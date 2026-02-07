@@ -35,10 +35,9 @@ with MockSession('demo') as session:
 ```bash
 git clone https://github.com/Waltham-Data-Science/NDI-python.git
 cd NDI-python
-pip install -e ".[dev]"
 ```
 
-See the [README](https://github.com/Waltham-Data-Science/NDI-python#readme) for full installation instructions including VH-Lab dependency setup.
+See the [Getting Started guide](getting-started.md) or the [README](https://github.com/Waltham-Data-Science/NDI-python#readme) for full installation instructions including VH-Lab dependency setup.
 
 ## MATLAB Migration
 

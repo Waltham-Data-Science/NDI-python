@@ -32,11 +32,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **OpenMINDS integration**: Object-to-dict serialization, NDI document conversion, controlled term lookup
 - **Mock utilities**: Subject/stimulator/neuron generators, CalculatorTest fixture
 - **MATLAB mapping**: Comprehensive MATLAB-to-Python function reference (MATLAB_MAPPING.md)
-- **CI/CD**: GitHub Actions workflow for Python 3.9-3.12
-- **1,277 tests** across 30 test files
+- **CI/CD**: GitHub Actions workflow for Python 3.10-3.12 with lint (black + ruff) and test matrix
+- **Code quality**: black formatting + ruff linting enforced in CI
+- **1,704 tests** across 50 test files
 
 ### Notes
 
 - Ported from [VH-Lab/NDI-matlab](https://github.com/VH-Lab/NDI-matlab)
-- 117 production Python files, 25,691 lines of code
+- 117 production Python files, ~26,000 lines of code
 - Requires [DID-python](https://github.com/VH-Lab/DID-python) and [vhlab-toolbox-python](https://github.com/VH-Lab/vhlab-toolbox-python)

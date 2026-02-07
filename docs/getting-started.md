@@ -4,7 +4,7 @@
 
 ### Prerequisites
 
-- Python 3.9 or later
+- Python 3.10 or later
 - Git (for installing VH-Lab dependencies)
 
 ### Install from source
@@ -18,16 +18,14 @@ python -m venv venv
 source venv/bin/activate  # Linux/macOS
 
 # Install VH-Lab dependencies (not yet on PyPI)
-# DID-python must be cloned and installed in editable mode
+# DID-python has a packaging bug — use PYTHONPATH instead of pip install
 git clone https://github.com/VH-Lab/DID-python.git /tmp/DID-python
-pip install -e /tmp/DID-python
-
-# vhlab-toolbox-python has no pyproject.toml — add to PYTHONPATH
 git clone https://github.com/VH-Lab/vhlab-toolbox-python.git /tmp/vhlab-toolbox-python
-export PYTHONPATH="/tmp/vhlab-toolbox-python:$PYTHONPATH"
+export PYTHONPATH="/tmp/DID-python/src:/tmp/vhlab-toolbox-python:$PYTHONPATH"
 
-# Install NDI-python
-pip install -e ".[dev]"
+# Install NDI-python (--no-deps avoids broken DID pip install)
+pip install -e ".[dev]" --no-deps
+pip install numpy networkx jsonschema requests pytest pytest-cov scipy
 ```
 
 ## Basic Usage

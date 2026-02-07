@@ -1,7 +1,7 @@
 # NDI-Python
 
 [![CI](https://github.com/Waltham-Data-Science/NDI-python/actions/workflows/ci.yml/badge.svg)](https://github.com/Waltham-Data-Science/NDI-python/actions/workflows/ci.yml)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
 Python implementation of the **Neuroscience Data Interface** ([NDI](https://neurodatainterface.org)) — a framework for managing, querying, and analyzing neuroscience experimental data.
@@ -37,17 +37,15 @@ source venv/bin/activate  # Linux/macOS
 # venv\Scripts\activate   # Windows
 
 # Install VH-Lab dependencies (not yet on PyPI)
-# DID-python must be installed from source (editable mode) due to a packaging
-# issue where pip install git+... misses the did.implementations subpackage.
+# DID-python has a packaging bug (pyproject.toml misses subpackages), so we
+# clone it and use PYTHONPATH rather than pip install.
 git clone https://github.com/VH-Lab/DID-python.git /tmp/DID-python
-pip install -e /tmp/DID-python
-
-# vhlab-toolbox-python has no pyproject.toml — add to PYTHONPATH
 git clone https://github.com/VH-Lab/vhlab-toolbox-python.git /tmp/vhlab-toolbox-python
-export PYTHONPATH="/tmp/vhlab-toolbox-python:$PYTHONPATH"
+export PYTHONPATH="/tmp/DID-python/src:/tmp/vhlab-toolbox-python:$PYTHONPATH"
 
-# Install NDI-python in editable mode
-pip install -e ".[dev]"
+# Install NDI-python in editable mode (--no-deps avoids the broken DID pip install)
+pip install -e ".[dev]" --no-deps
+pip install numpy networkx jsonschema requests pytest pytest-cov scipy
 ```
 
 ### Dependencies
@@ -207,19 +205,24 @@ pytest tests/ -v
 pytest tests/test_document.py -v
 
 # Run with coverage
-pytest tests/ --cov=ndi --cov-report=html
+pytest tests/ --cov=src/ndi --cov-report=term-missing
 ```
 
 ### Code Quality
 
+CI enforces formatting and lint on every push/PR:
+
 ```bash
-# Format code
+# Format code (must pass `black --check` in CI)
 black src/ tests/
 
-# Lint
+# Lint (must pass `ruff check` in CI)
 ruff check src/ tests/
 
-# Type check
+# Auto-fix lint issues
+ruff check --fix src/ tests/
+
+# Type check (optional, not yet enforced in CI)
 mypy src/ndi/
 ```
 
@@ -233,9 +236,9 @@ mkdocs serve  # Local preview at http://127.0.0.1:8000
 
 ## Test Coverage
 
-- **1,277 tests passing** across 30 test files
+- **1,704 tests passing** across 30+ test files (Python 3.10, 3.11, 3.12)
 - Covers all modules: core, DAQ, time, session, app, cloud, ontology, validation
-- 3 tests skipped (pre-existing schema path edge cases)
+- ~71% line coverage across `src/ndi/`
 
 ## License
 
