@@ -1,0 +1,22 @@
+{
+	"classname": "spikewaves",
+	"superclasses":  [ "base", "app", "epochid"],
+	"depends_on": [
+		{ "name": "element_id", "mustbenotempty": 1},
+		{ "name": "extraction_parameters_id", "mustbenotempty": 1}
+	],
+	"file": [
+		{"name": "spikewaves.vsw", "mustbenotempty": 1},
+		{"name": "spiketimes.bin", "mustbenotempty": 1}
+	],
+	"spikewaves": [
+		{
+			"name": "extraction_name",
+			"type": "string",
+			"default_value": "",
+			"parameters": "",
+			"queryable": 1,
+			"documentation": "The name of the extraction parameters document."
+		}
+	]
+}

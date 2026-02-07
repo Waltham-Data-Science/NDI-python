@@ -1,0 +1,39 @@
+{
+	"document_class": {
+		"definition":						"$NDIDOCUMENTPATH\/apps\/markgarbage\/valid_interval.json",
+		"validation":						"$NDISCHEMAPATH\/apps\/markgarbage\/valid_interval_schema.json",
+		"class_name":						"valid_interval",
+		"property_list_name":					"valid_interval",
+		"class_version":					1,
+		"superclasses": [
+			{ "definition":				"$NDIDOCUMENTPATH\/base.json" },
+			{ "definition":				"$NDIDOCUMENTPATH\/app.json" }
+		]
+	},
+	"depends_on": [
+		{	"name": "element_id",				
+			"value": "" 
+		}
+	],
+	"valid_interval": [
+		{
+			"timeref_structt0": {
+				"referent_epochsetname":		"",
+				"referent_classname":			"",
+				"clocktypestring":			"",
+				"epoch":				"",
+				"time":					""
+			},
+			"t0":						0,
+			"timeref_structt1": {
+				"referent_epochsetname":		"",
+				"referent_classname":			"",
+				"clocktypestring":			"",
+				"epoch":				"",
+				"time":					""
+			},
+			"t1":						0
+		}
+	]
+}
+

@@ -1,0 +1,41 @@
+{
+	"classname": "valid_interval",
+	"superclasses":  [ "base", "app"],
+	"depends_on": [
+		{ "name": "element_id", "mustbenotempty": 1 }
+	],
+	"valid_interval": [
+		{
+			"name": "timeref_structt0",
+			"type": "structure",
+			"default_value": "",
+			"parameters": "",
+			"queryable": 1,
+			"documentation": "The timeref for t0"
+		},
+		{
+			"name": "t0",
+			"type": "double",
+			"default_value": 0,
+			"parameters": [-Inf,Inf,0],
+			"queryable": 1,
+			"documentation": "t0, in time units of timeref_structt0"
+		},
+		{
+			"name": "timeref_structt1",
+			"type": "structure",
+			"default_value": "",
+			"parameters": "",
+			"queryable": 1,
+			"documentation": "The timeref for t1"
+		},
+		{
+			"name": "t1",
+			"type": "double",
+			"default_value": 1,
+			"parameters": [-Inf,Inf,0],
+			"queryable": 1,
+			"documentation": "t1, in time units of timeref_structt0"
+		}
+	]
+}

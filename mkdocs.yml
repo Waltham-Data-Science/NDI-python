@@ -1,0 +1,16 @@
+site_name: NDI-python
+site_description: Neuroscience Data Interface - Python implementation
+site_url: https://waltham-data-science.github.io/NDI-python
+repo_url: https://github.com/Waltham-Data-Science/NDI-python
+repo_name: Waltham-Data-Science/NDI-python
+
+theme:
+  name: material
+  palette:
+    primary: indigo
+    accent: indigo
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - MATLAB Migration: matlab-migration.md

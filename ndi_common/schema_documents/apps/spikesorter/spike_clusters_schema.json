@@ -1,0 +1,39 @@
+{
+	"classname": "spike_clusters",
+	"superclasses":  [ "base", "app"],
+	"depends_on": [
+		{ "name": "sorting_parameters_id", "mustbenotempty": 1},
+		{ "name": "element_id", "mustbenotempty": 1},
+		{ "name": "extraction_parameters_id", "mustbenotempty": 1},
+		{ "name": "spikewaves_doc_id", "mustbenotempty": 0}
+	],
+	"file": [
+		{"name": "spike_cluster.bin", "mustbenotempty": 1}
+	],
+	"spike_clusters": [
+		{
+			"name": "epoch_info",
+			"type": "structure",
+			"default_value": "",
+			"parameters": "",
+			"queryable": 1,
+			"documentation": ""
+		},
+		{
+			"name": "clusterinfo",
+			"type": "structure",
+			"default_value": [],
+			"parameters": [],
+			"queryable": 1,
+			"documentation": "The structure with the cluster info"
+		},
+		{
+			"name": "waveform_sample_times",
+			"type": "matrix",
+			"default_value": [],
+			"parameters": [NaN,1],
+			"queryable": 1,
+			"documentation": "The sample times for the spike waveforms"
+		}
+	]
+}

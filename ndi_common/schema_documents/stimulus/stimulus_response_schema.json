@@ -1,0 +1,28 @@
+{
+	"classname": "stimulus_response",
+	"superclasses":  [ "base"],
+	"depends_on": [
+		{ "name": "element_id", "mustbenotempty": 1},
+		{ "name": "stimulator_id", "mustbenotempty": 1},
+		{ "name": "stimulus_presentation_id", "mustbenotempty": 1},
+		{ "name": "stimulus_control_id", "mustbenotempty": 1}
+	],
+	"stimulus_response": [
+		{
+			"name": "stimulator_epochid",
+			"type": "string",
+			"default_value": "",
+			"parameters": "",
+			"queryable": 1,
+			"documentation": "The epochid of the stimulator."
+		},
+		{
+			"name": "element_epochid",
+			"type": "string",
+			"default_value": "",
+			"parameters": "",
+			"queryable": 1,
+			"documentation": "The epochid of the element."
+		}
+	]
+}

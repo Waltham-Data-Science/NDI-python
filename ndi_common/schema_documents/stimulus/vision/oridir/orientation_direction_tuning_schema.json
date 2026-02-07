@@ -1,0 +1,53 @@
+{
+	"classname": "orientation_direction_tuning",
+	"superclasses":  [ "base" ],
+	"depends_on": [
+		{ "name": "element_id", "mustbenotempty": 1},
+		{ "name": "stimulus_tuningcurve_id", "mustbenotempty": 1}
+	],
+	"file": [
+	],
+	"orientation_direction_tuning": [
+		{
+			"name": "properties",
+			"type": "structure",
+			"default_value": [],
+			"parameters": "",
+			"queryable": 1,
+			"documentation": "Unit properties."
+		},
+		{
+			"name": "tuning_curve",
+			"type": "structure",
+			"default_value": [],
+			"parameters": "",
+			"queryable": 1,
+			"documentation": "Tuning curve properties."
+		},
+		{
+			"name": "significance",
+			"type": "structure",
+			"default_value": [],
+			"parameters": "",
+			"queryable": 1,
+			"documentation": "Significance properties."
+		},
+		{
+			"name": "vector",
+			"type": "structure",
+			"default_value": [],
+			"parameters": "",
+			"queryable": 1,
+			"documentation": "Vector orientation/direction tuning properties."
+		},
+		{
+			"name": "fit",
+			"type": "structure",
+			"default_value": [],
+			"parameters": "",
+			"queryable": 1,
+			"documentation": "Orientation/direction fit tuning properties."
+		}
+	]
+}
+

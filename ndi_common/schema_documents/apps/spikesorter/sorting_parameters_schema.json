@@ -1,0 +1,56 @@
+{
+	"classname": "sorting_parameters",
+	"superclasses":  [ "base", "app"],
+	"depends_on": [ ],
+	"file": [ ],
+	"sorting_parameters": [
+		{
+			"name": "graphical_mode",
+			"type": "integer",
+			"default_value": 1,
+			"parameters": [0,1,0],
+			"queryable": 1,
+			"documentation": "0/1 Should we use graphical/interactive methods?"
+		},
+		{
+			"name": "num_pca_features",
+			"type": "integer",
+			"default_value": 10,
+			"parameters": [1,10000,0],
+			"queryable": 1,
+			"documentation": "The number of PCA features to use in clustering."
+		},
+		{
+			"name": "interpolation",
+			"type": "double",
+			"default_value": 3,
+			"parameters": [1,10000,0],
+			"queryable": 1,
+			"documentation": "Should we use interpolation? (>1) If so, by how many times should we increase the sampling resolution using interpolation?."
+		},
+		{
+			"name": "min_clusters",
+			"type": "integer",
+			"default_value": 3,
+			"parameters": [1,10000,0],
+			"queryable": 1,
+			"documentation": "How many clusters should we find at a minimum?"
+		},
+		{
+			"name": "max_clusters",
+			"type": "integer",
+			"default_value": 10,
+			"parameters": [1,10000,0],
+			"queryable": 1,
+			"documentation": "How many clusters should we find at maximum?"
+		},
+		{
+			"name": "num_start",
+			"type": "integer",
+			"default_value": 5,
+			"parameters": [1,10000,0],
+			"queryable": 1,
+			"documentation": "How many random starting locations should we start searching from?"
+		}
+	]
+}
