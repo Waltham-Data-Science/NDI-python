@@ -64,7 +64,7 @@ def get_cloud_dataset_id(
             cloud_id = ''
             if isinstance(props, dict):
                 remote = props.get('dataset_remote', {})
-                cloud_id = remote.get('cloud_dataset_id', '')
+                cloud_id = remote.get('dataset_id', '')
             return cloud_id, doc
     except Exception:
         pass
@@ -87,7 +87,7 @@ def create_remote_dataset_doc(
     from ndi.document import Document
 
     doc = Document('dataset_remote')
-    doc.set_value('dataset_remote.cloud_dataset_id', cloud_dataset_id)
+    doc._set_nested_property('dataset_remote.dataset_id', cloud_dataset_id)
     return doc
 
 

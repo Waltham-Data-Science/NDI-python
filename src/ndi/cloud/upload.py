@@ -201,13 +201,17 @@ def upload_single_file(
             try:
                 with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
                     zf.write(file_path, os.path.basename(file_path))
-                url = files_api.get_collection_upload_url(client, dataset_id)
+                url = files_api.get_file_collection_upload_url(
+                    client, client.config.org_id, dataset_id,
+                )
                 files_api.put_file(url, str(zip_path))
             finally:
                 if zip_path.exists():
                     zip_path.unlink()
         else:
-            url = files_api.get_upload_url(client, dataset_id, file_uid)
+            url = files_api.get_upload_url(
+                client, client.config.org_id, dataset_id, file_uid,
+            )
             files_api.put_file(url, file_path)
 
         return True, ''

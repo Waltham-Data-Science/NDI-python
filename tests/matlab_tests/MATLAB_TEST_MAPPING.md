@@ -340,6 +340,24 @@ official `openminds` Python library (v0.4.0) instead of non-existent
 
 ---
 
+## Cloud Orchestration Tests (`tests/test_cloud_gaps_extra.py`)
+
+Five cloud orchestration functions previously had zero or mock-only coverage. These
+are now tested with mocked API calls in `tests/test_cloud_gaps_extra.py` (19 tests).
+These tests also uncovered and fixed **4 additional production bugs**:
+
+| File | Bug | Fix |
+|------|-----|-----|
+| `cloud/upload.py` | `get_collection_upload_url` (wrong name) | `get_file_collection_upload_url` |
+| `cloud/upload.py` | `get_upload_url(client, dataset_id, file_uid)` missing org_id | `get_upload_url(client, client.config.org_id, dataset_id, file_uid)` |
+| `cloud/internal.py` | `doc.set_value(...)` (doesn't exist) | `doc._set_nested_property(...)` |
+| `cloud/internal.py` | `remote.get('cloud_dataset_id')` (wrong field) | `remote.get('dataset_id')` (matches schema) |
+
+**True end-to-end verification still requires live cloud credentials** — the mocked
+tests validate the wiring and argument passing but not the actual API responses.
+
+---
+
 ## Live Cloud Tests Not Yet Verified
 
 The cloud tests use two skip markers with increasing privilege levels:
