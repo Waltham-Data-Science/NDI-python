@@ -6,6 +6,7 @@ data reading, and metadata reading for a complete data acquisition system.
 """
 
 from __future__ import annotations
+import logging
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -13,6 +14,8 @@ import numpy as np
 from ..ido import Ido
 from ..time import ClockType, NO_TIME
 from .reader_base import DAQReader
+
+logger = logging.getLogger(__name__)
 
 
 class DAQSystem(Ido):
@@ -125,9 +128,43 @@ class DAQSystem(Ido):
         self._session = session
         self._daqmetadatareaders = metadata_readers
 
-        # TODO: Create reader and navigator from documents
-        self._daqreader = None
-        self._filenavigator = None
+        # Reconstruct reader from its document
+        reader_doc = reader_docs[0]
+        reader_class_name = reader_doc._get_nested_property(
+            'daqreader.ndi_daqreader_class', ''
+        )
+        _READER_CLASSES = {
+            'IntanReader': 'ndi.daq.reader.mfdaq.intan.IntanReader',
+            'BlackrockReader': 'ndi.daq.reader.mfdaq.blackrock.BlackrockReader',
+            'CEDSpike2Reader': 'ndi.daq.reader.mfdaq.cedspike2.CEDSpike2Reader',
+            'SpikeGadgetsReader': 'ndi.daq.reader.mfdaq.spikegadgets.SpikeGadgetsReader',
+        }
+        reader_path = _READER_CLASSES.get(reader_class_name)
+        if reader_path:
+            try:
+                module_path, cls_name = reader_path.rsplit('.', 1)
+                import importlib
+                mod = importlib.import_module(module_path)
+                ReaderCls = getattr(mod, cls_name)
+                self._daqreader = ReaderCls(
+                    session=session, document=reader_doc
+                )
+            except Exception as exc:
+                logger.warning('Could not reconstruct DAQ reader %s: %s', reader_class_name, exc)
+                self._daqreader = None
+        else:
+            logger.debug('Unknown DAQ reader class: %s', reader_class_name)
+            self._daqreader = None
+
+        # Reconstruct file navigator from its document
+        from ..file.navigator import FileNavigator
+        try:
+            self._filenavigator = FileNavigator(
+                session=session, document=nav_docs[0]
+            )
+        except Exception as exc:
+            logger.warning('Could not reconstruct file navigator: %s', exc)
+            self._filenavigator = None
 
     @property
     def name(self) -> str:

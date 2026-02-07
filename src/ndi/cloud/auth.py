@@ -30,6 +30,13 @@ def decode_jwt(token: str) -> Dict:
 
     Matches MATLAB ``ndi.cloud.internal.decodeJwt``.
 
+    .. warning::
+        This function does **not** verify the JWT signature.  It is
+        used only for reading expiration times and other metadata
+        from tokens that have already been issued by a trusted server.
+        **Never** use the decoded claims for authorization decisions
+        without server-side verification.
+
     Args:
         token: A three-part ``header.payload.signature`` JWT string.
 

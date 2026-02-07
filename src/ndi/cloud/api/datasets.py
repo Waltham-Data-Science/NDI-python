@@ -73,11 +73,14 @@ def list_datasets(
     )
 
 
+_MAX_PAGES = 1000
+
+
 def list_all_datasets(client: 'CloudClient', org_id: str) -> List[Dict[str, Any]]:
     """Auto-paginate through all datasets for an organisation."""
     all_datasets: List[Dict[str, Any]] = []
     page = 1
-    while True:
+    while page <= _MAX_PAGES:
         result = list_datasets(client, org_id, page=page)
         datasets = result.get('datasets', [])
         all_datasets.extend(datasets)

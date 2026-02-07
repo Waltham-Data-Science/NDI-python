@@ -137,8 +137,8 @@ class TimeMapping:
         """
         if len(self._mapping) != 2:
             raise ValueError("Inverse only supported for linear mappings")
-        if self._mapping[0] == 0:
-            raise ValueError("Cannot invert mapping with zero scale")
+        if abs(self._mapping[0]) < 1e-12:
+            raise ValueError("Cannot invert mapping with near-zero scale")
 
         inv_scale = 1.0 / self._mapping[0]
         inv_shift = -self._mapping[1] / self._mapping[0]

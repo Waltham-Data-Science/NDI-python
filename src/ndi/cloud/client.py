@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 from typing import Any, Dict, Optional
+from urllib.parse import quote as _url_quote
 
 from .config import CloudConfig
 from .exceptions import (
@@ -89,10 +90,10 @@ class CloudClient:
         Template variables like ``{datasetId}`` are substituted from
         *path_params*.  The result is joined to ``config.api_url``.
         """
-        # Substitute {placeholders}
+        # Substitute {placeholders} with URL-encoded values
         url = endpoint
         for key, value in path_params.items():
-            url = url.replace(f'{{{key}}}', str(value))
+            url = url.replace(f'{{{key}}}', _url_quote(str(value), safe=''))
 
         # Warn about un-replaced placeholders
         remaining = re.findall(r'\{(\w+)\}', url)

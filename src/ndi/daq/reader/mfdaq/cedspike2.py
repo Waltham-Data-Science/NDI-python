@@ -7,11 +7,14 @@ MATLAB equivalent: src/ndi/+ndi/+daq/+reader/+mfdaq/cedspike2.m
 """
 
 from __future__ import annotations
+import logging
 from typing import Any, List, Optional, Tuple, Union
 
 import numpy as np
 
 from ...mfdaq import MFDAQReader, ChannelInfo
+
+logger = logging.getLogger(__name__)
 
 
 class CEDSpike2Reader(MFDAQReader):
@@ -41,7 +44,8 @@ class CEDSpike2Reader(MFDAQReader):
             return []
         try:
             return SI().getchannelsepoch(epochfiles)
-        except Exception:
+        except Exception as exc:
+            logger.warning('CEDSpike2Reader.getchannelsepoch failed: %s', exc)
             return []
 
     def readchannels_epochsamples(self, channeltype, channel, epochfiles, s0, s1):

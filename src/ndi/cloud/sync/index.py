@@ -7,10 +7,12 @@ Persists to ``<dataset_path>/.ndi/sync/index.json``.
 from __future__ import annotations
 
 import json
+import fcntl
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List
+from typing import Iterator, List
 
 
 @dataclass
@@ -39,15 +41,25 @@ class SyncIndex:
         )
 
     def write(self, dataset_path: Path) -> None:
-        """Write the sync index to ``<dataset_path>/.ndi/sync/index.json``."""
+        """Write the sync index to ``<dataset_path>/.ndi/sync/index.json``.
+
+        Uses file locking to prevent concurrent writes from corrupting
+        the index.
+        """
         index_dir = Path(dataset_path) / '.ndi' / 'sync'
         index_dir.mkdir(parents=True, exist_ok=True)
         index_file = index_dir / 'index.json'
-        index_file.write_text(json.dumps({
+        content = json.dumps({
             'local_doc_ids_last_sync': self.local_doc_ids_last_sync,
             'remote_doc_ids_last_sync': self.remote_doc_ids_last_sync,
             'last_sync_timestamp': self.last_sync_timestamp,
-        }, indent=2))
+        }, indent=2)
+        with open(index_file, 'w') as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            try:
+                f.write(content)
+            finally:
+                fcntl.flock(f, fcntl.LOCK_UN)
 
     # ------------------------------------------------------------------
     # Update

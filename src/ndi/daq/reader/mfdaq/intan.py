@@ -8,9 +8,12 @@ MATLAB equivalent: src/ndi/+ndi/+daq/+reader/+mfdaq/intan.m
 """
 
 from __future__ import annotations
+import logging
 from typing import Any, List, Optional, Tuple, Union
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 from ...mfdaq import MFDAQReader, ChannelInfo
 
@@ -57,7 +60,8 @@ class IntanReader(MFDAQReader):
         try:
             reader = SI()
             return reader.getchannelsepoch(epochfiles)
-        except Exception:
+        except Exception as exc:
+            logger.warning('IntanReader.getchannelsepoch failed: %s', exc)
             return []
 
     def readchannels_epochsamples(

@@ -7,12 +7,15 @@ own session for storing dataset-level documents and metadata.
 """
 
 from __future__ import annotations
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from .ido import Ido
 from .document import Document
 from .query import Query
+
+logger = logging.getLogger(__name__)
 
 
 class Dataset:
@@ -135,8 +138,8 @@ class Dataset:
                 self._session._database.add(doc)
                 # Copy binary files from source session to dataset
                 self._copy_binary_files(session, doc)
-            except Exception:
-                pass  # Skip documents that fail (e.g., duplicates)
+            except Exception as exc:
+                logger.debug('Skipping document %s during ingestion: %s', doc.id, exc)
 
         # Create session_in_a_dataset document
         doc = self._create_session_doc(session, is_linked=False)
@@ -411,8 +414,8 @@ class Dataset:
         for doc in docs:
             try:
                 self._session.database_rm(doc)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning('Failed to remove document %s: %s', doc.id, exc)
 
     def _recreate_linked_session(self, props: Dict[str, Any]) -> Optional[Any]:
         """Recreate a linked session from stored creator args."""

@@ -82,6 +82,9 @@ def list_documents(
     )
 
 
+_MAX_PAGES = 1000
+
+
 def list_all_documents(
     client: 'CloudClient',
     dataset_id: str,
@@ -89,7 +92,7 @@ def list_all_documents(
     """Auto-paginate through all documents in a dataset."""
     all_docs: List[Dict[str, Any]] = []
     page = 1
-    while True:
+    while page <= _MAX_PAGES:
         result = list_documents(client, dataset_id, page=page)
         docs = result.get('documents', [])
         all_docs.extend(docs)
@@ -203,7 +206,7 @@ def ndi_query_all(
     """
     all_docs: List[Dict[str, Any]] = []
     page = 1
-    while True:
+    while page <= _MAX_PAGES:
         result = ndi_query(client, scope, search_structure, page=page, page_size=page_size)
         docs = result.get('documents', [])
         all_docs.extend(docs)

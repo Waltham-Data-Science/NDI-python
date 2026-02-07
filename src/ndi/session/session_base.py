@@ -743,7 +743,19 @@ class Session(ABC):
 
         # Filter by class
         if classmatch is not None:
-            probes = [p for p in probes if isinstance(p, eval(classmatch))]
+            from ..probe import Probe
+            from ..element import Element
+            _CLASS_LOOKUP = {
+                'Probe': Probe,
+                'Element': Element,
+            }
+            cls = _CLASS_LOOKUP.get(classmatch)
+            if cls is None:
+                raise ValueError(
+                    f"Unknown classmatch '{classmatch}'. "
+                    f"Valid values: {list(_CLASS_LOOKUP.keys())}"
+                )
+            probes = [p for p in probes if isinstance(p, cls)]
 
         # Filter by properties
         if kwargs:

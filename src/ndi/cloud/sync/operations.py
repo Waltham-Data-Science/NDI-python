@@ -9,11 +9,14 @@ MATLAB equivalents: +ndi/+cloud/+sync/*.m
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, TYPE_CHECKING
+import logging
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from .mode import SyncMode, SyncOptions
 from .index import SyncIndex
 from ..exceptions import CloudSyncError
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from ..client import CloudClient
@@ -59,13 +62,15 @@ def upload_new(
         report['uploaded'] = list(new_ids)
         return report
 
+    failed: List[str] = []
     for doc_id in new_ids:
         try:
             docs_api.add_document(client, cloud_dataset_id, {'ndiId': doc_id})
             report['uploaded'].append(doc_id)
         except Exception as exc:
-            if options.verbose:
-                print(f'Failed to upload {doc_id}: {exc}')
+            logger.warning('Failed to upload %s: %s', doc_id, exc)
+            failed.append(doc_id)
+    report['failed'] = failed
 
     # Update index
     index.update(
@@ -150,18 +155,22 @@ def mirror_to_remote(
         'dry_run': options.dry_run,
     }
 
+    failed: List[str] = []
     if not options.dry_run:
         for doc_id in to_upload:
             try:
                 docs_api.add_document(client, cloud_dataset_id, {'ndiId': doc_id})
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning('mirror_to_remote: failed to upload %s: %s', doc_id, exc)
+                failed.append(doc_id)
         for doc_id in to_delete:
             api_id = remote_ids.get(doc_id, doc_id)
             try:
                 docs_api.delete_document(client, cloud_dataset_id, api_id)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning('mirror_to_remote: failed to delete %s: %s', doc_id, exc)
+                failed.append(doc_id)
+    report['failed'] = failed
 
     index.update(list(local_ids), list(local_ids))
     index.write(ds_path)
@@ -232,12 +241,15 @@ def two_way_sync(
         'dry_run': options.dry_run,
     }
 
+    failed: List[str] = []
     if not options.dry_run:
         for doc_id in to_upload:
             try:
                 docs_api.add_document(client, cloud_dataset_id, {'ndiId': doc_id})
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning('two_way_sync: failed to upload %s: %s', doc_id, exc)
+                failed.append(doc_id)
+    report['failed'] = failed
 
     merged = local_ids | remote_id_set
     index.update(list(merged), list(merged))

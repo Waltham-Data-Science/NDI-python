@@ -7,6 +7,27 @@ on:
     branches: [main]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install linting tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff black
+
+      - name: Check formatting with black
+        run: black --check src/ tests/
+
+      - name: Lint with ruff
+        run: ruff check src/ tests/
+
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -37,8 +58,8 @@ jobs:
           pip install -e ".[dev]" --no-deps
           pip install numpy networkx jsonschema requests pytest pytest-cov scipy openminds
 
-      - name: Run tests
+      - name: Run tests with coverage
         env:
           PYTHONPATH: /tmp/DID-python/src:/tmp/vhlab-toolbox-python
         run: |
-          pytest tests/ -v --tb=short
+          pytest tests/ -v --tb=short --cov=src/ndi --cov-report=term-missing
