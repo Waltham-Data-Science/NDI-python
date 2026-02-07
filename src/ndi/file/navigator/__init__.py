@@ -705,7 +705,7 @@ class FileNavigator(Ido):
                 epochfiles_struct['epochprobemap'] = entry['epochprobemap']
 
             doc = Document(
-                'epochfiles_ingested',
+                'ingestion/epochfiles_ingested',
                 epochfiles_ingested=epochfiles_struct,
             )
             doc.set_dependency_value('filenavigator_id', self.id)
@@ -738,7 +738,7 @@ class FileNavigator(Ido):
         }
 
         doc = Document(
-            'filenavigator',
+            'daq/filenavigator',
             filenavigator=filenavigator_struct,
             **{'base.id': self.id},
         )

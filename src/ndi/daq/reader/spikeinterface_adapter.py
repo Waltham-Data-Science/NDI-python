@@ -439,7 +439,7 @@ class SpikeInterfaceReader(MFDAQReader):
         from ...document import Document
 
         doc = Document(
-            'daqreader',
+            'daq/daqreader',
             **{
                 'daqreader.ndi_daqreader_class': 'SpikeInterfaceReader',
                 'base.id': self.id,

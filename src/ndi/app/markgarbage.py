@@ -75,7 +75,7 @@ class MarkGarbage(App):
             raise RuntimeError("No session configured")
 
         from ..document import Document
-        doc = Document('apps/valid_interval', valid_interval=interval_struct)
+        doc = Document('apps/markgarbage/valid_interval', valid_interval=interval_struct)
         doc = doc.set_session_id(self._session.id())
         if hasattr(epochset_obj, 'id'):
             doc = doc.set_dependency_value(
@@ -125,7 +125,10 @@ class MarkGarbage(App):
         intervals = []
         for doc in docs:
             props = doc.document_properties
-            vi = getattr(props, 'valid_interval', None)
+            if isinstance(props, dict):
+                vi = props.get('valid_interval')
+            else:
+                vi = getattr(props, 'valid_interval', None)
             if vi:
                 intervals.append(vi if isinstance(vi, dict) else vars(vi))
         return intervals

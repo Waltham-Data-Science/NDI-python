@@ -151,18 +151,18 @@ def openminds_obj_to_ndi_document(
         )
 
     # Determine document schema and dependency name
-    doc_schema = 'openminds'
+    doc_schema = 'metadata/openminds'
     dependency_name = ''
 
     dtype = dependency_type.lower() if dependency_type else ''
     if dtype == 'subject':
-        doc_schema = 'openminds_subject'
+        doc_schema = 'metadata/openminds_subject'
         dependency_name = 'subject_id'
     elif dtype == 'element':
-        doc_schema = 'openminds_element'
+        doc_schema = 'metadata/openminds_element'
         dependency_name = 'element_id'
     elif dtype == 'stimulus':
-        doc_schema = 'openminds_stimulus'
+        doc_schema = 'metadata/openminds_stimulus'
         dependency_name = 'stimulus_element_id'
     elif dtype:
         raise ValueError(f"Unknown dependency_type: '{dependency_type}'")

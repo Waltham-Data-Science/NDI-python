@@ -595,7 +595,7 @@ class DAQSystem(Ido):
 
         # System document
         sys_doc = Document(
-            'daqsystem',
+            'daq/daqsystem',
             **{
                 'daqsystem.ndi_daqsystem_class': self.__class__.__name__,
                 'base.id': self.id,

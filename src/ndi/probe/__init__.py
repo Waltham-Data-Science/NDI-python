@@ -299,7 +299,7 @@ class Probe(Element):
         from ..document import Document
 
         doc = Document(
-            'probe',
+            'element',
             **{
                 'element.name': self._name,
                 'element.reference': self._reference,

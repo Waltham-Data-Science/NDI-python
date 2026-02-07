@@ -179,7 +179,7 @@ class SyncRule(Ido, ABC):
         from ..document import Document
 
         doc = Document(
-            document_type='syncrule',
+            document_type='daq/syncrule',
             **{
                 'syncrule.ndi_syncrule_class': type(self).__name__,
                 'syncrule.parameters': self._parameters,

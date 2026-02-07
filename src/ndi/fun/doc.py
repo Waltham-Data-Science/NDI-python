@@ -120,42 +120,122 @@ def make_species_strain_sex(
 
     MATLAB equivalent: ndi.fun.doc.subject.makeSpeciesStrainSex
 
+    Uses the ``openminds`` Python library to create controlled-term objects
+    (Species, Strain, BiologicalSex), then converts them to NDI documents
+    via :func:`ndi.openminds_convert.openminds_obj_to_ndi_document`.
+
     Args:
         session: NDI session instance.
         subject_doc: Subject document to link via dependency.
-        species: Species name or ontology term.
-        strain: Strain name or ontology term.
-        sex: Biological sex string.
+        species: Species ontology identifier (e.g. ``'NCBITaxon:10116'``).
+        strain: Strain ontology identifier (e.g. ``'RRID:RGD_70508'``).
+            Requires ``species`` to also be provided.
+        sex: Biological sex (``'male'``, ``'female'``, ``'hermaphrodite'``,
+            or ``'notDetectable'``).
         add_to_database: If True, add documents to the session database.
 
     Returns:
-        List of created documents.
+        List of created NDI Document objects.
     """
-    from ndi.document import Document
+    from ndi.openminds_convert import openminds_obj_to_ndi_document
 
-    docs: List[Any] = []
     subject_id = subject_doc.document_properties.get('base', {}).get('id', '')
+    openminds_objects: List[Any] = []
+    species_obj = None
 
+    # 1. Handle Species
     if species:
-        doc = Document('openminds_species')
-        doc = doc.set_session_id(session.id())
-        doc._set_nested_property('openminds_species.species', species)
-        doc = doc.set_dependency_value('subject_id', subject_id)
-        docs.append(doc)
+        try:
+            from ndi.ontology import lookup
+            ont_id, name = lookup(species)
+        except Exception:
+            ont_id, name = species, species
 
+        try:
+            from openminds.latest.controlled_terms import Species as OMSpecies
+            species_obj = OMSpecies(
+                name=name,
+                preferred_ontology_identifier=ont_id,
+            )
+            openminds_objects.append(species_obj)
+        except ImportError:
+            import warnings
+            warnings.warn(
+                'openminds package not installed; cannot create Species document',
+                stacklevel=2,
+            )
+
+    # 2. Handle Strain (requires species)
     if strain:
-        doc = Document('openminds_strain')
-        doc = doc.set_session_id(session.id())
-        doc._set_nested_property('openminds_strain.strain', strain)
-        doc = doc.set_dependency_value('subject_id', subject_id)
-        docs.append(doc)
+        if species_obj is None:
+            import warnings
+            warnings.warn(
+                "Cannot create a Strain document without a valid Species. "
+                "Please provide the 'species' option.",
+                stacklevel=2,
+            )
+        else:
+            try:
+                from ndi.ontology import lookup
+                ont_id, name = lookup(strain)
+            except Exception:
+                ont_id, name = strain, strain
 
+            try:
+                from openminds.latest.core import Strain as OMStrain
+                strain_obj = OMStrain(name=name, species=[species_obj])
+                openminds_objects.append(strain_obj)
+            except ImportError:
+                import warnings
+                warnings.warn(
+                    'openminds package not installed; cannot create Strain document',
+                    stacklevel=2,
+                )
+
+    # 3. Handle Biological Sex
     if sex:
-        doc = Document('openminds_biologicalsex')
-        doc = doc.set_session_id(session.id())
-        doc._set_nested_property('openminds_biologicalsex.biological_sex', sex)
-        doc = doc.set_dependency_value('subject_id', subject_id)
-        docs.append(doc)
+        _sex_ontology = {
+            'male': 'PATO:0000384',
+            'female': 'PATO:0000383',
+            'hermaphrodite': 'PATO:0001340',
+        }
+        pato_id = _sex_ontology.get(sex.lower(), '')
+        if pato_id:
+            try:
+                from ndi.ontology import lookup
+                ont_id, name = lookup(pato_id)
+            except Exception:
+                ont_id, name = pato_id, sex
+        else:
+            ont_id, name = '', sex
+
+        try:
+            from openminds.latest.controlled_terms import BiologicalSex as OMSex
+            sex_obj = OMSex(name=name, preferred_ontology_identifier=ont_id)
+            openminds_objects.append(sex_obj)
+        except ImportError:
+            import warnings
+            warnings.warn(
+                'openminds package not installed; cannot create BiologicalSex document',
+                stacklevel=2,
+            )
+
+    # 4. Convert openMINDS objects to NDI documents
+    docs: List[Any] = []
+    if openminds_objects:
+        try:
+            docs = openminds_obj_to_ndi_document(
+                openminds_objects,
+                session.id(),
+                'subject',
+                subject_id,
+            )
+        except Exception:
+            import warnings
+            warnings.warn(
+                'Failed to convert openMINDS objects to NDI documents',
+                stacklevel=2,
+            )
 
     if add_to_database:
         for d in docs:
@@ -193,7 +273,7 @@ def probe_locations_for_probes(
     docs: List[Any] = []
     for probe_doc, loc in zip(probe_docs, locations):
         probe_id = probe_doc.document_properties.get('base', {}).get('id', '')
-        doc = Document('probe_location')
+        doc = Document('probe/probe_location')
         doc = doc.set_session_id(session.id())
         doc._set_nested_property('probe_location.name', loc.get('name', ''))
         if 'ontology' in loc:

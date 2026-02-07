@@ -431,9 +431,10 @@ class TestOpenmindsObjToNdiDocument:
     """Tests for ndi.openminds_convert.openminds_obj_to_ndi_document."""
 
     @patch('ndi.openminds_convert.openminds_obj_to_dict')
-    @patch('ndi.document.Document')
-    def test_creates_documents(self, MockDoc, mock_to_dict):
+    def test_creates_documents(self, mock_to_dict):
+        """openminds_obj_to_ndi_document creates real NDI Documents."""
         from ndi.openminds_convert import openminds_obj_to_ndi_document
+        from ndi.document import Document
 
         mock_to_dict.return_value = [
             {
@@ -445,24 +446,20 @@ class TestOpenmindsObjToNdiDocument:
             },
         ]
 
-        mock_doc = MagicMock()
-        mock_doc.set_session_id.return_value = mock_doc
-        mock_doc._set_nested_property.return_value = None
-        mock_doc.set_dependency_value.return_value = mock_doc
-        mock_doc.add_dependency_value_n.return_value = mock_doc
-        MockDoc.return_value = mock_doc
-
         result = openminds_obj_to_ndi_document(
             MagicMock(), session_id='sess-1'
         )
 
         assert len(result) == 1
-        MockDoc.assert_called_once_with('openminds')
+        assert isinstance(result[0], Document)
+        props = result[0].document_properties
+        assert props.get('document_class', {}).get('class_name') == 'openminds'
 
     @patch('ndi.openminds_convert.openminds_obj_to_dict')
-    @patch('ndi.document.Document')
-    def test_subject_dependency(self, MockDoc, mock_to_dict):
+    def test_subject_dependency(self, mock_to_dict):
+        """openminds_obj_to_ndi_document creates openminds_subject Documents with dependency."""
         from ndi.openminds_convert import openminds_obj_to_ndi_document
+        from ndi.document import Document
 
         mock_to_dict.return_value = [
             {
@@ -474,20 +471,17 @@ class TestOpenmindsObjToNdiDocument:
             },
         ]
 
-        mock_doc = MagicMock()
-        mock_doc.set_session_id.return_value = mock_doc
-        mock_doc._set_nested_property.return_value = None
-        mock_doc.set_dependency_value.return_value = mock_doc
-        mock_doc.add_dependency_value_n.return_value = mock_doc
-        MockDoc.return_value = mock_doc
-
         result = openminds_obj_to_ndi_document(
             MagicMock(), session_id='sess-1',
             dependency_type='subject', dependency_value='subj-001',
         )
 
         assert len(result) == 1
-        MockDoc.assert_called_once_with('openminds_subject')
+        assert isinstance(result[0], Document)
+        props = result[0].document_properties
+        assert props.get('document_class', {}).get('class_name') == 'openminds_subject'
+        dep_names = {d['name']: d['value'] for d in props.get('depends_on', [])}
+        assert dep_names.get('subject_id') == 'subj-001'
 
     def test_raises_on_empty_dependency_value(self):
         from ndi.openminds_convert import openminds_obj_to_ndi_document

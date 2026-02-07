@@ -294,7 +294,7 @@ class DAQReader(Ido, ABC):
         }
 
         doc = Document(
-            'daqreader_epochdata_ingested',
+            'ingestion/daqreader_epochdata_ingested',
             daqreader_epochdata_ingested={'epochtable': epochtable},
             epochid={'epochid': epoch_id},
         )
@@ -312,7 +312,7 @@ class DAQReader(Ido, ABC):
         from ..document import Document
 
         doc = Document(
-            'daqreader',
+            'daq/daqreader',
             **{
                 'daqreader.ndi_daqreader_class': self.__class__.__name__,
                 'base.id': self.id,

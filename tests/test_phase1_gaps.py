@@ -610,7 +610,9 @@ class TestPresentationTime:
 class TestDocHelpers:
 
     def test_make_species_strain_sex(self):
+        """make_species_strain_sex creates real openMINDS NDI Documents."""
         from ndi.fun.doc import make_species_strain_sex
+        from ndi.document import Document
 
         session = MagicMock()
         session.id.return_value = 'sess_1'
@@ -618,38 +620,40 @@ class TestDocHelpers:
         subj_doc = MagicMock()
         subj_doc.document_properties = {'base': {'id': 'subj_123'}}
 
-        with patch('ndi.document.Document') as MockDoc:
-            mock_inst = MagicMock()
-            mock_inst.set_session_id.return_value = mock_inst
-            mock_inst._set_nested_property.return_value = None
-            mock_inst.set_dependency_value.return_value = mock_inst
-            MockDoc.return_value = mock_inst
-
-            docs = make_species_strain_sex(
-                session, subj_doc,
-                species='Mus musculus', strain='C57BL/6', sex='male',
-            )
-            assert len(docs) == 3
+        docs = make_species_strain_sex(
+            session, subj_doc,
+            species='Mus musculus', strain='C57BL/6', sex='male',
+        )
+        # Species + Strain + BiologicalSex = 3 documents
+        assert len(docs) == 3
+        for doc in docs:
+            assert isinstance(doc, Document)
+            props = doc.document_properties
+            # All should be openminds_subject docs linked to subject
+            assert props.get('document_class', {}).get('class_name') == 'openminds_subject'
+            dep_names = {d['name']: d['value'] for d in props.get('depends_on', [])}
+            assert dep_names.get('subject_id') == 'subj_123'
 
     def test_make_species_only(self):
+        """make_species_strain_sex with species only creates 1 document."""
         from ndi.fun.doc import make_species_strain_sex
+        from ndi.document import Document
 
         session = MagicMock()
         session.id.return_value = 'sess_1'
         subj_doc = MagicMock()
         subj_doc.document_properties = {'base': {'id': 'subj_123'}}
 
-        with patch('ndi.document.Document') as MockDoc:
-            mock_inst = MagicMock()
-            mock_inst.set_session_id.return_value = mock_inst
-            mock_inst.set_dependency_value.return_value = mock_inst
-            MockDoc.return_value = mock_inst
-
-            docs = make_species_strain_sex(session, subj_doc, species='Rattus')
-            assert len(docs) == 1
+        docs = make_species_strain_sex(session, subj_doc, species='Rattus')
+        assert len(docs) == 1
+        assert isinstance(docs[0], Document)
+        om = docs[0].document_properties.get('openminds', {})
+        assert 'Species' in om.get('openminds_type', '')
 
     def test_probe_locations_for_probes(self):
+        """probe_locations_for_probes creates real probe_location Documents."""
         from ndi.fun.doc import probe_locations_for_probes
+        from ndi.document import Document
 
         session = MagicMock()
         session.id.return_value = 'sess_1'
@@ -664,17 +668,14 @@ class TestDocHelpers:
             {'name': 'LGN'},
         ]
 
-        with patch('ndi.document.Document') as MockDoc:
-            mock_inst = MagicMock()
-            mock_inst.set_session_id.return_value = mock_inst
-            mock_inst._set_nested_property.return_value = None
-            mock_inst.set_dependency_value.return_value = mock_inst
-            MockDoc.return_value = mock_inst
-
-            docs = probe_locations_for_probes(
-                session, [probe1, probe2], locations,
-            )
-            assert len(docs) == 2
+        docs = probe_locations_for_probes(
+            session, [probe1, probe2], locations,
+        )
+        assert len(docs) == 2
+        for doc in docs:
+            assert isinstance(doc, Document)
+            props = doc.document_properties
+            assert props.get('document_class', {}).get('class_name') == 'probe_location'
 
 
 # =========================================================================

@@ -246,7 +246,7 @@ class MetadataReader(Ido):
         epochid_struct = {'epochid': epoch_id}
 
         doc = Document(
-            'daqmetadatareader_epochdata_ingested',
+            'ingestion/daqmetadatareader_epochdata_ingested',
             epochid=epochid_struct,
         )
         doc.set_dependency_value('daqmetadatareader_id', self.id)
@@ -271,7 +271,7 @@ class MetadataReader(Ido):
         from ...document import Document
 
         doc = Document(
-            'daqmetadatareader',
+            'daq/daqmetadatareader',
             **{
                 'daqmetadatareader.ndi_daqmetadatareader_class': self.__class__.__name__,
                 'daqmetadatareader.tab_separated_file_parameter': self._tab_separated_file_parameter,

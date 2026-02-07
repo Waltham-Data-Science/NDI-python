@@ -553,7 +553,7 @@ class SyncGraph(Ido):
 
         # Create syncgraph document
         sg_doc = Document(
-            document_type='syncgraph',
+            document_type='daq/syncgraph',
             **{
                 'syncgraph.ndi_syncgraph_class': type(self).__name__,
                 'base.id': self.id,
