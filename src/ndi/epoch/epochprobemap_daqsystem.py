@@ -8,13 +8,13 @@ MATLAB equivalent: src/ndi/+ndi/+epoch/epochprobemap_daqsystem.m
 """
 
 from __future__ import annotations
-import re
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Dict, List, Optional
 
-from .epochprobemap import EpochProbeMap
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
 from ..daq.daqsystemstring import DAQSystemString
+from .epochprobemap import EpochProbeMap
 
 
 @dataclass
@@ -43,7 +43,7 @@ class EpochProbeMapDAQSystem(EpochProbeMap):
     def __post_init__(self):
         """Validate fields and parse device string."""
         super().__post_init__()
-        self._daqsystemstring: Optional[DAQSystemString] = None
+        self._daqsystemstring: DAQSystemString | None = None
 
     @property
     def daqsystemstring(self) -> DAQSystemString:
@@ -52,7 +52,7 @@ class EpochProbeMapDAQSystem(EpochProbeMap):
             self._daqsystemstring = DAQSystemString.parse(self.devicestring)
         return self._daqsystemstring
 
-    def serialization_struct(self) -> Dict[str, Any]:
+    def serialization_struct(self) -> dict[str, Any]:
         """
         Create a structure suitable for serialization.
 
@@ -60,11 +60,11 @@ class EpochProbeMapDAQSystem(EpochProbeMap):
             Dict with all fields
         """
         return {
-            'name': self.name,
-            'reference': self.reference,
-            'type': self.type,
-            'devicestring': self.devicestring,
-            'subjectstring': self.subjectstring,
+            "name": self.name,
+            "reference": self.reference,
+            "type": self.type,
+            "devicestring": self.devicestring,
+            "subjectstring": self.subjectstring,
         }
 
     def serialize(self) -> str:
@@ -74,13 +74,15 @@ class EpochProbeMapDAQSystem(EpochProbeMap):
         Returns:
             Tab-delimited string: name\\treference\\ttype\\tdevicestring\\tsubjectstring
         """
-        return '\t'.join([
-            self.name,
-            str(self.reference),
-            self.type,
-            self.devicestring,
-            self.subjectstring,
-        ])
+        return "\t".join(
+            [
+                self.name,
+                str(self.reference),
+                self.type,
+                self.devicestring,
+                self.subjectstring,
+            ]
+        )
 
     def save_to_file(self, filename: str) -> None:
         """
@@ -90,11 +92,11 @@ class EpochProbeMapDAQSystem(EpochProbeMap):
             filename: Path to write to
         """
         Path(filename).parent.mkdir(parents=True, exist_ok=True)
-        with open(filename, 'w') as f:
-            f.write(self.serialize() + '\n')
+        with open(filename, "w") as f:
+            f.write(self.serialize() + "\n")
 
     @classmethod
-    def decode(cls, s: str) -> 'EpochProbeMapDAQSystem':
+    def decode(cls, s: str) -> EpochProbeMapDAQSystem:
         """
         Decode from a serialized string.
 
@@ -107,11 +109,9 @@ class EpochProbeMapDAQSystem(EpochProbeMap):
         Raises:
             ValueError: If the string cannot be parsed
         """
-        parts = s.strip().split('\t')
+        parts = s.strip().split("\t")
         if len(parts) < 5:
-            raise ValueError(
-                f"Expected 5 tab-separated fields, got {len(parts)}: '{s}'"
-            )
+            raise ValueError(f"Expected 5 tab-separated fields, got {len(parts)}: '{s}'")
 
         return cls(
             name=parts[0],
@@ -122,7 +122,7 @@ class EpochProbeMapDAQSystem(EpochProbeMap):
         )
 
     @classmethod
-    def load_from_file(cls, filename: str) -> List['EpochProbeMapDAQSystem']:
+    def load_from_file(cls, filename: str) -> list[EpochProbeMapDAQSystem]:
         """
         Load epoch probe maps from a file.
 
@@ -135,10 +135,10 @@ class EpochProbeMapDAQSystem(EpochProbeMap):
             List of EpochProbeMapDAQSystem objects
         """
         results = []
-        with open(filename, 'r') as f:
+        with open(filename) as f:
             for line in f:
                 line = line.strip()
-                if line and not line.startswith('#'):
+                if line and not line.startswith("#"):
                     results.append(cls.decode(line))
         return results
 

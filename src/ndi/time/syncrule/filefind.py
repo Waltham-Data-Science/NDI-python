@@ -6,7 +6,8 @@ based on explicit file path matching.
 """
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, Tuple
+
+from typing import Any
 
 from ..syncrule_base import SyncRule
 from ..timemapping import TimeMapping
@@ -33,8 +34,8 @@ class FileFind(SyncRule):
 
     def __init__(
         self,
-        parameters: Optional[Dict[str, Any]] = None,
-        identifier: Optional[str] = None,
+        parameters: dict[str, Any] | None = None,
+        identifier: str | None = None,
     ):
         """
         Create a new FileFind sync rule.
@@ -45,13 +46,13 @@ class FileFind(SyncRule):
         """
         if parameters is None:
             parameters = {
-                'file_patterns': [],
-                'match_type': 'exact',
+                "file_patterns": [],
+                "match_type": "exact",
             }
 
         super().__init__(parameters, identifier)
 
-    def is_valid_parameters(self, parameters: Dict[str, Any]) -> Tuple[bool, str]:
+    def is_valid_parameters(self, parameters: dict[str, Any]) -> tuple[bool, str]:
         """
         Validate parameters for FileFind.
 
@@ -64,29 +65,29 @@ class FileFind(SyncRule):
         if not isinstance(parameters, dict):
             return False, "Parameters must be a dictionary"
 
-        if 'file_patterns' not in parameters:
+        if "file_patterns" not in parameters:
             return False, "Missing required field: file_patterns"
 
-        patterns = parameters['file_patterns']
+        patterns = parameters["file_patterns"]
         if not isinstance(patterns, list):
             return False, "file_patterns must be a list"
 
-        match_type = parameters.get('match_type', 'exact')
-        valid_types = ['exact', 'contains', 'regex', 'glob']
+        match_type = parameters.get("match_type", "exact")
+        valid_types = ["exact", "contains", "regex", "glob"]
         if match_type not in valid_types:
             return False, f"match_type must be one of: {valid_types}"
 
         return True, ""
 
-    def eligible_epochsets(self) -> List[str]:
+    def eligible_epochsets(self) -> list[str]:
         """Return eligible epochset class names."""
-        return ['ndi.daq.system', 'DAQSystem']
+        return ["ndi.daq.system", "DAQSystem"]
 
     def apply(
         self,
-        epochnode_a: Dict[str, Any],
-        epochnode_b: Dict[str, Any],
-    ) -> Tuple[Optional[float], Optional[TimeMapping]]:
+        epochnode_a: dict[str, Any],
+        epochnode_b: dict[str, Any],
+    ) -> tuple[float | None, TimeMapping | None]:
         """
         Apply FileFind rule to determine if epochs can be synchronized.
 
@@ -103,8 +104,8 @@ class FileFind(SyncRule):
         import re
 
         # Get file patterns
-        patterns = self._parameters.get('file_patterns', [])
-        match_type = self._parameters.get('match_type', 'exact')
+        patterns = self._parameters.get("file_patterns", [])
+        match_type = self._parameters.get("match_type", "exact")
 
         if not patterns:
             return None, None
@@ -117,18 +118,18 @@ class FileFind(SyncRule):
             return None, None
 
         # Check if patterns match in both epochs
-        def matches_pattern(files: List[str], pattern: str) -> bool:
+        def matches_pattern(files: list[str], pattern: str) -> bool:
             for f in files:
-                if match_type == 'exact':
-                    if f == pattern or f.endswith('/' + pattern):
+                if match_type == "exact":
+                    if f == pattern or f.endswith("/" + pattern):
                         return True
-                elif match_type == 'contains':
+                elif match_type == "contains":
                     if pattern in f:
                         return True
-                elif match_type == 'glob':
+                elif match_type == "glob":
                     if fnmatch.fnmatch(f, pattern):
                         return True
-                elif match_type == 'regex':
+                elif match_type == "regex":
                     if re.search(pattern, f):
                         return True
             return False
@@ -144,7 +145,7 @@ class FileFind(SyncRule):
         return 1.0, TimeMapping.identity()
 
     @staticmethod
-    def _get_epoch_files(epochnode: Dict[str, Any]) -> List[str]:
+    def _get_epoch_files(epochnode: dict[str, Any]) -> list[str]:
         """
         Extract file paths from an epoch node.
 
@@ -157,11 +158,11 @@ class FileFind(SyncRule):
         files = []
 
         # Try underlying_epochs
-        underlying = epochnode.get('underlying_epochs')
+        underlying = epochnode.get("underlying_epochs")
         if underlying:
             if isinstance(underlying, dict):
-                underlying_files = underlying.get('underlying', [])
-            elif hasattr(underlying, 'underlying'):
+                underlying_files = underlying.get("underlying", [])
+            elif hasattr(underlying, "underlying"):
                 underlying_files = underlying.underlying
             else:
                 underlying_files = []

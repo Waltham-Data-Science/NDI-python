@@ -6,8 +6,9 @@ used in time synchronization across epochs and devices.
 """
 
 from __future__ import annotations
+
 from enum import Enum
-from typing import Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .timemapping import TimeMapping
@@ -30,18 +31,18 @@ class ClockType(Enum):
     - INHERITED: Timing inherited from another device
     """
 
-    UTC = 'utc'
-    APPROX_UTC = 'approx_utc'
-    EXP_GLOBAL_TIME = 'exp_global_time'
-    APPROX_EXP_GLOBAL_TIME = 'approx_exp_global_time'
-    DEV_GLOBAL_TIME = 'dev_global_time'
-    APPROX_DEV_GLOBAL_TIME = 'approx_dev_global_time'
-    DEV_LOCAL_TIME = 'dev_local_time'
-    NO_TIME = 'no_time'
-    INHERITED = 'inherited'
+    UTC = "utc"
+    APPROX_UTC = "approx_utc"
+    EXP_GLOBAL_TIME = "exp_global_time"
+    APPROX_EXP_GLOBAL_TIME = "approx_exp_global_time"
+    DEV_GLOBAL_TIME = "dev_global_time"
+    APPROX_DEV_GLOBAL_TIME = "approx_dev_global_time"
+    DEV_LOCAL_TIME = "dev_local_time"
+    NO_TIME = "no_time"
+    INHERITED = "inherited"
 
     @classmethod
-    def from_string(cls, type_str: str) -> 'ClockType':
+    def from_string(cls, type_str: str) -> ClockType:
         """
         Create a ClockType from a string.
 
@@ -93,7 +94,7 @@ class ClockType(Enum):
         return self in global_types
 
     @staticmethod
-    def assert_global(clocktype: 'ClockType') -> None:
+    def assert_global(clocktype: ClockType) -> None:
         """
         Assert that a clock type is global, raising an error if not.
 
@@ -104,19 +105,21 @@ class ClockType(Enum):
             AssertionError: If clock type is not global
         """
         if not clocktype.is_global():
-            valid_types = ', '.join([
-                ClockType.UTC.value,
-                ClockType.APPROX_UTC.value,
-                ClockType.EXP_GLOBAL_TIME.value,
-                ClockType.APPROX_EXP_GLOBAL_TIME.value,
-                ClockType.DEV_GLOBAL_TIME.value,
-                ClockType.APPROX_DEV_GLOBAL_TIME.value,
-            ])
+            valid_types = ", ".join(
+                [
+                    ClockType.UTC.value,
+                    ClockType.APPROX_UTC.value,
+                    ClockType.EXP_GLOBAL_TIME.value,
+                    ClockType.APPROX_EXP_GLOBAL_TIME.value,
+                    ClockType.DEV_GLOBAL_TIME.value,
+                    ClockType.APPROX_DEV_GLOBAL_TIME.value,
+                ]
+            )
             raise AssertionError(
                 f"Clock type must be one of: {valid_types}. Got: {clocktype.value}"
             )
 
-    def epochgraph_edge(self, other: 'ClockType') -> Tuple[float, Optional['TimeMapping']]:
+    def epochgraph_edge(self, other: ClockType) -> tuple[float, TimeMapping | None]:
         """
         Provide epochgraph edge based purely on clock type.
 
@@ -141,7 +144,7 @@ class ClockType(Enum):
 
         # No mapping possible with no_time
         if self == ClockType.NO_TIME or other == ClockType.NO_TIME:
-            return float('inf'), None
+            return float("inf"), None
 
         # Define valid transitions
         valid_transitions = [
@@ -156,7 +159,7 @@ class ClockType(Enum):
         if (self, other) in valid_transitions:
             return 100.0, TimeMapping.identity()
 
-        return float('inf'), None
+        return float("inf"), None
 
 
 # Convenience aliases for common clock types

@@ -6,17 +6,17 @@ MATLAB equivalents: +ndi/+fun/+epoch/epochid2element.m, filename2epochid.m
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import numpy as np
 
 
 def epochid2element(
     session: Any,
-    epoch_ids: List[str],
-    element_name: str = '',
-    element_type: str = '',
-) -> Dict[str, List[Any]]:
+    epoch_ids: list[str],
+    element_name: str = "",
+    element_type: str = "",
+) -> dict[str, list[Any]]:
     """Find elements containing specified epoch IDs.
 
     MATLAB equivalent: ndi.fun.epoch.epochid2element
@@ -33,32 +33,32 @@ def epochid2element(
     from ndi.query import Query
 
     # Get all elements
-    q = Query('').isa('element')
+    q = Query("").isa("element")
     if element_name:
-        q = q & (Query('element.name') == element_name)
+        q = q & (Query("element.name") == element_name)
     docs = session.database_search(q)
 
-    result: Dict[str, List[Any]] = {eid: [] for eid in epoch_ids}
+    result: dict[str, list[Any]] = {eid: [] for eid in epoch_ids}
 
     for doc in docs:
-        props = doc.document_properties if hasattr(doc, 'document_properties') else doc
+        props = doc.document_properties if hasattr(doc, "document_properties") else doc
         if not isinstance(props, dict):
             continue
 
         if element_type:
-            classes = props.get('document_class', {}).get('class_list', [])
-            type_names = [c.get('class_name', '') for c in classes]
+            classes = props.get("document_class", {}).get("class_list", [])
+            type_names = [c.get("class_name", "") for c in classes]
             if element_type not in type_names:
                 continue
 
         # Check epoch table
-        et = props.get('element', {}).get('epoch_table', [])
+        et = props.get("element", {}).get("epoch_table", [])
         if not isinstance(et, list):
             et = []
         doc_epoch_ids = set()
         for entry in et:
             if isinstance(entry, dict):
-                eid = entry.get('epoch_id', '')
+                eid = entry.get("epoch_id", "")
                 if eid:
                     doc_epoch_ids.add(eid.lower())
 
@@ -71,8 +71,8 @@ def epochid2element(
 
 def filename2epochid(
     session: Any,
-    filenames: List[str],
-) -> Dict[str, List[str]]:
+    filenames: list[str],
+) -> dict[str, list[str]]:
     """Map filenames to their epoch IDs by searching DAQ epoch tables.
 
     MATLAB equivalent: ndi.fun.epoch.filename2epochid
@@ -87,24 +87,24 @@ def filename2epochid(
     from ndi.query import Query
 
     # Search for DAQ system documents
-    docs = session.database_search(Query('').isa('daq_system'))
+    docs = session.database_search(Query("").isa("daq_system"))
 
-    result: Dict[str, List[str]] = {fn: [] for fn in filenames}
+    result: dict[str, list[str]] = {fn: [] for fn in filenames}
 
     for doc in docs:
-        props = doc.document_properties if hasattr(doc, 'document_properties') else doc
+        props = doc.document_properties if hasattr(doc, "document_properties") else doc
         if not isinstance(props, dict):
             continue
 
-        et = props.get('daqsystem', {}).get('epoch_table', [])
+        et = props.get("daqsystem", {}).get("epoch_table", [])
         if not isinstance(et, list):
             et = []
 
         for entry in et:
             if not isinstance(entry, dict):
                 continue
-            epoch_id = entry.get('epoch_id', '')
-            underlying = entry.get('underlying_files', [])
+            epoch_id = entry.get("epoch_id", "")
+            underlying = entry.get("underlying_files", [])
             if isinstance(underlying, str):
                 underlying = [underlying]
             for uf in underlying:
@@ -118,7 +118,7 @@ def filename2epochid(
 
 
 def t0_t1_to_array(
-    t0t1_in: Union[List, Any],
+    t0t1_in: list | Any,
 ) -> np.ndarray:
     """Convert a list of ``[t0, t1]`` interval pairs to an Nx2 numpy array.
 

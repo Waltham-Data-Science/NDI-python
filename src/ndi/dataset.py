@@ -7,12 +7,13 @@ own session for storing dataset-level documents and metadata.
 """
 
 from __future__ import annotations
+
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
-from .ido import Ido
 from .document import Document
+from .ido import Ido
 from .query import Query
 
 logger = logging.getLogger(__name__)
@@ -42,8 +43,8 @@ class Dataset:
 
     def __init__(
         self,
-        path: Union[str, Path],
-        reference: str = '',
+        path: str | Path,
+        reference: str = "",
     ):
         """
         Create or open a Dataset.
@@ -59,7 +60,7 @@ class Dataset:
         self._ido = Ido()
 
         # Create internal session for dataset-level documents
-        dataset_session_path = self._path / '.ndi_dataset'
+        dataset_session_path = self._path / ".ndi_dataset"
         dataset_session_path.mkdir(parents=True, exist_ok=True)
         self._session = DirSession(
             f"dataset:{self._reference}",
@@ -67,7 +68,7 @@ class Dataset:
         )
 
         # Cache of open sessions
-        self._session_cache: Dict[str, Any] = {}
+        self._session_cache: dict[str, Any] = {}
 
     @property
     def reference(self) -> str:
@@ -86,7 +87,7 @@ class Dataset:
     # Session Management
     # =========================================================================
 
-    def add_linked_session(self, session: Any) -> 'Dataset':
+    def add_linked_session(self, session: Any) -> Dataset:
         """
         Add a linked session to this dataset.
 
@@ -110,7 +111,7 @@ class Dataset:
 
         return self
 
-    def add_ingested_session(self, session: Any) -> 'Dataset':
+    def add_ingested_session(self, session: Any) -> Dataset:
         """
         Ingest a session into this dataset.
 
@@ -132,14 +133,14 @@ class Dataset:
         # We bypass session.database_add() because it enforces session_id ==
         # self._session.id(), but ingested docs retain their *original*
         # session_id so we can tell which session they came from.
-        all_docs = session.database_search(Query('').isa('base'))
+        all_docs = session.database_search(Query("").isa("base"))
         for doc in all_docs:
             try:
                 self._session._database.add(doc)
                 # Copy binary files from source session to dataset
                 self._copy_binary_files(session, doc)
             except Exception as exc:
-                logger.debug('Skipping document %s during ingestion: %s', doc.id, exc)
+                logger.debug("Skipping document %s during ingestion: %s", doc.id, exc)
 
         # Create session_in_a_dataset document
         doc = self._create_session_doc(session, is_linked=False)
@@ -151,7 +152,7 @@ class Dataset:
         self,
         session_id: str,
         remove_documents: bool = False,
-    ) -> 'Dataset':
+    ) -> Dataset:
         """
         Remove a session from this dataset.
 
@@ -178,7 +179,7 @@ class Dataset:
 
         return self
 
-    def open_session(self, session_id: str) -> Optional[Any]:
+    def open_session(self, session_id: str) -> Any | None:
         """
         Open a session by its ID.
 
@@ -199,8 +200,8 @@ class Dataset:
         if doc is None:
             return None
 
-        props = doc.document_properties.get('session_in_a_dataset', {})
-        is_linked = props.get('is_linked', False)
+        props = doc.document_properties.get("session_in_a_dataset", {})
+        is_linked = props.get("is_linked", False)
 
         if is_linked:
             # Recreate from creator args
@@ -214,7 +215,7 @@ class Dataset:
 
         return session
 
-    def session_list(self) -> List[Dict[str, Any]]:
+    def session_list(self) -> list[dict[str, Any]]:
         """
         List all sessions in this dataset.
 
@@ -225,18 +226,20 @@ class Dataset:
                 - is_linked: True if linked, False if ingested
                 - document_id: ID of the session_in_a_dataset document
         """
-        q = Query('').isa('session_in_a_dataset')
+        q = Query("").isa("session_in_a_dataset")
         docs = self._session.database_search(q)
 
         result = []
         for doc in docs:
-            props = doc.document_properties.get('session_in_a_dataset', {})
-            result.append({
-                'session_id': props.get('session_id', ''),
-                'session_reference': props.get('session_reference', ''),
-                'is_linked': bool(props.get('is_linked', False)),
-                'document_id': doc.id,
-            })
+            props = doc.document_properties.get("session_in_a_dataset", {})
+            result.append(
+                {
+                    "session_id": props.get("session_id", ""),
+                    "session_reference": props.get("session_reference", ""),
+                    "is_linked": bool(props.get("is_linked", False)),
+                    "document_id": doc.id,
+                }
+            )
 
         return result
 
@@ -244,21 +247,21 @@ class Dataset:
     # Database Operations (delegated to internal session)
     # =========================================================================
 
-    def database_add(self, document: Document) -> 'Dataset':
+    def database_add(self, document: Document) -> Dataset:
         """Add a document to the dataset database."""
         self._session.database_add(document)
         return self
 
     def database_rm(
         self,
-        doc_or_id: Union[Document, str],
+        doc_or_id: Document | str,
         error_if_not_found: bool = False,
-    ) -> 'Dataset':
+    ) -> Dataset:
         """Remove a document from the dataset database."""
         self._session.database_rm(doc_or_id, error_if_not_found)
         return self
 
-    def database_search(self, query: Query) -> List[Document]:
+    def database_search(self, query: Query) -> list[Document]:
         """Search the dataset database.
 
         Unlike Session.database_search(), this does NOT filter by session_id
@@ -288,7 +291,7 @@ class Dataset:
         self,
         session_id: str,
         are_you_sure: bool = False,
-    ) -> 'Dataset':
+    ) -> Dataset:
         """
         Delete an ingested session and all its documents.
 
@@ -309,11 +312,9 @@ class Dataset:
         if doc is None:
             return self
 
-        props = doc.document_properties.get('session_in_a_dataset', {})
-        if props.get('is_linked', False):
-            raise ValueError(
-                "Cannot delete a linked session. Use unlink_session() instead."
-            )
+        props = doc.document_properties.get("session_in_a_dataset", {})
+        if props.get("is_linked", False):
+            raise ValueError("Cannot delete a linked session. Use unlink_session() instead.")
 
         # Remove all documents from this session
         self._remove_session_documents(session_id)
@@ -326,7 +327,7 @@ class Dataset:
 
         return self
 
-    def document_session(self, document: Document) -> Optional[Any]:
+    def document_session(self, document: Document) -> Any | None:
         """
         Find which session a document belongs to.
 
@@ -348,18 +349,19 @@ class Dataset:
     def _copy_binary_files(self, source_session: Any, doc: Document) -> None:
         """Copy binary file attachments from a source session to this dataset."""
         import shutil
+
         if self._session._database is None:
             return
         props = doc.document_properties
-        files = props.get('files', {})
+        files = props.get("files", {})
         if not isinstance(files, dict):
             return
-        for fi in files.get('file_info', []):
-            name = fi.get('name', '')
+        for fi in files.get("file_info", []):
+            name = fi.get("name", "")
             if not name:
                 continue
             # Try the source session's binary dir first
-            if hasattr(source_session, '_database') and source_session._database is not None:
+            if hasattr(source_session, "_database") and source_session._database is not None:
                 src_path = source_session._database.get_binary_path(doc, name)
                 if src_path.exists():
                     dest_path = self._session._database.get_binary_path(doc, name)
@@ -367,8 +369,8 @@ class Dataset:
                     shutil.copy2(str(src_path), str(dest_path))
                     continue
             # Fallback: try the original file location from file_info
-            for loc in fi.get('locations', []):
-                source = loc.get('location', '')
+            for loc in fi.get("locations", []):
+                source = loc.get("location", "")
                 if source:
                     src_path = Path(source)
                     if src_path.exists():
@@ -380,34 +382,33 @@ class Dataset:
     def _create_session_doc(self, session: Any, is_linked: bool) -> Document:
         """Create a session_in_a_dataset document."""
         # Get creator args for recreating the session
-        creator_args = session.creator_args() if hasattr(session, 'creator_args') else []
+        creator_args = session.creator_args() if hasattr(session, "creator_args") else []
 
         props = {
-            'session_in_a_dataset.session_id': session.id(),
-            'session_in_a_dataset.session_reference': session.reference,
-            'session_in_a_dataset.is_linked': is_linked,
-            'session_in_a_dataset.session_creator': type(session).__name__,
+            "session_in_a_dataset.session_id": session.id(),
+            "session_in_a_dataset.session_reference": session.reference,
+            "session_in_a_dataset.is_linked": is_linked,
+            "session_in_a_dataset.session_creator": type(session).__name__,
         }
 
         # Store up to 6 creator args
         for i, arg in enumerate(creator_args[:6], 1):
-            props[f'session_in_a_dataset.session_creator_input{i}'] = str(arg)
+            props[f"session_in_a_dataset.session_creator_input{i}"] = str(arg)
 
-        doc = Document('session_in_a_dataset', **props)
+        doc = Document("session_in_a_dataset", **props)
         return doc
 
-    def _find_session_doc(self, session_id: str) -> Optional[Document]:
+    def _find_session_doc(self, session_id: str) -> Document | None:
         """Find the session_in_a_dataset document for a given session ID."""
-        q = (
-            Query('').isa('session_in_a_dataset') &
-            (Query('session_in_a_dataset.session_id') == session_id)
+        q = Query("").isa("session_in_a_dataset") & (
+            Query("session_in_a_dataset.session_id") == session_id
         )
         docs = self._session.database_search(q)
         return docs[0] if docs else None
 
     def _remove_session_documents(self, session_id: str) -> None:
         """Remove all documents belonging to a session."""
-        q = Query('base.session_id') == session_id
+        q = Query("base.session_id") == session_id
         # Search directly on the database, not through Session which
         # filters to its own session_id.
         docs = self._session._database.search(q) if self._session._database else []
@@ -415,19 +416,19 @@ class Dataset:
             try:
                 self._session.database_rm(doc)
             except Exception as exc:
-                logger.warning('Failed to remove document %s: %s', doc.id, exc)
+                logger.warning("Failed to remove document %s: %s", doc.id, exc)
 
-    def _recreate_linked_session(self, props: Dict[str, Any]) -> Optional[Any]:
+    def _recreate_linked_session(self, props: dict[str, Any]) -> Any | None:
         """Recreate a linked session from stored creator args."""
-        creator = props.get('session_creator', '')
+        creator = props.get("session_creator", "")
 
-        if creator == 'DirSession':
+        if creator == "DirSession":
             from .session.dir import DirSession
 
             # Get creator args
             args = []
             for i in range(1, 7):
-                arg = props.get(f'session_creator_input{i}', '')
+                arg = props.get(f"session_creator_input{i}", "")
                 if arg:
                     args.append(arg)
 

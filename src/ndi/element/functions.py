@@ -13,7 +13,8 @@ MATLAB equivalents:
 """
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+
+from typing import Any
 
 import numpy as np
 
@@ -21,7 +22,7 @@ import numpy as np
 def missingepochs(
     element1: Any,
     element2: Any,
-) -> Tuple[bool, List[str]]:
+) -> tuple[bool, list[str]]:
     """
     Determine if epochs in element1 are missing from element2.
 
@@ -47,8 +48,8 @@ def missingepochs(
     et2 = _get_epoch_table(element2)
 
     # Extract epoch IDs
-    ids1 = {e.get('epoch_id', '') for e in et1}
-    ids2 = {e.get('epoch_id', '') for e in et2}
+    ids1 = {e.get("epoch_id", "") for e in et1}
+    ids2 = {e.get("epoch_id", "") for e in et2}
 
     # Find missing
     missing_ids = sorted(ids1 - ids2)
@@ -95,7 +96,7 @@ def oneepoch(
         session=session,
         name=name_out,
         reference=reference_out,
-        type=getattr(element_in, '_type', 'timeseries'),
+        type=getattr(element_in, "_type", "timeseries"),
     )
 
     return elem_out
@@ -106,7 +107,7 @@ def spikes_for_probe(
     probe: Any,
     name: str,
     reference: int,
-    spikedata: List[Dict[str, Any]],
+    spikedata: list[dict[str, Any]],
 ) -> Any:
     """
     Create a spiking neuron element from probe data and spike times.
@@ -138,21 +139,19 @@ def spikes_for_probe(
 
     # Validate spikedata
     probe_et = _get_epoch_table(probe)
-    probe_epoch_ids = {e.get('epoch_id', '') for e in probe_et}
+    probe_epoch_ids = {e.get("epoch_id", "") for e in probe_et}
 
     for sd in spikedata:
-        epoch_id = sd.get('epochid', '')
+        epoch_id = sd.get("epochid", "")
         if epoch_id and epoch_id not in probe_epoch_ids:
-            raise ValueError(
-                f"Spike data epoch_id '{epoch_id}' not found in probe epochs"
-            )
+            raise ValueError(f"Spike data epoch_id '{epoch_id}' not found in probe epochs")
 
     # Create neuron element
     neuron = Element(
         session=session,
         name=name,
         reference=reference,
-        type='spikes',
+        type="spikes",
     )
 
     return neuron
@@ -200,7 +199,7 @@ def downsample(
         session=session,
         name=name_out,
         reference=reference_out,
-        type=getattr(element_in, '_type', 'timeseries'),
+        type=getattr(element_in, "_type", "timeseries"),
     )
 
     return elem_out
@@ -210,7 +209,7 @@ def downsample_timeseries(
     t_in: np.ndarray,
     d_in: np.ndarray,
     lp_freq: float,
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Downsample timeseries data with anti-aliasing filter.
 
@@ -251,11 +250,10 @@ def downsample_timeseries(
 
     try:
         from scipy.signal import cheby1, filtfilt
-    except ImportError:
+    except ImportError as exc:
         raise ImportError(
-            "scipy is required for anti-aliased downsampling. "
-            "Install with: pip install scipy"
-        )
+            "scipy is required for anti-aliased downsampling. " "Install with: pip install scipy"
+        ) from exc
 
     # Design Chebyshev Type I low-pass filter
     nyq = fs / 2.0
@@ -263,7 +261,7 @@ def downsample_timeseries(
     if normalized_cutoff >= 1.0:
         return t_in, d_in
 
-    b, a = cheby1(N=4, rp=0.8, Wn=normalized_cutoff, btype='low')
+    b, a = cheby1(N=4, rp=0.8, Wn=normalized_cutoff, btype="low")
 
     # Compute decimation factor
     new_fs = 2 * lp_freq
@@ -291,16 +289,16 @@ def downsample_timeseries(
     return t_out, d_out
 
 
-def _get_epoch_table(obj: Any) -> List[Dict]:
+def _get_epoch_table(obj: Any) -> list[dict]:
     """
     Get epoch table from various object types.
 
     Handles Element, Probe, and dict-like objects.
     """
-    if hasattr(obj, 'epochtable'):
+    if hasattr(obj, "epochtable"):
         return obj.epochtable()
     if isinstance(obj, dict):
-        return obj.get('epochtable', [])
+        return obj.get("epochtable", [])
     if isinstance(obj, list):
         return obj
     return []

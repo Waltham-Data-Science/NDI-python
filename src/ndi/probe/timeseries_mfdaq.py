@@ -8,7 +8,8 @@ MATLAB equivalent: src/ndi/+ndi/+probe/+timeseries/mfdaq.m
 """
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, Tuple, Union
+
+from typing import Any
 
 import numpy as np
 
@@ -36,10 +37,10 @@ class ProbeTimeseriesMFDAQ(ProbeTimeseries):
 
     def read_epochsamples(
         self,
-        epoch: Union[int, str],
+        epoch: int | str,
         s0: int,
         s1: int,
-    ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], Optional[Any]]:
+    ) -> tuple[np.ndarray | None, np.ndarray | None, Any | None]:
         """
         Read data from an epoch by sample indices.
 
@@ -65,17 +66,13 @@ class ProbeTimeseriesMFDAQ(ProbeTimeseries):
 
         # Read data from the device
         try:
-            data = dev.readchannels_epochsamples(
-                channeltype, channellist, devepoch, s0, s1
-            )
+            data = dev.readchannels_epochsamples(channeltype, channellist, devepoch, s0, s1)
         except (AttributeError, TypeError):
             return None, None, None
 
         # Get time values
         try:
-            t = dev.epochsamples2times(
-                channeltype, channellist, devepoch, np.arange(s0, s1 + 1)
-            )
+            t = dev.epochsamples2times(channeltype, channellist, devepoch, np.arange(s0, s1 + 1))
         except (AttributeError, TypeError):
             t = None
 
@@ -83,10 +80,10 @@ class ProbeTimeseriesMFDAQ(ProbeTimeseries):
 
     def readtimeseriesepoch(
         self,
-        epoch: Union[int, str],
+        epoch: int | str,
         t0: float = 0.0,
-        t1: float = float('inf'),
-    ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], Optional[Any]]:
+        t1: float = float("inf"),
+    ) -> tuple[np.ndarray | None, np.ndarray | None, Any | None]:
         """
         Read data from an epoch by time bounds.
 
@@ -111,9 +108,7 @@ class ProbeTimeseriesMFDAQ(ProbeTimeseries):
 
         # Convert times to samples
         try:
-            samples = dev.epochtimes2samples(
-                channeltype, channellist, devepoch, np.array([t0, t1])
-            )
+            samples = dev.epochtimes2samples(channeltype, channellist, devepoch, np.array([t0, t1]))
             s0 = int(samples[0])
             s1 = int(samples[1])
         except (AttributeError, TypeError):
@@ -121,7 +116,7 @@ class ProbeTimeseriesMFDAQ(ProbeTimeseries):
 
         return self.read_epochsamples(epoch, s0, s1)
 
-    def samplerate(self, epoch: Union[int, str]) -> float:
+    def samplerate(self, epoch: int | str) -> float:
         """
         Get sample rate for this probe in an epoch.
 
@@ -142,7 +137,7 @@ class ProbeTimeseriesMFDAQ(ProbeTimeseries):
 
         try:
             sr = dev.samplerate(devepoch, channeltype, channellist)
-            if hasattr(sr, '__len__'):
+            if hasattr(sr, "__len__"):
                 return float(sr[0]) if len(sr) > 0 else -1.0
             return float(sr)
         except (AttributeError, TypeError):
@@ -150,8 +145,8 @@ class ProbeTimeseriesMFDAQ(ProbeTimeseries):
 
     def getchanneldevinfo(
         self,
-        epoch: Union[int, str],
-    ) -> Optional[Tuple[Any, Any, Any, List[int]]]:
+        epoch: int | str,
+    ) -> tuple[Any, Any, Any, list[int]] | None:
         """
         Get device info for channels in an epoch.
 
@@ -180,21 +175,21 @@ class ProbeTimeseriesMFDAQ(ProbeTimeseries):
                 entry = et[epoch - 1]
         else:
             for e in et:
-                if e.get('epoch_id') == epoch:
+                if e.get("epoch_id") == epoch:
                     entry = e
                     break
 
         if entry is None:
             return None
 
-        epm = entry.get('epochprobemap')
+        epm = entry.get("epochprobemap")
         if epm is None:
             return None
 
         # Find matching probe map entry
         maps = epm if isinstance(epm, list) else [epm]
         for m in maps:
-            if hasattr(m, 'matches'):
+            if hasattr(m, "matches"):
                 if m.matches(name=self._name, reference=self._reference):
                     return self._resolve_device(m, entry)
 
@@ -203,8 +198,8 @@ class ProbeTimeseriesMFDAQ(ProbeTimeseries):
     def _resolve_device(
         self,
         probe_map: Any,
-        epoch_entry: Dict,
-    ) -> Optional[Tuple[Any, Any, Any, List[int]]]:
+        epoch_entry: dict,
+    ) -> tuple[Any, Any, Any, list[int]] | None:
         """
         Resolve device info from a probe map entry.
 
@@ -215,11 +210,12 @@ class ProbeTimeseriesMFDAQ(ProbeTimeseries):
         Returns:
             Tuple of (device, device_epoch, channeltype, channellist)
         """
-        if not hasattr(probe_map, 'devicestring') or not probe_map.devicestring:
+        if not hasattr(probe_map, "devicestring") or not probe_map.devicestring:
             return None
 
         # Parse device string to get device name and channels
         from ..daq.daqsystemstring import DAQSystemString
+
         dss = DAQSystemString.parse(probe_map.devicestring)
 
         # Find the DAQ system by name
@@ -227,13 +223,13 @@ class ProbeTimeseriesMFDAQ(ProbeTimeseries):
             return None
 
         # Get all DAQ systems from the session
-        daq_systems = getattr(self._session, 'daqsystem', [])
+        daq_systems = getattr(self._session, "daqsystem", [])
         if callable(daq_systems):
             daq_systems = daq_systems()
 
         device = None
         for ds in (daq_systems if isinstance(daq_systems, list) else []):
-            if hasattr(ds, 'name') and ds.name == dss.devicename:
+            if hasattr(ds, "name") and ds.name == dss.devicename:
                 device = ds
                 break
 
@@ -246,10 +242,10 @@ class ProbeTimeseriesMFDAQ(ProbeTimeseries):
             channeltype = channels[0][0]
             channellist = channels[0][1]
         else:
-            channeltype = 'ai'
+            channeltype = "ai"
             channellist = [1]
 
-        devepoch = epoch_entry.get('epoch_number', 1)
+        devepoch = epoch_entry.get("epoch_number", 1)
 
         return device, devepoch, channeltype, channellist
 

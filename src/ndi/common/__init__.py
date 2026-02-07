@@ -24,10 +24,10 @@ class PathConstants:
     """
 
     # These can be overridden by environment variables or set programmatically
-    _ndi_root: Optional[Path] = None
-    _common_folder: Optional[Path] = None
-    _document_path: Optional[Path] = None
-    _schema_path: Optional[Path] = None
+    _ndi_root: Path | None = None
+    _common_folder: Path | None = None
+    _document_path: Path | None = None
+    _schema_path: Path | None = None
 
     @classmethod
     def _find_ndi_root(cls) -> Path:
@@ -36,8 +36,8 @@ class PathConstants:
         Looks for environment variable NDI_ROOT, or tries to find it
         relative to this package. Searches multiple possible locations.
         """
-        if os.environ.get('NDI_ROOT'):
-            return Path(os.environ['NDI_ROOT'])
+        if os.environ.get("NDI_ROOT"):
+            return Path(os.environ["NDI_ROOT"])
 
         # Try to find it relative to this file
         # src/ndi/common/__init__.py -> src/ndi/common -> src/ndi -> src -> repo_root
@@ -45,12 +45,12 @@ class PathConstants:
 
         # Check multiple possible locations for ndi_common
         possible_paths = [
-            package_dir / 'ndi_common',              # repo_root/ndi_common
-            package_dir / 'src' / 'ndi' / 'ndi_common',  # repo_root/src/ndi/ndi_common
+            package_dir / "ndi_common",  # repo_root/ndi_common
+            package_dir / "src" / "ndi" / "ndi_common",  # repo_root/src/ndi/ndi_common
         ]
 
         for path in possible_paths:
-            if path.exists() and (path / 'database_documents').exists():
+            if path.exists() and (path / "database_documents").exists():
                 # Return the parent that contains ndi_common
                 return path.parent
 
@@ -72,7 +72,7 @@ class PathConstants:
     def COMMON_FOLDER(cls) -> Path:
         """Path to ndi_common folder with shared resources."""
         if cls._common_folder is None:
-            cls._common_folder = cls.NDI_ROOT / 'ndi_common'
+            cls._common_folder = cls.NDI_ROOT / "ndi_common"
         return cls._common_folder
 
     @classmethod
@@ -80,7 +80,7 @@ class PathConstants:
     def DOCUMENT_PATH(cls) -> Path:
         """Path to document JSON definitions."""
         if cls._document_path is None:
-            cls._document_path = cls.COMMON_FOLDER / 'database_documents'
+            cls._document_path = cls.COMMON_FOLDER / "database_documents"
         return cls._document_path
 
     @classmethod
@@ -88,16 +88,16 @@ class PathConstants:
     def SCHEMA_PATH(cls) -> Path:
         """Path to JSON schema files."""
         if cls._schema_path is None:
-            cls._schema_path = cls.COMMON_FOLDER / 'schema_documents'
+            cls._schema_path = cls.COMMON_FOLDER / "schema_documents"
         return cls._schema_path
 
     @classmethod
     def set_paths(
         cls,
-        ndi_root: Optional[Path] = None,
-        common_folder: Optional[Path] = None,
-        document_path: Optional[Path] = None,
-        schema_path: Optional[Path] = None
+        ndi_root: Path | None = None,
+        common_folder: Path | None = None,
+        document_path: Path | None = None,
+        schema_path: Path | None = None,
     ) -> None:
         """Set custom paths for NDI resources.
 
@@ -130,10 +130,10 @@ def timestamp() -> str:
     """
     now = datetime.now(timezone.utc)
     # Format with microseconds and Z suffix
-    return now.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+    return now.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
-def get_logger(name: str = 'ndi'):
+def get_logger(name: str = "ndi"):
     """Get a logger for NDI components.
 
     Args:
@@ -143,7 +143,8 @@ def get_logger(name: str = 'ndi'):
         logging.Logger instance.
     """
     import logging
+
     return logging.getLogger(name)
 
 
-__all__ = ['PathConstants', 'timestamp', 'get_logger']
+__all__ = ["PathConstants", "timestamp", "get_logger"]

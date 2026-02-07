@@ -6,7 +6,8 @@ based on shared underlying files.
 """
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, Tuple
+
+from typing import Any
 
 from ..syncrule_base import SyncRule
 from ..timemapping import TimeMapping
@@ -32,8 +33,8 @@ class FileMatch(SyncRule):
 
     def __init__(
         self,
-        parameters: Optional[Dict[str, Any]] = None,
-        identifier: Optional[str] = None,
+        parameters: dict[str, Any] | None = None,
+        identifier: str | None = None,
     ):
         """
         Create a new FileMatch sync rule.
@@ -43,11 +44,11 @@ class FileMatch(SyncRule):
             identifier: Optional identifier
         """
         if parameters is None:
-            parameters = {'number_fullpath_matches': 2}
+            parameters = {"number_fullpath_matches": 2}
 
         super().__init__(parameters, identifier)
 
-    def is_valid_parameters(self, parameters: Dict[str, Any]) -> Tuple[bool, str]:
+    def is_valid_parameters(self, parameters: dict[str, Any]) -> tuple[bool, str]:
         """
         Validate parameters for FileMatch.
 
@@ -60,10 +61,10 @@ class FileMatch(SyncRule):
         if not isinstance(parameters, dict):
             return False, "Parameters must be a dictionary"
 
-        if 'number_fullpath_matches' not in parameters:
+        if "number_fullpath_matches" not in parameters:
             return False, "Missing required field: number_fullpath_matches"
 
-        n = parameters['number_fullpath_matches']
+        n = parameters["number_fullpath_matches"]
         if not isinstance(n, (int, float)):
             return False, "number_fullpath_matches must be a number"
 
@@ -72,24 +73,24 @@ class FileMatch(SyncRule):
 
         return True, ""
 
-    def eligible_epochsets(self) -> List[str]:
+    def eligible_epochsets(self) -> list[str]:
         """Return eligible epochset class names."""
-        return ['ndi.daq.system', 'DAQSystem']
+        return ["ndi.daq.system", "DAQSystem"]
 
-    def ineligible_epochsets(self) -> List[str]:
+    def ineligible_epochsets(self) -> list[str]:
         """Return ineligible epochset class names."""
         base_ineligible = super().ineligible_epochsets()
         return base_ineligible + [
-            'ndi.epoch.epochset',
-            'ndi.epoch.epochset.param',
-            'ndi.file.navigator',
+            "ndi.epoch.epochset",
+            "ndi.epoch.epochset.param",
+            "ndi.file.navigator",
         ]
 
     def apply(
         self,
-        epochnode_a: Dict[str, Any],
-        epochnode_b: Dict[str, Any],
-    ) -> Tuple[Optional[float], Optional[TimeMapping]]:
+        epochnode_a: dict[str, Any],
+        epochnode_b: dict[str, Any],
+    ) -> tuple[float | None, TimeMapping | None]:
         """
         Apply FileMatch rule to determine if epochs can be synchronized.
 
@@ -104,16 +105,16 @@ class FileMatch(SyncRule):
             Tuple of (cost, mapping) or (None, None) if no sync possible
         """
         # Quick content checks
-        class_a = epochnode_a.get('objectclass', '')
-        class_b = epochnode_b.get('objectclass', '')
+        class_a = epochnode_a.get("objectclass", "")
+        class_b = epochnode_b.get("objectclass", "")
 
         # Must be DAQ systems
         if not self._is_daq_system(class_a) or not self._is_daq_system(class_b):
             return None, None
 
         # Check for underlying epochs
-        underlying_a = epochnode_a.get('underlying_epochs')
-        underlying_b = epochnode_b.get('underlying_epochs')
+        underlying_a = epochnode_a.get("underlying_epochs")
+        underlying_b = epochnode_b.get("underlying_epochs")
 
         if not underlying_a or not underlying_b:
             return None, None
@@ -128,7 +129,7 @@ class FileMatch(SyncRule):
         # Find common files
         common = set(files_a) & set(files_b)
 
-        required_matches = self._parameters.get('number_fullpath_matches', 2)
+        required_matches = self._parameters.get("number_fullpath_matches", 2)
         if len(common) >= required_matches:
             # Epochs match - return cost=1 and identity mapping
             return 1.0, TimeMapping.identity()
@@ -139,14 +140,14 @@ class FileMatch(SyncRule):
     def _is_daq_system(classname: str) -> bool:
         """Check if a classname represents a DAQ system."""
         daq_classes = [
-            'ndi.daq.system',
-            'DAQSystem',
-            'daq.system',
+            "ndi.daq.system",
+            "DAQSystem",
+            "daq.system",
         ]
         return any(c in classname for c in daq_classes)
 
     @staticmethod
-    def _get_underlying_files(underlying_epochs: Any) -> List[str]:
+    def _get_underlying_files(underlying_epochs: Any) -> list[str]:
         """
         Extract underlying file paths from underlying_epochs structure.
 
@@ -157,8 +158,8 @@ class FileMatch(SyncRule):
             List of file paths
         """
         if isinstance(underlying_epochs, dict):
-            underlying = underlying_epochs.get('underlying', [])
-        elif hasattr(underlying_epochs, 'underlying'):
+            underlying = underlying_epochs.get("underlying", [])
+        elif hasattr(underlying_epochs, "underlying"):
             underlying = underlying_epochs.underlying
         else:
             return []

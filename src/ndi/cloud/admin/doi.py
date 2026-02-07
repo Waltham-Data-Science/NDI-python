@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .crossref import CONSTANTS, create_batch_submission
 
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from ..client import CloudClient
 
 
-def create_new_doi(prefix: str = '') -> str:
+def create_new_doi(prefix: str = "") -> str:
     """Generate a new unique DOI string.
 
     Args:
@@ -29,14 +29,14 @@ def create_new_doi(prefix: str = '') -> str:
     if not prefix:
         prefix = CONSTANTS.DOI_PREFIX
     suffix = uuid.uuid4().hex[:8]
-    return f'{prefix}/ndic.{suffix}'
+    return f"{prefix}/ndic.{suffix}"
 
 
 def register_dataset_doi(
-    client: 'CloudClient',
+    client: CloudClient,
     cloud_dataset_id: str,
     use_test: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Register a DOI for a cloud dataset via Crossref.
 
     Fetches dataset metadata from the cloud, generates Crossref XML,
@@ -60,7 +60,7 @@ def register_dataset_doi(
 
     # Fetch metadata
     metadata = ds_api.get_dataset(client, cloud_dataset_id)
-    metadata['cloud_dataset_id'] = cloud_dataset_id
+    metadata["cloud_dataset_id"] = cloud_dataset_id
 
     # Generate DOI
     doi = create_new_doi()
@@ -70,40 +70,40 @@ def register_dataset_doi(
 
     # Submit to Crossref
     deposit_url = CONSTANTS.TEST_DEPOSIT_URL if use_test else CONSTANTS.DEPOSIT_URL
-    crossref_user = os.environ.get('CROSSREF_USERNAME', '')
-    crossref_pass = os.environ.get('CROSSREF_PASSWORD', '')
+    crossref_user = os.environ.get("CROSSREF_USERNAME", "")
+    crossref_pass = os.environ.get("CROSSREF_PASSWORD", "")
 
     if not crossref_user or not crossref_pass:
         return {
-            'doi': doi,
-            'xml': xml,
-            'submission_status': 'skipped',
-            'reason': 'CROSSREF_USERNAME/CROSSREF_PASSWORD not set',
+            "doi": doi,
+            "xml": xml,
+            "submission_status": "skipped",
+            "reason": "CROSSREF_USERNAME/CROSSREF_PASSWORD not set",
         }
 
     try:
         resp = requests.post(
             deposit_url,
-            data=xml.encode('utf-8'),
-            headers={'Content-Type': 'application/xml'},
+            data=xml.encode("utf-8"),
+            headers={"Content-Type": "application/xml"},
             auth=(crossref_user, crossref_pass),
             timeout=60,
         )
         return {
-            'doi': doi,
-            'xml': xml,
-            'submission_status': 'submitted' if resp.status_code == 200 else 'failed',
-            'http_status': resp.status_code,
+            "doi": doi,
+            "xml": xml,
+            "submission_status": "submitted" if resp.status_code == 200 else "failed",
+            "http_status": resp.status_code,
         }
     except requests.RequestException as exc:
-        raise CloudError(f'Crossref submission failed: {exc}') from exc
+        raise CloudError(f"Crossref submission failed: {exc}") from exc
 
 
 def check_submission(
     filename: str,
-    data_type: str = 'result',
+    data_type: str = "result",
     use_test: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Check the status of a Crossref submission.
 
     Args:
@@ -117,13 +117,13 @@ def check_submission(
     import requests
 
     base = CONSTANTS.TEST_DEPOSIT_URL if use_test else CONSTANTS.DEPOSIT_URL
-    url = f'{base}?doi_batch_id={filename}&type={data_type}'
+    url = f"{base}?doi_batch_id={filename}&type={data_type}"
 
-    crossref_user = os.environ.get('CROSSREF_USERNAME', '')
-    crossref_pass = os.environ.get('CROSSREF_PASSWORD', '')
+    crossref_user = os.environ.get("CROSSREF_USERNAME", "")
+    crossref_pass = os.environ.get("CROSSREF_PASSWORD", "")
 
     if not crossref_user or not crossref_pass:
-        return {'status': 'skipped', 'reason': 'No credentials'}
+        return {"status": "skipped", "reason": "No credentials"}
 
     try:
         resp = requests.get(
@@ -132,9 +132,9 @@ def check_submission(
             timeout=60,
         )
         return {
-            'status': 'ok' if resp.status_code == 200 else 'error',
-            'http_status': resp.status_code,
-            'body': resp.text,
+            "status": "ok" if resp.status_code == 200 else "error",
+            "http_status": resp.status_code,
+            "body": resp.text,
         }
     except requests.RequestException as exc:
-        return {'status': 'error', 'message': str(exc)}
+        return {"status": "error", "message": str(exc)}

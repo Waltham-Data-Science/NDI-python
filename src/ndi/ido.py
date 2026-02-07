@@ -11,10 +11,9 @@ Example:
     id_value = i.id  # view the id that was created
 """
 
-import time
 import random
 import re
-from typing import Optional
+import time
 
 
 class Ido:
@@ -35,7 +34,7 @@ class Ido:
         >>> print(ido.id)  # prints something like '1a2b3c4d5e6f_7a8b9c0d1e2f'
     """
 
-    def __init__(self, id: Optional[str] = None):
+    def __init__(self, id: str | None = None):
         """Create a new NDI identifier.
 
         Args:
@@ -65,10 +64,10 @@ class Ido:
         """
         # Get current time in microseconds since epoch
         time_us = int(time.time() * 1000000)
-        time_hex = format(time_us, 'x')
+        time_hex = format(time_us, "x")
 
         # Generate random component
-        random_hex = format(random.getrandbits(48), '012x')
+        random_hex = format(random.getrandbits(48), "012x")
 
         return f"{time_hex}_{random_hex}"
 
@@ -87,14 +86,13 @@ class Ido:
             True if valid format, False otherwise.
         """
         # Check NDI format (hex_hex)
-        ndi_pattern = re.compile(r'^[0-9a-f]+_[0-9a-f]+$', re.I)
+        ndi_pattern = re.compile(r"^[0-9a-f]+_[0-9a-f]+$", re.I)
         if ndi_pattern.match(str(id_value)):
             return True
 
         # Also accept UUID format for compatibility
         uuid_pattern = re.compile(
-            r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-            re.I
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I
         )
         if uuid_pattern.match(str(id_value)):
             return True
@@ -102,7 +100,7 @@ class Ido:
         return False
 
     def __repr__(self) -> str:
-        return f'Ido({self.id})'
+        return f"Ido({self.id})"
 
     def __str__(self) -> str:
         return self.id

@@ -8,14 +8,14 @@ MATLAB equivalents: downloadDataset.m, uploadDataset.m, syncDataset.m,
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .client import CloudClient
 
 
 def download_dataset(
-    client: 'CloudClient',
+    client: CloudClient,
     cloud_dataset_id: str,
     target_folder: str,
     sync_files: bool = False,
@@ -46,16 +46,17 @@ def download_dataset(
     # Verify dataset exists
     ds_info = ds_api.get_dataset(client, cloud_dataset_id)
     if verbose:
-        name = ds_info.get('name', cloud_dataset_id)
-        print(f'Downloading dataset: {name}')
+        name = ds_info.get("name", cloud_dataset_id)
+        print(f"Downloading dataset: {name}")
 
     # Download all documents
     doc_jsons = docs_api.list_all_documents(client, cloud_dataset_id)
     if verbose:
-        print(f'  Downloaded {len(doc_jsons)} documents')
+        print(f"  Downloaded {len(doc_jsons)} documents")
 
     # Convert to Document objects and add to a local Dataset
     from ndi.dataset import Dataset
+
     dataset = Dataset(target)
     documents = jsons_to_documents(doc_jsons)
     for doc in documents:
@@ -73,25 +74,25 @@ def download_dataset(
 
     # Optionally download files
     if sync_files and doc_jsons:
-        file_dir = target / '.ndi' / 'files'
+        file_dir = target / ".ndi" / "files"
         report = download_dataset_files(client, cloud_dataset_id, doc_jsons, file_dir)
         if verbose:
             print(f'  Files downloaded: {report["downloaded"]}, failed: {report["failed"]}')
 
     if verbose:
-        print('Download complete.')
+        print("Download complete.")
 
     return dataset
 
 
 def upload_dataset(
-    client: 'CloudClient',
+    client: CloudClient,
     dataset: Any,
     upload_as_new: bool = False,
-    remote_name: str = '',
+    remote_name: str = "",
     sync_files: bool = True,
     verbose: bool = False,
-) -> Tuple[bool, str, str]:
+) -> tuple[bool, str, str]:
     """Upload a local dataset to NDI Cloud.
 
     MATLAB equivalent: ndi.cloud.uploadDataset
@@ -108,23 +109,23 @@ def upload_dataset(
         Tuple of ``(success, cloud_dataset_id, message)``.
     """
     from .api import datasets as ds_api
-    from .internal import get_cloud_dataset_id, create_remote_dataset_doc
+    from .internal import create_remote_dataset_doc, get_cloud_dataset_id
     from .upload import upload_document_collection, upload_files_for_documents
 
     # Resolve or create remote dataset
-    cloud_id = ''
+    cloud_id = ""
     if not upload_as_new:
         cloud_id, _ = get_cloud_dataset_id(client, dataset)
 
     if not cloud_id:
         # Create new remote dataset
-        name = remote_name or getattr(dataset, 'name', 'Unnamed Dataset')
+        name = remote_name or getattr(dataset, "name", "Unnamed Dataset")
         org_id = client.config.org_id
         try:
             result = ds_api.create_dataset(client, org_id, name)
-            cloud_id = result.get('id', result.get('_id', ''))
+            cloud_id = result.get("id", result.get("_id", ""))
         except Exception as exc:
-            return False, '', f'Failed to create remote dataset: {exc}'
+            return False, "", f"Failed to create remote dataset: {exc}"
 
         # Store link locally
         remote_doc = create_remote_dataset_doc(cloud_id, dataset)
@@ -134,18 +135,19 @@ def upload_dataset(
             pass
 
     if verbose:
-        print(f'Uploading to cloud dataset: {cloud_id}')
+        print(f"Uploading to cloud dataset: {cloud_id}")
 
     # Gather local documents
     from ndi.query import Query
+
     try:
-        all_docs = dataset.session.database_search(Query(''))
+        all_docs = dataset.session.database_search(Query(""))
     except Exception:
         all_docs = []
 
     doc_jsons = []
     for doc in all_docs:
-        props = doc.document_properties if hasattr(doc, 'document_properties') else doc
+        props = doc.document_properties if hasattr(doc, "document_properties") else doc
         if isinstance(props, dict):
             doc_jsons.append(props)
 
@@ -157,22 +159,25 @@ def upload_dataset(
     # Upload files
     if sync_files:
         file_report = upload_files_for_documents(
-            client, client.config.org_id, cloud_id, doc_jsons,
+            client,
+            client.config.org_id,
+            cloud_id,
+            doc_jsons,
         )
         if verbose:
             print(f'  Files uploaded: {file_report["uploaded"]}, failed: {file_report["failed"]}')
 
-    return True, cloud_id, ''
+    return True, cloud_id, ""
 
 
 def sync_dataset(
-    client: 'CloudClient',
+    client: CloudClient,
     dataset: Any,
-    sync_mode: str = 'download_new',
+    sync_mode: str = "download_new",
     sync_files: bool = False,
     verbose: bool = False,
     dry_run: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Synchronize a local dataset with its cloud counterpart.
 
     MATLAB equivalent: ndi.cloud.syncDataset
@@ -194,33 +199,33 @@ def sync_dataset(
 
     cloud_id, _ = get_cloud_dataset_id(client, dataset)
     if not cloud_id:
-        return {'error': 'No cloud dataset linked to this dataset'}
+        return {"error": "No cloud dataset linked to this dataset"}
 
-    report: Dict[str, Any] = {
-        'sync_mode': sync_mode,
-        'cloud_dataset_id': cloud_id,
-        'downloaded': 0,
-        'uploaded': 0,
-        'deleted': 0,
+    report: dict[str, Any] = {
+        "sync_mode": sync_mode,
+        "cloud_dataset_id": cloud_id,
+        "downloaded": 0,
+        "uploaded": 0,
+        "deleted": 0,
     }
 
-    if sync_mode == 'download_new':
+    if sync_mode == "download_new":
         report.update(_sync_download_new(client, dataset, cloud_id, sync_files, verbose, dry_run))
-    elif sync_mode == 'upload_new':
+    elif sync_mode == "upload_new":
         report.update(_sync_upload_new(client, dataset, cloud_id, sync_files, verbose, dry_run))
-    elif sync_mode == 'two_way_sync':
+    elif sync_mode == "two_way_sync":
         report.update(_sync_download_new(client, dataset, cloud_id, sync_files, verbose, dry_run))
         report.update(_sync_upload_new(client, dataset, cloud_id, sync_files, verbose, dry_run))
-    elif sync_mode in ('mirror_from_remote', 'mirror_to_remote'):
-        report['note'] = f'{sync_mode} delegates to full download/upload'
+    elif sync_mode in ("mirror_from_remote", "mirror_to_remote"):
+        report["note"] = f"{sync_mode} delegates to full download/upload"
 
     return report
 
 
 def new_dataset(
-    client: 'CloudClient',
+    client: CloudClient,
     dataset: Any,
-    name: str = '',
+    name: str = "",
 ) -> str:
     """Create a new remote dataset and upload contents.
 
@@ -230,19 +235,24 @@ def new_dataset(
         The cloud dataset ID.
     """
     success, cloud_id, msg = upload_dataset(
-        client, dataset, upload_as_new=True, remote_name=name, verbose=False,
+        client,
+        dataset,
+        upload_as_new=True,
+        remote_name=name,
+        verbose=False,
     )
     if not success:
         from .exceptions import CloudError
-        raise CloudError(f'Failed to create new cloud dataset: {msg}')
+
+        raise CloudError(f"Failed to create new cloud dataset: {msg}")
     return cloud_id
 
 
 def scan_for_upload(
-    client: 'CloudClient',
+    client: CloudClient,
     dataset: Any,
     cloud_dataset_id: str,
-) -> Tuple[List[Dict], List[Dict], float]:
+) -> tuple[list[dict], list[dict], float]:
     """Scan local documents/files to determine what needs uploading.
 
     MATLAB equivalent: +cloud/+upload/scanForUpload.m
@@ -250,12 +260,13 @@ def scan_for_upload(
     Returns:
         Tuple of (doc_structs, file_structs, total_size_kb).
     """
-    from .internal import list_remote_document_ids
     from ndi.query import Query
+
+    from .internal import list_remote_document_ids
 
     # Get local documents
     try:
-        all_docs = dataset.session.database_search(Query(''))
+        all_docs = dataset.session.database_search(Query(""))
     except Exception:
         all_docs = []
 
@@ -267,27 +278,29 @@ def scan_for_upload(
         except Exception:
             pass
 
-    doc_structs: List[Dict] = []
-    file_structs: List[Dict] = []
+    doc_structs: list[dict] = []
+    file_structs: list[dict] = []
     total_size = 0.0
 
     for doc in all_docs:
-        props = doc.document_properties if hasattr(doc, 'document_properties') else doc
-        doc_id = ''
+        props = doc.document_properties if hasattr(doc, "document_properties") else doc
+        doc_id = ""
         if isinstance(props, dict):
-            doc_id = props.get('base', {}).get('id', '')
+            doc_id = props.get("base", {}).get("id", "")
 
         is_uploaded = doc_id in remote_ids
-        doc_structs.append({'docid': doc_id, 'is_uploaded': is_uploaded})
+        doc_structs.append({"docid": doc_id, "is_uploaded": is_uploaded})
 
         # Check for associated files
-        file_uid = props.get('file_uid', '') if isinstance(props, dict) else ''
+        file_uid = props.get("file_uid", "") if isinstance(props, dict) else ""
         if file_uid:
-            file_structs.append({
-                'uid': file_uid,
-                'docid': doc_id,
-                'is_uploaded': is_uploaded,
-            })
+            file_structs.append(
+                {
+                    "uid": file_uid,
+                    "docid": doc_id,
+                    "is_uploaded": is_uploaded,
+                }
+            )
 
     return doc_structs, file_structs, total_size
 
@@ -298,13 +311,13 @@ def scan_for_upload(
 
 
 def _sync_download_new(
-    client: 'CloudClient',
+    client: CloudClient,
     dataset: Any,
     cloud_id: str,
     sync_files: bool,
     verbose: bool,
     dry_run: bool,
-) -> Dict[str, int]:
+) -> dict[str, int]:
     """Download documents that exist remotely but not locally."""
     from .api import documents as docs_api
     from .download import jsons_to_documents
@@ -313,28 +326,26 @@ def _sync_download_new(
 
     # Find local IDs
     from ndi.query import Query
+
     try:
-        local_docs = dataset.session.database_search(Query(''))
+        local_docs = dataset.session.database_search(Query(""))
     except Exception:
         local_docs = []
 
     local_ids = set()
     for ld in local_docs:
-        p = ld.document_properties if hasattr(ld, 'document_properties') else ld
+        p = ld.document_properties if hasattr(ld, "document_properties") else ld
         if isinstance(p, dict):
-            local_ids.add(p.get('base', {}).get('id', ''))
+            local_ids.add(p.get("base", {}).get("id", ""))
 
     # Filter to new docs
-    new_docs = [
-        rd for rd in remote_docs
-        if rd.get('ndiId', rd.get('id', '')) not in local_ids
-    ]
+    new_docs = [rd for rd in remote_docs if rd.get("ndiId", rd.get("id", "")) not in local_ids]
 
     if verbose:
-        print(f'  New remote docs to download: {len(new_docs)}')
+        print(f"  New remote docs to download: {len(new_docs)}")
 
     if dry_run:
-        return {'downloaded': len(new_docs)}
+        return {"downloaded": len(new_docs)}
 
     documents = jsons_to_documents(new_docs)
     added = 0
@@ -345,17 +356,17 @@ def _sync_download_new(
         except Exception:
             pass
 
-    return {'downloaded': added}
+    return {"downloaded": added}
 
 
 def _sync_upload_new(
-    client: 'CloudClient',
+    client: CloudClient,
     dataset: Any,
     cloud_id: str,
     sync_files: bool,
     verbose: bool,
     dry_run: bool,
-) -> Dict[str, int]:
+) -> dict[str, int]:
     """Upload documents that exist locally but not remotely."""
     from .internal import list_remote_document_ids
     from .upload import upload_document_collection
@@ -363,24 +374,25 @@ def _sync_upload_new(
     remote_ids = list_remote_document_ids(client, cloud_id)
 
     from ndi.query import Query
+
     try:
-        local_docs = dataset.session.database_search(Query(''))
+        local_docs = dataset.session.database_search(Query(""))
     except Exception:
         local_docs = []
 
     new_jsons = []
     for ld in local_docs:
-        p = ld.document_properties if hasattr(ld, 'document_properties') else ld
+        p = ld.document_properties if hasattr(ld, "document_properties") else ld
         if isinstance(p, dict):
-            doc_id = p.get('base', {}).get('id', '')
+            doc_id = p.get("base", {}).get("id", "")
             if doc_id not in remote_ids:
                 new_jsons.append(p)
 
     if verbose:
-        print(f'  New local docs to upload: {len(new_jsons)}')
+        print(f"  New local docs to upload: {len(new_jsons)}")
 
     if dry_run:
-        return {'uploaded': len(new_jsons)}
+        return {"uploaded": len(new_jsons)}
 
     report = upload_document_collection(client, cloud_id, new_jsons, only_missing=False)
-    return {'uploaded': report.get('uploaded', 0)}
+    return {"uploaded": report.get("uploaded", 0)}

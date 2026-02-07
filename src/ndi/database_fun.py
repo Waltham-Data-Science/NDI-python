@@ -9,17 +9,17 @@ and document analysis utilities.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Set, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .document import Document
+    pass
 
 
 def findallantecedents(
     session_or_dataset: Any,
     *documents: Any,
-    visited: Optional[Set[str]] = None,
-) -> List[Any]:
+    visited: set[str] | None = None,
+) -> list[Any]:
     """Find all documents that the given documents depend on (upstream).
 
     MATLAB equivalent: ndi.database.fun.findallantecedents
@@ -39,22 +39,22 @@ def findallantecedents(
     if visited is None:
         visited = set()
 
-    antecedents: List[Any] = []
-    dep_ids: List[str] = []
+    antecedents: list[Any] = []
+    dep_ids: list[str] = []
 
     for doc in documents:
-        props = doc.document_properties if hasattr(doc, 'document_properties') else doc
+        props = doc.document_properties if hasattr(doc, "document_properties") else doc
         if not isinstance(props, dict):
             continue
 
-        doc_id = props.get('base', {}).get('id', '')
+        doc_id = props.get("base", {}).get("id", "")
         if doc_id in visited:
             continue
         visited.add(doc_id)
 
         # Extract depends_on IDs
-        for dep in props.get('depends_on', []):
-            val = dep.get('value', '')
+        for dep in props.get("depends_on", []):
+            val = dep.get("value", "")
             if val and val not in visited:
                 dep_ids.append(val)
 
@@ -62,9 +62,9 @@ def findallantecedents(
         return antecedents
 
     # Batch query for all dependency IDs
-    q = Query('base.id') == dep_ids[0]
+    q = Query("base.id") == dep_ids[0]
     for did in dep_ids[1:]:
-        q = q | (Query('base.id') == did)
+        q = q | (Query("base.id") == did)
 
     try:
         found = session_or_dataset.database_search(q)
@@ -87,8 +87,8 @@ def findallantecedents(
 def findalldependencies(
     session_or_dataset: Any,
     *documents: Any,
-    visited: Optional[Set[str]] = None,
-) -> List[Any]:
+    visited: set[str] | None = None,
+) -> list[Any]:
     """Find all documents that depend on the given documents (downstream).
 
     MATLAB equivalent: ndi.database.fun.findalldependencies
@@ -100,20 +100,20 @@ def findalldependencies(
     if visited is None:
         visited = set()
 
-    dependents: List[Any] = []
+    dependents: list[Any] = []
 
     for doc in documents:
-        props = doc.document_properties if hasattr(doc, 'document_properties') else doc
+        props = doc.document_properties if hasattr(doc, "document_properties") else doc
         if not isinstance(props, dict):
             continue
 
-        doc_id = props.get('base', {}).get('id', '')
+        doc_id = props.get("base", {}).get("id", "")
         if doc_id in visited or not doc_id:
             continue
         visited.add(doc_id)
 
         # Find documents whose depends_on references this doc
-        q = Query('').depends_on('*', doc_id)
+        q = Query("").depends_on("*", doc_id)
 
         try:
             found = session_or_dataset.database_search(q)
@@ -125,8 +125,8 @@ def findalldependencies(
 
         new_found = []
         for f in found:
-            fp = f.document_properties if hasattr(f, 'document_properties') else f
-            fid = fp.get('base', {}).get('id', '') if isinstance(fp, dict) else ''
+            fp = f.document_properties if hasattr(f, "document_properties") else f
+            fid = fp.get("base", {}).get("id", "") if isinstance(fp, dict) else ""
             if fid not in visited:
                 new_found.append(f)
 
@@ -142,8 +142,8 @@ def findalldependencies(
 
 def docs_from_ids(
     session_or_dataset: Any,
-    document_ids: List[str],
-) -> List[Optional[Any]]:
+    document_ids: list[str],
+) -> list[Any | None]:
     """Retrieve documents by IDs in a single batch query.
 
     MATLAB equivalent: ndi.database.fun.docs_from_ids
@@ -162,9 +162,9 @@ def docs_from_ids(
         return []
 
     # Build OR query for all IDs
-    q = Query('base.id') == document_ids[0]
+    q = Query("base.id") == document_ids[0]
     for did in document_ids[1:]:
-        q = q | (Query('base.id') == did)
+        q = q | (Query("base.id") == did)
 
     try:
         found = session_or_dataset.database_search(q)
@@ -175,11 +175,11 @@ def docs_from_ids(
             found = []
 
     # Build lookup
-    found_map: Dict[str, Any] = {}
+    found_map: dict[str, Any] = {}
     for doc in found:
-        props = doc.document_properties if hasattr(doc, 'document_properties') else doc
+        props = doc.document_properties if hasattr(doc, "document_properties") else doc
         if isinstance(props, dict):
-            did = props.get('base', {}).get('id', '')
+            did = props.get("base", {}).get("id", "")
             if did:
                 found_map[did] = doc
 
@@ -187,8 +187,8 @@ def docs_from_ids(
 
 
 def docs2graph(
-    documents: List[Any],
-) -> Tuple[Dict[str, List[str]], List[str]]:
+    documents: list[Any],
+) -> tuple[dict[str, list[str]], list[str]]:
     """Build a dependency graph from document objects.
 
     MATLAB equivalent: ndi.database.fun.docs2graph
@@ -201,35 +201,35 @@ def docs2graph(
         each node ID to its list of dependency IDs (edges).
     """
     # Collect all node IDs
-    nodes: List[str] = []
+    nodes: list[str] = []
     for doc in documents:
-        props = doc.document_properties if hasattr(doc, 'document_properties') else doc
+        props = doc.document_properties if hasattr(doc, "document_properties") else doc
         if isinstance(props, dict):
-            did = props.get('base', {}).get('id', '')
+            did = props.get("base", {}).get("id", "")
             if did:
                 nodes.append(did)
 
     node_set = set(nodes)
-    adjacency: Dict[str, List[str]] = {n: [] for n in nodes}
+    adjacency: dict[str, list[str]] = {n: [] for n in nodes}
 
     for doc in documents:
-        props = doc.document_properties if hasattr(doc, 'document_properties') else doc
+        props = doc.document_properties if hasattr(doc, "document_properties") else doc
         if not isinstance(props, dict):
             continue
 
-        doc_id = props.get('base', {}).get('id', '')
+        doc_id = props.get("base", {}).get("id", "")
         if not doc_id:
             continue
 
-        for dep in props.get('depends_on', []):
-            dep_id = dep.get('value', '')
+        for dep in props.get("depends_on", []):
+            dep_id = dep.get("value", "")
             if dep_id and dep_id in node_set:
                 adjacency[doc_id].append(dep_id)
 
     return adjacency, nodes
 
 
-def find_ingested_docs(session_or_dataset: Any) -> List[Any]:
+def find_ingested_docs(session_or_dataset: Any) -> list[Any]:
     """Find all documents corresponding to ingested data.
 
     MATLAB equivalent: ndi.database.fun.find_ingested_docs
@@ -237,9 +237,9 @@ def find_ingested_docs(session_or_dataset: Any) -> List[Any]:
     from .query import Query
 
     q = (
-        Query('').isa('daqreader_mfdaq_epochdata_ingested')
-        | Query('').isa('daqmetadatareader_epochdata_ingested')
-        | Query('').isa('epochfiles_ingested')
+        Query("").isa("daqreader_mfdaq_epochdata_ingested")
+        | Query("").isa("daqmetadatareader_epochdata_ingested")
+        | Query("").isa("epochfiles_ingested")
     )
 
     try:
@@ -256,7 +256,7 @@ def finddocs_element_epoch_type(
     element_id: str,
     epoch_id: str,
     document_type: str,
-) -> List[Any]:
+) -> list[Any]:
     """Find documents matching an element, epoch, and document type.
 
     MATLAB equivalent: ndi.database.fun.finddocs_elementEpochType
@@ -275,9 +275,9 @@ def finddocs_element_epoch_type(
     """
     from .query import Query
 
-    q1 = Query('').isa(document_type)
-    q2 = Query('').depends_on('element_id', element_id)
-    q3 = Query('epochid') == epoch_id
+    q1 = Query("").isa(document_type)
+    q2 = Query("").depends_on("element_id", element_id)
+    q3 = Query("epochid") == epoch_id
     q = q1 & q2 & q3
 
     try:
@@ -311,9 +311,7 @@ def ndi_document2ndi_object(
 
     # If given an ID string, look up the document
     if isinstance(ndi_document_obj, str):
-        results = ndi_session_obj.database_search(
-            Query('base.id') == ndi_document_obj
-        )
+        results = ndi_session_obj.database_search(Query("base.id") == ndi_document_obj)
         if not results:
             return None
         ndi_document_obj = results[0]
@@ -323,8 +321,8 @@ def ndi_document2ndi_object(
         return None
 
     # Get class info
-    doc_class = props.get('document_class', {})
-    class_name = doc_class.get('class_name', '')
+    doc_class = props.get("document_class", {})
+    class_name = doc_class.get("class_name", "")
 
     # Try to reconstruct based on class_name
     class_map = _get_class_map()
@@ -338,40 +336,42 @@ def ndi_document2ndi_object(
     return None
 
 
-def _get_class_map() -> Dict[str, Any]:
+def _get_class_map() -> dict[str, Any]:
     """Build mapping of document class names to constructor functions."""
-    constructors: Dict[str, Any] = {}
+    constructors: dict[str, Any] = {}
 
     def _make_element(doc: Any, session: Any) -> Any:
         from .element import Element
+
         p = doc.document_properties
-        el = p.get('element', {})
+        el = p.get("element", {})
         return Element(
             session=session,
-            name=el.get('name', ''),
-            reference=el.get('reference', 0),
-            type=el.get('type', ''),
+            name=el.get("name", ""),
+            reference=el.get("reference", 0),
+            type=el.get("type", ""),
         )
 
     def _make_subject(doc: Any, session: Any) -> Any:
         from .subject import Subject
+
         p = doc.document_properties
-        subj = p.get('subject', {})
+        subj = p.get("subject", {})
         return Subject(
             session=session,
-            local_identifier=subj.get('local_identifier', ''),
-            description=subj.get('description', ''),
+            local_identifier=subj.get("local_identifier", ""),
+            description=subj.get("description", ""),
         )
 
-    constructors['element'] = _make_element
-    constructors['subject'] = _make_subject
+    constructors["element"] = _make_element
+    constructors["subject"] = _make_subject
     return constructors
 
 
 def copy_session_to_dataset(
     ndi_session_obj: Any,
     ndi_dataset_obj: Any,
-) -> Tuple[bool, str]:
+) -> tuple[bool, str]:
     """Copy database documents from a session to a dataset.
 
     MATLAB equivalent: ndi.database.fun.copy_session_to_dataset
@@ -395,33 +395,34 @@ def copy_session_to_dataset(
         if session_id in session_ids:
             return (
                 False,
-                f'Session with ID {session_id} is already part of '
-                f'the dataset.',
+                f"Session with ID {session_id} is already part of " f"the dataset.",
             )
     except Exception:
         pass
 
     # Get all documents from source session
     try:
-        all_docs = ndi_session_obj.database_search(Query('').isa('base'))
+        all_docs = ndi_session_obj.database_search(Query("").isa("base"))
     except Exception:
-        return False, 'Failed to search source session database.'
+        return False, "Failed to search source session database."
 
     # Fix empty session_ids
     session_id = ndi_session_obj.id()
     fixed_count = 0
     for i, doc in enumerate(all_docs):
         p = doc.document_properties
-        sid = p.get('base', {}).get('session_id', '')
+        sid = p.get("base", {}).get("session_id", "")
         if not sid:
             all_docs[i] = doc.set_session_id(session_id)
             fixed_count += 1
 
     if fixed_count > 0:
         import warnings
+
         warnings.warn(
-            f'Found {fixed_count} documents with empty session_id. '
-            f'Setting them to match the current session.',
+            f"Found {fixed_count} documents with empty session_id. "
+            f"Setting them to match the current session.",
+            stacklevel=2,
         )
 
     # Add documents to the dataset
@@ -431,13 +432,13 @@ def copy_session_to_dataset(
         except Exception:
             pass
 
-    return True, ''
+    return True, ""
 
 
 def finddocs_missing_dependencies(
     session_or_dataset: Any,
     *dep_names: str,
-) -> List[Any]:
+) -> list[Any]:
     """Find documents with unresolved dependency references.
 
     MATLAB equivalent: ndi.database.fun.finddocs_missing_dependencies
@@ -446,30 +447,30 @@ def finddocs_missing_dependencies(
 
     # Find all docs with depends_on
     try:
-        all_docs = session_or_dataset.database_search(Query('').isa('base'))
+        all_docs = session_or_dataset.database_search(Query("").isa("base"))
     except Exception:
         try:
-            all_docs = session_or_dataset.session.database_search(Query('').isa('base'))
+            all_docs = session_or_dataset.session.database_search(Query("").isa("base"))
         except Exception:
             return []
 
     # Build cache of known IDs
-    known_ids: Set[str] = set()
+    known_ids: set[str] = set()
     for doc in all_docs:
-        props = doc.document_properties if hasattr(doc, 'document_properties') else doc
+        props = doc.document_properties if hasattr(doc, "document_properties") else doc
         if isinstance(props, dict):
-            did = props.get('base', {}).get('id', '')
+            did = props.get("base", {}).get("id", "")
             if did:
                 known_ids.add(did)
 
-    missing: List[Any] = []
+    missing: list[Any] = []
     for doc in all_docs:
-        props = doc.document_properties if hasattr(doc, 'document_properties') else doc
+        props = doc.document_properties if hasattr(doc, "document_properties") else doc
         if not isinstance(props, dict):
             continue
-        for dep in props.get('depends_on', []):
-            dep_name = dep.get('name', '')
-            dep_val = dep.get('value', '')
+        for dep in props.get("depends_on", []):
+            dep_name = dep.get("name", "")
+            dep_val = dep.get("value", "")
             if not dep_val:
                 continue
             if dep_names and dep_name not in dep_names:
@@ -485,9 +486,10 @@ def finddocs_missing_dependencies(
 # Presentation time binary I/O
 # =========================================================================
 
+
 def write_presentation_time_structure(
     filename: str,
-    presentation_time: List[Dict[str, Any]],
+    presentation_time: list[dict[str, Any]],
 ) -> None:
     """Write presentation time structure to a binary file.
 
@@ -505,46 +507,49 @@ def write_presentation_time_structure(
             ``stimevents`` (Nx2 array).
     """
     import struct
+
     import numpy as np
 
-    with open(filename, 'wb') as f:
+    with open(filename, "wb") as f:
         # Header
-        header_line = b'presentation_time structure\n'
+        header_line = b"presentation_time structure\n"
         f.write(header_line)
         num_entries = len(presentation_time)
-        f.write(struct.pack('<Q', num_entries))
+        f.write(struct.pack("<Q", num_entries))
         # Zero-pad to 512 bytes
         current = f.tell()
-        f.write(b'\x00' * (512 - current))
+        f.write(b"\x00" * (512 - current))
 
         for entry in presentation_time:
             # Clocktype as string + newline
-            ct = entry.get('clocktype', '')
-            f.write(f'{ct}\n'.encode('ascii'))
+            ct = entry.get("clocktype", "")
+            f.write(f"{ct}\n".encode("ascii"))
             # Timing values
-            f.write(struct.pack('<d', float(entry.get('stimopen', 0))))
-            f.write(struct.pack('<d', float(entry.get('onset', 0))))
-            f.write(struct.pack('<d', float(entry.get('offset', 0))))
-            f.write(struct.pack('<d', float(entry.get('stimclose', 0))))
+            f.write(struct.pack("<d", float(entry.get("stimopen", 0))))
+            f.write(struct.pack("<d", float(entry.get("onset", 0))))
+            f.write(struct.pack("<d", float(entry.get("offset", 0))))
+            f.write(struct.pack("<d", float(entry.get("stimclose", 0))))
             # Stimevents
             stimevents = np.asarray(
-                entry.get('stimevents', []),
-                dtype='<f8',
+                entry.get("stimevents", []),
+                dtype="<f8",
             )
             if stimevents.ndim == 1:
-                stimevents = stimevents.reshape(-1, 2) if stimevents.size else np.empty((0, 2), dtype='<f8')
+                stimevents = (
+                    stimevents.reshape(-1, 2) if stimevents.size else np.empty((0, 2), dtype="<f8")
+                )
             num_events = stimevents.shape[0]
-            f.write(struct.pack('<I', num_events))
+            f.write(struct.pack("<I", num_events))
             # Write column-major (transposed), matching MATLAB's reshape
             if num_events > 0:
-                f.write(stimevents.T.astype('<f8').tobytes())
+                f.write(stimevents.T.astype("<f8").tobytes())
 
 
 def read_presentation_time_structure(
     filename: str,
-    n0: Optional[int] = None,
-    n1: Optional[int] = None,
-) -> Tuple[str, List[Dict[str, Any]]]:
+    n0: int | None = None,
+    n1: int | None = None,
+) -> tuple[str, list[dict[str, Any]]]:
     """Read presentation time structure from a binary file.
 
     MATLAB equivalent: ndi.database.fun.read_presentation_time_structure
@@ -559,20 +564,21 @@ def read_presentation_time_structure(
         string and entries is a list of dicts.
     """
     import struct
+
     import numpy as np
 
-    with open(filename, 'rb') as f:
+    with open(filename, "rb") as f:
         # Read header line
-        header = b''
+        header = b""
         while True:
             c = f.read(1)
-            if c == b'\n' or c == b'':
+            if c == b"\n" or c == b"":
                 break
             header += c
-        header_str = header.decode('ascii')
+        header_str = header.decode("ascii")
 
         # Read number of entries
-        num_entries = struct.unpack('<Q', f.read(8))[0]
+        num_entries = struct.unpack("<Q", f.read(8))[0]
 
         # Seek to 512
         f.seek(512)
@@ -583,39 +589,41 @@ def read_presentation_time_structure(
             n1 = num_entries - 1
         n1 = min(n1, num_entries - 1)
 
-        entries: List[Dict[str, Any]] = []
+        entries: list[dict[str, Any]] = []
 
         # Read all entries up to n1
-        for i in range(n1 + 1):
+        for _i in range(n1 + 1):
             # Clocktype
-            ct = b''
+            ct = b""
             while True:
                 c = f.read(1)
-                if c == b'\n' or c == b'':
+                if c == b"\n" or c == b"":
                     break
                 ct += c
-            clocktype = ct.decode('ascii')
+            clocktype = ct.decode("ascii")
 
-            stimopen = struct.unpack('<d', f.read(8))[0]
-            onset = struct.unpack('<d', f.read(8))[0]
-            offset = struct.unpack('<d', f.read(8))[0]
-            stimclose = struct.unpack('<d', f.read(8))[0]
+            stimopen = struct.unpack("<d", f.read(8))[0]
+            onset = struct.unpack("<d", f.read(8))[0]
+            offset = struct.unpack("<d", f.read(8))[0]
+            stimclose = struct.unpack("<d", f.read(8))[0]
 
-            num_events = struct.unpack('<I', f.read(4))[0]
+            num_events = struct.unpack("<I", f.read(4))[0]
             if num_events > 0:
-                raw = np.frombuffer(f.read(num_events * 2 * 8), dtype='<f8')
+                raw = np.frombuffer(f.read(num_events * 2 * 8), dtype="<f8")
                 stimevents = raw.reshape(2, num_events).T.copy()
             else:
-                stimevents = np.empty((0, 2), dtype='float64')
+                stimevents = np.empty((0, 2), dtype="float64")
 
-            entries.append({
-                'clocktype': clocktype,
-                'stimopen': stimopen,
-                'onset': onset,
-                'offset': offset,
-                'stimclose': stimclose,
-                'stimevents': stimevents,
-            })
+            entries.append(
+                {
+                    "clocktype": clocktype,
+                    "stimopen": stimopen,
+                    "onset": onset,
+                    "offset": offset,
+                    "stimclose": stimclose,
+                    "stimevents": stimevents,
+                }
+            )
 
         # Slice to [n0, n1]
         entries = entries[n0:]
@@ -626,6 +634,7 @@ def read_presentation_time_structure(
 # =========================================================================
 # Database export / extraction
 # =========================================================================
+
 
 def database_to_json(
     session: Any,
@@ -646,21 +655,22 @@ def database_to_json(
     """
     import json
     from pathlib import Path
+
     from .query import Query
 
     out = Path(output_path)
     out.mkdir(parents=True, exist_ok=True)
 
-    docs = session.database_search(Query('').isa('base'))
+    docs = session.database_search(Query("").isa("base"))
 
     count = 0
     for doc in docs:
-        props = doc.document_properties if hasattr(doc, 'document_properties') else doc
+        props = doc.document_properties if hasattr(doc, "document_properties") else doc
         if not isinstance(props, dict):
             continue
-        doc_id = props.get('base', {}).get('id', f'doc_{count}')
-        filepath = out / f'{doc_id}.json'
-        with open(filepath, 'w') as f:
+        doc_id = props.get("base", {}).get("id", f"doc_{count}")
+        filepath = out / f"{doc_id}.json"
+        with open(filepath, "w") as f:
             json.dump(props, f, indent=2, default=str)
         count += 1
 
@@ -671,8 +681,8 @@ def copy_doc_file_to_temp(
     doc: Any,
     session: Any,
     filename: str,
-    extension: str = '',
-) -> Tuple[str, str]:
+    extension: str = "",
+) -> tuple[str, str]:
     """Copy a binary file from a document's database storage to a temp file.
 
     MATLAB equivalent: ndi.database.fun.copydocfile2temp
@@ -691,20 +701,21 @@ def copy_doc_file_to_temp(
 
     f = session.database_openbinarydoc(doc, filename)
     data = f.read()
-    if hasattr(f, 'close'):
+    if hasattr(f, "close"):
         f.close()
 
     # Create temp file
     fd, base_path = tempfile.mkstemp(suffix=extension)
     import os
+
     os.close(fd)
 
-    with open(base_path, 'wb') as out:
+    with open(base_path, "wb") as out:
         out.write(data)
 
     # Compute path without extension
     if extension:
-        path_without_ext = base_path[:-len(extension)]
+        path_without_ext = base_path[: -len(extension)]
     else:
         path_without_ext = base_path
 
@@ -713,8 +724,8 @@ def copy_doc_file_to_temp(
 
 def extract_docs_files(
     session: Any,
-    target_path: Optional[str] = None,
-) -> Tuple[List[Any], str]:
+    target_path: str | None = None,
+) -> tuple[list[Any], str]:
     """Extract all documents and their binary files to a directory.
 
     MATLAB equivalent: ndi.database.fun.extract_doc_files
@@ -729,22 +740,23 @@ def extract_docs_files(
     import json
     import tempfile
     from pathlib import Path
+
     from .query import Query
 
     if target_path is None:
-        target_path = tempfile.mkdtemp(prefix='ndi_extract_')
+        target_path = tempfile.mkdtemp(prefix="ndi_extract_")
 
     out = Path(target_path)
     out.mkdir(parents=True, exist_ok=True)
 
-    docs = session.database_search(Query('').isa('base'))
+    docs = session.database_search(Query("").isa("base"))
 
     for doc in docs:
-        props = doc.document_properties if hasattr(doc, 'document_properties') else doc
+        props = doc.document_properties if hasattr(doc, "document_properties") else doc
         if not isinstance(props, dict):
             continue
 
-        doc_id = props.get('base', {}).get('id', '')
+        doc_id = props.get("base", {}).get("id", "")
         if not doc_id:
             continue
 
@@ -752,22 +764,22 @@ def extract_docs_files(
         doc_dir = out / doc_id
         doc_dir.mkdir(parents=True, exist_ok=True)
 
-        with open(doc_dir / 'document.json', 'w') as f:
+        with open(doc_dir / "document.json", "w") as f:
             json.dump(props, f, indent=2, default=str)
 
         # Copy binary files
-        files_info = props.get('files', {})
+        files_info = props.get("files", {})
         if isinstance(files_info, dict):
-            file_list = files_info.get('file_list', [])
+            file_list = files_info.get("file_list", [])
             for fname in file_list:
                 if not fname:
                     continue
                 try:
                     fobj = session.database_openbinarydoc(doc, fname)
                     data = fobj.read()
-                    if hasattr(fobj, 'close'):
+                    if hasattr(fobj, "close"):
                         fobj.close()
-                    with open(doc_dir / fname, 'wb') as bf:
+                    with open(doc_dir / fname, "wb") as bf:
                         bf.write(data)
                 except Exception:
                     pass

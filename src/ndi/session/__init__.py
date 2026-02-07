@@ -6,15 +6,15 @@ This module provides session classes for managing NDI experiments:
 - DirSession: Directory-based session implementation
 """
 
-from .session_base import Session, empty_id
 from .dir import DirSession
 from .mock import MockSession
+from .session_base import Session, empty_id
 from .sessiontable import SessionTable
 
 __all__ = [
-    'Session',
-    'DirSession',
-    'MockSession',
-    'SessionTable',
-    'empty_id',
+    "Session",
+    "DirSession",
+    "MockSession",
+    "SessionTable",
+    "empty_id",
 ]

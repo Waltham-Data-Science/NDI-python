@@ -6,8 +6,9 @@ relative to an NDI clock type within a specific epoch.
 """
 
 from __future__ import annotations
-from typing import Any, Optional, Union, TYPE_CHECKING
+
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 from .clocktype import ClockType
 
@@ -22,12 +23,13 @@ class TimeReferenceStruct:
 
     Used for serialization and database storage.
     """
+
     referent_epochsetname: str
     referent_classname: str
     clocktypestring: str
-    epoch: Optional[str]
+    epoch: str | None
     session_id: str
-    time: Optional[float]
+    time: float | None
 
 
 class TimeReference:
@@ -61,10 +63,10 @@ class TimeReference:
     def __init__(
         self,
         referent: Any,
-        clocktype: Union[ClockType, str],
-        epoch: Optional[str] = None,
-        time: Optional[float] = None,
-        session_id: Optional[str] = None,
+        clocktype: ClockType | str,
+        epoch: str | None = None,
+        time: float | None = None,
+        session_id: str | None = None,
     ):
         """
         Create a new time reference object.
@@ -90,9 +92,7 @@ class TimeReference:
 
         # Validate epoch requirement
         if clocktype.needs_epoch() and epoch is None:
-            raise ValueError(
-                f"Clock type '{clocktype.value}' requires an epoch to be specified"
-            )
+            raise ValueError(f"Clock type '{clocktype.value}' requires an epoch to be specified")
 
         # Extract session_id from referent if not provided
         if session_id is None:
@@ -119,17 +119,17 @@ class TimeReference:
             ValueError: If session ID cannot be extracted
         """
         # Handle different types of referent objects
-        if hasattr(referent, 'session'):
+        if hasattr(referent, "session"):
             session = referent.session
-            if hasattr(session, 'id'):
+            if hasattr(session, "id"):
                 if callable(session.id):
                     return session.id()
                 return session.id
             raise ValueError("Referent's session does not have a valid id")
-        elif hasattr(referent, 'session_id'):
+        elif hasattr(referent, "session_id"):
             return referent.session_id
-        elif isinstance(referent, dict) and 'session_id' in referent:
-            return referent['session_id']
+        elif isinstance(referent, dict) and "session_id" in referent:
+            return referent["session_id"]
         else:
             raise ValueError("Referent must have a session property with a valid id")
 
@@ -144,12 +144,12 @@ class TimeReference:
         return self._clocktype
 
     @property
-    def epoch(self) -> Optional[str]:
+    def epoch(self) -> str | None:
         """Get the epoch identifier."""
         return self._epoch
 
     @property
-    def time(self) -> Optional[float]:
+    def time(self) -> float | None:
         """Get the time value."""
         return self._time
 
@@ -168,12 +168,12 @@ class TimeReference:
             TimeReferenceStruct with string-based representation
         """
         # Get epochsetname
-        if hasattr(self._referent, 'epochsetname'):
+        if hasattr(self._referent, "epochsetname"):
             if callable(self._referent.epochsetname):
                 epochsetname = self._referent.epochsetname()
             else:
                 epochsetname = self._referent.epochsetname
-        elif hasattr(self._referent, 'name'):
+        elif hasattr(self._referent, "name"):
             epochsetname = self._referent.name
         else:
             epochsetname = str(self._referent)
@@ -195,7 +195,7 @@ class TimeReference:
         cls,
         session: Any,
         struct: TimeReferenceStruct,
-    ) -> 'TimeReference':
+    ) -> TimeReference:
         """
         Create a TimeReference from a struct and session.
 
@@ -210,11 +210,8 @@ class TimeReference:
             ValueError: If referent cannot be found in session
         """
         # Find the referent in the session
-        if hasattr(session, 'findexpobj'):
-            referent = session.findexpobj(
-                struct.referent_epochsetname,
-                struct.referent_classname
-            )
+        if hasattr(session, "findexpobj"):
+            referent = session.findexpobj(struct.referent_epochsetname, struct.referent_classname)
         else:
             raise ValueError("Session does not support finding experiment objects")
 
@@ -237,12 +234,12 @@ class TimeReference:
         """
         struct = self.to_struct()
         return {
-            'referent_epochsetname': struct.referent_epochsetname,
-            'referent_classname': struct.referent_classname,
-            'clocktypestring': struct.clocktypestring,
-            'epoch': struct.epoch,
-            'session_id': struct.session_id,
-            'time': struct.time,
+            "referent_epochsetname": struct.referent_epochsetname,
+            "referent_classname": struct.referent_classname,
+            "clocktypestring": struct.clocktypestring,
+            "epoch": struct.epoch,
+            "session_id": struct.session_id,
+            "time": struct.time,
         }
 
     def __eq__(self, other: object) -> bool:

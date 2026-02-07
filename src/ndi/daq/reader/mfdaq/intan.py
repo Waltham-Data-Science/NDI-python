@@ -8,14 +8,15 @@ MATLAB equivalent: src/ndi/+ndi/+daq/+reader/+mfdaq/intan.m
 """
 
 from __future__ import annotations
+
 import logging
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
-from ...mfdaq import MFDAQReader, ChannelInfo
+from ...mfdaq import ChannelInfo, MFDAQReader
 
 
 class IntanReader(MFDAQReader):
@@ -33,14 +34,14 @@ class IntanReader(MFDAQReader):
         >>> channels = reader.getchannelsepoch(['data.rhd'])
     """
 
-    NDI_DAQREADER_CLASS = 'ndi.daq.reader.mfdaq.intan'
-    FILE_EXTENSIONS = ['.rhd', '.rhs']
+    NDI_DAQREADER_CLASS = "ndi.daq.reader.mfdaq.intan"
+    FILE_EXTENSIONS = [".rhd", ".rhs"]
 
     def __init__(
         self,
-        identifier: Optional[str] = None,
-        session: Optional[Any] = None,
-        document: Optional[Any] = None,
+        identifier: str | None = None,
+        session: Any | None = None,
+        document: Any | None = None,
     ):
         super().__init__(identifier=identifier, session=session, document=document)
         self._ndi_daqreader_class = self.NDI_DAQREADER_CLASS
@@ -49,11 +50,12 @@ class IntanReader(MFDAQReader):
         """Get SpikeInterfaceReader lazily."""
         try:
             from ..spikeinterface_adapter import SpikeInterfaceReader
+
             return SpikeInterfaceReader
         except ImportError:
             return None
 
-    def getchannelsepoch(self, epochfiles: List[str]) -> List[ChannelInfo]:
+    def getchannelsepoch(self, epochfiles: list[str]) -> list[ChannelInfo]:
         SI = self._get_si_reader()
         if SI is None:
             return []
@@ -61,11 +63,16 @@ class IntanReader(MFDAQReader):
             reader = SI()
             return reader.getchannelsepoch(epochfiles)
         except Exception as exc:
-            logger.warning('IntanReader.getchannelsepoch failed: %s', exc)
+            logger.warning("IntanReader.getchannelsepoch failed: %s", exc)
             return []
 
     def readchannels_epochsamples(
-        self, channeltype, channel, epochfiles, s0, s1,
+        self,
+        channeltype,
+        channel,
+        epochfiles,
+        s0,
+        s1,
     ) -> np.ndarray:
         SI = self._get_si_reader()
         if SI is None:

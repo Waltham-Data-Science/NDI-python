@@ -8,12 +8,12 @@ MATLAB equivalent: src/ndi/+ndi/+app/markgarbage.m
 """
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+
+from typing import TYPE_CHECKING, Any
 
 from . import App
 
 if TYPE_CHECKING:
-    from ..document import Document
     from ..session.session_base import Session
 
 
@@ -30,8 +30,8 @@ class MarkGarbage(App):
         >>> intervals = app.loadvalidinterval(epochset)
     """
 
-    def __init__(self, session: Optional['Session'] = None):
-        super().__init__(session=session, name='ndi_app_markgarbage')
+    def __init__(self, session: Session | None = None):
+        super().__init__(session=session, name="ndi_app_markgarbage")
 
     def markvalidinterval(
         self,
@@ -52,17 +52,17 @@ class MarkGarbage(App):
             timeref_t1: Time reference for t1
         """
         interval = {
-            't0': t0,
-            'timeref_t0': str(timeref_t0),
-            't1': t1,
-            'timeref_t1': str(timeref_t1),
+            "t0": t0,
+            "timeref_t0": str(timeref_t0),
+            "t1": t1,
+            "timeref_t1": str(timeref_t1),
         }
         self.savevalidinterval(epochset_obj, interval)
 
     def savevalidinterval(
         self,
         epochset_obj: Any,
-        interval_struct: Dict[str, Any],
+        interval_struct: dict[str, Any],
     ) -> None:
         """
         Save a valid interval to the database.
@@ -75,11 +75,13 @@ class MarkGarbage(App):
             raise RuntimeError("No session configured")
 
         from ..document import Document
-        doc = Document('apps/markgarbage/valid_interval', valid_interval=interval_struct)
+
+        doc = Document("apps/markgarbage/valid_interval", valid_interval=interval_struct)
         doc = doc.set_session_id(self._session.id())
-        if hasattr(epochset_obj, 'id'):
+        if hasattr(epochset_obj, "id"):
             doc = doc.set_dependency_value(
-                'element_id', epochset_obj.id,
+                "element_id",
+                epochset_obj.id,
                 error_if_not_found=False,
             )
         self._session.database_add(doc)
@@ -95,15 +97,16 @@ class MarkGarbage(App):
             return
 
         from ..query import Query
-        q = Query('').isa('valid_interval')
-        if hasattr(epochset_obj, 'id'):
-            q = q & Query('').depends_on('element_id', epochset_obj.id)
+
+        q = Query("").isa("valid_interval")
+        if hasattr(epochset_obj, "id"):
+            q = q & Query("").depends_on("element_id", epochset_obj.id)
 
         docs = self._session.database_search(q)
         for doc in docs:
             self._session.database_remove(doc)
 
-    def loadvalidinterval(self, epochset_obj: Any) -> List[Dict[str, Any]]:
+    def loadvalidinterval(self, epochset_obj: Any) -> list[dict[str, Any]]:
         """
         Load stored valid intervals.
 
@@ -117,18 +120,19 @@ class MarkGarbage(App):
             return []
 
         from ..query import Query
-        q = Query('').isa('valid_interval')
-        if hasattr(epochset_obj, 'id'):
-            q = q & Query('').depends_on('element_id', epochset_obj.id)
+
+        q = Query("").isa("valid_interval")
+        if hasattr(epochset_obj, "id"):
+            q = q & Query("").depends_on("element_id", epochset_obj.id)
 
         docs = self._session.database_search(q)
         intervals = []
         for doc in docs:
             props = doc.document_properties
             if isinstance(props, dict):
-                vi = props.get('valid_interval')
+                vi = props.get("valid_interval")
             else:
-                vi = getattr(props, 'valid_interval', None)
+                vi = getattr(props, "valid_interval", None)
             if vi:
                 intervals.append(vi if isinstance(vi, dict) else vars(vi))
         return intervals

@@ -8,9 +8,9 @@ MATLAB equivalent: src/ndi/+ndi/+daq/daqsystemstring.m
 """
 
 from __future__ import annotations
+
 import re
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
 
 
 @dataclass
@@ -30,11 +30,11 @@ class DAQSystemString:
         channels: List of (channeltype, channellist) tuples
     """
 
-    devicename: str = ''
-    channels: List[Tuple[str, List[int]]] = field(default_factory=list)
+    devicename: str = ""
+    channels: list[tuple[str, list[int]]] = field(default_factory=list)
 
     @classmethod
-    def parse(cls, devstr: str) -> 'DAQSystemString':
+    def parse(cls, devstr: str) -> DAQSystemString:
         """
         Parse a device string into a DAQSystemString.
 
@@ -47,21 +47,21 @@ class DAQSystemString:
         Raises:
             ValueError: If the string format is invalid
         """
-        if not devstr or ':' not in devstr:
+        if not devstr or ":" not in devstr:
             if devstr:
                 return cls(devicename=devstr, channels=[])
             return cls()
 
-        colon_idx = devstr.index(':')
+        colon_idx = devstr.index(":")
         devicename = devstr[:colon_idx]
-        channel_str = devstr[colon_idx + 1:]
+        channel_str = devstr[colon_idx + 1 :]
 
         if not channel_str:
             return cls(devicename=devicename, channels=[])
 
         channels = []
         # Split by semicolons for multiple channel groups
-        groups = channel_str.split(';')
+        groups = channel_str.split(";")
 
         for group in groups:
             group = group.strip()
@@ -69,7 +69,7 @@ class DAQSystemString:
                 continue
 
             # Extract channel type prefix (letters) and number spec
-            match = re.match(r'^([a-zA-Z_]+)(.*)', group)
+            match = re.match(r"^([a-zA-Z_]+)(.*)", group)
             if not match:
                 raise ValueError(f"Invalid channel group: '{group}'")
 
@@ -101,11 +101,11 @@ class DAQSystemString:
 
         return f"{self.devicename}:{';'.join(parts)}"
 
-    def channel_types(self) -> List[str]:
+    def channel_types(self) -> list[str]:
         """Get list of unique channel types."""
         return [ct for ct, _ in self.channels]
 
-    def channel_list(self, channeltype: Optional[str] = None) -> List[int]:
+    def channel_list(self, channeltype: str | None = None) -> list[int]:
         """
         Get channel numbers, optionally filtered by type.
 
@@ -138,7 +138,7 @@ class DAQSystemString:
         return self.devicename == other.devicename and self.channels == other.channels
 
 
-def _parse_channel_numbers(spec: str) -> List[int]:
+def _parse_channel_numbers(spec: str) -> list[int]:
     """
     Parse a channel number specification.
 
@@ -152,33 +152,33 @@ def _parse_channel_numbers(spec: str) -> List[int]:
         return []
 
     numbers = set()
-    parts = spec.split(',')
+    parts = spec.split(",")
 
     for part in parts:
         part = part.strip()
         if not part:
             continue
 
-        if '-' in part:
+        if "-" in part:
             # Range like '1-5'
-            range_parts = part.split('-')
+            range_parts = part.split("-")
             if len(range_parts) == 2:
                 try:
                     start = int(range_parts[0])
                     end = int(range_parts[1])
                     numbers.update(range(start, end + 1))
-                except ValueError:
-                    raise ValueError(f"Invalid range: '{part}'")
+                except ValueError as exc:
+                    raise ValueError(f"Invalid range: '{part}'") from exc
         else:
             try:
                 numbers.add(int(part))
-            except ValueError:
-                raise ValueError(f"Invalid channel number: '{part}'")
+            except ValueError as exc:
+                raise ValueError(f"Invalid channel number: '{part}'") from exc
 
     return sorted(numbers)
 
 
-def _format_channel_numbers(channels: List[int]) -> str:
+def _format_channel_numbers(channels: list[int]) -> str:
     """
     Format channel numbers into compact string.
 
@@ -189,7 +189,7 @@ def _format_channel_numbers(channels: List[int]) -> str:
         Compact string like '1-5,7,23'
     """
     if not channels:
-        return ''
+        return ""
 
     sorted_ch = sorted(set(channels))
     parts = []
@@ -210,4 +210,4 @@ def _format_channel_numbers(channels: List[int]) -> str:
             parts.append(str(start))
         i += 1
 
-    return ','.join(parts)
+    return ",".join(parts)

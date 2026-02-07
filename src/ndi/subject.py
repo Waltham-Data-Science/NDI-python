@@ -7,11 +7,11 @@ local identifier (e.g., 'mouse23@vhlab.org') and a free-form description.
 """
 
 from __future__ import annotations
-import re
-from typing import Any, Optional, Tuple, TYPE_CHECKING
 
-from .ido import Ido
+from typing import TYPE_CHECKING, Any
+
 from .documentservice import DocumentService
+from .ido import Ido
 
 if TYPE_CHECKING:
     from .document import Document
@@ -38,9 +38,9 @@ class Subject(Ido, DocumentService):
 
     def __init__(
         self,
-        local_identifier_or_session: Any = '',
-        description_or_document: Any = '',
-        identifier: Optional[str] = None,
+        local_identifier_or_session: Any = "",
+        description_or_document: Any = "",
+        identifier: str | None = None,
     ):
         """
         Create a new Subject.
@@ -59,15 +59,17 @@ class Subject(Ido, DocumentService):
         Ido.__init__(self, identifier)
 
         # Determine construction mode
-        if hasattr(local_identifier_or_session, 'database_search'):
+        if hasattr(local_identifier_or_session, "database_search"):
             # Loading from session + document
             session = local_identifier_or_session
             doc_or_id = description_or_document
             self._load_from_session(session, doc_or_id)
         else:
             # Creating from scratch
-            local_identifier = str(local_identifier_or_session) if local_identifier_or_session else ''
-            description = str(description_or_document) if description_or_document else ''
+            local_identifier = (
+                str(local_identifier_or_session) if local_identifier_or_session else ""
+            )
+            description = str(description_or_document) if description_or_document else ""
 
             if local_identifier:
                 valid, msg = Subject.is_valid_local_identifier(local_identifier)
@@ -84,7 +86,8 @@ class Subject(Ido, DocumentService):
         if isinstance(doc_or_id, str):
             # It's a document ID - look it up
             from .query import Query
-            q = Query('base.id') == doc_or_id
+
+            q = Query("base.id") == doc_or_id
             docs = session.database_search(q)
             if not docs:
                 raise ValueError(f"No document found with id '{doc_or_id}'")
@@ -95,13 +98,13 @@ class Subject(Ido, DocumentService):
             raise TypeError(f"Expected Document or document ID string, got {type(doc_or_id)}")
 
         props = doc.document_properties
-        subject_props = props.get('subject', {})
+        subject_props = props.get("subject", {})
 
-        self._local_identifier = subject_props.get('local_identifier', '')
-        self._description = subject_props.get('description', '')
+        self._local_identifier = subject_props.get("local_identifier", "")
+        self._description = subject_props.get("description", "")
 
         # Use document ID as our identifier
-        base_id = props.get('base', {}).get('id', '')
+        base_id = props.get("base", {}).get("id", "")
         if base_id:
             self.identifier = base_id
 
@@ -119,7 +122,7 @@ class Subject(Ido, DocumentService):
     # DocumentService Implementation
     # =========================================================================
 
-    def newdocument(self) -> 'Document':
+    def newdocument(self) -> Document:
         """
         Create a new subject document.
 
@@ -129,16 +132,16 @@ class Subject(Ido, DocumentService):
         from .document import Document
 
         doc = Document(
-            'subject',
+            "subject",
             **{
-                'subject.local_identifier': self._local_identifier,
-                'subject.description': self._description,
-                'base.id': self.id,
-            }
+                "subject.local_identifier": self._local_identifier,
+                "subject.description": self._description,
+                "base.id": self.id,
+            },
         )
         return doc
 
-    def searchquery(self) -> 'Query':
+    def searchquery(self) -> Query:
         """
         Create a query to find this subject in the database.
 
@@ -147,9 +150,8 @@ class Subject(Ido, DocumentService):
         """
         from .query import Query
 
-        return (
-            Query('').isa('subject') &
-            (Query('subject.local_identifier') == self._local_identifier)
+        return Query("").isa("subject") & (
+            Query("subject.local_identifier") == self._local_identifier
         )
 
     # =========================================================================
@@ -157,7 +159,7 @@ class Subject(Ido, DocumentService):
     # =========================================================================
 
     @staticmethod
-    def is_valid_local_identifier(local_identifier: str) -> Tuple[bool, str]:
+    def is_valid_local_identifier(local_identifier: str) -> tuple[bool, str]:
         """
         Validate a local identifier string.
 
@@ -175,10 +177,10 @@ class Subject(Ido, DocumentService):
         if not local_identifier:
             return False, "local_identifier cannot be empty"
 
-        if ' ' in local_identifier:
+        if " " in local_identifier:
             return False, "local_identifier cannot contain spaces"
 
-        if '@' not in local_identifier:
+        if "@" not in local_identifier:
             return False, "local_identifier must contain '@' character"
 
         return True, ""
@@ -188,7 +190,7 @@ class Subject(Ido, DocumentService):
         session: Any,
         subjectstring: str,
         make_if_missing: bool = False,
-    ) -> Tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         """
         Check if a subject string matches a subject in the session database.
 
@@ -202,17 +204,14 @@ class Subject(Ido, DocumentService):
         """
         from .query import Query
 
-        q = (
-            Query('').isa('subject') &
-            (Query('subject.local_identifier') == subjectstring)
-        )
+        q = Query("").isa("subject") & (Query("subject.local_identifier") == subjectstring)
         docs = session.database_search(q)
 
         if docs:
             return True, docs[0].id
 
         if make_if_missing:
-            subject = Subject(subjectstring, '')
+            subject = Subject(subjectstring, "")
             doc = subject.newdocument()
             session.database_add(doc)
             return True, doc.id

@@ -8,41 +8,42 @@ MATLAB equivalent: src/ndi/+ndi/+file/+type/mfdaq_epoch_channel.m
 """
 
 from __future__ import annotations
+
 import json
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
 class ChannelInfo:
     """Information about a single channel in an MFDAQ recording."""
 
-    name: str = ''
-    type: str = ''
+    name: str = ""
+    type: str = ""
     time_channel: int = 1
     sample_rate: float = 0.0
     offset: float = 0.0
     scale: float = 1.0
     number: int = 0
     group: int = 0
-    dataclass: str = ''
+    dataclass: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> 'ChannelInfo':
+    def from_dict(cls, d: dict[str, Any]) -> ChannelInfo:
         return cls(
-            name=d.get('name', ''),
-            type=d.get('type', ''),
-            time_channel=d.get('time_channel', 1),
-            sample_rate=d.get('sample_rate', 0.0),
-            offset=d.get('offset', 0.0),
-            scale=d.get('scale', 1.0),
-            number=d.get('number', 0),
-            group=d.get('group', 0),
-            dataclass=d.get('dataclass', ''),
+            name=d.get("name", ""),
+            type=d.get("type", ""),
+            time_channel=d.get("time_channel", 1),
+            sample_rate=d.get("sample_rate", 0.0),
+            offset=d.get("offset", 0.0),
+            scale=d.get("scale", 1.0),
+            number=d.get("number", 0),
+            group=d.get("group", 0),
+            dataclass=d.get("dataclass", ""),
         )
 
 
@@ -64,9 +65,9 @@ class MFDAQEpochChannel:
         [ChannelInfo(name='ai1', ...)]
     """
 
-    channel_information: List[ChannelInfo] = field(default_factory=list)
+    channel_information: list[ChannelInfo] = field(default_factory=list)
 
-    def channels_of_type(self, channel_type: str) -> List[ChannelInfo]:
+    def channels_of_type(self, channel_type: str) -> list[ChannelInfo]:
         """
         Get channels of a specific type.
 
@@ -76,12 +77,9 @@ class MFDAQEpochChannel:
         Returns:
             List of matching ChannelInfo objects
         """
-        return [
-            ch for ch in self.channel_information
-            if ch.type == channel_type
-        ]
+        return [ch for ch in self.channel_information if ch.type == channel_type]
 
-    def channel_numbers(self, channel_type: Optional[str] = None) -> List[int]:
+    def channel_numbers(self, channel_type: str | None = None) -> list[int]:
         """
         Get channel numbers, optionally filtered by type.
 
@@ -93,10 +91,7 @@ class MFDAQEpochChannel:
         """
         if channel_type is None:
             return [ch.number for ch in self.channel_information]
-        return [
-            ch.number for ch in self.channel_information
-            if ch.type == channel_type
-        ]
+        return [ch.number for ch in self.channel_information if ch.type == channel_type]
 
     def read_from_file(self, filename: str) -> None:
         """
@@ -105,11 +100,11 @@ class MFDAQEpochChannel:
         Args:
             filename: Path to the JSON file
         """
-        with open(filename, 'r') as f:
+        with open(filename) as f:
             data = json.load(f)
 
         self.channel_information = []
-        for ch_data in data.get('channel_information', []):
+        for ch_data in data.get("channel_information", []):
             self.channel_information.append(ChannelInfo.from_dict(ch_data))
 
     def write_to_file(self, filename: str) -> None:
@@ -119,21 +114,17 @@ class MFDAQEpochChannel:
         Args:
             filename: Path to write
         """
-        data = {
-            'channel_information': [
-                ch.to_dict() for ch in self.channel_information
-            ]
-        }
+        data = {"channel_information": [ch.to_dict() for ch in self.channel_information]}
         Path(filename).parent.mkdir(parents=True, exist_ok=True)
-        with open(filename, 'w') as f:
+        with open(filename, "w") as f:
             json.dump(data, f, indent=2)
 
     @staticmethod
     def channel_group_decoding(
-        channel_info: List[ChannelInfo],
+        channel_info: list[ChannelInfo],
         channel_type: str,
-        channels: List[int],
-    ) -> List[int]:
+        channels: list[int],
+    ) -> list[int]:
         """
         Decode channel group assignments.
 
@@ -149,10 +140,7 @@ class MFDAQEpochChannel:
             List of group numbers for each requested channel
         """
         # Build lookup by (type, number) -> group
-        lookup = {
-            (ch.type, ch.number): ch.group
-            for ch in channel_info
-        }
+        lookup = {(ch.type, ch.number): ch.group for ch in channel_info}
 
         groups = []
         for ch_num in channels:

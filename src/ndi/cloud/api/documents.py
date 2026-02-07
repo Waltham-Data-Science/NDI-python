@@ -7,47 +7,47 @@ MATLAB equivalents: +ndi/+cloud/+api/+documents/*.m,
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..client import CloudClient
 
 
 def get_document(
-    client: 'CloudClient',
+    client: CloudClient,
     dataset_id: str,
     document_id: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """GET /datasets/{datasetId}/documents/{documentId}"""
     return client.get(
-        '/datasets/{datasetId}/documents/{documentId}',
+        "/datasets/{datasetId}/documents/{documentId}",
         datasetId=dataset_id,
         documentId=document_id,
     )
 
 
 def add_document(
-    client: 'CloudClient',
+    client: CloudClient,
     dataset_id: str,
-    doc_json: Dict[str, Any],
-) -> Dict[str, Any]:
+    doc_json: dict[str, Any],
+) -> dict[str, Any]:
     """POST /datasets/{datasetId}/documents"""
     return client.post(
-        '/datasets/{datasetId}/documents',
+        "/datasets/{datasetId}/documents",
         json=doc_json,
         datasetId=dataset_id,
     )
 
 
 def update_document(
-    client: 'CloudClient',
+    client: CloudClient,
     dataset_id: str,
     document_id: str,
-    doc_json: Dict[str, Any],
-) -> Dict[str, Any]:
+    doc_json: dict[str, Any],
+) -> dict[str, Any]:
     """PUT /datasets/{datasetId}/documents/{documentId}"""
     return client.put(
-        '/datasets/{datasetId}/documents/{documentId}',
+        "/datasets/{datasetId}/documents/{documentId}",
         json=doc_json,
         datasetId=dataset_id,
         documentId=document_id,
@@ -55,13 +55,13 @@ def update_document(
 
 
 def delete_document(
-    client: 'CloudClient',
+    client: CloudClient,
     dataset_id: str,
     document_id: str,
 ) -> bool:
     """DELETE /datasets/{datasetId}/documents/{documentId}"""
     client.delete(
-        '/datasets/{datasetId}/documents/{documentId}',
+        "/datasets/{datasetId}/documents/{documentId}",
         datasetId=dataset_id,
         documentId=document_id,
     )
@@ -69,15 +69,15 @@ def delete_document(
 
 
 def list_documents(
-    client: 'CloudClient',
+    client: CloudClient,
     dataset_id: str,
     page: int = 1,
     page_size: int = 1000,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """GET /datasets/{datasetId}/documents?page=&pageSize="""
     return client.get(
-        '/datasets/{datasetId}/documents',
-        params={'page': page, 'pageSize': page_size},
+        "/datasets/{datasetId}/documents",
+        params={"page": page, "pageSize": page_size},
         datasetId=dataset_id,
     )
 
@@ -86,94 +86,94 @@ _MAX_PAGES = 1000
 
 
 def list_all_documents(
-    client: 'CloudClient',
+    client: CloudClient,
     dataset_id: str,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Auto-paginate through all documents in a dataset."""
-    all_docs: List[Dict[str, Any]] = []
+    all_docs: list[dict[str, Any]] = []
     page = 1
     while page <= _MAX_PAGES:
         result = list_documents(client, dataset_id, page=page)
-        docs = result.get('documents', [])
+        docs = result.get("documents", [])
         all_docs.extend(docs)
-        total = result.get('totalNumber', 0)
+        total = result.get("totalNumber", 0)
         if len(all_docs) >= total or not docs:
             break
         page += 1
     return all_docs
 
 
-def get_document_count(client: 'CloudClient', dataset_id: str) -> int:
+def get_document_count(client: CloudClient, dataset_id: str) -> int:
     """Return the total number of documents in a dataset."""
     result = list_documents(client, dataset_id, page=1, page_size=1)
-    return result.get('totalNumber', 0)
+    return result.get("totalNumber", 0)
 
 
 def bulk_upload(
-    client: 'CloudClient',
+    client: CloudClient,
     dataset_id: str,
     zip_path: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """POST /datasets/{datasetId}/documents/bulk-upload
 
     Upload a ZIP file containing documents.
     """
     return client.post(
-        '/datasets/{datasetId}/documents/bulk-upload',
+        "/datasets/{datasetId}/documents/bulk-upload",
         data=zip_path,  # Actual file handling done by caller
         datasetId=dataset_id,
     )
 
 
 def get_bulk_upload_url(
-    client: 'CloudClient',
+    client: CloudClient,
     dataset_id: str,
 ) -> str:
     """Get a presigned URL for bulk document upload."""
     result = client.post(
-        '/datasets/{datasetId}/documents/bulk-upload',
+        "/datasets/{datasetId}/documents/bulk-upload",
         datasetId=dataset_id,
     )
-    return result.get('url', '') if isinstance(result, dict) else ''
+    return result.get("url", "") if isinstance(result, dict) else ""
 
 
 def get_bulk_download_url(
-    client: 'CloudClient',
+    client: CloudClient,
     dataset_id: str,
-    doc_ids: Optional[List[str]] = None,
+    doc_ids: list[str] | None = None,
 ) -> str:
     """Get a presigned URL for bulk document download."""
-    body: Dict[str, Any] = {}
+    body: dict[str, Any] = {}
     if doc_ids:
-        body['documentIds'] = doc_ids
+        body["documentIds"] = doc_ids
     result = client.get(
-        '/datasets/{datasetId}/documents/bulk-download',
+        "/datasets/{datasetId}/documents/bulk-download",
         params=body,
         datasetId=dataset_id,
     )
-    return result.get('url', '') if isinstance(result, dict) else ''
+    return result.get("url", "") if isinstance(result, dict) else ""
 
 
 def bulk_delete(
-    client: 'CloudClient',
+    client: CloudClient,
     dataset_id: str,
-    doc_ids: List[str],
-) -> Dict[str, Any]:
+    doc_ids: list[str],
+) -> dict[str, Any]:
     """POST /datasets/{datasetId}/documents/bulk-delete"""
     return client.post(
-        '/datasets/{datasetId}/documents/bulk-delete',
-        json={'documentIds': doc_ids},
+        "/datasets/{datasetId}/documents/bulk-delete",
+        json={"documentIds": doc_ids},
         datasetId=dataset_id,
     )
 
 
 def ndi_query(
-    client: 'CloudClient',
+    client: CloudClient,
     scope: str,
-    search_structure: Dict[str, Any],
+    search_structure: dict[str, Any],
     page: int = 1,
     page_size: int = 20,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Query documents across datasets via the NDI query API.
 
     MATLAB equivalent: +cloud/+api/+documents/ndiquery.m
@@ -189,28 +189,28 @@ def ndi_query(
         Dict with ``documents`` list and pagination metadata.
     """
     return client.post(
-        f'/ndiquery?page={page}&pageSize={page_size}',
-        json={'scope': scope, 'searchstructure': search_structure},
+        f"/ndiquery?page={page}&pageSize={page_size}",
+        json={"scope": scope, "searchstructure": search_structure},
     )
 
 
 def ndi_query_all(
-    client: 'CloudClient',
+    client: CloudClient,
     scope: str,
-    search_structure: Dict[str, Any],
+    search_structure: dict[str, Any],
     page_size: int = 1000,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Auto-paginate through all ndiquery results.
 
     MATLAB equivalent: +cloud/+api/+documents/ndiqueryAll.m
     """
-    all_docs: List[Dict[str, Any]] = []
+    all_docs: list[dict[str, Any]] = []
     page = 1
     while page <= _MAX_PAGES:
         result = ndi_query(client, scope, search_structure, page=page, page_size=page_size)
-        docs = result.get('documents', [])
+        docs = result.get("documents", [])
         all_docs.extend(docs)
-        total = result.get('totalItems', result.get('totalNumber', 0))
+        total = result.get("totalItems", result.get("totalNumber", 0))
         if len(all_docs) >= total or not docs:
             break
         page += 1
@@ -218,10 +218,10 @@ def ndi_query_all(
 
 
 def add_document_as_file(
-    client: 'CloudClient',
+    client: CloudClient,
     dataset_id: str,
     file_path: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Add a document from a JSON file on disk.
 
     MATLAB equivalent: +cloud/+api/+documents/addDocumentAsFile.m
@@ -229,6 +229,6 @@ def add_document_as_file(
     import json
     from pathlib import Path
 
-    content = Path(file_path).read_text(encoding='utf-8')
+    content = Path(file_path).read_text(encoding="utf-8")
     doc_json = json.loads(content)
     return add_document(client, dataset_id, doc_json)

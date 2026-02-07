@@ -7,12 +7,10 @@ MATLAB equivalent: src/ndi/+ndi/+daq/+reader/+mfdaq/blackrock.m
 """
 
 from __future__ import annotations
+
 import logging
-from typing import Any, List, Optional, Tuple, Union
 
-import numpy as np
-
-from ...mfdaq import MFDAQReader, ChannelInfo
+from ...mfdaq import ChannelInfo, MFDAQReader
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +22,8 @@ class BlackrockReader(MFDAQReader):
     File extensions: .ns1-.ns6, .nev
     """
 
-    NDI_DAQREADER_CLASS = 'ndi.daq.reader.mfdaq.blackrock'
-    FILE_EXTENSIONS = ['.ns1', '.ns2', '.ns3', '.ns4', '.ns5', '.ns6', '.nev']
+    NDI_DAQREADER_CLASS = "ndi.daq.reader.mfdaq.blackrock"
+    FILE_EXTENSIONS = [".ns1", ".ns2", ".ns3", ".ns4", ".ns5", ".ns6", ".nev"]
 
     def __init__(self, identifier=None, session=None, document=None):
         super().__init__(identifier=identifier, session=session, document=document)
@@ -34,18 +32,19 @@ class BlackrockReader(MFDAQReader):
     def _get_si_reader(self):
         try:
             from ..spikeinterface_adapter import SpikeInterfaceReader
+
             return SpikeInterfaceReader
         except ImportError:
             return None
 
-    def getchannelsepoch(self, epochfiles: List[str]) -> List[ChannelInfo]:
+    def getchannelsepoch(self, epochfiles: list[str]) -> list[ChannelInfo]:
         SI = self._get_si_reader()
         if SI is None:
             return []
         try:
             return SI().getchannelsepoch(epochfiles)
         except Exception as exc:
-            logger.warning('BlackrockReader.getchannelsepoch failed: %s', exc)
+            logger.warning("BlackrockReader.getchannelsepoch failed: %s", exc)
             return []
 
     def readchannels_epochsamples(self, channeltype, channel, epochfiles, s0, s1):

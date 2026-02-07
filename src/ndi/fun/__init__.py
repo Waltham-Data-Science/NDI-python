@@ -16,8 +16,8 @@ from .utils import (
 )
 
 __all__ = [
-    'channelname2prefixnumber',
-    'name2variable_name',
-    'pseudorandomint',
-    'timestamp',
+    "channelname2prefixnumber",
+    "name2variable_name",
+    "pseudorandomint",
+    "timestamp",
 ]

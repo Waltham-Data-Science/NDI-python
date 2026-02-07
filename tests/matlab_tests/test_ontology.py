@@ -18,25 +18,25 @@ import socket
 
 import pytest
 
-from ndi.ontology import OntologyResult, lookup, clear_cache
-
+from ndi.ontology import OntologyResult, clear_cache, lookup
 
 # ---------------------------------------------------------------------------
 # Network availability check
 # ---------------------------------------------------------------------------
 
+
 def _can_reach_network() -> bool:
     """Check if we can reach the internet for live ontology lookups."""
     try:
-        socket.create_connection(('www.ebi.ac.uk', 443), timeout=3)
+        socket.create_connection(("www.ebi.ac.uk", 443), timeout=3)
         return True
-    except (OSError, socket.timeout):
+    except (TimeoutError, OSError):
         return False
 
 
 requires_network = pytest.mark.skipif(
     not _can_reach_network(),
-    reason='No network access for ontology lookup',
+    reason="No network access for ontology lookup",
 )
 
 
@@ -44,29 +44,30 @@ requires_network = pytest.mark.skipif(
 # TestOntologyResult
 # ===========================================================================
 
+
 class TestOntologyResult:
     """Test the OntologyResult data class."""
 
     def test_result_creation(self):
         """OntologyResult can be created with defaults."""
         result = OntologyResult()
-        assert result.id == ''
-        assert result.name == ''
-        assert result.prefix == ''
-        assert result.definition == ''
+        assert result.id == ""
+        assert result.name == ""
+        assert result.prefix == ""
+        assert result.definition == ""
         assert result.synonyms == []
 
     def test_result_with_values(self):
         """OntologyResult stores provided values."""
         result = OntologyResult(
-            id='NCBITaxon:10090',
-            name='Mus musculus',
-            prefix='NCBITaxon',
-            definition='House mouse',
+            id="NCBITaxon:10090",
+            name="Mus musculus",
+            prefix="NCBITaxon",
+            definition="House mouse",
         )
-        assert result.id == 'NCBITaxon:10090'
-        assert result.name == 'Mus musculus'
-        assert result.prefix == 'NCBITaxon'
+        assert result.id == "NCBITaxon:10090"
+        assert result.name == "Mus musculus"
+        assert result.prefix == "NCBITaxon"
 
     def test_result_bool_empty(self):
         """Empty result is falsy."""
@@ -75,28 +76,29 @@ class TestOntologyResult:
 
     def test_result_bool_nonempty(self):
         """Result with id is truthy."""
-        result = OntologyResult(id='CL:0000540')
+        result = OntologyResult(id="CL:0000540")
         assert result
 
     def test_result_to_dict(self):
         """to_dict() returns a plain dict representation."""
-        result = OntologyResult(id='CL:0000540', name='neuron')
+        result = OntologyResult(id="CL:0000540", name="neuron")
         d = result.to_dict()
         assert isinstance(d, dict)
-        assert d['id'] == 'CL:0000540'
-        assert d['name'] == 'neuron'
+        assert d["id"] == "CL:0000540"
+        assert d["name"] == "neuron"
 
     def test_result_repr(self):
         """repr includes id and name."""
-        result = OntologyResult(id='CL:0000540', name='neuron')
+        result = OntologyResult(id="CL:0000540", name="neuron")
         r = repr(result)
-        assert 'CL:0000540' in r
-        assert 'neuron' in r
+        assert "CL:0000540" in r
+        assert "neuron" in r
 
 
 # ===========================================================================
 # TestOntologyLookup - Mocked
 # ===========================================================================
+
 
 class TestOntologyLookupMocked:
     """Port of ndi.unittest.ontology.TestOntologyLookup (mocked).
@@ -111,7 +113,7 @@ class TestOntologyLookupMocked:
         """
         # Looking up a term with no network will return an empty result
         # (providers catch exceptions and return empty OntologyResult)
-        result = lookup('EMPTY:anything')
+        result = lookup("EMPTY:anything")
         assert isinstance(result, OntologyResult)
 
     def test_lookup_no_colon_returns_empty(self):
@@ -119,7 +121,7 @@ class TestOntologyLookupMocked:
 
         MATLAB equivalent: TestOntologyLookup (edge case)
         """
-        result = lookup('no_colon_here')
+        result = lookup("no_colon_here")
         assert isinstance(result, OntologyResult)
         assert not result  # falsy for empty result
 
@@ -128,7 +130,7 @@ class TestOntologyLookupMocked:
 
         MATLAB equivalent: TestOntologyLookup (edge case)
         """
-        result = lookup('UNKNOWNPREFIX:12345')
+        result = lookup("UNKNOWNPREFIX:12345")
         assert isinstance(result, OntologyResult)
         assert not result
 
@@ -137,7 +139,7 @@ class TestOntologyLookupMocked:
 
         MATLAB equivalent: TestOntologyLookup.testClearCache
         """
-        result = lookup('clear')
+        result = lookup("clear")
         assert isinstance(result, OntologyResult)
         assert not result  # clear returns empty result
 
@@ -152,6 +154,7 @@ class TestOntologyLookupMocked:
 # ===========================================================================
 # TestOntologyLookup - Live network
 # ===========================================================================
+
 
 class TestOntologyLookupLive:
     """Port of ndi.unittest.ontology.TestOntologyLookup (live network).
@@ -168,11 +171,11 @@ class TestOntologyLookupLive:
         # Clear cache first to ensure fresh lookup
         clear_cache()
 
-        result = lookup('NCBITaxon:10090')
+        result = lookup("NCBITaxon:10090")
         assert isinstance(result, OntologyResult)
         assert result  # should be truthy (found something)
         # The name should contain 'Mus musculus' or 'mouse'
-        assert result.name, 'Should have a non-empty name'
+        assert result.name, "Should have a non-empty name"
 
     @requires_network
     def test_lookup_cell_ontology(self):
@@ -182,10 +185,10 @@ class TestOntologyLookupLive:
         """
         clear_cache()
 
-        result = lookup('CL:0000540')
+        result = lookup("CL:0000540")
         assert isinstance(result, OntologyResult)
         assert result
-        assert result.name, 'Should have a non-empty name'
+        assert result.name, "Should have a non-empty name"
 
     @requires_network
     def test_lookup_invalid_term(self):
@@ -196,7 +199,7 @@ class TestOntologyLookupLive:
         clear_cache()
 
         # A valid prefix but non-existent ID -- should return empty
-        result = lookup('CL:9999999')
+        result = lookup("CL:9999999")
         assert isinstance(result, OntologyResult)
         # May or may not find something, but should not raise
 
@@ -208,8 +211,8 @@ class TestOntologyLookupLive:
         """
         clear_cache()
 
-        result1 = lookup('NCBITaxon:10090')
-        result2 = lookup('NCBITaxon:10090')
+        result1 = lookup("NCBITaxon:10090")
+        result2 = lookup("NCBITaxon:10090")
 
         # Both should return the same data
         assert result1.id == result2.id

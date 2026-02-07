@@ -6,6 +6,7 @@ or stimulation devices in neuroscience experiments.
 """
 
 from __future__ import annotations
+
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -45,13 +46,13 @@ class Probe(Element):
 
     def __init__(
         self,
-        session: Optional[Any] = None,
-        name: str = '',
+        session: Any | None = None,
+        name: str = "",
         reference: int = 0,
-        type: str = '',
-        subject_id: str = '',
-        identifier: Optional[str] = None,
-        document: Optional[Any] = None,
+        type: str = "",
+        subject_id: str = "",
+        identifier: str | None = None,
+        document: Any | None = None,
     ):
         """
         Create a new Probe.
@@ -84,7 +85,7 @@ class Probe(Element):
     # EpochSet Overrides
     # =========================================================================
 
-    def buildepochtable(self) -> List[Dict[str, Any]]:
+    def buildepochtable(self) -> list[dict[str, Any]]:
         """
         Build epoch table from DAQ system epochprobemaps.
 
@@ -110,55 +111,58 @@ class Probe(Element):
 
             for device_entry in device_et:
                 # Check if any epochprobemap matches this probe
-                epochprobemaps = device_entry.get('epochprobemap', [])
+                epochprobemaps = device_entry.get("epochprobemap", [])
                 matching_epm = self._find_matching_epochprobemap(epochprobemaps)
 
                 if matching_epm is not None:
                     epoch_number += 1
 
                     # Get clock and timing info from device entry
-                    epoch_clock = device_entry.get('epoch_clock', [])
-                    t0_t1 = device_entry.get('t0_t1', [])
+                    epoch_clock = device_entry.get("epoch_clock", [])
+                    t0_t1 = device_entry.get("t0_t1", [])
 
-                    et.append({
-                        'epoch_number': epoch_number,
-                        'epoch_id': device_entry.get('epoch_id', ''),
-                        'epoch_session_id': device_entry.get('epoch_session_id', ''),
-                        'epochprobemap': [matching_epm],
-                        'epoch_clock': epoch_clock,
-                        't0_t1': t0_t1,
-                        'underlying_epochs': {
-                            'underlying': daqsys,
-                            'epoch_id': device_entry.get('epoch_id', ''),
-                            'epoch_session_id': device_entry.get('epoch_session_id', ''),
-                            'epochprobemap': epochprobemaps,
-                            'epoch_clock': epoch_clock,
-                            't0_t1': t0_t1,
-                        },
-                    })
+                    et.append(
+                        {
+                            "epoch_number": epoch_number,
+                            "epoch_id": device_entry.get("epoch_id", ""),
+                            "epoch_session_id": device_entry.get("epoch_session_id", ""),
+                            "epochprobemap": [matching_epm],
+                            "epoch_clock": epoch_clock,
+                            "t0_t1": t0_t1,
+                            "underlying_epochs": {
+                                "underlying": daqsys,
+                                "epoch_id": device_entry.get("epoch_id", ""),
+                                "epoch_session_id": device_entry.get("epoch_session_id", ""),
+                                "epochprobemap": epochprobemaps,
+                                "epoch_clock": epoch_clock,
+                                "t0_t1": t0_t1,
+                            },
+                        }
+                    )
 
         return et
 
-    def _get_daqsystems(self) -> List[Any]:
+    def _get_daqsystems(self) -> list[Any]:
         """Get all DAQ systems from the session."""
         if self._session is None:
             return []
 
         # Check if session has a method to get DAQ systems
-        if hasattr(self._session, 'getdaqsystems'):
+        if hasattr(self._session, "getdaqsystems"):
             return self._session.getdaqsystems()
 
-        if hasattr(self._session, 'daqsystems'):
+        if hasattr(self._session, "daqsystems"):
             return self._session.daqsystems
 
         # Fall back to querying database
         from ..query import Query
 
-        q = Query('').isa('daqsystem')
+        q = Query("").isa("daqsystem")
         docs = self._session.database_search(q)
 
         # Load DAQSystem objects from documents
         from ..daq.system import DAQSystem
+
         systems = []
         for doc in docs:
             try:
@@ -171,8 +175,8 @@ class Probe(Element):
 
     def _find_matching_epochprobemap(
         self,
-        epochprobemaps: List[Any],
-    ) -> Optional[EpochProbeMap]:
+        epochprobemaps: list[Any],
+    ) -> EpochProbeMap | None:
         """
         Find an epochprobemap matching this probe.
 
@@ -188,20 +192,24 @@ class Probe(Element):
                 if epm.matches(self._name, self._reference, self._type):
                     return epm
             elif isinstance(epm, dict):
-                if (epm.get('name') == self._name and
-                    epm.get('reference') == self._reference and
-                    epm.get('type') == self._type):
+                if (
+                    epm.get("name") == self._name
+                    and epm.get("reference") == self._reference
+                    and epm.get("type") == self._type
+                ):
                     return EpochProbeMap.from_dict(epm)
-            elif hasattr(epm, 'name') and hasattr(epm, 'reference') and hasattr(epm, 'type'):
-                if (epm.name == self._name and
-                    epm.reference == self._reference and
-                    epm.type == self._type):
+            elif hasattr(epm, "name") and hasattr(epm, "reference") and hasattr(epm, "type"):
+                if (
+                    epm.name == self._name
+                    and epm.reference == self._reference
+                    and epm.type == self._type
+                ):
                     return EpochProbeMap(
                         name=epm.name,
                         reference=epm.reference,
                         type=epm.type,
-                        devicestring=getattr(epm, 'devicestring', ''),
-                        subjectstring=getattr(epm, 'subjectstring', ''),
+                        devicestring=getattr(epm, "devicestring", ""),
+                        subjectstring=getattr(epm, "subjectstring", ""),
                     )
 
         return None
@@ -243,22 +251,22 @@ class Probe(Element):
             return epochprobemap.matches(self._name, self._reference, self._type)
         elif isinstance(epochprobemap, dict):
             return (
-                epochprobemap.get('name') == self._name and
-                epochprobemap.get('reference') == self._reference and
-                epochprobemap.get('type') == self._type
+                epochprobemap.get("name") == self._name
+                and epochprobemap.get("reference") == self._reference
+                and epochprobemap.get("type") == self._type
             )
-        elif hasattr(epochprobemap, 'name'):
+        elif hasattr(epochprobemap, "name"):
             return (
-                epochprobemap.name == self._name and
-                epochprobemap.reference == self._reference and
-                epochprobemap.type == self._type
+                epochprobemap.name == self._name
+                and epochprobemap.reference == self._reference
+                and epochprobemap.type == self._type
             )
         return False
 
     def getchanneldevinfo(
         self,
         epoch_number: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Get device and channel information for an epoch.
 
@@ -277,12 +285,12 @@ class Probe(Element):
             raise IndexError(f"Epoch {epoch_number} out of range (1..{len(et)})")
 
         entry = et[epoch_number - 1]
-        underlying = entry.get('underlying_epochs', {})
+        underlying = entry.get("underlying_epochs", {})
 
         return {
-            'daqsystem': underlying.get('underlying'),
-            'device_epoch_id': underlying.get('epoch_id'),
-            'epochprobemap': entry.get('epochprobemap', []),
+            "daqsystem": underlying.get("underlying"),
+            "device_epoch_id": underlying.get("epoch_id"),
+            "epochprobemap": entry.get("epochprobemap", []),
         }
 
     # =========================================================================
@@ -299,14 +307,14 @@ class Probe(Element):
         from ..document import Document
 
         doc = Document(
-            'element',
+            "element",
             **{
-                'element.name': self._name,
-                'element.reference': self._reference,
-                'element.type': self._type,
-                'element.direct': False,  # Probes are never direct
-                'base.id': self.id,
-            }
+                "element.name": self._name,
+                "element.reference": self._reference,
+                "element.type": self._type,
+                "element.direct": False,  # Probes are never direct
+                "base.id": self.id,
+            },
         )
 
         # Set session ID
@@ -315,7 +323,7 @@ class Probe(Element):
 
         # Set subject dependency
         if self._subject_id:
-            doc.set_dependency_value('subject_id', self._subject_id)
+            doc.set_dependency_value("subject_id", self._subject_id)
 
         return doc
 
@@ -325,9 +333,9 @@ class Probe(Element):
 
     @staticmethod
     def buildmultipleepochtables(
-        probes: List['Probe'],
+        probes: list[Probe],
         session: Any,
-    ) -> Dict[str, List[Dict[str, Any]]]:
+    ) -> dict[str, list[dict[str, Any]]]:
         """
         Build epoch tables for multiple probes efficiently.
 
@@ -342,15 +350,17 @@ class Probe(Element):
             Dict mapping probe.id to epoch table
         """
         # Get DAQ systems once
-        if hasattr(session, 'getdaqsystems'):
+        if hasattr(session, "getdaqsystems"):
             daqsystems = session.getdaqsystems()
-        elif hasattr(session, 'daqsystems'):
+        elif hasattr(session, "daqsystems"):
             daqsystems = session.daqsystems
         else:
             from ..query import Query
-            q = Query('').isa('daqsystem')
+
+            q = Query("").isa("daqsystem")
             docs = session.database_search(q)
             from ..daq.system import DAQSystem
+
             daqsystems = []
             for doc in docs:
                 try:
@@ -363,8 +373,8 @@ class Probe(Element):
         device_tables = {}
         for daqsys in daqsystems:
             device_tables[id(daqsys)] = {
-                'system': daqsys,
-                'epochtable': daqsys.epochtable(),
+                "system": daqsys,
+                "epochtable": daqsys.epochtable(),
             }
 
         # Build epoch tables for each probe
@@ -373,32 +383,34 @@ class Probe(Element):
             et = []
             epoch_number = 0
 
-            for daqsys_id, device_info in device_tables.items():
-                daqsys = device_info['system']
-                device_et = device_info['epochtable']
+            for _daqsys_id, device_info in device_tables.items():
+                daqsys = device_info["system"]
+                device_et = device_info["epochtable"]
 
                 for device_entry in device_et:
-                    epochprobemaps = device_entry.get('epochprobemap', [])
+                    epochprobemaps = device_entry.get("epochprobemap", [])
                     matching_epm = probe._find_matching_epochprobemap(epochprobemaps)
 
                     if matching_epm is not None:
                         epoch_number += 1
-                        et.append({
-                            'epoch_number': epoch_number,
-                            'epoch_id': device_entry.get('epoch_id', ''),
-                            'epoch_session_id': device_entry.get('epoch_session_id', ''),
-                            'epochprobemap': [matching_epm],
-                            'epoch_clock': device_entry.get('epoch_clock', []),
-                            't0_t1': device_entry.get('t0_t1', []),
-                            'underlying_epochs': {
-                                'underlying': daqsys,
-                                'epoch_id': device_entry.get('epoch_id', ''),
-                                'epoch_session_id': device_entry.get('epoch_session_id', ''),
-                                'epochprobemap': epochprobemaps,
-                                'epoch_clock': device_entry.get('epoch_clock', []),
-                                't0_t1': device_entry.get('t0_t1', []),
-                            },
-                        })
+                        et.append(
+                            {
+                                "epoch_number": epoch_number,
+                                "epoch_id": device_entry.get("epoch_id", ""),
+                                "epoch_session_id": device_entry.get("epoch_session_id", ""),
+                                "epochprobemap": [matching_epm],
+                                "epoch_clock": device_entry.get("epoch_clock", []),
+                                "t0_t1": device_entry.get("t0_t1", []),
+                                "underlying_epochs": {
+                                    "underlying": daqsys,
+                                    "epoch_id": device_entry.get("epoch_id", ""),
+                                    "epoch_session_id": device_entry.get("epoch_session_id", ""),
+                                    "epochprobemap": epochprobemaps,
+                                    "epoch_clock": device_entry.get("epoch_clock", []),
+                                    "t0_t1": device_entry.get("t0_t1", []),
+                                },
+                            }
+                        )
 
             result[probe.id] = et
 
@@ -413,10 +425,10 @@ class Probe(Element):
 # Probe Type Map utilities
 # =========================================================================
 
-_PROBE_TYPE_MAP: Optional[Dict[str, str]] = None
+_PROBE_TYPE_MAP: dict[str, str] | None = None
 
 
-def init_probe_type_map() -> Dict[str, str]:
+def init_probe_type_map() -> dict[str, str]:
     """Load the probe type→class mapping from ``probetype2object.json``.
 
     MATLAB equivalent: ndi.probe.fun.initProbeTypeMap
@@ -431,25 +443,26 @@ def init_probe_type_map() -> Dict[str, str]:
 
     try:
         from ..common import PathConstants
-        json_path = PathConstants.COMMON_FOLDER / 'probe' / 'probetype2object.json'
+
+        json_path = PathConstants.COMMON_FOLDER / "probe" / "probetype2object.json"
     except Exception:
         return {}
 
     if not json_path.exists():
         return {}
 
-    with open(json_path, 'r') as f:
+    with open(json_path) as f:
         entries = json.load(f)
 
-    result: Dict[str, str] = {}
+    result: dict[str, str] = {}
     for entry in entries:
-        if isinstance(entry, dict) and 'type' in entry and 'classname' in entry:
-            result[entry['type']] = entry['classname']
+        if isinstance(entry, dict) and "type" in entry and "classname" in entry:
+            result[entry["type"]] = entry["classname"]
 
     return result
 
 
-def get_probe_type_map() -> Dict[str, str]:
+def get_probe_type_map() -> dict[str, str]:
     """Return the cached probe type→class mapping.
 
     MATLAB equivalent: ndi.probe.fun.getProbeTypeMap

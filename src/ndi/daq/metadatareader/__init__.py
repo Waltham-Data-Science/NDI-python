@@ -7,6 +7,7 @@ subclasses for different stimulus systems.
 """
 
 from __future__ import annotations
+
 import csv
 import re
 from pathlib import Path
@@ -38,10 +39,10 @@ class MetadataReader(Ido):
 
     def __init__(
         self,
-        tsv_pattern: str = '',
-        identifier: Optional[str] = None,
-        session: Optional[Any] = None,
-        document: Optional[Any] = None,
+        tsv_pattern: str = "",
+        identifier: str | None = None,
+        session: Any | None = None,
+        document: Any | None = None,
     ):
         """
         Create a new MetadataReader.
@@ -58,14 +59,12 @@ class MetadataReader(Ido):
 
         # Load from document if provided
         if document is not None:
-            doc_props = getattr(document, 'document_properties', document)
-            if hasattr(doc_props, 'base') and hasattr(doc_props.base, 'id'):
+            doc_props = getattr(document, "document_properties", document)
+            if hasattr(doc_props, "base") and hasattr(doc_props.base, "id"):
                 self.identifier = doc_props.base.id
-            if hasattr(doc_props, 'daqmetadatareader'):
+            if hasattr(doc_props, "daqmetadatareader"):
                 self._tab_separated_file_parameter = getattr(
-                    doc_props.daqmetadatareader,
-                    'tab_separated_file_parameter',
-                    ''
+                    doc_props.daqmetadatareader, "tab_separated_file_parameter", ""
                 )
 
     @property
@@ -75,8 +74,8 @@ class MetadataReader(Ido):
 
     def readmetadata(
         self,
-        epochfiles: List[str],
-    ) -> List[Dict[str, Any]]:
+        epochfiles: list[str],
+    ) -> list[dict[str, Any]]:
         """
         Read metadata parameters from epoch files.
 
@@ -111,8 +110,7 @@ class MetadataReader(Ido):
             )
         if len(matches) == 0:
             raise ValueError(
-                f"No files match pattern '{self._tab_separated_file_parameter}' "
-                f"in {epochfiles}"
+                f"No files match pattern '{self._tab_separated_file_parameter}' " f"in {epochfiles}"
             )
 
         filepath = matches[0]
@@ -124,7 +122,7 @@ class MetadataReader(Ido):
     def readmetadatafromfile(
         self,
         filepath: str,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Read metadata from a specific file.
 
@@ -136,17 +134,17 @@ class MetadataReader(Ido):
         """
         parameters = []
 
-        with open(filepath, 'r', newline='') as f:
+        with open(filepath, newline="") as f:
             # Try to detect delimiter (tab or comma)
             sample = f.read(1024)
             f.seek(0)
 
-            if '\t' in sample:
-                delimiter = '\t'
-            elif ',' in sample:
-                delimiter = ','
+            if "\t" in sample:
+                delimiter = "\t"
+            elif "," in sample:
+                delimiter = ","
             else:
-                delimiter = '\t'
+                delimiter = "\t"
 
             reader = csv.DictReader(f, delimiter=delimiter)
             for row in reader:
@@ -171,9 +169,9 @@ class MetadataReader(Ido):
 
     def readmetadata_ingested(
         self,
-        epochfiles: List[str],
+        epochfiles: list[str],
         session: Any,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Read metadata from an ingested epoch.
 
@@ -195,9 +193,9 @@ class MetadataReader(Ido):
 
     def get_ingested_document(
         self,
-        epochfiles: List[str],
+        epochfiles: list[str],
         session: Any,
-    ) -> Optional[Any]:
+    ) -> Any | None:
         """
         Get the ingested document for epochfiles.
 
@@ -211,14 +209,13 @@ class MetadataReader(Ido):
         from ...query import Query
 
         # Check if ingested
-        if not epochfiles or not epochfiles[0].startswith('epochid://'):
+        if not epochfiles or not epochfiles[0].startswith("epochid://"):
             return None
 
-        epochid = epochfiles[0][len('epochid://'):]
+        epochid = epochfiles[0][len("epochid://") :]
 
-        q = (
-            Query('').depends_on('daqmetadatareader_id', self.id) &
-            (Query('epochid.epochid') == epochid)
+        q = Query("").depends_on("daqmetadatareader_id", self.id) & (
+            Query("epochid.epochid") == epochid
         )
         results = session.database_search(q)
 
@@ -228,7 +225,7 @@ class MetadataReader(Ido):
 
     def ingest_epochfiles(
         self,
-        epochfiles: List[str],
+        epochfiles: list[str],
         epoch_id: str,
     ) -> Any:
         """
@@ -243,21 +240,21 @@ class MetadataReader(Ido):
         """
         from ...document import Document
 
-        epochid_struct = {'epochid': epoch_id}
+        epochid_struct = {"epochid": epoch_id}
 
         doc = Document(
-            'ingestion/daqmetadatareader_epochdata_ingested',
+            "ingestion/daqmetadatareader_epochdata_ingested",
             epochid=epochid_struct,
         )
-        doc.set_dependency_value('daqmetadatareader_id', self.id)
+        doc.set_dependency_value("daqmetadatareader_id", self.id)
 
         # Read and store metadata
         try:
-            parameters = self.readmetadata(epochfiles)
+            self.readmetadata(epochfiles)
             # In a full implementation, we would compress and store
             # the parameters as binary data
         except (ValueError, FileNotFoundError):
-            parameters = []
+            pass
 
         return doc
 
@@ -271,12 +268,12 @@ class MetadataReader(Ido):
         from ...document import Document
 
         doc = Document(
-            'daq/daqmetadatareader',
+            "daq/daqmetadatareader",
             **{
-                'daqmetadatareader.ndi_daqmetadatareader_class': self.__class__.__name__,
-                'daqmetadatareader.tab_separated_file_parameter': self._tab_separated_file_parameter,
-                'base.id': self.id,
-            }
+                "daqmetadatareader.ndi_daqmetadatareader_class": self.__class__.__name__,
+                "daqmetadatareader.tab_separated_file_parameter": self._tab_separated_file_parameter,
+                "base.id": self.id,
+            },
         )
         return doc
 
@@ -288,15 +285,16 @@ class MetadataReader(Ido):
             Query object
         """
         from ...query import Query
-        return Query('base.id') == self.id
+
+        return Query("base.id") == self.id
 
     def __eq__(self, other: Any) -> bool:
         """Test equality by class and properties."""
         if not isinstance(other, MetadataReader):
             return False
         return (
-            self.__class__.__name__ == other.__class__.__name__ and
-            self._tab_separated_file_parameter == other._tab_separated_file_parameter
+            self.__class__.__name__ == other.__class__.__name__
+            and self._tab_separated_file_parameter == other._tab_separated_file_parameter
         )
 
     def __hash__(self) -> int:
@@ -308,4 +306,4 @@ class MetadataReader(Ido):
 from .newstim_stims import NewStimStimsReader
 from .nielsenlab_stims import NielsenLabStimsReader
 
-__all__ = ['MetadataReader', 'NewStimStimsReader', 'NielsenLabStimsReader']
+__all__ = ["MetadataReader", "NewStimStimsReader", "NielsenLabStimsReader"]

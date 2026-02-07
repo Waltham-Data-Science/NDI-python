@@ -15,10 +15,11 @@ import json
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 try:
     import pandas as pd
+
     HAS_PANDAS = True
 except ImportError:
     HAS_PANDAS = False
@@ -28,8 +29,8 @@ try:
 except ImportError:
     DIDDocument = None
 
-from .ido import Ido
 from .common import PathConstants, timestamp
+from .ido import Ido
 
 
 class Document:
@@ -53,11 +54,7 @@ class Document:
         doc = doc.set_session_id('session_12345')
     """
 
-    def __init__(
-        self,
-        document_type: Union[str, dict, 'Document'] = 'base',
-        **kwargs
-    ):
+    def __init__(self, document_type: Union[str, dict, "Document"] = "base", **kwargs):
         """Create a new NDI document.
 
         Args:
@@ -88,8 +85,8 @@ class Document:
 
             # Generate new ID and timestamp
             ido = Ido()
-            self._document_properties['base']['id'] = ido.id
-            self._document_properties['base']['datestamp'] = timestamp()
+            self._document_properties["base"]["id"] = ido.id
+            self._document_properties["base"]["datestamp"] = timestamp()
 
             # Set additional properties from kwargs
             for key, value in kwargs.items():
@@ -103,14 +100,14 @@ class Document:
     @property
     def id(self) -> str:
         """Return the document's unique identifier."""
-        return self._document_properties.get('base', {}).get('id', '')
+        return self._document_properties.get("base", {}).get("id", "")
 
     @property
     def session_id(self) -> str:
         """Return the document's session identifier."""
-        return self._document_properties.get('base', {}).get('session_id', '')
+        return self._document_properties.get("base", {}).get("session_id", "")
 
-    def set_session_id(self, session_id: str) -> 'Document':
+    def set_session_id(self, session_id: str) -> "Document":
         """Set the session ID for this document.
 
         Args:
@@ -119,7 +116,7 @@ class Document:
         Returns:
             Self for method chaining.
         """
-        self._document_properties['base']['session_id'] = session_id
+        self._document_properties["base"]["session_id"] = session_id
         return self
 
     def _set_nested_property(self, path: str, value: Any) -> None:
@@ -129,7 +126,7 @@ class Document:
             path: Property path like 'base.name' or 'element.type'.
             value: Value to set.
         """
-        parts = path.split('.')
+        parts = path.split(".")
         obj = self._document_properties
         for part in parts[:-1]:
             if part not in obj:
@@ -147,7 +144,7 @@ class Document:
         Returns:
             The property value or default.
         """
-        parts = path.split('.')
+        parts = path.split(".")
         obj = self._document_properties
         for part in parts:
             if isinstance(obj, dict) and part in obj:
@@ -164,18 +161,18 @@ class Document:
         Returns:
             True if document has files, False otherwise.
         """
-        files = self._document_properties.get('files', {})
-        file_info = files.get('file_info', [])
+        files = self._document_properties.get("files", {})
+        file_info = files.get("file_info", [])
         return bool(file_info)
 
     def add_file(
         self,
         name: str,
         location: str,
-        ingest: Optional[bool] = None,
-        delete_original: Optional[bool] = None,
-        location_type: Optional[str] = None
-    ) -> 'Document':
+        ingest: bool | None = None,
+        delete_original: bool | None = None,
+        location_type: str | None = None,
+    ) -> "Document":
         """Add a file to this document.
 
         Args:
@@ -193,7 +190,7 @@ class Document:
             ValueError: If name is not in the document's file_list.
         """
         # Check if this document accepts files
-        if 'files' not in self._document_properties:
+        if "files" not in self._document_properties:
             raise ValueError("This document type does not accept files")
 
         # Validate name is in file_list
@@ -203,17 +200,17 @@ class Document:
 
         # Detect location type
         location = location.strip()
-        detected_type = 'file'
-        if location.lower().startswith(('http://', 'https://')):
-            detected_type = 'url'
-        elif location.lower().startswith('ndic://'):
-            detected_type = 'ndicloud'
+        detected_type = "file"
+        if location.lower().startswith(("http://", "https://")):
+            detected_type = "url"
+        elif location.lower().startswith("ndic://"):
+            detected_type = "ndicloud"
 
         # Set defaults based on location type
         if ingest is None:
-            ingest = detected_type == 'file'
+            ingest = detected_type == "file"
         if delete_original is None:
-            delete_original = detected_type == 'file'
+            delete_original = detected_type == "file"
         if location_type is None:
             location_type = detected_type
 
@@ -221,37 +218,30 @@ class Document:
         uid = Ido().id
 
         location_info = {
-            'delete_original': delete_original,
-            'uid': uid,
-            'location': location,
-            'parameters': '',
-            'location_type': location_type,
-            'ingest': ingest
+            "delete_original": delete_original,
+            "uid": uid,
+            "location": location,
+            "parameters": "",
+            "location_type": location_type,
+            "ingest": ingest,
         }
 
         # Add to file_info
-        if 'file_info' not in self._document_properties['files']:
-            self._document_properties['files']['file_info'] = []
+        if "file_info" not in self._document_properties["files"]:
+            self._document_properties["files"]["file_info"] = []
 
-        file_info = self._document_properties['files']['file_info']
+        file_info = self._document_properties["files"]["file_info"]
 
         if fi_index is None:
             # New file entry
-            file_info.append({
-                'name': name,
-                'locations': [location_info]
-            })
+            file_info.append({"name": name, "locations": [location_info]})
         else:
             # Add location to existing file entry
-            file_info[fi_index]['locations'].append(location_info)
+            file_info[fi_index]["locations"].append(location_info)
 
         return self
 
-    def remove_file(
-        self,
-        name: str,
-        location: Optional[str] = None
-    ) -> 'Document':
+    def remove_file(self, name: str, location: str | None = None) -> "Document":
         """Remove file information from this document.
 
         Args:
@@ -268,85 +258,81 @@ class Document:
         if fi_index is None:
             return self  # Nothing to remove
 
-        file_info = self._document_properties['files']['file_info']
+        file_info = self._document_properties["files"]["file_info"]
 
         if location is None:
             # Remove entire file entry
             del file_info[fi_index]
         else:
             # Remove specific location
-            locations = file_info[fi_index]['locations']
-            file_info[fi_index]['locations'] = [
-                loc for loc in locations if loc['location'] != location
+            locations = file_info[fi_index]["locations"]
+            file_info[fi_index]["locations"] = [
+                loc for loc in locations if loc["location"] != location
             ]
             # If no locations left, remove the file entry
-            if not file_info[fi_index]['locations']:
+            if not file_info[fi_index]["locations"]:
                 del file_info[fi_index]
 
         return self
 
-    def _is_in_file_list(self, name: str) -> Tuple[bool, str, Optional[int]]:
+    def _is_in_file_list(self, name: str) -> tuple[bool, str, int | None]:
         """Check if a file name is valid for this document.
 
         Returns:
             Tuple of (is_valid, error_message, file_info_index)
         """
-        if 'files' not in self._document_properties:
+        if "files" not in self._document_properties:
             return False, "This document type does not accept files", None
 
-        files = self._document_properties['files']
-        file_list = files.get('file_list', [])
+        files = self._document_properties["files"]
+        file_list = files.get("file_list", [])
 
         # Check for numbered file pattern (e.g., 'file_1' matches 'file_#')
         search_name = name
-        if '_' in name:
-            parts = name.rsplit('_', 1)
+        if "_" in name:
+            parts = name.rsplit("_", 1)
             if parts[1].isdigit():
-                search_name = parts[0] + '_#'
+                search_name = parts[0] + "_#"
 
         # Check if name is in file_list
         if name not in file_list and search_name not in file_list:
             return False, f"File '{name}' is not in this document's file_list", None
 
         # Find index in file_info if exists
-        file_info = files.get('file_info', [])
+        file_info = files.get("file_info", [])
         for i, fi in enumerate(file_info):
-            if fi['name'] == name:
-                return True, '', i
+            if fi["name"] == name:
+                return True, "", i
 
-        return True, '', None
+        return True, "", None
 
-    def current_file_list(self) -> List[str]:
+    def current_file_list(self) -> list[str]:
         """Return list of files currently associated with this document.
 
         Returns:
             List of file names that have been added to the document.
         """
-        if 'files' not in self._document_properties:
+        if "files" not in self._document_properties:
             return []
-        file_info = self._document_properties['files'].get('file_info', [])
-        return [fi['name'] for fi in file_info]
+        file_info = self._document_properties["files"].get("file_info", [])
+        return [fi["name"] for fi in file_info]
 
     # === Dependency Management ===
 
-    def dependency(self) -> Tuple[List[str], List[dict]]:
+    def dependency(self) -> tuple[list[str], list[dict]]:
         """Return all dependencies for this document.
 
         Returns:
             Tuple of (names_list, dependency_structures)
         """
-        depends_on = self._document_properties.get('depends_on', [])
+        depends_on = self._document_properties.get("depends_on", [])
         if not depends_on:
             return [], []
 
-        names = [d['name'] for d in depends_on]
+        names = [d["name"] for d in depends_on]
         return names, depends_on
 
-    def dependency_value(
-        self,
-        dependency_name: str,
-        error_if_not_found: bool = True
-    ) -> Optional[str]:
+    def dependency_value(self, dependency_name: str, error_if_not_found: bool = True) -> str | None:
         """Get the value of a dependency by name.
 
         Args:
@@ -359,21 +345,19 @@ class Document:
         Raises:
             KeyError: If dependency not found and error_if_not_found is True.
         """
-        depends_on = self._document_properties.get('depends_on', [])
+        depends_on = self._document_properties.get("depends_on", [])
 
         for dep in depends_on:
-            if dep['name'].lower() == dependency_name.lower():
-                return dep['value']
+            if dep["name"].lower() == dependency_name.lower():
+                return dep["value"]
 
         if error_if_not_found:
             raise KeyError(f"Dependency '{dependency_name}' not found")
         return None
 
     def dependency_value_n(
-        self,
-        dependency_name: str,
-        error_if_not_found: bool = True
-    ) -> List[str]:
+        self, dependency_name: str, error_if_not_found: bool = True
+    ) -> list[str]:
         """Get values from a numbered dependency list.
 
         For dependencies like 'element_1', 'element_2', etc.
@@ -385,14 +369,14 @@ class Document:
         Returns:
             List of dependency values in order.
         """
-        depends_on = self._document_properties.get('depends_on', [])
+        depends_on = self._document_properties.get("depends_on", [])
         values = []
         i = 1
         while True:
             found = False
             for dep in depends_on:
-                if dep['name'].lower() == f"{dependency_name}_{i}".lower():
-                    values.append(dep['value'])
+                if dep["name"].lower() == f"{dependency_name}_{i}".lower():
+                    values.append(dep["value"])
                     found = True
                     break
             if not found:
@@ -404,11 +388,8 @@ class Document:
         return values
 
     def set_dependency_value(
-        self,
-        dependency_name: str,
-        value: str,
-        error_if_not_found: bool = True
-    ) -> 'Document':
+        self, dependency_name: str, value: str, error_if_not_found: bool = True
+    ) -> "Document":
         """Set the value of a dependency.
 
         Args:
@@ -420,17 +401,17 @@ class Document:
         Returns:
             Self for method chaining.
         """
-        if 'depends_on' not in self._document_properties:
+        if "depends_on" not in self._document_properties:
             if error_if_not_found:
                 raise KeyError("Document has no dependencies")
-            self._document_properties['depends_on'] = []
+            self._document_properties["depends_on"] = []
 
-        depends_on = self._document_properties['depends_on']
+        depends_on = self._document_properties["depends_on"]
 
         # Try to find existing
         for dep in depends_on:
-            if dep['name'].lower() == dependency_name.lower():
-                dep['value'] = value
+            if dep["name"].lower() == dependency_name.lower():
+                dep["value"] = value
                 return self
 
         # Not found
@@ -438,14 +419,10 @@ class Document:
             raise KeyError(f"Dependency '{dependency_name}' not found")
 
         # Add new dependency
-        depends_on.append({'name': dependency_name, 'value': value})
+        depends_on.append({"name": dependency_name, "value": value})
         return self
 
-    def add_dependency_value_n(
-        self,
-        dependency_name: str,
-        value: str
-    ) -> 'Document':
+    def add_dependency_value_n(self, dependency_name: str, value: str) -> "Document":
         """Add a value to a numbered dependency list.
 
         Args:
@@ -467,25 +444,27 @@ class Document:
         Returns:
             The class name (e.g., 'base', 'element', 'stimulus').
         """
-        return self._document_properties.get('document_class', {}).get('class_name', '')
+        return self._document_properties.get("document_class", {}).get("class_name", "")
 
-    def doc_superclass(self) -> List[str]:
+    def doc_superclass(self) -> list[str]:
         """Get the document's superclasses.
 
         Returns:
             List of superclass names.
         """
-        doc_class = self._document_properties.get('document_class', {})
-        superclasses = doc_class.get('superclasses', [])
+        doc_class = self._document_properties.get("document_class", {})
+        superclasses = doc_class.get("superclasses", [])
 
         sc_names = []
         for sc in superclasses:
             # Each superclass has a 'definition' pointing to its JSON
             # We need to read that to get the class_name
-            definition = sc.get('definition', '')
+            definition = sc.get("definition", "")
             if definition:
                 try:
-                    sc_doc = Document(definition.replace('$NDIDOCUMENTPATH/', '').replace('.json', ''))
+                    sc_doc = Document(
+                        definition.replace("$NDIDOCUMENTPATH/", "").replace(".json", "")
+                    )
                     sc_names.append(sc_doc.doc_class())
                 except Exception:
                     pass
@@ -511,16 +490,16 @@ class Document:
             filename: Path to write the JSON file.
             indent: Indentation level for pretty printing.
         """
-        from pathlib import Path
+
         Path(filename).parent.mkdir(parents=True, exist_ok=True)
-        with open(filename, 'w') as f:
+        with open(filename, "w") as f:
             json.dump(self._document_properties, f, indent=indent)
 
     def remove_dependency_value_n(
         self,
         dependency_name: str,
-        index: Optional[int] = None,
-    ) -> 'Document':
+        index: int | None = None,
+    ) -> "Document":
         """Remove a numbered dependency value.
 
         If index is None, removes all dependencies matching the base name.
@@ -533,37 +512,34 @@ class Document:
         Returns:
             Self for method chaining.
         """
-        if 'depends_on' not in self._document_properties:
+        if "depends_on" not in self._document_properties:
             return self
 
-        depends_on = self._document_properties['depends_on']
+        depends_on = self._document_properties["depends_on"]
 
         if index is not None:
             target = f"{dependency_name}_{index}"
-            self._document_properties['depends_on'] = [
-                d for d in depends_on
-                if d['name'] != target
-            ]
+            self._document_properties["depends_on"] = [d for d in depends_on if d["name"] != target]
         else:
             # Remove all matching the pattern
             import re
-            pattern = re.compile(rf'^{re.escape(dependency_name)}_\d+$')
-            self._document_properties['depends_on'] = [
-                d for d in depends_on
-                if not pattern.match(d['name'])
+
+            pattern = re.compile(rf"^{re.escape(dependency_name)}_\d+$")
+            self._document_properties["depends_on"] = [
+                d for d in depends_on if not pattern.match(d["name"])
             ]
 
         return self
 
     # === Comparison and Merging ===
 
-    def __eq__(self, other: 'Document') -> bool:
+    def __eq__(self, other: "Document") -> bool:
         """Check equality based on document ID."""
         if not isinstance(other, Document):
             return False
         return self.id == other.id
 
-    def __add__(self, other: 'Document') -> 'Document':
+    def __add__(self, other: "Document") -> "Document":
         """Merge two documents.
 
         The result has fields from both documents. Fields in self take
@@ -575,34 +551,37 @@ class Document:
         result = Document(self._document_properties)
 
         # Merge superclasses
-        my_sc = result._document_properties.get('document_class', {}).get('superclasses', [])
-        other_sc = other._document_properties.get('document_class', {}).get('superclasses', [])
-        result._document_properties['document_class']['superclasses'] = my_sc + other_sc
+        my_sc = result._document_properties.get("document_class", {}).get("superclasses", [])
+        other_sc = other._document_properties.get("document_class", {}).get("superclasses", [])
+        result._document_properties["document_class"]["superclasses"] = my_sc + other_sc
 
         # Merge dependencies
-        if 'depends_on' in other._document_properties:
-            if 'depends_on' not in result._document_properties:
-                result._document_properties['depends_on'] = []
-            for dep in other._document_properties['depends_on']:
-                existing = [d for d in result._document_properties['depends_on']
-                            if d['name'] == dep['name']]
+        if "depends_on" in other._document_properties:
+            if "depends_on" not in result._document_properties:
+                result._document_properties["depends_on"] = []
+            for dep in other._document_properties["depends_on"]:
+                existing = [
+                    d for d in result._document_properties["depends_on"] if d["name"] == dep["name"]
+                ]
                 if existing:
-                    existing[0]['value'] = dep['value']
+                    existing[0]["value"] = dep["value"]
                 else:
-                    result._document_properties['depends_on'].append(dep)
+                    result._document_properties["depends_on"].append(dep)
 
         # Merge file_list
-        if 'files' in other._document_properties:
-            if 'files' not in result._document_properties:
-                result._document_properties['files'] = other._document_properties['files']
+        if "files" in other._document_properties:
+            if "files" not in result._document_properties:
+                result._document_properties["files"] = other._document_properties["files"]
             else:
-                my_files = result._document_properties['files'].get('file_list', [])
-                other_files = other._document_properties['files'].get('file_list', [])
-                result._document_properties['files']['file_list'] = list(set(my_files + other_files))
+                my_files = result._document_properties["files"].get("file_list", [])
+                other_files = other._document_properties["files"].get("file_list", [])
+                result._document_properties["files"]["file_list"] = list(
+                    set(my_files + other_files)
+                )
 
         # Merge other fields (other's fields added if not in self)
         for key, value in other._document_properties.items():
-            if key not in ['document_class', 'depends_on', 'files', 'base']:
+            if key not in ["document_class", "depends_on", "files", "base"]:
                 if key not in result._document_properties:
                     result._document_properties[key] = deepcopy(value)
 
@@ -610,7 +589,7 @@ class Document:
 
     # === Conversion ===
 
-    def to_table(self) -> 'pd.DataFrame':
+    def to_table(self) -> "pd.DataFrame":
         """Convert document to a pandas DataFrame.
 
         Returns:
@@ -627,12 +606,12 @@ class Document:
         # Add dependencies
         names, deps = self.dependency()
         for dep in deps:
-            data[f"depends_on_{dep['name']}"] = dep['value']
+            data[f"depends_on_{dep['name']}"] = dep["value"]
 
         # Flatten properties (excluding files and depends_on)
-        def flatten(obj, prefix=''):
+        def flatten(obj, prefix=""):
             for key, value in obj.items():
-                if key in ['depends_on', 'files']:
+                if key in ["depends_on", "files"]:
                     continue
                 full_key = f"{prefix}{key}" if prefix else key
                 if isinstance(value, dict):
@@ -663,7 +642,7 @@ class Document:
         """
         return json.dumps(self._document_properties, indent=indent)
 
-    def setproperties(self, **kwargs) -> 'Document':
+    def setproperties(self, **kwargs) -> "Document":
         """Set multiple properties at once.
 
         Args:
@@ -696,15 +675,15 @@ class Document:
             Bool-coercible: ``if doc.validate(): ...``
         """
         from .validate import validate as _validate
+
         return _validate(self, session=session)
 
     # === Static Methods ===
 
     @staticmethod
     def find_doc_by_id(
-        doc_array: List['Document'],
-        doc_id: str
-    ) -> Tuple[Optional['Document'], Optional[int]]:
+        doc_array: list["Document"], doc_id: str
+    ) -> tuple[Optional["Document"], int | None]:
         """Find a document in a list by its ID.
 
         Args:
@@ -720,7 +699,7 @@ class Document:
         return None, None
 
     @staticmethod
-    def find_newest(doc_array: List['Document']) -> Tuple['Document', int, datetime]:
+    def find_newest(doc_array: list["Document"]) -> tuple["Document", int, datetime]:
         """Find the newest document in a list.
 
         Args:
@@ -734,11 +713,11 @@ class Document:
 
         timestamps = []
         for doc in doc_array:
-            ds = doc._document_properties.get('base', {}).get('datestamp', '')
+            ds = doc._document_properties.get("base", {}).get("datestamp", "")
             if ds:
                 # Parse ISO format timestamp
                 try:
-                    ts = datetime.fromisoformat(ds.replace('Z', '+00:00'))
+                    ts = datetime.fromisoformat(ds.replace("Z", "+00:00"))
                 except ValueError:
                     ts = datetime.min.replace(tzinfo=timezone.utc)
             else:
@@ -768,21 +747,21 @@ class Document:
                 f"Make sure NDI is properly installed."
             )
 
-        with open(json_path, 'r') as f:
+        with open(json_path) as f:
             definition = json.load(f)
 
         # Process superclasses recursively
-        if 'document_class' in definition and 'superclasses' in definition['document_class']:
-            for sc in definition['document_class']['superclasses']:
-                sc_def = sc.get('definition', '')
+        if "document_class" in definition and "superclasses" in definition["document_class"]:
+            for sc in definition["document_class"]["superclasses"]:
+                sc_def = sc.get("definition", "")
                 if sc_def:
                     # Extract document type from definition path
-                    sc_type = sc_def.replace('$NDIDOCUMENTPATH/', '').replace('.json', '')
+                    sc_type = sc_def.replace("$NDIDOCUMENTPATH/", "").replace(".json", "")
                     try:
                         sc_props = Document.read_blank_definition(sc_type)
                         # Merge superclass properties
                         for key, value in sc_props.items():
-                            if key != 'document_class' and key not in definition:
+                            if key != "document_class" and key not in definition:
                                 definition[key] = value
                     except FileNotFoundError:
                         pass  # Skip missing superclass definitions

@@ -7,14 +7,15 @@ stimulators, behavioral sensors).
 """
 
 from __future__ import annotations
+
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ..ido import Ido
-from ..epoch.epochset import EpochSet
-from ..epoch.epochprobemap import EpochProbeMap
 from ..documentservice import DocumentService
+from ..epoch.epochprobemap import EpochProbeMap
+from ..epoch.epochset import EpochSet
+from ..ido import Ido
 from ..time import ClockType
 
 
@@ -51,16 +52,16 @@ class Element(Ido, EpochSet, DocumentService):
 
     def __init__(
         self,
-        session: Optional[Any] = None,
-        name: str = '',
+        session: Any | None = None,
+        name: str = "",
         reference: int = 0,
-        type: str = '',
-        underlying_element: Optional['Element'] = None,
+        type: str = "",
+        underlying_element: Element | None = None,
         direct: bool = True,
-        subject_id: str = '',
-        dependencies: Optional[Dict[str, str]] = None,
-        identifier: Optional[str] = None,
-        document: Optional[Any] = None,
+        subject_id: str = "",
+        dependencies: dict[str, str] | None = None,
+        identifier: str | None = None,
+        document: Any | None = None,
     ):
         """
         Create a new Element.
@@ -89,15 +90,15 @@ class Element(Ido, EpochSet, DocumentService):
             return
 
         # Validate inputs
-        if ' ' in name or '\t' in name:
+        if " " in name or "\t" in name:
             raise ValueError(f"name cannot contain whitespace: '{name}'")
-        if ' ' in type or '\t' in type:
+        if " " in type or "\t" in type:
             raise ValueError(f"type cannot contain whitespace: '{type}'")
         if reference < 0:
             raise ValueError(f"reference must be non-negative: {reference}")
 
         # If underlying_element provided, inherit subject_id
-        if underlying_element is not None and subject_id == '':
+        if underlying_element is not None and subject_id == "":
             subject_id = underlying_element.subject_id
 
         self._session = session
@@ -111,34 +112,35 @@ class Element(Ido, EpochSet, DocumentService):
 
     def _load_from_document(self, session: Any, document: Any) -> None:
         """Load element from a document."""
-        props = getattr(document, 'document_properties', document)
+        props = getattr(document, "document_properties", document)
 
         # Get basic properties
-        if hasattr(props, 'element'):
-            self._name = getattr(props.element, 'name', '')
-            self._reference = getattr(props.element, 'reference', 0)
-            self._type = getattr(props.element, 'type', '')
-            self._direct = getattr(props.element, 'direct', True)
+        if hasattr(props, "element"):
+            self._name = getattr(props.element, "name", "")
+            self._reference = getattr(props.element, "reference", 0)
+            self._type = getattr(props.element, "type", "")
+            self._direct = getattr(props.element, "direct", True)
         else:
-            self._name = ''
+            self._name = ""
             self._reference = 0
-            self._type = ''
+            self._type = ""
             self._direct = True
 
         # Get ID from base
-        if hasattr(props, 'base') and hasattr(props.base, 'id'):
+        if hasattr(props, "base") and hasattr(props.base, "id"):
             self.identifier = props.base.id
 
         self._session = session
-        self._subject_id = document.dependency_value('subject_id', error_if_not_found=False) or ''
+        self._subject_id = document.dependency_value("subject_id", error_if_not_found=False) or ""
         self._underlying_element = None
         self._dependencies = {}
 
         # Load underlying element if dependency exists
-        underlying_id = document.dependency_value('underlying_element_id', error_if_not_found=False)
+        underlying_id = document.dependency_value("underlying_element_id", error_if_not_found=False)
         if underlying_id:
             from ..query import Query
-            q = Query('base.id') == underlying_id
+
+            q = Query("base.id") == underlying_id
             docs = session.database_search(q)
             if len(docs) == 1:
                 self._underlying_element = Element(session=session, document=docs[0])
@@ -164,7 +166,7 @@ class Element(Ido, EpochSet, DocumentService):
         return self._type
 
     @property
-    def underlying_element(self) -> Optional['Element']:
+    def underlying_element(self) -> Element | None:
         """Get the underlying element."""
         return self._underlying_element
 
@@ -179,7 +181,7 @@ class Element(Ido, EpochSet, DocumentService):
         return self._subject_id
 
     @property
-    def dependencies(self) -> Dict[str, str]:
+    def dependencies(self) -> dict[str, str]:
         """Get additional dependencies."""
         return self._dependencies
 
@@ -196,7 +198,7 @@ class Element(Ido, EpochSet, DocumentService):
     # EpochSet Implementation
     # =========================================================================
 
-    def buildepochtable(self) -> List[Dict[str, Any]]:
+    def buildepochtable(self) -> list[dict[str, Any]]:
         """
         Build the epoch table for this element.
 
@@ -213,7 +215,7 @@ class Element(Ido, EpochSet, DocumentService):
             # Load registered epochs from database
             return self._build_registered_epochtable()
 
-    def _build_direct_epochtable(self) -> List[Dict[str, Any]]:
+    def _build_direct_epochtable(self) -> list[dict[str, Any]]:
         """Build epoch table from underlying element."""
         if self._underlying_element is None:
             return []
@@ -222,26 +224,28 @@ class Element(Ido, EpochSet, DocumentService):
         et = []
 
         for i, entry in enumerate(underlying_et):
-            et.append({
-                'epoch_number': i + 1,
-                'epoch_id': entry.get('epoch_id', ''),
-                'epoch_session_id': entry.get('epoch_session_id', ''),
-                'epochprobemap': entry.get('epochprobemap', []),
-                'epoch_clock': entry.get('epoch_clock', []),
-                't0_t1': entry.get('t0_t1', []),
-                'underlying_epochs': {
-                    'underlying': self._underlying_element,
-                    'epoch_id': entry.get('epoch_id', ''),
-                    'epoch_session_id': entry.get('epoch_session_id', ''),
-                    'epochprobemap': entry.get('epochprobemap', []),
-                    'epoch_clock': entry.get('epoch_clock', []),
-                    't0_t1': entry.get('t0_t1', []),
-                },
-            })
+            et.append(
+                {
+                    "epoch_number": i + 1,
+                    "epoch_id": entry.get("epoch_id", ""),
+                    "epoch_session_id": entry.get("epoch_session_id", ""),
+                    "epochprobemap": entry.get("epochprobemap", []),
+                    "epoch_clock": entry.get("epoch_clock", []),
+                    "t0_t1": entry.get("t0_t1", []),
+                    "underlying_epochs": {
+                        "underlying": self._underlying_element,
+                        "epoch_id": entry.get("epoch_id", ""),
+                        "epoch_session_id": entry.get("epoch_session_id", ""),
+                        "epochprobemap": entry.get("epochprobemap", []),
+                        "epoch_clock": entry.get("epoch_clock", []),
+                        "t0_t1": entry.get("t0_t1", []),
+                    },
+                }
+            )
 
         return et
 
-    def _build_registered_epochtable(self) -> List[Dict[str, Any]]:
+    def _build_registered_epochtable(self) -> list[dict[str, Any]]:
         """Build epoch table from registered epochs in database."""
         if self._session is None:
             return []
@@ -249,10 +253,7 @@ class Element(Ido, EpochSet, DocumentService):
         from ..query import Query
 
         # Query for registered epochs
-        q = (
-            Query('').isa('element_epoch') &
-            Query('').depends_on('element_id', self.id)
-        )
+        q = Query("").isa("element_epoch") & Query("").depends_on("element_id", self.id)
         epoch_docs = self._session.database_search(q)
 
         et = []
@@ -260,7 +261,7 @@ class Element(Ido, EpochSet, DocumentService):
             props = doc.document_properties
 
             # Parse epoch_clock
-            clock_raw = getattr(props.element_epoch, 'epoch_clock', [])
+            clock_raw = getattr(props.element_epoch, "epoch_clock", [])
             epoch_clock = []
             for c in clock_raw:
                 if isinstance(c, str):
@@ -269,21 +270,23 @@ class Element(Ido, EpochSet, DocumentService):
                     epoch_clock.append(c)
 
             # Parse t0_t1
-            t0t1_raw = getattr(props.element_epoch, 't0_t1', [])
+            t0t1_raw = getattr(props.element_epoch, "t0_t1", [])
             t0_t1 = []
             for t in t0t1_raw:
                 if isinstance(t, (list, tuple)) and len(t) >= 2:
                     t0_t1.append((float(t[0]), float(t[1])))
 
-            et.append({
-                'epoch_number': i + 1,
-                'epoch_id': getattr(props.epochid, 'epochid', ''),
-                'epoch_session_id': self._session.id() if self._session else '',
-                'epochprobemap': [],  # Registered epochs don't have probepmaps
-                'epoch_clock': epoch_clock,
-                't0_t1': t0_t1,
-                'underlying_epochs': {},
-            })
+            et.append(
+                {
+                    "epoch_number": i + 1,
+                    "epoch_id": getattr(props.epochid, "epochid", ""),
+                    "epoch_session_id": self._session.id() if self._session else "",
+                    "epochprobemap": [],  # Registered epochs don't have probepmaps
+                    "epoch_clock": epoch_clock,
+                    "t0_t1": t0_t1,
+                    "underlying_epochs": {},
+                }
+            )
 
         return et
 
@@ -310,9 +313,9 @@ class Element(Ido, EpochSet, DocumentService):
     def addepoch(
         self,
         epoch_id: str,
-        epoch_clock: List[ClockType],
-        t0_t1: List[Tuple[float, float]],
-    ) -> Tuple['Element', Any]:
+        epoch_clock: list[ClockType],
+        t0_t1: list[tuple[float, float]],
+    ) -> tuple[Element, Any]:
         """
         Add a new epoch to this element.
 
@@ -339,14 +342,14 @@ class Element(Ido, EpochSet, DocumentService):
 
         # Create epoch document
         doc = Document(
-            'element_epoch',
+            "element_epoch",
             **{
-                'element_epoch.epoch_clock': [str(c) for c in epoch_clock],
-                'element_epoch.t0_t1': list(t0_t1),
-                'epochid.epochid': epoch_id,
-            }
+                "element_epoch.epoch_clock": [str(c) for c in epoch_clock],
+                "element_epoch.t0_t1": list(t0_t1),
+                "epochid.epochid": epoch_id,
+            },
         )
-        doc.set_dependency_value('element_id', self.id)
+        doc.set_dependency_value("element_id", self.id)
         doc.set_session_id(self._session.id())
 
         # Add to database
@@ -357,7 +360,7 @@ class Element(Ido, EpochSet, DocumentService):
 
         return self, doc
 
-    def loadaddedepochs(self) -> Tuple[List[Dict[str, Any]], List[Any]]:
+    def loadaddedepochs(self) -> tuple[list[dict[str, Any]], list[Any]]:
         """
         Load registered epochs from the database.
 
@@ -369,10 +372,7 @@ class Element(Ido, EpochSet, DocumentService):
 
         from ..query import Query
 
-        q = (
-            Query('').isa('element_epoch') &
-            Query('').depends_on('element_id', self.id)
-        )
+        q = Query("").isa("element_epoch") & Query("").depends_on("element_id", self.id)
         epoch_docs = self._session.database_search(q)
 
         et = self._build_registered_epochtable()
@@ -393,14 +393,14 @@ class Element(Ido, EpochSet, DocumentService):
         from ..document import Document
 
         doc = Document(
-            'element',
+            "element",
             **{
-                'element.name': self._name,
-                'element.reference': self._reference,
-                'element.type': self._type,
-                'element.direct': self._direct,
-                'base.id': self.id,
-            }
+                "element.name": self._name,
+                "element.reference": self._reference,
+                "element.type": self._type,
+                "element.direct": self._direct,
+                "base.id": self.id,
+            },
         )
 
         # Set session ID
@@ -409,10 +409,10 @@ class Element(Ido, EpochSet, DocumentService):
 
         # Set dependencies
         if self._subject_id:
-            doc.set_dependency_value('subject_id', self._subject_id)
+            doc.set_dependency_value("subject_id", self._subject_id)
 
         if self._underlying_element is not None:
-            doc.set_dependency_value('underlying_element_id', self._underlying_element.id)
+            doc.set_dependency_value("underlying_element_id", self._underlying_element.id)
 
         for name, value in self._dependencies.items():
             doc.set_dependency_value(name, value)
@@ -428,14 +428,14 @@ class Element(Ido, EpochSet, DocumentService):
         """
         from ..query import Query
 
-        q = Query('base.id') == self.id
+        q = Query("base.id") == self.id
         return q
 
     # =========================================================================
     # Cache Management
     # =========================================================================
 
-    def getcache(self) -> Tuple[Optional[Any], str]:
+    def getcache(self) -> tuple[Any | None, str]:
         """
         Get the session cache for this element.
 
@@ -443,9 +443,9 @@ class Element(Ido, EpochSet, DocumentService):
             Tuple of (cache_object, cache_key)
         """
         if self._session is None:
-            return None, ''
+            return None, ""
 
-        cache = getattr(self._session, 'cache', None)
+        cache = getattr(self._session, "cache", None)
         key = f"element_{self.id}"
 
         return cache, key
@@ -459,9 +459,9 @@ class Element(Ido, EpochSet, DocumentService):
         if not isinstance(other, Element):
             return False
         return (
-            self._name == other._name and
-            self._reference == other._reference and
-            self._type == other._type
+            self._name == other._name
+            and self._reference == other._reference
+            and self._type == other._type
         )
 
     def __hash__(self) -> int:

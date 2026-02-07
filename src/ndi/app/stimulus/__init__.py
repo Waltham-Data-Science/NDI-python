@@ -8,4 +8,4 @@ stimulus-response tuning curves.
 from .decoder import StimulusDecoder
 from .tuning_response import TuningResponse
 
-__all__ = ['StimulusDecoder', 'TuningResponse']
+__all__ = ["StimulusDecoder", "TuningResponse"]

@@ -1,11 +1,12 @@
 """Tests for ndi.database module."""
 
-import pytest
-import tempfile
 import shutil
+import tempfile
 from pathlib import Path
 
-from ndi import Database, Document, Query, Ido, open_database
+import pytest
+
+from ndi import Database, Document, Ido, Query, open_database
 from ndi.common import timestamp
 
 
@@ -21,40 +22,38 @@ def temp_session():
 def sample_doc():
     """Create a sample document for testing."""
     ido = Ido()
-    return Document({
-        'base': {
-            'id': ido.id,
-            'datestamp': timestamp(),
-            'name': 'test_doc',
-            'session_id': 'session_123'
-        },
-        'document_class': {
-            'class_name': 'base',
-            'superclasses': []
+    return Document(
+        {
+            "base": {
+                "id": ido.id,
+                "datestamp": timestamp(),
+                "name": "test_doc",
+                "session_id": "session_123",
+            },
+            "document_class": {"class_name": "base", "superclasses": []},
         }
-    })
+    )
 
 
 @pytest.fixture
 def element_doc():
     """Create a sample element document for testing."""
     ido = Ido()
-    return Document({
-        'base': {
-            'id': ido.id,
-            'datestamp': timestamp(),
-            'name': 'electrode1',
-            'session_id': 'session_123'
-        },
-        'document_class': {
-            'class_name': 'element',
-            'superclasses': [{'definition': '$NDIDOCUMENTPATH/base.json'}]
-        },
-        'element': {
-            'type': 'probe',
-            'reference': 'ground'
+    return Document(
+        {
+            "base": {
+                "id": ido.id,
+                "datestamp": timestamp(),
+                "name": "electrode1",
+                "session_id": "session_123",
+            },
+            "document_class": {
+                "class_name": "element",
+                "superclasses": [{"definition": "$NDIDOCUMENTPATH/base.json"}],
+            },
+            "element": {"type": "probe", "reference": "ground"},
         }
-    })
+    )
 
 
 class TestDatabaseCreation:
@@ -64,13 +63,13 @@ class TestDatabaseCreation:
         """Test creating a database (uses DID-python SQLite)."""
         db = Database(temp_session)
         assert db.session_path == temp_session
-        assert (temp_session / '.ndi').exists()
-        assert (temp_session / '.ndi' / 'ndi.db').exists()
+        assert (temp_session / ".ndi").exists()
+        assert (temp_session / ".ndi" / "ndi.db").exists()
 
     def test_create_with_custom_db_name(self, temp_session):
         """Test creating database with custom name."""
-        db = Database(temp_session, db_name='.mydb')
-        assert (temp_session / '.mydb').exists()
+        Database(temp_session, db_name=".mydb")
+        assert (temp_session / ".mydb").exists()
 
     def test_open_database_function(self, temp_session):
         """Test open_database convenience function."""
@@ -107,15 +106,17 @@ class TestDatabaseAdd:
         docs = []
         for i in range(3):
             ido = Ido()
-            doc = Document({
-                'base': {
-                    'id': ido.id,
-                    'datestamp': timestamp(),
-                    'name': f'doc_{i}',
-                    'session_id': ''
-                },
-                'document_class': {'class_name': 'base', 'superclasses': []}
-            })
+            doc = Document(
+                {
+                    "base": {
+                        "id": ido.id,
+                        "datestamp": timestamp(),
+                        "name": f"doc_{i}",
+                        "session_id": "",
+                    },
+                    "document_class": {"class_name": "base", "superclasses": []},
+                }
+            )
             docs.append(doc)
 
         added = db.add_many(docs)
@@ -138,7 +139,7 @@ class TestDatabaseRead:
     def test_read_nonexistent(self, temp_session):
         """Test reading nonexistent document returns None."""
         db = Database(temp_session)
-        result = db.read('nonexistent_id')
+        result = db.read("nonexistent_id")
         assert result is None
 
     def test_find_by_id_alias(self, temp_session, sample_doc):
@@ -160,13 +161,13 @@ class TestDatabaseUpdate:
         db.add(sample_doc)
 
         # Modify and update
-        sample_doc = sample_doc.setproperties(**{'base.name': 'updated_name'})
+        sample_doc = sample_doc.setproperties(**{"base.name": "updated_name"})
         result = db.update(sample_doc)
-        assert result.document_properties['base']['name'] == 'updated_name'
+        assert result.document_properties["base"]["name"] == "updated_name"
 
         # Verify persisted
         reread = db.read(sample_doc.id)
-        assert reread.document_properties['base']['name'] == 'updated_name'
+        assert reread.document_properties["base"]["name"] == "updated_name"
 
     def test_update_nonexistent_raises(self, temp_session, sample_doc):
         """Test updating nonexistent document raises error."""
@@ -198,7 +199,7 @@ class TestDatabaseRemove:
     def test_remove_nonexistent(self, temp_session):
         """Test removing nonexistent returns False."""
         db = Database(temp_session)
-        result = db.remove('nonexistent_id')
+        result = db.remove("nonexistent_id")
         assert result is False
 
 
@@ -217,11 +218,11 @@ class TestDatabaseAddOrReplace:
         db = Database(temp_session)
         db.add(sample_doc)
 
-        sample_doc = sample_doc.setproperties(**{'base.name': 'replaced_name'})
+        sample_doc = sample_doc.setproperties(**{"base.name": "replaced_name"})
         db.add_or_replace(sample_doc)
 
         reread = db.read(sample_doc.id)
-        assert reread.document_properties['base']['name'] == 'replaced_name'
+        assert reread.document_properties["base"]["name"] == "replaced_name"
         assert db.numdocs() == 1  # Still just one document
 
 
@@ -235,15 +236,17 @@ class TestDatabaseSearch:
         # Add some documents
         for i in range(3):
             ido = Ido()
-            doc = Document({
-                'base': {
-                    'id': ido.id,
-                    'datestamp': timestamp(),
-                    'name': f'doc_{i}',
-                    'session_id': ''
-                },
-                'document_class': {'class_name': 'base', 'superclasses': []}
-            })
+            doc = Document(
+                {
+                    "base": {
+                        "id": ido.id,
+                        "datestamp": timestamp(),
+                        "name": f"doc_{i}",
+                        "session_id": "",
+                    },
+                    "document_class": {"class_name": "base", "superclasses": []},
+                }
+            )
             db.add(doc)
 
         results = db.search()
@@ -254,31 +257,33 @@ class TestDatabaseSearch:
         db = Database(temp_session)
 
         # Add documents with different names
-        for name in ['alpha', 'beta', 'gamma']:
+        for name in ["alpha", "beta", "gamma"]:
             ido = Ido()
-            doc = Document({
-                'base': {
-                    'id': ido.id,
-                    'datestamp': timestamp(),
-                    'name': name,
-                    'session_id': ''
-                },
-                'document_class': {'class_name': 'base', 'superclasses': []}
-            })
+            doc = Document(
+                {
+                    "base": {
+                        "id": ido.id,
+                        "datestamp": timestamp(),
+                        "name": name,
+                        "session_id": "",
+                    },
+                    "document_class": {"class_name": "base", "superclasses": []},
+                }
+            )
             db.add(doc)
 
         # Search for specific name
-        query = Query('base.name') == 'beta'
+        query = Query("base.name") == "beta"
         results = db.search(query)
         assert len(results) == 1
-        assert results[0].document_properties['base']['name'] == 'beta'
+        assert results[0].document_properties["base"]["name"] == "beta"
 
     def test_search_empty_result(self, temp_session, sample_doc):
         """Test search returns empty list when no matches."""
         db = Database(temp_session)
         db.add(sample_doc)
 
-        query = Query('base.name') == 'nonexistent'
+        query = Query("base.name") == "nonexistent"
         results = db.search(query)
         assert results == []
 
@@ -297,15 +302,17 @@ class TestDatabaseCounts:
 
         for i in range(5):
             ido = Ido()
-            doc = Document({
-                'base': {
-                    'id': ido.id,
-                    'datestamp': timestamp(),
-                    'name': f'doc_{i}',
-                    'session_id': ''
-                },
-                'document_class': {'class_name': 'base', 'superclasses': []}
-            })
+            doc = Document(
+                {
+                    "base": {
+                        "id": ido.id,
+                        "datestamp": timestamp(),
+                        "name": f"doc_{i}",
+                        "session_id": "",
+                    },
+                    "document_class": {"class_name": "base", "superclasses": []},
+                }
+            )
             db.add(doc)
 
         assert db.numdocs() == 5
@@ -317,15 +324,17 @@ class TestDatabaseCounts:
 
         for i in range(3):
             ido = Ido()
-            doc = Document({
-                'base': {
-                    'id': ido.id,
-                    'datestamp': timestamp(),
-                    'name': f'doc_{i}',
-                    'session_id': ''
-                },
-                'document_class': {'class_name': 'base', 'superclasses': []}
-            })
+            doc = Document(
+                {
+                    "base": {
+                        "id": ido.id,
+                        "datestamp": timestamp(),
+                        "name": f"doc_{i}",
+                        "session_id": "",
+                    },
+                    "document_class": {"class_name": "base", "superclasses": []},
+                }
+            )
             db.add(doc)
             added_ids.append(ido.id)
 
@@ -344,31 +353,33 @@ class TestDatabaseDependencies:
 
         # Create parent document
         parent_ido = Ido()
-        parent = Document({
-            'base': {
-                'id': parent_ido.id,
-                'datestamp': timestamp(),
-                'name': 'parent',
-                'session_id': ''
-            },
-            'document_class': {'class_name': 'base', 'superclasses': []}
-        })
+        parent = Document(
+            {
+                "base": {
+                    "id": parent_ido.id,
+                    "datestamp": timestamp(),
+                    "name": "parent",
+                    "session_id": "",
+                },
+                "document_class": {"class_name": "base", "superclasses": []},
+            }
+        )
         db.add(parent)
 
         # Create child document with dependency
         child_ido = Ido()
-        child = Document({
-            'base': {
-                'id': child_ido.id,
-                'datestamp': timestamp(),
-                'name': 'child',
-                'session_id': ''
-            },
-            'document_class': {'class_name': 'base', 'superclasses': []},
-            'depends_on': [
-                {'name': 'parent_doc', 'value': parent_ido.id}
-            ]
-        })
+        child = Document(
+            {
+                "base": {
+                    "id": child_ido.id,
+                    "datestamp": timestamp(),
+                    "name": "child",
+                    "session_id": "",
+                },
+                "document_class": {"class_name": "base", "superclasses": []},
+                "depends_on": [{"name": "parent_doc", "value": parent_ido.id}],
+            }
+        )
         db.add(child)
 
         # Find child's dependencies
@@ -384,7 +395,7 @@ class TestDatabasePaths:
         """Test database_path property points to SQLite file."""
         db = Database(temp_session)
         assert db.database_path.exists()
-        assert str(db.database_path).endswith('ndi.db')
+        assert str(db.database_path).endswith("ndi.db")
 
     def test_binary_path(self, temp_session):
         """Test binary_path property."""
@@ -394,8 +405,8 @@ class TestDatabasePaths:
     def test_get_binary_path(self, temp_session, sample_doc):
         """Test get_binary_path method."""
         db = Database(temp_session)
-        path = db.get_binary_path(sample_doc, 'data.bin')
-        assert str(path).endswith(f'{sample_doc.id}_data.bin')
+        path = db.get_binary_path(sample_doc, "data.bin")
+        assert str(path).endswith(f"{sample_doc.id}_data.bin")
 
 
 class TestDatabaseRemoveMany:
@@ -406,24 +417,26 @@ class TestDatabaseRemoveMany:
         db = Database(temp_session)
 
         # Add documents with different types
-        for name, doc_type in [('a', 'alpha'), ('b', 'alpha'), ('c', 'beta')]:
+        for name, doc_type in [("a", "alpha"), ("b", "alpha"), ("c", "beta")]:
             ido = Ido()
-            doc = Document({
-                'base': {
-                    'id': ido.id,
-                    'datestamp': timestamp(),
-                    'name': name,
-                    'session_id': ''
-                },
-                'document_class': {'class_name': 'base', 'superclasses': []},
-                'meta': {'type': doc_type}
-            })
+            doc = Document(
+                {
+                    "base": {
+                        "id": ido.id,
+                        "datestamp": timestamp(),
+                        "name": name,
+                        "session_id": "",
+                    },
+                    "document_class": {"class_name": "base", "superclasses": []},
+                    "meta": {"type": doc_type},
+                }
+            )
             db.add(doc)
 
         assert db.numdocs() == 3
 
         # Remove all alpha type
-        query = Query('meta.type') == 'alpha'
+        query = Query("meta.type") == "alpha"
         count = db.remove_many(query=query)
         assert count == 2
         assert db.numdocs() == 1

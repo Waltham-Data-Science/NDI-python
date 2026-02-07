@@ -8,7 +8,8 @@ MATLAB equivalent: src/ndi/+ndi/+app/spikesorter.m
 """
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+from typing import TYPE_CHECKING, Any
 
 from . import App
 from .appdoc import AppDoc
@@ -34,36 +35,36 @@ class SpikeSorter(App, AppDoc):
         >>> sorter.spike_sort(timeseries_obj, 'default', 'default')
     """
 
-    def __init__(self, session: Optional['Session'] = None):
-        App.__init__(self, session=session, name='ndi_app_spikesorter')
+    def __init__(self, session: Session | None = None):
+        App.__init__(self, session=session, name="ndi_app_spikesorter")
         AppDoc.__init__(
             self,
-            doc_types=['sorting_parameters', 'spike_clusters'],
+            doc_types=["sorting_parameters", "spike_clusters"],
             doc_document_types=[
-                'apps/spikesorter/sorting_parameters',
-                'apps/spikesorter/spike_clusters',
+                "apps/spikesorter/sorting_parameters",
+                "apps/spikesorter/spike_clusters",
             ],
         )
 
     @staticmethod
-    def default_sorting_parameters() -> Dict[str, Any]:
+    def default_sorting_parameters() -> dict[str, Any]:
         """Return default sorting parameters."""
         return {
-            'graphical_mode': False,
-            'num_pca_features': 4,
-            'interpolation': 2,
-            'min_clusters': 1,
-            'max_clusters': 5,
-            'num_start': 5,
+            "graphical_mode": False,
+            "num_pca_features": 4,
+            "interpolation": 2,
+            "min_clusters": 1,
+            "max_clusters": 5,
+            "num_start": 5,
         }
 
     def spike_sort(
         self,
         timeseries_obj: Any,
-        extraction_name: str = 'default',
-        sorting_name: str = 'default',
+        extraction_name: str = "default",
+        sorting_name: str = "default",
         redo: bool = False,
-    ) -> List['Document']:
+    ) -> list[Document]:
         """
         Perform spike sorting on extracted spikes.
 
@@ -84,10 +85,10 @@ class SpikeSorter(App, AppDoc):
     def clusters2neurons(
         self,
         timeseries_obj: Any,
-        sorting_name: str = 'default',
-        extraction_name: str = 'default',
+        sorting_name: str = "default",
+        extraction_name: str = "default",
         redo: bool = False,
-    ) -> List[Any]:
+    ) -> list[Any]:
         """
         Create Neuron elements from cluster assignments.
 
@@ -104,22 +105,24 @@ class SpikeSorter(App, AppDoc):
             "Full neuron creation from clusters requires additional infrastructure."
         )
 
-    def struct2doc(self, appdoc_type: str, appdoc_struct: Dict, **kwargs) -> 'Document':
+    def struct2doc(self, appdoc_type: str, appdoc_struct: dict, **kwargs) -> Document:
         from ..document import Document
+
         return Document(
             self.doc_document_types[self.doc_types.index(appdoc_type)],
             **{appdoc_type: appdoc_struct},
         )
 
-    def find_appdoc(self, appdoc_type: str, **kwargs) -> List['Document']:
+    def find_appdoc(self, appdoc_type: str, **kwargs) -> list[Document]:
         if self._session is None:
             return []
         from ..query import Query
-        return self._session.database_search(Query('').isa(appdoc_type))
 
-    def isvalid_appdoc_struct(self, appdoc_type: str, appdoc_struct: Dict) -> bool:
-        if appdoc_type == 'sorting_parameters':
-            return 'num_pca_features' in appdoc_struct
+        return self._session.database_search(Query("").isa(appdoc_type))
+
+    def isvalid_appdoc_struct(self, appdoc_type: str, appdoc_struct: dict) -> bool:
+        if appdoc_type == "sorting_parameters":
+            return "num_pca_features" in appdoc_struct
         return True
 
     def __repr__(self) -> str:

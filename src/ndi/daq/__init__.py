@@ -18,21 +18,20 @@ Example:
     >>> from ndi.daq.reader import MFDAQReader
 """
 
-from .reader_base import DAQReader
+from .daqsystemstring import DAQSystemString
+from .metadatareader import MetadataReader, NewStimStimsReader, NielsenLabStimsReader
 from .mfdaq import MFDAQReader
+from .reader_base import DAQReader
 from .system import DAQSystem
 from .system_mfdaq import DAQSystemMFDAQ
-from .metadatareader import MetadataReader
-from .metadatareader import NewStimStimsReader, NielsenLabStimsReader
-from .daqsystemstring import DAQSystemString
 
 __all__ = [
-    'DAQReader',
-    'MFDAQReader',
-    'DAQSystem',
-    'DAQSystemMFDAQ',
-    'MetadataReader',
-    'NewStimStimsReader',
-    'NielsenLabStimsReader',
-    'DAQSystemString',
+    "DAQReader",
+    "MFDAQReader",
+    "DAQSystem",
+    "DAQSystemMFDAQ",
+    "MetadataReader",
+    "NewStimStimsReader",
+    "NielsenLabStimsReader",
+    "DAQSystemString",
 ]

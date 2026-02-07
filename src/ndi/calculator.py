@@ -9,9 +9,10 @@ MATLAB equivalent: src/ndi/+ndi/calculator.m
 """
 
 from __future__ import annotations
+
 import itertools
 import logging
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from .app import App
 from .app.appdoc import AppDoc, DocExistsAction
@@ -45,9 +46,9 @@ class Calculator(App, AppDoc):
 
     def __init__(
         self,
-        session: Optional[Session] = None,
-        document_type: str = '',
-        path_to_doc_type: str = '',
+        session: Session | None = None,
+        document_type: str = "",
+        path_to_doc_type: str = "",
     ):
         """
         Create a new Calculator.
@@ -78,8 +79,8 @@ class Calculator(App, AppDoc):
     def run(
         self,
         doc_exists_action: DocExistsAction = DocExistsAction.ERROR,
-        parameters: Optional[dict] = None,
-    ) -> List['Document']:
+        parameters: dict | None = None,
+    ) -> list[Document]:
         """
         Run the calculator pipeline.
 
@@ -101,11 +102,12 @@ class Calculator(App, AppDoc):
 
         logger.debug(
             "Beginning calculator %s: %d parameter sets",
-            type(self).__name__, len(all_parameters),
+            type(self).__name__,
+            len(all_parameters),
         )
 
-        docs: List[Document] = []
-        docs_to_add: List[Document] = []
+        docs: list[Document] = []
+        docs_to_add: list[Document] = []
 
         for i, params in enumerate(all_parameters):
             logger.debug("Processing parameter set %d of %d", i + 1, len(all_parameters))
@@ -130,7 +132,7 @@ class Calculator(App, AppDoc):
                         existing_params = self._extract_input_parameters(edoc)
                         if existing_params is not None:
                             if self.are_input_parameters_equivalent(
-                                params.get('input_parameters', {}),
+                                params.get("input_parameters", {}),
                                 existing_params,
                             ):
                                 equivalent = True
@@ -177,7 +179,7 @@ class Calculator(App, AppDoc):
         logger.debug("Concluding calculator %s", type(self).__name__)
         return docs
 
-    def calculate(self, parameters: dict) -> List['Document']:
+    def calculate(self, parameters: dict) -> list[Document]:
         """
         Perform the calculation.
 
@@ -206,14 +208,14 @@ class Calculator(App, AppDoc):
             Dict with 'input_parameters', 'depends_on', and optionally 'query'
         """
         return {
-            'input_parameters': {},
-            'depends_on': [],
+            "input_parameters": {},
+            "depends_on": [],
         }
 
     def search_for_input_parameters(
         self,
         parameters_specification: dict,
-    ) -> List[dict]:
+    ) -> list[dict]:
         """
         Search the database for all valid input parameter sets.
 
@@ -229,9 +231,9 @@ class Calculator(App, AppDoc):
         Returns:
             List of parameter dicts, each with 'input_parameters' and 'depends_on'
         """
-        fixed_inputs = parameters_specification.get('input_parameters', {})
-        fixed_depends_on = parameters_specification.get('depends_on', [])
-        queries = parameters_specification.get('query', None)
+        fixed_inputs = parameters_specification.get("input_parameters", {})
+        fixed_depends_on = parameters_specification.get("depends_on", [])
+        queries = parameters_specification.get("query", None)
 
         # Normalize queries to list
         if queries is not None and not isinstance(queries, list):
@@ -239,10 +241,12 @@ class Calculator(App, AppDoc):
 
         # If no queries, return single parameter set with fixed values
         if not queries:
-            return [{
-                'input_parameters': fixed_inputs,
-                'depends_on': fixed_depends_on if fixed_depends_on else [],
-            }]
+            return [
+                {
+                    "input_parameters": fixed_inputs,
+                    "depends_on": fixed_depends_on if fixed_depends_on else [],
+                }
+            ]
 
         if self._session is None:
             return []
@@ -250,7 +254,7 @@ class Calculator(App, AppDoc):
         # Search database for each query
         doc_lists = []
         for q_spec in queries:
-            query_obj = q_spec.get('query')
+            query_obj = q_spec.get("query")
             if query_obj is not None:
                 results = self._session.database_search(query_obj)
                 doc_lists.append(results)
@@ -271,11 +275,11 @@ class Calculator(App, AppDoc):
 
             for idx, doc in enumerate(combo):
                 q_spec = queries[idx]
-                dep_name = q_spec.get('name', f'input_{idx + 1}')
+                dep_name = q_spec.get("name", f"input_{idx + 1}")
 
                 dep_entry = {
-                    'name': dep_name,
-                    'value': doc.id,
+                    "name": dep_name,
+                    "value": doc.id,
                 }
 
                 # Validate this dependency
@@ -291,17 +295,19 @@ class Calculator(App, AppDoc):
             # Combine fixed and query-derived dependencies
             all_depends = list(fixed_depends_on) + extra_depends
 
-            all_parameters.append({
-                'input_parameters': dict(fixed_inputs),
-                'depends_on': all_depends,
-            })
+            all_parameters.append(
+                {
+                    "input_parameters": dict(fixed_inputs),
+                    "depends_on": all_depends,
+                }
+            )
 
         return all_parameters
 
     def default_parameters_query(
         self,
         parameters_specification: dict,
-    ) -> List[dict]:
+    ) -> list[dict]:
         """
         Return default query structures for parameter search.
 
@@ -322,7 +328,7 @@ class Calculator(App, AppDoc):
     def search_for_calculator_docs(
         self,
         parameters: dict,
-    ) -> List['Document']:
+    ) -> list[Document]:
         """
         Find existing calculator documents matching the given parameters.
 
@@ -342,21 +348,21 @@ class Calculator(App, AppDoc):
 
         # Build query for calculator class name (not schema path)
         doc_type = self.doc_types[0]
-        q = Query('').isa(doc_type)
+        q = Query("").isa(doc_type)
 
         # Add dependency constraints
-        depends_on = parameters.get('depends_on', [])
+        depends_on = parameters.get("depends_on", [])
         for dep in depends_on:
-            dep_name = dep.get('name', '')
-            dep_value = dep.get('value', '')
+            dep_name = dep.get("name", "")
+            dep_value = dep.get("value", "")
             if dep_value:
-                q = q & Query('').depends_on(dep_name, dep_value)
+                q = q & Query("").depends_on(dep_name, dep_value)
 
         # Search database
         candidates = self._session.database_search(q)
 
         # Filter by input parameters
-        input_params = parameters.get('input_parameters', {})
+        input_params = parameters.get("input_parameters", {})
         if not input_params:
             return candidates
 
@@ -414,16 +420,16 @@ class Calculator(App, AppDoc):
     # Internal Helpers
     # =========================================================================
 
-    def _extract_input_parameters(self, doc: 'Document') -> Optional[dict]:
+    def _extract_input_parameters(self, doc: Document) -> dict | None:
         """Extract input_parameters from a calculator document."""
         props = doc.document_properties
-        doc_type = self.doc_types[0] if self.doc_types else ''
+        doc_type = self.doc_types[0] if self.doc_types else ""
         if doc_type:
             section = props.get(doc_type, {})
-            return section.get('input_parameters')
+            return section.get("input_parameters")
         return None
 
-    def _remove_docs(self, docs: List['Document']) -> None:
+    def _remove_docs(self, docs: list[Document]) -> None:
         """Remove documents from the database."""
         if self._session is None:
             return
@@ -434,5 +440,5 @@ class Calculator(App, AppDoc):
                 pass
 
     def __repr__(self) -> str:
-        doc_type = self.doc_document_types[0] if self.doc_document_types else 'none'
+        doc_type = self.doc_document_types[0] if self.doc_document_types else "none"
         return f"Calculator({self._name}, type={doc_type})"

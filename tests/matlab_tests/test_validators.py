@@ -23,11 +23,11 @@ from ndi.ido import Ido
 from ndi.session.dir import DirSession
 from ndi.session.session_base import empty_id
 
-
 # ===========================================================================
 # TestDocumentValidation
 # Port of: MATLAB validator tests - document-level validation
 # ===========================================================================
+
 
 class TestDocumentValidation:
     """Port of MATLAB validator tests -- document-level validation.
@@ -41,18 +41,18 @@ class TestDocumentValidation:
         MATLAB equivalent: validators (type checking)
         """
         with pytest.raises(FileNotFoundError):
-            Document('completely_nonexistent_type_xyz')
+            Document("completely_nonexistent_type_xyz")
 
     def test_document_valid_type(self):
         """Document accepts known types like 'base' and 'demoNDI'.
 
         MATLAB equivalent: validators (type checking)
         """
-        doc = Document('base')
+        doc = Document("base")
         assert doc is not None
         assert isinstance(doc.document_properties, dict)
 
-        doc2 = Document('demoNDI')
+        doc2 = Document("demoNDI")
         assert doc2 is not None
 
     def test_session_id_validation(self, tmp_path):
@@ -60,15 +60,15 @@ class TestDocumentValidation:
 
         MATLAB equivalent: validators (session_id checking)
         """
-        session_dir = tmp_path / 'val_sess'
+        session_dir = tmp_path / "val_sess"
         session_dir.mkdir()
-        session = DirSession('validator_test', session_dir)
+        session = DirSession("validator_test", session_dir)
 
         # Create a doc with a different session_id
-        doc = Document('demoNDI')
+        doc = Document("demoNDI")
         props = doc.document_properties
-        props['base']['session_id'] = 'wrong_session_id_12345'
-        props['demoNDI']['value'] = 1
+        props["base"]["session_id"] = "wrong_session_id_12345"
+        props["demoNDI"]["value"] = 1
         doc = Document(props)
 
         with pytest.raises(ValueError, match="doesn't match"):
@@ -79,14 +79,14 @@ class TestDocumentValidation:
 
         MATLAB equivalent: validators (session_id auto-assignment)
         """
-        session_dir = tmp_path / 'val_sess2'
+        session_dir = tmp_path / "val_sess2"
         session_dir.mkdir()
-        session = DirSession('validator_test', session_dir)
+        session = DirSession("validator_test", session_dir)
 
-        doc = Document('demoNDI')
+        doc = Document("demoNDI")
         props = doc.document_properties
-        props['base']['session_id'] = ''
-        props['demoNDI']['value'] = 99
+        props["base"]["session_id"] = ""
+        props["demoNDI"]["value"] = 99
         doc = Document(props)
 
         # Should not raise -- empty session_id is accepted and auto-assigned
@@ -97,14 +97,14 @@ class TestDocumentValidation:
 
         MATLAB equivalent: validators (session_id auto-assignment)
         """
-        session_dir = tmp_path / 'val_sess3'
+        session_dir = tmp_path / "val_sess3"
         session_dir.mkdir()
-        session = DirSession('validator_test', session_dir)
+        session = DirSession("validator_test", session_dir)
 
-        doc = Document('demoNDI')
+        doc = Document("demoNDI")
         props = doc.document_properties
-        props['base']['session_id'] = empty_id()
-        props['demoNDI']['value'] = 88
+        props["base"]["session_id"] = empty_id()
+        props["demoNDI"]["value"] = 88
         doc = Document(props)
 
         # Should not raise -- empty_id is accepted and auto-assigned
@@ -115,19 +115,20 @@ class TestDocumentValidation:
 
         MATLAB equivalent: validators (structure check)
         """
-        doc = Document('base')
+        doc = Document("base")
         props = doc.document_properties
 
-        assert 'base' in props
-        assert 'id' in props['base']
-        assert 'datestamp' in props['base']
-        assert 'document_class' in props
+        assert "base" in props
+        assert "id" in props["base"]
+        assert "datestamp" in props["base"]
+        assert "document_class" in props
 
 
 # ===========================================================================
 # TestIDValidation
 # Port of: MATLAB mustBeIDTest.m
 # ===========================================================================
+
 
 class TestIDValidation:
     """Port of MATLAB mustBeIDTest.m.
@@ -140,20 +141,19 @@ class TestIDValidation:
 
         MATLAB equivalent: mustBeIDTest.testValidID
         """
-        doc = Document('base')
+        doc = Document("base")
         doc_id = doc.id
 
         assert isinstance(doc_id, str)
         assert len(doc_id) > 0
-        assert Ido.is_valid(doc_id), \
-            f"Document ID '{doc_id}' should be a valid NDI ID"
+        assert Ido.is_valid(doc_id), f"Document ID '{doc_id}' should be a valid NDI ID"
 
     def test_id_is_string(self):
         """ID is always a string.
 
         MATLAB equivalent: mustBeIDTest.testIDIsString
         """
-        doc = Document('base')
+        doc = Document("base")
         assert isinstance(doc.id, str)
 
     def test_ido_generates_valid_ids(self):
@@ -163,8 +163,7 @@ class TestIDValidation:
         """
         for _ in range(10):
             id_val = Ido.unique_id()
-            assert Ido.is_valid(id_val), \
-                f"Generated ID '{id_val}' should be valid"
+            assert Ido.is_valid(id_val), f"Generated ID '{id_val}' should be valid"
 
     def test_ido_id_contains_underscore(self):
         """NDI IDs contain an underscore separator.
@@ -172,7 +171,7 @@ class TestIDValidation:
         MATLAB equivalent: mustBeIDTest (format check)
         """
         ido = Ido()
-        assert '_' in ido.id, 'NDI ID should contain underscore separator'
+        assert "_" in ido.id, "NDI ID should contain underscore separator"
 
     def test_ido_id_hex_format(self):
         """NDI ID parts are hexadecimal strings.
@@ -180,13 +179,14 @@ class TestIDValidation:
         MATLAB equivalent: mustBeIDTest (hex check)
         """
         ido = Ido()
-        parts = ido.id.split('_')
-        assert len(parts) == 2, 'NDI ID should have exactly two parts'
+        parts = ido.id.split("_")
+        assert len(parts) == 2, "NDI ID should have exactly two parts"
 
         for part in parts:
             # Each part should be valid hex
-            assert all(c in '0123456789abcdef' for c in part.lower()), \
-                f"ID part '{part}' should be hexadecimal"
+            assert all(
+                c in "0123456789abcdef" for c in part.lower()
+            ), f"ID part '{part}' should be hexadecimal"
 
     def test_ido_ids_are_unique(self):
         """Multiple Ido instances generate unique IDs.
@@ -194,31 +194,30 @@ class TestIDValidation:
         MATLAB equivalent: mustBeIDTest (uniqueness)
         """
         ids = [Ido().id for _ in range(20)]
-        assert len(set(ids)) == len(ids), \
-            'All generated IDs should be unique'
+        assert len(set(ids)) == len(ids), "All generated IDs should be unique"
 
     def test_ido_is_valid_accepts_ndi_format(self):
         """is_valid() accepts NDI hex_hex format.
 
         MATLAB equivalent: mustBeIDTest.testValidFormat
         """
-        assert Ido.is_valid('1a2b3c_4d5e6f') is True
+        assert Ido.is_valid("1a2b3c_4d5e6f") is True
 
     def test_ido_is_valid_accepts_uuid_format(self):
         """is_valid() accepts UUID format for compatibility.
 
         MATLAB equivalent: mustBeIDTest.testValidFormat
         """
-        assert Ido.is_valid('12345678-1234-1234-1234-123456789abc') is True
+        assert Ido.is_valid("12345678-1234-1234-1234-123456789abc") is True
 
     def test_ido_is_valid_rejects_invalid(self):
         """is_valid() rejects invalid ID strings.
 
         MATLAB equivalent: mustBeIDTest.testInvalidID
         """
-        assert Ido.is_valid('') is False
-        assert Ido.is_valid('not-a-valid-id') is False
-        assert Ido.is_valid('xyz') is False
+        assert Ido.is_valid("") is False
+        assert Ido.is_valid("not-a-valid-id") is False
+        assert Ido.is_valid("xyz") is False
 
     def test_document_session_id_is_property(self):
         """doc.session_id is a @property (not a method call).
@@ -226,7 +225,7 @@ class TestIDValidation:
         This is a Python-specific concern: ensure session_id is accessed
         as a property, not called as session_id().
         """
-        doc = Document('base')
+        doc = Document("base")
         # session_id is a property -- accessing it should return a string
         session_id = doc.session_id
         assert isinstance(session_id, str)

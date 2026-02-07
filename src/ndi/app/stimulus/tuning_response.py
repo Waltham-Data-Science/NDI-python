@@ -8,7 +8,8 @@ MATLAB equivalent: src/ndi/+ndi/+app/+stimulus/tuning_response.m
 """
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+
+from typing import TYPE_CHECKING, Any
 
 from .. import App
 
@@ -31,8 +32,8 @@ class TuningResponse(App):
         >>> tuning = tr.tuning_curve(response_doc)
     """
 
-    def __init__(self, session: Optional['Session'] = None):
-        super().__init__(session=session, name='ndi_app_tuning_response')
+    def __init__(self, session: Session | None = None):
+        super().__init__(session=session, name="ndi_app_tuning_response")
 
     def stimulus_responses(
         self,
@@ -40,7 +41,7 @@ class TuningResponse(App):
         timeseries_obj: Any,
         reset: bool = False,
         do_mean_only: bool = False,
-    ) -> List['Document']:
+    ) -> list[Document]:
         """
         Compute responses to a stimulus set.
 
@@ -60,10 +61,10 @@ class TuningResponse(App):
 
     def tuning_curve(
         self,
-        response_doc: 'Document',
-        independent_label: str = 'angle',
-        independent_parameter: str = 'angle',
-    ) -> Optional['Document']:
+        response_doc: Document,
+        independent_label: str = "angle",
+        independent_parameter: str = "angle",
+    ) -> Document | None:
         """
         Create a tuning curve from stimulus responses.
 
@@ -75,15 +76,13 @@ class TuningResponse(App):
         Returns:
             stimulus_tuningcurve document, or None
         """
-        raise NotImplementedError(
-            "Tuning curve generation requires response data analysis."
-        )
+        raise NotImplementedError("Tuning curve generation requires response data analysis.")
 
     def label_control_stimuli(
         self,
         stimulus_element: Any,
         reset: bool = False,
-    ) -> List['Document']:
+    ) -> list[Document]:
         """
         Label control stimuli in a stimulus set.
 
@@ -100,8 +99,8 @@ class TuningResponse(App):
         self,
         element_obj: Any,
         epochid: str,
-        response_type: str = 'mean',
-    ) -> List['Document']:
+        response_type: str = "mean",
+    ) -> list[Document]:
         """
         Find existing tuning curve documents.
 
@@ -117,9 +116,9 @@ class TuningResponse(App):
             return []
 
         from ...query import Query
-        q = (
-            Query('').isa('stimulus_tuningcurve') &
-            Query('').depends_on('element_id', element_obj.id)
+
+        q = Query("").isa("stimulus_tuningcurve") & Query("").depends_on(
+            "element_id", element_obj.id
         )
         return self._session.database_search(q)
 

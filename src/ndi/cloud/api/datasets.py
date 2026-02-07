@@ -10,65 +10,65 @@ MATLAB equivalents: +ndi/+cloud/+api/+datasets/*.m,
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..client import CloudClient
 
 
-def get_dataset(client: 'CloudClient', dataset_id: str) -> Dict[str, Any]:
+def get_dataset(client: CloudClient, dataset_id: str) -> dict[str, Any]:
     """GET /datasets/{datasetId}"""
-    return client.get('/datasets/{datasetId}', datasetId=dataset_id)
+    return client.get("/datasets/{datasetId}", datasetId=dataset_id)
 
 
 def create_dataset(
-    client: 'CloudClient',
+    client: CloudClient,
     org_id: str,
     name: str,
-    description: str = '',
+    description: str = "",
     **kwargs: Any,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """POST /organizations/{organizationId}/datasets"""
-    body: Dict[str, Any] = {'name': name}
+    body: dict[str, Any] = {"name": name}
     if description:
-        body['description'] = description
+        body["description"] = description
     body.update(kwargs)
     return client.post(
-        '/organizations/{organizationId}/datasets',
+        "/organizations/{organizationId}/datasets",
         json=body,
         organizationId=org_id,
     )
 
 
 def update_dataset(
-    client: 'CloudClient',
+    client: CloudClient,
     dataset_id: str,
     **fields: Any,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """PUT /datasets/{datasetId}"""
     return client.put(
-        '/datasets/{datasetId}',
+        "/datasets/{datasetId}",
         json=fields,
         datasetId=dataset_id,
     )
 
 
-def delete_dataset(client: 'CloudClient', dataset_id: str) -> bool:
+def delete_dataset(client: CloudClient, dataset_id: str) -> bool:
     """DELETE /datasets/{datasetId}"""
-    client.delete('/datasets/{datasetId}', datasetId=dataset_id)
+    client.delete("/datasets/{datasetId}", datasetId=dataset_id)
     return True
 
 
 def list_datasets(
-    client: 'CloudClient',
+    client: CloudClient,
     org_id: str,
     page: int = 1,
     page_size: int = 1000,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """GET /organizations/{organizationId}/datasets?page=&pageSize="""
     return client.get(
-        '/organizations/{organizationId}/datasets',
-        params={'page': page, 'pageSize': page_size},
+        "/organizations/{organizationId}/datasets",
+        params={"page": page, "pageSize": page_size},
         organizationId=org_id,
     )
 
@@ -76,15 +76,15 @@ def list_datasets(
 _MAX_PAGES = 1000
 
 
-def list_all_datasets(client: 'CloudClient', org_id: str) -> List[Dict[str, Any]]:
+def list_all_datasets(client: CloudClient, org_id: str) -> list[dict[str, Any]]:
     """Auto-paginate through all datasets for an organisation."""
-    all_datasets: List[Dict[str, Any]] = []
+    all_datasets: list[dict[str, Any]] = []
     page = 1
     while page <= _MAX_PAGES:
         result = list_datasets(client, org_id, page=page)
-        datasets = result.get('datasets', [])
+        datasets = result.get("datasets", [])
         all_datasets.extend(datasets)
-        total = result.get('totalNumber', 0)
+        total = result.get("totalNumber", 0)
         if len(all_datasets) >= total or not datasets:
             break
         page += 1
@@ -92,52 +92,52 @@ def list_all_datasets(client: 'CloudClient', org_id: str) -> List[Dict[str, Any]
 
 
 def get_published_datasets(
-    client: 'CloudClient',
+    client: CloudClient,
     page: int = 1,
     page_size: int = 1000,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """GET /datasets/published"""
     return client.get(
-        '/datasets/published',
-        params={'page': page, 'pageSize': page_size},
+        "/datasets/published",
+        params={"page": page, "pageSize": page_size},
     )
 
 
-def publish_dataset(client: 'CloudClient', dataset_id: str) -> Dict[str, Any]:
+def publish_dataset(client: CloudClient, dataset_id: str) -> dict[str, Any]:
     """POST /datasets/{datasetId}/publish"""
-    return client.post('/datasets/{datasetId}/publish', datasetId=dataset_id)
+    return client.post("/datasets/{datasetId}/publish", datasetId=dataset_id)
 
 
-def unpublish_dataset(client: 'CloudClient', dataset_id: str) -> Dict[str, Any]:
+def unpublish_dataset(client: CloudClient, dataset_id: str) -> dict[str, Any]:
     """POST /datasets/{datasetId}/unpublish"""
-    return client.post('/datasets/{datasetId}/unpublish', datasetId=dataset_id)
+    return client.post("/datasets/{datasetId}/unpublish", datasetId=dataset_id)
 
 
-def submit_dataset(client: 'CloudClient', dataset_id: str) -> Dict[str, Any]:
+def submit_dataset(client: CloudClient, dataset_id: str) -> dict[str, Any]:
     """POST /datasets/{datasetId}/submit"""
-    return client.post('/datasets/{datasetId}/submit', datasetId=dataset_id)
+    return client.post("/datasets/{datasetId}/submit", datasetId=dataset_id)
 
 
-def create_branch(client: 'CloudClient', dataset_id: str) -> Dict[str, Any]:
+def create_branch(client: CloudClient, dataset_id: str) -> dict[str, Any]:
     """POST /datasets/{datasetId}/branch"""
-    return client.post('/datasets/{datasetId}/branch', datasetId=dataset_id)
+    return client.post("/datasets/{datasetId}/branch", datasetId=dataset_id)
 
 
-def get_branches(client: 'CloudClient', dataset_id: str) -> List[Dict[str, Any]]:
+def get_branches(client: CloudClient, dataset_id: str) -> list[dict[str, Any]]:
     """GET /datasets/{datasetId}/branches"""
-    return client.get('/datasets/{datasetId}/branches', datasetId=dataset_id)
+    return client.get("/datasets/{datasetId}/branches", datasetId=dataset_id)
 
 
 def get_unpublished(
-    client: 'CloudClient',
+    client: CloudClient,
     page: int = 1,
     page_size: int = 20,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """GET /datasets/unpublished
 
     MATLAB equivalent: +cloud/+api/+datasets/getUnpublished.m
     """
     return client.get(
-        '/datasets/unpublished',
-        params={'page': page, 'pageSize': page_size},
+        "/datasets/unpublished",
+        params={"page": page, "pageSize": page_size},
     )

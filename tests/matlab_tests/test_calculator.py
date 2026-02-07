@@ -13,17 +13,14 @@ These calculators require a session. Tests use the session_with_docs
 fixture from conftest.py and also test sessionless instantiation.
 """
 
-import pytest
-
 from ndi.calc.example.simple import SimpleCalc
 from ndi.calc.stimulus.tuningcurve import TuningCurveCalc
-from ndi.app.appdoc import DocExistsAction
-
 
 # ===========================================================================
 # TestSimpleCalc
 # Port of: ndi.unittest.calc.example.testSimple
 # ===========================================================================
+
 
 class TestSimpleCalc:
     """Port of ndi.unittest.calc.example.testSimple.
@@ -57,10 +54,10 @@ class TestSimpleCalc:
         MATLAB equivalent: testSimple (property check)
         """
         calc = SimpleCalc()
-        assert hasattr(calc, 'doc_types')
+        assert hasattr(calc, "doc_types")
         assert isinstance(calc.doc_types, list)
         assert len(calc.doc_types) == 1
-        assert calc.doc_types[0] == 'simple_calc'
+        assert calc.doc_types[0] == "simple_calc"
 
     def test_simple_calc_doc_document_types(self):
         """SimpleCalc has doc_document_types=['apps/calculators/simple_calc'].
@@ -68,10 +65,10 @@ class TestSimpleCalc:
         MATLAB equivalent: testSimple (property check)
         """
         calc = SimpleCalc()
-        assert hasattr(calc, 'doc_document_types')
+        assert hasattr(calc, "doc_document_types")
         assert isinstance(calc.doc_document_types, list)
         assert len(calc.doc_document_types) == 1
-        assert calc.doc_document_types[0] == 'apps/calculators/simple_calc'
+        assert calc.doc_document_types[0] == "apps/calculators/simple_calc"
 
     def test_simple_calc_has_run_method(self):
         """SimpleCalc inherits run() from Calculator.
@@ -79,7 +76,7 @@ class TestSimpleCalc:
         MATLAB equivalent: testSimple (interface check)
         """
         calc = SimpleCalc()
-        assert hasattr(calc, 'run')
+        assert hasattr(calc, "run")
         assert callable(calc.run)
 
     def test_simple_calc_has_calculate_method(self):
@@ -88,7 +85,7 @@ class TestSimpleCalc:
         MATLAB equivalent: testSimple (interface check)
         """
         calc = SimpleCalc()
-        assert hasattr(calc, 'calculate')
+        assert hasattr(calc, "calculate")
         assert callable(calc.calculate)
 
     def test_simple_calc_default_search_params(self):
@@ -99,9 +96,9 @@ class TestSimpleCalc:
         calc = SimpleCalc()
         params = calc.default_search_for_input_parameters()
         assert isinstance(params, dict)
-        assert 'input_parameters' in params
-        assert 'depends_on' in params
-        assert params['input_parameters']['answer'] == 5
+        assert "input_parameters" in params
+        assert "depends_on" in params
+        assert params["input_parameters"]["answer"] == 5
 
     def test_simple_calc_calculate(self):
         """calculate() returns a list of documents.
@@ -110,8 +107,8 @@ class TestSimpleCalc:
         """
         calc = SimpleCalc()
         parameters = {
-            'input_parameters': {'answer': 42},
-            'depends_on': [],
+            "input_parameters": {"answer": 42},
+            "depends_on": [],
         }
         docs = calc.calculate(parameters)
         assert isinstance(docs, list)
@@ -120,8 +117,8 @@ class TestSimpleCalc:
         doc = docs[0]
         # Check that the document has the expected structure
         props = doc.document_properties
-        assert 'simple_calc' in props
-        assert props['simple_calc']['answer'] == 42
+        assert "simple_calc" in props
+        assert props["simple_calc"]["answer"] == 42
 
     def test_simple_calc_repr(self):
         """SimpleCalc has a useful repr.
@@ -130,13 +127,14 @@ class TestSimpleCalc:
         """
         calc = SimpleCalc()
         r = repr(calc)
-        assert 'SimpleCalc' in r
+        assert "SimpleCalc" in r
 
 
 # ===========================================================================
 # TestTuningCurveCalc
 # Port of: ndi.unittest.calc.stimulus.testCalcTuningCurve
 # ===========================================================================
+
 
 class TestTuningCurveCalc:
     """Port of ndi.unittest.calc.stimulus.testCalcTuningCurve.
@@ -170,10 +168,10 @@ class TestTuningCurveCalc:
         MATLAB equivalent: testCalcTuningCurve (property check)
         """
         calc = TuningCurveCalc()
-        assert hasattr(calc, 'doc_types')
+        assert hasattr(calc, "doc_types")
         assert isinstance(calc.doc_types, list)
         assert len(calc.doc_types) == 1
-        assert calc.doc_types[0] == 'tuningcurve_calc'
+        assert calc.doc_types[0] == "tuningcurve_calc"
 
     def test_tuning_curve_doc_document_types(self):
         """TuningCurveCalc has doc_document_types for schema path.
@@ -181,10 +179,10 @@ class TestTuningCurveCalc:
         MATLAB equivalent: testCalcTuningCurve (property check)
         """
         calc = TuningCurveCalc()
-        assert hasattr(calc, 'doc_document_types')
+        assert hasattr(calc, "doc_document_types")
         assert isinstance(calc.doc_document_types, list)
         assert len(calc.doc_document_types) == 1
-        assert calc.doc_document_types[0] == 'apps/calculators/tuningcurve_calc'
+        assert calc.doc_document_types[0] == "apps/calculators/tuningcurve_calc"
 
     def test_tuning_curve_has_run_method(self):
         """TuningCurveCalc inherits run() from Calculator.
@@ -192,7 +190,7 @@ class TestTuningCurveCalc:
         MATLAB equivalent: testCalcTuningCurve (interface check)
         """
         calc = TuningCurveCalc()
-        assert hasattr(calc, 'run')
+        assert hasattr(calc, "run")
         assert callable(calc.run)
 
     def test_tuning_curve_has_calculate_method(self):
@@ -201,7 +199,7 @@ class TestTuningCurveCalc:
         MATLAB equivalent: testCalcTuningCurve (interface check)
         """
         calc = TuningCurveCalc()
-        assert hasattr(calc, 'calculate')
+        assert hasattr(calc, "calculate")
         assert callable(calc.calculate)
 
     def test_tuning_curve_default_search_params(self):
@@ -212,11 +210,11 @@ class TestTuningCurveCalc:
         calc = TuningCurveCalc()
         params = calc.default_search_for_input_parameters()
         assert isinstance(params, dict)
-        assert 'input_parameters' in params
-        assert 'depends_on' in params
-        ip = params['input_parameters']
-        assert 'independent_label' in ip
-        assert 'independent_parameter' in ip
+        assert "input_parameters" in params
+        assert "depends_on" in params
+        ip = params["input_parameters"]
+        assert "independent_label" in ip
+        assert "independent_parameter" in ip
 
     def test_tuning_curve_calculate(self):
         """calculate() returns a list of documents.
@@ -225,11 +223,11 @@ class TestTuningCurveCalc:
         """
         calc = TuningCurveCalc()
         parameters = {
-            'input_parameters': {
-                'independent_label': 'angle',
-                'independent_parameter': 'angle',
+            "input_parameters": {
+                "independent_label": "angle",
+                "independent_parameter": "angle",
             },
-            'depends_on': [],
+            "depends_on": [],
         }
         docs = calc.calculate(parameters)
         assert isinstance(docs, list)
@@ -237,7 +235,7 @@ class TestTuningCurveCalc:
 
         doc = docs[0]
         props = doc.document_properties
-        assert 'tuningcurve_calc' in props
+        assert "tuningcurve_calc" in props
 
     def test_tuning_curve_generate_mock_docs(self):
         """generate_mock_docs() creates synthetic test data.
@@ -246,7 +244,7 @@ class TestTuningCurveCalc:
         """
         calc = TuningCurveCalc()
         docs, doc_output, doc_expected = calc.generate_mock_docs(
-            scope='standard',
+            scope="standard",
             number_of_tests=4,
         )
 
@@ -257,9 +255,9 @@ class TestTuningCurveCalc:
 
         # First test case should be contrast tuning
         assert docs[0] is not None
-        assert 'X' in docs[0]
-        assert 'R' in docs[0]
-        assert 'independent_variables' in docs[0]
+        assert "X" in docs[0]
+        assert "R" in docs[0]
+        assert "independent_variables" in docs[0]
 
     def test_tuning_curve_repr(self):
         """TuningCurveCalc has a useful repr.
@@ -268,4 +266,4 @@ class TestTuningCurveCalc:
         """
         calc = TuningCurveCalc()
         r = repr(calc)
-        assert 'TuningCurveCalc' in r
+        assert "TuningCurveCalc" in r

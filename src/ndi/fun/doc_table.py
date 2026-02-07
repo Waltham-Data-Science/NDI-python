@@ -8,7 +8,7 @@ Converts NDI documents into pandas DataFrames for analysis.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 try:
     import pandas as pd
@@ -19,14 +19,14 @@ except ImportError:
 def _require_pandas() -> None:
     if pd is None:
         raise ImportError(
-            'pandas is required for ndi.fun.doc_table utilities. '
-            'Install it with: pip install pandas'
+            "pandas is required for ndi.fun.doc_table utilities. "
+            "Install it with: pip install pandas"
         )
 
 
 def doc_cell_array_to_table(
-    documents: List[Any],
-) -> 'pd.DataFrame':
+    documents: list[Any],
+) -> pd.DataFrame:
     """Convert a list of NDI documents to a DataFrame.
 
     MATLAB equivalent: ndi.fun.docTable.docCellArray2Table
@@ -42,18 +42,18 @@ def doc_cell_array_to_table(
     """
     _require_pandas()
 
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for doc in documents:
-        props = doc.document_properties if hasattr(doc, 'document_properties') else doc
+        props = doc.document_properties if hasattr(doc, "document_properties") else doc
         if not isinstance(props, dict):
             continue
 
-        row: Dict[str, Any] = {}
+        row: dict[str, Any] = {}
         # Flatten top-level sections
         for section, data in props.items():
             if isinstance(data, dict):
                 for key, val in data.items():
-                    row[f'{section}.{key}'] = val
+                    row[f"{section}.{key}"] = val
             else:
                 row[section] = data
         rows.append(row)
@@ -63,7 +63,7 @@ def doc_cell_array_to_table(
 
 def element_table(
     session: Any,
-) -> 'pd.DataFrame':
+) -> pd.DataFrame:
     """Create a summary table of element documents.
 
     MATLAB equivalent: ndi.fun.docTable.element
@@ -77,18 +77,18 @@ def element_table(
     _require_pandas()
     from ndi.query import Query
 
-    docs = session.database_search(Query('').isa('element'))
-    rows: List[Dict[str, Any]] = []
+    docs = session.database_search(Query("").isa("element"))
+    rows: list[dict[str, Any]] = []
 
     for doc in docs:
         props = doc.document_properties
-        el = props.get('element', {})
-        base = props.get('base', {})
+        el = props.get("element", {})
+        base = props.get("base", {})
         row = {
-            'id': base.get('id', ''),
-            'name': el.get('name', ''),
-            'reference': el.get('reference', 0),
-            'type': el.get('type', ''),
+            "id": base.get("id", ""),
+            "name": el.get("name", ""),
+            "reference": el.get("reference", 0),
+            "type": el.get("type", ""),
         }
         rows.append(row)
 
@@ -97,7 +97,7 @@ def element_table(
 
 def subject_table(
     session: Any,
-) -> 'pd.DataFrame':
+) -> pd.DataFrame:
     """Create a summary table of subject documents.
 
     MATLAB equivalent: ndi.fun.docTable.subject
@@ -111,17 +111,17 @@ def subject_table(
     _require_pandas()
     from ndi.query import Query
 
-    docs = session.database_search(Query('').isa('subject'))
-    rows: List[Dict[str, Any]] = []
+    docs = session.database_search(Query("").isa("subject"))
+    rows: list[dict[str, Any]] = []
 
     for doc in docs:
         props = doc.document_properties
-        subj = props.get('subject', {})
-        base = props.get('base', {})
+        subj = props.get("subject", {})
+        base = props.get("base", {})
         row = {
-            'id': base.get('id', ''),
-            'local_identifier': subj.get('local_identifier', ''),
-            'description': subj.get('description', ''),
+            "id": base.get("id", ""),
+            "local_identifier": subj.get("local_identifier", ""),
+            "description": subj.get("description", ""),
         }
         rows.append(row)
 
@@ -130,7 +130,7 @@ def subject_table(
 
 def probe_table(
     session: Any,
-) -> 'pd.DataFrame':
+) -> pd.DataFrame:
     """Create a summary table of probe documents.
 
     MATLAB equivalent: ndi.fun.docTable.probe
@@ -144,18 +144,18 @@ def probe_table(
     _require_pandas()
     from ndi.query import Query
 
-    docs = session.database_search(Query('').isa('probe'))
-    rows: List[Dict[str, Any]] = []
+    docs = session.database_search(Query("").isa("probe"))
+    rows: list[dict[str, Any]] = []
 
     for doc in docs:
         props = doc.document_properties
-        el = props.get('element', {})
-        base = props.get('base', {})
+        el = props.get("element", {})
+        base = props.get("base", {})
         row = {
-            'id': base.get('id', ''),
-            'name': el.get('name', ''),
-            'reference': el.get('reference', 0),
-            'type': el.get('type', ''),
+            "id": base.get("id", ""),
+            "name": el.get("name", ""),
+            "reference": el.get("reference", 0),
+            "type": el.get("type", ""),
         }
         rows.append(row)
 
@@ -164,7 +164,7 @@ def probe_table(
 
 def epoch_table(
     session: Any,
-) -> 'pd.DataFrame':
+) -> pd.DataFrame:
     """Create a summary table of epoch-related documents.
 
     MATLAB equivalent: ndi.fun.docTable.epoch
@@ -178,16 +178,16 @@ def epoch_table(
     _require_pandas()
     from ndi.query import Query
 
-    docs = session.database_search(Query('').isa('epochprobemap_daqsystem'))
-    rows: List[Dict[str, Any]] = []
+    docs = session.database_search(Query("").isa("epochprobemap_daqsystem"))
+    rows: list[dict[str, Any]] = []
 
     for doc in docs:
         props = doc.document_properties
-        epm = props.get('epochprobemap_daqsystem', {})
-        base = props.get('base', {})
+        epm = props.get("epochprobemap_daqsystem", {})
+        base = props.get("base", {})
         row = {
-            'id': base.get('id', ''),
-            'epoch_id': epm.get('epoch_id', ''),
+            "id": base.get("id", ""),
+            "epoch_id": epm.get("epoch_id", ""),
         }
         rows.append(row)
 
@@ -196,8 +196,8 @@ def epoch_table(
 
 def openminds_table(
     session: Any,
-    doc_type: str = 'openminds',
-) -> 'pd.DataFrame':
+    doc_type: str = "openminds",
+) -> pd.DataFrame:
     """Gather OpenMINDS document properties into a table.
 
     MATLAB equivalent: ndi.fun.docTable.openminds
@@ -212,14 +212,14 @@ def openminds_table(
     _require_pandas()
     from ndi.query import Query
 
-    docs = session.database_search(Query('').isa(doc_type))
-    rows: List[Dict[str, Any]] = []
+    docs = session.database_search(Query("").isa(doc_type))
+    rows: list[dict[str, Any]] = []
 
     for doc in docs:
         props = doc.document_properties
-        base = props.get('base', {})
+        base = props.get("base", {})
         om = props.get(doc_type, {})
-        row = {'id': base.get('id', '')}
+        row = {"id": base.get("id", "")}
         if isinstance(om, dict):
             row.update(om)
         rows.append(row)
@@ -229,7 +229,7 @@ def openminds_table(
 
 def treatment_table(
     session: Any,
-) -> 'pd.DataFrame':
+) -> pd.DataFrame:
     """Gather treatment document properties into a table.
 
     MATLAB equivalent: ndi.fun.docTable.treatment
@@ -243,14 +243,14 @@ def treatment_table(
     _require_pandas()
     from ndi.query import Query
 
-    docs = session.database_search(Query('').isa('treatment'))
-    rows: List[Dict[str, Any]] = []
+    docs = session.database_search(Query("").isa("treatment"))
+    rows: list[dict[str, Any]] = []
 
     for doc in docs:
         props = doc.document_properties
-        base = props.get('base', {})
-        treat = props.get('treatment', {})
-        row = {'id': base.get('id', '')}
+        base = props.get("base", {})
+        treat = props.get("treatment", {})
+        row = {"id": base.get("id", "")}
         if isinstance(treat, dict):
             row.update(treat)
         rows.append(row)

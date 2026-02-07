@@ -8,10 +8,10 @@ MATLAB equivalent: Conceptual (MATLAB tests create sessions manually)
 """
 
 from __future__ import annotations
+
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Optional
 
 from .dir import DirSession
 
@@ -39,8 +39,8 @@ class MockSession(DirSession):
 
     def __init__(
         self,
-        reference: str = 'mock',
-        prefix: str = 'ndi_mock_',
+        reference: str = "mock",
+        prefix: str = "ndi_mock_",
         cleanup: bool = True,
     ):
         """
@@ -60,7 +60,7 @@ class MockSession(DirSession):
         if self._cleanup and Path(self._tmpdir).exists():
             shutil.rmtree(self._tmpdir, ignore_errors=True)
 
-    def __enter__(self) -> 'MockSession':
+    def __enter__(self) -> MockSession:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:

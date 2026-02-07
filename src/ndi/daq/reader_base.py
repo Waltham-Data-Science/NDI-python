@@ -6,13 +6,14 @@ the interface for reading data from data acquisition systems.
 """
 
 from __future__ import annotations
-from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Tuple, Union
+
+from abc import ABC
+from typing import Any
 
 import numpy as np
 
 from ..ido import Ido
-from ..time import ClockType, NO_TIME
+from ..time import NO_TIME, ClockType
 
 
 class DAQReader(Ido, ABC):
@@ -37,9 +38,9 @@ class DAQReader(Ido, ABC):
 
     def __init__(
         self,
-        identifier: Optional[str] = None,
-        session: Optional[Any] = None,
-        document: Optional[Any] = None,
+        identifier: str | None = None,
+        session: Any | None = None,
+        document: Any | None = None,
     ):
         """
         Create a new DAQReader.
@@ -54,14 +55,14 @@ class DAQReader(Ido, ABC):
 
         # Load from document if provided
         if document is not None:
-            doc_props = getattr(document, 'document_properties', document)
-            if hasattr(doc_props, 'base') and hasattr(doc_props.base, 'id'):
+            doc_props = getattr(document, "document_properties", document)
+            if hasattr(doc_props, "base") and hasattr(doc_props.base, "id"):
                 self.identifier = doc_props.base.id
 
     def epochclock(
         self,
-        epochfiles: List[str],
-    ) -> List[ClockType]:
+        epochfiles: list[str],
+    ) -> list[ClockType]:
         """
         Return the clock types for an epoch.
 
@@ -78,8 +79,8 @@ class DAQReader(Ido, ABC):
 
     def t0_t1(
         self,
-        epochfiles: List[str],
-    ) -> List[Tuple[float, float]]:
+        epochfiles: list[str],
+    ) -> list[tuple[float, float]]:
         """
         Return the start and end times for an epoch.
 
@@ -100,7 +101,7 @@ class DAQReader(Ido, ABC):
 
     def getingesteddocument(
         self,
-        epochfiles: List[str],
+        epochfiles: list[str],
         session: Any,
     ) -> Any:
         """
@@ -116,27 +117,26 @@ class DAQReader(Ido, ABC):
         Raises:
             AssertionError: If not exactly one document found
         """
-        from ..query import Query
         from ..file.navigator import FileNavigator
+        from ..query import Query
 
         epochid = FileNavigator.ingestedfiles_epochid(epochfiles)
 
         q = (
-            Query('').isa('daqreader_epochdata_ingested') &
-            Query('').depends_on('daqreader_id', self.id) &
-            (Query('epochid.epochid') == epochid)
+            Query("").isa("daqreader_epochdata_ingested")
+            & Query("").depends_on("daqreader_id", self.id)
+            & (Query("epochid.epochid") == epochid)
         )
         docs = session.database_search(q)
 
-        assert len(docs) == 1, \
-            f"Found {len(docs)} documents for {epochid}, needed exactly 1."
+        assert len(docs) == 1, f"Found {len(docs)} documents for {epochid}, needed exactly 1."
 
         return docs[0]
 
     def ingested2epochs_t0t1_epochclock(
         self,
         session: Any,
-    ) -> Dict[str, Dict[str, Any]]:
+    ) -> dict[str, dict[str, Any]]:
         """
         Create maps of all ingested epochs to t0t1 and epochclock.
 
@@ -149,9 +149,8 @@ class DAQReader(Ido, ABC):
         """
         from ..query import Query
 
-        q = (
-            Query('').isa('daqreader_epochdata_ingested') &
-            Query('').depends_on('daqreader_id', self.id)
+        q = Query("").isa("daqreader_epochdata_ingested") & Query("").depends_on(
+            "daqreader_id", self.id
         )
         d_ingested = session.database_search(q)
 
@@ -165,12 +164,12 @@ class DAQReader(Ido, ABC):
 
             # Extract epoch clock
             ec_list = []
-            for ec_str in et.get('epochclock', []):
+            for ec_str in et.get("epochclock", []):
                 ec_list.append(ClockType(ec_str) if isinstance(ec_str, str) else ec_str)
             epochclock_map[epochid] = ec_list
 
             # Extract t0_t1
-            t0t1_raw = et.get('t0_t1', [])
+            t0t1_raw = et.get("t0_t1", [])
             if not isinstance(t0t1_raw, list):
                 # Handle single entry case
                 t0t1_list = [tuple(t0t1_raw)]
@@ -179,15 +178,15 @@ class DAQReader(Ido, ABC):
             t0t1_map[epochid] = t0t1_list
 
         return {
-            't0t1': t0t1_map,
-            'epochclock': epochclock_map,
+            "t0t1": t0t1_map,
+            "epochclock": epochclock_map,
         }
 
     def epochclock_ingested(
         self,
-        epochfiles: List[str],
+        epochfiles: list[str],
         session: Any,
-    ) -> List[ClockType]:
+    ) -> list[ClockType]:
         """
         Return the clock types for an ingested epoch.
 
@@ -204,7 +203,7 @@ class DAQReader(Ido, ABC):
         et = doc.document_properties.daqreader_epochdata_ingested.epochtable
 
         ec_list = []
-        for ec_str in et.get('epochclock', []):
+        for ec_str in et.get("epochclock", []):
             if isinstance(ec_str, str):
                 ec_list.append(ClockType(ec_str))
             else:
@@ -214,9 +213,9 @@ class DAQReader(Ido, ABC):
 
     def t0_t1_ingested(
         self,
-        epochfiles: List[str],
+        epochfiles: list[str],
         session: Any,
-    ) -> List[Tuple[float, float]]:
+    ) -> list[tuple[float, float]]:
         """
         Return the start and end times for an ingested epoch.
 
@@ -232,7 +231,7 @@ class DAQReader(Ido, ABC):
         doc = self.getingesteddocument(epochfiles, session)
         et = doc.document_properties.daqreader_epochdata_ingested.epochtable
 
-        t0t1_raw = et.get('t0_t1', [])
+        t0t1_raw = et.get("t0_t1", [])
         if not isinstance(t0t1_raw, list):
             return [tuple(t0t1_raw)]
 
@@ -248,8 +247,8 @@ class DAQReader(Ido, ABC):
     def verifyepochprobemap(
         self,
         epochprobemap: Any,
-        epochfiles: List[str],
-    ) -> Tuple[bool, str]:
+        epochfiles: list[str],
+    ) -> tuple[bool, str]:
         """
         Verify that an epochprobemap is compatible with this reader.
 
@@ -265,7 +264,7 @@ class DAQReader(Ido, ABC):
 
     def ingest_epochfiles(
         self,
-        epochfiles: List[str],
+        epochfiles: list[str],
         epoch_id: str,
     ) -> Any:
         """
@@ -289,16 +288,16 @@ class DAQReader(Ido, ABC):
         t0t1 = self.t0_t1(epochfiles)
 
         epochtable = {
-            'epochclock': ec_strings,
-            't0_t1': t0t1,
+            "epochclock": ec_strings,
+            "t0_t1": t0t1,
         }
 
         doc = Document(
-            'ingestion/daqreader_epochdata_ingested',
-            daqreader_epochdata_ingested={'epochtable': epochtable},
-            epochid={'epochid': epoch_id},
+            "ingestion/daqreader_epochdata_ingested",
+            daqreader_epochdata_ingested={"epochtable": epochtable},
+            epochid={"epochid": epoch_id},
         )
-        doc.set_dependency_value('daqreader_id', self.id)
+        doc.set_dependency_value("daqreader_id", self.id)
 
         return doc
 
@@ -312,11 +311,11 @@ class DAQReader(Ido, ABC):
         from ..document import Document
 
         doc = Document(
-            'daq/daqreader',
+            "daq/daqreader",
             **{
-                'daqreader.ndi_daqreader_class': self.__class__.__name__,
-                'base.id': self.id,
-            }
+                "daqreader.ndi_daqreader_class": self.__class__.__name__,
+                "base.id": self.id,
+            },
         )
         return doc
 
@@ -328,16 +327,14 @@ class DAQReader(Ido, ABC):
             Query object for finding this reader
         """
         from ..query import Query
-        return Query('base.id') == self.id
+
+        return Query("base.id") == self.id
 
     def __eq__(self, other: Any) -> bool:
         """Test equality by class and ID."""
         if not isinstance(other, DAQReader):
             return False
-        return (
-            self.__class__.__name__ == other.__class__.__name__ and
-            self.id == other.id
-        )
+        return self.__class__.__name__ == other.__class__.__name__ and self.id == other.id
 
     def __hash__(self) -> int:
         """Hash by ID."""

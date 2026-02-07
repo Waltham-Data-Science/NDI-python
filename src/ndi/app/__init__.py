@@ -8,12 +8,13 @@ MATLAB equivalent: src/ndi/+ndi/app.m
 """
 
 from __future__ import annotations
+
 import platform
 import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional, Tuple
 
 from ..documentservice import DocumentService
 
@@ -41,14 +42,14 @@ class App(DocumentService):
 
     def __init__(
         self,
-        session: Optional[Session] = None,
-        name: str = 'generic',
+        session: Session | None = None,
+        name: str = "generic",
     ):
         self._session = session
         self._name = name
 
     @property
-    def session(self) -> Optional[Session]:
+    def session(self) -> Session | None:
         """Get the session."""
         return self._session
 
@@ -67,14 +68,14 @@ class App(DocumentService):
         Returns:
             Sanitized name string
         """
-        an = re.sub(r'[^0-9a-zA-Z_]', '_', self._name)
+        an = re.sub(r"[^0-9a-zA-Z_]", "_", self._name)
         if an and an[0].isdigit():
-            an = '_' + an
+            an = "_" + an
         if not an:
-            an = '_app'
+            an = "_app"
         return an
 
-    def version_url(self) -> Tuple[str, str]:
+    def version_url(self) -> tuple[str, str]:
         """
         Return (version, url) for this app.
 
@@ -88,27 +89,31 @@ class App(DocumentService):
             module_file = Path(sys.modules[self.__class__.__module__].__file__)
             parent_dir = str(module_file.parent)
             result = subprocess.run(
-                ['git', 'rev-parse', 'HEAD'],
-                capture_output=True, text=True,
-                cwd=parent_dir, timeout=5,
+                ["git", "rev-parse", "HEAD"],
+                capture_output=True,
+                text=True,
+                cwd=parent_dir,
+                timeout=5,
             )
             if result.returncode == 0:
                 version = result.stdout.strip()
             else:
-                version = '$Format:%H$'
+                version = "$Format:%H$"
 
             result_url = subprocess.run(
-                ['git', 'remote', 'get-url', 'origin'],
-                capture_output=True, text=True,
-                cwd=parent_dir, timeout=5,
+                ["git", "remote", "get-url", "origin"],
+                capture_output=True,
+                text=True,
+                cwd=parent_dir,
+                timeout=5,
             )
             if result_url.returncode == 0:
                 url = result_url.stdout.strip()
             else:
-                url = 'https://github.com/Waltham-Data-Science/NDI-python'
+                url = "https://github.com/Waltham-Data-Science/NDI-python"
         except Exception:
-            version = '$Format:%H$'
-            url = 'https://github.com/Waltham-Data-Science/NDI-python'
+            version = "$Format:%H$"
+            url = "https://github.com/Waltham-Data-Science/NDI-python"
 
         return version, url
 
@@ -124,16 +129,16 @@ class App(DocumentService):
         version, url = self.version_url()
 
         doc = Document(
-            'app',
+            "app",
             **{
-                'app.name': self._name,
-                'app.version': version,
-                'app.url': url,
-                'app.os': platform.system(),
-                'app.os_version': platform.version(),
-                'app.interpreter': 'Python',
-                'app.interpreter_version': sys.version.split()[0],
-            }
+                "app.name": self._name,
+                "app.version": version,
+                "app.url": url,
+                "app.os": platform.system(),
+                "app.os_version": platform.version(),
+                "app.interpreter": "Python",
+                "app.interpreter_version": sys.version.split()[0],
+            },
         )
 
         if self._session is not None:
@@ -152,10 +157,7 @@ class App(DocumentService):
         """
         from ..query import Query
 
-        q = (
-            Query('').isa('app') &
-            (Query('app.name') == self.varappname())
-        )
+        q = Query("").isa("app") & (Query("app.name") == self.varappname())
         return q
 
     def __repr__(self) -> str:

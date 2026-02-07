@@ -18,24 +18,24 @@ from ndi.document import Document
 from ndi.query import Query
 from ndi.session.dir import DirSession
 
-
 # ---------------------------------------------------------------------------
 # Helper — mirrors ndi.unittest.session.buildSession.addDocsWithFiles()
 # ---------------------------------------------------------------------------
 
+
 def _add_doc_with_file(session: DirSession, doc_number: int) -> None:
     """Add a demoNDI document with a file attachment to the session."""
-    docname = f'doc_{doc_number}'
+    docname = f"doc_{doc_number}"
     filepath = session.path / docname
     filepath.write_text(docname)
 
-    doc = Document('demoNDI')
+    doc = Document("demoNDI")
     props = doc.document_properties
-    props['base']['name'] = docname
-    props['demoNDI']['value'] = doc_number
-    props['base']['session_id'] = session.id()
+    props["base"]["name"] = docname
+    props["demoNDI"]["value"] = doc_number
+    props["base"]["session_id"] = session.id()
     doc = Document(props)
-    doc = doc.add_file('filename1.ext', str(filepath))
+    doc = doc.add_file("filename1.ext", str(filepath))
     session.database_add(doc)
 
 
@@ -43,6 +43,7 @@ def _add_doc_with_file(session: DirSession, doc_number: int) -> None:
 # TestDatasetConstructor
 # Port of: ndi.unittest.dataset.testDatasetConstructor
 # ===========================================================================
+
 
 class TestDatasetConstructor:
     """Test the constructor of Dataset."""
@@ -53,9 +54,9 @@ class TestDatasetConstructor:
         MATLAB equivalent: testConstructorWithEmptyDocs
         (MATLAB tests 2-arg and 3-arg; Python only has 2-arg and 1-arg.)
         """
-        ds_path = tmp_path / 'test_dataset'
+        ds_path = tmp_path / "test_dataset"
         ds_path.mkdir()
-        ds = Dataset(ds_path, 'test_ref')
+        ds = Dataset(ds_path, "test_ref")
 
         # Verify it's a valid Dataset
         assert isinstance(ds, Dataset)
@@ -68,12 +69,12 @@ class TestDatasetConstructor:
 
     def test_constructor_path_only(self, tmp_path):
         """Test Dataset(path) — reference derived from directory name."""
-        ds_path = tmp_path / 'my_dataset'
+        ds_path = tmp_path / "my_dataset"
         ds_path.mkdir()
         ds = Dataset(ds_path)
 
         assert isinstance(ds, Dataset)
-        assert ds.reference == 'my_dataset'
+        assert ds.reference == "my_dataset"
         assert ds.getpath() == ds_path
 
         ds_id = ds.id()
@@ -82,13 +83,13 @@ class TestDatasetConstructor:
 
     def test_two_datasets_have_different_ids(self, tmp_path):
         """Two separate datasets should have unique IDs."""
-        ds1_path = tmp_path / 'ds1'
+        ds1_path = tmp_path / "ds1"
         ds1_path.mkdir()
-        ds1 = Dataset(ds1_path, 'ref1')
+        ds1 = Dataset(ds1_path, "ref1")
 
-        ds2_path = tmp_path / 'ds2'
+        ds2_path = tmp_path / "ds2"
         ds2_path.mkdir()
-        ds2 = Dataset(ds2_path, 'ref2')
+        ds2 = Dataset(ds2_path, "ref2")
 
         assert ds1.id() != ds2.id()
 
@@ -97,6 +98,7 @@ class TestDatasetConstructor:
 # TestDatasetBuild
 # Port of: ndi.unittest.dataset.testDatasetBuild
 # ===========================================================================
+
 
 class TestDatasetBuild:
     """Test that buildDataset fixture creates a valid Dataset + Session."""
@@ -122,34 +124,32 @@ class TestDatasetBuild:
 
         # Session should be in dataset's session list
         sessions = dataset.session_list()
-        session_ids = [s['session_id'] for s in sessions]
-        assert session.id() in session_ids, \
-            'Session ID should be in dataset session list'
+        session_ids = [s["session_id"] for s in sessions]
+        assert session.id() in session_ids, "Session ID should be in dataset session list"
 
         # Should find exactly 5 demoNDI documents
-        q = Query('').isa('demoNDI')
+        q = Query("").isa("demoNDI")
         docs = dataset.database_search(q)
-        assert len(docs) == 5, 'Should find 5 demoNDI documents in the dataset'
+        assert len(docs) == 5, "Should find 5 demoNDI documents in the dataset"
 
         # Verify content of each document
         for i in range(1, 6):
-            docname = f'doc_{i}'
+            docname = f"doc_{i}"
             found = False
             for doc in docs:
-                name = doc.document_properties.get('base', {}).get('name', '')
+                name = doc.document_properties.get("base", {}).get("name", "")
                 if name == docname:
                     found = True
                     # Read binary file associated with the document
-                    fid = dataset.database_openbinarydoc(doc, 'filename1.ext')
+                    fid = dataset.database_openbinarydoc(doc, "filename1.ext")
                     content = fid.read()
                     dataset.database_closebinarydoc(fid)
                     # Content may be bytes or str
                     if isinstance(content, bytes):
-                        content = content.decode('utf-8')
-                    assert content == docname, \
-                        f'Content of {docname} should match'
+                        content = content.decode("utf-8")
+                    assert content == docname, f"Content of {docname} should match"
                     break
-            assert found, f'Document {docname} should be found'
+            assert found, f"Document {docname} should be found"
 
 
 # ===========================================================================
@@ -160,6 +160,7 @@ class TestDatasetBuild:
 # Python session_list() returns List[Dict] with keys:
 #   session_id, session_reference, is_linked, document_id
 # ===========================================================================
+
 
 class TestSessionList:
     """Test the session_list method of Dataset."""
@@ -179,40 +180,39 @@ class TestSessionList:
         entry = sessions[0]
 
         # 1. Verify session_reference
-        assert entry['session_reference'] == 'exp_demo', \
-            'Session reference should match expected value'
+        assert (
+            entry["session_reference"] == "exp_demo"
+        ), "Session reference should match expected value"
 
         # 2. Verify session_id
-        assert entry['session_id'] == session.id(), \
-            'Session ID should match the ingested session ID'
+        assert (
+            entry["session_id"] == session.id()
+        ), "Session ID should match the ingested session ID"
 
         # 3. Verify document_id is present
-        assert entry['document_id'], \
-            'document_id should be non-empty'
+        assert entry["document_id"], "document_id should be non-empty"
 
         # 4. Verify is_linked is False (this was ingested)
-        assert entry['is_linked'] is False
+        assert entry["is_linked"] is False
 
         # 5. Verify the session_in_a_dataset document exists and is correct
-        q = Query('base.id') == entry['document_id']
+        q = Query("base.id") == entry["document_id"]
         found = dataset.database_search(q)
-        assert len(found) == 1, \
-            'Should find exactly one document for the session_in_a_dataset ID'
+        assert len(found) == 1, "Should find exactly one document for the session_in_a_dataset ID"
 
         doc = found[0]
-        props = doc.document_properties.get('session_in_a_dataset', {})
+        props = doc.document_properties.get("session_in_a_dataset", {})
 
         # Check session_id in the document matches
-        assert props.get('session_id') == session.id(), \
-            'session_in_a_dataset document should have the correct session_id'
+        assert (
+            props.get("session_id") == session.id()
+        ), "session_in_a_dataset document should have the correct session_id"
 
         # Check session_reference matches
-        assert props.get('session_reference') == 'exp_demo', \
-            'session_reference should match'
+        assert props.get("session_reference") == "exp_demo", "session_reference should match"
 
         # Check session_creator
-        assert props.get('session_creator') == 'DirSession', \
-            'session_creator should be DirSession'
+        assert props.get("session_creator") == "DirSession", "session_creator should be DirSession"
 
 
 # ===========================================================================
@@ -225,6 +225,7 @@ class TestSessionList:
 # - MATLAB raises specific error IDs; Python raises ValueError
 # - MATLAB raises on nonexistent session; Python returns self silently
 # ===========================================================================
+
 
 class TestDeleteIngestedSession:
     """Test the delete_ingested_session method of Dataset."""
@@ -239,27 +240,25 @@ class TestDeleteIngestedSession:
 
         # Verify session exists initially
         sessions = dataset.session_list()
-        ids = [s['session_id'] for s in sessions]
-        assert session_id in ids, 'Session ID should be in dataset'
+        ids = [s["session_id"] for s in sessions]
+        assert session_id in ids, "Session ID should be in dataset"
 
         # Verify documents exist
-        q = Query('base.session_id') == session_id
+        q = Query("base.session_id") == session_id
         docs = dataset.database_search(q)
-        assert len(docs) > 0, 'Session documents should exist'
+        assert len(docs) > 0, "Session documents should exist"
 
         # Delete the session
         dataset.delete_ingested_session(session_id, are_you_sure=True)
 
         # Verify session is removed from list
         sessions_after = dataset.session_list()
-        ids_after = [s['session_id'] for s in sessions_after]
-        assert session_id not in ids_after, \
-            'Session ID should NOT be in dataset after deletion'
+        ids_after = [s["session_id"] for s in sessions_after]
+        assert session_id not in ids_after, "Session ID should NOT be in dataset after deletion"
 
         # Verify documents are removed
         docs_after = dataset.database_search(q)
-        assert len(docs_after) == 0, \
-            'Session documents should be gone after deletion'
+        assert len(docs_after) == 0, "Session documents should be gone after deletion"
 
     def test_delete_not_confirmed(self, build_dataset):
         """Deleting without are_you_sure=True raises ValueError.
@@ -275,9 +274,8 @@ class TestDeleteIngestedSession:
 
         # Verify session still exists
         sessions = dataset.session_list()
-        ids = [s['session_id'] for s in sessions]
-        assert session_id in ids, \
-            'Session ID should still be in dataset after failed delete'
+        ids = [s["session_id"] for s in sessions]
+        assert session_id in ids, "Session ID should still be in dataset after failed delete"
 
     def test_delete_linked_session_error(self, build_dataset, tmp_path):
         """Deleting a linked session raises ValueError.
@@ -288,22 +286,20 @@ class TestDeleteIngestedSession:
         dataset, _ = build_dataset
 
         # Create and link a separate session
-        linked_dir = tmp_path / 'linked_session'
+        linked_dir = tmp_path / "linked_session"
         linked_dir.mkdir()
-        linked_session = DirSession('linked_ref', linked_dir)
+        linked_session = DirSession("linked_ref", linked_dir)
 
         dataset.add_linked_session(linked_session)
 
         # Verify it was added
         sessions = dataset.session_list()
-        ids = [s['session_id'] for s in sessions]
+        ids = [s["session_id"] for s in sessions]
         assert linked_session.id() in ids
 
         # Attempt to delete a linked session — should fail
         with pytest.raises(ValueError, match="linked"):
-            dataset.delete_ingested_session(
-                linked_session.id(), are_you_sure=True
-            )
+            dataset.delete_ingested_session(linked_session.id(), are_you_sure=True)
 
     def test_delete_nonexistent_session(self, build_dataset):
         """Deleting a nonexistent session.
@@ -314,7 +310,7 @@ class TestDeleteIngestedSession:
         """
         dataset, _ = build_dataset
         # Should not raise
-        dataset.delete_ingested_session('fake_id_xyz', are_you_sure=True)
+        dataset.delete_ingested_session("fake_id_xyz", are_you_sure=True)
 
 
 # ===========================================================================
@@ -329,6 +325,7 @@ class TestDeleteIngestedSession:
 # - Python doesn't delete session files — only removes from dataset
 # ===========================================================================
 
+
 class TestUnlinkSession:
     """Test the unlink_session method of Dataset."""
 
@@ -338,34 +335,34 @@ class TestUnlinkSession:
         MATLAB equivalent: testUnlinkSession.testUnlinkLinkedSession
         """
         # Create session with docs
-        session_dir = tmp_path / 'sess_unlink'
+        session_dir = tmp_path / "sess_unlink"
         session_dir.mkdir()
-        session = DirSession('exp_unlink', session_dir)
+        session = DirSession("exp_unlink", session_dir)
         _add_doc_with_file(session, 1)
 
         # Create dataset
-        ds_dir = tmp_path / 'ds_unlink'
+        ds_dir = tmp_path / "ds_unlink"
         ds_dir.mkdir()
-        dataset = Dataset(ds_dir, 'ds_unlink')
+        dataset = Dataset(ds_dir, "ds_unlink")
         dataset.add_linked_session(session)
 
         # Verify session is linked
         sessions = dataset.session_list()
         assert len(sessions) == 1
-        assert sessions[0]['session_id'] == session.id()
-        assert sessions[0]['is_linked'] is True
+        assert sessions[0]["session_id"] == session.id()
+        assert sessions[0]["is_linked"] is True
 
         # Unlink
         dataset.unlink_session(session.id())
 
         # Verify session is gone from dataset
         sessions_after = dataset.session_list()
-        assert len(sessions_after) == 0, \
-            'Session list should be empty after unlink'
+        assert len(sessions_after) == 0, "Session list should be empty after unlink"
 
         # Session files should still exist
-        assert (session.path / '.ndi').exists(), \
-            'Session .ndi directory should still exist after unlink'
+        assert (
+            session.path / ".ndi"
+        ).exists(), "Session .ndi directory should still exist after unlink"
 
     def test_unlink_with_remove_documents(self, tmp_path):
         """Unlink with remove_documents=True removes session docs from dataset.
@@ -377,22 +374,22 @@ class TestUnlinkSession:
         It only removes documents from the dataset's internal database.
         """
         # Create session with docs
-        session_dir = tmp_path / 'sess_rm'
+        session_dir = tmp_path / "sess_rm"
         session_dir.mkdir()
-        session = DirSession('exp_rm', session_dir)
+        session = DirSession("exp_rm", session_dir)
         for i in range(1, 4):
             _add_doc_with_file(session, i)
 
         # Create dataset, ingest session
-        ds_dir = tmp_path / 'ds_rm'
+        ds_dir = tmp_path / "ds_rm"
         ds_dir.mkdir()
-        dataset = Dataset(ds_dir, 'ds_rm')
+        dataset = Dataset(ds_dir, "ds_rm")
         dataset.add_ingested_session(session)
 
         session_id = session.id()
 
         # Verify docs were ingested
-        q = Query('base.session_id') == session_id
+        q = Query("base.session_id") == session_id
         docs_before = dataset.database_search(q)
         assert len(docs_before) > 0
 
@@ -401,13 +398,11 @@ class TestUnlinkSession:
 
         # Verify session removed from list
         sessions_after = dataset.session_list()
-        assert len(sessions_after) == 0, \
-            'Session list should be empty'
+        assert len(sessions_after) == 0, "Session list should be empty"
 
         # Verify documents removed from dataset
         docs_after = dataset.database_search(q)
-        assert len(docs_after) == 0, \
-            'Session documents should be removed'
+        assert len(docs_after) == 0, "Session documents should be removed"
 
     def test_unlink_ingested_session(self, tmp_path):
         """Unlinking an ingested session (without remove_documents).
@@ -418,15 +413,15 @@ class TestUnlinkSession:
         but ingested documents remain in the database.
         """
         # Create session
-        session_dir = tmp_path / 'sess_ing'
+        session_dir = tmp_path / "sess_ing"
         session_dir.mkdir()
-        session = DirSession('exp_ing', session_dir)
+        session = DirSession("exp_ing", session_dir)
         _add_doc_with_file(session, 1)
 
         # Create dataset, ingest
-        ds_dir = tmp_path / 'ds_ing'
+        ds_dir = tmp_path / "ds_ing"
         ds_dir.mkdir()
-        dataset = Dataset(ds_dir, 'ds_ing')
+        dataset = Dataset(ds_dir, "ds_ing")
         dataset.add_ingested_session(session)
 
         session_id = session.id()
@@ -444,12 +439,12 @@ class TestUnlinkSession:
         MATLAB equivalent: testUnlinkSession.testUnlinkNotConfirmedError
         NOTE: Python doesn't require areYouSure for unlink.
         """
-        ds_dir = tmp_path / 'ds_empty'
+        ds_dir = tmp_path / "ds_empty"
         ds_dir.mkdir()
-        dataset = Dataset(ds_dir, 'ds_empty')
+        dataset = Dataset(ds_dir, "ds_empty")
 
         # Should not raise
-        dataset.unlink_session('nonexistent_id')
+        dataset.unlink_session("nonexistent_id")
 
         # Verify still empty
         assert len(dataset.session_list()) == 0
@@ -464,6 +459,7 @@ class TestUnlinkSession:
 # and create a synthetic equivalent.
 # ===========================================================================
 
+
 class TestOldDataset:
     """Test opening a pre-existing dataset (backward compatibility)."""
 
@@ -474,15 +470,15 @@ class TestOldDataset:
         (Adapted: MATLAB opens a shipped example; we create + reopen.)
         """
         # 1. Create a dataset with an ingested session
-        session_dir = tmp_path / 'old_session'
+        session_dir = tmp_path / "old_session"
         session_dir.mkdir()
-        session = DirSession('old_exp', session_dir)
+        session = DirSession("old_exp", session_dir)
         _add_doc_with_file(session, 1)
         _add_doc_with_file(session, 2)
 
-        ds_dir = tmp_path / 'old_dataset'
+        ds_dir = tmp_path / "old_dataset"
         ds_dir.mkdir()
-        dataset = Dataset(ds_dir, 'old_ds')
+        dataset = Dataset(ds_dir, "old_ds")
         dataset.add_ingested_session(session)
 
         # Remember the IDs
@@ -495,19 +491,18 @@ class TestOldDataset:
 
         # 3. Reopen the dataset from path only
         reopened = Dataset(ds_dir)
-        assert reopened.id() == original_ds_id, \
-            'Reopened dataset should have same ID'
+        assert reopened.id() == original_ds_id, "Reopened dataset should have same ID"
 
         # 4. Verify session list
         sessions = reopened.session_list()
-        assert len(sessions) >= 1, \
-            'Reopened dataset should have at least 1 session'
+        assert len(sessions) >= 1, "Reopened dataset should have at least 1 session"
 
-        session_ids = [s['session_id'] for s in sessions]
-        assert original_session_id in session_ids, \
-            'Original session should still be in the reopened dataset'
+        session_ids = [s["session_id"] for s in sessions]
+        assert (
+            original_session_id in session_ids
+        ), "Original session should still be in the reopened dataset"
 
         # 5. Verify documents are still accessible
-        q = Query('').isa('demoNDI')
+        q = Query("").isa("demoNDI")
         docs = reopened.database_search(q)
-        assert len(docs) == 2, 'Should find 2 demoNDI documents'
+        assert len(docs) == 2, "Should find 2 demoNDI documents"

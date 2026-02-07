@@ -8,14 +8,14 @@ MATLAB equivalents: +ndi/+cloud/+api/+files/*.m,
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..client import CloudClient
 
 
 def get_upload_url(
-    client: 'CloudClient',
+    client: CloudClient,
     org_id: str,
     dataset_id: str,
     file_uid: str,
@@ -25,16 +25,16 @@ def get_upload_url(
     Returns a presigned S3 URL for uploading.
     """
     result = client.get(
-        '/datasets/{organizationId}/{datasetId}/files/{file_uid}',
+        "/datasets/{organizationId}/{datasetId}/files/{file_uid}",
         organizationId=org_id,
         datasetId=dataset_id,
         file_uid=file_uid,
     )
-    return result.get('url', '') if isinstance(result, dict) else ''
+    return result.get("url", "") if isinstance(result, dict) else ""
 
 
 def get_bulk_upload_url(
-    client: 'CloudClient',
+    client: CloudClient,
     org_id: str,
     dataset_id: str,
 ) -> str:
@@ -43,16 +43,16 @@ def get_bulk_upload_url(
     Returns a presigned S3 URL for bulk file upload.
     """
     result = client.post(
-        '/datasets/{organizationId}/{datasetId}/files/bulk',
+        "/datasets/{organizationId}/{datasetId}/files/bulk",
         organizationId=org_id,
         datasetId=dataset_id,
     )
-    return result.get('url', '') if isinstance(result, dict) else ''
+    return result.get("url", "") if isinstance(result, dict) else ""
 
 
 def put_file(
     url: str,
-    file_path: Union[str, Path],
+    file_path: str | Path,
     timeout: int = 120,
 ) -> bool:
     """PUT a local file to a presigned S3 URL.
@@ -69,22 +69,21 @@ def put_file(
         CloudUploadError: On failure.
     """
     import requests
+
     from ..exceptions import CloudUploadError
 
     file_path = Path(file_path)
-    with open(file_path, 'rb') as fh:
+    with open(file_path, "rb") as fh:
         resp = requests.put(
             url,
             data=fh,
-            headers={'Content-Type': 'application/octet-stream'},
+            headers={"Content-Type": "application/octet-stream"},
             timeout=timeout,
         )
 
     if resp.status_code == 200:
         return True
-    raise CloudUploadError(
-        f'File upload failed (HTTP {resp.status_code}): {resp.text}'
-    )
+    raise CloudUploadError(f"File upload failed (HTTP {resp.status_code}): {resp.text}")
 
 
 def put_file_bytes(
@@ -106,25 +105,24 @@ def put_file_bytes(
         CloudUploadError: On failure.
     """
     import requests
+
     from ..exceptions import CloudUploadError
 
     resp = requests.put(
         url,
         data=data,
-        headers={'Content-Type': 'application/octet-stream'},
+        headers={"Content-Type": "application/octet-stream"},
         timeout=timeout,
     )
 
     if resp.status_code == 200:
         return True
-    raise CloudUploadError(
-        f'Bytes upload failed (HTTP {resp.status_code}): {resp.text}'
-    )
+    raise CloudUploadError(f"Bytes upload failed (HTTP {resp.status_code}): {resp.text}")
 
 
 def get_file(
     url: str,
-    target_path: Union[str, Path],
+    target_path: str | Path,
     timeout: int = 120,
 ) -> bool:
     """Download a file from a presigned URL.
@@ -138,7 +136,7 @@ def get_file(
 
     resp = requests.get(url, timeout=timeout, stream=True)
     if resp.status_code == 200:
-        with open(target_path, 'wb') as fh:
+        with open(target_path, "wb") as fh:
             for chunk in resp.iter_content(chunk_size=8192):
                 fh.write(chunk)
         return True
@@ -146,9 +144,9 @@ def get_file(
 
 
 def list_files(
-    client: 'CloudClient',
+    client: CloudClient,
     dataset_id: str,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """List all files associated with a cloud dataset.
 
     Fetches the dataset metadata and extracts the files list.
@@ -158,27 +156,27 @@ def list_files(
     from . import datasets as ds_api
 
     ds = ds_api.get_dataset(client, dataset_id)
-    return ds.get('files', []) if isinstance(ds, dict) else []
+    return ds.get("files", []) if isinstance(ds, dict) else []
 
 
 def get_file_details(
-    client: 'CloudClient',
+    client: CloudClient,
     dataset_id: str,
     file_uid: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Get detail info (including download URL) for a file.
 
     MATLAB equivalent: +cloud/+api/+files/getFileDetails.m
     """
     return client.get(
-        '/datasets/{datasetId}/files/{file_uid}/detail',
+        "/datasets/{datasetId}/files/{file_uid}/detail",
         datasetId=dataset_id,
         file_uid=file_uid,
     )
 
 
 def get_file_collection_upload_url(
-    client: 'CloudClient',
+    client: CloudClient,
     org_id: str,
     dataset_id: str,
 ) -> str:
@@ -187,8 +185,8 @@ def get_file_collection_upload_url(
     MATLAB equivalent: +cloud/+api/+files/getFileCollectionUploadURL.m
     """
     result = client.get(
-        '/datasets/{organizationId}/{datasetId}/files/bulk',
+        "/datasets/{organizationId}/{datasetId}/files/bulk",
         organizationId=org_id,
         datasetId=dataset_id,
     )
-    return result.get('url', '') if isinstance(result, dict) else ''
+    return result.get("url", "") if isinstance(result, dict) else ""

@@ -8,13 +8,14 @@ MATLAB equivalent: src/ndi/+ndi/+daq/+system/mfdaq.m
 """
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, Tuple, Union
+
+from typing import Any
 
 import numpy as np
 
-from .system import DAQSystem
+from ..time import DEV_LOCAL_TIME, ClockType
 from .mfdaq import MFDAQReader, standardize_channel_type
-from ..time import ClockType, DEV_LOCAL_TIME
+from .system import DAQSystem
 
 
 class DAQSystemMFDAQ(DAQSystem):
@@ -35,13 +36,17 @@ class DAQSystemMFDAQ(DAQSystem):
     """
 
     CHANNEL_TYPES = {
-        'analog_in': 'ai', 'analog_out': 'ao',
-        'digital_in': 'di', 'digital_out': 'do',
-        'auxiliary_in': 'ax', 'time': 't',
-        'event': 'e', 'marker': 'mk',
+        "analog_in": "ai",
+        "analog_out": "ao",
+        "digital_in": "di",
+        "digital_out": "do",
+        "auxiliary_in": "ax",
+        "time": "t",
+        "event": "e",
+        "marker": "mk",
     }
 
-    def epochclock(self, epoch_number: int) -> List[ClockType]:
+    def epochclock(self, epoch_number: int) -> list[ClockType]:
         """
         Return clock types for an epoch.
 
@@ -55,7 +60,7 @@ class DAQSystemMFDAQ(DAQSystem):
         """
         return [DEV_LOCAL_TIME]
 
-    def t0_t1(self, epoch_number: int) -> List[Tuple[float, float]]:
+    def t0_t1(self, epoch_number: int) -> list[tuple[float, float]]:
         """
         Return start/end times for an epoch.
 
@@ -72,7 +77,7 @@ class DAQSystemMFDAQ(DAQSystem):
             return self._daqreader.t0_t1(epochfiles)
         return [(np.nan, np.nan)]
 
-    def getchannelsepoch(self, epoch_number: int) -> List[Any]:
+    def getchannelsepoch(self, epoch_number: int) -> list[Any]:
         """
         Get available channels for an epoch.
 
@@ -91,7 +96,7 @@ class DAQSystemMFDAQ(DAQSystem):
             return self._daqreader.getchannelsepoch(epochfiles)
         return []
 
-    def getchannels(self) -> List[Any]:
+    def getchannels(self) -> list[Any]:
         """
         Get all available channels across all epochs.
 
@@ -103,7 +108,7 @@ class DAQSystemMFDAQ(DAQSystem):
         seen = set()
 
         for entry in et:
-            epoch_num = entry['epoch_number']
+            epoch_num = entry["epoch_number"]
             channels = self.getchannelsepoch(epoch_num)
             for ch in channels:
                 key = (ch.name, ch.type)
@@ -115,8 +120,8 @@ class DAQSystemMFDAQ(DAQSystem):
 
     def readchannels_epochsamples(
         self,
-        channeltype: Union[str, List[str]],
-        channel: Union[int, List[int]],
+        channeltype: str | list[str],
+        channel: int | list[int],
         epoch_number: int,
         s0: int,
         s1: int,
@@ -146,12 +151,12 @@ class DAQSystemMFDAQ(DAQSystem):
 
     def readevents_epochsamples(
         self,
-        channeltype: Union[str, List[str]],
-        channel: Union[int, List[int]],
+        channeltype: str | list[str],
+        channel: int | list[int],
         epoch_number: int,
         t0: float,
         t1: float,
-    ) -> Tuple:
+    ) -> tuple:
         """
         Read event data for an epoch.
 
@@ -170,16 +175,14 @@ class DAQSystemMFDAQ(DAQSystem):
 
         epochfiles = self._filenavigator.getepochfiles(epoch_number)
         if isinstance(self._daqreader, MFDAQReader):
-            return self._daqreader.readevents_epochsamples(
-                channeltype, channel, epochfiles, t0, t1
-            )
+            return self._daqreader.readevents_epochsamples(channeltype, channel, epochfiles, t0, t1)
         raise TypeError("DAQ reader is not an MFDAQReader")
 
     def samplerate(
         self,
         epoch_number: int,
-        channeltype: Union[str, List[str]],
-        channel: Union[int, List[int]],
+        channeltype: str | list[str],
+        channel: int | list[int],
     ) -> np.ndarray:
         """
         Get sample rate for channels in an epoch.
@@ -202,8 +205,8 @@ class DAQSystemMFDAQ(DAQSystem):
 
     def epochsamples2times(
         self,
-        channeltype: Union[str, List[str]],
-        channel: Union[int, List[int]],
+        channeltype: str | list[str],
+        channel: int | list[int],
         epoch_number: int,
         samples: np.ndarray,
     ) -> np.ndarray:
@@ -224,15 +227,13 @@ class DAQSystemMFDAQ(DAQSystem):
 
         epochfiles = self._filenavigator.getepochfiles(epoch_number)
         if isinstance(self._daqreader, MFDAQReader):
-            return self._daqreader.epochsamples2times(
-                channeltype, channel, epochfiles, samples
-            )
+            return self._daqreader.epochsamples2times(channeltype, channel, epochfiles, samples)
         raise TypeError("DAQ reader is not an MFDAQReader")
 
     def epochtimes2samples(
         self,
-        channeltype: Union[str, List[str]],
-        channel: Union[int, List[int]],
+        channeltype: str | list[str],
+        channel: int | list[int],
         epoch_number: int,
         times: np.ndarray,
     ) -> np.ndarray:
@@ -253,17 +254,21 @@ class DAQSystemMFDAQ(DAQSystem):
 
         epochfiles = self._filenavigator.getepochfiles(epoch_number)
         if isinstance(self._daqreader, MFDAQReader):
-            return self._daqreader.epochtimes2samples(
-                channeltype, channel, epochfiles, times
-            )
+            return self._daqreader.epochtimes2samples(channeltype, channel, epochfiles, times)
         raise TypeError("DAQ reader is not an MFDAQReader")
 
     @staticmethod
-    def mfdaq_channeltypes() -> List[str]:
+    def mfdaq_channeltypes() -> list[str]:
         """Get list of supported MFDAQ channel types."""
         return [
-            'analog_in', 'analog_out', 'digital_in', 'digital_out',
-            'time', 'auxiliary_in', 'event', 'marker',
+            "analog_in",
+            "analog_out",
+            "digital_in",
+            "digital_out",
+            "time",
+            "auxiliary_in",
+            "event",
+            "marker",
         ]
 
     @staticmethod
@@ -278,10 +283,14 @@ class DAQSystemMFDAQ(DAQSystem):
             Abbreviated prefix (e.g., 'ai' for 'analog_in')
         """
         prefixes = {
-            'analog_in': 'ai', 'analog_out': 'ao',
-            'digital_in': 'di', 'digital_out': 'do',
-            'auxiliary_in': 'ax', 'time': 't',
-            'event': 'e', 'marker': 'mk',
+            "analog_in": "ai",
+            "analog_out": "ao",
+            "digital_in": "di",
+            "digital_out": "do",
+            "auxiliary_in": "ax",
+            "time": "t",
+            "event": "e",
+            "marker": "mk",
         }
         return prefixes.get(standardize_channel_type(channeltype), channeltype)
 

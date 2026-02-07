@@ -7,8 +7,9 @@ the NDI database.
 """
 
 from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from typing import Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .document import Document
@@ -37,7 +38,7 @@ class DocumentService(ABC):
     """
 
     @abstractmethod
-    def newdocument(self) -> 'Document':
+    def newdocument(self) -> Document:
         """
         Create a new document for this object.
 
@@ -47,7 +48,7 @@ class DocumentService(ABC):
         pass
 
     @abstractmethod
-    def searchquery(self) -> 'Query':
+    def searchquery(self) -> Query:
         """
         Create a query to find this object in the database.
 
@@ -56,7 +57,7 @@ class DocumentService(ABC):
         """
         pass
 
-    def load_element_doc(self, session: Any) -> Optional['Document']:
+    def load_element_doc(self, session: Any) -> Document | None:
         """
         Load this object's document from the database.
 
@@ -72,7 +73,7 @@ class DocumentService(ABC):
             return docs[0]
         return None
 
-    def document_id(self, session: Any) -> Optional[str]:
+    def document_id(self, session: Any) -> str | None:
         """
         Get the document ID for this object.
 

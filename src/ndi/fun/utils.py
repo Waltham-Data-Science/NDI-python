@@ -10,10 +10,9 @@ from __future__ import annotations
 import random
 import re
 from datetime import datetime, timezone
-from typing import Tuple
 
 
-def channelname2prefixnumber(channelname: str) -> Tuple[str, int]:
+def channelname2prefixnumber(channelname: str) -> tuple[str, int]:
     """Parse channel name into prefix and number.
 
     MATLAB equivalent: ndi.fun.channelname2prefixnumber
@@ -27,7 +26,7 @@ def channelname2prefixnumber(channelname: str) -> Tuple[str, int]:
     Raises:
         ValueError: If no digits found or name starts with a digit.
     """
-    m = re.search(r'\d', channelname)
+    m = re.search(r"\d", channelname)
     if m is None:
         raise ValueError(f"No digits found in channel name '{channelname}'")
     idx = m.start()
@@ -54,18 +53,18 @@ def name2variable_name(name: str) -> str:
         camelCase variable name.
     """
     if not name:
-        return ''
+        return ""
     # Replace non-alphanumeric (except underscore) with space
-    cleaned = re.sub(r'[^a-zA-Z0-9_]', ' ', name)
+    cleaned = re.sub(r"[^a-zA-Z0-9_]", " ", name)
     words = cleaned.split()
     if not words:
-        return ''
+        return ""
     # CamelCase: first word lowercase, rest capitalised
     parts = [words[0].lower()] + [w.capitalize() for w in words[1:]]
-    result = ''.join(parts)
+    result = "".join(parts)
     # Prepend 'x' if starts with digit
     if result and result[0].isdigit():
-        result = 'x' + result
+        result = "x" + result
     return result
 
 
@@ -97,7 +96,7 @@ def timestamp() -> str:
         ISO-style UTC timestamp string.
     """
     now = datetime.now(timezone.utc)
-    ts = now.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3]
+    ts = now.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
     # Leap-second guard (Python doesn't really produce :60 but be safe)
-    ts = ts.replace(':60.', ':59.999')
+    ts = ts.replace(":60.", ":59.999")
     return ts

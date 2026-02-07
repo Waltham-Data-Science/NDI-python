@@ -1,7 +1,7 @@
 """Tests for ndi.ido module."""
 
-import pytest
 import re
+
 from ndi import Ido
 
 
@@ -19,12 +19,12 @@ class TestIdo:
         """Test that ID follows expected format (hex_hex)."""
         ido = Ido()
         # ID should be in format: hexstring_hexstring
-        assert '_' in ido.id
-        parts = ido.id.split('_')
+        assert "_" in ido.id
+        parts = ido.id.split("_")
         assert len(parts) == 2
         # Both parts should be valid hex strings
         for part in parts:
-            assert re.match(r'^[0-9a-f]+$', part), f"Part '{part}' is not valid hex"
+            assert re.match(r"^[0-9a-f]+$", part), f"Part '{part}' is not valid hex"
 
     def test_unique_ids(self):
         """Test that multiple Ido instances have unique IDs."""
@@ -46,7 +46,7 @@ class TestIdo:
         """Test repr shows class name and ID."""
         ido = Ido()
         repr_str = repr(ido)
-        assert 'Ido(' in repr_str
+        assert "Ido(" in repr_str
         assert ido.id in repr_str
 
     def test_id_sortable_by_time(self):

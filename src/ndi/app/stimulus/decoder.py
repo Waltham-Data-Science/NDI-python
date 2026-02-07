@@ -8,7 +8,8 @@ MATLAB equivalent: src/ndi/+ndi/+app/+stimulus/decoder.m
 """
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+from typing import TYPE_CHECKING, Any
 
 from .. import App
 
@@ -30,14 +31,14 @@ class StimulusDecoder(App):
         >>> docs = decoder.parse_stimuli(stim_element)
     """
 
-    def __init__(self, session: Optional['Session'] = None):
-        super().__init__(session=session, name='ndi_app_stimulus_decoder')
+    def __init__(self, session: Session | None = None):
+        super().__init__(session=session, name="ndi_app_stimulus_decoder")
 
     def parse_stimuli(
         self,
         stimulus_element: Any,
         reset: bool = False,
-    ) -> List['Document']:
+    ) -> list[Document]:
         """
         Parse stimulus presentations from a stimulus element.
 
@@ -59,8 +60,8 @@ class StimulusDecoder(App):
 
     def load_presentation_time(
         self,
-        stim_doc: 'Document',
-    ) -> Optional[Dict[str, Any]]:
+        stim_doc: Document,
+    ) -> dict[str, Any] | None:
         """
         Load presentation timing from a stimulus_presentation document.
 
@@ -80,9 +81,10 @@ class StimulusDecoder(App):
         if self._session is None:
             return
         from ...query import Query
-        q = Query('').isa('stimulus_presentation')
-        if hasattr(stimulus_element, 'id'):
-            q = q & Query('').depends_on('stimulus_element_id', stimulus_element.id)
+
+        q = Query("").isa("stimulus_presentation")
+        if hasattr(stimulus_element, "id"):
+            q = q & Query("").depends_on("stimulus_element_id", stimulus_element.id)
         docs = self._session.database_search(q)
         for doc in docs:
             self._session.database_remove(doc)

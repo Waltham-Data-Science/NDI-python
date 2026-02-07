@@ -6,7 +6,6 @@ Submodules:
     crossref — Crossref XML/metadata generation
 """
 
-from . import doi
-from . import crossref
+from . import crossref, doi
 
-__all__ = ['doi', 'crossref']
+__all__ = ["doi", "crossref"]

@@ -9,9 +9,10 @@ MATLAB equivalent: src/ndi/+ndi/+daq/+metadatareader/NewStimStims.m
 """
 
 from __future__ import annotations
+
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ..metadatareader import MetadataReader
 
@@ -32,14 +33,14 @@ class NewStimStimsReader(MetadataReader):
         >>> params = reader.readmetadata(['data.rhd', 'stims.mat'])
     """
 
-    STIM_FILE_PATTERN = r'stims\.mat$'
+    STIM_FILE_PATTERN = r"stims\.mat$"
 
     def __init__(
         self,
-        tsv_pattern: str = '',
-        identifier: Optional[str] = None,
-        session: Optional[Any] = None,
-        document: Optional[Any] = None,
+        tsv_pattern: str = "",
+        identifier: str | None = None,
+        session: Any | None = None,
+        document: Any | None = None,
     ):
         super().__init__(
             tsv_pattern=tsv_pattern,
@@ -50,8 +51,8 @@ class NewStimStimsReader(MetadataReader):
 
     def readmetadata(
         self,
-        epochfiles: List[str],
-    ) -> List[Dict[str, Any]]:
+        epochfiles: list[str],
+    ) -> list[dict[str, Any]]:
         """
         Read stimulus metadata from NewStim files.
 
@@ -81,7 +82,7 @@ class NewStimStimsReader(MetadataReader):
 
         return self._read_newstim_mat(stim_file)
 
-    def _find_stim_file(self, epochfiles: List[str]) -> Optional[str]:
+    def _find_stim_file(self, epochfiles: list[str]) -> str | None:
         """Find the NewStim .mat file in epoch files."""
         pattern = re.compile(self.STIM_FILE_PATTERN, re.IGNORECASE)
         for f in epochfiles:
@@ -89,7 +90,7 @@ class NewStimStimsReader(MetadataReader):
                 return f
         return None
 
-    def _read_newstim_mat(self, filepath: str) -> List[Dict[str, Any]]:
+    def _read_newstim_mat(self, filepath: str) -> list[dict[str, Any]]:
         """
         Read stimulus parameters from a NewStim .mat file.
 
@@ -107,11 +108,10 @@ class NewStimStimsReader(MetadataReader):
         """
         try:
             from scipy.io import loadmat
-        except ImportError:
+        except ImportError as exc:
             raise ImportError(
-                "scipy is required to read NewStim .mat files. "
-                "Install with: pip install scipy"
-            )
+                "scipy is required to read NewStim .mat files. " "Install with: pip install scipy"
+            ) from exc
 
         if not Path(filepath).is_file():
             return []
@@ -119,13 +119,13 @@ class NewStimStimsReader(MetadataReader):
         mat_data = loadmat(filepath, squeeze_me=True, struct_as_record=True)
 
         # NewStim stores data in 'saveScript' variable
-        if 'saveScript' not in mat_data:
+        if "saveScript" not in mat_data:
             return []
 
-        return self._extract_script_parameters(mat_data['saveScript'])
+        return self._extract_script_parameters(mat_data["saveScript"])
 
     @staticmethod
-    def _extract_script_parameters(script_data: Any) -> List[Dict[str, Any]]:
+    def _extract_script_parameters(script_data: Any) -> list[dict[str, Any]]:
         """
         Extract parameters from a NewStim script structure.
 
@@ -141,14 +141,14 @@ class NewStimStimsReader(MetadataReader):
             import numpy as np
 
             # Handle various script_data formats
-            if hasattr(script_data, 'dtype') and script_data.dtype.names:
+            if hasattr(script_data, "dtype") and script_data.dtype.names:
                 # Structured array
-                stims = script_data.get('stimscript', script_data)
-                if hasattr(stims, '__len__'):
+                stims = script_data.get("stimscript", script_data)
+                if hasattr(stims, "__len__"):
                     for i in range(len(stims)):
                         params = {}
                         stim = stims[i] if len(stims) > 1 else stims
-                        if hasattr(stim, 'dtype') and stim.dtype.names:
+                        if hasattr(stim, "dtype") and stim.dtype.names:
                             for name in stim.dtype.names:
                                 val = stim[name]
                                 if isinstance(val, np.ndarray) and val.size == 1:

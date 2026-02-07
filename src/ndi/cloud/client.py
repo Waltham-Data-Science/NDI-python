@@ -11,7 +11,7 @@ MATLAB equivalent: ndi.cloud.api.url(), +implementation classes.
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, Optional
+from typing import Any
 from urllib.parse import quote as _url_quote
 
 from .config import CloudConfig
@@ -40,21 +40,23 @@ class CloudClient:
             import requests
         except ImportError as exc:
             raise ImportError(
-                'The requests package is required for CloudClient. '
-                'Install it with: pip install ndi[cloud]'
+                "The requests package is required for CloudClient. "
+                "Install it with: pip install ndi[cloud]"
             ) from exc
         self._session = requests.Session()
-        self._session.headers.update({
-            'Accept': 'application/json',
-        })
+        self._session.headers.update(
+            {
+                "Accept": "application/json",
+            }
+        )
 
     # ------------------------------------------------------------------
     # Public convenience methods
     # ------------------------------------------------------------------
 
-    def get(self, endpoint: str, params: Optional[Dict] = None, **path_params: str) -> Any:
+    def get(self, endpoint: str, params: dict | None = None, **path_params: str) -> Any:
         """HTTP GET."""
-        return self._request('GET', endpoint, params=params, **path_params)
+        return self._request("GET", endpoint, params=params, **path_params)
 
     def post(
         self,
@@ -64,7 +66,7 @@ class CloudClient:
         **path_params: str,
     ) -> Any:
         """HTTP POST."""
-        return self._request('POST', endpoint, json=json, data=data, **path_params)
+        return self._request("POST", endpoint, json=json, data=data, **path_params)
 
     def put(
         self,
@@ -74,11 +76,11 @@ class CloudClient:
         **path_params: str,
     ) -> Any:
         """HTTP PUT."""
-        return self._request('PUT', endpoint, json=json, data=data, **path_params)
+        return self._request("PUT", endpoint, json=json, data=data, **path_params)
 
     def delete(self, endpoint: str, **path_params: str) -> Any:
         """HTTP DELETE."""
-        return self._request('DELETE', endpoint, **path_params)
+        return self._request("DELETE", endpoint, **path_params)
 
     # ------------------------------------------------------------------
     # Internal
@@ -93,38 +95,36 @@ class CloudClient:
         # Substitute {placeholders} with URL-encoded values
         url = endpoint
         for key, value in path_params.items():
-            url = url.replace(f'{{{key}}}', _url_quote(str(value), safe=''))
+            url = url.replace(f"{{{key}}}", _url_quote(str(value), safe=""))
 
         # Warn about un-replaced placeholders
-        remaining = re.findall(r'\{(\w+)\}', url)
+        remaining = re.findall(r"\{(\w+)\}", url)
         if remaining:
-            raise ValueError(
-                f"Missing path parameters: {remaining} in endpoint '{endpoint}'"
-            )
+            raise ValueError(f"Missing path parameters: {remaining} in endpoint '{endpoint}'")
 
         # Ensure single slash join
-        base = self.config.api_url.rstrip('/')
-        url = url if url.startswith('/') else f'/{url}'
-        return f'{base}{url}'
+        base = self.config.api_url.rstrip("/")
+        url = url if url.startswith("/") else f"/{url}"
+        return f"{base}{url}"
 
     def _request(
         self,
         method: str,
         endpoint: str,
         *,
-        params: Optional[Dict] = None,
+        params: dict | None = None,
         json: Any = None,
         data: Any = None,
-        timeout: Optional[int] = None,
+        timeout: int | None = None,
         **path_params: str,
     ) -> Any:
         """Execute an HTTP request with auth and error handling."""
         import requests as _requests
 
         url = self._build_url(endpoint, **path_params)
-        headers: Dict[str, str] = {}
+        headers: dict[str, str] = {}
         if self.config.token:
-            headers['Authorization'] = f'Bearer {self.config.token}'
+            headers["Authorization"] = f"Bearer {self.config.token}"
 
         try:
             resp = self._session.request(
@@ -137,7 +137,7 @@ class CloudClient:
                 timeout=timeout or self.DEFAULT_TIMEOUT,
             )
         except _requests.RequestException as exc:
-            raise CloudAPIError(f'Request failed: {exc}') from exc
+            raise CloudAPIError(f"Request failed: {exc}") from exc
 
         return self._handle_response(resp)
 
@@ -147,14 +147,12 @@ class CloudClient:
 
         # Auth errors
         if status in (401, 403):
-            raise CloudAuthError(
-                f'Authentication failed (HTTP {status}): {resp.text}'
-            )
+            raise CloudAuthError(f"Authentication failed (HTTP {status}): {resp.text}")
 
         # Not found
         if status == 404:
             raise CloudNotFoundError(
-                f'Not found (HTTP 404): {resp.text}',
+                f"Not found (HTTP 404): {resp.text}",
                 status_code=404,
                 response_body=resp.text,
             )
@@ -167,7 +165,7 @@ class CloudClient:
             except Exception:
                 pass
             raise CloudAPIError(
-                f'API error (HTTP {status})',
+                f"API error (HTTP {status})",
                 status_code=status,
                 response_body=body,
             )
@@ -181,4 +179,4 @@ class CloudClient:
             return resp.text
 
     def __repr__(self) -> str:
-        return f'CloudClient(api_url={self.config.api_url!r})'
+        return f"CloudClient(api_url={self.config.api_url!r})"

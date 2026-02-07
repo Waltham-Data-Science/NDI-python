@@ -7,36 +7,35 @@ MATLAB equivalents: +ndi/+fun/+data/readngrid.m, writengrid.m, mat2ngrid.m,
 
 from __future__ import annotations
 
-import re
-import struct
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any
 
 import numpy as np
 
 # Map type names to numpy dtypes
-_TYPE_MAP: Dict[str, np.dtype] = {
-    'double': np.dtype('<f8'),
-    'float64': np.dtype('<f8'),
-    'single': np.dtype('<f4'),
-    'float32': np.dtype('<f4'),
-    'int8': np.dtype('<i1'),
-    'int16': np.dtype('<i2'),
-    'int32': np.dtype('<i4'),
-    'int64': np.dtype('<i8'),
-    'uint8': np.dtype('<u1'),
-    'uint16': np.dtype('<u2'),
-    'uint32': np.dtype('<u4'),
-    'uint64': np.dtype('<u8'),
-    'logical': np.dtype('bool'),
-    'ubit1': np.dtype('bool'),
+_TYPE_MAP: dict[str, np.dtype] = {
+    "double": np.dtype("<f8"),
+    "float64": np.dtype("<f8"),
+    "single": np.dtype("<f4"),
+    "float32": np.dtype("<f4"),
+    "int8": np.dtype("<i1"),
+    "int16": np.dtype("<i2"),
+    "int32": np.dtype("<i4"),
+    "int64": np.dtype("<i8"),
+    "uint8": np.dtype("<u1"),
+    "uint16": np.dtype("<u2"),
+    "uint32": np.dtype("<u4"),
+    "uint64": np.dtype("<u8"),
+    "logical": np.dtype("bool"),
+    "ubit1": np.dtype("bool"),
 }
 
 
 def readngrid(
-    file_path: Union[str, Path],
+    file_path: str | Path,
     data_size: Sequence[int],
-    data_type: str = 'double',
+    data_type: str = "double",
 ) -> np.ndarray:
     """Read n-dimensional binary matrix from file.
 
@@ -60,7 +59,7 @@ def readngrid(
 
     p = Path(file_path)
     if not p.exists():
-        raise FileNotFoundError(f'File not found: {file_path}')
+        raise FileNotFoundError(f"File not found: {file_path}")
 
     expected = 1
     for d in data_size:
@@ -68,16 +67,14 @@ def readngrid(
 
     raw = np.fromfile(str(p), dtype=dtype)
     if raw.size != expected:
-        raise ValueError(
-            f'Data count mismatch: expected {expected}, got {raw.size}'
-        )
+        raise ValueError(f"Data count mismatch: expected {expected}, got {raw.size}")
     return raw.reshape(data_size)
 
 
 def writengrid(
     data: np.ndarray,
-    file_path: Union[str, Path],
-    data_type: str = 'double',
+    file_path: str | Path,
+    data_type: str = "double",
 ) -> None:
     """Write n-dimensional matrix to binary file in little-endian.
 
@@ -100,8 +97,8 @@ def writengrid(
 
 def mat2ngrid(
     data: np.ndarray,
-    coordinates: Optional[List[np.ndarray]] = None,
-) -> Dict[str, Any]:
+    coordinates: list[np.ndarray] | None = None,
+) -> dict[str, Any]:
     """Convert n-dimensional array to ngrid metadata structure.
 
     MATLAB equivalent: ndi.fun.data.mat2ngrid
@@ -116,7 +113,7 @@ def mat2ngrid(
     arr = np.asarray(data)
 
     # Reverse-map dtype to type name
-    type_name = 'double'
+    type_name = "double"
     for name, dt in _TYPE_MAP.items():
         if arr.dtype == dt:
             type_name = name
@@ -124,13 +121,13 @@ def mat2ngrid(
 
     # Default coordinates: 0..N-1 per dimension
     if coordinates is None:
-        coordinates = [np.arange(s, dtype='float64') for s in arr.shape]
+        coordinates = [np.arange(s, dtype="float64") for s in arr.shape]
 
     return {
-        'data_size': arr.dtype.itemsize,
-        'data_type': type_name,
-        'data_dim': list(arr.shape),
-        'coordinates': coordinates,
+        "data_size": arr.dtype.itemsize,
+        "data_type": type_name,
+        "data_dim": list(arr.shape),
+        "coordinates": coordinates,
     }
 
 
@@ -158,39 +155,37 @@ def evaluate_fitcurve(
         ValueError: If the document has unsupported variable counts.
     """
     props = fitcurve_doc
-    if hasattr(fitcurve_doc, 'document_properties'):
+    if hasattr(fitcurve_doc, "document_properties"):
         props = fitcurve_doc.document_properties
 
-    fc = props.get('fitcurve', {}) if isinstance(props, dict) else {}
+    fc = props.get("fitcurve", {}) if isinstance(props, dict) else {}
 
-    equation = fc.get('fit_equation', '')
-    param_names = fc.get('fit_parameter_names', [])
-    param_values = fc.get('fit_parameter_values', [])
-    var_names = fc.get('fit_variable_names', [])
+    equation = fc.get("fit_equation", "")
+    param_names = fc.get("fit_parameter_names", [])
+    param_values = fc.get("fit_parameter_values", [])
+    var_names = fc.get("fit_variable_names", [])
 
     if not equation or not var_names:
-        raise ValueError('fitcurve document missing equation or variable names')
+        raise ValueError("fitcurve document missing equation or variable names")
 
     # Separate independent (all but last) and dependent (last) variables
     independent_names = var_names[:-1]
-    dependent_name = var_names[-1]
+    var_names[-1]
 
     if len(independent_names) != len(args):
         raise ValueError(
-            f'Expected {len(independent_names)} independent variable(s), '
-            f'got {len(args)}'
+            f"Expected {len(independent_names)} independent variable(s), " f"got {len(args)}"
         )
 
     # Build a safe local namespace for evaluation
-    namespace: Dict[str, Any] = {'np': np}
+    namespace: dict[str, Any] = {"np": np}
     # Standard math functions
-    for fn in ('sin', 'cos', 'tan', 'exp', 'log', 'log10', 'sqrt',
-               'abs', 'pi', 'inf', 'nan'):
+    for fn in ("sin", "cos", "tan", "exp", "log", "log10", "sqrt", "abs", "pi", "inf", "nan"):
         namespace[fn] = getattr(np, fn, None) or getattr(np, fn, None)
-    namespace['pi'] = np.pi
-    namespace['inf'] = np.inf
-    namespace['nan'] = np.nan
-    namespace['power'] = np.power
+    namespace["pi"] = np.pi
+    namespace["inf"] = np.inf
+    namespace["nan"] = np.nan
+    namespace["power"] = np.power
 
     # Assign parameter values
     for name, val in zip(param_names, param_values):
@@ -202,7 +197,7 @@ def evaluate_fitcurve(
 
     # Evaluate the equation
     # The equation may use ^ for power (MATLAB style) - convert to **
-    expr = equation.replace('^', '**')
+    expr = equation.replace("^", "**")
 
     # Evaluate
     result = eval(expr, {"__builtins__": {}}, namespace)  # noqa: S307
@@ -214,7 +209,7 @@ def read_image_stack(
     session: Any,
     doc: Any,
     fmt: str,
-) -> Tuple[np.ndarray, Dict[str, Any]]:
+) -> tuple[np.ndarray, dict[str, Any]]:
     """Read an image stack or video from a database binary document.
 
     MATLAB equivalent: ndi.fun.data.readImageStack
@@ -234,34 +229,34 @@ def read_image_stack(
     """
     try:
         from PIL import Image
-    except ImportError:
+    except ImportError as exc:
         raise ImportError(
-            'Pillow is required for read_image_stack. '
-            'Install it with: pip install Pillow'
-        )
+            "Pillow is required for read_image_stack. " "Install it with: pip install Pillow"
+        ) from exc
 
-    image_formats = {'tif', 'tiff', 'png', 'jpg', 'jpeg', 'bmp', 'gif'}
-    video_formats = {'mp4', 'avi', 'mov', 'mkv', 'wmv'}
+    image_formats = {"tif", "tiff", "png", "jpg", "jpeg", "bmp", "gif"}
+    video_formats = {"mp4", "avi", "mov", "mkv", "wmv"}
 
     fmt_lower = fmt.lower()
 
     # Get binary file data from the database
     binary_data = None
-    if hasattr(session, 'database_openbinarydoc'):
-        fobj = session.database_openbinarydoc(doc, 'imageStack')
-        if hasattr(fobj, 'read'):
+    if hasattr(session, "database_openbinarydoc"):
+        fobj = session.database_openbinarydoc(doc, "imageStack")
+        if hasattr(fobj, "read"):
             binary_data = fobj.read()
-        elif hasattr(fobj, 'fullpathfilename'):
+        elif hasattr(fobj, "fullpathfilename"):
             binary_data = Path(fobj.fullpathfilename)
 
     if fmt_lower in image_formats:
         import io
+
         if isinstance(binary_data, (bytes, bytearray)):
             img = Image.open(io.BytesIO(binary_data))
         elif isinstance(binary_data, Path):
             img = Image.open(str(binary_data))
         else:
-            raise ValueError('Could not read image data from document')
+            raise ValueError("Could not read image data from document")
 
         frames = []
         try:
@@ -277,34 +272,36 @@ def read_image_stack(
             stack = np.stack(frames, axis=-1)
 
         info = {
-            'format': fmt,
-            'size': img.size,
-            'mode': img.mode,
-            'num_frames': len(frames),
+            "format": fmt,
+            "size": img.size,
+            "mode": img.mode,
+            "num_frames": len(frames),
         }
         return stack, info
 
     elif fmt_lower in video_formats:
         try:
             import cv2
-        except ImportError:
+        except ImportError as exc:
             raise ImportError(
-                'OpenCV is required for video reading. '
-                'Install it with: pip install opencv-python'
-            )
+                "OpenCV is required for video reading. "
+                "Install it with: pip install opencv-python"
+            ) from exc
 
         import tempfile
+
         if isinstance(binary_data, Path):
             video_path = str(binary_data)
         elif isinstance(binary_data, (bytes, bytearray)):
             tmp = tempfile.NamedTemporaryFile(
-                suffix=f'.{fmt}', delete=False,
+                suffix=f".{fmt}",
+                delete=False,
             )
             tmp.write(binary_data)
             tmp.close()
             video_path = tmp.name
         else:
-            raise ValueError('Could not read video data from document')
+            raise ValueError("Could not read video data from document")
 
         cap = cv2.VideoCapture(video_path)
         frames = []
@@ -316,15 +313,13 @@ def read_image_stack(
         cap.release()
 
         info = {
-            'format': fmt,
-            'num_frames': len(frames),
-            'fps': cap.get(cv2.CAP_PROP_FPS) if frames else 0,
+            "format": fmt,
+            "num_frames": len(frames),
+            "fps": cap.get(cv2.CAP_PROP_FPS) if frames else 0,
         }
 
         stack = np.stack(frames, axis=0) if frames else np.array([])
         return stack, info
 
     else:
-        raise ValueError(
-            f"Format '{fmt}' is not a recognized image or video format."
-        )
+        raise ValueError(f"Format '{fmt}' is not a recognized image or video format.")

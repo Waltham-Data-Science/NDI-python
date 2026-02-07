@@ -6,13 +6,14 @@ recording epoch with all its metadata.
 """
 
 from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from ..time import ClockType
     from .epochprobemap import EpochProbeMap
     from .epochset import EpochSet
-    from ..time import ClockType
 
 
 @dataclass(frozen=True)
@@ -53,31 +54,33 @@ class Epoch:
     """
 
     epoch_number: int = 0
-    epoch_id: str = ''
-    epoch_session_id: str = ''
-    epochprobemap: Tuple['EpochProbeMap', ...] = field(default_factory=tuple)
-    epoch_clock: Tuple['ClockType', ...] = field(default_factory=tuple)
-    t0_t1: Tuple[Tuple[float, float], ...] = field(default_factory=tuple)
-    epochset_object: Optional['EpochSet'] = None
-    underlying_epochs: Tuple['Epoch', ...] = field(default_factory=tuple)
-    underlying_files: Tuple[str, ...] = field(default_factory=tuple)
+    epoch_id: str = ""
+    epoch_session_id: str = ""
+    epochprobemap: tuple[EpochProbeMap, ...] = field(default_factory=tuple)
+    epoch_clock: tuple[ClockType, ...] = field(default_factory=tuple)
+    t0_t1: tuple[tuple[float, float], ...] = field(default_factory=tuple)
+    epochset_object: EpochSet | None = None
+    underlying_epochs: tuple[Epoch, ...] = field(default_factory=tuple)
+    underlying_files: tuple[str, ...] = field(default_factory=tuple)
 
     def __post_init__(self):
         """Convert lists to tuples for immutability."""
         # Note: frozen=True prevents direct assignment, so we use object.__setattr__
         if isinstance(self.epochprobemap, list):
-            object.__setattr__(self, 'epochprobemap', tuple(self.epochprobemap))
+            object.__setattr__(self, "epochprobemap", tuple(self.epochprobemap))
         if isinstance(self.epoch_clock, list):
-            object.__setattr__(self, 'epoch_clock', tuple(self.epoch_clock))
+            object.__setattr__(self, "epoch_clock", tuple(self.epoch_clock))
         if isinstance(self.t0_t1, list):
-            object.__setattr__(self, 't0_t1', tuple(tuple(x) if isinstance(x, list) else x for x in self.t0_t1))
+            object.__setattr__(
+                self, "t0_t1", tuple(tuple(x) if isinstance(x, list) else x for x in self.t0_t1)
+            )
         if isinstance(self.underlying_epochs, list):
-            object.__setattr__(self, 'underlying_epochs', tuple(self.underlying_epochs))
+            object.__setattr__(self, "underlying_epochs", tuple(self.underlying_epochs))
         if isinstance(self.underlying_files, list):
-            object.__setattr__(self, 'underlying_files', tuple(self.underlying_files))
+            object.__setattr__(self, "underlying_files", tuple(self.underlying_files))
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Epoch':
+    def from_dict(cls, data: dict[str, Any]) -> Epoch:
         """
         Create an Epoch from a dictionary.
 
@@ -87,11 +90,11 @@ class Epoch:
         Returns:
             New Epoch instance
         """
-        from .epochprobemap import EpochProbeMap
         from ..time import ClockType
+        from .epochprobemap import EpochProbeMap
 
         # Parse epochprobemap
-        epm_raw = data.get('epochprobemap', [])
+        epm_raw = data.get("epochprobemap", [])
         epochprobemap = []
         for epm in epm_raw:
             if isinstance(epm, EpochProbeMap):
@@ -100,7 +103,7 @@ class Epoch:
                 epochprobemap.append(EpochProbeMap.from_dict(epm))
 
         # Parse epoch_clock
-        clock_raw = data.get('epoch_clock', [])
+        clock_raw = data.get("epoch_clock", [])
         epoch_clock = []
         for clock in clock_raw:
             if isinstance(clock, ClockType):
@@ -109,14 +112,14 @@ class Epoch:
                 epoch_clock.append(ClockType(clock))
 
         # Parse t0_t1
-        t0t1_raw = data.get('t0_t1', [])
+        t0t1_raw = data.get("t0_t1", [])
         t0_t1 = []
         for t in t0t1_raw:
             if isinstance(t, (list, tuple)) and len(t) >= 2:
                 t0_t1.append((float(t[0]), float(t[1])))
 
         # Parse underlying_epochs recursively
-        underlying_raw = data.get('underlying_epochs', [])
+        underlying_raw = data.get("underlying_epochs", [])
         underlying_epochs = []
         for ue in underlying_raw:
             if isinstance(ue, Epoch):
@@ -125,18 +128,18 @@ class Epoch:
                 underlying_epochs.append(cls.from_dict(ue))
 
         return cls(
-            epoch_number=data.get('epoch_number', 0),
-            epoch_id=data.get('epoch_id', ''),
-            epoch_session_id=data.get('epoch_session_id', ''),
+            epoch_number=data.get("epoch_number", 0),
+            epoch_id=data.get("epoch_id", ""),
+            epoch_session_id=data.get("epoch_session_id", ""),
             epochprobemap=tuple(epochprobemap),
             epoch_clock=tuple(epoch_clock),
             t0_t1=tuple(t0_t1),
-            epochset_object=data.get('epochset_object'),
+            epochset_object=data.get("epochset_object"),
             underlying_epochs=tuple(underlying_epochs),
-            underlying_files=tuple(data.get('underlying_files', [])),
+            underlying_files=tuple(data.get("underlying_files", [])),
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert to dictionary representation.
 
@@ -146,17 +149,17 @@ class Epoch:
             Dictionary with epoch fields
         """
         return {
-            'epoch_number': self.epoch_number,
-            'epoch_id': self.epoch_id,
-            'epoch_session_id': self.epoch_session_id,
-            'epochprobemap': [epm.to_dict() for epm in self.epochprobemap],
-            'epoch_clock': [str(c) for c in self.epoch_clock],
-            't0_t1': list(self.t0_t1),
-            'underlying_epochs': [ue.to_dict() for ue in self.underlying_epochs],
-            'underlying_files': list(self.underlying_files),
+            "epoch_number": self.epoch_number,
+            "epoch_id": self.epoch_id,
+            "epoch_session_id": self.epoch_session_id,
+            "epochprobemap": [epm.to_dict() for epm in self.epochprobemap],
+            "epoch_clock": [str(c) for c in self.epoch_clock],
+            "t0_t1": list(self.t0_t1),
+            "underlying_epochs": [ue.to_dict() for ue in self.underlying_epochs],
+            "underlying_files": list(self.underlying_files),
         }
 
-    def has_clock(self, clock: 'ClockType') -> bool:
+    def has_clock(self, clock: ClockType) -> bool:
         """
         Check if this epoch has a specific clock type.
 
@@ -168,7 +171,7 @@ class Epoch:
         """
         return clock in self.epoch_clock
 
-    def time_range(self, clock: 'ClockType') -> Optional[Tuple[float, float]]:
+    def time_range(self, clock: ClockType) -> tuple[float, float] | None:
         """
         Get time range for a specific clock type.
 

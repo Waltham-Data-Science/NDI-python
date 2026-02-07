@@ -6,16 +6,16 @@ NDI experiments including DAQ systems, database, syncgraph, and probes.
 """
 
 from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
-import re
+from typing import Any
 
-from ..ido import Ido
 from ..cache import Cache
-from ..query import Query
-from ..document import Document
 from ..database import Database
+from ..document import Document
+from ..ido import Ido
+from ..query import Query
 from ..time.syncgraph import SyncGraph
 from ..time.syncrule_base import SyncRule
 
@@ -33,7 +33,7 @@ def empty_id() -> str:
     ido = Ido()
     base_id = ido.id
     # Replace all non-underscore characters with '0'
-    return ''.join('0' if c != '_' else '_' for c in base_id)
+    return "".join("0" if c != "_" else "_" for c in base_id)
 
 
 class Session(ABC):
@@ -70,9 +70,9 @@ class Session(ABC):
         """
         self._reference = reference
         self._identifier = Ido().id
-        self._syncgraph: Optional[SyncGraph] = None
+        self._syncgraph: SyncGraph | None = None
         self._cache = Cache()
-        self._database: Optional[Database] = None
+        self._database: Database | None = None
 
     @property
     def reference(self) -> str:
@@ -94,7 +94,7 @@ class Session(ABC):
         return self._identifier
 
     @property
-    def syncgraph(self) -> Optional[SyncGraph]:
+    def syncgraph(self) -> SyncGraph | None:
         """Get the session's syncgraph."""
         return self._syncgraph
 
@@ -104,7 +104,7 @@ class Session(ABC):
         return self._cache
 
     @property
-    def database(self) -> Optional[Database]:
+    def database(self) -> Database | None:
         """Get the session's database."""
         return self._database
 
@@ -112,7 +112,7 @@ class Session(ABC):
     # DAQ System Methods
     # =========================================================================
 
-    def daqsystem_add(self, dev: Any) -> 'Session':
+    def daqsystem_add(self, dev: Any) -> Session:
         """
         Add a DAQ system to the session.
 
@@ -139,7 +139,7 @@ class Session(ABC):
         search_result = self.database_search(sq)
 
         # Also check by name
-        sq1 = Query('').isa('daqsystem') & (Query('base.name') == dev.name)
+        sq1 = Query("").isa("daqsystem") & (Query("base.name") == dev.name)
         search_result1 = self.database_search(sq1)
 
         if len(search_result) == 0 and len(search_result1) == 0:
@@ -150,13 +150,11 @@ class Session(ABC):
             for doc in doc_set:
                 self.database_add(doc)
         else:
-            raise ValueError(
-                f"DAQ system '{dev.name}' or one with same ID already exists"
-            )
+            raise ValueError(f"DAQ system '{dev.name}' or one with same ID already exists")
 
         return self
 
-    def daqsystem_rm(self, dev: Any) -> 'Session':
+    def daqsystem_rm(self, dev: Any) -> Session:
         """
         Remove a DAQ system from the session.
 
@@ -188,9 +186,7 @@ class Session(ABC):
                 # Remove dependencies first
                 names, deps = doc.dependency()
                 for dep in deps:
-                    dep_docs = self.database_search(
-                        Query('base.id') == dep['value']
-                    )
+                    dep_docs = self.database_search(Query("base.id") == dep["value"])
                     for dep_doc in dep_docs:
                         self.database_rm(dep_doc)
                 # Remove the document itself
@@ -198,11 +194,7 @@ class Session(ABC):
 
         return self
 
-    def daqsystem_load(
-        self,
-        name: Optional[str] = None,
-        **kwargs
-    ) -> Union[List[Any], Any, None]:
+    def daqsystem_load(self, name: str | None = None, **kwargs) -> list[Any] | Any | None:
         """
         Load DAQ systems from the session.
 
@@ -218,19 +210,18 @@ class Session(ABC):
             >>> all_daqs = session.daqsystem_load(name='(.*)')
             >>> intan_daq = session.daqsystem_load(name='Intan')
         """
-        from ..daq.system import DAQSystem
 
         # Build query
-        q = Query('').isa('daqsystem')
-        q = q & (Query('base.session_id') == self.id())
+        q = Query("").isa("daqsystem")
+        q = q & (Query("base.session_id") == self.id())
 
         # Add name filter (using regex match for compatibility)
         if name is not None:
-            q = q & (Query('base.name').match(name))
+            q = q & (Query("base.name").match(name))
 
         # Add other filters
         for field, value in kwargs.items():
-            if field == 'name':
+            if field == "name":
                 continue  # Already handled
             q = q & (Query(field) == value)
 
@@ -254,14 +245,14 @@ class Session(ABC):
         else:
             return dev
 
-    def daqsystem_clear(self) -> 'Session':
+    def daqsystem_clear(self) -> Session:
         """
         Remove all DAQ systems from the session.
 
         Returns:
             self for chaining
         """
-        devs = self.daqsystem_load(name='(.*)')
+        devs = self.daqsystem_load(name="(.*)")
         if devs is not None:
             if not isinstance(devs, list):
                 devs = [devs]
@@ -273,7 +264,7 @@ class Session(ABC):
     # Database Methods
     # =========================================================================
 
-    def database_add(self, document: Union[Document, List[Document]]) -> 'Session':
+    def database_add(self, document: Document | list[Document]) -> Session:
         """
         Add a document to the session database.
 
@@ -297,8 +288,7 @@ class Session(ABC):
             session_id = doc.session_id
             if session_id and session_id != self.id() and session_id != empty_id():
                 raise ValueError(
-                    f"Document session_id '{session_id}' doesn't match "
-                    f"session id '{self.id()}'"
+                    f"Document session_id '{session_id}' doesn't match " f"session id '{self.id()}'"
                 )
             # Set session ID if empty or unset
             if not session_id or session_id == empty_id():
@@ -319,23 +309,25 @@ class Session(ABC):
         ``database_openbinarydoc`` can find it.
         """
         import shutil
+
         if self._database is None:
             return
         props = doc.document_properties
-        files = props.get('files', {})
+        files = props.get("files", {})
         if not isinstance(files, dict):
             return
-        for fi in files.get('file_info', []):
-            name = fi.get('name', '')
+        for fi in files.get("file_info", []):
+            name = fi.get("name", "")
             if not name:
                 continue
-            for loc in fi.get('locations', []):
-                if not loc.get('ingest', False):
+            for loc in fi.get("locations", []):
+                if not loc.get("ingest", False):
                     continue
-                source = loc.get('location', '')
+                source = loc.get("location", "")
                 if not source:
                     continue
                 from pathlib import Path
+
                 src_path = Path(source)
                 if not src_path.exists():
                     continue
@@ -345,9 +337,9 @@ class Session(ABC):
 
     def database_rm(
         self,
-        doc_or_id: Union[Document, str, List[Union[Document, str]]],
+        doc_or_id: Document | str | list[Document | str],
         error_if_not_found: bool = False,
-    ) -> 'Session':
+    ) -> Session:
         """
         Remove a document from the session database.
 
@@ -375,7 +367,7 @@ class Session(ABC):
 
         return self
 
-    def database_search(self, query: Query) -> List[Document]:
+    def database_search(self, query: Query) -> list[Document]:
         """
         Search for documents in the session database.
 
@@ -389,10 +381,10 @@ class Session(ABC):
             return []
 
         # Add session filter
-        in_session = Query('base.session_id') == self.id()
+        in_session = Query("base.session_id") == self.id()
         return self._database.search(query & in_session)
 
-    def database_clear(self, areyousure: str) -> 'Session':
+    def database_clear(self, areyousure: str) -> Session:
         """
         Delete all documents from the database.
 
@@ -402,7 +394,7 @@ class Session(ABC):
         Returns:
             self for chaining
         """
-        if areyousure.lower() != 'yes':
+        if areyousure.lower() != "yes":
             return self
 
         if self._database is not None:
@@ -412,10 +404,7 @@ class Session(ABC):
 
         return self
 
-    def validate_documents(
-        self,
-        documents: Union[Document, List[Document]]
-    ) -> Tuple[bool, str]:
+    def validate_documents(self, documents: Document | list[Document]) -> tuple[bool, str]:
         """
         Validate that documents belong to this session.
 
@@ -447,7 +436,7 @@ class Session(ABC):
 
     def database_openbinarydoc(
         self,
-        doc_or_id: Union[Document, str],
+        doc_or_id: Document | str,
         filename: str,
     ) -> Any:
         """
@@ -475,13 +464,13 @@ class Session(ABC):
         if not file_path.exists():
             raise FileNotFoundError(f"Binary file {filename} not found")
 
-        return open(file_path, 'rb')
+        return open(file_path, "rb")
 
     def database_existbinarydoc(
         self,
-        doc_or_id: Union[Document, str],
+        doc_or_id: Document | str,
         filename: str,
-    ) -> Tuple[bool, Optional[Path]]:
+    ) -> tuple[bool, Path | None]:
         """
         Check if a binary document exists.
 
@@ -510,14 +499,14 @@ class Session(ABC):
         Args:
             file_obj: File object to close
         """
-        if hasattr(file_obj, 'close'):
+        if hasattr(file_obj, "close"):
             file_obj.close()
 
     # =========================================================================
     # SyncGraph Methods
     # =========================================================================
 
-    def syncgraph_addrule(self, rule: SyncRule) -> 'Session':
+    def syncgraph_addrule(self, rule: SyncRule) -> Session:
         """
         Add a sync rule to the session's syncgraph.
 
@@ -534,7 +523,7 @@ class Session(ABC):
         self._update_syncgraph_in_db()
         return self
 
-    def syncgraph_rmrule(self, index: int) -> 'Session':
+    def syncgraph_rmrule(self, index: int) -> Session:
         """
         Remove a sync rule from the session's syncgraph.
 
@@ -556,14 +545,14 @@ class Session(ABC):
 
         # Remove old syncgraph docs
         old_docs = self.database_search(
-            Query('').isa('syncgraph') & (Query('base.session_id') == self.id())
+            Query("").isa("syncgraph") & (Query("base.session_id") == self.id())
         )
         for doc in old_docs:
             self._database.remove(doc)
 
         # Remove old syncrule docs
         old_rules = self.database_search(
-            Query('').isa('syncrule') & (Query('base.session_id') == self.id())
+            Query("").isa("syncrule") & (Query("base.session_id") == self.id())
         )
         for doc in old_rules:
             self._database.remove(doc)
@@ -578,21 +567,21 @@ class Session(ABC):
     # Ingest Methods
     # =========================================================================
 
-    def ingest(self) -> Tuple[bool, str]:
+    def ingest(self) -> tuple[bool, str]:
         """
         Ingest all raw data and sync info into the database.
 
         Returns:
             Tuple of (success, error_message)
         """
-        errmsg = ''
+        errmsg = ""
 
         # Ingest syncgraph
         if self._syncgraph is not None:
             d_syncgraph = self._syncgraph.new_document()
 
         # Get all DAQ systems
-        daqs = self.daqsystem_load(name='(.*)')
+        daqs = self.daqsystem_load(name="(.*)")
         if daqs is None:
             daqs = []
         elif not isinstance(daqs, list):
@@ -627,17 +616,17 @@ class Session(ABC):
 
         return success, errmsg
 
-    def get_ingested_docs(self) -> List[Document]:
+    def get_ingested_docs(self) -> list[Document]:
         """
         Get all documents related to ingested data.
 
         Returns:
             List of ingested data documents
         """
-        q_i1 = Query('').isa('daqreader_mfdaq_epochdata_ingested')
-        q_i2 = Query('').isa('daqmetadatareader_epochdata_ingested')
-        q_i3 = Query('').isa('epochfiles_ingested')
-        q_i4 = Query('').isa('syncrule_mapping')
+        q_i1 = Query("").isa("daqreader_mfdaq_epochdata_ingested")
+        q_i2 = Query("").isa("daqmetadatareader_epochdata_ingested")
+        q_i3 = Query("").isa("epochfiles_ingested")
+        q_i4 = Query("").isa("syncrule_mapping")
 
         return self.database_search(q_i1 | q_i2 | q_i3 | q_i4)
 
@@ -648,14 +637,14 @@ class Session(ABC):
         Returns:
             True if all data has been ingested
         """
-        daqs = self.daqsystem_load(name='(.*)')
+        daqs = self.daqsystem_load(name="(.*)")
         if daqs is None:
             return True
         if not isinstance(daqs, list):
             daqs = [daqs]
 
         for daq in daqs:
-            if hasattr(daq, 'filenavigator'):
+            if hasattr(daq, "filenavigator"):
                 docs = daq.filenavigator.ingest()
                 if docs:
                     return False
@@ -665,11 +654,7 @@ class Session(ABC):
     # Probe and Element Methods
     # =========================================================================
 
-    def getprobes(
-        self,
-        classmatch: Optional[str] = None,
-        **kwargs
-    ) -> List[Any]:
+    def getprobes(self, classmatch: str | None = None, **kwargs) -> list[Any]:
         """
         Get all probes in the session.
 
@@ -684,12 +669,12 @@ class Session(ABC):
 
         # Get probe structs from all DAQ systems
         probestructs = []
-        devs = self.daqsystem_load(name='(.*)')
+        devs = self.daqsystem_load(name="(.*)")
         if devs is not None:
             if not isinstance(devs, list):
                 devs = [devs]
             for dev in devs:
-                if hasattr(dev, 'getprobes'):
+                if hasattr(dev, "getprobes"):
                     ps = dev.getprobes()
                     if ps:
                         probestructs.extend(ps)
@@ -698,15 +683,13 @@ class Session(ABC):
         seen = set()
         unique_probes = []
         for ps in probestructs:
-            key = (ps.get('name', ''), ps.get('reference', 0), ps.get('type', ''))
+            key = (ps.get("name", ""), ps.get("reference", 0), ps.get("type", ""))
             if key not in seen:
                 seen.add(key)
                 unique_probes.append(ps)
 
         # Get existing probes from database
-        existing_docs = self.database_search(
-            Query('element.ndi_element_class').contains('probe')
-        )
+        existing_docs = self.database_search(Query("element.ndi_element_class").contains("probe"))
 
         # Convert existing docs to probe objects
         existing_probes = []
@@ -724,18 +707,20 @@ class Session(ABC):
             # Check if already in existing_probes
             found = False
             for ep in existing_probes:
-                if (ep.name == ps.get('name') and
-                    ep.reference == ps.get('reference') and
-                    ep.type == ps.get('type')):
+                if (
+                    ep.name == ps.get("name")
+                    and ep.reference == ps.get("reference")
+                    and ep.type == ps.get("type")
+                ):
                     found = True
                     break
             if not found:
                 probe = Probe(
                     session=self,
-                    name=ps.get('name', ''),
-                    reference=ps.get('reference', 0),
-                    type=ps.get('type', ''),
-                    subject_id=ps.get('subject_id', ''),
+                    name=ps.get("name", ""),
+                    reference=ps.get("reference", 0),
+                    type=ps.get("type", ""),
+                    subject_id=ps.get("subject_id", ""),
                 )
                 probes.append(probe)
 
@@ -743,11 +728,12 @@ class Session(ABC):
 
         # Filter by class
         if classmatch is not None:
-            from ..probe import Probe
             from ..element import Element
+            from ..probe import Probe
+
             _CLASS_LOOKUP = {
-                'Probe': Probe,
-                'Element': Element,
+                "Probe": Probe,
+                "Element": Element,
             }
             cls = _CLASS_LOOKUP.get(classmatch)
             if cls is None:
@@ -779,7 +765,7 @@ class Session(ABC):
 
         return probes
 
-    def getelements(self, **kwargs) -> List[Any]:
+    def getelements(self, **kwargs) -> list[Any]:
         """
         Get all elements in the session.
 
@@ -789,10 +775,10 @@ class Session(ABC):
         Returns:
             List of Element objects
         """
-        q = Query('').isa('element')
+        q = Query("").isa("element")
 
         for field, value in kwargs.items():
-            if 'reference' in field:
+            if "reference" in field:
                 q = q & (Query(field) == value)
             else:
                 q = q & (Query(field) == value)
@@ -814,11 +800,7 @@ class Session(ABC):
     # Document Service Methods
     # =========================================================================
 
-    def newdocument(
-        self,
-        document_type: str = 'base',
-        **properties
-    ) -> Document:
+    def newdocument(self, document_type: str = "base", **properties) -> Document:
         """
         Create a new document for this session.
 
@@ -830,7 +812,7 @@ class Session(ABC):
             New Document with session_id set
         """
         # Add session_id to properties
-        properties['base.session_id'] = self.id()
+        properties["base.session_id"] = self.id()
 
         return Document(document_type, **properties)
 
@@ -841,16 +823,13 @@ class Session(ABC):
         Returns:
             Query matching this session's documents
         """
-        return Query('base.session_id') == self.id()
+        return Query("base.session_id") == self.id()
 
     # =========================================================================
     # Helper Methods
     # =========================================================================
 
-    def _docinput2docs(
-        self,
-        doc_input: Union[str, Document, List[Union[str, Document]]]
-    ) -> List[Document]:
+    def _docinput2docs(self, doc_input: str | Document | list[str | Document]) -> list[Document]:
         """Convert document IDs or Documents to Documents."""
         if not isinstance(doc_input, list):
             doc_input = [doc_input]
@@ -866,13 +845,13 @@ class Session(ABC):
 
         return doc_list
 
-    def _find_all_dependencies(self, document: Document) -> List[Document]:
+    def _find_all_dependencies(self, document: Document) -> list[Document]:
         """Find all documents that depend on the given document."""
         dependents = []
         if self._database is None:
             return dependents
 
-        q = Query('').depends_on('', document.id)
+        q = Query("").depends_on("", document.id)
         results = self.database_search(q)
 
         for doc in results:
@@ -893,16 +872,19 @@ class Session(ABC):
             The NDI object or None
         """
         # Check document type
-        if document.doc_isa('daqsystem'):
+        if document.doc_isa("daqsystem"):
             from ..daq.system import DAQSystem
+
             return DAQSystem(session=self, document=document)
-        elif document.doc_isa('probe'):
+        elif document.doc_isa("probe"):
             from ..probe import Probe
+
             return Probe(session=self, document=document)
-        elif document.doc_isa('element'):
+        elif document.doc_isa("element"):
             from ..element import Element
+
             return Element(session=self, document=document)
-        elif document.doc_isa('syncgraph'):
+        elif document.doc_isa("syncgraph"):
             return SyncGraph(session=self, document=document)
 
         return None
@@ -912,7 +894,7 @@ class Session(ABC):
     # =========================================================================
 
     @abstractmethod
-    def getpath(self) -> Optional[Path]:
+    def getpath(self) -> Path | None:
         """
         Return the storage path of the session.
 
@@ -922,7 +904,7 @@ class Session(ABC):
         pass
 
     @abstractmethod
-    def creator_args(self) -> List[Any]:
+    def creator_args(self) -> list[Any]:
         """
         Return arguments needed to recreate the session.
 

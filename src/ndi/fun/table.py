@@ -10,9 +10,7 @@ and reshaping tabular data produced by NDI document conversions.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Sequence, Union
-
-import numpy as np
+from typing import Any
 
 try:
     import pandas as pd
@@ -23,17 +21,16 @@ except ImportError:
 def _require_pandas() -> None:
     if pd is None:
         raise ImportError(
-            'pandas is required for ndi.fun.table utilities. '
-            'Install it with: pip install pandas'
+            "pandas is required for ndi.fun.table utilities. " "Install it with: pip install pandas"
         )
 
 
 def identify_matching_rows(
-    df: 'pd.DataFrame',
+    df: pd.DataFrame,
     column: str,
     value: Any,
-    mode: str = 'identical',
-) -> 'pd.Series':
+    mode: str = "identical",
+) -> pd.Series:
     """Identify rows in a DataFrame matching the given criteria.
 
     MATLAB equivalent: ndi.fun.table.identifyMatchingRows
@@ -54,33 +51,33 @@ def identify_matching_rows(
     col = df[column]
     mode_lower = mode.lower()
 
-    if mode_lower == 'identical':
+    if mode_lower == "identical":
         return col == value
-    elif mode_lower == 'ignorecase':
+    elif mode_lower == "ignorecase":
         return col.astype(str).str.lower() == str(value).lower()
-    elif mode_lower == 'contains':
+    elif mode_lower == "contains":
         return col.astype(str).str.contains(str(value), case=False, na=False)
-    elif mode_lower == 'eq':
+    elif mode_lower == "eq":
         return col == value
-    elif mode_lower == 'ne':
+    elif mode_lower == "ne":
         return col != value
-    elif mode_lower == 'lt':
+    elif mode_lower == "lt":
         return col < value
-    elif mode_lower == 'le':
+    elif mode_lower == "le":
         return col <= value
-    elif mode_lower == 'gt':
+    elif mode_lower == "gt":
         return col > value
-    elif mode_lower == 'ge':
+    elif mode_lower == "ge":
         return col >= value
     else:
         raise ValueError(f"Unknown match mode: '{mode}'")
 
 
 def identify_valid_rows(
-    df: 'pd.DataFrame',
-    columns: Optional[List[str]] = None,
+    df: pd.DataFrame,
+    columns: list[str] | None = None,
     invalid_value: Any = None,
-) -> 'pd.Series':
+) -> pd.Series:
     """Identify rows where specified columns have valid (non-NaN) values.
 
     MATLAB equivalent: ndi.fun.table.identifyValidRows
@@ -111,9 +108,9 @@ def identify_valid_rows(
 
 
 def join_tables(
-    tables: List['pd.DataFrame'],
-    key_columns: Optional[List[str]] = None,
-) -> 'pd.DataFrame':
+    tables: list[pd.DataFrame],
+    key_columns: list[str] | None = None,
+) -> pd.DataFrame:
     """Combine multiple DataFrames using common columns as keys.
 
     MATLAB equivalent: ndi.fun.table.join
@@ -142,7 +139,7 @@ def join_tables(
 
     for t in tables[1:]:
         if key_columns:
-            result = result.merge(t, on=key_columns, how='outer')
+            result = result.merge(t, on=key_columns, how="outer")
         else:
             result = pd.concat([result, t], ignore_index=True)
 
@@ -150,9 +147,9 @@ def join_tables(
 
 
 def move_columns_left(
-    df: 'pd.DataFrame',
-    columns: List[str],
-) -> 'pd.DataFrame':
+    df: pd.DataFrame,
+    columns: list[str],
+) -> pd.DataFrame:
     """Move specified columns to the left of the DataFrame.
 
     MATLAB equivalent: ndi.fun.table.moveColumnsLeft
@@ -172,8 +169,8 @@ def move_columns_left(
 
 
 def vstack(
-    tables: List['pd.DataFrame'],
-) -> 'pd.DataFrame':
+    tables: list[pd.DataFrame],
+) -> pd.DataFrame:
     """Vertically stack DataFrames with dissimilar columns.
 
     MATLAB equivalent: ndi.fun.table.vstack

@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .common import PathConstants
 
@@ -29,19 +29,17 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 _TYPE_VALIDATORS = {
-    'did_uid': lambda v, p: isinstance(v, str),
-    'char': lambda v, p: isinstance(v, str),
-    'string': lambda v, p: isinstance(v, str),
-    'integer': lambda v, p: isinstance(v, (int, float)) and (isinstance(v, int) or v == int(v)),
-    'double': lambda v, p: isinstance(v, (int, float)),
-    'timestamp': lambda v, p: isinstance(v, str) and _is_timestamp(v),
-    'matrix': lambda v, p: isinstance(v, (list, tuple)),
-    'structure': lambda v, p: isinstance(v, dict),
+    "did_uid": lambda v, p: isinstance(v, str),
+    "char": lambda v, p: isinstance(v, str),
+    "string": lambda v, p: isinstance(v, str),
+    "integer": lambda v, p: isinstance(v, (int, float)) and (isinstance(v, int) or v == int(v)),
+    "double": lambda v, p: isinstance(v, (int, float)),
+    "timestamp": lambda v, p: isinstance(v, str) and _is_timestamp(v),
+    "matrix": lambda v, p: isinstance(v, (list, tuple)),
+    "structure": lambda v, p: isinstance(v, dict),
 }
 
-_ISO_TIMESTAMP_RE = re.compile(
-    r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}'
-)
+_ISO_TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
 
 
 def _is_timestamp(value: str) -> bool:
@@ -51,23 +49,23 @@ def _is_timestamp(value: str) -> bool:
     return bool(_ISO_TIMESTAMP_RE.match(value))
 
 
-def _check_integer_params(value: Any, params: Any) -> Optional[str]:
+def _check_integer_params(value: Any, params: Any) -> str | None:
     """Check integer value against parameter constraints [min, max, increment]."""
     if not isinstance(params, list) or len(params) < 2:
         return None
     min_val, max_val = params[0], params[1]
     num_val = int(value) if isinstance(value, float) else value
     if num_val < min_val or num_val > max_val:
-        return f'value {num_val} outside range [{min_val}, {max_val}]'
+        return f"value {num_val} outside range [{min_val}, {max_val}]"
     return None
 
 
-def _check_did_uid_params(value: str, params: Any) -> Optional[str]:
+def _check_did_uid_params(value: str, params: Any) -> str | None:
     """Check did_uid string length against parameter."""
     if isinstance(params, (int, float)) and params > 0:
         expected_len = int(params)
         if len(value) != expected_len:
-            return f'expected length {expected_len}, got {len(value)}'
+            return f"expected length {expected_len}, got {len(value)}"
     return None
 
 
@@ -75,10 +73,10 @@ def _check_did_uid_params(value: str, params: Any) -> Optional[str]:
 # Schema loading
 # ---------------------------------------------------------------------------
 
-_schema_cache: Dict[str, dict] = {}
+_schema_cache: dict[str, dict] = {}
 
 
-def _load_schema(schema_name: str) -> Optional[dict]:
+def _load_schema(schema_name: str) -> dict | None:
     """Load a schema JSON file by name.
 
     Searches in PathConstants.SCHEMA_PATH for ``{name}_schema.json``.
@@ -99,7 +97,7 @@ def _load_schema(schema_name: str) -> Optional[dict]:
         return None
 
     # Try direct path first
-    filename = f'{schema_name}_schema.json'
+    filename = f"{schema_name}_schema.json"
     full_path = schema_path / filename
 
     if not full_path.exists():
@@ -119,7 +117,7 @@ def _load_schema(schema_name: str) -> Optional[dict]:
         return None
 
 
-def _get_schema_for_document(doc: 'Document') -> Optional[dict]:
+def _get_schema_for_document(doc: Document) -> dict | None:
     """Get the schema for a document based on its document_class.
 
     Reads the document's ``document_class.definition`` path to find
@@ -132,10 +130,10 @@ def _get_schema_for_document(doc: 'Document') -> Optional[dict]:
         Schema dict or None.
     """
     props = doc.document_properties
-    doc_class = props.get('document_class', {})
+    doc_class = props.get("document_class", {})
 
     # Try the definition path to derive schema name
-    definition = doc_class.get('definition', '')
+    definition = doc_class.get("definition", "")
     if definition:
         # definition is like '$NDIDOCUMENTPATH/element.json'
         # Extract name: element
@@ -145,10 +143,10 @@ def _get_schema_for_document(doc: 'Document') -> Optional[dict]:
             return schema
 
     # Fallback: use class_name to derive schema
-    class_name = doc_class.get('class_name', '')
+    class_name = doc_class.get("class_name", "")
     if class_name:
         # class_name like 'ndi_document_element' -> 'element'
-        name = class_name.replace('ndi_document_', '').replace('ndi_document', 'base')
+        name = class_name.replace("ndi_document_", "").replace("ndi_document", "base")
         schema = _load_schema(name)
         if schema:
             return schema
@@ -171,33 +169,33 @@ class ValidationResult:
         errors_depends_on: Dict mapping dependency names to their status.
     """
 
-    __slots__ = ('is_valid', 'errors_this', 'errors_super', 'errors_depends_on')
+    __slots__ = ("is_valid", "errors_this", "errors_super", "errors_depends_on")
 
     def __init__(self) -> None:
         self.is_valid: bool = True
-        self.errors_this: List[str] = []
-        self.errors_super: Dict[str, List[str]] = {}
-        self.errors_depends_on: Dict[str, str] = {}
+        self.errors_this: list[str] = []
+        self.errors_super: dict[str, list[str]] = {}
+        self.errors_depends_on: dict[str, str] = {}
 
     @property
     def error_message(self) -> str:
         """Format all errors into a human-readable string."""
-        parts: List[str] = []
+        parts: list[str] = []
         if self.errors_this:
-            parts.append('This-class errors:')
+            parts.append("This-class errors:")
             for e in self.errors_this:
-                parts.append(f'  - {e}')
+                parts.append(f"  - {e}")
         for sc_name, sc_errors in self.errors_super.items():
             if sc_errors:
                 parts.append(f'Superclass "{sc_name}" errors:')
                 for e in sc_errors:
-                    parts.append(f'  - {e}')
+                    parts.append(f"  - {e}")
         if self.errors_depends_on:
-            parts.append('Dependency errors:')
+            parts.append("Dependency errors:")
             for name, status in self.errors_depends_on.items():
-                if status != 'ok':
-                    parts.append(f'  - {name}: {status}')
-        return '\n'.join(parts)
+                if status != "ok":
+                    parts.append(f"  - {name}: {status}")
+        return "\n".join(parts)
 
     def __bool__(self) -> bool:
         return self.is_valid
@@ -207,7 +205,7 @@ def _validate_properties(
     doc_props: dict,
     class_name: str,
     schema: dict,
-) -> List[str]:
+) -> list[str]:
     """Validate properties of a specific class section against its schema.
 
     Args:
@@ -218,7 +216,7 @@ def _validate_properties(
     Returns:
         List of error messages (empty if valid).
     """
-    errors: List[str] = []
+    errors: list[str] = []
 
     # Get the schema property definitions for this class
     prop_defs = schema.get(class_name, [])
@@ -233,22 +231,22 @@ def _validate_properties(
         return errors
 
     for prop_def in prop_defs:
-        prop_name = prop_def.get('name', '')
-        prop_type = prop_def.get('type', '')
-        params = prop_def.get('parameters', '')
+        prop_name = prop_def.get("name", "")
+        prop_type = prop_def.get("type", "")
+        params = prop_def.get("parameters", "")
 
         if not prop_name:
             continue
 
         if prop_name not in doc_section:
             # Property missing — check if it has a default or is required
-            errors.append(f'{class_name}.{prop_name}: missing property')
+            errors.append(f"{class_name}.{prop_name}: missing property")
             continue
 
         value = doc_section[prop_name]
 
         # Allow None/empty for optional fields
-        if value is None or value == '':
+        if value is None or value == "":
             continue
 
         # Type check
@@ -256,20 +254,20 @@ def _validate_properties(
         if validator and not validator(value, params):
             errors.append(
                 f'{class_name}.{prop_name}: expected type "{prop_type}", '
-                f'got {type(value).__name__} ({value!r})'
+                f"got {type(value).__name__} ({value!r})"
             )
             continue
 
         # Parameter constraints
-        if prop_type == 'integer' and isinstance(params, list):
+        if prop_type == "integer" and isinstance(params, list):
             param_err = _check_integer_params(value, params)
             if param_err:
-                errors.append(f'{class_name}.{prop_name}: {param_err}')
+                errors.append(f"{class_name}.{prop_name}: {param_err}")
 
-        if prop_type == 'did_uid' and isinstance(params, (int, float)):
+        if prop_type == "did_uid" and isinstance(params, (int, float)):
             param_err = _check_did_uid_params(str(value), params)
             if param_err:
-                errors.append(f'{class_name}.{prop_name}: {param_err}')
+                errors.append(f"{class_name}.{prop_name}: {param_err}")
 
     return errors
 
@@ -277,8 +275,8 @@ def _validate_properties(
 def _validate_depends_on(
     doc_props: dict,
     schema: dict,
-    session: Optional['Session'] = None,
-) -> Dict[str, str]:
+    session: Session | None = None,
+) -> dict[str, str]:
     """Validate dependency references.
 
     Args:
@@ -289,58 +287,57 @@ def _validate_depends_on(
     Returns:
         Dict mapping dependency name to status ('ok', 'missing', 'empty', 'skipped').
     """
-    results: Dict[str, str] = {}
-    schema_deps = schema.get('depends_on', [])
-    doc_deps = doc_props.get('depends_on', [])
+    results: dict[str, str] = {}
+    schema_deps = schema.get("depends_on", [])
+    doc_deps = doc_props.get("depends_on", [])
 
     if not isinstance(doc_deps, list):
         return results
 
     for schema_dep in schema_deps:
-        dep_name = schema_dep.get('name', '')
-        must_not_be_empty = schema_dep.get('mustbenotempty', 0)
+        dep_name = schema_dep.get("name", "")
+        must_not_be_empty = schema_dep.get("mustbenotempty", 0)
 
         # Find matching doc dependency
-        matching = [d for d in doc_deps if d.get('name') == dep_name]
+        matching = [d for d in doc_deps if d.get("name") == dep_name]
 
         if not matching:
             if must_not_be_empty:
-                results[dep_name] = 'missing dependency declaration'
+                results[dep_name] = "missing dependency declaration"
             else:
-                results[dep_name] = 'ok'
+                results[dep_name] = "ok"
             continue
 
-        dep_value = matching[0].get('value', '')
+        dep_value = matching[0].get("value", "")
 
         if not dep_value:
             if must_not_be_empty:
-                results[dep_name] = 'empty (required to be non-empty)'
+                results[dep_name] = "empty (required to be non-empty)"
             else:
-                results[dep_name] = 'ok'
+                results[dep_name] = "ok"
             continue
 
         # If session available, verify the referenced document exists
         if session is not None:
             try:
                 from .query import Query
-                found = session.database_search(
-                    Query('base.id') == dep_value
-                )
+
+                found = session.database_search(Query("base.id") == dep_value)
                 if found:
-                    results[dep_name] = 'ok'
+                    results[dep_name] = "ok"
                 else:
-                    results[dep_name] = f'document {dep_value!r} not found in database'
+                    results[dep_name] = f"document {dep_value!r} not found in database"
             except Exception as exc:
-                results[dep_name] = f'lookup error: {exc}'
+                results[dep_name] = f"lookup error: {exc}"
         else:
-            results[dep_name] = 'ok'  # Can't verify without session
+            results[dep_name] = "ok"  # Can't verify without session
 
     return results
 
 
 def validate(
-    doc: 'Document',
-    session: Optional['Session'] = None,
+    doc: Document,
+    session: Session | None = None,
 ) -> ValidationResult:
     """Validate an NDI document against its schema.
 
@@ -365,7 +362,7 @@ def validate(
         # No schema found — can't validate
         return result
 
-    class_name = schema.get('classname', '')
+    class_name = schema.get("classname", "")
 
     # 1. This-class validation
     this_errors = _validate_properties(props, class_name, schema)
@@ -374,7 +371,7 @@ def validate(
         result.errors_this = this_errors
 
     # 2. Superclass validation
-    superclasses = schema.get('superclasses', [])
+    superclasses = schema.get("superclasses", [])
     for sc_name in superclasses:
         sc_schema = _load_schema(sc_name)
         if sc_schema is None:
@@ -389,8 +386,8 @@ def validate(
 
     # 3. Dependency validation
     dep_results = _validate_depends_on(props, schema, session)
-    for dep_name, status in dep_results.items():
-        if status != 'ok':
+    for _dep_name, status in dep_results.items():
+        if status != "ok":
             result.is_valid = False
     result.errors_depends_on = dep_results
 

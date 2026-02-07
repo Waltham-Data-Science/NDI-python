@@ -6,4 +6,4 @@ Contains calculators for stimulus tuning analysis.
 
 from .tuningcurve import TuningCurveCalc
 
-__all__ = ['TuningCurveCalc']
+__all__ = ["TuningCurveCalc"]

@@ -9,9 +9,8 @@ time series data (spike times, waveforms, etc.).
 """
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
-import numpy as np
+from typing import TYPE_CHECKING, Any
 
 from .element_timeseries import ElementTimeseries
 
@@ -44,15 +43,15 @@ class Neuron(ElementTimeseries):
 
     def __init__(
         self,
-        session: Optional[Any] = None,
-        name: str = '',
+        session: Any | None = None,
+        name: str = "",
         reference: int = 0,
-        underlying_element: Optional[Any] = None,
+        underlying_element: Any | None = None,
         direct: bool = True,
-        subject_id: str = '',
-        dependencies: Optional[Dict[str, str]] = None,
-        identifier: Optional[str] = None,
-        document: Optional[Any] = None,
+        subject_id: str = "",
+        dependencies: dict[str, str] | None = None,
+        identifier: str | None = None,
+        document: Any | None = None,
     ):
         """
         Create a new Neuron.
@@ -72,7 +71,7 @@ class Neuron(ElementTimeseries):
             session=session,
             name=name,
             reference=reference,
-            type='neuron',
+            type="neuron",
             underlying_element=underlying_element,
             direct=direct,
             subject_id=subject_id,
@@ -81,7 +80,7 @@ class Neuron(ElementTimeseries):
             document=document,
         )
 
-    def newdocument(self) -> 'Document':
+    def newdocument(self) -> Document:
         """
         Create a new document for this neuron.
 
@@ -91,7 +90,7 @@ class Neuron(ElementTimeseries):
         # Use parent's newdocument - type is already 'neuron'
         return super().newdocument()
 
-    def searchquery(self) -> 'Query':
+    def searchquery(self) -> Query:
         """
         Create a query to find this neuron.
 
@@ -100,9 +99,7 @@ class Neuron(ElementTimeseries):
         """
         from .query import Query
 
-        return (
-            Query('base.id') == self.id
-        )
+        return Query("base.id") == self.id
 
     def epochsetname(self) -> str:
         """Return the name of this epoch set."""

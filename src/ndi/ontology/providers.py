@@ -9,31 +9,30 @@ Each provider subclasses OntologyProvider and implements lookup_term().
 from __future__ import annotations
 
 import csv
-import json
 import re
-from io import StringIO
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any
 from urllib.parse import quote
 
 # Registry populated at module load
-PROVIDER_REGISTRY: Dict[str, Type['OntologyProvider']] = {}
+PROVIDER_REGISTRY: dict[str, type[OntologyProvider]] = {}
 
 
 class OntologyProvider:
     """Base class for ontology providers."""
 
-    name: str = ''
+    name: str = ""
 
-    def lookup_term(self, term: str, prefix: str = '') -> Any:
+    def lookup_term(self, term: str, prefix: str = "") -> Any:
         """Look up a term by ID or name. Override in subclasses."""
         from . import OntologyResult
+
         return OntologyResult()
 
     @staticmethod
-    def _http_get_json(url: str, params: Optional[Dict] = None, timeout: int = 30) -> Any:
+    def _http_get_json(url: str, params: dict | None = None, timeout: int = 30) -> Any:
         """HTTP GET returning parsed JSON."""
         import requests
+
         resp = requests.get(url, params=params, timeout=timeout)
         resp.raise_for_status()
         return resp.json()
@@ -47,45 +46,46 @@ class OntologyProvider:
 class OLSProvider(OntologyProvider):
     """Provider backed by the EBI OLS4 API."""
 
-    ols_ontology: str = ''
-    ols_prefix: str = ''
+    ols_ontology: str = ""
+    ols_prefix: str = ""
 
-    def lookup_term(self, term: str, prefix: str = '') -> Any:
-        from . import OntologyResult
+    def lookup_term(self, term: str, prefix: str = "") -> Any:
+
         prefix = prefix or self.ols_prefix
 
-        is_numeric = bool(re.match(r'^\d+$', term))
+        is_numeric = bool(re.match(r"^\d+$", term))
 
         if is_numeric:
-            full_id = f'{prefix}:{term.zfill(7)}'
-            return self._search_ols(full_id, 'obo_id', prefix)
+            full_id = f"{prefix}:{term.zfill(7)}"
+            return self._search_ols(full_id, "obo_id", prefix)
         else:
-            return self._search_ols(term, 'label', prefix)
+            return self._search_ols(term, "label", prefix)
 
     def _search_ols(self, query: str, field: str, prefix: str) -> Any:
         from . import OntologyResult
+
         try:
-            params: Dict[str, Any] = {
-                'q': query,
-                'ontology': self.ols_ontology,
-                'queryFields': field,
+            params: dict[str, Any] = {
+                "q": query,
+                "ontology": self.ols_ontology,
+                "queryFields": field,
             }
-            if field == 'obo_id':
-                params['exact'] = 'true'
+            if field == "obo_id":
+                params["exact"] = "true"
 
             data = self._http_get_json(
-                'https://www.ebi.ac.uk/ols4/api/search',
+                "https://www.ebi.ac.uk/ols4/api/search",
                 params=params,
             )
 
-            docs = data.get('response', {}).get('docs', [])
+            docs = data.get("response", {}).get("docs", [])
             if not docs:
                 return OntologyResult()
 
             # For label search, find exact match
-            if field == 'label':
+            if field == "label":
                 for doc in docs:
-                    if doc.get('label', '').lower() == query.lower():
+                    if doc.get("label", "").lower() == query.lower():
                         return self._doc_to_result(doc, prefix)
                 return OntologyResult()
 
@@ -95,28 +95,29 @@ class OLSProvider(OntologyProvider):
         except Exception:
             return OntologyResult()
 
-    def _doc_to_result(self, doc: Dict, prefix: str) -> Any:
+    def _doc_to_result(self, doc: dict, prefix: str) -> Any:
         from . import OntologyResult
-        obo_id = doc.get('obo_id', '')
+
+        obo_id = doc.get("obo_id", "")
         if not obo_id:
-            short = doc.get('short_form', '')
+            short = doc.get("short_form", "")
             if short:
-                obo_id = short.replace('_', ':')
+                obo_id = short.replace("_", ":")
 
-        desc_list = doc.get('description', [])
-        definition = desc_list[0] if isinstance(desc_list, list) and desc_list else ''
+        desc_list = doc.get("description", [])
+        definition = desc_list[0] if isinstance(desc_list, list) and desc_list else ""
 
-        synonyms = doc.get('synonym', [])
+        synonyms = doc.get("synonym", [])
         if isinstance(synonyms, list):
-            synonyms = [s if isinstance(s, str) else s.get('name', '') for s in synonyms]
+            synonyms = [s if isinstance(s, str) else s.get("name", "") for s in synonyms]
 
         return OntologyResult(
             id=obo_id,
-            name=doc.get('label', ''),
+            name=doc.get("label", ""),
             prefix=prefix,
             definition=definition,
             synonyms=synonyms,
-            short_name=doc.get('short_form', ''),
+            short_name=doc.get("short_form", ""),
         )
 
 
@@ -126,104 +127,112 @@ class OLSProvider(OntologyProvider):
 
 
 class CLProvider(OLSProvider):
-    name = 'CL'
-    ols_ontology = 'cl'
-    ols_prefix = 'CL'
+    name = "CL"
+    ols_ontology = "cl"
+    ols_prefix = "CL"
 
 
 class OMProvider(OLSProvider):
     """Ontology of Units of Measure — label-only lookups."""
-    name = 'OM'
-    ols_ontology = 'om'
-    ols_prefix = 'OM'
 
-    def lookup_term(self, term: str, prefix: str = '') -> Any:
-        from . import OntologyResult
+    name = "OM"
+    ols_ontology = "om"
+    ols_prefix = "OM"
+
+    def lookup_term(self, term: str, prefix: str = "") -> Any:
+
         # OM doesn't support numeric ID lookups
         # Convert CamelCase to spaced lowercase for label search
-        label = re.sub(r'([a-z])([A-Z])', r'\1 \2', term).lower()
-        return self._search_ols(label, 'label', prefix or 'OM')
+        label = re.sub(r"([a-z])([A-Z])", r"\1 \2", term).lower()
+        return self._search_ols(label, "label", prefix or "OM")
 
 
 class CHEBIProvider(OLSProvider):
-    name = 'CHEBI'
-    ols_ontology = 'chebi'
-    ols_prefix = 'CHEBI'
+    name = "CHEBI"
+    ols_ontology = "chebi"
+    ols_prefix = "CHEBI"
 
 
 class SNOMEDProvider(OLSProvider):
-    name = 'SNOMED'
-    ols_ontology = 'snomed'
-    ols_prefix = 'SNOMED'
+    name = "SNOMED"
+    ols_ontology = "snomed"
+    ols_prefix = "SNOMED"
 
 
 class EFOProvider(OLSProvider):
-    name = 'EFO'
-    ols_ontology = 'efo'
-    ols_prefix = 'EFO'
+    name = "EFO"
+    ols_ontology = "efo"
+    ols_prefix = "EFO"
 
 
 class PATOProvider(OLSProvider):
-    name = 'PATO'
-    ols_ontology = 'pato'
-    ols_prefix = 'PATO'
+    name = "PATO"
+    ols_ontology = "pato"
+    ols_prefix = "PATO"
 
 
 class NDICProvider(OntologyProvider):
     """NDI Controlled Vocabulary — local TSV file."""
-    name = 'NDIC'
 
-    _data: Optional[List[Dict[str, str]]] = None
+    name = "NDIC"
 
-    def _load_data(self) -> List[Dict[str, str]]:
+    _data: list[dict[str, str]] | None = None
+
+    def _load_data(self) -> list[dict[str, str]]:
         if NDICProvider._data is not None:
             return NDICProvider._data
 
         try:
             from ndi.common import PathConstants
-            path = PathConstants.COMMON_FOLDER / 'controlled_vocabulary' / 'NDIC.txt'
+
+            path = PathConstants.COMMON_FOLDER / "controlled_vocabulary" / "NDIC.txt"
             if not path.exists():
                 NDICProvider._data = []
                 return []
 
-            entries: List[Dict[str, str]] = []
-            with open(path, 'r') as f:
-                reader = csv.reader(f, delimiter='\t')
+            entries: list[dict[str, str]] = []
+            with open(path) as f:
+                reader = csv.reader(f, delimiter="\t")
                 for row in reader:
                     if len(row) >= 3:
-                        entries.append({
-                            'id': row[0].strip(),
-                            'name': row[1].strip(),
-                            'description': row[2].strip(),
-                        })
+                        entries.append(
+                            {
+                                "id": row[0].strip(),
+                                "name": row[1].strip(),
+                                "description": row[2].strip(),
+                            }
+                        )
             NDICProvider._data = entries
             return entries
         except Exception:
             NDICProvider._data = []
             return []
 
-    def lookup_term(self, term: str, prefix: str = '') -> Any:
+    def lookup_term(self, term: str, prefix: str = "") -> Any:
         from . import OntologyResult
+
         data = self._load_data()
 
         for entry in data:
-            if entry['id'] == term or entry['name'].lower() == term.lower():
+            if entry["id"] == term or entry["name"].lower() == term.lower():
                 return OntologyResult(
                     id=f'NDIC:{entry["id"]}',
-                    name=entry['name'],
-                    prefix='NDIC',
-                    definition=entry['description'],
+                    name=entry["name"],
+                    prefix="NDIC",
+                    definition=entry["description"],
                 )
         return OntologyResult()
 
 
 class NCImProvider(OntologyProvider):
     """NCI Metathesaurus — NCI EVS REST API."""
-    name = 'NCIm'
-    _CUI_PATTERN = re.compile(r'^C\d{7}$')
 
-    def lookup_term(self, term: str, prefix: str = '') -> Any:
+    name = "NCIm"
+    _CUI_PATTERN = re.compile(r"^C\d{7}$")
+
+    def lookup_term(self, term: str, prefix: str = "") -> Any:
         from . import OntologyResult
+
         try:
             if self._CUI_PATTERN.match(term):
                 return self._lookup_cui(term)
@@ -233,40 +242,44 @@ class NCImProvider(OntologyProvider):
 
     def _lookup_cui(self, cui: str) -> Any:
         from . import OntologyResult
+
         data = self._http_get_json(
-            f'https://api-evsrest.nci.nih.gov/api/v1/concept/ncim/{cui}',
-            params={'include': 'full'},
+            f"https://api-evsrest.nci.nih.gov/api/v1/concept/ncim/{cui}",
+            params={"include": "full"},
         )
-        defs = data.get('definitions', [])
-        definition = defs[0].get('definition', '') if defs else ''
-        syns = [s.get('name', '') for s in data.get('synonyms', []) if isinstance(s, dict)]
+        defs = data.get("definitions", [])
+        definition = defs[0].get("definition", "") if defs else ""
+        syns = [s.get("name", "") for s in data.get("synonyms", []) if isinstance(s, dict)]
 
         return OntologyResult(
             id=f'NCIm:{data.get("code", cui)}',
-            name=data.get('name', ''),
-            prefix='NCIm',
+            name=data.get("name", ""),
+            prefix="NCIm",
             definition=definition,
             synonyms=syns,
         )
 
     def _search_name(self, name: str) -> Any:
         from . import OntologyResult
+
         data = self._http_get_json(
-            'https://api-evsrest.nci.nih.gov/api/v1/concept/search',
-            params={'terminology': 'ncim', 'term': name, 'type': 'match'},
+            "https://api-evsrest.nci.nih.gov/api/v1/concept/search",
+            params={"terminology": "ncim", "term": name, "type": "match"},
         )
-        concepts = data.get('concepts', [])
+        concepts = data.get("concepts", [])
         if not concepts:
             return OntologyResult()
-        return self._lookup_cui(concepts[0].get('code', ''))
+        return self._lookup_cui(concepts[0].get("code", ""))
 
 
 class NCBITaxonProvider(OntologyProvider):
     """NCBI Taxonomy — NCBI E-utilities."""
-    name = 'NCBITaxon'
 
-    def lookup_term(self, term: str, prefix: str = '') -> Any:
+    name = "NCBITaxon"
+
+    def lookup_term(self, term: str, prefix: str = "") -> Any:
         from . import OntologyResult
+
         try:
             if term.isdigit():
                 return self._lookup_taxid(term)
@@ -275,61 +288,67 @@ class NCBITaxonProvider(OntologyProvider):
             return OntologyResult()
 
     def _lookup_taxid(self, taxid: str) -> Any:
-        from . import OntologyResult
         import xml.etree.ElementTree as ET
+
         import requests
 
+        from . import OntologyResult
+
         resp = requests.get(
-            'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi',
-            params={'db': 'taxonomy', 'id': taxid, 'retmode': 'xml'},
+            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi",
+            params={"db": "taxonomy", "id": taxid, "retmode": "xml"},
             timeout=30,
         )
         root = ET.fromstring(resp.text)
-        taxon = root.find('.//Taxon')
+        taxon = root.find(".//Taxon")
         if taxon is None:
             return OntologyResult()
 
-        name = taxon.findtext('ScientificName', '')
+        name = taxon.findtext("ScientificName", "")
         synonyms = []
-        for other in taxon.findall('.//OtherNames/Name/DispName'):
+        for other in taxon.findall(".//OtherNames/Name/DispName"):
             if other.text:
                 synonyms.append(other.text)
-        common = taxon.findtext('.//OtherNames/CommonName', '')
+        common = taxon.findtext(".//OtherNames/CommonName", "")
         if common:
             synonyms.insert(0, common)
 
         return OntologyResult(
-            id=f'NCBITaxon:{taxid}',
+            id=f"NCBITaxon:{taxid}",
             name=name,
-            prefix='NCBITaxon',
+            prefix="NCBITaxon",
             synonyms=synonyms,
         )
 
     def _search_name(self, name: str) -> Any:
-        from . import OntologyResult
         import xml.etree.ElementTree as ET
+
         import requests
 
+        from . import OntologyResult
+
         resp = requests.get(
-            'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi',
-            params={'db': 'taxonomy', 'term': f'{name}[Scientific Name]', 'retmode': 'xml'},
+            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
+            params={"db": "taxonomy", "term": f"{name}[Scientific Name]", "retmode": "xml"},
             timeout=30,
         )
         root = ET.fromstring(resp.text)
-        id_list = root.findall('.//Id')
+        id_list = root.findall(".//Id")
         if not id_list:
             return OntologyResult()
-        return self._lookup_taxid(id_list[0].text or '')
+        return self._lookup_taxid(id_list[0].text or "")
 
 
 class WBStrainProvider(OntologyProvider):
     """WormBase Strain Database."""
-    name = 'WBStrain'
 
-    def lookup_term(self, term: str, prefix: str = '') -> Any:
+    name = "WBStrain"
+
+    def lookup_term(self, term: str, prefix: str = "") -> Any:
         from . import OntologyResult
+
         try:
-            if re.match(r'^\d{8}$', term):
+            if re.match(r"^\d{8}$", term):
                 return self._lookup_id(term)
             return self._search_name(term)
         except Exception:
@@ -337,57 +356,63 @@ class WBStrainProvider(OntologyProvider):
 
     def _lookup_id(self, strain_id: str) -> Any:
         from . import OntologyResult
+
         data = self._http_get_json(
-            f'http://rest.wormbase.org/rest/widget/strain/{strain_id}/overview',
+            f"http://rest.wormbase.org/rest/widget/strain/{strain_id}/overview",
         )
-        overview = data.get('fields', {})
-        name_data = overview.get('name', {}).get('data', {})
-        name = name_data.get('label', '') if isinstance(name_data, dict) else ''
-        genotype = overview.get('genotype', {}).get('data', '')
+        overview = data.get("fields", {})
+        name_data = overview.get("name", {}).get("data", {})
+        name = name_data.get("label", "") if isinstance(name_data, dict) else ""
+        genotype = overview.get("genotype", {}).get("data", "")
 
         return OntologyResult(
-            id=f'WBStrain:{strain_id}',
+            id=f"WBStrain:{strain_id}",
             name=name,
-            prefix='WBStrain',
-            definition=str(genotype) if genotype else '',
+            prefix="WBStrain",
+            definition=str(genotype) if genotype else "",
         )
 
     def _search_name(self, name: str) -> Any:
         from . import OntologyResult
+
         data = self._http_get_json(
-            'https://www.alliancegenome.org/api/search',
-            params={'category': 'model', 'q': f'{name}(Cel)'},
+            "https://www.alliancegenome.org/api/search",
+            params={"category": "model", "q": f"{name}(Cel)"},
         )
-        results = data.get('results', [])
+        results = data.get("results", [])
         if not results:
             return OntologyResult()
-        primary_id = results[0].get('primaryId', '')
-        strain_id = primary_id.split(':')[-1] if ':' in primary_id else primary_id
+        primary_id = results[0].get("primaryId", "")
+        strain_id = primary_id.split(":")[-1] if ":" in primary_id else primary_id
         return self._lookup_id(strain_id)
 
 
 class RRIDProvider(OntologyProvider):
     """Research Resource Identifier — SciCrunch resolver."""
-    name = 'RRID'
 
-    def lookup_term(self, term: str, prefix: str = '') -> Any:
+    name = "RRID"
+
+    def lookup_term(self, term: str, prefix: str = "") -> Any:
         from . import OntologyResult
+
         try:
-            full_rrid = f'RRID:{term}'
+            full_rrid = f"RRID:{term}"
             data = self._http_get_json(
-                f'https://scicrunch.org/resolver/{full_rrid}.json',
+                f"https://scicrunch.org/resolver/{full_rrid}.json",
             )
-            hits = data.get('hits', {}).get('hits', [])
+            hits = data.get("hits", {}).get("hits", [])
             if not hits:
                 return OntologyResult()
 
-            source = hits[0].get('_source', {}).get('item', {})
+            source = hits[0].get("_source", {}).get("item", {})
             return OntologyResult(
                 id=full_rrid,
-                name=source.get('name', ''),
-                prefix='RRID',
-                definition=source.get('description', ''),
-                synonyms=source.get('synonyms', []) if isinstance(source.get('synonyms'), list) else [],
+                name=source.get("name", ""),
+                prefix="RRID",
+                definition=source.get("description", ""),
+                synonyms=(
+                    source.get("synonyms", []) if isinstance(source.get("synonyms"), list) else []
+                ),
             )
         except Exception:
             return OntologyResult()
@@ -395,17 +420,19 @@ class RRIDProvider(OntologyProvider):
 
 class PubChemProvider(OntologyProvider):
     """PubChem Compound — PUG REST API."""
-    name = 'PubChem'
 
-    def lookup_term(self, term: str, prefix: str = '') -> Any:
+    name = "PubChem"
+
+    def lookup_term(self, term: str, prefix: str = "") -> Any:
         from . import OntologyResult
+
         try:
             # Detect CID
-            cid = ''
+            cid = ""
             if term.isdigit():
                 cid = term
-            elif term.lower().startswith('cid'):
-                cid = term[3:].lstrip(':').strip()
+            elif term.lower().startswith("cid"):
+                cid = term[3:].lstrip(":").strip()
             if cid:
                 return self._lookup_cid(cid)
             return self._search_name(term)
@@ -414,40 +441,42 @@ class PubChemProvider(OntologyProvider):
 
     def _lookup_cid(self, cid: str) -> Any:
         from . import OntologyResult
-        base = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid'
 
-        title_data = self._http_get_json(f'{base}/{cid}/property/Title/JSON')
-        props = title_data.get('PropertyTable', {}).get('Properties', [{}])
-        title = props[0].get('Title', '') if props else ''
+        base = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid"
+
+        title_data = self._http_get_json(f"{base}/{cid}/property/Title/JSON")
+        props = title_data.get("PropertyTable", {}).get("Properties", [{}])
+        title = props[0].get("Title", "") if props else ""
 
         try:
-            desc_data = self._http_get_json(f'{base}/{cid}/description/JSON')
-            descs = desc_data.get('InformationList', {}).get('Information', [])
-            definition = descs[0].get('Description', '') if descs else ''
+            desc_data = self._http_get_json(f"{base}/{cid}/description/JSON")
+            descs = desc_data.get("InformationList", {}).get("Information", [])
+            definition = descs[0].get("Description", "") if descs else ""
         except Exception:
-            definition = ''
+            definition = ""
 
         try:
-            syn_data = self._http_get_json(f'{base}/{cid}/synonyms/JSON')
-            syn_info = syn_data.get('InformationList', {}).get('Information', [])
-            synonyms = syn_info[0].get('Synonym', [])[:10] if syn_info else []
+            syn_data = self._http_get_json(f"{base}/{cid}/synonyms/JSON")
+            syn_info = syn_data.get("InformationList", {}).get("Information", [])
+            synonyms = syn_info[0].get("Synonym", [])[:10] if syn_info else []
         except Exception:
             synonyms = []
 
         return OntologyResult(
-            id=f'PubChem:{cid}',
+            id=f"PubChem:{cid}",
             name=title,
-            prefix='PubChem',
+            prefix="PubChem",
             definition=definition,
             synonyms=synonyms,
         )
 
     def _search_name(self, name: str) -> Any:
         from . import OntologyResult
+
         data = self._http_get_json(
-            f'https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{quote(name)}/cids/JSON',
+            f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{quote(name)}/cids/JSON",
         )
-        cids = data.get('IdentifierList', {}).get('CID', [])
+        cids = data.get("IdentifierList", {}).get("CID", [])
         if not cids:
             return OntologyResult()
         return self._lookup_cid(str(cids[0]))
@@ -455,31 +484,35 @@ class PubChemProvider(OntologyProvider):
 
 class EMPTYProvider(OntologyProvider):
     """Remote Experimental Ontology (EMPTY) — GitHub-hosted OWL."""
-    name = 'EMPTY'
 
-    def lookup_term(self, term: str, prefix: str = '') -> Any:
+    name = "EMPTY"
+
+    def lookup_term(self, term: str, prefix: str = "") -> Any:
         from . import OntologyResult
+
         # Stub — EMPTY ontology requires OWL parsing which is complex
         # Return empty result; full implementation would fetch and parse OWL
-        return OntologyResult(prefix='EMPTY')
+        return OntologyResult(prefix="EMPTY")
 
 
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
 
-PROVIDER_REGISTRY.update({
-    'CL': CLProvider,
-    'OM': OMProvider,
-    'NDIC': NDICProvider,
-    'NCIm': NCImProvider,
-    'CHEBI': CHEBIProvider,
-    'NCBITaxon': NCBITaxonProvider,
-    'WBStrain': WBStrainProvider,
-    'SNOMED': SNOMEDProvider,
-    'RRID': RRIDProvider,
-    'EFO': EFOProvider,
-    'PATO': PATOProvider,
-    'PubChem': PubChemProvider,
-    'EMPTY': EMPTYProvider,
-})
+PROVIDER_REGISTRY.update(
+    {
+        "CL": CLProvider,
+        "OM": OMProvider,
+        "NDIC": NDICProvider,
+        "NCIm": NCImProvider,
+        "CHEBI": CHEBIProvider,
+        "NCBITaxon": NCBITaxonProvider,
+        "WBStrain": WBStrainProvider,
+        "SNOMED": SNOMEDProvider,
+        "RRID": RRIDProvider,
+        "EFO": EFOProvider,
+        "PATO": PATOProvider,
+        "PubChem": PubChemProvider,
+        "EMPTY": EMPTYProvider,
+    }
+)

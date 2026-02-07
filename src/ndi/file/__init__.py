@@ -14,12 +14,12 @@ Example:
     >>> epochfiles = nav.getepochfiles(1)
 """
 
+from . import type as filetype
 from .navigator import FileNavigator
 from .navigator.epochdir import EpochDirNavigator
-from . import type as filetype
 
 __all__ = [
-    'FileNavigator',
-    'EpochDirNavigator',
-    'filetype',
+    "FileNavigator",
+    "EpochDirNavigator",
+    "filetype",
 ]

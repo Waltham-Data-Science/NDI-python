@@ -20,10 +20,10 @@ import pytest
 
 from ndi.document import Document
 
-
 # ===========================================================================
 # TestMarkGarbageInstantiation — Basic API tests
 # ===========================================================================
+
 
 class TestMarkGarbageInstantiation:
     """Port of ndi.unittest.app.TestMarkGarbage — instantiation tests."""
@@ -35,14 +35,14 @@ class TestMarkGarbageInstantiation:
         app = MarkGarbage()
         assert app is not None
         assert app.session is None
-        assert app.name == 'ndi_app_markgarbage'
+        assert app.name == "ndi_app_markgarbage"
 
     def test_create_with_session(self):
         """MarkGarbage can be created with a session."""
         from ndi.app.markgarbage import MarkGarbage
 
         session = MagicMock()
-        session.id.return_value = 'session-123'
+        session.id.return_value = "session-123"
         app = MarkGarbage(session)
         assert app.session is session
 
@@ -51,7 +51,7 @@ class TestMarkGarbageInstantiation:
         from ndi.app.markgarbage import MarkGarbage
 
         app = MarkGarbage()
-        assert 'MarkGarbage' in repr(app)
+        assert "MarkGarbage" in repr(app)
 
     def test_repr_with_session(self):
         """MarkGarbage repr reflects session state."""
@@ -60,13 +60,13 @@ class TestMarkGarbageInstantiation:
         session = MagicMock()
         app = MarkGarbage(session)
         r = repr(app)
-        assert 'MarkGarbage' in r
-        assert 'True' in r  # session=True
+        assert "MarkGarbage" in r
+        assert "True" in r  # session=True
 
     def test_inherits_from_app(self):
         """MarkGarbage inherits from App."""
-        from ndi.app.markgarbage import MarkGarbage
         from ndi.app import App
+        from ndi.app.markgarbage import MarkGarbage
 
         app = MarkGarbage()
         assert isinstance(app, App)
@@ -75,6 +75,7 @@ class TestMarkGarbageInstantiation:
 # ===========================================================================
 # TestMarkGarbageMocked — Tests with real Document, mocked session
 # ===========================================================================
+
 
 class TestMarkGarbageMocked:
     """Port of ndi.unittest.app.TestMarkGarbage — mocked database tests.
@@ -91,18 +92,18 @@ class TestMarkGarbageMocked:
         from ndi.app.markgarbage import MarkGarbage
 
         session = MagicMock()
-        session.id.return_value = 'session-test-123'
+        session.id.return_value = "session-test-123"
         session.database_add = MagicMock()
         session.database_search = MagicMock(return_value=[])
         session.database_remove = MagicMock()
 
         probe = MagicMock()
-        probe.id = 'probe-001'
-        probe.name = 'cortex'
+        probe.id = "probe-001"
+        probe.name = "cortex"
         probe.reference = 1
 
         timeref = MagicMock()
-        timeref.__str__ = MagicMock(return_value='timeref-epoch1')
+        timeref.__str__ = MagicMock(return_value="timeref-epoch1")
 
         app = MarkGarbage(session)
         return app, session, probe, timeref
@@ -128,14 +129,14 @@ class TestMarkGarbageMocked:
         props = doc.document_properties
 
         # Verify schema class
-        doc_class = props.get('document_class', {})
-        assert doc_class.get('class_name') == 'valid_interval'
+        doc_class = props.get("document_class", {})
+        assert doc_class.get("class_name") == "valid_interval"
 
         # Verify interval values stored
-        vi = props.get('valid_interval')
+        vi = props.get("valid_interval")
         assert vi is not None
-        assert vi['t0'] == 1.0
-        assert vi['t1'] == 3.0
+        assert vi["t0"] == 1.0
+        assert vi["t1"] == 3.0
 
     def test_markvalidinterval_sets_session_id(self):
         """markvalidinterval sets the session ID on the Document."""
@@ -144,7 +145,7 @@ class TestMarkGarbageMocked:
         app.markvalidinterval(probe, 1.0, timeref, 3.0, timeref)
 
         doc = session.database_add.call_args[0][0]
-        assert doc.session_id == 'session-test-123'
+        assert doc.session_id == "session-test-123"
 
     def test_markvalidinterval_sets_dependency(self):
         """markvalidinterval sets element_id dependency on the Document."""
@@ -153,9 +154,9 @@ class TestMarkGarbageMocked:
         app.markvalidinterval(probe, 1.0, timeref, 3.0, timeref)
 
         doc = session.database_add.call_args[0][0]
-        deps = doc.document_properties.get('depends_on', [])
-        dep_names = {d['name']: d['value'] for d in deps}
-        assert dep_names.get('element_id') == 'probe-001'
+        deps = doc.document_properties.get("depends_on", [])
+        dep_names = {d["name"]: d["value"] for d in deps}
+        assert dep_names.get("element_id") == "probe-001"
 
     def test_clearvalidinterval_removes_docs(self):
         """clearvalidinterval removes all interval docs for probe."""
@@ -191,17 +192,17 @@ class TestMarkGarbageMocked:
         app, session, probe, timeref = self._make_app_and_probe()
 
         # Create a real Document (as markvalidinterval would)
-        interval = {'t0': 1.0, 'timeref_t0': 'tr', 't1': 3.0, 'timeref_t1': 'tr'}
+        interval = {"t0": 1.0, "timeref_t0": "tr", "t1": 3.0, "timeref_t1": "tr"}
         real_doc = Document(
-            'apps/markgarbage/valid_interval',
+            "apps/markgarbage/valid_interval",
             valid_interval=interval,
         )
         session.database_search.return_value = [real_doc]
 
         result = app.loadvalidinterval(probe)
         assert len(result) == 1
-        assert result[0]['t0'] == 1.0
-        assert result[0]['t1'] == 3.0
+        assert result[0]["t0"] == 1.0
+        assert result[0]["t1"] == 3.0
 
     def test_markvalidinterval_no_session_raises(self):
         """markvalidinterval without session raises RuntimeError."""
@@ -209,10 +210,10 @@ class TestMarkGarbageMocked:
 
         app = MarkGarbage()  # No session
         probe = MagicMock()
-        probe.id = 'probe-001'
+        probe.id = "probe-001"
         timeref = MagicMock()
 
-        with pytest.raises(RuntimeError, match='No session'):
+        with pytest.raises(RuntimeError, match="No session"):
             app.markvalidinterval(probe, 1.0, timeref, 3.0, timeref)
 
     def test_clearvalidinterval_no_session_noop(self):
@@ -250,8 +251,8 @@ class TestMarkGarbageMocked:
 
         intervals = app.loadvalidinterval(probe)
         assert len(intervals) == 1
-        assert intervals[0]['t0'] == 2.0
-        assert intervals[0]['t1'] == 5.0
+        assert intervals[0]["t0"] == 2.0
+        assert intervals[0]["t1"] == 5.0
 
     def test_mark_then_clear_workflow(self):
         """Full mark → clear → load workflow using real Documents."""
@@ -291,6 +292,6 @@ class TestMarkGarbageMocked:
 
         intervals = app.loadvalidinterval(probe)
         assert len(intervals) == 2
-        times = sorted([(i['t0'], i['t1']) for i in intervals])
+        times = sorted([(i["t0"], i["t1"]) for i in intervals])
         assert times[0] == (2.0, 4.0)
         assert times[1] == (8.0, 10.0)

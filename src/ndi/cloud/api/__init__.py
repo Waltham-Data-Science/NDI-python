@@ -9,10 +9,6 @@ Submodules:
     compute   — Compute session management
 """
 
-from . import datasets
-from . import documents
-from . import files
-from . import users
-from . import compute
+from . import compute, datasets, documents, files, users
 
-__all__ = ['datasets', 'documents', 'files', 'users', 'compute']
+__all__ = ["datasets", "documents", "files", "users", "compute"]

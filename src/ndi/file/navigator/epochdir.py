@@ -7,9 +7,8 @@ MATLAB equivalent: src/ndi/+ndi/+file/navigator_epochdir.m (conceptual)
 """
 
 from __future__ import annotations
-import os
+
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
 
 from . import FileNavigator
 
@@ -32,7 +31,7 @@ class EpochDirNavigator(FileNavigator):
         >>> #   trial_002/file.rhd  -> epoch 2
     """
 
-    def selectfilegroups_disk(self) -> List[List[str]]:
+    def selectfilegroups_disk(self) -> list[list[str]]:
         """
         Select file groups from disk, one per subdirectory.
 
@@ -47,7 +46,7 @@ class EpochDirNavigator(FileNavigator):
         except ValueError:
             return []
 
-        patterns = self._fileparameters.get('filematch', [])
+        patterns = self._fileparameters.get("filematch", [])
         if not patterns:
             return []
 
@@ -58,10 +57,7 @@ class EpochDirNavigator(FileNavigator):
         groups = []
 
         # Sort directories for deterministic ordering
-        subdirs = sorted([
-            d for d in base.iterdir()
-            if d.is_dir() and not d.name.startswith('.')
-        ])
+        subdirs = sorted([d for d in base.iterdir() if d.is_dir() and not d.name.startswith(".")])
 
         for subdir in subdirs:
             matched = self._match_files_in_dir(subdir, patterns)
@@ -73,8 +69,8 @@ class EpochDirNavigator(FileNavigator):
     def _match_files_in_dir(
         self,
         directory: Path,
-        patterns: List[str],
-    ) -> List[str]:
+        patterns: list[str],
+    ) -> list[str]:
         """
         Find files matching patterns in a single directory.
 
@@ -95,7 +91,7 @@ class EpochDirNavigator(FileNavigator):
             return []
 
         for f in files:
-            if f.name.startswith('.'):
+            if f.name.startswith("."):
                 continue
             for pattern in patterns:
                 if fnmatch.fnmatch(f.name, pattern):
@@ -111,5 +107,5 @@ class EpochDirNavigator(FileNavigator):
         return matched
 
     def __repr__(self) -> str:
-        n_patterns = len(self._fileparameters.get('filematch', []))
+        n_patterns = len(self._fileparameters.get("filematch", []))
         return f"EpochDirNavigator(patterns={n_patterns})"

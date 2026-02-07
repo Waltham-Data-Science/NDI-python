@@ -7,9 +7,9 @@ during an epoch.
 """
 
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union
-import re
+
+from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -41,17 +41,17 @@ class EpochProbeMap:
     name: str
     reference: int
     type: str
-    devicestring: str = ''
-    subjectstring: str = ''
+    devicestring: str = ""
+    subjectstring: str = ""
 
     def __post_init__(self):
         """Validate fields after initialization."""
         # Validate no whitespace in name
-        if ' ' in self.name or '\t' in self.name:
+        if " " in self.name or "\t" in self.name:
             raise ValueError(f"name cannot contain whitespace: '{self.name}'")
 
         # Validate no whitespace in type
-        if ' ' in self.type or '\t' in self.type:
+        if " " in self.type or "\t" in self.type:
             raise ValueError(f"type cannot contain whitespace: '{self.type}'")
 
         # Validate reference is non-negative
@@ -62,23 +62,23 @@ class EpochProbeMap:
     def devicename(self) -> str:
         """Extract device name from devicestring."""
         if not self.devicestring:
-            return ''
-        parts = self.devicestring.split(':')
-        return parts[0] if parts else ''
+            return ""
+        parts = self.devicestring.split(":")
+        return parts[0] if parts else ""
 
     @property
     def deviceclass(self) -> str:
         """Extract device class from devicestring."""
         if not self.devicestring:
-            return ''
-        parts = self.devicestring.split(':')
-        return parts[1] if len(parts) > 1 else ''
+            return ""
+        parts = self.devicestring.split(":")
+        return parts[1] if len(parts) > 1 else ""
 
     def matches(
         self,
-        name: Optional[str] = None,
-        reference: Optional[int] = None,
-        type: Optional[str] = None,
+        name: str | None = None,
+        reference: int | None = None,
+        type: str | None = None,
     ) -> bool:
         """
         Check if this probe map matches the given criteria.
@@ -99,25 +99,25 @@ class EpochProbeMap:
             return False
         return True
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary representation."""
         return {
-            'name': self.name,
-            'reference': self.reference,
-            'type': self.type,
-            'devicestring': self.devicestring,
-            'subjectstring': self.subjectstring,
+            "name": self.name,
+            "reference": self.reference,
+            "type": self.type,
+            "devicestring": self.devicestring,
+            "subjectstring": self.subjectstring,
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'EpochProbeMap':
+    def from_dict(cls, data: dict[str, Any]) -> EpochProbeMap:
         """Create from dictionary representation."""
         return cls(
-            name=data.get('name', ''),
-            reference=data.get('reference', 0),
-            type=data.get('type', ''),
-            devicestring=data.get('devicestring', ''),
-            subjectstring=data.get('subjectstring', ''),
+            name=data.get("name", ""),
+            reference=data.get("reference", 0),
+            type=data.get("type", ""),
+            devicestring=data.get("devicestring", ""),
+            subjectstring=data.get("subjectstring", ""),
         )
 
     def __str__(self) -> str:
@@ -129,11 +129,11 @@ class EpochProbeMap:
         if not isinstance(other, EpochProbeMap):
             return False
         return (
-            self.name == other.name and
-            self.reference == other.reference and
-            self.type == other.type and
-            self.devicestring == other.devicestring and
-            self.subjectstring == other.subjectstring
+            self.name == other.name
+            and self.reference == other.reference
+            and self.type == other.type
+            and self.devicestring == other.devicestring
+            and self.subjectstring == other.subjectstring
         )
 
     def __hash__(self) -> int:
@@ -141,7 +141,7 @@ class EpochProbeMap:
         return hash((self.name, self.reference, self.type))
 
 
-def parse_devicestring(devicestring: str) -> Dict[str, str]:
+def parse_devicestring(devicestring: str) -> dict[str, str]:
     """
     Parse a device string into components.
 
@@ -153,18 +153,18 @@ def parse_devicestring(devicestring: str) -> Dict[str, str]:
     Returns:
         Dict with 'name', 'class', 'details' keys
     """
-    parts = devicestring.split(':')
+    parts = devicestring.split(":")
     return {
-        'name': parts[0] if len(parts) > 0 else '',
-        'class': parts[1] if len(parts) > 1 else '',
-        'details': ':'.join(parts[2:]) if len(parts) > 2 else '',
+        "name": parts[0] if len(parts) > 0 else "",
+        "class": parts[1] if len(parts) > 1 else "",
+        "details": ":".join(parts[2:]) if len(parts) > 2 else "",
     }
 
 
 def build_devicestring(
     name: str,
-    deviceclass: str = '',
-    details: str = '',
+    deviceclass: str = "",
+    details: str = "",
 ) -> str:
     """
     Build a device string from components.

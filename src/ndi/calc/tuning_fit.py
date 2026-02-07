@@ -10,7 +10,7 @@ MATLAB equivalent: src/ndi/+ndi/+calc/tuning_fit.m
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -40,16 +40,16 @@ class TuningFit(Calculator):
     """
 
     # Scope presets (reps, noise)
-    SCOPE_PRESETS: Dict[str, Dict[str, Any]] = {
-        'highSNR': {'reps': 5, 'noise': 0.001},
-        'lowSNR':  {'reps': 10, 'noise': 1.0},
+    SCOPE_PRESETS: dict[str, dict[str, Any]] = {
+        "highSNR": {"reps": 5, "noise": 0.001},
+        "lowSNR": {"reps": 10, "noise": 1.0},
     }
 
     def __init__(
         self,
-        session: Optional['Session'] = None,
-        document_type: str = '',
-        path_to_doc_type: str = '',
+        session: Session | None = None,
+        document_type: str = "",
+        path_to_doc_type: str = "",
     ):
         super().__init__(
             session=session,
@@ -66,7 +66,7 @@ class TuningFit(Calculator):
         self,
         scope: str,
         index: int,
-    ) -> Tuple[Dict[str, Any], List[str], np.ndarray, np.ndarray]:
+    ) -> tuple[dict[str, Any], list[str], np.ndarray, np.ndarray]:
         """
         Generate mock stimulus parameters for testing.
 
@@ -92,8 +92,8 @@ class TuningFit(Calculator):
         number_of_tests: int,
         *,
         generate_expected_docs: bool = False,
-        specific_test_inds: Optional[List[int]] = None,
-    ) -> Tuple[List[Any], List[Any], List[Any]]:
+        specific_test_inds: list[int] | None = None,
+    ) -> tuple[list[Any], list[Any], list[Any]]:
         """
         Generate mock input documents and expected outputs for self-testing.
 
@@ -119,20 +119,18 @@ class TuningFit(Calculator):
             ValueError: If *scope* is not a recognised preset.
         """
         if scope not in self.SCOPE_PRESETS:
-            raise ValueError(
-                f"scope must be one of {list(self.SCOPE_PRESETS)}, got '{scope}'"
-            )
+            raise ValueError(f"scope must be one of {list(self.SCOPE_PRESETS)}, got '{scope}'")
 
         preset = self.SCOPE_PRESETS[scope]
-        reps = preset['reps']
-        noise = preset['noise']
+        reps = preset["reps"]
+        noise = preset["noise"]
 
         if specific_test_inds is None or len(specific_test_inds) == 0:
             specific_test_inds = list(range(1, number_of_tests + 1))
 
-        docs: List[Any] = [None] * number_of_tests
-        doc_output: List[Any] = [None] * number_of_tests
-        doc_expected_output: List[Any] = [None] * number_of_tests
+        docs: list[Any] = [None] * number_of_tests
+        doc_output: list[Any] = [None] * number_of_tests
+        doc_expected_output: list[Any] = [None] * number_of_tests
 
         for i in range(1, number_of_tests + 1):
             if i not in specific_test_inds:
@@ -140,9 +138,7 @@ class TuningFit(Calculator):
 
             idx = i - 1  # 0-based storage index
 
-            param_struct, independent_variable, x, r = (
-                self.generate_mock_parameters(scope, i)
-            )
+            param_struct, independent_variable, x, r = self.generate_mock_parameters(scope, i)
 
             # Build synthetic stimulus-response data
             x = np.asarray(x, dtype=float)
@@ -151,45 +147,45 @@ class TuningFit(Calculator):
 
             stim_responses = []
             for s in range(n_stim):
-                for rep in range(reps):
+                for _rep in range(reps):
                     noisy_r = r[s] + noise * np.random.randn()
                     entry = {
-                        'stimid': s + 1,
-                        'response': noisy_r,
-                        'parameters': {
+                        "stimid": s + 1,
+                        "response": noisy_r,
+                        "parameters": {
                             **param_struct,
                         },
                     }
                     # Add independent variable values
                     if x.ndim == 1:
-                        entry['parameters'][independent_variable[0]] = float(x[s])
+                        entry["parameters"][independent_variable[0]] = float(x[s])
                     else:
                         for dim, var_name in enumerate(independent_variable):
-                            entry['parameters'][var_name] = float(x[s, dim])
+                            entry["parameters"][var_name] = float(x[s, dim])
                     stim_responses.append(entry)
 
             docs[idx] = {
-                'stim_responses': stim_responses,
-                'param_struct': param_struct,
-                'independent_variable': independent_variable,
-                'x': x,
-                'r': r,
-                'reps': reps,
-                'noise': noise,
+                "stim_responses": stim_responses,
+                "param_struct": param_struct,
+                "independent_variable": independent_variable,
+                "x": x,
+                "r": r,
+                "reps": reps,
+                "noise": noise,
             }
 
             # Build expected output (noiseless)
             doc_expected_output[idx] = {
-                'independent_variable': x.tolist(),
-                'response_mean': r.tolist(),
-                'response_stderr': [0.0] * n_stim,
+                "independent_variable": x.tolist(),
+                "response_mean": r.tolist(),
+                "response_stderr": [0.0] * n_stim,
             }
 
             # Run the calculator if a session is available
             if self._session is not None:
                 calc_params = self.default_search_for_input_parameters()
-                calc_params['input_parameters'] = {
-                    'independent_variable': independent_variable,
+                calc_params["input_parameters"] = {
+                    "independent_variable": independent_variable,
                     **param_struct,
                 }
                 try:
@@ -200,8 +196,5 @@ class TuningFit(Calculator):
         return docs, doc_output, doc_expected_output
 
     def __repr__(self) -> str:
-        doc_type = self.doc_document_types[0] if self.doc_document_types else 'none'
-        return (
-            f"TuningFit(type={doc_type!r}, "
-            f"session={self._session is not None})"
-        )
+        doc_type = self.doc_document_types[0] if self.doc_document_types else "none"
+        return f"TuningFit(type={doc_type!r}, " f"session={self._session is not None})"

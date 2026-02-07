@@ -8,7 +8,8 @@ MATLAB equivalent: src/ndi/+ndi/+probe/+timeseries/stimulator.m
 """
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, Tuple, Union
+
+from typing import Any
 
 import numpy as np
 
@@ -46,10 +47,10 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
 
     def __init__(
         self,
-        session: Optional[Any] = None,
-        name: str = '',
+        session: Any | None = None,
+        name: str = "",
         reference: int = 1,
-        type: str = 'stimulator',
+        type: str = "stimulator",
     ):
         super().__init__(
             session=session,
@@ -60,10 +61,10 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
 
     def readtimeseriesepoch(
         self,
-        epoch: Union[int, str],
+        epoch: int | str,
         t0: float = 0.0,
-        t1: float = float('inf'),
-    ) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[Any]]:
+        t1: float = float("inf"),
+    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, Any | None]:
         """
         Read stimulus delivery data from an epoch.
 
@@ -85,40 +86,40 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
             return None, None, None
 
         data = {
-            'stimid': np.array([], dtype=int),
-            'parameters': [],
-            'analog': np.array([]),
+            "stimid": np.array([], dtype=int),
+            "parameters": [],
+            "analog": np.array([]),
         }
 
         times = {
-            'stimon': np.array([]),
-            'stimoff': np.array([]),
-            'stimopenclose': np.array([]).reshape(0, 2),
-            'stimevents': np.array([]),
+            "stimon": np.array([]),
+            "stimoff": np.array([]),
+            "stimopenclose": np.array([]).reshape(0, 2),
+            "stimevents": np.array([]),
         }
 
         # Read marker channels to extract stimulus timing
         mk_data = self._read_marker_channels(epoch, t0, t1)
         if mk_data is not None:
-            data['stimid'] = mk_data.get('stimid', data['stimid'])
-            times['stimon'] = mk_data.get('stimon', times['stimon'])
-            times['stimoff'] = mk_data.get('stimoff', times['stimoff'])
-            times['stimopenclose'] = mk_data.get('stimopenclose', times['stimopenclose'])
+            data["stimid"] = mk_data.get("stimid", data["stimid"])
+            times["stimon"] = mk_data.get("stimon", times["stimon"])
+            times["stimoff"] = mk_data.get("stimoff", times["stimoff"])
+            times["stimopenclose"] = mk_data.get("stimopenclose", times["stimopenclose"])
 
         # Read metadata channels for parameters
         md_data = self._read_metadata_channels(epoch, t0, t1)
         if md_data is not None:
-            data['parameters'] = md_data
+            data["parameters"] = md_data
 
         # Read event channels
         ev_data = self._read_event_channels(epoch, t0, t1)
         if ev_data is not None:
-            times['stimevents'] = ev_data
+            times["stimevents"] = ev_data
 
         # Read analog channels
         ai_data = self._read_analog_channels(epoch, t0, t1)
         if ai_data is not None:
-            data['analog'] = ai_data
+            data["analog"] = ai_data
 
         # Get time reference
         timeref = self._get_epoch_timeref(epoch)
@@ -127,10 +128,10 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
 
     def _read_marker_channels(
         self,
-        epoch: Union[int, str],
+        epoch: int | str,
         t0: float,
         t1: float,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Read marker channels to extract stimulus timing.
 
@@ -147,43 +148,44 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
 
     def _read_metadata_channels(
         self,
-        epoch: Union[int, str],
+        epoch: int | str,
         t0: float,
         t1: float,
-    ) -> Optional[List[Dict[str, Any]]]:
+    ) -> list[dict[str, Any]] | None:
         """Read metadata channels for stimulus parameters."""
         return None
 
     def _read_event_channels(
         self,
-        epoch: Union[int, str],
+        epoch: int | str,
         t0: float,
         t1: float,
-    ) -> Optional[np.ndarray]:
+    ) -> np.ndarray | None:
         """Read event channels for stimulus triggers."""
         return None
 
     def _read_analog_channels(
         self,
-        epoch: Union[int, str],
+        epoch: int | str,
         t0: float,
         t1: float,
-    ) -> Optional[np.ndarray]:
+    ) -> np.ndarray | None:
         """Read analog channels from the stimulator."""
         return None
 
-    def _get_epoch_timeref(self, epoch: Union[int, str]) -> Optional[Any]:
+    def _get_epoch_timeref(self, epoch: int | str) -> Any | None:
         """Get the time reference for an epoch."""
         if self._session is None:
             return None
         from ..time import ClockType
+
         return ClockType.DEV_LOCAL_TIME
 
     def parse_marker_data(
         self,
         mk_timestamps: np.ndarray,
         mk_values: np.ndarray,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Parse raw marker channel data into structured stimulus events.
 
@@ -199,10 +201,10 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
         """
         if mk_timestamps.size == 0 or mk_values.size == 0:
             return {
-                'stimid': np.array([], dtype=int),
-                'stimon': np.array([]),
-                'stimoff': np.array([]),
-                'stimopenclose': np.array([]).reshape(0, 2),
+                "stimid": np.array([], dtype=int),
+                "stimon": np.array([]),
+                "stimoff": np.array([]),
+                "stimopenclose": np.array([]).reshape(0, 2),
             }
 
         # Ensure 2D
@@ -230,7 +232,7 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
         # Parse mk2 (stimulus ID) if available
         if ncols >= 2:
             col1_vals = mk_values[:, 1]
-            col1_times = mk_timestamps[:, 1]
+            mk_timestamps[:, 1]
             # IDs recorded at onset events
             id_mask = col1_vals > 0
             stimids = col1_vals[id_mask].astype(int).tolist()
@@ -247,14 +249,15 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
                 openclose_times.append([s, c])
 
         return {
-            'stimid': np.array(stimids, dtype=int),
-            'stimon': np.array(stimon_times),
-            'stimoff': np.array(stimoff_times),
-            'stimopenclose': np.array(openclose_times).reshape(-1, 2) if openclose_times else np.array([]).reshape(0, 2),
+            "stimid": np.array(stimids, dtype=int),
+            "stimon": np.array(stimon_times),
+            "stimoff": np.array(stimoff_times),
+            "stimopenclose": (
+                np.array(openclose_times).reshape(-1, 2)
+                if openclose_times
+                else np.array([]).reshape(0, 2)
+            ),
         }
 
     def __repr__(self) -> str:
-        return (
-            f"ProbeTimeseriesStimulator(name='{self._name}', "
-            f"reference={self._reference})"
-        )
+        return f"ProbeTimeseriesStimulator(name='{self._name}', " f"reference={self._reference})"

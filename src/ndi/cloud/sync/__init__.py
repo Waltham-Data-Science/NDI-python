@@ -5,8 +5,8 @@ Provides sync modes, index tracking, and sync operations between
 local datasets and the NDI Cloud.
 """
 
-from .mode import SyncMode, SyncOptions
 from .index import SyncIndex
+from .mode import SyncMode, SyncOptions
 from .operations import (
     download_new,
     mirror_from_remote,
@@ -17,13 +17,13 @@ from .operations import (
 )
 
 __all__ = [
-    'SyncMode',
-    'SyncOptions',
-    'SyncIndex',
-    'upload_new',
-    'download_new',
-    'mirror_to_remote',
-    'mirror_from_remote',
-    'two_way_sync',
-    'sync',
+    "SyncMode",
+    "SyncOptions",
+    "SyncIndex",
+    "upload_new",
+    "download_new",
+    "mirror_to_remote",
+    "mirror_from_remote",
+    "two_way_sync",
+    "sync",
 ]

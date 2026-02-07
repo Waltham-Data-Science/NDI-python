@@ -8,9 +8,10 @@ MATLAB equivalent: src/ndi/+ndi/+daq/+metadatareader/NielsenLabStims.m
 """
 
 from __future__ import annotations
+
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from ..metadatareader import MetadataReader
 
@@ -30,14 +31,14 @@ class NielsenLabStimsReader(MetadataReader):
         >>> params = reader.readmetadata(['data.rhd', 'analyzer.mat'])
     """
 
-    ANALYZER_FILE_PATTERN = r'analyzer\.mat$'
+    ANALYZER_FILE_PATTERN = r"analyzer\.mat$"
 
     def __init__(
         self,
-        tsv_pattern: str = '',
-        identifier: Optional[str] = None,
-        session: Optional[Any] = None,
-        document: Optional[Any] = None,
+        tsv_pattern: str = "",
+        identifier: str | None = None,
+        session: Any | None = None,
+        document: Any | None = None,
     ):
         super().__init__(
             tsv_pattern=tsv_pattern,
@@ -48,8 +49,8 @@ class NielsenLabStimsReader(MetadataReader):
 
     def readmetadata(
         self,
-        epochfiles: List[str],
-    ) -> List[Dict[str, Any]]:
+        epochfiles: list[str],
+    ) -> list[dict[str, Any]]:
         """
         Read stimulus metadata from Nielsen Lab files.
 
@@ -73,7 +74,7 @@ class NielsenLabStimsReader(MetadataReader):
 
         return self._read_analyzer_mat(analyzer_file)
 
-    def _find_analyzer_file(self, epochfiles: List[str]) -> Optional[str]:
+    def _find_analyzer_file(self, epochfiles: list[str]) -> str | None:
         """Find the analyzer .mat file in epoch files."""
         pattern = re.compile(self.ANALYZER_FILE_PATTERN, re.IGNORECASE)
         for f in epochfiles:
@@ -81,7 +82,7 @@ class NielsenLabStimsReader(MetadataReader):
                 return f
         return None
 
-    def _read_analyzer_mat(self, filepath: str) -> List[Dict[str, Any]]:
+    def _read_analyzer_mat(self, filepath: str) -> list[dict[str, Any]]:
         """
         Read stimulus parameters from a Nielsen Lab analyzer .mat file.
 
@@ -93,26 +94,26 @@ class NielsenLabStimsReader(MetadataReader):
         """
         try:
             from scipy.io import loadmat
-        except ImportError:
+        except ImportError as exc:
             raise ImportError(
                 "scipy is required to read Nielsen Lab .mat files. "
                 "Install with: pip install scipy"
-            )
+            ) from exc
 
         if not Path(filepath).is_file():
             return []
 
         mat_data = loadmat(filepath, squeeze_me=True, struct_as_record=True)
 
-        if 'Analyzer' not in mat_data:
+        if "Analyzer" not in mat_data:
             return []
 
-        return self.extract_stimulus_parameters(mat_data['Analyzer'])
+        return self.extract_stimulus_parameters(mat_data["Analyzer"])
 
     @staticmethod
     def extract_stimulus_parameters(
         analyzer: Any,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Extract stimulus parameters from an Analyzer structure.
 
@@ -133,9 +134,9 @@ class NielsenLabStimsReader(MetadataReader):
         try:
             # Extract global parameters from M field
             global_params = {}
-            m_field = analyzer['M'] if 'M' in analyzer.dtype.names else None
+            m_field = analyzer["M"] if "M" in analyzer.dtype.names else None
             if m_field is not None:
-                if hasattr(m_field, 'dtype') and m_field.dtype.names:
+                if hasattr(m_field, "dtype") and m_field.dtype.names:
                     for name in m_field.dtype.names:
                         val = m_field[name]
                         if isinstance(val, np.ndarray) and val.size == 1:
@@ -144,13 +145,13 @@ class NielsenLabStimsReader(MetadataReader):
 
             # Extract base parameters from P.param
             base_params = {}
-            if 'P' in analyzer.dtype.names:
-                p_field = analyzer['P']
-                if hasattr(p_field, 'dtype') and 'param' in p_field.dtype.names:
-                    param_array = p_field['param']
-                    if hasattr(param_array, '__len__'):
+            if "P" in analyzer.dtype.names:
+                p_field = analyzer["P"]
+                if hasattr(p_field, "dtype") and "param" in p_field.dtype.names:
+                    param_array = p_field["param"]
+                    if hasattr(param_array, "__len__"):
                         for item in param_array:
-                            if hasattr(item, '__len__') and len(item) >= 3:
+                            if hasattr(item, "__len__") and len(item) >= 3:
                                 name = str(item[0])
                                 value = item[2]
                                 if isinstance(value, np.ndarray) and value.size == 1:
@@ -158,11 +159,11 @@ class NielsenLabStimsReader(MetadataReader):
                                 base_params[name] = value
 
             # Extract condition-specific parameters from loops.conds
-            if 'loops' in analyzer.dtype.names:
-                loops = analyzer['loops']
-                if hasattr(loops, 'dtype') and 'conds' in loops.dtype.names:
-                    conds = loops['conds']
-                    if hasattr(conds, '__len__'):
+            if "loops" in analyzer.dtype.names:
+                loops = analyzer["loops"]
+                if hasattr(loops, "dtype") and "conds" in loops.dtype.names:
+                    conds = loops["conds"]
+                    if hasattr(conds, "__len__"):
                         num_conds = len(conds)
                     else:
                         num_conds = 1
@@ -174,10 +175,10 @@ class NielsenLabStimsReader(MetadataReader):
                         cond_params.update(base_params)
 
                         # Add condition-specific values
-                        if hasattr(cond, 'dtype') and cond.dtype.names:
-                            symbols = cond.get('symbol', []) if 'symbol' in cond.dtype.names else []
-                            vals = cond.get('val', []) if 'val' in cond.dtype.names else []
-                            if hasattr(symbols, '__len__') and hasattr(vals, '__len__'):
+                        if hasattr(cond, "dtype") and cond.dtype.names:
+                            symbols = cond.get("symbol", []) if "symbol" in cond.dtype.names else []
+                            vals = cond.get("val", []) if "val" in cond.dtype.names else []
+                            if hasattr(symbols, "__len__") and hasattr(vals, "__len__"):
                                 for s, v in zip(symbols, vals):
                                     name = str(s)
                                     if isinstance(v, np.ndarray) and v.size == 1:
@@ -203,7 +204,7 @@ class NielsenLabStimsReader(MetadataReader):
         return parameters
 
     @staticmethod
-    def extract_display_order(analyzer: Any) -> List[int]:
+    def extract_display_order(analyzer: Any) -> list[int]:
         """
         Extract display order (trial-to-condition mapping) from Analyzer.
 
@@ -217,18 +218,18 @@ class NielsenLabStimsReader(MetadataReader):
 
         display_order = []
         try:
-            if 'loops' in analyzer.dtype.names:
-                loops = analyzer['loops']
-                if hasattr(loops, 'dtype') and 'conds' in loops.dtype.names:
-                    conds = loops['conds']
-                    if hasattr(conds, '__len__'):
+            if "loops" in analyzer.dtype.names:
+                loops = analyzer["loops"]
+                if hasattr(loops, "dtype") and "conds" in loops.dtype.names:
+                    conds = loops["conds"]
+                    if hasattr(conds, "__len__"):
                         for cond_idx, cond in enumerate(conds):
-                            if hasattr(cond, 'dtype') and 'repeats' in cond.dtype.names:
-                                repeats = cond['repeats']
-                                if hasattr(repeats, '__len__'):
+                            if hasattr(cond, "dtype") and "repeats" in cond.dtype.names:
+                                repeats = cond["repeats"]
+                                if hasattr(repeats, "__len__"):
                                     for rep in repeats:
-                                        if hasattr(rep, 'dtype') and 'trialno' in rep.dtype.names:
-                                            trialno = rep['trialno']
+                                        if hasattr(rep, "dtype") and "trialno" in rep.dtype.names:
+                                            trialno = rep["trialno"]
                                             if isinstance(trialno, np.ndarray):
                                                 trialno = trialno.item()
                                             display_order.append((int(trialno), cond_idx))

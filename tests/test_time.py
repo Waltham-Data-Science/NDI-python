@@ -2,21 +2,17 @@
 Tests for ndi.time module (Phase 4).
 """
 
-import pytest
 import numpy as np
+import pytest
 
 from ndi.time import (
     ClockType,
+    EpochNode,
+    SyncGraph,
     TimeMapping,
     TimeReference,
-    SyncRule,
-    SyncGraph,
-    EpochNode,
-    UTC,
-    DEV_LOCAL_TIME,
-    NO_TIME,
 )
-from ndi.time.syncrule import FileMatch, FileFind
+from ndi.time.syncrule import FileFind, FileMatch
 
 
 class TestClockType:
@@ -25,28 +21,34 @@ class TestClockType:
     def test_all_clock_types_exist(self):
         """Test that all 9 clock types are defined."""
         expected = [
-            'utc', 'approx_utc', 'exp_global_time', 'approx_exp_global_time',
-            'dev_global_time', 'approx_dev_global_time', 'dev_local_time',
-            'no_time', 'inherited'
+            "utc",
+            "approx_utc",
+            "exp_global_time",
+            "approx_exp_global_time",
+            "dev_global_time",
+            "approx_dev_global_time",
+            "dev_local_time",
+            "no_time",
+            "inherited",
         ]
         actual = [ct.value for ct in ClockType]
         assert sorted(actual) == sorted(expected)
 
     def test_from_string(self):
         """Test creating ClockType from string."""
-        assert ClockType.from_string('utc') == ClockType.UTC
-        assert ClockType.from_string('UTC') == ClockType.UTC
-        assert ClockType.from_string('dev_local_time') == ClockType.DEV_LOCAL_TIME
+        assert ClockType.from_string("utc") == ClockType.UTC
+        assert ClockType.from_string("UTC") == ClockType.UTC
+        assert ClockType.from_string("dev_local_time") == ClockType.DEV_LOCAL_TIME
 
     def test_from_string_invalid(self):
         """Test that invalid string raises ValueError."""
         with pytest.raises(ValueError):
-            ClockType.from_string('invalid_clock')
+            ClockType.from_string("invalid_clock")
 
     def test_str(self):
         """Test string conversion."""
-        assert str(ClockType.UTC) == 'utc'
-        assert str(ClockType.DEV_LOCAL_TIME) == 'dev_local_time'
+        assert str(ClockType.UTC) == "utc"
+        assert str(ClockType.DEV_LOCAL_TIME) == "dev_local_time"
 
     def test_needs_epoch(self):
         """Test needs_epoch method."""
@@ -90,17 +92,17 @@ class TestClockType:
     def test_epochgraph_edge_no_time(self):
         """Test epochgraph_edge with no_time."""
         cost, mapping = ClockType.NO_TIME.epochgraph_edge(ClockType.UTC)
-        assert cost == float('inf')
+        assert cost == float("inf")
         assert mapping is None
 
         cost, mapping = ClockType.UTC.epochgraph_edge(ClockType.NO_TIME)
-        assert cost == float('inf')
+        assert cost == float("inf")
         assert mapping is None
 
     def test_epochgraph_edge_no_transition(self):
         """Test epochgraph_edge for invalid transition."""
         cost, mapping = ClockType.DEV_LOCAL_TIME.epochgraph_edge(ClockType.UTC)
-        assert cost == float('inf')
+        assert cost == float("inf")
         assert mapping is None
 
 
@@ -194,86 +196,65 @@ class TestTimeReference:
     @pytest.fixture
     def mock_referent(self):
         """Create a mock referent object."""
+
         class MockSession:
             def id(self):
-                return 'session_123'
+                return "session_123"
 
         class MockReferent:
             def __init__(self):
                 self.session = MockSession()
-                self.name = 'test_daq'
+                self.name = "test_daq"
 
             def epochsetname(self):
-                return 'test_daq'
+                return "test_daq"
 
         return MockReferent()
 
     def test_create_utc_reference(self, mock_referent):
         """Test creating a UTC time reference."""
-        tr = TimeReference(
-            referent=mock_referent,
-            clocktype=ClockType.UTC,
-            time=1234567890.0
-        )
+        tr = TimeReference(referent=mock_referent, clocktype=ClockType.UTC, time=1234567890.0)
         assert tr.clocktype == ClockType.UTC
         assert tr.time == 1234567890.0
         assert tr.epoch is None
-        assert tr.session_id == 'session_123'
+        assert tr.session_id == "session_123"
 
     def test_create_local_reference_requires_epoch(self, mock_referent):
         """Test that DEV_LOCAL_TIME requires epoch."""
         with pytest.raises(ValueError):
-            TimeReference(
-                referent=mock_referent,
-                clocktype=ClockType.DEV_LOCAL_TIME,
-                time=0.5
-            )
+            TimeReference(referent=mock_referent, clocktype=ClockType.DEV_LOCAL_TIME, time=0.5)
 
     def test_create_local_reference_with_epoch(self, mock_referent):
         """Test creating a local time reference with epoch."""
         tr = TimeReference(
-            referent=mock_referent,
-            clocktype=ClockType.DEV_LOCAL_TIME,
-            epoch='epoch_001',
-            time=0.5
+            referent=mock_referent, clocktype=ClockType.DEV_LOCAL_TIME, epoch="epoch_001", time=0.5
         )
         assert tr.clocktype == ClockType.DEV_LOCAL_TIME
-        assert tr.epoch == 'epoch_001'
+        assert tr.epoch == "epoch_001"
         assert tr.time == 0.5
 
     def test_clocktype_from_string(self, mock_referent):
         """Test creating with string clocktype."""
-        tr = TimeReference(
-            referent=mock_referent,
-            clocktype='utc',
-            time=100.0
-        )
+        tr = TimeReference(referent=mock_referent, clocktype="utc", time=100.0)
         assert tr.clocktype == ClockType.UTC
 
     def test_to_struct(self, mock_referent):
         """Test converting to struct."""
         tr = TimeReference(
-            referent=mock_referent,
-            clocktype=ClockType.UTC,
-            epoch='epoch_001',
-            time=100.0
+            referent=mock_referent, clocktype=ClockType.UTC, epoch="epoch_001", time=100.0
         )
         struct = tr.to_struct()
-        assert struct.referent_epochsetname == 'test_daq'
-        assert struct.clocktypestring == 'utc'
-        assert struct.epoch == 'epoch_001'
+        assert struct.referent_epochsetname == "test_daq"
+        assert struct.clocktypestring == "utc"
+        assert struct.epoch == "epoch_001"
         assert struct.time == 100.0
 
     def test_to_dict(self, mock_referent):
         """Test converting to dict."""
-        tr = TimeReference(
-            referent=mock_referent,
-            clocktype=ClockType.UTC,
-            time=100.0
-        )
+        tr = TimeReference(referent=mock_referent, clocktype=ClockType.UTC, time=100.0)
         d = tr.to_dict()
-        assert d['clocktypestring'] == 'utc'
-        assert d['time'] == 100.0
+        assert d["clocktypestring"] == "utc"
+        assert d["time"] == 100.0
 
 
 class TestFileMatch:
@@ -282,33 +263,33 @@ class TestFileMatch:
     def test_default_parameters(self):
         """Test default parameters."""
         rule = FileMatch()
-        assert rule.parameters['number_fullpath_matches'] == 2
+        assert rule.parameters["number_fullpath_matches"] == 2
 
     def test_custom_parameters(self):
         """Test custom parameters."""
-        rule = FileMatch({'number_fullpath_matches': 3})
-        assert rule.parameters['number_fullpath_matches'] == 3
+        rule = FileMatch({"number_fullpath_matches": 3})
+        assert rule.parameters["number_fullpath_matches"] == 3
 
     def test_invalid_parameters(self):
         """Test invalid parameters raise error."""
         with pytest.raises(ValueError):
-            FileMatch({'number_fullpath_matches': 'not_a_number'})
+            FileMatch({"number_fullpath_matches": "not_a_number"})
 
     def test_apply_matching_files(self):
         """Test apply with matching files."""
-        rule = FileMatch({'number_fullpath_matches': 2})
+        rule = FileMatch({"number_fullpath_matches": 2})
 
         node_a = {
-            'objectclass': 'ndi.daq.system',
-            'underlying_epochs': {
-                'underlying': ['/data/file1.dat', '/data/file2.dat', '/data/file3.dat']
-            }
+            "objectclass": "ndi.daq.system",
+            "underlying_epochs": {
+                "underlying": ["/data/file1.dat", "/data/file2.dat", "/data/file3.dat"]
+            },
         }
         node_b = {
-            'objectclass': 'ndi.daq.system',
-            'underlying_epochs': {
-                'underlying': ['/data/file1.dat', '/data/file2.dat', '/data/file4.dat']
-            }
+            "objectclass": "ndi.daq.system",
+            "underlying_epochs": {
+                "underlying": ["/data/file1.dat", "/data/file2.dat", "/data/file4.dat"]
+            },
         }
 
         cost, mapping = rule.apply(node_a, node_b)
@@ -318,19 +299,15 @@ class TestFileMatch:
 
     def test_apply_not_enough_matches(self):
         """Test apply with not enough matching files."""
-        rule = FileMatch({'number_fullpath_matches': 2})
+        rule = FileMatch({"number_fullpath_matches": 2})
 
         node_a = {
-            'objectclass': 'ndi.daq.system',
-            'underlying_epochs': {
-                'underlying': ['/data/file1.dat', '/data/file2.dat']
-            }
+            "objectclass": "ndi.daq.system",
+            "underlying_epochs": {"underlying": ["/data/file1.dat", "/data/file2.dat"]},
         }
         node_b = {
-            'objectclass': 'ndi.daq.system',
-            'underlying_epochs': {
-                'underlying': ['/data/file1.dat', '/data/file3.dat']
-            }
+            "objectclass": "ndi.daq.system",
+            "underlying_epochs": {"underlying": ["/data/file1.dat", "/data/file3.dat"]},
         }
 
         cost, mapping = rule.apply(node_a, node_b)
@@ -342,12 +319,12 @@ class TestFileMatch:
         rule = FileMatch()
 
         node_a = {
-            'objectclass': 'some.other.class',
-            'underlying_epochs': {'underlying': ['/data/file1.dat']}
+            "objectclass": "some.other.class",
+            "underlying_epochs": {"underlying": ["/data/file1.dat"]},
         }
         node_b = {
-            'objectclass': 'ndi.daq.system',
-            'underlying_epochs': {'underlying': ['/data/file1.dat']}
+            "objectclass": "ndi.daq.system",
+            "underlying_epochs": {"underlying": ["/data/file1.dat"]},
         }
 
         cost, mapping = rule.apply(node_a, node_b)
@@ -361,27 +338,20 @@ class TestFileFind:
     def test_default_parameters(self):
         """Test default parameters."""
         rule = FileFind()
-        assert rule.parameters['file_patterns'] == []
-        assert rule.parameters['match_type'] == 'exact'
+        assert rule.parameters["file_patterns"] == []
+        assert rule.parameters["match_type"] == "exact"
 
     def test_apply_exact_match(self):
         """Test apply with exact file match."""
-        rule = FileFind({
-            'file_patterns': ['sync.txt'],
-            'match_type': 'exact'
-        })
+        rule = FileFind({"file_patterns": ["sync.txt"], "match_type": "exact"})
 
         node_a = {
-            'objectclass': 'ndi.daq.system',
-            'underlying_epochs': {
-                'underlying': ['/data/sync.txt', '/data/other.dat']
-            }
+            "objectclass": "ndi.daq.system",
+            "underlying_epochs": {"underlying": ["/data/sync.txt", "/data/other.dat"]},
         }
         node_b = {
-            'objectclass': 'ndi.daq.system',
-            'underlying_epochs': {
-                'underlying': ['/data/sync.txt', '/data/more.dat']
-            }
+            "objectclass": "ndi.daq.system",
+            "underlying_epochs": {"underlying": ["/data/sync.txt", "/data/more.dat"]},
         }
 
         cost, mapping = rule.apply(node_a, node_b)
@@ -390,22 +360,15 @@ class TestFileFind:
 
     def test_apply_contains_match(self):
         """Test apply with contains match."""
-        rule = FileFind({
-            'file_patterns': ['sync'],
-            'match_type': 'contains'
-        })
+        rule = FileFind({"file_patterns": ["sync"], "match_type": "contains"})
 
         node_a = {
-            'objectclass': 'ndi.daq.system',
-            'underlying_epochs': {
-                'underlying': ['/data/my_sync_file.txt']
-            }
+            "objectclass": "ndi.daq.system",
+            "underlying_epochs": {"underlying": ["/data/my_sync_file.txt"]},
         }
         node_b = {
-            'objectclass': 'ndi.daq.system',
-            'underlying_epochs': {
-                'underlying': ['/data/sync_data.dat']
-            }
+            "objectclass": "ndi.daq.system",
+            "underlying_epochs": {"underlying": ["/data/sync_data.dat"]},
         }
 
         cost, mapping = rule.apply(node_a, node_b)
@@ -413,18 +376,15 @@ class TestFileFind:
 
     def test_apply_no_match(self):
         """Test apply when patterns don't match."""
-        rule = FileFind({
-            'file_patterns': ['missing.txt'],
-            'match_type': 'exact'
-        })
+        rule = FileFind({"file_patterns": ["missing.txt"], "match_type": "exact"})
 
         node_a = {
-            'objectclass': 'ndi.daq.system',
-            'underlying_epochs': {'underlying': ['/data/file.txt']}
+            "objectclass": "ndi.daq.system",
+            "underlying_epochs": {"underlying": ["/data/file.txt"]},
         }
         node_b = {
-            'objectclass': 'ndi.daq.system',
-            'underlying_epochs': {'underlying': ['/data/other.txt']}
+            "objectclass": "ndi.daq.system",
+            "underlying_epochs": {"underlying": ["/data/other.txt"]},
         }
 
         cost, mapping = rule.apply(node_a, node_b)
@@ -437,47 +397,47 @@ class TestEpochNode:
     def test_create_epoch_node(self):
         """Test creating an epoch node."""
         node = EpochNode(
-            epoch_id='epoch_001',
-            epoch_session_id='session_123',
+            epoch_id="epoch_001",
+            epoch_session_id="session_123",
             epochprobemap=None,
             epoch_clock=ClockType.UTC,
             t0_t1=(0.0, 100.0),
-            objectname='daq1',
-            objectclass='ndi.daq.system'
+            objectname="daq1",
+            objectclass="ndi.daq.system",
         )
-        assert node.epoch_id == 'epoch_001'
+        assert node.epoch_id == "epoch_001"
         assert node.epoch_clock == ClockType.UTC
         assert node.t0_t1 == (0.0, 100.0)
 
     def test_to_dict(self):
         """Test converting to dict."""
         node = EpochNode(
-            epoch_id='epoch_001',
-            epoch_session_id='session_123',
+            epoch_id="epoch_001",
+            epoch_session_id="session_123",
             epochprobemap=None,
             epoch_clock=ClockType.UTC,
             t0_t1=(0.0, 100.0),
-            objectname='daq1',
-            objectclass='ndi.daq.system'
+            objectname="daq1",
+            objectclass="ndi.daq.system",
         )
         d = node.to_dict()
-        assert d['epoch_id'] == 'epoch_001'
-        assert d['epoch_clock'] == 'utc'
-        assert d['t0_t1'] == [0.0, 100.0]
+        assert d["epoch_id"] == "epoch_001"
+        assert d["epoch_clock"] == "utc"
+        assert d["t0_t1"] == [0.0, 100.0]
 
     def test_from_dict(self):
         """Test creating from dict."""
         d = {
-            'epoch_id': 'epoch_001',
-            'epoch_session_id': 'session_123',
-            'epochprobemap': None,
-            'epoch_clock': 'utc',
-            't0_t1': [0.0, 100.0],
-            'objectname': 'daq1',
-            'objectclass': 'ndi.daq.system'
+            "epoch_id": "epoch_001",
+            "epoch_session_id": "session_123",
+            "epochprobemap": None,
+            "epoch_clock": "utc",
+            "t0_t1": [0.0, 100.0],
+            "objectname": "daq1",
+            "objectclass": "ndi.daq.system",
         }
         node = EpochNode.from_dict(d)
-        assert node.epoch_id == 'epoch_001'
+        assert node.epoch_id == "epoch_001"
         assert node.epoch_clock == ClockType.UTC
         assert node.t0_t1 == (0.0, 100.0)
 
@@ -503,7 +463,7 @@ class TestSyncGraph:
     def test_add_duplicate_rule(self):
         """Test that duplicate rules aren't added."""
         sg = SyncGraph()
-        rule = FileMatch({'number_fullpath_matches': 2})
+        rule = FileMatch({"number_fullpath_matches": 2})
         sg.add_rule(rule)
         sg.add_rule(rule)  # Same rule
 
@@ -512,14 +472,14 @@ class TestSyncGraph:
     def test_remove_rule(self):
         """Test removing a sync rule."""
         sg = SyncGraph()
-        rule1 = FileMatch({'number_fullpath_matches': 2})
-        rule2 = FileMatch({'number_fullpath_matches': 3})
+        rule1 = FileMatch({"number_fullpath_matches": 2})
+        rule2 = FileMatch({"number_fullpath_matches": 3})
         sg.add_rule(rule1)
         sg.add_rule(rule2)
 
         sg.remove_rule(0)
         assert len(sg.rules) == 1
-        assert sg.rules[0].parameters['number_fullpath_matches'] == 3
+        assert sg.rules[0].parameters["number_fullpath_matches"] == 3
 
     def test_has_unique_id(self):
         """Test that sync graph has unique ID."""

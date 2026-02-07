@@ -8,7 +8,8 @@ MATLAB equivalent: src/ndi/+ndi/+app/spikeextractor.m
 """
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+from typing import TYPE_CHECKING, Any
 
 from . import App
 from .appdoc import AppDoc
@@ -35,15 +36,15 @@ class SpikeExtractor(App, AppDoc):
         >>> extractor.extract(timeseries_obj, epoch=1)
     """
 
-    def __init__(self, session: Optional['Session'] = None):
-        App.__init__(self, session=session, name='ndi_app_spikeextractor')
+    def __init__(self, session: Session | None = None):
+        App.__init__(self, session=session, name="ndi_app_spikeextractor")
         AppDoc.__init__(
             self,
-            doc_types=['extraction_parameters', 'extraction_parameters_modification', 'spikewaves'],
+            doc_types=["extraction_parameters", "extraction_parameters_modification", "spikewaves"],
             doc_document_types=[
-                'apps/spikeextractor/spike_extraction_parameters',
-                'apps/spikeextractor/spike_extraction_parameters_modification',
-                'apps/spikeextractor/spikewaves',
+                "apps/spikeextractor/spike_extraction_parameters",
+                "apps/spikeextractor/spike_extraction_parameters_modification",
+                "apps/spikeextractor/spikewaves",
             ],
         )
 
@@ -51,10 +52,10 @@ class SpikeExtractor(App, AppDoc):
         self,
         timeseries_obj: Any,
         epoch: Any = None,
-        extraction_name: str = 'default',
+        extraction_name: str = "default",
         redo: bool = False,
-        t0_t1: Optional[Any] = None,
-    ) -> List['Document']:
+        t0_t1: Any | None = None,
+    ) -> list[Document]:
         """
         Extract spikes from a timeseries element.
 
@@ -74,7 +75,7 @@ class SpikeExtractor(App, AppDoc):
         )
 
     @staticmethod
-    def default_extraction_parameters() -> Dict[str, Any]:
+    def default_extraction_parameters() -> dict[str, Any]:
         """
         Return default spike extraction parameters.
 
@@ -82,41 +83,43 @@ class SpikeExtractor(App, AppDoc):
             Dict with filter, threshold, and timing parameters
         """
         return {
-            'filter': {
-                'type': 'cheby1',
-                'order': 4,
-                'low': 300,
-                'high': 6000,
-                'passband_ripple': 0.8,
+            "filter": {
+                "type": "cheby1",
+                "order": 4,
+                "low": 300,
+                "high": 6000,
+                "passband_ripple": 0.8,
             },
-            'threshold': {
-                'method': 'std',
-                'parameter': -4.0,
+            "threshold": {
+                "method": "std",
+                "parameter": -4.0,
             },
-            'timing': {
-                'pre_samples': 10,
-                'post_samples': 22,
-                'refractory_samples': 10,
+            "timing": {
+                "pre_samples": 10,
+                "post_samples": 22,
+                "refractory_samples": 10,
             },
         }
 
-    def struct2doc(self, appdoc_type: str, appdoc_struct: Dict, **kwargs) -> 'Document':
+    def struct2doc(self, appdoc_type: str, appdoc_struct: dict, **kwargs) -> Document:
         from ..document import Document
+
         return Document(
             self.doc_document_types[self.doc_types.index(appdoc_type)],
             **{appdoc_type: appdoc_struct},
         )
 
-    def find_appdoc(self, appdoc_type: str, **kwargs) -> List['Document']:
+    def find_appdoc(self, appdoc_type: str, **kwargs) -> list[Document]:
         if self._session is None:
             return []
         from ..query import Query
-        q = Query('').isa(appdoc_type)
+
+        q = Query("").isa(appdoc_type)
         return self._session.database_search(q)
 
-    def isvalid_appdoc_struct(self, appdoc_type: str, appdoc_struct: Dict) -> bool:
-        if appdoc_type == 'extraction_parameters':
-            return 'filter' in appdoc_struct and 'threshold' in appdoc_struct
+    def isvalid_appdoc_struct(self, appdoc_type: str, appdoc_struct: dict) -> bool:
+        if appdoc_type == "extraction_parameters":
+            return "filter" in appdoc_struct and "threshold" in appdoc_struct
         return True
 
     def __repr__(self) -> str:

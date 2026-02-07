@@ -6,14 +6,15 @@ stores all data in a directory on the filesystem.
 """
 
 from __future__ import annotations
-from pathlib import Path
-from typing import Any, List, Optional, Union
 
-from .session_base import Session
-from ..ido import Ido
+from pathlib import Path
+from typing import Any
+
 from ..database import Database
-from ..time.syncgraph import SyncGraph
+from ..ido import Ido
 from ..query import Query
+from ..time.syncgraph import SyncGraph
+from .session_base import Session
 
 
 class DirSession(Session):
@@ -37,9 +38,9 @@ class DirSession(Session):
 
     def __init__(
         self,
-        reference_or_path: Union[str, Path],
-        path: Optional[Union[str, Path]] = None,
-        session_id: Optional[str] = None,
+        reference_or_path: str | Path,
+        path: str | Path | None = None,
+        session_id: str | None = None,
     ):
         """
         Create or open a directory-based session.
@@ -57,7 +58,7 @@ class DirSession(Session):
         if path is None:
             # Single argument: it's the path
             self._path = Path(reference_or_path)
-            reference = 'temp'
+            reference = "temp"
         else:
             # Two arguments: reference and path
             reference = str(reference_or_path)
@@ -81,7 +82,7 @@ class DirSession(Session):
             should_read_from_database = False
         else:
             # Try to read identifier from file
-            unique_ref_file = self._ndi_pathname() / 'unique_reference.txt'
+            unique_ref_file = self._ndi_pathname() / "unique_reference.txt"
             if unique_ref_file.exists():
                 self._identifier = unique_ref_file.read_text().strip()
             else:
@@ -89,33 +90,33 @@ class DirSession(Session):
                 self._identifier = Ido().id
 
         # Initialize database
-        self._database = Database(self._ndi_pathname(), db_name='.')
+        self._database = Database(self._ndi_pathname(), db_name=".")
 
         # Try to load session info from database
         read_from_database = False
         if should_read_from_database:
-            session_docs = self.database_search(Query('').isa('session'))
+            session_docs = self.database_search(Query("").isa("session"))
             if session_docs:
                 # Use the oldest session document
                 oldest_doc = session_docs[0]
                 if len(session_docs) > 1:
                     # Find oldest by datestamp
                     for doc in session_docs[1:]:
-                        if hasattr(doc.document_properties, 'base'):
+                        if hasattr(doc.document_properties, "base"):
                             # Compare datestamps if available
                             pass  # Use first for simplicity
                 oldest_doc = session_docs[0]
 
                 props = oldest_doc.document_properties
-                if hasattr(props, 'base'):
-                    self._identifier = getattr(props.base, 'session_id', self._identifier)
-                if hasattr(props, 'session'):
-                    self._reference = getattr(props.session, 'reference', self._reference)
+                if hasattr(props, "base"):
+                    self._identifier = getattr(props.base, "session_id", self._identifier)
+                if hasattr(props, "session"):
+                    self._reference = getattr(props.session, "reference", self._reference)
                 read_from_database = True
 
         # If not read from database, try reference file or create new
         if should_read_from_database and not read_from_database:
-            ref_file = self._ndi_pathname() / 'reference.txt'
+            ref_file = self._ndi_pathname() / "reference.txt"
             if ref_file.exists():
                 self._reference = ref_file.read_text().strip()
             elif path is None:
@@ -126,11 +127,9 @@ class DirSession(Session):
 
             # Create session document
             from ..document import Document
+
             try:
-                session_doc = Document(
-                    'session',
-                    **{'session.reference': self._reference}
-                )
+                session_doc = Document("session", **{"session.reference": self._reference})
                 session_doc = session_doc.set_session_id(self._identifier)
                 self.database_add(session_doc)
             except Exception:
@@ -139,16 +138,14 @@ class DirSession(Session):
 
         # Load or create syncgraph
         syncgraph_docs = self.database_search(
-            Query('').isa('syncgraph') & (Query('base.session_id') == self.id())
+            Query("").isa("syncgraph") & (Query("base.session_id") == self.id())
         )
 
         if not syncgraph_docs:
             self._syncgraph = SyncGraph(self)
         else:
             if len(syncgraph_docs) > 1:
-                raise ValueError(
-                    "Too many syncgraph documents found. There should be only 1."
-                )
+                raise ValueError("Too many syncgraph documents found. There should be only 1.")
             self._syncgraph = SyncGraph(session=self, document=syncgraph_docs[0])
 
         # Write reference files
@@ -163,7 +160,7 @@ class DirSession(Session):
         Returns:
             Path to .ndi directory
         """
-        ndi_dir = self._path / '.ndi'
+        ndi_dir = self._path / ".ndi"
         ndi_dir.mkdir(parents=True, exist_ok=True)
         return ndi_dir
 
@@ -171,10 +168,10 @@ class DirSession(Session):
         """Write reference and unique_reference files."""
         ndi_dir = self._ndi_pathname()
 
-        ref_file = ndi_dir / 'reference.txt'
+        ref_file = ndi_dir / "reference.txt"
         ref_file.write_text(self._reference)
 
-        unique_ref_file = ndi_dir / 'unique_reference.txt'
+        unique_ref_file = ndi_dir / "unique_reference.txt"
         unique_ref_file.write_text(self._identifier)
 
     def getpath(self) -> Path:
@@ -200,7 +197,7 @@ class DirSession(Session):
         """
         return self._ndi_pathname()
 
-    def creator_args(self) -> List[Any]:
+    def creator_args(self) -> list[Any]:
         """
         Return arguments needed to recreate this session.
 
@@ -213,7 +210,7 @@ class DirSession(Session):
         self,
         are_you_sure: bool = False,
         ask_user: bool = True,
-    ) -> Optional['DirSession']:
+    ) -> DirSession | None:
         """
         Delete the session's data structures.
 
@@ -229,7 +226,7 @@ class DirSession(Session):
         passed = are_you_sure
 
         if passed:
-            ndi_dir = self._path / '.ndi'
+            ndi_dir = self._path / ".ndi"
             if ndi_dir.exists():
                 shutil.rmtree(ndi_dir)
             return None
@@ -237,7 +234,7 @@ class DirSession(Session):
         return self
 
     @staticmethod
-    def exists(path: Union[str, Path]) -> bool:
+    def exists(path: str | Path) -> bool:
         """
         Check if a session exists at the given path.
 
@@ -248,15 +245,15 @@ class DirSession(Session):
             True if a valid session exists
         """
         path = Path(path)
-        ndi_dir = path / '.ndi'
+        ndi_dir = path / ".ndi"
         if not ndi_dir.exists():
             return False
 
-        ref_file = ndi_dir / 'reference.txt'
+        ref_file = ndi_dir / "reference.txt"
         return ref_file.exists()
 
     @staticmethod
-    def database_erase(session: 'DirSession', areyousure: str) -> None:
+    def database_erase(session: DirSession, areyousure: str) -> None:
         """
         Delete the entire session database.
 
@@ -266,11 +263,11 @@ class DirSession(Session):
         """
         import shutil
 
-        if areyousure.lower() != 'yes':
+        if areyousure.lower() != "yes":
             print("Not erasing session because confirmation not given.")
             return
 
-        ndi_dir = session._path / '.ndi'
+        ndi_dir = session._path / ".ndi"
         if ndi_dir.exists():
             shutil.rmtree(ndi_dir)
 

@@ -9,7 +9,6 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 
 def md5(file_path: str) -> str:
@@ -28,15 +27,15 @@ def md5(file_path: str) -> str:
     """
     p = Path(file_path)
     if not p.exists():
-        raise FileNotFoundError(f'File not found: {file_path}')
+        raise FileNotFoundError(f"File not found: {file_path}")
     h = hashlib.md5()
-    with open(p, 'rb') as f:
-        for chunk in iter(lambda: f.read(8192), b''):
+    with open(p, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
             h.update(chunk)
     return h.hexdigest()
 
 
-def date_created(file_path: str) -> Optional[datetime]:
+def date_created(file_path: str) -> datetime | None:
     """Get the creation date of a file.
 
     MATLAB equivalent: ndi.fun.file.dateCreated
@@ -55,7 +54,7 @@ def date_created(file_path: str) -> Optional[datetime]:
     try:
         stat = p.stat()
         # macOS provides st_birthtime
-        ts = getattr(stat, 'st_birthtime', None)
+        ts = getattr(stat, "st_birthtime", None)
         if ts is None:
             ts = stat.st_ctime  # Windows: creation; Linux: metadata change
         return datetime.fromtimestamp(ts, tz=timezone.utc)
@@ -63,7 +62,7 @@ def date_created(file_path: str) -> Optional[datetime]:
         return None
 
 
-def date_updated(file_path: str) -> Optional[datetime]:
+def date_updated(file_path: str) -> datetime | None:
     """Get the last modification date of a file.
 
     MATLAB equivalent: ndi.fun.file.dateUpdated

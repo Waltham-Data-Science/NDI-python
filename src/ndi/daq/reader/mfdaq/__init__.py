@@ -9,14 +9,14 @@ Each reader class:
 - Delegates all data reading to SpikeInterfaceReader
 """
 
-from .intan import IntanReader
 from .blackrock import BlackrockReader
 from .cedspike2 import CEDSpike2Reader
+from .intan import IntanReader
 from .spikegadgets import SpikeGadgetsReader
 
 __all__ = [
-    'IntanReader',
-    'BlackrockReader',
-    'CEDSpike2Reader',
-    'SpikeGadgetsReader',
+    "IntanReader",
+    "BlackrockReader",
+    "CEDSpike2Reader",
+    "SpikeGadgetsReader",
 ]

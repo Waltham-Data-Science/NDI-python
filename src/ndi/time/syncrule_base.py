@@ -6,8 +6,9 @@ synchronization between epochs and devices.
 """
 
 from __future__ import annotations
-from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+
+from abc import ABC
+from typing import TYPE_CHECKING, Any
 
 from ..ido import Ido
 from .clocktype import ClockType
@@ -31,8 +32,8 @@ class SyncRule(Ido, ABC):
 
     def __init__(
         self,
-        parameters: Optional[Dict[str, Any]] = None,
-        identifier: Optional[str] = None,
+        parameters: dict[str, Any] | None = None,
+        identifier: str | None = None,
     ):
         """
         Create a new SyncRule.
@@ -53,11 +54,11 @@ class SyncRule(Ido, ABC):
         self.set_parameters(parameters)
 
     @property
-    def parameters(self) -> Dict[str, Any]:
+    def parameters(self) -> dict[str, Any]:
         """Get the sync rule parameters."""
         return self._parameters.copy()
 
-    def set_parameters(self, parameters: Dict[str, Any]) -> None:
+    def set_parameters(self, parameters: dict[str, Any]) -> None:
         """
         Set the parameters for this sync rule, checking for validity.
 
@@ -72,7 +73,7 @@ class SyncRule(Ido, ABC):
             raise ValueError(f"Could not set parameters: {msg}")
         self._parameters = parameters.copy()
 
-    def is_valid_parameters(self, parameters: Dict[str, Any]) -> Tuple[bool, str]:
+    def is_valid_parameters(self, parameters: dict[str, Any]) -> tuple[bool, str]:
         """
         Determine if a parameter structure is valid for this sync rule.
 
@@ -86,7 +87,7 @@ class SyncRule(Ido, ABC):
         """
         return True, ""
 
-    def eligible_clocks(self) -> List[ClockType]:
+    def eligible_clocks(self) -> list[ClockType]:
         """
         Return eligible clock types that can be used with this sync rule.
 
@@ -100,7 +101,7 @@ class SyncRule(Ido, ABC):
         """
         return []
 
-    def ineligible_clocks(self) -> List[ClockType]:
+    def ineligible_clocks(self) -> list[ClockType]:
         """
         Return ineligible clock types that cannot be used with this sync rule.
 
@@ -114,7 +115,7 @@ class SyncRule(Ido, ABC):
         """
         return [ClockType.NO_TIME]
 
-    def eligible_epochsets(self) -> List[str]:
+    def eligible_epochsets(self) -> list[str]:
         """
         Return eligible epochset class names for this sync rule.
 
@@ -128,7 +129,7 @@ class SyncRule(Ido, ABC):
         """
         return []
 
-    def ineligible_epochsets(self) -> List[str]:
+    def ineligible_epochsets(self) -> list[str]:
         """
         Return ineligible epochset class names for this sync rule.
 
@@ -144,9 +145,9 @@ class SyncRule(Ido, ABC):
 
     def apply(
         self,
-        epochnode_a: Dict[str, Any],
-        epochnode_b: Dict[str, Any],
-    ) -> Tuple[Optional[float], Optional[TimeMapping]]:
+        epochnode_a: dict[str, Any],
+        epochnode_b: dict[str, Any],
+    ) -> tuple[float | None, TimeMapping | None]:
         """
         Apply the sync rule to obtain cost and mapping between two epoch nodes.
 
@@ -169,7 +170,7 @@ class SyncRule(Ido, ABC):
             return NotImplemented
         return self._parameters == other._parameters
 
-    def new_document(self) -> 'Document':
+    def new_document(self) -> Document:
         """
         Create a new ndi.Document for this sync rule.
 
@@ -179,12 +180,12 @@ class SyncRule(Ido, ABC):
         from ..document import Document
 
         doc = Document(
-            document_type='daq/syncrule',
+            document_type="daq/syncrule",
             **{
-                'syncrule.ndi_syncrule_class': type(self).__name__,
-                'syncrule.parameters': self._parameters,
-                'base.id': self.id,
-            }
+                "syncrule.ndi_syncrule_class": type(self).__name__,
+                "syncrule.parameters": self._parameters,
+                "base.id": self.id,
+            },
         )
         return doc
 
@@ -196,9 +197,10 @@ class SyncRule(Ido, ABC):
             Query object to find this sync rule
         """
         from ..query import Query
-        return Query('base.id') == self.id
 
-    def to_dict(self) -> Dict[str, Any]:
+        return Query("base.id") == self.id
+
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert to dictionary for serialization.
 
@@ -206,13 +208,13 @@ class SyncRule(Ido, ABC):
             Dictionary representation
         """
         return {
-            'id': self.id,
-            'class': type(self).__name__,
-            'parameters': self._parameters,
+            "id": self.id,
+            "class": type(self).__name__,
+            "parameters": self._parameters,
         }
 
     @classmethod
-    def from_document(cls, session: Any, doc: 'Document') -> 'SyncRule':
+    def from_document(cls, session: Any, doc: Document) -> SyncRule:
         """
         Create a SyncRule from a document.
 
@@ -228,24 +230,24 @@ class SyncRule(Ido, ABC):
         """
         # Get class name from document
         props = doc.document_properties
-        class_name = props.get('syncrule', {}).get('ndi_syncrule_class', 'SyncRule')
-        parameters = props.get('syncrule', {}).get('parameters', {})
-        identifier = props.get('base', {}).get('id')
+        class_name = props.get("syncrule", {}).get("ndi_syncrule_class", "SyncRule")
+        parameters = props.get("syncrule", {}).get("parameters", {})
+        identifier = props.get("base", {}).get("id")
 
         # Import subclasses dynamically
         from . import syncrule as syncrule_module
 
         # Map class names to classes
         class_map = {
-            'SyncRule': SyncRule,
-            'FileMatch': syncrule_module.FileMatch,
-            'FileFind': syncrule_module.FileFind,
+            "SyncRule": SyncRule,
+            "FileMatch": syncrule_module.FileMatch,
+            "FileFind": syncrule_module.FileFind,
         }
 
         rule_class = class_map.get(class_name, cls)
 
         # Abstract classes can't be instantiated directly
         if rule_class is SyncRule:
-            raise ValueError(f"Cannot instantiate abstract SyncRule directly")
+            raise ValueError("Cannot instantiate abstract SyncRule directly")
 
         return rule_class(parameters=parameters, identifier=identifier)

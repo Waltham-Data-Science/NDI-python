@@ -6,7 +6,7 @@ across epochs and devices using polynomial transformations.
 """
 
 from __future__ import annotations
-from typing import Union, List, Sequence
+
 import numpy as np
 
 
@@ -34,7 +34,7 @@ class TimeMapping:
         20.0
     """
 
-    def __init__(self, mapping: Union[List[float], np.ndarray, None] = None):
+    def __init__(self, mapping: list[float] | np.ndarray | None = None):
         """
         Create a new TimeMapping object.
 
@@ -55,7 +55,7 @@ class TimeMapping:
         try:
             self.map(0.0)
         except Exception as e:
-            raise ValueError(f"Mapping test with t_in=0 failed: {e}")
+            raise ValueError(f"Mapping test with t_in=0 failed: {e}") from e
 
     @property
     def mapping(self) -> np.ndarray:
@@ -82,7 +82,7 @@ class TimeMapping:
         """
         return float(self._mapping[-1])
 
-    def map(self, t_in: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
+    def map(self, t_in: float | np.ndarray) -> float | np.ndarray:
         """
         Perform a mapping from one time base to another.
 
@@ -94,12 +94,12 @@ class TimeMapping:
         """
         return np.polyval(self._mapping, t_in)
 
-    def __call__(self, t_in: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
+    def __call__(self, t_in: float | np.ndarray) -> float | np.ndarray:
         """Allow calling the mapping directly like a function."""
         return self.map(t_in)
 
     @classmethod
-    def identity(cls) -> 'TimeMapping':
+    def identity(cls) -> TimeMapping:
         """
         Create an identity mapping (t_out = t_in).
 
@@ -109,7 +109,7 @@ class TimeMapping:
         return cls([1.0, 0.0])
 
     @classmethod
-    def linear(cls, scale: float = 1.0, shift: float = 0.0) -> 'TimeMapping':
+    def linear(cls, scale: float = 1.0, shift: float = 0.0) -> TimeMapping:
         """
         Create a linear mapping: t_out = scale * t_in + shift.
 
@@ -122,7 +122,7 @@ class TimeMapping:
         """
         return cls([scale, shift])
 
-    def inverse(self) -> 'TimeMapping':
+    def inverse(self) -> TimeMapping:
         """
         Compute the inverse mapping (for linear mappings only).
 
@@ -144,7 +144,7 @@ class TimeMapping:
         inv_shift = -self._mapping[1] / self._mapping[0]
         return TimeMapping([inv_scale, inv_shift])
 
-    def compose(self, other: 'TimeMapping') -> 'TimeMapping':
+    def compose(self, other: TimeMapping) -> TimeMapping:
         """
         Compose two mappings: apply self first, then other.
 
@@ -193,10 +193,10 @@ class TimeMapping:
         Returns:
             Dictionary with 'mapping' key
         """
-        return {'mapping': self._mapping.tolist()}
+        return {"mapping": self._mapping.tolist()}
 
     @classmethod
-    def from_dict(cls, data: dict) -> 'TimeMapping':
+    def from_dict(cls, data: dict) -> TimeMapping:
         """
         Create TimeMapping from dictionary.
 
@@ -206,4 +206,4 @@ class TimeMapping:
         Returns:
             TimeMapping instance
         """
-        return cls(data['mapping'])
+        return cls(data["mapping"])

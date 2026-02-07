@@ -8,8 +8,9 @@ MATLAB equivalent: src/ndi/+ndi/+app/appdoc.m
 """
 
 from __future__ import annotations
+
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..document import Document
@@ -17,10 +18,11 @@ if TYPE_CHECKING:
 
 class DocExistsAction(str, Enum):
     """Action to take when a document already exists."""
-    ERROR = 'Error'
-    NO_ACTION = 'NoAction'
-    REPLACE = 'Replace'
-    REPLACE_IF_DIFFERENT = 'ReplaceIfDifferent'
+
+    ERROR = "Error"
+    NO_ACTION = "NoAction"
+    REPLACE = "Replace"
+    REPLACE_IF_DIFFERENT = "ReplaceIfDifferent"
 
 
 class AppDoc:
@@ -39,8 +41,8 @@ class AppDoc:
 
     def __init__(
         self,
-        doc_types: Optional[List[str]] = None,
-        doc_document_types: Optional[List[str]] = None,
+        doc_types: list[str] | None = None,
+        doc_document_types: list[str] | None = None,
         doc_session: Any = None,
     ):
         self.doc_types = doc_types or []
@@ -54,7 +56,7 @@ class AppDoc:
         doc_exists_action: DocExistsAction = DocExistsAction.ERROR,
         *args,
         **kwargs,
-    ) -> List['Document']:
+    ) -> list[Document]:
         """
         Create and store an app document.
 
@@ -75,18 +77,14 @@ class AppDoc:
 
         if existing:
             if doc_exists_action == DocExistsAction.ERROR:
-                raise RuntimeError(
-                    f"Document of type '{appdoc_type}' already exists"
-                )
+                raise RuntimeError(f"Document of type '{appdoc_type}' already exists")
             elif doc_exists_action == DocExistsAction.NO_ACTION:
                 return existing
             elif doc_exists_action == DocExistsAction.REPLACE_IF_DIFFERENT:
                 # Check if the existing doc matches
                 for doc in existing:
                     existing_struct = self.doc2struct(appdoc_type, doc)
-                    if self.isequal_appdoc_struct(
-                        appdoc_type, existing_struct, appdoc_struct
-                    ):
+                    if self.isequal_appdoc_struct(appdoc_type, existing_struct, appdoc_struct):
                         return existing
                 # Different - fall through to replace
                 if self.doc_session is not None:
@@ -115,8 +113,9 @@ class AppDoc:
         self,
         appdoc_type: str,
         appdoc_struct: dict,
-        *args, **kwargs,
-    ) -> Optional['Document']:
+        *args,
+        **kwargs,
+    ) -> Document | None:
         """
         Convert a parameter dict to an ndi.Document.
 
@@ -127,7 +126,7 @@ class AppDoc:
     def doc2struct(
         self,
         appdoc_type: str,
-        doc: 'Document',
+        doc: Document,
     ) -> dict:
         """
         Extract parameter dict from a Document.
@@ -135,8 +134,8 @@ class AppDoc:
         Base class reads the property_list_name from the document.
         """
         props = doc.document_properties
-        doc_class = props.get('document_class', {})
-        property_list_name = doc_class.get('property_list_name', appdoc_type)
+        doc_class = props.get("document_class", {})
+        property_list_name = doc_class.get("property_list_name", appdoc_type)
         return props.get(property_list_name, {})
 
     def defaultstruct_appdoc(self, appdoc_type: str) -> dict:
@@ -146,8 +145,9 @@ class AppDoc:
     def find_appdoc(
         self,
         appdoc_type: str,
-        *args, **kwargs,
-    ) -> List['Document']:
+        *args,
+        **kwargs,
+    ) -> list[Document]:
         """
         Find existing app documents in the database.
 
@@ -158,7 +158,8 @@ class AppDoc:
     def clear_appdoc(
         self,
         appdoc_type: str,
-        *args, **kwargs,
+        *args,
+        **kwargs,
     ) -> bool:
         """
         Remove app documents from the database.
@@ -178,7 +179,8 @@ class AppDoc:
     def loaddata_appdoc(
         self,
         appdoc_type: str,
-        *args, **kwargs,
+        *args,
+        **kwargs,
     ) -> Any:
         """Load data from an app document. Base class returns None."""
         return None
@@ -187,9 +189,9 @@ class AppDoc:
         self,
         appdoc_type: str,
         appdoc_struct: dict,
-    ) -> Tuple[bool, str]:
+    ) -> tuple[bool, str]:
         """Validate an appdoc struct. Base class returns (False, message)."""
-        return False, 'Base class always returns invalid'
+        return False, "Base class always returns invalid"
 
     def isequal_appdoc_struct(
         self,

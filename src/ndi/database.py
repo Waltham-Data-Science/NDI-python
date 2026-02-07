@@ -20,11 +20,9 @@ Example:
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
 
 from .document import Document
 from .query import Query
-from .ido import Ido
 
 
 class SQLiteDriver:
@@ -35,16 +33,16 @@ class SQLiteDriver:
     field_search() for query evaluation.
     """
 
-    def __init__(self, db_path: Path, branch_id: str = 'main'):
+    def __init__(self, db_path: Path, branch_id: str = "main"):
         """Initialize the SQLite driver.
 
         Args:
             db_path: Path to the SQLite database file.
             branch_id: Default branch ID to use.
         """
-        from did.implementations.sqlitedb import SQLiteDB
-        from did.document import Document as DIDDocument
         from did.datastructures import field_search
+        from did.document import Document as DIDDocument
+        from did.implementations.sqlitedb import SQLiteDB
 
         self._db_path = db_path
         self._branch_id = branch_id
@@ -57,11 +55,11 @@ class SQLiteDriver:
         # Create main branch if it doesn't exist
         existing_branches = self._db.all_branch_ids()
         if branch_id not in existing_branches:
-            self._db.add_branch(branch_id, '')  # Empty string for root branch
+            self._db.add_branch(branch_id, "")  # Empty string for root branch
 
-    def add(self, document: Dict) -> None:
+    def add(self, document: dict) -> None:
         """Add a document to the database."""
-        doc_id = document.get('base', {}).get('id', '')
+        doc_id = document.get("base", {}).get("id", "")
         if not doc_id:
             raise ValueError("Document must have a base.id")
 
@@ -74,9 +72,9 @@ class SQLiteDriver:
         did_doc = self._DIDDocument(document)
         self._db.add_docs([did_doc], self._branch_id)
 
-    def update(self, document: Dict) -> None:
+    def update(self, document: dict) -> None:
         """Update an existing document."""
-        doc_id = document.get('base', {}).get('id', '')
+        doc_id = document.get("base", {}).get("id", "")
 
         # Check if document exists
         existing_ids = self._db.get_doc_ids(self._branch_id)
@@ -97,17 +95,17 @@ class SQLiteDriver:
         self._db.remove_docs([doc_id], self._branch_id)
         return True
 
-    def find_by_id(self, doc_id: str) -> Optional[Dict]:
+    def find_by_id(self, doc_id: str) -> dict | None:
         """Find a document by ID."""
         try:
-            doc = self._db.get_docs(doc_id, self._branch_id, OnMissing='ignore')
+            doc = self._db.get_docs(doc_id, self._branch_id, OnMissing="ignore")
             if doc is None:
                 return None
             return doc.document_properties
         except Exception:
             return None
 
-    def find(self, query=None) -> List[Dict]:
+    def find(self, query=None) -> list[dict]:
         """Find all documents matching query.
 
         Uses DID-python's field_search() for query evaluation.
@@ -121,7 +119,7 @@ class SQLiteDriver:
         # Get all documents
         documents = []
         for doc_id in doc_ids:
-            doc = self._db.get_docs(doc_id, self._branch_id, OnMissing='ignore')
+            doc = self._db.get_docs(doc_id, self._branch_id, OnMissing="ignore")
             if doc is not None:
                 documents.append(doc.document_properties)
 
@@ -149,12 +147,7 @@ class Database:
         docs = db.search(Query('element.type') == 'probe')
     """
 
-    def __init__(
-        self,
-        session_path: Union[str, Path],
-        db_name: str = '.ndi',
-        **backend_kwargs
-    ):
+    def __init__(self, session_path: str | Path, db_name: str = ".ndi", **backend_kwargs):
         """Initialize NDI database.
 
         Args:
@@ -175,17 +168,17 @@ class Database:
         db_dir.mkdir(parents=True, exist_ok=True)
 
         # Initialize SQLite driver (wraps DID-python's SQLiteDB)
-        db_path = db_dir / 'ndi.db'
+        db_path = db_dir / "ndi.db"
         self._driver = SQLiteDriver(db_path, **backend_kwargs)
 
         # Binary directory for file attachments
-        self._binary_dir = self.session_path / db_name / 'binary'
+        self._binary_dir = self.session_path / db_name / "binary"
         self._binary_dir.mkdir(parents=True, exist_ok=True)
 
     @property
     def database_path(self) -> Path:
         """Path to the SQLite database file."""
-        return self.session_path / self._db_name / 'ndi.db'
+        return self.session_path / self._db_name / "ndi.db"
 
     @property
     def binary_path(self) -> Path:
@@ -212,16 +205,14 @@ class Database:
         """
         try:
             self._driver.add(document.document_properties)
-        except FileExistsError:
-            raise ValueError(f"Document with ID {document.id} already exists. "
-                           f"Use update() or add_or_replace().")
+        except FileExistsError as exc:
+            raise ValueError(
+                f"Document with ID {document.id} already exists. "
+                f"Use update() or add_or_replace()."
+            ) from exc
         return document
 
-    def read(
-        self,
-        doc_id: str,
-        isa_class: Optional[str] = None
-    ) -> Optional[Document]:
+    def read(self, doc_id: str, isa_class: str | None = None) -> Document | None:
         """Read a document by ID.
 
         Args:
@@ -246,7 +237,7 @@ class Database:
 
         return doc
 
-    def remove(self, document: Union[Document, str]) -> bool:
+    def remove(self, document: Document | str) -> bool:
         """Remove a document from the database.
 
         Args:
@@ -281,9 +272,10 @@ class Database:
         """
         try:
             self._driver.update(document.document_properties)
-        except FileNotFoundError:
-            raise ValueError(f"Document with ID {document.id} not found. "
-                           f"Use add() for new documents.")
+        except FileNotFoundError as exc:
+            raise ValueError(
+                f"Document with ID {document.id} not found. " f"Use add() for new documents."
+            ) from exc
         return document
 
     def add_or_replace(self, document: Document) -> Document:
@@ -310,11 +302,7 @@ class Database:
 
     # === Query Operations ===
 
-    def search(
-        self,
-        query: Optional[Query] = None,
-        isa_class: Optional[str] = None
-    ) -> List[Document]:
+    def search(self, query: Query | None = None, isa_class: str | None = None) -> list[Document]:
         """Search for documents matching a query.
 
         Args:
@@ -344,7 +332,7 @@ class Database:
         # Build combined query
         combined = query
         if isa_class:
-            isa_query = Query('').isa(isa_class)
+            isa_query = Query("").isa(isa_class)
             combined = (combined & isa_query) if combined else isa_query
 
         # Execute search
@@ -353,7 +341,7 @@ class Database:
         # Convert results to ndi.Document
         return [Document(r) for r in results]
 
-    def find_by_id(self, doc_id: str) -> Optional[Document]:
+    def find_by_id(self, doc_id: str) -> Document | None:
         """Find a document by its ID.
 
         Alias for read() for MATLAB compatibility.
@@ -366,14 +354,14 @@ class Database:
         """
         return self.read(doc_id)
 
-    def alldocids(self) -> List[str]:
+    def alldocids(self) -> list[str]:
         """Get all document IDs in the database.
 
         Returns:
             List of document IDs.
         """
         all_docs = self._driver.find(None)
-        return [doc.get('base', {}).get('id', '') for doc in all_docs]
+        return [doc.get("base", {}).get("id", "") for doc in all_docs]
 
     def numdocs(self) -> int:
         """Get the number of documents in the database.
@@ -385,10 +373,7 @@ class Database:
 
     # === Dependency Operations ===
 
-    def find_depends_on(
-        self,
-        document: Union[Document, str]
-    ) -> List[Document]:
+    def find_depends_on(self, document: Document | str) -> list[Document]:
         """Find all documents that depend on a given document.
 
         Args:
@@ -401,10 +386,7 @@ class Database:
         query = Query.depends_on(doc_id)
         return self.search(query)
 
-    def find_dependencies(
-        self,
-        document: Union[Document, str]
-    ) -> List[Document]:
+    def find_dependencies(self, document: Document | str) -> list[Document]:
         """Find all documents that a given document depends on.
 
         Args:
@@ -421,14 +403,14 @@ class Database:
         names, deps = document.dependency()
         results = []
         for dep in deps:
-            dep_doc = self.read(dep['value'])
+            dep_doc = self.read(dep["value"])
             if dep_doc:
                 results.append(dep_doc)
         return results
 
     # === Batch Operations ===
 
-    def add_many(self, documents: List[Document]) -> List[Document]:
+    def add_many(self, documents: list[Document]) -> list[Document]:
         """Add multiple documents.
 
         Args:
@@ -446,9 +428,7 @@ class Database:
         return added
 
     def remove_many(
-        self,
-        query: Optional[Query] = None,
-        documents: Optional[List[Document]] = None
+        self, query: Query | None = None, documents: list[Document] | None = None
     ) -> int:
         """Remove multiple documents.
 
@@ -498,10 +478,7 @@ class Database:
 
 
 # Convenience function
-def open_database(
-    session_path: Union[str, Path],
-    **kwargs
-) -> Database:
+def open_database(session_path: str | Path, **kwargs) -> Database:
     """Open or create an NDI database.
 
     This is a convenience function for Database(). Uses DID-python's

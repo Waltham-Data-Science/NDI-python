@@ -10,17 +10,17 @@ Classes:
     EpochProbeMap: Mapping between probes and devices for an epoch
 """
 
+from .epoch import Epoch
 from .epochprobemap import EpochProbeMap
 from .epochprobemap_daqsystem import EpochProbeMapDAQSystem
 from .epochset import EpochSet
-from .epoch import Epoch
 from .functions import epochrange, find_epoch_node
 
 __all__ = [
-    'Epoch',
-    'EpochSet',
-    'EpochProbeMap',
-    'EpochProbeMapDAQSystem',
-    'epochrange',
-    'find_epoch_node',
+    "Epoch",
+    "EpochSet",
+    "EpochProbeMap",
+    "EpochProbeMapDAQSystem",
+    "epochrange",
+    "find_epoch_node",
 ]

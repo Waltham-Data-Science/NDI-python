@@ -14,13 +14,13 @@ Example:
     >>> channels = reader.getchannelsepoch(['data.rhd'])
 """
 
+from .mfdaq import BlackrockReader, CEDSpike2Reader, IntanReader, SpikeGadgetsReader
 from .spikeinterface_adapter import SpikeInterfaceReader
-from .mfdaq import IntanReader, BlackrockReader, CEDSpike2Reader, SpikeGadgetsReader
 
 __all__ = [
-    'SpikeInterfaceReader',
-    'IntanReader',
-    'BlackrockReader',
-    'CEDSpike2Reader',
-    'SpikeGadgetsReader',
+    "SpikeInterfaceReader",
+    "IntanReader",
+    "BlackrockReader",
+    "CEDSpike2Reader",
+    "SpikeGadgetsReader",
 ]

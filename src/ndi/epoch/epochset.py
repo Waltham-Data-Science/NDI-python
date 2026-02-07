@@ -6,15 +6,15 @@ the interface for objects that manage epochs (recording periods).
 """
 
 from __future__ import annotations
-from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+
 import hashlib
-import json
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 if TYPE_CHECKING:
-    from ..time import ClockType, TimeReference
+    from ..time import ClockType
 
 
 class EpochSet(ABC):
@@ -48,11 +48,11 @@ class EpochSet(ABC):
 
     def __init__(self):
         """Initialize epoch set with empty cache."""
-        self._epochtable_cache: Optional[List[Dict[str, Any]]] = None
-        self._epochtable_hash: Optional[str] = None
+        self._epochtable_cache: list[dict[str, Any]] | None = None
+        self._epochtable_hash: str | None = None
 
     @abstractmethod
-    def buildepochtable(self) -> List[Dict[str, Any]]:
+    def buildepochtable(self) -> list[dict[str, Any]]:
         """
         Build the epoch table for this epoch set.
 
@@ -98,7 +98,7 @@ class EpochSet(ABC):
     def epochtable(
         self,
         force_rebuild: bool = False,
-    ) -> Tuple[List[Dict[str, Any]], str]:
+    ) -> tuple[list[dict[str, Any]], str]:
         """
         Get the epoch table with caching.
 
@@ -117,8 +117,9 @@ class EpochSet(ABC):
 
         return self._epochtable_cache, self._epochtable_hash
 
-    def _compute_hash(self, epochtable: List[Dict[str, Any]]) -> str:
+    def _compute_hash(self, epochtable: list[dict[str, Any]]) -> str:
         """Compute hash of epoch table for cache validation."""
+
         # Create a stable string representation
         def make_hashable(obj):
             if isinstance(obj, dict):
@@ -127,9 +128,9 @@ class EpochSet(ABC):
                 return tuple(make_hashable(x) for x in obj)
             elif isinstance(obj, np.ndarray):
                 return tuple(obj.flatten().tolist())
-            elif hasattr(obj, 'to_dict'):
+            elif hasattr(obj, "to_dict"):
                 return make_hashable(obj.to_dict())
-            elif hasattr(obj, '__dict__'):
+            elif hasattr(obj, "__dict__"):
                 return make_hashable(obj.__dict__)
             else:
                 return obj
@@ -148,7 +149,7 @@ class EpochSet(ABC):
         et, _ = self.epochtable()
         return len(et)
 
-    def epochclock(self, epoch_number: int) -> List['ClockType']:
+    def epochclock(self, epoch_number: int) -> list[ClockType]:
         """
         Get clock types for an epoch.
 
@@ -166,9 +167,9 @@ class EpochSet(ABC):
             raise IndexError(f"Epoch {epoch_number} out of range (1..{len(et)})")
 
         entry = et[epoch_number - 1]
-        return entry.get('epoch_clock', [])
+        return entry.get("epoch_clock", [])
 
-    def t0_t1(self, epoch_number: int) -> List[Tuple[float, float]]:
+    def t0_t1(self, epoch_number: int) -> list[tuple[float, float]]:
         """
         Get time range for an epoch.
 
@@ -186,7 +187,7 @@ class EpochSet(ABC):
             raise IndexError(f"Epoch {epoch_number} out of range (1..{len(et)})")
 
         entry = et[epoch_number - 1]
-        return entry.get('t0_t1', [(np.nan, np.nan)])
+        return entry.get("t0_t1", [(np.nan, np.nan)])
 
     def epochid(self, epoch_number: int) -> str:
         """
@@ -205,7 +206,7 @@ class EpochSet(ABC):
         if epoch_number < 1 or epoch_number > len(et):
             raise IndexError(f"Epoch {epoch_number} out of range (1..{len(et)})")
 
-        return et[epoch_number - 1].get('epoch_id', '')
+        return et[epoch_number - 1].get("epoch_id", "")
 
     def epochnumber(self, epoch_id: str) -> int:
         """
@@ -222,16 +223,16 @@ class EpochSet(ABC):
         """
         et, _ = self.epochtable()
         for i, entry in enumerate(et):
-            if entry.get('epoch_id') == epoch_id:
+            if entry.get("epoch_id") == epoch_id:
                 return i + 1
 
         raise ValueError(f"Epoch ID not found: {epoch_id}")
 
     def matchedepochtable(
         self,
-        epoch_number: Optional[int] = None,
-        epoch_id: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        epoch_number: int | None = None,
+        epoch_id: str | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Get epoch table entries matching criteria.
 
@@ -246,15 +247,15 @@ class EpochSet(ABC):
         matches = []
 
         for entry in et:
-            if epoch_number is not None and entry.get('epoch_number') != epoch_number:
+            if epoch_number is not None and entry.get("epoch_number") != epoch_number:
                 continue
-            if epoch_id is not None and entry.get('epoch_id') != epoch_id:
+            if epoch_id is not None and entry.get("epoch_id") != epoch_id:
                 continue
             matches.append(entry)
 
         return matches
 
-    def epochtableentry(self, epoch_number: int) -> Dict[str, Any]:
+    def epochtableentry(self, epoch_number: int) -> dict[str, Any]:
         """
         Get a single epoch table entry.
 
@@ -273,7 +274,7 @@ class EpochSet(ABC):
 
         return et[epoch_number - 1]
 
-    def epochgraph(self) -> List[Dict[str, Any]]:
+    def epochgraph(self) -> list[dict[str, Any]]:
         """
         Build epoch graph nodes for time synchronization.
 
@@ -292,20 +293,22 @@ class EpochSet(ABC):
         nodes = []
 
         for entry in et:
-            epoch_id = entry.get('epoch_id', '')
-            clocks = entry.get('epoch_clock', [])
-            t0t1_list = entry.get('t0_t1', [])
+            epoch_id = entry.get("epoch_id", "")
+            clocks = entry.get("epoch_clock", [])
+            t0t1_list = entry.get("t0_t1", [])
 
             # Create one node per clock type
             for i, clock in enumerate(clocks):
                 t0, t1 = t0t1_list[i] if i < len(t0t1_list) else (np.nan, np.nan)
-                nodes.append({
-                    'epoch_id': epoch_id,
-                    'epochset': self,
-                    'clock': clock,
-                    't0': t0,
-                    't1': t1,
-                })
+                nodes.append(
+                    {
+                        "epoch_id": epoch_id,
+                        "epochset": self,
+                        "clock": clock,
+                        "t0": t0,
+                        "t1": t1,
+                    }
+                )
 
         return nodes
 

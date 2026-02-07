@@ -12,7 +12,7 @@ from __future__ import annotations
 import csv
 import shutil
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 
 class SessionTable:
@@ -33,9 +33,9 @@ class SessionTable:
         '/data/experiment1'
     """
 
-    _REQUIRED_FIELDS = ('session_id', 'path')
+    _REQUIRED_FIELDS = ("session_id", "path")
 
-    def __init__(self, table_path: Optional[Path] = None):
+    def __init__(self, table_path: Path | None = None):
         """
         Create a SessionTable instance.
 
@@ -44,20 +44,19 @@ class SessionTable:
                         If None, uses ``local_table_filename()``.
         """
         self._table_path = (
-            Path(table_path) if table_path is not None
-            else self.local_table_filename()
+            Path(table_path) if table_path is not None else self.local_table_filename()
         )
 
     @staticmethod
     def local_table_filename() -> Path:
         """Return the default session table file path."""
-        return Path.home() / '.ndi' / 'preferences' / 'local_sessiontable.txt'
+        return Path.home() / ".ndi" / "preferences" / "local_sessiontable.txt"
 
     # ------------------------------------------------------------------
     # Read operations
     # ------------------------------------------------------------------
 
-    def get_session_table(self) -> List[Dict[str, str]]:
+    def get_session_table(self) -> list[dict[str, str]]:
         """
         Read and return the session table.
 
@@ -69,24 +68,24 @@ class SessionTable:
             return []
 
         try:
-            entries: List[Dict[str, str]] = []
-            with open(self._table_path, 'r', newline='') as f:
-                reader = csv.DictReader(f, delimiter='\t')
+            entries: list[dict[str, str]] = []
+            with open(self._table_path, newline="") as f:
+                reader = csv.DictReader(f, delimiter="\t")
                 if reader.fieldnames is None:
                     return []
                 for row in reader:
-                    sid = row.get('session_id', '')
-                    path = row.get('path', '')
+                    sid = row.get("session_id", "")
+                    path = row.get("path", "")
                     if not isinstance(sid, str):
                         sid = str(sid)
                     if not isinstance(path, str):
                         path = str(path)
-                    entries.append({'session_id': sid, 'path': path})
+                    entries.append({"session_id": sid, "path": path})
             return entries
         except Exception:
             return []
 
-    def get_session_path(self, session_id: str) -> Optional[str]:
+    def get_session_path(self, session_id: str) -> str | None:
         """
         Look up the filesystem path for *session_id*.
 
@@ -97,8 +96,8 @@ class SessionTable:
             Path string if found, None otherwise.
         """
         for entry in self.get_session_table():
-            if entry['session_id'] == session_id:
-                return entry['path']
+            if entry["session_id"] == session_id:
+                return entry["path"]
         return None
 
     # ------------------------------------------------------------------
@@ -126,7 +125,7 @@ class SessionTable:
         # Remove existing entry for this ID (if any), then append
         self.remove_entry(session_id)
         entries = self.get_session_table()
-        entries.append({'session_id': session_id, 'path': path})
+        entries.append({"session_id": session_id, "path": path})
         self._write_table(entries)
 
     def remove_entry(self, session_id: str) -> None:
@@ -136,7 +135,7 @@ class SessionTable:
         Does nothing if the ID is not present.
         """
         entries = self.get_session_table()
-        filtered = [e for e in entries if e['session_id'] != session_id]
+        filtered = [e for e in entries if e["session_id"] != session_id]
         if len(filtered) != len(entries):
             self._write_table(filtered)
 
@@ -155,7 +154,7 @@ class SessionTable:
     # Validation
     # ------------------------------------------------------------------
 
-    def check_table(self) -> Tuple[bool, List[Dict[str, Any]]]:
+    def check_table(self) -> tuple[bool, list[dict[str, Any]]]:
         """
         Validate the session table and check path accessibility.
 
@@ -171,16 +170,19 @@ class SessionTable:
 
         results = []
         for entry in entries:
-            results.append({
-                'session_id': entry['session_id'],
-                'path': entry['path'],
-                'exists': Path(entry['path']).is_dir(),
-            })
+            results.append(
+                {
+                    "session_id": entry["session_id"],
+                    "path": entry["path"],
+                    "exists": Path(entry["path"]).is_dir(),
+                }
+            )
         return True, results
 
     def is_valid_table(
-        self, entries: Optional[List[Dict[str, str]]] = None,
-    ) -> Tuple[bool, str]:
+        self,
+        entries: list[dict[str, str]] | None = None,
+    ) -> tuple[bool, str]:
         """
         Check whether the session table has the correct fields.
 
@@ -194,21 +196,21 @@ class SessionTable:
             entries = self.get_session_table()
 
         for i, entry in enumerate(entries):
-            if 'path' not in entry:
+            if "path" not in entry:
                 return False, f"Entry {i}: 'path' is a required field."
-            if 'session_id' not in entry:
+            if "session_id" not in entry:
                 return False, f"Entry {i}: 'session_id' is a required field."
-            if not isinstance(entry['path'], str):
+            if not isinstance(entry["path"], str):
                 return False, f"Entry {i}: 'path' must be a string."
-            if not isinstance(entry['session_id'], str):
+            if not isinstance(entry["session_id"], str):
                 return False, f"Entry {i}: 'session_id' must be a string."
-        return True, ''
+        return True, ""
 
     # ------------------------------------------------------------------
     # Backup
     # ------------------------------------------------------------------
 
-    def backup(self) -> Optional[Path]:
+    def backup(self) -> Path | None:
         """
         Create a numbered backup of the table file.
 
@@ -233,7 +235,7 @@ class SessionTable:
         shutil.copy2(self._table_path, backup_path)
         return backup_path
 
-    def backup_file_list(self) -> List[Path]:
+    def backup_file_list(self) -> list[Path]:
         """Return a list of existing backup files."""
         if not self._table_path.parent.is_dir():
             return []
@@ -247,7 +249,7 @@ class SessionTable:
     # Internal
     # ------------------------------------------------------------------
 
-    def _write_table(self, entries: List[Dict[str, str]]) -> None:
+    def _write_table(self, entries: list[dict[str, str]]) -> None:
         """Write entries to the table file (atomic-ish via parent mkdir)."""
         valid, msg = self.is_valid_table(entries)
         if not valid:
@@ -255,11 +257,11 @@ class SessionTable:
 
         self._table_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(self._table_path, 'w', newline='') as f:
+        with open(self._table_path, "w", newline="") as f:
             writer = csv.DictWriter(
                 f,
-                fieldnames=['session_id', 'path'],
-                delimiter='\t',
+                fieldnames=["session_id", "path"],
+                delimiter="\t",
             )
             writer.writeheader()
             writer.writerows(entries)

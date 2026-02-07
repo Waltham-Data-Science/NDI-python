@@ -8,12 +8,12 @@ MATLAB equivalent: src/ndi/+ndi/+probe/timeseries.m
 """
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, Tuple, Union
+
+from typing import Any
 
 import numpy as np
 
 from . import Probe
-from ..time import ClockType
 
 
 class ProbeTimeseries(Probe):
@@ -34,11 +34,11 @@ class ProbeTimeseries(Probe):
 
     def readtimeseries(
         self,
-        epoch: Union[int, str, Any] = None,
+        epoch: int | str | Any = None,
         t0: float = 0.0,
-        t1: float = float('inf'),
-        timeref: Optional[Any] = None,
-    ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], Optional[Any]]:
+        t1: float = float("inf"),
+        timeref: Any | None = None,
+    ) -> tuple[np.ndarray | None, np.ndarray | None, Any | None]:
         """
         Read timeseries data.
 
@@ -72,7 +72,7 @@ class ProbeTimeseries(Probe):
         timeref: Any,
         t0: float,
         t1: float,
-    ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], Optional[Any]]:
+    ) -> tuple[np.ndarray | None, np.ndarray | None, Any | None]:
         """
         Read timeseries using syncgraph time conversion.
 
@@ -97,7 +97,7 @@ class ProbeTimeseries(Probe):
 
         # Try each epoch to find one that covers the time range
         for entry in et:
-            epoch_number = entry['epoch_number']
+            epoch_number = entry["epoch_number"]
             try:
                 data, t, tr = self.readtimeseriesepoch(epoch_number, t0, t1)
                 if data is not None and len(data) > 0:
@@ -109,10 +109,10 @@ class ProbeTimeseries(Probe):
 
     def readtimeseriesepoch(
         self,
-        epoch: Union[int, str],
+        epoch: int | str,
         t0: float = 0.0,
-        t1: float = float('inf'),
-    ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], Optional[Any]]:
+        t1: float = float("inf"),
+    ) -> tuple[np.ndarray | None, np.ndarray | None, Any | None]:
         """
         Read timeseries data from a specific epoch.
 
@@ -129,7 +129,7 @@ class ProbeTimeseries(Probe):
         # Base implementation returns None - subclasses override
         return None, None, None
 
-    def samplerate(self, epoch: Union[int, str]) -> float:
+    def samplerate(self, epoch: int | str) -> float:
         """
         Get sample rate for this probe in an epoch.
 
@@ -143,7 +143,7 @@ class ProbeTimeseries(Probe):
 
     def times2samples(
         self,
-        epoch: Union[int, str],
+        epoch: int | str,
         times: np.ndarray,
     ) -> np.ndarray:
         """
@@ -164,7 +164,7 @@ class ProbeTimeseries(Probe):
 
     def samples2times(
         self,
-        epoch: Union[int, str],
+        epoch: int | str,
         samples: np.ndarray,
     ) -> np.ndarray:
         """

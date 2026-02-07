@@ -10,12 +10,11 @@ MATLAB equivalent: src/ndi/+ndi/+calc/+stimulus/tuningcurve.m
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from ...calculator import Calculator
-from ...app.appdoc import DocExistsAction
 
 if TYPE_CHECKING:
     from ...document import Document
@@ -34,14 +33,14 @@ class TuningCurveCalc(Calculator):
         >>> docs = calc.run(DocExistsAction.REPLACE)
     """
 
-    def __init__(self, session: Optional['Session'] = None):
+    def __init__(self, session: Session | None = None):
         super().__init__(
             session=session,
-            document_type='tuningcurve_calc',
-            path_to_doc_type='apps/calculators/tuningcurve_calc',
+            document_type="tuningcurve_calc",
+            path_to_doc_type="apps/calculators/tuningcurve_calc",
         )
 
-    def calculate(self, parameters: dict) -> List['Document']:
+    def calculate(self, parameters: dict) -> list[Document]:
         """
         Calculate tuning curves from stimulus responses.
 
@@ -57,29 +56,29 @@ class TuningCurveCalc(Calculator):
         """
         from ...document import Document
 
-        input_params = parameters.get('input_parameters', {})
+        input_params = parameters.get("input_parameters", {})
 
         tuningcurve_data = {
-            'input_parameters': input_params,
-            'independent_variable': [],
-            'response_mean': [],
-            'response_stderr': [],
+            "input_parameters": input_params,
+            "independent_variable": [],
+            "response_mean": [],
+            "response_stderr": [],
         }
 
         doc = Document(
-            'apps/calculators/tuningcurve_calc',
-            **{'tuningcurve_calc': tuningcurve_data},
+            "apps/calculators/tuningcurve_calc",
+            **{"tuningcurve_calc": tuningcurve_data},
         )
 
         if self._session is not None:
             doc = doc.set_session_id(self._session.id())
 
-        depends_on = parameters.get('depends_on', [])
+        depends_on = parameters.get("depends_on", [])
         if depends_on:
             dep = depends_on[0]
             doc = doc.set_dependency_value(
-                dep.get('name', 'document_id'),
-                dep.get('value', ''),
+                dep.get("name", "document_id"),
+                dep.get("value", ""),
             )
 
         return [doc]
@@ -89,17 +88,17 @@ class TuningCurveCalc(Calculator):
         from ...query import Query
 
         return {
-            'input_parameters': {
-                'independent_label': 'angle',
-                'independent_parameter': 'angle',
-                'selection': {},
-                'best_algorithm': 'empirical',
+            "input_parameters": {
+                "independent_label": "angle",
+                "independent_parameter": "angle",
+                "selection": {},
+                "best_algorithm": "empirical",
             },
-            'depends_on': [],
-            'query': [
+            "depends_on": [],
+            "query": [
                 {
-                    'name': 'document_id',
-                    'query': Query('').isa('stimulus_response_scalar'),
+                    "name": "document_id",
+                    "query": Query("").isa("stimulus_response_scalar"),
                 },
             ],
         }
@@ -111,7 +110,7 @@ class TuningCurveCalc(Calculator):
     def default_parameters_query(
         self,
         parameters_specification: dict,
-    ) -> List[dict]:
+    ) -> list[dict]:
         """Return default queries for finding input parameters.
 
         MATLAB equivalent: tuningcurve.default_parameters_query
@@ -132,25 +131,29 @@ class TuningCurveCalc(Calculator):
         if q_default:
             return q_default
 
-        q1 = Query('').isa('stimulus_response_scalar')
+        q1 = Query("").isa("stimulus_response_scalar")
         q2 = Query.from_search(
-            'stimulus_response_scalar.response_type',
-            'contains_string', 'mean', '',
+            "stimulus_response_scalar.response_type",
+            "contains_string",
+            "mean",
+            "",
         )
         q3 = Query.from_search(
-            'stimulus_response_scalar.response_type',
-            'contains_string', 'F1', '',
+            "stimulus_response_scalar.response_type",
+            "contains_string",
+            "F1",
+            "",
         )
         q_total = q1 & (q2 | q3)
 
-        return [{'name': 'stimulus_response_scalar_id', 'query': q_total}]
+        return [{"name": "stimulus_response_scalar_id", "query": q_total}]
 
     def best_value(
         self,
         algorithm: str,
-        stim_response_doc: 'Document',
+        stim_response_doc: Document,
         prop: str,
-    ) -> Tuple[int, float, Any]:
+    ) -> tuple[int, float, Any]:
         """Find the stimulus with the "best" response.
 
         MATLAB equivalent: tuningcurve.best_value
@@ -169,15 +172,15 @@ class TuningCurveCalc(Calculator):
             ValueError: If algorithm is unknown.
         """
         algo = algorithm.lower()
-        if algo == 'empirical_maximum':
+        if algo == "empirical_maximum":
             return self.best_value_empirical(stim_response_doc, prop)
         raise ValueError(f"Unknown best_value algorithm: '{algorithm}'")
 
     def best_value_empirical(
         self,
-        stim_response_doc: 'Document',
+        stim_response_doc: Document,
         prop: str,
-    ) -> Tuple[int, float, Any]:
+    ) -> tuple[int, float, Any]:
         """Find the stimulus with the largest empirical mean response.
 
         MATLAB equivalent: tuningcurve.best_value_empirical
@@ -198,46 +201,41 @@ class TuningCurveCalc(Calculator):
         Raises:
             RuntimeError: If stimulus presentation document cannot be found.
         """
-        from ...query import Query
 
         stim_pres_doc = self._get_stim_presentation_doc(stim_response_doc)
 
-        stim_pres = stim_pres_doc.document_properties.get(
-            'stimulus_presentation', {}
-        )
-        stimuli = stim_pres.get('stimuli', [])
-        presentation_order = stim_pres.get('presentation_order', [])
+        stim_pres = stim_pres_doc.document_properties.get("stimulus_presentation", {})
+        stimuli = stim_pres.get("stimuli", [])
+        presentation_order = stim_pres.get("presentation_order", [])
 
         # Find stimuli that have the requested property
         include = []
         for i, stim in enumerate(stimuli):
-            params = stim.get('parameters', {})
+            params = stim.get("parameters", {})
             if prop in params:
                 include.append(i)
 
         n = -1
-        v = float('-inf')
-        property_value: Any = ''
+        v = float("-inf")
+        property_value: Any = ""
 
-        responses = stim_response_doc.document_properties.get(
-            'stimulus_response_scalar', {}
-        ).get('responses', {})
-        response_real = responses.get('response_real', [])
-        response_imag = responses.get('response_imaginary', [])
-        control_real = responses.get('control_response_real', [])
-        control_imag = responses.get('control_response_imaginary', [])
+        responses = stim_response_doc.document_properties.get("stimulus_response_scalar", {}).get(
+            "responses", {}
+        )
+        response_real = responses.get("response_real", [])
+        response_imag = responses.get("response_imaginary", [])
+        control_real = responses.get("control_response_real", [])
+        control_imag = responses.get("control_response_imaginary", [])
 
         for idx in include:
             # Find all presentations of this stimulus
             indexes = [
-                j for j, po in enumerate(presentation_order)
+                j
+                for j, po in enumerate(presentation_order)
                 if po == idx or po == idx + 1  # handle 0-based or 1-based
             ]
             # Use strict equality with actual presentation_order values
-            indexes = [
-                j for j, po in enumerate(presentation_order)
-                if po == idx
-            ]
+            indexes = [j for j, po in enumerate(presentation_order) if po == idx]
 
             r_values = []
             for j in indexes:
@@ -263,17 +261,15 @@ class TuningCurveCalc(Calculator):
                 if mn > v:
                     v = mn
                     n = idx
-                    property_value = stimuli[idx].get('parameters', {}).get(
-                        prop, ''
-                    )
+                    property_value = stimuli[idx].get("parameters", {}).get(prop, "")
 
         return (n, v, property_value)
 
     def property_value_array(
         self,
-        stim_response_doc: 'Document',
+        stim_response_doc: Document,
         prop: str,
-    ) -> List[Any]:
+    ) -> list[Any]:
         """Find all unique values of a stimulus property.
 
         MATLAB equivalent: tuningcurve.property_value_array
@@ -290,14 +286,12 @@ class TuningCurveCalc(Calculator):
         """
         stim_pres_doc = self._get_stim_presentation_doc(stim_response_doc)
 
-        stim_pres = stim_pres_doc.document_properties.get(
-            'stimulus_presentation', {}
-        )
-        stimuli = stim_pres.get('stimuli', [])
+        stim_pres = stim_pres_doc.document_properties.get("stimulus_presentation", {})
+        stimuli = stim_pres.get("stimuli", [])
 
-        pva: List[Any] = []
+        pva: list[Any] = []
         for stim in stimuli:
-            params = stim.get('parameters', {})
+            params = stim.get("parameters", {})
             if prop in params:
                 val = params[prop]
                 if not _value_in_list(val, pva):
@@ -307,12 +301,12 @@ class TuningCurveCalc(Calculator):
 
     def generate_mock_docs(
         self,
-        scope: str = 'standard',
+        scope: str = "standard",
         number_of_tests: int = 4,
         *,
         generate_expected_docs: bool = False,
-        specific_test_inds: Optional[List[int]] = None,
-    ) -> Tuple[List[Any], List[Any], List[Any]]:
+        specific_test_inds: list[int] | None = None,
+    ) -> tuple[list[Any], list[Any], list[Any]]:
         """Generate synthetic test data for tuning curve calculation.
 
         MATLAB equivalent: tuningcurve.generate_mock_docs
@@ -331,15 +325,11 @@ class TuningCurveCalc(Calculator):
             Tuple ``(docs, doc_output, doc_expected_output)`` where each
             is a list aligned with test indices.
         """
-        docs: List[Any] = [None] * number_of_tests
-        doc_output: List[Any] = [None] * number_of_tests
-        doc_expected_output: List[Any] = [None] * number_of_tests
+        docs: list[Any] = [None] * number_of_tests
+        doc_output: list[Any] = [None] * number_of_tests
+        doc_expected_output: list[Any] = [None] * number_of_tests
 
-        test_inds = (
-            specific_test_inds
-            if specific_test_inds
-            else list(range(number_of_tests))
-        )
+        test_inds = specific_test_inds if specific_test_inds else list(range(number_of_tests))
 
         for i in test_inds:
             if i >= number_of_tests:
@@ -347,29 +337,29 @@ class TuningCurveCalc(Calculator):
 
             # Defaults
             param_struct = {
-                'spatial_frequency': 0.5,
-                'angle': 0,
-                'contrast': 1,
+                "spatial_frequency": 0.5,
+                "angle": 0,
+                "contrast": 1,
             }
-            independent_variables = ['contrast']
+            independent_variables = ["contrast"]
             selection = [
-                {'property': 'contrast', 'operation': 'hasfield', 'value': 'varies'},
+                {"property": "contrast", "operation": "hasfield", "value": "varies"},
             ]
 
             if i == 0:
                 # Contrast tuning (Naka-Rushton)
                 X = np.array([0, 0.2, 0.4, 0.6, 0.8, 1.0])
                 Rmax, C50, n_exp, Baseline = 10, 0.5, 2, 1
-                R = Rmax * (X ** n_exp) / (X ** n_exp + C50 ** n_exp) + Baseline
+                R = Rmax * (X**n_exp) / (X**n_exp + C50**n_exp) + Baseline
                 selection = [
-                    {'property': 'contrast', 'operation': 'hasfield', 'value': 'varies'},
+                    {"property": "contrast", "operation": "hasfield", "value": "varies"},
                 ]
 
             elif i == 1:
                 # Orientation + contrast 2D
                 angles = np.arange(0, 360, 45)
                 contrasts = np.array([0, 0.25, 0.50, 0.75, 1.0])
-                A, C = np.meshgrid(angles, contrasts, indexing='ij')
+                A, C = np.meshgrid(angles, contrasts, indexing="ij")
                 X = np.column_stack([A.ravel(), C.ravel()])
                 Preferred, Width, Baseline, Amplitude = 90, 30, 2, 20
                 C50, n_exp = 0.3, 2
@@ -380,36 +370,31 @@ class TuningCurveCalc(Calculator):
                         np.abs(A.ravel() - Preferred + 360),
                     ),
                 )
-                R_angle = np.exp(-(da ** 2) / (2 * Width ** 2))
-                R_contrast = (C.ravel() ** n_exp) / (
-                    C.ravel() ** n_exp + C50 ** n_exp
-                )
+                R_angle = np.exp(-(da**2) / (2 * Width**2))
+                R_contrast = (C.ravel() ** n_exp) / (C.ravel() ** n_exp + C50**n_exp)
                 R = Baseline + Amplitude * R_angle * R_contrast
-                independent_variables = ['angle', 'contrast']
+                independent_variables = ["angle", "contrast"]
                 selection = [
-                    {'property': 'angle', 'operation': 'hasfield', 'value': 'varies'},
-                    {'property': 'contrast', 'operation': 'hasfield', 'value': 'varies'},
-                    {'property': 'angle', 'operation': 'exact_number', 'value': 'best'},
+                    {"property": "angle", "operation": "hasfield", "value": "varies"},
+                    {"property": "contrast", "operation": "hasfield", "value": "varies"},
+                    {"property": "angle", "operation": "exact_number", "value": "best"},
                 ]
 
             elif i == 2:
                 # 2D: contrast x spatial_frequency
                 c_vals = np.array([0, 0.5, 1.0])
                 sf_vals = np.array([0.1, 1.0, 10.0])
-                CC, SF = np.meshgrid(c_vals, sf_vals, indexing='ij')
+                CC, SF = np.meshgrid(c_vals, sf_vals, indexing="ij")
                 X = np.column_stack([CC.ravel(), SF.ravel()])
                 Rmax, C50, n_exp = 10, 0.5, 2
-                Rc = (CC.ravel() ** n_exp) / (CC.ravel() ** n_exp + C50 ** n_exp)
+                Rc = (CC.ravel() ** n_exp) / (CC.ravel() ** n_exp + C50**n_exp)
                 PrefSF, SigmaSF = 1, 0.5
-                Rsf = np.exp(
-                    -(np.log10(SF.ravel()) - np.log10(PrefSF)) ** 2
-                    / (2 * SigmaSF ** 2)
-                )
+                Rsf = np.exp(-((np.log10(SF.ravel()) - np.log10(PrefSF)) ** 2) / (2 * SigmaSF**2))
                 R = 20 * Rc * Rsf + 1
-                independent_variables = ['contrast', 'spatial_frequency']
+                independent_variables = ["contrast", "spatial_frequency"]
                 selection = [
-                    {'property': 'contrast', 'operation': 'hasfield', 'value': 'varies'},
-                    {'property': 'spatial_frequency', 'operation': 'hasfield', 'value': 'varies'},
+                    {"property": "contrast", "operation": "hasfield", "value": "varies"},
+                    {"property": "spatial_frequency", "operation": "hasfield", "value": "varies"},
                 ]
 
             elif i == 3:
@@ -423,10 +408,10 @@ class TuningCurveCalc(Calculator):
                         np.abs(X - Preferred + 360),
                     ),
                 )
-                R = Amplitude * np.exp(-(da ** 2) / (2 * Width ** 2)) + Baseline
-                independent_variables = ['angle']
+                R = Amplitude * np.exp(-(da**2) / (2 * Width**2)) + Baseline
+                independent_variables = ["angle"]
                 selection = [
-                    {'property': 'angle', 'operation': 'hasfield', 'value': 'varies'},
+                    {"property": "angle", "operation": "hasfield", "value": "varies"},
                 ]
 
             else:
@@ -434,17 +419,17 @@ class TuningCurveCalc(Calculator):
                 X = np.array([0, 1])
                 R = np.array([0, 10])
 
-            noise = 0.2 if scope.lower() == 'lowsnr' else 0
+            noise = 0.2 if scope.lower() == "lowsnr" else 0
             reps = 5
 
             docs[i] = {
-                'param_struct': param_struct,
-                'independent_variables': independent_variables,
-                'X': X,
-                'R': R,
-                'noise': noise,
-                'reps': reps,
-                'selection': selection,
+                "param_struct": param_struct,
+                "independent_variables": independent_variables,
+                "X": X,
+                "R": R,
+                "noise": noise,
+                "reps": reps,
+                "selection": selection,
             }
             doc_output[i] = None
             doc_expected_output[i] = None
@@ -456,27 +441,21 @@ class TuningCurveCalc(Calculator):
     # =========================================================================
 
     def _get_stim_presentation_doc(
-        self, stim_response_doc: 'Document',
-    ) -> 'Document':
+        self,
+        stim_response_doc: Document,
+    ) -> Document:
         """Retrieve the stimulus_presentation doc linked to a response doc."""
         from ...query import Query
 
         if self._session is None:
-            raise RuntimeError('Session is required for stimulus lookup')
+            raise RuntimeError("Session is required for stimulus lookup")
 
-        dep_id = stim_response_doc.dependency_value(
-            'stimulus_presentation_id'
-        )
-        results = self._session.database_search(
-            Query('base.id') == dep_id
-        )
+        dep_id = stim_response_doc.dependency_value("stimulus_presentation_id")
+        results = self._session.database_search(Query("base.id") == dep_id)
         if len(results) != 1:
-            doc_id = stim_response_doc.document_properties.get(
-                'base', {}
-            ).get('id', '<unknown>')
+            doc_id = stim_response_doc.document_properties.get("base", {}).get("id", "<unknown>")
             raise RuntimeError(
-                f'Could not find stimulus presentation doc for '
-                f'document {doc_id}'
+                f"Could not find stimulus presentation doc for " f"document {doc_id}"
             )
         return results[0]
 
@@ -492,10 +471,10 @@ def _is_nan(value: Any) -> bool:
         return False
 
 
-def _value_in_list(val: Any, lst: List[Any]) -> bool:
+def _value_in_list(val: Any, lst: list[Any]) -> bool:
     """Check if val is already in lst (deep equality)."""
     for existing in lst:
-        if type(val) == type(existing):
+        if type(val) is type(existing):
             if isinstance(val, (int, float, str, bool)):
                 if val == existing:
                     return True

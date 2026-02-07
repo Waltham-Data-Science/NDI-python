@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from typing import Optional
 
 
 def pfilemirror(
@@ -49,12 +48,12 @@ def pfilemirror(
 
     if not src.is_dir():
         if verbose:
-            print(f'Error: Source path {src} is not a directory')
+            print(f"Error: Source path {src} is not a directory")
         return False
 
     if not dest.exists():
         if verbose or dry_run:
-            print(f'Action: Create directory {dest}')
+            print(f"Action: Create directory {dest}")
         if not dry_run:
             dest.mkdir(parents=True, exist_ok=True)
 
@@ -62,16 +61,16 @@ def pfilemirror(
         name = item.name
 
         # Skip . and .. (handled by iterdir), .git
-        if name == '.git':
+        if name == ".git":
             continue
-        if not copy_hidden_files and name.startswith('.'):
+        if not copy_hidden_files and name.startswith("."):
             continue
 
         if item.is_dir():
             sub_dest = dest / name
             if not sub_dest.exists():
                 if verbose or dry_run:
-                    print(f'Action: Create directory {sub_dest}')
+                    print(f"Action: Create directory {sub_dest}")
                 if not dry_run:
                     sub_dest.mkdir(parents=True, exist_ok=True)
 
@@ -87,15 +86,16 @@ def pfilemirror(
             if not success:
                 return False
 
-        elif item.suffix == '.py':
+        elif item.suffix == ".py":
             if compile_pyc:
-                pyc_name = item.stem + '.pyc'
+                pyc_name = item.stem + ".pyc"
                 dest_file = dest / pyc_name
 
                 if verbose or dry_run:
-                    print(f'Action: Compile {item} -> {dest_file}')
+                    print(f"Action: Compile {item} -> {dest_file}")
                 if not dry_run:
                     import py_compile
+
                     try:
                         py_compile.compile(
                             str(item),
@@ -104,12 +104,12 @@ def pfilemirror(
                         )
                     except py_compile.PyCompileError as e:
                         if verbose:
-                            print(f'Error compiling {item}: {e}')
+                            print(f"Error compiling {item}: {e}")
                         return False
             else:
                 dest_file = dest / name
                 if verbose or dry_run:
-                    print(f'Action: Copy {item} -> {dest_file}')
+                    print(f"Action: Copy {item} -> {dest_file}")
                 if not dry_run:
                     shutil.copy2(str(item), str(dest_file))
 
@@ -118,7 +118,7 @@ def pfilemirror(
             if copy_non_py_files:
                 dest_file = dest / name
                 if verbose or dry_run:
-                    print(f'Action: Copy {item} -> {dest_file}')
+                    print(f"Action: Copy {item} -> {dest_file}")
                 if not dry_run:
                     shutil.copy2(str(item), str(dest_file))
 

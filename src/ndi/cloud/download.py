@@ -7,18 +7,18 @@ MATLAB equivalents: +ndi/+cloud/+download/*.m
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .client import CloudClient
 
 
 def download_document_collection(
-    client: 'CloudClient',
+    client: CloudClient,
     dataset_id: str,
-    doc_ids: Optional[List[str]] = None,
+    doc_ids: list[str] | None = None,
     chunk_size: int = 2000,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Download documents from the cloud.
 
     Args:
@@ -47,11 +47,11 @@ def download_document_collection(
 
 
 def download_files_for_document(
-    client: 'CloudClient',
+    client: CloudClient,
     dataset_id: str,
-    document: Dict[str, Any],
+    document: dict[str, Any],
     target_dir: Path,
-) -> List[Path]:
+) -> list[Path]:
     """Download associated binary files for a single document.
 
     Args:
@@ -68,13 +68,14 @@ def download_files_for_document(
     target_dir = Path(target_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    downloaded: List[Path] = []
-    file_uid = document.get('file_uid', '')
+    downloaded: list[Path] = []
+    file_uid = document.get("file_uid", "")
     if not file_uid:
         return downloaded
 
     # Get download URL
     from .api import files as files_api
+
     url = files_api.get_upload_url(
         client,
         client.config.org_id,
@@ -95,11 +96,11 @@ def download_files_for_document(
 
 
 def download_dataset_files(
-    client: 'CloudClient',
+    client: CloudClient,
     dataset_id: str,
-    documents: List[Dict[str, Any]],
+    documents: list[dict[str, Any]],
     target_dir: Path,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Download binary files for a batch of documents.
 
     MATLAB equivalent: downloadDataset.m file-download loop.
@@ -110,22 +111,22 @@ def download_dataset_files(
     target_dir = Path(target_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    report: Dict[str, Any] = {'downloaded': 0, 'failed': 0, 'errors': []}
+    report: dict[str, Any] = {"downloaded": 0, "failed": 0, "errors": []}
 
     for doc in documents:
         try:
             paths = download_files_for_document(client, dataset_id, doc, target_dir)
-            report['downloaded'] += len(paths)
+            report["downloaded"] += len(paths)
         except Exception as exc:
-            report['failed'] += 1
-            report['errors'].append(str(exc))
+            report["failed"] += 1
+            report["errors"].append(str(exc))
 
     return report
 
 
 def jsons_to_documents(
-    doc_jsons: List[Dict[str, Any]],
-) -> List[Any]:
+    doc_jsons: list[dict[str, Any]],
+) -> list[Any]:
     """Convert a list of raw JSON dicts into ndi.Document objects.
 
     MATLAB equivalent: downloadDataset.m conversion step.

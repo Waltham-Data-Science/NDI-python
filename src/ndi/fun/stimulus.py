@@ -10,13 +10,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 
 def tuning_curve_to_response_type(
     session: Any,
     doc: Any,
-) -> Tuple[str, Optional[Any]]:
+) -> tuple[str, Any | None]:
     """Resolve response type from a tuning curve document.
 
     MATLAB equivalent: ndi.fun.stimulus.tuning_curve_to_response_type
@@ -33,25 +33,29 @@ def tuning_curve_to_response_type(
     """
     from ndi.query import Query
 
-    props = doc.document_properties if hasattr(doc, 'document_properties') else doc
+    props = doc.document_properties if hasattr(doc, "document_properties") else doc
     if not isinstance(props, dict):
-        return '', None
+        return "", None
 
-    depends = props.get('depends_on', [])
+    depends = props.get("depends_on", [])
 
     # Look for stimulus_response_scalar dependency
     for dep in depends:
         if not isinstance(dep, dict):
             continue
-        dep_name = dep.get('name', '')
-        dep_value = dep.get('value', '')
-        if 'stimulus_response_scalar' in dep_name and dep_value:
-            results = session.database_search(Query('base.id') == dep_value)
+        dep_name = dep.get("name", "")
+        dep_value = dep.get("value", "")
+        if "stimulus_response_scalar" in dep_name and dep_value:
+            results = session.database_search(Query("base.id") == dep_value)
             if results:
                 scalar_doc = results[0]
-                sp = scalar_doc.document_properties if hasattr(scalar_doc, 'document_properties') else scalar_doc
+                sp = (
+                    scalar_doc.document_properties
+                    if hasattr(scalar_doc, "document_properties")
+                    else scalar_doc
+                )
                 if isinstance(sp, dict):
-                    rt = sp.get('stimulus_response_scalar', {}).get('response_type', '')
+                    rt = sp.get("stimulus_response_scalar", {}).get("response_type", "")
                     if rt:
                         return rt, scalar_doc
 
@@ -59,21 +63,21 @@ def tuning_curve_to_response_type(
     for dep in depends:
         if not isinstance(dep, dict):
             continue
-        dep_name = dep.get('name', '')
-        dep_value = dep.get('value', '')
-        if 'stimulus_tuningcurve' in dep_name and dep_value:
-            results = session.database_search(Query('base.id') == dep_value)
+        dep_name = dep.get("name", "")
+        dep_value = dep.get("value", "")
+        if "stimulus_tuningcurve" in dep_name and dep_value:
+            results = session.database_search(Query("base.id") == dep_value)
             if results:
                 return tuning_curve_to_response_type(session, results[0])
 
-    return '', None
+    return "", None
 
 
 def f0_f1_responses(
     session: Any,
     doc: Any,
-    response_index: Optional[int] = None,
-) -> Dict[str, Any]:
+    response_index: int | None = None,
+) -> dict[str, Any]:
     """Extract F0 and F1 responses for a tuning curve.
 
     MATLAB equivalent: ndi.fun.stimulus.f0_f1_responses
@@ -88,15 +92,15 @@ def f0_f1_responses(
     """
     response_type, scalar_doc = tuning_curve_to_response_type(session, doc)
 
-    props = doc.document_properties if hasattr(doc, 'document_properties') else doc
+    props = doc.document_properties if hasattr(doc, "document_properties") else doc
     if not isinstance(props, dict):
-        return {'f0': None, 'f1': None, 'response_type': response_type}
+        return {"f0": None, "f1": None, "response_type": response_type}
 
-    tc_data = props.get('stimulus_tuningcurve', {})
-    responses = tc_data.get('responses', [])
+    tc_data = props.get("stimulus_tuningcurve", {})
+    responses = tc_data.get("responses", [])
 
     if not responses:
-        return {'f0': None, 'f1': None, 'response_type': response_type}
+        return {"f0": None, "f1": None, "response_type": response_type}
 
     if response_index is not None and 0 <= response_index < len(responses):
         val = responses[response_index]
@@ -105,16 +109,16 @@ def f0_f1_responses(
         val = max(responses) if responses else None
 
     return {
-        'f0': val if response_type == 'mean' else None,
-        'f1': val if response_type == 'F1' else None,
-        'response_type': response_type,
+        "f0": val if response_type == "mean" else None,
+        "f1": val if response_type == "F1" else None,
+        "response_type": response_type,
     }
 
 
 def find_mixture_name(
     dictionary_path: str,
-    mixture: List[Dict[str, Any]],
-) -> List[str]:
+    mixture: list[dict[str, Any]],
+) -> list[str]:
     """Match mixture against a JSON mixture dictionary.
 
     MATLAB equivalent: ndi.fun.stimulus.findMixtureName
@@ -131,14 +135,14 @@ def find_mixture_name(
     if not p.exists():
         return []
 
-    with open(p, 'r') as f:
+    with open(p) as f:
         dictionary = json.load(f)
 
     if not isinstance(dictionary, dict):
         return []
 
-    matches: List[str] = []
-    compare_fields = ['ontologyName', 'name', 'value', 'ontologyUnit', 'unitName']
+    matches: list[str] = []
+    compare_fields = ["ontologyName", "name", "value", "ontologyUnit", "unitName"]
 
     for entry_name, entry_components in dictionary.items():
         if not isinstance(entry_components, list):
@@ -147,13 +151,13 @@ def find_mixture_name(
             continue
 
         # Sort both by name for order-independent comparison
-        sorted_entry = sorted(entry_components, key=lambda x: x.get('name', ''))
-        sorted_mix = sorted(mixture, key=lambda x: x.get('name', ''))
+        sorted_entry = sorted(entry_components, key=lambda x: x.get("name", ""))
+        sorted_mix = sorted(mixture, key=lambda x: x.get("name", ""))
 
         all_match = True
         for ec, mc in zip(sorted_entry, sorted_mix):
             for field in compare_fields:
-                if str(ec.get(field, '')) != str(mc.get(field, '')):
+                if str(ec.get(field, "")) != str(mc.get(field, "")):
                     all_match = False
                     break
             if not all_match:
@@ -166,9 +170,9 @@ def find_mixture_name(
 
 
 def stimulus_temporal_frequency(
-    stimulus_parameters: Dict[str, Any],
-    config_path: Optional[str] = None,
-) -> Tuple[Optional[float], str]:
+    stimulus_parameters: dict[str, Any],
+    config_path: str | None = None,
+) -> tuple[float | None, str]:
     """Extract temporal frequency from stimulus parameters.
 
     MATLAB equivalent: ndi.fun.stimulustemporalfrequency
@@ -186,24 +190,25 @@ def stimulus_temporal_frequency(
     if config_path is None:
         try:
             from ndi.common import PathConstants
+
             config_path = str(
-                PathConstants.COMMON_FOLDER / 'stimulus' / 'temporal_frequency_rules.json'
+                PathConstants.COMMON_FOLDER / "stimulus" / "temporal_frequency_rules.json"
             )
         except Exception:
-            return None, ''
+            return None, ""
 
     p = Path(config_path)
     if not p.exists():
-        return None, ''
+        return None, ""
 
-    with open(p, 'r') as f:
+    with open(p) as f:
         rules = json.load(f)
 
     if not isinstance(rules, list):
-        rules = rules.get('rules', []) if isinstance(rules, dict) else []
+        rules = rules.get("rules", []) if isinstance(rules, dict) else []
 
     for rule in rules:
-        param_name = rule.get('parameterName', '')
+        param_name = rule.get("parameterName", "")
         if param_name not in stimulus_parameters:
             continue
 
@@ -211,9 +216,9 @@ def stimulus_temporal_frequency(
         if not isinstance(val, (int, float)):
             continue
 
-        multiplier = rule.get('multiplier', 1.0)
-        adder = rule.get('adder', 0.0)
-        is_period = rule.get('isPeriod', False)
+        multiplier = rule.get("multiplier", 1.0)
+        adder = rule.get("adder", 0.0)
+        is_period = rule.get("isPeriod", False)
 
         tf = val * multiplier + adder
 
@@ -223,7 +228,7 @@ def stimulus_temporal_frequency(
             tf = 1.0 / tf
 
         # Optional secondary parameter multiplication
-        secondary = rule.get('multiplyByParameter', '')
+        secondary = rule.get("multiplyByParameter", "")
         if secondary and secondary in stimulus_parameters:
             sec_val = stimulus_parameters[secondary]
             if isinstance(sec_val, (int, float)):
@@ -231,7 +236,7 @@ def stimulus_temporal_frequency(
 
         return tf, param_name
 
-    return None, ''
+    return None, ""
 
 
 def stimulus_tuningcurve_log(
@@ -255,26 +260,30 @@ def stimulus_tuningcurve_log(
     """
     from ndi.query import Query
 
-    props = doc.document_properties if hasattr(doc, 'document_properties') else doc
+    props = doc.document_properties if hasattr(doc, "document_properties") else doc
     if not isinstance(props, dict):
-        return ''
+        return ""
 
     # Find the stimulus_tuningcurve_id dependency value
-    stim_tune_doc_id = ''
-    for dep in props.get('depends_on', []):
-        if isinstance(dep, dict) and dep.get('name', '') == 'stimulus_tuningcurve_id':
-            stim_tune_doc_id = dep.get('value', '')
+    stim_tune_doc_id = ""
+    for dep in props.get("depends_on", []):
+        if isinstance(dep, dict) and dep.get("name", "") == "stimulus_tuningcurve_id":
+            stim_tune_doc_id = dep.get("value", "")
             break
 
     if not stim_tune_doc_id:
-        return ''
+        return ""
 
-    q = (Query('base.id') == stim_tune_doc_id) & Query('').isa('tuningcurve_calc')
+    q = (Query("base.id") == stim_tune_doc_id) & Query("").isa("tuningcurve_calc")
     results = session.database_search(q)
 
     if results:
-        rp = results[0].document_properties if hasattr(results[0], 'document_properties') else results[0]
+        rp = (
+            results[0].document_properties
+            if hasattr(results[0], "document_properties")
+            else results[0]
+        )
         if isinstance(rp, dict):
-            return rp.get('tuningcurve_calc', {}).get('log', '')
+            return rp.get("tuningcurve_calc", {}).get("log", "")
 
-    return ''
+    return ""

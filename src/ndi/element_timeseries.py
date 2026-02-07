@@ -8,7 +8,8 @@ ElementTimeseries is the intermediate class between Element and Neuron.
 """
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, Tuple, Union
+
+from typing import Any
 
 import numpy as np
 
@@ -48,7 +49,7 @@ class ElementTimeseries(Element):
         timeref_or_epoch: Any,
         t0: float = 0.0,
         t1: float = -1.0,
-    ) -> Tuple[np.ndarray, np.ndarray, Optional[Any]]:
+    ) -> tuple[np.ndarray, np.ndarray, Any | None]:
         """
         Read time series data from this element.
 
@@ -83,13 +84,15 @@ class ElementTimeseries(Element):
             return data, times, None
 
         # Fall back to underlying element
-        if self._underlying_element is not None and hasattr(self._underlying_element, 'readtimeseries'):
+        if self._underlying_element is not None and hasattr(
+            self._underlying_element, "readtimeseries"
+        ):
             return self._underlying_element.readtimeseries(timeref_or_epoch, t0, t1)
 
         # No data source available
         return np.array([]), np.array([]), None
 
-    def _resolve_epoch(self, timeref_or_epoch: Any) -> Optional[int]:
+    def _resolve_epoch(self, timeref_or_epoch: Any) -> int | None:
         """Resolve a timeref/epoch to an epoch number."""
         if isinstance(timeref_or_epoch, int):
             return timeref_or_epoch
@@ -98,12 +101,12 @@ class ElementTimeseries(Element):
             # It's an epoch_id - find it
             et, _ = self.epochtable()
             for entry in et:
-                if entry.get('epoch_id') == timeref_or_epoch:
-                    return entry.get('epoch_number')
+                if entry.get("epoch_id") == timeref_or_epoch:
+                    return entry.get("epoch_number")
             return None
 
         # Try TimeReference
-        if hasattr(timeref_or_epoch, 'epoch'):
+        if hasattr(timeref_or_epoch, "epoch"):
             epoch = timeref_or_epoch.epoch
             if isinstance(epoch, int):
                 return epoch
@@ -116,7 +119,7 @@ class ElementTimeseries(Element):
         epoch_number: int,
         t0: float,
         t1: float,
-    ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+    ) -> tuple[np.ndarray | None, np.ndarray | None]:
         """
         Read data from ingested epoch documents.
 
@@ -131,10 +134,7 @@ class ElementTimeseries(Element):
         from .query import Query
 
         # Find epoch document
-        q = (
-            Query('').isa('element_epoch') &
-            Query('').depends_on('element_id', self.id)
-        )
+        q = Query("").isa("element_epoch") & Query("").depends_on("element_id", self.id)
         epoch_docs = self._session.database_search(q)
 
         if epoch_number < 1 or epoch_number > len(epoch_docs):
@@ -144,12 +144,12 @@ class ElementTimeseries(Element):
 
         # Check for binary data
         try:
-            exists, binary_path = self._session.database_existbinarydoc(doc, 'timeseries.vhsb')
+            exists, binary_path = self._session.database_existbinarydoc(doc, "timeseries.vhsb")
             if not exists:
                 return None, None
 
             # Read VHSB file
-            fid = self._session.database_openbinarydoc(doc, 'timeseries.vhsb')
+            fid = self._session.database_openbinarydoc(doc, "timeseries.vhsb")
             if fid is None:
                 return None, None
 
@@ -174,17 +174,17 @@ class ElementTimeseries(Element):
     def _get_samplerate_from_doc(self, doc: Any) -> float:
         """Extract sample rate from an epoch document."""
         props = doc.document_properties
-        ee = props.get('element_epoch', {})
-        return float(ee.get('samplerate', 0))
+        ee = props.get("element_epoch", {})
+        return float(ee.get("samplerate", 0))
 
     def addepoch(
         self,
         epoch_id: str,
-        epoch_clock: List[ClockType],
-        t0_t1: List[Tuple[float, float]],
-        timepoints: Optional[np.ndarray] = None,
-        datapoints: Optional[np.ndarray] = None,
-    ) -> Tuple['ElementTimeseries', Any]:
+        epoch_clock: list[ClockType],
+        t0_t1: list[tuple[float, float]],
+        timepoints: np.ndarray | None = None,
+        datapoints: np.ndarray | None = None,
+    ) -> tuple[ElementTimeseries, Any]:
         """
         Add a new epoch with optional time series data.
 
@@ -224,7 +224,7 @@ class ElementTimeseries(Element):
         datapoints = np.asarray(datapoints, dtype=np.float64)
 
         try:
-            fid = self._session.database_openbinarydoc(doc, 'timeseries.vhsb')
+            fid = self._session.database_openbinarydoc(doc, "timeseries.vhsb")
             if fid is not None:
                 # Write data in simple format: timepoints then datapoints
                 fid.write(datapoints.tobytes())
@@ -244,7 +244,7 @@ class ElementTimeseries(Element):
         """
         # Check underlying element
         if self._underlying_element is not None:
-            if hasattr(self._underlying_element, 'samplerate'):
+            if hasattr(self._underlying_element, "samplerate"):
                 return self._underlying_element.samplerate(epoch)
 
         # Check epoch documents
@@ -252,10 +252,8 @@ class ElementTimeseries(Element):
             epoch_number = self._resolve_epoch(epoch) if not isinstance(epoch, int) else epoch
             if epoch_number is not None:
                 from .query import Query
-                q = (
-                    Query('').isa('element_epoch') &
-                    Query('').depends_on('element_id', self.id)
-                )
+
+                q = Query("").isa("element_epoch") & Query("").depends_on("element_id", self.id)
                 epoch_docs = self._session.database_search(q)
                 if 0 < epoch_number <= len(epoch_docs):
                     return self._get_samplerate_from_doc(epoch_docs[epoch_number - 1])

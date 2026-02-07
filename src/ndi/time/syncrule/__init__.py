@@ -5,7 +5,7 @@ This module provides concrete implementations of SyncRule for
 different synchronization strategies.
 """
 
-from .filematch import FileMatch
 from .filefind import FileFind
+from .filematch import FileMatch
 
-__all__ = ['FileMatch', 'FileFind']
+__all__ = ["FileMatch", "FileFind"]

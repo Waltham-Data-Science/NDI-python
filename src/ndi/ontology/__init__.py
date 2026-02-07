@@ -21,7 +21,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .providers import PROVIDER_REGISTRY
 
-
 # ---------------------------------------------------------------------------
 # Lookup result type
 # ---------------------------------------------------------------------------
@@ -30,16 +29,16 @@ from .providers import PROVIDER_REGISTRY
 class OntologyResult:
     """Result from an ontology lookup."""
 
-    __slots__ = ('id', 'name', 'prefix', 'definition', 'synonyms', 'short_name')
+    __slots__ = ("id", "name", "prefix", "definition", "synonyms", "short_name")
 
     def __init__(
         self,
-        id: str = '',
-        name: str = '',
-        prefix: str = '',
-        definition: str = '',
-        synonyms: Optional[List[str]] = None,
-        short_name: str = '',
+        id: str = "",
+        name: str = "",
+        prefix: str = "",
+        definition: str = "",
+        synonyms: list[str] | None = None,
+        short_name: str = "",
     ):
         self.id = id
         self.name = name
@@ -54,14 +53,14 @@ class OntologyResult:
     def __bool__(self) -> bool:
         return bool(self.id or self.name)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
-            'id': self.id,
-            'name': self.name,
-            'prefix': self.prefix,
-            'definition': self.definition,
-            'synonyms': self.synonyms,
-            'short_name': self.short_name,
+            "id": self.id,
+            "name": self.name,
+            "prefix": self.prefix,
+            "definition": self.definition,
+            "synonyms": self.synonyms,
+            "short_name": self.short_name,
         }
 
 
@@ -71,35 +70,36 @@ class OntologyResult:
 
 
 # Map prefixes to provider class names (case-insensitive)
-_PREFIX_MAP: Dict[str, str] = {
-    'CL': 'CL',
-    'OM': 'OM',
-    'NDIC': 'NDIC',
-    'NCIm': 'NCIm',
-    'CHEBI': 'CHEBI',
-    'NCBITaxon': 'NCBITaxon',
-    'taxonomy': 'NCBITaxon',
-    'WBStrain': 'WBStrain',
-    'SNOMED': 'SNOMED',
-    'RRID': 'RRID',
-    'EFO': 'EFO',
-    'PATO': 'PATO',
-    'PubChem': 'PubChem',
-    'EMPTY': 'EMPTY',
+_PREFIX_MAP: dict[str, str] = {
+    "CL": "CL",
+    "OM": "OM",
+    "NDIC": "NDIC",
+    "NCIm": "NCIm",
+    "CHEBI": "CHEBI",
+    "NCBITaxon": "NCBITaxon",
+    "taxonomy": "NCBITaxon",
+    "WBStrain": "WBStrain",
+    "SNOMED": "SNOMED",
+    "RRID": "RRID",
+    "EFO": "EFO",
+    "PATO": "PATO",
+    "PubChem": "PubChem",
+    "EMPTY": "EMPTY",
 }
 
 
-def _load_prefix_map() -> Dict[str, str]:
+def _load_prefix_map() -> dict[str, str]:
     """Load prefix mappings from ontology_list.json if available."""
     try:
         from ndi.common import PathConstants
-        json_path = PathConstants.COMMON_FOLDER / 'ontology' / 'ontology_list.json'
+
+        json_path = PathConstants.COMMON_FOLDER / "ontology" / "ontology_list.json"
         if json_path.exists():
             with open(json_path) as f:
                 data = json.load(f)
-            for mapping in data.get('prefix_ontology_mappings', []):
-                prefix = mapping.get('prefix', '')
-                name = mapping.get('ontology_name', '')
+            for mapping in data.get("prefix_ontology_mappings", []):
+                prefix = mapping.get("prefix", "")
+                name = mapping.get("ontology_name", "")
                 if prefix and name:
                     _PREFIX_MAP[prefix] = name
     except Exception:
@@ -111,7 +111,7 @@ def _load_prefix_map() -> Dict[str, str]:
 # Main lookup (with LRU cache)
 # ---------------------------------------------------------------------------
 
-_lookup_cache: Dict[str, OntologyResult] = {}
+_lookup_cache: dict[str, OntologyResult] = {}
 _CACHE_MAX = 100
 
 
@@ -127,7 +127,7 @@ def lookup(lookup_string: str) -> OntologyResult:
     Returns:
         OntologyResult with id, name, prefix, definition, synonyms.
     """
-    if lookup_string == 'clear':
+    if lookup_string == "clear":
         _lookup_cache.clear()
         return OntologyResult()
 
@@ -136,10 +136,10 @@ def lookup(lookup_string: str) -> OntologyResult:
         return _lookup_cache[lookup_string]
 
     # Parse prefix
-    if ':' not in lookup_string:
+    if ":" not in lookup_string:
         return OntologyResult()
 
-    prefix, remainder = lookup_string.split(':', 1)
+    prefix, remainder = lookup_string.split(":", 1)
 
     # Load prefix map
     prefix_map = _load_prefix_map()
@@ -180,4 +180,4 @@ def clear_cache() -> None:
     _lookup_cache.clear()
 
 
-__all__ = ['OntologyResult', 'lookup', 'clear_cache']
+__all__ = ["OntologyResult", "lookup", "clear_cache"]

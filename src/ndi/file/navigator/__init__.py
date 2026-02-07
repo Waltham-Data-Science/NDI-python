@@ -6,6 +6,7 @@ data files into epochs based on file patterns.
 """
 
 from __future__ import annotations
+
 import fnmatch
 import hashlib
 import os
@@ -15,14 +16,14 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ...ido import Ido
-from ...time import ClockType, NO_TIME
+from ...time import NO_TIME, ClockType
 
 
 @lru_cache(maxsize=10)
 def find_file_groups(
     base_path: str,
-    patterns: Tuple[str, ...],
-) -> List[List[str]]:
+    patterns: tuple[str, ...],
+) -> list[list[str]]:
     """
     Find groups of files matching patterns.
 
@@ -38,14 +39,14 @@ def find_file_groups(
         return []
 
     # Find all files recursively
-    all_files: Dict[str, List[str]] = {}  # directory -> files
+    all_files: dict[str, list[str]] = {}  # directory -> files
 
     for root, dirs, files in os.walk(base_path):
         # Skip hidden directories
-        dirs[:] = [d for d in dirs if not d.startswith('.')]
+        dirs[:] = [d for d in dirs if not d.startswith(".")]
 
         for f in files:
-            if f.startswith('.'):
+            if f.startswith("."):
                 continue
             fullpath = os.path.join(root, f)
             if root not in all_files:
@@ -55,7 +56,7 @@ def find_file_groups(
     # Group files by pattern matching
     groups = []
 
-    for directory, files in all_files.items():
+    for _directory, files in all_files.items():
         matched_files = []
         for f in files:
             filename = os.path.basename(f)
@@ -99,12 +100,12 @@ class FileNavigator(Ido):
 
     def __init__(
         self,
-        session: Optional[Any] = None,
-        fileparameters: Optional[Union[str, List[str], Dict[str, Any]]] = None,
-        epochprobemap_class: str = 'ndi.epoch.EpochProbeMap',
-        epochprobemap_fileparameters: Optional[Union[str, List[str], Dict[str, Any]]] = None,
-        identifier: Optional[str] = None,
-        document: Optional[Any] = None,
+        session: Any | None = None,
+        fileparameters: str | list[str] | dict[str, Any] | None = None,
+        epochprobemap_class: str = "ndi.epoch.EpochProbeMap",
+        epochprobemap_fileparameters: str | list[str] | dict[str, Any] | None = None,
+        identifier: str | None = None,
+        document: Any | None = None,
     ):
         """
         Create a new FileNavigator.
@@ -123,7 +124,7 @@ class FileNavigator(Ido):
         super().__init__(identifier)
         self._session = session
         self._epochprobemap_class = epochprobemap_class
-        self._cached_epoch_filenames: Dict[int, List[str]] = {}
+        self._cached_epoch_filenames: dict[int, list[str]] = {}
 
         # Load from document if provided
         if session is not None and document is not None:
@@ -138,46 +139,43 @@ class FileNavigator(Ido):
 
     def _load_from_document(self, document: Any) -> None:
         """Load navigator from a document."""
-        doc_props = getattr(document, 'document_properties', document)
+        doc_props = getattr(document, "document_properties", document)
 
-        if hasattr(doc_props, 'base') and hasattr(doc_props.base, 'id'):
+        if hasattr(doc_props, "base") and hasattr(doc_props.base, "id"):
             self.identifier = doc_props.base.id
 
-        filenavigator = getattr(doc_props, 'filenavigator', None)
+        filenavigator = getattr(doc_props, "filenavigator", None)
         if filenavigator:
-            fp = getattr(filenavigator, 'fileparameters', '')
-            self._fileparameters = self._normalize_fileparameters(
-                eval(fp) if fp else None
-            )
+            fp = getattr(filenavigator, "fileparameters", "")
+            self._fileparameters = self._normalize_fileparameters(eval(fp) if fp else None)
             self._epochprobemap_class = getattr(
-                filenavigator, 'epochprobemap_class',
-                'ndi.epoch.EpochProbeMap'
+                filenavigator, "epochprobemap_class", "ndi.epoch.EpochProbeMap"
             )
-            epfp = getattr(filenavigator, 'epochprobemap_fileparameters', '')
+            epfp = getattr(filenavigator, "epochprobemap_fileparameters", "")
             self._epochprobemap_fileparameters = self._normalize_fileparameters(
                 eval(epfp) if epfp else None
             )
         else:
-            self._fileparameters = {'filematch': []}
-            self._epochprobemap_fileparameters = {'filematch': []}
+            self._fileparameters = {"filematch": []}
+            self._epochprobemap_fileparameters = {"filematch": []}
 
     @staticmethod
     def _normalize_fileparameters(
-        params: Optional[Union[str, List[str], Dict[str, Any]]],
-    ) -> Dict[str, List[str]]:
+        params: str | list[str] | dict[str, Any] | None,
+    ) -> dict[str, list[str]]:
         """Normalize file parameters to dict format."""
         if params is None:
-            return {'filematch': []}
+            return {"filematch": []}
         if isinstance(params, str):
-            return {'filematch': [params]}
+            return {"filematch": [params]}
         if isinstance(params, list):
-            return {'filematch': params}
+            return {"filematch": params}
         if isinstance(params, dict):
-            fm = params.get('filematch', [])
+            fm = params.get("filematch", [])
             if isinstance(fm, str):
                 fm = [fm]
-            return {'filematch': fm}
-        return {'filematch': []}
+            return {"filematch": fm}
+        return {"filematch": []}
 
     @property
     def session(self) -> Any:
@@ -185,7 +183,7 @@ class FileNavigator(Ido):
         return self._session
 
     @property
-    def fileparameters(self) -> Dict[str, List[str]]:
+    def fileparameters(self) -> dict[str, list[str]]:
         """Get the file parameters."""
         return self._fileparameters
 
@@ -200,7 +198,7 @@ class FileNavigator(Ido):
         self._epochprobemap_class = value
 
     @property
-    def epochprobemap_fileparameters(self) -> Dict[str, List[str]]:
+    def epochprobemap_fileparameters(self) -> dict[str, list[str]]:
         """Get the epoch probe map file parameters."""
         return self._epochprobemap_fileparameters
 
@@ -214,11 +212,11 @@ class FileNavigator(Ido):
         Raises:
             ValueError: If no valid session
         """
-        if self._session is None or not hasattr(self._session, 'getpath'):
+        if self._session is None or not hasattr(self._session, "getpath"):
             raise ValueError("No valid session associated with this navigator")
         return self._session.getpath()
 
-    def set_session(self, session: Any) -> 'FileNavigator':
+    def set_session(self, session: Any) -> FileNavigator:
         """
         Set the session for this navigator.
 
@@ -233,8 +231,8 @@ class FileNavigator(Ido):
 
     def setfileparameters(
         self,
-        parameters: Union[str, List[str], Dict[str, Any]],
-    ) -> 'FileNavigator':
+        parameters: str | list[str] | dict[str, Any],
+    ) -> FileNavigator:
         """
         Set the file parameters.
 
@@ -249,8 +247,8 @@ class FileNavigator(Ido):
 
     def setepochprobemapfileparameters(
         self,
-        parameters: Union[str, List[str], Dict[str, Any]],
-    ) -> 'FileNavigator':
+        parameters: str | list[str] | dict[str, Any],
+    ) -> FileNavigator:
         """
         Set the epoch probe map file parameters.
 
@@ -263,7 +261,7 @@ class FileNavigator(Ido):
         self._epochprobemap_fileparameters = self._normalize_fileparameters(parameters)
         return self
 
-    def selectfilegroups(self) -> Tuple[List[List[str]], List[Optional[Any]]]:
+    def selectfilegroups(self) -> tuple[list[list[str]], list[Any | None]]:
         """
         Select groups of files that comprise epochs.
 
@@ -289,7 +287,7 @@ class FileNavigator(Ido):
             disk_ids.append(eid)
 
         # Get epoch IDs for ingested epochs
-        ingested_ids = [e['epoch_id'] for e in ingested_epochs]
+        ingested_ids = [e["epoch_id"] for e in ingested_epochs]
 
         # Combine unique epoch IDs
         all_ids = list(dict.fromkeys(ingested_ids + disk_ids))
@@ -300,8 +298,8 @@ class FileNavigator(Ido):
         for eid in all_ids:
             if eid in ingested_ids:
                 idx = ingested_ids.index(eid)
-                epochfiles.append(ingested_epochs[idx]['files'])
-                epochprobemaps.append(ingested_epochs[idx].get('epochprobemap'))
+                epochfiles.append(ingested_epochs[idx]["files"])
+                epochprobemaps.append(ingested_epochs[idx].get("epochprobemap"))
             else:
                 idx = disk_ids.index(eid)
                 epochfiles.append(disk_epochs[idx])
@@ -309,7 +307,7 @@ class FileNavigator(Ido):
 
         return epochfiles, epochprobemaps
 
-    def selectfilegroups_disk(self) -> List[List[str]]:
+    def selectfilegroups_disk(self) -> list[list[str]]:
         """
         Select file groups from disk.
 
@@ -321,7 +319,7 @@ class FileNavigator(Ido):
         except ValueError:
             return []
 
-        patterns = tuple(self._fileparameters.get('filematch', []))
+        patterns = tuple(self._fileparameters.get("filematch", []))
         if not patterns:
             return []
 
@@ -330,13 +328,13 @@ class FileNavigator(Ido):
         # Filter out hidden files
         filtered = []
         for group in groups:
-            visible = [f for f in group if not os.path.basename(f).startswith('.')]
+            visible = [f for f in group if not os.path.basename(f).startswith(".")]
             if visible:
                 filtered.append(visible)
 
         return filtered
 
-    def _get_ingested_epochs(self) -> List[Dict[str, Any]]:
+    def _get_ingested_epochs(self) -> list[dict[str, Any]]:
         """Get ingested epochs from database."""
         if self._session is None:
             return []
@@ -345,27 +343,27 @@ class FileNavigator(Ido):
             from ...query import Query
 
             q = (
-                Query('').isa('epochfiles_ingested') &
-                Query('').depends_on('filenavigator_id', self.id) &
-                (Query('base.session_id') == self._session.id)
+                Query("").isa("epochfiles_ingested")
+                & Query("").depends_on("filenavigator_id", self.id)
+                & (Query("base.session_id") == self._session.id)
             )
             docs = self._session.database_search(q)
 
             epochs = []
             for doc in docs:
                 props = doc.document_properties
-                epochs.append({
-                    'epoch_id': props.epochfiles_ingested.epoch_id,
-                    'files': props.epochfiles_ingested.files,
-                    'epochprobemap': getattr(
-                        props.epochfiles_ingested, 'epochprobemap', None
-                    ),
-                })
+                epochs.append(
+                    {
+                        "epoch_id": props.epochfiles_ingested.epoch_id,
+                        "files": props.epochfiles_ingested.files,
+                        "epochprobemap": getattr(props.epochfiles_ingested, "epochprobemap", None),
+                    }
+                )
             return epochs
         except Exception:
             return []
 
-    def epochtable(self) -> List[Dict[str, Any]]:
+    def epochtable(self) -> list[dict[str, Any]]:
         """
         Build the epoch table.
 
@@ -387,21 +385,21 @@ class FileNavigator(Ido):
             epoch_id = self.epochid(epoch_number, files)
 
             underlying = {
-                'underlying': files,
-                'epoch_id': epoch_id,
-                'epoch_session_id': self._session.id if self._session else None,
-                'epoch_clock': [NO_TIME],
-                't0_t1': [(float('nan'), float('nan'))],
+                "underlying": files,
+                "epoch_id": epoch_id,
+                "epoch_session_id": self._session.id if self._session else None,
+                "epoch_clock": [NO_TIME],
+                "t0_t1": [(float("nan"), float("nan"))],
             }
 
             entry = {
-                'epoch_number': epoch_number,
-                'epoch_id': epoch_id,
-                'epoch_session_id': self._session.id if self._session else None,
-                'epochprobemap': epochprobemaps[i] or self.getepochprobemap(epoch_number, files),
-                'epoch_clock': [NO_TIME],
-                't0_t1': [(float('nan'), float('nan'))],
-                'underlying_epochs': underlying,
+                "epoch_number": epoch_number,
+                "epoch_id": epoch_id,
+                "epoch_session_id": self._session.id if self._session else None,
+                "epochprobemap": epochprobemaps[i] or self.getepochprobemap(epoch_number, files),
+                "epoch_clock": [NO_TIME],
+                "t0_t1": [(float("nan"), float("nan"))],
+                "underlying_epochs": underlying,
             }
             table.append(entry)
 
@@ -410,7 +408,7 @@ class FileNavigator(Ido):
     def epochid(
         self,
         epoch_number: int,
-        epochfiles: Optional[List[str]] = None,
+        epochfiles: list[str] | None = None,
     ) -> str:
         """
         Get the epoch ID for an epoch.
@@ -432,17 +430,18 @@ class FileNavigator(Ido):
         # Try to read from epoch ID file
         eidfname = self.epochidfilename(epoch_number, epochfiles)
         if eidfname and Path(eidfname).is_file():
-            with open(eidfname, 'r') as f:
+            with open(eidfname) as f:
                 return f.read().strip()
 
         # Generate new ID
         from ...ido import Ido
+
         new_id = f"epoch_{Ido().id}"
 
         # Save to file if possible
         if eidfname:
             Path(eidfname).parent.mkdir(parents=True, exist_ok=True)
-            with open(eidfname, 'w') as f:
+            with open(eidfname, "w") as f:
                 f.write(new_id)
 
         return new_id
@@ -450,8 +449,8 @@ class FileNavigator(Ido):
     def epochidfilename(
         self,
         epoch_number: int,
-        epochfiles: Optional[List[str]] = None,
-    ) -> Optional[str]:
+        epochfiles: list[str] | None = None,
+    ) -> str | None:
         """
         Get the filename for storing epoch ID.
 
@@ -478,7 +477,7 @@ class FileNavigator(Ido):
     def epochprobemapfilename(
         self,
         epoch_number: int,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Get the filename for epoch probe map.
 
@@ -489,14 +488,14 @@ class FileNavigator(Ido):
             Path for epoch probe map file, or None
         """
         # Check for custom parameters
-        if self._epochprobemap_fileparameters.get('filematch'):
+        if self._epochprobemap_fileparameters.get("filematch"):
             epochfiles = self.getepochfiles_number(epoch_number)
             if self.isingested(epochfiles):
                 return None
 
             for f in epochfiles:
                 filename = os.path.basename(f)
-                for pattern in self._epochprobemap_fileparameters['filematch']:
+                for pattern in self._epochprobemap_fileparameters["filematch"]:
                     if fnmatch.fnmatch(filename, pattern):
                         return f
                     try:
@@ -510,7 +509,7 @@ class FileNavigator(Ido):
     def defaultepochprobemapfilename(
         self,
         epoch_number: int,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Get the default epoch probe map filename.
 
@@ -531,8 +530,8 @@ class FileNavigator(Ido):
     def getepochprobemap(
         self,
         epoch_number: int,
-        epochfiles: Optional[List[str]] = None,
-    ) -> Optional[Any]:
+        epochfiles: list[str] | None = None,
+    ) -> Any | None:
         """
         Get the epoch probe map for an epoch.
 
@@ -551,7 +550,7 @@ class FileNavigator(Ido):
             doc = self._get_epoch_ingested_doc(epochfiles)
             if doc:
                 props = doc.document_properties
-                return getattr(props.epochfiles_ingested, 'epochprobemap', None)
+                return getattr(props.epochfiles_ingested, "epochprobemap", None)
 
         # Try to load from file
         filename = self.epochprobemapfilename(epoch_number)
@@ -564,8 +563,8 @@ class FileNavigator(Ido):
 
     def _get_epoch_ingested_doc(
         self,
-        epochfiles: List[str],
-    ) -> Optional[Any]:
+        epochfiles: list[str],
+    ) -> Any | None:
         """Get the ingested document for epochfiles."""
         if not self.isingested(epochfiles) or self._session is None:
             return None
@@ -573,11 +572,12 @@ class FileNavigator(Ido):
         epochid = self.ingestedfiles_epochid(epochfiles)
 
         from ...query import Query
+
         q = (
-            Query('').isa('epochfiles_ingested') &
-            Query('').depends_on('filenavigator_id', self.id) &
-            (Query('base.session_id') == self._session.id) &
-            (Query('epochfiles_ingested.epoch_id') == epochid)
+            Query("").isa("epochfiles_ingested")
+            & Query("").depends_on("filenavigator_id", self.id)
+            & (Query("base.session_id") == self._session.id)
+            & (Query("epochfiles_ingested.epoch_id") == epochid)
         )
         docs = self._session.database_search(q)
 
@@ -587,8 +587,8 @@ class FileNavigator(Ido):
 
     def getepochfiles(
         self,
-        epoch_number_or_id: Union[int, str, List[int], List[str]],
-    ) -> Union[List[str], List[List[str]]]:
+        epoch_number_or_id: int | str | list[int] | list[str],
+    ) -> list[str] | list[list[str]]:
         """
         Get files for one or more epochs.
 
@@ -617,7 +617,7 @@ class FileNavigator(Ido):
                 # Find by epoch ID
                 match = None
                 for entry in et:
-                    if entry['epoch_id'] == item:
+                    if entry["epoch_id"] == item:
                         match = entry
                         break
                 if match is None:
@@ -628,8 +628,8 @@ class FileNavigator(Ido):
                     raise ValueError(f"Epoch number out of range: {item}")
                 match = et[item - 1]
 
-            underlying = match.get('underlying_epochs', {})
-            files = underlying.get('underlying', [])
+            underlying = match.get("underlying_epochs", {})
+            files = underlying.get("underlying", [])
             results.append(files)
 
         if multiple:
@@ -639,7 +639,7 @@ class FileNavigator(Ido):
     def getepochfiles_number(
         self,
         epoch_number: int,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Get files for an epoch by number.
 
@@ -667,14 +667,14 @@ class FileNavigator(Ido):
         Returns:
             MD5 hash of concatenated patterns
         """
-        patterns = self._fileparameters.get('filematch', [])
+        patterns = self._fileparameters.get("filematch", [])
         if not patterns:
             return ""
 
-        concat = ''.join(patterns)
+        concat = "".join(patterns)
         return hashlib.md5(concat.encode()).hexdigest()
 
-    def ingest(self) -> List[Any]:
+    def ingest(self) -> list[Any]:
         """
         Create documents for ingested epochs.
 
@@ -687,7 +687,7 @@ class FileNavigator(Ido):
         et = self.epochtable()
 
         for entry in et:
-            files = entry['underlying_epochs'].get('underlying', [])
+            files = entry["underlying_epochs"].get("underlying", [])
 
             if self.isingested(files):
                 continue
@@ -698,17 +698,17 @@ class FileNavigator(Ido):
 
             # Create ingested document
             epochfiles_struct = {
-                'epoch_id': entry['epoch_id'],
-                'files': [f"epochid://{entry['epoch_id']}"] + files,
+                "epoch_id": entry["epoch_id"],
+                "files": [f"epochid://{entry['epoch_id']}"] + files,
             }
-            if entry.get('epochprobemap'):
-                epochfiles_struct['epochprobemap'] = entry['epochprobemap']
+            if entry.get("epochprobemap"):
+                epochfiles_struct["epochprobemap"] = entry["epochprobemap"]
 
             doc = Document(
-                'ingestion/epochfiles_ingested',
+                "ingestion/epochfiles_ingested",
                 epochfiles_ingested=epochfiles_struct,
             )
-            doc.set_dependency_value('filenavigator_id', self.id)
+            doc.set_dependency_value("filenavigator_id", self.id)
             if self._session:
                 doc.set_session_id(self._session.id)
             docs.append(doc)
@@ -724,23 +724,23 @@ class FileNavigator(Ido):
         """
         from ...document import Document
 
-        fp = self._fileparameters.get('filematch', [])
-        fp_str = repr(fp) if fp else ''
+        fp = self._fileparameters.get("filematch", [])
+        fp_str = repr(fp) if fp else ""
 
-        epfp = self._epochprobemap_fileparameters.get('filematch', [])
-        epfp_str = repr(epfp) if epfp else ''
+        epfp = self._epochprobemap_fileparameters.get("filematch", [])
+        epfp_str = repr(epfp) if epfp else ""
 
         filenavigator_struct = {
-            'ndi_filenavigator_class': self.__class__.__name__,
-            'fileparameters': fp_str,
-            'epochprobemap_class': self._epochprobemap_class,
-            'epochprobemap_fileparameters': epfp_str,
+            "ndi_filenavigator_class": self.__class__.__name__,
+            "fileparameters": fp_str,
+            "epochprobemap_class": self._epochprobemap_class,
+            "epochprobemap_fileparameters": epfp_str,
         }
 
         doc = Document(
-            'daq/filenavigator',
+            "daq/filenavigator",
             filenavigator=filenavigator_struct,
-            **{'base.id': self.id},
+            **{"base.id": self.id},
         )
 
         if self._session:
@@ -757,13 +757,13 @@ class FileNavigator(Ido):
         """
         from ...query import Query
 
-        q = Query('base.id') == self.id
+        q = Query("base.id") == self.id
         if self._session:
-            q = q & (Query('base.session_id') == self._session.id)
+            q = q & (Query("base.session_id") == self._session.id)
         return q
 
     @staticmethod
-    def isingested(epochfiles: List[str]) -> bool:
+    def isingested(epochfiles: list[str]) -> bool:
         """
         Check if epochfiles indicate an ingested epoch.
 
@@ -775,10 +775,10 @@ class FileNavigator(Ido):
         """
         if not epochfiles:
             return False
-        return epochfiles[0].startswith('epochid://')
+        return epochfiles[0].startswith("epochid://")
 
     @staticmethod
-    def ingestedfiles_epochid(epochfiles: List[str]) -> str:
+    def ingestedfiles_epochid(epochfiles: list[str]) -> str:
         """
         Get the epoch ID from ingested epochfiles.
 
@@ -791,19 +791,20 @@ class FileNavigator(Ido):
         Raises:
             AssertionError: If epochfiles are not ingested
         """
-        assert FileNavigator.isingested(epochfiles), \
-            "This function is only applicable to ingested epochfiles"
-        return epochfiles[0][len('epochid://'):]
+        assert FileNavigator.isingested(
+            epochfiles
+        ), "This function is only applicable to ingested epochfiles"
+        return epochfiles[0][len("epochid://") :]
 
     def __eq__(self, other: Any) -> bool:
         """Test equality."""
         if not isinstance(other, FileNavigator):
             return False
         return (
-            self._session == other._session and
-            self._fileparameters == other._fileparameters and
-            self._epochprobemap_class == other._epochprobemap_class and
-            self._epochprobemap_fileparameters == other._epochprobemap_fileparameters
+            self._session == other._session
+            and self._fileparameters == other._fileparameters
+            and self._epochprobemap_class == other._epochprobemap_class
+            and self._epochprobemap_fileparameters == other._epochprobemap_fileparameters
         )
 
     def __hash__(self) -> int:

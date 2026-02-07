@@ -9,10 +9,10 @@ MATLAB equivalent: src/ndi/+ndi/+calc/+example/simple.m
 """
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+from typing import TYPE_CHECKING
 
 from ...calculator import Calculator
-from ...app.appdoc import DocExistsAction
 
 if TYPE_CHECKING:
     from ...document import Document
@@ -32,14 +32,14 @@ class SimpleCalc(Calculator):
         >>> docs = calc.run(DocExistsAction.REPLACE)
     """
 
-    def __init__(self, session: Optional[Session] = None):
+    def __init__(self, session: Session | None = None):
         super().__init__(
             session=session,
-            document_type='simple_calc',
-            path_to_doc_type='apps/calculators/simple_calc',
+            document_type="simple_calc",
+            path_to_doc_type="apps/calculators/simple_calc",
         )
 
-    def calculate(self, parameters: dict) -> List['Document']:
+    def calculate(self, parameters: dict) -> list[Document]:
         """
         Perform the simple calculation.
 
@@ -54,18 +54,18 @@ class SimpleCalc(Calculator):
         """
         from ...document import Document
 
-        input_params = parameters.get('input_parameters', {})
+        input_params = parameters.get("input_parameters", {})
 
         # Build the simple_calc content
         simple_calc_data = {
-            'input_parameters': input_params,
-            'answer': input_params.get('answer', 0),
+            "input_parameters": input_params,
+            "answer": input_params.get("answer", 0),
         }
 
         # Create document using full schema path
         doc = Document(
-            'apps/calculators/simple_calc',
-            **{'simple_calc': simple_calc_data},
+            "apps/calculators/simple_calc",
+            **{"simple_calc": simple_calc_data},
         )
 
         # Set session ID
@@ -73,12 +73,12 @@ class SimpleCalc(Calculator):
             doc = doc.set_session_id(self._session.id())
 
         # Add dependency if specified
-        depends_on = parameters.get('depends_on', [])
+        depends_on = parameters.get("depends_on", [])
         if depends_on:
             dep = depends_on[0]
             doc = doc.set_dependency_value(
-                dep.get('name', 'document_id'),
-                dep.get('value', ''),
+                dep.get("name", "document_id"),
+                dep.get("value", ""),
             )
 
         return [doc]
@@ -96,12 +96,12 @@ class SimpleCalc(Calculator):
         from ...query import Query
 
         return {
-            'input_parameters': {'answer': 5},
-            'depends_on': [],
-            'query': [
+            "input_parameters": {"answer": 5},
+            "depends_on": [],
+            "query": [
                 {
-                    'name': 'document_id',
-                    'query': Query('').isa('base'),
+                    "name": "document_id",
+                    "query": Query("").isa("base"),
                 },
             ],
         }
