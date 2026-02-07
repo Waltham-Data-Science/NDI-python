@@ -26,10 +26,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           # DID-python's pyproject.toml uses packages=["did"] which misses
-          # subpackages like did.implementations. Patch it to use find: before installing.
+          # subpackages like did.implementations. Patch it before installing.
           git clone https://github.com/VH-Lab/DID-python.git /tmp/DID-python
           cd /tmp/DID-python
-          sed -i 's/packages = \["did"\]/packages = {find = {where = ["src"]}}/' pyproject.toml
+          sed -i '/^\[tool\.setuptools\]$/,/^$/{/packages = \["did"\]/d}' pyproject.toml
+          printf '\n[tool.setuptools.packages.find]\nwhere = ["src"]\n' >> pyproject.toml
           cd -
           pip install -e /tmp/DID-python
           # vhlab-toolbox-python has no pyproject.toml; add to PYTHONPATH
