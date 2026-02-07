@@ -340,6 +340,35 @@ official `openminds` Python library (v0.4.0) instead of non-existent
 
 ---
 
+## Live Cloud Tests Not Yet Verified
+
+The cloud tests use two skip markers with increasing privilege levels:
+
+| Marker | Condition | Tests |
+|--------|-----------|-------|
+| `@requires_cloud` | `NDI_CLOUD_USERNAME` env var is set | Login/logout, list datasets, get user, get published/unpublished, get branches, invalid dataset, sync upload |
+| `@requires_upload` | `requires_cloud` + account has `canUploadDataset=true` | Dataset lifecycle (create/update/delete), document lifecycle (add/get/update/delete), file upload/download, bulk operations, compute hello-world |
+
+**None of the `_live` tests have been run against the real NDI cloud API yet.** They
+are all currently skipped in CI because no credentials are configured. The mocked
+versions pass and mirror the MATLAB test logic, but the live versions need to be
+validated with real credentials and an account that has upload permissions.
+
+To run them:
+
+```bash
+# Read-only cloud tests (list, get, auth)
+NDI_CLOUD_USERNAME=user NDI_CLOUD_PASSWORD=pass \
+  pytest tests/matlab_tests/test_cloud_api.py -v -k "live"
+
+# Full cloud tests including dataset/document creation (needs canUploadDataset=true)
+NDI_CLOUD_USERNAME=user NDI_CLOUD_PASSWORD=pass \
+  pytest tests/matlab_tests/test_cloud_api.py tests/matlab_tests/test_cloud_sync.py \
+         tests/matlab_tests/test_cloud_compute.py -v -k "live"
+```
+
+---
+
 ## Running the Tests
 
 ```bash
