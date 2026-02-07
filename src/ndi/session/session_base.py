@@ -306,7 +306,42 @@ class Session(ABC):
 
             self._database.add(doc)
 
+            # Ingest binary files: copy from original location to binary dir
+            self._ingest_binary_files(doc)
+
         return self
+
+    def _ingest_binary_files(self, doc: Document) -> None:
+        """Copy binary file attachments into the database's binary directory.
+
+        For each file location with ``ingest=True``, the source file is
+        copied to ``<binary_dir>/<doc.id>_<filename>`` so that
+        ``database_openbinarydoc`` can find it.
+        """
+        import shutil
+        if self._database is None:
+            return
+        props = doc.document_properties
+        files = props.get('files', {})
+        if not isinstance(files, dict):
+            return
+        for fi in files.get('file_info', []):
+            name = fi.get('name', '')
+            if not name:
+                continue
+            for loc in fi.get('locations', []):
+                if not loc.get('ingest', False):
+                    continue
+                source = loc.get('location', '')
+                if not source:
+                    continue
+                from pathlib import Path
+                src_path = Path(source)
+                if not src_path.exists():
+                    continue
+                dest_path = self._database.get_binary_path(doc, name)
+                dest_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(str(src_path), str(dest_path))
 
     def database_rm(
         self,

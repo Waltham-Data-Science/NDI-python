@@ -125,11 +125,16 @@ class Dataset:
         if existing is not None:
             return self
 
-        # Copy all documents from source session
+        # Copy all documents from source session into the dataset's database.
+        # We bypass session.database_add() because it enforces session_id ==
+        # self._session.id(), but ingested docs retain their *original*
+        # session_id so we can tell which session they came from.
         all_docs = session.database_search(Query('').isa('base'))
         for doc in all_docs:
             try:
-                self._session.database_add(doc)
+                self._session._database.add(doc)
+                # Copy binary files from source session to dataset
+                self._copy_binary_files(session, doc)
             except Exception:
                 pass  # Skip documents that fail (e.g., duplicates)
 
@@ -251,8 +256,14 @@ class Dataset:
         return self
 
     def database_search(self, query: Query) -> List[Document]:
-        """Search the dataset database."""
-        return self._session.database_search(query)
+        """Search the dataset database.
+
+        Unlike Session.database_search(), this does NOT filter by session_id
+        because a dataset stores documents from multiple ingested sessions.
+        """
+        if self._session._database is None:
+            return []
+        return self._session._database.search(query)
 
     def database_openbinarydoc(
         self,
@@ -331,6 +342,38 @@ class Dataset:
     # Internal Helpers
     # =========================================================================
 
+    def _copy_binary_files(self, source_session: Any, doc: Document) -> None:
+        """Copy binary file attachments from a source session to this dataset."""
+        import shutil
+        if self._session._database is None:
+            return
+        props = doc.document_properties
+        files = props.get('files', {})
+        if not isinstance(files, dict):
+            return
+        for fi in files.get('file_info', []):
+            name = fi.get('name', '')
+            if not name:
+                continue
+            # Try the source session's binary dir first
+            if hasattr(source_session, '_database') and source_session._database is not None:
+                src_path = source_session._database.get_binary_path(doc, name)
+                if src_path.exists():
+                    dest_path = self._session._database.get_binary_path(doc, name)
+                    dest_path.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(str(src_path), str(dest_path))
+                    continue
+            # Fallback: try the original file location from file_info
+            for loc in fi.get('locations', []):
+                source = loc.get('location', '')
+                if source:
+                    src_path = Path(source)
+                    if src_path.exists():
+                        dest_path = self._session._database.get_binary_path(doc, name)
+                        dest_path.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(str(src_path), str(dest_path))
+                        break
+
     def _create_session_doc(self, session: Any, is_linked: bool) -> Document:
         """Create a session_in_a_dataset document."""
         # Get creator args for recreating the session
@@ -362,7 +405,9 @@ class Dataset:
     def _remove_session_documents(self, session_id: str) -> None:
         """Remove all documents belonging to a session."""
         q = Query('base.session_id') == session_id
-        docs = self._session.database_search(q)
+        # Search directly on the database, not through Session which
+        # filters to its own session_id.
+        docs = self._session._database.search(q) if self._session._database else []
         for doc in docs:
             try:
                 self._session.database_rm(doc)
