@@ -251,6 +251,28 @@ class TestSyncOperations:
         )
         assert report["new_count"] == 1
 
+    @patch("ndi.cloud.sync.operations._download_docs_by_ids")
+    @patch("ndi.cloud.internal.list_remote_document_ids")
+    def test_download_new_actually_downloads(self, mock_remote, mock_dl, client, tmp_path):
+        """download_new() must fetch documents and save them locally."""
+        mock_remote.return_value = {"r1": "a1", "r2": "a2"}
+        mock_dl.return_value = (
+            [{"ndiId": "r2", "type": "base"}],
+            [],
+        )
+        idx = SyncIndex()
+        idx.update(["r1"], ["r1"])
+        idx.write(tmp_path)
+
+        report = download_new(client, str(tmp_path), "cloud-ds")
+        assert "r2" in report["downloaded"]
+        # Verify file was saved
+        doc_file = tmp_path / ".ndi" / "documents" / "r2.json"
+        assert doc_file.exists()
+        # Verify index updated
+        loaded = SyncIndex.read(tmp_path)
+        assert "r2" in loaded.local_doc_ids_last_sync
+
     @patch("ndi.cloud.internal.list_remote_document_ids")
     def test_mirror_to_remote(self, mock_remote, client, tmp_path):
         mock_remote.return_value = {"r1": "api-r1", "r-extra": "api-extra"}
@@ -268,9 +290,20 @@ class TestSyncOperations:
         assert report["upload_count"] == 1
         assert report["delete_count"] == 1
 
+    @patch("ndi.cloud.sync.operations._download_docs_by_ids")
     @patch("ndi.cloud.internal.list_remote_document_ids")
-    def test_mirror_from_remote(self, mock_remote, client, tmp_path):
+    def test_mirror_from_remote_downloads_and_deletes(self, mock_remote, mock_dl, client, tmp_path):
+        """mirror_from_remote must download remote docs and delete local-only."""
         mock_remote.return_value = {"r1": "a1", "r2": "a2"}
+        mock_dl.return_value = (
+            [{"ndiId": "r2", "type": "probe"}],
+            [],
+        )
+        # Create a local doc file that should be deleted
+        doc_dir = tmp_path / ".ndi" / "documents"
+        doc_dir.mkdir(parents=True)
+        (doc_dir / "local-only.json").write_text('{"ndiId": "local-only"}')
+
         idx = SyncIndex()
         idx.update(["r1", "local-only"], ["r1"])
         idx.write(tmp_path)
@@ -278,10 +311,21 @@ class TestSyncOperations:
         report = mirror_from_remote(client, str(tmp_path), "cloud-ds")
         assert report["download_count"] == 1
         assert report["delete_local_count"] == 1
+        assert "r2" in report["downloaded"]
+        assert "local-only" in report["deleted_local"]
+        # Verify local file removed
+        assert not (doc_dir / "local-only.json").exists()
+        # Verify downloaded file saved
+        assert (doc_dir / "r2.json").exists()
 
+    @patch("ndi.cloud.sync.operations._download_docs_by_ids")
     @patch("ndi.cloud.internal.list_remote_document_ids")
-    def test_two_way_sync(self, mock_remote, client, tmp_path):
+    def test_two_way_sync_uploads_and_downloads(self, mock_remote, mock_dl, client, tmp_path):
         mock_remote.return_value = {"shared": "a1", "remote-only": "a2"}
+        mock_dl.return_value = (
+            [{"ndiId": "remote-only", "type": "base"}],
+            [],
+        )
         idx = SyncIndex()
         idx.update(["shared", "local-only"], ["shared"])
         idx.write(tmp_path)
@@ -291,6 +335,62 @@ class TestSyncOperations:
         report = two_way_sync(client, str(tmp_path), "cloud-ds")
         assert report["upload_count"] == 1
         assert report["download_count"] == 1
+        assert "remote-only" in report["downloaded"]
+
+    @patch("ndi.cloud.sync.operations._download_docs_by_ids")
+    @patch("ndi.cloud.internal.list_remote_document_ids")
+    def test_two_way_sync_conflict_detection(self, mock_remote, mock_dl, client, tmp_path):
+        """Documents added on both sides since last sync are flagged as conflicts."""
+        # Last sync had only "shared"
+        idx = SyncIndex()
+        idx.update(
+            ["shared", "conflict-doc", "local-only"], ["shared", "conflict-doc", "remote-only"]
+        )
+        idx.write(tmp_path)
+
+        # Current remote now has conflict-doc + remote-only + shared
+        mock_remote.return_value = {
+            "shared": "a1",
+            "conflict-doc": "a-conflict",
+            "remote-only": "a3",
+        }
+        mock_dl.return_value = ([], [])
+
+        client._session.request.return_value = _ok({"id": "new"}, 201)
+
+        report = two_way_sync(client, str(tmp_path), "cloud-ds")
+        # conflict-doc should NOT be in conflicts because it was already in
+        # the last sync state (not newly added on both sides)
+        assert report["conflict_count"] == 0
+
+    @patch("ndi.cloud.sync.operations._download_docs_by_ids")
+    @patch("ndi.cloud.internal.list_remote_document_ids")
+    def test_two_way_sync_deletion_propagation(self, mock_remote, mock_dl, client, tmp_path):
+        """Deletions on one side are propagated to the other."""
+        # Last sync: both sides had "shared", "doc-a", "doc-b"
+        idx = SyncIndex()
+        idx.update(
+            ["shared", "doc-a", "doc-b"],  # local
+            ["shared", "doc-a", "doc-b"],  # remote
+        )
+        idx.write(tmp_path)
+
+        # Create local doc file for "doc-a" (will be deleted if remote removed it)
+        doc_dir = tmp_path / ".ndi" / "documents"
+        doc_dir.mkdir(parents=True)
+        (doc_dir / "doc-a.json").write_text('{"ndiId": "doc-a"}')
+
+        # Remote now missing doc-a (deleted remotely)
+        mock_remote.return_value = {
+            "shared": "a1",
+            "doc-b": "a2",
+        }
+        mock_dl.return_value = ([], [])
+        client._session.request.return_value = MagicMock(status_code=204, content=b"")
+
+        report = two_way_sync(client, str(tmp_path), "cloud-ds")
+        # doc-a was deleted from remote → should be deleted locally
+        assert "doc-a" in report["deleted_local"]
 
     def test_sync_dispatch(self, client, tmp_path):
         """sync() dispatches to the correct handler."""

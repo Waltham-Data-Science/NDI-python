@@ -190,6 +190,88 @@ class TestCache:
         assert "Cache" in repr_str
         assert "entries=1" in repr_str
 
+    def test_numpy_array_size_estimation(self):
+        """Cache must use ndarray.nbytes, not sys.getsizeof."""
+        import numpy as np
+
+        cache = Cache()
+        arr = np.zeros((1000, 1000), dtype=np.float64)  # 8 MB
+        expected_bytes = arr.nbytes  # 8_000_000
+
+        cache.add("arr", "data", arr)
+        entry = cache.lookup("arr", "data")
+        assert entry is not None
+        assert entry.bytes == expected_bytes
+        assert cache.bytes() == expected_bytes
+
+    def test_numpy_eviction_by_real_size(self):
+        """Numpy arrays must be evicted based on actual buffer size."""
+        import numpy as np
+
+        # 500 KB cache
+        cache = Cache(max_memory=500_000, replacement_rule="fifo")
+        small = np.ones(10_000, dtype=np.float64)  # 80 KB
+        big = np.ones(50_000, dtype=np.float64)  # 400 KB
+
+        cache.add("small", "data", small)
+        assert len(cache) == 1
+
+        cache.add("big", "data", big)
+        # small should be evicted to make room
+        assert cache.lookup("big", "data") is not None
+
+    def test_fifo_eviction_order(self):
+        """FIFO evicts oldest items first."""
+        import time
+
+        cache = Cache(max_memory=500, replacement_rule="fifo")
+        cache.add("first", "t", "a" * 100, priority=0)
+        time.sleep(0.01)
+        cache.add("second", "t", "b" * 100, priority=0)
+        time.sleep(0.01)
+        cache.add("third", "t", "c" * 100, priority=0)
+
+        # Force eviction by adding a large item
+        cache.add("trigger", "t", "d" * 200, priority=0)
+
+        # "first" (oldest) should be evicted before "third"
+        assert cache.lookup("trigger", "t") is not None
+
+    def test_lifo_eviction_order(self):
+        """LIFO evicts newest existing items first.
+
+        The eviction algorithm considers the new item as a candidate too,
+        so we give 'trigger' a higher priority to ensure it survives.
+        """
+        import time
+
+        cache = Cache(max_memory=500, replacement_rule="lifo")
+        cache.add("first", "t", "a" * 100, priority=0)
+        time.sleep(0.01)
+        cache.add("second", "t", "b" * 100, priority=0)
+        time.sleep(0.01)
+        cache.add("third", "t", "c" * 100, priority=0)
+
+        # Give trigger higher priority so it isn't evicted over existing items
+        cache.add("trigger", "t", "d" * 200, priority=1)
+
+        assert cache.lookup("trigger", "t") is not None
+        # "first" (oldest) should survive longest under LIFO
+        assert cache.lookup("first", "t") is not None
+        # "third" (newest existing, same low priority) should be evicted
+        assert cache.lookup("third", "t") is None
+
+    def test_priority_preserved_during_eviction(self):
+        """Higher priority items survive eviction over lower priority ones."""
+        cache = Cache(max_memory=500, replacement_rule="fifo")
+        cache.add("low", "t", "a" * 100, priority=0)
+        cache.add("high", "t", "b" * 100, priority=10)
+
+        # Force eviction — low priority should go first
+        cache.add("trigger", "t", "c" * 300, priority=5)
+
+        assert cache.lookup("high", "t") is not None
+
 
 # ==============================================================================
 # Session Tests

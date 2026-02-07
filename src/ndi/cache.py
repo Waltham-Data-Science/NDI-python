@@ -231,7 +231,18 @@ class Cache:
         return sum(entry.bytes for entry in self._table)
 
     def _estimate_size(self, data: Any) -> int:
-        """Estimate the memory size of data in bytes."""
+        """Estimate the memory size of data in bytes.
+
+        Uses ``ndarray.nbytes`` for numpy arrays (``sys.getsizeof``
+        only returns the object header, not the underlying buffer).
+        """
+        try:
+            import numpy as np
+
+            if isinstance(data, np.ndarray):
+                return data.nbytes
+        except ImportError:
+            pass
         try:
             return sys.getsizeof(data)
         except TypeError:
