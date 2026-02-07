@@ -304,7 +304,7 @@ All cloud tests are **dual-mode**: mocked by default, live when `NDI_CLOUD_USERN
 The MATLAB test porting process uncovered **16 production bugs** in Document schema
 paths. These were all caused by `Document('type_name')` not finding the schema file
 because it doesn't search subdirectories — the full path from `database_documents/`
-must be specified.
+must be specified. **All 16 bugs have been fixed** in the same commit that added these tests.
 
 | File | Bug | Fix |
 |------|-----|-----|
