@@ -611,6 +611,7 @@ class TestDocHelpers:
 
     def test_make_species_strain_sex(self):
         """make_species_strain_sex creates real openMINDS NDI Documents."""
+        pytest.importorskip('openminds', reason='openminds package not installed')
         from ndi.fun.doc import make_species_strain_sex
         from ndi.document import Document
 
@@ -636,6 +637,7 @@ class TestDocHelpers:
 
     def test_make_species_only(self):
         """make_species_strain_sex with species only creates 1 document."""
+        pytest.importorskip('openminds', reason='openminds package not installed')
         from ndi.fun.doc import make_species_strain_sex
         from ndi.document import Document
 

@@ -35,7 +35,7 @@ jobs:
       - name: Install NDI-python
         run: |
           pip install -e ".[dev]" --no-deps
-          pip install numpy networkx jsonschema requests pytest pytest-cov scipy
+          pip install numpy networkx jsonschema requests pytest pytest-cov scipy openminds
 
       - name: Run tests
         env:
