@@ -32,7 +32,7 @@ class CloudClient:
         dataset = client.get('/datasets/{datasetId}', datasetId='abc-123')
     """
 
-    DEFAULT_TIMEOUT = 30  # seconds
+    DEFAULT_TIMEOUT = 120  # seconds
 
     def __init__(self, config: CloudConfig):
         self.config = config
