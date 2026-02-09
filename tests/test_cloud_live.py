@@ -39,21 +39,28 @@ LARGE_DATASET = "682e7772cdf3f24938176fac"
 SMALL_DATASET = "668b0539f13096e04f1feccd"
 
 
-def _retry_on_server_error(fn, retries=3, delay=10):
+def _retry_on_server_error(fn, retries=3, delay=10, retry_on_404=False):
     """Call *fn*; retry on HTTP 502/504 server errors.
 
     The NDI Cloud API runs on AWS Lambda with a 30-second gateway timeout.
     Write-heavy operations (create_dataset, submit, publish) often exceed
     this limit, returning 504.  We retry with exponential back-off.
+
+    Set *retry_on_404* for operations that follow a create — MongoDB
+    ``secondaryPreferred`` reads may lag behind the primary write.
     """
     from ndi.cloud.exceptions import CloudAPIError
+
+    retryable = {502, 504}
+    if retry_on_404:
+        retryable.add(404)
 
     last_exc = None
     for attempt in range(retries + 1):
         try:
             return fn()
         except CloudAPIError as exc:
-            if getattr(exc, "status_code", 0) in (502, 504) and attempt < retries:
+            if getattr(exc, "status_code", 0) in retryable and attempt < retries:
                 last_exc = exc
                 time.sleep(delay * (attempt + 1))
                 continue
@@ -356,7 +363,10 @@ class TestDatasetLifecycle:
             ds = get_dataset(client, ds_id)
             assert ds.get("_id") == ds_id or ds.get("id") == ds_id
         finally:
-            delete_dataset(client, ds_id)
+            try:
+                _retry_on_server_error(lambda: delete_dataset(client, ds_id))
+            except Exception:
+                pass  # Best-effort cleanup
 
     def test_get_dataset_metadata(self, client, fresh_dataset):
         """Created dataset should have _id, name, createdAt."""
@@ -372,11 +382,12 @@ class TestDatasetLifecycle:
         """Update dataset name and verify the change persists."""
         from ndi.cloud.api.datasets import get_dataset, update_dataset
 
-        # Brief delay for eventual consistency after creation
-        time.sleep(2)
-
         new_name = "NDI_PYTEST_UPDATED_NAME"
-        update_dataset(client, fresh_dataset, name=new_name)
+        # Retry on 404 too — MongoDB secondary reads may lag after creation
+        _retry_on_server_error(
+            lambda: update_dataset(client, fresh_dataset, name=new_name),
+            retry_on_404=True,
+        )
 
         ds = get_dataset(client, fresh_dataset)
         assert ds.get("name") == new_name
@@ -479,13 +490,15 @@ class TestDocumentLifecycle:
         doc_id = result.get("_id", result.get("id", ""))
 
         try:
-            # Brief delay for eventual consistency
-            time.sleep(2)
             updated_json = {
                 "document_class": {"class_name": "ndi_pytest_update"},
                 "base": {"name": "modified"},
             }
-            update_document(client, fresh_dataset, doc_id, updated_json)
+            # Retry on 404 — MongoDB secondary reads may lag after add
+            _retry_on_server_error(
+                lambda: update_document(client, fresh_dataset, doc_id, updated_json),
+                retry_on_404=True,
+            )
             fetched = get_document(client, fresh_dataset, doc_id)
             assert fetched.get("base", {}).get("name") == "modified"
         finally:
@@ -784,7 +797,7 @@ class TestNDIQuery:
                 "param1": "session",
             }
         ]
-        docs = ndi_query_all(client, "public", search, page_size=3)
+        docs = _retry_on_server_error(lambda: ndi_query_all(client, "public", search, page_size=3))
         assert isinstance(docs, list)
         assert len(docs) > 0
 
