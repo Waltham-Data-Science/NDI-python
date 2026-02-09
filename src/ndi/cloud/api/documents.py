@@ -104,9 +104,17 @@ def list_all_documents(
 
 
 def get_document_count(client: CloudClient, dataset_id: str) -> int:
-    """Return the total number of documents in a dataset."""
+    """Return the total number of documents in a dataset.
+
+    Checks the ``totalNumber`` field first (some API versions include it).
+    Falls back to counting via :func:`list_all_documents`.
+    """
     result = list_documents(client, dataset_id, page=1, page_size=1)
-    return result.get("totalNumber", 0)
+    total = result.get("totalNumber", 0)
+    if total:
+        return total
+    # API didn't include totalNumber — count by paginating
+    return len(list_all_documents(client, dataset_id))
 
 
 def bulk_upload(

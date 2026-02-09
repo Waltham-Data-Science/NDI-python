@@ -138,9 +138,7 @@ class TestDocumentAPI:
         result = list_documents(client, DATASET_ID, page=1, page_size=10)
         assert isinstance(result, dict)
         docs = result.get("documents", [])
-        total = result.get("totalNumber", 0)
-        assert total > 0, "Dataset has no documents"
-        assert len(docs) > 0
+        assert len(docs) > 0, f"Dataset has no documents, keys: {list(result.keys())}"
 
     def test_list_all_documents(self, client):
         """Auto-paginate all documents."""
