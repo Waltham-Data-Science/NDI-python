@@ -14,12 +14,13 @@ concurrency:
 
 jobs:
   cloud-tests:
-    name: Cloud API Tests (User ${{ matrix.user }})
+    name: Cloud API (User ${{ matrix.user }}, ${{ matrix.environment }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         user: [1, 2]
+        environment: [prod, dev]
 
     steps:
       - uses: actions/checkout@v4
@@ -35,12 +36,13 @@ jobs:
           git clone https://github.com/VH-Lab/DID-python.git /tmp/DID-python
           git clone https://github.com/VH-Lab/vhlab-toolbox-python.git /tmp/vhlab-toolbox-python
           pip install -e ".[dev]" --no-deps
-          pip install numpy networkx jsonschema requests pytest pytest-cov scipy
+          pip install numpy networkx jsonschema requests pytest pytest-cov scipy openminds
 
       - name: Run cloud API tests
         env:
           PYTHONPATH: /tmp/DID-python/src:/tmp/vhlab-toolbox-python
           NDI_CLOUD_USERNAME: ${{ matrix.user == 1 && secrets.TEST_USER_1_USERNAME || secrets.TEST_USER_2_USERNAME }}
           NDI_CLOUD_PASSWORD: ${{ matrix.user == 1 && secrets.TEST_USER_1_PASSWORD || secrets.TEST_USER_2_PASSWORD }}
+          CLOUD_API_ENVIRONMENT: ${{ matrix.environment }}
         run: |
           pytest tests/test_cloud_live.py -v --tb=short

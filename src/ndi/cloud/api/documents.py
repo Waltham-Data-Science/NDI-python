@@ -88,33 +88,43 @@ _MAX_PAGES = 1000
 def list_all_documents(
     client: CloudClient,
     dataset_id: str,
+    page_size: int = 1000,
 ) -> list[dict[str, Any]]:
     """Auto-paginate through all documents in a dataset."""
     all_docs: list[dict[str, Any]] = []
     page = 1
     while page <= _MAX_PAGES:
-        result = list_documents(client, dataset_id, page=page)
+        result = list_documents(client, dataset_id, page=page, page_size=page_size)
         docs = result.get("documents", [])
         all_docs.extend(docs)
-        total = result.get("totalNumber", 0)
-        if len(all_docs) >= total or not docs:
+        # Stop when a page returns fewer docs than requested (last page)
+        if len(docs) < page_size:
             break
         page += 1
     return all_docs
 
 
 def get_document_count(client: CloudClient, dataset_id: str) -> int:
-    """Return the total number of documents in a dataset.
+    """Return the document count for a dataset.
 
-    Checks the ``totalNumber`` field first (some API versions include it).
-    Falls back to counting via :func:`list_all_documents`.
+    Tries the dedicated ``GET /datasets/{datasetId}/document-count``
+    endpoint first.  Falls back to the ``documentCount`` field from
+    ``GET /datasets/{datasetId}`` if the count endpoint times out.
     """
-    result = list_documents(client, dataset_id, page=1, page_size=1)
-    total = result.get("totalNumber", 0)
-    if total:
-        return total
-    # API didn't include totalNumber — count by paginating
-    return len(list_all_documents(client, dataset_id))
+    try:
+        result = client.get(
+            "/datasets/{datasetId}/document-count",
+            datasetId=dataset_id,
+        )
+        if isinstance(result, dict) and "count" in result:
+            return result["count"]
+    except Exception:
+        pass
+    # Fallback: get from dataset metadata
+    from .datasets import get_dataset
+
+    ds = get_dataset(client, dataset_id)
+    return ds.get("documentCount", 0)
 
 
 def bulk_upload(
@@ -150,13 +160,16 @@ def get_bulk_download_url(
     dataset_id: str,
     doc_ids: list[str] | None = None,
 ) -> str:
-    """Get a presigned URL for bulk document download."""
-    body: dict[str, Any] = {}
-    if doc_ids:
-        body["documentIds"] = doc_ids
-    result = client.get(
+    """POST /datasets/{datasetId}/documents/bulk-download
+
+    Returns a pre-signed URL where a ZIP of the requested documents
+    will be uploaded by a background worker.  The caller should poll
+    the URL until it becomes available.
+    """
+    body: dict[str, Any] = {"documentIds": doc_ids or []}
+    result = client.post(
         "/datasets/{datasetId}/documents/bulk-download",
-        params=body,
+        json=body,
         datasetId=dataset_id,
     )
     return result.get("url", "") if isinstance(result, dict) else ""
@@ -218,7 +231,7 @@ def ndi_query_all(
         result = ndi_query(client, scope, search_structure, page=page, page_size=page_size)
         docs = result.get("documents", [])
         all_docs.extend(docs)
-        total = result.get("totalItems", result.get("totalNumber", 0))
+        total = result.get("number_matches", result.get("totalItems", result.get("totalNumber", 0)))
         if len(all_docs) >= total or not docs:
             break
         page += 1

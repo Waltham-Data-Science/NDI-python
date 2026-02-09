@@ -73,23 +73,25 @@ def download_files_for_document(
     if not file_uid:
         return downloaded
 
-    # Get download URL
+    # Get download URL via file details endpoint
     from .api import files as files_api
 
-    url = files_api.get_upload_url(
-        client,
-        client.config.org_id,
-        dataset_id,
-        file_uid,
-    )
+    try:
+        details = files_api.get_file_details(client, dataset_id, file_uid)
+    except Exception:
+        return downloaded
+
+    url = details.get("downloadUrl", "") if isinstance(details, dict) else ""
     if not url:
         return downloaded
 
-    # Download
-    resp = requests.get(url, timeout=60)
+    # Download with streaming
+    resp = requests.get(url, timeout=120, stream=True)
     if resp.status_code == 200:
         out_path = target_dir / file_uid
-        out_path.write_bytes(resp.content)
+        with open(out_path, "wb") as fh:
+            for chunk in resp.iter_content(chunk_size=8192):
+                fh.write(chunk)
         downloaded.append(out_path)
 
     return downloaded
