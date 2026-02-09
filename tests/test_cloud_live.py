@@ -383,10 +383,8 @@ class TestDatasetLifecycle:
         from ndi.cloud.api.datasets import get_dataset, update_dataset
 
         new_name = "NDI_PYTEST_UPDATED_NAME"
-        # Retry on 404 too — MongoDB secondary reads may lag after creation
         _retry_on_server_error(
             lambda: update_dataset(client, fresh_dataset, name=new_name),
-            retry_on_404=True,
         )
 
         ds = get_dataset(client, fresh_dataset)
@@ -494,10 +492,8 @@ class TestDocumentLifecycle:
                 "document_class": {"class_name": "ndi_pytest_update"},
                 "base": {"name": "modified"},
             }
-            # Retry on 404 — MongoDB secondary reads may lag after add
             _retry_on_server_error(
                 lambda: update_document(client, fresh_dataset, doc_id, updated_json),
-                retry_on_404=True,
             )
             fetched = get_document(client, fresh_dataset, doc_id)
             assert fetched.get("base", {}).get("name") == "modified"

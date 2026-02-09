@@ -45,8 +45,8 @@ def update_dataset(
     dataset_id: str,
     **fields: Any,
 ) -> dict[str, Any]:
-    """PUT /datasets/{datasetId}"""
-    return client.put(
+    """POST /datasets/{datasetId}"""
+    return client.post(
         "/datasets/{datasetId}",
         json=fields,
         datasetId=dataset_id,

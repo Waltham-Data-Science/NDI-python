@@ -45,8 +45,8 @@ def update_document(
     document_id: str,
     doc_json: dict[str, Any],
 ) -> dict[str, Any]:
-    """PUT /datasets/{datasetId}/documents/{documentId}"""
-    return client.put(
+    """POST /datasets/{datasetId}/documents/{documentId}"""
+    return client.post(
         "/datasets/{datasetId}/documents/{documentId}",
         json=doc_json,
         datasetId=dataset_id,
