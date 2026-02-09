@@ -39,6 +39,23 @@ LARGE_DATASET = "682e7772cdf3f24938176fac"
 SMALL_DATASET = "668b0539f13096e04f1feccd"
 
 
+def _retry_on_server_error(fn, retries=2, delay=5):
+    """Call *fn*; retry on HTTP 502/504 server errors."""
+    from ndi.cloud.exceptions import CloudAPIError
+
+    last_exc = None
+    for attempt in range(retries + 1):
+        try:
+            return fn()
+        except CloudAPIError as exc:
+            if getattr(exc, "status_code", 0) in (502, 504) and attempt < retries:
+                last_exc = exc
+                time.sleep(delay * (attempt + 1))
+                continue
+            raise
+    raise last_exc  # pragma: no cover
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -116,7 +133,9 @@ def can_write(client, cloud_config):
     from ndi.cloud.api.datasets import create_dataset, delete_dataset
 
     try:
-        result = create_dataset(client, cloud_config.org_id, "NDI_PYTEST_WRITE_CHECK")
+        result = _retry_on_server_error(
+            lambda: create_dataset(client, cloud_config.org_id, "NDI_PYTEST_WRITE_CHECK")
+        )
         ds_id = result.get("_id", result.get("id", ""))
         if ds_id:
             try:
@@ -138,7 +157,9 @@ def fresh_dataset(client, cloud_config, can_write):
     from ndi.cloud.api.datasets import create_dataset, delete_dataset
 
     org_id = cloud_config.org_id
-    result = create_dataset(client, org_id, "NDI_PYTEST_TEMP_DATASET")
+    result = _retry_on_server_error(
+        lambda: create_dataset(client, org_id, "NDI_PYTEST_TEMP_DATASET")
+    )
     dataset_id = result.get("_id", result.get("id", ""))
     assert dataset_id, f"Failed to create dataset, response: {result}"
 
@@ -312,7 +333,9 @@ class TestDatasetLifecycle:
         )
 
         org_id = cloud_config.org_id
-        result = create_dataset(client, org_id, "NDI_PYTEST_CREATE_DELETE")
+        result = _retry_on_server_error(
+            lambda: create_dataset(client, org_id, "NDI_PYTEST_CREATE_DELETE")
+        )
         ds_id = result.get("_id", result.get("id", ""))
         assert ds_id, f"Create returned no ID: {result}"
 
@@ -635,18 +658,20 @@ class TestFileLifecycle:
         )
         assert resp.status_code == 200, f"Upload failed: {resp.status_code} {resp.text}"
 
-        # Wait for file to be registered
-        time.sleep(3)
+        # Wait for file to be registered and poll for upload completion
+        download_url = ""
+        for wait in (3, 5, 10):
+            time.sleep(wait)
+            files = list_files(client, fresh_dataset)
+            file_uids = [f.get("uid", "") for f in files]
+            if file_uid not in file_uids:
+                continue
+            details = get_file_details(client, fresh_dataset, file_uid)
+            download_url = details.get("downloadUrl", "")
+            if download_url:
+                break
 
-        # List files should include our upload
-        files = list_files(client, fresh_dataset)
-        file_uids = [f.get("uid", "") for f in files]
-        assert file_uid in file_uids, f"Uploaded file not in list: {file_uids}"
-
-        # Get download URL
-        details = get_file_details(client, fresh_dataset, file_uid)
-        download_url = details.get("downloadUrl", "")
-        assert download_url, f"No download URL in details: {details}"
+        assert download_url, f"No download URL after retries; details: {details}"
 
         # Download and verify content
         dl_resp = requests.get(download_url, timeout=30)
@@ -712,7 +737,9 @@ class TestNDIQuery:
                 "param1": "session",
             }
         ]
-        result = ndi_query(client, "public", search, page=1, page_size=5)
+        result = _retry_on_server_error(
+            lambda: ndi_query(client, "public", search, page=1, page_size=5)
+        )
         assert isinstance(result, dict)
         assert "documents" in result
 
@@ -727,7 +754,9 @@ class TestNDIQuery:
                 "param1": "nonexistent-id-that-should-not-match-anything",
             }
         ]
-        result = ndi_query(client, "public", search, page=1, page_size=5)
+        result = _retry_on_server_error(
+            lambda: ndi_query(client, "public", search, page=1, page_size=5)
+        )
         docs = result.get("documents", [])
         assert len(docs) == 0
 
@@ -762,7 +791,7 @@ class TestPublishWorkflow:
         """Submit a dataset for review."""
         from ndi.cloud.api.datasets import get_dataset, submit_dataset
 
-        submit_dataset(client, fresh_dataset)
+        _retry_on_server_error(lambda: submit_dataset(client, fresh_dataset))
 
         ds = get_dataset(client, fresh_dataset)
         assert ds.get("isSubmitted") is True
@@ -777,16 +806,16 @@ class TestPublishWorkflow:
         )
 
         # Submit
-        submit_dataset(client, fresh_dataset)
+        _retry_on_server_error(lambda: submit_dataset(client, fresh_dataset))
 
         # Publish
-        publish_dataset(client, fresh_dataset)
+        _retry_on_server_error(lambda: publish_dataset(client, fresh_dataset))
         time.sleep(2)  # Allow server processing
         ds = get_dataset(client, fresh_dataset)
         assert ds.get("isPublished") is True
 
         # Unpublish
-        unpublish_dataset(client, fresh_dataset)
+        _retry_on_server_error(lambda: unpublish_dataset(client, fresh_dataset))
         time.sleep(2)
         ds = get_dataset(client, fresh_dataset)
         assert ds.get("isPublished") is not True
@@ -888,9 +917,9 @@ class TestReadOnlyPublicDatasets:
         env = os.environ.get("CLOUD_API_ENVIRONMENT", "prod")
         large_count = get_document_count(client, LARGE_DATASET)
         small_count = get_document_count(client, SMALL_DATASET)
-        # On dev, datasets may have 0 docs
-        if large_count == 0 and small_count == 0 and env == "dev":
-            pytest.skip("Datasets have no documents on dev environment")
+        # On dev, either dataset may have 0 docs — comparison is meaningless
+        if env == "dev" and (large_count == 0 or small_count == 0):
+            pytest.skip("Dataset(s) have no documents on dev environment")
         assert large_count > small_count
 
     def test_both_published(self, large_dataset_info, small_dataset_info):
