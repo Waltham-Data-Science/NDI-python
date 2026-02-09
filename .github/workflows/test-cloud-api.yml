@@ -1,0 +1,46 @@
+name: Test Cloud API
+
+on:
+  # Run once a day
+  schedule:
+    - cron: '0 0 * * *'
+
+  # Allow manual runs from the Actions tab
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cloud-tests:
+    name: Cloud API Tests (User ${{ matrix.user }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        user: [1, 2]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          git clone https://github.com/VH-Lab/DID-python.git /tmp/DID-python
+          git clone https://github.com/VH-Lab/vhlab-toolbox-python.git /tmp/vhlab-toolbox-python
+          pip install -e ".[dev]" --no-deps
+          pip install numpy networkx jsonschema requests pytest pytest-cov scipy
+
+      - name: Run cloud API tests
+        env:
+          PYTHONPATH: /tmp/DID-python/src:/tmp/vhlab-toolbox-python
+          NDI_CLOUD_USERNAME: ${{ matrix.user == 1 && secrets.TEST_USER_1_USERNAME || secrets.TEST_USER_2_USERNAME }}
+          NDI_CLOUD_PASSWORD: ${{ matrix.user == 1 && secrets.TEST_USER_1_PASSWORD || secrets.TEST_USER_2_PASSWORD }}
+        run: |
+          pytest tests/test_cloud_live.py -v --tb=short
