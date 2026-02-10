@@ -175,6 +175,35 @@ def get_file_details(
     )
 
 
+def get_bulk_file_download_url(
+    client: CloudClient,
+    dataset_id: str,
+    file_uids: list[str] | None = None,
+) -> str:
+    """POST /datasets/{datasetId}/files/bulk-download
+
+    Returns a presigned S3 URL where the backend will place a ZIP of
+    all binary files for the dataset.  The ZIP is created asynchronously;
+    the caller must poll the returned URL until it becomes available.
+
+    Args:
+        client: Authenticated cloud client.
+        dataset_id: Cloud dataset ID.
+        file_uids: Optional list of specific file UIDs to include.
+            If ``None`` or empty, all uploaded files are included.
+
+    Returns:
+        Presigned S3 URL string.
+    """
+    body: dict[str, Any] = {"fileUids": file_uids or []}
+    result = client.post(
+        "/datasets/{datasetId}/files/bulk-download",
+        json=body,
+        datasetId=dataset_id,
+    )
+    return result.get("url", "") if isinstance(result, dict) else ""
+
+
 def get_file_collection_upload_url(
     client: CloudClient,
     org_id: str,

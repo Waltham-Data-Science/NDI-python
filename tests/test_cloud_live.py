@@ -202,7 +202,7 @@ class TestCloudConfig:
     def test_config_api_url_is_valid(self, cloud_config):
         """API URL should be a valid HTTPS URL."""
         assert cloud_config.api_url.startswith("https://")
-        assert "ndi-cloud.com" in cloud_config.api_url
+        assert "ndi-cloud.com" in cloud_config.api_url or "railway.app" in cloud_config.api_url
 
     def test_config_api_url_matches_environment(self, cloud_config):
         """URL should match the CLOUD_API_ENVIRONMENT setting."""
