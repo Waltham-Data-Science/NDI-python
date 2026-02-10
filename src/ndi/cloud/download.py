@@ -6,11 +6,157 @@ MATLAB equivalents: +ndi/+cloud/+download/*.m
 
 from __future__ import annotations
 
+import json
+import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .client import CloudClient
+
+logger = logging.getLogger(__name__)
+
+
+def download_full_dataset(
+    client: CloudClient,
+    dataset_id: str,
+    target_dir: str | Path,
+    *,
+    include_files: bool = True,
+    progress: Callable[[str], None] | None = None,
+) -> dict[str, Any]:
+    """Download a complete dataset (full documents + binary files) to disk.
+
+    This is the recommended way to download an entire dataset.  It fetches
+    the full JSON for every document (not just summaries) and optionally
+    downloads all associated binary files.  Already-downloaded items are
+    skipped, so the function is safe to resume after interruption.
+
+    Args:
+        client: Authenticated cloud client.
+        dataset_id: Cloud dataset ID.
+        target_dir: Local directory to save everything into.  Structure::
+
+            target_dir/
+              documents/       # one JSON file per document
+              files/           # binary files keyed by uid
+
+        include_files: Whether to also download binary files (default True).
+        progress: Optional callback that receives status strings, e.g.
+            ``print`` or ``logger.info``.
+
+    Returns:
+        Report dict with keys ``documents_downloaded``, ``documents_failed``,
+        ``files_downloaded``, ``files_failed``.
+    """
+    from .api import documents as docs_api
+    from .api import files as files_api
+
+    def _log(msg: str) -> None:
+        logger.info(msg)
+        if progress:
+            progress(msg)
+
+    target = Path(target_dir)
+    docs_dir = target / "documents"
+    files_dir = target / "files"
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    if include_files:
+        files_dir.mkdir(parents=True, exist_ok=True)
+
+    report: dict[str, Any] = {
+        "documents_downloaded": 0,
+        "documents_failed": 0,
+        "files_downloaded": 0,
+        "files_failed": 0,
+    }
+
+    # --- Phase 1: list all document IDs (paginated summaries) ---
+    _log("Listing all document IDs...")
+    all_doc_ids: list[str] = []
+    page = 1
+    page_size = 1000
+    while page <= 1000:
+        result = docs_api.list_documents(client, dataset_id, page=page, page_size=page_size)
+        docs = result.get("documents", [])
+        if not docs:
+            break
+        for d in docs:
+            doc_id = d.get("_id", d.get("id", ""))
+            if doc_id:
+                all_doc_ids.append(doc_id)
+        if len(docs) < page_size:
+            break
+        page += 1
+    _log(f"Found {len(all_doc_ids)} documents")
+
+    # --- Phase 2: fetch full JSON for each document ---
+    _log("Downloading full document JSON...")
+    for i, doc_id in enumerate(all_doc_ids):
+        out_path = docs_dir / f"{doc_id}.json"
+        if out_path.exists():
+            report["documents_downloaded"] += 1
+            continue
+        try:
+            full_doc = docs_api.get_document(client, dataset_id, doc_id)
+            with open(out_path, "w", encoding="utf-8") as fh:
+                json.dump(full_doc, fh, indent=2)
+            report["documents_downloaded"] += 1
+        except Exception as exc:
+            report["documents_failed"] += 1
+            logger.debug("Failed to download doc %s: %s", doc_id, exc)
+        if (i + 1) % 500 == 0 or (i + 1) == len(all_doc_ids):
+            _log(f"  Documents: {i + 1}/{len(all_doc_ids)}")
+
+    # --- Phase 3: download binary files ---
+    if include_files:
+        _log("Listing dataset files...")
+        try:
+            file_list = files_api.list_files(client, dataset_id)
+        except Exception:
+            file_list = []
+        _log(f"Found {len(file_list)} files")
+
+        import requests as _requests
+
+        for i, f_info in enumerate(file_list):
+            uid = f_info.get("uid", "")
+            if not uid:
+                continue
+            out_path = files_dir / uid
+            if out_path.exists():
+                report["files_downloaded"] += 1
+                continue
+            try:
+                details = files_api.get_file_details(client, dataset_id, uid)
+                url = details.get("downloadUrl", "") if isinstance(details, dict) else ""
+                if not url:
+                    report["files_failed"] += 1
+                    continue
+                resp = _requests.get(url, timeout=300, stream=True)
+                if resp.status_code == 200:
+                    with open(out_path, "wb") as fh:
+                        for chunk in resp.iter_content(chunk_size=65536):
+                            fh.write(chunk)
+                    report["files_downloaded"] += 1
+                else:
+                    report["files_failed"] += 1
+            except Exception as exc:
+                report["files_failed"] += 1
+                logger.debug("Failed to download file %s: %s", uid, exc)
+            if (i + 1) % 100 == 0 or (i + 1) == len(file_list):
+                _log(
+                    f"  Files: {i + 1}/{len(file_list)} "
+                    f"(ok: {report['files_downloaded']}, "
+                    f"fail: {report['files_failed']})"
+                )
+
+    _log(
+        f"Done — {report['documents_downloaded']} docs, "
+        f"{report['files_downloaded']} files downloaded"
+    )
+    return report
 
 
 def download_document_collection(
