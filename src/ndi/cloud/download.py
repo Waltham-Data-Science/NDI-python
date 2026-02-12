@@ -91,23 +91,35 @@ def download_full_dataset(
         page += 1
     _log(f"Found {len(all_doc_ids)} documents")
 
-    # --- Phase 2: fetch full JSON for each document ---
-    _log("Downloading full document JSON...")
-    for i, doc_id in enumerate(all_doc_ids):
-        out_path = docs_dir / f"{doc_id}.json"
-        if out_path.exists():
-            report["documents_downloaded"] += 1
-            continue
+    # --- Phase 2: bulk download full documents in chunks (matches MATLAB) ---
+    # Filter out already-downloaded docs for resume support
+    remaining_ids = [
+        did for did in all_doc_ids
+        if not (docs_dir / f"{did}.json").exists()
+    ]
+    already = len(all_doc_ids) - len(remaining_ids)
+    if already:
+        _log(f"Skipping {already} already-downloaded documents")
+        report["documents_downloaded"] += already
+
+    if remaining_ids:
+        _log(f"Downloading {len(remaining_ids)} documents via bulk chunks...")
         try:
-            full_doc = docs_api.get_document(client, dataset_id, doc_id)
-            with open(out_path, "w", encoding="utf-8") as fh:
-                json.dump(full_doc, fh, indent=2)
-            report["documents_downloaded"] += 1
+            full_docs = download_document_collection(
+                client, dataset_id, doc_ids=remaining_ids,
+                progress=progress,
+            )
+            for doc in full_docs:
+                doc_id = doc.get("_id", doc.get("id", ""))
+                if not doc_id:
+                    continue
+                out_path = docs_dir / f"{doc_id}.json"
+                with open(out_path, "w", encoding="utf-8") as fh:
+                    json.dump(doc, fh, indent=2)
+                report["documents_downloaded"] += 1
         except Exception as exc:
-            report["documents_failed"] += 1
-            logger.debug("Failed to download doc %s: %s", doc_id, exc)
-        if (i + 1) % 500 == 0 or (i + 1) == len(all_doc_ids):
-            _log(f"  Documents: {i + 1}/{len(all_doc_ids)}")
+            report["documents_failed"] += len(remaining_ids)
+            logger.debug("Bulk document download failed: %s", exc)
 
     # --- Phase 3: download binary files ---
     if include_files:
@@ -159,7 +171,7 @@ def download_full_dataset(
     return report
 
 
-def download_bulk_zip(
+def download_bulk_zip_railway(
     client: CloudClient,
     dataset_id: str,
     target_dir: str | Path,
@@ -171,7 +183,13 @@ def download_bulk_zip(
     max_wait: float = 600.0,
     progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
-    """Download a dataset via bulk ZIP endpoints (much faster than doc-by-doc).
+    """Download a dataset via Railway bulk ZIP endpoints.
+
+    .. note:: **Railway-only.** This function requires the Railway backend
+       which has longer timeouts and a ``POST /files/bulk-download`` endpoint
+       that does not exist on the Lambda API.  For Lambda-compatible downloads,
+       use :func:`download_full_dataset` or :func:`download_document_collection`
+       instead.
 
     Uses the Railway bulk download endpoints to fetch documents and files
     as ZIP archives rather than one-by-one.
@@ -323,37 +341,153 @@ def download_bulk_zip(
     return report
 
 
+def _download_chunk_zip(
+    url: str,
+    timeout: float = 20.0,
+    retry_interval: float = 1.0,
+) -> list[dict[str, Any]]:
+    """Download and extract a bulk-download ZIP from a presigned S3 URL.
+
+    Mirrors MATLAB's ``downloadDocumentCollection.m`` retry logic:
+    polls the URL every *retry_interval* seconds until the ZIP is ready
+    or *timeout* is exceeded.
+
+    Args:
+        url: Presigned S3 URL for the ZIP.
+        timeout: Maximum seconds to wait for the ZIP to become available.
+        retry_interval: Seconds between retry attempts.
+
+    Returns:
+        List of document dicts extracted from the ZIP.
+
+    Raises:
+        TimeoutError: If the ZIP is not ready within *timeout* seconds.
+    """
+    import io
+    import time
+    import zipfile
+
+    import requests
+
+    t0 = time.time()
+    last_exc: Exception | None = None
+
+    while time.time() - t0 < timeout:
+        try:
+            resp = requests.get(url, timeout=timeout)
+            if resp.status_code == 200:
+                # ZIP is ready — extract documents
+                zf = zipfile.ZipFile(io.BytesIO(resp.content))
+                all_docs: list[dict[str, Any]] = []
+                for name in zf.namelist():
+                    if name.endswith(".json"):
+                        data = json.loads(zf.read(name))
+                        docs = data if isinstance(data, list) else [data]
+                        all_docs.extend(docs)
+                return all_docs
+        except Exception as exc:
+            last_exc = exc
+
+        time.sleep(retry_interval)
+
+    msg = f"Download timed out after {timeout:.0f}s"
+    if last_exc:
+        msg += f": {last_exc}"
+    raise TimeoutError(msg)
+
+
 def download_document_collection(
     client: CloudClient,
     dataset_id: str,
     doc_ids: list[str] | None = None,
     chunk_size: int = 2000,
+    timeout: float = 20.0,
+    retry_interval: float = 1.0,
+    progress: Callable[[str], None] | None = None,
 ) -> list[dict[str, Any]]:
-    """Download documents from the cloud.
+    """Download full documents from the cloud using chunked bulk download.
+
+    Mirrors MATLAB ``ndi.cloud.download.downloadDocumentCollection``:
+    splits document IDs into chunks of *chunk_size* (default 2000),
+    requests a bulk-download ZIP for each chunk, and concatenates
+    the results.
 
     Args:
         client: Authenticated cloud client.
         dataset_id: Cloud dataset ID.
         doc_ids: Specific document IDs to download. If ``None``,
-            downloads all documents (auto-paginated).
-        chunk_size: Page size for pagination.
+            discovers all document IDs via paginated listing first.
+        chunk_size: Number of documents per bulk-download request.
+            Default 2000 matches MATLAB.
+        timeout: Seconds to wait for each chunk's ZIP to become
+            available. Default 20 matches MATLAB.
+        retry_interval: Seconds between polling attempts for each
+            chunk. Default 1 matches MATLAB.
+        progress: Optional callback for status messages.
 
     Returns:
-        List of document dicts.
+        List of full document dicts.
     """
+    import math
+
     from .api import documents as docs_api
 
-    if doc_ids is not None:
-        result = []
-        for doc_id in doc_ids:
-            try:
-                doc = docs_api.get_document(client, dataset_id, doc_id)
-                result.append(doc)
-            except Exception:
-                pass
-        return result
+    def _log(msg: str) -> None:
+        logger.info(msg)
+        if progress:
+            progress(msg)
 
-    return docs_api.list_all_documents(client, dataset_id)
+    # If no IDs given, discover all via paginated summaries
+    if doc_ids is None:
+        _log("Listing all document IDs...")
+        summaries = docs_api.list_all_documents(client, dataset_id)
+        doc_ids = [
+            s.get("_id", s.get("id", ""))
+            for s in summaries
+            if s.get("_id", s.get("id", ""))
+        ]
+        _log(f"Found {len(doc_ids)} documents")
+
+    if not doc_ids:
+        return []
+
+    # Split into chunks
+    num_chunks = math.ceil(len(doc_ids) / chunk_size)
+    all_documents: list[dict[str, Any]] = []
+
+    for i in range(num_chunks):
+        start = i * chunk_size
+        end = min(start + chunk_size, len(doc_ids))
+        chunk_ids = doc_ids[start:end]
+
+        _log(
+            f"  Processing chunk {i + 1} of {num_chunks} "
+            f"({len(chunk_ids)} documents)..."
+        )
+
+        # Get presigned URL for this chunk
+        try:
+            url = docs_api.get_bulk_download_url(client, dataset_id, chunk_ids)
+        except Exception as exc:
+            _log(f"  Chunk {i + 1}: failed to get download URL: {exc}")
+            continue
+
+        if not url:
+            _log(f"  Chunk {i + 1}: no download URL returned")
+            continue
+
+        # Download and extract the ZIP
+        try:
+            chunk_docs = _download_chunk_zip(url, timeout, retry_interval)
+            all_documents.extend(chunk_docs)
+            _log(f"  Chunk {i + 1}: extracted {len(chunk_docs)} documents")
+        except TimeoutError as exc:
+            _log(f"  Chunk {i + 1}: {exc}")
+        except Exception as exc:
+            _log(f"  Chunk {i + 1}: extraction failed: {exc}")
+
+    _log(f"Downloaded {len(all_documents)} documents total")
+    return all_documents
 
 
 def download_files_for_document(

@@ -66,25 +66,46 @@ def _download_docs_by_ids(
     ndi_to_api: dict[str, str],
     ids_to_download: set[str],
 ) -> tuple[list[dict[str, Any]], list[str]]:
-    """Fetch documents from the cloud by NDI ID.
+    """Fetch documents from the cloud by NDI ID using chunked bulk download.
 
     Returns (downloaded_docs, failed_ids).
     """
-    from ..api import documents as docs_api
+    from ..download import download_document_collection
 
-    downloaded: list[dict[str, Any]] = []
-    failed: list[str] = []
-    for ndi_id in ids_to_download:
-        api_id = ndi_to_api.get(ndi_id, ndi_id)
-        try:
-            doc = docs_api.get_document(client, cloud_dataset_id, api_id)
-            if isinstance(doc, dict):
-                doc.setdefault("ndiId", ndi_id)
-                downloaded.append(doc)
-        except Exception as exc:
-            logger.warning("Failed to download %s: %s", ndi_id, exc)
-            failed.append(ndi_id)
-    return downloaded, failed
+    if not ids_to_download:
+        return [], []
+
+    # Map NDI IDs to API IDs
+    api_ids = [ndi_to_api.get(ndi_id, ndi_id) for ndi_id in ids_to_download]
+
+    try:
+        docs = download_document_collection(
+            client, cloud_dataset_id, doc_ids=api_ids,
+        )
+    except Exception as exc:
+        logger.warning("Bulk download failed: %s", exc)
+        return [], list(ids_to_download)
+
+    # Set ndiId on downloaded docs and track which ones we got
+    downloaded_api_ids: set[str] = set()
+    for doc in docs:
+        api_id = doc.get("_id", doc.get("id", ""))
+        downloaded_api_ids.add(api_id)
+
+    # Build reverse map: api_id → ndi_id
+    api_to_ndi = {v: k for k, v in ndi_to_api.items()}
+    for doc in docs:
+        api_id = doc.get("_id", doc.get("id", ""))
+        ndi_id = api_to_ndi.get(api_id, api_id)
+        doc.setdefault("ndiId", ndi_id)
+
+    # Determine which IDs we failed to download
+    failed = [
+        ndi_id for ndi_id in ids_to_download
+        if ndi_to_api.get(ndi_id, ndi_id) not in downloaded_api_ids
+    ]
+
+    return docs, failed
 
 
 # ---------------------------------------------------------------------------

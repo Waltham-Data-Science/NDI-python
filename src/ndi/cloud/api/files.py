@@ -182,6 +182,10 @@ def get_bulk_file_download_url(
 ) -> str:
     """POST /datasets/{datasetId}/files/bulk-download
 
+    .. note:: **Railway-only.** This endpoint does not exist on the
+       Lambda API.  For Lambda-compatible file downloads, use
+       :func:`get_file_details` to get individual presigned URLs.
+
     Returns a presigned S3 URL where the backend will place a ZIP of
     all binary files for the dataset.  The ZIP is created asynchronously;
     the caller must poll the returned URL until it becomes available.

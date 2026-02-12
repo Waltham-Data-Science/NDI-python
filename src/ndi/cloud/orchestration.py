@@ -36,8 +36,11 @@ def download_dataset(
         An ndi.Dataset backed by the target folder.
     """
     from .api import datasets as ds_api
-    from .api import documents as docs_api
-    from .download import download_dataset_files, jsons_to_documents
+    from .download import (
+        download_dataset_files,
+        download_document_collection,
+        jsons_to_documents,
+    )
     from .internal import create_remote_dataset_doc
 
     target = Path(target_folder)
@@ -49,8 +52,11 @@ def download_dataset(
         name = ds_info.get("name", cloud_dataset_id)
         print(f"Downloading dataset: {name}")
 
-    # Download all documents
-    doc_jsons = docs_api.list_all_documents(client, cloud_dataset_id)
+    # Download all full documents via chunked bulk download
+    doc_jsons = download_document_collection(
+        client, cloud_dataset_id,
+        progress=print if verbose else None,
+    )
     if verbose:
         print(f"  Downloaded {len(doc_jsons)} documents")
 
