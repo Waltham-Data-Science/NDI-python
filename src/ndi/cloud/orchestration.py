@@ -54,7 +54,8 @@ def download_dataset(
 
     # Download all full documents via chunked bulk download
     doc_jsons = download_document_collection(
-        client, cloud_dataset_id,
+        client,
+        cloud_dataset_id,
         progress=print if verbose else None,
     )
     if verbose:

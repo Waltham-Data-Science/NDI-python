@@ -80,7 +80,9 @@ def _download_docs_by_ids(
 
     try:
         docs = download_document_collection(
-            client, cloud_dataset_id, doc_ids=api_ids,
+            client,
+            cloud_dataset_id,
+            doc_ids=api_ids,
         )
     except Exception as exc:
         logger.warning("Bulk download failed: %s", exc)
@@ -101,7 +103,8 @@ def _download_docs_by_ids(
 
     # Determine which IDs we failed to download
     failed = [
-        ndi_id for ndi_id in ids_to_download
+        ndi_id
+        for ndi_id in ids_to_download
         if ndi_to_api.get(ndi_id, ndi_id) not in downloaded_api_ids
     ]
 

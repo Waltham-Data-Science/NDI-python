@@ -93,10 +93,7 @@ def download_full_dataset(
 
     # --- Phase 2: bulk download full documents in chunks (matches MATLAB) ---
     # Filter out already-downloaded docs for resume support
-    remaining_ids = [
-        did for did in all_doc_ids
-        if not (docs_dir / f"{did}.json").exists()
-    ]
+    remaining_ids = [did for did in all_doc_ids if not (docs_dir / f"{did}.json").exists()]
     already = len(all_doc_ids) - len(remaining_ids)
     if already:
         _log(f"Skipping {already} already-downloaded documents")
@@ -106,7 +103,9 @@ def download_full_dataset(
         _log(f"Downloading {len(remaining_ids)} documents via bulk chunks...")
         try:
             full_docs = download_document_collection(
-                client, dataset_id, doc_ids=remaining_ids,
+                client,
+                dataset_id,
+                doc_ids=remaining_ids,
                 progress=progress,
             )
             for doc in full_docs:
@@ -442,9 +441,7 @@ def download_document_collection(
         _log("Listing all document IDs...")
         summaries = docs_api.list_all_documents(client, dataset_id)
         doc_ids = [
-            s.get("_id", s.get("id", ""))
-            for s in summaries
-            if s.get("_id", s.get("id", ""))
+            s.get("_id", s.get("id", "")) for s in summaries if s.get("_id", s.get("id", ""))
         ]
         _log(f"Found {len(doc_ids)} documents")
 
@@ -460,10 +457,7 @@ def download_document_collection(
         end = min(start + chunk_size, len(doc_ids))
         chunk_ids = doc_ids[start:end]
 
-        _log(
-            f"  Processing chunk {i + 1} of {num_chunks} "
-            f"({len(chunk_ids)} documents)..."
-        )
+        _log(f"  Processing chunk {i + 1} of {num_chunks} " f"({len(chunk_ids)} documents)...")
 
         # Get presigned URL for this chunk
         try:
