@@ -175,8 +175,6 @@ def get_file_details(
     )
 
 
-
-
 def get_file_collection_upload_url(
     client: CloudClient,
     org_id: str,

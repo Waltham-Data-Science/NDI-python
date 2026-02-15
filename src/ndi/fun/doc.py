@@ -44,8 +44,6 @@ def all_types() -> list[str]:
     return sorted(types)
 
 
-
-
 def find_fuid(session: Any, fuid: str) -> tuple[Any | None, str]:
     """Search session for a document containing a file with the given UID.
 

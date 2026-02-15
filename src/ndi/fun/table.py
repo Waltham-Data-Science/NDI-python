@@ -185,7 +185,7 @@ def join(
 
             result = (
                 result.groupby(unique_variables, sort=False)
-                .agg({c: _agg for c in other_cols})
+                .agg(dict.fromkeys(other_cols, _agg))
                 .reset_index()
             )
 

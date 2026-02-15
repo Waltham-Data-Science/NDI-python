@@ -332,9 +332,7 @@ class TestDocGetDocTypes:
             }
         }
         doc2 = MagicMock()
-        doc2.document_properties = {
-            "document_class": {"class_name": "subject"}
-        }
+        doc2.document_properties = {"document_class": {"class_name": "subject"}}
         session = MagicMock()
         session.database_search.return_value = [doc1, doc2]
 

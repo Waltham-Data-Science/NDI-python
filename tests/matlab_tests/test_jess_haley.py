@@ -26,7 +26,6 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -141,13 +140,11 @@ class TestDatasetLoading:
             actual_count = actual.get(dtype, 0)
             if dtype == "session":
                 # Dataset init adds 1 extra session doc
-                assert actual_count >= expected, (
-                    f"{dtype}: expected >= {expected}, got {actual_count}"
-                )
+                assert (
+                    actual_count >= expected
+                ), f"{dtype}: expected >= {expected}, got {actual_count}"
             else:
-                assert actual_count == expected, (
-                    f"{dtype}: expected {expected}, got {actual_count}"
-                )
+                assert actual_count == expected, f"{dtype}: expected {expected}, got {actual_count}"
 
     def test_all_documents_have_base_id(self, all_docs_raw):
         """Every document has a base.id field."""
@@ -227,9 +224,9 @@ class TestOntologyTableRowDoc2Table:
     def test_group_row_counts(self, otr_tables):
         data_tables, _ = otr_tables
         actual_sizes = sorted([len(dt) for dt in data_tables], reverse=True)
-        assert actual_sizes == EXPECTED_OTR_GROUP_SIZES_SORTED, (
-            f"Group sizes mismatch: {actual_sizes} != {EXPECTED_OTR_GROUP_SIZES_SORTED}"
-        )
+        assert (
+            actual_sizes == EXPECTED_OTR_GROUP_SIZES_SORTED
+        ), f"Group sizes mismatch: {actual_sizes} != {EXPECTED_OTR_GROUP_SIZES_SORTED}"
 
     def test_data_dict_extraction(self, otr_tables):
         """At least one group has bacterial plate columns."""
@@ -261,9 +258,9 @@ class TestOntologyTableRowDoc2Table:
         # Find the encounter table (largest group, ~20411 rows)
         encounter_table = max(data_tables, key=len)
         decel_col = "CElegansBehavioralAssay_DecelerationUponEncounter"
-        assert decel_col in encounter_table.columns, (
-            f"'{decel_col}' not in largest group columns: {list(encounter_table.columns)}"
-        )
+        assert (
+            decel_col in encounter_table.columns
+        ), f"'{decel_col}' not in largest group columns: {list(encounter_table.columns)}"
         assert pd.api.types.is_numeric_dtype(encounter_table[decel_col])
 
     def test_bacterial_plate_table_has_expected_columns(self, otr_tables):
@@ -633,7 +630,9 @@ class TestCrossDocumentRelationships:
         # Note: session_id is the session object's ID, NOT the session
         # document's base.id. The Jess Haley dataset has 3 unique session_ids.
         assert len(session_ids) >= 2, f"Expected >= 2 unique session_ids, got {session_ids}"
-        assert len(session_ids) <= 10, f"Too many session_ids ({len(session_ids)}), data may be corrupt"
+        assert (
+            len(session_ids) <= 10
+        ), f"Too many session_ids ({len(session_ids)}), data may be corrupt"
 
 
 # ===========================================================================
@@ -668,7 +667,7 @@ class TestDatasetVisualization:
         ax.barh(doc_types, doc_counts, color="steelblue")
         ax.set_xlabel("Count")
         ax.set_title("Jess Haley Dataset: Document Type Distribution")
-        for i, (t, c) in enumerate(zip(doc_types, doc_counts)):
+        for i, (_t, c) in enumerate(zip(doc_types, doc_counts)):
             ax.text(c + 100, i, str(c), va="center", fontsize=8)
         plt.tight_layout()
         plt.savefig(out / "doc_type_distribution.png", dpi=150)
@@ -681,7 +680,6 @@ class TestDatasetVisualization:
         import matplotlib
 
         matplotlib.use("Agg")
-        import re
         from collections import Counter
 
         import matplotlib.pyplot as plt
@@ -870,7 +868,7 @@ class TestDatasetVisualization:
         time_per_frame = time_scale[2] if len(time_scale) > 2 else 1.0
 
         fig, axes = plt.subplots(2, 4, figsize=(16, 8))
-        for idx, (ax, fi) in enumerate(zip(axes.flat, frame_indices)):
+        for _idx, (ax, fi) in enumerate(zip(axes.flat, frame_indices)):
             cap.set(cv2.CAP_PROP_POS_FRAMES, fi)
             ret, frame = cap.read()
             if ret:

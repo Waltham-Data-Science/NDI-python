@@ -400,9 +400,7 @@ def subject_summary(
     om_docs = session.database_search(Query("").isa("openminds_subject"))
 
     # Per-subject openminds data: {subject_id: {type: [doc_props, ...]}}
-    om_by_subject: dict[str, dict[str, list[dict]]] = {
-        sid: {} for sid in subject_info
-    }
+    om_by_subject: dict[str, dict[str, list[dict]]] = {sid: {} for sid in subject_info}
 
     for doc in om_docs:
         props = doc.document_properties if hasattr(doc, "document_properties") else doc

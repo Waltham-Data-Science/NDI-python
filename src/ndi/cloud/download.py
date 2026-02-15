@@ -182,8 +182,6 @@ def download_full_dataset(
     return report
 
 
-
-
 def _download_chunk_zip(
     url: str,
     timeout: float = 20.0,
