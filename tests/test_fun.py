@@ -328,15 +328,12 @@ class TestDocGetDocTypes:
         doc1 = MagicMock()
         doc1.document_properties = {
             "document_class": {
-                "class_list": [
-                    {"class_name": "base"},
-                    {"class_name": "element"},
-                ]
+                "class_name": "element",
             }
         }
         doc2 = MagicMock()
         doc2.document_properties = {
-            "document_class": {"class_list": [{"class_name": "base"}, {"class_name": "subject"}]}
+            "document_class": {"class_name": "subject"}
         }
         session = MagicMock()
         session.database_search.return_value = [doc1, doc2]
@@ -344,8 +341,9 @@ class TestDocGetDocTypes:
         types, counts = get_doc_types(session)
         assert "element" in types
         assert "subject" in types
-        assert counts["element"] == 1
-        assert counts["subject"] == 1
+        # counts is a list aligned with types
+        assert counts[types.index("element")] == 1
+        assert counts[types.index("subject")] == 1
 
 
 class TestDocFindFuid:

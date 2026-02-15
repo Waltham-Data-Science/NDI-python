@@ -27,9 +27,12 @@ def _require_pandas() -> None:
 
 def identify_matching_rows(
     df: pd.DataFrame,
-    column: str,
+    column: str | list[str],
     value: Any,
     mode: str = "identical",
+    *,
+    string_match: str | None = None,
+    numeric_match: str | None = None,
 ) -> pd.Series:
     """Identify rows in a DataFrame matching the given criteria.
 
@@ -37,40 +40,67 @@ def identify_matching_rows(
 
     Args:
         df: Input DataFrame.
-        column: Column name to match against.
-        value: Value to match.
-        mode: Match mode — ``'identical'``, ``'ignoreCase'``,
+        column: Column name(s) to match against.
+        value: Value(s) to match.  When *column* is a list, *value*
+            should be a list of the same length.
+        mode: Legacy match mode — ``'identical'``, ``'ignoreCase'``,
             ``'contains'``, ``'eq'``, ``'ne'``, ``'lt'``,
             ``'le'``, ``'gt'``, ``'ge'``.
+        string_match: String match mode (overrides *mode* for text):
+            ``'identical'``, ``'ignoreCase'``, ``'contains'``.
+        numeric_match: Numeric match mode (overrides *mode* for numbers):
+            ``'eq'``, ``'ne'``, ``'lt'``, ``'le'``, ``'gt'``, ``'ge'``.
 
     Returns:
         Boolean Series indicating matching rows.
     """
     _require_pandas()
 
-    col = df[column]
-    mode_lower = mode.lower()
-
-    if mode_lower == "identical":
-        return col == value
-    elif mode_lower == "ignorecase":
-        return col.astype(str).str.lower() == str(value).lower()
-    elif mode_lower == "contains":
-        return col.astype(str).str.contains(str(value), case=False, na=False)
-    elif mode_lower == "eq":
-        return col == value
-    elif mode_lower == "ne":
-        return col != value
-    elif mode_lower == "lt":
-        return col < value
-    elif mode_lower == "le":
-        return col <= value
-    elif mode_lower == "gt":
-        return col > value
-    elif mode_lower == "ge":
-        return col >= value
+    # Normalize to lists for multi-column support
+    if isinstance(column, str):
+        columns = [column]
+        values = [value]
     else:
-        raise ValueError(f"Unknown match mode: '{mode}'")
+        columns = list(column)
+        values = list(value) if isinstance(value, (list, tuple)) else [value] * len(columns)
+
+    mask = pd.Series(True, index=df.index)
+
+    for col_name, val in zip(columns, values):
+        col = df[col_name]
+
+        # Determine effective mode
+        if string_match is not None and col.dtype == object:
+            effective_mode = string_match.lower()
+        elif numeric_match is not None and col.dtype != object:
+            effective_mode = numeric_match.lower()
+        else:
+            effective_mode = mode.lower()
+
+        if effective_mode == "identical":
+            col_match = col == val
+        elif effective_mode == "ignorecase":
+            col_match = col.astype(str).str.lower() == str(val).lower()
+        elif effective_mode == "contains":
+            col_match = col.astype(str).str.contains(str(val), case=True, na=False)
+        elif effective_mode == "eq":
+            col_match = col == val
+        elif effective_mode == "ne":
+            col_match = col != val
+        elif effective_mode == "lt":
+            col_match = col < val
+        elif effective_mode == "le":
+            col_match = col <= val
+        elif effective_mode == "gt":
+            col_match = col > val
+        elif effective_mode == "ge":
+            col_match = col >= val
+        else:
+            raise ValueError(f"Unknown match mode: '{effective_mode}'")
+
+        mask = mask & col_match
+
+    return mask
 
 
 def identify_valid_rows(
@@ -107,13 +137,68 @@ def identify_valid_rows(
     return mask
 
 
+def join(
+    tables: list[pd.DataFrame],
+    unique_variables: list[str] | None = None,
+) -> pd.DataFrame:
+    """Combine multiple DataFrames using common columns as keys.
+
+    MATLAB equivalent: ndi.fun.table.join
+
+    Performs an inner merge on common key columns. When
+    *unique_variables* is given, duplicates are collapsed and
+    non-key columns are aggregated into comma-separated strings.
+
+    Args:
+        tables: List of DataFrames.
+        unique_variables: Column names for which only unique values
+            should be kept per aggregated row.
+
+    Returns:
+        Merged DataFrame.
+    """
+    _require_pandas()
+
+    if not tables:
+        return pd.DataFrame()
+
+    result = tables[0].copy()
+
+    for t in tables[1:]:
+        common = sorted(set(result.columns) & set(t.columns))
+        if common:
+            result = result.merge(t, on=common, how="inner")
+        else:
+            result = pd.concat([result, t], ignore_index=True)
+
+    if unique_variables:
+        other_cols = [c for c in result.columns if c not in unique_variables]
+        if other_cols:
+
+            def _agg(series: pd.Series) -> Any:
+                vals = series.dropna().unique()
+                if len(vals) == 0:
+                    return ""
+                if len(vals) == 1:
+                    return vals[0]
+                return ",".join(str(v) for v in vals)
+
+            result = (
+                result.groupby(unique_variables, sort=False)
+                .agg({c: _agg for c in other_cols})
+                .reset_index()
+            )
+
+    return result
+
+
 def join_tables(
     tables: list[pd.DataFrame],
     key_columns: list[str] | None = None,
 ) -> pd.DataFrame:
     """Combine multiple DataFrames using common columns as keys.
 
-    MATLAB equivalent: ndi.fun.table.join
+    .. deprecated:: Use :func:`join` instead.
 
     Performs an outer merge on common key columns.
 

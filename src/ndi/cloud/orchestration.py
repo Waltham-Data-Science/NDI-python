@@ -68,14 +68,14 @@ def download_dataset(
     documents = jsons_to_documents(doc_jsons)
     for doc in documents:
         try:
-            dataset.session.database_add(doc)
+            dataset._session._database.add(doc)
         except Exception:
             pass
 
     # Create remote link document
     remote_doc = create_remote_dataset_doc(cloud_dataset_id, dataset)
     try:
-        dataset.session.database_add(remote_doc)
+        dataset._session._database.add(remote_doc)
     except Exception:
         pass
 
@@ -88,6 +88,65 @@ def download_dataset(
 
     if verbose:
         print("Download complete.")
+
+    return dataset
+
+
+def load_dataset_from_json_dir(
+    json_dir: str | Path,
+    target_folder: str | Path | None = None,
+    verbose: bool = False,
+) -> Any:
+    """Load a dataset from a directory of pre-downloaded JSON documents.
+
+    This avoids re-downloading from the cloud when the documents have
+    already been saved locally (e.g. by ``download_full_dataset``).
+
+    Args:
+        json_dir: Directory containing ``*.json`` document files.
+        target_folder: Path for the local Dataset. If *None*, a
+            temporary directory is created next to *json_dir*.
+        verbose: Print progress messages.
+
+    Returns:
+        An :class:`ndi.Dataset` backed by the target folder.
+    """
+    import json as json_mod
+
+    json_path = Path(json_dir)
+    if not json_path.is_dir():
+        raise FileNotFoundError(f"JSON directory not found: {json_path}")
+
+    json_files = sorted(json_path.glob("*.json"))
+    if verbose:
+        print(f"Loading {len(json_files)} JSON documents from {json_path}")
+
+    doc_jsons: list[dict] = []
+    for jf in json_files:
+        with open(jf) as fh:
+            doc_jsons.append(json_mod.load(fh))
+
+    if verbose:
+        print(f"  Read {len(doc_jsons)} documents, bulk-inserting into Dataset...")
+
+    # Create Dataset
+    from ndi.dataset import Dataset
+
+    if target_folder is None:
+        target = json_path.parent / f"{json_path.name}_dataset"
+    else:
+        target = Path(target_folder)
+    target.mkdir(parents=True, exist_ok=True)
+
+    dataset = Dataset(target)
+
+    # Use bulk_add for fast insertion (single transaction, no per-doc
+    # duplicate checks).  This bypasses session_id enforcement since
+    # documents come from multiple remote sessions.
+    added, skipped = dataset._session._database._driver.bulk_add(doc_jsons)
+
+    if verbose:
+        print(f"  Dataset created at {target} with {added} documents ({skipped} skipped).")
 
     return dataset
 

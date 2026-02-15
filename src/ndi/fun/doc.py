@@ -44,35 +44,6 @@ def all_types() -> list[str]:
     return sorted(types)
 
 
-def get_doc_types(session: Any) -> tuple[list[str], dict[str, int]]:
-    """Find all unique document types and counts in a session.
-
-    MATLAB equivalent: ndi.fun.doc.getDocTypes
-
-    Args:
-        session: An NDI session instance.
-
-    Returns:
-        Tuple of ``(sorted_types, counts_dict)``.
-    """
-    from ndi.query import Query
-
-    docs = session.database_search(Query("").isa("base"))
-    counts: dict[str, int] = {}
-    for doc in docs:
-        props = doc.document_properties if hasattr(doc, "document_properties") else doc
-        if isinstance(props, dict):
-            classes = props.get("document_class", {}).get("class_list", [])
-            if classes:
-                doc_type = classes[-1].get("class_name", "unknown")
-            else:
-                doc_type = "unknown"
-        else:
-            doc_type = "unknown"
-        counts[doc_type] = counts.get(doc_type, 0) + 1
-
-    sorted_types = sorted(counts.keys())
-    return sorted_types, counts
 
 
 def find_fuid(session: Any, fuid: str) -> tuple[Any | None, str]:
@@ -438,3 +409,37 @@ def ontology_table_row_vars(
     ontology_nodes = [names_set[n][1] for n in sorted_names]
 
     return sorted_names, variable_names, ontology_nodes
+
+
+def get_doc_types(
+    session: Any,
+) -> tuple[list[str], list[int]]:
+    """Find all unique document types and their counts in a session.
+
+    MATLAB equivalent: ndi.fun.doc.getDocTypes
+
+    Args:
+        session: An NDI session or dataset instance.
+
+    Returns:
+        Tuple of ``(doc_types, doc_counts)`` where *doc_types* is a sorted
+        list of unique class names and *doc_counts* contains the count for
+        each type.
+    """
+    from collections import Counter
+
+    from ndi.query import Query
+
+    docs = session.database_search(Query("").isa("base"))
+
+    type_counter: Counter[str] = Counter()
+    for doc in docs:
+        props = doc.document_properties if hasattr(doc, "document_properties") else doc
+        if isinstance(props, dict):
+            class_name = props.get("document_class", {}).get("class_name", "unknown")
+            type_counter[class_name] += 1
+
+    sorted_types = sorted(type_counter.keys())
+    counts = [type_counter[t] for t in sorted_types]
+
+    return sorted_types, counts

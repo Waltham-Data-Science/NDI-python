@@ -72,6 +72,52 @@ class SQLiteDriver:
         did_doc = self._DIDDocument(document)
         self._db.add_docs([did_doc], self._branch_id)
 
+    def bulk_add(self, documents: list[dict]) -> tuple[int, int]:
+        """Add many documents at once, bypassing per-doc duplicate checks.
+
+        Uses a single transaction for all inserts.  Duplicates (by
+        ``base.id``) are silently skipped.
+
+        Returns:
+            ``(added, skipped)`` counts.
+        """
+        import json as json_mod
+        import time
+
+        existing_ids = set(self._db.get_doc_ids(self._branch_id))
+
+        added = 0
+        skipped = 0
+        cursor = self._db.dbid.cursor()
+        try:
+            for doc in documents:
+                doc_id = doc.get("base", {}).get("id", "")
+                if not doc_id or doc_id in existing_ids:
+                    skipped += 1
+                    continue
+
+                json_code = json_mod.dumps(doc)
+                cursor.execute(
+                    "INSERT INTO docs (doc_id, json_code, timestamp) VALUES (?, ?, ?)",
+                    (doc_id, json_code, time.time()),
+                )
+                doc_idx = cursor.lastrowid
+                try:
+                    cursor.execute(
+                        "INSERT INTO branch_docs (branch_id, doc_idx, timestamp) VALUES (?, ?, ?)",
+                        (self._branch_id, doc_idx, time.time()),
+                    )
+                except Exception:
+                    pass
+                existing_ids.add(doc_id)
+                added += 1
+            self._db.dbid.commit()
+        except Exception:
+            self._db.dbid.rollback()
+            raise
+
+        return added, skipped
+
     def update(self, document: dict) -> None:
         """Update an existing document."""
         doc_id = document.get("base", {}).get("id", "")
@@ -110,18 +156,20 @@ class SQLiteDriver:
 
         Uses DID-python's field_search() for query evaluation.
         """
-        # Get all document IDs in branch
-        doc_ids = self._db.get_doc_ids(self._branch_id)
+        import json as json_mod
 
-        if not doc_ids:
+        # Fetch all JSON blobs in a single SQL query instead of one-by-one.
+        rows = self._db.do_run_sql_query(
+            "SELECT d.json_code FROM docs d "
+            "JOIN branch_docs bd ON d.doc_idx = bd.doc_idx "
+            "WHERE bd.branch_id = ?",
+            (self._branch_id,),
+        )
+
+        if not rows:
             return []
 
-        # Get all documents
-        documents = []
-        for doc_id in doc_ids:
-            doc = self._db.get_docs(doc_id, self._branch_id, OnMissing="ignore")
-            if doc is not None:
-                documents.append(doc.document_properties)
+        documents = [json_mod.loads(r["json_code"]) for r in rows]
 
         # Filter by query if provided using DID-python's field_search
         if query is not None:
