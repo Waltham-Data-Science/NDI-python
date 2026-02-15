@@ -73,8 +73,12 @@ def download_full_dataset(
     }
 
     # --- Phase 1: list all document IDs (paginated summaries) ---
+    # Build mapping from NDI ID (base.id) → MongoDB _id so we can
+    # match bulk-downloaded documents (which lack MongoDB _id) back
+    # to the identifiers used for filenames and resume checks.
     _log("Listing all document IDs...")
     all_doc_ids: list[str] = []
+    ndi_to_mongo: dict[str, str] = {}
     page = 1
     page_size = 1000
     while page <= 1000:
@@ -84,8 +88,11 @@ def download_full_dataset(
             break
         for d in docs:
             doc_id = d.get("_id", d.get("id", ""))
+            ndi_id = d.get("ndiId", "")
             if doc_id:
                 all_doc_ids.append(doc_id)
+                if ndi_id:
+                    ndi_to_mongo[ndi_id] = doc_id
         if len(docs) < page_size:
             break
         page += 1
@@ -109,7 +116,12 @@ def download_full_dataset(
                 progress=progress,
             )
             for doc in full_docs:
+                # Bulk-downloaded docs may lack top-level _id/id.
+                # Try top-level first, then map NDI ID → MongoDB ID.
                 doc_id = doc.get("_id", doc.get("id", ""))
+                if not doc_id:
+                    ndi_id = doc.get("base", {}).get("id", "")
+                    doc_id = ndi_to_mongo.get(ndi_id, ndi_id)
                 if not doc_id:
                     continue
                 out_path = docs_dir / f"{doc_id}.json"
@@ -170,174 +182,6 @@ def download_full_dataset(
     return report
 
 
-def download_bulk_zip_railway(
-    client: CloudClient,
-    dataset_id: str,
-    target_dir: str | Path,
-    *,
-    include_files: bool = True,
-    doc_ids: list[str] | None = None,
-    file_uids: list[str] | None = None,
-    poll_interval: float = 5.0,
-    max_wait: float = 600.0,
-    progress: Callable[[str], None] | None = None,
-) -> dict[str, Any]:
-    """Download a dataset via Railway bulk ZIP endpoints.
-
-    .. note:: **Railway-only.** This function requires the Railway backend
-       which has longer timeouts and a ``POST /files/bulk-download`` endpoint
-       that does not exist on the Lambda API.  For Lambda-compatible downloads,
-       use :func:`download_full_dataset` or :func:`download_document_collection`
-       instead.
-
-    Uses the Railway bulk download endpoints to fetch documents and files
-    as ZIP archives rather than one-by-one.
-
-    Args:
-        client: Authenticated cloud client.
-        dataset_id: Cloud dataset ID.
-        target_dir: Local directory to save into.  Structure::
-
-            target_dir/
-              documents/       # extracted from document ZIP
-              files/           # extracted from file ZIP
-
-        include_files: Whether to also download binary files (default True).
-        doc_ids: Specific document IDs.  If ``None``, downloads all.
-        file_uids: Specific file UIDs.  If ``None``, downloads all.
-        poll_interval: Seconds between polling attempts.
-        max_wait: Maximum seconds to wait for each ZIP.
-        progress: Optional callback for status messages.
-
-    Returns:
-        Report dict with timing and count information.
-    """
-    import io
-    import time
-    import zipfile
-
-    import requests
-
-    from .api import documents as docs_api
-    from .api import files as files_api
-
-    def _log(msg: str) -> None:
-        logger.info(msg)
-        if progress:
-            progress(msg)
-
-    def _poll_and_download(url: str, label: str) -> tuple[bytes | None, float]:
-        """Poll a presigned URL until ZIP is ready, then download it."""
-        t0 = time.time()
-        while time.time() - t0 < max_wait:
-            try:
-                r = requests.get(
-                    url,
-                    headers={"Range": "bytes=0-0"},
-                    stream=True,
-                    timeout=30,
-                )
-                if r.status_code in (200, 206):
-                    r.close()
-                    break
-                r.close()
-            except Exception:
-                pass
-            elapsed = time.time() - t0
-            if int(elapsed) % 30 < poll_interval:
-                _log(f"  {label}: waiting... ({elapsed:.0f}s)")
-            time.sleep(poll_interval)
-        else:
-            _log(f"  {label}: timed out after {max_wait:.0f}s")
-            return None, time.time() - t0
-
-        wait_time = time.time() - t0
-        _log(f"  {label}: ready after {wait_time:.1f}s, downloading...")
-        r = requests.get(url, timeout=max_wait, stream=True)
-        chunks = []
-        for chunk in r.iter_content(chunk_size=65536):
-            chunks.append(chunk)
-        data = b"".join(chunks)
-        total_time = time.time() - t0
-        _log(f"  {label}: downloaded {len(data) / 1024 / 1024:.1f} MB in {total_time:.1f}s")
-        return data, total_time
-
-    target = Path(target_dir)
-    report: dict[str, Any] = {}
-
-    # --- Phase 1: Bulk document download ---
-    _log("Requesting bulk document download...")
-    t0 = time.time()
-    doc_url = docs_api.get_bulk_download_url(client, dataset_id, doc_ids)
-    if not doc_url:
-        _log("  Failed to get bulk document download URL")
-        report["documents_error"] = "no URL returned"
-    else:
-        report["doc_api_time"] = time.time() - t0
-        doc_data, doc_time = _poll_and_download(doc_url, "Documents ZIP")
-        report["doc_total_time"] = doc_time
-
-        if doc_data:
-            docs_dir = target / "documents"
-            docs_dir.mkdir(parents=True, exist_ok=True)
-            try:
-                zf = zipfile.ZipFile(io.BytesIO(doc_data))
-                count = 0
-                for name in zf.namelist():
-                    if name.endswith(".json"):
-                        data = json.loads(zf.read(name))
-                        docs = data if isinstance(data, list) else [data]
-                        for idx, doc in enumerate(docs):
-                            doc_id = doc.get("_id", doc.get("id", ""))
-                            fname = f"{doc_id}.json" if doc_id else f"doc_{idx:06d}.json"
-                            out = docs_dir / fname
-                            with open(out, "w", encoding="utf-8") as fh:
-                                json.dump(doc, fh, indent=2)
-                            count += 1
-                report["documents_downloaded"] = count
-                _log(f"  Extracted {count} documents")
-            except Exception as exc:
-                report["documents_error"] = str(exc)
-                _log(f"  Document extraction error: {exc}")
-            report["doc_zip_mb"] = len(doc_data) / 1024 / 1024
-
-    # --- Phase 2: Bulk file download ---
-    if include_files:
-        _log("Requesting bulk file download...")
-        t0 = time.time()
-        file_url = files_api.get_bulk_file_download_url(client, dataset_id, file_uids)
-        if not file_url:
-            _log("  Failed to get bulk file download URL")
-            report["files_error"] = "no URL returned"
-        else:
-            report["file_api_time"] = time.time() - t0
-            file_data, file_time = _poll_and_download(file_url, "Files ZIP")
-            report["file_total_time"] = file_time
-
-            if file_data:
-                files_dir = target / "files"
-                files_dir.mkdir(parents=True, exist_ok=True)
-                try:
-                    zf = zipfile.ZipFile(io.BytesIO(file_data))
-                    count = 0
-                    for name in zf.namelist():
-                        # Files are stored as files/{uid} in the ZIP
-                        basename = Path(name).name
-                        if not basename:
-                            continue
-                        out = files_dir / basename
-                        with open(out, "wb") as fh:
-                            fh.write(zf.read(name))
-                        count += 1
-                    report["files_downloaded"] = count
-                    _log(f"  Extracted {count} files")
-                except Exception as exc:
-                    report["files_error"] = str(exc)
-                    _log(f"  File extraction error: {exc}")
-                report["file_zip_mb"] = len(file_data) / 1024 / 1024
-
-    _log(f"Done — {report}")
-    return report
 
 
 def _download_chunk_zip(
