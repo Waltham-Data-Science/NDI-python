@@ -50,14 +50,32 @@ __all__ = [
     "reset_password",
     "verify_user",
     "resend_confirmation",
+    # Top-level convenience functions (mirror MATLAB ndi.cloud.*)
+    "download_dataset",
+    "upload_dataset",
+    "sync_dataset",
+    "upload_single_file",
 ]
 
-# Lazy import for CloudClient (requires requests)
+# Lazy imports for symbols that depend on requests.
+# CloudClient and the orchestration/upload convenience functions are
+# resolved on first access so that ``import ndi.cloud`` never fails
+# when requests is not installed.
+
+_LAZY_IMPORTS = {
+    "CloudClient": ("client", "CloudClient"),
+    "download_dataset": ("orchestration", "download_dataset"),
+    "upload_dataset": ("orchestration", "upload_dataset"),
+    "sync_dataset": ("orchestration", "sync_dataset"),
+    "upload_single_file": ("upload", "upload_single_file"),
+}
 
 
 def __getattr__(name: str):
-    if name == "CloudClient":
-        from .client import CloudClient
+    if name in _LAZY_IMPORTS:
+        module_name, attr = _LAZY_IMPORTS[name]
+        import importlib
 
-        return CloudClient
+        mod = importlib.import_module(f".{module_name}", __name__)
+        return getattr(mod, attr)
     raise AttributeError(f"module 'ndi.cloud' has no attribute {name!r}")
