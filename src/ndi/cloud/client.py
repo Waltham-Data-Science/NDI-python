@@ -78,9 +78,9 @@ class CloudClient:
         """HTTP PUT."""
         return self._request("PUT", endpoint, json=json, data=data, **path_params)
 
-    def delete(self, endpoint: str, **path_params: str) -> Any:
+    def delete(self, endpoint: str, params: dict | None = None, **path_params: str) -> Any:
         """HTTP DELETE."""
-        return self._request("DELETE", endpoint, **path_params)
+        return self._request("DELETE", endpoint, params=params, **path_params)
 
     # ------------------------------------------------------------------
     # Internal

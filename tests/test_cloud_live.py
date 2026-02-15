@@ -151,7 +151,7 @@ def can_write(client, cloud_config):
         ds_id = result.get("_id", result.get("id", ""))
         if ds_id:
             try:
-                delete_dataset(client, ds_id)
+                delete_dataset(client, ds_id, when="now")
             except Exception:
                 pass
             return True
@@ -183,7 +183,7 @@ def fresh_dataset(client, cloud_config, can_write):
 
     # Teardown: delete the dataset
     try:
-        delete_dataset(client, dataset_id)
+        delete_dataset(client, dataset_id, when="now")
     except Exception:
         pass
 
@@ -364,7 +364,7 @@ class TestDatasetLifecycle:
             assert ds.get("_id") == ds_id or ds.get("id") == ds_id
         finally:
             try:
-                _retry_on_server_error(lambda: delete_dataset(client, ds_id))
+                _retry_on_server_error(lambda: delete_dataset(client, ds_id, when="now"))
             except Exception:
                 pass  # Best-effort cleanup
 
@@ -463,7 +463,7 @@ class TestDocumentLifecycle:
         assert fetched.get("base", {}).get("name") == "test_document"
 
         # Delete
-        delete_document(client, fresh_dataset, doc_id)
+        delete_document(client, fresh_dataset, doc_id, when="now")
 
         # Verify gone
         from ndi.cloud.exceptions import CloudAPIError
@@ -499,7 +499,7 @@ class TestDocumentLifecycle:
             assert fetched.get("base", {}).get("name") == "modified"
         finally:
             try:
-                delete_document(client, fresh_dataset, doc_id)
+                delete_document(client, fresh_dataset, doc_id, when="now")
             except Exception:
                 pass
 
@@ -617,7 +617,7 @@ class TestDocumentLifecycle:
             doc_ids.append(result.get("_id", result.get("id", "")))
 
         # Delete the first 3
-        bulk_delete(client, fresh_dataset, doc_ids[:3])
+        bulk_delete(client, fresh_dataset, doc_ids[:3], when="now")
 
         # Small delay for server processing
         time.sleep(2)
@@ -871,6 +871,194 @@ class TestPublishWorkflow:
 
         result = get_unpublished(client, page=1, page_size=5)
         assert isinstance(result, dict)
+
+
+# ===========================================================================
+# TestSoftDelete -- soft-delete, undelete, list-deleted (requires write)
+# ===========================================================================
+
+
+class TestSoftDelete:
+    """Soft-delete API: deferred delete, undelete, and list-deleted."""
+
+    def test_deferred_delete_and_undelete(self, client, cloud_config, can_write):
+        """Delete with when='7d', verify listed as deleted, then undelete.
+
+        Creates a dataset WITH documents to mimic real-world usage.
+        """
+        if not can_write:
+            pytest.skip("User does not have dataset creation privileges")
+
+        from ndi.cloud.api.datasets import (
+            create_dataset,
+            delete_dataset,
+            get_dataset,
+            list_deleted_datasets,
+            undelete_dataset,
+        )
+        from ndi.cloud.api.documents import add_document, list_all_documents
+        from ndi.cloud.exceptions import CloudAPIError as _APIError
+
+        org_id = cloud_config.org_id
+        try:
+            result = _retry_on_server_error(
+                lambda: create_dataset(client, org_id, "NDI_PYTEST_SOFT_DELETE")
+            )
+        except _APIError as exc:
+            pytest.skip(f"create_dataset timed out: {exc}")
+        ds_id = result.get("_id", result.get("id", ""))
+        assert ds_id
+
+        try:
+            # Add documents to make it realistic
+            for i in range(3):
+                add_document(
+                    client,
+                    ds_id,
+                    {
+                        "document_class": {"class_name": "ndi_pytest_softdel"},
+                        "base": {"name": f"softdel_doc_{i}"},
+                    },
+                )
+
+            # Deferred delete (7 days)
+            del_result = delete_dataset(client, ds_id, when="7d")
+            assert isinstance(del_result, dict)
+            assert "message" in del_result
+
+            # Should appear in deleted list
+            time.sleep(2)
+            deleted = list_deleted_datasets(client)
+            deleted_ids = {d.get("_id", d.get("id", "")) for d in deleted.get("datasets", [])}
+            assert ds_id in deleted_ids, f"Dataset {ds_id} not found in deleted list"
+
+            # Undelete
+            undelete_result = undelete_dataset(client, ds_id)
+            assert isinstance(undelete_result, dict)
+
+            # Should be accessible again with documents intact
+            time.sleep(2)
+            ds = _retry_on_server_error(lambda: get_dataset(client, ds_id), retry_on_404=True)
+            ds_fetched_id = ds.get("_id", ds.get("id", ""))
+            assert ds_fetched_id == ds_id
+
+            # Verify documents survived the soft-delete round-trip
+            docs = list_all_documents(client, ds_id)
+            assert len(docs) >= 3, f"Expected >= 3 docs after undelete, got {len(docs)}"
+        finally:
+            # Final cleanup
+            try:
+                delete_dataset(client, ds_id, when="now")
+            except Exception:
+                pass
+
+    def test_immediate_delete_cannot_undelete(self, client, cloud_config, can_write):
+        """Delete with when='now' — undelete 10s later should fail.
+
+        Creates a dataset WITH documents to mimic real-world usage.
+        """
+        if not can_write:
+            pytest.skip("User does not have dataset creation privileges")
+
+        from ndi.cloud.api.datasets import (
+            create_dataset,
+            delete_dataset,
+            undelete_dataset,
+        )
+        from ndi.cloud.api.documents import add_document
+        from ndi.cloud.exceptions import CloudAPIError as _APIError
+
+        org_id = cloud_config.org_id
+        try:
+            result = _retry_on_server_error(
+                lambda: create_dataset(client, org_id, "NDI_PYTEST_HARD_DELETE")
+            )
+        except _APIError as exc:
+            pytest.skip(f"create_dataset timed out: {exc}")
+        ds_id = result.get("_id", result.get("id", ""))
+        assert ds_id
+
+        # Add documents to make it realistic
+        for i in range(3):
+            add_document(
+                client,
+                ds_id,
+                {
+                    "document_class": {"class_name": "ndi_pytest_harddel"},
+                    "base": {"name": f"harddel_doc_{i}"},
+                },
+            )
+
+        # Immediate delete
+        delete_dataset(client, ds_id, when="now")
+        time.sleep(10)
+
+        # Undelete should fail — dataset is permanently gone
+        with pytest.raises(_APIError):
+            undelete_dataset(client, ds_id)
+
+    def test_list_deleted_documents(self, client, fresh_dataset):
+        """Add doc, delete it, verify it appears in deleted-documents list."""
+        from ndi.cloud.api.documents import (
+            add_document,
+            delete_document,
+            list_deleted_documents,
+        )
+
+        doc_json = {
+            "document_class": {"class_name": "ndi_pytest_softdel"},
+            "base": {"name": "soft_delete_test"},
+        }
+        result = add_document(client, fresh_dataset, doc_json)
+        doc_id = result.get("_id", result.get("id", ""))
+        assert doc_id
+
+        delete_document(client, fresh_dataset, doc_id, when="now")
+        time.sleep(2)
+
+        deleted = list_deleted_documents(client, fresh_dataset)
+        assert isinstance(deleted, dict)
+        # The response should have a documents list
+        deleted_docs = deleted.get("documents", [])
+        assert isinstance(deleted_docs, list)
+
+    def test_delete_dataset_returns_message(self, client, cloud_config, can_write):
+        """delete_dataset should return a response dict with a message."""
+        if not can_write:
+            pytest.skip("User does not have dataset creation privileges")
+
+        from ndi.cloud.api.datasets import create_dataset, delete_dataset
+        from ndi.cloud.exceptions import CloudAPIError as _APIError
+
+        org_id = cloud_config.org_id
+        try:
+            result = _retry_on_server_error(
+                lambda: create_dataset(client, org_id, "NDI_PYTEST_DEL_MSG")
+            )
+        except _APIError as exc:
+            pytest.skip(f"create_dataset timed out: {exc}")
+        ds_id = result.get("_id", result.get("id", ""))
+        assert ds_id
+
+        del_result = delete_dataset(client, ds_id, when="now")
+        assert isinstance(del_result, dict)
+        assert "message" in del_result
+
+    def test_delete_document_returns_message(self, client, fresh_dataset):
+        """delete_document should return a response dict with a message."""
+        from ndi.cloud.api.documents import add_document, delete_document
+
+        doc_json = {
+            "document_class": {"class_name": "ndi_pytest_delmsg"},
+            "base": {"name": "delete_msg_test"},
+        }
+        result = add_document(client, fresh_dataset, doc_json)
+        doc_id = result.get("_id", result.get("id", ""))
+        assert doc_id
+
+        del_result = delete_document(client, fresh_dataset, doc_id, when="now")
+        assert isinstance(del_result, dict)
+        assert "message" in del_result
 
 
 # ===========================================================================

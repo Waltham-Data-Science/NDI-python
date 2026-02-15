@@ -53,10 +53,26 @@ def update_dataset(
     )
 
 
-def delete_dataset(client: CloudClient, dataset_id: str) -> bool:
-    """DELETE /datasets/{datasetId}"""
-    client.delete("/datasets/{datasetId}", datasetId=dataset_id)
-    return True
+def delete_dataset(
+    client: CloudClient,
+    dataset_id: str,
+    when: str = "7d",
+) -> dict[str, Any]:
+    """DELETE /datasets/{datasetId}?when=...
+
+    Soft-delete a dataset.  The *when* parameter controls how long before
+    the dataset and its documents are permanently pruned:
+
+    - ``'now'``  — immediate hard delete
+    - ``'7d'``   — prune after 7 days (default)
+    - ``'24h'``  — prune after 24 hours
+    - ``'30m'``  — prune after 30 minutes
+    """
+    return client.delete(
+        "/datasets/{datasetId}",
+        params={"when": when},
+        datasetId=dataset_id,
+    )
 
 
 def list_datasets(
@@ -139,5 +155,30 @@ def get_unpublished(
     """
     return client.get(
         "/datasets/unpublished",
+        params={"page": page, "pageSize": page_size},
+    )
+
+
+def undelete_dataset(client: CloudClient, dataset_id: str) -> dict[str, Any]:
+    """POST /datasets/{datasetId}/undelete
+
+    Reverse a deferred (soft) delete before the pruner runs.
+    Raises :class:`~ndi.cloud.exceptions.CloudAPIError` if the dataset
+    has already been permanently deleted.
+    """
+    return client.post("/datasets/{datasetId}/undelete", datasetId=dataset_id)
+
+
+def list_deleted_datasets(
+    client: CloudClient,
+    page: int = 1,
+    page_size: int = 1000,
+) -> dict[str, Any]:
+    """GET /datasets/deleted?page=&pageSize=
+
+    Returns soft-deleted datasets that have not yet been pruned.
+    """
+    return client.get(
+        "/datasets/deleted",
         params={"page": page, "pageSize": page_size},
     )

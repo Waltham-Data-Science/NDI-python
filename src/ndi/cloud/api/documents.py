@@ -58,14 +58,19 @@ def delete_document(
     client: CloudClient,
     dataset_id: str,
     document_id: str,
-) -> bool:
-    """DELETE /datasets/{datasetId}/documents/{documentId}"""
-    client.delete(
+    when: str = "7d",
+) -> dict[str, Any]:
+    """DELETE /datasets/{datasetId}/documents/{documentId}?when=...
+
+    Soft-delete a document.  See :func:`~ndi.cloud.api.datasets.delete_dataset`
+    for the *when* parameter format.
+    """
+    return client.delete(
         "/datasets/{datasetId}/documents/{documentId}",
+        params={"when": when},
         datasetId=dataset_id,
         documentId=document_id,
     )
-    return True
 
 
 def list_documents(
@@ -179,11 +184,17 @@ def bulk_delete(
     client: CloudClient,
     dataset_id: str,
     doc_ids: list[str],
+    when: str = "7d",
 ) -> dict[str, Any]:
-    """POST /datasets/{datasetId}/documents/bulk-delete"""
+    """POST /datasets/{datasetId}/documents/bulk-delete
+
+    Soft-delete multiple documents.  See
+    :func:`~ndi.cloud.api.datasets.delete_dataset` for the *when*
+    parameter format.
+    """
     return client.post(
         "/datasets/{datasetId}/documents/bulk-delete",
-        json={"documentIds": doc_ids},
+        json={"documentIds": doc_ids, "when": when},
         datasetId=dataset_id,
     )
 
@@ -236,6 +247,23 @@ def ndi_query_all(
             break
         page += 1
     return all_docs
+
+
+def list_deleted_documents(
+    client: CloudClient,
+    dataset_id: str,
+    page: int = 1,
+    page_size: int = 1000,
+) -> dict[str, Any]:
+    """GET /datasets/{datasetId}/documents/deleted?page=&pageSize=
+
+    Returns soft-deleted documents that have not yet been pruned.
+    """
+    return client.get(
+        "/datasets/{datasetId}/documents/deleted",
+        params={"page": page, "pageSize": page_size},
+        datasetId=dataset_id,
+    )
 
 
 def add_document_as_file(
