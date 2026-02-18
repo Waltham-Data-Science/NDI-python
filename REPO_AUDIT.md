@@ -167,6 +167,7 @@ Python consolidates into fewer locations:
 
 - `ndi.cloud.auth` — JWT/token functions (moved from `+internal`)
 - `ndi.cloud.internal` — dataset linking, file tracking (merged from both)
+- `ndi.cloud.filehandler` — on-demand file fetching via `ndic://` protocol (consolidates MATLAB's `updateFileInfoForRemoteFiles.m`, `setFileInfo.m`, and the `customFileHandler` callback from `didsqlite.m`)
 - `ndi.cloud.sync.SyncIndex` dataclass — replaces 5 index functions
 - `ndi.cloud.sync.operations` — private helpers inline (e.g. `_delete_local_docs`)
 
@@ -269,7 +270,12 @@ These functions exist in Python but have no MATLAB equivalent:
 | `bulk_upload()` (documents) | Low-level ZIP document upload |
 | `sync.sync()` | Dispatch by SyncMode enum |
 | `download_full_dataset()` | All-in-one dataset + files download |
+| `fetch_cloud_file()` | On-demand binary file download via `ndic://` protocol |
+| `get_or_create_cloud_client()` | Auto-auth from env vars for headless on-demand fetch |
 
 These should eventually be back-ported to MATLAB for feature parity. The
 soft-delete functions (`undelete_dataset`, `list_deleted_*`) will need MATLAB
-equivalents once the backend branch is merged.
+equivalents once the backend branch is merged. Note: `fetch_cloud_file` has
+a MATLAB equivalent (the `customFileHandler` callback in `didsqlite.m`), but
+the Python implementation is a standalone function rather than a callback,
+since DID-python lacks callback support.

@@ -61,6 +61,14 @@ def download_dataset(
     if verbose:
         print(f"  Downloaded {len(doc_jsons)} documents")
 
+    # When not syncing files, rewrite file_info locations to ndic:// URIs
+    # so binary files can be fetched on demand later.
+    if not sync_files:
+        from .filehandler import rewrite_file_info_for_cloud
+
+        for dj in doc_jsons:
+            rewrite_file_info_for_cloud(dj, cloud_dataset_id)
+
     # Convert to Document objects and add to a local Dataset
     from ndi.dataset import Dataset
 
@@ -79,6 +87,9 @@ def download_dataset(
     except Exception:
         pass
 
+    # Store cloud client for on-demand file fetching
+    dataset.cloud_client = client
+
     # Optionally download files
     if sync_files and doc_jsons:
         file_dir = target / ".ndi" / "files"
@@ -96,6 +107,8 @@ def load_dataset_from_json_dir(
     json_dir: str | Path,
     target_folder: str | Path | None = None,
     verbose: bool = False,
+    cloud_dataset_id: str | None = None,
+    client: CloudClient | None = None,
 ) -> Any:
     """Load a dataset from a directory of pre-downloaded JSON documents.
 
@@ -107,6 +120,12 @@ def load_dataset_from_json_dir(
         target_folder: Path for the local Dataset. If *None*, a
             temporary directory is created next to *json_dir*.
         verbose: Print progress messages.
+        cloud_dataset_id: If given, rewrite file_info locations to
+            ``ndic://`` URIs so binary files can be fetched on demand.
+            If *None*, auto-detect from a ``dataset_remote`` document
+            in the loaded JSONs.
+        client: Authenticated :class:`CloudClient` to store on the
+            dataset for on-demand file fetching.
 
     Returns:
         An :class:`ndi.Dataset` backed by the target folder.
@@ -129,6 +148,21 @@ def load_dataset_from_json_dir(
     if verbose:
         print(f"  Read {len(doc_jsons)} documents, bulk-inserting into Dataset...")
 
+    # Auto-detect cloud dataset ID from dataset_remote document
+    if cloud_dataset_id is None:
+        for dj in doc_jsons:
+            remote = dj.get("dataset_remote", {})
+            if isinstance(remote, dict) and remote.get("dataset_id"):
+                cloud_dataset_id = remote["dataset_id"]
+                break
+
+    # Rewrite file_info to ndic:// URIs for on-demand fetching
+    if cloud_dataset_id:
+        from .filehandler import rewrite_file_info_for_cloud
+
+        for dj in doc_jsons:
+            rewrite_file_info_for_cloud(dj, cloud_dataset_id)
+
     # Create Dataset
     from ndi.dataset import Dataset
 
@@ -144,6 +178,10 @@ def load_dataset_from_json_dir(
     # duplicate checks).  This bypasses session_id enforcement since
     # documents come from multiple remote sessions.
     added, skipped = dataset._session._database._driver.bulk_add(doc_jsons)
+
+    # Wire cloud client for on-demand file fetching
+    if client is not None:
+        dataset.cloud_client = client
 
     if verbose:
         print(f"  Dataset created at {target} with {added} documents ({skipped} skipped).")

@@ -7,6 +7,7 @@ NDI experiments including DAQ systems, database, syncgraph, and probes.
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,8 @@ from ..ido import Ido
 from ..query import Query
 from ..time.syncgraph import SyncGraph
 from ..time.syncrule_base import SyncRule
+
+logger = logging.getLogger(__name__)
 
 
 def empty_id() -> str:
@@ -73,6 +76,7 @@ class Session(ABC):
         self._syncgraph: SyncGraph | None = None
         self._cache = Cache()
         self._database: Database | None = None
+        self._cloud_client: Any = None
 
     @property
     def reference(self) -> str:
@@ -107,6 +111,16 @@ class Session(ABC):
     def database(self) -> Database | None:
         """Get the session's database."""
         return self._database
+
+    @property
+    def cloud_client(self) -> Any:
+        """Get the cloud client for on-demand file fetching."""
+        return self._cloud_client
+
+    @cloud_client.setter
+    def cloud_client(self, value: Any) -> None:
+        """Set the cloud client for on-demand file fetching."""
+        self._cloud_client = value
 
     # =========================================================================
     # DAQ System Methods
@@ -462,7 +476,15 @@ class Session(ABC):
 
         file_path = self._database.get_binary_path(doc, filename)
         if not file_path.exists():
-            raise FileNotFoundError(f"Binary file {filename} not found")
+            # Attempt on-demand fetch from cloud via ndic:// protocol
+            if self._try_cloud_fetch(doc, filename, file_path):
+                return open(file_path, "rb")
+            raise FileNotFoundError(
+                f"Binary file '{filename}' not found for document {doc_id}. "
+                f"If this is a cloud dataset, ensure NDI_CLOUD_USERNAME and "
+                f"NDI_CLOUD_PASSWORD environment variables are set, or pass "
+                f"a cloud_client to the session/dataset."
+            )
 
         return open(file_path, "rb")
 
@@ -501,6 +523,83 @@ class Session(ABC):
         """
         if hasattr(file_obj, "close"):
             file_obj.close()
+
+    def _try_cloud_fetch(
+        self,
+        doc: Document,
+        filename: str,
+        target_path: Path,
+    ) -> bool:
+        """Attempt to fetch a binary file from NDI Cloud via ndic:// protocol.
+
+        Scans the document's file_info for an ``ndic://`` location matching
+        *filename* and downloads the file on demand.
+
+        Args:
+            doc: The document that owns the file.
+            filename: Name of the binary file to fetch.
+            target_path: Local path where the file should be saved.
+
+        Returns:
+            True if the file was fetched successfully, False otherwise.
+        """
+        try:
+            from ..cloud.filehandler import NDIC_SCHEME, fetch_cloud_file
+        except ImportError:
+            return False
+
+        props = doc.document_properties
+        files = props.get("files", {})
+        if not isinstance(files, dict):
+            return False
+
+        file_info = files.get("file_info")
+        if file_info is None:
+            return False
+
+        # Normalise to list
+        if isinstance(file_info, dict):
+            file_info = [file_info]
+        if not isinstance(file_info, list):
+            return False
+
+        for fi in file_info:
+            if not isinstance(fi, dict):
+                continue
+            if fi.get("name", "") != filename:
+                continue
+
+            locations = fi.get("locations")
+            if locations is None:
+                continue
+            if isinstance(locations, dict):
+                locations = [locations]
+            if not isinstance(locations, list):
+                continue
+
+            for loc in locations:
+                if not isinstance(loc, dict):
+                    continue
+                location = loc.get("location", "")
+                if not location.startswith(NDIC_SCHEME):
+                    continue
+
+                try:
+                    return fetch_cloud_file(
+                        location,
+                        target_path,
+                        client=self._cloud_client,
+                    )
+                except Exception as exc:
+                    logger.debug(
+                        "Cloud fetch failed for %s: %s",
+                        location,
+                        exc,
+                        exc_info=True,
+                    )
+                    return False
+
+        return False
 
     # =========================================================================
     # SyncGraph Methods

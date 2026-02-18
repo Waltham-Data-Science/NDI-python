@@ -9,14 +9,16 @@ between the MATLAB and Python implementations.
 | Metric | Count |
 |--------|-------|
 | MATLAB test files (source) | 87 |
-| Python test files (ported) | 17 |
-| Python test classes | ~50 |
-| Python test methods | ~405 |
+| Python test files (ported) | 19 |
+| Python test classes | ~62 |
+| Python test methods | ~477 |
 | Intentionally skipped | ~5 (GUI, MATLAB-specific fixtures) |
 
-The 87 MATLAB files consolidate into 17 Python files because related MATLAB test
+The 87 MATLAB files consolidate into 19 Python files because related MATLAB test
 classes (e.g., all 7 `+dataset/*.m` files) are grouped into a single Python module
-(e.g., `test_dataset.py`).
+(e.g., `test_dataset.py`). Two additional test files (`test_carbon_fiber.py` and
+`test_cloud_filehandler.py`) test dataset-specific behaviour and the `ndic://`
+on-demand file fetching protocol.
 
 ---
 
@@ -384,6 +386,48 @@ NDI_CLOUD_USERNAME=user NDI_CLOUD_PASSWORD=pass \
   pytest tests/matlab_tests/test_cloud_api.py tests/matlab_tests/test_cloud_sync.py \
          tests/matlab_tests/test_cloud_compute.py -v -k "live"
 ```
+
+---
+
+## Batch 18: Carbon Fiber Dataset Tests
+
+**Python file:** `tests/matlab_tests/test_carbon_fiber.py`
+
+Tests against the Carbon fiber microelectrode dataset (`668b0539f13096e04f1feccd`,
+743 docs, 27 types, 17 neurons). Requires the dataset to be downloaded locally
+at `~/Documents/ndi-projects/datasets/carbon-fiber/documents/`.
+
+| MATLAB File | Python Class | Key Tests |
+|------------|-------------|-----------|
+| *(dataset-specific)* | `TestDatasetLoading` | `test_load_document_count` (743), `test_document_type_counts`, `test_get_doc_types` (>=27), `test_all_documents_have_base_id` |
+| *(dataset-specific)* | `TestSessionDiscovery` | `test_session_count`, `test_session_references`, `test_subject_exists`, `test_subject_local_identifier` |
+| *(dataset-specific)* | `TestElements` | `test_element_count`, `test_element_types`, `test_ntrode_elements`, `test_spike_elements`, `test_stimulator_element`, `test_element_depends_on_subject` |
+| *(dataset-specific)* | `TestNeurons` | `test_neuron_count` (17), `test_neuron_waveform_shape` (21x16), `test_neuron_has_mean_waveform`, `test_neuron_depends_on_element_and_clusters`, `test_neuron_app_is_jrclust` |
+| *(dataset-specific)* | `TestStimulusResponses` | `test_stimulus_response_count` (138), `test_response_types`, `test_stimulus_response_has_responses`, `test_stimulus_response_depends_on_five_docs` |
+| *(dataset-specific)* | `TestTuningCurves` | `test_tuningcurve_count` (126), `test_tuningcurve_types`, `test_orientation_tuning_has_12_directions`, `test_oridirtuning_count`, `test_spatial_frequency_tuning_count`, `test_temporal_frequency_tuning_count` |
+| *(dataset-specific)* | `TestEpochStructure` | `test_element_epoch_count`, `test_element_epoch_has_file_info`, `test_epochfiles_ingested_count`, `test_stimulus_presentation_count` |
+| *(dataset-specific)* | `TestOpenMinds` | `test_openminds_count` (67), `test_openminds_stimulus_count` (10) |
+| *(dataset-specific)* | `TestCrossDocumentRelationships` | `test_depends_on_references_exist`, `test_session_id_consistency`, `test_neuron_element_chain`, `test_tuningcurve_depends_on_stimulus_response` |
+| *(dataset-specific)* | `TestDAQInfrastructure` | `test_daqsystem_count`, `test_daqreader_count`, `test_filenavigator_count`, `test_syncgraph_exists`, `test_syncrule_count` |
+
+---
+
+## Batch 19: Cloud File Handler Tests
+
+**Python file:** `tests/test_cloud_filehandler.py`
+
+Tests for the `ndic://` protocol and on-demand cloud file fetching. All tests
+are offline (mocked) except `TestRewriteWithRealDocs` which requires the Carbon
+fiber dataset downloaded locally.
+
+| MATLAB File | Python Class | Key Tests |
+|------------|-------------|-----------|
+| *(ndic:// URI parsing)* | `TestParseNdicUri` | `test_valid_uri`, `test_valid_uri_with_long_ids`, `test_not_ndic_scheme`, `test_empty_string`, `test_missing_file_uid`, `test_missing_dataset_id`, `test_no_slash` |
+| `+sync/+internal/updateFileInfoForRemoteFiles` | `TestRewriteFileInfoForCloud` | `test_list_style_file_info`, `test_dict_style_file_info`, `test_multiple_locations`, `test_no_files_key`, `test_empty_file_info`, `test_no_uid_skipped` |
+| `didsqlite.m:customFileHandler` | `TestFetchCloudFile` | `test_fetch_success`, `test_fetch_no_download_url`, `test_fetch_invalid_uri`, `test_fetch_fallback_to_env_client` |
+| *(env var auth)* | `TestGetOrCreateCloudClient` | `test_missing_env_vars`, `test_env_vars_present` |
+| `didsqlite.m:do_openbinarydoc` | `TestTryCloudFetch` | `test_try_cloud_fetch_with_ndic_uri`, `test_try_cloud_fetch_no_ndic_uri`, `test_try_cloud_fetch_wrong_filename`, `test_try_cloud_fetch_no_file_info` |
+| *(integration)* | `TestRewriteWithRealDocs` | `test_rewrite_preserves_structure` (66+ docs), `test_load_dataset_with_cloud_id` |
 
 ---
 

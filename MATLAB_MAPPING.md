@@ -67,7 +67,7 @@ Complete reference mapping every MATLAB NDI function/class to its Python equival
 | `ndi.session.dir` | `ndi.DirSession` | `ndi.session.dir` |
 | `ndi.session.sessiontable` | `ndi.session.SessionTable` | `ndi.session.sessiontable` |
 | MockSession (conceptual) | `ndi.session.MockSession` | `ndi.session.mock` |
-| `ndi.dataset` | `ndi.Dataset` | `ndi.dataset` |
+| `ndi.dataset` | `ndi.Dataset` | `ndi.dataset` (`.cloud_client` property for on-demand file fetching) |
 | `ndi.subject` | `ndi.Subject` | `ndi.subject` |
 | `ndi.neuron` | `ndi.Neuron` | `ndi.neuron` |
 | `ndi.element_timeseries` | `ndi.ElementTimeseries` | `ndi.element_timeseries` |
@@ -303,7 +303,7 @@ Auth functions are re-exported from `ndi.cloud.__init__` so `from ndi.cloud impo
 | `getFile` | `get_file(url, target_path, ...)` | |
 | `getFileUploadURL` | `get_upload_url(client, org_id, dataset_id, uid)` | |
 | `getFileCollectionUploadURL` | `get_file_collection_upload_url(client, ...)` | |
-| `getFileDetails` | `get_file_details(client, dataset_id, uid)` | |
+| `getFileDetails` | `get_file_details(client, dataset_id, uid)` | Used by `fetch_cloud_file` for on-demand download |
 | `listFiles` | `list_files(client, dataset_id)` | |
 | `putFiles` | `put_file(url, file_path, ...)` | |
 | — | `put_file_bytes(url, data, ...)` | Python-only (raw bytes) |
@@ -344,6 +344,7 @@ from ndi.cloud import download_dataset, upload_dataset, sync_dataset, upload_sin
 | `ndi.cloud.uploadSingleFile` | `ndi.cloud.upload_single_file(client, ...)` | Also at `ndi.cloud.upload.upload_single_file()` |
 | `ndi.cloud.upload.newDataset` | `ndi.cloud.orchestration.new_dataset(client, ...)` | |
 | `ndi.cloud.upload.scanForUpload` | `ndi.cloud.orchestration.scan_for_upload(client, ...)` | |
+| *(customFileHandler in didsqlite.m)* | `ndi.cloud.fetch_cloud_file(ndic_uri, path, ...)` | On-demand binary file download via `ndic://` protocol |
 
 ### Download
 
@@ -355,6 +356,8 @@ from ndi.cloud import download_dataset, upload_dataset, sync_dataset, upload_sin
 | `ndi.cloud.download.jsons2documents` | `download.jsons_to_documents(doc_jsons)` | |
 | `ndi.cloud.download.datasetDocuments` | — | Handled inside orchestration |
 | `ndi.cloud.download.internal.*` | — | Folded into main functions |
+| `+sync/+internal/updateFileInfoForRemoteFiles` | `filehandler.rewrite_file_info_for_cloud()` | Rewrites file_info to `ndic://` URIs |
+| `+download/+internal/setFileInfo` | `filehandler.rewrite_file_info_for_cloud()` | Same function handles both modes |
 
 ### Upload
 
@@ -404,6 +407,7 @@ from ndi.cloud import download_dataset, upload_dataset, sync_dataset, upload_sin
 | `+sync/+internal/deleteRemoteDocuments` | Inline in `mirror_to_remote()` | |
 | `+sync/+internal/downloadNdiDocuments` | `sync.operations._download_docs_by_ids()` | Private |
 | `+sync/+internal/uploadFilesForDatasetDocuments` | `upload.upload_files_for_documents()` | |
+| *(ndic:// URI parsing in didsqlite.m)* | `filehandler.parse_ndic_uri()` | `ndic://dataset_id/file_uid` → tuple |
 
 ### Admin (DOI & Crossref)
 

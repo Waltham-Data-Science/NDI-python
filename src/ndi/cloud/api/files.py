@@ -129,7 +129,11 @@ def get_file(
 
     MATLAB equivalent: +cloud/+api/+files/getFile.m
     """
+    import logging
+
     import requests
+
+    logger = logging.getLogger(__name__)
 
     target_path = Path(target_path)
     target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -140,6 +144,19 @@ def get_file(
             for chunk in resp.iter_content(chunk_size=8192):
                 fh.write(chunk)
         return True
+
+    # Log the failure with S3 error details when available
+    body = ""
+    try:
+        body = resp.text[:500]
+    except Exception:
+        pass
+    logger.warning(
+        "File download failed (HTTP %d) from %s: %s",
+        resp.status_code,
+        url[:80],
+        body[:200],
+    )
     return False
 
 

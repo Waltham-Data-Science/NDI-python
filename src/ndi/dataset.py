@@ -75,6 +75,15 @@ class Dataset:
         """Get the dataset reference name."""
         return self._reference
 
+    @property
+    def cloud_client(self) -> Any:
+        """Get/set the cloud client for on-demand file fetching."""
+        return self._session.cloud_client
+
+    @cloud_client.setter
+    def cloud_client(self, value: Any) -> None:
+        self._session.cloud_client = value
+
     def id(self) -> str:
         """Get the unique dataset identifier."""
         return self._session.id()

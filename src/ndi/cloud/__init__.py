@@ -55,6 +55,7 @@ __all__ = [
     "upload_dataset",
     "sync_dataset",
     "upload_single_file",
+    "fetch_cloud_file",
 ]
 
 # Lazy imports for symbols that depend on requests.
@@ -68,6 +69,7 @@ _LAZY_IMPORTS = {
     "upload_dataset": ("orchestration", "upload_dataset"),
     "sync_dataset": ("orchestration", "sync_dataset"),
     "upload_single_file": ("upload", "upload_single_file"),
+    "fetch_cloud_file": ("filehandler", "fetch_cloud_file"),
 }
 
 
