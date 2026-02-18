@@ -134,7 +134,9 @@ class TestDatasetLoading:
             actual_count = actual.get(dtype, 0)
             if dtype == "session":
                 # Dataset init may add 1 extra session doc
-                assert actual_count >= expected, f"{dtype}: expected >= {expected}, got {actual_count}"
+                assert (
+                    actual_count >= expected
+                ), f"{dtype}: expected >= {expected}, got {actual_count}"
             else:
                 assert actual_count == expected, f"{dtype}: expected {expected}, got {actual_count}"
 
@@ -272,7 +274,7 @@ class TestElements:
             if isinstance(deps, dict):
                 deps = [deps]
             subject_deps = [d for d in deps if d.get("name") == "subject_id"]
-            assert len(subject_deps) == 1, f"Element missing subject_id dependency"
+            assert len(subject_deps) == 1, "Element missing subject_id dependency"
             assert subject_deps[0]["value"] == subject_id
 
 
@@ -477,18 +479,14 @@ class TestTuningCurves:
         """58 temporal frequency tuning documents."""
         from ndi.query import Query
 
-        docs = carbon_fiber_dataset.database_search(
-            Query("").isa("temporal_frequency_tuning_calc")
-        )
+        docs = carbon_fiber_dataset.database_search(Query("").isa("temporal_frequency_tuning_calc"))
         assert len(docs) == 58
 
     def test_temporal_frequency_has_5_frequencies(self, carbon_fiber_dataset):
         """Temporal frequency tuning samples 5 frequencies (1,2,4,8,16 Hz)."""
         from ndi.query import Query
 
-        docs = carbon_fiber_dataset.database_search(
-            Query("").isa("temporal_frequency_tuning_calc")
-        )
+        docs = carbon_fiber_dataset.database_search(Query("").isa("temporal_frequency_tuning_calc"))
         for doc in docs[:5]:
             tft = doc.document_properties.get("temporal_frequency_tuning", {})
             tc = tft.get("tuning_curve", {})
