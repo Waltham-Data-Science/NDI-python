@@ -483,16 +483,127 @@ class PubChemProvider(OntologyProvider):
 
 
 class EMPTYProvider(OntologyProvider):
-    """Remote Experimental Ontology (EMPTY) — GitHub-hosted OWL."""
+    """Experimental Measurements, Purposes, and Treatments ontologY (EMPTY).
+
+    MATLAB equivalent: +ndi/+ontology/EMPTY.m
+
+    Fetches the EMPTY ontology as JSON from the Waltham-Data-Science
+    GitHub repository and caches it in memory. Supports lookup by
+    numeric ID (e.g. ``"0000074"``), full OBO-style ID
+    (e.g. ``"EMPTY_0000074"``), or label substring
+    (e.g. ``"Optogenetic Tetanus Stimulation Target Location"``).
+    """
 
     name = "EMPTY"
 
+    _JSON_URL = (
+        "https://raw.githubusercontent.com/Waltham-Data-Science/empty-ontology"
+        "/main/empty-base.json"
+    )
+
+    # Class-level cache shared across instances
+    _cache: dict[str, Any] | None = None
+
+    def _load_ontology(self) -> dict[str, Any]:
+        """Fetch and parse empty-base.json, caching in class variable."""
+        if EMPTYProvider._cache is not None:
+            return EMPTYProvider._cache
+
+        try:
+            data = self._http_get_json(self._JSON_URL, timeout=30)
+        except Exception:
+            EMPTYProvider._cache = {"nodes": [], "edges": []}
+            return EMPTYProvider._cache
+
+        # The JSON has a single graph with nodes and edges
+        graphs = data.get("graphs", [])
+        graph = graphs[0] if graphs else {}
+
+        # Build lookup indices
+        nodes = graph.get("nodes", [])
+        by_id: dict[str, dict] = {}
+        by_label: dict[str, dict] = {}
+        for node in nodes:
+            node_id = node.get("id", "")
+            label = node.get("lbl", "")
+            # Extract the EMPTY_NNNNNNN suffix from the IRI
+            obo_id = ""
+            if "EMPTY_" in node_id:
+                obo_id = node_id.rsplit("/", 1)[-1]  # e.g. EMPTY_0000074
+            by_id[obo_id] = node
+            if label:
+                by_label[label.lower()] = node
+
+        EMPTYProvider._cache = {
+            "nodes": nodes,
+            "by_id": by_id,
+            "by_label": by_label,
+        }
+        return EMPTYProvider._cache
+
     def lookup_term(self, term: str, prefix: str = "") -> Any:
+        from ndi.fun.name_utils import name_to_variable_name
+
         from . import OntologyResult
 
-        # Stub — EMPTY ontology requires OWL parsing which is complex
-        # Return empty result; full implementation would fetch and parse OWL
-        return OntologyResult(prefix="EMPTY")
+        cache = self._load_ontology()
+        by_id = cache.get("by_id", {})
+        by_label = cache.get("by_label", {})
+
+        node = None
+
+        # Try numeric ID: "0000074" -> "EMPTY_0000074"
+        if re.match(r"^\d+$", term):
+            obo_key = f"EMPTY_{term.zfill(7)}"
+            node = by_id.get(obo_key)
+        # Try full OBO ID: "EMPTY_0000074"
+        elif term.startswith("EMPTY_"):
+            node = by_id.get(term)
+        # Try exact label match (case-insensitive)
+        if node is None:
+            node = by_label.get(term.lower())
+        # Try substring match on labels
+        if node is None:
+            term_lower = term.lower()
+            for label, n in by_label.items():
+                if term_lower in label:
+                    node = n
+                    break
+
+        if node is None:
+            return OntologyResult(prefix="EMPTY")
+
+        label = node.get("lbl", "")
+        node_id = node.get("id", "")
+        # Build EMPTY:NNNNNNN style ID
+        obo_id = ""
+        if "EMPTY_" in node_id:
+            suffix = node_id.rsplit("/", 1)[-1]  # EMPTY_0000074
+            obo_id = suffix.replace("_", ":", 1)  # EMPTY:0000074
+
+        # Extract definition
+        meta = node.get("meta", {})
+        definition = ""
+        if isinstance(meta, dict):
+            defn = meta.get("definition", {})
+            if isinstance(defn, dict):
+                definition = defn.get("val", "")
+
+        # Extract synonyms
+        synonyms = []
+        if isinstance(meta, dict):
+            for syn in meta.get("synonyms", []):
+                if isinstance(syn, dict):
+                    synonyms.append(syn.get("val", ""))
+
+        return OntologyResult(
+            id=obo_id,
+            name=label,
+            prefix="EMPTY",
+            definition=definition,
+            synonyms=synonyms,
+            short_name=name_to_variable_name(label),
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -35,18 +35,15 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 CLOUD_DATASET_ID = "682e7772cdf3f24938176fac"
-JESS_HALEY_DOCS = Path(os.path.expanduser(
-    "~/Documents/ndi-projects/datasets/jess-haley/documents"
-))
-JESS_HALEY_FILES = Path(os.path.expanduser(
-    "~/Documents/ndi-projects/datasets/jess_haley_files"
-))
+JESS_HALEY_DOCS = Path(os.path.expanduser("~/Documents/ndi-projects/datasets/jess-haley/documents"))
+JESS_HALEY_FILES = Path(os.path.expanduser("~/Documents/ndi-projects/datasets/jess_haley_files"))
 OUTPUT_HTML = Path(__file__).parent / f"tutorial_{CLOUD_DATASET_ID}.html"
 
 
 # ---------------------------------------------------------------------------
 # HTML Builder
 # ---------------------------------------------------------------------------
+
 
 class HTMLBuilder:
     """Builds an HTML document matching the MATLAB Live Script export style."""
@@ -69,9 +66,7 @@ class HTMLBuilder:
         )
 
     def add_output_text(self, text: str) -> None:
-        self.sections.append(
-            f'<div class="output-block"><pre>{escape(text)}</pre></div>'
-        )
+        self.sections.append(f'<div class="output-block"><pre>{escape(text)}</pre></div>')
 
     def add_table_html(self, table_html: str, caption: str = "") -> None:
         s = '<div class="table-block">'
@@ -81,8 +76,7 @@ class HTMLBuilder:
         s += "</div>"
         self.sections.append(s)
 
-    def add_image_base64(self, img_bytes: bytes, fmt: str = "png",
-                         caption: str = "") -> None:
+    def add_image_base64(self, img_bytes: bytes, fmt: str = "png", caption: str = "") -> None:
         b64 = base64.b64encode(img_bytes).decode()
         s = '<div class="figure-block">'
         s += f'<img src="data:image/{fmt};base64,{b64}" />'
@@ -240,9 +234,9 @@ class HTMLBuilder:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def df_to_html(df: Any, max_rows: int = 20, show_shape: bool = True) -> str:
     """Convert a DataFrame to a styled HTML table string."""
-    import pandas as pd
 
     n = len(df)
     if n > max_rows:
@@ -252,25 +246,21 @@ def df_to_html(df: Any, max_rows: int = 20, show_shape: bool = True) -> str:
         html = "<table>"
         html += "<tr>" + "".join(f"<th>{escape(str(c))}</th>" for c in df.columns) + "</tr>"
         for _, row in top.iterrows():
-            html += "<tr>" + "".join(
-                f"<td>{escape(str(v)[:80])}</td>" for v in row
-            ) + "</tr>"
+            html += "<tr>" + "".join(f"<td>{escape(str(v)[:80])}</td>" for v in row) + "</tr>"
         # Ellipsis row
-        html += "<tr>" + "".join(
-            "<td style='text-align:center;color:#999;'>...</td>" for _ in df.columns
-        ) + "</tr>"
+        html += (
+            "<tr>"
+            + "".join("<td style='text-align:center;color:#999;'>...</td>" for _ in df.columns)
+            + "</tr>"
+        )
         for _, row in bottom.iterrows():
-            html += "<tr>" + "".join(
-                f"<td>{escape(str(v)[:80])}</td>" for v in row
-            ) + "</tr>"
+            html += "<tr>" + "".join(f"<td>{escape(str(v)[:80])}</td>" for v in row) + "</tr>"
         html += "</table>"
     else:
         html = "<table>"
         html += "<tr>" + "".join(f"<th>{escape(str(c))}</th>" for c in df.columns) + "</tr>"
         for _, row in df.iterrows():
-            html += "<tr>" + "".join(
-                f"<td>{escape(str(v)[:80])}</td>" for v in row
-            ) + "</tr>"
+            html += "<tr>" + "".join(f"<td>{escape(str(v)[:80])}</td>" for v in row) + "</tr>"
         html += "</table>"
 
     shape_str = f"<p class='timing'>{n} rows x {len(df.columns)} columns</p>" if show_shape else ""
@@ -291,18 +281,21 @@ def fig_to_bytes() -> bytes:
 
 def timed(func):
     """Decorator to time a function and print elapsed time."""
+
     def wrapper(*args, **kwargs):
         t0 = time.time()
         result = func(*args, **kwargs)
         elapsed = time.time() - t0
         print(f"  [{func.__name__}] {elapsed:.1f}s")
         return result
+
     return wrapper
 
 
 # ---------------------------------------------------------------------------
 # Tutorial Sections
 # ---------------------------------------------------------------------------
+
 
 def section_import(html: HTMLBuilder) -> None:
     """Section 1: Import the NDI dataset."""
@@ -318,8 +311,7 @@ cloud_dataset_id = '682e7772cdf3f24938176fac'
 data_path = Path(os.path.expanduser('~/Documents/ndi-projects/datasets/jess-haley/documents'))""")
 
     html.add_output_text(
-        f"cloud_dataset_id = '{CLOUD_DATASET_ID}'\n"
-        f"data_path = '{JESS_HALEY_DOCS}'"
+        f"cloud_dataset_id = '{CLOUD_DATASET_ID}'\n" f"data_path = '{JESS_HALEY_DOCS}'"
     )
 
 
@@ -448,14 +440,15 @@ print(f'shortName:  {result.short_name}')""")
     full_names, variable_names, ontology_nodes = ontology_table_row_vars(dataset)
 
     # Show the full variable list
-    var_df = pd.DataFrame({
-        "name": full_names,
-        "variableName": variable_names,
-        "ontologyNode": ontology_nodes,
-    })
+    var_df = pd.DataFrame(
+        {
+            "name": full_names,
+            "variableName": variable_names,
+            "ontologyNode": ontology_nodes,
+        }
+    )
     html.add_table_html(
-        df_to_html(var_df, max_rows=80),
-        f"Ontology variables ({len(var_df)} unique variables)"
+        df_to_html(var_df, max_rows=80), f"Ontology variables ({len(var_df)} unique variables)"
     )
 
     # Look up a specific term
@@ -465,15 +458,16 @@ print(f'shortName:  {result.short_name}')""")
         term_id = ontology_nodes[idx]
 
         from ndi.ontology import lookup
+
         result = lookup(term_id)
 
-        info_df = pd.DataFrame({
-            "value": [result.id, result.name, result.definition[:200], result.short_name]
-        }, index=["id", "name", "definition", "shortName"])
+        info_df = pd.DataFrame(
+            {"value": [result.id, result.name, result.definition[:200], result.short_name]},
+            index=["id", "name", "definition", "shortName"],
+        )
 
         html.add_table_html(
-            df_to_html(info_df, max_rows=10, show_shape=False),
-            f"variableInfo: lookup('{term_id}')"
+            df_to_html(info_df, max_rows=10, show_shape=False), f"variableInfo: lookup('{term_id}')"
         )
     except (ValueError, Exception) as e:
         html.add_output_text(f"Could not look up ontology term: {e}")
@@ -515,7 +509,7 @@ for i, (dt, ids) in enumerate(zip(data_tables, doc_ids)):
     data_tables, doc_ids = ontology_table_row_doc_to_table(docs)
 
     output_lines = []
-    for i, (dt, ids) in enumerate(zip(data_tables, doc_ids)):
+    for i, (dt, _ids) in enumerate(zip(data_tables, doc_ids)):
         cols_preview = list(dt.columns)[:4]
         output_lines.append(
             f"Table {i+1}: {len(dt)} rows x {len(dt.columns)} cols — {cols_preview}..."
@@ -531,7 +525,11 @@ for i, (dt, ids) in enumerate(zip(data_tables, doc_ids)):
         elif "CElegansBehavioralAssayLabel" in cols and "BacterialPlateIdentifier" in cols:
             # C. elegans behavioral plate table
             data_tables[i] = dt.assign(BacterialPlateDocumentIdentifier=ids)
-        elif "MicroscopyImageIdentifier" in cols and "BacterialPlateIdentifier" in cols and len(dt) < 2000:
+        elif (
+            "MicroscopyImageIdentifier" in cols
+            and "BacterialPlateIdentifier" in cols
+            and len(dt) < 2000
+        ):
             # E. coli microscopy image table (~1521 rows)
             data_tables[i] = dt.assign(ImageDocumentIdentifier=ids)
         elif "AgarPlatePouringTimestamp" in cols:
@@ -544,7 +542,6 @@ for i, (dt, ids) in enumerate(zip(data_tables, doc_ids)):
 @timed
 def section_subject_summary(html: HTMLBuilder, dataset: Any, data_tables: list) -> Any:
     """Section 8: View subject summary table."""
-    import pandas as pd
 
     from ndi.fun.doc_table import subject_summary
     from ndi.fun.table import join
@@ -560,9 +557,7 @@ def section_subject_summary(html: HTMLBuilder, dataset: Any, data_tables: list) 
         "Additionally, metadata about any treatments that a subject received "
         "such as food deprivation are stored in treatment documents."
     )
-    html.add_text(
-        "A summary table showing the metadata for each subject can be viewed below."
-    )
+    html.add_text("A summary table showing the metadata for each subject can be viewed below.")
 
     html.add_code("""\
 from ndi.fun.doc_table import subject_summary
@@ -600,7 +595,7 @@ print(subject_table.head(10))""")
 
     html.add_table_html(
         df_to_html(subject_table, max_rows=20),
-        f"subjectTable ({subject_table.shape[0]} x {subject_table.shape[1]} table)"
+        f"subjectTable ({subject_table.shape[0]} x {subject_table.shape[1]} table)",
     )
 
     return subject_table
@@ -633,10 +628,12 @@ print(f'filteredSubjects: {len(filtered_subjects)} rows')""")
     row_ind = identify_matching_rows(subject_table, col, value, string_match="contains")
     filtered = subject_table[row_ind]
 
-    html.add_output_text(f"filteredSubjects: {len(filtered)} rows x {len(filtered.columns)} columns")
+    html.add_output_text(
+        f"filteredSubjects: {len(filtered)} rows x {len(filtered.columns)} columns"
+    )
     html.add_table_html(
         df_to_html(filtered, max_rows=20),
-        f"filteredSubjects ({len(filtered)} x {len(filtered.columns)} table)"
+        f"filteredSubjects ({len(filtered)} x {len(filtered.columns)} table)",
     )
 
     return filtered
@@ -648,9 +645,7 @@ def section_behavior_plate(html: HTMLBuilder, data_tables: list) -> Any:
     from ndi.fun.table import join
 
     html.add_heading("View bacterial plate summary tables", level=3)
-    html.add_text(
-        "Let's combine all of the information about the behavior plates and patches."
-    )
+    html.add_text("Let's combine all of the information about the behavior plates and patches.")
 
     html.add_code("""\
 from ndi.fun.table import join
@@ -687,7 +682,7 @@ print(f'behaviorPlateTable: {behavior_plate_table.shape}')""")
         html.add_table_html(
             df_to_html(behavior_plate_table, max_rows=20),
             f"behaviorPlateTable ({behavior_plate_table.shape[0]} x "
-            f"{behavior_plate_table.shape[1]} table)"
+            f"{behavior_plate_table.shape[1]} table)",
         )
         return behavior_plate_table
     else:
@@ -708,11 +703,23 @@ def _identify_tables(data_tables: list) -> dict:
             tables["patch"] = dt
         elif "CElegansBehavioralAssayLabel" in cols and "BacterialPlateIdentifier" in cols:
             tables["plate_assay"] = dt
-        elif "SubjectDocumentIdentifier" in cols and "BacterialPlateIdentifier" in cols and len(dt) > 2000:
+        elif (
+            "SubjectDocumentIdentifier" in cols
+            and "BacterialPlateIdentifier" in cols
+            and len(dt) > 2000
+        ):
             tables["subject_plate"] = dt
-        elif "SubjectIdentifier" in cols and "SubjectLocalIdentifier" in cols and len(dt.columns) <= 5:
+        elif (
+            "SubjectIdentifier" in cols
+            and "SubjectLocalIdentifier" in cols
+            and len(dt.columns) <= 5
+        ):
             tables["subject"] = dt
-        elif "MicroscopyImageIdentifier" in cols and "BacterialPlateIdentifier" in cols and len(dt) < 2000:
+        elif (
+            "MicroscopyImageIdentifier" in cols
+            and "BacterialPlateIdentifier" in cols
+            and len(dt) < 2000
+        ):
             tables["ecoli_microscopy"] = dt
         elif "BacterialPatchBorderPeakFluorescenceIntensity" in cols:
             tables["ecoli_patch_analysis"] = dt
@@ -720,24 +727,29 @@ def _identify_tables(data_tables: list) -> dict:
             tables["ecoli_plate"] = dt
 
     # Encounter table = largest remaining C. elegans table
-    assigned = set(id(v) for v in tables.values())
+    assigned = {id(v) for v in tables.values()}
     remaining = [dt for dt in data_tables if id(dt) not in assigned]
-    celegans_remaining = [dt for dt in remaining
-                          if "MicroscopyImageIdentifier" not in dt.columns
-                          and "AgarPlatePouringTimestamp" not in dt.columns]
+    celegans_remaining = [
+        dt
+        for dt in remaining
+        if "MicroscopyImageIdentifier" not in dt.columns
+        and "AgarPlatePouringTimestamp" not in dt.columns
+    ]
     if celegans_remaining:
         tables["encounter"] = max(celegans_remaining, key=len)
     # Exclusion = next largest
-    assigned2 = set(id(v) for v in tables.values())
-    celegans_remaining2 = [dt for dt in data_tables
-                           if id(dt) not in assigned2
-                           and "MicroscopyImageIdentifier" not in dt.columns]
+    assigned2 = {id(v) for v in tables.values()}
+    celegans_remaining2 = [
+        dt
+        for dt in data_tables
+        if id(dt) not in assigned2 and "MicroscopyImageIdentifier" not in dt.columns
+    ]
     if celegans_remaining2:
         tables["exclusion"] = max(celegans_remaining2, key=len)
 
     # E. coli OD600 table = small table with BacterialOD600TargetAtSeeding
     for dt in remaining:
-        if id(dt) not in set(id(v) for v in tables.values()):
+        if id(dt) not in {id(v) for v in tables.values()}:
             if "BacterialOD600TargetAtSeeding" in dt.columns and len(dt) < 200:
                 tables["ecoli_od600"] = dt
 
@@ -751,25 +763,6 @@ def _get_doc_uid(doc_props: dict) -> str:
         locs = fi.get("locations", {})
         return locs.get("uid", "") if isinstance(locs, dict) else ""
     return ""
-
-
-@timed
-def section_doc_type_chart(html: HTMLBuilder, doc_types: list, doc_counts: list) -> None:
-    """Bar chart of document types."""
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    html.add_heading("Document type distribution", level=3)
-
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.barh(doc_types, doc_counts, color="steelblue")
-    ax.set_xlabel("Count")
-    ax.set_title("NDI Document Types")
-    for i, (t, c) in enumerate(zip(doc_types, doc_counts)):
-        ax.text(c + 200, i, str(c), va="center", fontsize=8)
-    plt.tight_layout()
-    html.add_image_base64(fig_to_bytes(), caption="Document type distribution")
 
 
 # ---------------------------------------------------------------------------
@@ -788,9 +781,6 @@ def section_subject_behavior(
     data_tables: list,
 ) -> dict:
     """Section 11: Retrieve C. elegans subject behavior — choose a subject."""
-    import pandas as pd
-
-    from ndi.fun.table import identify_matching_rows, vstack
 
     html.add_heading("Retrieve C. elegans subject behavior", level=3)
     html.add_text(
@@ -848,19 +838,25 @@ for sg_doc in sg_docs:
     current_subject = subject_table[ind_subject]
     html.add_table_html(
         df_to_html(current_subject, max_rows=5),
-        f"currentSubject ({current_subject.shape[0]} x {current_subject.shape[1]} table)"
+        f"currentSubject ({current_subject.shape[0]} x {current_subject.shape[1]} table)",
     )
 
     # Get plate IDs for this subject
     behavior_plate_id = ""
-    if subject_plate_table is not None and "BacterialPlateDocumentIdentifier" in subject_plate_table.columns:
+    if (
+        subject_plate_table is not None
+        and "BacterialPlateDocumentIdentifier" in subject_plate_table.columns
+    ):
         ind_sp = subject_plate_table["SubjectDocumentIdentifier"] == subject_id
         plate_doc_ids = subject_plate_table.loc[ind_sp, "BacterialPlateDocumentIdentifier"].tolist()
 
         # Find cultivation and behavior plate rows
-        cultivation_table = tables.get("exclusion")  # or other small plate table
+        tables.get("exclusion")  # cultivation table — used in MATLAB for plate rows
         # Build currentPlates from behavior_plate_table
-        if behavior_plate_table is not None and "BacterialPlateDocumentIdentifier" in behavior_plate_table.columns:
+        if (
+            behavior_plate_table is not None
+            and "BacterialPlateDocumentIdentifier" in behavior_plate_table.columns
+        ):
             for pid in plate_doc_ids:
                 ind_bp = behavior_plate_table["BacterialPlateDocumentIdentifier"] == pid
                 if ind_bp.any():
@@ -874,7 +870,7 @@ for sg_doc in sg_docs:
             ].head(1)
             html.add_table_html(
                 df_to_html(bp_row, max_rows=5),
-                f"currentPlates — behavior plate (1 x {bp_row.shape[1]} table)"
+                f"currentPlates — behavior plate (1 x {bp_row.shape[1]} table)",
             )
     else:
         plate_doc_ids = []
@@ -882,6 +878,7 @@ for sg_doc in sg_docs:
     # Find the subject_group containing this subject
     subject_group_id = ""
     from ndi.query import Query as _Q
+
     sg_docs = dataset.database_search(_Q("").isa("subject_group"))
     for sg_doc in sg_docs:
         sg_props = sg_doc.document_properties
@@ -912,16 +909,54 @@ def _read_vhsb(filepath: str, t0: float = 0, t1: float = 3600) -> tuple:
     try:
         sys.path.insert(0, "/tmp/vhlab-toolbox-python")
         from vlt.file.custom_file_formats import vhsb_read
+
         return vhsb_read(filepath, t0, t1)
     except Exception:
         return None, None
 
 
+def _safe_depends_on_search(dataset: Any, type_query: Any, dep_name: str, dep_value: str) -> list:
+    """Search with depends_on, falling back to manual filter on DID-python bug.
+
+    Some documents have string entries in their ``depends_on`` array instead
+    of ``{name, value}`` dicts.  DID-python's ``field_search`` crashes with
+    ``AttributeError: 'str' object has no attribute 'get'`` when it encounters
+    these.  This helper catches that and falls back to manual filtering.
+    """
+    from ndi.query import Query
+
+    try:
+        q = type_query & Query("").depends_on(dep_name, dep_value)
+        return dataset.database_search(q)
+    except (AttributeError, TypeError):
+        all_docs = dataset.database_search(type_query)
+        results = []
+        for doc in all_docs:
+            props = doc.document_properties if hasattr(doc, "document_properties") else doc
+            if not isinstance(props, dict):
+                continue
+            deps = props.get("depends_on", [])
+            if isinstance(deps, dict):
+                deps = [deps]
+            for dep in deps:
+                if (
+                    isinstance(dep, dict)
+                    and dep.get("name") == dep_name
+                    and dep.get("value") == dep_value
+                ):
+                    results.append(doc)
+                    break
+        return results
+
+
 def _find_element_epoch_uid(dataset: Any, element_id: str) -> str:
     """Find the binary file UID for an element's epoch data."""
     from ndi.query import Query
-    q = Query("").isa("element_epoch") & Query("").depends_on("element_id", element_id)
-    epoch_docs = dataset.database_search(q)
+
+    epoch_docs = _safe_depends_on_search(
+        dataset, Query("").isa("element_epoch"), "element_id", element_id
+    )
+
     for doc in epoch_docs:
         props = doc.document_properties if hasattr(doc, "document_properties") else doc
         if isinstance(props, dict):
@@ -976,9 +1011,8 @@ position, time = vhsb_read(str(files_dir / uid), t0=0, t1=3600)
 # position shape: (N, 2) — columns are [X, Y] coordinates in pixels""")
 
     try:
-        q_type = (Query("element.type") == "position")
-        q_dep = Query("").depends_on("subject_id", subject_id)
-        position_docs = dataset.database_search(q_type & q_dep)
+        q_type = Query("element.type") == "position"
+        position_docs = _safe_depends_on_search(dataset, q_type, "subject_id", subject_id)
         if position_docs:
             pos_id = position_docs[0].document_properties.get("base", {}).get("id", "")
 
@@ -996,8 +1030,9 @@ position, time = vhsb_read(str(files_dir / uid), t0=0, t1=3600)
                     )
 
             # Get position_metadata
-            q_meta = Query("").isa("position_metadata") & Query("").depends_on("element_id", pos_id)
-            meta_docs = dataset.database_search(q_meta)
+            meta_docs = _safe_depends_on_search(
+                dataset, Query("").isa("position_metadata"), "element_id", pos_id
+            )
             if meta_docs:
                 pos_meta = meta_docs[0].document_properties.get("position_metadata", {})
                 from ndi.ontology import lookup
@@ -1010,21 +1045,31 @@ position, time = vhsb_read(str(files_dir / uid), t0=0, t1=3600)
                     for tid in term_ids:
                         try:
                             info = lookup(tid)
-                            rows.append({
-                                "field": field,
-                                "id": info.id,
-                                "name": info.name,
-                                "definition": info.definition[:80] if info.definition else "",
-                                "shortName": info.short_name,
-                            })
+                            rows.append(
+                                {
+                                    "field": field,
+                                    "id": info.id,
+                                    "name": info.name,
+                                    "definition": info.definition[:80] if info.definition else "",
+                                    "shortName": info.short_name,
+                                }
+                            )
                         except Exception:
-                            rows.append({"field": field, "id": tid, "name": "", "definition": "", "shortName": ""})
+                            rows.append(
+                                {
+                                    "field": field,
+                                    "id": tid,
+                                    "name": "",
+                                    "definition": "",
+                                    "shortName": "",
+                                }
+                            )
 
                 if rows:
                     meta_df = pd.DataFrame(rows)
                     html.add_table_html(
                         df_to_html(meta_df, max_rows=20, show_shape=False),
-                        f"positionMetadata ({len(meta_df)} x {len(meta_df.columns)} table)"
+                        f"positionMetadata ({len(meta_df)} x {len(meta_df.columns)} table)",
                     )
         else:
             html.add_output_text("No position element found for this subject.")
@@ -1035,9 +1080,7 @@ position, time = vhsb_read(str(files_dir / uid), t0=0, t1=3600)
 
 
 @timed
-def section_image_metadata(
-    html: HTMLBuilder, dataset: Any, ctx: dict
-) -> dict:
+def section_image_metadata(html: HTMLBuilder, dataset: Any, ctx: dict) -> dict:
     """Section 13: Get associated video and image metadata."""
     import pandas as pd
 
@@ -1071,10 +1114,11 @@ for doc in image_stack_docs:
 
     try:
         q_type = Query("").isa("imageStack")
-        q_dep = Query("").depends_on("subject_id", subject_group_id)
-        image_stack_docs = dataset.database_search(q_type & q_dep) if subject_group_id else []
-
-        from ndi.ontology import lookup
+        image_stack_docs = (
+            _safe_depends_on_search(dataset, q_type, "subject_id", subject_group_id)
+            if subject_group_id
+            else []
+        )
 
         for doc in image_stack_docs:
             props = doc.document_properties if hasattr(doc, "document_properties") else doc
@@ -1088,8 +1132,9 @@ for doc in image_stack_docs:
             # Look up ontology label via depends_on query
             ontology_node = ""
             try:
-                ql = Query("").isa("ontologyLabel") & Query("").depends_on("document_id", doc_id)
-                label_matches = dataset.database_search(ql)
+                label_matches = _safe_depends_on_search(
+                    dataset, Query("").isa("ontologyLabel"), "document_id", doc_id
+                )
                 if label_matches:
                     label_data = label_matches[0].document_properties.get("ontologyLabel", {})
                     ontology_node = label_data.get("ontologyNode", "")
@@ -1119,9 +1164,11 @@ for doc in image_stack_docs:
             params_df = pd.DataFrame(image_params_list)
             html.add_table_html(
                 df_to_html(params_df, max_rows=20, show_shape=False),
-                f"imageStackParameters ({len(params_df)} x {len(params_df.columns)} table)"
+                f"imageStackParameters ({len(params_df)} x {len(params_df.columns)} table)",
             )
-            html.add_output_text(f"Found {len(image_stack_docs)} imageStack documents for this subject")
+            html.add_output_text(
+                f"Found {len(image_stack_docs)} imageStack documents for this subject"
+            )
         else:
             html.add_output_text("No imageStack documents found for this subject.")
 
@@ -1150,25 +1197,33 @@ def _read_binary_image(uid: str, data_type: str, dim_size: list) -> Any:
     if header[:4] == b"\x89PNG":
         try:
             from PIL import Image
+
             img = Image.open(filepath)
             return np.array(img)
         except ImportError:
             import cv2
+
             return cv2.imread(str(filepath), cv2.IMREAD_UNCHANGED)
 
     # TIFF file
     if header[:2] in (b"II", b"MM"):
         try:
             from PIL import Image
+
             img = Image.open(filepath)
             return np.array(img)
         except ImportError:
             import cv2
+
             return cv2.imread(str(filepath), cv2.IMREAD_UNCHANGED)
 
     # Raw binary fallback
-    np_dtype = {"logical": np.uint8, "uint8": np.uint8, "uint16": np.uint16,
-                "double": np.float64}.get(data_type, np.uint8)
+    np_dtype = {
+        "logical": np.uint8,
+        "uint8": np.uint8,
+        "uint16": np.uint16,
+        "double": np.float64,
+    }.get(data_type, np.uint8)
     raw = np.fromfile(str(filepath), dtype=np_dtype)
     if len(dim_size) >= 2:
         expected = dim_size[0] * dim_size[1]
@@ -1183,6 +1238,7 @@ def section_plot_image_with_position(
 ) -> None:
     """Section 14: Plot an image/mask with subject position."""
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
@@ -1252,8 +1308,9 @@ for j in range(n_bins - 1):
         img_float = (img_float - vmin) / (vmax - vmin)
 
     fig, ax = plt.subplots(figsize=(10, 10))
-    ax.imshow(np.flipud(img_float), cmap="gray", origin="lower",
-              extent=[0, img.shape[1], 0, img.shape[0]])
+    ax.imshow(
+        np.flipud(img_float), cmap="gray", origin="lower", extent=[0, img.shape[1], 0, img.shape[0]]
+    )
 
     # Overlay position trajectory colored by time (matching MATLAB jet colormap)
     position = position_data.get("position")
@@ -1283,6 +1340,7 @@ for j in range(n_bins - 1):
 def section_play_video(html: HTMLBuilder, image_doc_map: dict) -> None:
     """Section 15: Play video of the subject (show frame sequence)."""
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
@@ -1374,8 +1432,7 @@ cap.release()""")
     plt.suptitle(f"Video: {target_name}", fontsize=12)
     plt.tight_layout()
     html.add_image_base64(
-        fig_to_bytes(),
-        caption="8 evenly-spaced frames from C. elegans behavioral video"
+        fig_to_bytes(), caption="8 evenly-spaced frames from C. elegans behavioral video"
     )
 
 
@@ -1417,9 +1474,8 @@ distance, time = vhsb_read(str(files_dir / uid), t0=0, t1=3600)
 #                           col 1: on-patch flag, col 2: closest patch number""")
 
     try:
-        q_type = (Query("element.type") == "distance")
-        q_dep = Query("").depends_on("subject_id", subject_id)
-        distance_docs = dataset.database_search(q_type & q_dep)
+        q_type = Query("element.type") == "distance"
+        distance_docs = _safe_depends_on_search(dataset, q_type, "subject_id", subject_id)
 
         if distance_docs:
             dist_id = distance_docs[0].document_properties.get("base", {}).get("id", "")
@@ -1443,13 +1499,14 @@ distance, time = vhsb_read(str(files_dir / uid), t0=0, t1=3600)
                     )
             else:
                 html.add_output_text(
-                    f"Distance element ID: {dist_id}\n"
-                    f"No element_epoch binary file found"
+                    f"Distance element ID: {dist_id}\n" f"No element_epoch binary file found"
                 )
 
             # Get distance_metadata
-            q_meta = Query("").isa("distance_metadata") & Query("").depends_on("element_id", dist_id)
-            meta_docs = dataset.database_search(q_meta)
+            meta_docs = _safe_depends_on_search(
+                dataset, Query("").isa("distance_metadata"), "element_id", dist_id
+            )
+
             if meta_docs:
                 dist_meta = meta_docs[0].document_properties.get("distance_metadata", {})
                 from ndi.ontology import lookup
@@ -1464,21 +1521,31 @@ distance, time = vhsb_read(str(files_dir / uid), t0=0, t1=3600)
                     for tid in term_ids:
                         try:
                             info = lookup(tid)
-                            rows.append({
-                                "field": field,
-                                "id": info.id,
-                                "name": info.name,
-                                "definition": info.definition[:80] if info.definition else "",
-                                "shortName": info.short_name,
-                            })
+                            rows.append(
+                                {
+                                    "field": field,
+                                    "id": info.id,
+                                    "name": info.name,
+                                    "definition": info.definition[:80] if info.definition else "",
+                                    "shortName": info.short_name,
+                                }
+                            )
                         except Exception:
-                            rows.append({"field": field, "id": tid, "name": "", "definition": "", "shortName": ""})
+                            rows.append(
+                                {
+                                    "field": field,
+                                    "id": tid,
+                                    "name": "",
+                                    "definition": "",
+                                    "shortName": "",
+                                }
+                            )
 
                 if rows:
                     meta_df = pd.DataFrame(rows)
                     html.add_table_html(
                         df_to_html(meta_df, max_rows=20, show_shape=False),
-                        f"distanceMetadata ({len(meta_df)} x {len(meta_df.columns)} table)"
+                        f"distanceMetadata ({len(meta_df)} x {len(meta_df.columns)} table)",
                     )
 
                 # Show integer-to-label mapping
@@ -1490,18 +1557,21 @@ distance, time = vhsb_read(str(files_dir / uid), t0=0, t1=3600)
                         if str_vals:
                             labels = str_vals.split(",")
                             if isinstance(ids, list):
-                                map_rows = [{"ObjectNum": i, "label": l.strip()}
-                                            for i, l in zip(ids, labels)]
+                                map_rows = [
+                                    {"ObjectNum": idx, "label": lbl.strip()}
+                                    for idx, lbl in zip(ids, labels)
+                                ]
                                 map_df = pd.DataFrame(map_rows)
                                 suffix = key.split("_")[-1]
                                 html.add_table_html(
                                     df_to_html(map_df, max_rows=20, show_shape=False),
-                                    f"distanceMap_{suffix}"
+                                    f"distanceMap_{suffix}",
                                 )
 
             # --- Plot distance timeseries (matching MATLAB Image 3) ---
             if distance_y is not None and distance_t is not None:
                 import matplotlib
+
                 matplotlib.use("Agg")
                 import matplotlib.pyplot as plt
                 import numpy as np
@@ -1538,7 +1608,7 @@ distance, time = vhsb_read(str(files_dir / uid), t0=0, t1=3600)
                 plt.tight_layout()
                 html.add_image_base64(
                     fig_to_bytes(),
-                    caption="Distance to nearest bacterial patch edge and closest patch number"
+                    caption="Distance to nearest bacterial patch edge and closest patch number",
                 )
         else:
             html.add_output_text("No distance element found for this subject.")
@@ -1547,9 +1617,7 @@ distance, time = vhsb_read(str(files_dir / uid), t0=0, t1=3600)
 
 
 @timed
-def section_encounter_per_subject(
-    html: HTMLBuilder, data_tables: list, ctx: dict
-) -> None:
+def section_encounter_per_subject(html: HTMLBuilder, data_tables: list, ctx: dict) -> None:
     """Section 17: Get analysis of patch encounters for the chosen subject."""
     from ndi.fun.table import identify_matching_rows
 
@@ -1597,13 +1665,14 @@ print(f'currentEncounters: {current_encounters.shape}')""")
     )
     html.add_table_html(
         df_to_html(current_encounters, max_rows=20),
-        f"currentEncounters ({current_encounters.shape[0]} x {current_encounters.shape[1]} table)"
+        f"currentEncounters ({current_encounters.shape[0]} x {current_encounters.shape[1]} table)",
     )
 
 
 # ---------------------------------------------------------------------------
 # E. coli sections
 # ---------------------------------------------------------------------------
+
 
 @timed
 def section_ecoli_intro(html: HTMLBuilder) -> None:
@@ -1718,7 +1787,7 @@ for doc in om_docs:
         strain_table = pd.DataFrame(unique_rows)
         html.add_table_html(
             df_to_html(strain_table, max_rows=10),
-            f"strainTable ({strain_table.shape[0]} x {strain_table.shape[1]} table)"
+            f"strainTable ({strain_table.shape[0]} x {strain_table.shape[1]} table)",
         )
         return strain_table
     else:
@@ -1727,11 +1796,8 @@ for doc in om_docs:
 
 
 @timed
-def section_ecoli_metadata(
-    html: HTMLBuilder, data_tables: list, strain_table: Any
-) -> Any:
+def section_ecoli_metadata(html: HTMLBuilder, data_tables: list, strain_table: Any) -> Any:
     """Section 20: Retrieve experiment metadata (E. coli)."""
-    import pandas as pd
 
     from ndi.fun.table import join
 
@@ -1779,12 +1845,11 @@ print(f'bacteriaTable: {bacteria_table.shape}')""")
     if len(join_tables) >= 2:
         bacteria_table = join(join_tables)
         html.add_output_text(
-            f"bacteriaTable: {bacteria_table.shape[0]} rows x "
-            f"{bacteria_table.shape[1]} columns"
+            f"bacteriaTable: {bacteria_table.shape[0]} rows x " f"{bacteria_table.shape[1]} columns"
         )
         html.add_table_html(
             df_to_html(bacteria_table, max_rows=20),
-            f"bacteriaTable ({bacteria_table.shape[0]} x {bacteria_table.shape[1]} table)"
+            f"bacteriaTable ({bacteria_table.shape[0]} x {bacteria_table.shape[1]} table)",
         )
         return bacteria_table
     else:
@@ -1793,9 +1858,7 @@ print(f'bacteriaTable: {bacteria_table.shape}')""")
 
 
 @timed
-def section_ecoli_image_metadata(
-    html: HTMLBuilder, dataset: Any, bacteria_table: Any
-) -> dict:
+def section_ecoli_image_metadata(html: HTMLBuilder, dataset: Any, bacteria_table: Any) -> dict:
     """Section 21: Get microscopy image metadata (E. coli)."""
     import pandas as pd
 
@@ -1803,8 +1866,7 @@ def section_ecoli_image_metadata(
 
     html.add_heading("Get microscopy image metadata", level=3)
     html.add_text(
-        "We also have imageStack documents which contain images and their "
-        "relevant metadata."
+        "We also have imageStack documents which contain images and their " "relevant metadata."
     )
 
     html.add_code("""\
@@ -1835,7 +1897,10 @@ for doc in image_stack_docs:
     # Find a specific microscopy image
     image_id = "0101"
     image_doc_id = ""
-    if "ImageDocumentIdentifier" in bacteria_table.columns and "MicroscopyImageIdentifier" in bacteria_table.columns:
+    if (
+        "ImageDocumentIdentifier" in bacteria_table.columns
+        and "MicroscopyImageIdentifier" in bacteria_table.columns
+    ):
         ind = bacteria_table["MicroscopyImageIdentifier"].astype(str) == image_id
         if ind.any():
             image_doc_id = str(bacteria_table.loc[ind, "ImageDocumentIdentifier"].iloc[0])
@@ -1850,9 +1915,9 @@ for doc in image_stack_docs:
 
     try:
         if image_doc_id:
-            q_type = Query("").isa("imageStack")
-            q_dep = Query("").depends_on("document_id", image_doc_id)
-            is_docs = dataset.database_search(q_type & q_dep)
+            is_docs = _safe_depends_on_search(
+                dataset, Query("").isa("imageStack"), "document_id", image_doc_id
+            )
         else:
             is_docs = []
 
@@ -1867,21 +1932,25 @@ for doc in image_stack_docs:
             uid = _get_doc_uid(props)
             label = is_info.get("label", "")
 
-            rows.append({
-                "label": label[:80],
-                "data_type": is_params.get("data_type", ""),
-                "dimension_size": str(is_params.get("dimension_size", [])),
-                "format": is_info.get("formatOntology", ""),
-            })
+            rows.append(
+                {
+                    "label": label[:80],
+                    "data_type": is_params.get("data_type", ""),
+                    "dimension_size": str(is_params.get("dimension_size", [])),
+                    "format": is_info.get("formatOntology", ""),
+                }
+            )
             image_doc_map[label] = {"uid": uid, "doc_id": doc_id, "props": props}
 
         if rows:
             params_df = pd.DataFrame(rows)
             html.add_table_html(
                 df_to_html(params_df, max_rows=20, show_shape=False),
-                f"imageStackParameters ({len(params_df)} x {len(params_df.columns)} table)"
+                f"imageStackParameters ({len(params_df)} x {len(params_df.columns)} table)",
             )
-            html.add_output_text(f"Found {len(is_docs)} imageStack documents for this microscopy image")
+            html.add_output_text(
+                f"Found {len(is_docs)} imageStack documents for this microscopy image"
+            )
         else:
             html.add_output_text("No E. coli imageStack documents found.")
     except Exception as e:
@@ -1891,14 +1960,12 @@ for doc in image_stack_docs:
 
 
 @timed
-def section_ecoli_plot_image(
-    html: HTMLBuilder, ecoli_image_map: dict, bacteria_table: Any
-) -> None:
+def section_ecoli_plot_image(html: HTMLBuilder, ecoli_image_map: dict, bacteria_table: Any) -> None:
     """Section 22: Plot an image or mask (E. coli)."""
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    import numpy as np
 
     html.add_heading("Plot an image or mask", level=3)
 
@@ -2001,6 +2068,7 @@ ax.set_title(f'{image_name}\\ntarget OD600 at seeding = {od600}\\ngrowth time = 
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     print("=" * 70)
     print("NDI Dataset Tutorial: C. elegans Behavior & E. coli Fluorescence")
@@ -2012,9 +2080,7 @@ def main() -> None:
         print("Please download the dataset first.")
         sys.exit(1)
 
-    html = HTMLBuilder(
-        "NDI Dataset Tutorial: C. elegans Behavior & E. coli Fluorescence Imaging"
-    )
+    html = HTMLBuilder("NDI Dataset Tutorial: C. elegans Behavior & E. coli Fluorescence Imaging")
 
     # Section 1: Import
     print("\n[1/18] Import dataset configuration...")
@@ -2026,7 +2092,7 @@ def main() -> None:
 
     # Section 3: Sessions
     print("[3/18] Retrieving sessions...")
-    sessions = section_sessions(html, dataset)
+    section_sessions(html, dataset)
 
     # Section 4: Document types
     print("[4/18] Viewing document types...")
@@ -2050,7 +2116,7 @@ def main() -> None:
 
     # Section 9: Filter subjects
     print("[8/18] Filtering subjects...")
-    filtered = section_filter_subjects(html, subject_table)
+    section_filter_subjects(html, subject_table)
 
     # Section 10: Behavior plate
     print("[9/18] Building behavior plate table...")

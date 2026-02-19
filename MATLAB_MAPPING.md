@@ -157,7 +157,7 @@ Complete reference mapping every MATLAB NDI function/class to its Python equival
 |--------|--------|--------|
 | `ndi.fun.docTable.docCellArray2Table` | `ndi.fun.doc_table.doc_cell_array_to_table()` | `ndi.fun.doc_table` |
 | `ndi.fun.docTable.element` | `ndi.fun.doc_table.element_table()` | `ndi.fun.doc_table` |
-| `ndi.fun.docTable.subject` | `ndi.fun.doc_table.subject_table()` | `ndi.fun.doc_table` |
+| `ndi.fun.docTable.subject` | `ndi.fun.doc_table.subject_summary()` | `ndi.fun.doc_table` |
 | `ndi.fun.docTable.probe` | `ndi.fun.doc_table.probe_table()` | `ndi.fun.doc_table` |
 | `ndi.fun.docTable.epoch` | `ndi.fun.doc_table.epoch_table()` | `ndi.fun.doc_table` |
 | `ndi.fun.docTable.openminds` | `ndi.fun.doc_table.openminds_table()` | `ndi.fun.doc_table` |
@@ -214,7 +214,7 @@ Complete reference mapping every MATLAB NDI function/class to its Python equival
 | MATLAB | Python | Module |
 |--------|--------|--------|
 | `ndi.fun.channelname2prefixnumber` | `ndi.fun.utils.channel_name_to_prefix_number()` | `ndi.fun.utils` |
-| `ndi.fun.name2variableName` | `ndi.fun.utils.name_to_variable_name()` | `ndi.fun.utils` |
+| `ndi.fun.name2variableName` | `ndi.fun.name_utils.name_to_variable_name()` | `ndi.fun.name_utils` |
 | `ndi.fun.pseudorandomint` | `ndi.fun.utils.pseudorandom_int()` | `ndi.fun.utils` |
 | `ndi.fun.timestamp` | `ndi.fun.utils.ndi_timestamp()` | `ndi.fun.utils` |
 

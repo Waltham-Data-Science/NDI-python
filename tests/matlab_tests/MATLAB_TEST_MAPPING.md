@@ -9,9 +9,9 @@ between the MATLAB and Python implementations.
 | Metric | Count |
 |--------|-------|
 | MATLAB test files (source) | 87 |
-| Python test files (ported) | 19 |
-| Python test classes | ~62 |
-| Python test methods | ~477 |
+| Python test files (ported) | 20 |
+| Python test classes | ~70 |
+| Python test methods | ~524 |
 | Intentionally skipped | ~5 (GUI, MATLAB-specific fixtures) |
 
 The 87 MATLAB files consolidate into 19 Python files because related MATLAB test
@@ -428,6 +428,28 @@ fiber dataset downloaded locally.
 | *(env var auth)* | `TestGetOrCreateCloudClient` | `test_missing_env_vars`, `test_env_vars_present` |
 | `didsqlite.m:do_openbinarydoc` | `TestTryCloudFetch` | `test_try_cloud_fetch_with_ndic_uri`, `test_try_cloud_fetch_no_ndic_uri`, `test_try_cloud_fetch_wrong_filename`, `test_try_cloud_fetch_no_file_info` |
 | *(integration)* | `TestRewriteWithRealDocs` | `test_rewrite_preserves_structure` (66+ docs), `test_load_dataset_with_cloud_id` |
+
+---
+
+## Batch 20: Dabrowska Dataset Tests
+
+**Python file:** `tests/matlab_tests/test_dabrowska.py`
+
+Tests against the Dabrowska electrophysiology dataset (`67f723d574f5f79c6062389d`,
+14,646 docs, 215 subjects, 606 probes). Requires the dataset to be downloaded locally
+at `~/Documents/ndi-projects/datasets/dabrowska/`. Mirrors the MATLAB tutorial
+workflow from `ndi.setup.conv.dabrowska.tutorial_67f723d574f5f79c6062389d.mlx`.
+
+| MATLAB File | Python Class | Key Tests |
+|------------|-------------|-----------|
+| *(dataset-specific)* | `TestDatasetLoading` | `test_dataset_loads`, `test_document_type_counts` (12 types), `test_total_document_count` (>=14646), `test_session_docs_exist` |
+| `ndi.fun.docTable.subject` | `TestSubjectSummary` | `test_row_count` (215), `test_required_columns_exist`, `test_dynamic_treatment_columns`, `test_species_all_rattus`, `test_strain_distribution`, `test_filter_avp_cre` (49), `test_filter_otr_cre` |
+| `ndi.fun.docTable.probe` | `TestProbeSummary` | `test_row_count` (606), `test_column_count` (>=9), `test_probe_type_distribution` (202 each), `test_probe_location_columns`, `test_cell_type_columns`, `test_probes_have_location` (>=400), `test_subject_id_column` |
+| `ndi.fun.docTable.epoch` | `TestEpochSummary` | `test_row_count` (>=4000), `test_column_count` (>=8), `test_epoch_number_column`, `test_approach_column`, `test_mixture_column`, `test_unique_probes` (>=100) |
+| `ndi.fun.table.join` | `TestCombinedTable` | `test_join_produces_rows`, `test_joined_columns`, `test_move_columns_left`, `test_filter_by_approach` |
+| `ndi.fun.doc.ontologyTableRowDoc2Table` | `TestEPMAnalysis` | `test_epm_doc_count` (45), `test_epm_table_shape` (45x51), `test_epm_treatment_values`, `test_epm_data_exclusion_flag`, `test_epm_subject_identifier`, `test_epm_open_arm_columns` |
+| `ndi.fun.doc.ontologyTableRowDoc2Table` | `TestFPSAnalysis` | `test_fps_doc_count` (6160), `test_fps_table_shape` (6160x13), `test_fps_trial_types` (4), `test_fps_experimental_phases` (>=3 Cue tests), `test_fps_startle_amplitude_numeric`, `test_fps_groupby_aggregation`, `test_fps_fear_percentage_calculation` |
+| `ndi.ontology.lookup` + `ndi.fun.name2variableName` | `TestOntologyIntegration` | `test_ontology_table_row_vars`, `test_empty_ontology_lookup`, `test_name_to_variable_name` (3 cases), `test_name_to_variable_name_edge_cases` |
 
 ---
 
