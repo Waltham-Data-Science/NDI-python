@@ -12,8 +12,9 @@ the results to an HTML file.
 
 Prerequisites:
   - Dataset JSON docs at ~/Documents/ndi-projects/datasets/jess-haley/documents/
-  - Binary files at ~/Documents/ndi-projects/datasets/jess_haley_files/ (optional, for images)
   - pip install pandas matplotlib opencv-python-headless
+  - Set NDI_CLOUD_USERNAME/NDI_CLOUD_PASSWORD env vars for binary file access
+    (images, video, and timeseries are fetched on demand via ndic:// protocol)
 
 Usage:
   python tutorials/tutorial_682e7772cdf3f24938176fac.py
@@ -36,7 +37,6 @@ from typing import Any
 
 CLOUD_DATASET_ID = "682e7772cdf3f24938176fac"
 JESS_HALEY_DOCS = Path(os.path.expanduser("~/Documents/ndi-projects/datasets/jess-haley/documents"))
-JESS_HALEY_FILES = Path(os.path.expanduser("~/Documents/ndi-projects/datasets/jess_haley_files"))
 OUTPUT_HTML = Path(__file__).parent / f"tutorial_{CLOUD_DATASET_ID}.html"
 
 
@@ -333,10 +333,12 @@ def section_load_dataset(html: HTMLBuilder) -> Any:
     )
 
     html.add_code("""\
-dataset = load_dataset_from_json_dir(data_path, verbose=True)""")
+dataset = load_dataset_from_json_dir(data_path, cloud_dataset_id=cloud_dataset_id, verbose=True)""")
 
     t0 = time.time()
-    dataset = load_dataset_from_json_dir(JESS_HALEY_DOCS, verbose=True)
+    dataset = load_dataset_from_json_dir(
+        JESS_HALEY_DOCS, cloud_dataset_id=CLOUD_DATASET_ID, verbose=True
+    )
     elapsed = time.time() - t0
 
     html.add_output_text(f"Dataset loaded in {elapsed:.1f}s from {JESS_HALEY_DOCS}")
@@ -904,13 +906,48 @@ for sg_doc in sg_docs:
     }
 
 
-def _read_vhsb(filepath: str, t0: float = 0, t1: float = 3600) -> tuple:
-    """Read VHSB binary file. Returns (y_data, x_time) numpy arrays."""
+def _get_vhsb_filename(epoch_doc: Any) -> str:
+    """Get the VHSB binary filename from the document's file_info.
+
+    Different datasets may use different names (e.g. ``timeseries.vhsb``
+    vs ``epoch_binary_data.vhsb``).  This reads the actual name from
+    the document rather than hardcoding it.
+    """
+    props = (
+        epoch_doc.document_properties if hasattr(epoch_doc, "document_properties") else epoch_doc
+    )
+    fi = props.get("files", {}).get("file_info")
+    if isinstance(fi, dict):
+        name = fi.get("name", "")
+        if name.endswith(".vhsb"):
+            return name
+    elif isinstance(fi, list):
+        for f in fi:
+            name = f.get("name", "")
+            if name.endswith(".vhsb"):
+                return name
+    return "timeseries.vhsb"  # fallback
+
+
+def _read_vhsb_from_doc(dataset: Any, epoch_doc: Any, t0: float = 0, t1: float = 3600) -> tuple:
+    """Read VHSB timeseries via the session binary API.
+
+    Uses ``database_openbinarydoc`` which fetches on demand via ndic://
+    when credentials are available.  Returns ``(y_data, x_time)``.
+    """
     try:
         sys.path.insert(0, "/tmp/vhlab-toolbox-python")
         from vlt.file.custom_file_formats import vhsb_read
 
-        return vhsb_read(filepath, t0, t1)
+        vhsb_name = _get_vhsb_filename(epoch_doc)
+        fid = dataset.database_openbinarydoc(epoch_doc, vhsb_name)
+        try:
+            return vhsb_read(fid, t0, t1)
+        finally:
+            if hasattr(fid, "close"):
+                fid.close()
+    except FileNotFoundError:
+        return None, None
     except Exception:
         return None, None
 
@@ -921,36 +958,48 @@ def _safe_depends_on_search(dataset: Any, type_query: Any, dep_name: str, dep_va
     Some documents have string entries in their ``depends_on`` array instead
     of ``{name, value}`` dicts.  DID-python's ``field_search`` crashes with
     ``AttributeError: 'str' object has no attribute 'get'`` when it encounters
-    these.  This helper catches that and falls back to manual filtering.
+    these.  Also, DID-python doesn't handle single-dict ``depends_on``
+    (returns empty instead of matching), so we fall back to manual filtering
+    when the query returns no results.
     """
     from ndi.query import Query
 
     try:
         q = type_query & Query("").depends_on(dep_name, dep_value)
-        return dataset.database_search(q)
+        results = dataset.database_search(q)
+        if results:
+            return results
+        # Query returned empty — may be due to single-dict depends_on;
+        # fall through to manual search below.
     except (AttributeError, TypeError):
-        all_docs = dataset.database_search(type_query)
-        results = []
-        for doc in all_docs:
-            props = doc.document_properties if hasattr(doc, "document_properties") else doc
-            if not isinstance(props, dict):
-                continue
-            deps = props.get("depends_on", [])
-            if isinstance(deps, dict):
-                deps = [deps]
-            for dep in deps:
-                if (
-                    isinstance(dep, dict)
-                    and dep.get("name") == dep_name
-                    and dep.get("value") == dep_value
-                ):
-                    results.append(doc)
-                    break
-        return results
+        pass
+
+    all_docs = dataset.database_search(type_query)
+    results = []
+    for doc in all_docs:
+        props = doc.document_properties if hasattr(doc, "document_properties") else doc
+        if not isinstance(props, dict):
+            continue
+        deps = props.get("depends_on", [])
+        if isinstance(deps, dict):
+            deps = [deps]
+        for dep in deps:
+            if (
+                isinstance(dep, dict)
+                and dep.get("name") == dep_name
+                and dep.get("value") == dep_value
+            ):
+                results.append(doc)
+                break
+    return results
 
 
-def _find_element_epoch_uid(dataset: Any, element_id: str) -> str:
-    """Find the binary file UID for an element's epoch data."""
+def _find_element_epoch_doc(dataset: Any, element_id: str) -> Any:
+    """Find the element_epoch document for reading binary data.
+
+    Returns the first element_epoch document that has a binary file
+    reference, or ``None``.
+    """
     from ndi.query import Query
 
     epoch_docs = _safe_depends_on_search(
@@ -961,9 +1010,9 @@ def _find_element_epoch_uid(dataset: Any, element_id: str) -> str:
         props = doc.document_properties if hasattr(doc, "document_properties") else doc
         if isinstance(props, dict):
             uid = _get_doc_uid(props)
-            if uid and (JESS_HALEY_FILES / uid).exists():
-                return uid
-    return ""
+            if uid:
+                return doc
+    return None
 
 
 @timed
@@ -1000,14 +1049,16 @@ query_dependency = Query('').depends_on('subject_id', subject_id)
 position_docs = dataset.database_search(query_doc_type & query_dependency)
 pos_id = position_docs[0].document_properties['base']['id']
 
-# Find the element_epoch binary file for this element
+# Find the element_epoch document for this element
 q_epoch = Query('').isa('element_epoch') & Query('').depends_on('element_id', pos_id)
 epoch_docs = dataset.database_search(q_epoch)
-uid = epoch_docs[0].document_properties['files']['file_info']['locations']['uid']
 
-# Read position timeseries from VHSB binary file
+# Read position timeseries via database binary API (fetches on demand via ndic://)
 from vlt.file.custom_file_formats import vhsb_read
-position, time = vhsb_read(str(files_dir / uid), t0=0, t1=3600)
+vhsb_name = epoch_docs[0].document_properties['files']['file_info']['name']
+fid = dataset.database_openbinarydoc(epoch_docs[0], vhsb_name)
+position, time = vhsb_read(fid, t0=0, t1=3600)
+fid.close()
 # position shape: (N, 2) — columns are [X, Y] coordinates in pixels""")
 
     try:
@@ -1016,10 +1067,10 @@ position, time = vhsb_read(str(files_dir / uid), t0=0, t1=3600)
         if position_docs:
             pos_id = position_docs[0].document_properties.get("base", {}).get("id", "")
 
-            # Read position timeseries via VHSB
-            uid = _find_element_epoch_uid(dataset, pos_id)
-            if uid:
-                y, x = _read_vhsb(str(JESS_HALEY_FILES / uid))
+            # Read position timeseries via session binary API
+            epoch_doc = _find_element_epoch_doc(dataset, pos_id)
+            if epoch_doc is not None:
+                y, x = _read_vhsb_from_doc(dataset, epoch_doc)
                 if y is not None:
                     position_data["position"] = y
                     position_data["time"] = x
@@ -1158,7 +1209,7 @@ for doc in image_stack_docs:
             }
             image_params_list.append(row)
             # Use label text as key for image lookup
-            image_doc_map[label] = {"uid": uid, "doc_id": doc_id, "props": props}
+            image_doc_map[label] = {"doc": doc, "uid": uid, "doc_id": doc_id, "props": props}
 
         if image_params_list:
             params_df = pd.DataFrame(image_params_list)
@@ -1178,63 +1229,9 @@ for doc in image_stack_docs:
     return image_doc_map
 
 
-def _read_binary_image(uid: str, data_type: str, dim_size: list) -> Any:
-    """Read an image file from the files directory.
-
-    Supports PNG, TIFF, and raw binary formats.
-    """
-    import numpy as np
-
-    filepath = JESS_HALEY_FILES / uid
-    if not filepath.exists():
-        return None
-
-    # Check file header to determine format
-    with open(filepath, "rb") as f:
-        header = f.read(8)
-
-    # PNG file
-    if header[:4] == b"\x89PNG":
-        try:
-            from PIL import Image
-
-            img = Image.open(filepath)
-            return np.array(img)
-        except ImportError:
-            import cv2
-
-            return cv2.imread(str(filepath), cv2.IMREAD_UNCHANGED)
-
-    # TIFF file
-    if header[:2] in (b"II", b"MM"):
-        try:
-            from PIL import Image
-
-            img = Image.open(filepath)
-            return np.array(img)
-        except ImportError:
-            import cv2
-
-            return cv2.imread(str(filepath), cv2.IMREAD_UNCHANGED)
-
-    # Raw binary fallback
-    np_dtype = {
-        "logical": np.uint8,
-        "uint8": np.uint8,
-        "uint16": np.uint16,
-        "double": np.float64,
-    }.get(data_type, np.uint8)
-    raw = np.fromfile(str(filepath), dtype=np_dtype)
-    if len(dim_size) >= 2:
-        expected = dim_size[0] * dim_size[1]
-        if raw.size >= expected:
-            return raw[:expected].reshape(dim_size[1], dim_size[0])
-    return None
-
-
 @timed
 def section_plot_image_with_position(
-    html: HTMLBuilder, image_doc_map: dict, position_data: dict
+    html: HTMLBuilder, dataset: Any, image_doc_map: dict, position_data: dict
 ) -> None:
     """Section 14: Plot an image/mask with subject position."""
     import matplotlib
@@ -1247,15 +1244,16 @@ def section_plot_image_with_position(
 
     html.add_code("""\
 import numpy as np
-from PIL import Image
+from ndi.fun.data import read_image_stack
 
 # Choose an image type: the patch identifier map
 # (where each pixel's value = identifier of the closest bacterial patch)
 image_name = 'identifier map'  # keyword to match in imageStack labels
 doc_info = image_doc_map[image_name]
 
-# Read image from binary file (PNG/TIFF detected by header)
-img = np.array(Image.open(files_dir / doc_info['uid']))
+# Read image via the database binary API (auto-detects PNG/TIFF/raw binary)
+# Binary files are fetched on demand from NDI Cloud via ndic:// protocol
+img, info = read_image_stack(dataset, doc_info['doc'], 'auto')
 
 # Normalize to [0, 1] for display (equivalent to MATLAB mat2gray)
 img_float = img.astype(np.float64)
@@ -1274,10 +1272,6 @@ for j in range(n_bins - 1):
     ax.plot(position[ind, 0], position[ind, 1],
             color=cmap(j / (n_bins - 1)), linewidth=1)""")
 
-    if not JESS_HALEY_FILES.exists():
-        html.add_output_text("Binary files directory not available — skipping image display.")
-        return
-
     # Find the identifier map image by label keyword
     target_name = "identifier map"
     img_info = None
@@ -1287,18 +1281,22 @@ for j in range(n_bins - 1):
             target_name = name
             break
 
-    if not img_info or not img_info.get("uid"):
+    if not img_info or not img_info.get("doc"):
         html.add_output_text(f"Image '{target_name}' not found or no binary file available.")
         return
 
-    props = img_info.get("props", {})
-    is_params = props.get("imageStack_parameters", {})
-    data_type = is_params.get("data_type", "")
-    dim_size = is_params.get("dimension_size", [])
+    try:
+        from ndi.fun.data import read_image_stack
 
-    img = _read_binary_image(img_info["uid"], data_type, dim_size)
-    if img is None:
-        html.add_output_text("Could not decode image data.")
+        img, _info = read_image_stack(dataset, img_info["doc"], "auto")
+    except FileNotFoundError:
+        html.add_output_text(
+            "Binary file not available. Set NDI_CLOUD_USERNAME/PASSWORD "
+            "to fetch on demand from NDI Cloud."
+        )
+        return
+    except Exception as e:
+        html.add_output_text(f"Could not decode image data: {e}")
         return
 
     # Normalize to [0, 1]
@@ -1337,7 +1335,7 @@ for j in range(n_bins - 1):
 
 
 @timed
-def section_play_video(html: HTMLBuilder, image_doc_map: dict) -> None:
+def section_play_video(html: HTMLBuilder, dataset: Any, image_doc_map: dict) -> None:
     """Section 15: Play video of the subject (show frame sequence)."""
     import matplotlib
 
@@ -1348,34 +1346,28 @@ def section_play_video(html: HTMLBuilder, image_doc_map: dict) -> None:
 
     html.add_code("""\
 import cv2
+from ndi.fun.data import read_image_stack
 
 # Get the video recording from imageStack documents
 image_name = 'video recording'  # keyword to match in imageStack labels
 doc_info = image_doc_map[image_name]
-video_path = files_dir / doc_info['uid']
+
+# Read video via the database binary API (fetches on demand via ndic://)
+video_data, info = read_image_stack(dataset, doc_info['doc'], 'mp4')
 
 # Get time scale from imageStack_parameters.dimension_scale
 is_params = doc_info['props']['imageStack_parameters']
 time_per_frame = is_params['dimension_scale'][2]  # seconds per frame
 
-# Read 8 evenly-spaced frames using OpenCV
-cap = cv2.VideoCapture(str(video_path))
-total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+total_frames = info['num_frames']
 frame_indices = [int(i * total_frames / 8) for i in range(8)]
 
 fig, axes = plt.subplots(2, 4, figsize=(16, 8))
 for ax, fi in zip(axes.flat, frame_indices):
-    cap.set(cv2.CAP_PROP_POS_FRAMES, fi)
-    ret, frame = cap.read()
-    if ret:
-        ax.imshow(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), cmap='gray')
-        ax.set_title(f't = {fi * time_per_frame:.1f}s')
-    ax.axis('off')
-cap.release()""")
-
-    if not JESS_HALEY_FILES.exists():
-        html.add_output_text("Binary files not available — skipping video.")
-        return
+    frame = video_data[fi]
+    ax.imshow(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), cmap='gray')
+    ax.set_title(f't = {fi * time_per_frame:.1f}s')
+    ax.axis('off')""")
 
     try:
         import cv2
@@ -1392,14 +1384,20 @@ cap.release()""")
             target_name = name
             break
 
-    if not vid_info or not vid_info.get("uid"):
+    if not vid_info or not vid_info.get("doc"):
         html.add_output_text(f"Video '{target_name}' not found.")
         return
 
-    uid = vid_info["uid"]
-    filepath = JESS_HALEY_FILES / uid
-    if not filepath.exists():
-        html.add_output_text(f"Video file not found: {uid}")
+    # Get the video file path via database_openbinarydoc (triggers ndic:// fetch)
+    try:
+        fid = dataset.database_openbinarydoc(vid_info["doc"], "imageStack")
+        filepath = fid.name
+        fid.close()
+    except FileNotFoundError:
+        html.add_output_text(
+            "Video file not available. Set NDI_CLOUD_USERNAME/PASSWORD "
+            "to fetch on demand from NDI Cloud."
+        )
         return
 
     props = vid_info.get("props", {})
@@ -1462,14 +1460,18 @@ query_dep = Query('').depends_on('subject_id', subject_id)
 distance_docs = dataset.database_search(query_type & query_dep)
 dist_id = distance_docs[0].document_properties['base']['id']
 
-# Find the element_epoch binary file for this element
+# Find the element_epoch document for this element
 q_epoch = Query('').isa('element_epoch') & Query('').depends_on('element_id', dist_id)
 epoch_docs = dataset.database_search(q_epoch)
-uid = epoch_docs[0].document_properties['files']['file_info']['locations']['uid']
+epoch_doc = epoch_docs[0]
 
-# Read distance timeseries from VHSB binary file
+# Read distance timeseries via the session binary API
+# Binary files are fetched on demand from NDI Cloud via ndic:// protocol
 from vlt.file.custom_file_formats import vhsb_read
-distance, time = vhsb_read(str(files_dir / uid), t0=0, t1=3600)
+vhsb_name = epoch_doc.document_properties['files']['file_info']['name']
+fid = dataset.database_openbinarydoc(epoch_doc, vhsb_name)
+distance, time = vhsb_read(fid, t0=0, t1=3600)
+fid.close()
 # distance shape: (N, 3) — col 0: distance to patch edge (pixels),
 #                           col 1: on-patch flag, col 2: closest patch number""")
 
@@ -1480,12 +1482,12 @@ distance, time = vhsb_read(str(files_dir / uid), t0=0, t1=3600)
         if distance_docs:
             dist_id = distance_docs[0].document_properties.get("base", {}).get("id", "")
 
-            # Read distance timeseries via VHSB
-            uid = _find_element_epoch_uid(dataset, dist_id)
+            # Read distance timeseries via session binary API
+            epoch_doc = _find_element_epoch_doc(dataset, dist_id)
             distance_y = None
             distance_t = None
-            if uid:
-                distance_y, distance_t = _read_vhsb(str(JESS_HALEY_FILES / uid))
+            if epoch_doc is not None:
+                distance_y, distance_t = _read_vhsb_from_doc(dataset, epoch_doc)
                 if distance_y is not None:
                     html.add_output_text(
                         f"Distance element ID: {dist_id}\n"
@@ -1495,11 +1497,12 @@ distance, time = vhsb_read(str(files_dir / uid), t0=0, t1=3600)
                 else:
                     html.add_output_text(
                         f"Distance element ID: {dist_id}\n"
-                        f"Could not read VHSB data for UID: {uid}"
+                        "Could not read VHSB data (set NDI_CLOUD_USERNAME/PASSWORD "
+                        "to fetch on demand)"
                     )
             else:
                 html.add_output_text(
-                    f"Distance element ID: {dist_id}\n" f"No element_epoch binary file found"
+                    f"Distance element ID: {dist_id}\n" "No element_epoch binary file found"
                 )
 
             # Get distance_metadata
@@ -1940,7 +1943,7 @@ for doc in image_stack_docs:
                     "format": is_info.get("formatOntology", ""),
                 }
             )
-            image_doc_map[label] = {"uid": uid, "doc_id": doc_id, "props": props}
+            image_doc_map[label] = {"doc": doc, "uid": uid, "doc_id": doc_id, "props": props}
 
         if rows:
             params_df = pd.DataFrame(rows)
@@ -1960,7 +1963,9 @@ for doc in image_stack_docs:
 
 
 @timed
-def section_ecoli_plot_image(html: HTMLBuilder, ecoli_image_map: dict, bacteria_table: Any) -> None:
+def section_ecoli_plot_image(
+    html: HTMLBuilder, dataset: Any, ecoli_image_map: dict, bacteria_table: Any
+) -> None:
     """Section 22: Plot an image or mask (E. coli)."""
     import matplotlib
 
@@ -1971,7 +1976,7 @@ def section_ecoli_plot_image(html: HTMLBuilder, ecoli_image_map: dict, bacteria_
 
     html.add_code("""\
 import numpy as np
-from PIL import Image
+from ndi.fun.data import read_image_stack
 
 # Choose a fluorescence image (prefer normalized)
 for name, info in ecoli_image_map.items():
@@ -1980,8 +1985,9 @@ for name, info in ecoli_image_map.items():
         doc_info = info
         break
 
-# Read image from binary file (TIFF detected by header)
-img = np.array(Image.open(files_dir / doc_info['uid']))
+# Read image via the database binary API (auto-detects PNG/TIFF/raw binary)
+# Binary files are fetched on demand from NDI Cloud via ndic:// protocol
+img, info = read_image_stack(dataset, doc_info['doc'], 'auto')
 
 # Plot with colorbar and metadata title
 fig, ax = plt.subplots(figsize=(8, 8))
@@ -1992,10 +1998,6 @@ plt.colorbar(im, ax=ax, fraction=0.046)
 od600 = bacteria_table['BacterialOD600TargetAtSeeding'].iloc[0]
 growth = bacteria_table['BacteriaGrowthDurationAfterSeeding'].iloc[0]
 ax.set_title(f'{image_name}\\ntarget OD600 at seeding = {od600}\\ngrowth time = {growth}h')""")
-
-    if not JESS_HALEY_FILES.exists():
-        html.add_output_text("Binary files not available — skipping image display.")
-        return
 
     # Find the fluorescence image by label keyword
     target_name = "fluorescence"
@@ -2017,24 +2019,22 @@ ax.set_title(f'{image_name}\\ntarget OD600 at seeding = {od600}\\ngrowth time = 
         target_name = next(iter(ecoli_image_map))
         img_info = ecoli_image_map[target_name]
 
-    if not img_info or not img_info.get("uid"):
-        html.add_output_text(f"Image '{target_name}' not found.")
+    if not img_info or not img_info.get("doc"):
+        html.add_output_text(f"Image '{target_name}' not found or no binary file available.")
         return
 
-    uid = img_info["uid"]
-    filepath = JESS_HALEY_FILES / uid
-    if not filepath.exists():
-        html.add_output_text(f"Binary file not found: {uid}")
+    try:
+        from ndi.fun.data import read_image_stack
+
+        img, _info = read_image_stack(dataset, img_info["doc"], "auto")
+    except FileNotFoundError:
+        html.add_output_text(
+            "Binary file not available. Set NDI_CLOUD_USERNAME/PASSWORD "
+            "to fetch on demand from NDI Cloud."
+        )
         return
-
-    props = img_info.get("props", {})
-    is_params = props.get("imageStack_parameters", {})
-    data_type = is_params.get("data_type", "uint16")
-    dim_size = is_params.get("dimension_size", [])
-
-    img = _read_binary_image(uid, data_type, dim_size)
-    if img is None:
-        html.add_output_text("Could not decode E. coli image data.")
+    except Exception as e:
+        html.add_output_text(f"Could not decode E. coli image data: {e}")
         return
 
     if img is not None:
@@ -2060,8 +2060,6 @@ ax.set_title(f'{image_name}\\ntarget OD600 at seeding = {od600}\\ngrowth time = 
         ax.set_yticks([])
         plt.tight_layout()
         html.add_image_base64(fig_to_bytes(), caption=f"E. coli fluorescence image: {target_name}")
-    else:
-        html.add_output_text("Could not decode E. coli image data.")
 
 
 # ---------------------------------------------------------------------------
@@ -2138,11 +2136,11 @@ def main() -> None:
 
     # Section 14: Plot an image/mask with subject position
     print("[13/18] Plotting image with position overlay...")
-    section_plot_image_with_position(html, image_doc_map, position_data)
+    section_plot_image_with_position(html, dataset, image_doc_map, position_data)
 
     # Section 15: Play video of the subject
     print("[14/18] Showing video frame sequence...")
-    section_play_video(html, image_doc_map)
+    section_play_video(html, dataset, image_doc_map)
 
     # Section 16: Get distance to patch edge over time
     print("[15/18] Getting distance element metadata...")
@@ -2172,7 +2170,7 @@ def main() -> None:
 
     # Section 22: Plot an image or mask
     print("[18b/18] E. coli fluorescence image...")
-    section_ecoli_plot_image(html, ecoli_image_map, bacteria_table)
+    section_ecoli_plot_image(html, dataset, ecoli_image_map, bacteria_table)
 
     # Write HTML
     output = html.render()

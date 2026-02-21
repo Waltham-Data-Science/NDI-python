@@ -934,21 +934,128 @@ print(f'DAQ ingested docs for epoch {epoch_num}: {len(daq_docs)}')
 
     html.add_output_text("\n".join(daq_output_lines))
 
+    # --- Step 7: Read and plot the electrophysiology data ---
+    html.add_heading("Plot Vm and I traces", level=3)
     html.add_text(
-        "The plot below shows what the MATLAB tutorial produces: a "
-        "two-panel figure with the membrane voltage (Vm) trace on top "
-        "and the injected current (I) trace on the bottom for the "
-        "selected epoch. Each sweep in this current-clamp protocol "
-        "applies a different current step, and the voltage response "
-        "reveals the cell's intrinsic firing properties."
+        "The ingested binary data is stored as compressed NBF (National "
+        "Binary Format) tar.gz archives in the DAQ document, one per "
+        "channel group. The channel_list.bin file describes the channel "
+        "layout: ai1 (analog input = Vm), ao1 (analog output = I "
+        "command), and t1 (time). We read each channel via the session "
+        "binary API, which fetches the data on demand from NDI Cloud "
+        "via the ndic:// protocol."
     )
-    html.add_text(
-        "Note: To generate the actual plot from Python, set the "
-        "NDI_CLOUD_USERNAME and NDI_CLOUD_PASSWORD environment "
-        "variables. The full readtimeseries pipeline via "
-        "ndi.probe.timeseries will then fetch and decode the binary "
-        "data automatically."
-    )
+
+    html.add_code("""\
+import tarfile, numpy as np
+
+daq_doc = daq_docs[0]  # the ingested DAQ document for this epoch
+
+def read_nbf_channel(dataset, daq_doc, filename):
+    \"\"\"Read raw float64 data from a compressed NBF tar.gz archive.\"\"\"
+    fid = dataset.database_openbinarydoc(daq_doc, filename)
+    filepath = fid.name
+    fid.close()
+    with tarfile.open(filepath, 'r:gz') as tar:
+        for m in tar.getmembers():
+            if not m.name.startswith('._') and m.name.endswith('.nbf'):
+                return np.frombuffer(tar.extractfile(m).read(), dtype='<f8')
+    return None
+
+# Read membrane voltage (Vm) from analog input channel
+Vm_d = read_nbf_channel(dataset, daq_doc, 'ai_group1_seg.nbf_1')
+# Read injected current (I) from analog output channel
+I_d  = read_nbf_channel(dataset, daq_doc, 'ao_group1_seg.nbf_1')
+# Construct time axis from sample rate (10 kHz from channel_list.bin)
+t = np.arange(len(Vm_d)) / 10000.0
+
+# Plot 2-panel figure (matching MATLAB tutorial)
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
+ax1.plot(t, Vm_d); ax1.set_ylabel('Vm (mV)')
+ax1.set_title(f'{subject_name} — Epoch {epoch_num}')
+ax2.plot(t, I_d); ax2.set_ylabel('I (pA)'); ax2.set_xlabel('Time (s)')""")
+
+    import tarfile
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    def _read_nbf_channel(dataset_obj: Any, doc: Any, filename: str) -> np.ndarray | None:
+        """Read raw float64 data from a compressed NBF tar.gz archive."""
+        fid = dataset_obj.database_openbinarydoc(doc, filename)
+        filepath = fid.name
+        if hasattr(fid, "close"):
+            fid.close()
+        with tarfile.open(filepath, "r:gz") as tar:
+            for m in tar.getmembers():
+                if not m.name.startswith("._") and m.name.endswith(".nbf"):
+                    f = tar.extractfile(m)
+                    if f is not None:
+                        return np.frombuffer(f.read(), dtype="<f8")
+        return None
+
+    try:
+        # Read Vm from analog input, I from analog output
+        vm_data = _read_nbf_channel(dataset, daq_docs[0], "ai_group1_seg.nbf_1")
+        i_data = _read_nbf_channel(dataset, daq_docs[0], "ao_group1_seg.nbf_1")
+
+        if vm_data is not None and i_data is not None:
+            # Parse sample rate from channel_list.bin
+            sample_rate = 10000.0  # default
+            try:
+                ch_fid = dataset.database_openbinarydoc(daq_docs[0], "channel_list.bin")
+                ch_path = ch_fid.name
+                ch_fid.close()
+                import gzip
+
+                with open(ch_path, "rb") as f:
+                    hdr = f.read(2)
+                    f.seek(0)
+                    ch_raw = gzip.decompress(f.read()) if hdr == b"\x1f\x8b" else f.read()
+                for line in ch_raw.decode("utf-8").strip().split("\n")[1:]:
+                    parts = line.split("\t")
+                    if len(parts) >= 4 and parts[1] in ("analog_in", "ai"):
+                        sample_rate = float(parts[3])
+                        break
+            except Exception:
+                pass  # use default 10 kHz
+
+            t = np.arange(len(vm_data)) / sample_rate
+
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
+            ax1.plot(t, vm_data, linewidth=0.3, color="k")
+            ax1.set_ylabel("Vm (mV)")
+            ax1.set_title(f"{subject_name} \u2014 Epoch {epoch_num}")
+            ax2.plot(t, i_data, linewidth=0.3, color="k")
+            ax2.set_ylabel("I (pA)")
+            ax2.set_xlabel("Time (s)")
+            plt.tight_layout()
+            html.add_image_base64(
+                fig_to_bytes(),
+                caption=f"Electrophysiology trace: {subject_name} epoch {epoch_num}",
+            )
+        elif vm_data is not None:
+            t = np.arange(len(vm_data)) / 10000.0
+            fig, ax = plt.subplots(figsize=(12, 4))
+            ax.plot(t, vm_data, linewidth=0.3, color="k")
+            ax.set_ylabel("Vm (mV)")
+            ax.set_xlabel("Time (s)")
+            ax.set_title(f"{subject_name} \u2014 Epoch {epoch_num}")
+            plt.tight_layout()
+            html.add_image_base64(fig_to_bytes(), caption="Membrane voltage trace")
+        else:
+            html.add_output_text("No AI/AO channel binary files found in the DAQ document.")
+    except FileNotFoundError:
+        html.add_output_text(
+            "Binary data not available. Set NDI_CLOUD_USERNAME and "
+            "NDI_CLOUD_PASSWORD environment variables to fetch on demand "
+            "from NDI Cloud."
+        )
+    except Exception as e:
+        html.add_output_text(f"Could not read electrophysiology data: {e}")
 
 
 # ---------------------------------------------------------------------------
