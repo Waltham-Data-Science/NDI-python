@@ -962,18 +962,41 @@ def read_nbf_channel(dataset, daq_doc, filename):
                 return np.frombuffer(tar.extractfile(m).read(), dtype='<f8')
     return None
 
-# Read membrane voltage (Vm) from analog input channel
+# Read membrane voltage (Vm) and injected current (I)
 Vm_d = read_nbf_channel(dataset, daq_doc, 'ai_group1_seg.nbf_1')
-# Read injected current (I) from analog output channel
 I_d  = read_nbf_channel(dataset, daq_doc, 'ao_group1_seg.nbf_1')
-# Construct time axis from sample rate (10 kHz from channel_list.bin)
-t = np.arange(len(Vm_d)) / 10000.0
 
-# Plot 2-panel figure (matching MATLAB tutorial)
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
-ax1.plot(t, Vm_d); ax1.set_ylabel('Vm (mV)')
-ax1.set_title(f'{subject_name} — Epoch {epoch_num}')
-ax2.plot(t, I_d); ax2.set_ylabel('I (pA)'); ax2.set_xlabel('Time (s)')""")
+# Segment into individual sweeps (separated by NaN gaps, as in MATLAB)
+trace_starts = np.where(np.diff(np.concatenate([[1], np.isnan(I_d).astype(int)])) == -1)[0]
+trace_ends   = np.where(np.diff(np.concatenate([np.isnan(I_d).astype(int), [0]])) == 1)[0]
+num_steps     = len(trace_starts)
+num_timepoints = max(trace_ends - trace_starts) + 1
+sample_rate    = 10000.0
+
+# Reformat into matrices (time x steps)
+time_matrix = np.arange(num_timepoints) / sample_rate
+Vm_matrix = np.full((num_timepoints, num_steps), np.nan)
+I_matrix  = np.full((num_timepoints, num_steps), np.nan)
+for i in range(num_steps):
+    seg = slice(trace_starts[i], trace_ends[i] + 1)
+    n = trace_ends[i] - trace_starts[i] + 1
+    Vm_matrix[:n, i] = Vm_d[seg]
+    I_matrix[:n, i]  = I_d[seg]
+
+# Get current step value for each sweep
+row_ind = np.nanargmax(np.abs(I_matrix), axis=0)
+current_steps = np.array([I_matrix[row_ind[j], j] for j in range(num_steps)])
+
+# Plot all sweeps overlaid, color-coded by current injection level
+fig, ax = plt.subplots(figsize=(8, 6))
+cmap = plt.cm.turbo
+norm = plt.Normalize(current_steps.min(), current_steps.max())
+for i in range(num_steps):
+    ax.plot(time_matrix, Vm_matrix[:, i],
+            color=cmap(norm(current_steps[i])), linewidth=0.8)
+ax.set_xlabel('Time (s)'); ax.set_ylabel('Voltage (mV)')
+sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+cb = plt.colorbar(sm, ax=ax); cb.set_label('Current (pA)')""")
 
     import tarfile
 
@@ -1003,49 +1026,48 @@ ax2.plot(t, I_d); ax2.set_ylabel('I (pA)'); ax2.set_xlabel('Time (s)')""")
         i_data = _read_nbf_channel(dataset, daq_docs[0], "ao_group1_seg.nbf_1")
 
         if vm_data is not None and i_data is not None:
-            # Parse sample rate from channel_list.bin
-            sample_rate = 10000.0  # default
-            try:
-                ch_fid = dataset.database_openbinarydoc(daq_docs[0], "channel_list.bin")
-                ch_path = ch_fid.name
-                ch_fid.close()
-                import gzip
+            sample_rate = 10000.0
 
-                with open(ch_path, "rb") as f:
-                    hdr = f.read(2)
-                    f.seek(0)
-                    ch_raw = gzip.decompress(f.read()) if hdr == b"\x1f\x8b" else f.read()
-                for line in ch_raw.decode("utf-8").strip().split("\n")[1:]:
-                    parts = line.split("\t")
-                    if len(parts) >= 4 and parts[1] in ("analog_in", "ai"):
-                        sample_rate = float(parts[3])
-                        break
-            except Exception:
-                pass  # use default 10 kHz
+            # Segment sweeps by NaN gaps (matching MATLAB's readtimeseries)
+            nan_i = np.isnan(i_data).astype(int)
+            trace_starts = np.where(np.diff(np.concatenate([[1], nan_i])) == -1)[0]
+            trace_ends = np.where(np.diff(np.concatenate([nan_i, [0]])) == 1)[0]
+            num_steps = len(trace_starts)
+            num_tp = max(trace_ends - trace_starts) + 1
 
-            t = np.arange(len(vm_data)) / sample_rate
+            time_matrix = np.arange(num_tp) / sample_rate
+            vm_matrix = np.full((num_tp, num_steps), np.nan)
+            i_matrix = np.full((num_tp, num_steps), np.nan)
+            for i in range(num_steps):
+                n = trace_ends[i] - trace_starts[i] + 1
+                vm_matrix[:n, i] = vm_data[trace_starts[i] : trace_ends[i] + 1]
+                i_matrix[:n, i] = i_data[trace_starts[i] : trace_ends[i] + 1]
 
-            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
-            ax1.plot(t, vm_data, linewidth=0.3, color="k")
-            ax1.set_ylabel("Vm (mV)")
-            ax1.set_title(f"{subject_name} \u2014 Epoch {epoch_num}")
-            ax2.plot(t, i_data, linewidth=0.3, color="k")
-            ax2.set_ylabel("I (pA)")
-            ax2.set_xlabel("Time (s)")
+            # Current step value for each sweep
+            row_ind = np.nanargmax(np.abs(i_matrix), axis=0)
+            current_steps = np.array([i_matrix[row_ind[j], j] for j in range(num_steps)])
+
+            # Plot all sweeps overlaid, color-coded by current (turbo colormap)
+            fig, ax = plt.subplots(figsize=(8, 6))
+            cmap = plt.cm.turbo
+            norm = plt.Normalize(current_steps.min(), current_steps.max())
+            for i in range(num_steps):
+                ax.plot(
+                    time_matrix,
+                    vm_matrix[:, i],
+                    color=cmap(norm(current_steps[i])),
+                    linewidth=0.8,
+                )
+            ax.set_xlabel("Time (s)")
+            ax.set_ylabel("Voltage (mV)")
+            sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+            cb = plt.colorbar(sm, ax=ax)
+            cb.set_label("Current (pA)")
             plt.tight_layout()
             html.add_image_base64(
                 fig_to_bytes(),
                 caption=f"Electrophysiology trace: {subject_name} epoch {epoch_num}",
             )
-        elif vm_data is not None:
-            t = np.arange(len(vm_data)) / 10000.0
-            fig, ax = plt.subplots(figsize=(12, 4))
-            ax.plot(t, vm_data, linewidth=0.3, color="k")
-            ax.set_ylabel("Vm (mV)")
-            ax.set_xlabel("Time (s)")
-            ax.set_title(f"{subject_name} \u2014 Epoch {epoch_num}")
-            plt.tight_layout()
-            html.add_image_base64(fig_to_bytes(), caption="Membrane voltage trace")
         else:
             html.add_output_text("No AI/AO channel binary files found in the DAQ document.")
     except FileNotFoundError:
@@ -1136,7 +1158,7 @@ print(f'Columns: {list(table_epm.columns[:8])} ...')""")
         "for each measured quantity."
     )
 
-    plotting_variable = "ElevatedPlusMaze_OpenArmTotalEntries"
+    plotting_variable = "ElevatedPlusMaze_OpenArmNorth_Entries"
     grouping_variable = "Treatment_CNOOrSalineAdministration"
 
     html.add_code(f"""\
@@ -1147,7 +1169,7 @@ from ndi.ontology import lookup as ontology_lookup
 full_names, short_names, ontology_nodes = ontology_table_row_vars(dataset)
 
 # Look up the selected variable
-plotting_variable = '{plotting_variable}'
+plotting_variable = 'ElevatedPlusMaze_OpenArmNorth_Entries'
 grouping_variable = '{grouping_variable}'
 
 # Find the ontology term for this variable
@@ -1214,15 +1236,42 @@ table_valid = table_epm[valid_rows]
 x = table_valid['{grouping_variable}']
 y = table_valid['{plotting_variable}']
 
-fig, ax = plt.subplots(figsize=(6, 5))
-# Group data for violin plot
+fig, ax = plt.subplots(figsize=(6, 6))
 groups = ['Saline', 'CNO']
+colors_fill = ['#c4ddf0', '#f5cdb6']  # light blue, light peach
+colors_dot  = ['#1f77b4', '#e67e22']  # blue, orange
 data_by_group = [y[x == g].values for g in groups]
-parts = ax.violinplot(data_by_group, positions=[0, 1], showmedians=True)
-ax.set_xticks([0, 1])
-ax.set_xticklabels(groups)
+
+# Violin bodies
+parts = ax.violinplot(data_by_group, positions=[0, 1], showextrema=False,
+                      showmedians=False)
+for i, body in enumerate(parts['bodies']):
+    body.set_facecolor(colors_fill[i])
+    body.set_edgecolor('black')
+    body.set_linewidth(0.5)
+    body.set_alpha(0.8)
+
+# Inner box (IQR), whiskers, median for each group
+for i, data in enumerate(data_by_group):
+    q1, med, q3 = np.percentile(data, [25, 50, 75])
+    iqr = q3 - q1
+    wlo = max(data.min(), q1 - 1.5 * iqr)
+    whi = min(data.max(), q3 + 1.5 * iqr)
+    ax.add_patch(plt.Rectangle((i - 0.04, q1), 0.08, iqr,
+                 facecolor='dimgray', zorder=3))
+    ax.plot([i, i], [wlo, q1], color='gray', lw=1, zorder=2)
+    ax.plot([i, i], [q3, whi], color='gray', lw=1, zorder=2)
+    ax.scatter(i, med, color='white', s=20, zorder=4, edgecolor='none')
+
+# Scatter individual data points (jittered)
+rng = np.random.default_rng(42)
+for i, data in enumerate(data_by_group):
+    jitter = rng.uniform(-0.15, 0.15, len(data))
+    ax.scatter(i + jitter, data, color=colors_dot[i], s=20,
+               alpha=0.8, zorder=5, edgecolor='none')
+
+ax.set_xticks([0, 1]); ax.set_xticklabels(groups)
 ax.set_ylabel('{term_full_name}')
-ax.set_title('Elevated Plus Maze: Open Arm Total Entries')
 plt.tight_layout()""")
 
     import matplotlib
@@ -1253,17 +1302,40 @@ plt.tight_layout()""")
         f"Saline: {n_saline}, CNO: {n_cno}"
     )
 
-    fig, ax = plt.subplots(figsize=(6, 5))
+    fig, ax = plt.subplots(figsize=(6, 6))
     groups = ["Saline", "CNO"]
+    colors_fill = ["#c4ddf0", "#f5cdb6"]
+    colors_dot = ["#1f77b4", "#e67e22"]
     data_by_group = [pd.to_numeric(y[x == g], errors="coerce").dropna().values for g in groups]
-    ax.violinplot(data_by_group, positions=[0, 1], showmedians=True)
+
+    parts = ax.violinplot(data_by_group, positions=[0, 1], showextrema=False, showmedians=False)
+    for i, body in enumerate(parts["bodies"]):
+        body.set_facecolor(colors_fill[i])
+        body.set_edgecolor("black")
+        body.set_linewidth(0.5)
+        body.set_alpha(0.8)
+
+    rng = np.random.default_rng(42)
+    for i, data in enumerate(data_by_group):
+        q1, med, q3 = np.percentile(data, [25, 50, 75])
+        iqr = q3 - q1
+        wlo = max(data.min(), q1 - 1.5 * iqr)
+        whi = min(data.max(), q3 + 1.5 * iqr)
+        ax.add_patch(plt.Rectangle((i - 0.04, q1), 0.08, iqr, facecolor="dimgray", zorder=3))
+        ax.plot([i, i], [wlo, q1], color="gray", lw=1, zorder=2)
+        ax.plot([i, i], [q3, whi], color="gray", lw=1, zorder=2)
+        ax.scatter(i, med, color="white", s=20, zorder=4, edgecolor="none")
+        jitter = rng.uniform(-0.15, 0.15, len(data))
+        ax.scatter(
+            i + jitter, data, color=colors_dot[i], s=20, alpha=0.8, zorder=5, edgecolor="none"
+        )
+
     ax.set_xticks([0, 1])
     ax.set_xticklabels(groups)
     ax.set_ylabel(term_full_name)
-    ax.set_title("Elevated Plus Maze: Open Arm Total Entries")
     plt.tight_layout()
 
-    html.add_image_base64(fig_to_bytes(), caption="EPM: Open Arm Total Entries by Treatment")
+    html.add_image_base64(fig_to_bytes(), caption=f"EPM: {term_full_name} by Treatment")
 
     return table_epm
 
@@ -1492,20 +1564,36 @@ table_cue_with_treatment = table_cue.merge(
 phase_rows = table_cue_with_treatment['{phase_col}'] == selected_phase
 table_phase = table_cue_with_treatment[phase_rows]
 
-# Plot
-fig, ax = plt.subplots(figsize=(6, 5))
+# Plot (matching MATLAB violinplot style)
+fig, ax = plt.subplots(figsize=(6, 6))
 groups = ['Saline', 'CNO']
+colors_fill = ['#c4ddf0', '#f5cdb6']
+colors_dot  = ['#1f77b4', '#e67e22']
 data_by_group = [
     table_phase.loc[
         table_phase[grouping_variable] == g, '{plotting_variable}'
     ].dropna().values
     for g in groups
 ]
-parts = ax.violinplot(data_by_group, positions=[0, 1], showmedians=True)
-ax.set_xticks([0, 1])
-ax.set_xticklabels(groups)
+parts = ax.violinplot(data_by_group, positions=[0, 1],
+                      showextrema=False, showmedians=False)
+for i, body in enumerate(parts['bodies']):
+    body.set_facecolor(colors_fill[i])
+    body.set_edgecolor('black'); body.set_linewidth(0.5); body.set_alpha(0.8)
+rng = np.random.default_rng(42)
+for i, data in enumerate(data_by_group):
+    q1, med, q3 = np.percentile(data, [25, 50, 75])
+    iqr = q3 - q1
+    wlo, whi = max(data.min(), q1-1.5*iqr), min(data.max(), q3+1.5*iqr)
+    ax.add_patch(plt.Rectangle((i-0.04,q1), 0.08, iqr, fc='dimgray', zorder=3))
+    ax.plot([i,i], [wlo,q1], color='gray', lw=1, zorder=2)
+    ax.plot([i,i], [q3,whi], color='gray', lw=1, zorder=2)
+    ax.scatter(i, med, color='white', s=20, zorder=4, edgecolor='none')
+    jitter = rng.uniform(-0.15, 0.15, len(data))
+    ax.scatter(i+jitter, data, color=colors_dot[i], s=20, alpha=0.8,
+               zorder=5, edgecolor='none')
+ax.set_xticks([0, 1]); ax.set_xticklabels(groups)
 ax.set_ylabel('{plotting_variable}')
-ax.set_title(f'Fear-Potentiated Startle: Cued Fear ({{selected_phase}})')
 plt.tight_layout()""")
 
     import matplotlib
@@ -1537,74 +1625,61 @@ plt.tight_layout()""")
     # Filter to rows that have treatment info
     table_phase = table_phase[table_phase[grouping_variable].notna()]
 
-    fig, ax = plt.subplots(figsize=(6, 5))
+    import numpy as np
+
+    fig, ax = plt.subplots(figsize=(6, 6))
     groups = ["Saline", "CNO"]
+    colors_fill = ["#c4ddf0", "#f5cdb6"]
+    colors_dot = ["#1f77b4", "#e67e22"]
     data_by_group = [
         table_phase.loc[table_phase[grouping_variable] == g, plotting_variable].dropna().values
         for g in groups
     ]
 
-    # Only plot if we have data in at least one group
     non_empty = [d for d in data_by_group if len(d) > 0]
     if non_empty:
         positions = [i for i, d in enumerate(data_by_group) if len(d) > 0]
         labels = [groups[i] for i in positions]
-        ax.violinplot(
-            [data_by_group[i] for i in positions],
-            positions=positions,
-            showmedians=True,
-        )
+        plot_data = [data_by_group[i] for i in positions]
+        parts = ax.violinplot(plot_data, positions=positions, showextrema=False, showmedians=False)
+        for idx, body in enumerate(parts["bodies"]):
+            body.set_facecolor(colors_fill[positions[idx]])
+            body.set_edgecolor("black")
+            body.set_linewidth(0.5)
+            body.set_alpha(0.8)
+
+        rng = np.random.default_rng(42)
+        for idx, pos in enumerate(positions):
+            data = plot_data[idx]
+            q1, med, q3 = np.percentile(data, [25, 50, 75])
+            iqr = q3 - q1
+            wlo = max(data.min(), q1 - 1.5 * iqr)
+            whi = min(data.max(), q3 + 1.5 * iqr)
+            ax.add_patch(plt.Rectangle((pos - 0.04, q1), 0.08, iqr, facecolor="dimgray", zorder=3))
+            ax.plot([pos, pos], [wlo, q1], color="gray", lw=1, zorder=2)
+            ax.plot([pos, pos], [q3, whi], color="gray", lw=1, zorder=2)
+            ax.scatter(pos, med, color="white", s=20, zorder=4, edgecolor="none")
+            jitter = rng.uniform(-0.15, 0.15, len(data))
+            ax.scatter(
+                pos + jitter,
+                data,
+                color=colors_dot[pos],
+                s=20,
+                alpha=0.8,
+                zorder=5,
+                edgecolor="none",
+            )
         ax.set_xticks(positions)
         ax.set_xticklabels(labels)
     else:
         ax.text(0.5, 0.5, "No data available", transform=ax.transAxes, ha="center", va="center")
 
     ax.set_ylabel(plotting_variable)
-    ax.set_title(f"Fear-Potentiated Startle: Cued Fear ({selected_phase})")
     plt.tight_layout()
 
     html.add_image_base64(
         fig_to_bytes(),
         caption=f"FPS: Cued Fear % by Treatment ({selected_phase})",
-    )
-
-    # --- Step 6: Plot non-cued fear as well ---
-    html.add_heading("Plot non-cued fear by treatment group", level=3)
-    html.add_text(
-        "Similarly, we can plot the non-cued fear percentage, which "
-        "measures contextual fear (the increase in startle from baseline "
-        "in the absence of an explicit cue)."
-    )
-
-    plotting_variable_nc = "nonCuedFear"
-
-    fig, ax = plt.subplots(figsize=(6, 5))
-    data_by_group_nc = [
-        table_phase.loc[table_phase[grouping_variable] == g, plotting_variable_nc].dropna().values
-        for g in groups
-    ]
-
-    non_empty_nc = [d for d in data_by_group_nc if len(d) > 0]
-    if non_empty_nc:
-        positions = [i for i, d in enumerate(data_by_group_nc) if len(d) > 0]
-        labels = [groups[i] for i in positions]
-        ax.violinplot(
-            [data_by_group_nc[i] for i in positions],
-            positions=positions,
-            showmedians=True,
-        )
-        ax.set_xticks(positions)
-        ax.set_xticklabels(labels)
-    else:
-        ax.text(0.5, 0.5, "No data available", transform=ax.transAxes, ha="center", va="center")
-
-    ax.set_ylabel(plotting_variable_nc)
-    ax.set_title(f"Fear-Potentiated Startle: Non-Cued Fear ({selected_phase})")
-    plt.tight_layout()
-
-    html.add_image_base64(
-        fig_to_bytes(),
-        caption=f"FPS: Non-Cued Fear % by Treatment ({selected_phase})",
     )
 
 
