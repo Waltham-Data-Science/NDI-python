@@ -135,6 +135,7 @@ def convert_to_crossref(dataset_metadata: dict[str, Any]) -> dict[str, Any]:
         "date": convert_dataset_date(dataset_metadata),
         "funding": convert_funding(dataset_metadata),
         "license": convert_license(dataset_metadata),
+        "related_publications": convert_related_publications(dataset_metadata),
     }
 
 
@@ -257,3 +258,35 @@ def convert_license(
         url = LICENSE_URLS.get(normalized, "")
 
     return {"name": normalized or name, "url": url} if name else {}
+
+
+def convert_related_publications(
+    dataset_metadata: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Convert associated publications to Crossref RelProgram format.
+
+    MATLAB equivalent: +crossref/+conversion/convertRelatedPublications.m
+
+    Returns a list of related item dicts.  Each dict contains whatever
+    fields are available in the source record (e.g. ``title``, ``doi``,
+    ``url``).  Returns an empty list when the dataset has no associated
+    publications.
+    """
+    pubs = dataset_metadata.get("associatedPublications", [])
+    if not pubs:
+        return []
+    result: list[dict[str, Any]] = []
+    for pub in pubs:
+        if not isinstance(pub, dict):
+            continue
+        item: dict[str, Any] = {}
+        if pub.get("title"):
+            item["title"] = pub["title"]
+        if pub.get("doi"):
+            item["doi"] = pub["doi"]
+        if pub.get("url"):
+            item["url"] = pub["url"]
+        if pub.get("citation"):
+            item["citation"] = pub["citation"]
+        result.append(item)
+    return result

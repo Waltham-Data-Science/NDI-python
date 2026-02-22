@@ -61,8 +61,11 @@ pandas = [
 scipy = [
     "scipy>=1.9.0",
 ]
+openminds = [
+    "openMINDS>=0.2.0",
+]
 all = [
-    "ndi[dev,docs,pandas,scipy]",
+    "ndi[dev,docs,pandas,scipy,openminds]",
 ]
 
 [project.urls]

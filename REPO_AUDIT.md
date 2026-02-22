@@ -4,7 +4,7 @@ This document analyzes every structural difference between the MATLAB and Python
 implementations of the NDI Cloud module, explains why each difference exists,
 and recommends whether to change or keep it.
 
-**Date**: 2025-02-15
+**Date**: 2026-02-22 (updated), originally 2025-02-15
 **MATLAB source**: `VH-Lab/NDI-matlab` — `src/ndi/+ndi/+cloud/`
 **Python source**: `src/ndi/cloud/`
 
@@ -20,11 +20,23 @@ and recommends whether to change or keep it.
 | `+internal` subpackages flattened | ~20 functions | Keep (reduced nesting) |
 | Crossref `+conversion/` flattened | 5 functions | Keep (single file) |
 | Sync index collapsed to dataclass | 5 → 1 | Keep (Pythonic) |
-| Not ported (GUI/MATLAB-specific) | 6 items | Expected |
+| Not ported (GUI/MATLAB-specific) | 5 items | Expected |
 
 **Bottom line**: The Python API surface mirrors MATLAB's for every function that
 matters to users. The differences are all internal architecture choices that
 simplify the codebase without affecting the call paths.
+
+### Test Results (2026-02-22, verified against live prod environment)
+
+| Suite | Passed | Skipped | Failed |
+|-------|--------|---------|--------|
+| Core + MATLAB port tests | 1619 | 5 | 0 |
+| Cloud live (admin / thing1) | 60 | 3 | 0 |
+| Cloud live (non-admin / thing2) | 35 | 28 | 0 |
+| **Total** | **1714** | **36** | **0** |
+
+- The 3 admin-skipped tests are environment-driven (dev dataset has 0 docs, no non-empty files); they pass on prod with data.
+- The 28 non-admin skips are correct — write operations (create, update, delete, publish) require admin privileges.
 
 ---
 
@@ -205,16 +217,16 @@ convert_contributors()
 convert_dataset_date()
 convert_funding()
 convert_license()
-# convertRelatedPublications — not yet ported
+convert_related_publications()
 ```
 
 ### Why
 
 Five small conversion functions don't justify a sub-sub-package in Python. They
-share the same imports and constants. One 260-line file is more navigable than
-5 separate files of 30-50 lines each.
+share the same imports and constants. One ~290-line file is more navigable than
+6 separate files of 30-50 lines each.
 
-**Verdict: Keep. Note that `convertRelatedPublications` is not yet ported.**
+**Verdict: Keep. All conversion functions are now ported.**
 
 ---
 
@@ -229,7 +241,6 @@ These MATLAB-only items were deliberately not ported:
 | `ndi.cloud.utility.createCloudMetadataStruct` | MATLAB struct validation; replaced by `CloudConfig` dataclass + type hints |
 | `ndi.cloud.utility.mustBeValidMetadata` | Same as above |
 | `+internal/duplicateDocuments` | Duplicate detection utility — could be ported if needed |
-| `+crossref/+conversion/convertRelatedPublications` | Related publications metadata — could be ported if needed |
 
 ---
 
@@ -279,3 +290,31 @@ equivalents once the backend branch is merged. Note: `fetch_cloud_file` has
 a MATLAB equivalent (the `customFileHandler` callback in `didsqlite.m`), but
 the Python implementation is a standalone function rather than a callback,
 since DID-python lacks callback support.
+
+---
+
+## Appendix: Packaging & Dependencies
+
+### pyproject.toml
+
+| Dependency | Type | Status |
+|-----------|------|--------|
+| `did` (DID-python) | Core | Git URL dep; CI uses PYTHONPATH hack |
+| `numpy>=1.20.0` | Core | OK |
+| `networkx>=2.6` | Core | OK |
+| `jsonschema>=4.0.0` | Core | OK |
+| `requests>=2.28.0` | Core | OK |
+| `openMINDS>=0.2.0` | Optional (`[openminds]`) | Added 2026-02-22 |
+| `pandas>=1.5.0` | Optional (`[pandas]`) | OK |
+| `scipy>=1.9.0` | Optional (`[scipy]`) | OK |
+
+**Note**: `vhlab-toolbox-python` is also required at runtime but is not in
+`pyproject.toml` — it relies on the same PYTHONPATH hack as DID-python in CI.
+Both should eventually be published to PyPI for clean `pip install ndi`.
+
+### Backend (ndi-cloud-node)
+
+No changes required. The Python client is fully compatible with the current
+backend API. Key operational note: the AWS Lambda 30-second timeout causes
+HTTP 504 on large publish/unpublish operations. The Python client mitigates
+this with `_retry_on_server_error()` (2 retries with exponential backoff).

@@ -425,7 +425,7 @@ from ndi.cloud import download_dataset, upload_dataset, sync_dataset, upload_sin
 | `+crossref/+conversion/convertDatasetDate` | `admin.crossref.convert_dataset_date()` | |
 | `+crossref/+conversion/convertFunding` | `admin.crossref.convert_funding()` | |
 | `+crossref/+conversion/convertLicense` | `admin.crossref.convert_license()` | |
-| `+crossref/+conversion/convertRelatedPublications` | — | Not yet ported |
+| `+crossref/+conversion/convertRelatedPublications` | `admin.crossref.convert_related_publications()` | |
 
 ### Cloud: Not Ported
 
@@ -436,7 +436,6 @@ from ndi.cloud import download_dataset, upload_dataset, sync_dataset, upload_sin
 | `ndi.cloud.utility.createCloudMetadataStruct` | MATLAB struct validator; `CloudConfig` replaces |
 | `ndi.cloud.utility.mustBeValidMetadata` | MATLAB struct validator; type hints replace |
 | `+internal/duplicateDocuments` | Not yet ported |
-| `+crossref/+conversion/convertRelatedPublications` | Not yet ported |
 
 ## Ontology
 
