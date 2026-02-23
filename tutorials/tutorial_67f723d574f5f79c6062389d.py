@@ -838,9 +838,9 @@ print(f'I  probe: {i_probe_id}')""")
 
     html.add_code("""\
 epoch_mask = identify_matching_rows(
-    combined, 'SubjectDocumentIdentifier', subject_id
+    combined_summary, 'SubjectDocumentIdentifier', subject_id
 )
-epoch_conditions = combined[epoch_mask]
+epoch_conditions = combined_summary[epoch_mask]
 
 # Epochs for the Vm probe
 vm_epochs = epoch_conditions[

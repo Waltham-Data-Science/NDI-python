@@ -35,6 +35,21 @@ from pathlib import Path
 from typing import Any
 
 # ---------------------------------------------------------------------------
+# Ensure vhlab-toolbox-python (vlt) is importable
+# ---------------------------------------------------------------------------
+# The installer puts it in ~/.ndi/tools/; legacy setups use /tmp/.
+try:
+    import vlt as _vlt_check  # noqa: F401
+except ImportError:
+    for _vlt_candidate in [
+        Path.home() / ".ndi" / "tools" / "vhlab-toolbox-python",
+        Path("/tmp/vhlab-toolbox-python"),
+    ]:
+        if (_vlt_candidate / "vlt").is_dir():
+            sys.path.insert(0, str(_vlt_candidate))
+            break
+
+# ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
@@ -984,7 +999,6 @@ def _read_vhsb_from_doc(dataset: Any, epoch_doc: Any, t0: float = 0, t1: float =
     when credentials are available.  Returns ``(y_data, x_time)``.
     """
     try:
-        sys.path.insert(0, "/tmp/vhlab-toolbox-python")
         from vlt.file.custom_file_formats import vhsb_read
 
         vhsb_name = _get_vhsb_filename(epoch_doc)
@@ -1105,7 +1119,7 @@ epoch_docs = dataset.database_search(q_epoch)
 from vlt.file.custom_file_formats import vhsb_read
 vhsb_name = epoch_docs[0].document_properties['files']['file_info']['name']
 fid = dataset.database_openbinarydoc(epoch_docs[0], vhsb_name)
-position, time = vhsb_read(fid, t0=0, t1=3600)
+position, time = vhsb_read(fid, 0, 3600)
 fid.close()
 # position shape: (N, 2) — columns are [X, Y] coordinates in pixels""")
 
@@ -1518,7 +1532,7 @@ epoch_doc = epoch_docs[0]
 from vlt.file.custom_file_formats import vhsb_read
 vhsb_name = epoch_doc.document_properties['files']['file_info']['name']
 fid = dataset.database_openbinarydoc(epoch_doc, vhsb_name)
-distance, time = vhsb_read(fid, t0=0, t1=3600)
+distance, time = vhsb_read(fid, 0, 3600)
 fid.close()
 # distance shape: (N, 3) — col 0: distance to patch edge (pixels),
 #                           col 1: on-patch flag, col 2: closest patch number""")
