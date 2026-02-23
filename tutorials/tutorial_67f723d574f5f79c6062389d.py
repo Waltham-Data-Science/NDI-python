@@ -21,9 +21,10 @@ Dataset summary:
   - Strains: CRF-Cre, OTR-IRES-Cre, AVP-Cre, SD wildtype
 
 Prerequisites:
-  - pip install pandas matplotlib
+  - Run 'python ndi_install.py' to install NDI and all dependencies
   - NDI Cloud account (free at https://www.ndi-cloud.com)
   - Set NDI_CLOUD_USERNAME/NDI_CLOUD_PASSWORD env vars (or edit this script)
+  - See tutorials/README.md for detailed setup instructions
 
 Usage:
   python tutorials/tutorial_67f723d574f5f79c6062389d.py

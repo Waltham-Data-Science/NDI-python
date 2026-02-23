@@ -299,7 +299,7 @@ since DID-python lacks callback support.
 
 | Dependency | Type | Status |
 |-----------|------|--------|
-| `did` (DID-python) | Core | Git URL dep; CI uses PYTHONPATH hack |
+| `did` (DID-python) | Core | Git URL dep; `ndi_install.py` handles via .pth file |
 | `numpy>=1.20.0` | Core | OK |
 | `networkx>=2.6` | Core | OK |
 | `jsonschema>=4.0.0` | Core | OK |
@@ -307,10 +307,13 @@ since DID-python lacks callback support.
 | `openMINDS>=0.2.0` | Optional (`[openminds]`) | Added 2026-02-22 |
 | `pandas>=1.5.0` | Optional (`[pandas]`) | OK |
 | `scipy>=1.9.0` | Optional (`[scipy]`) | OK |
+| `matplotlib>=3.5.0` | Optional (`[tutorials]`) | OK |
+| `opencv-python-headless>=4.5.0` | Optional (`[tutorials]`) | OK |
 
 **Note**: `vhlab-toolbox-python` is also required at runtime but is not in
-`pyproject.toml` — it relies on the same PYTHONPATH hack as DID-python in CI.
-Both should eventually be published to PyPI for clean `pip install ndi`.
+`pyproject.toml` — `ndi_install.py` clones it and configures a .pth file.
+Both DID-python and vhlab-toolbox-python should eventually be published to
+PyPI for clean `pip install ndi`.
 
 ### Backend (ndi-cloud-node)
 

@@ -25,39 +25,62 @@ NDI provides a unified interface for working with multi-modal neuroscience data 
 
 ## Installation
 
-### From source (development)
-
 ```bash
 git clone https://github.com/Waltham-Data-Science/NDI-python.git
 cd NDI-python
-
-# Create virtual environment
 python -m venv venv
-source venv/bin/activate  # Linux/macOS
-# venv\Scripts\activate   # Windows
-
-# Install VH-Lab dependencies (not yet on PyPI)
-# DID-python has a packaging bug (pyproject.toml misses subpackages), so we
-# clone it and use PYTHONPATH rather than pip install.
-git clone https://github.com/VH-Lab/DID-python.git /tmp/DID-python
-git clone https://github.com/VH-Lab/vhlab-toolbox-python.git /tmp/vhlab-toolbox-python
-export PYTHONPATH="/tmp/DID-python/src:/tmp/vhlab-toolbox-python:$PYTHONPATH"
-
-# Install NDI-python in editable mode (--no-deps avoids the broken DID pip install)
-pip install -e ".[dev]" --no-deps
-pip install numpy networkx jsonschema requests pytest pytest-cov scipy
+source venv/bin/activate  # Linux/macOS (venv\Scripts\activate on Windows)
+python ndi_install.py
 ```
+
+The installer clones all dependencies, installs packages, and validates your setup. Run `python -m ndi check` at any time to verify your installation.
+
+### Updating
+
+```bash
+python ndi_install.py --update
+```
+
+### Tutorials
+
+```bash
+python tutorials/tutorial_67f723d574f5f79c6062389d.py   # Dabrowska dataset
+python tutorials/tutorial_682e7772cdf3f24938176fac.py   # Jess Haley dataset
+```
+
+See [tutorials/README.md](tutorials/README.md) for full setup and cloud credentials.
 
 ### Dependencies
 
-NDI-Python requires these VH-Lab packages:
+NDI-Python requires these VH-Lab packages (installed automatically by `ndi_install.py`):
 
 | Package | Repository | Purpose |
 |---------|-----------|---------|
 | [DID-python](https://github.com/VH-Lab/DID-python) | VH-Lab/DID-python | Document database backend (SQLite, queries) |
 | [vhlab-toolbox-python](https://github.com/VH-Lab/vhlab-toolbox-python) | VH-Lab/vhlab-toolbox-python | Data utilities, file formats, signal processing |
 
-Additional dependencies (installed automatically): `numpy`, `networkx`, `jsonschema`, `requests`.
+Additional dependencies (installed automatically): `numpy`, `networkx`, `jsonschema`, `requests`, `scipy`, `pandas`, `matplotlib`.
+
+<details>
+<summary>Manual installation (advanced)</summary>
+
+```bash
+git clone https://github.com/Waltham-Data-Science/NDI-python.git
+cd NDI-python
+python -m venv venv
+source venv/bin/activate
+
+# Clone VH-Lab dependencies (not yet on PyPI)
+git clone https://github.com/VH-Lab/DID-python.git ~/.ndi/tools/DID-python
+git clone https://github.com/VH-Lab/vhlab-toolbox-python.git ~/.ndi/tools/vhlab-toolbox-python
+export PYTHONPATH="$HOME/.ndi/tools/DID-python/src:$HOME/.ndi/tools/vhlab-toolbox-python:$PYTHONPATH"
+
+# Install NDI-python (--no-deps works around DID packaging bug)
+pip install -e ".[dev,tutorials]" --no-deps
+pip install numpy networkx jsonschema requests pytest pytest-cov scipy pandas matplotlib opencv-python-headless portalocker openminds
+```
+
+</details>
 
 ## Quick Start
 

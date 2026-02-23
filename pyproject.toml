@@ -64,9 +64,17 @@ scipy = [
 openminds = [
     "openMINDS>=0.2.0",
 ]
-all = [
-    "ndi[dev,docs,pandas,scipy,openminds]",
+tutorials = [
+    "pandas>=1.5.0",
+    "matplotlib>=3.5.0",
+    "opencv-python-headless>=4.5.0",
 ]
+all = [
+    "ndi[dev,docs,pandas,scipy,openminds,tutorials]",
+]
+
+[project.scripts]
+ndi = "ndi.__main__:main"
 
 [project.urls]
 Homepage = "https://github.com/Waltham-Data-Science/NDI-python"
@@ -119,6 +127,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "UP035"]  # unused imports are re-exports; typing aliases used throughout
+"ndi_install.py" = ["UP036"]  # version check is intentional (standalone script)
 
 [tool.mypy]
 python_version = "3.10"

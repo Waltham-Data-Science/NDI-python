@@ -14,9 +14,10 @@ runs the same analysis steps as the MATLAB tutorial, and writes
 the results to an HTML file.
 
 Prerequisites:
-  - pip install pandas matplotlib opencv-python-headless
+  - Run 'python ndi_install.py' to install NDI and all dependencies
   - NDI Cloud account (free at https://www.ndi-cloud.com)
   - Set NDI_CLOUD_USERNAME/NDI_CLOUD_PASSWORD env vars (or edit this script)
+  - See tutorials/README.md for detailed setup instructions
 
 Usage:
   python tutorials/tutorial_682e7772cdf3f24938176fac.py

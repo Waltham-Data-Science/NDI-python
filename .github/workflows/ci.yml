@@ -43,23 +43,14 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install VH-Lab dependencies
+      - name: Install with ndi_install.py
         run: |
           python -m pip install --upgrade pip
-          # Clone DID-python and its deps (its pyproject.toml has a packaging
-          # bug that misses subpackages — we use PYTHONPATH instead of pip)
-          git clone https://github.com/VH-Lab/DID-python.git /tmp/DID-python
-          pip install numpy pandas portalocker networkx matplotlib
-          # vhlab-toolbox-python has no pyproject.toml; use PYTHONPATH
-          git clone https://github.com/VH-Lab/vhlab-toolbox-python.git /tmp/vhlab-toolbox-python
+          python ndi_install.py --dev --no-validate --verbose
 
-      - name: Install NDI-python
-        run: |
-          pip install -e ".[dev]" --no-deps
-          pip install numpy networkx jsonschema requests pytest pytest-cov scipy openminds
+      - name: Validate installation
+        run: python -m ndi check
 
       - name: Run tests with coverage
-        env:
-          PYTHONPATH: /tmp/DID-python/src:/tmp/vhlab-toolbox-python
         run: |
           pytest tests/ -v --tb=short --cov=src/ndi --cov-report=term-missing

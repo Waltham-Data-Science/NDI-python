@@ -12,21 +12,13 @@
 ```bash
 git clone https://github.com/Waltham-Data-Science/NDI-python.git
 cd NDI-python
-
-# Create and activate virtual environment
 python -m venv venv
-source venv/bin/activate  # Linux/macOS
-
-# Install VH-Lab dependencies (not yet on PyPI)
-# DID-python has a packaging bug — use PYTHONPATH instead of pip install
-git clone https://github.com/VH-Lab/DID-python.git /tmp/DID-python
-git clone https://github.com/VH-Lab/vhlab-toolbox-python.git /tmp/vhlab-toolbox-python
-export PYTHONPATH="/tmp/DID-python/src:/tmp/vhlab-toolbox-python:$PYTHONPATH"
-
-# Install NDI-python (--no-deps avoids broken DID pip install)
-pip install -e ".[dev]" --no-deps
-pip install numpy networkx jsonschema requests pytest pytest-cov scipy
+source venv/bin/activate  # Linux/macOS (venv\Scripts\activate on Windows)
+python ndi_install.py
 ```
+
+The installer clones all dependencies, installs packages, and validates your setup.
+Run `python -m ndi check` at any time to verify your installation.
 
 ## Basic Usage
 

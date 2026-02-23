@@ -30,17 +30,13 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
+      - name: Install with ndi_install.py
         run: |
           python -m pip install --upgrade pip
-          git clone https://github.com/VH-Lab/DID-python.git /tmp/DID-python
-          git clone https://github.com/VH-Lab/vhlab-toolbox-python.git /tmp/vhlab-toolbox-python
-          pip install -e ".[dev]" --no-deps
-          pip install numpy networkx jsonschema requests pytest pytest-cov scipy openminds
+          python ndi_install.py --dev --no-validate --verbose
 
       - name: Run cloud API tests
         env:
-          PYTHONPATH: /tmp/DID-python/src:/tmp/vhlab-toolbox-python
           NDI_CLOUD_USERNAME: ${{ matrix.user == 1 && secrets.TEST_USER_1_USERNAME || secrets.TEST_USER_2_USERNAME }}
           NDI_CLOUD_PASSWORD: ${{ matrix.user == 1 && secrets.TEST_USER_1_PASSWORD || secrets.TEST_USER_2_PASSWORD }}
           CLOUD_API_ENVIRONMENT: ${{ matrix.environment }}
