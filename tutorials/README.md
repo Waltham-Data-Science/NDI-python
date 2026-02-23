@@ -59,6 +59,15 @@ Or edit the `NDI_CLOUD_USERNAME` / `NDI_CLOUD_PASSWORD` variables at the top of 
 
 Each tutorial generates an HTML file in the `tutorials/` directory with tables, plots, and analysis results.
 
+**Tip:** Start with the Dabrowska tutorial first — it's faster and a good way to verify your setup before running the larger Jess Haley dataset.
+
+## Notes
+
+- **Virtual environment required.** The installer writes a `.pth` file into your venv's `site-packages`. Running without a venv may require elevated permissions and is not recommended.
+- **Disk space.** The Jess Haley dataset is ~16 GB. Make sure you have enough free space under `~/Documents/MATLAB/Datasets/`.
+- **Dataset storage location.** Downloaded datasets are saved to `~/Documents/MATLAB/Datasets/` (matching the MATLAB tutorial convention). This directory is created automatically on first download.
+- **Tested on macOS.** Linux should work. Windows is untested — please report any issues.
+
 ## Troubleshooting
 
 ### ModuleNotFoundError: No module named 'did.implementations'
