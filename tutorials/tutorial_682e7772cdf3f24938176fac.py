@@ -6,15 +6,17 @@ NDI Dataset Tutorial: C. elegans Behavior & E. coli Fluorescence Imaging
 Python equivalent of the MATLAB tutorial:
   tutorial_682e7772cdf3f24938176fac.mlx
 
+Paper: https://doi.org/10.7554/eLife.103191.3
+Dataset DOI: https://doi.org/10.63884/ndic.2025.pb77mj2s
+
 This script loads the Jess Haley dataset (682e7772cdf3f24938176fac),
 runs the same analysis steps as the MATLAB tutorial, and writes
 the results to an HTML file.
 
 Prerequisites:
-  - Dataset JSON docs at ~/Documents/ndi-projects/datasets/jess-haley/documents/
   - pip install pandas matplotlib opencv-python-headless
-  - Set NDI_CLOUD_USERNAME/NDI_CLOUD_PASSWORD env vars for binary file access
-    (images, video, and timeseries are fetched on demand via ndic:// protocol)
+  - NDI Cloud account (free at https://www.ndi-cloud.com)
+  - Set NDI_CLOUD_USERNAME/NDI_CLOUD_PASSWORD env vars (or edit this script)
 
 Usage:
   python tutorials/tutorial_682e7772cdf3f24938176fac.py
@@ -36,8 +38,22 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 CLOUD_DATASET_ID = "682e7772cdf3f24938176fac"
-JESS_HALEY_DOCS = Path(os.path.expanduser("~/Documents/ndi-projects/datasets/jess-haley/documents"))
+DATA_PATH = Path(os.path.expanduser("~/Documents/MATLAB/Datasets"))
+DATASET_PATH = DATA_PATH / CLOUD_DATASET_ID
 OUTPUT_HTML = Path(__file__).parent / f"tutorial_{CLOUD_DATASET_ID}.html"
+
+# ---------------------------------------------------------------------------
+# NDI Cloud Credentials
+# ---------------------------------------------------------------------------
+# To download datasets and fetch binary files on demand, set your
+# NDI Cloud credentials below OR as environment variables:
+#
+#   export NDI_CLOUD_USERNAME="your_email@example.com"
+#   export NDI_CLOUD_PASSWORD="your_password"
+#
+# You can create a free account at https://www.ndi-cloud.com
+NDI_CLOUD_USERNAME = os.environ.get("NDI_CLOUD_USERNAME", "")
+NDI_CLOUD_PASSWORD = os.environ.get("NDI_CLOUD_PASSWORD", "")
 
 
 # ---------------------------------------------------------------------------
@@ -246,7 +262,7 @@ def df_to_html(df: Any, max_rows: int = 20, show_shape: bool = True) -> str:
         html = "<table>"
         html += "<tr>" + "".join(f"<th>{escape(str(c))}</th>" for c in df.columns) + "</tr>"
         for _, row in top.iterrows():
-            html += "<tr>" + "".join(f"<td>{escape(str(v)[:80])}</td>" for v in row) + "</tr>"
+            html += "<tr>" + "".join(f"<td>{escape(str(v)[:200])}</td>" for v in row) + "</tr>"
         # Ellipsis row
         html += (
             "<tr>"
@@ -254,13 +270,13 @@ def df_to_html(df: Any, max_rows: int = 20, show_shape: bool = True) -> str:
             + "</tr>"
         )
         for _, row in bottom.iterrows():
-            html += "<tr>" + "".join(f"<td>{escape(str(v)[:80])}</td>" for v in row) + "</tr>"
+            html += "<tr>" + "".join(f"<td>{escape(str(v)[:200])}</td>" for v in row) + "</tr>"
         html += "</table>"
     else:
         html = "<table>"
         html += "<tr>" + "".join(f"<th>{escape(str(c))}</th>" for c in df.columns) + "</tr>"
         for _, row in df.iterrows():
-            html += "<tr>" + "".join(f"<td>{escape(str(v)[:80])}</td>" for v in row) + "</tr>"
+            html += "<tr>" + "".join(f"<td>{escape(str(v)[:200])}</td>" for v in row) + "</tr>"
         html += "</table>"
 
     shape_str = f"<p class='timing'>{n} rows x {len(df.columns)} columns</p>" if show_shape else ""
@@ -300,25 +316,43 @@ def timed(func):
 def section_import(html: HTMLBuilder) -> None:
     """Section 1: Import the NDI dataset."""
     html.add_heading("Import the NDI dataset")
-    html.add_text("Define the dataset path and cloud ID.")
+    html.add_text(
+        "Define the dataset path and cloud ID. "
+        "You will need an NDI Cloud account to download the dataset and "
+        "fetch binary files on demand."
+    )
+    html.add_text("Paper: https://doi.org/10.7554/eLife.103191.3")
+    html.add_text("Dataset DOI: https://doi.org/10.63884/ndic.2025.pb77mj2s")
 
     html.add_code("""\
 import os
 from pathlib import Path
-from ndi.cloud.orchestration import load_dataset_from_json_dir
+from ndi.cloud import download_dataset
+from ndi.cloud.auth import login
+from ndi.cloud.client import CloudClient
+import ndi.dataset
 
 cloud_dataset_id = '682e7772cdf3f24938176fac'
-data_path = Path(os.path.expanduser('~/Documents/ndi-projects/datasets/jess-haley/documents'))""")
+data_path = Path(os.path.expanduser('~/Documents/MATLAB/Datasets'))
+dataset_path = data_path / cloud_dataset_id
+
+# NDI Cloud credentials (set via environment variables or edit here)
+# Create a free account at https://www.ndi-cloud.com
+ndi_cloud_username = os.environ.get('NDI_CLOUD_USERNAME', '')
+ndi_cloud_password = os.environ.get('NDI_CLOUD_PASSWORD', '')""")
 
     html.add_output_text(
-        f"cloud_dataset_id = '{CLOUD_DATASET_ID}'\n" f"data_path = '{JESS_HALEY_DOCS}'"
+        f"cloud_dataset_id = '{CLOUD_DATASET_ID}'\n" f"dataset_path = '{DATASET_PATH}'"
     )
 
 
 @timed
 def section_load_dataset(html: HTMLBuilder) -> Any:
     """Section 2: Download or load the NDI dataset."""
-    from ndi.cloud.orchestration import load_dataset_from_json_dir
+    import ndi.dataset
+    from ndi.cloud import download_dataset
+    from ndi.cloud.auth import login
+    from ndi.cloud.client import CloudClient
 
     html.add_heading("Download or load the NDI dataset")
     html.add_text(
@@ -327,21 +361,34 @@ def section_load_dataset(html: HTMLBuilder) -> Any:
         "dataset downloaded, every other time you examine the data you can "
         "just load it."
     )
-    html.add_text(
-        "In Python, we use load_dataset_from_json_dir() to load pre-downloaded "
-        "JSON documents into an NDI Dataset object."
-    )
 
     html.add_code("""\
-dataset = load_dataset_from_json_dir(data_path, cloud_dataset_id=cloud_dataset_id, verbose=True)""")
+if dataset_path.exists():
+    # Load from previously downloaded dataset
+    dataset = ndi.dataset.Dataset(dataset_path)
+else:
+    # Download from NDI Cloud (first time only)
+    config = login(ndi_cloud_username, ndi_cloud_password)
+    client = CloudClient(config)
+    dataset = download_dataset(client, cloud_dataset_id, str(dataset_path), verbose=True)""")
 
     t0 = time.time()
-    dataset = load_dataset_from_json_dir(
-        JESS_HALEY_DOCS, cloud_dataset_id=CLOUD_DATASET_ID, verbose=True
-    )
-    elapsed = time.time() - t0
-
-    html.add_output_text(f"Dataset loaded in {elapsed:.1f}s from {JESS_HALEY_DOCS}")
+    if DATASET_PATH.exists():
+        dataset = ndi.dataset.Dataset(DATASET_PATH)
+        elapsed = time.time() - t0
+        html.add_output_text(f"Dataset loaded in {elapsed:.1f}s from {DATASET_PATH}")
+    else:
+        if not NDI_CLOUD_USERNAME or not NDI_CLOUD_PASSWORD:
+            print("ERROR: Dataset not found locally and no NDI Cloud credentials set.")
+            print("Set NDI_CLOUD_USERNAME and NDI_CLOUD_PASSWORD environment variables,")
+            print("or edit the credentials at the top of this script.")
+            print(f"Expected dataset path: {DATASET_PATH}")
+            sys.exit(1)
+        config = login(NDI_CLOUD_USERNAME, NDI_CLOUD_PASSWORD)
+        client = CloudClient(config)
+        dataset = download_dataset(client, CLOUD_DATASET_ID, str(DATASET_PATH), verbose=True)
+        elapsed = time.time() - t0
+        html.add_output_text(f"Dataset downloaded in {elapsed:.1f}s to {DATASET_PATH}")
 
     return dataset
 
@@ -2072,11 +2119,6 @@ def main() -> None:
     print("NDI Dataset Tutorial: C. elegans Behavior & E. coli Fluorescence")
     print(f"Dataset: {CLOUD_DATASET_ID}")
     print("=" * 70)
-
-    if not JESS_HALEY_DOCS.exists():
-        print(f"\nERROR: Dataset documents not found at {JESS_HALEY_DOCS}")
-        print("Please download the dataset first.")
-        sys.exit(1)
 
     html = HTMLBuilder("NDI Dataset Tutorial: C. elegans Behavior & E. coli Fluorescence Imaging")
 

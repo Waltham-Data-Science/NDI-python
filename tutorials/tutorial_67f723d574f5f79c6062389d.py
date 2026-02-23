@@ -21,8 +21,9 @@ Dataset summary:
   - Strains: CRF-Cre, OTR-IRES-Cre, AVP-Cre, SD wildtype
 
 Prerequisites:
-  - Dataset downloaded at ~/Documents/ndi-projects/datasets/dabrowska/.ndi_dataset
   - pip install pandas matplotlib
+  - NDI Cloud account (free at https://www.ndi-cloud.com)
+  - Set NDI_CLOUD_USERNAME/NDI_CLOUD_PASSWORD env vars (or edit this script)
 
 Usage:
   python tutorials/tutorial_67f723d574f5f79c6062389d.py
@@ -44,8 +45,22 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 CLOUD_DATASET_ID = "67f723d574f5f79c6062389d"
-DATASET_PATH = Path(os.path.expanduser("~/Documents/ndi-projects/datasets/dabrowska"))
+DATA_PATH = Path(os.path.expanduser("~/Documents/MATLAB/Datasets"))
+DATASET_PATH = DATA_PATH / CLOUD_DATASET_ID
 OUTPUT_HTML = Path(__file__).parent / f"tutorial_{CLOUD_DATASET_ID}.html"
+
+# ---------------------------------------------------------------------------
+# NDI Cloud Credentials
+# ---------------------------------------------------------------------------
+# To download datasets and fetch binary files on demand, set your
+# NDI Cloud credentials below OR as environment variables:
+#
+#   export NDI_CLOUD_USERNAME="your_email@example.com"
+#   export NDI_CLOUD_PASSWORD="your_password"
+#
+# You can create a free account at https://www.ndi-cloud.com
+NDI_CLOUD_USERNAME = os.environ.get("NDI_CLOUD_USERNAME", "")
+NDI_CLOUD_PASSWORD = os.environ.get("NDI_CLOUD_PASSWORD", "")
 
 
 # ---------------------------------------------------------------------------
@@ -254,7 +269,7 @@ def df_to_html(df: Any, max_rows: int = 20, show_shape: bool = True) -> str:
         html = "<table>"
         html += "<tr>" + "".join(f"<th>{escape(str(c))}</th>" for c in df.columns) + "</tr>"
         for _, row in top.iterrows():
-            html += "<tr>" + "".join(f"<td>{escape(str(v)[:80])}</td>" for v in row) + "</tr>"
+            html += "<tr>" + "".join(f"<td>{escape(str(v)[:200])}</td>" for v in row) + "</tr>"
         # Ellipsis row
         html += (
             "<tr>"
@@ -262,13 +277,13 @@ def df_to_html(df: Any, max_rows: int = 20, show_shape: bool = True) -> str:
             + "</tr>"
         )
         for _, row in bottom.iterrows():
-            html += "<tr>" + "".join(f"<td>{escape(str(v)[:80])}</td>" for v in row) + "</tr>"
+            html += "<tr>" + "".join(f"<td>{escape(str(v)[:200])}</td>" for v in row) + "</tr>"
         html += "</table>"
     else:
         html = "<table>"
         html += "<tr>" + "".join(f"<th>{escape(str(c))}</th>" for c in df.columns) + "</tr>"
         for _, row in df.iterrows():
-            html += "<tr>" + "".join(f"<td>{escape(str(v)[:80])}</td>" for v in row) + "</tr>"
+            html += "<tr>" + "".join(f"<td>{escape(str(v)[:200])}</td>" for v in row) + "</tr>"
         html += "</table>"
 
     shape_str = f"<p class='timing'>{n} rows x {len(df.columns)} columns</p>" if show_shape else ""
@@ -311,38 +326,75 @@ def section_1_import_and_load(html: HTMLBuilder) -> Any:
     import pandas as pd
 
     import ndi.dataset
+    from ndi.cloud import download_dataset
+    from ndi.cloud.auth import login
+    from ndi.cloud.client import CloudClient
     from ndi.fun.doc import get_doc_types
 
     html.add_heading("Import and load NDI dataset")
     html.add_text(
         "Define the dataset path and cloud ID, then load the dataset. "
-        "This dataset has been pre-downloaded as a local SQLite database. "
         "The first time you access a dataset it must be downloaded from "
         "NDI Cloud, which may take several minutes. Once downloaded, "
         "subsequent loads are instantaneous."
+    )
+    html.add_text(
+        "You will need an NDI Cloud account to download the dataset and "
+        "fetch binary files on demand. Create a free account at "
+        "https://www.ndi-cloud.com and set your credentials via "
+        "environment variables or at the top of this script."
     )
     html.add_text("Paper: https://doi.org/10.1016/j.celrep.2025.115768")
     html.add_text("Dataset DOI: https://doi.org/10.63884/ndic.2025.jyxfer8m")
 
     html.add_code("""\
+import os
 import ndi.dataset
-from ndi.query import Query
+from ndi.cloud import download_dataset
+from ndi.cloud.auth import login
+from ndi.cloud.client import CloudClient
 from ndi.fun.doc import get_doc_types
 
 cloud_dataset_id = '67f723d574f5f79c6062389d'
-dataset_path = '~/Documents/ndi-projects/datasets/dabrowska'
+data_path = os.path.expanduser('~/Documents/MATLAB/Datasets')
+dataset_path = os.path.join(data_path, cloud_dataset_id)
 
-dataset = ndi.dataset.Dataset(dataset_path)""")
+# NDI Cloud credentials (set via environment variables or edit here)
+ndi_cloud_username = os.environ.get('NDI_CLOUD_USERNAME', '')
+ndi_cloud_password = os.environ.get('NDI_CLOUD_PASSWORD', '')
+
+if os.path.exists(dataset_path):
+    dataset = ndi.dataset.Dataset(dataset_path)
+else:
+    config = login(ndi_cloud_username, ndi_cloud_password)
+    client = CloudClient(config)
+    dataset = download_dataset(client, cloud_dataset_id, dataset_path, verbose=True)""")
 
     t0 = time.time()
-    dataset = ndi.dataset.Dataset(DATASET_PATH)
-    elapsed = time.time() - t0
-
-    html.add_output_text(
-        f"cloud_dataset_id = '{CLOUD_DATASET_ID}'\n"
-        f"dataset_path = '{DATASET_PATH}'\n"
-        f"Dataset loaded in {elapsed:.2f}s"
-    )
+    if DATASET_PATH.exists():
+        dataset = ndi.dataset.Dataset(DATASET_PATH)
+        elapsed = time.time() - t0
+        html.add_output_text(
+            f"cloud_dataset_id = '{CLOUD_DATASET_ID}'\n"
+            f"dataset_path = '{DATASET_PATH}'\n"
+            f"Dataset loaded in {elapsed:.2f}s"
+        )
+    else:
+        if not NDI_CLOUD_USERNAME or not NDI_CLOUD_PASSWORD:
+            print("ERROR: Dataset not found locally and no NDI Cloud credentials set.")
+            print("Set NDI_CLOUD_USERNAME and NDI_CLOUD_PASSWORD environment variables,")
+            print("or edit the credentials at the top of this script.")
+            print(f"Expected dataset path: {DATASET_PATH}")
+            sys.exit(1)
+        config = login(NDI_CLOUD_USERNAME, NDI_CLOUD_PASSWORD)
+        client = CloudClient(config)
+        dataset = download_dataset(client, CLOUD_DATASET_ID, str(DATASET_PATH), verbose=True)
+        elapsed = time.time() - t0
+        html.add_output_text(
+            f"cloud_dataset_id = '{CLOUD_DATASET_ID}'\n"
+            f"dataset_path = '{DATASET_PATH}'\n"
+            f"Dataset downloaded in {elapsed:.2f}s"
+        )
 
     # Show document type counts
     html.add_text(
@@ -987,16 +1039,18 @@ for i in range(num_steps):
 row_ind = np.nanargmax(np.abs(I_matrix), axis=0)
 current_steps = np.array([I_matrix[row_ind[j], j] for j in range(num_steps)])
 
-# Plot all sweeps overlaid, color-coded by current injection level
-fig, ax = plt.subplots(figsize=(8, 6))
+# Plot Vm and I traces in 2 subplots (matching MATLAB layout)
+fig, (ax_vm, ax_i) = plt.subplots(2, 1, figsize=(8, 8), sharex=True)
 cmap = plt.cm.turbo
 norm = plt.Normalize(current_steps.min(), current_steps.max())
 for i in range(num_steps):
-    ax.plot(time_matrix, Vm_matrix[:, i],
-            color=cmap(norm(current_steps[i])), linewidth=0.8)
-ax.set_xlabel('Time (s)'); ax.set_ylabel('Voltage (mV)')
+    c = cmap(norm(current_steps[i]))
+    ax_vm.plot(time_matrix, Vm_matrix[:, i], color=c, linewidth=0.8)
+    ax_i.plot(time_matrix, I_matrix[:, i], color=c, linewidth=0.8)
+ax_vm.set_ylabel('Vm (V)'); ax_vm.set_title(subject_name)
+ax_i.set_ylabel('I (A)');   ax_i.set_xlabel('Time (s)')
 sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-cb = plt.colorbar(sm, ax=ax); cb.set_label('Current (pA)')""")
+plt.colorbar(sm, ax=[ax_vm, ax_i], label='I (A)')""")
 
     import tarfile
 
@@ -1047,22 +1101,20 @@ cb = plt.colorbar(sm, ax=ax); cb.set_label('Current (pA)')""")
             row_ind = np.nanargmax(np.abs(i_matrix), axis=0)
             current_steps = np.array([i_matrix[row_ind[j], j] for j in range(num_steps)])
 
-            # Plot all sweeps overlaid, color-coded by current (turbo colormap)
-            fig, ax = plt.subplots(figsize=(8, 6))
+            # Plot Vm and I in 2 subplots (matching MATLAB layout)
+            fig, (ax_vm, ax_i) = plt.subplots(2, 1, figsize=(8, 8), sharex=True)
             cmap = plt.cm.turbo
             norm = plt.Normalize(current_steps.min(), current_steps.max())
             for i in range(num_steps):
-                ax.plot(
-                    time_matrix,
-                    vm_matrix[:, i],
-                    color=cmap(norm(current_steps[i])),
-                    linewidth=0.8,
-                )
-            ax.set_xlabel("Time (s)")
-            ax.set_ylabel("Voltage (mV)")
+                c = cmap(norm(current_steps[i]))
+                ax_vm.plot(time_matrix, vm_matrix[:, i], color=c, linewidth=0.8)
+                ax_i.plot(time_matrix, i_matrix[:, i], color=c, linewidth=0.8)
+            ax_vm.set_ylabel("Vm (V)")
+            ax_vm.set_title(subject_name)
+            ax_i.set_ylabel("I (A)")
+            ax_i.set_xlabel("Time (s)")
             sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-            cb = plt.colorbar(sm, ax=ax)
-            cb.set_label("Current (pA)")
+            plt.colorbar(sm, ax=[ax_vm, ax_i], label="I (A)")
             plt.tight_layout()
             html.add_image_base64(
                 fig_to_bytes(),
@@ -1693,11 +1745,6 @@ def main() -> None:
     print("NDI Dataset Tutorial: Rat Electrophysiology & Optogenetic Stimulation")
     print(f"Dataset: {CLOUD_DATASET_ID}")
     print("=" * 70)
-
-    if not DATASET_PATH.exists():
-        print(f"\nERROR: Dataset not found at {DATASET_PATH}")
-        print("Please download the dataset first.")
-        sys.exit(1)
 
     html = HTMLBuilder("NDI Dataset Tutorial: Rat Electrophysiology & Optogenetic Stimulation")
 

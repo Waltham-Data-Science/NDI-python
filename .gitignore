@@ -46,3 +46,6 @@ site/
 # NDI session data (generated during tests)
 .ndi/
 *.ndi
+
+# Generated tutorial HTML (keep locally for review, not in repo)
+tutorials/*.html
