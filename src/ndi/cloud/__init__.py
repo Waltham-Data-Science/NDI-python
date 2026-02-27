@@ -73,12 +73,19 @@ __all__ = [
 # when requests is not installed.
 
 _LAZY_IMPORTS = {
+    # Python-style (primary)
+    "APIResponse": ("client", "APIResponse"),
     "CloudClient": ("client", "CloudClient"),
     "download_dataset": ("orchestration", "download_dataset"),
     "upload_dataset": ("orchestration", "upload_dataset"),
     "sync_dataset": ("orchestration", "sync_dataset"),
     "upload_single_file": ("upload", "upload_single_file"),
     "fetch_cloud_file": ("filehandler", "fetch_cloud_file"),
+    # MATLAB-style aliases (for users migrating from MATLAB)
+    "downloadDataset": ("orchestration", "download_dataset"),
+    "uploadDataset": ("orchestration", "upload_dataset"),
+    "syncDataset": ("orchestration", "sync_dataset"),
+    "uploadSingleFile": ("upload", "upload_single_file"),
 }
 
 

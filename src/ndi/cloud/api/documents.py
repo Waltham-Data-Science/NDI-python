@@ -19,6 +19,25 @@ if TYPE_CHECKING:
     from ..client import CloudClient
 
 
+def _coerce_search_structure(search_structure: Any) -> Any:
+    """Convert Query objects to JSON-serializable dicts.
+
+    Accepts :class:`~ndi.query.Query` objects, raw dicts/lists, or lists
+    containing a mix of both.  Returns a JSON-serializable value suitable
+    for the cloud ``searchstructure`` POST body.
+    """
+    # Single Query object
+    if hasattr(search_structure, "to_search_structure"):
+        return search_structure.to_search_structure()
+    # List that may contain Query objects
+    if isinstance(search_structure, list):
+        return [
+            q.to_search_structure() if hasattr(q, "to_search_structure") else q
+            for q in search_structure
+        ]
+    return search_structure
+
+
 @_auto_client
 def get_document(
     client: CloudClient,
@@ -134,7 +153,7 @@ def get_document_count(client: CloudClient, dataset_id: str) -> int:
             "/datasets/{datasetId}/document-count",
             datasetId=dataset_id,
         )
-        if isinstance(result, dict) and "count" in result:
+        if "count" in result:
             return result["count"]
     except Exception:
         pass
@@ -172,7 +191,7 @@ def get_bulk_upload_url(
         "/datasets/{datasetId}/documents/bulk-upload",
         datasetId=dataset_id,
     )
-    return result.get("url", "") if isinstance(result, dict) else ""
+    return result.get("url", "")
 
 
 @_auto_client
@@ -193,7 +212,7 @@ def get_bulk_download_url(
         json=body,
         datasetId=dataset_id,
     )
-    return result.get("url", "") if isinstance(result, dict) else ""
+    return result.get("url", "")
 
 
 @_auto_client
@@ -220,7 +239,7 @@ def bulk_delete(
 def ndi_query(
     client: CloudClient,
     scope: str,
-    search_structure: dict[str, Any],
+    search_structure: Any,
     page: int = 1,
     page_size: int = 20,
 ) -> dict[str, Any]:
@@ -231,13 +250,16 @@ def ndi_query(
     Args:
         client: Authenticated cloud client.
         scope: One of ``'public'``, ``'private'``, ``'all'``.
-        search_structure: Query search structure dict.
+        search_structure: Query object, search structure dict, or list.
+            Accepts :class:`~ndi.query.Query` objects (auto-converted),
+            raw dicts, or lists of either.
         page: Page number (1-based).
         page_size: Results per page.
 
     Returns:
         Dict with ``documents`` list and pagination metadata.
     """
+    search_structure = _coerce_search_structure(search_structure)
     return client.post(
         f"/ndiquery?page={page}&pageSize={page_size}",
         json={"scope": scope, "searchstructure": search_structure},
@@ -248,13 +270,14 @@ def ndi_query(
 def ndi_query_all(
     client: CloudClient,
     scope: str,
-    search_structure: dict[str, Any],
+    search_structure: Any,
     page_size: int = 1000,
 ) -> list[dict[str, Any]]:
     """Auto-paginate through all ndiquery results.
 
     MATLAB equivalent: +cloud/+api/+documents/ndiqueryAll.m
     """
+    search_structure = _coerce_search_structure(search_structure)
     all_docs: list[dict[str, Any]] = []
     page = 1
     while page <= _MAX_PAGES:

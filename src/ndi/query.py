@@ -65,12 +65,34 @@ class Query:
         "regexp": "match",
     }
 
-    def __init__(self, field: str = ""):
-        """Create a new query for the specified field.
+    def __init__(
+        self,
+        field: str = "",
+        operation: str | None = None,
+        param1: Any = None,
+        param2: Any = None,
+    ):
+        """Create a new query.
+
+        Supports both Pythonic and MATLAB-style construction:
+
+        Pythonic (chain operators after construction)::
+
+            q = Query('base.name') == 'test'
+
+        MATLAB-compatible (pass operation and params directly)::
+
+            q = Query('', 'isa', 'base')
+            q = Query('base.name', 'exact_string', 'test')
 
         Args:
             field: The document field to query (e.g., 'base.name',
                    'element.type'). Can be empty string for 'isa' queries.
+            operation: Optional MATLAB-style operation string (e.g.,
+                   'exact_string', 'isa', 'regexp'). When provided, the
+                   query is resolved immediately.
+            param1: First parameter for the operation.
+            param2: Second parameter for the operation.
         """
         self.field = field
         self.operator = None
@@ -79,6 +101,13 @@ class Query:
         self._composite = False
         self._composite_op = None
         self._queries = []
+
+        if operation is not None:
+            resolved = Query.from_search(field, operation, param1 or "", param2 or "")
+            self.field = resolved.field
+            self.operator = resolved.operator
+            self.value = resolved.value
+            self._resolved = resolved._resolved
 
     def _resolve(self, operator: str, value: Any) -> "Query":
         """Internal method to set the query condition."""

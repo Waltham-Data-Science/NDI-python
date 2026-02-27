@@ -201,6 +201,82 @@ is not installed. The functions are still defined in their respective modules
 
 **Verdict: Implemented. Now matches MATLAB's discoverability.**
 
+### 3b. camelCase Aliases (Implemented — Issue #4)
+
+MATLAB users expect `ndi.cloud.downloadDataset` (camelCase). Python used only
+`ndi.cloud.download_dataset` (snake_case). Now the lazy-import table in
+`ndi.cloud.__init__` also registers camelCase aliases:
+
+```python
+# Both work:
+ndi.cloud.download_dataset(...)     # Python convention (primary)
+ndi.cloud.downloadDataset(...)      # MATLAB convention (alias)
+```
+
+| MATLAB camelCase | Python alias → target |
+|------------------|-----------------------|
+| `downloadDataset` | → `download_dataset` |
+| `uploadDataset` | → `upload_dataset` |
+| `syncDataset` | → `sync_dataset` |
+| `uploadSingleFile` | → `upload_single_file` |
+
+**Verdict: Implemented. camelCase aliases resolve via `__getattr__` lazy import.**
+
+---
+
+## 3c. Query Serialization for Cloud API (Implemented — Issue #3)
+
+### Problem
+
+`ndi.Query` objects couldn't be passed directly to `ndi.cloud.api.documents.ndi_query()`.
+The cloud API expected JSON-serializable dicts but Query objects weren't auto-converted.
+Also, MATLAB's constructor syntax `ndi.query('', 'isa', 'base')` didn't work in Python.
+
+### Solution
+
+1. **MATLAB constructor**: `Query.__init__` now accepts `(field, operation, param1, param2)`:
+   ```python
+   q = Query('', 'isa', 'base')                      # MATLAB-style
+   q = Query('base.name', 'exact_string', 'test')     # MATLAB-style
+   q = Query('base.name') == 'test'                   # Pythonic (still works)
+   ```
+
+2. **Auto-coercion**: `ndi_query()` and `ndi_query_all()` call `_coerce_search_structure()`
+   which auto-converts Query objects via `to_search_structure()`:
+   ```python
+   q = Query('', 'isa', 'element')
+   result = ndi_query(client, 'public', q)   # Query auto-converted to dict
+   ```
+
+**Verdict: Implemented. Both MATLAB constructor and cloud API integration work.**
+
+---
+
+## 3d. APIResponse Metadata (Implemented — Issue #5)
+
+### Problem
+
+MATLAB cloud API functions return a 4-tuple `[b, answer, apiResponse, apiURL]`
+providing response metadata alongside the data. Python only returned the raw data.
+
+### Solution
+
+`CloudClient._request()` now wraps results in an `APIResponse` class that
+**transparently proxies** dict/list operations to the underlying data:
+
+```python
+result = get_dataset(client, dataset_id)
+result.get("name")       # works — proxied to data dict
+result.success           # True for HTTP 2xx
+result.status_code       # 200
+result.url               # full request URL
+```
+
+Backward compatible: all existing code using `.get()`, `[]`, `in`, `for ... in`
+continues to work unchanged.
+
+**Verdict: Implemented. MATLAB 4-output pattern available via .success/.status_code/.url.**
+
 ---
 
 ## 4. Internal Helpers Flattened

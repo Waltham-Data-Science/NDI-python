@@ -37,7 +37,7 @@ def get_upload_url(
         datasetId=dataset_id,
         file_uid=file_uid,
     )
-    return result.get("url", "") if isinstance(result, dict) else ""
+    return result.get("url", "")
 
 
 @_auto_client
@@ -55,7 +55,7 @@ def get_bulk_upload_url(
         organizationId=org_id,
         datasetId=dataset_id,
     )
-    return result.get("url", "") if isinstance(result, dict) else ""
+    return result.get("url", "")
 
 
 def put_file(
@@ -217,4 +217,4 @@ def get_file_collection_upload_url(
         organizationId=org_id,
         datasetId=dataset_id,
     )
-    return result.get("url", "") if isinstance(result, dict) else ""
+    return result.get("url", "")

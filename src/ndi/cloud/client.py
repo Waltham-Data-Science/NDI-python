@@ -23,6 +23,81 @@ from .exceptions import (
 )
 
 
+class APIResponse:
+    """Wrapper around cloud API results with request metadata.
+
+    MATLAB equivalent: the 4-output ``[b, answer, apiResponse, apiURL]``
+    pattern returned by all ``ndi.cloud.api.call`` subclasses.
+
+    This class **transparently proxies** dict and list operations to the
+    underlying ``data`` payload so that existing code like
+    ``result.get("field")`` or ``for doc in result`` keeps working.
+    New code can access ``result.success``, ``result.status_code``, and
+    ``result.url`` for diagnostics.
+
+    Attributes:
+        success: True if the request returned HTTP 2xx.
+        data: The parsed response payload (dict, list, str, or None).
+        status_code: The HTTP status code.
+        url: The full request URL.
+    """
+
+    __slots__ = ("success", "data", "status_code", "url")
+
+    def __init__(
+        self,
+        data: Any,
+        *,
+        success: bool = True,
+        status_code: int = 200,
+        url: str = "",
+    ):
+        self.success = success
+        self.data = data
+        self.status_code = status_code
+        self.url = url
+
+    # -- Dict proxy (when data is a dict) --
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Proxy ``dict.get()`` to the data payload."""
+        if isinstance(self.data, dict):
+            return self.data.get(key, default)
+        return default
+
+    def __getitem__(self, key: Any) -> Any:
+        return self.data[key]
+
+    def __contains__(self, key: Any) -> bool:
+        return key in self.data
+
+    def keys(self):
+        return self.data.keys()
+
+    def values(self):
+        return self.data.values()
+
+    def items(self):
+        return self.data.items()
+
+    # -- List proxy (when data is a list) --
+
+    def __iter__(self):
+        return iter(self.data)
+
+    def __len__(self) -> int:
+        return len(self.data)
+
+    # -- General --
+
+    def __bool__(self) -> bool:
+        return bool(self.data) if self.data is not None else False
+
+    def __repr__(self) -> str:
+        status = "OK" if self.success else "FAIL"
+        return f"APIResponse({status}, status={self.status_code}, url={self.url!r})"
+
+
 class CloudClient:
     """HTTP client for the NDI Cloud REST API.
 
@@ -118,8 +193,15 @@ class CloudClient:
         data: Any = None,
         timeout: int | None = None,
         **path_params: str,
-    ) -> Any:
-        """Execute an HTTP request with auth and error handling."""
+    ) -> APIResponse:
+        """Execute an HTTP request with auth and error handling.
+
+        Returns:
+            :class:`APIResponse` wrapping the parsed data with metadata
+            (``success``, ``status_code``, ``url``).  On HTTP errors the
+            method still raises the appropriate exception; the
+            ``APIResponse`` is only returned for successful (2xx) requests.
+        """
         import requests as _requests
 
         url = self._build_url(endpoint, **path_params)
@@ -140,7 +222,13 @@ class CloudClient:
         except _requests.RequestException as exc:
             raise CloudAPIError(f"Request failed: {exc}") from exc
 
-        return self._handle_response(resp)
+        parsed = self._handle_response(resp)
+        return APIResponse(
+            parsed,
+            success=True,
+            status_code=resp.status_code,
+            url=url,
+        )
 
     def _handle_response(self, resp: Any) -> Any:
         """Map HTTP responses to return values or exceptions."""

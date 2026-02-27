@@ -304,7 +304,7 @@ class TestAuth:
 class TestUser:
     def test_get_current_user(self, user_info):
         """GET /users/me should return authenticated user info."""
-        assert isinstance(user_info, dict)
+        assert hasattr(user_info, "get"), f"Expected dict-like response, got {type(user_info)}"
         assert user_info.get("id")
         assert user_info.get("email")
         assert user_info.get("name")
@@ -682,6 +682,7 @@ class TestFileLifecycle:
 
         # Wait for file to be registered and poll for upload completion
         download_url = ""
+        details = {}
         for wait in (3, 5, 10):
             time.sleep(wait)
             files = list_files(client, fresh_dataset)
@@ -738,7 +739,7 @@ class TestFileLifecycle:
         time.sleep(3)
 
         details = get_file_details(client, fresh_dataset, file_uid)
-        assert isinstance(details, dict)
+        assert hasattr(details, "get"), f"Expected dict-like response, got {type(details)}"
         assert details.get("downloadUrl")
 
 
@@ -762,7 +763,7 @@ class TestNDIQuery:
         result = _retry_on_server_error(
             lambda: ndi_query(client, "public", search, page=1, page_size=5)
         )
-        assert isinstance(result, dict)
+        assert hasattr(result, "get"), f"Expected dict-like response, got {type(result)}"
         assert "documents" in result
 
     def test_ndi_query_nonexistent_returns_empty(self, client):
@@ -861,7 +862,7 @@ class TestPublishWorkflow:
         from ndi.cloud.api.datasets import get_published_datasets
 
         result = get_published_datasets(client, page=1, page_size=5)
-        assert isinstance(result, dict)
+        assert hasattr(result, "get"), f"Expected dict-like response, got {type(result)}"
         datasets = result.get("datasets", [])
         assert len(datasets) > 0
 
@@ -870,7 +871,7 @@ class TestPublishWorkflow:
         from ndi.cloud.api.datasets import get_unpublished
 
         result = get_unpublished(client, page=1, page_size=5)
-        assert isinstance(result, dict)
+        assert hasattr(result, "get"), f"Expected dict-like response, got {type(result)}"
 
 
 # ===========================================================================
@@ -923,7 +924,9 @@ class TestSoftDelete:
 
             # Deferred delete (7 days)
             del_result = delete_dataset(client, ds_id, when="7d")
-            assert isinstance(del_result, dict)
+            assert hasattr(
+                del_result, "get"
+            ), f"Expected dict-like response, got {type(del_result)}"
             assert "message" in del_result
 
             # Should appear in deleted list
@@ -934,7 +937,9 @@ class TestSoftDelete:
 
             # Undelete
             undelete_result = undelete_dataset(client, ds_id)
-            assert isinstance(undelete_result, dict)
+            assert hasattr(
+                undelete_result, "get"
+            ), f"Expected dict-like response, got {type(undelete_result)}"
 
             # Should be accessible again with documents intact
             time.sleep(2)
@@ -1017,7 +1022,7 @@ class TestSoftDelete:
         time.sleep(2)
 
         deleted = list_deleted_documents(client, fresh_dataset)
-        assert isinstance(deleted, dict)
+        assert hasattr(deleted, "get"), f"Expected dict-like response, got {type(deleted)}"
         # The response should have a documents list
         deleted_docs = deleted.get("documents", [])
         assert isinstance(deleted_docs, list)
@@ -1041,7 +1046,7 @@ class TestSoftDelete:
         assert ds_id
 
         del_result = delete_dataset(client, ds_id, when="now")
-        assert isinstance(del_result, dict)
+        assert hasattr(del_result, "get"), f"Expected dict-like response, got {type(del_result)}"
         assert "message" in del_result
 
     def test_delete_document_returns_message(self, client, fresh_dataset):
@@ -1057,7 +1062,7 @@ class TestSoftDelete:
         assert doc_id
 
         del_result = delete_document(client, fresh_dataset, doc_id, when="now")
-        assert isinstance(del_result, dict)
+        assert hasattr(del_result, "get"), f"Expected dict-like response, got {type(del_result)}"
         assert "message" in del_result
 
 

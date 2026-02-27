@@ -80,6 +80,8 @@ def abort_session(
 def list_sessions(client: CloudClient) -> list[dict[str, Any]]:
     """GET /compute — List all compute sessions."""
     result = client.get("/compute")
-    if isinstance(result, list):
-        return result
-    return result.get("sessions", []) if isinstance(result, dict) else []
+    # Handle both APIResponse (has .data) and raw dict/list from mocks
+    raw = result.data if hasattr(result, "data") else result
+    if isinstance(raw, list):
+        return raw
+    return raw.get("sessions", []) if isinstance(raw, dict) else []
