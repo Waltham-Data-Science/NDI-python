@@ -1,6 +1,10 @@
 """
 ndi.cloud.api.compute - Compute session management.
 
+All functions accept an optional :class:`~ndi.cloud.client.CloudClient` as
+the first argument.  When omitted, a client is created automatically from
+environment variables.
+
 MATLAB equivalents: +ndi/+cloud/+api/+compute/*.m
 """
 
@@ -8,10 +12,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ..client import _auto_client
+
 if TYPE_CHECKING:
     from ..client import CloudClient
 
 
+@_auto_client
 def start_session(
     client: CloudClient,
     pipeline_id: str,
@@ -24,6 +31,7 @@ def start_session(
     return client.post("/compute/start", json=body)
 
 
+@_auto_client
 def get_session_status(
     client: CloudClient,
     session_id: str,
@@ -32,6 +40,7 @@ def get_session_status(
     return client.get("/compute/{sessionId}", sessionId=session_id)
 
 
+@_auto_client
 def trigger_stage(
     client: CloudClient,
     session_id: str,
@@ -45,6 +54,7 @@ def trigger_stage(
     )
 
 
+@_auto_client
 def finalize_session(
     client: CloudClient,
     session_id: str,
@@ -56,6 +66,7 @@ def finalize_session(
     )
 
 
+@_auto_client
 def abort_session(
     client: CloudClient,
     session_id: str,
@@ -65,6 +76,7 @@ def abort_session(
     return True
 
 
+@_auto_client
 def list_sessions(client: CloudClient) -> list[dict[str, Any]]:
     """GET /compute — List all compute sessions."""
     result = client.get("/compute")

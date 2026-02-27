@@ -17,7 +17,6 @@ streamed to local storage.
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -176,8 +175,9 @@ def fetch_cloud_file(
 def get_or_create_cloud_client() -> CloudClient:
     """Create an authenticated CloudClient from environment variables.
 
-    Reads ``NDI_CLOUD_USERNAME`` and ``NDI_CLOUD_PASSWORD`` from the
-    environment and calls :func:`login`.
+    Delegates to :meth:`CloudClient.from_env`, which checks for an
+    existing valid token first, then falls back to username/password
+    login.
 
     Returns:
         An authenticated :class:`CloudClient`.
@@ -185,19 +185,6 @@ def get_or_create_cloud_client() -> CloudClient:
     Raises:
         CloudAuthError: If credentials are missing or login fails.
     """
-    from .auth import login
     from .client import CloudClient
-    from .exceptions import CloudAuthError
 
-    username = os.environ.get("NDI_CLOUD_USERNAME", "")
-    password = os.environ.get("NDI_CLOUD_PASSWORD", "")
-
-    if not username or not password:
-        raise CloudAuthError(
-            "Cannot auto-authenticate for cloud file download. "
-            "Set NDI_CLOUD_USERNAME and NDI_CLOUD_PASSWORD environment "
-            "variables, or pass a CloudClient explicitly."
-        )
-
-    config = login(username, password)
-    return CloudClient(config)
+    return CloudClient.from_env()

@@ -13,9 +13,9 @@ Usage:
 
 What it does:
     1. Checks prerequisites (git, Python >= 3.10)
-    2. Clones DID-python and vhlab-toolbox-python to ~/.ndi/tools/
-    3. Writes a .pth file so Python finds them automatically
-    4. Installs NDI-python and all pip dependencies
+    2. Clones vhlab-toolbox-python to ~/.ndi/tools/ (not on PyPI)
+    3. Writes a .pth file so Python finds it automatically
+    4. Installs NDI-python and all pip dependencies (DID-python via pip)
     5. Validates the installation
 """
 
@@ -35,18 +35,11 @@ from pathlib import Path
 
 DEPENDENCIES = [
     {
-        "name": "DID-python",
-        "repo": "https://github.com/VH-Lab/DID-python.git",
-        "branch": "main",
-        "python_path": "src",
-        "description": "Document database backend",
-    },
-    {
         "name": "vhlab-toolbox-python",
         "repo": "https://github.com/VH-Lab/vhlab-toolbox-python.git",
         "branch": "main",
         "python_path": ".",
-        "description": "VH-Lab data utilities and file formats",
+        "description": "VH-Lab data utilities and file formats (not on PyPI)",
     },
 ]
 
@@ -54,13 +47,8 @@ DEFAULT_TOOLS_DIR = Path.home() / ".ndi" / "tools"
 
 PTH_FILENAME = "ndi-deps.pth"
 
-# All pip-installable dependencies (explicit list avoids relying on
-# pyproject.toml dependency resolution which fails due to DID packaging bug).
+# Additional pip dependencies not covered by pyproject.toml's [project.optional-dependencies].
 PIP_DEPS = [
-    "numpy>=1.20.0",
-    "networkx>=2.6",
-    "jsonschema>=4.0.0",
-    "requests>=2.28.0",
     "scipy>=1.9.0",
     "pandas>=1.5.0",
     "matplotlib>=3.5.0",
@@ -342,7 +330,7 @@ def install_ndi_and_deps(ndi_root: Path, include_dev: bool = False) -> bool:
     """Install NDI-python (editable) and all pip dependencies."""
     ok = True
 
-    # Install NDI in editable mode (skip dependency resolution)
+    # Install NDI in editable mode (pip resolves DID-python from pyproject.toml)
     info("Installing NDI-python (editable)...")
     extras = "tutorials"
     if include_dev:
@@ -355,7 +343,6 @@ def install_ndi_and_deps(ndi_root: Path, include_dev: bool = False) -> bool:
             "install",
             "-e",
             f".[{extras}]",
-            "--no-deps",
             "--quiet",
         ],
         capture_output=True,

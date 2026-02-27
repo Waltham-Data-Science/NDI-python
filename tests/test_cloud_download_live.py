@@ -31,15 +31,6 @@ import tempfile
 import time
 import traceback
 from collections import Counter
-from pathlib import Path
-
-# Add project to path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-
-# DID-python dependency
-did_path = Path(__file__).resolve().parent.parent.parent / "DID-python" / "python"
-if did_path.exists():
-    sys.path.insert(0, str(did_path))
 
 logging.basicConfig(
     level=logging.DEBUG,

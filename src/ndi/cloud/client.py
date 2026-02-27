@@ -10,6 +10,7 @@ MATLAB equivalent: ndi.cloud.api.url(), +implementation classes.
 
 from __future__ import annotations
 
+import functools
 import re
 from typing import Any
 from urllib.parse import quote as _url_quote
@@ -178,5 +179,73 @@ class CloudClient:
         except Exception:
             return resp.text
 
+    @classmethod
+    def from_env(cls) -> CloudClient:
+        """Create an authenticated client from environment variables.
+
+        Uses :func:`~ndi.cloud.auth.authenticate` to obtain a valid
+        token (checks ``NDI_CLOUD_TOKEN`` first, then falls back to
+        ``NDI_CLOUD_USERNAME`` / ``NDI_CLOUD_PASSWORD``).  This matches
+        the MATLAB behaviour where ``ndi.cloud.authenticate`` reads
+        credentials from the environment automatically.
+
+        Returns:
+            An authenticated :class:`CloudClient`.
+
+        Raises:
+            CloudAuthError: If no valid credentials are available.
+        """
+        from .auth import authenticate
+
+        config = CloudConfig.from_env()
+        config.token = authenticate(config)
+        return cls(config)
+
     def __repr__(self) -> str:
         return f"CloudClient(api_url={self.config.api_url!r})"
+
+
+def _is_client_like(obj: Any) -> bool:
+    """Check if *obj* is a CloudClient or a duck-typed equivalent (e.g. mock).
+
+    Returns True for CloudClient instances **and** for objects that have
+    ``get`` and ``post`` callable attributes — this allows unittest.mock
+    MagicMock objects to pass through without triggering ``from_env()``.
+    """
+    if isinstance(obj, CloudClient):
+        return True
+    return callable(getattr(obj, "get", None)) and callable(getattr(obj, "post", None))
+
+
+def _auto_client(func):
+    """Decorator that makes the ``client`` parameter optional.
+
+    If the first positional argument is a :class:`CloudClient`, it is
+    passed through unchanged.  Otherwise a client is created
+    automatically from environment variables via
+    :meth:`CloudClient.from_env`.
+
+    This allows callers to use either style::
+
+        get_dataset(client, "abc-123")   # explicit client
+        get_dataset("abc-123")           # auto-built from env
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        # Client passed as keyword argument
+        if "client" in kwargs:
+            if kwargs["client"] is None:
+                kwargs["client"] = CloudClient.from_env()
+            # Prepend client as first positional arg so the function
+            # signature (client, ...) is satisfied without conflict.
+            client = kwargs.pop("client")
+            return func(client, *args, **kwargs)
+        # First positional argument is already a CloudClient (or duck-typed mock)
+        if args and _is_client_like(args[0]):
+            return func(*args, **kwargs)
+        # No client provided — auto-create and prepend
+        client = CloudClient.from_env()
+        return func(client, *args, **kwargs)
+
+    return wrapper

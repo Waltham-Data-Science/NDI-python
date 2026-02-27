@@ -1,8 +1,10 @@
 """
 ndi.cloud.api.datasets - Dataset CRUD, publish, and branch operations.
 
-All functions accept a :class:`~ndi.cloud.client.CloudClient` as the
-first argument.
+All functions accept an optional :class:`~ndi.cloud.client.CloudClient` as
+the first argument.  When omitted, a client is created automatically from
+environment variables (``NDI_CLOUD_TOKEN`` or ``NDI_CLOUD_USERNAME`` /
+``NDI_CLOUD_PASSWORD``).
 
 MATLAB equivalents: +ndi/+cloud/+api/+datasets/*.m,
     +implementation/+datasets/*.m
@@ -12,15 +14,19 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ..client import _auto_client
+
 if TYPE_CHECKING:
     from ..client import CloudClient
 
 
+@_auto_client
 def get_dataset(client: CloudClient, dataset_id: str) -> dict[str, Any]:
     """GET /datasets/{datasetId}"""
     return client.get("/datasets/{datasetId}", datasetId=dataset_id)
 
 
+@_auto_client
 def create_dataset(
     client: CloudClient,
     org_id: str,
@@ -40,6 +46,7 @@ def create_dataset(
     )
 
 
+@_auto_client
 def update_dataset(
     client: CloudClient,
     dataset_id: str,
@@ -53,6 +60,7 @@ def update_dataset(
     )
 
 
+@_auto_client
 def delete_dataset(
     client: CloudClient,
     dataset_id: str,
@@ -75,6 +83,7 @@ def delete_dataset(
     )
 
 
+@_auto_client
 def list_datasets(
     client: CloudClient,
     org_id: str,
@@ -92,6 +101,7 @@ def list_datasets(
 _MAX_PAGES = 1000
 
 
+@_auto_client
 def list_all_datasets(client: CloudClient, org_id: str) -> list[dict[str, Any]]:
     """Auto-paginate through all datasets for an organisation."""
     all_datasets: list[dict[str, Any]] = []
@@ -107,6 +117,7 @@ def list_all_datasets(client: CloudClient, org_id: str) -> list[dict[str, Any]]:
     return all_datasets
 
 
+@_auto_client
 def get_published_datasets(
     client: CloudClient,
     page: int = 1,
@@ -119,31 +130,37 @@ def get_published_datasets(
     )
 
 
+@_auto_client
 def publish_dataset(client: CloudClient, dataset_id: str) -> dict[str, Any]:
     """POST /datasets/{datasetId}/publish"""
     return client.post("/datasets/{datasetId}/publish", datasetId=dataset_id)
 
 
+@_auto_client
 def unpublish_dataset(client: CloudClient, dataset_id: str) -> dict[str, Any]:
     """POST /datasets/{datasetId}/unpublish"""
     return client.post("/datasets/{datasetId}/unpublish", datasetId=dataset_id)
 
 
+@_auto_client
 def submit_dataset(client: CloudClient, dataset_id: str) -> dict[str, Any]:
     """POST /datasets/{datasetId}/submit"""
     return client.post("/datasets/{datasetId}/submit", datasetId=dataset_id)
 
 
+@_auto_client
 def create_branch(client: CloudClient, dataset_id: str) -> dict[str, Any]:
     """POST /datasets/{datasetId}/branch"""
     return client.post("/datasets/{datasetId}/branch", datasetId=dataset_id)
 
 
+@_auto_client
 def get_branches(client: CloudClient, dataset_id: str) -> list[dict[str, Any]]:
     """GET /datasets/{datasetId}/branches"""
     return client.get("/datasets/{datasetId}/branches", datasetId=dataset_id)
 
 
+@_auto_client
 def get_unpublished(
     client: CloudClient,
     page: int = 1,
@@ -159,6 +176,7 @@ def get_unpublished(
     )
 
 
+@_auto_client
 def undelete_dataset(client: CloudClient, dataset_id: str) -> dict[str, Any]:
     """POST /datasets/{datasetId}/undelete
 
@@ -169,6 +187,7 @@ def undelete_dataset(client: CloudClient, dataset_id: str) -> dict[str, Any]:
     return client.post("/datasets/{datasetId}/undelete", datasetId=dataset_id)
 
 
+@_auto_client
 def list_deleted_datasets(
     client: CloudClient,
     page: int = 1,

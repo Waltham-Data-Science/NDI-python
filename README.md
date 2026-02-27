@@ -70,14 +70,13 @@ cd NDI-python
 python -m venv venv
 source venv/bin/activate
 
-# Clone VH-Lab dependencies (not yet on PyPI)
-git clone https://github.com/VH-Lab/DID-python.git ~/.ndi/tools/DID-python
+# Clone vhlab-toolbox-python (not yet on PyPI)
 git clone https://github.com/VH-Lab/vhlab-toolbox-python.git ~/.ndi/tools/vhlab-toolbox-python
-export PYTHONPATH="$HOME/.ndi/tools/DID-python/src:$HOME/.ndi/tools/vhlab-toolbox-python:$PYTHONPATH"
+export PYTHONPATH="$HOME/.ndi/tools/vhlab-toolbox-python:$PYTHONPATH"
 
-# Install NDI-python (--no-deps works around DID packaging bug)
-pip install -e ".[dev,tutorials]" --no-deps
-pip install numpy networkx jsonschema requests pytest pytest-cov scipy pandas matplotlib opencv-python-headless portalocker openminds
+# Install NDI-python (DID-python is resolved automatically via pip)
+pip install -e ".[dev,tutorials]"
+pip install scipy pandas matplotlib opencv-python-headless portalocker openminds
 ```
 
 </details>
@@ -108,6 +107,25 @@ session = DirSession('my_experiment', '/path/to/data')
 session.database_add(doc)
 results = session.database_search(Query('').isa('base'))
 ```
+
+### Cloud API
+
+```python
+from ndi.cloud.api.datasets import get_published_datasets
+
+# Option 1: Set env vars and call without a client
+#   export NDI_CLOUD_USERNAME="you@example.com"
+#   export NDI_CLOUD_PASSWORD="your-password"
+datasets = get_published_datasets()
+
+# Option 2: Pass an explicit client
+from ndi.cloud import CloudClient, login
+config = login('you@example.com', 'your-password')
+client = CloudClient(config)
+datasets = get_published_datasets(client)
+```
+
+All `ndi.cloud.api.*` functions accept an optional `client` parameter. If omitted, a client is built automatically from environment variables.
 
 ## Package Structure
 

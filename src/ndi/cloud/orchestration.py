@@ -1,6 +1,10 @@
 """
 ndi.cloud.orchestration - High-level dataset sync/transfer operations.
 
+Public functions accept an optional :class:`~ndi.cloud.client.CloudClient`
+as the first argument.  When omitted, a client is created automatically
+from environment variables.
+
 MATLAB equivalents: downloadDataset.m, uploadDataset.m, syncDataset.m,
     +upload/newDataset.m, +upload/scanForUpload.m
 """
@@ -10,10 +14,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from .client import _auto_client
+
 if TYPE_CHECKING:
     from .client import CloudClient
 
 
+@_auto_client
 def download_dataset(
     client: CloudClient,
     cloud_dataset_id: str,
@@ -189,6 +196,7 @@ def load_dataset_from_json_dir(
     return dataset
 
 
+@_auto_client
 def upload_dataset(
     client: CloudClient,
     dataset: Any,
@@ -274,6 +282,7 @@ def upload_dataset(
     return True, cloud_id, ""
 
 
+@_auto_client
 def sync_dataset(
     client: CloudClient,
     dataset: Any,
@@ -326,6 +335,7 @@ def sync_dataset(
     return report
 
 
+@_auto_client
 def new_dataset(
     client: CloudClient,
     dataset: Any,
@@ -352,6 +362,7 @@ def new_dataset(
     return cloud_id
 
 
+@_auto_client
 def scan_for_upload(
     client: CloudClient,
     dataset: Any,

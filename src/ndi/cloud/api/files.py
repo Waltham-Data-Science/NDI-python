@@ -1,6 +1,10 @@
 """
 ndi.cloud.api.files - File transfer via presigned URLs.
 
+Functions that accept a :class:`~ndi.cloud.client.CloudClient` treat it as
+optional — when omitted, a client is created automatically from environment
+variables.
+
 MATLAB equivalents: +ndi/+cloud/+api/+files/*.m,
     +implementation/+files/*.m
 """
@@ -10,10 +14,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ..client import _auto_client
+
 if TYPE_CHECKING:
     from ..client import CloudClient
 
 
+@_auto_client
 def get_upload_url(
     client: CloudClient,
     org_id: str,
@@ -33,6 +40,7 @@ def get_upload_url(
     return result.get("url", "") if isinstance(result, dict) else ""
 
 
+@_auto_client
 def get_bulk_upload_url(
     client: CloudClient,
     org_id: str,
@@ -160,6 +168,7 @@ def get_file(
     return False
 
 
+@_auto_client
 def list_files(
     client: CloudClient,
     dataset_id: str,
@@ -176,6 +185,7 @@ def list_files(
     return ds.get("files", []) if isinstance(ds, dict) else []
 
 
+@_auto_client
 def get_file_details(
     client: CloudClient,
     dataset_id: str,
@@ -192,6 +202,7 @@ def get_file_details(
     )
 
 
+@_auto_client
 def get_file_collection_upload_url(
     client: CloudClient,
     org_id: str,

@@ -1015,7 +1015,7 @@ def _read_vhsb_from_doc(dataset: Any, epoch_doc: Any, t0: float = 0, t1: float =
 
 
 def _safe_depends_on_search(dataset: Any, type_query: Any, dep_name: str, dep_value: str) -> list:
-    """Search with depends_on, falling back to manual filter on DID-python bug.
+    """Search with depends_on, falling back to manual filter on malformed data.
 
     Some documents have string entries in their ``depends_on`` array instead
     of ``{name, value}`` dicts.  DID-python's ``field_search`` crashes with

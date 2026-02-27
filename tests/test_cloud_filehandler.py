@@ -295,18 +295,14 @@ class TestGetOrCreateCloudClient:
     def test_env_vars_present(self):
         from ndi.cloud.filehandler import get_or_create_cloud_client
 
-        mock_config = MagicMock()
         mock_client = MagicMock()
 
-        with (
-            patch.dict(os.environ, {"NDI_CLOUD_USERNAME": "user", "NDI_CLOUD_PASSWORD": "pass"}),
-            patch("ndi.cloud.auth.login", return_value=mock_config) as mock_login,
-            patch("ndi.cloud.client.CloudClient", return_value=mock_client) as mock_cc,
-        ):
+        with patch(
+            "ndi.cloud.client.CloudClient.from_env", return_value=mock_client
+        ) as mock_from_env:
             result = get_or_create_cloud_client()
 
-        mock_login.assert_called_once_with("user", "pass")
-        mock_cc.assert_called_once_with(mock_config)
+        mock_from_env.assert_called_once()
         assert result is mock_client
 
 
@@ -320,16 +316,6 @@ class TestTryCloudFetch:
 
     def _make_session_with_doc(self, tmp_path, file_info):
         """Create a DirSession with a document containing given file_info."""
-        import sys
-
-        # Ensure DID-python is importable
-        did_path = "/tmp/DID-python/src"
-        if did_path not in sys.path:
-            sys.path.insert(0, did_path)
-        toolbox_path = "/tmp/vhlab-toolbox-python"
-        if toolbox_path not in sys.path:
-            sys.path.insert(0, toolbox_path)
-
         from ndi.session.dir import DirSession
 
         session_dir = tmp_path / "session"

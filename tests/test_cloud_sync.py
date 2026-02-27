@@ -1,12 +1,16 @@
 """
 Tests for cloud sync structural components.
 
-Tests SyncMode, SyncOptions, SyncIndex, and zip_documents_for_upload.
+Tests SyncMode, SyncOptions, SyncIndex, zip_documents_for_upload,
+CloudClient.from_env(), and the _auto_client decorator.
 These test local data structures and file I/O — no cloud API calls needed.
 """
 
 import json
 import zipfile
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from ndi.cloud.sync.index import SyncIndex
 from ndi.cloud.sync.mode import SyncMode, SyncOptions
@@ -150,3 +154,152 @@ class TestSyncImports:
         from ndi.cloud.download import download_document_collection
 
         assert callable(download_document_collection)
+
+
+# ===========================================================================
+# CloudClient.from_env() and _auto_client decorator
+# ===========================================================================
+
+
+class TestFromEnv:
+    @patch("ndi.cloud.auth.authenticate")
+    @patch("ndi.cloud.config.CloudConfig.from_env")
+    def test_from_env_creates_client(self, mock_config_from_env, mock_authenticate):
+        from ndi.cloud.client import CloudClient
+
+        mock_config = MagicMock()
+        mock_config.api_url = "https://api.example.com"
+        mock_config_from_env.return_value = mock_config
+        mock_authenticate.return_value = "fake-token"
+
+        client = CloudClient.from_env()
+
+        assert isinstance(client, CloudClient)
+        assert client.config is mock_config
+        mock_authenticate.assert_called_once_with(mock_config)
+        assert mock_config.token == "fake-token"
+
+    @patch("ndi.cloud.auth.authenticate")
+    @patch("ndi.cloud.config.CloudConfig.from_env")
+    def test_from_env_raises_on_auth_failure(self, mock_config_from_env, mock_authenticate):
+        from ndi.cloud.client import CloudClient
+        from ndi.cloud.exceptions import CloudAuthError
+
+        mock_config = MagicMock()
+        mock_config_from_env.return_value = mock_config
+        mock_authenticate.side_effect = CloudAuthError("No credentials")
+
+        with pytest.raises(CloudAuthError):
+            CloudClient.from_env()
+
+
+class TestAutoClient:
+    def test_passthrough_with_explicit_client(self):
+        """When a CloudClient is passed, it should be used directly."""
+        from ndi.cloud.client import CloudClient, _auto_client
+
+        mock_client = MagicMock(spec=CloudClient)
+        calls = []
+
+        @_auto_client
+        def my_func(client, arg1):
+            calls.append((client, arg1))
+            return "ok"
+
+        result = my_func(mock_client, "hello")
+        assert result == "ok"
+        assert calls == [(mock_client, "hello")]
+
+    def test_passthrough_with_keyword_client(self):
+        """When client is passed as keyword, it should be used directly."""
+        from ndi.cloud.client import CloudClient, _auto_client
+
+        mock_client = MagicMock(spec=CloudClient)
+        calls = []
+
+        @_auto_client
+        def my_func(client, arg1):
+            calls.append((client, arg1))
+            return "ok"
+
+        result = my_func("hello", client=mock_client)
+        assert result == "ok"
+        assert calls == [(mock_client, "hello")]
+
+    @patch("ndi.cloud.client.CloudClient.from_env")
+    def test_auto_creates_client_when_omitted(self, mock_from_env):
+        """When no client is passed, one should be created from env."""
+        from ndi.cloud.client import CloudClient, _auto_client
+
+        auto_client = MagicMock(spec=CloudClient)
+        mock_from_env.return_value = auto_client
+        calls = []
+
+        @_auto_client
+        def my_func(client, arg1):
+            calls.append((client, arg1))
+            return "ok"
+
+        result = my_func("hello")
+        assert result == "ok"
+        assert calls == [(auto_client, "hello")]
+        mock_from_env.assert_called_once()
+
+    @patch("ndi.cloud.client.CloudClient.from_env")
+    def test_auto_creates_client_when_keyword_none(self, mock_from_env):
+        """When client=None is passed, one should be created from env."""
+        from ndi.cloud.client import CloudClient, _auto_client
+
+        auto_client = MagicMock(spec=CloudClient)
+        mock_from_env.return_value = auto_client
+        calls = []
+
+        @_auto_client
+        def my_func(client, arg1):
+            calls.append((client, arg1))
+            return "ok"
+
+        result = my_func("hello", client=None)
+        assert result == "ok"
+        assert calls[0][0] is auto_client
+        mock_from_env.assert_called_once()
+
+    def test_preserves_function_name(self):
+        """Decorator should preserve the original function name."""
+        from ndi.cloud.client import _auto_client
+
+        @_auto_client
+        def get_dataset(client, dataset_id):
+            """My docstring."""
+            pass
+
+        assert get_dataset.__name__ == "get_dataset"
+        assert get_dataset.__doc__ == "My docstring."
+
+    @patch("ndi.cloud.client.CloudClient.from_env")
+    def test_api_function_without_client(self, mock_from_env):
+        """Real API function should work without explicit client."""
+        from ndi.cloud.client import CloudClient
+
+        mock_client = MagicMock(spec=CloudClient)
+        mock_client.get.return_value = {"_id": "abc", "name": "Test"}
+        mock_from_env.return_value = mock_client
+
+        from ndi.cloud.api.datasets import get_dataset
+
+        result = get_dataset("abc-123")
+        assert result == {"_id": "abc", "name": "Test"}
+        mock_client.get.assert_called_once()
+
+    def test_api_function_with_explicit_client(self):
+        """Real API function should work with explicit client."""
+        from ndi.cloud.client import CloudClient
+
+        mock_client = MagicMock(spec=CloudClient)
+        mock_client.get.return_value = {"_id": "abc", "name": "Test"}
+
+        from ndi.cloud.api.datasets import get_dataset
+
+        result = get_dataset(mock_client, "abc-123")
+        assert result == {"_id": "abc", "name": "Test"}
+        mock_client.get.assert_called_once()

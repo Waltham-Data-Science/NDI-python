@@ -6,10 +6,19 @@ management, document CRUD, file transfer, sync, and DOI administration.
 
 Quick start::
 
-    from ndi.cloud import CloudConfig, CloudClient, login, logout
+    # Option 1: Explicit client
+    from ndi.cloud import CloudConfig, CloudClient, login
 
     config = login('user@example.com', 'password')
     client = CloudClient(config)
+    ndi.cloud.api.datasets.get_dataset(client, dataset_id)
+
+    # Option 2: Auto-client from environment variables (no client needed)
+    #   Set NDI_CLOUD_USERNAME, NDI_CLOUD_PASSWORD (or NDI_CLOUD_TOKEN)
+    ndi.cloud.api.datasets.get_dataset(dataset_id)
+
+All ``ndi.cloud.api.*`` functions accept an optional ``client`` parameter.
+If omitted, a client is built automatically from environment variables.
 
 Requires the ``requests`` package.  Install with::
 

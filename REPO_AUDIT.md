@@ -96,6 +96,48 @@ user benefit.
 
 ---
 
+## 1b. Optional `client` Parameter (Implemented — Issue #2)
+
+### MATLAB
+
+MATLAB cloud API functions don't require a client object — they read the
+token from the `NDI_CLOUD_TOKEN` environment variable automatically:
+
+```matlab
+ndi.cloud.api.datasets.getDataset(datasetId)
+```
+
+### Python (before)
+
+Python required an explicit `CloudClient` as the first argument:
+
+```python
+client = CloudClient(config)
+get_dataset(client, dataset_id)  # client is required
+```
+
+### Python (after, Implemented)
+
+All `ndi.cloud.api.*` functions now accept an optional `client` parameter
+via the `@_auto_client` decorator. If omitted, a client is built
+automatically from environment variables (`NDI_CLOUD_USERNAME` +
+`NDI_CLOUD_PASSWORD`, or `NDI_CLOUD_TOKEN`):
+
+```python
+# Explicit client (still works)
+get_dataset(client, dataset_id)
+
+# Auto-client from env vars (new — matches MATLAB behavior)
+get_dataset(dataset_id)
+```
+
+The `@_auto_client` decorator in `ndi.cloud.client` handles duck-typing
+detection (so mocks pass through) and `CloudClient.from_env()` fallback.
+
+**Verdict: Implemented. Now matches MATLAB's implicit auth behavior.**
+
+---
+
 ## 2. Auth Functions Promoted to Top-Level
 
 ### MATLAB
@@ -299,7 +341,7 @@ since DID-python lacks callback support.
 
 | Dependency | Type | Status |
 |-----------|------|--------|
-| `did` (DID-python) | Core | Git URL dep; `ndi_install.py` handles via .pth file |
+| `did` (DID-python) | Core | Git URL dep in pyproject.toml; installed normally via pip |
 | `numpy>=1.20.0` | Core | OK |
 | `networkx>=2.6` | Core | OK |
 | `jsonschema>=4.0.0` | Core | OK |
@@ -312,8 +354,10 @@ since DID-python lacks callback support.
 
 **Note**: `vhlab-toolbox-python` is also required at runtime but is not in
 `pyproject.toml` — `ndi_install.py` clones it and configures a .pth file.
-Both DID-python and vhlab-toolbox-python should eventually be published to
-PyPI for clean `pip install ndi`.
+DID-python's packaging bug (PR #16) was fixed upstream in Feb 2026, so it
+now installs correctly via pip from the git URL in pyproject.toml.
+`vhlab-toolbox-python` should eventually be published to PyPI for a clean
+`pip install ndi`.
 
 ### Backend (ndi-cloud-node)
 

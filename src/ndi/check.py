@@ -59,7 +59,7 @@ def run_checks() -> tuple[list[tuple[str, bool, str]], int, int]:
     except Exception as e:
         check("ndi_common data folder", False, str(e))
 
-    # DID-python (the packaging bug check)
+    # DID-python
     ok, detail = _try_import("did.document")
     check("DID-python (did.document)", ok, detail)
 

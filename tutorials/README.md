@@ -70,14 +70,6 @@ Each tutorial generates an HTML file in the `tutorials/` directory with tables, 
 
 ## Troubleshooting
 
-### ModuleNotFoundError: No module named 'did.implementations'
-
-DID-python has a known packaging bug. Run `python ndi_install.py` to set up the dependency correctly, or manually clone it:
-
-```bash
-git clone https://github.com/VH-Lab/DID-python.git ~/.ndi/tools/DID-python
-```
-
 ### ModuleNotFoundError: No module named 'vlt'
 
 vhlab-toolbox-python is not on PyPI. Run `python ndi_install.py` or manually clone:

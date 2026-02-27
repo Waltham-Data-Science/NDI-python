@@ -1,6 +1,10 @@
 """
 ndi.cloud.api.documents - Document CRUD and bulk operations.
 
+All functions accept an optional :class:`~ndi.cloud.client.CloudClient` as
+the first argument.  When omitted, a client is created automatically from
+environment variables.
+
 MATLAB equivalents: +ndi/+cloud/+api/+documents/*.m,
     +implementation/+documents/*.m
 """
@@ -9,10 +13,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ..client import _auto_client
+
 if TYPE_CHECKING:
     from ..client import CloudClient
 
 
+@_auto_client
 def get_document(
     client: CloudClient,
     dataset_id: str,
@@ -26,6 +33,7 @@ def get_document(
     )
 
 
+@_auto_client
 def add_document(
     client: CloudClient,
     dataset_id: str,
@@ -39,6 +47,7 @@ def add_document(
     )
 
 
+@_auto_client
 def update_document(
     client: CloudClient,
     dataset_id: str,
@@ -54,6 +63,7 @@ def update_document(
     )
 
 
+@_auto_client
 def delete_document(
     client: CloudClient,
     dataset_id: str,
@@ -73,6 +83,7 @@ def delete_document(
     )
 
 
+@_auto_client
 def list_documents(
     client: CloudClient,
     dataset_id: str,
@@ -90,6 +101,7 @@ def list_documents(
 _MAX_PAGES = 1000
 
 
+@_auto_client
 def list_all_documents(
     client: CloudClient,
     dataset_id: str,
@@ -109,6 +121,7 @@ def list_all_documents(
     return all_docs
 
 
+@_auto_client
 def get_document_count(client: CloudClient, dataset_id: str) -> int:
     """Return the document count for a dataset.
 
@@ -132,6 +145,7 @@ def get_document_count(client: CloudClient, dataset_id: str) -> int:
     return ds.get("documentCount", 0)
 
 
+@_auto_client
 def bulk_upload(
     client: CloudClient,
     dataset_id: str,
@@ -148,6 +162,7 @@ def bulk_upload(
     )
 
 
+@_auto_client
 def get_bulk_upload_url(
     client: CloudClient,
     dataset_id: str,
@@ -160,6 +175,7 @@ def get_bulk_upload_url(
     return result.get("url", "") if isinstance(result, dict) else ""
 
 
+@_auto_client
 def get_bulk_download_url(
     client: CloudClient,
     dataset_id: str,
@@ -180,6 +196,7 @@ def get_bulk_download_url(
     return result.get("url", "") if isinstance(result, dict) else ""
 
 
+@_auto_client
 def bulk_delete(
     client: CloudClient,
     dataset_id: str,
@@ -199,6 +216,7 @@ def bulk_delete(
     )
 
 
+@_auto_client
 def ndi_query(
     client: CloudClient,
     scope: str,
@@ -226,6 +244,7 @@ def ndi_query(
     )
 
 
+@_auto_client
 def ndi_query_all(
     client: CloudClient,
     scope: str,
@@ -249,6 +268,7 @@ def ndi_query_all(
     return all_docs
 
 
+@_auto_client
 def list_deleted_documents(
     client: CloudClient,
     dataset_id: str,
@@ -266,6 +286,7 @@ def list_deleted_documents(
     )
 
 
+@_auto_client
 def add_document_as_file(
     client: CloudClient,
     dataset_id: str,
