@@ -33,9 +33,10 @@ def create_new_doi(prefix: str = "") -> str:
 
 
 def register_dataset_doi(
-    client: CloudClient,
     cloud_dataset_id: str,
     use_test: bool = False,
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """Register a DOI for a cloud dataset via Crossref.
 
@@ -59,7 +60,7 @@ def register_dataset_doi(
     from ..exceptions import CloudError
 
     # Fetch metadata
-    metadata = ds_api.get_dataset(client, cloud_dataset_id)
+    metadata = ds_api.get_dataset(cloud_dataset_id, client=client)
     metadata["cloud_dataset_id"] = cloud_dataset_id
 
     # Generate DOI

@@ -4,46 +4,55 @@ ndi.query - search an ndi.database for ndi.documents
 Query objects define searches for ndi.documents; they are passed to the
 ndi.database.search() function.
 
-This module provides both Pythonic query construction (via operators) and
-MATLAB-compatible construction (via operation strings).
+Inherits from did.query.Query, using search_structure as the single
+source of truth. Provides both Pythonic query construction (via
+operators) and MATLAB-compatible construction (via operation strings).
 
 Pythonic examples:
     q = Query('element.name') == 'electrode1'
     q = (Query('element.type') == 'probe') & (Query('element.name').contains('elec'))
 
 MATLAB-compatible examples:
-    q = Query.from_search('ndi_document_property.id', 'exact_string', '12345678')
+    q = Query('', 'isa', 'base')
+    q = Query('base.name', 'exact_string', 'test')
     q = Query.from_search('ndi_document_property.name', 'regexp', '(.*)')
-    q = Query.from_search('', 'isa', 'ndi.document.base')
 """
 
 from typing import Any
 
+import did.query
 
-class Query:
+
+class Query(did.query.Query):
     """NDI query class for searching documents.
+
+    Inherits from did.query.Query, using ``search_structure`` as the
+    single source of truth.  Adds Pythonic operator overloading for
+    convenient query construction.
 
     The query can be constructed in two ways:
 
-    1. Pythonic (recommended):
+    1. Pythonic (recommended)::
+
         q = Query('field') == 'value'
         q = Query('field').contains('substring')
-        q = Query.isa('document_class')
 
-    2. MATLAB-compatible:
+    2. MATLAB-compatible::
+
+        q = Query('', 'isa', 'base')
+        q = Query('base.name', 'exact_string', 'test')
         q = Query.from_search('field', 'exact_string', 'value')
-        q = Query.from_search('', 'isa', 'document_class')
 
     Attributes:
-        field (str): The field to query.
-        operator (str): The comparison operator.
-        value (Any): The value to compare against.
+        field (str): The field being queried (computed from search_structure).
+        operator (str): The Python-style operator (computed from search_structure).
+        value (Any): The query value (computed from search_structure).
     """
 
-    # Map Python operators to MATLAB-style for internal use
-    _OP_TO_MATLAB = {
+    # Map Python operators to DID-style operations
+    _OP_TO_DID = {
         "==": "exact_string",
-        "!=": "notequal",
+        "!=": "~exact_string",
         ">": "greaterthan",
         ">=": "greaterthaneq",
         "<": "lessthan",
@@ -52,11 +61,11 @@ class Query:
         "match": "regexp",
     }
 
-    # Map MATLAB operators to Python-style for public interface
-    _MATLAB_TO_OP = {
+    # Map DID operations back to Python-style for public interface
+    _DID_TO_OP = {
         "exact_string": "==",
         "exact_number": "==",
-        "notequal": "!=",
+        "~exact_string": "!=",
         "greaterthan": ">",
         "greaterthaneq": ">=",
         "lessthan": "<",
@@ -88,47 +97,121 @@ class Query:
         Args:
             field: The document field to query (e.g., 'base.name',
                    'element.type'). Can be empty string for 'isa' queries.
-            operation: Optional MATLAB-style operation string (e.g.,
+            operation: Optional DID-style operation string (e.g.,
                    'exact_string', 'isa', 'regexp'). When provided, the
-                   query is resolved immediately.
+                   query is resolved immediately via did.Query.
             param1: First parameter for the operation.
             param2: Second parameter for the operation.
         """
-        self.field = field
-        self.operator = None
-        self.value = None
-        self._resolved = False
+        if operation is not None:
+            # MATLAB-style: delegate to did.Query for validation and storage
+            super().__init__(
+                field,
+                op=operation,
+                param1=param1 if param1 is not None else "",
+                param2=param2 if param2 is not None else "",
+            )
+            self._pending_field = field
+            self._resolved = True
+        else:
+            # Pythonic: store field for later operator chaining
+            super().__init__()  # search_structure = []
+            self._pending_field = field
+            self._resolved = False
+
         self._composite = False
         self._composite_op = None
         self._queries = []
 
-        if operation is not None:
-            resolved = Query.from_search(field, operation, param1 or "", param2 or "")
-            self.field = resolved.field
-            self.operator = resolved.operator
-            self.value = resolved.value
-            self._resolved = resolved._resolved
+    # ------------------------------------------------------------------
+    # Computed properties (read from search_structure)
+    # ------------------------------------------------------------------
 
-    def _resolve(self, operator: str, value: Any) -> "Query":
-        """Internal method to set the query condition."""
-        if self._resolved:
-            raise ValueError("This query has already been resolved")
-        self.operator = operator
-        self.value = value
-        self._resolved = True
-        return self
+    @property
+    def field(self) -> str:
+        """The field being queried."""
+        if self._composite:
+            return ""
+        if self.search_structure and isinstance(self.search_structure, list):
+            ss = self.search_structure[0]
+            if isinstance(ss, dict):
+                return ss.get("field", self._pending_field)
+        return self._pending_field
+
+    @property
+    def operator(self) -> str | None:
+        """The Python-style operator (mapped from DID operation)."""
+        if self._composite:
+            return self._composite_op
+        if not self._resolved:
+            return None
+        if self.search_structure and isinstance(self.search_structure, list):
+            ss = self.search_structure[0]
+            if isinstance(ss, dict):
+                did_op = ss.get("operation", "")
+                return self._DID_TO_OP.get(did_op, did_op)
+        return None
+
+    @property
+    def value(self) -> Any:
+        """The query value (param1, or (param1, param2) for depends_on)."""
+        if self._composite or not self._resolved:
+            return None
+        if self.search_structure and isinstance(self.search_structure, list):
+            ss = self.search_structure[0]
+            if isinstance(ss, dict):
+                did_op = ss.get("operation", "")
+                if did_op == "depends_on":
+                    return (ss.get("param1", ""), ss.get("param2", ""))
+                return ss.get("param1", "")
+        return None
 
     @property
     def queries(self) -> list["Query"]:
         """Get the list of sub-queries for composite queries."""
         return self._queries
 
-    # === Pythonic operators ===
+    # ------------------------------------------------------------------
+    # Internal
+    # ------------------------------------------------------------------
+
+    def _resolve(self, py_op: str, value: Any) -> "Query":
+        """Set the query condition by building a DID search_structure entry."""
+        if self._resolved:
+            raise ValueError("This query has already been resolved")
+
+        did_op = self._OP_TO_DID.get(py_op, py_op)
+
+        # Use exact_number for numeric == comparisons
+        if py_op == "==" and isinstance(value, (int, float)):
+            did_op = "exact_number"
+
+        # Handle depends_on tuple value
+        if py_op == "depends_on" and isinstance(value, tuple):
+            p1 = value[0]
+            p2 = value[1] if len(value) > 1 else ""
+        else:
+            p1 = value
+            p2 = ""
+
+        self.search_structure = [
+            {
+                "field": self._pending_field,
+                "operation": did_op,
+                "param1": p1,
+                "param2": p2,
+            }
+        ]
+        self._resolved = True
+        return self
+
+    # ------------------------------------------------------------------
+    # Pythonic operators
+    # ------------------------------------------------------------------
 
     def __eq__(self, other: Any) -> "Query":
         """Equality comparison."""
         if isinstance(other, Query):
-            # This is comparing two Query objects, not a query condition
             return NotImplemented
         return self._resolve("==", other)
 
@@ -153,41 +236,61 @@ class Query:
         return self._resolve(">=", other)
 
     def __and__(self, other: "Query") -> "Query":
-        """Combine queries with AND."""
+        """Combine queries with AND (list concatenation of search_structures)."""
         if not isinstance(other, Query):
             return NotImplemented
         q = Query()
+        q.search_structure = self.search_structure + other.search_structure
+        q._resolved = True
         q._composite = True
         q._composite_op = "and"
         q._queries = [self, other]
-        q._resolved = True
         return q
 
     def __or__(self, other: "Query") -> "Query":
-        """Combine queries with OR."""
+        """Combine queries with OR (nested 'or' operation)."""
         if not isinstance(other, Query):
             return NotImplemented
         q = Query()
+        q.search_structure = [
+            {
+                "field": "",
+                "operation": "or",
+                "param1": self.search_structure,
+                "param2": other.search_structure,
+            }
+        ]
+        q._resolved = True
         q._composite = True
         q._composite_op = "or"
         q._queries = [self, other]
-        q._resolved = True
         return q
 
     def __invert__(self) -> "Query":
         """Negate a query."""
         if not self._resolved:
             raise ValueError("Cannot negate an unresolved query")
-        q = Query(self.field)
-        q.operator = "~" + self.operator
-        q.value = self.value
+        q = Query()
+        q._pending_field = self._pending_field
         q._resolved = True
         q._composite = self._composite
         q._composite_op = self._composite_op
         q._queries = self._queries
+        # Copy search_structure with negated operations
+        q.search_structure = []
+        for ss in self.search_structure:
+            new_ss = dict(ss)
+            op = new_ss.get("operation", "")
+            if op.startswith("~"):
+                new_ss["operation"] = op[1:]  # double negation cancels
+            else:
+                new_ss["operation"] = "~" + op
+            q.search_structure.append(new_ss)
         return q
 
-    # === String methods ===
+    # ------------------------------------------------------------------
+    # String methods
+    # ------------------------------------------------------------------
 
     def contains(self, value: str) -> "Query":
         """Check if field contains substring.
@@ -222,7 +325,9 @@ class Query:
         """
         return self._resolve("==", value)
 
-    # === Comparison methods (for explicit calls) ===
+    # ------------------------------------------------------------------
+    # Comparison methods (for explicit calls)
+    # ------------------------------------------------------------------
 
     def less_than(self, value: Any) -> "Query":
         """Check if field is less than value."""
@@ -240,7 +345,9 @@ class Query:
         """Check if field is greater than or equal to value."""
         return self._resolve(">=", value)
 
-    # === Field existence ===
+    # ------------------------------------------------------------------
+    # Field existence
+    # ------------------------------------------------------------------
 
     def has_field(self) -> "Query":
         """Check if the field exists in the document.
@@ -261,12 +368,12 @@ class Query:
         """
         return self._resolve("hasmember", value)
 
-    # === NDI-specific queries ===
+    # ------------------------------------------------------------------
+    # NDI-specific queries
+    # ------------------------------------------------------------------
 
     def isa(self, document_class: str) -> "Query":
         """Check if document is of a specific class or inherits from it.
-
-        Instance method version.
 
         Args:
             document_class: The document class name to check against.
@@ -279,8 +386,6 @@ class Query:
     def depends_on(self, name: str, value: str = "") -> "Query":
         """Check if document depends on another document.
 
-        Instance method version.
-
         Args:
             name: The dependency name.
             value: The dependency value (document ID).
@@ -290,7 +395,9 @@ class Query:
         """
         return self._resolve("depends_on", (name, value))
 
-    # === Static factory methods ===
+    # ------------------------------------------------------------------
+    # Static factory methods
+    # ------------------------------------------------------------------
 
     @staticmethod
     def all() -> "Query":
@@ -309,14 +416,17 @@ class Query:
         return q.isa("_impossible_class_name_that_will_never_exist_")
 
     @classmethod
-    def from_search(cls, field: str, operation: str, param1: Any = "", param2: Any = "") -> "Query":
+    def from_search(
+        cls, field: str, operation: str, param1: Any = "", param2: Any = ""
+    ) -> "Query":
         """Create a query using MATLAB-style parameters.
 
         This provides compatibility with MATLAB ndi.query construction.
+        Delegates to did.Query for operation validation.
 
         Args:
             field: The field to search (e.g., 'base.name'). Empty for 'isa'.
-            operation: The operation type. Supported operations:
+            operation: The DID operation type. Supported operations:
                 - 'exact_string': Field equals param1 exactly
                 - 'exact_string_anycase': Case-insensitive exact match
                 - 'contains_string': Field contains param1 as substring
@@ -341,49 +451,15 @@ class Query:
             q = Query.from_search('base.name', 'exact_string', 'my_document')
             q = Query.from_search('', 'isa', 'element')
         """
-        negated = operation.startswith("~")
-        if negated:
-            operation = operation[1:]
+        # Translate Python-style aliases to DID ops
+        _ALIAS = {"==": "exact_string", "notequal": "~exact_string"}
+        if operation in _ALIAS:
+            operation = _ALIAS[operation]
+        return cls(field, operation=operation, param1=param1, param2=param2)
 
-        q = cls(field)
-
-        if operation == "exact_string":
-            q = q.equals(param1)
-        elif operation == "exact_string_anycase":
-            q._resolve("exact_string_anycase", param1)
-        elif operation == "contains_string":
-            q = q.contains(param1)
-        elif operation == "regexp":
-            q = q.match(param1)
-        elif operation == "exact_number":
-            q = q.equals(param1)
-        elif operation == "lessthan":
-            q = q.less_than(param1)
-        elif operation == "lessthaneq":
-            q = q.less_than_or_equal_to(param1)
-        elif operation == "greaterthan":
-            q = q.greater_than(param1)
-        elif operation == "greaterthaneq":
-            q = q.greater_than_or_equal_to(param1)
-        elif operation == "hasfield":
-            q = q.has_field()
-        elif operation == "hasmember":
-            q = q.has_member(param1)
-        elif operation == "isa":
-            q = q.isa(param1)
-        elif operation == "depends_on":
-            q = q.depends_on(param1, param2)
-        elif operation == "==":
-            q = q.equals(param1)
-        elif operation == "notequal":
-            q._resolve("!=", param1)
-        else:
-            raise ValueError(f"Unknown operation: {operation}")
-
-        if negated:
-            q.operator = "~" + q.operator
-
-        return q
+    # ------------------------------------------------------------------
+    # Serialization
+    # ------------------------------------------------------------------
 
     @property
     def query(self) -> tuple:
@@ -391,7 +467,7 @@ class Query:
         return (self.field, self.operator, self.value)
 
     def to_searchstructure(self) -> dict:
-        """Convert query to a search structure dictionary.
+        """Convert query to a search structure dict with Python-style operators.
 
         Returns:
             Dictionary with keys 'field', 'operation', 'param1', 'param2',
@@ -408,93 +484,41 @@ class Query:
                 "search": [q.to_searchstructure() for q in self._queries],
             }
 
-        # Keep Python-style operators in public interface
-        op = self.operator
+        if not self.search_structure:
+            return {}
 
-        # Handle depends_on tuple value
-        if self.operator == "depends_on" and isinstance(self.value, tuple):
-            return {
-                "field": self.field,
-                "operation": op,
-                "param1": self.value[0],
-                "param2": self.value[1] if len(self.value) > 1 else "",
-            }
+        ss = self.search_structure[0]
+        if not isinstance(ss, dict):
+            return {}
 
-        return {"field": self.field, "operation": op, "param1": self.value, "param2": ""}
-
-    def to_search_structure(self) -> dict | list[dict]:
-        """Convert query to DID-python compatible search structure.
-
-        This method converts Python-style operators to MATLAB/DID-style
-        operators for compatibility with DID-python's field_search() function.
-
-        Returns:
-            Dictionary or list of dictionaries compatible with DID-python.
-        """
-        return self._convert_to_did_format(self.to_searchstructure())
-
-    def _convert_to_did_format(self, ss: dict) -> dict | list[dict]:
-        """Convert a search structure to DID-python format.
-
-        Args:
-            ss: Search structure dictionary.
-
-        Returns:
-            DID-python compatible search structure.
-        """
-        # Handle composite queries (and/or)
-        op = ss.get("operation", "")
-
-        if op == "and":
-            # DID-python expects a list for AND operations
-            return [self._convert_to_did_format(s) for s in ss.get("search", [])]
-        elif op == "or":
-            # DID-python expects 'or' operation with param1/param2
-            sub_queries = ss.get("search", [])
-            if len(sub_queries) >= 2:
-                return {
-                    "field": "",
-                    "operation": "or",
-                    "param1": self._convert_to_did_format(sub_queries[0]),
-                    "param2": self._convert_to_did_format(sub_queries[1]),
-                }
-            return ss
-
-        # Map Python operators to MATLAB/DID operators
-        op_map = {
-            "==": "exact_string",
-            "!=": "~exact_string",
-            "<": "lessthan",
-            "<=": "lessthaneq",
-            ">": "greaterthan",
-            ">=": "greaterthaneq",
-            "contains": "contains_string",
-            "match": "regexp",
-            "hasfield": "hasfield",
-            "hasmember": "hasmember",
-            "isa": "isa",
-            "depends_on": "depends_on",
-            "exact_string_anycase": "exact_string_anycase",
-        }
-
-        # Handle negated operators
-        negated = False
-        check_op = op
-        if op and op.startswith("~"):
-            negated = True
-            check_op = op[1:]
-
-        # Convert operator
-        did_op = op_map.get(check_op, check_op)
-        if negated and not did_op.startswith("~"):
-            did_op = "~" + did_op
+        did_op = ss.get("operation", "")
+        py_op = self._DID_TO_OP.get(did_op, did_op)
 
         return {
             "field": ss.get("field", ""),
-            "operation": did_op,
-            "param1": ss.get("param1", ss.get("value", "")),
+            "operation": py_op,
+            "param1": ss.get("param1", ""),
             "param2": ss.get("param2", ""),
         }
+
+    def to_search_structure(self) -> dict | list[dict]:
+        """Convert to DID-python compatible search structure.
+
+        Returns ``search_structure`` (inherited from did.Query), unwrapping
+        single-element lists for consistency with DID conventions:
+
+        - Simple query -> dict
+        - AND query -> list of dicts
+        - OR query -> dict with 'or' operation
+        """
+        ss = self.search_structure
+        if isinstance(ss, list) and len(ss) == 1:
+            return ss[0]
+        return ss
+
+    # ------------------------------------------------------------------
+    # Iteration / collection
+    # ------------------------------------------------------------------
 
     def __iter__(self):
         """Iterate over sub-queries for composite queries."""

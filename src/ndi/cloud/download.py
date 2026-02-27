@@ -19,12 +19,12 @@ logger = logging.getLogger(__name__)
 
 
 def download_full_dataset(
-    client: CloudClient,
     dataset_id: str,
     target_dir: str | Path,
     *,
     include_files: bool = True,
     progress: Callable[[str], None] | None = None,
+    client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """Download a complete dataset (full documents + binary files) to disk.
 
@@ -34,7 +34,6 @@ def download_full_dataset(
     skipped, so the function is safe to resume after interruption.
 
     Args:
-        client: Authenticated cloud client.
         dataset_id: Cloud dataset ID.
         target_dir: Local directory to save everything into.  Structure::
 
@@ -45,6 +44,7 @@ def download_full_dataset(
         include_files: Whether to also download binary files (default True).
         progress: Optional callback that receives status strings, e.g.
             ``print`` or ``logger.info``.
+        client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
         Report dict with keys ``documents_downloaded``, ``documents_failed``,
@@ -82,7 +82,7 @@ def download_full_dataset(
     page = 1
     page_size = 1000
     while page <= 1000:
-        result = docs_api.list_documents(client, dataset_id, page=page, page_size=page_size)
+        result = docs_api.list_documents(dataset_id, page=page, page_size=page_size, client=client)
         docs = result.get("documents", [])
         if not docs:
             break
@@ -110,10 +110,10 @@ def download_full_dataset(
         _log(f"Downloading {len(remaining_ids)} documents via bulk chunks...")
         try:
             full_docs = download_document_collection(
-                client,
                 dataset_id,
                 doc_ids=remaining_ids,
                 progress=progress,
+                client=client,
             )
             for doc in full_docs:
                 # Bulk-downloaded docs may lack top-level _id/id.
@@ -136,7 +136,7 @@ def download_full_dataset(
     if include_files:
         _log("Listing dataset files...")
         try:
-            file_list = files_api.list_files(client, dataset_id)
+            file_list = files_api.list_files(dataset_id, client=client).data
         except Exception:
             file_list = []
         _log(f"Found {len(file_list)} files")
@@ -152,8 +152,8 @@ def download_full_dataset(
                 report["files_downloaded"] += 1
                 continue
             try:
-                details = files_api.get_file_details(client, dataset_id, uid)
-                url = details.get("downloadUrl", "") if isinstance(details, dict) else ""
+                details = files_api.get_file_details(dataset_id, uid, client=client)
+                url = details.get("downloadUrl", "") if hasattr(details, "get") else ""
                 if not url:
                     report["files_failed"] += 1
                     continue
@@ -238,13 +238,14 @@ def _download_chunk_zip(
 
 
 def download_document_collection(
-    client: CloudClient,
     dataset_id: str,
     doc_ids: list[str] | None = None,
     chunk_size: int = 2000,
     timeout: float = 20.0,
     retry_interval: float = 1.0,
     progress: Callable[[str], None] | None = None,
+    *,
+    client: CloudClient | None = None,
 ) -> list[dict[str, Any]]:
     """Download full documents from the cloud using chunked bulk download.
 
@@ -254,7 +255,6 @@ def download_document_collection(
     the results.
 
     Args:
-        client: Authenticated cloud client.
         dataset_id: Cloud dataset ID.
         doc_ids: Specific document IDs to download. If ``None``,
             discovers all document IDs via paginated listing first.
@@ -265,6 +265,7 @@ def download_document_collection(
         retry_interval: Seconds between polling attempts for each
             chunk. Default 1 matches MATLAB.
         progress: Optional callback for status messages.
+        client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
         List of full document dicts.
@@ -281,9 +282,9 @@ def download_document_collection(
     # If no IDs given, discover all via paginated summaries
     if doc_ids is None:
         _log("Listing all document IDs...")
-        summaries = docs_api.list_all_documents(client, dataset_id)
+        summaries = docs_api.list_all_documents(dataset_id, client=client)
         doc_ids = [
-            s.get("_id", s.get("id", "")) for s in summaries if s.get("_id", s.get("id", ""))
+            s.get("_id", s.get("id", "")) for s in summaries.data if s.get("_id", s.get("id", ""))
         ]
         _log(f"Found {len(doc_ids)} documents")
 
@@ -303,7 +304,7 @@ def download_document_collection(
 
         # Get presigned URL for this chunk
         try:
-            url = docs_api.get_bulk_download_url(client, dataset_id, chunk_ids)
+            url = docs_api.get_bulk_download_url(dataset_id, chunk_ids, client=client)
         except Exception as exc:
             _log(f"  Chunk {i + 1}: failed to get download URL: {exc}")
             continue
@@ -327,18 +328,19 @@ def download_document_collection(
 
 
 def download_files_for_document(
-    client: CloudClient,
     dataset_id: str,
     document: dict[str, Any],
     target_dir: Path,
+    *,
+    client: CloudClient | None = None,
 ) -> list[Path]:
     """Download associated binary files for a single document.
 
     Args:
-        client: Authenticated cloud client.
         dataset_id: Cloud dataset ID.
         document: Document dict (must include ``file_uid``).
         target_dir: Directory to save downloaded files.
+        client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
         List of paths to downloaded files.
@@ -357,11 +359,11 @@ def download_files_for_document(
     from .api import files as files_api
 
     try:
-        details = files_api.get_file_details(client, dataset_id, file_uid)
+        details = files_api.get_file_details(dataset_id, file_uid, client=client)
     except Exception:
         return downloaded
 
-    url = details.get("downloadUrl", "") if isinstance(details, dict) else ""
+    url = details.get("downloadUrl", "") if hasattr(details, "get") else ""
     if not url:
         return downloaded
 
@@ -378,10 +380,11 @@ def download_files_for_document(
 
 
 def download_dataset_files(
-    client: CloudClient,
     dataset_id: str,
     documents: list[dict[str, Any]],
     target_dir: Path,
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """Download binary files for a batch of documents.
 
@@ -397,7 +400,7 @@ def download_dataset_files(
 
     for doc in documents:
         try:
-            paths = download_files_for_document(client, dataset_id, doc, target_dir)
+            paths = download_files_for_document(dataset_id, doc, target_dir, client=client)
             report["downloaded"] += len(paths)
         except Exception as exc:
             report["failed"] += 1

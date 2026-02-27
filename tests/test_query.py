@@ -315,3 +315,70 @@ class TestQueryJSONSerialization:
         json.dumps(ss)  # should not raise
         assert ss["param1"] == "element_id"
         assert ss["param2"] == "abc123"
+
+
+class TestQueryDIDInheritance:
+    """Test that ndi.Query properly inherits from did.query.Query (Issue #3)."""
+
+    def test_isinstance_did_query(self):
+        """ndi.Query instances must be instances of did.query.Query."""
+        import did.query
+
+        q = Query("", "isa", "base")
+        assert isinstance(q, did.query.Query)
+
+    def test_isinstance_pythonic_query(self):
+        """Pythonic-constructed queries are also did.query.Query instances."""
+        import did.query
+
+        q = Query("base.name") == "test"
+        assert isinstance(q, did.query.Query)
+
+    def test_search_structure_attribute(self):
+        """Query should have search_structure attribute from did.Query."""
+        q = Query("base.name", "exact_string", "test")
+        assert hasattr(q, "search_structure")
+        assert isinstance(q.search_structure, list)
+        assert len(q.search_structure) == 1
+        assert q.search_structure[0]["operation"] == "exact_string"
+
+    def test_search_structure_pythonic(self):
+        """Pythonic query should also populate search_structure."""
+        q = Query("base.name") == "test"
+        assert isinstance(q.search_structure, list)
+        assert len(q.search_structure) == 1
+        assert q.search_structure[0]["operation"] == "exact_string"
+        assert q.search_structure[0]["field"] == "base.name"
+        assert q.search_structure[0]["param1"] == "test"
+
+    def test_search_structure_and(self):
+        """AND combination should concatenate search_structures."""
+        q1 = Query("base.name") == "test"
+        q2 = Query("").isa("element")
+        combined = q1 & q2
+        assert isinstance(combined.search_structure, list)
+        assert len(combined.search_structure) == 2
+
+    def test_search_structure_or(self):
+        """OR combination should nest search_structures."""
+        q1 = Query("type") == "ephys"
+        q2 = Query("type") == "digital"
+        combined = q1 | q2
+        assert isinstance(combined.search_structure, list)
+        assert len(combined.search_structure) == 1
+        assert combined.search_structure[0]["operation"] == "or"
+
+    def test_to_search_structure_inherited(self):
+        """to_search_structure() should return DID-format operations."""
+        q = Query("base.name") == "test"
+        ss = q.to_search_structure()
+        # DID format uses 'exact_string', not '=='
+        assert ss["operation"] == "exact_string"
+
+    def test_numeric_uses_exact_number(self):
+        """Numeric == comparisons should use exact_number in DID format."""
+        q = Query("count") == 42
+        ss = q.to_search_structure()
+        assert ss["operation"] == "exact_number"
+        # But Python-style operator property still shows '=='
+        assert q.operator == "=="

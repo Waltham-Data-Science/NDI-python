@@ -372,7 +372,7 @@ def run_test(username: str, password: str) -> dict:
             print(f"  File UID: {file_uid}")
 
             try:
-                details = get_file_details(client, ds_id, file_uid)
+                details = get_file_details(ds_id, file_uid, client=client)
                 download_url = details.get("downloadUrl", "")
                 print(f"  File details response keys: {list(details.keys())}")
                 if download_url:
@@ -472,7 +472,7 @@ def run_test(username: str, password: str) -> dict:
 
                     ds_id2, file_uid2 = parse_ndic_uri(uri)
                     try:
-                        details2 = get_file_details(client, ds_id2, file_uid2)
+                        details2 = get_file_details(ds_id2, file_uid2, client=client)
                         url2 = details2.get("downloadUrl", "")
                         if url2:
                             resp2 = requests.head(url2, timeout=10)

@@ -145,7 +145,7 @@ def fetch_cloud_file(
         client = get_or_create_cloud_client()
 
     # Get fresh presigned URL
-    details = get_file_details(client, dataset_id, file_uid)
+    details = get_file_details(dataset_id, file_uid, client=client)
     download_url = details.get("downloadUrl", "")
     if not download_url:
         from .exceptions import CloudError

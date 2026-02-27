@@ -14,8 +14,9 @@ if TYPE_CHECKING:
 
 
 def list_remote_document_ids(
-    client: CloudClient,
     cloud_dataset_id: str,
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, str]:
     """Return a mapping of ``ndiId → apiId`` for all remote documents.
 
@@ -26,9 +27,9 @@ def list_remote_document_ids(
     """
     from .api import documents as docs_api
 
-    all_docs = docs_api.list_all_documents(client, cloud_dataset_id)
+    all_docs = docs_api.list_all_documents(cloud_dataset_id, client=client)
     mapping: dict[str, str] = {}
-    for doc in all_docs:
+    for doc in all_docs.data:
         ndi_id = doc.get("ndiId", doc.get("id", ""))
         api_id = doc.get("id", doc.get("_id", ""))
         if ndi_id:
@@ -37,8 +38,9 @@ def list_remote_document_ids(
 
 
 def get_cloud_dataset_id(
-    client: CloudClient,
     dataset: Any,
+    *,
+    client: CloudClient | None = None,
 ) -> tuple[str, dict | None]:
     """Resolve the cloud dataset ID from a local dataset.
 
@@ -46,8 +48,8 @@ def get_cloud_dataset_id(
     that links this dataset to a cloud dataset.
 
     Args:
-        client: Authenticated cloud client.
         dataset: A local :class:`~ndi.dataset.Dataset` instance.
+        client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
         Tuple of ``(cloud_dataset_id, remote_doc)`` where
@@ -143,8 +145,9 @@ def get_file_uids_from_documents(documents: list[Any]) -> list[str]:
 
 def files_not_yet_uploaded(
     file_manifest: list[dict[str, Any]],
-    client: CloudClient,
     cloud_dataset_id: str,
+    *,
+    client: CloudClient | None = None,
 ) -> list[dict[str, Any]]:
     """Filter a file manifest to only files not yet in the cloud.
 
@@ -153,7 +156,7 @@ def files_not_yet_uploaded(
     from .api.files import list_files
 
     try:
-        remote_files = list_files(client, cloud_dataset_id)
+        remote_files = list_files(cloud_dataset_id, client=client).data
     except Exception:
         return file_manifest  # can't check, assume all need upload
 
@@ -167,9 +170,10 @@ def files_not_yet_uploaded(
 
 
 def validate_sync(
-    client: CloudClient,
     dataset: Any,
     cloud_dataset_id: str,
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """Compare local dataset with remote to identify sync discrepancies.
 
@@ -179,7 +183,7 @@ def validate_sync(
         Report dict with local_only, remote_only, common, mismatched IDs.
     """
     _, local_ids = list_local_documents(dataset)
-    remote_id_map = list_remote_document_ids(client, cloud_dataset_id)
+    remote_id_map = list_remote_document_ids(cloud_dataset_id, client=client)
 
     local_set = set(local_ids)
     remote_set = set(remote_id_map.keys())

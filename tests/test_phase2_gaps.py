@@ -357,7 +357,7 @@ class TestUploadSingleFile:
 
         with patch.dict("sys.modules", {"ndi.cloud.api.files": mock_files}):
             with patch("ndi.cloud.api.files", mock_files):
-                success, err = upload_single_file(client, "ds-123", "file-uid-1", "/tmp/test.dat")
+                success, err = upload_single_file("ds-123", "file-uid-1", "/tmp/test.dat", client=client)
 
         assert success is True
         assert err == ""
@@ -372,7 +372,7 @@ class TestUploadSingleFile:
 
         with patch.dict("sys.modules", {"ndi.cloud.api.files": mock_files}):
             with patch("ndi.cloud.api.files", mock_files):
-                success, err = upload_single_file(client, "ds-123", "file-uid-1", "/tmp/test.dat")
+                success, err = upload_single_file("ds-123", "file-uid-1", "/tmp/test.dat", client=client)
 
         assert success is False
         assert "Network error" in err

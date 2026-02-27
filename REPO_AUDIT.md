@@ -4,7 +4,7 @@ This document analyzes every structural difference between the MATLAB and Python
 implementations of the NDI Cloud module, explains why each difference exists,
 and recommends whether to change or keep it.
 
-**Date**: 2026-02-22 (updated), originally 2025-02-15
+**Date**: 2026-02-27 (updated), originally 2025-02-15
 **MATLAB source**: `VH-Lab/NDI-matlab` — `src/ndi/+ndi/+cloud/`
 **Python source**: `src/ndi/cloud/`
 
@@ -26,17 +26,13 @@ and recommends whether to change or keep it.
 matters to users. The differences are all internal architecture choices that
 simplify the codebase without affecting the call paths.
 
-### Test Results (2026-02-22, verified against live prod environment)
+### Test Results (2026-02-27, verified locally)
 
 | Suite | Passed | Skipped | Failed |
 |-------|--------|---------|--------|
-| Core + MATLAB port tests | 1619 | 5 | 0 |
-| Cloud live (admin / thing1) | 60 | 3 | 0 |
-| Cloud live (non-admin / thing2) | 35 | 28 | 0 |
-| **Total** | **1714** | **36** | **0** |
+| Core + MATLAB port + cloud unit tests | 1660 | 2 | 0 |
 
-- The 3 admin-skipped tests are environment-driven (dev dataset has 0 docs, no non-empty files); they pass on prod with data.
-- The 28 non-admin skips are correct — write operations (create, update, delete, publish) require admin privileges.
+- Cloud live tests require credentials and are run separately via CI.
 
 ---
 
@@ -70,7 +66,8 @@ functions that call `client.get(...)`, `client.post(...)`, etc. directly:
 
 ```python
 # ndi.cloud.api.datasets
-def get_dataset(client: CloudClient, dataset_id: str) -> dict:
+@_auto_client
+def get_dataset(dataset_id: str, *, client: CloudClient | None = None) -> dict:
     return client.get("/datasets/{datasetId}", datasetId=dataset_id)
 ```
 
@@ -87,7 +84,7 @@ essentially a declarative HTTP framework built from scratch. Python's
 
 **User-facing call path is identical:**
 - MATLAB: `ndi.cloud.api.datasets.getDataset(datasetId)`
-- Python: `ndi.cloud.api.datasets.get_dataset(client, dataset_id)`
+- Python: `ndi.cloud.api.datasets.get_dataset(dataset_id)`
 
 Adding an `implementation/` package to Python would double the code for zero
 user benefit.
@@ -96,12 +93,12 @@ user benefit.
 
 ---
 
-## 1b. Optional `client` Parameter (Implemented — Issue #2)
+## 1b. Keyword-Only `client` Parameter (Implemented — Issue #2)
 
 ### MATLAB
 
-MATLAB cloud API functions don't require a client object — they read the
-token from the `NDI_CLOUD_TOKEN` environment variable automatically:
+MATLAB cloud API functions don't take a client parameter at all — auth is
+handled internally via `ndi.cloud.authenticate()`:
 
 ```matlab
 ndi.cloud.api.datasets.getDataset(datasetId)
@@ -109,32 +106,40 @@ ndi.cloud.api.datasets.getDataset(datasetId)
 
 ### Python (before)
 
-Python required an explicit `CloudClient` as the first argument:
+Python required an explicit `CloudClient` as the first positional argument:
 
 ```python
 client = CloudClient(config)
-get_dataset(client, dataset_id)  # client is required
+get_dataset(client, dataset_id)  # client is first positional arg
 ```
 
 ### Python (after, Implemented)
 
-All `ndi.cloud.api.*` functions now accept an optional `client` parameter
-via the `@_auto_client` decorator. If omitted, a client is built
-automatically from environment variables (`NDI_CLOUD_USERNAME` +
-`NDI_CLOUD_PASSWORD`, or `NDI_CLOUD_TOKEN`):
+All `ndi.cloud.api.*` functions now have `client` as a **keyword-only**
+parameter with `default=None`. The `@_auto_client` decorator injects a
+client via `CloudClient.from_env()` when none is provided:
 
 ```python
-# Explicit client (still works)
-get_dataset(client, dataset_id)
-
-# Auto-client from env vars (new — matches MATLAB behavior)
+# Auto-client from env vars (matches MATLAB — no client needed)
 get_dataset(dataset_id)
+
+# Explicit client via keyword (advanced usage)
+get_dataset(dataset_id, client=my_client)
 ```
 
-The `@_auto_client` decorator in `ndi.cloud.client` handles duck-typing
-detection (so mocks pass through) and `CloudClient.from_env()` fallback.
+Function signatures follow the pattern:
 
-**Verdict: Implemented. Now matches MATLAB's implicit auth behavior.**
+```python
+@_auto_client
+def get_dataset(dataset_id: str, *, client: CloudClient | None = None):
+    return client.get("/datasets/{datasetId}", datasetId=dataset_id)
+```
+
+The `@_auto_client` decorator is minimal — it checks `kwargs.get("client")`
+and injects `CloudClient.from_env()` if None. No duck-typing or positional
+detection needed since `client` is keyword-only.
+
+**Verdict: Implemented. Now matches MATLAB's call pattern exactly.**
 
 ---
 
@@ -224,58 +229,84 @@ ndi.cloud.downloadDataset(...)      # MATLAB convention (alias)
 
 ---
 
-## 3c. Query Serialization for Cloud API (Implemented — Issue #3)
+## 3c. Query Subclassing and Cloud API (Implemented — Issue #3)
 
 ### Problem
 
-`ndi.Query` objects couldn't be passed directly to `ndi.cloud.api.documents.ndi_query()`.
-The cloud API expected JSON-serializable dicts but Query objects weren't auto-converted.
-Also, MATLAB's constructor syntax `ndi.query('', 'isa', 'base')` didn't work in Python.
+MATLAB's `ndi.query` inherits from `did.query` (`classdef query < did.query`).
+Python's `ndi.Query` was a standalone class that didn't subclass `did.query.Query`,
+breaking `isinstance` checks and the shared `search_structure` contract.
 
 ### Solution
 
-1. **MATLAB constructor**: `Query.__init__` now accepts `(field, operation, param1, param2)`:
-   ```python
-   q = Query('', 'isa', 'base')                      # MATLAB-style
-   q = Query('base.name', 'exact_string', 'test')     # MATLAB-style
-   q = Query('base.name') == 'test'                   # Pythonic (still works)
-   ```
+`ndi.Query` now subclasses `did.query.Query`:
 
-2. **Auto-coercion**: `ndi_query()` and `ndi_query_all()` call `_coerce_search_structure()`
-   which auto-converts Query objects via `to_search_structure()`:
-   ```python
-   q = Query('', 'isa', 'element')
-   result = ndi_query(client, 'public', q)   # Query auto-converted to dict
-   ```
+```python
+import did.query
 
-**Verdict: Implemented. Both MATLAB constructor and cloud API integration work.**
+class Query(did.query.Query):
+    """NDI query — subclasses did.query.Query, adds Pythonic operators."""
+```
+
+Key properties:
+- `search_structure` (inherited from `did.Query`) is the single source of truth
+- `isinstance(q, did.query.Query)` returns `True`
+- `to_search_structure()` inherited from `did.Query` — returns `search_structure` directly
+- MATLAB constructor: `Query('', 'isa', 'base')` maps to DID operations
+- Pythonic operators (`==`, `!=`, `>`, `<`, `contains()`, `match()`) build DID-format `search_structure`
+- `__and__` / `__or__` return `ndi.Query` (not `did.Query`)
+
+```python
+# MATLAB-style
+q = Query('', 'isa', 'base')
+q = Query('base.name', 'exact_string', 'test')
+
+# Pythonic (builds same search_structure)
+q = Query('base.name') == 'test'
+
+# Cloud API — auto-coerced via _coerce_search_structure()
+result = ndi_query('public', q)
+```
+
+**Verdict: Implemented. Proper subclass of did.Query with full MATLAB compatibility.**
 
 ---
 
-## 3d. APIResponse Metadata (Implemented — Issue #5)
+## 3d. APIResponse 4-Tuple Unpacking (Implemented — Issue #5)
 
 ### Problem
 
 MATLAB cloud API functions return a 4-tuple `[b, answer, apiResponse, apiURL]`
-providing response metadata alongside the data. Python only returned the raw data.
+providing response metadata alongside the data. Python's `APIResponse` wrapped
+results but didn't support MATLAB-style tuple unpacking.
 
 ### Solution
 
-`CloudClient._request()` now wraps results in an `APIResponse` class that
-**transparently proxies** dict/list operations to the underlying data:
+`APIResponse.__iter__` now yields a 4-tuple `(success, data, status_code, url)`:
 
 ```python
-result = get_dataset(client, dataset_id)
-result.get("name")       # works — proxied to data dict
+# Pattern 1: single-value assignment (dict proxy — backward compatible)
+result = get_dataset(dataset_id)
+result.get("name")       # proxied to data dict
 result.success           # True for HTTP 2xx
 result.status_code       # 200
-result.url               # full request URL
+
+# Pattern 2: MATLAB-style 4-tuple unpacking
+b, answer, status, url = get_dataset(dataset_id)
+answer["name"]           # answer is the raw dict
+
+# Pattern 3: aggregation function unpacking
+b, docs, status, url = list_all_documents(dataset_id)
+for doc in docs:         # docs is plain list
+    print(doc.get("_id"))
 ```
 
-Backward compatible: all existing code using `.get()`, `[]`, `in`, `for ... in`
-continues to work unchanged.
+Aggregation functions (`list_all_documents`, `list_all_datasets`, `ndi_query_all`,
+`list_sessions`, `list_files`) explicitly wrap their results in `APIResponse` so
+tuple unpacking works consistently. Internal callers that iterate over aggregated
+results use `.data` to access the raw list.
 
-**Verdict: Implemented. MATLAB 4-output pattern available via .success/.status_code/.url.**
+**Verdict: Implemented. MATLAB `[b, answer, resp, url]` pattern works in Python.**
 
 ---
 

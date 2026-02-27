@@ -1,10 +1,9 @@
 """
 ndi.cloud.api.datasets - Dataset CRUD, publish, and branch operations.
 
-All functions accept an optional :class:`~ndi.cloud.client.CloudClient` as
-the first argument.  When omitted, a client is created automatically from
-environment variables (``NDI_CLOUD_TOKEN`` or ``NDI_CLOUD_USERNAME`` /
-``NDI_CLOUD_PASSWORD``).
+All functions accept an optional ``client`` keyword argument.  When omitted,
+a client is created automatically from environment variables
+(``NDI_CLOUD_TOKEN`` or ``NDI_CLOUD_USERNAME`` / ``NDI_CLOUD_PASSWORD``).
 
 MATLAB equivalents: +ndi/+cloud/+api/+datasets/*.m,
     +implementation/+datasets/*.m
@@ -14,24 +13,25 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from ..client import _auto_client
+from ..client import APIResponse, _auto_client
 
 if TYPE_CHECKING:
     from ..client import CloudClient
 
 
 @_auto_client
-def get_dataset(client: CloudClient, dataset_id: str) -> dict[str, Any]:
+def get_dataset(dataset_id: str, *, client: CloudClient | None = None) -> dict[str, Any]:
     """GET /datasets/{datasetId}"""
     return client.get("/datasets/{datasetId}", datasetId=dataset_id)
 
 
 @_auto_client
 def create_dataset(
-    client: CloudClient,
     org_id: str,
     name: str,
     description: str = "",
+    *,
+    client: CloudClient | None = None,
     **kwargs: Any,
 ) -> dict[str, Any]:
     """POST /organizations/{organizationId}/datasets"""
@@ -48,8 +48,9 @@ def create_dataset(
 
 @_auto_client
 def update_dataset(
-    client: CloudClient,
     dataset_id: str,
+    *,
+    client: CloudClient | None = None,
     **fields: Any,
 ) -> dict[str, Any]:
     """POST /datasets/{datasetId}"""
@@ -62,19 +63,20 @@ def update_dataset(
 
 @_auto_client
 def delete_dataset(
-    client: CloudClient,
     dataset_id: str,
     when: str = "7d",
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """DELETE /datasets/{datasetId}?when=...
 
     Soft-delete a dataset.  The *when* parameter controls how long before
     the dataset and its documents are permanently pruned:
 
-    - ``'now'``  — immediate hard delete
-    - ``'7d'``   — prune after 7 days (default)
-    - ``'24h'``  — prune after 24 hours
-    - ``'30m'``  — prune after 30 minutes
+    - ``'now'``  -- immediate hard delete
+    - ``'7d'``   -- prune after 7 days (default)
+    - ``'24h'``  -- prune after 24 hours
+    - ``'30m'``  -- prune after 30 minutes
     """
     return client.delete(
         "/datasets/{datasetId}",
@@ -85,10 +87,11 @@ def delete_dataset(
 
 @_auto_client
 def list_datasets(
-    client: CloudClient,
     org_id: str,
     page: int = 1,
     page_size: int = 1000,
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """GET /organizations/{organizationId}/datasets?page=&pageSize="""
     return client.get(
@@ -102,26 +105,29 @@ _MAX_PAGES = 1000
 
 
 @_auto_client
-def list_all_datasets(client: CloudClient, org_id: str) -> list[dict[str, Any]]:
+def list_all_datasets(
+    org_id: str, *, client: CloudClient | None = None
+) -> list[dict[str, Any]]:
     """Auto-paginate through all datasets for an organisation."""
     all_datasets: list[dict[str, Any]] = []
     page = 1
     while page <= _MAX_PAGES:
-        result = list_datasets(client, org_id, page=page)
+        result = list_datasets(org_id, page=page, client=client)
         datasets = result.get("datasets", [])
         all_datasets.extend(datasets)
         total = result.get("totalNumber", 0)
         if len(all_datasets) >= total or not datasets:
             break
         page += 1
-    return all_datasets
+    return APIResponse(all_datasets, success=True, status_code=200, url="")
 
 
 @_auto_client
 def get_published_datasets(
-    client: CloudClient,
     page: int = 1,
     page_size: int = 1000,
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """GET /datasets/published"""
     return client.get(
@@ -131,40 +137,51 @@ def get_published_datasets(
 
 
 @_auto_client
-def publish_dataset(client: CloudClient, dataset_id: str) -> dict[str, Any]:
+def publish_dataset(
+    dataset_id: str, *, client: CloudClient | None = None
+) -> dict[str, Any]:
     """POST /datasets/{datasetId}/publish"""
     return client.post("/datasets/{datasetId}/publish", datasetId=dataset_id)
 
 
 @_auto_client
-def unpublish_dataset(client: CloudClient, dataset_id: str) -> dict[str, Any]:
+def unpublish_dataset(
+    dataset_id: str, *, client: CloudClient | None = None
+) -> dict[str, Any]:
     """POST /datasets/{datasetId}/unpublish"""
     return client.post("/datasets/{datasetId}/unpublish", datasetId=dataset_id)
 
 
 @_auto_client
-def submit_dataset(client: CloudClient, dataset_id: str) -> dict[str, Any]:
+def submit_dataset(
+    dataset_id: str, *, client: CloudClient | None = None
+) -> dict[str, Any]:
     """POST /datasets/{datasetId}/submit"""
     return client.post("/datasets/{datasetId}/submit", datasetId=dataset_id)
 
 
 @_auto_client
-def create_branch(client: CloudClient, dataset_id: str) -> dict[str, Any]:
+def create_branch(
+    dataset_id: str, *, client: CloudClient | None = None
+) -> dict[str, Any]:
     """POST /datasets/{datasetId}/branch"""
     return client.post("/datasets/{datasetId}/branch", datasetId=dataset_id)
 
 
 @_auto_client
-def get_branches(client: CloudClient, dataset_id: str) -> list[dict[str, Any]]:
+def get_branches(
+    dataset_id: str, *, client: CloudClient | None = None
+) -> list[dict[str, Any]]:
     """GET /datasets/{datasetId}/branches"""
     return client.get("/datasets/{datasetId}/branches", datasetId=dataset_id)
 
 
 @_auto_client
 def get_unpublished(
-    client: CloudClient,
     page: int = 1,
     page_size: int = 20,
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """GET /datasets/unpublished
 
@@ -177,7 +194,9 @@ def get_unpublished(
 
 
 @_auto_client
-def undelete_dataset(client: CloudClient, dataset_id: str) -> dict[str, Any]:
+def undelete_dataset(
+    dataset_id: str, *, client: CloudClient | None = None
+) -> dict[str, Any]:
     """POST /datasets/{datasetId}/undelete
 
     Reverse a deferred (soft) delete before the pruner runs.
@@ -189,9 +208,10 @@ def undelete_dataset(client: CloudClient, dataset_id: str) -> dict[str, Any]:
 
 @_auto_client
 def list_deleted_datasets(
-    client: CloudClient,
     page: int = 1,
     page_size: int = 1000,
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """GET /datasets/deleted?page=&pageSize=
 

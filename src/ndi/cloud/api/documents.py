@@ -1,9 +1,8 @@
 """
 ndi.cloud.api.documents - Document CRUD and bulk operations.
 
-All functions accept an optional :class:`~ndi.cloud.client.CloudClient` as
-the first argument.  When omitted, a client is created automatically from
-environment variables.
+All functions accept an optional ``client`` keyword argument.  When omitted,
+a client is created automatically from environment variables.
 
 MATLAB equivalents: +ndi/+cloud/+api/+documents/*.m,
     +implementation/+documents/*.m
@@ -13,7 +12,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from ..client import _auto_client
+from ..client import APIResponse, _auto_client
 
 if TYPE_CHECKING:
     from ..client import CloudClient
@@ -40,9 +39,10 @@ def _coerce_search_structure(search_structure: Any) -> Any:
 
 @_auto_client
 def get_document(
-    client: CloudClient,
     dataset_id: str,
     document_id: str,
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """GET /datasets/{datasetId}/documents/{documentId}"""
     return client.get(
@@ -54,9 +54,10 @@ def get_document(
 
 @_auto_client
 def add_document(
-    client: CloudClient,
     dataset_id: str,
     doc_json: dict[str, Any],
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """POST /datasets/{datasetId}/documents"""
     return client.post(
@@ -68,10 +69,11 @@ def add_document(
 
 @_auto_client
 def update_document(
-    client: CloudClient,
     dataset_id: str,
     document_id: str,
     doc_json: dict[str, Any],
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """POST /datasets/{datasetId}/documents/{documentId}"""
     return client.post(
@@ -84,10 +86,11 @@ def update_document(
 
 @_auto_client
 def delete_document(
-    client: CloudClient,
     dataset_id: str,
     document_id: str,
     when: str = "7d",
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """DELETE /datasets/{datasetId}/documents/{documentId}?when=...
 
@@ -104,10 +107,11 @@ def delete_document(
 
 @_auto_client
 def list_documents(
-    client: CloudClient,
     dataset_id: str,
     page: int = 1,
     page_size: int = 1000,
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """GET /datasets/{datasetId}/documents?page=&pageSize="""
     return client.get(
@@ -122,26 +126,29 @@ _MAX_PAGES = 1000
 
 @_auto_client
 def list_all_documents(
-    client: CloudClient,
     dataset_id: str,
     page_size: int = 1000,
+    *,
+    client: CloudClient | None = None,
 ) -> list[dict[str, Any]]:
     """Auto-paginate through all documents in a dataset."""
     all_docs: list[dict[str, Any]] = []
     page = 1
     while page <= _MAX_PAGES:
-        result = list_documents(client, dataset_id, page=page, page_size=page_size)
+        result = list_documents(dataset_id, page=page, page_size=page_size, client=client)
         docs = result.get("documents", [])
         all_docs.extend(docs)
         # Stop when a page returns fewer docs than requested (last page)
         if len(docs) < page_size:
             break
         page += 1
-    return all_docs
+    return APIResponse(all_docs, success=True, status_code=200, url="")
 
 
 @_auto_client
-def get_document_count(client: CloudClient, dataset_id: str) -> int:
+def get_document_count(
+    dataset_id: str, *, client: CloudClient | None = None
+) -> int:
     """Return the document count for a dataset.
 
     Tries the dedicated ``GET /datasets/{datasetId}/document-count``
@@ -160,15 +167,16 @@ def get_document_count(client: CloudClient, dataset_id: str) -> int:
     # Fallback: get from dataset metadata
     from .datasets import get_dataset
 
-    ds = get_dataset(client, dataset_id)
+    ds = get_dataset(dataset_id, client=client)
     return ds.get("documentCount", 0)
 
 
 @_auto_client
 def bulk_upload(
-    client: CloudClient,
     dataset_id: str,
     zip_path: str,
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """POST /datasets/{datasetId}/documents/bulk-upload
 
@@ -183,8 +191,7 @@ def bulk_upload(
 
 @_auto_client
 def get_bulk_upload_url(
-    client: CloudClient,
-    dataset_id: str,
+    dataset_id: str, *, client: CloudClient | None = None
 ) -> str:
     """Get a presigned URL for bulk document upload."""
     result = client.post(
@@ -196,9 +203,10 @@ def get_bulk_upload_url(
 
 @_auto_client
 def get_bulk_download_url(
-    client: CloudClient,
     dataset_id: str,
     doc_ids: list[str] | None = None,
+    *,
+    client: CloudClient | None = None,
 ) -> str:
     """POST /datasets/{datasetId}/documents/bulk-download
 
@@ -217,10 +225,11 @@ def get_bulk_download_url(
 
 @_auto_client
 def bulk_delete(
-    client: CloudClient,
     dataset_id: str,
     doc_ids: list[str],
     when: str = "7d",
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """POST /datasets/{datasetId}/documents/bulk-delete
 
@@ -237,24 +246,25 @@ def bulk_delete(
 
 @_auto_client
 def ndi_query(
-    client: CloudClient,
     scope: str,
     search_structure: Any,
     page: int = 1,
     page_size: int = 20,
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """Query documents across datasets via the NDI query API.
 
     MATLAB equivalent: +cloud/+api/+documents/ndiquery.m
 
     Args:
-        client: Authenticated cloud client.
         scope: One of ``'public'``, ``'private'``, ``'all'``.
         search_structure: Query object, search structure dict, or list.
             Accepts :class:`~ndi.query.Query` objects (auto-converted),
             raw dicts, or lists of either.
         page: Page number (1-based).
         page_size: Results per page.
+        client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
         Dict with ``documents`` list and pagination metadata.
@@ -268,10 +278,11 @@ def ndi_query(
 
 @_auto_client
 def ndi_query_all(
-    client: CloudClient,
     scope: str,
     search_structure: Any,
     page_size: int = 1000,
+    *,
+    client: CloudClient | None = None,
 ) -> list[dict[str, Any]]:
     """Auto-paginate through all ndiquery results.
 
@@ -281,22 +292,23 @@ def ndi_query_all(
     all_docs: list[dict[str, Any]] = []
     page = 1
     while page <= _MAX_PAGES:
-        result = ndi_query(client, scope, search_structure, page=page, page_size=page_size)
+        result = ndi_query(scope, search_structure, page=page, page_size=page_size, client=client)
         docs = result.get("documents", [])
         all_docs.extend(docs)
         total = result.get("number_matches", result.get("totalItems", result.get("totalNumber", 0)))
         if len(all_docs) >= total or not docs:
             break
         page += 1
-    return all_docs
+    return APIResponse(all_docs, success=True, status_code=200, url="")
 
 
 @_auto_client
 def list_deleted_documents(
-    client: CloudClient,
     dataset_id: str,
     page: int = 1,
     page_size: int = 1000,
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """GET /datasets/{datasetId}/documents/deleted?page=&pageSize=
 
@@ -311,9 +323,10 @@ def list_deleted_documents(
 
 @_auto_client
 def add_document_as_file(
-    client: CloudClient,
     dataset_id: str,
     file_path: str,
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """Add a document from a JSON file on disk.
 
@@ -324,4 +337,4 @@ def add_document_as_file(
 
     content = Path(file_path).read_text(encoding="utf-8")
     doc_json = json.loads(content)
-    return add_document(client, dataset_id, doc_json)
+    return add_document(dataset_id, doc_json, client=client)

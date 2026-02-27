@@ -15,25 +15,28 @@ import zipfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from .client import _auto_client
+
 if TYPE_CHECKING:
     from .client import CloudClient
 
 
 def upload_document_collection(
-    client: CloudClient,
     dataset_id: str,
     documents: list[dict[str, Any]],
     only_missing: bool = True,
     max_chunk: int | None = None,
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """Upload a list of document dicts to the cloud.
 
     Args:
-        client: Authenticated cloud client.
         dataset_id: Cloud dataset ID.
         documents: List of document property dicts.
         only_missing: If True, skip documents already on the remote.
         max_chunk: Maximum documents per ZIP chunk (None = all at once).
+        client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
         Report dict with ``upload_type``, ``manifest``, ``status``.
@@ -51,8 +54,8 @@ def upload_document_collection(
 
     if only_missing:
         try:
-            existing = docs_api.list_all_documents(client, dataset_id)
-            existing_ids = {d.get("ndiId", d.get("id", "")) for d in existing}
+            existing = docs_api.list_all_documents(dataset_id, client=client)
+            existing_ids = {d.get("ndiId", d.get("id", "")) for d in existing.data}
             filtered = [d for d in documents if d.get("ndiId", d.get("id", "")) not in existing_ids]
             report["skipped"] = len(documents) - len(filtered)
             documents = filtered
@@ -70,7 +73,7 @@ def upload_document_collection(
     for chunk in chunks:
         for doc in chunk:
             try:
-                docs_api.add_document(client, dataset_id, doc)
+                docs_api.add_document(dataset_id, doc, client=client)
                 report["uploaded"] += 1
                 doc_id = doc.get("ndiId", doc.get("id", ""))
                 report["manifest"].append(doc_id)
@@ -118,15 +121,22 @@ def zip_documents_for_upload(
 
 
 def upload_files_for_documents(
-    client: CloudClient,
     org_id: str,
     dataset_id: str,
     documents: list[dict[str, Any]],
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """Upload associated binary files for a list of documents.
 
     For each document that has a ``file_uid`` field, obtains a
     presigned URL and uploads the file.
+
+    Args:
+        org_id: Organisation ID.
+        dataset_id: Cloud dataset ID.
+        documents: List of document property dicts.
+        client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
         Report dict with counts of uploaded and failed files.
@@ -145,7 +155,7 @@ def upload_files_for_documents(
         if not file_uid or not file_path:
             continue
         try:
-            url = files_api.get_upload_url(client, org_id, dataset_id, file_uid)
+            url = files_api.get_upload_url(org_id, dataset_id, file_uid, client=client)
             files_api.put_file(url, file_path)
             report["uploaded"] += 1
         except Exception as exc:
@@ -155,25 +165,26 @@ def upload_files_for_documents(
     return report
 
 
+@_auto_client
 def upload_single_file(
-    client: CloudClient,
     dataset_id: str,
     file_uid: str,
     file_path: str,
     *,
     use_bulk_upload: bool = False,
+    client: CloudClient | None = None,
 ) -> tuple[bool, str]:
     """Upload a single file to the NDI cloud service.
 
     MATLAB equivalent: ndi.cloud.uploadSingleFile
 
     Args:
-        client: Authenticated cloud client.
         dataset_id: The cloud dataset ID.
         file_uid: Unique ID to assign to the uploaded file.
         file_path: Local path of the file to upload.
         use_bulk_upload: If True, zip the file and use the bulk upload
             mechanism. Defaults to False.
+        client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
         Tuple of ``(success, error_message)``.
@@ -191,9 +202,9 @@ def upload_single_file(
                 with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
                     zf.write(file_path, os.path.basename(file_path))
                 url = files_api.get_file_collection_upload_url(
-                    client,
                     client.config.org_id,
                     dataset_id,
+                    client=client,
                 )
                 files_api.put_file(url, str(zip_path))
             finally:
@@ -201,10 +212,10 @@ def upload_single_file(
                     zip_path.unlink()
         else:
             url = files_api.get_upload_url(
-                client,
                 client.config.org_id,
                 dataset_id,
                 file_uid,
+                client=client,
             )
             files_api.put_file(url, file_path)
 

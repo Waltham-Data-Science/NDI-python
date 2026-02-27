@@ -98,7 +98,7 @@ def user_info(client):
     """Fetch and cache current user info."""
     from ndi.cloud.api.users import get_current_user
 
-    return get_current_user(client)
+    return get_current_user(client=client)
 
 
 @pytest.fixture(scope="module")
@@ -125,7 +125,7 @@ def large_dataset_info(client):
     """Fetch and cache metadata for the large public dataset."""
     from ndi.cloud.api.datasets import get_dataset
 
-    return get_dataset(client, LARGE_DATASET)
+    return get_dataset(LARGE_DATASET, client=client)
 
 
 @pytest.fixture(scope="module")
@@ -133,7 +133,7 @@ def small_dataset_info(client):
     """Fetch and cache metadata for the small public dataset."""
     from ndi.cloud.api.datasets import get_dataset
 
-    return get_dataset(client, SMALL_DATASET)
+    return get_dataset(SMALL_DATASET, client=client)
 
 
 @pytest.fixture(scope="module")
@@ -146,12 +146,12 @@ def can_write(client, cloud_config):
 
     try:
         result = _retry_on_server_error(
-            lambda: create_dataset(client, cloud_config.org_id, "NDI_PYTEST_WRITE_CHECK")
+            lambda: create_dataset(cloud_config.org_id, "NDI_PYTEST_WRITE_CHECK", client=client)
         )
         ds_id = result.get("_id", result.get("id", ""))
         if ds_id:
             try:
-                delete_dataset(client, ds_id, when="now")
+                delete_dataset(ds_id, when="now", client=client)
             except Exception:
                 pass
             return True
@@ -172,7 +172,7 @@ def fresh_dataset(client, cloud_config, can_write):
     org_id = cloud_config.org_id
     try:
         result = _retry_on_server_error(
-            lambda: create_dataset(client, org_id, "NDI_PYTEST_TEMP_DATASET")
+            lambda: create_dataset(org_id, "NDI_PYTEST_TEMP_DATASET", client=client)
         )
     except CloudAPIError as exc:
         pytest.skip(f"Could not create dataset (server error): {exc}")
@@ -183,7 +183,7 @@ def fresh_dataset(client, cloud_config, can_write):
 
     # Teardown: delete the dataset
     try:
-        delete_dataset(client, dataset_id, when="now")
+        delete_dataset(dataset_id, when="now", client=client)
     except Exception:
         pass
 
@@ -321,7 +321,7 @@ class TestUser:
         """GET /users/{userId} should return the same user."""
         from ndi.cloud.api.users import get_user
 
-        user = get_user(client, user_info["id"])
+        user = get_user(user_info["id"], client=client)
         assert user.get("id") == user_info["id"]
 
     def test_user_role_detection(self, user_info, is_admin):
@@ -352,7 +352,7 @@ class TestDatasetLifecycle:
         org_id = cloud_config.org_id
         try:
             result = _retry_on_server_error(
-                lambda: create_dataset(client, org_id, "NDI_PYTEST_CREATE_DELETE")
+                lambda: create_dataset(org_id, "NDI_PYTEST_CREATE_DELETE", client=client)
             )
         except _APIError as exc:
             pytest.skip(f"create_dataset timed out (server 504): {exc}")
@@ -360,11 +360,11 @@ class TestDatasetLifecycle:
         assert ds_id, f"Create returned no ID: {result}"
 
         try:
-            ds = get_dataset(client, ds_id)
+            ds = get_dataset(ds_id, client=client)
             assert ds.get("_id") == ds_id or ds.get("id") == ds_id
         finally:
             try:
-                _retry_on_server_error(lambda: delete_dataset(client, ds_id, when="now"))
+                _retry_on_server_error(lambda: delete_dataset(ds_id, when="now", client=client))
             except Exception:
                 pass  # Best-effort cleanup
 
@@ -372,7 +372,7 @@ class TestDatasetLifecycle:
         """Created dataset should have _id, name, createdAt."""
         from ndi.cloud.api.datasets import get_dataset
 
-        ds = get_dataset(client, fresh_dataset)
+        ds = get_dataset(fresh_dataset, client=client)
         ds_id = ds.get("_id", ds.get("id", ""))
         assert ds_id == fresh_dataset
         assert ds.get("name")
@@ -384,17 +384,17 @@ class TestDatasetLifecycle:
 
         new_name = "NDI_PYTEST_UPDATED_NAME"
         _retry_on_server_error(
-            lambda: update_dataset(client, fresh_dataset, name=new_name),
+            lambda: update_dataset(fresh_dataset, name=new_name, client=client),
         )
 
-        ds = get_dataset(client, fresh_dataset)
+        ds = get_dataset(fresh_dataset, client=client)
         assert ds.get("name") == new_name
 
     def test_list_datasets(self, client, cloud_config, fresh_dataset):
         """Created dataset should appear in the org's dataset list."""
         from ndi.cloud.api.datasets import list_datasets
 
-        result = list_datasets(client, cloud_config.org_id)
+        result = list_datasets(cloud_config.org_id, client=client)
         datasets = result.get("datasets", [])
         ids = {d.get("_id", d.get("id", "")) for d in datasets}
         assert fresh_dataset in ids
@@ -403,7 +403,7 @@ class TestDatasetLifecycle:
         """Branches endpoint should return without error."""
         from ndi.cloud.api.datasets import get_branches
 
-        result = get_branches(client, fresh_dataset)
+        result = get_branches(fresh_dataset, client=client)
         assert result is not None
 
     def test_nonexistent_dataset_raises(self, client):
@@ -412,7 +412,7 @@ class TestDatasetLifecycle:
         from ndi.cloud.exceptions import CloudAPIError
 
         with pytest.raises(CloudAPIError):
-            get_dataset(client, "000000000000000000000000")
+            get_dataset("000000000000000000000000", client=client)
 
     def test_invalid_dataset_id_raises(self, client):
         """Fetching with invalid ID format should raise."""
@@ -420,7 +420,7 @@ class TestDatasetLifecycle:
         from ndi.cloud.exceptions import CloudAPIError
 
         with pytest.raises(CloudAPIError):
-            get_dataset(client, "not-a-valid-id")
+            get_dataset("not-a-valid-id", client=client)
 
 
 # ===========================================================================
@@ -433,11 +433,11 @@ class TestDocumentLifecycle:
         """A newly created dataset should have 0 documents."""
         from ndi.cloud.api.documents import get_document_count, list_documents
 
-        result = list_documents(client, fresh_dataset, page=1, page_size=10)
+        result = list_documents(fresh_dataset, page=1, page_size=10, client=client)
         docs = result.get("documents", [])
         assert len(docs) == 0
 
-        count = get_document_count(client, fresh_dataset)
+        count = get_document_count(fresh_dataset, client=client)
         assert count == 0
 
     def test_add_get_delete_document(self, client, fresh_dataset):
@@ -454,22 +454,22 @@ class TestDocumentLifecycle:
         }
 
         # Add
-        result = add_document(client, fresh_dataset, doc_json)
+        result = add_document(fresh_dataset, doc_json, client=client)
         doc_id = result.get("_id", result.get("id", ""))
         assert doc_id, f"Add returned no ID: {result}"
 
         # Get and verify
-        fetched = get_document(client, fresh_dataset, doc_id)
+        fetched = get_document(fresh_dataset, doc_id, client=client)
         assert fetched.get("base", {}).get("name") == "test_document"
 
         # Delete
-        delete_document(client, fresh_dataset, doc_id, when="now")
+        delete_document(fresh_dataset, doc_id, when="now", client=client)
 
         # Verify gone
         from ndi.cloud.exceptions import CloudAPIError
 
         with pytest.raises(CloudAPIError):
-            get_document(client, fresh_dataset, doc_id)
+            get_document(fresh_dataset, doc_id, client=client)
 
     def test_update_document(self, client, fresh_dataset):
         """Add a document, update it, verify changes persist."""
@@ -484,7 +484,7 @@ class TestDocumentLifecycle:
             "document_class": {"class_name": "ndi_pytest_update"},
             "base": {"name": "original"},
         }
-        result = add_document(client, fresh_dataset, doc_json)
+        result = add_document(fresh_dataset, doc_json, client=client)
         doc_id = result.get("_id", result.get("id", ""))
 
         try:
@@ -493,13 +493,13 @@ class TestDocumentLifecycle:
                 "base": {"name": "modified"},
             }
             _retry_on_server_error(
-                lambda: update_document(client, fresh_dataset, doc_id, updated_json),
+                lambda: update_document(fresh_dataset, doc_id, updated_json, client=client),
             )
-            fetched = get_document(client, fresh_dataset, doc_id)
+            fetched = get_document(fresh_dataset, doc_id, client=client)
             assert fetched.get("base", {}).get("name") == "modified"
         finally:
             try:
-                delete_document(client, fresh_dataset, doc_id, when="now")
+                delete_document(fresh_dataset, doc_id, when="now", client=client)
             except Exception:
                 pass
 
@@ -511,18 +511,18 @@ class TestDocumentLifecycle:
         doc_ids = []
         for i in range(5):
             result = add_document(
-                client,
                 fresh_dataset,
                 {
                     "document_class": {"class_name": "ndi_pytest_pagination"},
                     "base": {"name": f"doc_{i}"},
                 },
+                client=client,
             )
             doc_ids.append(result.get("_id", result.get("id", "")))
 
         # Paginate with page_size=2
-        p1 = list_documents(client, fresh_dataset, page=1, page_size=2)
-        p2 = list_documents(client, fresh_dataset, page=2, page_size=2)
+        p1 = list_documents(fresh_dataset, page=1, page_size=2, client=client)
+        p2 = list_documents(fresh_dataset, page=2, page_size=2, client=client)
         docs1 = p1.get("documents", [])
         docs2 = p2.get("documents", [])
         assert len(docs1) == 2
@@ -540,15 +540,15 @@ class TestDocumentLifecycle:
         # Add 5 docs
         for i in range(5):
             add_document(
-                client,
                 fresh_dataset,
                 {
                     "document_class": {"class_name": "ndi_pytest_listall"},
                     "base": {"name": f"listall_{i}"},
                 },
+                client=client,
             )
 
-        docs = list_all_documents(client, fresh_dataset, page_size=2)
+        docs = list_all_documents(fresh_dataset, page_size=2, client=client).data
         # Should get all docs in the dataset (at least the 5 we added,
         # plus any from previous tests in same fixture -- but fresh_dataset
         # is function-scoped so each test gets its own)
@@ -560,15 +560,15 @@ class TestDocumentLifecycle:
 
         for i in range(3):
             add_document(
-                client,
                 fresh_dataset,
                 {
                     "document_class": {"class_name": "ndi_pytest_count"},
                     "base": {"name": f"count_{i}"},
                 },
+                client=client,
             )
 
-        count = get_document_count(client, fresh_dataset)
+        count = get_document_count(fresh_dataset, client=client)
         assert count == 3
 
     def test_bulk_upload_and_download(self, client, fresh_dataset):
@@ -584,15 +584,15 @@ class TestDocumentLifecycle:
             for i in range(3)
         ]
 
-        report = upload_document_collection(client, fresh_dataset, docs)
+        report = upload_document_collection(fresh_dataset, docs, client=client)
         assert report.get("uploaded", 0) >= 3 or report.get("added", 0) >= 3
 
         # Verify they exist
-        all_docs = list_all_documents(client, fresh_dataset)
+        all_docs = list_all_documents(fresh_dataset, client=client).data
         assert len(all_docs) >= 3
 
         # Bulk download URL should be generated
-        url = get_bulk_download_url(client, fresh_dataset)
+        url = get_bulk_download_url(fresh_dataset, client=client)
         assert url
         assert "s3" in url.lower() or "amazonaws" in url.lower() or "http" in url.lower()
 
@@ -607,22 +607,22 @@ class TestDocumentLifecycle:
         doc_ids = []
         for i in range(5):
             result = add_document(
-                client,
                 fresh_dataset,
                 {
                     "document_class": {"class_name": "ndi_pytest_bulkdel"},
                     "base": {"name": f"bulkdel_{i}"},
                 },
+                client=client,
             )
             doc_ids.append(result.get("_id", result.get("id", "")))
 
         # Delete the first 3
-        bulk_delete(client, fresh_dataset, doc_ids[:3], when="now")
+        bulk_delete(fresh_dataset, doc_ids[:3], when="now", client=client)
 
         # Small delay for server processing
         time.sleep(2)
 
-        remaining = list_all_documents(client, fresh_dataset)
+        remaining = list_all_documents(fresh_dataset, client=client).data
         assert len(remaining) == 2
 
     def test_nonexistent_document_raises(self, client, fresh_dataset):
@@ -631,7 +631,7 @@ class TestDocumentLifecycle:
         from ndi.cloud.exceptions import CloudAPIError
 
         with pytest.raises(CloudAPIError):
-            get_document(client, fresh_dataset, "000000000000000000000000")
+            get_document(fresh_dataset, "000000000000000000000000", client=client)
 
 
 # ===========================================================================
@@ -645,10 +645,10 @@ class TestFileLifecycle:
         from ndi.cloud.api.files import get_upload_url
 
         url = get_upload_url(
-            client,
             cloud_config.org_id,
             fresh_dataset,
             "pytest-test-file-uid",
+            client=client,
         )
         assert isinstance(url, str)
         assert url  # non-empty
@@ -668,7 +668,7 @@ class TestFileLifecycle:
         test_content = b"Hello from NDI pytest! This is test file content."
 
         # Get upload URL
-        upload_url = get_upload_url(client, cloud_config.org_id, fresh_dataset, file_uid)
+        upload_url = get_upload_url(cloud_config.org_id, fresh_dataset, file_uid, client=client)
         assert upload_url
 
         # Upload
@@ -685,11 +685,11 @@ class TestFileLifecycle:
         details = {}
         for wait in (3, 5, 10):
             time.sleep(wait)
-            files = list_files(client, fresh_dataset)
+            files = list_files(fresh_dataset, client=client).data
             file_uids = [f.get("uid", "") for f in files]
             if file_uid not in file_uids:
                 continue
-            details = get_file_details(client, fresh_dataset, file_uid)
+            details = get_file_details(fresh_dataset, file_uid, client=client)
             download_url = details.get("downloadUrl", "")
             if download_url:
                 break
@@ -708,7 +708,7 @@ class TestFileLifecycle:
         from ndi.cloud.api.files import get_upload_url, list_files
 
         file_uid = "pytest-list-test-file"
-        upload_url = get_upload_url(client, cloud_config.org_id, fresh_dataset, file_uid)
+        upload_url = get_upload_url(cloud_config.org_id, fresh_dataset, file_uid, client=client)
         requests.put(
             upload_url,
             data=b"list test data",
@@ -717,7 +717,7 @@ class TestFileLifecycle:
         )
         time.sleep(3)
 
-        files = list_files(client, fresh_dataset)
+        files = list_files(fresh_dataset, client=client).data
         assert isinstance(files, list)
         uids = [f.get("uid", "") for f in files]
         assert file_uid in uids
@@ -729,7 +729,7 @@ class TestFileLifecycle:
         from ndi.cloud.api.files import get_file_details, get_upload_url
 
         file_uid = "pytest-details-test-file"
-        upload_url = get_upload_url(client, cloud_config.org_id, fresh_dataset, file_uid)
+        upload_url = get_upload_url(cloud_config.org_id, fresh_dataset, file_uid, client=client)
         requests.put(
             upload_url,
             data=b"details test",
@@ -738,7 +738,7 @@ class TestFileLifecycle:
         )
         time.sleep(3)
 
-        details = get_file_details(client, fresh_dataset, file_uid)
+        details = get_file_details(fresh_dataset, file_uid, client=client)
         assert hasattr(details, "get"), f"Expected dict-like response, got {type(details)}"
         assert details.get("downloadUrl")
 
@@ -761,7 +761,7 @@ class TestNDIQuery:
             }
         ]
         result = _retry_on_server_error(
-            lambda: ndi_query(client, "public", search, page=1, page_size=5)
+            lambda: ndi_query("public", search, page=1, page_size=5, client=client)
         )
         assert hasattr(result, "get"), f"Expected dict-like response, got {type(result)}"
         assert "documents" in result
@@ -778,7 +778,7 @@ class TestNDIQuery:
             }
         ]
         result = _retry_on_server_error(
-            lambda: ndi_query(client, "public", search, page=1, page_size=5)
+            lambda: ndi_query("public", search, page=1, page_size=5, client=client)
         )
         docs = result.get("documents", [])
         assert len(docs) == 0
@@ -794,7 +794,8 @@ class TestNDIQuery:
                 "param1": "session",
             }
         ]
-        docs = _retry_on_server_error(lambda: ndi_query_all(client, "public", search, page_size=3))
+        result = _retry_on_server_error(lambda: ndi_query_all("public", search, page_size=3, client=client))
+        docs = result.data
         assert isinstance(docs, list)
         assert len(docs) > 0
 
@@ -816,11 +817,11 @@ class TestPublishWorkflow:
         from ndi.cloud.exceptions import CloudAPIError
 
         try:
-            _retry_on_server_error(lambda: submit_dataset(client, fresh_dataset))
+            _retry_on_server_error(lambda: submit_dataset(fresh_dataset, client=client))
         except CloudAPIError as exc:
             pytest.skip(f"submit_dataset server timeout: {exc}")
 
-        ds = get_dataset(client, fresh_dataset)
+        ds = get_dataset(fresh_dataset, client=client)
         assert ds.get("isSubmitted") is True
 
     def test_publish_unpublish_lifecycle(self, client, fresh_dataset):
@@ -835,33 +836,33 @@ class TestPublishWorkflow:
 
         # Submit
         try:
-            _retry_on_server_error(lambda: submit_dataset(client, fresh_dataset))
+            _retry_on_server_error(lambda: submit_dataset(fresh_dataset, client=client))
         except CloudAPIError as exc:
             pytest.skip(f"submit_dataset server timeout: {exc}")
 
         # Publish
         try:
-            _retry_on_server_error(lambda: publish_dataset(client, fresh_dataset))
+            _retry_on_server_error(lambda: publish_dataset(fresh_dataset, client=client))
         except CloudAPIError as exc:
             pytest.skip(f"publish_dataset server timeout: {exc}")
         time.sleep(2)  # Allow server processing
-        ds = get_dataset(client, fresh_dataset)
+        ds = get_dataset(fresh_dataset, client=client)
         assert ds.get("isPublished") is True
 
         # Unpublish
         try:
-            _retry_on_server_error(lambda: unpublish_dataset(client, fresh_dataset))
+            _retry_on_server_error(lambda: unpublish_dataset(fresh_dataset, client=client))
         except CloudAPIError as exc:
             pytest.skip(f"unpublish_dataset server timeout: {exc}")
         time.sleep(2)
-        ds = get_dataset(client, fresh_dataset)
+        ds = get_dataset(fresh_dataset, client=client)
         assert ds.get("isPublished") is not True
 
     def test_published_datasets_list(self, client):
         """GET /datasets/published should return results."""
         from ndi.cloud.api.datasets import get_published_datasets
 
-        result = get_published_datasets(client, page=1, page_size=5)
+        result = get_published_datasets(page=1, page_size=5, client=client)
         assert hasattr(result, "get"), f"Expected dict-like response, got {type(result)}"
         datasets = result.get("datasets", [])
         assert len(datasets) > 0
@@ -870,7 +871,7 @@ class TestPublishWorkflow:
         """GET /datasets/unpublished should return results."""
         from ndi.cloud.api.datasets import get_unpublished
 
-        result = get_unpublished(client, page=1, page_size=5)
+        result = get_unpublished(page=1, page_size=5, client=client)
         assert hasattr(result, "get"), f"Expected dict-like response, got {type(result)}"
 
 
@@ -903,7 +904,7 @@ class TestSoftDelete:
         org_id = cloud_config.org_id
         try:
             result = _retry_on_server_error(
-                lambda: create_dataset(client, org_id, "NDI_PYTEST_SOFT_DELETE")
+                lambda: create_dataset(org_id, "NDI_PYTEST_SOFT_DELETE", client=client)
             )
         except _APIError as exc:
             pytest.skip(f"create_dataset timed out: {exc}")
@@ -914,16 +915,16 @@ class TestSoftDelete:
             # Add documents to make it realistic
             for i in range(3):
                 add_document(
-                    client,
                     ds_id,
                     {
                         "document_class": {"class_name": "ndi_pytest_softdel"},
                         "base": {"name": f"softdel_doc_{i}"},
                     },
+                    client=client,
                 )
 
             # Deferred delete (7 days)
-            del_result = delete_dataset(client, ds_id, when="7d")
+            del_result = delete_dataset(ds_id, when="7d", client=client)
             assert hasattr(
                 del_result, "get"
             ), f"Expected dict-like response, got {type(del_result)}"
@@ -931,29 +932,29 @@ class TestSoftDelete:
 
             # Should appear in deleted list
             time.sleep(2)
-            deleted = list_deleted_datasets(client)
+            deleted = list_deleted_datasets(client=client)
             deleted_ids = {d.get("_id", d.get("id", "")) for d in deleted.get("datasets", [])}
             assert ds_id in deleted_ids, f"Dataset {ds_id} not found in deleted list"
 
             # Undelete
-            undelete_result = undelete_dataset(client, ds_id)
+            undelete_result = undelete_dataset(ds_id, client=client)
             assert hasattr(
                 undelete_result, "get"
             ), f"Expected dict-like response, got {type(undelete_result)}"
 
             # Should be accessible again with documents intact
             time.sleep(2)
-            ds = _retry_on_server_error(lambda: get_dataset(client, ds_id), retry_on_404=True)
+            ds = _retry_on_server_error(lambda: get_dataset(ds_id, client=client), retry_on_404=True)
             ds_fetched_id = ds.get("_id", ds.get("id", ""))
             assert ds_fetched_id == ds_id
 
             # Verify documents survived the soft-delete round-trip
-            docs = list_all_documents(client, ds_id)
+            docs = list_all_documents(ds_id, client=client).data
             assert len(docs) >= 3, f"Expected >= 3 docs after undelete, got {len(docs)}"
         finally:
             # Final cleanup
             try:
-                delete_dataset(client, ds_id, when="now")
+                delete_dataset(ds_id, when="now", client=client)
             except Exception:
                 pass
 
@@ -976,7 +977,7 @@ class TestSoftDelete:
         org_id = cloud_config.org_id
         try:
             result = _retry_on_server_error(
-                lambda: create_dataset(client, org_id, "NDI_PYTEST_HARD_DELETE")
+                lambda: create_dataset(org_id, "NDI_PYTEST_HARD_DELETE", client=client)
             )
         except _APIError as exc:
             pytest.skip(f"create_dataset timed out: {exc}")
@@ -986,21 +987,21 @@ class TestSoftDelete:
         # Add documents to make it realistic
         for i in range(3):
             add_document(
-                client,
                 ds_id,
                 {
                     "document_class": {"class_name": "ndi_pytest_harddel"},
                     "base": {"name": f"harddel_doc_{i}"},
                 },
+                client=client,
             )
 
         # Immediate delete
-        delete_dataset(client, ds_id, when="now")
+        delete_dataset(ds_id, when="now", client=client)
         time.sleep(10)
 
         # Undelete should fail — dataset is permanently gone
         with pytest.raises(_APIError):
-            undelete_dataset(client, ds_id)
+            undelete_dataset(ds_id, client=client)
 
     def test_list_deleted_documents(self, client, fresh_dataset):
         """Add doc, delete it, verify it appears in deleted-documents list."""
@@ -1014,14 +1015,14 @@ class TestSoftDelete:
             "document_class": {"class_name": "ndi_pytest_softdel"},
             "base": {"name": "soft_delete_test"},
         }
-        result = add_document(client, fresh_dataset, doc_json)
+        result = add_document(fresh_dataset, doc_json, client=client)
         doc_id = result.get("_id", result.get("id", ""))
         assert doc_id
 
-        delete_document(client, fresh_dataset, doc_id, when="now")
+        delete_document(fresh_dataset, doc_id, when="now", client=client)
         time.sleep(2)
 
-        deleted = list_deleted_documents(client, fresh_dataset)
+        deleted = list_deleted_documents(fresh_dataset, client=client)
         assert hasattr(deleted, "get"), f"Expected dict-like response, got {type(deleted)}"
         # The response should have a documents list
         deleted_docs = deleted.get("documents", [])
@@ -1038,14 +1039,14 @@ class TestSoftDelete:
         org_id = cloud_config.org_id
         try:
             result = _retry_on_server_error(
-                lambda: create_dataset(client, org_id, "NDI_PYTEST_DEL_MSG")
+                lambda: create_dataset(org_id, "NDI_PYTEST_DEL_MSG", client=client)
             )
         except _APIError as exc:
             pytest.skip(f"create_dataset timed out: {exc}")
         ds_id = result.get("_id", result.get("id", ""))
         assert ds_id
 
-        del_result = delete_dataset(client, ds_id, when="now")
+        del_result = delete_dataset(ds_id, when="now", client=client)
         assert hasattr(del_result, "get"), f"Expected dict-like response, got {type(del_result)}"
         assert "message" in del_result
 
@@ -1057,11 +1058,11 @@ class TestSoftDelete:
             "document_class": {"class_name": "ndi_pytest_delmsg"},
             "base": {"name": "delete_msg_test"},
         }
-        result = add_document(client, fresh_dataset, doc_json)
+        result = add_document(fresh_dataset, doc_json, client=client)
         doc_id = result.get("_id", result.get("id", ""))
         assert doc_id
 
-        del_result = delete_document(client, fresh_dataset, doc_id, when="now")
+        del_result = delete_document(fresh_dataset, doc_id, when="now", client=client)
         assert hasattr(del_result, "get"), f"Expected dict-like response, got {type(del_result)}"
         assert "message" in del_result
 
@@ -1078,7 +1079,7 @@ class TestErrorHandling:
         from ndi.cloud.exceptions import CloudAPIError
 
         with pytest.raises(CloudAPIError):
-            get_dataset(client, "000000000000000000000000")
+            get_dataset("000000000000000000000000", client=client)
 
     def test_bad_auth_raises(self):
         """Expired/invalid token should raise on API call."""
@@ -1102,7 +1103,7 @@ class TestErrorHandling:
         with pytest.raises((CloudAPIError, Exception)):
             from ndi.cloud.download import download_document_collection
 
-            download_document_collection(client, "000000000000000000000000")
+            download_document_collection("000000000000000000000000", client=client)
 
 
 # ===========================================================================
@@ -1128,7 +1129,7 @@ class TestReadOnlyPublicDatasets:
         from ndi.cloud.api.documents import get_document_count
 
         # Metadata field may be 0 on dev; use the count API instead
-        count = get_document_count(client, LARGE_DATASET)
+        count = get_document_count(LARGE_DATASET, client=client)
         metadata_count = large_dataset_info.get("documentCount", 0)
         # At least one of the two should be > 0 on prod.
         # On dev, the dataset may genuinely have 0 docs — skip in that case.
@@ -1144,8 +1145,8 @@ class TestReadOnlyPublicDatasets:
         from ndi.cloud.api.documents import get_document_count
 
         env = os.environ.get("CLOUD_API_ENVIRONMENT", "prod")
-        large_count = get_document_count(client, LARGE_DATASET)
-        small_count = get_document_count(client, SMALL_DATASET)
+        large_count = get_document_count(LARGE_DATASET, client=client)
+        small_count = get_document_count(SMALL_DATASET, client=client)
         # On dev, either dataset may have 0 docs — comparison is meaningless
         if env == "dev" and (large_count == 0 or small_count == 0):
             pytest.skip("Dataset(s) have no documents on dev environment")
@@ -1160,7 +1161,7 @@ class TestReadOnlyPublicDatasets:
         """Download all docs from the small dataset."""
         from ndi.cloud.download import download_document_collection
 
-        docs = download_document_collection(client, SMALL_DATASET)
+        docs = download_document_collection(SMALL_DATASET, client=client)
         assert isinstance(docs, list)
         assert len(docs) > 0
         for doc in docs[:3]:
@@ -1182,7 +1183,7 @@ class TestReadOnlyPublicDatasets:
         if target is None:
             pytest.skip("No non-empty files in dataset")
 
-        details = get_file_details(client, SMALL_DATASET, target["uid"])
+        details = get_file_details(SMALL_DATASET, target["uid"], client=client)
         url = details.get("downloadUrl", "")
         assert url, "File details should include downloadUrl"
 
@@ -1194,7 +1195,7 @@ class TestReadOnlyPublicDatasets:
         """List documents from carbon fiber dataset."""
         from ndi.cloud.api.documents import list_documents
 
-        result = list_documents(client, SMALL_DATASET, page=1, page_size=5)
+        result = list_documents(SMALL_DATASET, page=1, page_size=5, client=client)
         docs = result.get("documents", [])
         assert len(docs) == 5
 
@@ -1202,6 +1203,6 @@ class TestReadOnlyPublicDatasets:
         """list_remote_document_ids should return a non-empty mapping."""
         from ndi.cloud.internal import list_remote_document_ids
 
-        mapping = list_remote_document_ids(client, SMALL_DATASET)
+        mapping = list_remote_document_ids(SMALL_DATASET, client=client)
         assert isinstance(mapping, dict)
         assert len(mapping) > 0

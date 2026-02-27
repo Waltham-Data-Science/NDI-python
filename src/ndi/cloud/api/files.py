@@ -1,9 +1,8 @@
 """
 ndi.cloud.api.files - File transfer via presigned URLs.
 
-Functions that accept a :class:`~ndi.cloud.client.CloudClient` treat it as
-optional — when omitted, a client is created automatically from environment
-variables.
+All functions accept an optional ``client`` keyword argument.  When omitted,
+a client is created automatically from environment variables.
 
 MATLAB equivalents: +ndi/+cloud/+api/+files/*.m,
     +implementation/+files/*.m
@@ -14,7 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ..client import _auto_client
+from ..client import APIResponse, _auto_client
 
 if TYPE_CHECKING:
     from ..client import CloudClient
@@ -22,10 +21,11 @@ if TYPE_CHECKING:
 
 @_auto_client
 def get_upload_url(
-    client: CloudClient,
     org_id: str,
     dataset_id: str,
     file_uid: str,
+    *,
+    client: CloudClient | None = None,
 ) -> str:
     """GET /datasets/{organizationId}/{datasetId}/files/{file_uid}
 
@@ -42,9 +42,10 @@ def get_upload_url(
 
 @_auto_client
 def get_bulk_upload_url(
-    client: CloudClient,
     org_id: str,
     dataset_id: str,
+    *,
+    client: CloudClient | None = None,
 ) -> str:
     """POST /datasets/{organizationId}/{datasetId}/files/bulk
 
@@ -170,8 +171,9 @@ def get_file(
 
 @_auto_client
 def list_files(
-    client: CloudClient,
     dataset_id: str,
+    *,
+    client: CloudClient | None = None,
 ) -> list[dict[str, Any]]:
     """List all files associated with a cloud dataset.
 
@@ -181,15 +183,17 @@ def list_files(
     """
     from . import datasets as ds_api
 
-    ds = ds_api.get_dataset(client, dataset_id)
-    return ds.get("files", []) if isinstance(ds, dict) else []
+    ds = ds_api.get_dataset(dataset_id, client=client)
+    files = ds.get("files", []) if hasattr(ds, "get") else []
+    return APIResponse(files, success=True, status_code=200, url="")
 
 
 @_auto_client
 def get_file_details(
-    client: CloudClient,
     dataset_id: str,
     file_uid: str,
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """Get detail info (including download URL) for a file.
 
@@ -204,9 +208,10 @@ def get_file_details(
 
 @_auto_client
 def get_file_collection_upload_url(
-    client: CloudClient,
     org_id: str,
     dataset_id: str,
+    *,
+    client: CloudClient | None = None,
 ) -> str:
     """Get a presigned URL for bulk file collection upload.
 

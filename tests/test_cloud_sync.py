@@ -202,11 +202,11 @@ class TestAutoClient:
         calls = []
 
         @_auto_client
-        def my_func(client, arg1):
+        def my_func(arg1, *, client=None):
             calls.append((client, arg1))
             return "ok"
 
-        result = my_func(mock_client, "hello")
+        result = my_func("hello", client=mock_client)
         assert result == "ok"
         assert calls == [(mock_client, "hello")]
 
@@ -218,7 +218,7 @@ class TestAutoClient:
         calls = []
 
         @_auto_client
-        def my_func(client, arg1):
+        def my_func(arg1, *, client=None):
             calls.append((client, arg1))
             return "ok"
 
@@ -236,7 +236,7 @@ class TestAutoClient:
         calls = []
 
         @_auto_client
-        def my_func(client, arg1):
+        def my_func(arg1, *, client=None):
             calls.append((client, arg1))
             return "ok"
 
@@ -255,7 +255,7 @@ class TestAutoClient:
         calls = []
 
         @_auto_client
-        def my_func(client, arg1):
+        def my_func(arg1, *, client=None):
             calls.append((client, arg1))
             return "ok"
 
@@ -269,7 +269,7 @@ class TestAutoClient:
         from ndi.cloud.client import _auto_client
 
         @_auto_client
-        def get_dataset(client, dataset_id):
+        def get_dataset(dataset_id, *, client=None):
             """My docstring."""
             pass
 
@@ -300,6 +300,6 @@ class TestAutoClient:
 
         from ndi.cloud.api.datasets import get_dataset
 
-        result = get_dataset(mock_client, "abc-123")
+        result = get_dataset("abc-123", client=mock_client)
         assert result == {"_id": "abc", "name": "Test"}
         mock_client.get.assert_called_once()

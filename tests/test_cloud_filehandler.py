@@ -230,7 +230,7 @@ class TestFetchCloudFile:
         assert result is True
         assert target.exists()
         assert target.read_bytes() == b"fake binary data"
-        mock_details.assert_called_once_with(mock_client, "ds123", "uid456")
+        mock_details.assert_called_once_with("ds123", "uid456", client=mock_client)
 
     def test_fetch_no_download_url(self, tmp_path):
         from ndi.cloud.exceptions import CloudError

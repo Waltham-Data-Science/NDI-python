@@ -56,7 +56,7 @@ class TestCompute:
         client = MagicMock()
         client.post.return_value = {"sessionId": "session-abc-123"}
 
-        result = start_session(client, "hello-world-v1")
+        result = start_session("hello-world-v1", client=client)
         assert result["sessionId"] == "session-abc-123"
         client.post.assert_called_once()
 
@@ -71,7 +71,7 @@ class TestCompute:
             "currentStageId": "stage-1",
         }
 
-        result = get_session_status(client, "session-abc-123")
+        result = get_session_status("session-abc-123", client=client)
         assert result["status"] == "RUNNING"
         assert result["currentStageId"] == "stage-1"
 
@@ -87,10 +87,11 @@ class TestCompute:
             ]
         }
 
-        result = list_sessions(client)
-        assert isinstance(result, list)
-        assert len(result) == 2
-        assert result[0]["sessionId"] == "session-1"
+        result = list_sessions(client=client)
+        sessions = result.data
+        assert isinstance(sessions, list)
+        assert len(sessions) == 2
+        assert sessions[0]["sessionId"] == "session-1"
 
     def test_list_sessions_as_list_mocked(self):
         """listSessions handles direct list return (mocked)."""
@@ -101,9 +102,10 @@ class TestCompute:
             {"sessionId": "session-1", "status": "RUNNING"},
         ]
 
-        result = list_sessions(client)
-        assert isinstance(result, list)
-        assert len(result) == 1
+        result = list_sessions(client=client)
+        sessions = result.data
+        assert isinstance(sessions, list)
+        assert len(sessions) == 1
 
     def test_abort_session_mocked(self):
         """abortSession returns True (mocked)."""
@@ -112,7 +114,7 @@ class TestCompute:
         client = MagicMock()
         client.post.return_value = {}
 
-        result = abort_session(client, "session-abc-123")
+        result = abort_session("session-abc-123", client=client)
         assert result is True
         client.post.assert_called_once()
 
@@ -123,7 +125,7 @@ class TestCompute:
         client = MagicMock()
         client.post.return_value = {"status": "triggered"}
 
-        result = trigger_stage(client, "session-abc-123", "stage-1")
+        result = trigger_stage("session-abc-123", "stage-1", client=client)
         assert result["status"] == "triggered"
 
     def test_finalize_session_mocked(self):
@@ -133,7 +135,7 @@ class TestCompute:
         client = MagicMock()
         client.post.return_value = {"status": "finalized"}
 
-        result = finalize_session(client, "session-abc-123")
+        result = finalize_session("session-abc-123", client=client)
         assert result["status"] == "finalized"
 
     # ---- Live tests ----
@@ -161,17 +163,17 @@ class TestCompute:
         _, client = _login()
 
         # 1. Start session
-        result = start_session(client, "hello-world-v1")
+        result = start_session("hello-world-v1", client=client)
         session_id = result.get("sessionId") or result.get("id", "")
         assert session_id, f"No sessionId in response: {result}"
 
         try:
             # 2. Get session status
-            status_result = get_session_status(client, session_id)
+            status_result = get_session_status(session_id, client=client)
             assert "status" in status_result, f"No status in response: {status_result}"
 
             # 3. List sessions — verify our session appears
-            sessions = list_sessions(client)
+            sessions = list_sessions(client=client).data
             session_ids = []
             for s in sessions:
                 sid = s.get("sessionId") or s.get("id", "")
@@ -180,27 +182,27 @@ class TestCompute:
 
             # 4. Abort session (cleanup)
             try:
-                abort_session(client, session_id)
+                abort_session(session_id, client=client)
             except Exception:
                 # If session already finished, abort may 404
                 pass
 
             # 5. triggerStage — just verify no crash
             try:
-                trigger_stage(client, session_id, "dummy-stage")
+                trigger_stage(session_id, "dummy-stage", client=client)
             except Exception:
                 pass  # Expected: session may be gone
 
             # 6. finalizeSession — just verify no crash
             try:
-                finalize_session(client, session_id)
+                finalize_session(session_id, client=client)
             except Exception:
                 pass  # Expected: session may be gone
 
         except Exception:
             # Best-effort cleanup
             try:
-                abort_session(client, session_id)
+                abort_session(session_id, client=client)
             except Exception:
                 pass
             raise
@@ -232,7 +234,7 @@ class TestZombie:
 
         # Start returns session ID
         client.post.return_value = {"sessionId": "zombie-session-1"}
-        result = start_session(client, "zombie-test-v1")
+        result = start_session("zombie-test-v1", client=client)
         assert result["sessionId"] == "zombie-session-1"
 
         # Status returns RUNNING, then COMPLETED
@@ -249,10 +251,10 @@ class TestZombie:
             },
         ]
 
-        status1 = get_session_status(client, "zombie-session-1")
+        status1 = get_session_status("zombie-session-1", client=client)
         assert status1["status"] == "RUNNING"
 
-        status2 = get_session_status(client, "zombie-session-1")
+        status2 = get_session_status("zombie-session-1", client=client)
         assert status2["status"] == "COMPLETED"
 
     @requires_cloud
@@ -272,7 +274,7 @@ class TestZombie:
         _, client = _login()
 
         # 1. Start pipeline
-        result = start_session(client, "zombie-test-v1")
+        result = start_session("zombie-test-v1", client=client)
         session_id = result.get("sessionId") or result.get("id", "")
         assert session_id, f"No sessionId in response: {result}"
 
@@ -280,7 +282,7 @@ class TestZombie:
         time.sleep(10)
 
         # 3. Verify session in list
-        sessions = list_sessions(client)
+        sessions = list_sessions(client=client).data
         session_ids = [s.get("sessionId") or s.get("id", "") for s in sessions]
         assert session_id in session_ids, f"Session {session_id} not in list: {session_ids}"
 
@@ -290,7 +292,7 @@ class TestZombie:
 
         for _ in range(max_iterations):
             try:
-                status_result = get_session_status(client, session_id)
+                status_result = get_session_status(session_id, client=client)
                 status = status_result.get("status", "UNKNOWN")
 
                 if status in ("ABORTED", "FAILED", "COMPLETED"):

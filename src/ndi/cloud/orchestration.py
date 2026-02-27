@@ -1,9 +1,8 @@
 """
 ndi.cloud.orchestration - High-level dataset sync/transfer operations.
 
-Public functions accept an optional :class:`~ndi.cloud.client.CloudClient`
-as the first argument.  When omitted, a client is created automatically
-from environment variables.
+Public functions accept an optional ``client`` keyword argument.  When
+omitted, a client is created automatically from environment variables.
 
 MATLAB equivalents: downloadDataset.m, uploadDataset.m, syncDataset.m,
     +upload/newDataset.m, +upload/scanForUpload.m
@@ -22,22 +21,23 @@ if TYPE_CHECKING:
 
 @_auto_client
 def download_dataset(
-    client: CloudClient,
     cloud_dataset_id: str,
     target_folder: str,
     sync_files: bool = False,
     verbose: bool = False,
+    *,
+    client: CloudClient | None = None,
 ) -> Any:
     """Download a cloud dataset to a local folder.
 
     MATLAB equivalent: ndi.cloud.downloadDataset
 
     Args:
-        client: Authenticated cloud client.
         cloud_dataset_id: Remote dataset ID.
         target_folder: Path to local directory.
         sync_files: If True, also download binary files.
         verbose: Print progress messages.
+        client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
         An ndi.Dataset backed by the target folder.
@@ -54,15 +54,15 @@ def download_dataset(
     target.mkdir(parents=True, exist_ok=True)
 
     # Verify dataset exists
-    ds_info = ds_api.get_dataset(client, cloud_dataset_id)
+    ds_info = ds_api.get_dataset(cloud_dataset_id, client=client)
     if verbose:
         name = ds_info.get("name", cloud_dataset_id)
         print(f"Downloading dataset: {name}")
 
     # Download all full documents via chunked bulk download
     doc_jsons = download_document_collection(
-        client,
         cloud_dataset_id,
+        client=client,
         progress=print if verbose else None,
     )
     if verbose:
@@ -100,7 +100,7 @@ def download_dataset(
     # Optionally download files
     if sync_files and doc_jsons:
         file_dir = target / ".ndi" / "files"
-        report = download_dataset_files(client, cloud_dataset_id, doc_jsons, file_dir)
+        report = download_dataset_files(cloud_dataset_id, doc_jsons, file_dir, client=client)
         if verbose:
             print(f'  Files downloaded: {report["downloaded"]}, failed: {report["failed"]}')
 
@@ -115,6 +115,7 @@ def load_dataset_from_json_dir(
     target_folder: str | Path | None = None,
     verbose: bool = False,
     cloud_dataset_id: str | None = None,
+    *,
     client: CloudClient | None = None,
 ) -> Any:
     """Load a dataset from a directory of pre-downloaded JSON documents.
@@ -198,24 +199,25 @@ def load_dataset_from_json_dir(
 
 @_auto_client
 def upload_dataset(
-    client: CloudClient,
     dataset: Any,
     upload_as_new: bool = False,
     remote_name: str = "",
     sync_files: bool = True,
     verbose: bool = False,
+    *,
+    client: CloudClient | None = None,
 ) -> tuple[bool, str, str]:
     """Upload a local dataset to NDI Cloud.
 
     MATLAB equivalent: ndi.cloud.uploadDataset
 
     Args:
-        client: Authenticated cloud client.
         dataset: Local ndi.Dataset.
         upload_as_new: If True, always create a new remote dataset.
         remote_name: Name for the remote dataset.
         sync_files: Upload binary files.
         verbose: Print progress.
+        client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
         Tuple of ``(success, cloud_dataset_id, message)``.
@@ -227,14 +229,14 @@ def upload_dataset(
     # Resolve or create remote dataset
     cloud_id = ""
     if not upload_as_new:
-        cloud_id, _ = get_cloud_dataset_id(client, dataset)
+        cloud_id, _ = get_cloud_dataset_id(dataset, client=client)
 
     if not cloud_id:
         # Create new remote dataset
         name = remote_name or getattr(dataset, "name", "Unnamed Dataset")
         org_id = client.config.org_id
         try:
-            result = ds_api.create_dataset(client, org_id, name)
+            result = ds_api.create_dataset(org_id, name, client=client)
             cloud_id = result.get("id", result.get("_id", ""))
         except Exception as exc:
             return False, "", f"Failed to create remote dataset: {exc}"
@@ -264,17 +266,17 @@ def upload_dataset(
             doc_jsons.append(props)
 
     # Upload documents
-    report = upload_document_collection(client, cloud_id, doc_jsons)
+    report = upload_document_collection(cloud_id, doc_jsons, client=client)
     if verbose:
         print(f'  Documents uploaded: {report["uploaded"]}, skipped: {report["skipped"]}')
 
     # Upload files
     if sync_files:
         file_report = upload_files_for_documents(
-            client,
             client.config.org_id,
             cloud_id,
             doc_jsons,
+            client=client,
         )
         if verbose:
             print(f'  Files uploaded: {file_report["uploaded"]}, failed: {file_report["failed"]}')
@@ -284,19 +286,19 @@ def upload_dataset(
 
 @_auto_client
 def sync_dataset(
-    client: CloudClient,
     dataset: Any,
     sync_mode: str = "download_new",
     sync_files: bool = False,
     verbose: bool = False,
     dry_run: bool = False,
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """Synchronize a local dataset with its cloud counterpart.
 
     MATLAB equivalent: ndi.cloud.syncDataset
 
     Args:
-        client: Authenticated cloud client.
         dataset: Local ndi.Dataset.
         sync_mode: One of ``'download_new'``, ``'upload_new'``,
             ``'mirror_from_remote'``, ``'mirror_to_remote'``,
@@ -304,13 +306,14 @@ def sync_dataset(
         sync_files: Also sync binary files.
         verbose: Print progress.
         dry_run: Simulate without making changes.
+        client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
         Report dict with counts of changes.
     """
     from .internal import get_cloud_dataset_id
 
-    cloud_id, _ = get_cloud_dataset_id(client, dataset)
+    cloud_id, _ = get_cloud_dataset_id(dataset, client=client)
     if not cloud_id:
         return {"error": "No cloud dataset linked to this dataset"}
 
@@ -323,12 +326,12 @@ def sync_dataset(
     }
 
     if sync_mode == "download_new":
-        report.update(_sync_download_new(client, dataset, cloud_id, sync_files, verbose, dry_run))
+        report.update(_sync_download_new(dataset, cloud_id, sync_files, verbose, dry_run, client=client))
     elif sync_mode == "upload_new":
-        report.update(_sync_upload_new(client, dataset, cloud_id, sync_files, verbose, dry_run))
+        report.update(_sync_upload_new(dataset, cloud_id, sync_files, verbose, dry_run, client=client))
     elif sync_mode == "two_way_sync":
-        report.update(_sync_download_new(client, dataset, cloud_id, sync_files, verbose, dry_run))
-        report.update(_sync_upload_new(client, dataset, cloud_id, sync_files, verbose, dry_run))
+        report.update(_sync_download_new(dataset, cloud_id, sync_files, verbose, dry_run, client=client))
+        report.update(_sync_upload_new(dataset, cloud_id, sync_files, verbose, dry_run, client=client))
     elif sync_mode in ("mirror_from_remote", "mirror_to_remote"):
         report["note"] = f"{sync_mode} delegates to full download/upload"
 
@@ -337,9 +340,10 @@ def sync_dataset(
 
 @_auto_client
 def new_dataset(
-    client: CloudClient,
     dataset: Any,
     name: str = "",
+    *,
+    client: CloudClient | None = None,
 ) -> str:
     """Create a new remote dataset and upload contents.
 
@@ -349,11 +353,11 @@ def new_dataset(
         The cloud dataset ID.
     """
     success, cloud_id, msg = upload_dataset(
-        client,
         dataset,
         upload_as_new=True,
         remote_name=name,
         verbose=False,
+        client=client,
     )
     if not success:
         from .exceptions import CloudError
@@ -364,9 +368,10 @@ def new_dataset(
 
 @_auto_client
 def scan_for_upload(
-    client: CloudClient,
     dataset: Any,
     cloud_dataset_id: str,
+    *,
+    client: CloudClient | None = None,
 ) -> tuple[list[dict], list[dict], float]:
     """Scan local documents/files to determine what needs uploading.
 
@@ -389,7 +394,7 @@ def scan_for_upload(
     remote_ids = {}
     if cloud_dataset_id:
         try:
-            remote_ids = list_remote_document_ids(client, cloud_dataset_id)
+            remote_ids = list_remote_document_ids(cloud_dataset_id, client=client)
         except Exception:
             pass
 
@@ -426,18 +431,19 @@ def scan_for_upload(
 
 
 def _sync_download_new(
-    client: CloudClient,
     dataset: Any,
     cloud_id: str,
     sync_files: bool,
     verbose: bool,
     dry_run: bool,
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, int]:
     """Download documents that exist remotely but not locally."""
     from .api import documents as docs_api
     from .download import jsons_to_documents
 
-    remote_docs = docs_api.list_all_documents(client, cloud_id)
+    remote_docs = docs_api.list_all_documents(cloud_id, client=client).data
 
     # Find local IDs
     from ndi.query import Query
@@ -475,18 +481,19 @@ def _sync_download_new(
 
 
 def _sync_upload_new(
-    client: CloudClient,
     dataset: Any,
     cloud_id: str,
     sync_files: bool,
     verbose: bool,
     dry_run: bool,
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, int]:
     """Upload documents that exist locally but not remotely."""
     from .internal import list_remote_document_ids
     from .upload import upload_document_collection
 
-    remote_ids = list_remote_document_ids(client, cloud_id)
+    remote_ids = list_remote_document_ids(cloud_id, client=client)
 
     from ndi.query import Query
 
@@ -509,5 +516,5 @@ def _sync_upload_new(
     if dry_run:
         return {"uploaded": len(new_jsons)}
 
-    report = upload_document_collection(client, cloud_id, new_jsons, only_missing=False)
+    report = upload_document_collection(cloud_id, new_jsons, only_missing=False, client=client)
     return {"uploaded": report.get("uploaded", 0)}

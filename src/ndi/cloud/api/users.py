@@ -1,9 +1,8 @@
 """
 ndi.cloud.api.users - User management.
 
-All functions accept an optional :class:`~ndi.cloud.client.CloudClient` as
-the first argument.  When omitted, a client is created automatically from
-environment variables.
+All functions accept an optional ``client`` keyword argument.  When omitted,
+a client is created automatically from environment variables.
 
 MATLAB equivalents: +ndi/+cloud/+api/+users/*.m,
     +implementation/+users/*.m
@@ -21,12 +20,13 @@ if TYPE_CHECKING:
 
 @_auto_client
 def create_user(
-    client: CloudClient,
     email: str,
     name: str,
     password: str,
+    *,
+    client: CloudClient | None = None,
 ) -> dict[str, Any]:
-    """POST /users — Create a new user (no auth required)."""
+    """POST /users -- Create a new user (no auth required)."""
     return client.post(
         "/users",
         json={"email": email, "name": name, "password": password},
@@ -34,8 +34,8 @@ def create_user(
 
 
 @_auto_client
-def get_current_user(client: CloudClient) -> dict[str, Any]:
-    """GET /users/me — Get the authenticated user's profile.
+def get_current_user(*, client: CloudClient | None = None) -> dict[str, Any]:
+    """GET /users/me -- Get the authenticated user's profile.
 
     The response includes the user's organization memberships.
     """
@@ -43,6 +43,6 @@ def get_current_user(client: CloudClient) -> dict[str, Any]:
 
 
 @_auto_client
-def get_user(client: CloudClient, user_id: str) -> dict[str, Any]:
+def get_user(user_id: str, *, client: CloudClient | None = None) -> dict[str, Any]:
     """GET /users/{userId}"""
     return client.get("/users/{userId}", userId=user_id)
