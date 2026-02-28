@@ -146,9 +146,7 @@ def list_all_documents(
 
 
 @_auto_client
-def get_document_count(
-    dataset_id: str, *, client: CloudClient | None = None
-) -> int:
+def get_document_count(dataset_id: str, *, client: CloudClient | None = None) -> int:
     """Return the document count for a dataset.
 
     Tries the dedicated ``GET /datasets/{datasetId}/document-count``
@@ -190,9 +188,7 @@ def bulk_upload(
 
 
 @_auto_client
-def get_bulk_upload_url(
-    dataset_id: str, *, client: CloudClient | None = None
-) -> str:
+def get_bulk_upload_url(dataset_id: str, *, client: CloudClient | None = None) -> str:
     """Get a presigned URL for bulk document upload."""
     result = client.post(
         "/datasets/{datasetId}/documents/bulk-upload",

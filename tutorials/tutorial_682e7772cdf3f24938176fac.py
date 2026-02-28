@@ -386,7 +386,7 @@ else:
     # Download from NDI Cloud (first time only)
     config = login(ndi_cloud_username, ndi_cloud_password)
     client = CloudClient(config)
-    dataset = download_dataset(client, cloud_dataset_id, str(dataset_path), verbose=True)""")
+    dataset = download_dataset(cloud_dataset_id, str(dataset_path), verbose=True, client=client)""")
 
     t0 = time.time()
     if DATASET_PATH.exists():
@@ -402,7 +402,7 @@ else:
             sys.exit(1)
         config = login(NDI_CLOUD_USERNAME, NDI_CLOUD_PASSWORD)
         client = CloudClient(config)
-        dataset = download_dataset(client, CLOUD_DATASET_ID, str(DATASET_PATH), verbose=True)
+        dataset = download_dataset(CLOUD_DATASET_ID, str(DATASET_PATH), verbose=True, client=client)
         elapsed = time.time() - t0
         html.add_output_text(f"Dataset downloaded in {elapsed:.1f}s to {DATASET_PATH}")
 

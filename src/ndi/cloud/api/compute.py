@@ -32,9 +32,7 @@ def start_session(
 
 
 @_auto_client
-def get_session_status(
-    session_id: str, *, client: CloudClient | None = None
-) -> dict[str, Any]:
+def get_session_status(session_id: str, *, client: CloudClient | None = None) -> dict[str, Any]:
     """GET /compute/{sessionId} -- Get session status."""
     return client.get("/compute/{sessionId}", sessionId=session_id)
 
@@ -55,9 +53,7 @@ def trigger_stage(
 
 
 @_auto_client
-def finalize_session(
-    session_id: str, *, client: CloudClient | None = None
-) -> dict[str, Any]:
+def finalize_session(session_id: str, *, client: CloudClient | None = None) -> dict[str, Any]:
     """POST /compute/{sessionId}/finalize"""
     return client.post(
         "/compute/{sessionId}/finalize",
@@ -66,9 +62,7 @@ def finalize_session(
 
 
 @_auto_client
-def abort_session(
-    session_id: str, *, client: CloudClient | None = None
-) -> bool:
+def abort_session(session_id: str, *, client: CloudClient | None = None) -> bool:
     """POST /compute/{sessionId}/abort"""
     client.post("/compute/{sessionId}/abort", sessionId=session_id)
     return True

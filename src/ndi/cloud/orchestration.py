@@ -326,12 +326,20 @@ def sync_dataset(
     }
 
     if sync_mode == "download_new":
-        report.update(_sync_download_new(dataset, cloud_id, sync_files, verbose, dry_run, client=client))
+        report.update(
+            _sync_download_new(dataset, cloud_id, sync_files, verbose, dry_run, client=client)
+        )
     elif sync_mode == "upload_new":
-        report.update(_sync_upload_new(dataset, cloud_id, sync_files, verbose, dry_run, client=client))
+        report.update(
+            _sync_upload_new(dataset, cloud_id, sync_files, verbose, dry_run, client=client)
+        )
     elif sync_mode == "two_way_sync":
-        report.update(_sync_download_new(dataset, cloud_id, sync_files, verbose, dry_run, client=client))
-        report.update(_sync_upload_new(dataset, cloud_id, sync_files, verbose, dry_run, client=client))
+        report.update(
+            _sync_download_new(dataset, cloud_id, sync_files, verbose, dry_run, client=client)
+        )
+        report.update(
+            _sync_upload_new(dataset, cloud_id, sync_files, verbose, dry_run, client=client)
+        )
     elif sync_mode in ("mirror_from_remote", "mirror_to_remote"):
         report["note"] = f"{sync_mode} delegates to full download/upload"
 

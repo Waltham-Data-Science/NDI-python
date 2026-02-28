@@ -416,9 +416,7 @@ class Query(did.query.Query):
         return q.isa("_impossible_class_name_that_will_never_exist_")
 
     @classmethod
-    def from_search(
-        cls, field: str, operation: str, param1: Any = "", param2: Any = ""
-    ) -> "Query":
+    def from_search(cls, field: str, operation: str, param1: Any = "", param2: Any = "") -> "Query":
         """Create a query using MATLAB-style parameters.
 
         This provides compatibility with MATLAB ndi.query construction.

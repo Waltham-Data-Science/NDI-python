@@ -109,11 +109,11 @@ def run_test(username: str, password: str) -> dict:
         t0 = time.time()
         try:
             dataset = download_dataset(
-                client,
                 CARBON_FIBER_ID,
                 target_folder=tmpdir,
                 sync_files=False,
                 verbose=True,
+                client=client,
             )
             elapsed = time.time() - t0
             print(f"  Download completed in {elapsed:.1f}s")

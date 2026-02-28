@@ -794,7 +794,9 @@ class TestNDIQuery:
                 "param1": "session",
             }
         ]
-        result = _retry_on_server_error(lambda: ndi_query_all("public", search, page_size=3, client=client))
+        result = _retry_on_server_error(
+            lambda: ndi_query_all("public", search, page_size=3, client=client)
+        )
         docs = result.data
         assert isinstance(docs, list)
         assert len(docs) > 0
@@ -944,7 +946,9 @@ class TestSoftDelete:
 
             # Should be accessible again with documents intact
             time.sleep(2)
-            ds = _retry_on_server_error(lambda: get_dataset(ds_id, client=client), retry_on_404=True)
+            ds = _retry_on_server_error(
+                lambda: get_dataset(ds_id, client=client), retry_on_404=True
+            )
             ds_fetched_id = ds.get("_id", ds.get("id", ""))
             assert ds_fetched_id == ds_id
 

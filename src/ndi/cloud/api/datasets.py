@@ -105,9 +105,7 @@ _MAX_PAGES = 1000
 
 
 @_auto_client
-def list_all_datasets(
-    org_id: str, *, client: CloudClient | None = None
-) -> list[dict[str, Any]]:
+def list_all_datasets(org_id: str, *, client: CloudClient | None = None) -> list[dict[str, Any]]:
     """Auto-paginate through all datasets for an organisation."""
     all_datasets: list[dict[str, Any]] = []
     page = 1
@@ -137,41 +135,31 @@ def get_published_datasets(
 
 
 @_auto_client
-def publish_dataset(
-    dataset_id: str, *, client: CloudClient | None = None
-) -> dict[str, Any]:
+def publish_dataset(dataset_id: str, *, client: CloudClient | None = None) -> dict[str, Any]:
     """POST /datasets/{datasetId}/publish"""
     return client.post("/datasets/{datasetId}/publish", datasetId=dataset_id)
 
 
 @_auto_client
-def unpublish_dataset(
-    dataset_id: str, *, client: CloudClient | None = None
-) -> dict[str, Any]:
+def unpublish_dataset(dataset_id: str, *, client: CloudClient | None = None) -> dict[str, Any]:
     """POST /datasets/{datasetId}/unpublish"""
     return client.post("/datasets/{datasetId}/unpublish", datasetId=dataset_id)
 
 
 @_auto_client
-def submit_dataset(
-    dataset_id: str, *, client: CloudClient | None = None
-) -> dict[str, Any]:
+def submit_dataset(dataset_id: str, *, client: CloudClient | None = None) -> dict[str, Any]:
     """POST /datasets/{datasetId}/submit"""
     return client.post("/datasets/{datasetId}/submit", datasetId=dataset_id)
 
 
 @_auto_client
-def create_branch(
-    dataset_id: str, *, client: CloudClient | None = None
-) -> dict[str, Any]:
+def create_branch(dataset_id: str, *, client: CloudClient | None = None) -> dict[str, Any]:
     """POST /datasets/{datasetId}/branch"""
     return client.post("/datasets/{datasetId}/branch", datasetId=dataset_id)
 
 
 @_auto_client
-def get_branches(
-    dataset_id: str, *, client: CloudClient | None = None
-) -> list[dict[str, Any]]:
+def get_branches(dataset_id: str, *, client: CloudClient | None = None) -> list[dict[str, Any]]:
     """GET /datasets/{datasetId}/branches"""
     return client.get("/datasets/{datasetId}/branches", datasetId=dataset_id)
 
@@ -194,9 +182,7 @@ def get_unpublished(
 
 
 @_auto_client
-def undelete_dataset(
-    dataset_id: str, *, client: CloudClient | None = None
-) -> dict[str, Any]:
+def undelete_dataset(dataset_id: str, *, client: CloudClient | None = None) -> dict[str, Any]:
     """POST /datasets/{datasetId}/undelete
 
     Reverse a deferred (soft) delete before the pruner runs.
