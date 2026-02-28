@@ -69,7 +69,7 @@ def abort_session(session_id: str, *, client: CloudClient | None = None) -> bool
 
 
 @_auto_client
-def list_sessions(*, client: CloudClient | None = None) -> list[dict[str, Any]]:
+def list_sessions(*, client: CloudClient | None = None) -> APIResponse:
     """GET /compute -- List all compute sessions."""
     result = client.get("/compute")
     # Handle both APIResponse (has .data) and raw dict/list from mocks

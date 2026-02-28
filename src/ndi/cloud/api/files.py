@@ -174,7 +174,7 @@ def list_files(
     dataset_id: str,
     *,
     client: CloudClient | None = None,
-) -> list[dict[str, Any]]:
+) -> APIResponse:
     """List all files associated with a cloud dataset.
 
     Fetches the dataset metadata and extracts the files list.

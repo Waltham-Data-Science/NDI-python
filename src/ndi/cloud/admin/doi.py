@@ -11,6 +11,7 @@ import os
 import uuid
 from typing import TYPE_CHECKING, Any
 
+from ..client import _auto_client
 from .crossref import CONSTANTS, create_batch_submission
 
 if TYPE_CHECKING:
@@ -32,6 +33,7 @@ def create_new_doi(prefix: str = "") -> str:
     return f"{prefix}/ndic.{suffix}"
 
 
+@_auto_client
 def register_dataset_doi(
     cloud_dataset_id: str,
     use_test: bool = False,

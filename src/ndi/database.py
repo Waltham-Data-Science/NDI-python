@@ -431,8 +431,19 @@ class Database:
             List of Documents that depend on the given document.
         """
         doc_id = document.id if isinstance(document, Document) else document
-        query = Query.depends_on(doc_id)
-        return self.search(query)
+        # DID's depends_on query requires both name and value, but we want
+        # all documents that depend on doc_id regardless of dependency name.
+        # Search all documents and filter by depends_on value.
+        all_docs = self.search(Query.all())
+        return [
+            doc
+            for doc in all_docs
+            if any(
+                dep.get("value") == doc_id
+                for dep in doc.document_properties.get("depends_on", [])
+                if isinstance(dep, dict)
+            )
+        ]
 
     def find_dependencies(self, document: Document | str) -> list[Document]:
         """Find all documents that a given document depends on.

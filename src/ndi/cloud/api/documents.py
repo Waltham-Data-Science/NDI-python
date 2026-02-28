@@ -130,7 +130,7 @@ def list_all_documents(
     page_size: int = 1000,
     *,
     client: CloudClient | None = None,
-) -> list[dict[str, Any]]:
+) -> APIResponse:
     """Auto-paginate through all documents in a dataset."""
     all_docs: list[dict[str, Any]] = []
     page = 1
@@ -279,7 +279,7 @@ def ndi_query_all(
     page_size: int = 1000,
     *,
     client: CloudClient | None = None,
-) -> list[dict[str, Any]]:
+) -> APIResponse:
     """Auto-paginate through all ndiquery results.
 
     MATLAB equivalent: +cloud/+api/+documents/ndiqueryAll.m

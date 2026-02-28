@@ -105,7 +105,7 @@ _MAX_PAGES = 1000
 
 
 @_auto_client
-def list_all_datasets(org_id: str, *, client: CloudClient | None = None) -> list[dict[str, Any]]:
+def list_all_datasets(org_id: str, *, client: CloudClient | None = None) -> APIResponse:
     """Auto-paginate through all datasets for an organisation."""
     all_datasets: list[dict[str, Any]] = []
     page = 1

@@ -66,12 +66,19 @@ class Query(did.query.Query):
         "exact_string": "==",
         "exact_number": "==",
         "~exact_string": "!=",
+        "~exact_number": "!=",
         "greaterthan": ">",
         "greaterthaneq": ">=",
         "lessthan": "<",
         "lessthaneq": "<=",
+        "~greaterthan": "~>",
+        "~greaterthaneq": "~>=",
+        "~lessthan": "~<",
+        "~lessthaneq": "~<=",
         "contains_string": "contains",
         "regexp": "match",
+        "~contains_string": "~contains",
+        "~regexp": "~match",
     }
 
     def __init__(
@@ -217,6 +224,8 @@ class Query(did.query.Query):
 
     def __ne__(self, other: Any) -> "Query":
         """Inequality comparison."""
+        if isinstance(other, Query):
+            return NotImplemented
         return self._resolve("!=", other)
 
     def __lt__(self, other: Any) -> "Query":
