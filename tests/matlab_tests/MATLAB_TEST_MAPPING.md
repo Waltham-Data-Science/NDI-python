@@ -351,7 +351,7 @@ These tests also uncovered and fixed **4 additional production bugs**:
 | File | Bug | Fix |
 |------|-----|-----|
 | `cloud/upload.py` | `get_collection_upload_url` (wrong name) | `get_file_collection_upload_url` |
-| `cloud/upload.py` | `get_upload_url(client, dataset_id, file_uid)` missing org_id | `get_upload_url(client, client.config.org_id, dataset_id, file_uid)` |
+| `cloud/upload.py` | `get_upload_url(dataset_id, file_uid)` missing org_id | `get_upload_url(org_id, dataset_id, file_uid)` |
 | `cloud/internal.py` | `doc.set_value(...)` (doesn't exist) | `doc._set_nested_property(...)` |
 | `cloud/internal.py` | `remote.get('cloud_dataset_id')` (wrong field) | `remote.get('dataset_id')` (matches schema) |
 

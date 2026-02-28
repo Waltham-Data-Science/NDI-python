@@ -122,7 +122,7 @@ datasets = get_published_datasets()
 from ndi.cloud import CloudClient, login
 config = login('you@example.com', 'your-password')
 client = CloudClient(config)
-datasets = get_published_datasets(client)
+datasets = get_published_datasets(client=client)
 ```
 
 All `ndi.cloud.api.*` functions accept an optional `client` parameter. If omitted, a client is built automatically from environment variables.
