@@ -10,12 +10,14 @@ MATLAB equivalents: +ndi/+cloud/+api/+documents/*.m,
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Annotated, Any
 
-from ..client import APIResponse, _auto_client
+from pydantic import SkipValidation, validate_call
 
-if TYPE_CHECKING:
-    from ..client import CloudClient
+from ..client import APIResponse, CloudClient, _auto_client
+from ._validators import VALIDATE_CONFIG, CloudId, FilePath, PageNumber, PageSize, Scope
+
+_Client = Annotated[CloudClient | None, SkipValidation()]
 
 
 def _coerce_search_structure(search_structure: Any) -> Any:
@@ -38,11 +40,12 @@ def _coerce_search_structure(search_structure: Any) -> Any:
 
 
 @_auto_client
+@validate_call(config=VALIDATE_CONFIG)
 def get_document(
-    dataset_id: str,
-    document_id: str,
+    dataset_id: CloudId,
+    document_id: CloudId,
     *,
-    client: CloudClient | None = None,
+    client: _Client = None,
 ) -> dict[str, Any]:
     """GET /datasets/{datasetId}/documents/{documentId}"""
     return client.get(
@@ -53,11 +56,12 @@ def get_document(
 
 
 @_auto_client
+@validate_call(config=VALIDATE_CONFIG)
 def add_document(
-    dataset_id: str,
+    dataset_id: CloudId,
     doc_json: dict[str, Any],
     *,
-    client: CloudClient | None = None,
+    client: _Client = None,
 ) -> dict[str, Any]:
     """POST /datasets/{datasetId}/documents"""
     return client.post(
@@ -68,12 +72,13 @@ def add_document(
 
 
 @_auto_client
+@validate_call(config=VALIDATE_CONFIG)
 def update_document(
-    dataset_id: str,
-    document_id: str,
+    dataset_id: CloudId,
+    document_id: CloudId,
     doc_json: dict[str, Any],
     *,
-    client: CloudClient | None = None,
+    client: _Client = None,
 ) -> dict[str, Any]:
     """POST /datasets/{datasetId}/documents/{documentId}"""
     return client.post(
@@ -85,12 +90,13 @@ def update_document(
 
 
 @_auto_client
+@validate_call(config=VALIDATE_CONFIG)
 def delete_document(
-    dataset_id: str,
-    document_id: str,
+    dataset_id: CloudId,
+    document_id: CloudId,
     when: str = "7d",
     *,
-    client: CloudClient | None = None,
+    client: _Client = None,
 ) -> dict[str, Any]:
     """DELETE /datasets/{datasetId}/documents/{documentId}?when=...
 
@@ -106,12 +112,13 @@ def delete_document(
 
 
 @_auto_client
+@validate_call(config=VALIDATE_CONFIG)
 def list_documents(
-    dataset_id: str,
-    page: int = 1,
-    page_size: int = 1000,
+    dataset_id: CloudId,
+    page: PageNumber = 1,
+    page_size: PageSize = 1000,
     *,
-    client: CloudClient | None = None,
+    client: _Client = None,
 ) -> dict[str, Any]:
     """GET /datasets/{datasetId}/documents?page=&pageSize="""
     return client.get(
@@ -125,11 +132,12 @@ _MAX_PAGES = 1000
 
 
 @_auto_client
+@validate_call(config=VALIDATE_CONFIG)
 def list_all_documents(
-    dataset_id: str,
-    page_size: int = 1000,
+    dataset_id: CloudId,
+    page_size: PageSize = 1000,
     *,
-    client: CloudClient | None = None,
+    client: _Client = None,
 ) -> APIResponse:
     """Auto-paginate through all documents in a dataset."""
     all_docs: list[dict[str, Any]] = []
@@ -146,7 +154,8 @@ def list_all_documents(
 
 
 @_auto_client
-def get_document_count(dataset_id: str, *, client: CloudClient | None = None) -> int:
+@validate_call(config=VALIDATE_CONFIG)
+def get_document_count(dataset_id: CloudId, *, client: _Client = None) -> int:
     """Return the document count for a dataset.
 
     Tries the dedicated ``GET /datasets/{datasetId}/document-count``
@@ -170,11 +179,12 @@ def get_document_count(dataset_id: str, *, client: CloudClient | None = None) ->
 
 
 @_auto_client
+@validate_call(config=VALIDATE_CONFIG)
 def bulk_upload(
-    dataset_id: str,
+    dataset_id: CloudId,
     zip_path: str,
     *,
-    client: CloudClient | None = None,
+    client: _Client = None,
 ) -> dict[str, Any]:
     """POST /datasets/{datasetId}/documents/bulk-upload
 
@@ -188,7 +198,8 @@ def bulk_upload(
 
 
 @_auto_client
-def get_bulk_upload_url(dataset_id: str, *, client: CloudClient | None = None) -> str:
+@validate_call(config=VALIDATE_CONFIG)
+def get_bulk_upload_url(dataset_id: CloudId, *, client: _Client = None) -> str:
     """Get a presigned URL for bulk document upload."""
     result = client.post(
         "/datasets/{datasetId}/documents/bulk-upload",
@@ -198,11 +209,12 @@ def get_bulk_upload_url(dataset_id: str, *, client: CloudClient | None = None) -
 
 
 @_auto_client
+@validate_call(config=VALIDATE_CONFIG)
 def get_bulk_download_url(
-    dataset_id: str,
+    dataset_id: CloudId,
     doc_ids: list[str] | None = None,
     *,
-    client: CloudClient | None = None,
+    client: _Client = None,
 ) -> str:
     """POST /datasets/{datasetId}/documents/bulk-download
 
@@ -220,12 +232,13 @@ def get_bulk_download_url(
 
 
 @_auto_client
+@validate_call(config=VALIDATE_CONFIG)
 def bulk_delete(
-    dataset_id: str,
+    dataset_id: CloudId,
     doc_ids: list[str],
     when: str = "7d",
     *,
-    client: CloudClient | None = None,
+    client: _Client = None,
 ) -> dict[str, Any]:
     """POST /datasets/{datasetId}/documents/bulk-delete
 
@@ -241,13 +254,14 @@ def bulk_delete(
 
 
 @_auto_client
+@validate_call(config=VALIDATE_CONFIG)
 def ndi_query(
-    scope: str,
+    scope: Scope,
     search_structure: Any,
-    page: int = 1,
-    page_size: int = 20,
+    page: PageNumber = 1,
+    page_size: PageSize = 20,
     *,
-    client: CloudClient | None = None,
+    client: _Client = None,
 ) -> dict[str, Any]:
     """Query documents across datasets via the NDI query API.
 
@@ -273,12 +287,13 @@ def ndi_query(
 
 
 @_auto_client
+@validate_call(config=VALIDATE_CONFIG)
 def ndi_query_all(
-    scope: str,
+    scope: Scope,
     search_structure: Any,
-    page_size: int = 1000,
+    page_size: PageSize = 1000,
     *,
-    client: CloudClient | None = None,
+    client: _Client = None,
 ) -> APIResponse:
     """Auto-paginate through all ndiquery results.
 
@@ -299,12 +314,13 @@ def ndi_query_all(
 
 
 @_auto_client
+@validate_call(config=VALIDATE_CONFIG)
 def list_deleted_documents(
-    dataset_id: str,
-    page: int = 1,
-    page_size: int = 1000,
+    dataset_id: CloudId,
+    page: PageNumber = 1,
+    page_size: PageSize = 1000,
     *,
-    client: CloudClient | None = None,
+    client: _Client = None,
 ) -> dict[str, Any]:
     """GET /datasets/{datasetId}/documents/deleted?page=&pageSize=
 
@@ -318,11 +334,12 @@ def list_deleted_documents(
 
 
 @_auto_client
+@validate_call(config=VALIDATE_CONFIG)
 def add_document_as_file(
-    dataset_id: str,
-    file_path: str,
+    dataset_id: CloudId,
+    file_path: FilePath,
     *,
-    client: CloudClient | None = None,
+    client: _Client = None,
 ) -> dict[str, Any]:
     """Add a document from a JSON file on disk.
 

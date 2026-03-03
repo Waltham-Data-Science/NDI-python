@@ -10,21 +10,24 @@ MATLAB equivalents: +ndi/+cloud/+api/+users/*.m,
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Annotated, Any
 
-from ..client import _auto_client
+from pydantic import SkipValidation, validate_call
 
-if TYPE_CHECKING:
-    from ..client import CloudClient
+from ..client import CloudClient, _auto_client
+from ._validators import VALIDATE_CONFIG, NonEmptyStr
+
+_Client = Annotated[CloudClient | None, SkipValidation()]
 
 
 @_auto_client
+@validate_call(config=VALIDATE_CONFIG)
 def create_user(
-    email: str,
-    name: str,
-    password: str,
+    email: NonEmptyStr,
+    name: NonEmptyStr,
+    password: NonEmptyStr,
     *,
-    client: CloudClient | None = None,
+    client: _Client = None,
 ) -> dict[str, Any]:
     """POST /users -- Create a new user (no auth required)."""
     return client.post(
@@ -34,7 +37,7 @@ def create_user(
 
 
 @_auto_client
-def get_current_user(*, client: CloudClient | None = None) -> dict[str, Any]:
+def get_current_user(*, client: _Client = None) -> dict[str, Any]:
     """GET /users/me -- Get the authenticated user's profile.
 
     The response includes the user's organization memberships.
@@ -43,6 +46,7 @@ def get_current_user(*, client: CloudClient | None = None) -> dict[str, Any]:
 
 
 @_auto_client
-def get_user(user_id: str, *, client: CloudClient | None = None) -> dict[str, Any]:
+@validate_call(config=VALIDATE_CONFIG)
+def get_user(user_id: NonEmptyStr, *, client: _Client = None) -> dict[str, Any]:
     """GET /users/{userId}"""
     return client.get("/users/{userId}", userId=user_id)

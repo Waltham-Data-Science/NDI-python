@@ -11,21 +11,24 @@ MATLAB equivalents: +ndi/+cloud/+api/+files/*.m,
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Annotated, Any
 
-from ..client import APIResponse, _auto_client
+from pydantic import SkipValidation, validate_call
 
-if TYPE_CHECKING:
-    from ..client import CloudClient
+from ..client import APIResponse, CloudClient, _auto_client
+from ._validators import VALIDATE_CONFIG, CloudId, FilePath, NonEmptyStr
+
+_Client = Annotated[CloudClient | None, SkipValidation()]
 
 
 @_auto_client
+@validate_call(config=VALIDATE_CONFIG)
 def get_upload_url(
-    org_id: str,
-    dataset_id: str,
-    file_uid: str,
+    org_id: NonEmptyStr,
+    dataset_id: CloudId,
+    file_uid: NonEmptyStr,
     *,
-    client: CloudClient | None = None,
+    client: _Client = None,
 ) -> str:
     """GET /datasets/{organizationId}/{datasetId}/files/{file_uid}
 
@@ -41,11 +44,12 @@ def get_upload_url(
 
 
 @_auto_client
+@validate_call(config=VALIDATE_CONFIG)
 def get_bulk_upload_url(
-    org_id: str,
-    dataset_id: str,
+    org_id: NonEmptyStr,
+    dataset_id: CloudId,
     *,
-    client: CloudClient | None = None,
+    client: _Client = None,
 ) -> str:
     """POST /datasets/{organizationId}/{datasetId}/files/bulk
 
@@ -59,9 +63,10 @@ def get_bulk_upload_url(
     return result.get("url", "")
 
 
+@validate_call
 def put_file(
-    url: str,
-    file_path: str | Path,
+    url: NonEmptyStr,
+    file_path: FilePath,
     timeout: int = 120,
 ) -> bool:
     """PUT a local file to a presigned S3 URL.
@@ -95,8 +100,9 @@ def put_file(
     raise CloudUploadError(f"File upload failed (HTTP {resp.status_code}): {resp.text}")
 
 
+@validate_call
 def put_file_bytes(
-    url: str,
+    url: NonEmptyStr,
     data: bytes,
     timeout: int = 120,
 ) -> bool:
@@ -129,8 +135,9 @@ def put_file_bytes(
     raise CloudUploadError(f"Bytes upload failed (HTTP {resp.status_code}): {resp.text}")
 
 
+@validate_call
 def get_file(
-    url: str,
+    url: NonEmptyStr,
     target_path: str | Path,
     timeout: int = 120,
 ) -> bool:
@@ -170,10 +177,11 @@ def get_file(
 
 
 @_auto_client
+@validate_call(config=VALIDATE_CONFIG)
 def list_files(
-    dataset_id: str,
+    dataset_id: CloudId,
     *,
-    client: CloudClient | None = None,
+    client: _Client = None,
 ) -> APIResponse:
     """List all files associated with a cloud dataset.
 
@@ -189,11 +197,12 @@ def list_files(
 
 
 @_auto_client
+@validate_call(config=VALIDATE_CONFIG)
 def get_file_details(
-    dataset_id: str,
-    file_uid: str,
+    dataset_id: CloudId,
+    file_uid: NonEmptyStr,
     *,
-    client: CloudClient | None = None,
+    client: _Client = None,
 ) -> dict[str, Any]:
     """Get detail info (including download URL) for a file.
 
@@ -207,11 +216,12 @@ def get_file_details(
 
 
 @_auto_client
+@validate_call(config=VALIDATE_CONFIG)
 def get_file_collection_upload_url(
-    org_id: str,
-    dataset_id: str,
+    org_id: NonEmptyStr,
+    dataset_id: CloudId,
     *,
-    client: CloudClient | None = None,
+    client: _Client = None,
 ) -> str:
     """Get a presigned URL for bulk file collection upload.
 
