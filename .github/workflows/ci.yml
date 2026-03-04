@@ -53,4 +53,9 @@ jobs:
 
       - name: Run tests with coverage
         run: |
+          # Use sys.monitoring (PEP 669) on Python 3.12+ for faster coverage.
+          # CTracer (sys.settrace) is catastrophically slow on 3.12 when
+          # importing large packages like openminds (~6 min vs ~2 sec).
+          COVERAGE_CORE=$(python -c "import sys; print('sysmon' if sys.version_info >= (3,12) else 'ctrace')")
+          export COVERAGE_CORE
           pytest tests/ -v --tb=short --cov=src/ndi --cov-report=term-missing
