@@ -5,7 +5,7 @@ Covers:
 - Batch 1: stimulus_tuningcurve_log, t0_t1_to_array, ontology_table_row_vars
 - Batch 2: database_to_json, copy_doc_file_to_temp, extract_docs_files
 - Batch 3: get_probe_type_map, init_probe_type_map
-- Batch 4: upload_single_file
+- Batch 4: uploadSingleFile
 - Batch 5: openminds_convert (4 functions)
 """
 
@@ -344,20 +344,20 @@ class TestProbeTypeMap:
 
 
 class TestUploadSingleFile:
-    """Tests for ndi.cloud.upload.upload_single_file."""
+    """Tests for ndi.cloud.upload.uploadSingleFile."""
 
     def test_direct_upload_success(self):
-        from ndi.cloud.upload import upload_single_file
+        from ndi.cloud.upload import uploadSingleFile
 
         client = MagicMock()
 
         mock_files = MagicMock()
-        mock_files.get_upload_url.return_value = "https://s3.example.com/upload"
-        mock_files.put_file.return_value = None
+        mock_files.getFileUploadURL.return_value = "https://s3.example.com/upload"
+        mock_files.putFiles.return_value = None
 
         with patch.dict("sys.modules", {"ndi.cloud.api.files": mock_files}):
             with patch("ndi.cloud.api.files", mock_files):
-                success, err = upload_single_file(
+                success, err = uploadSingleFile(
                     "ds-123", "file-uid-1", "/tmp/test.dat", client=client
                 )
 
@@ -365,16 +365,16 @@ class TestUploadSingleFile:
         assert err == ""
 
     def test_upload_failure(self):
-        from ndi.cloud.upload import upload_single_file
+        from ndi.cloud.upload import uploadSingleFile
 
         client = MagicMock()
 
         mock_files = MagicMock()
-        mock_files.get_upload_url.side_effect = Exception("Network error")
+        mock_files.getFileUploadURL.side_effect = Exception("Network error")
 
         with patch.dict("sys.modules", {"ndi.cloud.api.files": mock_files}):
             with patch("ndi.cloud.api.files", mock_files):
-                success, err = upload_single_file(
+                success, err = uploadSingleFile(
                     "ds-123", "file-uid-1", "/tmp/test.dat", client=client
                 )
 

@@ -41,7 +41,7 @@ def _coerce_search_structure(search_structure: Any) -> Any:
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def get_document(
+def getDocument(
     dataset_id: CloudId,
     document_id: CloudId,
     *,
@@ -57,7 +57,7 @@ def get_document(
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def add_document(
+def addDocument(
     dataset_id: CloudId,
     doc_json: dict[str, Any],
     *,
@@ -73,7 +73,7 @@ def add_document(
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def update_document(
+def updateDocument(
     dataset_id: CloudId,
     document_id: CloudId,
     doc_json: dict[str, Any],
@@ -91,7 +91,7 @@ def update_document(
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def delete_document(
+def deleteDocument(
     dataset_id: CloudId,
     document_id: CloudId,
     when: str = "7d",
@@ -100,7 +100,7 @@ def delete_document(
 ) -> dict[str, Any]:
     """DELETE /datasets/{datasetId}/documents/{documentId}?when=...
 
-    Soft-delete a document.  See :func:`~ndi.cloud.api.datasets.delete_dataset`
+    Soft-delete a document.  See :func:`~ndi.cloud.api.datasets.deleteDataset`
     for the *when* parameter format.
     """
     return client.delete(
@@ -113,7 +113,7 @@ def delete_document(
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def list_documents(
+def listDatasetDocuments(
     dataset_id: CloudId,
     page: PageNumber = 1,
     page_size: PageSize = 1000,
@@ -133,7 +133,7 @@ _MAX_PAGES = 1000
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def list_all_documents(
+def listDatasetDocumentsAll(
     dataset_id: CloudId,
     page_size: PageSize = 1000,
     *,
@@ -143,7 +143,7 @@ def list_all_documents(
     all_docs: list[dict[str, Any]] = []
     page = 1
     while page <= _MAX_PAGES:
-        result = list_documents(dataset_id, page=page, page_size=page_size, client=client)
+        result = listDatasetDocuments(dataset_id, page=page, page_size=page_size, client=client)
         docs = result.get("documents", [])
         all_docs.extend(docs)
         # Stop when a page returns fewer docs than requested (last page)
@@ -155,7 +155,7 @@ def list_all_documents(
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def get_document_count(dataset_id: CloudId, *, client: _Client = None) -> int:
+def countDocuments(dataset_id: CloudId, *, client: _Client = None) -> int:
     """Return the document count for a dataset.
 
     Tries the dedicated ``GET /datasets/{datasetId}/document-count``
@@ -172,15 +172,15 @@ def get_document_count(dataset_id: CloudId, *, client: _Client = None) -> int:
     except Exception:
         pass
     # Fallback: get from dataset metadata
-    from .datasets import get_dataset
+    from .datasets import getDataset
 
-    ds = get_dataset(dataset_id, client=client)
+    ds = getDataset(dataset_id, client=client)
     return ds.get("documentCount", 0)
 
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def bulk_upload(
+def bulkUpload(
     dataset_id: CloudId,
     zip_path: str,
     *,
@@ -199,7 +199,7 @@ def bulk_upload(
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def get_bulk_upload_url(dataset_id: CloudId, *, client: _Client = None) -> str:
+def getBulkUploadURL(dataset_id: CloudId, *, client: _Client = None) -> str:
     """Get a presigned URL for bulk document upload."""
     result = client.post(
         "/datasets/{datasetId}/documents/bulk-upload",
@@ -210,7 +210,7 @@ def get_bulk_upload_url(dataset_id: CloudId, *, client: _Client = None) -> str:
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def get_bulk_download_url(
+def getBulkDownloadURL(
     dataset_id: CloudId,
     doc_ids: list[str] | None = None,
     *,
@@ -233,7 +233,7 @@ def get_bulk_download_url(
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def bulk_delete(
+def bulkDeleteDocuments(
     dataset_id: CloudId,
     doc_ids: list[str],
     when: str = "7d",
@@ -243,7 +243,7 @@ def bulk_delete(
     """POST /datasets/{datasetId}/documents/bulk-delete
 
     Soft-delete multiple documents.  See
-    :func:`~ndi.cloud.api.datasets.delete_dataset` for the *when*
+    :func:`~ndi.cloud.api.datasets.deleteDataset` for the *when*
     parameter format.
     """
     return client.post(
@@ -255,7 +255,7 @@ def bulk_delete(
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def ndi_query(
+def ndiquery(
     scope: Scope,
     search_structure: Any,
     page: PageNumber = 1,
@@ -288,7 +288,7 @@ def ndi_query(
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def ndi_query_all(
+def ndiqueryAll(
     scope: Scope,
     search_structure: Any,
     page_size: PageSize = 1000,
@@ -303,7 +303,7 @@ def ndi_query_all(
     all_docs: list[dict[str, Any]] = []
     page = 1
     while page <= _MAX_PAGES:
-        result = ndi_query(scope, search_structure, page=page, page_size=page_size, client=client)
+        result = ndiquery(scope, search_structure, page=page, page_size=page_size, client=client)
         docs = result.get("documents", [])
         all_docs.extend(docs)
         total = result.get("number_matches", result.get("totalItems", result.get("totalNumber", 0)))
@@ -315,7 +315,7 @@ def ndi_query_all(
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def list_deleted_documents(
+def listDeletedDocuments(
     dataset_id: CloudId,
     page: PageNumber = 1,
     page_size: PageSize = 1000,
@@ -335,7 +335,7 @@ def list_deleted_documents(
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def add_document_as_file(
+def addDocumentAsFile(
     dataset_id: CloudId,
     file_path: FilePath,
     *,
@@ -350,4 +350,4 @@ def add_document_as_file(
 
     content = Path(file_path).read_text(encoding="utf-8")
     doc_json = json.loads(content)
-    return add_document(dataset_id, doc_json, client=client)
+    return addDocument(dataset_id, doc_json, client=client)

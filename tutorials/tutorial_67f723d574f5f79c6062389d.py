@@ -327,7 +327,7 @@ def section_1_import_and_load(html: HTMLBuilder) -> Any:
     import pandas as pd
 
     import ndi.dataset
-    from ndi.cloud import download_dataset
+    from ndi.cloud import downloadDataset
     from ndi.cloud.auth import login
     from ndi.cloud.client import CloudClient
     from ndi.fun.doc import get_doc_types
@@ -351,7 +351,7 @@ def section_1_import_and_load(html: HTMLBuilder) -> Any:
     html.add_code("""\
 import os
 import ndi.dataset
-from ndi.cloud import download_dataset
+from ndi.cloud import downloadDataset
 from ndi.cloud.auth import login
 from ndi.cloud.client import CloudClient
 from ndi.fun.doc import get_doc_types
@@ -369,7 +369,7 @@ if os.path.exists(dataset_path):
 else:
     config = login(ndi_cloud_username, ndi_cloud_password)
     client = CloudClient(config)
-    dataset = download_dataset(cloud_dataset_id, dataset_path, verbose=True, client=client)""")
+    dataset = downloadDataset(cloud_dataset_id, dataset_path, verbose=True, client=client)""")
 
     t0 = time.time()
     if DATASET_PATH.exists():
@@ -389,7 +389,7 @@ else:
             sys.exit(1)
         config = login(NDI_CLOUD_USERNAME, NDI_CLOUD_PASSWORD)
         client = CloudClient(config)
-        dataset = download_dataset(CLOUD_DATASET_ID, str(DATASET_PATH), verbose=True, client=client)
+        dataset = downloadDataset(CLOUD_DATASET_ID, str(DATASET_PATH), verbose=True, client=client)
         elapsed = time.time() - t0
         html.add_output_text(
             f"cloud_dataset_id = '{CLOUD_DATASET_ID}'\n"

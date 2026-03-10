@@ -240,10 +240,10 @@ Auth functions are re-exported from `ndi.cloud.__init__` so `from ndi.cloud impo
 | `ndi.cloud.authenticate` | `ndi.cloud.authenticate()` | |
 | `ndi.cloud.api.auth.login` | `ndi.cloud.login()` | Also at `ndi.cloud.auth.login()` |
 | `ndi.cloud.api.auth.logout` | `ndi.cloud.logout()` | Also at `ndi.cloud.auth.logout()` |
-| `ndi.cloud.api.auth.changePassword` | `ndi.cloud.change_password()` | |
-| `ndi.cloud.api.auth.resetPassword` | `ndi.cloud.reset_password()` | |
-| `ndi.cloud.api.auth.verifyUser` | `ndi.cloud.verify_user()` | |
-| `ndi.cloud.api.auth.resendConfirmation` | `ndi.cloud.resend_confirmation()` | |
+| `ndi.cloud.api.auth.changePassword` | `ndi.cloud.changePassword()` | |
+| `ndi.cloud.api.auth.resetPassword` | `ndi.cloud.resetPassword()` | |
+| `ndi.cloud.api.auth.verifyUser` | `ndi.cloud.verifyUser()` | |
+| `ndi.cloud.api.auth.resendConfirmation` | `ndi.cloud.resendConfirmation()` | |
 | `ndi.cloud.uilogin` | — | GUI-only, no Python equivalent |
 
 ### Client & Config
@@ -260,100 +260,100 @@ Auth functions are re-exported from `ndi.cloud.__init__` so `from ndi.cloud impo
 
 | MATLAB | Python | Notes |
 |--------|--------|-------|
-| `getDataset` | `get_dataset(dataset_id)` | |
-| `createDataset` | `create_dataset(org_id, name, ...)` | |
-| `updateDataset` | `update_dataset(dataset_id, **fields)` | |
-| `deleteDataset` | `delete_dataset(dataset_id, when='7d')` | `when` param for soft-delete |
-| `listDatasets` | `list_datasets(org_id, ...)` | |
-| — | `list_all_datasets(org_id)` | Auto-paginator (Python-only) |
-| `getPublished` | `get_published_datasets(...)` | |
-| `getUnpublished` | `get_unpublished(...)` | |
-| `publishDataset` | `publish_dataset(dataset_id)` | |
-| `unpublishDataset` | `unpublish_dataset(dataset_id)` | |
-| `submitDataset` | `submit_dataset(dataset_id)` | |
-| `createDatasetBranch` | `create_branch(dataset_id)` | |
-| `getBranches` | `get_branches(dataset_id)` | |
-| — | `undelete_dataset(dataset_id)` | Soft-delete API |
-| — | `list_deleted_datasets(...)` | Soft-delete API |
+| `getDataset` | `getDataset(dataset_id)` | |
+| `createDataset` | `createDataset(org_id, name, ...)` | |
+| `updateDataset` | `updateDataset(dataset_id, **fields)` | |
+| `deleteDataset` | `deleteDataset(dataset_id, when='7d')` | `when` param for soft-delete |
+| `listDatasets` | `listDatasets(org_id, ...)` | |
+| — | `listAllDatasets(org_id)` | Auto-paginator (Python-only) |
+| `getPublished` | `getPublished(...)` | |
+| `getUnpublished` | `getUnpublished(...)` | |
+| `publishDataset` | `publishDataset(dataset_id)` | |
+| `unpublishDataset` | `unpublishDataset(dataset_id)` | |
+| `submitDataset` | `submitDataset(dataset_id)` | |
+| `createDatasetBranch` | `createDatasetBranch(dataset_id)` | |
+| `getBranches` | `getBranches(dataset_id)` | |
+| — | `undeleteDataset(dataset_id)` | Soft-delete API |
+| — | `listDeletedDatasets(...)` | Soft-delete API |
 
 ### Documents API (`ndi.cloud.api.documents`)
 
 | MATLAB | Python | Notes |
 |--------|--------|-------|
-| `getDocument` | `get_document(dataset_id, doc_id)` | |
-| `addDocument` | `add_document(dataset_id, doc_json)` | |
-| `addDocumentAsFile` | `add_document_as_file(dataset_id, path)` | |
-| `updateDocument` | `update_document(dataset_id, doc_id, doc_json)` | |
-| `deleteDocument` | `delete_document(dataset_id, doc_id, when='7d')` | `when` param for soft-delete |
-| `listDatasetDocuments` | `list_documents(dataset_id, ...)` | |
-| `listDatasetDocumentsAll` | `list_all_documents(dataset_id, ...)` | |
-| `countDocuments` / `documentCount` | `get_document_count(dataset_id)` | Single function with fallback |
-| `getBulkUploadURL` | `get_bulk_upload_url(dataset_id)` | |
-| `getBulkDownloadURL` | `get_bulk_download_url(dataset_id, ...)` | |
-| `bulkDeleteDocuments` | `bulk_delete(dataset_id, doc_ids, when='7d')` | `when` param for soft-delete |
-| `ndiquery` | `ndi_query(scope, search_structure, ...)` | |
-| `ndiqueryAll` | `ndi_query_all(scope, search_structure, ...)` | |
-| — | `bulk_upload(dataset_id, zip_path)` | Python-only |
-| — | `list_deleted_documents(dataset_id, ...)` | Soft-delete API |
+| `getDocument` | `getDocument(dataset_id, doc_id)` | |
+| `addDocument` | `addDocument(dataset_id, doc_json)` | |
+| `addDocumentAsFile` | `addDocumentAsFile(dataset_id, path)` | |
+| `updateDocument` | `updateDocument(dataset_id, doc_id, doc_json)` | |
+| `deleteDocument` | `deleteDocument(dataset_id, doc_id, when='7d')` | `when` param for soft-delete |
+| `listDatasetDocuments` | `listDatasetDocuments(dataset_id, ...)` | |
+| `listDatasetDocumentsAll` | `listDatasetDocumentsAll(dataset_id, ...)` | |
+| `countDocuments` / `documentCount` | `countDocuments(dataset_id)` | Single function with fallback |
+| `getBulkUploadURL` | `getBulkUploadURL(dataset_id)` | |
+| `getBulkDownloadURL` | `getBulkDownloadURL(dataset_id, ...)` | |
+| `bulkDeleteDocuments` | `bulkDeleteDocuments(dataset_id, doc_ids, when='7d')` | `when` param for soft-delete |
+| `ndiquery` | `ndiquery(scope, search_structure, ...)` | |
+| `ndiqueryAll` | `ndiqueryAll(scope, search_structure, ...)` | |
+| — | `bulkUpload(dataset_id, zip_path)` | Python-only |
+| — | `listDeletedDocuments(dataset_id, ...)` | Soft-delete API |
 
 ### Files API (`ndi.cloud.api.files`)
 
 | MATLAB | Python | Notes |
 |--------|--------|-------|
-| `getFile` | `get_file(url, target_path, ...)` | |
-| `getFileUploadURL` | `get_upload_url(org_id, dataset_id, uid)` | |
-| `getFileCollectionUploadURL` | `get_file_collection_upload_url(...)` | |
-| `getFileDetails` | `get_file_details(dataset_id, uid)` | Used by `fetch_cloud_file` for on-demand download |
-| `listFiles` | `list_files(dataset_id)` | |
-| `putFiles` | `put_file(url, file_path, ...)` | |
-| — | `put_file_bytes(url, data, ...)` | Python-only (raw bytes) |
-| — | `get_bulk_upload_url(org_id, dataset_id)` | Python-only |
+| `getFile` | `getFile(url, target_path, ...)` | |
+| `getFileUploadURL` | `getFileUploadURL(org_id, dataset_id, uid)` | |
+| `getFileCollectionUploadURL` | `getFileCollectionUploadURL(...)` | |
+| `getFileDetails` | `getFileDetails(dataset_id, uid)` | Used by `fetch_cloud_file` for on-demand download |
+| `listFiles` | `listFiles(dataset_id)` | |
+| `putFiles` | `putFiles(url, file_path, ...)` | |
+| — | `putFileBytes(url, data, ...)` | Python-only (raw bytes) |
+| — | `getBulkUploadURL(org_id, dataset_id)` | Python-only |
 
 ### Users API (`ndi.cloud.api.users`)
 
 | MATLAB | Python | Notes |
 |--------|--------|-------|
-| `createUser` | `create_user(email, name, password)` | |
-| `GetUser` | `get_user(user_id)` | |
-| `me` | `get_current_user()` | Renamed for clarity |
+| `createUser` | `createUser(email, name, password)` | |
+| `GetUser` | `GetUser(user_id)` | |
+| `me` | `me()` | |
 
 ### Compute API (`ndi.cloud.api.compute`)
 
 | MATLAB | Python | Notes |
 |--------|--------|-------|
-| `startSession` | `start_session(pipeline_id, ...)` | |
-| `getSessionStatus` | `get_session_status(session_id)` | |
-| `triggerStage` | `trigger_stage(session_id, stage_id)` | |
-| `finalizeSession` | `finalize_session(session_id)` | |
-| `abortSession` | `abort_session(session_id)` | |
-| `listSessions` | `list_sessions()` | |
+| `startSession` | `startSession(pipeline_id, ...)` | |
+| `getSessionStatus` | `getSessionStatus(session_id)` | |
+| `triggerStage` | `triggerStage(session_id, stage_id)` | |
+| `finalizeSession` | `finalizeSession(session_id)` | |
+| `abortSession` | `abortSession(session_id)` | |
+| `listSessions` | `listSessions()` | |
 
 ### Top-Level Convenience Functions
 
 These match MATLAB's `ndi.cloud.*` functions and are importable directly from `ndi.cloud`:
 
 ```python
-from ndi.cloud import download_dataset, upload_dataset, sync_dataset, upload_single_file
+from ndi.cloud import downloadDataset, uploadDataset, syncDataset, uploadSingleFile
 ```
 
 | MATLAB | Python | Notes |
 |--------|--------|-------|
-| `ndi.cloud.downloadDataset` | `ndi.cloud.download_dataset(...)` | Also at `ndi.cloud.orchestration.download_dataset()` |
-| `ndi.cloud.uploadDataset` | `ndi.cloud.upload_dataset(...)` | Also at `ndi.cloud.orchestration.upload_dataset()` |
-| `ndi.cloud.syncDataset` | `ndi.cloud.sync_dataset(...)` | Also at `ndi.cloud.orchestration.sync_dataset()` |
-| `ndi.cloud.uploadSingleFile` | `ndi.cloud.upload_single_file(...)` | Also at `ndi.cloud.upload.upload_single_file()` |
-| `ndi.cloud.upload.newDataset` | `ndi.cloud.orchestration.new_dataset(...)` | |
-| `ndi.cloud.upload.scanForUpload` | `ndi.cloud.orchestration.scan_for_upload(...)` | |
+| `ndi.cloud.downloadDataset` | `ndi.cloud.downloadDataset(...)` | Also at `ndi.cloud.orchestration.downloadDataset()` |
+| `ndi.cloud.uploadDataset` | `ndi.cloud.uploadDataset(...)` | Also at `ndi.cloud.orchestration.uploadDataset()` |
+| `ndi.cloud.syncDataset` | `ndi.cloud.syncDataset(...)` | Also at `ndi.cloud.orchestration.syncDataset()` |
+| `ndi.cloud.uploadSingleFile` | `ndi.cloud.uploadSingleFile(...)` | Also at `ndi.cloud.upload.uploadSingleFile()` |
+| `ndi.cloud.upload.newDataset` | `ndi.cloud.orchestration.newDataset(...)` | |
+| `ndi.cloud.upload.scanForUpload` | `ndi.cloud.orchestration.scanForUpload(...)` | |
 | *(customFileHandler in didsqlite.m)* | `ndi.cloud.fetch_cloud_file(ndic_uri, path, ...)` | On-demand binary file download via `ndic://` protocol |
 
 ### Download
 
 | MATLAB | Python | Notes |
 |--------|--------|-------|
-| `ndi.cloud.download.dataset` | `download.download_full_dataset(...)` | |
-| `ndi.cloud.download.downloadDatasetFiles` | `download.download_dataset_files(...)` | |
-| `ndi.cloud.download.downloadDocumentCollection` | `download.download_document_collection(...)` | |
-| `ndi.cloud.download.jsons2documents` | `download.jsons_to_documents(doc_jsons)` | |
+| `ndi.cloud.download.dataset` | `download.downloadFullDataset(...)` | |
+| `ndi.cloud.download.downloadDatasetFiles` | `download.downloadDatasetFiles(...)` | |
+| `ndi.cloud.download.downloadDocumentCollection` | `download.downloadDocumentCollection(...)` | |
+| `ndi.cloud.download.jsons2documents` | `download.jsons2documents(doc_jsons)` | |
 | `ndi.cloud.download.datasetDocuments` | — | Handled inside orchestration |
 | `ndi.cloud.download.internal.*` | — | Folded into main functions |
 | `+sync/+internal/updateFileInfoForRemoteFiles` | `filehandler.rewrite_file_info_for_cloud()` | Rewrites file_info to `ndic://` URIs |
@@ -363,9 +363,10 @@ from ndi.cloud import download_dataset, upload_dataset, sync_dataset, upload_sin
 
 | MATLAB | Python | Notes |
 |--------|--------|-------|
-| `ndi.cloud.upload.uploadDocumentCollection` | `upload.upload_document_collection(...)` | |
-| `ndi.cloud.upload.zipForUpload` | `upload.zip_documents_for_upload(docs, ...)` | |
-| `ndi.cloud.upload.uploadToNDICloud` | — | Subsumed by `upload_dataset()` |
+| `ndi.cloud.upload.uploadDocumentCollection` | `upload.uploadDocumentCollection(...)` | |
+| `ndi.cloud.upload.zipForUpload` | `upload.zipForUpload(docs, ...)` | |
+| `ndi.cloud.upload.uploadFilesForDatasetDocuments` | `upload.uploadFilesForDatasetDocuments(...)` | |
+| `ndi.cloud.upload.uploadToNDICloud` | — | Subsumed by `uploadDataset()` |
 | `ndi.cloud.upload.internal.*` | — | Promoted or folded inline |
 
 ### Sync
@@ -374,12 +375,12 @@ from ndi.cloud import download_dataset, upload_dataset, sync_dataset, upload_sin
 |--------|--------|-------|
 | `SyncOptions` classdef | `ndi.cloud.sync.SyncOptions` | Dataclass |
 | `SyncMode` enum | `ndi.cloud.sync.SyncMode` | Python Enum |
-| `downloadNew` | `ndi.cloud.sync.download_new(...)` | |
-| `uploadNew` | `ndi.cloud.sync.upload_new(...)` | |
-| `mirrorFromRemote` | `ndi.cloud.sync.mirror_from_remote(...)` | |
-| `mirrorToRemote` | `ndi.cloud.sync.mirror_to_remote(...)` | |
-| `twoWaySync` | `ndi.cloud.sync.two_way_sync(...)` | |
-| `validate` | `ndi.cloud.sync.validate_sync(...)` | |
+| `downloadNew` | `ndi.cloud.sync.downloadNew(...)` | |
+| `uploadNew` | `ndi.cloud.sync.uploadNew(...)` | |
+| `mirrorFromRemote` | `ndi.cloud.sync.mirrorFromRemote(...)` | |
+| `mirrorToRemote` | `ndi.cloud.sync.mirrorToRemote(...)` | |
+| `twoWaySync` | `ndi.cloud.sync.twoWaySync(...)` | |
+| `validate` | `ndi.cloud.sync.validate(...)` | |
 | — | `ndi.cloud.sync.sync(..., mode)` | Dispatch by SyncMode (Python-only) |
 | `+sync/+internal/Constants` | — | Inlined |
 | `+sync/+internal/index.*` (5 funcs) | `ndi.cloud.sync.SyncIndex` | Collapsed into dataclass |
@@ -388,44 +389,44 @@ from ndi.cloud import download_dataset, upload_dataset, sync_dataset, upload_sin
 
 | MATLAB | Python | Notes |
 |--------|--------|-------|
-| `+internal/listRemoteDocumentIds` | `internal.list_remote_document_ids()` | |
-| `+internal/getCloudDatasetIdForLocalDataset` | `internal.get_cloud_dataset_id()` | |
-| `+internal/createRemoteDatasetDoc` | `internal.create_remote_dataset_doc()` | |
-| `+internal/decodeJwt` | `auth.decode_jwt()` | Moved to auth |
-| `+internal/getActiveToken` | `auth.get_active_token()` | Moved to auth |
-| `+internal/getTokenExpiration` | `auth.get_token_expiration()` | Moved to auth |
+| `+internal/listRemoteDocumentIds` | `internal.listRemoteDocumentIds()` | |
+| `+internal/getCloudDatasetIdForLocalDataset` | `internal.getCloudDatasetIdForLocalDataset()` | |
+| `+internal/createRemoteDatasetDoc` | `internal.createRemoteDatasetDoc()` | |
+| `+internal/decodeJwt` | `auth.decodeJwt()` | Moved to auth |
+| `+internal/getActiveToken` | `auth.getActiveToken()` | Moved to auth |
+| `+internal/getTokenExpiration` | `auth.getTokenExpiration()` | Moved to auth |
 | `+internal/getWeboptionsWithAuthHeader` | — | Replaced by `CloudClient` |
-| `+internal/getUploadedDocumentIds` | — | Via `list_remote_document_ids()` |
-| `+internal/getUploadedFileIds` | — | Via `list_files()` |
+| `+internal/getUploadedDocumentIds` | — | Via `listRemoteDocumentIds()` |
+| `+internal/getUploadedFileIds` | — | Via `listFiles()` |
 | `+internal/dropDuplicateDocsFromJsonDecode` | — | Not needed (Python JSON is exact) |
 | `+internal/duplicateDocuments` | — | Not yet ported |
-| `+sync/+internal/listLocalDocuments` | `internal.list_local_documents()` | |
-| `+sync/+internal/getFileUidsFromDocuments` | `internal.get_file_uids_from_documents()` | |
-| `+sync/+internal/filesNotYetUploaded` | `internal.files_not_yet_uploaded()` | |
-| `+sync/+internal/datasetSessionIdFromDocs` | `internal.dataset_session_id_from_docs()` | |
+| `+sync/+internal/listLocalDocuments` | `internal.listLocalDocuments()` | |
+| `+sync/+internal/getFileUidsFromDocuments` | `internal.getFileUidsFromDocuments()` | |
+| `+sync/+internal/filesNotYetUploaded` | `internal.filesNotYetUploaded()` | |
+| `+sync/+internal/datasetSessionIdFromDocs` | `internal.datasetSessionIdFromDocs()` | |
 | `+sync/+internal/deleteLocalDocuments` | `sync.operations._delete_local_docs()` | Private |
-| `+sync/+internal/deleteRemoteDocuments` | Inline in `mirror_to_remote()` | |
+| `+sync/+internal/deleteRemoteDocuments` | Inline in `mirrorToRemote()` | |
 | `+sync/+internal/downloadNdiDocuments` | `sync.operations._download_docs_by_ids()` | Private |
-| `+sync/+internal/uploadFilesForDatasetDocuments` | `upload.upload_files_for_documents()` | |
+| `+sync/+internal/uploadFilesForDatasetDocuments` | `upload.uploadFilesForDatasetDocuments()` | |
 | *(ndic:// URI parsing in didsqlite.m)* | `filehandler.parse_ndic_uri()` | `ndic://dataset_id/file_uid` → tuple |
 
 ### Admin (DOI & Crossref)
 
 | MATLAB | Python | Notes |
 |--------|--------|-------|
-| `ndi.cloud.admin.createNewDOI` | `admin.doi.create_new_doi()` | |
-| `ndi.cloud.admin.registerDatasetDOI` | `admin.doi.register_dataset_doi()` | |
-| `ndi.cloud.admin.checkSubmission` | `admin.doi.check_submission()` | |
+| `ndi.cloud.admin.createNewDOI` | `admin.doi.createNewDOI()` | |
+| `ndi.cloud.admin.registerDatasetDOI` | `admin.doi.registerDatasetDOI()` | |
+| `ndi.cloud.admin.checkSubmission` | `admin.doi.checkSubmission()` | |
 | `+crossref/Constants` | `admin.crossref.CrossrefConstants` | Frozen dataclass |
-| `+crossref/createDoiBatchSubmission` | `admin.crossref.create_batch_submission()` | |
-| `+crossref/convertCloudDatasetToCrossrefDataset` | `admin.crossref.convert_to_crossref()` | |
-| `+crossref/createDatabaseMetadata` | — | Inline in `create_batch_submission()` |
-| `+crossref/createDoiBatchHeadElement` | — | Inline in `create_batch_submission()` |
-| `+crossref/+conversion/convertContributors` | `admin.crossref.convert_contributors()` | |
-| `+crossref/+conversion/convertDatasetDate` | `admin.crossref.convert_dataset_date()` | |
-| `+crossref/+conversion/convertFunding` | `admin.crossref.convert_funding()` | |
-| `+crossref/+conversion/convertLicense` | `admin.crossref.convert_license()` | |
-| `+crossref/+conversion/convertRelatedPublications` | `admin.crossref.convert_related_publications()` | |
+| `+crossref/createDoiBatchSubmission` | `admin.crossref.createDoiBatchSubmission()` | |
+| `+crossref/convertCloudDatasetToCrossrefDataset` | `admin.crossref.convertCloudDatasetToCrossrefDataset()` | |
+| `+crossref/createDatabaseMetadata` | — | Inline in `createDoiBatchSubmission()` |
+| `+crossref/createDoiBatchHeadElement` | — | Inline in `createDoiBatchSubmission()` |
+| `+crossref/+conversion/convertContributors` | `admin.crossref.convertContributors()` | |
+| `+crossref/+conversion/convertDatasetDate` | `admin.crossref.convertDatasetDate()` | |
+| `+crossref/+conversion/convertFunding` | `admin.crossref.convertFunding()` | |
+| `+crossref/+conversion/convertLicense` | `admin.crossref.convertLicense()` | |
+| `+crossref/+conversion/convertRelatedPublications` | `admin.crossref.convertRelatedPublications()` | |
 
 ### Cloud: Not Ported
 

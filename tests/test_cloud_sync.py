@@ -1,7 +1,7 @@
 """
 Tests for cloud sync structural components.
 
-Tests SyncMode, SyncOptions, SyncIndex, zip_documents_for_upload,
+Tests SyncMode, SyncOptions, SyncIndex, zipForUpload,
 CloudClient.from_env(), and the _auto_client decorator.
 These test local data structures and file I/O — no cloud API calls needed.
 """
@@ -14,7 +14,7 @@ import pytest
 
 from ndi.cloud.sync.index import SyncIndex
 from ndi.cloud.sync.mode import SyncMode, SyncOptions
-from ndi.cloud.upload import zip_documents_for_upload
+from ndi.cloud.upload import zipForUpload
 
 # ===========================================================================
 # SyncMode & SyncOptions
@@ -106,7 +106,7 @@ class TestSyncIndex:
 class TestZipDocuments:
     def test_creates_zip(self, tmp_path):
         docs = [{"ndiId": "doc-1", "type": "base"}, {"ndiId": "doc-2", "type": "probe"}]
-        zip_path, manifest = zip_documents_for_upload(docs, "ds-1", tmp_path)
+        zip_path, manifest = zipForUpload(docs, "ds-1", tmp_path)
         assert zip_path.exists()
         assert len(manifest) == 2
         assert "doc-1" in manifest
@@ -118,7 +118,7 @@ class TestZipDocuments:
 
     def test_zip_content_is_valid_json(self, tmp_path):
         docs = [{"ndiId": "x", "data": [1, 2, 3]}]
-        zip_path, _ = zip_documents_for_upload(docs, "ds-1", tmp_path)
+        zip_path, _ = zipForUpload(docs, "ds-1", tmp_path)
         with zipfile.ZipFile(zip_path) as zf:
             content = json.loads(zf.read("x.json"))
             assert content["data"] == [1, 2, 3]
@@ -138,22 +138,22 @@ class TestSyncImports:
         assert SyncIndex is not None
 
     def test_import_sync_operations(self):
-        from ndi.cloud.sync import download_new, sync, upload_new
+        from ndi.cloud.sync import downloadNew, sync, uploadNew
 
-        assert callable(upload_new)
-        assert callable(download_new)
+        assert callable(uploadNew)
+        assert callable(downloadNew)
         assert callable(sync)
 
     def test_import_upload(self):
-        from ndi.cloud.upload import upload_document_collection, zip_documents_for_upload
+        from ndi.cloud.upload import uploadDocumentCollection, zipForUpload
 
-        assert callable(upload_document_collection)
-        assert callable(zip_documents_for_upload)
+        assert callable(uploadDocumentCollection)
+        assert callable(zipForUpload)
 
     def test_import_download(self):
-        from ndi.cloud.download import download_document_collection
+        from ndi.cloud.download import downloadDocumentCollection
 
-        assert callable(download_document_collection)
+        assert callable(downloadDocumentCollection)
 
 
 # ===========================================================================
@@ -269,12 +269,12 @@ class TestAutoClient:
         from ndi.cloud.client import _auto_client
 
         @_auto_client
-        def get_dataset(dataset_id, *, client=None):
+        def getDataset(dataset_id, *, client=None):
             """My docstring."""
             pass
 
-        assert get_dataset.__name__ == "get_dataset"
-        assert get_dataset.__doc__ == "My docstring."
+        assert getDataset.__name__ == "getDataset"
+        assert getDataset.__doc__ == "My docstring."
 
     @patch("ndi.cloud.client.CloudClient.from_env")
     def test_api_function_without_client(self, mock_from_env):
@@ -285,9 +285,9 @@ class TestAutoClient:
         mock_client.get.return_value = {"_id": "abc", "name": "Test"}
         mock_from_env.return_value = mock_client
 
-        from ndi.cloud.api.datasets import get_dataset
+        from ndi.cloud.api.datasets import getDataset
 
-        result = get_dataset("abc-123")
+        result = getDataset("abc-123")
         assert result == {"_id": "abc", "name": "Test"}
         mock_client.get.assert_called_once()
 
@@ -298,8 +298,8 @@ class TestAutoClient:
         mock_client = MagicMock(spec=CloudClient)
         mock_client.get.return_value = {"_id": "abc", "name": "Test"}
 
-        from ndi.cloud.api.datasets import get_dataset
+        from ndi.cloud.api.datasets import getDataset
 
-        result = get_dataset("abc-123", client=mock_client)
+        result = getDataset("abc-123", client=mock_client)
         assert result == {"_id": "abc", "name": "Test"}
         mock_client.get.assert_called_once()

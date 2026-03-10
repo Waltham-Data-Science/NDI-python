@@ -343,7 +343,7 @@ def section_import(html: HTMLBuilder) -> None:
     html.add_code("""\
 import os
 from pathlib import Path
-from ndi.cloud import download_dataset
+from ndi.cloud import downloadDataset
 from ndi.cloud.auth import login
 from ndi.cloud.client import CloudClient
 import ndi.dataset
@@ -366,7 +366,7 @@ ndi_cloud_password = os.environ.get('NDI_CLOUD_PASSWORD', '')""")
 def section_load_dataset(html: HTMLBuilder) -> Any:
     """Section 2: Download or load the NDI dataset."""
     import ndi.dataset
-    from ndi.cloud import download_dataset
+    from ndi.cloud import downloadDataset
     from ndi.cloud.auth import login
     from ndi.cloud.client import CloudClient
 
@@ -386,7 +386,7 @@ else:
     # Download from NDI Cloud (first time only)
     config = login(ndi_cloud_username, ndi_cloud_password)
     client = CloudClient(config)
-    dataset = download_dataset(cloud_dataset_id, str(dataset_path), verbose=True, client=client)""")
+    dataset = downloadDataset(cloud_dataset_id, str(dataset_path), verbose=True, client=client)""")
 
     t0 = time.time()
     if DATASET_PATH.exists():
@@ -402,7 +402,7 @@ else:
             sys.exit(1)
         config = login(NDI_CLOUD_USERNAME, NDI_CLOUD_PASSWORD)
         client = CloudClient(config)
-        dataset = download_dataset(CLOUD_DATASET_ID, str(DATASET_PATH), verbose=True, client=client)
+        dataset = downloadDataset(CLOUD_DATASET_ID, str(DATASET_PATH), verbose=True, client=client)
         elapsed = time.time() - t0
         html.add_output_text(f"Dataset downloaded in {elapsed:.1f}s to {DATASET_PATH}")
 

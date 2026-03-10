@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 
 @_auto_client
-def download_dataset(
+def downloadDataset(
     cloud_dataset_id: str,
     target_folder: str,
     sync_files: bool = False,
@@ -44,23 +44,23 @@ def download_dataset(
     """
     from .api import datasets as ds_api
     from .download import (
-        download_dataset_files,
-        download_document_collection,
-        jsons_to_documents,
+        downloadDatasetFiles,
+        downloadDocumentCollection,
+        jsons2documents,
     )
-    from .internal import create_remote_dataset_doc
+    from .internal import createRemoteDatasetDoc
 
     target = Path(target_folder)
     target.mkdir(parents=True, exist_ok=True)
 
     # Verify dataset exists
-    ds_info = ds_api.get_dataset(cloud_dataset_id, client=client)
+    ds_info = ds_api.getDataset(cloud_dataset_id, client=client)
     if verbose:
         name = ds_info.get("name", cloud_dataset_id)
         print(f"Downloading dataset: {name}")
 
     # Download all full documents via chunked bulk download
-    doc_jsons = download_document_collection(
+    doc_jsons = downloadDocumentCollection(
         cloud_dataset_id,
         client=client,
         progress=print if verbose else None,
@@ -80,7 +80,7 @@ def download_dataset(
     from ndi.dataset import Dataset
 
     dataset = Dataset(target)
-    documents = jsons_to_documents(doc_jsons)
+    documents = jsons2documents(doc_jsons)
     for doc in documents:
         try:
             dataset._session._database.add(doc)
@@ -88,7 +88,7 @@ def download_dataset(
             pass
 
     # Create remote link document
-    remote_doc = create_remote_dataset_doc(cloud_dataset_id, dataset)
+    remote_doc = createRemoteDatasetDoc(cloud_dataset_id, dataset)
     try:
         dataset._session._database.add(remote_doc)
     except Exception:
@@ -100,7 +100,7 @@ def download_dataset(
     # Optionally download files
     if sync_files and doc_jsons:
         file_dir = target / ".ndi" / "files"
-        report = download_dataset_files(cloud_dataset_id, doc_jsons, file_dir, client=client)
+        report = downloadDatasetFiles(cloud_dataset_id, doc_jsons, file_dir, client=client)
         if verbose:
             print(f'  Files downloaded: {report["downloaded"]}, failed: {report["failed"]}')
 
@@ -198,7 +198,7 @@ def load_dataset_from_json_dir(
 
 
 @_auto_client
-def upload_dataset(
+def uploadDataset(
     dataset: Any,
     upload_as_new: bool = False,
     remote_name: str = "",
@@ -223,26 +223,26 @@ def upload_dataset(
         Tuple of ``(success, cloud_dataset_id, message)``.
     """
     from .api import datasets as ds_api
-    from .internal import create_remote_dataset_doc, get_cloud_dataset_id
-    from .upload import upload_document_collection, upload_files_for_documents
+    from .internal import createRemoteDatasetDoc, getCloudDatasetIdForLocalDataset
+    from .upload import uploadDocumentCollection, uploadFilesForDatasetDocuments
 
     # Resolve or create remote dataset
     cloud_id = ""
     if not upload_as_new:
-        cloud_id, _ = get_cloud_dataset_id(dataset, client=client)
+        cloud_id, _ = getCloudDatasetIdForLocalDataset(dataset, client=client)
 
     if not cloud_id:
         # Create new remote dataset
         name = remote_name or getattr(dataset, "name", "Unnamed Dataset")
         org_id = client.config.org_id
         try:
-            result = ds_api.create_dataset(org_id, name, client=client)
+            result = ds_api.createDataset(org_id, name, client=client)
             cloud_id = result.get("id", result.get("_id", ""))
         except Exception as exc:
             return False, "", f"Failed to create remote dataset: {exc}"
 
         # Store link locally
-        remote_doc = create_remote_dataset_doc(cloud_id, dataset)
+        remote_doc = createRemoteDatasetDoc(cloud_id, dataset)
         try:
             dataset.session.database_add(remote_doc)
         except Exception:
@@ -266,13 +266,13 @@ def upload_dataset(
             doc_jsons.append(props)
 
     # Upload documents
-    report = upload_document_collection(cloud_id, doc_jsons, client=client)
+    report = uploadDocumentCollection(cloud_id, doc_jsons, client=client)
     if verbose:
         print(f'  Documents uploaded: {report["uploaded"]}, skipped: {report["skipped"]}')
 
     # Upload files
     if sync_files:
-        file_report = upload_files_for_documents(
+        file_report = uploadFilesForDatasetDocuments(
             client.config.org_id,
             cloud_id,
             doc_jsons,
@@ -285,7 +285,7 @@ def upload_dataset(
 
 
 @_auto_client
-def sync_dataset(
+def syncDataset(
     dataset: Any,
     sync_mode: str = "download_new",
     sync_files: bool = False,
@@ -311,9 +311,9 @@ def sync_dataset(
     Returns:
         Report dict with counts of changes.
     """
-    from .internal import get_cloud_dataset_id
+    from .internal import getCloudDatasetIdForLocalDataset
 
-    cloud_id, _ = get_cloud_dataset_id(dataset, client=client)
+    cloud_id, _ = getCloudDatasetIdForLocalDataset(dataset, client=client)
     if not cloud_id:
         return {"error": "No cloud dataset linked to this dataset"}
 
@@ -347,7 +347,7 @@ def sync_dataset(
 
 
 @_auto_client
-def new_dataset(
+def newDataset(
     dataset: Any,
     name: str = "",
     *,
@@ -360,7 +360,7 @@ def new_dataset(
     Returns:
         The cloud dataset ID.
     """
-    success, cloud_id, msg = upload_dataset(
+    success, cloud_id, msg = uploadDataset(
         dataset,
         upload_as_new=True,
         remote_name=name,
@@ -375,7 +375,7 @@ def new_dataset(
 
 
 @_auto_client
-def scan_for_upload(
+def scanForUpload(
     dataset: Any,
     cloud_dataset_id: str,
     *,
@@ -390,7 +390,7 @@ def scan_for_upload(
     """
     from ndi.query import Query
 
-    from .internal import list_remote_document_ids
+    from .internal import listRemoteDocumentIds
 
     # Get local documents
     try:
@@ -402,7 +402,7 @@ def scan_for_upload(
     remote_ids = {}
     if cloud_dataset_id:
         try:
-            remote_ids = list_remote_document_ids(cloud_dataset_id, client=client)
+            remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
         except Exception:
             pass
 
@@ -449,9 +449,9 @@ def _sync_download_new(
 ) -> dict[str, int]:
     """Download documents that exist remotely but not locally."""
     from .api import documents as docs_api
-    from .download import jsons_to_documents
+    from .download import jsons2documents
 
-    remote_docs = docs_api.list_all_documents(cloud_id, client=client).data
+    remote_docs = docs_api.listDatasetDocumentsAll(cloud_id, client=client).data
 
     # Find local IDs
     from ndi.query import Query
@@ -476,7 +476,7 @@ def _sync_download_new(
     if dry_run:
         return {"downloaded": len(new_docs)}
 
-    documents = jsons_to_documents(new_docs)
+    documents = jsons2documents(new_docs)
     added = 0
     for doc in documents:
         try:
@@ -498,10 +498,10 @@ def _sync_upload_new(
     client: CloudClient | None = None,
 ) -> dict[str, int]:
     """Upload documents that exist locally but not remotely."""
-    from .internal import list_remote_document_ids
-    from .upload import upload_document_collection
+    from .internal import listRemoteDocumentIds
+    from .upload import uploadDocumentCollection
 
-    remote_ids = list_remote_document_ids(cloud_id, client=client)
+    remote_ids = listRemoteDocumentIds(cloud_id, client=client)
 
     from ndi.query import Query
 
@@ -524,5 +524,5 @@ def _sync_upload_new(
     if dry_run:
         return {"uploaded": len(new_jsons)}
 
-    report = upload_document_collection(cloud_id, new_jsons, only_missing=False, client=client)
+    report = uploadDocumentCollection(cloud_id, new_jsons, only_missing=False, client=client)
     return {"uploaded": report.get("uploaded", 0)}
