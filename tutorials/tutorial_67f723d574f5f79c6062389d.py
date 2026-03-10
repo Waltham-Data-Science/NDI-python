@@ -330,7 +330,7 @@ def section_1_import_and_load(html: HTMLBuilder) -> Any:
     from ndi.cloud import downloadDataset
     from ndi.cloud.auth import login
     from ndi.cloud.client import CloudClient
-    from ndi.fun.doc import get_doc_types
+    from ndi.fun.doc import getDocTypes
 
     html.add_heading("Import and load NDI dataset")
     html.add_text(
@@ -354,7 +354,7 @@ import ndi.dataset
 from ndi.cloud import downloadDataset
 from ndi.cloud.auth import login
 from ndi.cloud.client import CloudClient
-from ndi.fun.doc import get_doc_types
+from ndi.fun.doc import getDocTypes
 
 cloud_dataset_id = '67f723d574f5f79c6062389d'
 data_path = os.path.expanduser('~/Documents/MATLAB/Datasets')
@@ -404,11 +404,11 @@ else:
     )
 
     html.add_code("""\
-doc_types, doc_counts = get_doc_types(dataset)
+doc_types, doc_counts = getDocTypes(dataset)
 for t, c in zip(doc_types, doc_counts):
     print(f'  {t}: {c}')""")
 
-    doc_types, doc_counts = get_doc_types(dataset)
+    doc_types, doc_counts = getDocTypes(dataset)
     output_lines = []
     total_docs = 0
     for t, c in zip(doc_types, doc_counts):
@@ -428,7 +428,7 @@ for t, c in zip(doc_types, doc_counts):
 def section_2_subject_summary(html: HTMLBuilder, dataset: Any) -> Any:
     """Section 2: View subject summary table."""
 
-    from ndi.fun.doc_table import subject_summary
+    from ndi.fun.doc_table import subject as subject_summary
 
     html.add_heading("View subject summary table")
     html.add_text(
@@ -443,7 +443,7 @@ def section_2_subject_summary(html: HTMLBuilder, dataset: Any) -> Any:
     html.add_text("A summary table showing the metadata for each subject can be " "viewed below.")
 
     html.add_code("""\
-from ndi.fun.doc_table import subject_summary
+from ndi.fun.doc_table import subject as subject_summary
 
 subject_table = subject_summary(dataset)
 print(f'subjectTable: {subject_table.shape[0]} x {subject_table.shape[1]} table')
@@ -467,7 +467,7 @@ print(subject_table.head(10))""")
 @timed
 def section_3_filter_subjects(html: HTMLBuilder, subject_table: Any) -> Any:
     """Section 3: Filter subjects by strain."""
-    from ndi.fun.table import identify_matching_rows
+    from ndi.fun.table import identifyMatchingRows
 
     html.add_heading("Filter subjects by strain")
     html.add_text(
@@ -478,18 +478,18 @@ def section_3_filter_subjects(html: HTMLBuilder, subject_table: Any) -> Any:
     )
 
     html.add_code("""\
-from ndi.fun.table import identify_matching_rows
+from ndi.fun.table import identifyMatchingRows
 
 column_name = 'StrainName'
 data_value = 'AVP-Cre'
-row_ind = identify_matching_rows(
+row_ind = identifyMatchingRows(
     subject_table, column_name, data_value, string_match='contains'
 )
 filtered_subjects = subject_table[row_ind]
 print(f'filteredSubjects: {len(filtered_subjects)} rows x {len(filtered_subjects.columns)} columns')
 print(filtered_subjects)""")
 
-    row_ind = identify_matching_rows(
+    row_ind = identifyMatchingRows(
         subject_table, "StrainName", "AVP-Cre", string_match="contains"
     )
     filtered_subjects = subject_table[row_ind]
@@ -515,7 +515,7 @@ print(filtered_subjects)""")
 def section_4_probe_summary(html: HTMLBuilder, dataset: Any) -> Any:
     """Section 4: View probe summary table."""
 
-    from ndi.fun.doc_table import probe_table
+    from ndi.fun.doc_table import probe as probe_table
 
     html.add_heading("View probe summary table")
     html.add_text(
@@ -526,7 +526,7 @@ def section_4_probe_summary(html: HTMLBuilder, dataset: Any) -> Any:
     )
 
     html.add_code("""\
-from ndi.fun.doc_table import probe_table
+from ndi.fun.doc_table import probe as probe_table
 
 probe_summary = probe_table(dataset)
 print(f'probeTable: {probe_summary.shape[0]} x {probe_summary.shape[1]} table')
@@ -584,7 +584,7 @@ print(probe_summary['CellTypeName'].value_counts().to_string())""")
 def section_5_epoch_summary(html: HTMLBuilder, dataset: Any) -> Any:
     """Section 5: View epoch summary table."""
 
-    from ndi.fun.doc_table import epoch_table
+    from ndi.fun.doc_table import epoch as epoch_table
 
     html.add_heading("View epoch summary table")
     html.add_text(
@@ -596,7 +596,7 @@ def section_5_epoch_summary(html: HTMLBuilder, dataset: Any) -> Any:
     )
 
     html.add_code("""\
-from ndi.fun.doc_table import epoch_table
+from ndi.fun.doc_table import epoch as epoch_table
 
 epoch_summary = epoch_table(dataset)
 print(f'epochTable: {epoch_summary.shape[0]} x {epoch_summary.shape[1]} table')
@@ -639,7 +639,7 @@ def section_6_combined_table(
 ) -> Any:
     """Section 6: Combined summary table and epoch filtering."""
 
-    from ndi.fun.table import identify_matching_rows, join, move_columns_left
+    from ndi.fun.table import identifyMatchingRows, join, moveColumnsLeft
 
     html.add_heading("Combined summary table and epoch filtering")
     html.add_text(
@@ -650,15 +650,15 @@ def section_6_combined_table(
     )
 
     html.add_code("""\
-from ndi.fun.table import join, move_columns_left, identify_matching_rows
+from ndi.fun.table import join, moveColumnsLeft, identifyMatchingRows
 
 combined = join([subject_table, probe_summary, epoch_summary])
-combined = move_columns_left(combined, ['SubjectLocalIdentifier', 'EpochNumber'])
+combined = moveColumnsLeft(combined, ['SubjectLocalIdentifier', 'EpochNumber'])
 print(f'combined: {combined.shape[0]} x {combined.shape[1]} table')
 print(f'Columns: {list(combined.columns)}')""")
 
     combined = join([subject_table, probe_summary, epoch_summary])
-    combined = move_columns_left(combined, ["SubjectLocalIdentifier", "EpochNumber"])
+    combined = moveColumnsLeft(combined, ["SubjectLocalIdentifier", "EpochNumber"])
 
     html.add_output_text(
         f"combined: {combined.shape[0]} x {combined.shape[1]} table\n"
@@ -677,13 +677,13 @@ print(f'Columns: {list(combined.columns)}')""")
     )
 
     html.add_code("""\
-row_ind = identify_matching_rows(
+row_ind = identifyMatchingRows(
     combined, 'ApproachName', 'optogenetic', string_match='contains'
 )
 opto_epochs = combined[row_ind]
 print(f'Epochs with optogenetic approach: {len(opto_epochs)} rows')""")
 
-    row_ind = identify_matching_rows(
+    row_ind = identifyMatchingRows(
         combined, "ApproachName", "optogenetic", string_match="contains"
     )
     opto_epochs = combined[row_ind]
@@ -703,13 +703,13 @@ print(f'Epochs with optogenetic approach: {len(opto_epochs)} rows')""")
     )
 
     html.add_code("""\
-row_ind = identify_matching_rows(
+row_ind = identifyMatchingRows(
     combined, 'MixtureName', 'aCSF', string_match='contains'
 )
 acsf_epochs = combined[row_ind]
 print(f'Epochs with aCSF mixture: {len(acsf_epochs)} rows')""")
 
-    row_ind = identify_matching_rows(combined, "MixtureName", "aCSF", string_match="contains")
+    row_ind = identifyMatchingRows(combined, "MixtureName", "aCSF", string_match="contains")
     acsf_epochs = combined[row_ind]
 
     html.add_output_text(f"Epochs with aCSF mixture: {len(acsf_epochs)} rows")
@@ -727,13 +727,13 @@ print(f'Epochs with aCSF mixture: {len(acsf_epochs)} rows')""")
     )
 
     html.add_code("""\
-row_ind = identify_matching_rows(
+row_ind = identifyMatchingRows(
     combined, 'CellTypeName', 'type I BNST neuron', string_match='identical'
 )
 type1_epochs = combined[row_ind]
 print(f'Epochs with type I BNST neuron: {len(type1_epochs)} rows')""")
 
-    row_ind = identify_matching_rows(
+    row_ind = identifyMatchingRows(
         combined, "CellTypeName", "type I BNST neuron", string_match="identical"
     )
     type1_epochs = combined[row_ind]
@@ -762,7 +762,7 @@ def section_7_plot_electrophysiology(
 ) -> None:
     """Section 7: Plot electrophysiology data for a selected subject."""
 
-    from ndi.fun.table import identify_matching_rows
+    from ndi.fun.table import identifyMatchingRows
     from ndi.query import Query
 
     html.add_heading("Plot electrophysiology data")
@@ -837,7 +837,7 @@ print(f'I  probe: {i_probe_id}')""")
     )
 
     html.add_code("""\
-epoch_mask = identify_matching_rows(
+epoch_mask = identifyMatchingRows(
     combined_summary, 'SubjectDocumentIdentifier', subject_id
 )
 epoch_conditions = combined_summary[epoch_mask]
@@ -849,7 +849,7 @@ vm_epochs = epoch_conditions[
 epoch_nums = sorted(vm_epochs['EpochNumber'].tolist())
 print(f'Vm probe has {len(epoch_nums)} epochs: {epoch_nums}')""")
 
-    epoch_mask = identify_matching_rows(combined_summary, "SubjectDocumentIdentifier", subject_id)
+    epoch_mask = identifyMatchingRows(combined_summary, "SubjectDocumentIdentifier", subject_id)
     epoch_conditions = combined_summary[epoch_mask]
 
     vm_epochs = epoch_conditions[epoch_conditions["ProbeDocumentIdentifier"] == vm_probe_id]
@@ -1143,8 +1143,8 @@ def section_8_plot_epm(html: HTMLBuilder, dataset: Any) -> Any:
     """Section 8: Plot Elevated Plus Maze data."""
     import pandas as pd
 
-    from ndi.fun.doc_table import ontology_table_row_doc_to_table
-    from ndi.fun.table import move_columns_left
+    from ndi.fun.doc_table import ontologyTableRowDoc2Table
+    from ndi.fun.table import moveColumnsLeft
     from ndi.query import Query
 
     html.add_heading("Plot Elevated Plus Maze data")
@@ -1158,25 +1158,25 @@ def section_8_plot_epm(html: HTMLBuilder, dataset: Any) -> Any:
     # --- Step 1: Query and convert EPM data ---
     html.add_code("""\
 from ndi.query import Query
-from ndi.fun.doc_table import ontology_table_row_doc_to_table
-from ndi.fun.table import move_columns_left
+from ndi.fun.doc_table import ontologyTableRowDoc2Table
+from ndi.fun.table import moveColumnsLeft
 
 query = Query('ontologyTableRow.variableNames').contains('ElevatedPlusMaze')
 docs_epm = dataset.database_search(query)
-tables_epm, ids_epm = ontology_table_row_doc_to_table(docs_epm)
+tables_epm, ids_epm = ontologyTableRowDoc2Table(docs_epm)
 table_epm = tables_epm[0]
 print(f'tableEPM: {table_epm.shape[0]} x {table_epm.shape[1]} table')""")
 
     query = Query("ontologyTableRow.variableNames").contains("ElevatedPlusMaze")
     docs_epm = dataset.database_search(query)
-    tables_epm, ids_epm = ontology_table_row_doc_to_table(docs_epm)
+    tables_epm, ids_epm = ontologyTableRowDoc2Table(docs_epm)
     table_epm = tables_epm[0]
 
     html.add_output_text(f"tableEPM: {table_epm.shape[0]} x {table_epm.shape[1]} table")
 
     # --- Step 2: Reorganize columns ---
     html.add_code("""\
-table_epm = move_columns_left(table_epm, [
+table_epm = moveColumnsLeft(table_epm, [
     'SubjectLocalIdentifier',
     'Treatment_CNOOrSalineAdministration',
     'ExperimentalGroupCode',
@@ -1185,7 +1185,7 @@ table_epm = move_columns_left(table_epm, [
 ])
 print(f'Columns: {list(table_epm.columns[:8])} ...')""")
 
-    table_epm = move_columns_left(
+    table_epm = moveColumnsLeft(
         table_epm,
         [
             "SubjectLocalIdentifier",
@@ -1215,11 +1215,11 @@ print(f'Columns: {list(table_epm.columns[:8])} ...')""")
     grouping_variable = "Treatment_CNOOrSalineAdministration"
 
     html.add_code(f"""\
-from ndi.fun.doc import ontology_table_row_vars
+from ndi.fun.doc import ontologyTableRowVars
 from ndi.ontology import lookup as ontology_lookup
 
 # Get ontology metadata for all OTR variables
-full_names, short_names, ontology_nodes = ontology_table_row_vars(dataset)
+full_names, short_names, ontology_nodes = ontologyTableRowVars(dataset)
 
 # Look up the selected variable
 plotting_variable = 'ElevatedPlusMaze_OpenArmNorth_Entries'
@@ -1238,10 +1238,10 @@ try:
 except ValueError:
     print(f'Variable {{plotting_variable}} not found in ontology metadata')""")
 
-    from ndi.fun.doc import ontology_table_row_vars
+    from ndi.fun.doc import ontologyTableRowVars
     from ndi.ontology import lookup as ontology_lookup
 
-    full_names, short_names, ontology_nodes = ontology_table_row_vars(dataset)
+    full_names, short_names, ontology_nodes = ontologyTableRowVars(dataset)
 
     term_info_lines = []
     term_full_name = plotting_variable
@@ -1398,8 +1398,8 @@ def section_9_plot_fps(html: HTMLBuilder, dataset: Any, table_epm: Any) -> None:
     """Section 9: Plot Fear-Potentiated Startle data."""
     import pandas as pd
 
-    from ndi.fun.doc_table import ontology_table_row_doc_to_table
-    from ndi.fun.table import move_columns_left
+    from ndi.fun.doc_table import ontologyTableRowDoc2Table
+    from ndi.fun.table import moveColumnsLeft
     from ndi.query import Query
 
     html.add_heading("Plot Fear-Potentiated Startle data")
@@ -1416,26 +1416,26 @@ query = Query('ontologyTableRow.variableNames').contains(
     'Fear_potentiatedStartle'
 )
 docs_fps = dataset.database_search(query)
-tables_fps, ids_fps = ontology_table_row_doc_to_table(docs_fps)
+tables_fps, ids_fps = ontologyTableRowDoc2Table(docs_fps)
 table_fps = tables_fps[0]
 print(f'tableFPS: {table_fps.shape[0]} x {table_fps.shape[1]} table')""")
 
     query = Query("ontologyTableRow.variableNames").contains("Fear_potentiatedStartle")
     docs_fps = dataset.database_search(query)
-    tables_fps, ids_fps = ontology_table_row_doc_to_table(docs_fps)
+    tables_fps, ids_fps = ontologyTableRowDoc2Table(docs_fps)
     table_fps = tables_fps[0]
 
     html.add_output_text(f"tableFPS: {table_fps.shape[0]} x {table_fps.shape[1]} table")
 
     # --- Step 2: Reorganize columns ---
     html.add_code("""\
-table_fps = move_columns_left(table_fps, [
+table_fps = moveColumnsLeft(table_fps, [
     'Fear_potentiatedStartle_ExperimentalPhaseOrTestName',
     'SubjectLocalIdentifier',
 ])
 print(f'Columns: {list(table_fps.columns)}')""")
 
-    table_fps = move_columns_left(
+    table_fps = moveColumnsLeft(
         table_fps,
         [
             "Fear_potentiatedStartle_ExperimentalPhaseOrTestName",

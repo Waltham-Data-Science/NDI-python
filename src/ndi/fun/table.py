@@ -25,7 +25,7 @@ def _require_pandas() -> None:
         )
 
 
-def identify_matching_rows(
+def identifyMatchingRows(
     df: pd.DataFrame,
     column: str | list[str],
     value: Any,
@@ -103,7 +103,7 @@ def identify_matching_rows(
     return mask
 
 
-def identify_valid_rows(
+def identifyValidRows(
     df: pd.DataFrame,
     columns: list[str] | None = None,
     invalid_value: Any = None,
@@ -231,7 +231,7 @@ def join_tables(
     return result
 
 
-def move_columns_left(
+def moveColumnsLeft(
     df: pd.DataFrame,
     columns: list[str],
 ) -> pd.DataFrame:
@@ -275,3 +275,9 @@ def vstack(
         return pd.DataFrame()
 
     return pd.concat(tables, ignore_index=True, sort=False)
+
+
+# Backward-compatible aliases
+identify_matching_rows = identifyMatchingRows
+identify_valid_rows = identifyValidRows
+move_columns_left = moveColumnsLeft

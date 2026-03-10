@@ -115,7 +115,7 @@ def f0_f1_responses(
     }
 
 
-def find_mixture_name(
+def findMixtureName(
     dictionary_path: str,
     mixture: list[dict[str, Any]],
 ) -> list[str]:
@@ -169,7 +169,7 @@ def find_mixture_name(
     return matches
 
 
-def stimulus_temporal_frequency(
+def stimulustemporalfrequency(
     stimulus_parameters: dict[str, Any],
     config_path: str | None = None,
 ) -> tuple[float | None, str]:
@@ -287,3 +287,8 @@ def stimulus_tuningcurve_log(
             return rp.get("tuningcurve_calc", {}).get("log", "")
 
     return ""
+
+
+# Backward-compatible aliases
+find_mixture_name = findMixtureName
+stimulus_temporal_frequency = stimulustemporalfrequency

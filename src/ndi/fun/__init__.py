@@ -13,12 +13,14 @@ from . import probe  # noqa: F401 — make ndi.fun.probe accessible
 from .utils import (
     channelname2prefixnumber,
     name2variable_name,
+    name2variableName,
     pseudorandomint,
     timestamp,
 )
 
 __all__ = [
     "channelname2prefixnumber",
+    "name2variableName",
     "name2variable_name",
     "probe",
     "pseudorandomint",

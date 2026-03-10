@@ -10,7 +10,7 @@ import json
 from typing import Any
 
 
-def all_types() -> list[str]:
+def allTypes() -> list[str]:
     """Return all known NDI document types by scanning schema JSON files.
 
     MATLAB equivalent: ndi.fun.doc.allTypes
@@ -44,7 +44,7 @@ def all_types() -> list[str]:
     return sorted(types)
 
 
-def find_fuid(session: Any, fuid: str) -> tuple[Any | None, str]:
+def findFuid(session: Any, fuid: str) -> tuple[Any | None, str]:
     """Search session for a document containing a file with the given UID.
 
     MATLAB equivalent: ndi.fun.doc.findFuid
@@ -75,7 +75,7 @@ def find_fuid(session: Any, fuid: str) -> tuple[Any | None, str]:
     return None, ""
 
 
-def make_species_strain_sex(
+def makeSpeciesStrainSex(
     session: Any,
     subject_doc: Any,
     *,
@@ -226,7 +226,7 @@ def make_species_strain_sex(
     return docs
 
 
-def probe_locations_for_probes(
+def probeLocations4probes(
     session: Any,
     probe_docs: list[Any],
     locations: list[dict[str, str]],
@@ -346,7 +346,7 @@ def diff(
     return {"equal": len(details) == 0, "details": details}
 
 
-def ontology_table_row_vars(
+def ontologyTableRowVars(
     session: Any,
 ) -> tuple[list[str], list[str], list[str]]:
     """Return all unique ontologyTableRow variable names in a session.
@@ -409,7 +409,7 @@ def ontology_table_row_vars(
     return sorted_names, variable_names, ontology_nodes
 
 
-def get_doc_types(
+def getDocTypes(
     session: Any,
 ) -> tuple[list[str], list[int]]:
     """Find all unique document types and their counts in a session.
@@ -441,3 +441,12 @@ def get_doc_types(
     counts = [type_counter[t] for t in sorted_types]
 
     return sorted_types, counts
+
+
+# Backward-compatible aliases
+all_types = allTypes
+find_fuid = findFuid
+make_species_strain_sex = makeSpeciesStrainSex
+probe_locations_for_probes = probeLocations4probes
+ontology_table_row_vars = ontologyTableRowVars
+get_doc_types = getDocTypes

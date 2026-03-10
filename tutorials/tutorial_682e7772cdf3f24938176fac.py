@@ -448,7 +448,7 @@ def section_doc_types(html: HTMLBuilder, dataset: Any) -> tuple:
     """Section 4: View NDI file types."""
     import pandas as pd
 
-    from ndi.fun.doc import get_doc_types
+    from ndi.fun.doc import getDocTypes
 
     html.add_heading("View NDI file types")
     html.add_text(
@@ -458,13 +458,13 @@ def section_doc_types(html: HTMLBuilder, dataset: Any) -> tuple:
     )
 
     html.add_code("""\
-from ndi.fun.doc import get_doc_types
+from ndi.fun.doc import getDocTypes
 
-doc_types, doc_counts = get_doc_types(dataset)
+doc_types, doc_counts = getDocTypes(dataset)
 documents_ndi = pd.DataFrame({'docTypes': doc_types, 'docCounts': doc_counts})
 print(documents_ndi)""")
 
-    doc_types, doc_counts = get_doc_types(dataset)
+    doc_types, doc_counts = getDocTypes(dataset)
     df = pd.DataFrame({"docTypes": doc_types, "docCounts": doc_counts})
     html.add_table_html(df_to_html(df, max_rows=30), f"documentsNDI ({len(df)} x 2 table)")
 
@@ -476,7 +476,7 @@ def section_ontology_terms(html: HTMLBuilder, dataset: Any) -> None:
     """Section 5: View ontology term definitions."""
     import pandas as pd
 
-    from ndi.fun.doc import ontology_table_row_vars
+    from ndi.fun.doc import ontologyTableRowVars
 
     html.add_heading("View ontology term definitions")
     html.add_text(
@@ -487,10 +487,10 @@ def section_ontology_terms(html: HTMLBuilder, dataset: Any) -> None:
     )
 
     html.add_code("""\
-from ndi.fun.doc import ontology_table_row_vars
+from ndi.fun.doc import ontologyTableRowVars
 from ndi.ontology import lookup
 
-full_names, variable_names, ontology_nodes = ontology_table_row_vars(dataset)
+full_names, variable_names, ontology_nodes = ontologyTableRowVars(dataset)
 
 # Look up a specific ontology term by name
 target_name = 'C. elegans behavioral assay: deceleration upon encounter'
@@ -502,7 +502,7 @@ print(f'name:       {result.name}')
 print(f'definition: {result.definition}')
 print(f'shortName:  {result.short_name}')""")
 
-    full_names, variable_names, ontology_nodes = ontology_table_row_vars(dataset)
+    full_names, variable_names, ontology_nodes = ontologyTableRowVars(dataset)
 
     # Show the full variable list
     var_df = pd.DataFrame(
@@ -541,7 +541,7 @@ print(f'shortName:  {result.short_name}')""")
 @timed
 def section_retrieve_metadata(html: HTMLBuilder, dataset: Any) -> tuple:
     """Section 6-7: Retrieve experiment metadata (ontologyTableRow tables)."""
-    from ndi.fun.doc_table import ontology_table_row_doc_to_table
+    from ndi.fun.doc_table import ontologyTableRowDoc2Table
     from ndi.query import Query
 
     html.add_heading("View C. elegans dataset")
@@ -561,17 +561,17 @@ def section_retrieve_metadata(html: HTMLBuilder, dataset: Any) -> tuple:
 
     html.add_code("""\
 from ndi.query import Query
-from ndi.fun.doc_table import ontology_table_row_doc_to_table
+from ndi.fun.doc_table import ontologyTableRowDoc2Table
 
 query = Query('').isa('ontologyTableRow')
 docs = dataset.database_search(query)
-data_tables, doc_ids = ontology_table_row_doc_to_table(docs)
+data_tables, doc_ids = ontologyTableRowDoc2Table(docs)
 
 for i, (dt, ids) in enumerate(zip(data_tables, doc_ids)):
     print(f'Table {i+1}: {len(dt)} rows x {len(dt.columns)} cols — {list(dt.columns)[:3]}...')""")
 
     docs = dataset.database_search(Query("").isa("ontologyTableRow"))
-    data_tables, doc_ids = ontology_table_row_doc_to_table(docs)
+    data_tables, doc_ids = ontologyTableRowDoc2Table(docs)
 
     output_lines = []
     for i, (dt, _ids) in enumerate(zip(data_tables, doc_ids)):
@@ -608,7 +608,7 @@ for i, (dt, ids) in enumerate(zip(data_tables, doc_ids)):
 def section_subject_summary(html: HTMLBuilder, dataset: Any, data_tables: list) -> Any:
     """Section 8: View subject summary table."""
 
-    from ndi.fun.doc_table import subject_summary
+    from ndi.fun.doc_table import subject as subject_summary
     from ndi.fun.table import join
 
     html.add_heading("View subject summary table", level=3)
@@ -625,7 +625,7 @@ def section_subject_summary(html: HTMLBuilder, dataset: Any, data_tables: list) 
     html.add_text("A summary table showing the metadata for each subject can be viewed below.")
 
     html.add_code("""\
-from ndi.fun.doc_table import subject_summary
+from ndi.fun.doc_table import subject as subject_summary
 from ndi.fun.table import join
 
 subject_summ = subject_summary(dataset)
@@ -669,7 +669,7 @@ print(subject_table.head(10))""")
 @timed
 def section_filter_subjects(html: HTMLBuilder, subject_table: Any) -> Any:
     """Section 9: Filter subjects."""
-    from ndi.fun.table import identify_matching_rows
+    from ndi.fun.table import identifyMatchingRows
 
     html.add_heading("Filter subjects", level=3)
     html.add_text(
@@ -678,11 +678,11 @@ def section_filter_subjects(html: HTMLBuilder, subject_table: Any) -> Any:
     )
 
     html.add_code("""\
-from ndi.fun.table import identify_matching_rows
+from ndi.fun.table import identifyMatchingRows
 
 column_name = 'StrainName'
 data_value = 'PR811'
-row_ind = identify_matching_rows(
+row_ind = identifyMatchingRows(
     subject_table, column_name, data_value, string_match='contains'
 )
 filtered_subjects = subject_table[row_ind]
@@ -690,7 +690,7 @@ print(f'filteredSubjects: {len(filtered_subjects)} rows')""")
 
     col = "StrainName" if "StrainName" in subject_table.columns else "SubjectLocalIdentifier"
     value = "PR811"
-    row_ind = identify_matching_rows(subject_table, col, value, string_match="contains")
+    row_ind = identifyMatchingRows(subject_table, col, value, string_match="contains")
     filtered = subject_table[row_ind]
 
     html.add_output_text(
@@ -1306,7 +1306,7 @@ def section_plot_image_with_position(
 
     html.add_code("""\
 import numpy as np
-from ndi.fun.data import read_image_stack
+from ndi.fun.data import readImageStack
 
 # Choose an image type: the patch identifier map
 # (where each pixel's value = identifier of the closest bacterial patch)
@@ -1315,7 +1315,7 @@ doc_info = image_doc_map[image_name]
 
 # Read image via the database binary API (auto-detects PNG/TIFF/raw binary)
 # Binary files are fetched on demand from NDI Cloud via ndic:// protocol
-img, info = read_image_stack(dataset, doc_info['doc'], 'auto')
+img, info = readImageStack(dataset, doc_info['doc'], 'auto')
 
 # Normalize to [0, 1] for display (equivalent to MATLAB mat2gray)
 img_float = img.astype(np.float64)
@@ -1348,9 +1348,9 @@ for j in range(n_bins - 1):
         return
 
     try:
-        from ndi.fun.data import read_image_stack
+        from ndi.fun.data import readImageStack
 
-        img, _info = read_image_stack(dataset, img_info["doc"], "auto")
+        img, _info = readImageStack(dataset, img_info["doc"], "auto")
     except FileNotFoundError:
         html.add_output_text(
             "Binary file not available. Set NDI_CLOUD_USERNAME/PASSWORD "
@@ -1408,14 +1408,14 @@ def section_play_video(html: HTMLBuilder, dataset: Any, image_doc_map: dict) -> 
 
     html.add_code("""\
 import cv2
-from ndi.fun.data import read_image_stack
+from ndi.fun.data import readImageStack
 
 # Get the video recording from imageStack documents
 image_name = 'video recording'  # keyword to match in imageStack labels
 doc_info = image_doc_map[image_name]
 
 # Read video via the database binary API (fetches on demand via ndic://)
-video_data, info = read_image_stack(dataset, doc_info['doc'], 'mp4')
+video_data, info = readImageStack(dataset, doc_info['doc'], 'mp4')
 
 # Get time scale from imageStack_parameters.dimension_scale
 is_params = doc_info['props']['imageStack_parameters']
@@ -1684,7 +1684,7 @@ fid.close()
 @timed
 def section_encounter_per_subject(html: HTMLBuilder, data_tables: list, ctx: dict) -> None:
     """Section 17: Get analysis of patch encounters for the chosen subject."""
-    from ndi.fun.table import identify_matching_rows
+    from ndi.fun.table import identifyMatchingRows
 
     subject_id = ctx.get("subject_id", "")
     tables = ctx.get("tables", {})
@@ -1697,14 +1697,14 @@ def section_encounter_per_subject(html: HTMLBuilder, data_tables: list, ctx: dic
     )
 
     html.add_code("""\
-from ndi.fun.table import identify_matching_rows
+from ndi.fun.table import identifyMatchingRows
 
 # The encounter table is the largest ontologyTableRow group
 # (contains C. elegans encounter behavior data with ~20K rows)
 encounter_table = data_tables[0]  # largest group by row count
 
 # Filter to encounters for this subject
-ind = identify_matching_rows(
+ind = identifyMatchingRows(
     encounter_table, 'SubjectDocumentIdentifier', subject_id)
 current_encounters = encounter_table[ind]
 print(f'currentEncounters: {current_encounters.shape}')""")
@@ -1721,7 +1721,7 @@ print(f'currentEncounters: {current_encounters.shape}')""")
         )
         return
 
-    ind = identify_matching_rows(encounter_table, "SubjectDocumentIdentifier", subject_id)
+    ind = identifyMatchingRows(encounter_table, "SubjectDocumentIdentifier", subject_id)
     current_encounters = encounter_table[ind]
 
     html.add_output_text(
@@ -2038,7 +2038,7 @@ def section_ecoli_plot_image(
 
     html.add_code("""\
 import numpy as np
-from ndi.fun.data import read_image_stack
+from ndi.fun.data import readImageStack
 
 # Choose a fluorescence image (prefer normalized)
 for name, info in ecoli_image_map.items():
@@ -2049,7 +2049,7 @@ for name, info in ecoli_image_map.items():
 
 # Read image via the database binary API (auto-detects PNG/TIFF/raw binary)
 # Binary files are fetched on demand from NDI Cloud via ndic:// protocol
-img, info = read_image_stack(dataset, doc_info['doc'], 'auto')
+img, info = readImageStack(dataset, doc_info['doc'], 'auto')
 
 # Plot with colorbar and metadata title
 fig, ax = plt.subplots(figsize=(8, 8))
@@ -2086,9 +2086,9 @@ ax.set_title(f'{image_name}\\ntarget OD600 at seeding = {od600}\\ngrowth time = 
         return
 
     try:
-        from ndi.fun.data import read_image_stack
+        from ndi.fun.data import readImageStack
 
-        img, _info = read_image_stack(dataset, img_info["doc"], "auto")
+        img, _info = readImageStack(dataset, img_info["doc"], "auto")
     except FileNotFoundError:
         html.add_output_text(
             "Binary file not available. Set NDI_CLOUD_USERNAME/PASSWORD "

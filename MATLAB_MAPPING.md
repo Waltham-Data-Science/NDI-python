@@ -143,25 +143,26 @@ Complete reference mapping every MATLAB NDI function/class to its Python equival
 
 | MATLAB | Python | Module |
 |--------|--------|--------|
-| `ndi.fun.doc.allTypes` | `ndi.fun.doc.all_types()` | `ndi.fun.doc` |
-| `ndi.fun.doc.getDocTypes` | `ndi.fun.doc.get_doc_types()` | `ndi.fun.doc` |
-| `ndi.fun.doc.findFuid` | `ndi.fun.doc.find_fuid()` | `ndi.fun.doc` |
-| `ndi.fun.doc.subject.makeSpeciesStrainSex` | `ndi.fun.doc.make_species_strain_sex()` | `ndi.fun.doc` |
-| `ndi.fun.doc.probe.probeLocations4probes` | `ndi.fun.doc.probe_locations_for_probes()` | `ndi.fun.doc` |
-| `ndi.fun.doc.diff` | `ndi.fun.doc.doc_diff()` | `ndi.fun.doc` |
-| `ndi.fun.doc.ontologyTableRowVars` | `ndi.fun.doc.ontology_table_row_vars()` | `ndi.fun.doc` |
+| `ndi.fun.doc.allTypes` | `ndi.fun.doc.allTypes()` | `ndi.fun.doc` |
+| `ndi.fun.doc.getDocTypes` | `ndi.fun.doc.getDocTypes()` | `ndi.fun.doc` |
+| `ndi.fun.doc.findFuid` | `ndi.fun.doc.findFuid()` | `ndi.fun.doc` |
+| `ndi.fun.doc.subject.makeSpeciesStrainSex` | `ndi.fun.doc.makeSpeciesStrainSex()` | `ndi.fun.doc` |
+| `ndi.fun.doc.probe.probeLocations4probes` | `ndi.fun.doc.probeLocations4probes()` | `ndi.fun.doc` |
+| `ndi.fun.doc.diff` | `ndi.fun.doc.diff()` | `ndi.fun.doc` |
+| `ndi.fun.doc.ontologyTableRowVars` | `ndi.fun.doc.ontologyTableRowVars()` | `ndi.fun.doc` |
 
 ### DocTable Utilities
 
 | MATLAB | Python | Module |
 |--------|--------|--------|
-| `ndi.fun.docTable.docCellArray2Table` | `ndi.fun.doc_table.doc_cell_array_to_table()` | `ndi.fun.doc_table` |
-| `ndi.fun.docTable.element` | `ndi.fun.doc_table.element_table()` | `ndi.fun.doc_table` |
-| `ndi.fun.docTable.subject` | `ndi.fun.doc_table.subject_summary()` | `ndi.fun.doc_table` |
-| `ndi.fun.docTable.probe` | `ndi.fun.doc_table.probe_table()` | `ndi.fun.doc_table` |
-| `ndi.fun.docTable.epoch` | `ndi.fun.doc_table.epoch_table()` | `ndi.fun.doc_table` |
-| `ndi.fun.docTable.openminds` | `ndi.fun.doc_table.openminds_table()` | `ndi.fun.doc_table` |
-| `ndi.fun.docTable.treatment` | `ndi.fun.doc_table.treatment_table()` | `ndi.fun.doc_table` |
+| `ndi.fun.docTable.docCellArray2Table` | `ndi.fun.doc_table.docCellArray2Table()` | `ndi.fun.doc_table` |
+| `ndi.fun.doc.ontologyTableRowDoc2Table` | `ndi.fun.doc_table.ontologyTableRowDoc2Table()` | `ndi.fun.doc_table` |
+| `ndi.fun.docTable.element` | `ndi.fun.doc_table.element()` | `ndi.fun.doc_table` |
+| `ndi.fun.docTable.subject` | `ndi.fun.doc_table.subject()` | `ndi.fun.doc_table` |
+| `ndi.fun.docTable.probe` | `ndi.fun.doc_table.probe()` | `ndi.fun.doc_table` |
+| `ndi.fun.docTable.epoch` | `ndi.fun.doc_table.epoch()` | `ndi.fun.doc_table` |
+| `ndi.fun.docTable.openminds` | `ndi.fun.doc_table.openminds()` | `ndi.fun.doc_table` |
+| `ndi.fun.docTable.treatment` | `ndi.fun.doc_table.treatment()` | `ndi.fun.doc_table` |
 
 ### Epoch Utilities
 
@@ -169,25 +170,25 @@ Complete reference mapping every MATLAB NDI function/class to its Python equival
 |--------|--------|--------|
 | `ndi.fun.epoch.epochid2element` | `ndi.fun.epoch.epochid2element()` | `ndi.fun.epoch` |
 | `ndi.fun.epoch.filename2epochid` | `ndi.fun.epoch.filename2epochid()` | `ndi.fun.epoch` |
-| `ndi.fun.doc.t0_t1cell2array` | `ndi.fun.epoch.t0_t1_to_array()` | `ndi.fun.epoch` |
+| `ndi.fun.doc.t0_t1cell2array` | `ndi.fun.epoch.t0_t1cell2array()` | `ndi.fun.epoch` |
 
 ### File Utilities
 
 | MATLAB | Python | Module |
 |--------|--------|--------|
-| `ndi.fun.file.MD5` | `ndi.fun.file.md5()` | `ndi.fun.file` |
-| `ndi.fun.file.dateCreated` | `ndi.fun.file.date_created()` | `ndi.fun.file` |
-| `ndi.fun.file.dateUpdated` | `ndi.fun.file.date_updated()` | `ndi.fun.file` |
+| `ndi.fun.file.MD5` | `ndi.fun.file.MD5()` | `ndi.fun.file` |
+| `ndi.fun.file.dateCreated` | `ndi.fun.file.dateCreated()` | `ndi.fun.file` |
+| `ndi.fun.file.dateUpdated` | `ndi.fun.file.dateUpdated()` | `ndi.fun.file` |
 
 ### Data Utilities
 
 | MATLAB | Python | Module |
 |--------|--------|--------|
-| `ndi.fun.data.readngrid` | `ndi.fun.data.read_ngrid()` | `ndi.fun.data` |
-| `ndi.fun.data.writengrid` | `ndi.fun.data.write_ngrid()` | `ndi.fun.data` |
-| `ndi.fun.data.mat2ngrid` | `ndi.fun.data.mat_to_ngrid()` | `ndi.fun.data` |
-| `ndi.fun.data.evaluate_fitcurve` | `ndi.fun.data.evaluate_fitcurve()` | `ndi.fun.data` |
-| `ndi.fun.data.readImageStack` | `ndi.fun.data.read_image_stack()` | `ndi.fun.data` |
+| `ndi.fun.data.readngrid` | `ndi.fun.data.readngrid()` | `ndi.fun.data` |
+| `ndi.fun.data.writengrid` | `ndi.fun.data.writengrid()` | `ndi.fun.data` |
+| `ndi.fun.data.mat2ngrid` | `ndi.fun.data.mat2ngrid()` | `ndi.fun.data` |
+| — | `ndi.fun.data.evaluate_fitcurve()` | `ndi.fun.data` |
+| `ndi.fun.data.readImageStack` | `ndi.fun.data.readImageStack()` | `ndi.fun.data` |
 
 ### Stimulus Utilities
 
@@ -195,35 +196,51 @@ Complete reference mapping every MATLAB NDI function/class to its Python equival
 |--------|--------|--------|
 | `ndi.fun.stimulus.tuning_curve_to_response_type` | `ndi.fun.stimulus.tuning_curve_to_response_type()` | `ndi.fun.stimulus` |
 | `ndi.fun.stimulus.f0_f1_responses` | `ndi.fun.stimulus.f0_f1_responses()` | `ndi.fun.stimulus` |
-| `ndi.fun.stimulus.findMixtureName` | `ndi.fun.stimulus.find_mixture_name()` | `ndi.fun.stimulus` |
-| `ndi.fun.stimulustemporalfrequency` | `ndi.fun.stimulus.stimulus_temporal_frequency()` | `ndi.fun.stimulus` |
+| `ndi.fun.stimulus.findMixtureName` | `ndi.fun.stimulus.findMixtureName()` | `ndi.fun.stimulus` |
+| `ndi.fun.stimulustemporalfrequency` | `ndi.fun.stimulus.stimulustemporalfrequency()` | `ndi.fun.stimulus` |
 | `ndi.fun.calc.stimulus_tuningcurve_log` | `ndi.fun.stimulus.stimulus_tuningcurve_log()` | `ndi.fun.stimulus` |
 
 ### Table Utilities
 
 | MATLAB | Python | Module |
 |--------|--------|--------|
-| `ndi.fun.table.identifyMatchingRows` | `ndi.fun.table.identify_matching_rows()` | `ndi.fun.table` |
-| `ndi.fun.table.identifyValidRows` | `ndi.fun.table.identify_valid_rows()` | `ndi.fun.table` |
-| `ndi.fun.table.join` | `ndi.fun.table.join_tables()` | `ndi.fun.table` |
-| `ndi.fun.table.moveColumnsLeft` | `ndi.fun.table.move_columns_left()` | `ndi.fun.table` |
+| `ndi.fun.table.identifyMatchingRows` | `ndi.fun.table.identifyMatchingRows()` | `ndi.fun.table` |
+| `ndi.fun.table.identifyValidRows` | `ndi.fun.table.identifyValidRows()` | `ndi.fun.table` |
+| `ndi.fun.table.join` | `ndi.fun.table.join()` | `ndi.fun.table` |
+| `ndi.fun.table.moveColumnsLeft` | `ndi.fun.table.moveColumnsLeft()` | `ndi.fun.table` |
 | `ndi.fun.table.vstack` | `ndi.fun.table.vstack()` | `ndi.fun.table` |
+
+### Probe Utilities
+
+| MATLAB | Python | Module |
+|--------|--------|--------|
+| `ndi.fun.probe.export_binary` | `ndi.fun.probe.export_binary()` | `ndi.fun.probe.export_binary` |
+| `ndi.fun.probe.export_all_binary` | `ndi.fun.probe.export_all_binary()` | `ndi.fun.probe.export_binary` |
+| `ndi.fun.probe.location` | `ndi.fun.probe.location()` | `ndi.fun.probe.location` |
+
+### Plot Utilities
+
+| MATLAB | Python | Module |
+|--------|--------|--------|
+| `ndi.fun.plot.bar3` | `ndi.fun.plot.bar3()` | `ndi.fun.plot` |
+| `ndi.fun.plot.multichan` | `ndi.fun.plot.multichan()` | `ndi.fun.plot` |
+| `ndi.fun.plot.stimulusTimeseries` | `ndi.fun.plot.stimulusTimeseries()` | `ndi.fun.plot` |
 
 ### General Utilities
 
 | MATLAB | Python | Module |
 |--------|--------|--------|
-| `ndi.fun.channelname2prefixnumber` | `ndi.fun.utils.channel_name_to_prefix_number()` | `ndi.fun.utils` |
-| `ndi.fun.name2variableName` | `ndi.fun.name_utils.name_to_variable_name()` | `ndi.fun.name_utils` |
-| `ndi.fun.pseudorandomint` | `ndi.fun.utils.pseudorandom_int()` | `ndi.fun.utils` |
-| `ndi.fun.timestamp` | `ndi.fun.utils.ndi_timestamp()` | `ndi.fun.utils` |
+| `ndi.fun.channelname2prefixnumber` | `ndi.fun.channelname2prefixnumber()` | `ndi.fun.utils` |
+| `ndi.fun.name2variableName` | `ndi.fun.name2variableName()` | `ndi.fun.utils` / `ndi.fun.name_utils` |
+| `ndi.fun.pseudorandomint` | `ndi.fun.pseudorandomint()` | `ndi.fun.utils` |
+| `ndi.fun.timestamp` | `ndi.fun.timestamp()` | `ndi.fun.utils` |
 
 ### Session & Dataset Diff
 
 | MATLAB | Python | Module |
 |--------|--------|--------|
-| `ndi.fun.session.diff` | `ndi.fun.session.session_diff()` | `ndi.fun.session` |
-| `ndi.fun.dataset.diff` | `ndi.fun.dataset.dataset_diff()` | `ndi.fun.dataset` |
+| `ndi.fun.session.diff` | `ndi.fun.session.diff()` | `ndi.fun.session` |
+| `ndi.fun.dataset.diff` | `ndi.fun.dataset.diff()` | `ndi.fun.dataset` |
 
 ## Cloud API
 
@@ -477,3 +494,9 @@ The following MATLAB components were intentionally not ported (GUI, MATLAB-speci
 | `readGenBankNames.m` / `readGenBankNodes.m` | Batch taxonomy scripts |
 | `createGenBankControlledVocabulary.m` | Batch vocabulary builder |
 | `find_calc_directories.m` | MATLAB path/toolbox discovery |
+| `ndi.fun.assertAddonOnPath` | MATLAB addon/path checker |
+| `ndi.fun.check_Matlab_toolboxes` | MATLAB toolbox checker |
+| `ndi.fun.console` / `debuglog` / `errlog` / `syslog` | MATLAB console/logging |
+| `ndi.fun.convertoldnsd2ndi` | Legacy NSD→NDI migration |
+| `ndi.fun.run_Linux_checks` | MATLAB Linux environment checks |
+| `ndi.fun.plot_extracellular_spikeshapes` | MATLAB GUI plotting |

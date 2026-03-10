@@ -14,20 +14,20 @@ MATLAB source files (SKIPPED - no Python equivalent):
 
 Tests for:
 - ndi.fun.utils.channelname2prefixnumber()
-- ndi.fun.utils.name2variable_name()
+- ndi.fun.utils.name2variableName()
 - ndi.fun.utils.pseudorandomint()
 - ndi.fun.utils.timestamp()
-- ndi.fun.doc.all_types()
+- ndi.fun.doc.allTypes()
 """
 
 import re
 
 import pytest
 
-from ndi.fun.doc import all_types
+from ndi.fun.doc import allTypes
 from ndi.fun.utils import (
     channelname2prefixnumber,
-    name2variable_name,
+    name2variableName,
     pseudorandomint,
     timestamp,
 )
@@ -132,7 +132,7 @@ class TestNameUtils:
 
         MATLAB equivalent: name2variableName('my name')
         """
-        result = name2variable_name("my name")
+        result = name2variableName("my name")
         assert result == "myName"
 
     def test_name2variable_with_special_chars(self):
@@ -140,7 +140,7 @@ class TestNameUtils:
 
         MATLAB equivalent: name2variableName('hello-world')
         """
-        result = name2variable_name("hello-world")
+        result = name2variableName("hello-world")
         assert result == "helloWorld"
 
     def test_name2variable_with_dots(self):
@@ -148,7 +148,7 @@ class TestNameUtils:
 
         MATLAB equivalent: name2variableName('my.variable.name')
         """
-        result = name2variable_name("my.variable.name")
+        result = name2variableName("my.variable.name")
         assert result == "myVariableName"
 
     def test_name2variable_starts_with_digit(self):
@@ -156,7 +156,7 @@ class TestNameUtils:
 
         MATLAB equivalent: name2variableName('1abc')
         """
-        result = name2variable_name("1abc")
+        result = name2variableName("1abc")
         assert result.startswith("x")
 
     def test_name2variable_empty(self):
@@ -164,7 +164,7 @@ class TestNameUtils:
 
         MATLAB equivalent: name2variableName('')
         """
-        result = name2variable_name("")
+        result = name2variableName("")
         assert result == ""
 
     def test_name2variable_underscore_preserved(self):
@@ -172,7 +172,7 @@ class TestNameUtils:
 
         MATLAB equivalent: name2variableName('my_var')
         """
-        result = name2variable_name("my_var")
+        result = name2variableName("my_var")
         # Underscores are kept in the cleaned string, split happens on spaces
         # So 'my_var' -> cleaned 'my_var' -> split ['my_var'] -> 'my_var'
         assert isinstance(result, str)
@@ -263,51 +263,51 @@ class TestPseudoRandomInt:
 class TestAllTypes:
     """Port of MATLAB ndi.fun.doc.allTypes tests.
 
-    Verifies that all_types() returns a list of known document types.
+    Verifies that allTypes() returns a list of known document types.
     """
 
-    def test_all_types_returns_list(self):
-        """all_types() returns a sorted list of strings.
+    def test_allTypes_returns_list(self):
+        """allTypes() returns a sorted list of strings.
 
         MATLAB equivalent: ndi.fun.doc.allTypes()
         """
-        types = all_types()
+        types = allTypes()
         assert isinstance(types, list)
         assert len(types) > 0
 
-    def test_all_types_contains_base(self):
-        """all_types() includes 'base' document type.
+    def test_allTypes_contains_base(self):
+        """allTypes() includes 'base' document type.
 
         MATLAB equivalent: ndi.fun.doc.allTypes() (contains 'base')
         """
-        types = all_types()
+        types = allTypes()
         assert "base" in types, "'base' should be a known document type"
 
-    def test_all_types_are_strings(self):
+    def test_allTypes_are_strings(self):
         """All returned types are non-empty strings.
 
         MATLAB equivalent: ndi.fun.doc.allTypes() (type check)
         """
-        types = all_types()
+        types = allTypes()
         for t in types:
             assert isinstance(t, str)
             assert len(t) > 0
 
-    def test_all_types_sorted(self):
-        """all_types() returns a sorted list.
+    def test_allTypes_sorted(self):
+        """allTypes() returns a sorted list.
 
         MATLAB equivalent: ndi.fun.doc.allTypes() (sorted)
         """
-        types = all_types()
+        types = allTypes()
         assert types == sorted(types), "Types should be sorted alphabetically"
 
-    def test_all_types_contains_known_types(self):
-        """all_types() includes several known document types.
+    def test_allTypes_contains_known_types(self):
+        """allTypes() includes several known document types.
 
         MATLAB equivalent: ndi.fun.doc.allTypes() (spot check)
         """
-        types = all_types()
+        types = allTypes()
         # These are expected schema files in database_documents/
         expected = ["base", "demoNDI"]
         for doc_type in expected:
-            assert doc_type in types, f"Expected '{doc_type}' to be in all_types()"
+            assert doc_type in types, f"Expected '{doc_type}' to be in allTypes()"
