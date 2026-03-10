@@ -2,10 +2,10 @@
 Tests for Phase 2 low-priority gap implementations.
 
 Covers:
-- Batch 1: stimulus_tuningcurve_log, t0_t1_to_array, ontology_table_row_vars
+- Batch 1: stimulus_tuningcurve_log, t0_t1cell2array, ontologyTableRowVars
 - Batch 2: database_to_json, copy_doc_file_to_temp, extract_docs_files
 - Batch 3: get_probe_type_map, init_probe_type_map
-- Batch 4: upload_single_file
+- Batch 4: uploadSingleFile
 - Batch 5: openminds_convert (4 functions)
 """
 
@@ -96,42 +96,42 @@ class TestStimulusTuningcurveLog:
 
 
 class TestT0T1ToArray:
-    """Tests for ndi.fun.epoch.t0_t1_to_array."""
+    """Tests for ndi.fun.epoch.t0_t1cell2array."""
 
     def test_basic_conversion(self):
-        from ndi.fun.epoch import t0_t1_to_array
+        from ndi.fun.epoch import t0_t1cell2array
 
-        result = t0_t1_to_array([[0.0, 1.5], [2.0, 3.5]])
+        result = t0_t1cell2array([[0.0, 1.5], [2.0, 3.5]])
         expected = np.array([[0.0, 1.5], [2.0, 3.5]])
         np.testing.assert_array_equal(result, expected)
 
     def test_empty_input(self):
-        from ndi.fun.epoch import t0_t1_to_array
+        from ndi.fun.epoch import t0_t1cell2array
 
-        result = t0_t1_to_array([])
+        result = t0_t1cell2array([])
         assert result.shape == (0, 2)
 
     def test_single_pair(self):
-        from ndi.fun.epoch import t0_t1_to_array
+        from ndi.fun.epoch import t0_t1cell2array
 
-        result = t0_t1_to_array([[10.0, 20.0]])
+        result = t0_t1cell2array([[10.0, 20.0]])
         assert result.shape == (1, 2)
         assert result[0, 0] == 10.0
         assert result[0, 1] == 20.0
 
     def test_tuples(self):
-        from ndi.fun.epoch import t0_t1_to_array
+        from ndi.fun.epoch import t0_t1cell2array
 
-        result = t0_t1_to_array([(0.0, 1.0), (2.0, 3.0)])
+        result = t0_t1cell2array([(0.0, 1.0), (2.0, 3.0)])
         assert result.shape == (2, 2)
         assert result[1, 0] == 2.0
 
 
 class TestOntologyTableRowVars:
-    """Tests for ndi.fun.doc.ontology_table_row_vars."""
+    """Tests for ndi.fun.doc.ontologyTableRowVars."""
 
     def test_extracts_unique_vars(self):
-        from ndi.fun.doc import ontology_table_row_vars
+        from ndi.fun.doc import ontologyTableRowVars
 
         doc1 = MagicMock()
         doc1.document_properties = {
@@ -154,7 +154,7 @@ class TestOntologyTableRowVars:
         session = MagicMock()
         session.database_search.return_value = [doc1, doc2]
 
-        names, var_names, ont_nodes = ontology_table_row_vars(session)
+        names, var_names, ont_nodes = ontologyTableRowVars(session)
 
         assert "alpha" in names
         assert "beta" in names
@@ -162,12 +162,12 @@ class TestOntologyTableRowVars:
         assert len(names) == 3
 
     def test_empty_session(self):
-        from ndi.fun.doc import ontology_table_row_vars
+        from ndi.fun.doc import ontologyTableRowVars
 
         session = MagicMock()
         session.database_search.return_value = []
 
-        names, var_names, ont_nodes = ontology_table_row_vars(session)
+        names, var_names, ont_nodes = ontologyTableRowVars(session)
         assert names == []
         assert var_names == []
         assert ont_nodes == []
@@ -344,20 +344,20 @@ class TestProbeTypeMap:
 
 
 class TestUploadSingleFile:
-    """Tests for ndi.cloud.upload.upload_single_file."""
+    """Tests for ndi.cloud.upload.uploadSingleFile."""
 
     def test_direct_upload_success(self):
-        from ndi.cloud.upload import upload_single_file
+        from ndi.cloud.upload import uploadSingleFile
 
         client = MagicMock()
 
         mock_files = MagicMock()
-        mock_files.get_upload_url.return_value = "https://s3.example.com/upload"
-        mock_files.put_file.return_value = None
+        mock_files.getFileUploadURL.return_value = "https://s3.example.com/upload"
+        mock_files.putFiles.return_value = None
 
         with patch.dict("sys.modules", {"ndi.cloud.api.files": mock_files}):
             with patch("ndi.cloud.api.files", mock_files):
-                success, err = upload_single_file(
+                success, err = uploadSingleFile(
                     "ds-123", "file-uid-1", "/tmp/test.dat", client=client
                 )
 
@@ -365,16 +365,16 @@ class TestUploadSingleFile:
         assert err == ""
 
     def test_upload_failure(self):
-        from ndi.cloud.upload import upload_single_file
+        from ndi.cloud.upload import uploadSingleFile
 
         client = MagicMock()
 
         mock_files = MagicMock()
-        mock_files.get_upload_url.side_effect = Exception("Network error")
+        mock_files.getFileUploadURL.side_effect = Exception("Network error")
 
         with patch.dict("sys.modules", {"ndi.cloud.api.files": mock_files}):
             with patch("ndi.cloud.api.files", mock_files):
-                success, err = upload_single_file(
+                success, err = uploadSingleFile(
                     "ds-123", "file-uid-1", "/tmp/test.dat", client=client
                 )
 

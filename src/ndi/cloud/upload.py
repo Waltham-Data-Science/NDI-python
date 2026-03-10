@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from .client import CloudClient
 
 
-def upload_document_collection(
+def uploadDocumentCollection(
     dataset_id: str,
     documents: list[dict[str, Any]],
     only_missing: bool = True,
@@ -54,7 +54,7 @@ def upload_document_collection(
 
     if only_missing:
         try:
-            existing = docs_api.list_all_documents(dataset_id, client=client)
+            existing = docs_api.listDatasetDocumentsAll(dataset_id, client=client)
             existing_ids = {d.get("ndiId", d.get("id", "")) for d in existing.data}
             filtered = [d for d in documents if d.get("ndiId", d.get("id", "")) not in existing_ids]
             report["skipped"] = len(documents) - len(filtered)
@@ -73,7 +73,7 @@ def upload_document_collection(
     for chunk in chunks:
         for doc in chunk:
             try:
-                docs_api.add_document(dataset_id, doc, client=client)
+                docs_api.addDocument(dataset_id, doc, client=client)
                 report["uploaded"] += 1
                 doc_id = doc.get("ndiId", doc.get("id", ""))
                 report["manifest"].append(doc_id)
@@ -86,7 +86,7 @@ def upload_document_collection(
     return report
 
 
-def zip_documents_for_upload(
+def zipForUpload(
     documents: list[dict[str, Any]],
     dataset_id: str,
     target_dir: Path | None = None,
@@ -120,7 +120,7 @@ def zip_documents_for_upload(
     return zip_path, manifest
 
 
-def upload_files_for_documents(
+def uploadFilesForDatasetDocuments(
     org_id: str,
     dataset_id: str,
     documents: list[dict[str, Any]],
@@ -155,8 +155,8 @@ def upload_files_for_documents(
         if not file_uid or not file_path:
             continue
         try:
-            url = files_api.get_upload_url(org_id, dataset_id, file_uid, client=client)
-            files_api.put_file(url, file_path)
+            url = files_api.getFileUploadURL(org_id, dataset_id, file_uid, client=client)
+            files_api.putFiles(url, file_path)
             report["uploaded"] += 1
         except Exception as exc:
             report["failed"] += 1
@@ -166,7 +166,7 @@ def upload_files_for_documents(
 
 
 @_auto_client
-def upload_single_file(
+def uploadSingleFile(
     dataset_id: str,
     file_uid: str,
     file_path: str,
@@ -201,23 +201,23 @@ def upload_single_file(
             try:
                 with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
                     zf.write(file_path, os.path.basename(file_path))
-                url = files_api.get_file_collection_upload_url(
+                url = files_api.getFileCollectionUploadURL(
                     client.config.org_id,
                     dataset_id,
                     client=client,
                 )
-                files_api.put_file(url, str(zip_path))
+                files_api.putFiles(url, str(zip_path))
             finally:
                 if zip_path.exists():
                     zip_path.unlink()
         else:
-            url = files_api.get_upload_url(
+            url = files_api.getFileUploadURL(
                 client.config.org_id,
                 dataset_id,
                 file_uid,
                 client=client,
             )
-            files_api.put_file(url, file_path)
+            files_api.putFiles(url, file_path)
 
         return True, ""
     except Exception as exc:

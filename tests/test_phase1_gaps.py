@@ -328,7 +328,7 @@ class TestNdiDocument2NdiObject:
 class TestDocTable:
 
     def test_doc_cell_array_to_table(self):
-        from ndi.fun.doc_table import doc_cell_array_to_table
+        from ndi.fun.doc_table import docCellArray2Table
 
         doc1 = MagicMock()
         doc1.document_properties = {
@@ -341,15 +341,15 @@ class TestDocTable:
             "element": {"name": "e2"},
         }
 
-        df = doc_cell_array_to_table([doc1, doc2])
+        df = docCellArray2Table([doc1, doc2])
         assert len(df) == 2
         assert "base.id" in df.columns
         assert df["element.name"].tolist() == ["e1", "e2"]
 
     def test_empty_list(self):
-        from ndi.fun.doc_table import doc_cell_array_to_table
+        from ndi.fun.doc_table import docCellArray2Table
 
-        df = doc_cell_array_to_table([])
+        df = docCellArray2Table([])
         assert len(df) == 0
 
 
@@ -363,34 +363,34 @@ class TestTableUtils:
     def test_identify_matching_rows_identical(self):
         import pandas as pd
 
-        from ndi.fun.table import identify_matching_rows
+        from ndi.fun.table import identifyMatchingRows
 
         df = pd.DataFrame({"name": ["a", "b", "c", "a"]})
-        mask = identify_matching_rows(df, "name", "a")
+        mask = identifyMatchingRows(df, "name", "a")
         assert mask.tolist() == [True, False, False, True]
 
     def test_identify_matching_rows_contains(self):
         import pandas as pd
 
-        from ndi.fun.table import identify_matching_rows
+        from ndi.fun.table import identifyMatchingRows
 
         df = pd.DataFrame({"name": ["alpha", "beta", "gamma"]})
-        mask = identify_matching_rows(df, "name", "al", "contains")
+        mask = identifyMatchingRows(df, "name", "al", "contains")
         assert mask.tolist() == [True, False, False]
 
     def test_identify_matching_rows_numeric(self):
         import pandas as pd
 
-        from ndi.fun.table import identify_matching_rows
+        from ndi.fun.table import identifyMatchingRows
 
         df = pd.DataFrame({"val": [1, 2, 3, 4]})
-        mask = identify_matching_rows(df, "val", 2, "gt")
+        mask = identifyMatchingRows(df, "val", 2, "gt")
         assert mask.tolist() == [False, False, True, True]
 
     def test_identify_valid_rows(self):
         import pandas as pd
 
-        from ndi.fun.table import identify_valid_rows
+        from ndi.fun.table import identifyValidRows
 
         df = pd.DataFrame(
             {
@@ -398,13 +398,13 @@ class TestTableUtils:
                 "b": [4, 5, float("nan")],
             }
         )
-        mask = identify_valid_rows(df)
+        mask = identifyValidRows(df)
         assert mask.tolist() == [True, False, False]
 
     def test_identify_valid_rows_specific_cols(self):
         import pandas as pd
 
-        from ndi.fun.table import identify_valid_rows
+        from ndi.fun.table import identifyValidRows
 
         df = pd.DataFrame(
             {
@@ -412,7 +412,7 @@ class TestTableUtils:
                 "b": [4, 5, float("nan")],
             }
         )
-        mask = identify_valid_rows(df, columns=["a"])
+        mask = identifyValidRows(df, columns=["a"])
         assert mask.tolist() == [True, False, True]
 
     def test_vstack(self):
@@ -432,10 +432,10 @@ class TestTableUtils:
     def test_move_columns_left(self):
         import pandas as pd
 
-        from ndi.fun.table import move_columns_left
+        from ndi.fun.table import moveColumnsLeft
 
         df = pd.DataFrame({"a": [1], "b": [2], "c": [3]})
-        result = move_columns_left(df, ["c", "b"])
+        result = moveColumnsLeft(df, ["c", "b"])
         assert list(result.columns) == ["c", "b", "a"]
 
     def test_join_tables(self):
@@ -621,10 +621,10 @@ class TestPresentationTime:
 class TestDocHelpers:
 
     def test_make_species_strain_sex(self):
-        """make_species_strain_sex creates real openMINDS NDI Documents."""
+        """makeSpeciesStrainSex creates real openMINDS NDI Documents."""
         pytest.importorskip("openminds", reason="openminds package not installed")
         from ndi.document import Document
-        from ndi.fun.doc import make_species_strain_sex
+        from ndi.fun.doc import makeSpeciesStrainSex
 
         session = MagicMock()
         session.id.return_value = "sess_1"
@@ -632,7 +632,7 @@ class TestDocHelpers:
         subj_doc = MagicMock()
         subj_doc.document_properties = {"base": {"id": "subj_123"}}
 
-        docs = make_species_strain_sex(
+        docs = makeSpeciesStrainSex(
             session,
             subj_doc,
             species="Mus musculus",
@@ -650,26 +650,26 @@ class TestDocHelpers:
             assert dep_names.get("subject_id") == "subj_123"
 
     def test_make_species_only(self):
-        """make_species_strain_sex with species only creates 1 document."""
+        """makeSpeciesStrainSex with species only creates 1 document."""
         pytest.importorskip("openminds", reason="openminds package not installed")
         from ndi.document import Document
-        from ndi.fun.doc import make_species_strain_sex
+        from ndi.fun.doc import makeSpeciesStrainSex
 
         session = MagicMock()
         session.id.return_value = "sess_1"
         subj_doc = MagicMock()
         subj_doc.document_properties = {"base": {"id": "subj_123"}}
 
-        docs = make_species_strain_sex(session, subj_doc, species="Rattus")
+        docs = makeSpeciesStrainSex(session, subj_doc, species="Rattus")
         assert len(docs) == 1
         assert isinstance(docs[0], Document)
         om = docs[0].document_properties.get("openminds", {})
         assert "Species" in om.get("openminds_type", "")
 
     def test_probe_locations_for_probes(self):
-        """probe_locations_for_probes creates real probe_location Documents."""
+        """probeLocations4probes creates real probe_location Documents."""
         from ndi.document import Document
-        from ndi.fun.doc import probe_locations_for_probes
+        from ndi.fun.doc import probeLocations4probes
 
         session = MagicMock()
         session.id.return_value = "sess_1"
@@ -684,7 +684,7 @@ class TestDocHelpers:
             {"name": "LGN"},
         ]
 
-        docs = probe_locations_for_probes(
+        docs = probeLocations4probes(
             session,
             [probe1, probe2],
             locations,

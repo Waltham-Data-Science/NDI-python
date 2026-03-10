@@ -109,10 +109,10 @@ def ontology_table_row_docs(jess_haley_dataset):
 
 @pytest.fixture(scope="session")
 def otr_tables(ontology_table_row_docs):
-    """Run ontology_table_row_doc_to_table and cache result."""
-    from ndi.fun.doc_table import ontology_table_row_doc_to_table
+    """Run ontologyTableRowDoc2Table and cache result."""
+    from ndi.fun.doc_table import ontologyTableRowDoc2Table
 
-    return ontology_table_row_doc_to_table(ontology_table_row_docs)
+    return ontologyTableRowDoc2Table(ontology_table_row_docs)
 
 
 # ===========================================================================
@@ -132,9 +132,9 @@ class TestDatasetLoading:
 
     def test_document_type_counts(self, jess_haley_dataset):
         """All 15 document types have expected counts (session may be +1)."""
-        from ndi.fun.doc import get_doc_types
+        from ndi.fun.doc import getDocTypes
 
-        doc_types, doc_counts = get_doc_types(jess_haley_dataset)
+        doc_types, doc_counts = getDocTypes(jess_haley_dataset)
         actual = dict(zip(doc_types, doc_counts))
         for dtype, expected in EXPECTED_TYPE_COUNTS.items():
             actual_count = actual.get(dtype, 0)
@@ -154,11 +154,11 @@ class TestDatasetLoading:
                 missing += 1
         assert missing == 0, f"{missing} documents missing base.id"
 
-    def test_get_doc_types(self, jess_haley_dataset):
-        """get_doc_types returns sorted types and matching counts."""
-        from ndi.fun.doc import get_doc_types
+    def test_getDocTypes(self, jess_haley_dataset):
+        """getDocTypes returns sorted types and matching counts."""
+        from ndi.fun.doc import getDocTypes
 
-        doc_types, doc_counts = get_doc_types(jess_haley_dataset)
+        doc_types, doc_counts = getDocTypes(jess_haley_dataset)
         assert doc_types == sorted(doc_types)
         assert len(doc_types) == 15
         assert sum(doc_counts) >= TOTAL_JSON_DOCS
@@ -242,9 +242,9 @@ class TestOntologyTableRowDoc2Table:
             assert len(dt) == len(ids)
 
     def test_stack_all_mode(self, ontology_table_row_docs):
-        from ndi.fun.doc_table import ontology_table_row_doc_to_table
+        from ndi.fun.doc_table import ontologyTableRowDoc2Table
 
-        data_tables, doc_ids = ontology_table_row_doc_to_table(
+        data_tables, doc_ids = ontologyTableRowDoc2Table(
             ontology_table_row_docs, stack_all=True
         )
         assert len(data_tables) == 1
@@ -285,23 +285,23 @@ class TestOntologyTableRowVars:
     """MATLAB: ndi.fun.doc.ontologyTableRowVars(dataset)."""
 
     def test_returns_nonempty_tuples(self, jess_haley_dataset):
-        from ndi.fun.doc import ontology_table_row_vars
+        from ndi.fun.doc import ontologyTableRowVars
 
-        names, var_names, ont_nodes = ontology_table_row_vars(jess_haley_dataset)
+        names, var_names, ont_nodes = ontologyTableRowVars(jess_haley_dataset)
         assert len(names) > 0
         assert len(var_names) > 0
         assert len(ont_nodes) > 0
 
     def test_names_and_variable_names_same_length(self, jess_haley_dataset):
-        from ndi.fun.doc import ontology_table_row_vars
+        from ndi.fun.doc import ontologyTableRowVars
 
-        names, var_names, ont_nodes = ontology_table_row_vars(jess_haley_dataset)
+        names, var_names, ont_nodes = ontologyTableRowVars(jess_haley_dataset)
         assert len(names) == len(var_names) == len(ont_nodes)
 
     def test_known_variables_present(self, jess_haley_dataset):
-        from ndi.fun.doc import ontology_table_row_vars
+        from ndi.fun.doc import ontologyTableRowVars
 
-        names, _, _ = ontology_table_row_vars(jess_haley_dataset)
+        names, _, _ = ontologyTableRowVars(jess_haley_dataset)
         expected = "C. elegans behavioral assay: deceleration upon encounter"
         assert expected in names, f"'{expected}' not in ontologyTableRowVars"
 
@@ -321,14 +321,14 @@ class TestSubjectQueries:
         assert len(docs) == 1656
 
     def test_subject_table(self, jess_haley_dataset):
-        from ndi.fun.doc_table import subject_table
+        from ndi.fun.doc_table import subjectBasic as subject_table
 
         df = subject_table(jess_haley_dataset)
         assert len(df) == 1656
         assert "local_identifier" in df.columns
 
     def test_subject_local_identifier_nonempty(self, jess_haley_dataset):
-        from ndi.fun.doc_table import subject_table
+        from ndi.fun.doc_table import subjectBasic as subject_table
 
         df = subject_table(jess_haley_dataset)
         empty_ids = df[df["local_identifier"] == ""]
@@ -336,7 +336,7 @@ class TestSubjectQueries:
 
     def test_subject_strains(self, jess_haley_dataset):
         """Subjects include N2 (wildtype) and PR811 (transgenic) strains."""
-        from ndi.fun.doc_table import subject_table
+        from ndi.fun.doc_table import subjectBasic as subject_table
 
         df = subject_table(jess_haley_dataset)
         ids = df["local_identifier"].tolist()
@@ -349,11 +349,11 @@ class TestSubjectQueries:
 
     def test_subject_filter_pr811(self, jess_haley_dataset):
         """Filter for PR811 strain subjects matches MATLAB count."""
-        from ndi.fun.doc_table import subject_table
-        from ndi.fun.table import identify_matching_rows
+        from ndi.fun.doc_table import subjectBasic as subject_table
+        from ndi.fun.table import identifyMatchingRows
 
         df = subject_table(jess_haley_dataset)
-        mask = identify_matching_rows(df, "local_identifier", "PR811", string_match="contains")
+        mask = identifyMatchingRows(df, "local_identifier", "PR811", string_match="contains")
         filtered = df[mask]
         # MATLAB tutorial shows 76 PR811 subjects
         assert len(filtered) == 76, f"Expected 76 PR811 subjects, got {len(filtered)}"
@@ -387,24 +387,24 @@ class TestTableJoinAndFilter:
                 break
         assert joined, "No pair of OTR tables could be joined on common columns"
 
-    def test_identify_matching_rows_string_contains(self):
+    def test_identifyMatchingRows_string_contains(self):
         """String 'contains' matching works on DataFrame."""
         import pandas as pd
 
-        from ndi.fun.table import identify_matching_rows
+        from ndi.fun.table import identifyMatchingRows
 
         df = pd.DataFrame({"name": ["apple", "banana", "cherry", "APPLE pie"]})
-        mask = identify_matching_rows(df, "name", "apple", string_match="contains")
+        mask = identifyMatchingRows(df, "name", "apple", string_match="contains")
         assert mask.sum() == 1  # case-sensitive: only 'apple'
 
-    def test_identify_matching_rows_numeric(self):
+    def test_identifyMatchingRows_numeric(self):
         """Numeric comparison matching."""
         import pandas as pd
 
-        from ndi.fun.table import identify_matching_rows
+        from ndi.fun.table import identifyMatchingRows
 
         df = pd.DataFrame({"value": [10, 20, 30, 40]})
-        mask = identify_matching_rows(df, "value", 25, numeric_match="gt")
+        mask = identifyMatchingRows(df, "value", 25, numeric_match="gt")
         assert mask.sum() == 2  # 30 and 40
 
 
@@ -658,10 +658,10 @@ class TestDatasetVisualization:
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
-        from ndi.fun.doc import get_doc_types
+        from ndi.fun.doc import getDocTypes
 
         out = self._ensure_output_dir()
-        doc_types, doc_counts = get_doc_types(jess_haley_dataset)
+        doc_types, doc_counts = getDocTypes(jess_haley_dataset)
 
         fig, ax = plt.subplots(figsize=(12, 6))
         ax.barh(doc_types, doc_counts, color="steelblue")
@@ -684,7 +684,7 @@ class TestDatasetVisualization:
 
         import matplotlib.pyplot as plt
 
-        from ndi.fun.doc_table import subject_table
+        from ndi.fun.doc_table import subjectBasic as subject_table
 
         out = self._ensure_output_dir()
         df = subject_table(jess_haley_dataset)
@@ -978,15 +978,15 @@ class TestDatasetVisualization:
         import matplotlib.pyplot as plt
         import numpy as np
 
-        from ndi.fun.doc import get_doc_types
-        from ndi.fun.doc_table import subject_table
+        from ndi.fun.doc import getDocTypes
+        from ndi.fun.doc_table import subjectBasic as subject_table
 
         out = self._ensure_output_dir()
         fig, axes = plt.subplots(2, 3, figsize=(20, 12))
 
         # (1) Document type distribution
         ax = axes[0, 0]
-        doc_types, doc_counts = get_doc_types(jess_haley_dataset)
+        doc_types, doc_counts = getDocTypes(jess_haley_dataset)
         ax.barh(doc_types, doc_counts, color="steelblue")
         ax.set_xlabel("Count")
         ax.set_title("Document Types")

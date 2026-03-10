@@ -23,7 +23,7 @@ from .exceptions import CloudAuthError
 # ---------------------------------------------------------------------------
 
 
-def decode_jwt(token: str) -> dict:
+def decodeJwt(token: str) -> dict:
     """Decode a JWT payload without signature verification.
 
     Matches MATLAB ``ndi.cloud.internal.decodeJwt``.
@@ -60,7 +60,7 @@ def decode_jwt(token: str) -> dict:
         raise CloudAuthError(f"Failed to decode JWT: {exc}") from exc
 
 
-def get_token_expiration(token: str) -> datetime:
+def getTokenExpiration(token: str) -> datetime:
     """Extract the ``exp`` claim from a JWT as a UTC datetime.
 
     Args:
@@ -72,14 +72,14 @@ def get_token_expiration(token: str) -> datetime:
     Raises:
         CloudAuthError: If the token has no ``exp`` claim.
     """
-    payload = decode_jwt(token)
+    payload = decodeJwt(token)
     exp = payload.get("exp")
     if exp is None:
         raise CloudAuthError("JWT has no exp claim")
     return datetime.fromtimestamp(exp, tz=timezone.utc)
 
 
-def verify_token(token: str) -> bool:
+def verifyToken(token: str) -> bool:
     """Check whether *token* is still valid (not expired).
 
     Does **not** contact the server — only checks the ``exp`` claim.
@@ -87,13 +87,13 @@ def verify_token(token: str) -> bool:
     if not token:
         return False
     try:
-        expiration = get_token_expiration(token)
+        expiration = getTokenExpiration(token)
         return datetime.now(timezone.utc) < expiration
     except CloudAuthError:
         return False
 
 
-def get_active_token(config: CloudConfig | None = None) -> tuple[str, str]:
+def getActiveToken(config: CloudConfig | None = None) -> tuple[str, str]:
     """Return ``(token, org_id)`` from *config* or environment.
 
     Raises:
@@ -105,7 +105,7 @@ def get_active_token(config: CloudConfig | None = None) -> tuple[str, str]:
     if not config.token:
         raise CloudAuthError("No token available (NDI_CLOUD_TOKEN not set)")
 
-    if not verify_token(config.token):
+    if not verifyToken(config.token):
         raise CloudAuthError("Token is expired")
 
     return config.token, config.org_id
@@ -242,7 +242,7 @@ def authenticate(config: CloudConfig | None = None) -> str:
         config = CloudConfig.from_env()
 
     # 1. Already have a valid token?
-    if config.token and verify_token(config.token):
+    if config.token and verifyToken(config.token):
         return config.token
 
     # 2. Try env-var credentials
@@ -263,7 +263,7 @@ def authenticate(config: CloudConfig | None = None) -> str:
 # ---------------------------------------------------------------------------
 
 
-def change_password(
+def changePassword(
     old_password: str,
     new_password: str,
     config: CloudConfig | None = None,
@@ -296,7 +296,7 @@ def change_password(
     return True
 
 
-def reset_password(
+def resetPassword(
     email: str,
     config: CloudConfig | None = None,
 ) -> bool:
@@ -325,7 +325,7 @@ def reset_password(
     return True
 
 
-def verify_user(
+def verifyUser(
     email: str,
     confirmation_code: str,
     config: CloudConfig | None = None,
@@ -359,7 +359,7 @@ def verify_user(
     return True
 
 
-def resend_confirmation(
+def resendConfirmation(
     email: str,
     config: CloudConfig | None = None,
 ) -> bool:

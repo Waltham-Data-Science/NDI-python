@@ -24,7 +24,7 @@ def _require_pandas() -> None:
         )
 
 
-def ontology_table_row_doc_to_table(
+def ontologyTableRowDoc2Table(
     documents: list[Any],
     stack_all: bool = False,
 ) -> tuple[list[pd.DataFrame], list[list[str]]]:
@@ -103,7 +103,7 @@ def ontology_table_row_doc_to_table(
     return data_tables, doc_ids
 
 
-def doc_cell_array_to_table(
+def docCellArray2Table(
     documents: list[Any],
 ) -> pd.DataFrame:
     """Convert a list of NDI documents to a DataFrame.
@@ -140,7 +140,7 @@ def doc_cell_array_to_table(
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
-def element_table(
+def element(
     session: Any,
 ) -> pd.DataFrame:
     """Create a summary table of element documents.
@@ -174,7 +174,7 @@ def element_table(
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
-def subject_table(
+def subjectBasic(
     session: Any,
 ) -> pd.DataFrame:
     """Create a summary table of subject documents.
@@ -207,7 +207,7 @@ def subject_table(
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
-def probe_table(
+def probe(
     session: Any,
 ) -> pd.DataFrame:
     """Create a summary table of probe documents.
@@ -285,7 +285,7 @@ def probe_table(
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
-def epoch_table(
+def epoch(
     session: Any,
 ) -> pd.DataFrame:
     """Create a summary table of epoch-related documents.
@@ -424,7 +424,7 @@ def epoch_table(
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
-def openminds_table(
+def openminds(
     session: Any,
     doc_type: str = "openminds",
 ) -> pd.DataFrame:
@@ -457,7 +457,7 @@ def openminds_table(
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
-def treatment_table(
+def treatment(
     session: Any,
 ) -> pd.DataFrame:
     """Gather treatment document properties into a table.
@@ -502,7 +502,7 @@ def _get_depends_on(props: dict, name: str) -> str:
     return ""
 
 
-def subject_summary(
+def subject(
     session: Any,
 ) -> pd.DataFrame:
     """Create a rich subject summary joining subject, openminds, and treatment data.
@@ -755,3 +755,15 @@ def subject_summary(
     treatment_cols = sorted(c for c in all_cols if c not in fixed_cols)
     col_order = [c for c in fixed_cols if c in all_cols] + treatment_cols
     return df[col_order]
+
+
+# Backward-compatible aliases
+ontology_table_row_doc_to_table = ontologyTableRowDoc2Table
+doc_cell_array_to_table = docCellArray2Table
+element_table = element
+subject_table = subjectBasic
+probe_table = probe
+epoch_table = epoch
+openminds_table = openminds
+treatment_table = treatment
+subject_summary = subject

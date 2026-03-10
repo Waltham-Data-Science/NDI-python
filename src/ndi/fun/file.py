@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-def md5(file_path: str) -> str:
+def MD5(file_path: str) -> str:
     """Compute MD5 checksum of a file.
 
     MATLAB equivalent: ndi.fun.file.MD5
@@ -35,7 +35,7 @@ def md5(file_path: str) -> str:
     return h.hexdigest()
 
 
-def date_created(file_path: str) -> datetime | None:
+def dateCreated(file_path: str) -> datetime | None:
     """Get the creation date of a file.
 
     MATLAB equivalent: ndi.fun.file.dateCreated
@@ -62,7 +62,7 @@ def date_created(file_path: str) -> datetime | None:
         return None
 
 
-def date_updated(file_path: str) -> datetime | None:
+def dateUpdated(file_path: str) -> datetime | None:
     """Get the last modification date of a file.
 
     MATLAB equivalent: ndi.fun.file.dateUpdated
@@ -80,3 +80,9 @@ def date_updated(file_path: str) -> datetime | None:
         return datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
     except Exception:
         return None
+
+
+# Backward-compatible aliases
+md5 = MD5
+date_created = dateCreated
+date_updated = dateUpdated

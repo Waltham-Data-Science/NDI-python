@@ -103,12 +103,12 @@ def run_test(username: str, password: str) -> dict:
     # =================================================================
     section("Step 2: Download Dataset (docs only, ndic:// URIs)")
 
-    from ndi.cloud.orchestration import download_dataset
+    from ndi.cloud.orchestration import downloadDataset
 
     with tempfile.TemporaryDirectory(prefix="ndi_live_test_") as tmpdir:
         t0 = time.time()
         try:
-            dataset = download_dataset(
+            dataset = downloadDataset(
                 CARBON_FIBER_ID,
                 target_folder=tmpdir,
                 sync_files=False,
@@ -363,8 +363,8 @@ def run_test(username: str, password: str) -> dict:
             print(f"  Test file: {test_filename}")
             print(f"  ndic URI: {test_uri}")
 
-            # Step 9a: Test get_file_details API directly
-            from ndi.cloud.api.files import get_file_details
+            # Step 9a: Test getFileDetails API directly
+            from ndi.cloud.api.files import getFileDetails
             from ndi.cloud.filehandler import parse_ndic_uri
 
             ds_id, file_uid = parse_ndic_uri(test_uri)
@@ -372,7 +372,7 @@ def run_test(username: str, password: str) -> dict:
             print(f"  File UID: {file_uid}")
 
             try:
-                details = get_file_details(ds_id, file_uid, client=client)
+                details = getFileDetails(ds_id, file_uid, client=client)
                 download_url = details.get("downloadUrl", "")
                 print(f"  File details response keys: {list(details.keys())}")
                 if download_url:
@@ -383,12 +383,12 @@ def run_test(username: str, password: str) -> dict:
                     print(f"  Download URL host: {parsed.hostname}")
                     print(f"  Download URL path prefix: {parsed.path[:80]}...")
                     results["file_details_api"] = True
-                    check("get_file_details API", True, "presigned URL obtained")
+                    check("getFileDetails API", True, "presigned URL obtained")
                 else:
                     print(f"  WARNING: No downloadUrl in response: {details}")
-                    check("get_file_details API", False, "no downloadUrl")
+                    check("getFileDetails API", False, "no downloadUrl")
             except Exception as exc:
-                print(f"  get_file_details FAILED: {exc}")
+                print(f"  getFileDetails FAILED: {exc}")
                 traceback.print_exc()
 
             # Step 9b: Test raw download with detailed error reporting
@@ -472,7 +472,7 @@ def run_test(username: str, password: str) -> dict:
 
                     ds_id2, file_uid2 = parse_ndic_uri(uri)
                     try:
-                        details2 = get_file_details(ds_id2, file_uid2, client=client)
+                        details2 = getFileDetails(ds_id2, file_uid2, client=client)
                         url2 = details2.get("downloadUrl", "")
                         if url2:
                             resp2 = requests.head(url2, timeout=10)

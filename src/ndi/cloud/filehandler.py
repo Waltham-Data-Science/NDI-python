@@ -10,7 +10,7 @@ The ndic:// URI scheme provides stable references to cloud-hosted binary
 files.  When a dataset is downloaded without ``sync_files=True``, document
 file_info locations are rewritten to ``ndic://{dataset_id}/{file_uid}``.
 When a binary file is opened, the URI is resolved on demand: a fresh
-presigned S3 URL is fetched via ``get_file_details`` and the file is
+presigned S3 URL is fetched via ``getFileDetails`` and the file is
 streamed to local storage.
 """
 
@@ -120,7 +120,7 @@ def fetch_cloud_file(
 ) -> bool:
     """Download a cloud file on demand.
 
-    Parses the ``ndic://`` URI, calls ``get_file_details`` for a fresh
+    Parses the ``ndic://`` URI, calls ``getFileDetails`` for a fresh
     presigned S3 URL, then streams the file to *target_path*.  Uses an
     atomic write (download to ``.tmp``, then rename) to avoid partial files.
 
@@ -137,7 +137,7 @@ def fetch_cloud_file(
         ValueError: If the URI is invalid.
         CloudError: If the download fails.
     """
-    from .api.files import get_file, get_file_details
+    from .api.files import getFile, getFileDetails
 
     dataset_id, file_uid = parse_ndic_uri(ndic_uri)
 
@@ -145,7 +145,7 @@ def fetch_cloud_file(
         client = get_or_create_cloud_client()
 
     # Get fresh presigned URL
-    details = get_file_details(dataset_id, file_uid, client=client)
+    details = getFileDetails(dataset_id, file_uid, client=client)
     download_url = details.get("downloadUrl", "")
     if not download_url:
         from .exceptions import CloudError
@@ -158,7 +158,7 @@ def fetch_cloud_file(
     tmp_path = target.with_suffix(target.suffix + ".tmp")
 
     logger.debug("Fetching cloud file %s -> %s", ndic_uri, target)
-    success = get_file(download_url, tmp_path, timeout=300)
+    success = getFile(download_url, tmp_path, timeout=300)
 
     if success:
         tmp_path.rename(target)

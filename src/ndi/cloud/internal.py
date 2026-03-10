@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from .client import CloudClient
 
 
-def list_remote_document_ids(
+def listRemoteDocumentIds(
     cloud_dataset_id: str,
     *,
     client: CloudClient | None = None,
@@ -27,7 +27,7 @@ def list_remote_document_ids(
     """
     from .api import documents as docs_api
 
-    all_docs = docs_api.list_all_documents(cloud_dataset_id, client=client)
+    all_docs = docs_api.listDatasetDocumentsAll(cloud_dataset_id, client=client)
     mapping: dict[str, str] = {}
     for doc in all_docs.data:
         ndi_id = doc.get("ndiId", doc.get("id", ""))
@@ -37,7 +37,7 @@ def list_remote_document_ids(
     return mapping
 
 
-def get_cloud_dataset_id(
+def getCloudDatasetIdForLocalDataset(
     dataset: Any,
     *,
     client: CloudClient | None = None,
@@ -74,7 +74,7 @@ def get_cloud_dataset_id(
     return "", None
 
 
-def create_remote_dataset_doc(
+def createRemoteDatasetDoc(
     cloud_dataset_id: str,
     dataset: Any,
 ) -> Any:
@@ -94,7 +94,7 @@ def create_remote_dataset_doc(
     return doc
 
 
-def list_local_documents(dataset: Any) -> tuple[list[Any], list[str]]:
+def listLocalDocuments(dataset: Any) -> tuple[list[Any], list[str]]:
     """Retrieve all documents and their IDs from a local dataset.
 
     MATLAB equivalent: +sync/+internal/listLocalDocuments.m
@@ -117,7 +117,7 @@ def list_local_documents(dataset: Any) -> tuple[list[Any], list[str]]:
     return docs, ids
 
 
-def get_file_uids_from_documents(documents: list[Any]) -> list[str]:
+def getFileUidsFromDocuments(documents: list[Any]) -> list[str]:
     """Extract unique file UIDs from a list of documents.
 
     MATLAB equivalent: +sync/+internal/getFileUidsFromDocuments.m
@@ -143,7 +143,7 @@ def get_file_uids_from_documents(documents: list[Any]) -> list[str]:
     return list(uids)
 
 
-def files_not_yet_uploaded(
+def filesNotYetUploaded(
     file_manifest: list[dict[str, Any]],
     cloud_dataset_id: str,
     *,
@@ -153,10 +153,10 @@ def files_not_yet_uploaded(
 
     MATLAB equivalent: +sync/+internal/filesNotYetUploaded.m
     """
-    from .api.files import list_files
+    from .api.files import listFiles
 
     try:
-        remote_files = list_files(cloud_dataset_id, client=client).data
+        remote_files = listFiles(cloud_dataset_id, client=client).data
     except Exception:
         return file_manifest  # can't check, assume all need upload
 
@@ -169,7 +169,7 @@ def files_not_yet_uploaded(
     return [f for f in file_manifest if f.get("uid", "") not in remote_uids]
 
 
-def validate_sync(
+def validateSync(
     dataset: Any,
     cloud_dataset_id: str,
     *,
@@ -182,8 +182,8 @@ def validate_sync(
     Returns:
         Report dict with local_only, remote_only, common, mismatched IDs.
     """
-    _, local_ids = list_local_documents(dataset)
-    remote_id_map = list_remote_document_ids(cloud_dataset_id, client=client)
+    _, local_ids = listLocalDocuments(dataset)
+    remote_id_map = listRemoteDocumentIds(cloud_dataset_id, client=client)
 
     local_set = set(local_ids)
     remote_set = set(remote_id_map.keys())
@@ -197,7 +197,7 @@ def validate_sync(
     }
 
 
-def dataset_session_id_from_docs(documents: list[Any]) -> str:
+def datasetSessionIdFromDocs(documents: list[Any]) -> str:
     """Extract the unique dataset session ID from a list of documents.
 
     MATLAB equivalent: +sync/+internal/datasetSessionIdFromDocs.m

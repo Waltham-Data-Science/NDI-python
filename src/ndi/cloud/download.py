@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def download_full_dataset(
+def downloadFullDataset(
     dataset_id: str,
     target_dir: str | Path,
     *,
@@ -82,7 +82,9 @@ def download_full_dataset(
     page = 1
     page_size = 1000
     while page <= 1000:
-        result = docs_api.list_documents(dataset_id, page=page, page_size=page_size, client=client)
+        result = docs_api.listDatasetDocuments(
+            dataset_id, page=page, page_size=page_size, client=client
+        )
         docs = result.get("documents", [])
         if not docs:
             break
@@ -109,7 +111,7 @@ def download_full_dataset(
     if remaining_ids:
         _log(f"Downloading {len(remaining_ids)} documents via bulk chunks...")
         try:
-            full_docs = download_document_collection(
+            full_docs = downloadDocumentCollection(
                 dataset_id,
                 doc_ids=remaining_ids,
                 progress=progress,
@@ -136,7 +138,7 @@ def download_full_dataset(
     if include_files:
         _log("Listing dataset files...")
         try:
-            file_list = files_api.list_files(dataset_id, client=client).data
+            file_list = files_api.listFiles(dataset_id, client=client).data
         except Exception:
             file_list = []
         _log(f"Found {len(file_list)} files")
@@ -152,7 +154,7 @@ def download_full_dataset(
                 report["files_downloaded"] += 1
                 continue
             try:
-                details = files_api.get_file_details(dataset_id, uid, client=client)
+                details = files_api.getFileDetails(dataset_id, uid, client=client)
                 url = details.get("downloadUrl", "") if hasattr(details, "get") else ""
                 if not url:
                     report["files_failed"] += 1
@@ -237,7 +239,7 @@ def _download_chunk_zip(
     raise TimeoutError(msg)
 
 
-def download_document_collection(
+def downloadDocumentCollection(
     dataset_id: str,
     doc_ids: list[str] | None = None,
     chunk_size: int = 2000,
@@ -282,7 +284,7 @@ def download_document_collection(
     # If no IDs given, discover all via paginated summaries
     if doc_ids is None:
         _log("Listing all document IDs...")
-        summaries = docs_api.list_all_documents(dataset_id, client=client)
+        summaries = docs_api.listDatasetDocumentsAll(dataset_id, client=client)
         doc_ids = [
             s.get("_id", s.get("id", "")) for s in summaries.data if s.get("_id", s.get("id", ""))
         ]
@@ -304,7 +306,7 @@ def download_document_collection(
 
         # Get presigned URL for this chunk
         try:
-            url = docs_api.get_bulk_download_url(dataset_id, chunk_ids, client=client)
+            url = docs_api.getBulkDownloadURL(dataset_id, chunk_ids, client=client)
         except Exception as exc:
             _log(f"  Chunk {i + 1}: failed to get download URL: {exc}")
             continue
@@ -327,7 +329,7 @@ def download_document_collection(
     return all_documents
 
 
-def download_files_for_document(
+def downloadFilesForDocument(
     dataset_id: str,
     document: dict[str, Any],
     target_dir: Path,
@@ -359,7 +361,7 @@ def download_files_for_document(
     from .api import files as files_api
 
     try:
-        details = files_api.get_file_details(dataset_id, file_uid, client=client)
+        details = files_api.getFileDetails(dataset_id, file_uid, client=client)
     except Exception:
         return downloaded
 
@@ -379,7 +381,7 @@ def download_files_for_document(
     return downloaded
 
 
-def download_dataset_files(
+def downloadDatasetFiles(
     dataset_id: str,
     documents: list[dict[str, Any]],
     target_dir: Path,
@@ -400,7 +402,7 @@ def download_dataset_files(
 
     for doc in documents:
         try:
-            paths = download_files_for_document(dataset_id, doc, target_dir, client=client)
+            paths = downloadFilesForDocument(dataset_id, doc, target_dir, client=client)
             report["downloaded"] += len(paths)
         except Exception as exc:
             report["failed"] += 1
@@ -409,7 +411,7 @@ def download_dataset_files(
     return report
 
 
-def jsons_to_documents(
+def jsons2documents(
     doc_jsons: list[dict[str, Any]],
 ) -> list[Any]:
     """Convert a list of raw JSON dicts into ndi.Document objects.

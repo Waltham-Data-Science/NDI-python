@@ -21,7 +21,7 @@ _Client = Annotated[CloudClient | None, SkipValidation()]
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def start_session(
+def startSession(
     pipeline_id: NonEmptyStr,
     input_params: dict[str, Any] | None = None,
     *,
@@ -36,14 +36,14 @@ def start_session(
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def get_session_status(session_id: NonEmptyStr, *, client: _Client = None) -> dict[str, Any]:
+def getSessionStatus(session_id: NonEmptyStr, *, client: _Client = None) -> dict[str, Any]:
     """GET /compute/{sessionId} -- Get session status."""
     return client.get("/compute/{sessionId}", sessionId=session_id)
 
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def trigger_stage(
+def triggerStage(
     session_id: NonEmptyStr,
     stage_id: NonEmptyStr,
     *,
@@ -59,7 +59,7 @@ def trigger_stage(
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def finalize_session(session_id: NonEmptyStr, *, client: _Client = None) -> dict[str, Any]:
+def finalizeSession(session_id: NonEmptyStr, *, client: _Client = None) -> dict[str, Any]:
     """POST /compute/{sessionId}/finalize"""
     return client.post(
         "/compute/{sessionId}/finalize",
@@ -69,14 +69,14 @@ def finalize_session(session_id: NonEmptyStr, *, client: _Client = None) -> dict
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def abort_session(session_id: NonEmptyStr, *, client: _Client = None) -> bool:
+def abortSession(session_id: NonEmptyStr, *, client: _Client = None) -> bool:
     """POST /compute/{sessionId}/abort"""
     client.post("/compute/{sessionId}/abort", sessionId=session_id)
     return True
 
 
 @_auto_client
-def list_sessions(*, client: _Client = None) -> APIResponse:
+def listSessions(*, client: _Client = None) -> APIResponse:
     """GET /compute -- List all compute sessions."""
     result = client.get("/compute")
     # Handle both APIResponse (has .data) and raw dict/list from mocks

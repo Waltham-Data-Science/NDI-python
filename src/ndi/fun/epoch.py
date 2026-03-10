@@ -117,7 +117,7 @@ def filename2epochid(
     return result
 
 
-def t0_t1_to_array(
+def t0_t1cell2array(
     t0t1_in: list | Any,
 ) -> np.ndarray:
     """Convert a list of ``[t0, t1]`` interval pairs to an Nx2 numpy array.
@@ -136,7 +136,7 @@ def t0_t1_to_array(
         Returns an empty ``(0, 2)`` array if input is empty.
 
     Example:
-        >>> t0_t1_to_array([[0.0, 1.5], [2.0, 3.5]])
+        >>> t0_t1cell2array([[0.0, 1.5], [2.0, 3.5]])
         array([[0. , 1.5],
                [2. , 3.5]])
     """
@@ -149,3 +149,7 @@ def t0_t1_to_array(
         result[k, 1] = pair[1]
 
     return result
+
+
+# Backward-compatible alias
+t0_t1_to_array = t0_t1cell2array

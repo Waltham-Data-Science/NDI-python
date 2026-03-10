@@ -49,20 +49,20 @@ class TestCompute:
 
     # ---- Mocked tests ----
 
-    def test_start_session_mocked(self):
+    def test_startSession_mocked(self):
         """startSession returns a session ID (mocked)."""
-        from ndi.cloud.api.compute import start_session
+        from ndi.cloud.api.compute import startSession
 
         client = MagicMock()
         client.post.return_value = {"sessionId": "session-abc-123"}
 
-        result = start_session("hello-world-v1", client=client)
+        result = startSession("hello-world-v1", client=client)
         assert result["sessionId"] == "session-abc-123"
         client.post.assert_called_once()
 
-    def test_get_session_status_mocked(self):
+    def test_getSessionStatus_mocked(self):
         """getSessionStatus returns status dict (mocked)."""
-        from ndi.cloud.api.compute import get_session_status
+        from ndi.cloud.api.compute import getSessionStatus
 
         client = MagicMock()
         client.get.return_value = {
@@ -71,13 +71,13 @@ class TestCompute:
             "currentStageId": "stage-1",
         }
 
-        result = get_session_status("session-abc-123", client=client)
+        result = getSessionStatus("session-abc-123", client=client)
         assert result["status"] == "RUNNING"
         assert result["currentStageId"] == "stage-1"
 
-    def test_list_sessions_mocked(self):
+    def test_listSessions_mocked(self):
         """listSessions returns a list of sessions (mocked)."""
-        from ndi.cloud.api.compute import list_sessions
+        from ndi.cloud.api.compute import listSessions
 
         client = MagicMock()
         client.get.return_value = {
@@ -87,55 +87,55 @@ class TestCompute:
             ]
         }
 
-        result = list_sessions(client=client)
+        result = listSessions(client=client)
         sessions = result.data
         assert isinstance(sessions, list)
         assert len(sessions) == 2
         assert sessions[0]["sessionId"] == "session-1"
 
-    def test_list_sessions_as_list_mocked(self):
+    def test_listSessions_as_list_mocked(self):
         """listSessions handles direct list return (mocked)."""
-        from ndi.cloud.api.compute import list_sessions
+        from ndi.cloud.api.compute import listSessions
 
         client = MagicMock()
         client.get.return_value = [
             {"sessionId": "session-1", "status": "RUNNING"},
         ]
 
-        result = list_sessions(client=client)
+        result = listSessions(client=client)
         sessions = result.data
         assert isinstance(sessions, list)
         assert len(sessions) == 1
 
-    def test_abort_session_mocked(self):
+    def test_abortSession_mocked(self):
         """abortSession returns True (mocked)."""
-        from ndi.cloud.api.compute import abort_session
+        from ndi.cloud.api.compute import abortSession
 
         client = MagicMock()
         client.post.return_value = {}
 
-        result = abort_session("session-abc-123", client=client)
+        result = abortSession("session-abc-123", client=client)
         assert result is True
         client.post.assert_called_once()
 
-    def test_trigger_stage_mocked(self):
+    def test_triggerStage_mocked(self):
         """triggerStage calls the correct endpoint (mocked)."""
-        from ndi.cloud.api.compute import trigger_stage
+        from ndi.cloud.api.compute import triggerStage
 
         client = MagicMock()
         client.post.return_value = {"status": "triggered"}
 
-        result = trigger_stage("session-abc-123", "stage-1", client=client)
+        result = triggerStage("session-abc-123", "stage-1", client=client)
         assert result["status"] == "triggered"
 
-    def test_finalize_session_mocked(self):
+    def test_finalizeSession_mocked(self):
         """finalizeSession calls the correct endpoint (mocked)."""
-        from ndi.cloud.api.compute import finalize_session
+        from ndi.cloud.api.compute import finalizeSession
 
         client = MagicMock()
         client.post.return_value = {"status": "finalized"}
 
-        result = finalize_session("session-abc-123", client=client)
+        result = finalizeSession("session-abc-123", client=client)
         assert result["status"] == "finalized"
 
     # ---- Live tests ----
@@ -152,28 +152,28 @@ class TestCompute:
         6. finalizeSession (expect possible error, just verify no crash)
         """
         from ndi.cloud.api.compute import (
-            abort_session,
-            finalize_session,
-            get_session_status,
-            list_sessions,
-            start_session,
-            trigger_stage,
+            abortSession,
+            finalizeSession,
+            getSessionStatus,
+            listSessions,
+            startSession,
+            triggerStage,
         )
 
         _, client = _login()
 
         # 1. Start session
-        result = start_session("hello-world-v1", client=client)
+        result = startSession("hello-world-v1", client=client)
         session_id = result.get("sessionId") or result.get("id", "")
         assert session_id, f"No sessionId in response: {result}"
 
         try:
             # 2. Get session status
-            status_result = get_session_status(session_id, client=client)
+            status_result = getSessionStatus(session_id, client=client)
             assert "status" in status_result, f"No status in response: {status_result}"
 
             # 3. List sessions — verify our session appears
-            sessions = list_sessions(client=client).data
+            sessions = listSessions(client=client).data
             session_ids = []
             for s in sessions:
                 sid = s.get("sessionId") or s.get("id", "")
@@ -182,27 +182,27 @@ class TestCompute:
 
             # 4. Abort session (cleanup)
             try:
-                abort_session(session_id, client=client)
+                abortSession(session_id, client=client)
             except Exception:
                 # If session already finished, abort may 404
                 pass
 
             # 5. triggerStage — just verify no crash
             try:
-                trigger_stage(session_id, "dummy-stage", client=client)
+                triggerStage(session_id, "dummy-stage", client=client)
             except Exception:
                 pass  # Expected: session may be gone
 
             # 6. finalizeSession — just verify no crash
             try:
-                finalize_session(session_id, client=client)
+                finalizeSession(session_id, client=client)
             except Exception:
                 pass  # Expected: session may be gone
 
         except Exception:
             # Best-effort cleanup
             try:
-                abort_session(session_id, client=client)
+                abortSession(session_id, client=client)
             except Exception:
                 pass
             raise
@@ -226,15 +226,15 @@ class TestZombie:
     def test_zombie_flow_mocked(self):
         """Zombie flow with mocked responses — verifies logic without waiting."""
         from ndi.cloud.api.compute import (
-            get_session_status,
-            start_session,
+            getSessionStatus,
+            startSession,
         )
 
         client = MagicMock()
 
         # Start returns session ID
         client.post.return_value = {"sessionId": "zombie-session-1"}
-        result = start_session("zombie-test-v1", client=client)
+        result = startSession("zombie-test-v1", client=client)
         assert result["sessionId"] == "zombie-session-1"
 
         # Status returns RUNNING, then COMPLETED
@@ -251,10 +251,10 @@ class TestZombie:
             },
         ]
 
-        status1 = get_session_status("zombie-session-1", client=client)
+        status1 = getSessionStatus("zombie-session-1", client=client)
         assert status1["status"] == "RUNNING"
 
-        status2 = get_session_status("zombie-session-1", client=client)
+        status2 = getSessionStatus("zombie-session-1", client=client)
         assert status2["status"] == "COMPLETED"
 
     @requires_cloud
@@ -266,15 +266,15 @@ class TestZombie:
         ABORTED/FAILED/COMPLETED. Times out after 10 minutes.
         """
         from ndi.cloud.api.compute import (
-            get_session_status,
-            list_sessions,
-            start_session,
+            getSessionStatus,
+            listSessions,
+            startSession,
         )
 
         _, client = _login()
 
         # 1. Start pipeline
-        result = start_session("zombie-test-v1", client=client)
+        result = startSession("zombie-test-v1", client=client)
         session_id = result.get("sessionId") or result.get("id", "")
         assert session_id, f"No sessionId in response: {result}"
 
@@ -282,7 +282,7 @@ class TestZombie:
         time.sleep(10)
 
         # 3. Verify session in list
-        sessions = list_sessions(client=client).data
+        sessions = listSessions(client=client).data
         session_ids = [s.get("sessionId") or s.get("id", "") for s in sessions]
         assert session_id in session_ids, f"Session {session_id} not in list: {session_ids}"
 
@@ -292,7 +292,7 @@ class TestZombie:
 
         for _ in range(max_iterations):
             try:
-                status_result = get_session_status(session_id, client=client)
+                status_result = getSessionStatus(session_id, client=client)
                 status = status_result.get("status", "UNKNOWN")
 
                 if status in ("ABORTED", "FAILED", "COMPLETED"):
