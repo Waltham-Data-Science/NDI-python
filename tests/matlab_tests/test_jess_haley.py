@@ -244,9 +244,7 @@ class TestOntologyTableRowDoc2Table:
     def test_stack_all_mode(self, ontology_table_row_docs):
         from ndi.fun.doc_table import ontologyTableRowDoc2Table
 
-        data_tables, doc_ids = ontologyTableRowDoc2Table(
-            ontology_table_row_docs, stack_all=True
-        )
+        data_tables, doc_ids = ontologyTableRowDoc2Table(ontology_table_row_docs, stack_all=True)
         assert len(data_tables) == 1
         assert len(data_tables[0]) == sum(EXPECTED_OTR_GROUP_SIZES_SORTED)
 

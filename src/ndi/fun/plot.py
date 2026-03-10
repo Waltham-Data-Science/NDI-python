@@ -55,8 +55,7 @@ def bar3(
         import matplotlib.pyplot as plt
     except ImportError as exc:
         raise ImportError(
-            "matplotlib is required for ndi.fun.plot. "
-            "Install it with: pip install matplotlib"
+            "matplotlib is required for ndi.fun.plot. " "Install it with: pip install matplotlib"
         ) from exc
 
     import pandas as pd
@@ -91,21 +90,14 @@ def bar3(
         ax = axes[i]
         for j in range(g2_size):
             for k in range(g3_size):
-                mask = (
-                    (group_indices[0] == i)
-                    & (group_indices[1] == j)
-                    & (group_indices[2] == k)
-                )
+                mask = (group_indices[0] == i) & (group_indices[1] == j) & (group_indices[2] == k)
                 vals = df.loc[mask, plotting_variable].values
                 x = j * (g3_size + 1) + k + 1
                 if len(vals) > 0:
                     ax.bar(x, np.nanmean(vals), color=colors[k])
 
         # Format subplot
-        tick_positions = [
-            (g3_size + 1) * j + (g3_size + 1) / 2
-            for j in range(g2_size)
-        ]
+        tick_positions = [(g3_size + 1) * j + (g3_size + 1) / 2 for j in range(g2_size)]
         ax.set_xticks(tick_positions)
         ax.set_xticklabels([str(g) for g in groups[1]])
         ax.set_title(str(groups[0][i]))
@@ -150,8 +142,7 @@ def multichan(
         import matplotlib.pyplot as plt
     except ImportError as exc:
         raise ImportError(
-            "matplotlib is required for ndi.fun.plot. "
-            "Install it with: pip install matplotlib"
+            "matplotlib is required for ndi.fun.plot. " "Install it with: pip install matplotlib"
         ) from exc
 
     data = np.asarray(data)
@@ -222,8 +213,7 @@ def stimulusTimeseries(
         import matplotlib.pyplot as plt
     except ImportError as exc:
         raise ImportError(
-            "matplotlib is required for ndi.fun.plot. "
-            "Install it with: pip install matplotlib"
+            "matplotlib is required for ndi.fun.plot. " "Install it with: pip install matplotlib"
         ) from exc
 
     # Read stimulus data from the probe
@@ -240,9 +230,7 @@ def stimulusTimeseries(
             for entry in stimulus_data:
                 if isinstance(entry, dict) and "stimid" in entry:
                     ids.extend(
-                        entry["stimid"]
-                        if isinstance(entry["stimid"], list)
-                        else [entry["stimid"]]
+                        entry["stimid"] if isinstance(entry["stimid"], list) else [entry["stimid"]]
                     )
             stimid = ids if ids else None
 
@@ -254,14 +242,10 @@ def stimulusTimeseries(
         stimon = stimulus_time_data.stimon
         stimoff = stimulus_time_data.stimoff
     else:
-        raise ValueError(
-            "stimulus_time_data must contain 'stimon' and 'stimoff' fields"
-        )
+        raise ValueError("stimulus_time_data must contain 'stimon' and 'stimoff' fields")
 
     if stimon is None or stimoff is None:
-        raise ValueError(
-            "stimulus_time_data must contain 'stimon' and 'stimoff' fields"
-        )
+        raise ValueError("stimulus_time_data must contain 'stimon' and 'stimoff' fields")
 
     stimon = np.asarray(stimon).ravel()
     stimoff = np.asarray(stimoff).ravel()
