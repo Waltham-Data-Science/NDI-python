@@ -37,9 +37,7 @@ def location(
 
     # Step 1: resolve string identifier to an element object
     if isinstance(element, str):
-        docs = session.database_search(
-            Query("base.id", "exact_string", element, "")
-        )
+        docs = session.database_search(Query("base.id", "exact_string", element, ""))
         if not docs:
             raise ValueError(f"Could not find an element with id '{element}'.")
         element = ndi_document2ndi_object(docs[0], session)

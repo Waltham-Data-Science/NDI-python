@@ -61,9 +61,7 @@ def export_binary(
         for e_idx, entry in enumerate(et):
             epoch_id = entry.get("epoch_id", e_idx + 1)
             if verbose:
-                print(
-                    f"Processing epoch {e_idx + 1} of {len(et)}."
-                )
+                print(f"Processing epoch {e_idx + 1} of {len(et)}.")
 
             t0_t1 = entry.get("t0_t1", [])
             if isinstance(t0_t1, list) and len(t0_t1) > 0:
@@ -95,9 +93,7 @@ def export_binary(
                 start_time = float(cs)
                 end_time = min(cs + chunk_duration - single_sample_time, t_end)
 
-                data, _t, _tr = probe.readtimeseries(
-                    epoch=epoch_id, t0=start_time, t1=end_time
-                )
+                data, _t, _tr = probe.readtimeseries(epoch=epoch_id, t0=start_time, t1=end_time)
                 if data is None or len(data) == 0:
                     continue
 
