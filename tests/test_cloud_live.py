@@ -946,9 +946,7 @@ class TestSoftDelete:
 
             # Should be accessible again with documents intact
             time.sleep(2)
-            ds = _retry_on_server_error(
-                lambda: getDataset(ds_id, client=client), retry_on_404=True
-            )
+            ds = _retry_on_server_error(lambda: getDataset(ds_id, client=client), retry_on_404=True)
             ds_fetched_id = ds.get("_id", ds.get("id", ""))
             assert ds_fetched_id == ds_id
 
