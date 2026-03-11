@@ -224,38 +224,26 @@ class Dataset:
 
         return session
 
-    def session_list(self) -> tuple[list[str], list[dict[str, Any]]]:
+    def session_list(self) -> tuple[list[str], list[str]]:
         """
         List all sessions in this dataset.
 
         Returns:
-            A tuple of (session_references, session_list) where:
+            A tuple of (session_references, session_ids) where:
                 - session_references: List of session reference strings
-                - session_list: List of dicts with keys:
-                    - session_id: Session identifier
-                    - session_reference: Session reference name
-                    - is_linked: True if linked, False if ingested
-                    - document_id: ID of the session_in_a_dataset document
+                - session_ids: List of session ID strings
         """
         q = Query("").isa("session_in_a_dataset")
         docs = self._session.database_search(q)
 
         session_references = []
-        session_list = []
+        session_ids = []
         for doc in docs:
             props = doc.document_properties.get("session_in_a_dataset", {})
-            ref = props.get("session_reference", "")
-            session_references.append(ref)
-            session_list.append(
-                {
-                    "session_id": props.get("session_id", ""),
-                    "session_reference": ref,
-                    "is_linked": bool(props.get("is_linked", False)),
-                    "document_id": doc.id,
-                }
-            )
+            session_references.append(props.get("session_reference", ""))
+            session_ids.append(props.get("session_id", ""))
 
-        return session_references, session_list
+        return session_references, session_ids
 
     # =========================================================================
     # Database Operations (delegated to internal session)
@@ -465,5 +453,5 @@ class Dataset:
 
     def __repr__(self) -> str:
         """String representation."""
-        _refs, details = self.session_list()
-        return f"Dataset('{self._reference}', sessions={len(details)})"
+        refs, _ids = self.session_list()
+        return f"Dataset('{self._reference}', sessions={len(refs)})"

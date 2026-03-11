@@ -123,8 +123,7 @@ class TestDatasetBuild:
         assert isinstance(session, DirSession)
 
         # Session should be in dataset's session list
-        refs, details = dataset.session_list()
-        session_ids = [s["session_id"] for s in details]
+        refs, session_ids = dataset.session_list()
         assert session.id() in session_ids, "Session ID should be in dataset session list"
 
         # Should find exactly 5 demoNDI documents
@@ -157,8 +156,7 @@ class TestDatasetBuild:
 # Port of: ndi.unittest.dataset.testSessionList
 #
 # NOTE: MATLAB session_list() returns (refs, ids, sess_docs, dset_doc).
-# Python session_list() returns List[Dict] with keys:
-#   session_id, session_reference, is_linked, document_id
+# Python session_list() returns (refs, session_ids) — two lists of strings.
 # ===========================================================================
 
 
@@ -172,33 +170,24 @@ class TestSessionList:
         """
         dataset, session = build_dataset
 
-        refs, details = dataset.session_list()
+        refs, session_ids = dataset.session_list()
 
         # Should have exactly 1 session
-        assert len(details) == 1
-
-        entry = details[0]
+        assert len(session_ids) == 1
+        assert len(refs) == 1
 
         # 1. Verify session_reference
-        assert (
-            entry["session_reference"] == "exp_demo"
-        ), "Session reference should match expected value"
+        assert refs[0] == "exp_demo", "Session reference should match expected value"
 
         # 2. Verify session_id
         assert (
-            entry["session_id"] == session.id()
+            session_ids[0] == session.id()
         ), "Session ID should match the ingested session ID"
 
-        # 3. Verify document_id is present
-        assert entry["document_id"], "document_id should be non-empty"
-
-        # 4. Verify is_linked is False (this was ingested)
-        assert entry["is_linked"] is False
-
-        # 5. Verify the session_in_a_dataset document exists and is correct
-        q = Query("base.id") == entry["document_id"]
+        # 3. Verify the session_in_a_dataset document exists and is correct
+        q = Query("").isa("session_in_a_dataset")
         found = dataset.database_search(q)
-        assert len(found) == 1, "Should find exactly one document for the session_in_a_dataset ID"
+        assert len(found) == 1, "Should find exactly one session_in_a_dataset document"
 
         doc = found[0]
         props = doc.document_properties.get("session_in_a_dataset", {})
@@ -239,9 +228,8 @@ class TestDeleteIngestedSession:
         session_id = session.id()
 
         # Verify session exists initially
-        refs, details = dataset.session_list()
-        ids = [s["session_id"] for s in details]
-        assert session_id in ids, "Session ID should be in dataset"
+        refs, session_ids = dataset.session_list()
+        assert session_id in session_ids, "Session ID should be in dataset"
 
         # Verify documents exist
         q = Query("base.session_id") == session_id
@@ -252,8 +240,7 @@ class TestDeleteIngestedSession:
         dataset.delete_ingested_session(session_id, are_you_sure=True)
 
         # Verify session is removed from list
-        refs_after, details_after = dataset.session_list()
-        ids_after = [s["session_id"] for s in details_after]
+        refs_after, ids_after = dataset.session_list()
         assert session_id not in ids_after, "Session ID should NOT be in dataset after deletion"
 
         # Verify documents are removed
@@ -273,9 +260,8 @@ class TestDeleteIngestedSession:
             dataset.delete_ingested_session(session_id, are_you_sure=False)
 
         # Verify session still exists
-        refs, details = dataset.session_list()
-        ids = [s["session_id"] for s in details]
-        assert session_id in ids, "Session ID should still be in dataset after failed delete"
+        refs, session_ids = dataset.session_list()
+        assert session_id in session_ids, "Session ID should still be in dataset after failed delete"
 
     def test_delete_linked_session_error(self, build_dataset, tmp_path):
         """Deleting a linked session raises ValueError.
@@ -293,9 +279,8 @@ class TestDeleteIngestedSession:
         dataset.add_linked_session(linked_session)
 
         # Verify it was added
-        refs, details = dataset.session_list()
-        ids = [s["session_id"] for s in details]
-        assert linked_session.id() in ids
+        refs, session_ids = dataset.session_list()
+        assert linked_session.id() in session_ids
 
         # Attempt to delete a linked session — should fail
         with pytest.raises(ValueError, match="linked"):
@@ -347,17 +332,16 @@ class TestUnlinkSession:
         dataset.add_linked_session(session)
 
         # Verify session is linked
-        refs, details = dataset.session_list()
-        assert len(details) == 1
-        assert details[0]["session_id"] == session.id()
-        assert details[0]["is_linked"] is True
+        refs, session_ids = dataset.session_list()
+        assert len(session_ids) == 1
+        assert session_ids[0] == session.id()
 
         # Unlink
         dataset.unlink_session(session.id())
 
         # Verify session is gone from dataset
-        refs_after, details_after = dataset.session_list()
-        assert len(details_after) == 0, "Session list should be empty after unlink"
+        refs_after, ids_after = dataset.session_list()
+        assert len(ids_after) == 0, "Session list should be empty after unlink"
 
         # Session files should still exist
         assert (
@@ -397,8 +381,8 @@ class TestUnlinkSession:
         dataset.unlink_session(session_id, remove_documents=True)
 
         # Verify session removed from list
-        refs_after, details_after = dataset.session_list()
-        assert len(details_after) == 0, "Session list should be empty"
+        refs_after, ids_after = dataset.session_list()
+        assert len(ids_after) == 0, "Session list should be empty"
 
         # Verify documents removed from dataset
         docs_after = dataset.database_search(q)
@@ -430,8 +414,8 @@ class TestUnlinkSession:
         dataset.unlink_session(session_id)
 
         # Verify session removed from list
-        refs_after, details_after = dataset.session_list()
-        assert len(details_after) == 0
+        refs_after, ids_after = dataset.session_list()
+        assert len(ids_after) == 0
 
     def test_unlink_nonexistent_session(self, tmp_path):
         """Unlinking a nonexistent session does nothing.
@@ -447,8 +431,8 @@ class TestUnlinkSession:
         dataset.unlink_session("nonexistent_id")
 
         # Verify still empty
-        refs, details = dataset.session_list()
-        assert len(details) == 0
+        refs, session_ids = dataset.session_list()
+        assert len(session_ids) == 0
 
 
 # ===========================================================================
@@ -495,10 +479,8 @@ class TestOldDataset:
         assert reopened.id() == original_ds_id, "Reopened dataset should have same ID"
 
         # 4. Verify session list
-        refs, details = reopened.session_list()
-        assert len(details) >= 1, "Reopened dataset should have at least 1 session"
-
-        session_ids = [s["session_id"] for s in details]
+        refs, session_ids = reopened.session_list()
+        assert len(session_ids) >= 1, "Reopened dataset should have at least 1 session"
         assert (
             original_session_id in session_ids
         ), "Original session should still be in the reopened dataset"
