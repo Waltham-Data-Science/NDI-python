@@ -207,7 +207,8 @@ def _cleanup_stale_pytest_datasets(client, cloud_config):
         result = listDatasets(cloud_config.org_id, client=client)
         datasets = result.get("datasets", [])
         stale = [
-            ds for ds in datasets
+            ds
+            for ds in datasets
             if ds.get("name", "").startswith("NDI_PYTEST") and ds.get("_id", ds.get("id", ""))
         ]
         if stale:

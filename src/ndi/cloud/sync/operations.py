@@ -477,9 +477,7 @@ def twoWaySync(
             failed.append(doc_id)
 
     # 4. Download remote-only docs
-    docs, dl_failed = downloadNdiDocuments(
-        cloud_dataset_id, remote_ids, to_download, client=client
-    )
+    docs, dl_failed = downloadNdiDocuments(cloud_dataset_id, remote_ids, to_download, client=client)
     saved = _save_downloaded_docs(ds_path, docs)
     report["downloaded"] = saved
     failed.extend(dl_failed)

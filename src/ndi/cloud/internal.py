@@ -288,7 +288,9 @@ def duplicateDocuments(
         for i in range(0, len(doc_ids_to_delete), maximum_delete_batch_size):
             batch = doc_ids_to_delete[i : i + maximum_delete_batch_size]
             batch_num = i // maximum_delete_batch_size + 1
-            total_batches = (len(doc_ids_to_delete) + maximum_delete_batch_size - 1) // maximum_delete_batch_size
+            total_batches = (
+                len(doc_ids_to_delete) + maximum_delete_batch_size - 1
+            ) // maximum_delete_batch_size
             if verbose:
                 print(f"Deleting batch {batch_num} of {total_batches}...")
             try:

@@ -377,7 +377,6 @@ def newDataset(
 # Re-export from upload module (MATLAB: ndi.cloud.upload.scanForUpload)
 from .upload import scanForUpload  # noqa: F401
 
-
 # ---------------------------------------------------------------------------
 # Private sync helpers
 # ---------------------------------------------------------------------------
