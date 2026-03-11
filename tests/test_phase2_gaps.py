@@ -4,7 +4,7 @@ Tests for Phase 2 low-priority gap implementations.
 Covers:
 - Batch 1: stimulus_tuningcurve_log, t0_t1cell2array, ontologyTableRowVars
 - Batch 2: database_to_json, copy_doc_file_to_temp, extract_docs_files
-- Batch 3: get_probe_type_map, init_probe_type_map
+- Batch 3: getProbeTypeMap, initProbeTypeMap
 - Batch 4: uploadSingleFile
 - Batch 5: openminds_convert (4 functions)
 """
@@ -305,33 +305,33 @@ class TestExtractDocsFiles:
 
 
 class TestProbeTypeMap:
-    """Tests for ndi.probe.init_probe_type_map and get_probe_type_map."""
+    """Tests for ndi.probe.initProbeTypeMap and getProbeTypeMap."""
 
-    def test_init_probe_type_map_returns_dict(self):
-        from ndi.probe import init_probe_type_map
+    def test_initProbeTypeMap_returns_dict(self):
+        from ndi.probe import initProbeTypeMap
 
-        result = init_probe_type_map()
+        result = initProbeTypeMap()
         assert isinstance(result, dict)
         # probetype2object.json exists in the repo
         if result:
             assert "n-trode" in result
             assert result["n-trode"] == "ndi.probe.timeseries.mfdaq"
 
-    def test_get_probe_type_map_cached(self):
+    def test_getProbeTypeMap_cached(self):
         import ndi.probe as probe_mod
 
         # Reset cache
         probe_mod._PROBE_TYPE_MAP = None
 
-        result1 = probe_mod.get_probe_type_map()
-        result2 = probe_mod.get_probe_type_map()
+        result1 = probe_mod.getProbeTypeMap()
+        result2 = probe_mod.getProbeTypeMap()
         # Should be same object (cached)
         assert result1 is result2
 
     def test_map_has_expected_types(self):
-        from ndi.probe import init_probe_type_map
+        from ndi.probe import initProbeTypeMap
 
-        m = init_probe_type_map()
+        m = initProbeTypeMap()
         if m:
             assert "stimulator" in m
             assert "patch" in m

@@ -234,6 +234,17 @@ class Probe(Element):
     # Probe-specific Methods
     # =========================================================================
 
+    def probestring(self) -> str:
+        """
+        Format probe as human-readable string.
+
+        MATLAB equivalent: ndi.probe.probestring
+
+        Returns:
+            String in format "name | reference | type"
+        """
+        return f"{self._name} | {self._reference} | {self._type}"
+
     def epochprobemapmatch(
         self,
         epochprobemap: Any,
@@ -428,7 +439,7 @@ class Probe(Element):
 _PROBE_TYPE_MAP: dict[str, str] | None = None
 
 
-def init_probe_type_map() -> dict[str, str]:
+def initProbeTypeMap() -> dict[str, str]:
     """Load the probe type→class mapping from ``probetype2object.json``.
 
     MATLAB equivalent: ndi.probe.fun.initProbeTypeMap
@@ -462,7 +473,7 @@ def init_probe_type_map() -> dict[str, str]:
     return result
 
 
-def get_probe_type_map() -> dict[str, str]:
+def getProbeTypeMap() -> dict[str, str]:
     """Return the cached probe type→class mapping.
 
     MATLAB equivalent: ndi.probe.fun.getProbeTypeMap
@@ -474,5 +485,5 @@ def get_probe_type_map() -> dict[str, str]:
     """
     global _PROBE_TYPE_MAP
     if _PROBE_TYPE_MAP is None:
-        _PROBE_TYPE_MAP = init_probe_type_map()
+        _PROBE_TYPE_MAP = initProbeTypeMap()
     return _PROBE_TYPE_MAP

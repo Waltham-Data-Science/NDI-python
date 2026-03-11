@@ -356,7 +356,7 @@ class Element(Ido, EpochSet, DocumentService):
         self._session.database_add(doc)
 
         # Clear cache
-        self.clear_cache()
+        self.resetepochtable()
 
         return self, doc
 

@@ -118,7 +118,7 @@ def _resolve_epoch_index(
     raise ValueError(f"Epoch ID '{epoch}' not found")
 
 
-def find_epoch_node(
+def findepochnode(
     epoch_node: dict[str, Any],
     epoch_node_array: list[dict[str, Any]],
 ) -> list[int]:
@@ -153,9 +153,9 @@ def find_epoch_node(
         ...     {'epoch_id': 'e1', 'objectname': 'probe1'},
         ...     {'epoch_id': 'e2', 'objectname': 'probe2'},
         ... ]
-        >>> find_epoch_node({'epoch_id': 'e1'}, nodes)
+        >>> findepochnode({'epoch_id': 'e1'}, nodes)
         [0]
-        >>> find_epoch_node({}, nodes)  # empty = match all
+        >>> findepochnode({}, nodes)  # empty = match all
         [0, 1]
     """
     STRING_FIELDS = (

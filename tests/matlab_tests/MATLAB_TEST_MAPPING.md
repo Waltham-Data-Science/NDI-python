@@ -170,7 +170,7 @@ All cloud tests are **dual-mode**: mocked by default, live when `NDI_CLOUD_USERN
 
 | MATLAB File | Python Class | Key Tests |
 |------------|-------------|-----------|
-| `+probe/ProbeMapTest.m` | `TestProbeMap` | `test_init_probe_type_map`, `test_map_contains_expected_types`, `test_map_ntrode_class` |
+| `+probe/ProbeMapTest.m` | `TestProbeMap` | `test_initProbeTypeMap`, `test_map_contains_expected_types`, `test_map_ntrode_class` |
 | `+probe/ProbeTest.m` | `TestProbe` | `test_probe_instantiation`, `test_probe_with_session`, `test_probe_issyncgraphroot`, `test_probe_epochsetname` |
 
 ---

@@ -6,11 +6,12 @@ The MATLAB codebase is the **Source of Truth**. The Python version is a "faithfu
 
 ## 2. Function & Variable Naming (The "Strict Mirror" Rule)
 
-Do **not** attempt to "translate" MATLAB names into Python PEP 8 (`snake_case`).
+**MATLAB function names are the source of truth.** Do **not** attempt to "translate" MATLAB names into Python PEP 8 (`snake_case`).
 
 - **Exact Match:** Every function name in Python must be an identical string match to the MATLAB function name.
-- **Case Sensitivity:** If the MATLAB function is `ListAllDocuments`, the Python function must be `ListAllDocuments`. If the MATLAB function is `get_dataset_id`, the Python function must be `get_dataset_id`.
+- **Case Sensitivity:** If the MATLAB function is `ListAllDocuments`, the Python function must be `ListAllDocuments`. If the MATLAB function is `get_dataset_id`, the Python function must be `get_dataset_id`. If the MATLAB function is `savetofile`, the Python method must be `savetofile` (not `save_to_file`).
 - **No Aliasing:** Do not create `snake_case` aliases unless explicitly requested. The user should be able to copy-paste function names between environments.
+- **Verification:** When porting or reviewing code, always check the MATLAB source at [VH-Lab/NDI-matlab](https://github.com/VH-Lab/NDI-matlab) to confirm the exact function name. The MATLAB `.m` file's `function` line is the canonical reference.
 
 ## 3. Namespace and Directory Structure
 

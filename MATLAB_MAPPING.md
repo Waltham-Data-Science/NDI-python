@@ -56,8 +56,8 @@ Complete reference mapping every MATLAB NDI function/class to its Python equival
 | `ndi.probe.timeseries` | `ndi.probe.ProbeTimeseries` | `ndi.probe.timeseries` |
 | `ndi.probe.timeseries.mfdaq` | `ndi.probe.ProbeTimeseriesMFDAQ` | `ndi.probe.timeseries_mfdaq` |
 | `ndi.probe.timeseries.stimulator` | `ndi.probe.ProbeTimeseriesStimulator` | `ndi.probe.timeseries_stimulator` |
-| `ndi.probe.fun.initProbeTypeMap` | `ndi.probe.init_probe_type_map()` | `ndi.probe` |
-| `ndi.probe.fun.getProbeTypeMap` | `ndi.probe.get_probe_type_map()` | `ndi.probe` |
+| `ndi.probe.fun.initProbeTypeMap` | `ndi.probe.initProbeTypeMap()` | `ndi.probe` |
+| `ndi.probe.fun.getProbeTypeMap` | `ndi.probe.getProbeTypeMap()` | `ndi.probe` |
 
 ## Session & Dataset
 

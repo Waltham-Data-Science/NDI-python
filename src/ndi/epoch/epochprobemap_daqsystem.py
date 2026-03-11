@@ -84,7 +84,7 @@ class EpochProbeMapDAQSystem(EpochProbeMap):
             ]
         )
 
-    def save_to_file(self, filename: str) -> None:
+    def savetofile(self, filename: str) -> None:
         """
         Write this epoch probe map to a file.
 
@@ -122,7 +122,7 @@ class EpochProbeMapDAQSystem(EpochProbeMap):
         )
 
     @classmethod
-    def load_from_file(cls, filename: str) -> list[EpochProbeMapDAQSystem]:
+    def loadfromfile(cls, filename: str) -> list[EpochProbeMapDAQSystem]:
         """
         Load epoch probe maps from a file.
 
