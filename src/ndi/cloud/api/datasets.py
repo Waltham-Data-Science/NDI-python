@@ -16,7 +16,7 @@ from typing import Annotated, Any
 from pydantic import SkipValidation, validate_call
 
 from ..client import APIResponse, CloudClient, _auto_client
-from ._validators import VALIDATE_CONFIG, CloudId, NonEmptyStr, PageNumber, PageSize
+from ._validators import VALIDATE_CONFIG, CloudId, PageNumber, PageSize
 
 _Client = Annotated[CloudClient | None, SkipValidation()]
 
