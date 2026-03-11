@@ -222,3 +222,139 @@ def uploadSingleFile(
         return True, ""
     except Exception as exc:
         return False, str(exc)
+
+
+@_auto_client
+def uploadToNDICloud(
+    dataset: Any,
+    dataset_id: str,
+    *,
+    verbose: bool = True,
+    client: CloudClient | None = None,
+) -> tuple[bool, str]:
+    """Upload an NDI database to NDI Cloud.
+
+    MATLAB equivalent: ``ndi.cloud.upload.uploadToNDICloud``
+
+    Reads all documents from the local dataset, determines which
+    are already uploaded, and uploads the remainder.
+
+    Args:
+        dataset: An ndi.session or ndi.dataset object.
+        dataset_id: The cloud dataset ID to upload to.
+        verbose: Print progress messages.
+        client: Authenticated cloud client (auto-created if omitted).
+
+    Returns:
+        Tuple of ``(success, error_message)``.
+    """
+    from ndi.query import Query
+
+    from .api import documents as docs_api
+
+    try:
+        if verbose:
+            print("Loading documents...")
+        all_docs = dataset.database_search(Query("")) if hasattr(dataset, "database_search") else []
+
+        if verbose:
+            print("Getting list of previously uploaded documents...")
+        doc_structs, file_structs, total_size = scanForUpload(dataset, dataset_id, client=client)
+
+        docs_left = sum(1 for ds in doc_structs if not ds["is_uploaded"])
+        files_left = sum(1 for fs in file_structs if not fs["is_uploaded"])
+        if verbose:
+            print(f"Found {docs_left} new documents and {files_left} files. Uploading...")
+
+        # Build docid → index lookup
+        doc_id_to_idx = {ds["docid"]: i for i, ds in enumerate(doc_structs)}
+
+        cur_doc = 0
+        for doc in all_docs:
+            props = doc.document_properties if hasattr(doc, "document_properties") else doc
+            if not isinstance(props, dict):
+                continue
+            doc_id = props.get("base", {}).get("id", "")
+            idx = doc_id_to_idx.get(doc_id)
+            if idx is not None and not doc_structs[idx]["is_uploaded"]:
+                cur_doc += 1
+                if verbose:
+                    print(
+                        f"Uploading {cur_doc} JSON portions of {docs_left} "
+                        f"({100 * cur_doc / max(docs_left, 1):.0f}%)"
+                    )
+                try:
+                    docs_api.addDocumentAsFile(dataset_id, props, client=client)
+                    doc_structs[idx]["is_uploaded"] = True
+                except Exception:
+                    if verbose:
+                        print(f"  Warning: Failed to add document {doc_id}")
+
+        # Upload files via zip
+        file_docs = [
+            (doc.document_properties if hasattr(doc, "document_properties") else doc)
+            for doc in all_docs
+        ]
+        file_docs = [d for d in file_docs if isinstance(d, dict)]
+        success, msg = zipForUpload(file_docs, dataset_id)
+        if not success:
+            return False, msg
+
+        return True, ""
+    except Exception as exc:
+        return False, str(exc)
+
+
+def scanForUpload(
+    dataset: Any,
+    dataset_id: str,
+    *,
+    client: CloudClient | None = None,
+) -> tuple[list[dict], list[dict], float]:
+    """Scan local documents/files to determine what needs uploading.
+
+    MATLAB equivalent: ``ndi.cloud.upload.scanForUpload``
+
+    Returns:
+        Tuple of ``(doc_structs, file_structs, total_size_kb)``.
+    """
+    from ndi.query import Query
+
+    from .internal import listRemoteDocumentIds
+
+    try:
+        all_docs = dataset.database_search(Query("")) if hasattr(dataset, "database_search") else []
+    except Exception:
+        all_docs = []
+
+    remote_ids = {}
+    if dataset_id:
+        try:
+            remote_ids = listRemoteDocumentIds(dataset_id, client=client)
+        except Exception:
+            pass
+
+    doc_structs: list[dict] = []
+    file_structs: list[dict] = []
+    total_size = 0.0
+
+    for doc in all_docs:
+        props = doc.document_properties if hasattr(doc, "document_properties") else doc
+        doc_id = ""
+        if isinstance(props, dict):
+            doc_id = props.get("base", {}).get("id", "")
+
+        is_uploaded = doc_id in remote_ids
+        doc_structs.append({"docid": doc_id, "is_uploaded": is_uploaded})
+
+        file_uid = props.get("file_uid", "") if isinstance(props, dict) else ""
+        if file_uid:
+            file_structs.append(
+                {
+                    "uid": file_uid,
+                    "docid": doc_id,
+                    "is_uploaded": is_uploaded,
+                }
+            )
+
+    return doc_structs, file_structs, total_size

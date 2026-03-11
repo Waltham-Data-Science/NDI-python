@@ -49,11 +49,17 @@ def parse_ndic_uri(uri: str) -> tuple[str, str]:
     return parts[0], parts[1]
 
 
-def rewrite_file_info_for_cloud(doc_props: dict, cloud_dataset_id: str) -> None:
+def updateFileInfoForRemoteFiles(doc_props: dict, cloud_dataset_id: str) -> None:
     """Rewrite a document's file_info locations to use ``ndic://`` URIs.
 
-    Mutates *doc_props* in-place.  Handles both list-style and dict-style
-    (MATLAB struct) ``file_info`` and ``locations`` fields.
+    MATLAB equivalent: ``ndi.cloud.sync.internal.updateFileInfoForRemoteFiles``
+
+    Mutates *doc_props* in-place.  Sets each location to
+    ``ndic://{dataset_id}/{file_uid}`` with ``location_type='ndicloud'``
+    and ``ingest=0``, ``delete_original=0``.
+
+    Handles both list-style and dict-style (MATLAB struct) ``file_info``
+    and ``locations`` fields.
 
     Args:
         doc_props: Document properties dict (as from JSON).
@@ -188,3 +194,85 @@ def get_or_create_cloud_client() -> CloudClient:
     from .client import CloudClient
 
     return CloudClient.from_env()
+
+
+def updateFileInfoForLocalFiles(
+    doc_props: dict,
+    file_directory: str,
+) -> None:
+    """Update file_info locations to point to local files.
+
+    MATLAB equivalent: ``ndi.cloud.sync.internal.updateFileInfoForLocalFiles``
+
+    Mutates *doc_props* in-place.  For each file_info entry, replaces
+    the location with the local file path ``{file_directory}/{uid}``
+    and sets ``delete_original=1``, ``ingest=1``.
+
+    Args:
+        doc_props: Document properties dict (as from JSON).
+        file_directory: Directory where local files are stored.
+    """
+    import os
+
+    files = doc_props.get("files")
+    if not files or not isinstance(files, dict):
+        return
+
+    file_info = files.get("file_info")
+    if file_info is None:
+        return
+
+    if isinstance(file_info, dict):
+        fi_list = [file_info]
+        was_dict = True
+    elif isinstance(file_info, list):
+        fi_list = file_info
+        was_dict = False
+    else:
+        return
+
+    for fi in fi_list:
+        if not isinstance(fi, dict):
+            continue
+
+        locations = fi.get("locations")
+        if locations is None:
+            continue
+
+        if isinstance(locations, dict):
+            loc_list = [locations]
+            loc_was_dict = True
+        elif isinstance(locations, list):
+            loc_list = locations
+            loc_was_dict = False
+        else:
+            continue
+
+        for loc in loc_list:
+            if not isinstance(loc, dict):
+                continue
+            uid = loc.get("uid", "")
+            if not uid:
+                continue
+            file_location = os.path.join(file_directory, uid)
+            if os.path.isfile(file_location):
+                loc["location"] = file_location
+                loc["location_type"] = "file"
+                loc["delete_original"] = 1
+                loc["ingest"] = 1
+            else:
+                logger.warning(
+                    "Local file does not exist for uid %s at %s",
+                    uid,
+                    file_location,
+                )
+
+        if loc_was_dict:
+            fi["locations"] = loc_list[0]
+
+    if was_dict:
+        files["file_info"] = fi_list[0]
+
+
+# Backward-compatible alias
+rewrite_file_info_for_cloud = updateFileInfoForRemoteFiles
