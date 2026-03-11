@@ -123,8 +123,8 @@ class TestDatasetBuild:
         assert isinstance(session, DirSession)
 
         # Session should be in dataset's session list
-        sessions = dataset.session_list()
-        session_ids = [s["session_id"] for s in sessions]
+        refs, details = dataset.session_list()
+        session_ids = [s["session_id"] for s in details]
         assert session.id() in session_ids, "Session ID should be in dataset session list"
 
         # Should find exactly 5 demoNDI documents
@@ -172,12 +172,12 @@ class TestSessionList:
         """
         dataset, session = build_dataset
 
-        sessions = dataset.session_list()
+        refs, details = dataset.session_list()
 
         # Should have exactly 1 session
-        assert len(sessions) == 1
+        assert len(details) == 1
 
-        entry = sessions[0]
+        entry = details[0]
 
         # 1. Verify session_reference
         assert (
@@ -239,8 +239,8 @@ class TestDeleteIngestedSession:
         session_id = session.id()
 
         # Verify session exists initially
-        sessions = dataset.session_list()
-        ids = [s["session_id"] for s in sessions]
+        refs, details = dataset.session_list()
+        ids = [s["session_id"] for s in details]
         assert session_id in ids, "Session ID should be in dataset"
 
         # Verify documents exist
@@ -252,8 +252,8 @@ class TestDeleteIngestedSession:
         dataset.delete_ingested_session(session_id, are_you_sure=True)
 
         # Verify session is removed from list
-        sessions_after = dataset.session_list()
-        ids_after = [s["session_id"] for s in sessions_after]
+        refs_after, details_after = dataset.session_list()
+        ids_after = [s["session_id"] for s in details_after]
         assert session_id not in ids_after, "Session ID should NOT be in dataset after deletion"
 
         # Verify documents are removed
@@ -273,8 +273,8 @@ class TestDeleteIngestedSession:
             dataset.delete_ingested_session(session_id, are_you_sure=False)
 
         # Verify session still exists
-        sessions = dataset.session_list()
-        ids = [s["session_id"] for s in sessions]
+        refs, details = dataset.session_list()
+        ids = [s["session_id"] for s in details]
         assert session_id in ids, "Session ID should still be in dataset after failed delete"
 
     def test_delete_linked_session_error(self, build_dataset, tmp_path):
@@ -293,8 +293,8 @@ class TestDeleteIngestedSession:
         dataset.add_linked_session(linked_session)
 
         # Verify it was added
-        sessions = dataset.session_list()
-        ids = [s["session_id"] for s in sessions]
+        refs, details = dataset.session_list()
+        ids = [s["session_id"] for s in details]
         assert linked_session.id() in ids
 
         # Attempt to delete a linked session — should fail
@@ -347,17 +347,17 @@ class TestUnlinkSession:
         dataset.add_linked_session(session)
 
         # Verify session is linked
-        sessions = dataset.session_list()
-        assert len(sessions) == 1
-        assert sessions[0]["session_id"] == session.id()
-        assert sessions[0]["is_linked"] is True
+        refs, details = dataset.session_list()
+        assert len(details) == 1
+        assert details[0]["session_id"] == session.id()
+        assert details[0]["is_linked"] is True
 
         # Unlink
         dataset.unlink_session(session.id())
 
         # Verify session is gone from dataset
-        sessions_after = dataset.session_list()
-        assert len(sessions_after) == 0, "Session list should be empty after unlink"
+        refs_after, details_after = dataset.session_list()
+        assert len(details_after) == 0, "Session list should be empty after unlink"
 
         # Session files should still exist
         assert (
@@ -397,8 +397,8 @@ class TestUnlinkSession:
         dataset.unlink_session(session_id, remove_documents=True)
 
         # Verify session removed from list
-        sessions_after = dataset.session_list()
-        assert len(sessions_after) == 0, "Session list should be empty"
+        refs_after, details_after = dataset.session_list()
+        assert len(details_after) == 0, "Session list should be empty"
 
         # Verify documents removed from dataset
         docs_after = dataset.database_search(q)
@@ -430,8 +430,8 @@ class TestUnlinkSession:
         dataset.unlink_session(session_id)
 
         # Verify session removed from list
-        sessions_after = dataset.session_list()
-        assert len(sessions_after) == 0
+        refs_after, details_after = dataset.session_list()
+        assert len(details_after) == 0
 
     def test_unlink_nonexistent_session(self, tmp_path):
         """Unlinking a nonexistent session does nothing.
@@ -447,7 +447,8 @@ class TestUnlinkSession:
         dataset.unlink_session("nonexistent_id")
 
         # Verify still empty
-        assert len(dataset.session_list()) == 0
+        refs, details = dataset.session_list()
+        assert len(details) == 0
 
 
 # ===========================================================================
@@ -494,10 +495,10 @@ class TestOldDataset:
         assert reopened.id() == original_ds_id, "Reopened dataset should have same ID"
 
         # 4. Verify session list
-        sessions = reopened.session_list()
-        assert len(sessions) >= 1, "Reopened dataset should have at least 1 session"
+        refs, details = reopened.session_list()
+        assert len(details) >= 1, "Reopened dataset should have at least 1 session"
 
-        session_ids = [s["session_id"] for s in sessions]
+        session_ids = [s["session_id"] for s in details]
         assert (
             original_session_id in session_ids
         ), "Original session should still be in the reopened dataset"

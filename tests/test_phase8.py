@@ -409,10 +409,10 @@ class TestDatasetSessions:
         ds = Dataset(temp_dir / "dataset1", "Test")
         ds.add_linked_session(session)
 
-        sessions = ds.session_list()
-        assert len(sessions) == 1
-        assert sessions[0]["session_id"] == session.id()
-        assert sessions[0]["is_linked"] is True
+        refs, details = ds.session_list()
+        assert len(details) == 1
+        assert details[0]["session_id"] == session.id()
+        assert details[0]["is_linked"] is True
 
     def test_add_multiple_sessions(self, temp_dir, session, session2):
         """Test adding multiple sessions."""
@@ -420,8 +420,8 @@ class TestDatasetSessions:
         ds.add_linked_session(session)
         ds.add_linked_session(session2)
 
-        sessions = ds.session_list()
-        assert len(sessions) == 2
+        refs, details = ds.session_list()
+        assert len(details) == 2
 
     def test_add_duplicate_session(self, temp_dir, session):
         """Test that adding same session twice doesn't duplicate."""
@@ -429,8 +429,8 @@ class TestDatasetSessions:
         ds.add_linked_session(session)
         ds.add_linked_session(session)
 
-        sessions = ds.session_list()
-        assert len(sessions) == 1
+        refs, details = ds.session_list()
+        assert len(details) == 1
 
     def test_add_ingested_session(self, temp_dir, session):
         """Test ingesting a session."""
@@ -442,18 +442,20 @@ class TestDatasetSessions:
         ds = Dataset(temp_dir / "dataset1", "Test")
         ds.add_ingested_session(session)
 
-        sessions = ds.session_list()
-        assert len(sessions) == 1
-        assert sessions[0]["is_linked"] is False
+        refs, details = ds.session_list()
+        assert len(details) == 1
+        assert details[0]["is_linked"] is False
 
     def test_unlink_session(self, temp_dir, session):
         """Test unlinking a session."""
         ds = Dataset(temp_dir / "dataset1", "Test")
         ds.add_linked_session(session)
-        assert len(ds.session_list()) == 1
+        refs, details = ds.session_list()
+        assert len(details) == 1
 
         ds.unlink_session(session.id())
-        assert len(ds.session_list()) == 0
+        refs, details = ds.session_list()
+        assert len(details) == 0
 
     def test_unlink_nonexistent(self, temp_dir):
         """Test unlinking a session that doesn't exist (no error)."""
@@ -463,16 +465,18 @@ class TestDatasetSessions:
     def test_session_list_empty(self, temp_dir):
         """Test session list on empty dataset."""
         ds = Dataset(temp_dir / "dataset1", "Test")
-        assert ds.session_list() == []
+        refs, details = ds.session_list()
+        assert refs == []
+        assert details == []
 
     def test_session_list_details(self, temp_dir, session):
         """Test session list returns correct details."""
         ds = Dataset(temp_dir / "dataset1", "Test")
         ds.add_linked_session(session)
 
-        sessions = ds.session_list()
-        assert len(sessions) == 1
-        entry = sessions[0]
+        refs, details = ds.session_list()
+        assert len(details) == 1
+        entry = details[0]
         assert "session_id" in entry
         assert "session_reference" in entry
         assert "is_linked" in entry
@@ -518,10 +522,12 @@ class TestDatasetIngestion:
         """Test deleting an ingested session."""
         ds = Dataset(temp_dir / "dataset1", "Test")
         ds.add_ingested_session(session)
-        assert len(ds.session_list()) == 1
+        refs, details = ds.session_list()
+        assert len(details) == 1
 
         ds.delete_ingested_session(session.id(), are_you_sure=True)
-        assert len(ds.session_list()) == 0
+        refs, details = ds.session_list()
+        assert len(details) == 0
 
     def test_delete_linked_session_raises(self, temp_dir, session):
         """Test that deleting a linked session raises error."""
@@ -598,8 +604,8 @@ class TestPhase8Integration:
             ds.add_linked_session(session2)
 
             # Verify
-            sessions = ds.session_list()
-            assert len(sessions) == 2
+            refs, details = ds.session_list()
+            assert len(details) == 2
         except FileNotFoundError:
             pytest.skip("Schema not available")
 

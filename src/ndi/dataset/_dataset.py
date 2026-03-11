@@ -465,5 +465,5 @@ class Dataset:
 
     def __repr__(self) -> str:
         """String representation."""
-        sessions = self.session_list()
-        return f"Dataset('{self._reference}', sessions={len(sessions)})"
+        _refs, details = self.session_list()
+        return f"Dataset('{self._reference}', sessions={len(details)})"
