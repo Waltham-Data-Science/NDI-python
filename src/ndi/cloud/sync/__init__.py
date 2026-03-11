@@ -8,6 +8,8 @@ local datasets and the NDI Cloud.
 from .index import SyncIndex
 from .mode import SyncMode, SyncOptions
 from .operations import (
+    deleteLocalDocuments,
+    downloadNdiDocuments,
     downloadNew,
     mirrorFromRemote,
     mirrorToRemote,
@@ -26,4 +28,6 @@ __all__ = [
     "mirrorFromRemote",
     "twoWaySync",
     "sync",
+    "deleteLocalDocuments",
+    "downloadNdiDocuments",
 ]

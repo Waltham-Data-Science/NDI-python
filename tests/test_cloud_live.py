@@ -188,6 +188,34 @@ def fresh_dataset(client, cloud_config, can_write):
         pass
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _cleanup_stale_pytest_datasets(client, cloud_config):
+    """Safety-net: delete any leftover NDI_PYTEST_* datasets after all tests.
+
+    Individual tests and fixtures do their own cleanup, but if the test
+    runner crashes or a teardown is skipped, datasets can be left behind.
+    This module-scoped autouse fixture runs at the very end and sweeps up
+    any remaining NDI_PYTEST_* datasets so they don't accumulate.
+    """
+    yield  # Let all tests run first
+
+    from ndi.cloud.api.datasets import deleteDataset, listDatasets
+
+    try:
+        result = listDatasets(cloud_config.org_id, client=client)
+        datasets = result.get("datasets", [])
+        for ds in datasets:
+            name = ds.get("name", "")
+            ds_id = ds.get("_id", ds.get("id", ""))
+            if name.startswith("NDI_PYTEST") and ds_id:
+                try:
+                    deleteDataset(ds_id, when="now", client=client)
+                except Exception:
+                    pass  # Best-effort cleanup
+    except Exception:
+        pass  # Don't fail the test run over cleanup
+
+
 # ===========================================================================
 # TestCloudConfig -- replaces mocked foundation config tests
 # ===========================================================================

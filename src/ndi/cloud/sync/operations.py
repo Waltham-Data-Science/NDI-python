@@ -48,8 +48,11 @@ def _save_downloaded_docs(
     return saved
 
 
-def _delete_local_docs(ds_path: Path, doc_ids: set[str]) -> list[str]:
-    """Remove local document JSON files for the given IDs."""
+def deleteLocalDocuments(ds_path: Path, doc_ids: set[str]) -> list[str]:
+    """Remove local document JSON files for the given IDs.
+
+    MATLAB equivalent: ``ndi.cloud.sync.internal.deleteLocalDocuments``
+    """
     doc_dir = ds_path / _DOC_DIR
     deleted: list[str] = []
     for doc_id in doc_ids:
@@ -60,7 +63,7 @@ def _delete_local_docs(ds_path: Path, doc_ids: set[str]) -> list[str]:
     return deleted
 
 
-def _download_docs_by_ids(
+def downloadNdiDocuments(
     cloud_dataset_id: str,
     ndi_to_api: dict[str, str],
     ids_to_download: set[str],
@@ -69,7 +72,10 @@ def _download_docs_by_ids(
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """Fetch documents from the cloud by NDI ID using chunked bulk download.
 
-    Returns (downloaded_docs, failed_ids).
+    MATLAB equivalent: ``ndi.cloud.sync.internal.downloadNdiDocuments``
+
+    Returns:
+        Tuple of ``(downloaded_docs, failed_ids)``.
     """
     from ..download import downloadDocumentCollection
 
@@ -210,7 +216,7 @@ def downloadNew(
         return report
 
     # Actually fetch documents from the cloud
-    docs, failed = _download_docs_by_ids(cloud_dataset_id, remote_ids, new_ids, client=client)
+    docs, failed = downloadNdiDocuments(cloud_dataset_id, remote_ids, new_ids, client=client)
     saved = _save_downloaded_docs(ds_path, docs)
     report["downloaded"] = saved
     report["failed"] = failed
@@ -343,11 +349,11 @@ def mirrorFromRemote(
         return report
 
     # Delete local-only documents
-    deleted = _delete_local_docs(ds_path, to_delete_local)
+    deleted = deleteLocalDocuments(ds_path, to_delete_local)
     report["deleted_local"] = deleted
 
     # Download remote-only documents
-    docs, failed = _download_docs_by_ids(cloud_dataset_id, remote_ids, to_download, client=client)
+    docs, failed = downloadNdiDocuments(cloud_dataset_id, remote_ids, to_download, client=client)
     saved = _save_downloaded_docs(ds_path, docs)
     report["downloaded"] = saved
     report["failed"] = failed
@@ -448,7 +454,7 @@ def twoWaySync(
     failed: list[str] = []
 
     # 1. Delete local docs that were removed on the remote
-    deleted_local_ids = _delete_local_docs(ds_path, to_delete_local)
+    deleted_local_ids = deleteLocalDocuments(ds_path, to_delete_local)
     report["deleted_local"] = deleted_local_ids
 
     # 2. Delete remote docs that were removed locally
@@ -471,7 +477,7 @@ def twoWaySync(
             failed.append(doc_id)
 
     # 4. Download remote-only docs
-    docs, dl_failed = _download_docs_by_ids(
+    docs, dl_failed = downloadNdiDocuments(
         cloud_dataset_id, remote_ids, to_download, client=client
     )
     saved = _save_downloaded_docs(ds_path, docs)

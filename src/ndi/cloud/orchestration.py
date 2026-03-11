@@ -71,10 +71,10 @@ def downloadDataset(
     # When not syncing files, rewrite file_info locations to ndic:// URIs
     # so binary files can be fetched on demand later.
     if not sync_files:
-        from .filehandler import rewrite_file_info_for_cloud
+        from .filehandler import updateFileInfoForRemoteFiles
 
         for dj in doc_jsons:
-            rewrite_file_info_for_cloud(dj, cloud_dataset_id)
+            updateFileInfoForRemoteFiles(dj, cloud_dataset_id)
 
     # Convert to Document objects and add to a local Dataset
     from ndi.dataset import Dataset
@@ -166,10 +166,10 @@ def load_dataset_from_json_dir(
 
     # Rewrite file_info to ndic:// URIs for on-demand fetching
     if cloud_dataset_id:
-        from .filehandler import rewrite_file_info_for_cloud
+        from .filehandler import updateFileInfoForRemoteFiles
 
         for dj in doc_jsons:
-            rewrite_file_info_for_cloud(dj, cloud_dataset_id)
+            updateFileInfoForRemoteFiles(dj, cloud_dataset_id)
 
     # Create Dataset
     from ndi.dataset import Dataset
@@ -374,63 +374,8 @@ def newDataset(
     return cloud_id
 
 
-@_auto_client
-def scanForUpload(
-    dataset: Any,
-    cloud_dataset_id: str,
-    *,
-    client: CloudClient | None = None,
-) -> tuple[list[dict], list[dict], float]:
-    """Scan local documents/files to determine what needs uploading.
-
-    MATLAB equivalent: +cloud/+upload/scanForUpload.m
-
-    Returns:
-        Tuple of (doc_structs, file_structs, total_size_kb).
-    """
-    from ndi.query import Query
-
-    from .internal import listRemoteDocumentIds
-
-    # Get local documents
-    try:
-        all_docs = dataset.session.database_search(Query(""))
-    except Exception:
-        all_docs = []
-
-    # Get remote IDs
-    remote_ids = {}
-    if cloud_dataset_id:
-        try:
-            remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
-        except Exception:
-            pass
-
-    doc_structs: list[dict] = []
-    file_structs: list[dict] = []
-    total_size = 0.0
-
-    for doc in all_docs:
-        props = doc.document_properties if hasattr(doc, "document_properties") else doc
-        doc_id = ""
-        if isinstance(props, dict):
-            doc_id = props.get("base", {}).get("id", "")
-
-        is_uploaded = doc_id in remote_ids
-        doc_structs.append({"docid": doc_id, "is_uploaded": is_uploaded})
-
-        # Check for associated files
-        file_uid = props.get("file_uid", "") if isinstance(props, dict) else ""
-        if file_uid:
-            file_structs.append(
-                {
-                    "uid": file_uid,
-                    "docid": doc_id,
-                    "is_uploaded": is_uploaded,
-                }
-            )
-
-    return doc_structs, file_structs, total_size
+# Re-export from upload module (MATLAB: ndi.cloud.upload.scanForUpload)
+from .upload import scanForUpload  # noqa: F401
 
 
 # ---------------------------------------------------------------------------

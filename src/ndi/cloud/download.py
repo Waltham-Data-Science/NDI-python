@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def downloadFullDataset(
+def dataset(
     dataset_id: str,
     target_dir: str | Path,
     *,
@@ -27,6 +27,8 @@ def downloadFullDataset(
     client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """Download a complete dataset (full documents + binary files) to disk.
+
+    MATLAB equivalent: ``ndi.cloud.download.dataset``
 
     This is the recommended way to download an entire dataset.  It fetches
     the full JSON for every document (not just summaries) and optionally
@@ -427,3 +429,351 @@ def jsons2documents(
         except Exception:
             pass
     return documents
+
+
+def datasetDocuments(
+    dataset_info: dict[str, Any],
+    mode: str = "local",
+    json_dir: str | Path | None = None,
+    files_dir: str | Path | None = None,
+    *,
+    verbose: bool = True,
+    client: CloudClient | None = None,
+) -> tuple[bool, str]:
+    """Download dataset documents one-by-one from the cloud.
+
+    MATLAB equivalent: ``ndi.cloud.download.datasetDocuments``
+
+    This fetches each document individually via ``getDocument``, sets
+    file info according to *mode* (``'local'`` or ``'hybrid'``), and
+    saves each document as a JSON file in *json_dir*.
+
+    Args:
+        dataset_info: Dataset dict as returned by ``getDataset``, must
+            include ``documents`` (list of document IDs) and ``_id``.
+        mode: ``'local'`` — files are expected on disk, set ingest/delete
+            flags.  ``'hybrid'`` — leave files in cloud, set ndic:// URIs.
+        json_dir: Directory to save document JSON files.
+        files_dir: Directory containing locally-downloaded binary files
+            (used only when *mode* is ``'local'``).
+        verbose: Print progress messages.
+        client: Authenticated cloud client (auto-created if omitted).
+
+    Returns:
+        Tuple of ``(success, error_message)``.
+    """
+    from .api import documents as docs_api
+
+    dataset_id = dataset_info.get("_id", dataset_info.get("id", ""))
+    doc_ids = dataset_info.get("documents", [])
+
+    if verbose:
+        print(f"Will download {len(doc_ids)} documents...")
+
+    if json_dir is not None:
+        json_path = Path(json_dir)
+        json_path.mkdir(parents=True, exist_ok=True)
+    else:
+        json_path = None
+
+    for i, document_id in enumerate(doc_ids):
+        if verbose:
+            pct = 100 * (i + 1) / max(len(doc_ids), 1)
+            print(f"Downloading document {i + 1} of {len(doc_ids)} ({pct:.0f}%)...")
+
+        if json_path is not None:
+            out_file = json_path / f"{document_id}.json"
+            if out_file.exists():
+                if verbose:
+                    print(f"  Document {i + 1} already exists. Skipping...")
+                continue
+
+        try:
+            doc_struct = docs_api.getDocument(dataset_id, document_id, client=client)
+            if hasattr(doc_struct, "data"):
+                doc_struct = doc_struct.data
+        except Exception as exc:
+            logger.warning("Failed to get document %s: %s", document_id, exc)
+            continue
+
+        # Remove cloud-only 'id' field (MATLAB: rmfield(docStruct, 'id'))
+        doc_struct.pop("id", None)
+
+        # Set file info according to mode
+        doc_struct = setFileInfo(doc_struct, mode, str(files_dir or ""))
+
+        if json_path is not None:
+            out_file = json_path / f"{document_id}.json"
+            out_file.write_text(json.dumps(doc_struct, indent=2), encoding="utf-8")
+
+    return True, ""
+
+
+def downloadGenericFiles(
+    ndi_dataset: Any,
+    ndi_document_ids: list[str],
+    target_folder: str | Path,
+    *,
+    verbose: bool = True,
+    zip_result: bool = False,
+    naming_strategy: str = "original",
+    client: CloudClient | None = None,
+) -> tuple[bool, str, dict[str, Any]]:
+    """Download generic_file documents from cloud to a folder with extensions.
+
+    MATLAB equivalent: ``ndi.cloud.download.downloadGenericFiles``
+
+    Identifies ``generic_file`` documents among the specified NDI document
+    IDs and their dependencies, downloads their associated data files to
+    *target_folder* using their original filenames (including extensions).
+
+    Args:
+        ndi_dataset: The local NDI dataset (or session) object.
+        ndi_document_ids: NDI document IDs to download.
+        target_folder: Destination folder for the files.
+        verbose: Print progress messages.
+        zip_result: If True, zip the downloaded files.
+        naming_strategy: One of ``'original'``, ``'id'``, ``'id_original'``.
+        client: Authenticated cloud client (auto-created if omitted).
+
+    Returns:
+        Tuple of ``(success, error_message, report)`` where *report*
+        contains ``downloaded_filenames`` and optionally ``zip_file``.
+    """
+    import requests as _requests
+
+    from .api import files as files_api
+    from .internal import getCloudDatasetIdForLocalDataset
+
+    target = Path(target_folder)
+    target.mkdir(parents=True, exist_ok=True)
+
+    report: dict[str, Any] = {"downloaded_filenames": [], "zip_file": ""}
+
+    if not ndi_document_ids:
+        if verbose:
+            print("No NDI document IDs provided.")
+        return True, "", report
+
+    try:
+        # Resolve cloud dataset ID
+        cloud_dataset_id, _ = getCloudDatasetIdForLocalDataset(ndi_dataset, client=client)
+        if not cloud_dataset_id:
+            return False, "Dataset is not linked to an NDI cloud dataset", report
+
+        # Get documents from the local database
+        from ndi.query import Query
+
+        all_docs = []
+        for doc_id in ndi_document_ids:
+            q = Query("base.id", "exact_string", doc_id, "")
+            results = ndi_dataset.database_search(q) if hasattr(ndi_dataset, "database_search") else []
+            all_docs.extend(results)
+
+        if not all_docs:
+            if verbose:
+                print("No matching documents found in the dataset.")
+            return True, "", report
+
+        # Filter for generic_file documents
+        generic_docs = []
+        for doc in all_docs:
+            props = doc.document_properties if hasattr(doc, "document_properties") else doc
+            if isinstance(props, dict) and "generic_file" in props:
+                generic_docs.append(doc)
+
+        if not generic_docs:
+            if verbose:
+                print("No generic_file documents found.")
+            return True, "", report
+
+        # Build download list
+        download_list: list[dict[str, str]] = []
+        for doc in generic_docs:
+            props = doc.document_properties if hasattr(doc, "document_properties") else doc
+            if not isinstance(props, dict):
+                continue
+            files_info = props.get("files", {}).get("file_info", [])
+            if isinstance(files_info, dict):
+                files_info = [files_info]
+            generic_file = props.get("generic_file", {})
+            original_filename = generic_file.get("filename", "")
+            doc_id = props.get("base", {}).get("id", "")
+
+            for fi in files_info:
+                locations = fi.get("locations", [])
+                if isinstance(locations, dict):
+                    locations = [locations]
+                if locations:
+                    uid = locations[0].get("uid", "")
+                    if not uid:
+                        continue
+
+                    import os
+
+                    name_part, ext_part = os.path.splitext(original_filename)
+                    if not name_part:
+                        name_part, ext_part = os.path.splitext(fi.get("name", ""))
+
+                    if naming_strategy == "id":
+                        filename = f"{doc_id}{ext_part}"
+                    elif naming_strategy == "id_original":
+                        filename = f"{doc_id}_{name_part}{ext_part}"
+                    else:  # "original"
+                        filename = f"{name_part}{ext_part}"
+
+                    download_list.append({"uid": uid, "filename": filename})
+
+        if not download_list:
+            if verbose:
+                print("No files associated with these documents.")
+            return True, "", report
+
+        # Download files
+        if verbose:
+            print(f"Downloading {len(download_list)} files to {target}...")
+
+        for i, item in enumerate(download_list):
+            uid = item["uid"]
+            filename = item["filename"]
+            target_path = target / filename
+
+            if verbose:
+                print(f"  [{i + 1}/{len(download_list)}] Downloading {filename} (UID: {uid})...")
+
+            try:
+                details = files_api.getFileDetails(cloud_dataset_id, uid, client=client)
+                url = details.get("downloadUrl", "") if hasattr(details, "get") else ""
+                if not url:
+                    logger.warning("No download URL for file %s (UID: %s)", filename, uid)
+                    continue
+
+                resp = _requests.get(url, timeout=300, stream=True)
+                if resp.status_code == 200:
+                    with open(target_path, "wb") as fh:
+                        for chunk in resp.iter_content(chunk_size=65536):
+                            fh.write(chunk)
+                    report["downloaded_filenames"].append(filename)
+            except Exception as exc:
+                logger.warning("Failed to download file %s: %s", filename, exc)
+
+        # Optional zip
+        if zip_result and report["downloaded_filenames"]:
+            import zipfile as _zipfile
+
+            zip_name = target / f"exported_generic_files.zip"
+            with _zipfile.ZipFile(zip_name, "w", _zipfile.ZIP_DEFLATED) as zf:
+                for fname in report["downloaded_filenames"]:
+                    zf.write(target / fname, fname)
+            report["zip_file"] = str(zip_name)
+            if verbose:
+                print(f"Zip complete: {zip_name}")
+
+    except Exception as exc:
+        return False, str(exc), report
+
+    return True, "", report
+
+
+def setFileInfo(
+    doc_struct: dict[str, Any],
+    mode: str,
+    filepath: str,
+) -> dict[str, Any]:
+    """Set file_info parameters for different download modes.
+
+    MATLAB equivalent: ``ndi.cloud.download.internal.setFileInfo``
+
+    Args:
+        doc_struct: Document properties dict.
+        mode: ``'local'`` — set delete_original and ingest to 1 and
+            update file locations to local paths.  ``'hybrid'`` — set
+            delete_original and ingest to 0 (leave files in cloud).
+        filepath: Directory containing locally-downloaded files.
+
+    Returns:
+        Updated document properties dict.
+    """
+    new_struct = dict(doc_struct)
+    files = new_struct.get("files")
+    if not files or not isinstance(files, dict):
+        return new_struct
+
+    file_info = files.get("file_info")
+    if file_info is None:
+        return new_struct
+
+    if isinstance(file_info, dict):
+        file_info = [file_info]
+
+    if mode == "local":
+        # Rewrite file info to point to local files
+        import os
+
+        new_file_info = []
+        for fi in file_info:
+            if not isinstance(fi, dict):
+                new_file_info.append(fi)
+                continue
+            locations = fi.get("locations", [])
+            if isinstance(locations, dict):
+                locations = [locations]
+            if locations:
+                uid = locations[0].get("uid", "")
+                file_location = os.path.join(filepath, uid) if uid else ""
+                new_fi = dict(fi)
+                new_fi["locations"] = [
+                    {
+                        "uid": uid,
+                        "location": file_location,
+                        "location_type": "file",
+                        "delete_original": 1,
+                        "ingest": 1,
+                        **{
+                            k: v
+                            for k, v in locations[0].items()
+                            if k not in ("location", "location_type", "delete_original", "ingest")
+                        },
+                    }
+                ]
+                new_file_info.append(new_fi)
+            else:
+                new_file_info.append(fi)
+        files["file_info"] = new_file_info if len(new_file_info) != 1 else new_file_info
+    else:
+        # hybrid: set flags to 0
+        for fi in file_info:
+            if not isinstance(fi, dict):
+                continue
+            locations = fi.get("locations", [])
+            if isinstance(locations, dict):
+                locations = [locations]
+            for loc in locations:
+                if isinstance(loc, dict):
+                    loc["delete_original"] = 0
+                    loc["ingest"] = 0
+
+    return new_struct
+
+
+def structsToNdiDocuments(
+    ndi_document_structs: list[dict[str, Any]],
+) -> list[Any]:
+    """Convert downloaded NDI document structures to ndi.Document objects.
+
+    MATLAB equivalent: ``ndi.cloud.download.internal.structsToNdiDocuments``
+
+    This is equivalent to :func:`jsons2documents` but named to match
+    the MATLAB function.
+
+    Args:
+        ndi_document_structs: List of document property dicts.
+
+    Returns:
+        List of :class:`ndi.Document` objects.
+    """
+    return jsons2documents(ndi_document_structs)
+
+
+# Backward-compatible alias
+downloadFullDataset = dataset
