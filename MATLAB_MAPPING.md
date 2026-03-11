@@ -454,6 +454,45 @@ from ndi.cloud import downloadDataset, uploadDataset, syncDataset, uploadSingleF
 | `ndi.cloud.utility.createCloudMetadataStruct` | MATLAB struct validator; `CloudConfig` replaces |
 | `ndi.cloud.utility.mustBeValidMetadata` | MATLAB struct validator; type hints replace |
 
+## Validators (`ndi.validators.*`)
+
+| MATLAB | Python | Module |
+|--------|--------|--------|
+| `ndi.validators.mustBeCellArrayOfClass` | `ndi.validators.mustBeCellArrayOfClass()` | `ndi.validators.mustBeCellArrayOfClass` |
+| `ndi.validators.mustBeCellArrayOfNdiSessions` | `ndi.validators.mustBeCellArrayOfNdiSessions()` | `ndi.validators.mustBeCellArrayOfNdiSessions` |
+| `ndi.validators.mustBeCellArrayOfNonEmptyCharacterArrays` | `ndi.validators.mustBeCellArrayOfNonEmptyCharacterArrays()` | `ndi.validators.mustBeCellArrayOfNonEmptyCharacterArrays` |
+| `ndi.validators.mustBeClassnameOfType` | `ndi.validators.mustBeClassnameOfType()` | `ndi.validators.mustBeClassnameOfType` |
+| `ndi.validators.mustBeEpochInput` | `ndi.validators.mustBeEpochInput()` | `ndi.validators.mustBeEpochInput` |
+| `ndi.validators.mustBeID` | `ndi.validators.mustBeID()` | `ndi.validators.mustBeID` |
+| `ndi.validators.mustBeNumericClass` | `ndi.validators.mustBeNumericClass()` | `ndi.validators.mustBeNumericClass` |
+| `ndi.validators.mustBeTextLike` | `ndi.validators.mustBeTextLike()` | `ndi.validators.mustBeTextLike` |
+| `ndi.validators.mustHaveFields` | `ndi.validators.mustHaveFields()` | `ndi.validators.mustHaveFields` |
+| `ndi.validators.mustHaveRequiredColumns` | `ndi.validators.mustHaveRequiredColumns()` | `ndi.validators.mustHaveRequiredColumns` |
+| `ndi.validators.mustMatchRegex` | `ndi.validators.mustMatchRegex()` | `ndi.validators.mustMatchRegex` |
+
+## Utilities (`ndi.util.*`)
+
+| MATLAB | Python | Module |
+|--------|--------|--------|
+| `ndi.util.datestamp2datetime` | `ndi.util.datestamp2datetime()` | `ndi.util.datestamp2datetime` |
+| `ndi.util.downsampleTimeseries` | `ndi.util.downsampleTimeseries()` | `ndi.util.downsampleTimeseries` |
+| `ndi.util.hexDiff` | `ndi.util.hexDiff()` | `ndi.util.hexDiff` |
+| `ndi.util.hexDiffBytes` | `ndi.util.hexDiffBytes()` | `ndi.util.hexDiffBytes` |
+| `ndi.util.getHexDiffFromFileObj` | `ndi.util.getHexDiffFromFileObj()` | `ndi.util.getHexDiffFromFileObj` |
+| `ndi.util.hexDump` | `ndi.util.hexDump()` | `ndi.util.hexDump` |
+| `ndi.util.rehydrateJSONNanNull` | `ndi.util.rehydrateJSONNanNull()` | `ndi.util.rehydrateJSONNanNull` |
+| `ndi.util.unwrapTableCellContent` | `ndi.util.unwrapTableCellContent()` | `ndi.util.unwrapTableCellContent` |
+| `ndi.util.openminds.find_instance_name` | `ndi.openminds_convert.find_controlled_instance()` | `ndi.openminds_convert` |
+| `ndi.util.openminds.find_techniques_names` | `ndi.openminds_convert.find_technique_names()` | `ndi.openminds_convert` |
+
+### Util: Not Ported
+
+| MATLAB | Reason |
+|--------|--------|
+| `ndi.util.choosefile` | MATLAB GUI dialog |
+| `ndi.util.choosefileordir` | MATLAB GUI dialog |
+| `ndi.util.toolboxdir` | MATLAB-specific path resolution |
+
 ## Ontology
 
 | MATLAB | Python | Module |
@@ -499,3 +538,6 @@ The following MATLAB components were intentionally not ported (GUI, MATLAB-speci
 | `ndi.fun.convertoldnsd2ndi` | Legacy NSD→NDI migration |
 | `ndi.fun.run_Linux_checks` | MATLAB Linux environment checks |
 | `ndi.fun.plot_extracellular_spikeshapes` | MATLAB GUI plotting |
+| `ndi.util.choosefile` | MATLAB GUI dialog |
+| `ndi.util.choosefileordir` | MATLAB GUI dialog |
+| `ndi.util.toolboxdir` | MATLAB-specific path resolution |

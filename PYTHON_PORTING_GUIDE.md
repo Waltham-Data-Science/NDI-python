@@ -78,3 +78,33 @@ Verified coverage of each MATLAB namespace against the Python port. See
 | `ndi.cloud.ui.dialog.selectCloudDataset` | MATLAB GUI dialog |
 | `ndi.cloud.utility.createCloudMetadataStruct` | MATLAB struct validator; `CloudConfig` replaces |
 | `ndi.cloud.utility.mustBeValidMetadata` | MATLAB struct validator; type hints replace |
+
+### `ndi.validators` — Fully Ported
+
+**Verified:** 2026-03-11 against `VH-Lab/NDI-matlab` branch `main`.
+
+| MATLAB | Python | Coverage |
+|--------|--------|:--------:|
+| 11 functions | 11 functions | **100 %** |
+
+All 11 MATLAB `arguments`-block validators ported 1:1 with matching
+function names.  Python equivalents accept Python types (``list`` for
+cell array, ``dict`` for struct, ``pd.DataFrame`` for table).
+
+### `ndi.util` — Fully Ported
+
+**Verified:** 2026-03-11 against `VH-Lab/NDI-matlab` branch `main`.
+
+| Category | MATLAB funcs | Python funcs | Coverage | Notes |
+|----------|:------------:|:------------:|:--------:|-------|
+| Data/time utilities (8) | 8 | 8 | **100 %** | |
+| `+openminds` (2) | 2 | 2 | **100 %** | Ported in `ndi.openminds_convert` |
+| GUI / MATLAB-specific (3) | 3 | — | **N/A** | `choosefile`, `choosefileordir`, `toolboxdir` |
+
+**Not ported (intentional):**
+
+| MATLAB | Reason |
+|--------|--------|
+| `ndi.util.choosefile` | MATLAB GUI dialog (`inputdlg`) |
+| `ndi.util.choosefileordir` | MATLAB GUI dialog (`inputdlg`) |
+| `ndi.util.toolboxdir` | MATLAB-specific path resolution |
