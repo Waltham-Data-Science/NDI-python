@@ -3,7 +3,7 @@ include README.md
 include CHANGELOG.md
 include MATLAB_MAPPING.md
 
-recursive-include ndi_common *.json *.txt *.tsv *.tsv.gz *.obo *.md
-recursive-include ndi_common/example_binaries *
-recursive-include ndi_common/example_datasets *
-recursive-include ndi_common/daq_systems *
+recursive-include src/ndi/ndi_common *.json *.txt *.tsv *.tsv.gz *.obo *.md
+recursive-include src/ndi/ndi_common/example_binaries *
+recursive-include src/ndi/ndi_common/example_datasets *
+recursive-include src/ndi/ndi_common/daq_systems *

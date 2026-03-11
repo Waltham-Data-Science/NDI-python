@@ -34,25 +34,19 @@ class PathConstants:
         """Find the NDI root directory.
 
         Looks for environment variable NDI_ROOT, or tries to find it
-        relative to this package. Searches multiple possible locations.
+        relative to this package. The ndi_common directory lives inside
+        the ndi package (src/ndi/ndi_common), so the root is the ndi
+        package directory itself.
         """
         if os.environ.get("NDI_ROOT"):
             return Path(os.environ["NDI_ROOT"])
 
-        # Try to find it relative to this file
-        # src/ndi/common/__init__.py -> src/ndi/common -> src/ndi -> src -> repo_root
-        package_dir = Path(__file__).parent.parent.parent.parent
+        # ndi_common is inside the ndi package directory.
+        # src/ndi/common/__init__.py -> common -> ndi (package root)
+        package_dir = Path(__file__).parent.parent
 
-        # Check multiple possible locations for ndi_common
-        possible_paths = [
-            package_dir / "ndi_common",  # repo_root/ndi_common
-            package_dir / "src" / "ndi" / "ndi_common",  # repo_root/src/ndi/ndi_common
-        ]
-
-        for path in possible_paths:
-            if path.exists() and (path / "database_documents").exists():
-                # Return the parent that contains ndi_common
-                return path.parent
+        if (package_dir / "ndi_common" / "database_documents").exists():
+            return package_dir
 
         raise ValueError(
             "Cannot find NDI root directory. "
