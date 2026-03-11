@@ -40,9 +40,25 @@ class APIResponse:
         data: The parsed response payload (dict, list, str, or None).
         status_code: The HTTP status code.
         url: The full request URL.
+        headers: Response headers (dict-like, or empty dict).
+        reason: HTTP reason phrase (e.g. ``"OK"``, ``"Not Found"``).
+        elapsed: Time between sending the request and receiving the
+            response headers (``datetime.timedelta``, or ``None``).
+        http_response: The raw ``requests.Response`` object, when
+            available.  ``None`` for locally-constructed instances
+            (e.g. paginated aggregations).
     """
 
-    __slots__ = ("success", "data", "status_code", "url")
+    __slots__ = (
+        "success",
+        "data",
+        "status_code",
+        "url",
+        "headers",
+        "reason",
+        "elapsed",
+        "http_response",
+    )
 
     def __init__(
         self,
@@ -51,11 +67,19 @@ class APIResponse:
         success: bool = True,
         status_code: int = 200,
         url: str = "",
+        headers: Any = None,
+        reason: str = "",
+        elapsed: Any = None,
+        http_response: Any = None,
     ):
         self.success = success
         self.data = data
         self.status_code = status_code
         self.url = url
+        self.headers = headers if headers is not None else {}
+        self.reason = reason
+        self.elapsed = elapsed
+        self.http_response = http_response
 
     # -- Dict proxy (when data is a dict) --
 
@@ -97,7 +121,12 @@ class APIResponse:
 
     def __repr__(self) -> str:
         status = "OK" if self.success else "FAIL"
-        return f"APIResponse({status}, status={self.status_code}, url={self.url!r})"
+        reason = f" {self.reason}" if self.reason else ""
+        elapsed = f", elapsed={self.elapsed}" if self.elapsed is not None else ""
+        return (
+            f"APIResponse({status}, status={self.status_code}{reason}"
+            f"{elapsed}, url={self.url!r})"
+        )
 
 
 class CloudClient:
@@ -230,6 +259,10 @@ class CloudClient:
             success=True,
             status_code=resp.status_code,
             url=url,
+            headers=resp.headers,
+            reason=getattr(resp, "reason", ""),
+            elapsed=getattr(resp, "elapsed", None),
+            http_response=resp,
         )
 
     def _handle_response(self, resp: Any) -> Any:
