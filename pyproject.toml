@@ -90,7 +90,7 @@ allow-direct-references = true
 packages = ["src/ndi"]
 
 [tool.hatch.build.targets.sdist]
-include = ["/src", "/ndi_common", "/tests", "/examples", "LICENSE", "README.md", "CHANGELOG.md", "MATLAB_MAPPING.md"]
+include = ["/src", "/tests", "/examples", "LICENSE", "README.md", "CHANGELOG.md", "MATLAB_MAPPING.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
