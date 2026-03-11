@@ -9,14 +9,18 @@ Compares two files and prints the 16-byte lines where they differ.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Annotated
+
+import pydantic
 
 
+@pydantic.validate_call
 def hexDiff(
     filename1: str | Path,
     filename2: str | Path,
     *,
-    StartByte: int = 0,
-    StopByte: int | None = None,
+    StartByte: Annotated[int, pydantic.Field(ge=0)] = 0,
+    StopByte: Annotated[int, pydantic.Field(ge=0)] | None = None,
 ) -> None:
     """Compare two files and print differing 16-byte lines.
 
@@ -34,6 +38,8 @@ def hexDiff(
 
     Raises
     ------
+    ValidationError
+        If types are wrong or byte offsets are negative.
     FileNotFoundError
         If either file does not exist.
     ValueError

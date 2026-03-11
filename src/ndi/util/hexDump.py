@@ -10,15 +10,19 @@ from __future__ import annotations
 
 import warnings
 from pathlib import Path
+from typing import Annotated
+
+import pydantic
 
 from .hexDiff import _format_chunk
 
 
+@pydantic.validate_call
 def hexDump(
     filename: str | Path,
     *,
-    StartByte: int = 0,
-    StopByte: int | None = None,
+    StartByte: Annotated[int, pydantic.Field(ge=0)] = 0,
+    StopByte: Annotated[int, pydantic.Field(ge=0)] | None = None,
 ) -> None:
     """Print a hex dump of a file.
 
@@ -35,6 +39,8 @@ def hexDump(
 
     Raises
     ------
+    ValidationError
+        If types are wrong or byte offsets are negative.
     FileNotFoundError
         If the file does not exist.
     ValueError

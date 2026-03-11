@@ -12,7 +12,11 @@ from __future__ import annotations
 import math
 from typing import Any
 
+import pydantic
+from pydantic import ConfigDict
 
+
+@pydantic.validate_call(config=ConfigDict(arbitrary_types_allowed=True))
 def unwrapTableCellContent(cellValue: Any) -> Any:
     """Recursively unwrap nested lists to retrieve the innermost value.
 

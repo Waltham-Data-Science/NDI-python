@@ -9,14 +9,18 @@ Downsamples a timeseries after applying a low-pass anti-aliasing filter.
 from __future__ import annotations
 
 import warnings
+from typing import Annotated
 
 import numpy as np
+import pydantic
+from pydantic import ConfigDict
 
 
+@pydantic.validate_call(config=ConfigDict(arbitrary_types_allowed=True))
 def downsampleTimeseries(
     t_in: np.ndarray,
     d_in: np.ndarray,
-    LP: float,
+    LP: Annotated[float, pydantic.Field(gt=0)],
 ) -> tuple[np.ndarray, np.ndarray]:
     """Downsample a timeseries with anti-aliasing.
 
@@ -36,7 +40,7 @@ def downsampleTimeseries(
         Data matrix.  Each column is a channel; rows correspond to samples
         in *t_in*.
     LP : float
-        Low-pass cutoff frequency in Hz.
+        Low-pass cutoff frequency in Hz.  Must be positive.
 
     Returns
     -------
@@ -47,9 +51,10 @@ def downsampleTimeseries(
 
     Raises
     ------
+    ValidationError
+        If *LP* is not positive or types are wrong.
     ValueError
-        If *t_in* and *d_in* have incompatible shapes, or *LP* is not
-        positive.
+        If *t_in* and *d_in* have incompatible shapes.
     """
     from scipy.signal import cheby1, filtfilt
 
@@ -64,8 +69,6 @@ def downsampleTimeseries(
         raise ValueError(
             "The number of rows in d_in must equal the length of t_in."
         )
-    if LP <= 0:
-        raise ValueError("LP must be positive.")
 
     dt = np.median(np.diff(t_in))
     fs = 1.0 / dt

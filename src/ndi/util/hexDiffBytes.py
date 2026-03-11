@@ -8,14 +8,19 @@ Compares two byte sequences and returns a formatted hex diff string.
 
 from __future__ import annotations
 
+from typing import Annotated
+
+import pydantic
+
 from .hexDiff import _format_chunk
 
 
+@pydantic.validate_call
 def hexDiffBytes(
     data1: bytes,
     data2: bytes,
     *,
-    StartOffset: int = 0,
+    StartOffset: Annotated[int, pydantic.Field(ge=0)] = 0,
 ) -> str:
     """Compare two byte sequences and return a hex diff string.
 
@@ -34,6 +39,11 @@ def hexDiffBytes(
     str
         A formatted hex diff string.  Empty if the sequences are
         identical in the compared range.
+
+    Raises
+    ------
+    ValidationError
+        If types are wrong or *StartOffset* is negative.
     """
     max_size = max(len(data1), len(data2))
     lines: list[str] = []

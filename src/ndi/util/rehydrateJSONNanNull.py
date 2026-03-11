@@ -9,7 +9,10 @@ text with Python-compatible representations.
 
 from __future__ import annotations
 
+import pydantic
 
+
+@pydantic.validate_call
 def rehydrateJSONNanNull(
     jsonText: str,
     *,
@@ -46,12 +49,9 @@ def rehydrateJSONNanNull(
 
     Raises
     ------
-    TypeError
+    ValidationError
         If *jsonText* is not a string.
     """
-    if not isinstance(jsonText, str):
-        raise TypeError("Input must be a string.")
-
     result = jsonText
     result = result.replace(nan_string, "NaN")
     result = result.replace(inf_string, "Infinity")

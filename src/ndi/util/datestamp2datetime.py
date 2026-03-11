@@ -10,7 +10,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pydantic
 
+
+@pydantic.validate_call
 def datestamp2datetime(datestampStr: str) -> datetime:
     """Convert an NDI datestamp string to a :class:`datetime.datetime`.
 
@@ -32,13 +35,10 @@ def datestamp2datetime(datestampStr: str) -> datetime:
 
     Raises
     ------
-    TypeError
+    ValidationError
         If *datestampStr* is not a string.
     ValueError
         If the string cannot be parsed.
     """
-    if not isinstance(datestampStr, str):
-        raise TypeError("Input must be a string.")
-
     dt = datetime.fromisoformat(datestampStr)
     return dt.astimezone(timezone.utc)

@@ -8,16 +8,20 @@ Compare two file-like objects chunk by chunk for equality.
 
 from __future__ import annotations
 
-from typing import IO
+from typing import IO, Annotated
+
+import pydantic
+from pydantic import ConfigDict
 
 from .hexDiffBytes import hexDiffBytes
 
 
+@pydantic.validate_call(config=ConfigDict(arbitrary_types_allowed=True))
 def getHexDiffFromFileObj(
     file_obj1: IO[bytes],
     file_obj2: IO[bytes],
     *,
-    chunkSize: int = 1024 * 1024,
+    chunkSize: Annotated[int, pydantic.Field(gt=0)] = 1024 * 1024,
 ) -> tuple[bool, str]:
     """Compare two file-like objects chunk by chunk.
 
@@ -29,7 +33,8 @@ def getHexDiffFromFileObj(
     file_obj1, file_obj2 : file-like (binary mode)
         Open file objects to compare.
     chunkSize : int, optional
-        Number of bytes to read per chunk (default 1 MiB).
+        Number of bytes to read per chunk (default 1 MiB).  Must be
+        positive.
 
     Returns
     -------
@@ -38,6 +43,11 @@ def getHexDiffFromFileObj(
     diff_output : str
         Empty when identical; hex diff of the first mismatched chunk
         otherwise.
+
+    Raises
+    ------
+    ValidationError
+        If types are wrong or *chunkSize* is not positive.
     """
     file_obj1.seek(0, 2)
     size1 = file_obj1.tell()
