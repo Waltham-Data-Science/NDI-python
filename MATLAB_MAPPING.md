@@ -64,10 +64,11 @@ Complete reference mapping every MATLAB NDI function/class to its Python equival
 | MATLAB | Python | Module |
 |--------|--------|--------|
 | `ndi.session` | `ndi.Session` | `ndi.session` |
-| `ndi.session.dir` | `ndi.DirSession` | `ndi.session.dir` |
+| `ndi.session.dir` | `ndi.session.dir` / `ndi.DirSession` | `ndi.session.dir` |
 | `ndi.session.sessiontable` | `ndi.session.SessionTable` | `ndi.session.sessiontable` |
 | MockSession (conceptual) | `ndi.session.MockSession` | `ndi.session.mock` |
 | `ndi.dataset` | `ndi.Dataset` | `ndi.dataset` (`.cloud_client` property for on-demand file fetching) |
+| `ndi.dataset.dir` | `ndi.dataset.dir` / `ndi.Dataset` | `ndi.dataset` |
 | `ndi.subject` | `ndi.Subject` | `ndi.subject` |
 | `ndi.neuron` | `ndi.Neuron` | `ndi.neuron` |
 | `ndi.element_timeseries` | `ndi.ElementTimeseries` | `ndi.element_timeseries` |
@@ -76,10 +77,10 @@ Complete reference mapping every MATLAB NDI function/class to its Python equival
 
 | MATLAB | Python | Module |
 |--------|--------|--------|
-| `ndi.file.navigator` | `ndi.file.FileNavigator` | `ndi.file.navigator` |
-| `ndi.file.navigator_epochdir` | `ndi.file.navigator.EpochDirNavigator` | `ndi.file.navigator.epochdir` |
-| `ndi.file.type.mfdaq_epoch_channel` | `ndi.file.type.MFDAQEpochChannel` | `ndi.file.type.mfdaq_epoch_channel` |
-| `ndi.file.pfilemirror` | `ndi.file.PFileMirror` | `ndi.file.pfilemirror` |
+| `ndi.file.navigator` | `ndi.file.navigator` / `ndi.file.FileNavigator` | `ndi.file.navigator` |
+| `ndi.file.navigator_epochdir` | `ndi.file.navigator_epochdir` / `ndi.file.EpochDirNavigator` | `ndi.file.navigator.epochdir` |
+| `ndi.file.type.mfdaq_epoch_channel` | `ndi.file.type.mfdaq_epoch_channel` / `ndi.file.type.MFDAQEpochChannel` | `ndi.file.type.mfdaq_epoch_channel` |
+| `ndi.file.pfilemirror` | `ndi.file.pfilemirror()` | `ndi.file.pfilemirror` |
 
 ## App Framework
 
