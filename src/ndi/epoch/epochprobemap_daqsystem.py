@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import pydantic
+
 from ..daq.daqsystemstring import DAQSystemString
 from .epochprobemap import EpochProbeMap
 
@@ -84,6 +86,7 @@ class EpochProbeMapDAQSystem(EpochProbeMap):
             ]
         )
 
+    @pydantic.validate_call
     def savetofile(self, filename: str) -> None:
         """
         Write this epoch probe map to a file.

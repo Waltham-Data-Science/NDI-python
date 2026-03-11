@@ -10,9 +10,13 @@ from __future__ import annotations
 
 from typing import Any
 
+import pydantic
+from pydantic import ConfigDict
+
 from ..time import ClockType
 
 
+@pydantic.validate_call(config=ConfigDict(arbitrary_types_allowed=True))
 def epochrange(
     epochset_obj: Any,
     clocktype: ClockType,
@@ -118,6 +122,7 @@ def _resolve_epoch_index(
     raise ValueError(f"Epoch ID '{epoch}' not found")
 
 
+@pydantic.validate_call(config=ConfigDict(arbitrary_types_allowed=True))
 def findepochnode(
     epoch_node: dict[str, Any],
     epoch_node_array: list[dict[str, Any]],

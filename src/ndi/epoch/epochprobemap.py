@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import pydantic
+
 
 @dataclass
 class EpochProbeMap:
@@ -141,6 +143,7 @@ class EpochProbeMap:
         return hash((self.name, self.reference, self.type))
 
 
+@pydantic.validate_call
 def parse_devicestring(devicestring: str) -> dict[str, str]:
     """
     Parse a device string into components.
@@ -161,6 +164,7 @@ def parse_devicestring(devicestring: str) -> dict[str, str]:
     }
 
 
+@pydantic.validate_call
 def build_devicestring(
     name: str,
     deviceclass: str = "",

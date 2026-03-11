@@ -13,6 +13,8 @@ import re
 from typing import Any
 from urllib.parse import quote
 
+import pydantic
+
 # Registry populated at module load
 PROVIDER_REGISTRY: dict[str, type[OntologyProvider]] = {}
 
@@ -22,6 +24,7 @@ class OntologyProvider:
 
     name: str = ""
 
+    @pydantic.validate_call
     def lookup_term(self, term: str, prefix: str = "") -> Any:
         """Look up a term by ID or name. Override in subclasses."""
         from . import OntologyResult
@@ -49,6 +52,7 @@ class OLSProvider(OntologyProvider):
     ols_ontology: str = ""
     ols_prefix: str = ""
 
+    @pydantic.validate_call
     def lookup_term(self, term: str, prefix: str = "") -> Any:
 
         prefix = prefix or self.ols_prefix
@@ -139,6 +143,7 @@ class OMProvider(OLSProvider):
     ols_ontology = "om"
     ols_prefix = "OM"
 
+    @pydantic.validate_call
     def lookup_term(self, term: str, prefix: str = "") -> Any:
 
         # OM doesn't support numeric ID lookups
@@ -208,6 +213,7 @@ class NDICProvider(OntologyProvider):
             NDICProvider._data = []
             return []
 
+    @pydantic.validate_call
     def lookup_term(self, term: str, prefix: str = "") -> Any:
         from . import OntologyResult
 
@@ -230,6 +236,7 @@ class NCImProvider(OntologyProvider):
     name = "NCIm"
     _CUI_PATTERN = re.compile(r"^C\d{7}$")
 
+    @pydantic.validate_call
     def lookup_term(self, term: str, prefix: str = "") -> Any:
         from . import OntologyResult
 
@@ -277,6 +284,7 @@ class NCBITaxonProvider(OntologyProvider):
 
     name = "NCBITaxon"
 
+    @pydantic.validate_call
     def lookup_term(self, term: str, prefix: str = "") -> Any:
         from . import OntologyResult
 
@@ -344,6 +352,7 @@ class WBStrainProvider(OntologyProvider):
 
     name = "WBStrain"
 
+    @pydantic.validate_call
     def lookup_term(self, term: str, prefix: str = "") -> Any:
         from . import OntologyResult
 
@@ -392,6 +401,7 @@ class RRIDProvider(OntologyProvider):
 
     name = "RRID"
 
+    @pydantic.validate_call
     def lookup_term(self, term: str, prefix: str = "") -> Any:
         from . import OntologyResult
 
@@ -423,6 +433,7 @@ class PubChemProvider(OntologyProvider):
 
     name = "PubChem"
 
+    @pydantic.validate_call
     def lookup_term(self, term: str, prefix: str = "") -> Any:
         from . import OntologyResult
 
@@ -541,6 +552,7 @@ class EMPTYProvider(OntologyProvider):
         }
         return EMPTYProvider._cache
 
+    @pydantic.validate_call
     def lookup_term(self, term: str, prefix: str = "") -> Any:
         from ndi.fun.name_utils import name_to_variable_name
 
