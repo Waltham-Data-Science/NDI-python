@@ -21,6 +21,20 @@ from ._validators import VALIDATE_CONFIG, CloudId, NonEmptyStr, PageNumber, Page
 _Client = Annotated[CloudClient | None, SkipValidation()]
 
 
+def _resolve_org_id(org_id: str | None, client: CloudClient) -> str:
+    """Return *org_id* if given, otherwise pull it from client config."""
+    if org_id:
+        return org_id
+    resolved = getattr(client, "config", None)
+    if resolved and getattr(resolved, "org_id", ""):
+        return resolved.org_id
+    raise ValueError(
+        "org_id is required but was not provided and could not be "
+        "resolved from the client config.  Either pass org_id explicitly "
+        "or set NDI_CLOUD_ORGANIZATION_ID in the environment."
+    )
+
+
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
 def getDataset(dataset_id: CloudId, *, client: _Client = None) -> dict[str, Any]:
@@ -29,16 +43,22 @@ def getDataset(dataset_id: CloudId, *, client: _Client = None) -> dict[str, Any]
 
 
 @_auto_client
-@validate_call(config=VALIDATE_CONFIG)
 def createDataset(
-    org_id: NonEmptyStr,
-    name: NonEmptyStr,
+    org_id: str | None = None,
+    name: str = "",
     description: str = "",
     *,
     client: _Client = None,
     **kwargs: Any,
 ) -> dict[str, Any]:
-    """POST /organizations/{organizationId}/datasets"""
+    """POST /organizations/{organizationId}/datasets
+
+    If *org_id* is omitted it is resolved from the client's config
+    (populated automatically during login), matching MATLAB behaviour.
+    """
+    org_id = _resolve_org_id(org_id, client)
+    if not name:
+        raise ValueError("name is required")
     body: dict[str, Any] = {"name": name}
     if description:
         body["description"] = description
@@ -92,15 +112,19 @@ def deleteDataset(
 
 
 @_auto_client
-@validate_call(config=VALIDATE_CONFIG)
 def listDatasets(
-    org_id: NonEmptyStr,
-    page: PageNumber = 1,
-    page_size: PageSize = 1000,
+    org_id: str | None = None,
+    page: int = 1,
+    page_size: int = 1000,
     *,
     client: _Client = None,
 ) -> dict[str, Any]:
-    """GET /organizations/{organizationId}/datasets?page=&pageSize="""
+    """GET /organizations/{organizationId}/datasets?page=&pageSize=
+
+    If *org_id* is omitted it is resolved from the client's config
+    (populated automatically during login), matching MATLAB behaviour.
+    """
+    org_id = _resolve_org_id(org_id, client)
     return client.get(
         "/organizations/{organizationId}/datasets",
         params={"page": page, "pageSize": page_size},
@@ -112,9 +136,13 @@ _MAX_PAGES = 1000
 
 
 @_auto_client
-@validate_call(config=VALIDATE_CONFIG)
-def listAllDatasets(org_id: NonEmptyStr, *, client: _Client = None) -> APIResponse:
-    """Auto-paginate through all datasets for an organisation."""
+def listAllDatasets(org_id: str | None = None, *, client: _Client = None) -> APIResponse:
+    """Auto-paginate through all datasets for an organisation.
+
+    If *org_id* is omitted it is resolved from the client's config
+    (populated automatically during login), matching MATLAB behaviour.
+    """
+    org_id = _resolve_org_id(org_id, client)
     all_datasets: list[dict[str, Any]] = []
     page = 1
     while page <= _MAX_PAGES:
