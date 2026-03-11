@@ -390,9 +390,10 @@ def copy_session_to_dataset(
 
     # Check for already-copied sessions
     try:
-        refs, session_ids = ndi_dataset_obj.session_list()
+        sessions = ndi_dataset_obj.session_list()
         session_id = ndi_session_obj.id()
-        if session_id in session_ids:
+        existing_ids = [s["session_id"] for s in sessions]
+        if session_id in existing_ids:
             return (
                 False,
                 f"Session with ID {session_id} is already part of " f"the dataset.",

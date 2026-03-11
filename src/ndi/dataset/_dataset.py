@@ -224,28 +224,24 @@ class Dataset:
 
         return session
 
-    def session_list(self) -> tuple[list[str], list[dict[str, Any]]]:
+    def session_list(self) -> list[dict[str, Any]]:
         """
         List all sessions in this dataset.
 
         Returns:
-            A tuple of (session_references, session_list) where:
-                - session_references: List of session reference strings
-                - session_list: List of dicts with keys:
-                    - session_id: Session identifier
-                    - session_reference: Session reference name
-                    - is_linked: True if linked, False if ingested
-                    - document_id: ID of the session_in_a_dataset document
+            List of dicts with keys:
+                - session_id: Session identifier
+                - session_reference: Session reference name
+                - is_linked: True if linked, False if ingested
+                - document_id: ID of the session_in_a_dataset document
         """
         q = Query("").isa("session_in_a_dataset")
         docs = self._session.database_search(q)
 
-        session_references = []
         session_list = []
         for doc in docs:
             props = doc.document_properties.get("session_in_a_dataset", {})
             ref = props.get("session_reference", "")
-            session_references.append(ref)
             session_list.append(
                 {
                     "session_id": props.get("session_id", ""),
@@ -255,7 +251,7 @@ class Dataset:
                 }
             )
 
-        return session_references, session_list
+        return session_list
 
     # =========================================================================
     # Database Operations (delegated to internal session)
