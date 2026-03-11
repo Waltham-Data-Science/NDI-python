@@ -105,7 +105,7 @@ class TestIsIngestedInDataset:
         ds_dir.mkdir()
         dataset = Dataset(ds_dir, "ds_empty")
 
-        refs, session_ids = dataset.session_list()
+        refs, session_ids, *_ = dataset.session_list()
         assert session.id() not in session_ids, "Standalone session should not be in dataset"
 
     def test_ingested_session_in_dataset(self, tmp_path):
@@ -132,7 +132,7 @@ class TestIsIngestedInDataset:
         dataset = Dataset(ds_dir, "ds")
         dataset.add_ingested_session(session)
 
-        refs, session_ids = dataset.session_list()
+        refs, session_ids, *_ = dataset.session_list()
         assert session.id() in session_ids, "Ingested session should appear in dataset session list"
 
         # Also verify the document was ingested
@@ -152,7 +152,7 @@ class TestIsIngestedInDataset:
         dataset = Dataset(ds_dir, "ds_link")
         dataset.add_linked_session(session)
 
-        refs, session_ids = dataset.session_list()
+        refs, session_ids, *_ = dataset.session_list()
         assert len(session_ids) == 1
         assert session_ids[0] == session.id()
 
