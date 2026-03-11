@@ -31,6 +31,23 @@ To replicate the robustness of the MATLAB `arguments` block, use Pydantic for al
   - MATLAB `char` or `string` → Python `str`
   - MATLAB `{member1, member2}` → Python `Literal["member1", "member2"]`
 - **Coercion:** Allow Pydantic's default behavior of casting (e.g., allowing a string `"1"` or integer `1` to satisfy a `bool` type).
+- **Arbitrary Types:** When a function accepts types that Pydantic cannot serialise natively (e.g. `numpy.ndarray`, file-like `IO[bytes]`), pass `config=ConfigDict(arbitrary_types_allowed=True)` to the decorator.
+- **Constraints:** Use `Annotated[type, pydantic.Field(...)]` to express MATLAB `arguments`-block constraints such as `mustBePositive` (`gt=0`), `mustBeNonnegative` (`ge=0`), and `mustBeInteger`.
+
+### 4a. Reusable Validators in `ndi.validators`
+
+MATLAB centralises custom validation functions in the `+ndi/+validators/` namespace.  Python must do the same in the `ndi/validators/` package.
+
+- **When to create a validator:** Any type check, format check, or constraint that appears (or is likely to appear) in more than one function should be extracted into its own module under `ndi/validators/` instead of being written inline.
+- **Naming convention:** MATLAB-originated validators keep their exact MATLAB name (e.g. `mustBeID`).  Python-specific validators that have no MATLAB counterpart use `snake_case` prefixed with a descriptive verb (e.g. `is_ndarray`, `is_iso8601`).
+- **Signature pattern:** Each validator takes a single value, raises `ValueError` on failure, and returns the validated value unchanged:
+  ```python
+  def is_ndarray(val: object) -> np.ndarray:
+      if not isinstance(val, np.ndarray):
+          raise ValueError("Input must be a numpy.ndarray")
+      return val
+  ```
+- **Registration:** Every new validator must be imported and listed in `ndi/validators/__init__.py` so it is accessible as `ndi.validators.<name>`.
 
 ## 5. Error Handling
 
@@ -85,11 +102,18 @@ Verified coverage of each MATLAB namespace against the Python port. See
 
 | MATLAB | Python | Coverage |
 |--------|--------|:--------:|
-| 11 functions | 11 functions | **100 %** |
+| 11 functions | 11 + 2 | **100 %** |
 
 All 11 MATLAB `arguments`-block validators ported 1:1 with matching
 function names.  Python equivalents accept Python types (``list`` for
 cell array, ``dict`` for struct, ``pd.DataFrame`` for table).
+
+Python adds two reusable validators with no direct MATLAB counterpart:
+
+| Python | Purpose |
+|--------|---------|
+| `is_ndarray` | Validates value is a `numpy.ndarray` |
+| `is_iso8601` | Validates string is parseable ISO 8601 |
 
 ### `ndi.util` — Fully Ported
 
