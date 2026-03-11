@@ -51,12 +51,15 @@ MATLAB centralises custom validation functions in the `+ndi/+validators/` namesp
 
 ## 5. Code Style & Linting
 
-All Python code must pass **`black`** formatting before being committed.
+All Python code must pass **`black`** formatting and **`ruff`** linting before being committed.
 
 - **Formatter:** [Black](https://black.readthedocs.io/) is the project's sole code formatter.
-- **Before committing:** Always run `black --check src/ tests/` to verify formatting. If any files would be reformatted, run `black src/ tests/` to fix them before committing.
+- **Linter:** [Ruff](https://docs.astral.sh/ruff/) is the project's linter.
+- **Before committing:** Always run both checks and fix any issues:
+  1. `ruff check src/ tests/` — fix any lint errors (unused imports, undefined names, etc.). Use `ruff check --fix src/ tests/` for auto-fixable issues.
+  2. `black --check src/ tests/` — verify formatting. Run `black src/ tests/` to fix.
 - **Line length:** Use Black's default (88 characters).
-- **No manual formatting overrides:** Do not use `# fmt: off` / `# fmt: on` unless absolutely necessary.
+- **No manual formatting overrides:** Do not use `# fmt: off` / `# fmt: on` or `# noqa` unless absolutely necessary.
 
 ## 6. Error Handling
 
