@@ -50,7 +50,9 @@ def downloadDataset(
     )
     from .internal import createRemoteDatasetDoc
 
-    target = Path(target_folder)
+    # MATLAB compatibility: the actual download directory is
+    # target_folder / cloud_dataset_id, matching MATLAB behaviour.
+    target = Path(target_folder) / cloud_dataset_id
     target.mkdir(parents=True, exist_ok=True)
 
     # Verify dataset exists

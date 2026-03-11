@@ -32,7 +32,7 @@ Example:
 # Import epoch module (Phase 6)
 # Import Phase 10: Cloud API client
 # Import Phase 11: Schema validation
-from . import calc, cloud, daq, epoch, file, session, time, util, validate, validators
+from . import calc, cloud, common, daq, epoch, file, session, time, util, validate, validators
 
 # Import Phase 9: App framework and calculators
 from .app import App
@@ -41,7 +41,7 @@ from .app.appdoc import AppDoc, DocExistsAction
 # Import session and cache modules (Phase 7)
 from .cache import Cache
 from .calculator import Calculator
-from .common import PathConstants, get_logger, timestamp
+from .common import PathConstants, get_logger, getLogger, timestamp
 from .database import Database, open_database
 from .dataset import Dataset
 from .document import Document

@@ -1,13 +1,24 @@
 """
-ndi.common - common utilities for NDI
+ndi.common - common utilities for NDI.
 
-Provides path constants, timestamps, and other shared utilities.
+MATLAB equivalent: +ndi/+common
+
+Provides path constants, cache, logger, and other shared utilities.
+
+MATLAB functions:
+    ndi.common.PathConstants
+    ndi.common.assertDIDInstalled
+    ndi.common.getCache
+    ndi.common.getDatabaseHierarchy
+    ndi.common.getLogger
 """
+
+from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Any
 
 
 class PathConstants:
@@ -127,8 +138,10 @@ def timestamp() -> str:
     return now.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
-def get_logger(name: str = "ndi"):
+def getLogger(name: str = "ndi"):
     """Get a logger for NDI components.
+
+    MATLAB equivalent: ndi.common.getLogger
 
     Args:
         name: Logger name (default: 'ndi').
@@ -141,4 +154,114 @@ def get_logger(name: str = "ndi"):
     return logging.getLogger(name)
 
 
-__all__ = ["PathConstants", "timestamp", "get_logger"]
+# Keep old name for backwards compatibility
+get_logger = getLogger
+
+
+# ---------------------------------------------------------------------------
+# Singleton cache — mirrors MATLAB ndi.common.getCache
+# ---------------------------------------------------------------------------
+
+_cache_singleton: Any = None
+
+
+def getCache() -> Any:
+    """Return the global NDI cache singleton.
+
+    MATLAB equivalent: ndi.common.getCache
+
+    Returns a shared :class:`ndi.cache.Cache` instance, creating it on first
+    call. Subsequent calls return the same object.
+
+    Returns:
+        The global :class:`~ndi.cache.Cache` instance.
+    """
+    global _cache_singleton  # noqa: PLW0603
+    if _cache_singleton is None:
+        from ..cache import Cache
+
+        _cache_singleton = Cache()
+    return _cache_singleton
+
+
+# ---------------------------------------------------------------------------
+# Database hierarchy — mirrors MATLAB ndi.common.getDatabaseHierarchy
+# ---------------------------------------------------------------------------
+
+_database_hierarchy_singleton: Any = None
+
+
+def getDatabaseHierarchy() -> dict[str, Any]:
+    """Return the database document type hierarchy.
+
+    MATLAB equivalent: ndi.common.getDatabaseHierarchy
+
+    Reads the document definitions from ``ndi_common/database_documents``
+    and builds a mapping of document types to their superclasses and fields.
+    The result is cached after the first call.
+
+    Returns:
+        Dict mapping document type names to their definition metadata.
+    """
+    global _database_hierarchy_singleton  # noqa: PLW0603
+    if _database_hierarchy_singleton is not None:
+        return _database_hierarchy_singleton
+
+    import json
+
+    hierarchy: dict[str, Any] = {}
+    doc_path = PathConstants.DOCUMENT_PATH
+    if doc_path.is_dir():
+        for json_file in sorted(doc_path.rglob("*.json")):
+            try:
+                data = json.loads(json_file.read_text())
+                # Each definition has a "document_class" with "definition"
+                # containing the type name and superclasses.
+                doc_class = data.get("document_class", {})
+                def_info = doc_class.get("definition", "")
+                if def_info:
+                    # Use the definition URL/path stem as the type name
+                    type_name = Path(def_info).stem
+                    hierarchy[type_name] = {
+                        "definition": def_info,
+                        "class_version": doc_class.get("class_version", 1),
+                        "superclasses": doc_class.get("superclasses", []),
+                        "file": str(json_file),
+                    }
+            except (json.JSONDecodeError, KeyError):
+                continue
+
+    _database_hierarchy_singleton = hierarchy
+    return _database_hierarchy_singleton
+
+
+# ---------------------------------------------------------------------------
+# DID install check — mirrors MATLAB ndi.common.assertDIDInstalled
+# ---------------------------------------------------------------------------
+
+
+def assertDIDInstalled() -> None:
+    """Assert that the DID (Document Interface Database) package is installed.
+
+    MATLAB equivalent: ndi.common.assertDIDInstalled
+
+    Raises:
+        ImportError: If the ``did`` package is not installed.
+    """
+    try:
+        import did  # noqa: F401
+    except ImportError:
+        raise ImportError(
+            "The 'did' package is required but not installed. " "Install it with: pip install did"
+        ) from None
+
+
+__all__ = [
+    "PathConstants",
+    "timestamp",
+    "getLogger",
+    "get_logger",
+    "getCache",
+    "getDatabaseHierarchy",
+    "assertDIDInstalled",
+]
