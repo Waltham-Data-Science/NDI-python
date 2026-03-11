@@ -54,18 +54,14 @@ def hexDiff(
         StopByte = max_size - 1 if max_size > 0 else -1
 
     if StartByte >= max_size and max_size > 0:
-        raise ValueError(
-            f"StartByte ({StartByte}) is beyond the end of both files."
-        )
+        raise ValueError(f"StartByte ({StartByte}) is beyond the end of both files.")
     if StartByte > StopByte:
         raise ValueError(
-            f"StartByte ({StartByte}) cannot be greater than "
-            f"StopByte ({StopByte})."
+            f"StartByte ({StartByte}) cannot be greater than " f"StopByte ({StopByte})."
         )
 
     print(
-        f'Comparing "{filename1}" ({len(data1)} bytes) with '
-        f'"{filename2}" ({len(data2)} bytes)'
+        f'Comparing "{filename1}" ({len(data1)} bytes) with ' f'"{filename2}" ({len(data2)} bytes)'
     )
     print("Displaying only differing 16-byte lines...")
     print("-" * 140)
@@ -87,14 +83,8 @@ def hexDiff(
 
 
 def _print_header() -> None:
-    h1 = (
-        " Offset(h)  00 01 02 03 04 05 06 07  "
-        "08 09 0A 0B 0C 0D 0E 0F  |ASCII           |"
-    )
-    h2 = (
-        "  |  00 01 02 03 04 05 06 07  "
-        "08 09 0A 0B 0C 0D 0E 0F  |ASCII           |"
-    )
+    h1 = " Offset(h)  00 01 02 03 04 05 06 07  " "08 09 0A 0B 0C 0D 0E 0F  |ASCII           |"
+    h2 = "  |  00 01 02 03 04 05 06 07  " "08 09 0A 0B 0C 0D 0E 0F  |ASCII           |"
     print(h1 + h2)
     print("-" * 140)
 
@@ -121,7 +111,4 @@ def _format_chunk(chunk: bytes) -> str:
 
 
 def _print_diff_line(offset: int, chunk1: bytes, chunk2: bytes) -> None:
-    print(
-        f"{offset:08x}:   {_format_chunk(chunk1)}  |  "
-        f"{_format_chunk(chunk2)}"
-    )
+    print(f"{offset:08x}:   {_format_chunk(chunk1)}  |  " f"{_format_chunk(chunk2)}")

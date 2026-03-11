@@ -37,6 +37,4 @@ def mustHaveFields(s: dict, fields: Sequence[str]) -> None:
         raise TypeError("First argument must be a dict.")
     missing = [f for f in fields if f not in s]
     if missing:
-        raise ValueError(
-            f"Dict is missing fields: {', '.join(missing)}"
-        )
+        raise ValueError(f"Dict is missing fields: {', '.join(missing)}")

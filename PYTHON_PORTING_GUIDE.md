@@ -49,12 +49,21 @@ MATLAB centralises custom validation functions in the `+ndi/+validators/` namesp
   ```
 - **Registration:** Every new validator must be imported and listed in `ndi/validators/__init__.py` so it is accessible as `ndi.validators.<name>`.
 
-## 5. Error Handling
+## 5. Code Style & Linting
+
+All Python code must pass **`black`** formatting before being committed.
+
+- **Formatter:** [Black](https://black.readthedocs.io/) is the project's sole code formatter.
+- **Before committing:** Always run `black --check src/ tests/` to verify formatting. If any files would be reformatted, run `black src/ tests/` to fix them before committing.
+- **Line length:** Use Black's default (88 characters).
+- **No manual formatting overrides:** Do not use `# fmt: off` / `# fmt: on` unless absolutely necessary.
+
+## 6. Error Handling
 
 - If a MATLAB function throws an error for a specific condition, the Python version must raise a corresponding Exception (`ValueError`, `TypeError`, or a custom `NDIError`).
 - The goal is to ensure that a user providing bad input gets a **"Hard Fail"** at the function entry point in both languages.
 
-## 6. Documentation (Docstring Symmetry)
+## 7. Documentation (Docstring Symmetry)
 
 - Include the original MATLAB documentation in the Python docstring.
 - Note any Python-specific requirements (like specific library dependencies) at the bottom of the docstring.

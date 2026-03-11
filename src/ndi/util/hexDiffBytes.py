@@ -59,17 +59,11 @@ def hexDiffBytes(
                     " Offset(h)  00 01 02 03 04 05 06 07  "
                     "08 09 0A 0B 0C 0D 0E 0F  |ASCII           |"
                 )
-                h2 = (
-                    "  |  00 01 02 03 04 05 06 07  "
-                    "08 09 0A 0B 0C 0D 0E 0F  |ASCII           |"
-                )
+                h2 = "  |  00 01 02 03 04 05 06 07  " "08 09 0A 0B 0C 0D 0E 0F  |ASCII           |"
                 lines.append(h1 + h2)
                 lines.append("-" * 140)
                 header_added = True
 
-            lines.append(
-                f"{offset:08x}:   {_format_chunk(chunk1)}  |  "
-                f"{_format_chunk(chunk2)}"
-            )
+            lines.append(f"{offset:08x}:   {_format_chunk(chunk1)}  |  " f"{_format_chunk(chunk2)}")
 
     return "\n".join(lines) if lines else ""

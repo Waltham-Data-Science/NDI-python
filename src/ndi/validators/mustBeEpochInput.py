@@ -39,6 +39,4 @@ def mustBeEpochInput(v: str | int) -> None:
             raise ValueError("Epoch input integer must be positive.")
         return
 
-    raise TypeError(
-        "Value must be a string or positive integer scalar."
-    )
+    raise TypeError("Value must be a string or positive integer scalar.")

@@ -48,6 +48,4 @@ def mustHaveRequiredColumns(
     actual = set(t.columns)
     missing = [c for c in requiredCols if c not in actual]
     if missing:
-        raise ValueError(
-            f"Input table is missing required column(s): {', '.join(missing)}"
-        )
+        raise ValueError(f"Input table is missing required column(s): {', '.join(missing)}")

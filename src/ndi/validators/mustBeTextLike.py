@@ -36,6 +36,4 @@ def mustBeTextLike(value: str | list | tuple) -> None:
         if all(isinstance(item, str) for item in value):
             return
 
-    raise TypeError(
-        "Input must be a string, or a list/tuple of strings."
-    )
+    raise TypeError("Input must be a string, or a list/tuple of strings.")

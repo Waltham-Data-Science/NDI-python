@@ -39,15 +39,11 @@ def mustBeID(inputArg: str) -> None:
 
     if len(inputArg) != 33:
         raise ValueError(
-            f"Input must be exactly 33 characters long "
-            f"(actual length was {len(inputArg)})."
+            f"Input must be exactly 33 characters long " f"(actual length was {len(inputArg)})."
         )
 
     if inputArg[16] != "_":
-        raise ValueError(
-            f"Character 17 must be an underscore (_), "
-            f"but found {inputArg[16]!r}."
-        )
+        raise ValueError(f"Character 17 must be an underscore (_), " f"but found {inputArg[16]!r}.")
 
     if not _ID_PATTERN.match(inputArg):
         # Find first invalid character for a helpful message.

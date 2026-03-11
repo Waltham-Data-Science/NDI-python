@@ -66,9 +66,7 @@ def downsampleTimeseries(
     if d_in.ndim == 1:
         d_in = d_in[:, np.newaxis]
     if d_in.shape[0] != t_in.shape[0]:
-        raise ValueError(
-            "The number of rows in d_in must equal the length of t_in."
-        )
+        raise ValueError("The number of rows in d_in must equal the length of t_in.")
 
     dt = np.median(np.diff(t_in))
     fs = 1.0 / dt

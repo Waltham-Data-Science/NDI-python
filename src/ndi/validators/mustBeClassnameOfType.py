@@ -56,6 +56,5 @@ def mustBeClassnameOfType(classname: str, requiredType: type) -> None:
 
     if not issubclass(cls, requiredType):
         raise ValueError(
-            f"Class {classname!r} must be a subclass of "
-            f"{requiredType.__name__!r}."
+            f"Class {classname!r} must be a subclass of " f"{requiredType.__name__!r}."
         )

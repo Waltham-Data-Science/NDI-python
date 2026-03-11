@@ -38,6 +38,4 @@ def mustMatchRegex(value: str, pattern: str) -> None:
         raise TypeError("Pattern must be a string.")
 
     if not re.fullmatch(pattern, value):
-        raise ValueError(
-            f'Value "{value}" does not match the required pattern: "{pattern}".'
-        )
+        raise ValueError(f'Value "{value}" does not match the required pattern: "{pattern}".')

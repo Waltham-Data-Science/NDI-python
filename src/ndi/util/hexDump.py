@@ -64,8 +64,7 @@ def hexDump(
 
     if StartByte >= file_size:
         raise ValueError(
-            f"StartByte ({StartByte}) is beyond the end of the file "
-            f"(size: {file_size} bytes)."
+            f"StartByte ({StartByte}) is beyond the end of the file " f"(size: {file_size} bytes)."
         )
     if StopByte >= file_size:
         warnings.warn(
@@ -76,8 +75,7 @@ def hexDump(
         StopByte = file_size - 1
     if StartByte > StopByte:
         raise ValueError(
-            f"StartByte ({StartByte}) cannot be greater than "
-            f"StopByte ({StopByte})."
+            f"StartByte ({StartByte}) cannot be greater than " f"StopByte ({StopByte})."
         )
 
     print("-" * 77)
@@ -85,10 +83,7 @@ def hexDump(
     print(f" File Size: {file_size} bytes")
     print(f" Displaying bytes {StartByte} through {StopByte}")
     print("-" * 77)
-    print(
-        " Offset(h)  00 01 02 03 04 05 06 07  "
-        "08 09 0A 0B 0C 0D 0E 0F  |ASCII           |"
-    )
+    print(" Offset(h)  00 01 02 03 04 05 06 07  " "08 09 0A 0B 0C 0D 0E 0F  |ASCII           |")
     print("-" * 77)
 
     region = data[StartByte : StopByte + 1]
