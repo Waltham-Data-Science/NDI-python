@@ -19,6 +19,16 @@ Complete reference mapping every MATLAB NDI function/class to its Python equival
 | `ndi.validate` | `ndi.validate` | `ndi.validate` |
 | `ndi.documentservice` | `ndi.DocumentService` | `ndi.documentservice` |
 
+## Common Utilities
+
+| MATLAB | Python | Module |
+|--------|--------|--------|
+| `ndi.common.PathConstants` | `ndi.common.PathConstants` | `ndi.common` |
+| `ndi.common.getLogger` | `ndi.common.getLogger()` | `ndi.common` |
+| `ndi.common.getCache` | `ndi.common.getCache()` | `ndi.common` |
+| `ndi.common.getDatabaseHierarchy` | `ndi.common.getDatabaseHierarchy()` | `ndi.common` |
+| `ndi.common.assertDIDInstalled` | `ndi.common.assertDIDInstalled()` | `ndi.common` |
+
 ## Time Synchronization
 
 | MATLAB | Python | Module |
