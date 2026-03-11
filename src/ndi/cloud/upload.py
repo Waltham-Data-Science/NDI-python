@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from .client import CloudClient
 
 
-def upload_document_collection(
+def uploadDocumentCollection(
     dataset_id: str,
     documents: list[dict[str, Any]],
     only_missing: bool = True,
@@ -54,7 +54,7 @@ def upload_document_collection(
 
     if only_missing:
         try:
-            existing = docs_api.list_all_documents(dataset_id, client=client)
+            existing = docs_api.listDatasetDocumentsAll(dataset_id, client=client)
             existing_ids = {d.get("ndiId", d.get("id", "")) for d in existing.data}
             filtered = [d for d in documents if d.get("ndiId", d.get("id", "")) not in existing_ids]
             report["skipped"] = len(documents) - len(filtered)
@@ -73,7 +73,7 @@ def upload_document_collection(
     for chunk in chunks:
         for doc in chunk:
             try:
-                docs_api.add_document(dataset_id, doc, client=client)
+                docs_api.addDocument(dataset_id, doc, client=client)
                 report["uploaded"] += 1
                 doc_id = doc.get("ndiId", doc.get("id", ""))
                 report["manifest"].append(doc_id)
@@ -86,7 +86,7 @@ def upload_document_collection(
     return report
 
 
-def zip_documents_for_upload(
+def zipForUpload(
     documents: list[dict[str, Any]],
     dataset_id: str,
     target_dir: Path | None = None,
@@ -120,7 +120,7 @@ def zip_documents_for_upload(
     return zip_path, manifest
 
 
-def upload_files_for_documents(
+def uploadFilesForDatasetDocuments(
     org_id: str,
     dataset_id: str,
     documents: list[dict[str, Any]],
@@ -155,8 +155,8 @@ def upload_files_for_documents(
         if not file_uid or not file_path:
             continue
         try:
-            url = files_api.get_upload_url(org_id, dataset_id, file_uid, client=client)
-            files_api.put_file(url, file_path)
+            url = files_api.getFileUploadURL(org_id, dataset_id, file_uid, client=client)
+            files_api.putFiles(url, file_path)
             report["uploaded"] += 1
         except Exception as exc:
             report["failed"] += 1
@@ -166,7 +166,7 @@ def upload_files_for_documents(
 
 
 @_auto_client
-def upload_single_file(
+def uploadSingleFile(
     dataset_id: str,
     file_uid: str,
     file_path: str,
@@ -201,24 +201,160 @@ def upload_single_file(
             try:
                 with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
                     zf.write(file_path, os.path.basename(file_path))
-                url = files_api.get_file_collection_upload_url(
+                url = files_api.getFileCollectionUploadURL(
                     client.config.org_id,
                     dataset_id,
                     client=client,
                 )
-                files_api.put_file(url, str(zip_path))
+                files_api.putFiles(url, str(zip_path))
             finally:
                 if zip_path.exists():
                     zip_path.unlink()
         else:
-            url = files_api.get_upload_url(
+            url = files_api.getFileUploadURL(
                 client.config.org_id,
                 dataset_id,
                 file_uid,
                 client=client,
             )
-            files_api.put_file(url, file_path)
+            files_api.putFiles(url, file_path)
 
         return True, ""
     except Exception as exc:
         return False, str(exc)
+
+
+@_auto_client
+def uploadToNDICloud(
+    dataset: Any,
+    dataset_id: str,
+    *,
+    verbose: bool = True,
+    client: CloudClient | None = None,
+) -> tuple[bool, str]:
+    """Upload an NDI database to NDI Cloud.
+
+    MATLAB equivalent: ``ndi.cloud.upload.uploadToNDICloud``
+
+    Reads all documents from the local dataset, determines which
+    are already uploaded, and uploads the remainder.
+
+    Args:
+        dataset: An ndi.session or ndi.dataset object.
+        dataset_id: The cloud dataset ID to upload to.
+        verbose: Print progress messages.
+        client: Authenticated cloud client (auto-created if omitted).
+
+    Returns:
+        Tuple of ``(success, error_message)``.
+    """
+    from ndi.query import Query
+
+    from .api import documents as docs_api
+
+    try:
+        if verbose:
+            print("Loading documents...")
+        all_docs = dataset.database_search(Query("")) if hasattr(dataset, "database_search") else []
+
+        if verbose:
+            print("Getting list of previously uploaded documents...")
+        doc_structs, file_structs, total_size = scanForUpload(dataset, dataset_id, client=client)
+
+        docs_left = sum(1 for ds in doc_structs if not ds["is_uploaded"])
+        files_left = sum(1 for fs in file_structs if not fs["is_uploaded"])
+        if verbose:
+            print(f"Found {docs_left} new documents and {files_left} files. Uploading...")
+
+        # Build docid → index lookup
+        doc_id_to_idx = {ds["docid"]: i for i, ds in enumerate(doc_structs)}
+
+        cur_doc = 0
+        for doc in all_docs:
+            props = doc.document_properties if hasattr(doc, "document_properties") else doc
+            if not isinstance(props, dict):
+                continue
+            doc_id = props.get("base", {}).get("id", "")
+            idx = doc_id_to_idx.get(doc_id)
+            if idx is not None and not doc_structs[idx]["is_uploaded"]:
+                cur_doc += 1
+                if verbose:
+                    print(
+                        f"Uploading {cur_doc} JSON portions of {docs_left} "
+                        f"({100 * cur_doc / max(docs_left, 1):.0f}%)"
+                    )
+                try:
+                    docs_api.addDocumentAsFile(dataset_id, props, client=client)
+                    doc_structs[idx]["is_uploaded"] = True
+                except Exception:
+                    if verbose:
+                        print(f"  Warning: Failed to add document {doc_id}")
+
+        # Upload files via zip
+        file_docs = [
+            (doc.document_properties if hasattr(doc, "document_properties") else doc)
+            for doc in all_docs
+        ]
+        file_docs = [d for d in file_docs if isinstance(d, dict)]
+        success, msg = zipForUpload(file_docs, dataset_id)
+        if not success:
+            return False, msg
+
+        return True, ""
+    except Exception as exc:
+        return False, str(exc)
+
+
+def scanForUpload(
+    dataset: Any,
+    dataset_id: str,
+    *,
+    client: CloudClient | None = None,
+) -> tuple[list[dict], list[dict], float]:
+    """Scan local documents/files to determine what needs uploading.
+
+    MATLAB equivalent: ``ndi.cloud.upload.scanForUpload``
+
+    Returns:
+        Tuple of ``(doc_structs, file_structs, total_size_kb)``.
+    """
+    from ndi.query import Query
+
+    from .internal import listRemoteDocumentIds
+
+    try:
+        all_docs = dataset.database_search(Query("")) if hasattr(dataset, "database_search") else []
+    except Exception:
+        all_docs = []
+
+    remote_ids = {}
+    if dataset_id:
+        try:
+            remote_ids = listRemoteDocumentIds(dataset_id, client=client)
+        except Exception:
+            pass
+
+    doc_structs: list[dict] = []
+    file_structs: list[dict] = []
+    total_size = 0.0
+
+    for doc in all_docs:
+        props = doc.document_properties if hasattr(doc, "document_properties") else doc
+        doc_id = ""
+        if isinstance(props, dict):
+            doc_id = props.get("base", {}).get("id", "")
+
+        is_uploaded = doc_id in remote_ids
+        doc_structs.append({"docid": doc_id, "is_uploaded": is_uploaded})
+
+        file_uid = props.get("file_uid", "") if isinstance(props, dict) else ""
+        if file_uid:
+            file_structs.append(
+                {
+                    "uid": file_uid,
+                    "docid": doc_id,
+                    "is_uploaded": is_uploaded,
+                }
+            )
+
+    return doc_structs, file_structs, total_size

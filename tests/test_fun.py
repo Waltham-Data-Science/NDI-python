@@ -49,35 +49,35 @@ class TestChannelName2PrefixNumber:
 
 
 class TestName2VariableName:
-    """Tests for name2variable_name."""
+    """Tests for name2variableName."""
 
     def test_basic(self):
-        from ndi.fun.utils import name2variable_name
+        from ndi.fun.utils import name2variableName
 
-        assert name2variable_name("hello world") == "helloWorld"
+        assert name2variableName("hello world") == "helloWorld"
 
     def test_special_chars(self):
-        from ndi.fun.utils import name2variable_name
+        from ndi.fun.utils import name2variableName
 
-        assert name2variable_name("my-variable.name") == "myVariableName"
+        assert name2variableName("my-variable.name") == "myVariableName"
 
     def test_starts_with_digit(self):
-        from ndi.fun.utils import name2variable_name
+        from ndi.fun.utils import name2variableName
 
-        result = name2variable_name("123test")
+        result = name2variableName("123test")
         assert result.startswith("x")
         assert not result[0].isdigit()
 
     def test_underscore_preserved(self):
-        from ndi.fun.utils import name2variable_name
+        from ndi.fun.utils import name2variableName
 
-        result = name2variable_name("my_var")
+        result = name2variableName("my_var")
         assert "_" in result or "my" in result.lower()
 
     def test_empty(self):
-        from ndi.fun.utils import name2variable_name
+        from ndi.fun.utils import name2variableName
 
-        assert name2variable_name("") == ""
+        assert name2variableName("") == ""
 
 
 class TestPseudorandomint:
@@ -142,30 +142,30 @@ class TestFileMd5:
 
 
 class TestFileDates:
-    """Tests for date_created and date_updated."""
+    """Tests for dateCreated and dateUpdated."""
 
     def test_date_updated(self, tmp_path):
-        from ndi.fun.file import date_updated
+        from ndi.fun.file import dateUpdated
 
         f = tmp_path / "test.txt"
         f.write_text("hello")
-        dt = date_updated(str(f))
+        dt = dateUpdated(str(f))
         assert dt is not None
         assert dt.tzinfo is not None
 
     def test_date_created(self, tmp_path):
-        from ndi.fun.file import date_created
+        from ndi.fun.file import dateCreated
 
         f = tmp_path / "test.txt"
         f.write_text("hello")
-        dt = date_created(str(f))
+        dt = dateCreated(str(f))
         assert dt is not None
 
     def test_nonexistent_returns_none(self):
-        from ndi.fun.file import date_created, date_updated
+        from ndi.fun.file import dateCreated, dateUpdated
 
-        assert date_updated("/nonexistent") is None
-        assert date_created("/nonexistent") is None
+        assert dateUpdated("/nonexistent") is None
+        assert dateCreated("/nonexistent") is None
 
 
 # ===========================================================================
@@ -302,28 +302,28 @@ class TestDocDiff:
 
 
 class TestDocAllTypes:
-    """Tests for doc.all_types."""
+    """Tests for doc.allTypes."""
 
     def test_returns_list(self):
-        from ndi.fun.doc import all_types
+        from ndi.fun.doc import allTypes
 
-        types = all_types()
+        types = allTypes()
         assert isinstance(types, list)
         # Should find at least base types from schema_documents
         assert len(types) > 0
 
     def test_sorted(self):
-        from ndi.fun.doc import all_types
+        from ndi.fun.doc import allTypes
 
-        types = all_types()
+        types = allTypes()
         assert types == sorted(types)
 
 
 class TestDocGetDocTypes:
-    """Tests for doc.get_doc_types."""
+    """Tests for doc.getDocTypes."""
 
     def test_with_mock_session(self):
-        from ndi.fun.doc import get_doc_types
+        from ndi.fun.doc import getDocTypes
 
         doc1 = MagicMock()
         doc1.document_properties = {
@@ -336,7 +336,7 @@ class TestDocGetDocTypes:
         session = MagicMock()
         session.database_search.return_value = [doc1, doc2]
 
-        types, counts = get_doc_types(session)
+        types, counts = getDocTypes(session)
         assert "element" in types
         assert "subject" in types
         # counts is a list aligned with types
@@ -345,10 +345,10 @@ class TestDocGetDocTypes:
 
 
 class TestDocFindFuid:
-    """Tests for doc.find_fuid."""
+    """Tests for doc.findFuid."""
 
     def test_found(self):
-        from ndi.fun.doc import find_fuid
+        from ndi.fun.doc import findFuid
 
         doc = MagicMock()
         doc.document_properties = {
@@ -364,16 +364,16 @@ class TestDocFindFuid:
         session = MagicMock()
         session.database_search.return_value = [doc]
 
-        result_doc, filename = find_fuid(session, "abc123")
+        result_doc, filename = findFuid(session, "abc123")
         assert result_doc is doc
         assert filename == "data.bin"
 
     def test_not_found(self):
-        from ndi.fun.doc import find_fuid
+        from ndi.fun.doc import findFuid
 
         session = MagicMock()
         session.database_search.return_value = []
-        result_doc, filename = find_fuid(session, "nonexistent")
+        result_doc, filename = findFuid(session, "nonexistent")
         assert result_doc is None
         assert filename == ""
 
@@ -495,10 +495,10 @@ class TestTuningCurveToResponseType:
 
 
 class TestFindMixtureName:
-    """Tests for stimulus.find_mixture_name."""
+    """Tests for stimulus.findMixtureName."""
 
     def test_match(self, tmp_path):
-        from ndi.fun.stimulus import find_mixture_name
+        from ndi.fun.stimulus import findMixtureName
 
         dictionary = {
             "saline": [
@@ -523,11 +523,11 @@ class TestFindMixtureName:
                 "unitName": "percent",
             },
         ]
-        result = find_mixture_name(str(f), mixture)
+        result = findMixtureName(str(f), mixture)
         assert "saline" in result
 
     def test_no_match(self, tmp_path):
-        from ndi.fun.stimulus import find_mixture_name
+        from ndi.fun.stimulus import findMixtureName
 
         dictionary = {
             "saline": [
@@ -542,7 +542,7 @@ class TestFindMixtureName:
         }
         f = tmp_path / "mixtures.json"
         f.write_text(json.dumps(dictionary))
-        result = find_mixture_name(
+        result = findMixtureName(
             str(f),
             [
                 {
@@ -557,16 +557,16 @@ class TestFindMixtureName:
         assert result == []
 
     def test_file_not_found(self):
-        from ndi.fun.stimulus import find_mixture_name
+        from ndi.fun.stimulus import findMixtureName
 
-        assert find_mixture_name("/nonexistent.json", []) == []
+        assert findMixtureName("/nonexistent.json", []) == []
 
 
 class TestStimulusTemporalFrequency:
-    """Tests for stimulus.stimulus_temporal_frequency."""
+    """Tests for stimulus.stimulustemporalfrequency."""
 
     def test_basic_rule(self, tmp_path):
-        from ndi.fun.stimulus import stimulus_temporal_frequency
+        from ndi.fun.stimulus import stimulustemporalfrequency
 
         rules = [
             {"parameterName": "tFrequency", "multiplier": 1.0, "adder": 0.0, "isPeriod": False},
@@ -574,12 +574,12 @@ class TestStimulusTemporalFrequency:
         f = tmp_path / "rules.json"
         f.write_text(json.dumps(rules))
 
-        tf, name = stimulus_temporal_frequency({"tFrequency": 4.0}, config_path=str(f))
+        tf, name = stimulustemporalfrequency({"tFrequency": 4.0}, config_path=str(f))
         assert tf == 4.0
         assert name == "tFrequency"
 
     def test_period_inversion(self, tmp_path):
-        from ndi.fun.stimulus import stimulus_temporal_frequency
+        from ndi.fun.stimulus import stimulustemporalfrequency
 
         rules = [
             {"parameterName": "period", "multiplier": 1.0, "adder": 0.0, "isPeriod": True},
@@ -587,17 +587,17 @@ class TestStimulusTemporalFrequency:
         f = tmp_path / "rules.json"
         f.write_text(json.dumps(rules))
 
-        tf, name = stimulus_temporal_frequency({"period": 0.5}, config_path=str(f))
+        tf, name = stimulustemporalfrequency({"period": 0.5}, config_path=str(f))
         assert tf == pytest.approx(2.0)
 
     def test_no_match(self, tmp_path):
-        from ndi.fun.stimulus import stimulus_temporal_frequency
+        from ndi.fun.stimulus import stimulustemporalfrequency
 
         rules = [{"parameterName": "tFrequency", "multiplier": 1.0, "adder": 0.0}]
         f = tmp_path / "rules.json"
         f.write_text(json.dumps(rules))
 
-        tf, name = stimulus_temporal_frequency({"other": 5.0}, config_path=str(f))
+        tf, name = stimulustemporalfrequency({"other": 5.0}, config_path=str(f))
         assert tf is None
         assert name == ""
 
@@ -685,9 +685,16 @@ class TestFunImports:
         from ndi.fun import data, dataset, doc, epoch, file, session, stimulus
 
         assert hasattr(doc, "diff")
+        assert hasattr(doc, "allTypes")
+        assert hasattr(doc, "getDocTypes")
+        assert hasattr(doc, "findFuid")
         assert hasattr(epoch, "epochid2element")
         assert hasattr(file, "md5")
+        assert hasattr(file, "dateCreated")
+        assert hasattr(file, "dateUpdated")
         assert hasattr(data, "readngrid")
         assert hasattr(stimulus, "tuning_curve_to_response_type")
+        assert hasattr(stimulus, "findMixtureName")
+        assert hasattr(stimulus, "stimulustemporalfrequency")
         assert hasattr(session, "diff")
         assert hasattr(dataset, "diff")

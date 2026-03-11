@@ -11,11 +11,11 @@ Quick start::
 
     config = login('user@example.com', 'password')
     client = CloudClient(config)
-    ndi.cloud.api.datasets.get_dataset(dataset_id, client=client)
+    ndi.cloud.api.datasets.getDataset(dataset_id, client=client)
 
     # Option 2: Auto-client from environment variables (no client needed)
     #   Set NDI_CLOUD_USERNAME, NDI_CLOUD_PASSWORD (or NDI_CLOUD_TOKEN)
-    ndi.cloud.api.datasets.get_dataset(dataset_id)
+    ndi.cloud.api.datasets.getDataset(dataset_id)
 
 All ``ndi.cloud.api.*`` functions accept an optional ``client`` keyword
 parameter.  If omitted, a client is built automatically from environment
@@ -28,12 +28,12 @@ Requires the ``requests`` package.  Install with::
 
 from .auth import (
     authenticate,
-    change_password,
+    changePassword,
     login,
     logout,
-    resend_confirmation,
-    reset_password,
-    verify_user,
+    resendConfirmation,
+    resetPassword,
+    verifyUser,
 )
 from .config import CloudConfig
 from .exceptions import (
@@ -56,15 +56,15 @@ __all__ = [
     "authenticate",
     "login",
     "logout",
-    "change_password",
-    "reset_password",
-    "verify_user",
-    "resend_confirmation",
+    "changePassword",
+    "resetPassword",
+    "verifyUser",
+    "resendConfirmation",
     # Top-level convenience functions (mirror MATLAB ndi.cloud.*)
-    "download_dataset",
-    "upload_dataset",
-    "sync_dataset",
-    "upload_single_file",
+    "downloadDataset",
+    "uploadDataset",
+    "syncDataset",
+    "uploadSingleFile",
     "fetch_cloud_file",
 ]
 
@@ -74,19 +74,13 @@ __all__ = [
 # when requests is not installed.
 
 _LAZY_IMPORTS = {
-    # Python-style (primary)
     "APIResponse": ("client", "APIResponse"),
     "CloudClient": ("client", "CloudClient"),
-    "download_dataset": ("orchestration", "download_dataset"),
-    "upload_dataset": ("orchestration", "upload_dataset"),
-    "sync_dataset": ("orchestration", "sync_dataset"),
-    "upload_single_file": ("upload", "upload_single_file"),
+    "downloadDataset": ("orchestration", "downloadDataset"),
+    "uploadDataset": ("orchestration", "uploadDataset"),
+    "syncDataset": ("orchestration", "syncDataset"),
+    "uploadSingleFile": ("upload", "uploadSingleFile"),
     "fetch_cloud_file": ("filehandler", "fetch_cloud_file"),
-    # MATLAB-style aliases (for users migrating from MATLAB)
-    "downloadDataset": ("orchestration", "download_dataset"),
-    "uploadDataset": ("orchestration", "upload_dataset"),
-    "syncDataset": ("orchestration", "sync_dataset"),
-    "uploadSingleFile": ("upload", "upload_single_file"),
 }
 
 

@@ -37,7 +37,7 @@ def channelname2prefixnumber(channelname: str) -> tuple[str, int]:
     return prefix, number
 
 
-def name2variable_name(name: str) -> str:
+def name2variableName(name: str) -> str:
     """Convert arbitrary string to a camelCase variable name.
 
     MATLAB equivalent: ndi.fun.name2variableName
@@ -66,6 +66,10 @@ def name2variable_name(name: str) -> str:
     if result and result[0].isdigit():
         result = "x" + result
     return result
+
+
+# Backward-compatible alias
+name2variable_name = name2variableName
 
 
 def pseudorandomint() -> int:

@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 
 
-def name_to_variable_name(name: str) -> str:
+def name2variableName(name: str) -> str:
     """Convert a human-readable name to a PascalCase variable name.
 
     MATLAB equivalent: ndi.fun.name2variableName
@@ -27,11 +27,11 @@ def name_to_variable_name(name: str) -> str:
 
     Examples::
 
-        >>> name_to_variable_name("treatment: food restriction onset time")
+        >>> name2variableName("treatment: food restriction onset time")
         'Treatment_FoodRestrictionOnsetTime'
-        >>> name_to_variable_name("Optogenetic Tetanus Stimulation Target Location")
+        >>> name2variableName("Optogenetic Tetanus Stimulation Target Location")
         'OptogeneticTetanusStimulationTargetLocation'
-        >>> name_to_variable_name("elevated plus maze: test duration")
+        >>> name2variableName("elevated plus maze: test duration")
         'ElevatedPlusMaze_TestDuration'
 
     Args:
@@ -65,3 +65,7 @@ def name_to_variable_name(name: str) -> str:
     result = re.sub(r"[^a-zA-Z0-9_]", "", result)
 
     return result
+
+
+# Backward-compatible alias
+name_to_variable_name = name2variableName

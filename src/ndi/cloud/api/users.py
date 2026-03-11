@@ -22,7 +22,7 @@ _Client = Annotated[CloudClient | None, SkipValidation()]
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def create_user(
+def createUser(
     email: NonEmptyStr,
     name: NonEmptyStr,
     password: NonEmptyStr,
@@ -37,7 +37,7 @@ def create_user(
 
 
 @_auto_client
-def get_current_user(*, client: _Client = None) -> dict[str, Any]:
+def me(*, client: _Client = None) -> dict[str, Any]:
     """GET /users/me -- Get the authenticated user's profile.
 
     The response includes the user's organization memberships.
@@ -47,6 +47,6 @@ def get_current_user(*, client: _Client = None) -> dict[str, Any]:
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def get_user(user_id: NonEmptyStr, *, client: _Client = None) -> dict[str, Any]:
+def GetUser(user_id: NonEmptyStr, *, client: _Client = None) -> dict[str, Any]:
     """GET /users/{userId}"""
     return client.get("/users/{userId}", userId=user_id)

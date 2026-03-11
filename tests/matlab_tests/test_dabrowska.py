@@ -78,7 +78,7 @@ def dabrowska_dataset():
 @pytest.fixture(scope="session")
 def subject_table(dabrowska_dataset):
     """Build subject summary table."""
-    from ndi.fun.doc_table import subject_summary
+    from ndi.fun.doc_table import subject as subject_summary
 
     return subject_summary(dabrowska_dataset)
 
@@ -86,7 +86,7 @@ def subject_table(dabrowska_dataset):
 @pytest.fixture(scope="session")
 def probe_summary(dabrowska_dataset):
     """Build probe summary table."""
-    from ndi.fun.doc_table import probe_table
+    from ndi.fun.doc_table import probe as probe_table
 
     return probe_table(dabrowska_dataset)
 
@@ -94,7 +94,7 @@ def probe_summary(dabrowska_dataset):
 @pytest.fixture(scope="session")
 def epoch_summary(dabrowska_dataset):
     """Build epoch summary table."""
-    from ndi.fun.doc_table import epoch_table
+    from ndi.fun.doc_table import epoch as epoch_table
 
     return epoch_table(dabrowska_dataset)
 
@@ -102,24 +102,24 @@ def epoch_summary(dabrowska_dataset):
 @pytest.fixture(scope="session")
 def epm_table(dabrowska_dataset):
     """Query and convert EPM OTR docs to table."""
-    from ndi.fun.doc_table import ontology_table_row_doc_to_table
+    from ndi.fun.doc_table import ontologyTableRowDoc2Table
     from ndi.query import Query
 
     query = Query("ontologyTableRow.variableNames").contains("ElevatedPlusMaze")
     docs = dabrowska_dataset.database_search(query)
-    tables, _ = ontology_table_row_doc_to_table(docs)
+    tables, _ = ontologyTableRowDoc2Table(docs)
     return tables[0]
 
 
 @pytest.fixture(scope="session")
 def fps_table(dabrowska_dataset):
     """Query and convert FPS OTR docs to table."""
-    from ndi.fun.doc_table import ontology_table_row_doc_to_table
+    from ndi.fun.doc_table import ontologyTableRowDoc2Table
     from ndi.query import Query
 
     query = Query("ontologyTableRow.variableNames").contains("Fear_potentiatedStartle")
     docs = dabrowska_dataset.database_search(query)
-    tables, _ = ontology_table_row_doc_to_table(docs)
+    tables, _ = ontologyTableRowDoc2Table(docs)
     return tables[0]
 
 
@@ -137,9 +137,9 @@ class TestDatasetLoading:
 
     def test_document_type_counts(self, dabrowska_dataset):
         """All 13+ document types have expected counts."""
-        from ndi.fun.doc import get_doc_types
+        from ndi.fun.doc import getDocTypes
 
-        doc_types, doc_counts = get_doc_types(dabrowska_dataset)
+        doc_types, doc_counts = getDocTypes(dabrowska_dataset)
         actual = dict(zip(doc_types, doc_counts))
         for dtype, expected in EXPECTED_TYPE_COUNTS.items():
             actual_count = actual.get(dtype, 0)
@@ -214,9 +214,9 @@ class TestSubjectSummary:
 
     def test_filter_avp_cre(self, subject_table):
         """AVP-Cre strain filtering returns expected count."""
-        from ndi.fun.table import identify_matching_rows
+        from ndi.fun.table import identifyMatchingRows
 
-        row_ind = identify_matching_rows(
+        row_ind = identifyMatchingRows(
             subject_table, "StrainName", "AVP-Cre", string_match="contains"
         )
         filtered = subject_table[row_ind]
@@ -224,9 +224,9 @@ class TestSubjectSummary:
 
     def test_filter_otr_cre(self, subject_table):
         """OTR-IRES-Cre filtering works."""
-        from ndi.fun.table import identify_matching_rows
+        from ndi.fun.table import identifyMatchingRows
 
-        row_ind = identify_matching_rows(
+        row_ind = identifyMatchingRows(
             subject_table, "StrainName", "OTR-IRES-Cre", string_match="contains"
         )
         filtered = subject_table[row_ind]
@@ -359,12 +359,12 @@ class TestCombinedTable:
         assert "ProbeType" in combined.columns
         assert "EpochNumber" in combined.columns
 
-    def test_move_columns_left(self, subject_table, probe_summary, epoch_summary):
-        """move_columns_left reorders columns correctly."""
-        from ndi.fun.table import join, move_columns_left
+    def test_moveColumnsLeft(self, subject_table, probe_summary, epoch_summary):
+        """moveColumnsLeft reorders columns correctly."""
+        from ndi.fun.table import join, moveColumnsLeft
 
         combined = join([subject_table, probe_summary, epoch_summary])
-        reordered = move_columns_left(combined, ["SubjectLocalIdentifier", "EpochNumber"])
+        reordered = moveColumnsLeft(combined, ["SubjectLocalIdentifier", "EpochNumber"])
         assert list(reordered.columns[:2]) == [
             "SubjectLocalIdentifier",
             "EpochNumber",
@@ -372,10 +372,10 @@ class TestCombinedTable:
 
     def test_filter_by_approach(self, subject_table, probe_summary, epoch_summary):
         """Filter by ApproachName containing 'optogenetic' works."""
-        from ndi.fun.table import identify_matching_rows, join
+        from ndi.fun.table import identifyMatchingRows, join
 
         combined = join([subject_table, probe_summary, epoch_summary])
-        row_ind = identify_matching_rows(
+        row_ind = identifyMatchingRows(
             combined, "ApproachName", "optogenetic", string_match="contains"
         )
         opto = combined[row_ind]
@@ -548,11 +548,11 @@ class TestFPSAnalysis:
 class TestOntologyIntegration:
     """Validate EMPTY ontology integration for the Dabrowska dataset."""
 
-    def test_ontology_table_row_vars(self, dabrowska_dataset):
-        """ontology_table_row_vars returns names, short names, nodes."""
-        from ndi.fun.doc import ontology_table_row_vars
+    def test_ontologyTableRowVars(self, dabrowska_dataset):
+        """ontologyTableRowVars returns names, short names, nodes."""
+        from ndi.fun.doc import ontologyTableRowVars
 
-        names, short_names, nodes = ontology_table_row_vars(dabrowska_dataset)
+        names, short_names, nodes = ontologyTableRowVars(dabrowska_dataset)
         assert len(names) > 0
         assert len(names) == len(short_names) == len(nodes)
 
@@ -565,28 +565,28 @@ class TestOntologyIntegration:
         assert result.name is not None
         assert len(result.name) > 0
 
-    def test_name_to_variable_name(self):
-        """name_to_variable_name produces correct PascalCase output."""
-        from ndi.fun.name_utils import name_to_variable_name
+    def test_name2variableName(self):
+        """name2variableName produces correct PascalCase output."""
+        from ndi.fun.name_utils import name2variableName
 
         assert (
-            name_to_variable_name("treatment: food restriction onset time")
+            name2variableName("treatment: food restriction onset time")
             == "Treatment_FoodRestrictionOnsetTime"
         )
         assert (
-            name_to_variable_name("elevated plus maze: test duration")
+            name2variableName("elevated plus maze: test duration")
             == "ElevatedPlusMaze_TestDuration"
         )
         assert (
-            name_to_variable_name("Optogenetic Tetanus Stimulation Target Location")
+            name2variableName("Optogenetic Tetanus Stimulation Target Location")
             == "OptogeneticTetanusStimulationTargetLocation"
         )
 
-    def test_name_to_variable_name_edge_cases(self):
-        """name_to_variable_name handles edge cases."""
-        from ndi.fun.name_utils import name_to_variable_name
+    def test_name2variableName_edge_cases(self):
+        """name2variableName handles edge cases."""
+        from ndi.fun.name_utils import name2variableName
 
-        assert name_to_variable_name("") == ""
-        assert name_to_variable_name("   ") == ""
-        assert name_to_variable_name("123abc") == "var_123abc"
-        assert name_to_variable_name("simple") == "Simple"
+        assert name2variableName("") == ""
+        assert name2variableName("   ") == ""
+        assert name2variableName("123abc") == "var_123abc"
+        assert name2variableName("simple") == "Simple"

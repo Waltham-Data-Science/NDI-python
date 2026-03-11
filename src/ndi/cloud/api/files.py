@@ -23,7 +23,7 @@ _Client = Annotated[CloudClient | None, SkipValidation()]
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def get_upload_url(
+def getFileUploadURL(
     org_id: NonEmptyStr,
     dataset_id: CloudId,
     file_uid: NonEmptyStr,
@@ -45,7 +45,7 @@ def get_upload_url(
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def get_bulk_upload_url(
+def getBulkUploadURL(
     org_id: NonEmptyStr,
     dataset_id: CloudId,
     *,
@@ -64,7 +64,7 @@ def get_bulk_upload_url(
 
 
 @validate_call
-def put_file(
+def putFiles(
     url: NonEmptyStr,
     file_path: FilePath,
     timeout: int = 120,
@@ -101,7 +101,7 @@ def put_file(
 
 
 @validate_call
-def put_file_bytes(
+def putFileBytes(
     url: NonEmptyStr,
     data: bytes,
     timeout: int = 120,
@@ -136,7 +136,7 @@ def put_file_bytes(
 
 
 @validate_call
-def get_file(
+def getFile(
     url: NonEmptyStr,
     target_path: str | Path,
     timeout: int = 120,
@@ -178,7 +178,7 @@ def get_file(
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def list_files(
+def listFiles(
     dataset_id: CloudId,
     *,
     client: _Client = None,
@@ -191,14 +191,14 @@ def list_files(
     """
     from . import datasets as ds_api
 
-    ds = ds_api.get_dataset(dataset_id, client=client)
+    ds = ds_api.getDataset(dataset_id, client=client)
     files = ds.get("files", []) if hasattr(ds, "get") else []
     return APIResponse(files, success=True, status_code=200, url="")
 
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def get_file_details(
+def getFileDetails(
     dataset_id: CloudId,
     file_uid: NonEmptyStr,
     *,
@@ -217,7 +217,7 @@ def get_file_details(
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def get_file_collection_upload_url(
+def getFileCollectionUploadURL(
     org_id: NonEmptyStr,
     dataset_id: CloudId,
     *,

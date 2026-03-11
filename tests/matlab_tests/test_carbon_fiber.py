@@ -126,9 +126,9 @@ class TestDatasetLoading:
 
     def test_document_type_counts(self, carbon_fiber_dataset):
         """All 27 document types have expected counts."""
-        from ndi.fun.doc import get_doc_types
+        from ndi.fun.doc import getDocTypes
 
-        doc_types, doc_counts = get_doc_types(carbon_fiber_dataset)
+        doc_types, doc_counts = getDocTypes(carbon_fiber_dataset)
         actual = dict(zip(doc_types, doc_counts))
         for dtype, expected in EXPECTED_TYPE_COUNTS.items():
             actual_count = actual.get(dtype, 0)
@@ -140,11 +140,11 @@ class TestDatasetLoading:
             else:
                 assert actual_count == expected, f"{dtype}: expected {expected}, got {actual_count}"
 
-    def test_get_doc_types(self, carbon_fiber_dataset):
-        """get_doc_types returns sorted types and matching counts."""
-        from ndi.fun.doc import get_doc_types
+    def test_getDocTypes(self, carbon_fiber_dataset):
+        """getDocTypes returns sorted types and matching counts."""
+        from ndi.fun.doc import getDocTypes
 
-        doc_types, doc_counts = get_doc_types(carbon_fiber_dataset)
+        doc_types, doc_counts = getDocTypes(carbon_fiber_dataset)
         assert doc_types == sorted(doc_types)
         # 27 from JSON + session doc auto-created by Dataset init = 28
         assert len(doc_types) >= 27

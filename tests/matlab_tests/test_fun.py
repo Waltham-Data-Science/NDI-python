@@ -10,7 +10,7 @@ MATLAB source files:
   +table/TestVStack.m          -> TestVStack
 
 Python modules under test:
-  ndi.fun.doc   — all_types, find_fuid, diff
+  ndi.fun.doc   — allTypes, findFuid, diff
   ndi.fun.session — diff
   ndi.fun.dataset — diff
   ndi.fun.table — vstack
@@ -24,7 +24,7 @@ import pandas as pd
 from ndi.dataset import Dataset
 from ndi.document import Document
 from ndi.fun.dataset import diff as dataset_diff
-from ndi.fun.doc import all_types, find_fuid
+from ndi.fun.doc import allTypes, findFuid
 from ndi.fun.doc import diff as doc_diff
 from ndi.fun.session import diff as session_diff
 from ndi.fun.table import vstack
@@ -76,41 +76,41 @@ def _make_session_with_docs(tmp_path, ref, doc_specs):
 class TestAllTypes:
     """Port of ndi.unittest.fun.doc.TestAllTypes."""
 
-    def test_all_types_returns_nonempty_list(self):
-        """all_types() returns a non-empty list.
+    def test_allTypes_returns_nonempty_list(self):
+        """allTypes() returns a non-empty list.
 
         MATLAB equivalent: TestAllTypes.testNonEmptyList
         """
-        types = all_types()
+        types = allTypes()
         assert isinstance(types, list)
         assert len(types) > 0
 
-    def test_all_types_contains_strings(self):
-        """all_types() returns list of strings.
+    def test_allTypes_contains_strings(self):
+        """allTypes() returns list of strings.
 
         MATLAB equivalent: TestAllTypes.testContainsStrings
         """
-        types = all_types()
+        types = allTypes()
         for t in types:
             assert isinstance(t, str)
             assert len(t) > 0
 
-    def test_all_types_contains_known_types(self):
-        """all_types() should include well-known document types.
+    def test_allTypes_contains_known_types(self):
+        """allTypes() should include well-known document types.
 
         MATLAB equivalent: TestAllTypes.testContainsKnownTypes
         """
-        types = all_types()
+        types = allTypes()
         # 'base' and 'demoNDI' are always expected to exist
-        assert "base" in types, "base should be in all_types()"
-        assert "demoNDI" in types, "demoNDI should be in all_types()"
+        assert "base" in types, "base should be in allTypes()"
+        assert "demoNDI" in types, "demoNDI should be in allTypes()"
 
-    def test_all_types_sorted(self):
-        """all_types() returns a sorted list.
+    def test_allTypes_sorted(self):
+        """allTypes() returns a sorted list.
 
         MATLAB equivalent: TestAllTypes.testSorted
         """
-        types = all_types()
+        types = allTypes()
         assert types == sorted(types)
 
 
@@ -124,7 +124,7 @@ class TestFindFuid:
     """Port of ndi.unittest.fun.doc.TestFindFuid."""
 
     def test_find_known_fuid(self, tmp_path):
-        """find_fuid locates a document by its file UID.
+        """findFuid locates a document by its file UID.
 
         MATLAB equivalent: TestFindFuid.testFindKnownFuid
         """
@@ -146,13 +146,13 @@ class TestFindFuid:
         session.database_add(doc)
 
         # Now search for it
-        found_doc, found_name = find_fuid(session, fuid)
+        found_doc, found_name = findFuid(session, fuid)
 
         assert found_doc is not None, "Should find the document by FUID"
         assert found_name == "filename1.ext", f"File name should be filename1.ext, got {found_name}"
 
-    def test_find_fuid_not_found(self, tmp_path):
-        """find_fuid returns (None, '') for nonexistent FUID.
+    def test_findFuid_not_found(self, tmp_path):
+        """findFuid returns (None, '') for nonexistent FUID.
 
         MATLAB equivalent: TestFindFuid.testFuidNotFound
         """
@@ -164,13 +164,13 @@ class TestFindFuid:
         doc = _make_demo_doc("some_doc", 99, session.id())
         session.database_add(doc)
 
-        found_doc, found_name = find_fuid(session, "nonexistent_uid_12345")
+        found_doc, found_name = findFuid(session, "nonexistent_uid_12345")
 
         assert found_doc is None
         assert found_name == ""
 
-    def test_find_fuid_in_populated_session(self, tmp_path):
-        """find_fuid searches among multiple documents correctly.
+    def test_findFuid_in_populated_session(self, tmp_path):
+        """findFuid searches among multiple documents correctly.
 
         MATLAB equivalent: TestFindFuid.testFindInSession
         """
@@ -197,7 +197,7 @@ class TestFindFuid:
 
         assert target_fuid is not None
 
-        found_doc, found_name = find_fuid(session, target_fuid)
+        found_doc, found_name = findFuid(session, target_fuid)
 
         assert found_doc is not None
         assert found_name == "filename1.ext"

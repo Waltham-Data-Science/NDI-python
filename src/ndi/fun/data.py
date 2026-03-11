@@ -205,7 +205,7 @@ def evaluate_fitcurve(
     return np.asarray(result, dtype=float)
 
 
-def read_image_stack(
+def readImageStack(
     session: Any,
     doc: Any,
     fmt: str = "auto",
@@ -389,3 +389,7 @@ def read_image_stack(
         return stack, info
 
     raise ValueError(f"Format '{fmt}' is not a recognized image or video format.")
+
+
+# Backward-compatible alias
+read_image_stack = readImageStack

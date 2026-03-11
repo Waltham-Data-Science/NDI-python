@@ -12,13 +12,13 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 from ..client import _auto_client
-from .crossref import CONSTANTS, create_batch_submission
+from .crossref import CONSTANTS, createDoiBatchSubmission
 
 if TYPE_CHECKING:
     from ..client import CloudClient
 
 
-def create_new_doi(prefix: str = "") -> str:
+def createNewDOI(prefix: str = "") -> str:
     """Generate a new unique DOI string.
 
     Args:
@@ -34,7 +34,7 @@ def create_new_doi(prefix: str = "") -> str:
 
 
 @_auto_client
-def register_dataset_doi(
+def registerDatasetDOI(
     cloud_dataset_id: str,
     use_test: bool = False,
     *,
@@ -62,14 +62,14 @@ def register_dataset_doi(
     from ..exceptions import CloudError
 
     # Fetch metadata
-    metadata = ds_api.get_dataset(cloud_dataset_id, client=client)
+    metadata = ds_api.getDataset(cloud_dataset_id, client=client)
     metadata["cloud_dataset_id"] = cloud_dataset_id
 
     # Generate DOI
-    doi = create_new_doi()
+    doi = createNewDOI()
 
     # Build XML
-    xml = create_batch_submission(metadata, doi)
+    xml = createDoiBatchSubmission(metadata, doi)
 
     # Submit to Crossref
     deposit_url = CONSTANTS.TEST_DEPOSIT_URL if use_test else CONSTANTS.DEPOSIT_URL
@@ -102,7 +102,7 @@ def register_dataset_doi(
         raise CloudError(f"Crossref submission failed: {exc}") from exc
 
 
-def check_submission(
+def checkSubmission(
     filename: str,
     data_type: str = "result",
     use_test: bool = False,

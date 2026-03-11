@@ -23,14 +23,14 @@ _Client = Annotated[CloudClient | None, SkipValidation()]
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def get_dataset(dataset_id: CloudId, *, client: _Client = None) -> dict[str, Any]:
+def getDataset(dataset_id: CloudId, *, client: _Client = None) -> dict[str, Any]:
     """GET /datasets/{datasetId}"""
     return client.get("/datasets/{datasetId}", datasetId=dataset_id)
 
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def create_dataset(
+def createDataset(
     org_id: NonEmptyStr,
     name: NonEmptyStr,
     description: str = "",
@@ -52,7 +52,7 @@ def create_dataset(
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def update_dataset(
+def updateDataset(
     dataset_id: CloudId,
     *,
     client: _Client = None,
@@ -68,7 +68,7 @@ def update_dataset(
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def delete_dataset(
+def deleteDataset(
     dataset_id: CloudId,
     when: str = "7d",
     *,
@@ -93,7 +93,7 @@ def delete_dataset(
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def list_datasets(
+def listDatasets(
     org_id: NonEmptyStr,
     page: PageNumber = 1,
     page_size: PageSize = 1000,
@@ -113,12 +113,12 @@ _MAX_PAGES = 1000
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def list_all_datasets(org_id: NonEmptyStr, *, client: _Client = None) -> APIResponse:
+def listAllDatasets(org_id: NonEmptyStr, *, client: _Client = None) -> APIResponse:
     """Auto-paginate through all datasets for an organisation."""
     all_datasets: list[dict[str, Any]] = []
     page = 1
     while page <= _MAX_PAGES:
-        result = list_datasets(org_id, page=page, client=client)
+        result = listDatasets(org_id, page=page, client=client)
         datasets = result.get("datasets", [])
         all_datasets.extend(datasets)
         total = result.get("totalNumber", 0)
@@ -130,7 +130,7 @@ def list_all_datasets(org_id: NonEmptyStr, *, client: _Client = None) -> APIResp
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def get_published_datasets(
+def getPublished(
     page: PageNumber = 1,
     page_size: PageSize = 1000,
     *,
@@ -145,42 +145,42 @@ def get_published_datasets(
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def publish_dataset(dataset_id: CloudId, *, client: _Client = None) -> dict[str, Any]:
+def publishDataset(dataset_id: CloudId, *, client: _Client = None) -> dict[str, Any]:
     """POST /datasets/{datasetId}/publish"""
     return client.post("/datasets/{datasetId}/publish", datasetId=dataset_id)
 
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def unpublish_dataset(dataset_id: CloudId, *, client: _Client = None) -> dict[str, Any]:
+def unpublishDataset(dataset_id: CloudId, *, client: _Client = None) -> dict[str, Any]:
     """POST /datasets/{datasetId}/unpublish"""
     return client.post("/datasets/{datasetId}/unpublish", datasetId=dataset_id)
 
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def submit_dataset(dataset_id: CloudId, *, client: _Client = None) -> dict[str, Any]:
+def submitDataset(dataset_id: CloudId, *, client: _Client = None) -> dict[str, Any]:
     """POST /datasets/{datasetId}/submit"""
     return client.post("/datasets/{datasetId}/submit", datasetId=dataset_id)
 
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def create_branch(dataset_id: CloudId, *, client: _Client = None) -> dict[str, Any]:
+def createDatasetBranch(dataset_id: CloudId, *, client: _Client = None) -> dict[str, Any]:
     """POST /datasets/{datasetId}/branch"""
     return client.post("/datasets/{datasetId}/branch", datasetId=dataset_id)
 
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def get_branches(dataset_id: CloudId, *, client: _Client = None) -> list[dict[str, Any]]:
+def getBranches(dataset_id: CloudId, *, client: _Client = None) -> list[dict[str, Any]]:
     """GET /datasets/{datasetId}/branches"""
     return client.get("/datasets/{datasetId}/branches", datasetId=dataset_id)
 
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def get_unpublished(
+def getUnpublished(
     page: PageNumber = 1,
     page_size: PageSize = 20,
     *,
@@ -198,7 +198,7 @@ def get_unpublished(
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def undelete_dataset(dataset_id: CloudId, *, client: _Client = None) -> dict[str, Any]:
+def undeleteDataset(dataset_id: CloudId, *, client: _Client = None) -> dict[str, Any]:
     """POST /datasets/{datasetId}/undelete
 
     Reverse a deferred (soft) delete before the pruner runs.
@@ -210,7 +210,7 @@ def undelete_dataset(dataset_id: CloudId, *, client: _Client = None) -> dict[str
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def list_deleted_datasets(
+def listDeletedDatasets(
     page: PageNumber = 1,
     page_size: PageSize = 1000,
     *,

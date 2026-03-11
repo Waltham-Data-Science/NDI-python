@@ -31,7 +31,7 @@ class CrossrefConstants:
 CONSTANTS = CrossrefConstants()
 
 
-def create_batch_submission(
+def createDoiBatchSubmission(
     dataset_metadata: dict[str, Any],
     doi: str,
 ) -> str:
@@ -114,7 +114,7 @@ def create_batch_submission(
     return tostring(root, encoding="unicode", xml_declaration=True)
 
 
-def convert_to_crossref(dataset_metadata: dict[str, Any]) -> dict[str, Any]:
+def convertCloudDatasetToCrossrefDataset(dataset_metadata: dict[str, Any]) -> dict[str, Any]:
     """Convert NDI dataset metadata to Crossref-compatible format.
 
     Args:
@@ -126,16 +126,16 @@ def convert_to_crossref(dataset_metadata: dict[str, Any]) -> dict[str, Any]:
     return {
         "title": dataset_metadata.get("name", ""),
         "description": dataset_metadata.get("description", ""),
-        "contributors": convert_contributors(dataset_metadata),
+        "contributors": convertContributors(dataset_metadata),
         "doi_prefix": CONSTANTS.DOI_PREFIX,
         "database_title": CONSTANTS.DATABASE_TITLE,
         "resource_url": (
             f"{CONSTANTS.DATASET_BASE_URL}" f"{dataset_metadata.get('cloud_dataset_id', '')}"
         ),
-        "date": convert_dataset_date(dataset_metadata),
-        "funding": convert_funding(dataset_metadata),
-        "license": convert_license(dataset_metadata),
-        "related_publications": convert_related_publications(dataset_metadata),
+        "date": convertDatasetDate(dataset_metadata),
+        "funding": convertFunding(dataset_metadata),
+        "license": convertLicense(dataset_metadata),
+        "related_publications": convertRelatedPublications(dataset_metadata),
     }
 
 
@@ -144,7 +144,7 @@ def convert_to_crossref(dataset_metadata: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def convert_contributors(
+def convertContributors(
     dataset_metadata: dict[str, Any],
 ) -> list[dict[str, Any]]:
     """Convert contributor list to Crossref PersonName format.
@@ -177,7 +177,7 @@ def convert_contributors(
     return result
 
 
-def convert_dataset_date(
+def convertDatasetDate(
     dataset_metadata: dict[str, Any],
 ) -> dict[str, str]:
     """Convert dataset timestamps to Crossref date format.
@@ -205,7 +205,7 @@ def convert_dataset_date(
     }
 
 
-def convert_funding(
+def convertFunding(
     dataset_metadata: dict[str, Any],
 ) -> list[dict[str, str]]:
     """Convert funding information to Crossref FrProgram format.
@@ -222,7 +222,7 @@ def convert_funding(
     ]
 
 
-def convert_license(
+def convertLicense(
     dataset_metadata: dict[str, Any],
 ) -> dict[str, str]:
     """Convert license information to Crossref AiProgram format.
@@ -260,7 +260,7 @@ def convert_license(
     return {"name": normalized or name, "url": url} if name else {}
 
 
-def convert_related_publications(
+def convertRelatedPublications(
     dataset_metadata: dict[str, Any],
 ) -> list[dict[str, Any]]:
     """Convert associated publications to Crossref RelProgram format.

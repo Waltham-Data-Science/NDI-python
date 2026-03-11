@@ -48,8 +48,11 @@ def _save_downloaded_docs(
     return saved
 
 
-def _delete_local_docs(ds_path: Path, doc_ids: set[str]) -> list[str]:
-    """Remove local document JSON files for the given IDs."""
+def deleteLocalDocuments(ds_path: Path, doc_ids: set[str]) -> list[str]:
+    """Remove local document JSON files for the given IDs.
+
+    MATLAB equivalent: ``ndi.cloud.sync.internal.deleteLocalDocuments``
+    """
     doc_dir = ds_path / _DOC_DIR
     deleted: list[str] = []
     for doc_id in doc_ids:
@@ -60,7 +63,7 @@ def _delete_local_docs(ds_path: Path, doc_ids: set[str]) -> list[str]:
     return deleted
 
 
-def _download_docs_by_ids(
+def downloadNdiDocuments(
     cloud_dataset_id: str,
     ndi_to_api: dict[str, str],
     ids_to_download: set[str],
@@ -69,9 +72,12 @@ def _download_docs_by_ids(
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """Fetch documents from the cloud by NDI ID using chunked bulk download.
 
-    Returns (downloaded_docs, failed_ids).
+    MATLAB equivalent: ``ndi.cloud.sync.internal.downloadNdiDocuments``
+
+    Returns:
+        Tuple of ``(downloaded_docs, failed_ids)``.
     """
-    from ..download import download_document_collection
+    from ..download import downloadDocumentCollection
 
     if not ids_to_download:
         return [], []
@@ -80,7 +86,7 @@ def _download_docs_by_ids(
     api_ids = [ndi_to_api.get(ndi_id, ndi_id) for ndi_id in ids_to_download]
 
     try:
-        docs = download_document_collection(
+        docs = downloadDocumentCollection(
             cloud_dataset_id,
             doc_ids=api_ids,
             client=client,
@@ -117,7 +123,7 @@ def _download_docs_by_ids(
 # ---------------------------------------------------------------------------
 
 
-def upload_new(
+def uploadNew(
     dataset_path: str,
     cloud_dataset_id: str,
     options: SyncOptions | None = None,
@@ -130,14 +136,14 @@ def upload_new(
     them, and updates the index.
     """
     from ..api import documents as docs_api
-    from ..internal import list_remote_document_ids
+    from ..internal import listRemoteDocumentIds
 
     options = options or SyncOptions()
     ds_path = Path(dataset_path)
     index = SyncIndex.read(ds_path)
 
     # Get remote doc IDs
-    remote_ids = list_remote_document_ids(cloud_dataset_id, client=client)
+    remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
     remote_id_set = set(remote_ids.keys())
 
     # Get local doc IDs (from index — actual local enumeration deferred)
@@ -160,7 +166,7 @@ def upload_new(
     failed: list[str] = []
     for doc_id in new_ids:
         try:
-            docs_api.add_document(cloud_dataset_id, {"ndiId": doc_id}, client=client)
+            docs_api.addDocument(cloud_dataset_id, {"ndiId": doc_id}, client=client)
             report["uploaded"].append(doc_id)
         except Exception as exc:
             logger.warning("Failed to upload %s: %s", doc_id, exc)
@@ -177,7 +183,7 @@ def upload_new(
     return report
 
 
-def download_new(
+def downloadNew(
     dataset_path: str,
     cloud_dataset_id: str,
     options: SyncOptions | None = None,
@@ -185,13 +191,13 @@ def download_new(
     client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """Download documents that exist in the cloud but not locally."""
-    from ..internal import list_remote_document_ids
+    from ..internal import listRemoteDocumentIds
 
     options = options or SyncOptions()
     ds_path = Path(dataset_path)
     index = SyncIndex.read(ds_path)
 
-    remote_ids = list_remote_document_ids(cloud_dataset_id, client=client)
+    remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
     remote_id_set = set(remote_ids.keys())
     local_ids = set(index.local_doc_ids_last_sync)
 
@@ -210,13 +216,13 @@ def download_new(
         return report
 
     # Actually fetch documents from the cloud
-    docs, failed = _download_docs_by_ids(cloud_dataset_id, remote_ids, new_ids, client=client)
+    docs, failed = downloadNdiDocuments(cloud_dataset_id, remote_ids, new_ids, client=client)
     saved = _save_downloaded_docs(ds_path, docs)
     report["downloaded"] = saved
     report["failed"] = failed
 
     if options.verbose and saved:
-        logger.info("download_new: downloaded %d documents", len(saved))
+        logger.info("downloadNew: downloaded %d documents", len(saved))
 
     # Update index
     index.update(
@@ -228,7 +234,7 @@ def download_new(
     return report
 
 
-def mirror_to_remote(
+def mirrorToRemote(
     dataset_path: str,
     cloud_dataset_id: str,
     options: SyncOptions | None = None,
@@ -237,13 +243,13 @@ def mirror_to_remote(
 ) -> dict[str, Any]:
     """Make the remote match the local state (upload new, delete remote-only)."""
     from ..api import documents as docs_api
-    from ..internal import list_remote_document_ids
+    from ..internal import listRemoteDocumentIds
 
     options = options or SyncOptions()
     ds_path = Path(dataset_path)
     index = SyncIndex.read(ds_path)
 
-    remote_ids = list_remote_document_ids(cloud_dataset_id, client=client)
+    remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
     remote_id_set = set(remote_ids.keys())
     local_ids = set(index.local_doc_ids_last_sync)
 
@@ -263,24 +269,24 @@ def mirror_to_remote(
     if not options.dry_run:
         for doc_id in to_upload:
             try:
-                docs_api.add_document(cloud_dataset_id, {"ndiId": doc_id}, client=client)
+                docs_api.addDocument(cloud_dataset_id, {"ndiId": doc_id}, client=client)
                 report["uploaded"].append(doc_id)
             except Exception as exc:
-                logger.warning("mirror_to_remote: failed to upload %s: %s", doc_id, exc)
+                logger.warning("mirrorToRemote: failed to upload %s: %s", doc_id, exc)
                 failed.append(doc_id)
         for doc_id in to_delete:
             api_id = remote_ids.get(doc_id, doc_id)
             try:
-                docs_api.delete_document(cloud_dataset_id, api_id, client=client)
+                docs_api.deleteDocument(cloud_dataset_id, api_id, client=client)
                 report["deleted"].append(doc_id)
             except Exception as exc:
-                logger.warning("mirror_to_remote: failed to delete %s: %s", doc_id, exc)
+                logger.warning("mirrorToRemote: failed to delete %s: %s", doc_id, exc)
                 failed.append(doc_id)
 
         # Upload associated files if requested
         if options.sync_files and report["uploaded"]:
             try:
-                from ..upload import upload_files_for_documents
+                from ..upload import uploadFilesForDatasetDocuments
 
                 doc_dir = ds_path / _DOC_DIR
                 doc_dicts = []
@@ -289,14 +295,14 @@ def mirror_to_remote(
                     if doc_file.exists():
                         doc_dicts.append(json.loads(doc_file.read_text(encoding="utf-8")))
                 if doc_dicts:
-                    upload_files_for_documents(
+                    uploadFilesForDatasetDocuments(
                         client.config.org_id,
                         cloud_dataset_id,
                         doc_dicts,
                         client=client,
                     )
             except Exception as exc:
-                logger.warning("mirror_to_remote: file upload failed: %s", exc)
+                logger.warning("mirrorToRemote: file upload failed: %s", exc)
 
     report["failed"] = failed
 
@@ -306,7 +312,7 @@ def mirror_to_remote(
     return report
 
 
-def mirror_from_remote(
+def mirrorFromRemote(
     dataset_path: str,
     cloud_dataset_id: str,
     options: SyncOptions | None = None,
@@ -314,13 +320,13 @@ def mirror_from_remote(
     client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """Make the local state match the remote (download new, delete local-only)."""
-    from ..internal import list_remote_document_ids
+    from ..internal import listRemoteDocumentIds
 
     options = options or SyncOptions()
     ds_path = Path(dataset_path)
     index = SyncIndex.read(ds_path)
 
-    remote_ids = list_remote_document_ids(cloud_dataset_id, client=client)
+    remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
     remote_id_set = set(remote_ids.keys())
     local_ids = set(index.local_doc_ids_last_sync)
 
@@ -343,18 +349,18 @@ def mirror_from_remote(
         return report
 
     # Delete local-only documents
-    deleted = _delete_local_docs(ds_path, to_delete_local)
+    deleted = deleteLocalDocuments(ds_path, to_delete_local)
     report["deleted_local"] = deleted
 
     # Download remote-only documents
-    docs, failed = _download_docs_by_ids(cloud_dataset_id, remote_ids, to_download, client=client)
+    docs, failed = downloadNdiDocuments(cloud_dataset_id, remote_ids, to_download, client=client)
     saved = _save_downloaded_docs(ds_path, docs)
     report["downloaded"] = saved
     report["failed"] = failed
 
     if options.verbose:
         logger.info(
-            "mirror_from_remote: downloaded %d, deleted %d local",
+            "mirrorFromRemote: downloaded %d, deleted %d local",
             len(saved),
             len(deleted),
         )
@@ -365,7 +371,7 @@ def mirror_from_remote(
     return report
 
 
-def two_way_sync(
+def twoWaySync(
     dataset_path: str,
     cloud_dataset_id: str,
     options: SyncOptions | None = None,
@@ -380,14 +386,14 @@ def two_way_sync(
     propagated to the other (unless the deleted doc was re-added).
     """
     from ..api import documents as docs_api
-    from ..internal import list_remote_document_ids
+    from ..internal import listRemoteDocumentIds
 
     options = options or SyncOptions()
     ds_path = Path(dataset_path)
     index = SyncIndex.read(ds_path)
 
     # Current state
-    remote_ids = list_remote_document_ids(cloud_dataset_id, client=client)
+    remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
     current_remote = set(remote_ids.keys())
     current_local = set(index.local_doc_ids_last_sync)
 
@@ -405,7 +411,7 @@ def two_way_sync(
     conflicts = added_local & added_remote
     if conflicts and options.verbose:
         logger.warning(
-            "two_way_sync: %d documents added on both sides (skipping): %s",
+            "twoWaySync: %d documents added on both sides (skipping): %s",
             len(conflicts),
             conflicts,
         )
@@ -448,30 +454,30 @@ def two_way_sync(
     failed: list[str] = []
 
     # 1. Delete local docs that were removed on the remote
-    deleted_local_ids = _delete_local_docs(ds_path, to_delete_local)
+    deleted_local_ids = deleteLocalDocuments(ds_path, to_delete_local)
     report["deleted_local"] = deleted_local_ids
 
     # 2. Delete remote docs that were removed locally
     for doc_id in to_delete_remote:
         api_id = remote_ids.get(doc_id, doc_id)
         try:
-            docs_api.delete_document(cloud_dataset_id, api_id, client=client)
+            docs_api.deleteDocument(cloud_dataset_id, api_id, client=client)
             report["deleted_remote"].append(doc_id)
         except Exception as exc:
-            logger.warning("two_way_sync: failed to delete remote %s: %s", doc_id, exc)
+            logger.warning("twoWaySync: failed to delete remote %s: %s", doc_id, exc)
             failed.append(doc_id)
 
     # 3. Upload local-only docs
     for doc_id in to_upload:
         try:
-            docs_api.add_document(cloud_dataset_id, {"ndiId": doc_id}, client=client)
+            docs_api.addDocument(cloud_dataset_id, {"ndiId": doc_id}, client=client)
             report["uploaded"].append(doc_id)
         except Exception as exc:
-            logger.warning("two_way_sync: failed to upload %s: %s", doc_id, exc)
+            logger.warning("twoWaySync: failed to upload %s: %s", doc_id, exc)
             failed.append(doc_id)
 
     # 4. Download remote-only docs
-    docs, dl_failed = _download_docs_by_ids(
+    docs, dl_failed = downloadNdiDocuments(
         cloud_dataset_id, remote_ids, to_download, client=client
     )
     saved = _save_downloaded_docs(ds_path, docs)
@@ -482,7 +488,7 @@ def two_way_sync(
 
     if options.verbose:
         logger.info(
-            "two_way_sync: uploaded=%d downloaded=%d " "del_local=%d del_remote=%d conflicts=%d",
+            "twoWaySync: uploaded=%d downloaded=%d " "del_local=%d del_remote=%d conflicts=%d",
             len(report["uploaded"]),
             len(report["downloaded"]),
             len(report["deleted_local"]),
@@ -499,7 +505,7 @@ def two_way_sync(
     return report
 
 
-def validate_sync(
+def validate(
     dataset: Any,
     cloud_dataset_id: str,
     *,
@@ -512,7 +518,7 @@ def validate_sync(
     Returns:
         Report with local_only, remote_only, common ID lists.
     """
-    from ..internal import validate_sync as _validate
+    from ..internal import validateSync as _validate
 
     return _validate(dataset, cloud_dataset_id, client=client)
 
@@ -527,11 +533,11 @@ def sync(
 ) -> dict[str, Any]:
     """Dispatch to the appropriate sync operation based on *mode*."""
     dispatch = {
-        SyncMode.UPLOAD_NEW: upload_new,
-        SyncMode.DOWNLOAD_NEW: download_new,
-        SyncMode.MIRROR_TO_REMOTE: mirror_to_remote,
-        SyncMode.MIRROR_FROM_REMOTE: mirror_from_remote,
-        SyncMode.TWO_WAY_SYNC: two_way_sync,
+        SyncMode.UPLOAD_NEW: uploadNew,
+        SyncMode.DOWNLOAD_NEW: downloadNew,
+        SyncMode.MIRROR_TO_REMOTE: mirrorToRemote,
+        SyncMode.MIRROR_FROM_REMOTE: mirrorFromRemote,
+        SyncMode.TWO_WAY_SYNC: twoWaySync,
     }
     handler = dispatch.get(mode)
     if handler is None:

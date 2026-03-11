@@ -10,7 +10,7 @@ The ndic:// URI scheme provides stable references to cloud-hosted binary
 files.  When a dataset is downloaded without ``sync_files=True``, document
 file_info locations are rewritten to ``ndic://{dataset_id}/{file_uid}``.
 When a binary file is opened, the URI is resolved on demand: a fresh
-presigned S3 URL is fetched via ``get_file_details`` and the file is
+presigned S3 URL is fetched via ``getFileDetails`` and the file is
 streamed to local storage.
 """
 
@@ -49,11 +49,17 @@ def parse_ndic_uri(uri: str) -> tuple[str, str]:
     return parts[0], parts[1]
 
 
-def rewrite_file_info_for_cloud(doc_props: dict, cloud_dataset_id: str) -> None:
+def updateFileInfoForRemoteFiles(doc_props: dict, cloud_dataset_id: str) -> None:
     """Rewrite a document's file_info locations to use ``ndic://`` URIs.
 
-    Mutates *doc_props* in-place.  Handles both list-style and dict-style
-    (MATLAB struct) ``file_info`` and ``locations`` fields.
+    MATLAB equivalent: ``ndi.cloud.sync.internal.updateFileInfoForRemoteFiles``
+
+    Mutates *doc_props* in-place.  Sets each location to
+    ``ndic://{dataset_id}/{file_uid}`` with ``location_type='ndicloud'``
+    and ``ingest=0``, ``delete_original=0``.
+
+    Handles both list-style and dict-style (MATLAB struct) ``file_info``
+    and ``locations`` fields.
 
     Args:
         doc_props: Document properties dict (as from JSON).
@@ -120,7 +126,7 @@ def fetch_cloud_file(
 ) -> bool:
     """Download a cloud file on demand.
 
-    Parses the ``ndic://`` URI, calls ``get_file_details`` for a fresh
+    Parses the ``ndic://`` URI, calls ``getFileDetails`` for a fresh
     presigned S3 URL, then streams the file to *target_path*.  Uses an
     atomic write (download to ``.tmp``, then rename) to avoid partial files.
 
@@ -137,7 +143,7 @@ def fetch_cloud_file(
         ValueError: If the URI is invalid.
         CloudError: If the download fails.
     """
-    from .api.files import get_file, get_file_details
+    from .api.files import getFile, getFileDetails
 
     dataset_id, file_uid = parse_ndic_uri(ndic_uri)
 
@@ -145,7 +151,7 @@ def fetch_cloud_file(
         client = get_or_create_cloud_client()
 
     # Get fresh presigned URL
-    details = get_file_details(dataset_id, file_uid, client=client)
+    details = getFileDetails(dataset_id, file_uid, client=client)
     download_url = details.get("downloadUrl", "")
     if not download_url:
         from .exceptions import CloudError
@@ -158,7 +164,7 @@ def fetch_cloud_file(
     tmp_path = target.with_suffix(target.suffix + ".tmp")
 
     logger.debug("Fetching cloud file %s -> %s", ndic_uri, target)
-    success = get_file(download_url, tmp_path, timeout=300)
+    success = getFile(download_url, tmp_path, timeout=300)
 
     if success:
         tmp_path.rename(target)
@@ -188,3 +194,85 @@ def get_or_create_cloud_client() -> CloudClient:
     from .client import CloudClient
 
     return CloudClient.from_env()
+
+
+def updateFileInfoForLocalFiles(
+    doc_props: dict,
+    file_directory: str,
+) -> None:
+    """Update file_info locations to point to local files.
+
+    MATLAB equivalent: ``ndi.cloud.sync.internal.updateFileInfoForLocalFiles``
+
+    Mutates *doc_props* in-place.  For each file_info entry, replaces
+    the location with the local file path ``{file_directory}/{uid}``
+    and sets ``delete_original=1``, ``ingest=1``.
+
+    Args:
+        doc_props: Document properties dict (as from JSON).
+        file_directory: Directory where local files are stored.
+    """
+    import os
+
+    files = doc_props.get("files")
+    if not files or not isinstance(files, dict):
+        return
+
+    file_info = files.get("file_info")
+    if file_info is None:
+        return
+
+    if isinstance(file_info, dict):
+        fi_list = [file_info]
+        was_dict = True
+    elif isinstance(file_info, list):
+        fi_list = file_info
+        was_dict = False
+    else:
+        return
+
+    for fi in fi_list:
+        if not isinstance(fi, dict):
+            continue
+
+        locations = fi.get("locations")
+        if locations is None:
+            continue
+
+        if isinstance(locations, dict):
+            loc_list = [locations]
+            loc_was_dict = True
+        elif isinstance(locations, list):
+            loc_list = locations
+            loc_was_dict = False
+        else:
+            continue
+
+        for loc in loc_list:
+            if not isinstance(loc, dict):
+                continue
+            uid = loc.get("uid", "")
+            if not uid:
+                continue
+            file_location = os.path.join(file_directory, uid)
+            if os.path.isfile(file_location):
+                loc["location"] = file_location
+                loc["location_type"] = "file"
+                loc["delete_original"] = 1
+                loc["ingest"] = 1
+            else:
+                logger.warning(
+                    "Local file does not exist for uid %s at %s",
+                    uid,
+                    file_location,
+                )
+
+        if loc_was_dict:
+            fi["locations"] = loc_list[0]
+
+    if was_dict:
+        files["file_info"] = fi_list[0]
+
+
+# Backward-compatible alias
+rewrite_file_info_for_cloud = updateFileInfoForRemoteFiles

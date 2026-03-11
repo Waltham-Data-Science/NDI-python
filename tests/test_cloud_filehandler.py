@@ -213,8 +213,8 @@ class TestFetchCloudFile:
         mock_client = MagicMock()
 
         with (
-            patch("ndi.cloud.api.files.get_file_details") as mock_details,
-            patch("ndi.cloud.api.files.get_file") as mock_get_file,
+            patch("ndi.cloud.api.files.getFileDetails") as mock_details,
+            patch("ndi.cloud.api.files.getFile") as mock_get_file,
         ):
             mock_details.return_value = {"downloadUrl": "https://s3.example.com/file"}
 
@@ -239,7 +239,7 @@ class TestFetchCloudFile:
         target = tmp_path / "file.bin"
         mock_client = MagicMock()
 
-        with patch("ndi.cloud.api.files.get_file_details") as mock_details:
+        with patch("ndi.cloud.api.files.getFileDetails") as mock_details:
             mock_details.return_value = {}
 
             with pytest.raises(CloudError, match="No downloadUrl"):
@@ -258,8 +258,8 @@ class TestFetchCloudFile:
 
         with (
             patch("ndi.cloud.filehandler.get_or_create_cloud_client") as mock_auto,
-            patch("ndi.cloud.api.files.get_file_details") as mock_details,
-            patch("ndi.cloud.api.files.get_file") as mock_get_file,
+            patch("ndi.cloud.api.files.getFileDetails") as mock_details,
+            patch("ndi.cloud.api.files.getFile") as mock_get_file,
         ):
             mock_auto.return_value = MagicMock()
             mock_details.return_value = {"downloadUrl": "https://s3.example.com/f"}
