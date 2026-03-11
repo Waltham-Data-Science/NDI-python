@@ -199,15 +199,27 @@ def _cleanup_stale_pytest_datasets(client, cloud_config):
     """
     yield  # Let all tests run first
 
+    import warnings
+
     from ndi.cloud.api.datasets import deleteDataset, listDatasets
 
     try:
         result = listDatasets(cloud_config.org_id, client=client)
         datasets = result.get("datasets", [])
-        for ds in datasets:
-            name = ds.get("name", "")
-            ds_id = ds.get("_id", ds.get("id", ""))
-            if name.startswith("NDI_PYTEST") and ds_id:
+        stale = [
+            ds for ds in datasets
+            if ds.get("name", "").startswith("NDI_PYTEST") and ds.get("_id", ds.get("id", ""))
+        ]
+        if stale:
+            names = [f"{ds.get('name')} (id={ds.get('_id', ds.get('id', '?'))})" for ds in stale]
+            warnings.warn(
+                f"Cleaning up {len(stale)} leftover NDI_PYTEST_* dataset(s) — "
+                f"this indicates a test or teardown failed silently:\n"
+                + "\n".join(f"  - {n}" for n in names),
+                stacklevel=1,
+            )
+            for ds in stale:
+                ds_id = ds.get("_id", ds.get("id", ""))
                 try:
                     deleteDataset(ds_id, when="now", client=client)
                 except Exception:
