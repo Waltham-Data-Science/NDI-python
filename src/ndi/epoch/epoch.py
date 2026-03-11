@@ -10,6 +10,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+import pydantic
+from pydantic import ConfigDict
+
 if TYPE_CHECKING:
     from ..time import ClockType
     from .epochprobemap import EpochProbeMap
@@ -210,6 +213,7 @@ class Epoch:
         return False
 
 
+@pydantic.validate_call(config=ConfigDict(arbitrary_types_allowed=True))
 def is_epoch_or_empty(value: Any) -> bool:
     """
     Validate that a value is an Epoch or empty.

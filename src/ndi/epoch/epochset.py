@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import hashlib
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from typing import Annotated, Any
 
 import numpy as np
+import pydantic
+from pydantic import Field
 
-if TYPE_CHECKING:
-    from ..time import ClockType
+from ..time import ClockType
 
 
 class EpochSet(ABC):
@@ -149,7 +150,8 @@ class EpochSet(ABC):
         et, _ = self.epochtable()
         return len(et)
 
-    def epochclock(self, epoch_number: int) -> list[ClockType]:
+    @pydantic.validate_call
+    def epochclock(self, epoch_number: Annotated[int, Field(ge=1)]) -> list[ClockType]:
         """
         Get clock types for an epoch.
 
@@ -163,13 +165,14 @@ class EpochSet(ABC):
             IndexError: If epoch_number is out of range
         """
         et, _ = self.epochtable()
-        if epoch_number < 1 or epoch_number > len(et):
+        if epoch_number > len(et):
             raise IndexError(f"Epoch {epoch_number} out of range (1..{len(et)})")
 
         entry = et[epoch_number - 1]
         return entry.get("epoch_clock", [])
 
-    def t0_t1(self, epoch_number: int) -> list[tuple[float, float]]:
+    @pydantic.validate_call
+    def t0_t1(self, epoch_number: Annotated[int, Field(ge=1)]) -> list[tuple[float, float]]:
         """
         Get time range for an epoch.
 
@@ -183,13 +186,14 @@ class EpochSet(ABC):
             IndexError: If epoch_number is out of range
         """
         et, _ = self.epochtable()
-        if epoch_number < 1 or epoch_number > len(et):
+        if epoch_number > len(et):
             raise IndexError(f"Epoch {epoch_number} out of range (1..{len(et)})")
 
         entry = et[epoch_number - 1]
         return entry.get("t0_t1", [(np.nan, np.nan)])
 
-    def epochid(self, epoch_number: int) -> str:
+    @pydantic.validate_call
+    def epochid(self, epoch_number: Annotated[int, Field(ge=1)]) -> str:
         """
         Get epoch ID for an epoch number.
 
@@ -203,11 +207,12 @@ class EpochSet(ABC):
             IndexError: If epoch_number is out of range
         """
         et, _ = self.epochtable()
-        if epoch_number < 1 or epoch_number > len(et):
+        if epoch_number > len(et):
             raise IndexError(f"Epoch {epoch_number} out of range (1..{len(et)})")
 
         return et[epoch_number - 1].get("epoch_id", "")
 
+    @pydantic.validate_call
     def epochnumber(self, epoch_id: str) -> int:
         """
         Get epoch number for an epoch ID.
@@ -255,7 +260,8 @@ class EpochSet(ABC):
 
         return matches
 
-    def epochtableentry(self, epoch_number: int) -> dict[str, Any]:
+    @pydantic.validate_call
+    def epochtableentry(self, epoch_number: Annotated[int, Field(ge=1)]) -> dict[str, Any]:
         """
         Get a single epoch table entry.
 
@@ -269,7 +275,7 @@ class EpochSet(ABC):
             IndexError: If epoch_number is out of range
         """
         et, _ = self.epochtable()
-        if epoch_number < 1 or epoch_number > len(et):
+        if epoch_number > len(et):
             raise IndexError(f"Epoch {epoch_number} out of range (1..{len(et)})")
 
         return et[epoch_number - 1]

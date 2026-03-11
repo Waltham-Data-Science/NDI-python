@@ -11,7 +11,7 @@ Classes:
 """
 
 from .epoch import Epoch
-from .epochprobemap import EpochProbeMap
+from .epochprobemap import EpochProbeMap, build_devicestring, parse_devicestring
 from .epochprobemap_daqsystem import EpochProbeMapDAQSystem
 from .epochset import EpochSet
 from .functions import epochrange, findepochnode
@@ -21,6 +21,8 @@ __all__ = [
     "EpochSet",
     "EpochProbeMap",
     "EpochProbeMapDAQSystem",
+    "build_devicestring",
     "epochrange",
     "findepochnode",
+    "parse_devicestring",
 ]

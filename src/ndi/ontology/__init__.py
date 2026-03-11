@@ -15,9 +15,9 @@ Usage::
 from __future__ import annotations
 
 import json
-from functools import lru_cache
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
+
+import pydantic
 
 from .providers import PROVIDER_REGISTRY
 
@@ -115,6 +115,7 @@ _lookup_cache: dict[str, OntologyResult] = {}
 _CACHE_MAX = 100
 
 
+@pydantic.validate_call
 def lookup(lookup_string: str) -> OntologyResult:
     """Look up a term in the appropriate ontology.
 
