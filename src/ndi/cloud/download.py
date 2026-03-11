@@ -663,7 +663,7 @@ def downloadGenericFiles(
         if zip_result and report["downloaded_filenames"]:
             import zipfile as _zipfile
 
-            zip_name = target / f"exported_generic_files.zip"
+            zip_name = target / "exported_generic_files.zip"
             with _zipfile.ZipFile(zip_name, "w", _zipfile.ZIP_DEFLATED) as zf:
                 for fname in report["downloaded_filenames"]:
                     zf.write(target / fname, fname)
