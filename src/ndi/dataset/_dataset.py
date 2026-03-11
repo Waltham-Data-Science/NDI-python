@@ -12,9 +12,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from .document import Document
-from .ido import Ido
-from .query import Query
+from ..document import Document
+from ..ido import Ido
+from ..query import Query
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ class Dataset:
             path: Directory path for the dataset
             reference: Human-readable reference name
         """
-        from .session.dir import DirSession
+        from ..session.dir import DirSession
 
         self._path = Path(path)
         self._reference = reference or self._path.name
@@ -432,7 +432,7 @@ class Dataset:
         creator = props.get("session_creator", "")
 
         if creator == "DirSession":
-            from .session.dir import DirSession
+            from ..session.dir import DirSession
 
             # Get creator args
             args = []
