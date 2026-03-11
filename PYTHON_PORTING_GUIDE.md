@@ -41,3 +41,40 @@ To replicate the robustness of the MATLAB `arguments` block, use Pydantic for al
 
 - Include the original MATLAB documentation in the Python docstring.
 - Note any Python-specific requirements (like specific library dependencies) at the bottom of the docstring.
+
+---
+
+## Namespace Coverage Status
+
+Verified coverage of each MATLAB namespace against the Python port. See
+[MATLAB_MAPPING.md](MATLAB_MAPPING.md) for the full function-by-function mapping.
+
+### `ndi.cloud.api` — Fully Ported
+
+**Verified:** 2026-03-11 against `VH-Lab/NDI-matlab` branch `main`.
+
+| Submodule | MATLAB funcs | Python funcs | Coverage | Notes |
+|-----------|:------------:|:------------:|:--------:|-------|
+| `+datasets` (14) | 14 | 14 + 2 | **100 %** | Python adds `listAllDatasets` (auto-paginator), `listDeletedDatasets` |
+| `+documents` (15) | 15 | 15 + 1 | **100 %** | `countDocuments` subsumes MATLAB's `documentCount`; Python adds `bulkUpload` |
+| `+files` (6) | 6 | 6 + 2 | **100 %** | Python adds `putFileBytes`, `getBulkUploadURL` |
+| `+users` (3) | 3 | 3 | **100 %** | |
+| `+compute` (6) | 6 | 6 | **100 %** | |
+| `+auth` (8) | 8 | 8 | **100 %** | `loginOriginal`/`logoutOriginal` (legacy) intentionally skipped; auth funcs live in `ndi.cloud.auth` |
+| `call.m` / `url.m` | 2 | — | **N/A** | Replaced by `CloudClient` + `CloudConfig` (architectural change) |
+| `+implementation/*` (50 classes) | 50 | — | **N/A** | Eliminated; single `CloudClient` replaces all impl classes |
+
+**Architectural differences from MATLAB:**
+
+- MATLAB uses an abstract `call` base class with 50 concrete implementation classes (one per endpoint). Python replaces this with `CloudClient`, a thin `requests.Session` wrapper with `get`/`post`/`put`/`delete` methods.
+- MATLAB `url.m` builds endpoint URLs from a name→template dictionary. Python uses `CloudConfig.api_url` + path templates in each function.
+- All Python API functions use `@pydantic.validate_call` for input validation (matching MATLAB `arguments` blocks) and `@_auto_client` to make the `client` parameter optional.
+
+**Not ported (intentional):**
+
+| MATLAB | Reason |
+|--------|--------|
+| `ndi.cloud.uilogin` | MATLAB GUI |
+| `ndi.cloud.ui.dialog.selectCloudDataset` | MATLAB GUI dialog |
+| `ndi.cloud.utility.createCloudMetadataStruct` | MATLAB struct validator; `CloudConfig` replaces |
+| `ndi.cloud.utility.mustBeValidMetadata` | MATLAB struct validator; type hints replace |

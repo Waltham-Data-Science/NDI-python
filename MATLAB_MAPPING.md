@@ -290,8 +290,8 @@ Auth functions are re-exported from `ndi.cloud.__init__` so `from ndi.cloud impo
 | `submitDataset` | `submitDataset(dataset_id)` | |
 | `createDatasetBranch` | `createDatasetBranch(dataset_id)` | |
 | `getBranches` | `getBranches(dataset_id)` | |
-| — | `undeleteDataset(dataset_id)` | Soft-delete API |
-| — | `listDeletedDatasets(...)` | Soft-delete API |
+| `undeleteDataset` | `undeleteDataset(dataset_id)` | |
+| `listDeletedDatasets` | `listDeletedDatasets(...)` | |
 
 ### Documents API (`ndi.cloud.api.documents`)
 
@@ -311,7 +311,7 @@ Auth functions are re-exported from `ndi.cloud.__init__` so `from ndi.cloud impo
 | `ndiquery` | `ndiquery(scope, search_structure, ...)` | |
 | `ndiqueryAll` | `ndiqueryAll(scope, search_structure, ...)` | |
 | — | `bulkUpload(dataset_id, zip_path)` | Python-only |
-| — | `listDeletedDocuments(dataset_id, ...)` | Soft-delete API |
+| `listDeletedDocuments` | `listDeletedDocuments(dataset_id, ...)` | |
 
 ### Files API (`ndi.cloud.api.files`)
 
@@ -416,7 +416,7 @@ from ndi.cloud import downloadDataset, uploadDataset, syncDataset, uploadSingleF
 | `+internal/getUploadedDocumentIds` | — | Via `listRemoteDocumentIds()` |
 | `+internal/getUploadedFileIds` | — | Via `listFiles()` |
 | `+internal/dropDuplicateDocsFromJsonDecode` | — | Not needed (Python JSON is exact) |
-| `+internal/duplicateDocuments` | — | Not yet ported |
+| `+internal/duplicateDocuments` | `internal.duplicateDocuments()` | |
 | `+sync/+internal/listLocalDocuments` | `internal.listLocalDocuments()` | |
 | `+sync/+internal/getFileUidsFromDocuments` | `internal.getFileUidsFromDocuments()` | |
 | `+sync/+internal/filesNotYetUploaded` | `internal.filesNotYetUploaded()` | |
@@ -453,7 +453,6 @@ from ndi.cloud import downloadDataset, uploadDataset, syncDataset, uploadSingleF
 | `ndi.cloud.ui.dialog.selectCloudDataset` | MATLAB GUI dialog |
 | `ndi.cloud.utility.createCloudMetadataStruct` | MATLAB struct validator; `CloudConfig` replaces |
 | `ndi.cloud.utility.mustBeValidMetadata` | MATLAB struct validator; type hints replace |
-| `+internal/duplicateDocuments` | Not yet ported |
 
 ## Ontology
 
