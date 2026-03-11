@@ -312,7 +312,10 @@ class EpochSet(ABC):
 
         return nodes
 
-    def clear_cache(self) -> None:
-        """Clear the epoch table cache."""
+    def resetepochtable(self) -> None:
+        """Reset (clear) the epoch table cache.
+
+        MATLAB equivalent: ndi.epoch.epochset.resetepochtable
+        """
         self._epochtable_cache = None
         self._epochtable_hash = None

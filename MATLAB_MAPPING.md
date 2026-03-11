@@ -56,8 +56,8 @@ Complete reference mapping every MATLAB NDI function/class to its Python equival
 | `ndi.probe.timeseries` | `ndi.probe.ProbeTimeseries` | `ndi.probe.timeseries` |
 | `ndi.probe.timeseries.mfdaq` | `ndi.probe.ProbeTimeseriesMFDAQ` | `ndi.probe.timeseries_mfdaq` |
 | `ndi.probe.timeseries.stimulator` | `ndi.probe.ProbeTimeseriesStimulator` | `ndi.probe.timeseries_stimulator` |
-| `ndi.probe.fun.initProbeTypeMap` | `ndi.probe.init_probe_type_map()` | `ndi.probe` |
-| `ndi.probe.fun.getProbeTypeMap` | `ndi.probe.get_probe_type_map()` | `ndi.probe` |
+| `ndi.probe.fun.initProbeTypeMap` | `ndi.probe.initProbeTypeMap()` | `ndi.probe` |
+| `ndi.probe.fun.getProbeTypeMap` | `ndi.probe.getProbeTypeMap()` | `ndi.probe` |
 
 ## Session & Dataset
 
@@ -290,8 +290,8 @@ Auth functions are re-exported from `ndi.cloud.__init__` so `from ndi.cloud impo
 | `submitDataset` | `submitDataset(dataset_id)` | |
 | `createDatasetBranch` | `createDatasetBranch(dataset_id)` | |
 | `getBranches` | `getBranches(dataset_id)` | |
-| — | `undeleteDataset(dataset_id)` | Soft-delete API |
-| — | `listDeletedDatasets(...)` | Soft-delete API |
+| `undeleteDataset` | `undeleteDataset(dataset_id)` | |
+| `listDeletedDatasets` | `listDeletedDatasets(...)` | |
 
 ### Documents API (`ndi.cloud.api.documents`)
 
@@ -311,7 +311,7 @@ Auth functions are re-exported from `ndi.cloud.__init__` so `from ndi.cloud impo
 | `ndiquery` | `ndiquery(scope, search_structure, ...)` | |
 | `ndiqueryAll` | `ndiqueryAll(scope, search_structure, ...)` | |
 | — | `bulkUpload(dataset_id, zip_path)` | Python-only |
-| — | `listDeletedDocuments(dataset_id, ...)` | Soft-delete API |
+| `listDeletedDocuments` | `listDeletedDocuments(dataset_id, ...)` | |
 
 ### Files API (`ndi.cloud.api.files`)
 
@@ -416,7 +416,7 @@ from ndi.cloud import downloadDataset, uploadDataset, syncDataset, uploadSingleF
 | `+internal/getUploadedDocumentIds` | — | Via `listRemoteDocumentIds()` |
 | `+internal/getUploadedFileIds` | — | Via `listFiles()` |
 | `+internal/dropDuplicateDocsFromJsonDecode` | — | Not needed (Python JSON is exact) |
-| `+internal/duplicateDocuments` | — | Not yet ported |
+| `+internal/duplicateDocuments` | `internal.duplicateDocuments()` | |
 | `+sync/+internal/listLocalDocuments` | `internal.listLocalDocuments()` | |
 | `+sync/+internal/getFileUidsFromDocuments` | `internal.getFileUidsFromDocuments()` | |
 | `+sync/+internal/filesNotYetUploaded` | `internal.filesNotYetUploaded()` | |
@@ -453,7 +453,45 @@ from ndi.cloud import downloadDataset, uploadDataset, syncDataset, uploadSingleF
 | `ndi.cloud.ui.dialog.selectCloudDataset` | MATLAB GUI dialog |
 | `ndi.cloud.utility.createCloudMetadataStruct` | MATLAB struct validator; `CloudConfig` replaces |
 | `ndi.cloud.utility.mustBeValidMetadata` | MATLAB struct validator; type hints replace |
-| `+internal/duplicateDocuments` | Not yet ported |
+
+## Validators (`ndi.validators.*`)
+
+| MATLAB | Python | Module |
+|--------|--------|--------|
+| `ndi.validators.mustBeCellArrayOfClass` | `ndi.validators.mustBeCellArrayOfClass()` | `ndi.validators.mustBeCellArrayOfClass` |
+| `ndi.validators.mustBeCellArrayOfNdiSessions` | `ndi.validators.mustBeCellArrayOfNdiSessions()` | `ndi.validators.mustBeCellArrayOfNdiSessions` |
+| `ndi.validators.mustBeCellArrayOfNonEmptyCharacterArrays` | `ndi.validators.mustBeCellArrayOfNonEmptyCharacterArrays()` | `ndi.validators.mustBeCellArrayOfNonEmptyCharacterArrays` |
+| `ndi.validators.mustBeClassnameOfType` | `ndi.validators.mustBeClassnameOfType()` | `ndi.validators.mustBeClassnameOfType` |
+| `ndi.validators.mustBeEpochInput` | `ndi.validators.mustBeEpochInput()` | `ndi.validators.mustBeEpochInput` |
+| `ndi.validators.mustBeID` | `ndi.validators.mustBeID()` | `ndi.validators.mustBeID` |
+| `ndi.validators.mustBeNumericClass` | `ndi.validators.mustBeNumericClass()` | `ndi.validators.mustBeNumericClass` |
+| `ndi.validators.mustBeTextLike` | `ndi.validators.mustBeTextLike()` | `ndi.validators.mustBeTextLike` |
+| `ndi.validators.mustHaveFields` | `ndi.validators.mustHaveFields()` | `ndi.validators.mustHaveFields` |
+| `ndi.validators.mustHaveRequiredColumns` | `ndi.validators.mustHaveRequiredColumns()` | `ndi.validators.mustHaveRequiredColumns` |
+| `ndi.validators.mustMatchRegex` | `ndi.validators.mustMatchRegex()` | `ndi.validators.mustMatchRegex` |
+
+## Utilities (`ndi.util.*`)
+
+| MATLAB | Python | Module |
+|--------|--------|--------|
+| `ndi.util.datestamp2datetime` | `ndi.util.datestamp2datetime()` | `ndi.util.datestamp2datetime` |
+| `ndi.util.downsampleTimeseries` | `ndi.util.downsampleTimeseries()` | `ndi.util.downsampleTimeseries` |
+| `ndi.util.hexDiff` | `ndi.util.hexDiff()` | `ndi.util.hexDiff` |
+| `ndi.util.hexDiffBytes` | `ndi.util.hexDiffBytes()` | `ndi.util.hexDiffBytes` |
+| `ndi.util.getHexDiffFromFileObj` | `ndi.util.getHexDiffFromFileObj()` | `ndi.util.getHexDiffFromFileObj` |
+| `ndi.util.hexDump` | `ndi.util.hexDump()` | `ndi.util.hexDump` |
+| `ndi.util.rehydrateJSONNanNull` | `ndi.util.rehydrateJSONNanNull()` | `ndi.util.rehydrateJSONNanNull` |
+| `ndi.util.unwrapTableCellContent` | `ndi.util.unwrapTableCellContent()` | `ndi.util.unwrapTableCellContent` |
+| `ndi.util.openminds.find_instance_name` | `ndi.openminds_convert.find_controlled_instance()` | `ndi.openminds_convert` |
+| `ndi.util.openminds.find_techniques_names` | `ndi.openminds_convert.find_technique_names()` | `ndi.openminds_convert` |
+
+### Util: Not Ported
+
+| MATLAB | Reason |
+|--------|--------|
+| `ndi.util.choosefile` | MATLAB GUI dialog |
+| `ndi.util.choosefileordir` | MATLAB GUI dialog |
+| `ndi.util.toolboxdir` | MATLAB-specific path resolution |
 
 ## Ontology
 
@@ -500,3 +538,6 @@ The following MATLAB components were intentionally not ported (GUI, MATLAB-speci
 | `ndi.fun.convertoldnsd2ndi` | Legacy NSD→NDI migration |
 | `ndi.fun.run_Linux_checks` | MATLAB Linux environment checks |
 | `ndi.fun.plot_extracellular_spikeshapes` | MATLAB GUI plotting |
+| `ndi.util.choosefile` | MATLAB GUI dialog |
+| `ndi.util.choosefileordir` | MATLAB GUI dialog |
+| `ndi.util.toolboxdir` | MATLAB-specific path resolution |

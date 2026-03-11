@@ -327,12 +327,12 @@ class TestMissingEpochs:
 
 
 class TestSpikesForProbe:
-    """Tests for ndi.element.functions.spikes_for_probe."""
+    """Tests for ndi.element.functions.spikesForProbe."""
 
     def test_creates_spike_element(self):
-        """spikes_for_probe creates an element of type 'spikes'."""
+        """spikesForProbe creates an element of type 'spikes'."""
         from ndi.element import Element
-        from ndi.element.functions import spikes_for_probe
+        from ndi.element.functions import spikesForProbe
 
         session = MagicMock()
         probe = MagicMock()
@@ -344,13 +344,13 @@ class TestSpikesForProbe:
             {"epochid": "epoch_001", "spiketimes": [0.1, 0.5]},
         ]
 
-        result = spikes_for_probe(session, probe, "unit1", 1, spikedata)
+        result = spikesForProbe(session, probe, "unit1", 1, spikedata)
         assert isinstance(result, Element)
         assert result._type == "spikes"
 
     def test_invalid_epoch_raises(self):
-        """spikes_for_probe raises ValueError for unknown epoch."""
-        from ndi.element.functions import spikes_for_probe
+        """spikesForProbe raises ValueError for unknown epoch."""
+        from ndi.element.functions import spikesForProbe
 
         session = MagicMock()
         probe = MagicMock()
@@ -363,7 +363,7 @@ class TestSpikesForProbe:
         ]
 
         with pytest.raises(ValueError, match="not found"):
-            spikes_for_probe(session, probe, "unit1", 1, spikedata)
+            spikesForProbe(session, probe, "unit1", 1, spikedata)
 
 
 # ===========================================================================

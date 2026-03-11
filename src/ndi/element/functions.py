@@ -102,7 +102,7 @@ def oneepoch(
     return elem_out
 
 
-def spikes_for_probe(
+def spikesForProbe(
     session: Any,
     probe: Any,
     name: str,
@@ -129,7 +129,7 @@ def spikes_for_probe(
         ...     {'epochid': 'epoch_001', 'spiketimes': [0.1, 0.5, 1.2]},
         ...     {'epochid': 'epoch_002', 'spiketimes': [0.3, 0.8]},
         ... ]
-        >>> neuron = spikes_for_probe(session, probe, 'unit1', 1, spikes)
+        >>> neuron = spikesForProbe(session, probe, 'unit1', 1, spikes)
 
     Note:
         This creates the structural framework for a neuron element.

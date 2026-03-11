@@ -6,11 +6,11 @@ MATLAB source files:
   +probe/ProbeTest.m      -> TestProbe
 
 Tests for:
-- ndi.probe.init_probe_type_map() / get_probe_type_map()
+- ndi.probe.initProbeTypeMap() / getProbeTypeMap()
 - ndi.probe.Probe instantiation and basic interface
 """
 
-from ndi.probe import Probe, get_probe_type_map, init_probe_type_map
+from ndi.probe import Probe, getProbeTypeMap, initProbeTypeMap
 
 # ===========================================================================
 # TestProbeMap
@@ -25,22 +25,22 @@ class TestProbeMap:
     from probetype2object.json.
     """
 
-    def test_init_probe_type_map(self):
-        """init_probe_type_map() returns a non-empty dict.
+    def test_initProbeTypeMap(self):
+        """initProbeTypeMap() returns a non-empty dict.
 
         MATLAB equivalent: ProbeMapTest.testInitProbeTypeMap
         """
-        probe_map = init_probe_type_map()
+        probe_map = initProbeTypeMap()
         assert isinstance(probe_map, dict)
         assert len(probe_map) > 0, "Probe type map should be non-empty"
 
-    def test_get_probe_type_map(self):
-        """get_probe_type_map() returns the cached version, same result.
+    def test_getProbeTypeMap(self):
+        """getProbeTypeMap() returns the cached version, same result.
 
         MATLAB equivalent: ProbeMapTest.testGetProbeTypeMap
         """
-        map_init = init_probe_type_map()
-        map_cached = get_probe_type_map()
+        map_init = initProbeTypeMap()
+        map_cached = getProbeTypeMap()
 
         assert isinstance(map_cached, dict)
         assert map_cached == map_init, "Cached map should equal freshly loaded map"
@@ -50,7 +50,7 @@ class TestProbeMap:
 
         MATLAB equivalent: ProbeMapTest.testMapContents
         """
-        probe_map = get_probe_type_map()
+        probe_map = getProbeTypeMap()
 
         # These types are defined in ndi_common/probe/probetype2object.json
         expected_types = ["n-trode", "patch", "sharp", "stimulator"]
@@ -63,7 +63,7 @@ class TestProbeMap:
 
         MATLAB equivalent: ProbeMapTest (implicit)
         """
-        probe_map = get_probe_type_map()
+        probe_map = getProbeTypeMap()
         for key, value in probe_map.items():
             assert isinstance(key, str), f"Key should be string, got {type(key)}"
             assert isinstance(value, str), f"Value should be string, got {type(value)}"
@@ -74,7 +74,7 @@ class TestProbeMap:
 
         MATLAB equivalent: ProbeMapTest (spot check)
         """
-        probe_map = get_probe_type_map()
+        probe_map = getProbeTypeMap()
         assert probe_map["n-trode"] == "ndi.probe.timeseries.mfdaq"
 
 

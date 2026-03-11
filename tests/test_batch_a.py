@@ -212,8 +212,8 @@ class TestEpochProbeMapDAQSystem:
             subjectstring="mouse001",
         )
         filepath = str(tmp_path / "test_epm.txt")
-        epm.save_to_file(filepath)
-        loaded = EpochProbeMapDAQSystem.load_from_file(filepath)
+        epm.savetofile(filepath)
+        loaded = EpochProbeMapDAQSystem.loadfromfile(filepath)
         assert len(loaded) == 1
         assert loaded[0].name == "probe1"
 
@@ -712,11 +712,11 @@ class TestElementFunctions:
     """Tests for ndi.element.functions."""
 
     def test_import(self):
-        from ndi.element.functions import missingepochs, oneepoch, spikes_for_probe
+        from ndi.element.functions import missingepochs, oneepoch, spikesForProbe
 
         assert missingepochs is not None
         assert oneepoch is not None
-        assert spikes_for_probe is not None
+        assert spikesForProbe is not None
 
     def test_missingepochs_none_missing(self):
         from ndi.element.functions import missingepochs
@@ -779,8 +779,8 @@ class TestElementFunctions:
         assert missing
         assert ids == ["b"]
 
-    def test_spikes_for_probe_validates_epochs(self, tmp_path):
-        from ndi.element.functions import spikes_for_probe
+    def test_spikesForProbe_validates_epochs(self, tmp_path):
+        from ndi.element.functions import spikesForProbe
         from ndi.session import DirSession
 
         session_path = tmp_path / "test_session"
@@ -796,7 +796,7 @@ class TestElementFunctions:
         ]
 
         with pytest.raises(ValueError, match="not found"):
-            spikes_for_probe(session, MockProbe(), "unit1", 1, spikedata)
+            spikesForProbe(session, MockProbe(), "unit1", 1, spikedata)
 
 
 # ============================================================================
@@ -848,8 +848,8 @@ class TestBatchAImports:
         assert ProbeTimeseriesMFDAQ is not None
 
     def test_element_functions(self):
-        from ndi.element.functions import missingepochs, oneepoch, spikes_for_probe
+        from ndi.element.functions import missingepochs, oneepoch, spikesForProbe
 
         assert callable(missingepochs)
         assert callable(oneepoch)
-        assert callable(spikes_for_probe)
+        assert callable(spikesForProbe)

@@ -14,7 +14,7 @@ from .epoch import Epoch
 from .epochprobemap import EpochProbeMap
 from .epochprobemap_daqsystem import EpochProbeMapDAQSystem
 from .epochset import EpochSet
-from .functions import epochrange, find_epoch_node
+from .functions import epochrange, findepochnode
 
 __all__ = [
     "Epoch",
@@ -22,5 +22,5 @@ __all__ = [
     "EpochProbeMap",
     "EpochProbeMapDAQSystem",
     "epochrange",
-    "find_epoch_node",
+    "findepochnode",
 ]

@@ -234,13 +234,13 @@ class TestEpochSet:
         with pytest.raises(ValueError):
             es.epochnumber("unknown")
 
-    def test_clear_cache(self):
-        """Test cache clearing."""
+    def test_resetepochtable(self):
+        """Test cache clearing via resetepochtable."""
         es = ConcreteEpochSet([{"epoch_number": 1, "epoch_id": "ep1"}])
         es.epochtable()  # Populate cache
         assert es._epochtable_cache is not None
 
-        es.clear_cache()
+        es.resetepochtable()
         assert es._epochtable_cache is None
 
 

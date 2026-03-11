@@ -32,7 +32,7 @@ Example:
 # Import epoch module (Phase 6)
 # Import Phase 10: Cloud API client
 # Import Phase 11: Schema validation
-from . import calc, cloud, daq, epoch, file, session, time, validate
+from . import calc, cloud, daq, epoch, file, session, time, util, validate, validators
 
 # Import Phase 9: App framework and calculators
 from .app import App
@@ -123,6 +123,8 @@ __all__ = [
     "Calculator",
     "calc",
     "cloud",
+    "util",
     "validate",
+    "validators",
     "version",
 ]

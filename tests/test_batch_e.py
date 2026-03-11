@@ -1,7 +1,7 @@
 """
 Tests for Batch E: Minor remaining MATLAB gaps.
 
-Tests find_epoch_node(), SessionTable, TuningFit.
+Tests findepochnode(), SessionTable, TuningFit.
 """
 
 from pathlib import Path
@@ -14,17 +14,17 @@ from ndi.calc.tuning_fit import TuningFit
 # ---------------------------------------------------------------------------
 # Imports
 # ---------------------------------------------------------------------------
-from ndi.epoch.functions import find_epoch_node
+from ndi.epoch.functions import findepochnode
 from ndi.session.sessiontable import SessionTable
 
 
 class TestImports:
     """Verify all Batch E items are importable."""
 
-    def test_import_find_epoch_node_from_epoch(self):
-        from ndi.epoch import find_epoch_node as fen
+    def test_import_findepochnode_from_epoch(self):
+        from ndi.epoch import findepochnode as fen
 
-        assert fen is find_epoch_node
+        assert fen is findepochnode
 
     def test_import_session_table_from_session(self):
         from ndi.session import SessionTable as ST
@@ -38,7 +38,7 @@ class TestImports:
 
 
 # ===========================================================================
-# find_epoch_node
+# findepochnode
 # ===========================================================================
 
 
@@ -77,58 +77,58 @@ class TestFindEpochNode:
 
     def test_empty_search_matches_all(self, sample_nodes):
         """Empty search node = wildcard, matches everything."""
-        result = find_epoch_node({}, sample_nodes)
+        result = findepochnode({}, sample_nodes)
         assert result == [0, 1, 2]
 
     def test_search_by_epoch_id(self, sample_nodes):
-        result = find_epoch_node({"epoch_id": "e2"}, sample_nodes)
+        result = findepochnode({"epoch_id": "e2"}, sample_nodes)
         assert result == [1]
 
     def test_search_by_objectname(self, sample_nodes):
-        result = find_epoch_node({"objectname": "probe1"}, sample_nodes)
+        result = findepochnode({"objectname": "probe1"}, sample_nodes)
         assert result == [0, 2]
 
     def test_search_by_objectclass(self, sample_nodes):
-        result = find_epoch_node({"objectclass": "Probe"}, sample_nodes)
+        result = findepochnode({"objectclass": "Probe"}, sample_nodes)
         assert result == [0, 1]
 
     def test_search_by_session_id(self, sample_nodes):
-        result = find_epoch_node({"epoch_session_id": "s2"}, sample_nodes)
+        result = findepochnode({"epoch_session_id": "s2"}, sample_nodes)
         assert result == [2]
 
     def test_search_by_multiple_fields(self, sample_nodes):
-        result = find_epoch_node(
+        result = findepochnode(
             {"objectname": "probe1", "objectclass": "Probe"},
             sample_nodes,
         )
         assert result == [0]
 
     def test_search_no_match(self, sample_nodes):
-        result = find_epoch_node({"epoch_id": "e99"}, sample_nodes)
+        result = findepochnode({"epoch_id": "e99"}, sample_nodes)
         assert result == []
 
     def test_search_by_epoch_clock(self, sample_nodes):
-        result = find_epoch_node({"epoch_clock": "utc"}, sample_nodes)
+        result = findepochnode({"epoch_clock": "utc"}, sample_nodes)
         assert result == [2]
 
     def test_search_by_time_value_in_range(self, sample_nodes):
-        result = find_epoch_node({"time_value": 5.0}, sample_nodes)
+        result = findepochnode({"time_value": 5.0}, sample_nodes)
         # 5.0 is in [0, 10] (node 0) and [0, 100] (node 2)
         assert result == [0, 2]
 
     def test_search_by_time_value_boundary(self, sample_nodes):
-        result = find_epoch_node({"time_value": 10.0}, sample_nodes)
+        result = findepochnode({"time_value": 10.0}, sample_nodes)
         # 10.0 is at boundary of node 0 [0,10] and node 1 [10,20] and node 2 [0,100]
         assert 0 in result
         assert 1 in result
         assert 2 in result
 
     def test_search_by_time_value_out_of_range(self, sample_nodes):
-        result = find_epoch_node({"time_value": 200.0}, sample_nodes)
+        result = findepochnode({"time_value": 200.0}, sample_nodes)
         assert result == []
 
     def test_combined_string_and_time(self, sample_nodes):
-        result = find_epoch_node(
+        result = findepochnode(
             {"objectname": "probe1", "time_value": 5.0},
             sample_nodes,
         )
@@ -136,15 +136,15 @@ class TestFindEpochNode:
         assert result == [0, 2]
 
     def test_empty_node_array(self):
-        result = find_epoch_node({"epoch_id": "e1"}, [])
+        result = findepochnode({"epoch_id": "e1"}, [])
         assert result == []
 
     def test_none_field_treated_as_wildcard(self, sample_nodes):
-        result = find_epoch_node({"epoch_id": None}, sample_nodes)
+        result = findepochnode({"epoch_id": None}, sample_nodes)
         assert result == [0, 1, 2]
 
     def test_empty_string_treated_as_wildcard(self, sample_nodes):
-        result = find_epoch_node({"objectname": ""}, sample_nodes)
+        result = findepochnode({"objectname": ""}, sample_nodes)
         assert result == [0, 1, 2]
 
 
