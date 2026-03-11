@@ -567,7 +567,9 @@ def downloadGenericFiles(
         all_docs = []
         for doc_id in ndi_document_ids:
             q = Query("base.id", "exact_string", doc_id, "")
-            results = ndi_dataset.database_search(q) if hasattr(ndi_dataset, "database_search") else []
+            results = (
+                ndi_dataset.database_search(q) if hasattr(ndi_dataset, "database_search") else []
+            )
             all_docs.extend(results)
 
         if not all_docs:
