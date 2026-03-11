@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -73,7 +73,7 @@ class TestCreateDataset:
 
         client = _make_client(org_id="org-abc")
         client.post.return_value = {"id": "ds-new", "name": "NewDS"}
-        result = createDataset(name="NewDS", client=client)
+        createDataset(name="NewDS", client=client)
 
         call_kwargs = client.post.call_args
         assert call_kwargs.kwargs["organizationId"] == "org-abc"
