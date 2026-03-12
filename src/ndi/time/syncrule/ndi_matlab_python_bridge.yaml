@@ -1,0 +1,161 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/time/syncrule/
+# The Primary Contract for the ndi.time.syncrule namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # =========================================================================
+  # ndi.time.syncrule.filematch
+  # =========================================================================
+  - name: filematch
+    type: class
+    matlab_path: "+ndi/+time/+syncrule/filematch.m"
+    python_path: "ndi/time/syncrule/filematch.py"
+    python_class: "FileMatch"
+    inherits: "ndi.time.syncrule"
+
+    methods:
+      - name: filematch
+        kind: constructor
+        input_arguments:
+          - name: parameters
+            type_matlab: "struct"
+            type_python: "dict[str, Any] | None"
+            default: "None"
+          - name: identifier
+            type_matlab: "char"
+            type_python: "str | None"
+            default: "None"
+        output_arguments:
+          - name: fm_obj
+            type_python: "FileMatch"
+        decision_log: >
+          Exact match. Default parameters:
+          {'number_fullpath_matches': 2}.
+
+      - name: is_valid_parameters
+        input_arguments:
+          - name: parameters
+            type_matlab: "struct"
+            type_python: "dict[str, Any]"
+        output_arguments:
+          - name: is_valid
+            type_python: "bool"
+          - name: msg
+            type_python: "str"
+        decision_log: >
+          Exact match. Validates 'number_fullpath_matches' is
+          present and >= 1.
+
+      - name: eligible_epochsets
+        input_arguments: []
+        output_arguments:
+          - name: classes
+            type_python: "list[str]"
+        decision_log: >
+          Exact match. Returns ['ndi.daq.system', 'DAQSystem'].
+
+      - name: ineligible_epochsets
+        input_arguments: []
+        output_arguments:
+          - name: classes
+            type_python: "list[str]"
+        decision_log: >
+          Exact match. Returns base ineligible list plus
+          ndi.epoch.epochset, ndi.epoch.epochset.param,
+          ndi.file.navigator.
+
+      - name: apply
+        input_arguments:
+          - name: epochnode_a
+            type_matlab: "struct"
+            type_python: "dict[str, Any]"
+          - name: epochnode_b
+            type_matlab: "struct"
+            type_python: "dict[str, Any]"
+        output_arguments:
+          - name: cost
+            type_python: "float | None"
+          - name: mapping
+            type_python: "TimeMapping | None"
+        decision_log: >
+          Exact match. Returns (1.0, identity_mapping) if epochs
+          share >= number_fullpath_matches underlying files.
+          Returns (None, None) otherwise.
+
+  # =========================================================================
+  # ndi.time.syncrule.filefind
+  # =========================================================================
+  - name: filefind
+    type: class
+    matlab_path: "+ndi/+time/+syncrule/filefind.m"
+    python_path: "ndi/time/syncrule/filefind.py"
+    python_class: "FileFind"
+    inherits: "ndi.time.syncrule"
+
+    methods:
+      - name: filefind
+        kind: constructor
+        input_arguments:
+          - name: parameters
+            type_matlab: "struct"
+            type_python: "dict[str, Any] | None"
+            default: "None"
+          - name: identifier
+            type_matlab: "char"
+            type_python: "str | None"
+            default: "None"
+        output_arguments:
+          - name: ff_obj
+            type_python: "FileFind"
+        decision_log: >
+          Exact match. Default parameters:
+          {'file_patterns': [], 'match_type': 'exact'}.
+
+      - name: is_valid_parameters
+        input_arguments:
+          - name: parameters
+            type_matlab: "struct"
+            type_python: "dict[str, Any]"
+        output_arguments:
+          - name: is_valid
+            type_python: "bool"
+          - name: msg
+            type_python: "str"
+        decision_log: >
+          Exact match. Validates 'file_patterns' is a list and
+          'match_type' is one of: exact, contains, regex, glob.
+
+      - name: eligible_epochsets
+        input_arguments: []
+        output_arguments:
+          - name: classes
+            type_python: "list[str]"
+        decision_log: >
+          Exact match. Returns ['ndi.daq.system', 'DAQSystem'].
+
+      - name: apply
+        input_arguments:
+          - name: epochnode_a
+            type_matlab: "struct"
+            type_python: "dict[str, Any]"
+          - name: epochnode_b
+            type_matlab: "struct"
+            type_python: "dict[str, Any]"
+        output_arguments:
+          - name: cost
+            type_python: "float | None"
+          - name: mapping
+            type_python: "TimeMapping | None"
+        decision_log: >
+          Exact match. Returns (1.0, identity_mapping) if all
+          file patterns match in both epochs. Returns (None, None)
+          otherwise. Supports match types: exact, contains, regex,
+          glob.

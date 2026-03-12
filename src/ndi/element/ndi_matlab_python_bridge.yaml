@@ -1,0 +1,358 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/element/
+# The Primary Contract for the ndi.element namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Standalone functions
+# =========================================================================
+functions:
+
+  - name: missingepochs
+    type: function
+    matlab_path: "+ndi/+element/missingepochs.m"
+    python_path: "ndi/element/functions.py"
+    input_arguments:
+      - name: element1
+        type_matlab: "ndi.element"
+        type_python: "Any"
+      - name: element2
+        type_matlab: "ndi.element"
+        type_python: "Any"
+    output_arguments:
+      - name: missing
+        type_python: "bool"
+      - name: epoch_ids
+        type_python: "list[str]"
+    decision_log: >
+      Exact match. Returns a 2-tuple (missing, epoch_ids).
+      Compares epoch tables and returns epoch_ids present in
+      element1 but not in element2.
+
+  - name: oneepoch
+    type: function
+    matlab_path: "+ndi/+element/oneepoch.m"
+    python_path: "ndi/element/functions.py"
+    input_arguments:
+      - name: session
+        type_matlab: "ndi.session"
+        type_python: "Any"
+      - name: element_in
+        type_matlab: "ndi.element"
+        type_python: "Any"
+      - name: name_out
+        type_matlab: "char"
+        type_python: "str"
+      - name: reference_out
+        type_matlab: "integer"
+        type_python: "int"
+    output_arguments:
+      - name: element_out
+        type_python: "Any"
+    decision_log: >
+      Exact match. Creates a single-epoch concatenated version
+      of a timeseries element. Framework function; full
+      concatenation depends on the element/probe type.
+
+  - name: spikesForProbe
+    type: function
+    matlab_path: "+ndi/+element/spikesForProbe.m"
+    python_path: "ndi/element/functions.py"
+    input_arguments:
+      - name: session
+        type_matlab: "ndi.session"
+        type_python: "Any"
+      - name: probe
+        type_matlab: "ndi.probe"
+        type_python: "Any"
+      - name: name
+        type_matlab: "char"
+        type_python: "str"
+      - name: reference
+        type_matlab: "integer"
+        type_python: "int"
+      - name: spikedata
+        type_matlab: "struct array"
+        type_python: "list[dict[str, Any]]"
+    output_arguments:
+      - name: neuron
+        type_python: "Any"
+    decision_log: >
+      Exact match. Creates a spiking neuron element from probe
+      data and spike times. spikedata entries have 'epochid' and
+      'spiketimes' keys.
+
+  - name: downsample
+    type: function
+    matlab_path: "+ndi/+element/downsample.m"
+    python_path: "ndi/element/functions.py"
+    input_arguments:
+      - name: session
+        type_matlab: "ndi.session"
+        type_python: "Any"
+      - name: element_in
+        type_matlab: "ndi.element"
+        type_python: "Any"
+      - name: lp_freq
+        type_matlab: "double"
+        type_python: "float"
+      - name: name_out
+        type_matlab: "char"
+        type_python: "str"
+      - name: reference_out
+        type_matlab: "integer"
+        type_python: "int"
+    output_arguments:
+      - name: element_out
+        type_python: "Any"
+    decision_log: >
+      Exact match. Creates a new element containing low-pass
+      filtered and decimated data. Uses Chebyshev Type I filter
+      for anti-aliasing before decimation.
+
+  - name: downsample_timeseries
+    type: function
+    matlab_path: null
+    python_path: "ndi/element/functions.py"
+    input_arguments:
+      - name: t_in
+        type_matlab: "double array"
+        type_python: "np.ndarray"
+      - name: d_in
+        type_matlab: "double array"
+        type_python: "np.ndarray"
+      - name: lp_freq
+        type_matlab: "double"
+        type_python: "float"
+    output_arguments:
+      - name: t_out
+        type_python: "np.ndarray"
+      - name: d_out
+        type_python: "np.ndarray"
+    decision_log: >
+      Python-specific helper extracted from downsample logic.
+      Applies a Chebyshev Type I 4th-order filter with 0.8 dB
+      ripple and decimates. Returns 2-tuple (t_out, d_out).
+      Requires scipy.
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # =========================================================================
+  # ndi.element  (base class, extends Ido + EpochSet + DocumentService)
+  # =========================================================================
+  - name: element
+    type: class
+    matlab_path: "+ndi/element.m"
+    python_path: "ndi/element/__init__.py"
+    python_class: "Element"
+    inherits: "ndi.ido, ndi.epoch.epochset, ndi.documentservice"
+
+    properties:
+      - name: name
+        type_matlab: "char"
+        type_python: "str"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: "Implemented as @property in Python."
+
+      - name: reference
+        type_matlab: "integer"
+        type_python: "int"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: "Implemented as @property in Python. Non-negative."
+
+      - name: type
+        type_matlab: "char"
+        type_python: "str"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: "Implemented as @property in Python."
+
+      - name: underlying_element
+        type_matlab: "ndi.element"
+        type_python: "Element | None"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: "Implemented as @property in Python."
+
+      - name: direct
+        type_matlab: "logical"
+        type_python: "bool"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: "Implemented as @property in Python."
+
+      - name: subject_id
+        type_matlab: "char"
+        type_python: "str"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: "Implemented as @property in Python."
+
+      - name: dependencies
+        type_matlab: "struct"
+        type_python: "dict[str, str]"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: >
+          MATLAB uses a struct; Python uses a dict.
+          Implemented as @property in Python.
+
+    methods:
+      # --- Constructor ---
+      - name: element
+        kind: constructor
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any | None"
+            default: "None"
+          - name: name
+            type_matlab: "char"
+            type_python: "str"
+            default: "''"
+          - name: reference
+            type_matlab: "integer"
+            type_python: "int"
+            default: "0"
+          - name: type
+            type_matlab: "char"
+            type_python: "str"
+            default: "''"
+          - name: underlying_element
+            type_matlab: "ndi.element"
+            type_python: "Element | None"
+            default: "None"
+          - name: direct
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "True"
+          - name: subject_id
+            type_matlab: "char"
+            type_python: "str"
+            default: "''"
+          - name: dependencies
+            type_matlab: "struct"
+            type_python: "dict[str, str] | None"
+            default: "None"
+          - name: identifier
+            type_matlab: "char"
+            type_python: "str | None"
+            default: "None"
+          - name: document
+            type_matlab: "ndi.document"
+            type_python: "Any | None"
+            default: "None"
+        output_arguments:
+          - name: element_obj
+            type_python: "Element"
+        decision_log: >
+          Exact match. Can be created from scratch or loaded from
+          a document. If underlying_element is provided and
+          subject_id is empty, inherits subject_id from underlying.
+
+      # --- EpochSet Implementation ---
+      - name: buildepochtable
+        input_arguments: []
+        output_arguments:
+          - name: et
+            type_python: "list[dict[str, Any]]"
+        decision_log: >
+          Exact match. If direct=True, uses underlying_element's
+          epochs. If direct=False, loads registered epochs from
+          the database.
+
+      - name: epochsetname
+        input_arguments: []
+        output_arguments:
+          - name: name
+            type_python: "str"
+        decision_log: "Exact match. Returns 'element: name | reference'."
+
+      - name: issyncgraphroot
+        input_arguments: []
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: >
+          Exact match. Returns True if no underlying_element
+          (stop traversal), False otherwise (continue).
+
+      # --- Element-specific methods ---
+      - name: elementstring
+        input_arguments: []
+        output_arguments:
+          - name: s
+            type_python: "str"
+        decision_log: "Exact match. Returns 'name | reference'."
+
+      - name: addepoch
+        input_arguments:
+          - name: epoch_id
+            type_matlab: "char"
+            type_python: "str"
+          - name: epoch_clock
+            type_matlab: "ndi.time.clocktype array"
+            type_python: "list[ClockType]"
+          - name: t0_t1
+            type_matlab: "cell array of [t0 t1]"
+            type_python: "list[tuple[float, float]]"
+        output_arguments:
+          - name: element_obj
+            type_python: "Element"
+          - name: epoch_doc
+            type_python: "Any"
+        decision_log: >
+          Exact match. Returns 2-tuple (self, epoch_document).
+          Raises ValueError if direct=True.
+
+      - name: loadaddedepochs
+        input_arguments: []
+        output_arguments:
+          - name: et
+            type_python: "list[dict[str, Any]]"
+          - name: epoch_docs
+            type_python: "list[Any]"
+        decision_log: >
+          Exact match. Returns 2-tuple (epoch_table, epoch_documents)
+          from the database.
+
+      # --- DocumentService Implementation ---
+      - name: newdocument
+        input_arguments: []
+        output_arguments:
+          - name: doc
+            type_python: "Any"
+        decision_log: >
+          Exact match. Creates an element document with name,
+          reference, type, direct properties and dependencies.
+
+      - name: searchquery
+        input_arguments: []
+        output_arguments:
+          - name: q
+            type_python: "Any"
+        decision_log: "Exact match. Returns a Query matching base.id."
+
+      # --- Cache ---
+      - name: getcache
+        input_arguments: []
+        output_arguments:
+          - name: cache
+            type_python: "Any | None"
+          - name: key
+            type_python: "str"
+        decision_log: >
+          Exact match. Returns 2-tuple (cache_object, cache_key).
+
+      # --- Equality ---
+      - name: eq
+        input_arguments:
+          - name: other
+            type_python: "Any"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: >
+          Mapped to Python __eq__ dunder method. Compares by
+          name, reference, and type.
