@@ -97,6 +97,30 @@ class Session(ABC):
         """
         return self._identifier
 
+    def unique_reference_string(self) -> str:
+        """
+        Return the unique reference string for this session.
+
+        MATLAB equivalent: ``ndi.session/unique_reference_string``
+
+        Returns a combination of the reference and identifier joined
+        with ``'_'``.
+
+        .. deprecated::
+            Use :meth:`id` instead.
+
+        Returns:
+            String of the form ``'{reference}_{identifier}'``
+        """
+        import warnings
+
+        warnings.warn(
+            "unique_reference_string is deprecated, use id() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return f"{self._reference}_{self._identifier}"
+
     @property
     def syncgraph(self) -> SyncGraph | None:
         """Get the session's syncgraph."""
@@ -749,6 +773,38 @@ class Session(ABC):
                     return False
         return True
 
+    def isIngestedInDataset(self) -> bool:
+        """
+        Check if the session is ingested in a dataset.
+
+        MATLAB equivalent: ``ndi.session/isIngestedInDataset``
+
+        Searches for a ``session_in_a_dataset`` document in the database
+        that matches this session's ID and has ``is_linked=0`` (i.e. the
+        session was ingested, not merely linked).
+
+        Returns:
+            True if the session is ingested in a dataset, False otherwise.
+        """
+        if self._database is None:
+            return False
+
+        q = Query("").isa("session_in_a_dataset") & (
+            Query("session_in_a_dataset.session_id") == self.id()
+        )
+        docs = self._database.search(q)
+
+        for doc in docs:
+            props = doc.document_properties
+            sia = props.get("session_in_a_dataset", {})
+            is_linked = sia.get("is_linked", True)
+            if isinstance(is_linked, (int, float)):
+                is_linked = bool(is_linked)
+            if not is_linked:
+                return True
+
+        return False
+
     # =========================================================================
     # Probe and Element Methods
     # =========================================================================
@@ -894,6 +950,63 @@ class Session(ABC):
                 pass
 
         return elements
+
+    def findexpobj(self, obj_name: str, obj_classname: str) -> Any | None:
+        """
+        Search the session for a specific object by name and class.
+
+        MATLAB equivalent: ``ndi.session/findexpobj``
+
+        Examines the DAQ system list and probe list for an object with
+        the given *obj_name* and *obj_classname*.
+
+        Args:
+            obj_name: Name of the object to find.
+            obj_classname: Class name to match (e.g. ``'Probe'``,
+                ``'DAQSystem'``).
+
+        Returns:
+            The matching object, or None if not found.
+        """
+        # Determine where to search based on classname
+        classname_lower = obj_classname.lower()
+
+        # Check DAQ systems
+        if "daqsystem" in classname_lower or "daq" in classname_lower:
+            obj = self.daqsystem_load(name=obj_name)
+            if obj is not None:
+                if not isinstance(obj, list):
+                    obj = [obj]
+                for o in obj:
+                    if type(o).__name__ == obj_classname:
+                        return o
+            return None
+
+        # Check probes
+        if "probe" in classname_lower:
+            probes = self.getprobes()
+            for p in probes:
+                p_name = p.name if hasattr(p, "name") else ""
+                if type(p).__name__ == obj_classname and p_name == obj_name:
+                    return p
+            return None
+
+        # Fallback: search probes then DAQ systems
+        probes = self.getprobes()
+        for p in probes:
+            p_name = p.name if hasattr(p, "name") else ""
+            if type(p).__name__ == obj_classname and p_name == obj_name:
+                return p
+
+        obj = self.daqsystem_load(name=obj_name)
+        if obj is not None:
+            if not isinstance(obj, list):
+                obj = [obj]
+            for o in obj:
+                if type(o).__name__ == obj_classname:
+                    return o
+
+        return None
 
     # =========================================================================
     # Document Service Methods

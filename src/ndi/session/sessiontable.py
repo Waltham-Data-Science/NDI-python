@@ -28,8 +28,8 @@ class SessionTable:
 
     Example:
         >>> table = SessionTable()
-        >>> table.add_entry('abc123', '/data/experiment1')
-        >>> table.get_session_path('abc123')
+        >>> table.addtableentry('abc123', '/data/experiment1')
+        >>> table.getsessionpath('abc123')
         '/data/experiment1'
     """
 
@@ -41,24 +41,27 @@ class SessionTable:
 
         Args:
             table_path: Override the default table file location.
-                        If None, uses ``local_table_filename()``.
+                        If None, uses ``localtablefilename()``.
         """
-        self._table_path = (
-            Path(table_path) if table_path is not None else self.local_table_filename()
-        )
+        self._table_path = Path(table_path) if table_path is not None else self.localtablefilename()
 
     @staticmethod
-    def local_table_filename() -> Path:
-        """Return the default session table file path."""
+    def localtablefilename() -> Path:
+        """Return the default session table file path.
+
+        MATLAB equivalent: ``ndi.session.sessiontable.localtablefilename``
+        """
         return Path.home() / ".ndi" / "preferences" / "local_sessiontable.txt"
 
     # ------------------------------------------------------------------
     # Read operations
     # ------------------------------------------------------------------
 
-    def get_session_table(self) -> list[dict[str, str]]:
+    def getsessiontable(self) -> list[dict[str, str]]:
         """
         Read and return the session table.
+
+        MATLAB equivalent: ``ndi.session.sessiontable/getsessiontable``
 
         Returns:
             List of dicts with keys ``session_id`` and ``path``.
@@ -85,9 +88,11 @@ class SessionTable:
         except Exception:
             return []
 
-    def get_session_path(self, session_id: str) -> str | None:
+    def getsessionpath(self, session_id: str) -> str | None:
         """
         Look up the filesystem path for *session_id*.
+
+        MATLAB equivalent: ``ndi.session.sessiontable/getsessionpath``
 
         Args:
             session_id: The session identifier to search for.
@@ -95,7 +100,7 @@ class SessionTable:
         Returns:
             Path string if found, None otherwise.
         """
-        for entry in self.get_session_table():
+        for entry in self.getsessiontable():
             if entry["session_id"] == session_id:
                 return entry["path"]
         return None
@@ -104,9 +109,11 @@ class SessionTable:
     # Write operations
     # ------------------------------------------------------------------
 
-    def add_entry(self, session_id: str, path: str) -> None:
+    def addtableentry(self, session_id: str, path: str) -> None:
         """
         Add or replace an entry in the session table.
+
+        MATLAB equivalent: ``ndi.session.sessiontable/addtableentry``
 
         If *session_id* already exists it is replaced with the new *path*.
 
@@ -123,48 +130,54 @@ class SessionTable:
             raise ValueError("path must be a non-empty string")
 
         # Remove existing entry for this ID (if any), then append
-        self.remove_entry(session_id)
-        entries = self.get_session_table()
+        self.removetableentry(session_id)
+        entries = self.getsessiontable()
         entries.append({"session_id": session_id, "path": path})
-        self._write_table(entries)
+        self._writesessiontable(entries)
 
-    def remove_entry(self, session_id: str) -> None:
+    def removetableentry(self, session_id: str) -> None:
         """
         Remove the entry with the given *session_id*.
 
+        MATLAB equivalent: ``ndi.session.sessiontable/removetableentry``
+
         Does nothing if the ID is not present.
         """
-        entries = self.get_session_table()
+        entries = self.getsessiontable()
         filtered = [e for e in entries if e["session_id"] != session_id]
         if len(filtered) != len(entries):
-            self._write_table(filtered)
+            self._writesessiontable(filtered)
 
-    def clear(self, make_backup: bool = False) -> None:
+    def clearsessiontable(self, make_backup: bool = False) -> None:
         """
         Remove all entries from the session table.
+
+        MATLAB equivalent: ``ndi.session.sessiontable/clearsessiontable``
 
         Args:
             make_backup: If True, create a backup before clearing.
         """
         if make_backup:
-            self.backup()
-        self._write_table([])
+            self.backupsessiontable()
+        self._writesessiontable([])
 
     # ------------------------------------------------------------------
     # Validation
     # ------------------------------------------------------------------
 
-    def check_table(self) -> tuple[bool, list[dict[str, Any]]]:
+    def checktable(self) -> tuple[bool, list[dict[str, Any]]]:
         """
         Validate the session table and check path accessibility.
+
+        MATLAB equivalent: ``ndi.session.sessiontable/checktable``
 
         Returns:
             Tuple of (valid, results):
             - valid: True if the table has the correct format
             - results: List of dicts with ``exists`` key for each entry
         """
-        entries = self.get_session_table()
-        valid, _ = self.is_valid_table(entries)
+        entries = self.getsessiontable()
+        valid, _ = self.isvalidtable(entries)
         if not valid:
             return False, []
 
@@ -179,12 +192,14 @@ class SessionTable:
             )
         return True, results
 
-    def is_valid_table(
+    def isvalidtable(
         self,
         entries: list[dict[str, str]] | None = None,
     ) -> tuple[bool, str]:
         """
         Check whether the session table has the correct fields.
+
+        MATLAB equivalent: ``ndi.session.sessiontable/isvalidtable``
 
         Args:
             entries: Table entries to validate. If None, reads from file.
@@ -193,7 +208,7 @@ class SessionTable:
             Tuple of (valid, message). Message is empty if valid.
         """
         if entries is None:
-            entries = self.get_session_table()
+            entries = self.getsessiontable()
 
         for i, entry in enumerate(entries):
             if "path" not in entry:
@@ -210,9 +225,11 @@ class SessionTable:
     # Backup
     # ------------------------------------------------------------------
 
-    def backup(self) -> Path | None:
+    def backupsessiontable(self) -> Path | None:
         """
         Create a numbered backup of the table file.
+
+        MATLAB equivalent: ``ndi.session.sessiontable/backupsessiontable``
 
         Returns:
             Path to the backup file, or None if no file to back up.
@@ -235,8 +252,11 @@ class SessionTable:
         shutil.copy2(self._table_path, backup_path)
         return backup_path
 
-    def backup_file_list(self) -> list[Path]:
-        """Return a list of existing backup files."""
+    def backupfilelist(self) -> list[Path]:
+        """Return a list of existing backup files.
+
+        MATLAB equivalent: ``ndi.session.sessiontable/backupfilelist``
+        """
         if not self._table_path.parent.is_dir():
             return []
 
@@ -249,9 +269,12 @@ class SessionTable:
     # Internal
     # ------------------------------------------------------------------
 
-    def _write_table(self, entries: list[dict[str, str]]) -> None:
-        """Write entries to the table file (atomic-ish via parent mkdir)."""
-        valid, msg = self.is_valid_table(entries)
+    def _writesessiontable(self, entries: list[dict[str, str]]) -> None:
+        """Write entries to the table file (atomic-ish via parent mkdir).
+
+        MATLAB equivalent: ``ndi.session.sessiontable/writesessiontable`` (protected)
+        """
+        valid, msg = self.isvalidtable(entries)
         if not valid:
             raise ValueError(f"Invalid session table: {msg}")
 

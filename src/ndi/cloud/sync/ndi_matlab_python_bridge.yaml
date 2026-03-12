@@ -1,0 +1,335 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/cloud/sync/
+# The Primary Contract for the ndi.cloud.sync namespace.
+#
+# Covers: mode.py, operations.py, index.py
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "N/A (no user-facing counting)"
+
+# =============================================================================
+# Classes — mode.py
+# Maps to: +cloud/+sync/+enum/SyncMode.m and +cloud/+sync/SyncOptions.m
+# =============================================================================
+classes:
+
+  - name: SyncMode
+    type: enum
+    matlab_path: "+ndi/+cloud/+sync/+enum/SyncMode.m"
+    python_path: "ndi/cloud/sync/mode.py"
+    python_class: "SyncMode"
+    members:
+      - name: DOWNLOAD_NEW
+        value: "download_new"
+      - name: MIRROR_FROM_REMOTE
+        value: "mirror_from_remote"
+      - name: UPLOAD_NEW
+        value: "upload_new"
+      - name: MIRROR_TO_REMOTE
+        value: "mirror_to_remote"
+      - name: TWO_WAY_SYNC
+        value: "two_way_sync"
+    decision_log: >
+      MATLAB uses PascalCase enum values (DownloadNew, UploadNew, etc).
+      Python uses UPPER_SNAKE for enum members (DOWNLOAD_NEW) with
+      lowercase string values matching MATLAB's string representation.
+
+  - name: SyncOptions
+    type: dataclass
+    matlab_path: "+ndi/+cloud/+sync/SyncOptions.m"
+    python_path: "ndi/cloud/sync/mode.py"
+    python_class: "SyncOptions"
+    properties:
+      - name: sync_files
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "False"
+      - name: verbose
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "True"
+      - name: dry_run
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "False"
+      - name: file_upload_strategy
+        type_python: "str"
+        default: "'batch'"
+    decision_log: "Exact match for shared fields."
+
+  - name: SyncIndex
+    type: dataclass
+    matlab_path: "+ndi/+cloud/+sync/+internal/+index/"
+    python_path: "ndi/cloud/sync/index.py"
+    python_class: "SyncIndex"
+    properties:
+      - name: local_doc_ids_last_sync
+        type_python: "list[str]"
+      - name: remote_doc_ids_last_sync
+        type_python: "list[str]"
+      - name: last_sync_timestamp
+        type_python: "str"
+    methods:
+      - name: read
+        kind: classmethod
+        matlab_equivalent: "readSyncIndex"
+        input_arguments:
+          - name: dataset_path
+            type_python: "Path"
+        output_arguments:
+          - name: index
+            type_python: "SyncIndex"
+        decision_log: >
+          MATLAB has readSyncIndex as standalone function.
+          Python wraps it as a classmethod on SyncIndex dataclass.
+
+      - name: write
+        matlab_equivalent: "writeSyncIndex"
+        input_arguments:
+          - name: dataset_path
+            type_python: "Path"
+        output_arguments: []
+        decision_log: >
+          MATLAB has writeSyncIndex as standalone function.
+          Python wraps it as an instance method.
+
+      - name: update
+        matlab_equivalent: "updateSyncIndex"
+        input_arguments:
+          - name: local_ids
+            type_python: "list[str]"
+          - name: remote_ids
+            type_python: "list[str]"
+        output_arguments: []
+        decision_log: >
+          MATLAB has updateSyncIndex as standalone function.
+          Python wraps it as an instance method.
+
+# =============================================================================
+# Functions — operations.py
+# Maps to: +cloud/+sync/
+# =============================================================================
+functions:
+
+  - name: uploadNew
+    matlab_path: "+ndi/+cloud/+sync/uploadNew.m"
+    python_path: "ndi/cloud/sync/operations.py"
+    input_arguments:
+      - name: dataset_path
+        type_matlab: "char"
+        type_python: "str"
+      - name: cloud_dataset_id
+        type_matlab: "char"
+        type_python: "str"
+      - name: options
+        type_matlab: "ndi.cloud.sync.SyncOptions"
+        type_python: "SyncOptions | None"
+        default: "None"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: "Exact match."
+
+  - name: downloadNew
+    matlab_path: "+ndi/+cloud/+sync/downloadNew.m"
+    python_path: "ndi/cloud/sync/operations.py"
+    input_arguments:
+      - name: dataset_path
+        type_matlab: "char"
+        type_python: "str"
+      - name: cloud_dataset_id
+        type_matlab: "char"
+        type_python: "str"
+      - name: options
+        type_matlab: "ndi.cloud.sync.SyncOptions"
+        type_python: "SyncOptions | None"
+        default: "None"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: "Exact match."
+
+  - name: mirrorToRemote
+    matlab_path: "+ndi/+cloud/+sync/mirrorToRemote.m"
+    python_path: "ndi/cloud/sync/operations.py"
+    input_arguments:
+      - name: dataset_path
+        type_matlab: "char"
+        type_python: "str"
+      - name: cloud_dataset_id
+        type_matlab: "char"
+        type_python: "str"
+      - name: options
+        type_matlab: "ndi.cloud.sync.SyncOptions"
+        type_python: "SyncOptions | None"
+        default: "None"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: "Exact match."
+
+  - name: mirrorFromRemote
+    matlab_path: "+ndi/+cloud/+sync/mirrorFromRemote.m"
+    python_path: "ndi/cloud/sync/operations.py"
+    input_arguments:
+      - name: dataset_path
+        type_matlab: "char"
+        type_python: "str"
+      - name: cloud_dataset_id
+        type_matlab: "char"
+        type_python: "str"
+      - name: options
+        type_matlab: "ndi.cloud.sync.SyncOptions"
+        type_python: "SyncOptions | None"
+        default: "None"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: "Exact match."
+
+  - name: twoWaySync
+    matlab_path: "+ndi/+cloud/+sync/twoWaySync.m"
+    python_path: "ndi/cloud/sync/operations.py"
+    input_arguments:
+      - name: dataset_path
+        type_matlab: "char"
+        type_python: "str"
+      - name: cloud_dataset_id
+        type_matlab: "char"
+        type_python: "str"
+      - name: options
+        type_matlab: "ndi.cloud.sync.SyncOptions"
+        type_python: "SyncOptions | None"
+        default: "None"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: "Exact match."
+
+  - name: validate
+    matlab_path: "+ndi/+cloud/+sync/validate.m"
+    python_path: "ndi/cloud/sync/operations.py"
+    input_arguments:
+      - name: dataset
+        type_matlab: "ndi.dataset"
+        type_python: "Any"
+      - name: cloud_dataset_id
+        type_matlab: "char"
+        type_python: "str"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: "Exact match."
+
+  - name: sync
+    matlab_path: "N/A"
+    python_path: "ndi/cloud/sync/operations.py"
+    input_arguments:
+      - name: dataset_path
+        type_python: "str"
+      - name: cloud_dataset_id
+        type_python: "str"
+      - name: mode
+        type_python: "SyncMode"
+      - name: options
+        type_python: "SyncOptions | None"
+        default: "None"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Python-only dispatcher that routes to the specific sync operation
+      based on SyncMode. MATLAB uses syncDataset at the top level.
+
+  - name: deleteLocalDocuments
+    matlab_path: "+ndi/+cloud/+sync/+internal/deleteLocalDocuments.m"
+    python_path: "ndi/cloud/sync/operations.py"
+    input_arguments:
+      - name: ds_path
+        type_matlab: "char"
+        type_python: "Path"
+      - name: doc_ids
+        type_matlab: "string array"
+        type_python: "set[str]"
+    output_arguments:
+      - name: deleted_ids
+        type_python: "list[str]"
+    decision_log: >
+      MATLAB places this in +sync/+internal. Python places it in
+      operations.py. Exact name match.
+
+  - name: downloadNdiDocuments
+    matlab_path: "+ndi/+cloud/+sync/+internal/downloadNdiDocuments.m"
+    python_path: "ndi/cloud/sync/operations.py"
+    input_arguments:
+      - name: cloud_dataset_id
+        type_matlab: "char"
+        type_python: "str"
+      - name: ndi_to_api
+        type_python: "dict[str, str]"
+      - name: ids_to_download
+        type_python: "set[str]"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: docs
+        type_python: "list[dict[str, Any]]"
+      - name: failed_ids
+        type_python: "list[str]"
+    decision_log: >
+      MATLAB places this in +sync/+internal. Python places it in
+      operations.py. Exact name match.
+
+# =============================================================================
+# Not-yet-ported MATLAB functions
+# =============================================================================
+not_yet_ported:
+
+  - name: Constants
+    matlab_path: "+ndi/+cloud/+sync/+internal/Constants.m"
+    status: not_yet_ported
+    decision_log: "MATLAB sync constants class. Values may be inlined in Python."
+
+  - name: deleteRemoteDocuments
+    matlab_path: "+ndi/+cloud/+sync/+internal/deleteRemoteDocuments.m"
+    status: not_yet_ported
+    decision_log: >
+      MATLAB internal for removing remote documents during mirror operations.
+      Python sync operations handle this inline via API calls.
+
+  - name: createSyncIndexStruct
+    matlab_path: "+ndi/+cloud/+sync/+internal/+index/createSyncIndexStruct.m"
+    status: not_applicable
+    decision_log: >
+      MATLAB struct constructor. Python uses SyncIndex dataclass
+      with default field values instead.
+
+  - name: getIndexFilepath
+    matlab_path: "+ndi/+cloud/+sync/+internal/+index/getIndexFilepath.m"
+    status: not_applicable
+    decision_log: >
+      MATLAB path resolver. Python handles this inside
+      SyncIndex.read() and SyncIndex.write() methods.

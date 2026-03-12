@@ -1,0 +1,1029 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/cloud/
+# The Primary Contract for the ndi.cloud root namespace.
+#
+# Covers: auth.py, config.py, client.py, exceptions.py, orchestration.py,
+#         download.py, upload.py, filehandler.py, internal.py
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "N/A (no user-facing counting)"
+
+# =============================================================================
+# Infrastructure (Python-only — no MATLAB equivalent)
+# =============================================================================
+infrastructure:
+  - name: CloudConfig
+    type: class
+    python_path: "ndi/cloud/config.py"
+    decision_log: >
+      Python-only configuration container. MATLAB uses environment variables
+      and ndi_globals directly; Python wraps them in a dataclass.
+
+  - name: CloudClient
+    type: class
+    python_path: "ndi/cloud/client.py"
+    decision_log: >
+      Python-only HTTP client. MATLAB uses webread/webwrite/call.m;
+      Python wraps requests.Session for all REST calls.
+
+  - name: APIResponse
+    type: class
+    python_path: "ndi/cloud/client.py"
+    decision_log: >
+      Python-only response wrapper. MATLAB returns raw structs/cells
+      from webread; Python normalizes into APIResponse.
+
+  - name: _auto_client
+    type: decorator
+    python_path: "ndi/cloud/client.py"
+    decision_log: >
+      Python-only decorator making the 'client' parameter optional.
+      MATLAB functions implicitly use the environment for auth.
+
+  - name: CloudError
+    type: exception
+    python_path: "ndi/cloud/exceptions.py"
+    decision_log: "Python-only base exception class for cloud operations."
+
+  - name: CloudAuthError
+    type: exception
+    python_path: "ndi/cloud/exceptions.py"
+    decision_log: "Python-only. MATLAB raises generic errors."
+
+  - name: CloudAPIError
+    type: exception
+    python_path: "ndi/cloud/exceptions.py"
+    decision_log: "Python-only. MATLAB raises generic errors with status codes in message."
+
+  - name: CloudNotFoundError
+    type: exception
+    python_path: "ndi/cloud/exceptions.py"
+    decision_log: "Python-only 404 exception."
+
+  - name: CloudSyncError
+    type: exception
+    python_path: "ndi/cloud/exceptions.py"
+    decision_log: "Python-only sync exception."
+
+  - name: CloudUploadError
+    type: exception
+    python_path: "ndi/cloud/exceptions.py"
+    decision_log: "Python-only upload exception."
+
+# =============================================================================
+# Functions — Auth (auth.py)
+# Maps to: +cloud/+api/+auth/ and +cloud/+internal/
+# =============================================================================
+functions:
+
+  # --- auth.py functions ---
+  - name: authenticate
+    matlab_path: "+ndi/+cloud/authenticate.m"
+    python_path: "ndi/cloud/auth.py"
+    input_arguments:
+      - name: config
+        type_matlab: "N/A (uses env)"
+        type_python: "CloudConfig | None"
+        default: "None"
+    output_arguments:
+      - name: token
+        type_python: "str"
+    decision_log: >
+      MATLAB authenticate returns [token, organizationID].
+      Python returns token only; org_id is stored in config.
+
+  - name: login
+    matlab_path: "+ndi/+cloud/+api/+auth/login.m"
+    python_path: "ndi/cloud/auth.py"
+    input_arguments:
+      - name: email
+        type_matlab: "char"
+        type_python: "str | None"
+      - name: password
+        type_matlab: "char"
+        type_python: "str | None"
+      - name: config
+        type_python: "CloudConfig | None"
+        default: "None"
+    output_arguments:
+      - name: config
+        type_python: "CloudConfig"
+    decision_log: "Exact match."
+
+  - name: logout
+    matlab_path: "+ndi/+cloud/logout.m"
+    python_path: "ndi/cloud/auth.py"
+    input_arguments:
+      - name: config
+        type_python: "CloudConfig | None"
+        default: "None"
+    output_arguments: []
+    decision_log: "Exact match."
+
+  - name: changePassword
+    matlab_path: "+ndi/+cloud/+api/+auth/changePassword.m"
+    python_path: "ndi/cloud/auth.py"
+    input_arguments:
+      - name: old_password
+        type_matlab: "char"
+        type_python: "str"
+      - name: new_password
+        type_matlab: "char"
+        type_python: "str"
+      - name: config
+        type_python: "CloudConfig | None"
+        default: "None"
+    output_arguments:
+      - name: success
+        type_python: "bool"
+    decision_log: "Exact match."
+
+  - name: resetPassword
+    matlab_path: "+ndi/+cloud/+api/+auth/resetPassword.m"
+    python_path: "ndi/cloud/auth.py"
+    input_arguments:
+      - name: email
+        type_matlab: "char"
+        type_python: "str"
+      - name: config
+        type_python: "CloudConfig | None"
+        default: "None"
+    output_arguments:
+      - name: success
+        type_python: "bool"
+    decision_log: "Exact match."
+
+  - name: verifyUser
+    matlab_path: "+ndi/+cloud/+api/+auth/verifyUser.m"
+    python_path: "ndi/cloud/auth.py"
+    input_arguments:
+      - name: email
+        type_matlab: "char"
+        type_python: "str"
+      - name: confirmation_code
+        type_matlab: "char"
+        type_python: "str"
+      - name: config
+        type_python: "CloudConfig | None"
+        default: "None"
+    output_arguments:
+      - name: success
+        type_python: "bool"
+    decision_log: "Exact match."
+
+  - name: resendConfirmation
+    matlab_path: "+ndi/+cloud/+api/+auth/resendConfirmation.m"
+    python_path: "ndi/cloud/auth.py"
+    input_arguments:
+      - name: email
+        type_matlab: "char"
+        type_python: "str"
+      - name: config
+        type_python: "CloudConfig | None"
+        default: "None"
+    output_arguments:
+      - name: success
+        type_python: "bool"
+    decision_log: "Exact match."
+
+  - name: decodeJwt
+    matlab_path: "+ndi/+cloud/+internal/decodeJwt.m"
+    python_path: "ndi/cloud/auth.py"
+    input_arguments:
+      - name: token
+        type_matlab: "char"
+        type_python: "str"
+    output_arguments:
+      - name: payload
+        type_python: "dict"
+    decision_log: >
+      MATLAB places this in +internal; Python places it in auth.py
+      since it is tightly coupled with authentication logic. Name exact match.
+
+  - name: getTokenExpiration
+    matlab_path: "+ndi/+cloud/+internal/getTokenExpiration.m"
+    python_path: "ndi/cloud/auth.py"
+    input_arguments:
+      - name: token
+        type_matlab: "char"
+        type_python: "str"
+    output_arguments:
+      - name: expiration
+        type_python: "datetime"
+    decision_log: >
+      MATLAB places this in +internal; Python places it in auth.py.
+      Name exact match.
+
+  - name: verifyToken
+    matlab_path: "N/A"
+    python_path: "ndi/cloud/auth.py"
+    input_arguments:
+      - name: token
+        type_python: "str"
+    output_arguments:
+      - name: valid
+        type_python: "bool"
+    decision_log: "Python-only convenience. No MATLAB equivalent."
+
+  - name: getActiveToken
+    matlab_path: "+ndi/+cloud/+internal/getActiveToken.m"
+    python_path: "ndi/cloud/auth.py"
+    input_arguments:
+      - name: config
+        type_python: "CloudConfig | None"
+        default: "None"
+    output_arguments:
+      - name: token
+        type_python: "str"
+      - name: org_id
+        type_python: "str"
+    decision_log: >
+      MATLAB places this in +internal; Python places it in auth.py.
+      Name exact match.
+
+  # --- orchestration.py functions ---
+  - name: downloadDataset
+    matlab_path: "+ndi/+cloud/downloadDataset.m"
+    python_path: "ndi/cloud/orchestration.py"
+    input_arguments:
+      - name: cloud_dataset_id
+        type_matlab: "string"
+        type_python: "str"
+      - name: target_folder
+        type_matlab: "string"
+        type_python: "str"
+      - name: sync_files
+        type_matlab: "logical (via SyncOptions)"
+        type_python: "bool"
+        default: "False"
+      - name: verbose
+        type_matlab: "logical (via SyncOptions)"
+        type_python: "bool"
+        default: "False"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: ndi_dataset
+        type_python: "Any"
+    decision_log: >
+      MATLAB takes (cloudDatasetId, targetFolder, syncOptions).
+      Python unpacks SyncOptions into keyword args for convenience.
+      Name exact match.
+
+  - name: uploadDataset
+    matlab_path: "+ndi/+cloud/uploadDataset.m"
+    python_path: "ndi/cloud/orchestration.py"
+    input_arguments:
+      - name: dataset
+        type_matlab: "ndi.dataset"
+        type_python: "Any"
+      - name: upload_as_new
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "False"
+      - name: remote_name
+        type_matlab: "char"
+        type_python: "str"
+        default: "''"
+      - name: sync_files
+        type_matlab: "logical (via SyncOptions)"
+        type_python: "bool"
+        default: "True"
+      - name: verbose
+        type_matlab: "logical (via SyncOptions)"
+        type_python: "bool"
+        default: "False"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: success
+        type_python: "bool"
+      - name: cloud_dataset_id
+        type_python: "str"
+      - name: message
+        type_python: "str"
+    decision_log: >
+      MATLAB takes (ndiDataset, syncOptions, options.*).
+      Python unpacks into keyword args. Name exact match.
+
+  - name: syncDataset
+    matlab_path: "+ndi/+cloud/syncDataset.m"
+    python_path: "ndi/cloud/orchestration.py"
+    input_arguments:
+      - name: dataset
+        type_matlab: "ndi.dataset"
+        type_python: "Any"
+      - name: sync_mode
+        type_matlab: "ndi.cloud.sync.enum.SyncMode"
+        type_python: "str"
+        default: "'download_new'"
+      - name: sync_files
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "False"
+      - name: verbose
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "False"
+      - name: dry_run
+        type_python: "bool"
+        default: "False"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: "Exact match."
+
+  - name: newDataset
+    matlab_path: "+ndi/+cloud/+upload/newDataset.m"
+    python_path: "ndi/cloud/orchestration.py"
+    input_arguments:
+      - name: dataset
+        type_matlab: "ndi.dataset"
+        type_python: "Any"
+      - name: name
+        type_matlab: "char"
+        type_python: "str"
+        default: "''"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: cloud_dataset_id
+        type_python: "str"
+    decision_log: >
+      MATLAB places this in +upload; Python places it in orchestration.py
+      as a high-level convenience. Name exact match.
+
+  - name: load_dataset_from_json_dir
+    matlab_path: "N/A"
+    python_path: "ndi/cloud/orchestration.py"
+    input_arguments:
+      - name: json_dir
+        type_python: "str | Path"
+      - name: target_folder
+        type_python: "str | Path | None"
+      - name: verbose
+        type_python: "bool"
+        default: "False"
+      - name: cloud_dataset_id
+        type_python: "str | None"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: dataset
+        type_python: "Any"
+    decision_log: >
+      Python-only convenience function. No MATLAB equivalent.
+      Snake_case is acceptable for Python-only functions.
+
+  # --- download.py functions ---
+  - name: dataset
+    matlab_path: "+ndi/+cloud/+download/dataset.m"
+    python_path: "ndi/cloud/download.py"
+    python_qualified: "ndi.cloud.download.dataset"
+    input_arguments:
+      - name: dataset_id
+        type_matlab: "string"
+        type_python: "str"
+      - name: target_dir
+        type_matlab: "string"
+        type_python: "str | Path"
+      - name: include_files
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "True"
+      - name: progress
+        type_python: "Callable | None"
+        default: "None"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: "Exact match."
+
+  - name: downloadDocumentCollection
+    matlab_path: "+ndi/+cloud/+download/downloadDocumentCollection.m"
+    python_path: "ndi/cloud/download.py"
+    input_arguments:
+      - name: dataset_id
+        type_matlab: "string"
+        type_python: "str"
+      - name: doc_ids
+        type_matlab: "string array"
+        type_python: "list[str] | None"
+      - name: chunk_size
+        type_matlab: "double"
+        type_python: "int"
+        default: "2000"
+      - name: timeout
+        type_matlab: "double"
+        type_python: "float"
+        default: "20.0"
+      - name: retry_interval
+        type_python: "float"
+        default: "1.0"
+      - name: progress
+        type_python: "Callable | None"
+        default: "None"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: documents
+        type_python: "list[dict[str, Any]]"
+    decision_log: "Exact match."
+
+  - name: downloadFilesForDocument
+    matlab_path: "N/A"
+    python_path: "ndi/cloud/download.py"
+    input_arguments:
+      - name: dataset_id
+        type_python: "str"
+      - name: document
+        type_python: "dict[str, Any]"
+      - name: target_dir
+        type_python: "Path"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: paths
+        type_python: "list[Path]"
+    decision_log: "Python-only helper for single-document file download."
+
+  - name: downloadDatasetFiles
+    matlab_path: "+ndi/+cloud/+download/downloadDatasetFiles.m"
+    python_path: "ndi/cloud/download.py"
+    input_arguments:
+      - name: dataset_id
+        type_matlab: "string"
+        type_python: "str"
+      - name: documents
+        type_matlab: "N/A"
+        type_python: "list[dict[str, Any]]"
+      - name: target_dir
+        type_matlab: "string"
+        type_python: "Path"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: >
+      MATLAB takes (cloudDatasetId, targetFolder, fileUuids, options).
+      Python takes (dataset_id, documents, target_dir). Exact name match.
+
+  - name: jsons2documents
+    matlab_path: "+ndi/+cloud/+download/jsons2documents.m"
+    python_path: "ndi/cloud/download.py"
+    input_arguments:
+      - name: doc_jsons
+        type_matlab: "cell"
+        type_python: "list[dict[str, Any]]"
+    output_arguments:
+      - name: documents
+        type_python: "list[Any]"
+    decision_log: "Exact match."
+
+  - name: datasetDocuments
+    matlab_path: "+ndi/+cloud/+download/datasetDocuments.m"
+    python_path: "ndi/cloud/download.py"
+    input_arguments:
+      - name: dataset_info
+        type_matlab: "struct"
+        type_python: "dict[str, Any]"
+      - name: mode
+        type_matlab: "char"
+        type_python: "str"
+        default: "'local'"
+      - name: json_dir
+        type_matlab: "char"
+        type_python: "str | Path | None"
+      - name: files_dir
+        type_matlab: "char"
+        type_python: "str | Path | None"
+      - name: verbose
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "True"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: success
+        type_python: "bool"
+      - name: message
+        type_python: "str"
+    decision_log: "Exact match."
+
+  - name: downloadGenericFiles
+    matlab_path: "+ndi/+cloud/+download/downloadGenericFiles.m"
+    python_path: "ndi/cloud/download.py"
+    input_arguments:
+      - name: ndi_dataset
+        type_matlab: "ndi.dataset"
+        type_python: "Any"
+      - name: ndi_document_ids
+        type_matlab: "string"
+        type_python: "list[str]"
+      - name: target_folder
+        type_matlab: "string"
+        type_python: "str | Path"
+      - name: verbose
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "True"
+      - name: zip_result
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "False"
+      - name: naming_strategy
+        type_matlab: "string"
+        type_python: "str"
+        default: "'original'"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: success
+        type_python: "bool"
+      - name: error_message
+        type_python: "str"
+      - name: report
+        type_python: "dict[str, Any]"
+    decision_log: "Exact match."
+
+  - name: setFileInfo
+    matlab_path: "+ndi/+cloud/+download/+internal/setFileInfo.m"
+    python_path: "ndi/cloud/download.py"
+    input_arguments:
+      - name: doc_struct
+        type_matlab: "struct"
+        type_python: "dict[str, Any]"
+      - name: mode
+        type_matlab: "char"
+        type_python: "str"
+      - name: filepath
+        type_matlab: "char"
+        type_python: "str"
+    output_arguments:
+      - name: doc_struct
+        type_python: "dict[str, Any]"
+    decision_log: >
+      MATLAB places this in +download/+internal; Python places it
+      in download.py. Exact name match.
+
+  - name: structsToNdiDocuments
+    matlab_path: "+ndi/+cloud/+download/+internal/structsToNdiDocuments.m"
+    python_path: "ndi/cloud/download.py"
+    input_arguments:
+      - name: ndi_document_structs
+        type_matlab: "cell"
+        type_python: "list[dict[str, Any]]"
+    output_arguments:
+      - name: documents
+        type_python: "list[Any]"
+    decision_log: >
+      MATLAB places this in +download/+internal; Python places it
+      in download.py. Exact name match.
+
+  - name: downloadFullDataset
+    matlab_path: "N/A"
+    python_path: "ndi/cloud/download.py"
+    decision_log: "Python backward-compatible alias for download.dataset."
+
+  # --- upload.py functions ---
+  - name: uploadDocumentCollection
+    matlab_path: "+ndi/+cloud/+upload/uploadDocumentCollection.m"
+    python_path: "ndi/cloud/upload.py"
+    input_arguments:
+      - name: dataset_id
+        type_matlab: "string"
+        type_python: "str"
+      - name: documents
+        type_matlab: "cell"
+        type_python: "list[dict[str, Any]]"
+      - name: only_missing
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "True"
+      - name: max_chunk
+        type_python: "int | None"
+        default: "None"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: "Exact match."
+
+  - name: zipForUpload
+    matlab_path: "+ndi/+cloud/+upload/zipForUpload.m"
+    python_path: "ndi/cloud/upload.py"
+    input_arguments:
+      - name: documents
+        type_matlab: "cell"
+        type_python: "list[dict[str, Any]]"
+      - name: dataset_id
+        type_matlab: "string"
+        type_python: "str"
+      - name: target_dir
+        type_python: "Path | None"
+        default: "None"
+    output_arguments:
+      - name: zip_path
+        type_python: "Path"
+      - name: doc_ids
+        type_python: "list[str]"
+    decision_log: "Exact match."
+
+  - name: uploadFilesForDatasetDocuments
+    matlab_path: "+ndi/+cloud/+sync/+internal/uploadFilesForDatasetDocuments.m"
+    python_path: "ndi/cloud/upload.py"
+    input_arguments:
+      - name: org_id
+        type_matlab: "char"
+        type_python: "str"
+      - name: dataset_id
+        type_matlab: "char"
+        type_python: "str"
+      - name: documents
+        type_matlab: "cell"
+        type_python: "list[dict[str, Any]]"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: >
+      MATLAB places this in +sync/+internal. Python places it in upload.py.
+      Exact name match.
+
+  - name: uploadSingleFile
+    matlab_path: "+ndi/+cloud/uploadSingleFile.m"
+    python_path: "ndi/cloud/upload.py"
+    input_arguments:
+      - name: dataset_id
+        type_matlab: "string"
+        type_python: "str"
+      - name: file_uid
+        type_matlab: "string"
+        type_python: "str"
+      - name: file_path
+        type_matlab: "string"
+        type_python: "str"
+      - name: use_bulk_upload
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "False"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: success
+        type_python: "bool"
+      - name: error_message
+        type_python: "str"
+    decision_log: "Exact match."
+
+  - name: uploadToNDICloud
+    matlab_path: "+ndi/+cloud/+upload/uploadToNDICloud.m"
+    python_path: "ndi/cloud/upload.py"
+    input_arguments:
+      - name: dataset
+        type_matlab: "ndi.session"
+        type_python: "Any"
+      - name: dataset_id
+        type_matlab: "char"
+        type_python: "str"
+      - name: verbose
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "True"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: success
+        type_python: "bool"
+      - name: message
+        type_python: "str"
+    decision_log: "Exact match."
+
+  - name: scanForUpload
+    matlab_path: "+ndi/+cloud/+upload/scanForUpload.m"
+    python_path: "ndi/cloud/upload.py"
+    input_arguments:
+      - name: dataset
+        type_matlab: "ndi.dataset"
+        type_python: "Any"
+      - name: dataset_id
+        type_matlab: "string"
+        type_python: "str"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: docs_to_upload
+        type_python: "list[dict]"
+      - name: files_to_upload
+        type_python: "list[dict]"
+      - name: upload_size
+        type_python: "float"
+    decision_log: "Exact match."
+
+  # --- filehandler.py functions ---
+  - name: updateFileInfoForRemoteFiles
+    matlab_path: "+ndi/+cloud/+sync/+internal/updateFileInfoForRemoteFiles.m"
+    python_path: "ndi/cloud/filehandler.py"
+    input_arguments:
+      - name: doc_props
+        type_matlab: "struct"
+        type_python: "dict"
+      - name: cloud_dataset_id
+        type_matlab: "char"
+        type_python: "str"
+    output_arguments: []
+    decision_log: >
+      MATLAB places this in +sync/+internal. Python places it in
+      filehandler.py. Exact name match. Mutates doc_props in-place.
+
+  - name: updateFileInfoForLocalFiles
+    matlab_path: "+ndi/+cloud/+sync/+internal/updateFileInfoForLocalFiles.m"
+    python_path: "ndi/cloud/filehandler.py"
+    input_arguments:
+      - name: doc_props
+        type_matlab: "struct"
+        type_python: "dict"
+      - name: file_directory
+        type_matlab: "char"
+        type_python: "str"
+    output_arguments: []
+    decision_log: >
+      MATLAB places this in +sync/+internal. Python places it in
+      filehandler.py. Exact name match. Mutates doc_props in-place.
+
+  - name: parse_ndic_uri
+    matlab_path: "N/A"
+    python_path: "ndi/cloud/filehandler.py"
+    input_arguments:
+      - name: uri
+        type_python: "str"
+    output_arguments:
+      - name: dataset_id
+        type_python: "str"
+      - name: file_uid
+        type_python: "str"
+    decision_log: "Python-only utility for ndic:// URI parsing."
+
+  - name: fetch_cloud_file
+    matlab_path: "N/A"
+    python_path: "ndi/cloud/filehandler.py"
+    input_arguments:
+      - name: ndic_uri
+        type_python: "str"
+      - name: target_path
+        type_python: "str | Path"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: success
+        type_python: "bool"
+    decision_log: "Python-only on-demand cloud file fetcher."
+
+  - name: get_or_create_cloud_client
+    matlab_path: "N/A"
+    python_path: "ndi/cloud/filehandler.py"
+    output_arguments:
+      - name: client
+        type_python: "CloudClient"
+    decision_log: "Python-only convenience for lazy client creation."
+
+  # --- internal.py functions ---
+  - name: listRemoteDocumentIds
+    matlab_path: "+ndi/+cloud/+sync/+internal/listRemoteDocumentIds.m"
+    python_path: "ndi/cloud/internal.py"
+    input_arguments:
+      - name: cloud_dataset_id
+        type_matlab: "char"
+        type_python: "str"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: id_map
+        type_python: "dict[str, str]"
+    decision_log: >
+      MATLAB places this in +sync/+internal. Python places it in
+      internal.py. Exact name match.
+
+  - name: getCloudDatasetIdForLocalDataset
+    matlab_path: "+ndi/+cloud/+internal/getCloudDatasetIdForLocalDataset.m"
+    python_path: "ndi/cloud/internal.py"
+    input_arguments:
+      - name: dataset
+        type_matlab: "ndi.dataset"
+        type_python: "Any"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: cloud_dataset_id
+        type_python: "str"
+      - name: remote_doc
+        type_python: "dict | None"
+    decision_log: "Exact match."
+
+  - name: createRemoteDatasetDoc
+    matlab_path: "+ndi/+cloud/+internal/createRemoteDatasetDoc.m"
+    python_path: "ndi/cloud/internal.py"
+    input_arguments:
+      - name: cloud_dataset_id
+        type_matlab: "char"
+        type_python: "str"
+      - name: dataset
+        type_matlab: "ndi.dataset"
+        type_python: "Any"
+    output_arguments:
+      - name: doc
+        type_python: "Any"
+    decision_log: "Exact match."
+
+  - name: listLocalDocuments
+    matlab_path: "+ndi/+cloud/+sync/+internal/listLocalDocuments.m"
+    python_path: "ndi/cloud/internal.py"
+    input_arguments:
+      - name: dataset
+        type_matlab: "ndi.dataset"
+        type_python: "Any"
+    output_arguments:
+      - name: documents
+        type_python: "list[Any]"
+      - name: doc_ids
+        type_python: "list[str]"
+    decision_log: >
+      MATLAB places this in +sync/+internal. Python places it in
+      internal.py. Exact name match.
+
+  - name: getFileUidsFromDocuments
+    matlab_path: "+ndi/+cloud/+sync/+internal/getFileUidsFromDocuments.m"
+    python_path: "ndi/cloud/internal.py"
+    input_arguments:
+      - name: documents
+        type_matlab: "cell"
+        type_python: "list[Any]"
+    output_arguments:
+      - name: file_uids
+        type_python: "list[str]"
+    decision_log: >
+      MATLAB places this in +sync/+internal. Python places it in
+      internal.py. Exact name match.
+
+  - name: filesNotYetUploaded
+    matlab_path: "+ndi/+cloud/+sync/+internal/filesNotYetUploaded.m"
+    python_path: "ndi/cloud/internal.py"
+    input_arguments:
+      - name: file_manifest
+        type_matlab: "struct array"
+        type_python: "list[dict[str, Any]]"
+      - name: cloud_dataset_id
+        type_matlab: "char"
+        type_python: "str"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: missing_files
+        type_python: "list[dict[str, Any]]"
+    decision_log: >
+      MATLAB places this in +sync/+internal. Python places it in
+      internal.py. Exact name match.
+
+  - name: validateSync
+    matlab_path: "N/A"
+    python_path: "ndi/cloud/internal.py"
+    input_arguments:
+      - name: dataset
+        type_python: "Any"
+      - name: cloud_dataset_id
+        type_python: "str"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Python-only wrapper around sync validation. MATLAB equivalent is
+      ndi.cloud.sync.validate which is mapped in the sync bridge file.
+
+  - name: datasetSessionIdFromDocs
+    matlab_path: "+ndi/+cloud/+sync/+internal/datasetSessionIdFromDocs.m"
+    python_path: "ndi/cloud/internal.py"
+    input_arguments:
+      - name: documents
+        type_matlab: "cell"
+        type_python: "list[Any]"
+    output_arguments:
+      - name: session_id
+        type_python: "str"
+    decision_log: >
+      MATLAB places this in +sync/+internal. Python places it in
+      internal.py. Exact name match.
+
+  - name: duplicateDocuments
+    matlab_path: "+ndi/+cloud/+internal/duplicateDocuments.m"
+    python_path: "ndi/cloud/internal.py"
+    input_arguments:
+      - name: cloud_dataset_id
+        type_matlab: "char"
+        type_python: "str"
+      - name: delete_duplicates
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "True"
+      - name: maximum_delete_batch_size
+        type_python: "int"
+        default: "1000"
+      - name: verbose
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "False"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: duplicates
+        type_python: "list[dict[str, Any]]"
+      - name: unique
+        type_python: "list[dict[str, Any]]"
+    decision_log: "Exact match."
+
+# =============================================================================
+# Not-yet-ported MATLAB functions
+# =============================================================================
+not_yet_ported:
+
+  - name: dropDuplicateDocsFromJsonDecode
+    matlab_path: "+ndi/+cloud/+internal/dropDuplicateDocsFromJsonDecode.m"
+    status: not_yet_ported
+    decision_log: "MATLAB internal utility. May not be needed in Python."
+
+  - name: getUploadedDocumentIds
+    matlab_path: "+ndi/+cloud/+internal/getUploadedDocumentIds.m"
+    status: not_yet_ported
+    decision_log: >
+      MATLAB internal. Python uses listRemoteDocumentIds instead
+      which serves the same purpose.
+
+  - name: getUploadedFileIds
+    matlab_path: "+ndi/+cloud/+internal/getUploadedFileIds.m"
+    status: not_yet_ported
+    decision_log: "MATLAB internal for file upload tracking."
+
+  - name: getWeboptionsWithAuthHeader
+    matlab_path: "+ndi/+cloud/+internal/getWeboptionsWithAuthHeader.m"
+    status: not_applicable
+    decision_log: >
+      MATLAB-specific HTTP configuration. Python uses CloudClient
+      with requests.Session which handles auth headers internally.
+
+  - name: createCloudMetadataStruct
+    matlab_path: "+ndi/+cloud/+utility/createCloudMetadataStruct.m"
+    status: not_yet_ported
+    decision_log: "MATLAB utility for metadata struct creation."
+
+  - name: mustBeValidMetadata
+    matlab_path: "+ndi/+cloud/+utility/mustBeValidMetadata.m"
+    status: not_yet_ported
+    decision_log: "MATLAB validation function for metadata."
+
+  - name: authenticateOriginal
+    matlab_path: "+ndi/+cloud/authenticateOriginal.m"
+    status: not_applicable
+    decision_log: "Deprecated MATLAB function. Not needed in Python."
+
+  - name: uilogin
+    matlab_path: "+ndi/+cloud/uilogin.m"
+    status: not_applicable
+    decision_log: "MATLAB GUI login. No Python equivalent needed."
+
+  - name: zip_documents_for_upload
+    matlab_path: "+ndi/+cloud/+upload/+internal/zip_documents_for_upload.m"
+    status: not_applicable
+    decision_log: >
+      MATLAB internal helper. Python uses zipForUpload which handles
+      this internally with zipfile module.

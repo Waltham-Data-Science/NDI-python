@@ -1,0 +1,325 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/dataset/
+# The Primary Contract for the ndi.dataset namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+classes:
+
+  # =========================================================================
+  # ndi.dataset  (base class)
+  # =========================================================================
+  - name: dataset
+    type: class
+    matlab_path: "+ndi/dataset.m"
+    python_path: "ndi/dataset/_dataset.py"
+    python_class: "Dataset"
+
+    properties:
+      - name: session
+        type_matlab: "ndi.session"
+        type_python: "Any"
+        access: "protected"
+        decision_log: "Stored as _session in Python. Access=protected in MATLAB."
+
+      - name: session_info
+        type_matlab: "struct"
+        type_python: "list[dict[str, Any]]"
+        access: "protected"
+        decision_log: "Stored as _session_info in Python."
+
+      - name: session_array
+        type_matlab: "struct array"
+        type_python: "list[dict[str, Any]]"
+        access: "protected"
+        decision_log: "Stored as _session_array in Python."
+
+    methods:
+      # --- Constructor ---
+      - name: dataset
+        kind: constructor
+        input_arguments:
+          - name: reference
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: ndi_dataset_obj
+            type_python: "Dataset"
+        decision_log: "Python __init__ takes no arguments; session is set by subclass."
+
+      # --- Public instance methods ---
+      - name: id
+        input_arguments: []
+        output_arguments:
+          - name: identifier
+            type_python: "str"
+        decision_log: "Delegates to self._session.id()."
+
+      - name: reference
+        kind: property
+        type_matlab: "char"
+        type_python: "str"
+        decision_log: "Implemented as a @property in Python, matching MATLAB getter."
+
+      - name: getpath
+        input_arguments: []
+        output_arguments:
+          - name: p
+            type_python: "Path"
+        decision_log: "Delegates to self._session.getpath()."
+
+      - name: add_linked_session
+        input_arguments:
+          - name: ndi_session_obj
+            type_matlab: "ndi.session"
+            type_python: "Any"
+        output_arguments:
+          - name: ndi_dataset_obj
+            type_python: "Dataset"
+        decision_log: "MATLAB name uses underscores. Exact match."
+
+      - name: add_ingested_session
+        input_arguments:
+          - name: ndi_session_obj
+            type_matlab: "ndi.session"
+            type_python: "Any"
+        output_arguments:
+          - name: ndi_dataset_obj
+            type_python: "Dataset"
+        decision_log: "MATLAB name uses underscores. Exact match."
+
+      - name: deleteIngestedSession
+        input_arguments:
+          - name: session_id
+            type_matlab: "char"
+            type_python: "str"
+          - name: are_you_sure
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "False"
+        output_arguments:
+          - name: ndi_dataset_obj
+            type_python: "Dataset"
+        decision_log: >
+          MATLAB name is deleteIngestedSession (camelCase).
+          Python was previously delete_ingested_session; renamed to match MATLAB.
+
+      - name: unlink_session
+        input_arguments:
+          - name: ndi_session_id
+            type_matlab: "char"
+            type_python: "str"
+          - name: are_you_sure
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "False"
+        output_arguments:
+          - name: ndi_dataset_obj
+            type_python: "Dataset"
+        decision_log: "MATLAB name uses underscores. Exact match."
+
+      - name: open_session
+        input_arguments:
+          - name: session_id
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: ndi_session_obj
+            type_python: "Any | None"
+        decision_log: "MATLAB name uses underscores. Exact match."
+
+      - name: session_list
+        input_arguments: []
+        output_arguments:
+          - name: ref_list
+            type_python: "list[str]"
+          - name: id_list
+            type_python: "list[str]"
+          - name: session_doc_ids
+            type_python: "list[str]"
+          - name: dataset_session_doc_id
+            type_python: "str"
+        decision_log: "Returns a 4-tuple matching the MATLAB [ref_list, id_list, session_doc_ids, dataset_session_doc_id]."
+
+      - name: database_add
+        input_arguments:
+          - name: document
+            type_matlab: "ndi.document | cell"
+            type_python: "Document | list[Document]"
+        output_arguments:
+          - name: ndi_dataset_obj
+            type_python: "Dataset"
+        decision_log: "Exact match."
+
+      - name: database_rm
+        input_arguments:
+          - name: doc_unique_id
+            type_matlab: "ndi.document | char | cell"
+            type_python: "Document | str | list"
+          - name: error_if_not_found
+            type_matlab: "logical (name-value)"
+            type_python: "bool"
+            default: "False"
+        output_arguments:
+          - name: ndi_dataset_obj
+            type_python: "Dataset"
+        decision_log: "Exact match."
+
+      - name: database_search
+        input_arguments:
+          - name: searchparameters
+            type_matlab: "ndi.query"
+            type_python: "Query"
+        output_arguments:
+          - name: ndi_document_obj
+            type_python: "list[Document]"
+        decision_log: "Exact match."
+
+      - name: database_openbinarydoc
+        input_arguments:
+          - name: ndi_document_or_id
+            type_matlab: "ndi.document | char"
+            type_python: "Any"
+          - name: filename
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: ndi_binarydoc_obj
+            type_python: "Any"
+        decision_log: "Exact match."
+
+      - name: database_existbinarydoc
+        input_arguments:
+          - name: ndi_document_or_id
+            type_matlab: "ndi.document | char"
+            type_python: "Any"
+          - name: filename
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: tf
+            type_python: "bool"
+          - name: file_path
+            type_python: "Path | None"
+        decision_log: "Delegates to self._session.database_existbinarydoc(). Exact match."
+
+      - name: database_closebinarydoc
+        input_arguments:
+          - name: ndi_binarydoc_obj
+            type_matlab: "ndi_binarydoc_obj"
+            type_python: "Any"
+        output_arguments: []
+        decision_log: "Exact match."
+
+      - name: document_session
+        input_arguments:
+          - name: ndi_document_obj
+            type_matlab: "ndi.document"
+            type_python: "Document"
+        output_arguments:
+          - name: ndi_session_obj
+            type_python: "Any | None"
+        decision_log: "Exact match."
+
+      # --- Protected methods ---
+      - name: build_session_info
+        kind: protected
+        input_arguments: []
+        output_arguments: []
+        decision_log: "Exact match."
+
+      - name: open_linked_sessions
+        kind: protected
+        input_arguments: []
+        output_arguments: []
+        decision_log: "Python uses _open_linked_sessions (leading underscore for protected convention)."
+
+      # --- Static methods ---
+      - name: repairDatasetSessionInfo
+        kind: static
+        input_arguments:
+          - name: ndi_dataset_obj
+            type_python: "Dataset"
+          - name: doc
+            type_python: "list[Document]"
+        output_arguments:
+          - name: new_docs
+            type_python: "list[Document]"
+        decision_log: "MATLAB camelCase preserved exactly."
+
+      - name: addSessionInfoToDataset
+        kind: static
+        input_arguments:
+          - name: ndi_dataset_obj
+            type_python: "Dataset"
+          - name: session_info
+            type_python: "dict[str, Any]"
+        output_arguments:
+          - name: new_doc
+            type_python: "Document"
+        decision_log: "MATLAB camelCase preserved exactly."
+
+      - name: removeSessionInfoFromDataset
+        kind: static
+        input_arguments:
+          - name: ndi_dataset_obj
+            type_python: "Dataset"
+          - name: session_id
+            type_python: "str"
+        output_arguments: []
+        decision_log: "MATLAB camelCase preserved exactly."
+
+  # =========================================================================
+  # ndi.dataset.dir  (directory-backed subclass)
+  # =========================================================================
+  - name: dir
+    type: class
+    matlab_path: "+ndi/+dataset/dir.m"
+    python_path: "ndi/dataset/_dataset.py"
+    python_class: "DatasetDir"
+    inherits: "ndi.dataset"
+
+    properties:
+      - name: path
+        type_matlab: "char"
+        type_python: "Path"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: "Stored as _path in Python."
+
+    methods:
+      - name: dir
+        kind: constructor
+        input_arguments:
+          - name: reference
+            type_matlab: "char"
+            type_python: "str | Path"
+          - name: path_name
+            type_matlab: "char"
+            type_python: "str | Path | None"
+          - name: docs
+            type_matlab: "cell (hidden)"
+            type_python: "list[Document] | None"
+        output_arguments:
+          - name: ndi_dataset_dir_obj
+            type_python: "DatasetDir"
+        decision_log: >
+          Python constructor supports MATLAB calling conventions:
+          dir(path), dir(reference, path), dir(reference, path, docs).
+
+    static_methods:
+      - name: dataset_erase
+        input_arguments:
+          - name: ndi_dataset_dir_obj
+            type_matlab: "ndi.dataset.dir"
+            type_python: "DatasetDir"
+          - name: areyousure
+            type_matlab: "char"
+            type_python: "str"
+            default: "'no'"
+        output_arguments: []
+        decision_log: >
+          Removes the .ndi directory from the dataset path.
+          MATLAB also calls delete(obj); Python does not destroy the object
+          (no equivalent of MATLAB handle delete).

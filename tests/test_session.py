@@ -471,7 +471,7 @@ class TestDirSession:
         ndi_dir = temp_dir / ".ndi"
         assert ndi_dir.exists()
 
-        result = session.delete_session_data_structures(are_you_sure=True)
+        result = session.deleteSessionDataStructures(are_you_sure=True)
         assert result is None
         assert not ndi_dir.exists()
 
@@ -480,7 +480,7 @@ class TestDirSession:
         session = DirSession("Test", temp_dir)
         ndi_dir = temp_dir / ".ndi"
 
-        result = session.delete_session_data_structures(are_you_sure=False)
+        result = session.deleteSessionDataStructures(are_you_sure=False)
         assert result is session
         assert ndi_dir.exists()
 
