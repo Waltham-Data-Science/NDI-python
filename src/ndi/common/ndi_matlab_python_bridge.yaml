@@ -1,0 +1,130 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/common/
+# The Primary Contract for the ndi.common namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Standalone functions
+# =========================================================================
+functions:
+
+  - name: timestamp
+    type: function
+    matlab_path: null
+    python_path: "ndi/common/__init__.py"
+    input_arguments: []
+    output_arguments:
+      - name: ts
+        type_python: "str"
+    decision_log: >
+      Python-specific utility. No direct MATLAB equivalent.
+      Returns ISO 8601 timestamp in UTC.
+
+  - name: getLogger
+    type: function
+    matlab_path: "+ndi/+common/getLogger.m"
+    python_path: "ndi/common/__init__.py"
+    input_arguments:
+      - name: name
+        type_matlab: "char"
+        type_python: "str"
+        default: "'ndi'"
+    output_arguments:
+      - name: logger
+        type_python: "logging.Logger"
+    decision_log: "Exact match."
+
+  - name: getCache
+    type: function
+    matlab_path: "+ndi/+common/getCache.m"
+    python_path: "ndi/common/__init__.py"
+    input_arguments: []
+    output_arguments:
+      - name: cache
+        type_python: "Cache"
+    decision_log: "Exact match. Returns a global singleton."
+
+  - name: getDatabaseHierarchy
+    type: function
+    matlab_path: "+ndi/+common/getDatabaseHierarchy.m"
+    python_path: "ndi/common/__init__.py"
+    input_arguments: []
+    output_arguments:
+      - name: hierarchy
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Exact match. Reads document definitions from ndi_common/database_documents.
+      Result is cached after first call.
+
+  - name: assertDIDInstalled
+    type: function
+    matlab_path: "+ndi/+common/assertDIDInstalled.m"
+    python_path: "ndi/common/__init__.py"
+    input_arguments: []
+    output_arguments: []
+    decision_log: >
+      Exact match. Raises ImportError if 'did' package not installed.
+      MATLAB equivalent raises error if DID toolbox is missing.
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # =========================================================================
+  # ndi.common.PathConstants
+  # =========================================================================
+  - name: PathConstants
+    type: class
+    matlab_path: "+ndi/+common/PathConstants.m"
+    python_path: "ndi/common/__init__.py"
+    python_class: "PathConstants"
+
+    properties:
+      - name: NDI_ROOT
+        type_matlab: "char"
+        type_python: "Path"
+        access: "class property (read-only)"
+        decision_log: "Exact match. Python uses pathlib.Path."
+
+      - name: COMMON_FOLDER
+        type_matlab: "char"
+        type_python: "Path"
+        access: "class property (read-only)"
+        decision_log: "Exact match. Python uses pathlib.Path."
+
+      - name: DOCUMENT_PATH
+        type_matlab: "char"
+        type_python: "Path"
+        access: "class property (read-only)"
+        decision_log: "Exact match. Python uses pathlib.Path."
+
+      - name: SCHEMA_PATH
+        type_matlab: "char"
+        type_python: "Path"
+        access: "class property (read-only)"
+        decision_log: "Exact match. Python uses pathlib.Path."
+
+    methods:
+      - name: set_paths
+        kind: classmethod
+        input_arguments:
+          - name: ndi_root
+            type_python: "Path | None"
+            default: "None"
+          - name: common_folder
+            type_python: "Path | None"
+            default: "None"
+          - name: document_path
+            type_python: "Path | None"
+            default: "None"
+          - name: schema_path
+            type_python: "Path | None"
+            default: "None"
+        output_arguments: []
+        decision_log: >
+          Python-specific method for programmatic path overrides.
+          MATLAB uses environment variables or property assignment.

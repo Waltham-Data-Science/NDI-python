@@ -154,10 +154,6 @@ def getLogger(name: str = "ndi"):
     return logging.getLogger(name)
 
 
-# Keep old name for backwards compatibility
-get_logger = getLogger
-
-
 # ---------------------------------------------------------------------------
 # Singleton cache — mirrors MATLAB ndi.common.getCache
 # ---------------------------------------------------------------------------
@@ -260,7 +256,6 @@ __all__ = [
     "PathConstants",
     "timestamp",
     "getLogger",
-    "get_logger",
     "getCache",
     "getDatabaseHierarchy",
     "assertDIDInstalled",

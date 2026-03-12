@@ -1,0 +1,578 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/epoch/
+# The Primary Contract for the ndi.epoch namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Standalone functions
+# =========================================================================
+functions:
+
+  - name: epochrange
+    type: function
+    matlab_path: "+ndi/+epoch/epochrange.m"
+    python_path: "ndi/epoch/functions.py"
+    input_arguments:
+      - name: epochset_obj
+        type_matlab: "ndi.epoch.epochset"
+        type_python: "Any"
+      - name: clocktype
+        type_matlab: "ndi.time.clocktype"
+        type_python: "ClockType"
+      - name: first_epoch
+        type_matlab: "integer | char"
+        type_python: "int | str"
+      - name: last_epoch
+        type_matlab: "integer | char"
+        type_python: "int | str"
+    output_arguments:
+      - name: epoch_ids
+        type_python: "list[str]"
+      - name: epoch_table
+        type_python: "list[dict]"
+      - name: t0_t1
+        type_python: "list[tuple[float, float]]"
+    decision_log: >
+      Exact match. Returns a 3-tuple.
+      Epoch numbers are 1-indexed (user concept).
+
+  - name: findepochnode
+    type: function
+    matlab_path: "+ndi/+epoch/findepochnode.m"
+    python_path: "ndi/epoch/functions.py"
+    input_arguments:
+      - name: epoch_node
+        type_matlab: "struct"
+        type_python: "dict[str, Any]"
+      - name: epoch_node_array
+        type_matlab: "struct array"
+        type_python: "list[dict[str, Any]]"
+    output_arguments:
+      - name: index
+        type_python: "list[int]"
+    decision_log: >
+      MATLAB returns 1-based indices. Python returns 0-based indices
+      (internal data structure access). This is an intentional divergence
+      per the Semantic Parity rule: the returned indices are used for
+      internal array indexing, not user-facing epoch counting.
+
+  - name: is_epoch_or_empty
+    type: function
+    matlab_path: null
+    python_path: "ndi/epoch/epoch.py"
+    input_arguments:
+      - name: value
+        type_python: "Any"
+    output_arguments:
+      - name: result
+        type_python: "bool"
+    decision_log: >
+      Python-specific validation utility. No direct MATLAB equivalent.
+
+  - name: parse_devicestring
+    type: function
+    matlab_path: "+ndi/+epoch/epochprobemap_daqsystem.m (inline)"
+    python_path: "ndi/epoch/epochprobemap.py"
+    input_arguments:
+      - name: devicestring
+        type_matlab: "char"
+        type_python: "str"
+    output_arguments:
+      - name: components
+        type_python: "dict[str, str]"
+    decision_log: >
+      Extracted as a standalone function in Python. MATLAB has this
+      logic inline in the epochprobemap_daqsystem class.
+
+  - name: build_devicestring
+    type: function
+    matlab_path: "+ndi/+epoch/epochprobemap_daqsystem.m (inline)"
+    python_path: "ndi/epoch/epochprobemap.py"
+    input_arguments:
+      - name: name
+        type_matlab: "char"
+        type_python: "str"
+      - name: deviceclass
+        type_matlab: "char"
+        type_python: "str"
+        default: "''"
+      - name: details
+        type_matlab: "char"
+        type_python: "str"
+        default: "''"
+    output_arguments:
+      - name: devicestring
+        type_python: "str"
+    decision_log: >
+      Extracted as a standalone function in Python. MATLAB has this
+      logic inline in the epochprobemap_daqsystem class.
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # =========================================================================
+  # ndi.epoch.epochset  (abstract base class)
+  # =========================================================================
+  - name: epochset
+    type: class
+    matlab_path: "+ndi/+epoch/epochset.m"
+    python_path: "ndi/epoch/epochset.py"
+    python_class: "EpochSet"
+
+    methods:
+      # --- Abstract methods ---
+      - name: buildepochtable
+        kind: abstract
+        input_arguments: []
+        output_arguments:
+          - name: et
+            type_python: "list[dict[str, Any]]"
+        decision_log: "Exact match. Abstract in both."
+
+      - name: epochsetname
+        kind: abstract
+        input_arguments: []
+        output_arguments:
+          - name: name
+            type_python: "str"
+        decision_log: "Exact match. Abstract in both."
+
+      - name: issyncgraphroot
+        kind: abstract
+        input_arguments: []
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: "Exact match. Abstract in both."
+
+      # --- Public instance methods ---
+      - name: epochtable
+        input_arguments:
+          - name: force_rebuild
+            type_matlab: "logical (implicit via cache)"
+            type_python: "bool"
+            default: "False"
+        output_arguments:
+          - name: et
+            type_python: "list[dict[str, Any]]"
+          - name: hashvalue
+            type_python: "str"
+        decision_log: >
+          MATLAB returns (et, hashvalue) tuple. Python matches exactly.
+          Python adds explicit force_rebuild parameter; MATLAB rebuilds
+          implicitly when cache is stale.
+
+      - name: numepochs
+        input_arguments: []
+        output_arguments:
+          - name: n
+            type_python: "int"
+        decision_log: "Exact match."
+
+      - name: epochclock
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: ec
+            type_python: "list[ClockType]"
+        decision_log: >
+          Semantic Parity: epoch_number is 1-indexed (user concept).
+          Internally maps to 0-based index.
+
+      - name: t0_t1
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: t0t1
+            type_python: "list[tuple[float, float]]"
+        decision_log: >
+          Semantic Parity: epoch_number is 1-indexed (user concept).
+          Internally maps to 0-based index.
+
+      - name: epochid
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: epoch_id
+            type_python: "str"
+        decision_log: >
+          Semantic Parity: epoch_number is 1-indexed (user concept).
+          Internally maps to 0-based index.
+
+      - name: epochnumber
+        input_arguments:
+          - name: epoch_id
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: epoch_number
+            type_python: "int"
+        decision_log: >
+          Semantic Parity: returns 1-indexed epoch number
+          (user-facing concept).
+
+      - name: matchedepochtable
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer (optional)"
+            type_python: "int | None"
+            default: "None"
+          - name: epoch_id
+            type_matlab: "char (optional)"
+            type_python: "str | None"
+            default: "None"
+        output_arguments:
+          - name: et
+            type_python: "list[dict[str, Any]]"
+        decision_log: "Exact match."
+
+      - name: epochtableentry
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: entry
+            type_python: "dict[str, Any]"
+        decision_log: >
+          Semantic Parity: epoch_number is 1-indexed (user concept).
+          Internally maps to 0-based index.
+
+      - name: epochgraph
+        input_arguments: []
+        output_arguments:
+          - name: nodes
+            type_python: "list[dict[str, Any]]"
+        decision_log: "Exact match."
+
+      - name: resetepochtable
+        input_arguments: []
+        output_arguments: []
+        decision_log: "Exact match. Clears the epoch table cache."
+
+  # =========================================================================
+  # ndi.epoch.epoch  (immutable data class)
+  # =========================================================================
+  - name: epoch
+    type: class
+    matlab_path: "+ndi/+epoch/epoch.m"
+    python_path: "ndi/epoch/epoch.py"
+    python_class: "Epoch"
+
+    properties:
+      - name: epoch_number
+        type_matlab: "integer"
+        type_python: "int"
+        decision_log: "Exact match. Default 0 = unknown."
+
+      - name: epoch_id
+        type_matlab: "char"
+        type_python: "str"
+        decision_log: "Exact match."
+
+      - name: epoch_session_id
+        type_matlab: "char"
+        type_python: "str"
+        decision_log: "Exact match."
+
+      - name: epochprobemap
+        type_matlab: "ndi.epoch.epochprobemap array"
+        type_python: "tuple[EpochProbeMap, ...]"
+        decision_log: "Python uses immutable tuple. MATLAB uses cell array."
+
+      - name: epoch_clock
+        type_matlab: "ndi.time.clocktype array"
+        type_python: "tuple[ClockType, ...]"
+        decision_log: "Python uses immutable tuple. MATLAB uses cell array."
+
+      - name: t0_t1
+        type_matlab: "cell array of [t0 t1]"
+        type_python: "tuple[tuple[float, float], ...]"
+        decision_log: "Python uses immutable nested tuples."
+
+      - name: epochset_object
+        type_matlab: "ndi.epoch.epochset"
+        type_python: "EpochSet | None"
+        decision_log: "Exact match. None when not associated."
+
+      - name: underlying_epochs
+        type_matlab: "ndi.epoch.epoch array"
+        type_python: "tuple[Epoch, ...]"
+        decision_log: "Python uses immutable tuple."
+
+      - name: underlying_files
+        type_matlab: "cell array of char"
+        type_python: "tuple[str, ...]"
+        decision_log: "Python uses immutable tuple."
+
+    methods:
+      - name: from_dict
+        kind: classmethod
+        input_arguments:
+          - name: data
+            type_python: "dict[str, Any]"
+        output_arguments:
+          - name: epoch_obj
+            type_python: "Epoch"
+        decision_log: >
+          Python-specific factory method for deserialization.
+          No direct MATLAB equivalent.
+
+      - name: to_dict
+        input_arguments: []
+        output_arguments:
+          - name: data
+            type_python: "dict[str, Any]"
+        decision_log: >
+          Python-specific serialization method.
+          No direct MATLAB equivalent.
+
+      - name: has_clock
+        input_arguments:
+          - name: clock
+            type_python: "ClockType"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: "Python-specific convenience method."
+
+      - name: time_range
+        input_arguments:
+          - name: clock
+            type_python: "ClockType"
+        output_arguments:
+          - name: t0_t1
+            type_python: "tuple[float, float] | None"
+        decision_log: "Python-specific convenience method."
+
+      - name: matches_probe
+        input_arguments:
+          - name: name
+            type_matlab: "char"
+            type_python: "str"
+          - name: reference
+            type_matlab: "integer"
+            type_python: "int"
+          - name: type
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: "Python-specific convenience method."
+
+  # =========================================================================
+  # ndi.epoch.epochprobemap
+  # =========================================================================
+  - name: epochprobemap
+    type: class
+    matlab_path: "+ndi/+epoch/epochprobemap.m"
+    python_path: "ndi/epoch/epochprobemap.py"
+    python_class: "EpochProbeMap"
+
+    properties:
+      - name: name
+        type_matlab: "char"
+        type_python: "str"
+        decision_log: "Exact match. No whitespace allowed."
+
+      - name: reference
+        type_matlab: "integer"
+        type_python: "int"
+        decision_log: "Exact match. Non-negative."
+
+      - name: type
+        type_matlab: "char"
+        type_python: "str"
+        decision_log: "Exact match. No whitespace allowed."
+
+      - name: devicestring
+        type_matlab: "char"
+        type_python: "str"
+        decision_log: "Exact match. Format: 'devicename:class:details'."
+
+      - name: subjectstring
+        type_matlab: "char"
+        type_python: "str"
+        decision_log: "Exact match."
+
+    methods:
+      - name: epochprobemap
+        kind: constructor
+        input_arguments:
+          - name: name
+            type_matlab: "char"
+            type_python: "str"
+          - name: reference
+            type_matlab: "integer"
+            type_python: "int"
+          - name: type
+            type_matlab: "char"
+            type_python: "str"
+          - name: devicestring
+            type_matlab: "char"
+            type_python: "str"
+            default: "''"
+          - name: subjectstring
+            type_matlab: "char"
+            type_python: "str"
+            default: "''"
+        output_arguments:
+          - name: epm_obj
+            type_python: "EpochProbeMap"
+        decision_log: "Exact match."
+
+      - name: devicename
+        kind: property
+        type_python: "str"
+        decision_log: "Computed property. Extracts name from devicestring."
+
+      - name: deviceclass
+        kind: property
+        type_python: "str"
+        decision_log: "Computed property. Extracts class from devicestring."
+
+      - name: matches
+        input_arguments:
+          - name: name
+            type_matlab: "char (optional)"
+            type_python: "str | None"
+            default: "None"
+          - name: reference
+            type_matlab: "integer (optional)"
+            type_python: "int | None"
+            default: "None"
+          - name: type
+            type_matlab: "char (optional)"
+            type_python: "str | None"
+            default: "None"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: "Exact match."
+
+      - name: to_dict
+        input_arguments: []
+        output_arguments:
+          - name: data
+            type_python: "dict[str, Any]"
+        decision_log: "Python-specific serialization method."
+
+      - name: from_dict
+        kind: classmethod
+        input_arguments:
+          - name: data
+            type_python: "dict[str, Any]"
+        output_arguments:
+          - name: epm_obj
+            type_python: "EpochProbeMap"
+        decision_log: "Python-specific factory method."
+
+      - name: eq
+        input_arguments:
+          - name: other
+            type_python: "Any"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: "Mapped to Python __eq__ dunder method."
+
+  # =========================================================================
+  # ndi.epoch.epochprobemap_daqsystem
+  # =========================================================================
+  - name: epochprobemap_daqsystem
+    type: class
+    matlab_path: "+ndi/+epoch/epochprobemap_daqsystem.m"
+    python_path: "ndi/epoch/epochprobemap_daqsystem.py"
+    python_class: "EpochProbeMapDAQSystem"
+    inherits: "ndi.epoch.epochprobemap"
+
+    properties:
+      - name: daqsystemstring
+        type_matlab: "ndi.daq.daqsystemstring"
+        type_python: "DAQSystemString"
+        access: "computed property"
+        decision_log: >
+          Lazy-parsed from devicestring. MATLAB stores explicitly;
+          Python computes on access.
+
+    methods:
+      - name: epochprobemap_daqsystem
+        kind: constructor
+        input_arguments:
+          - name: name
+            type_matlab: "char"
+            type_python: "str"
+          - name: reference
+            type_matlab: "integer"
+            type_python: "int"
+          - name: type
+            type_matlab: "char"
+            type_python: "str"
+          - name: devicestring
+            type_matlab: "char"
+            type_python: "str"
+            default: "''"
+          - name: subjectstring
+            type_matlab: "char"
+            type_python: "str"
+            default: "''"
+        output_arguments:
+          - name: epm_daq_obj
+            type_python: "EpochProbeMapDAQSystem"
+        decision_log: "Exact match."
+
+      - name: serialization_struct
+        input_arguments: []
+        output_arguments:
+          - name: s
+            type_python: "dict[str, Any]"
+        decision_log: "Exact match. MATLAB returns a struct; Python returns a dict."
+
+      - name: serialize
+        input_arguments: []
+        output_arguments:
+          - name: s
+            type_python: "str"
+        decision_log: "Exact match. Tab-delimited string."
+
+      - name: savetofile
+        input_arguments:
+          - name: filename
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments: []
+        decision_log: "Exact match."
+
+      - name: decode
+        kind: classmethod
+        input_arguments:
+          - name: s
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: epm_daq_obj
+            type_python: "EpochProbeMapDAQSystem"
+        decision_log: "MATLAB is a static method. Python uses classmethod."
+
+      - name: loadfromfile
+        kind: classmethod
+        input_arguments:
+          - name: filename
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: epm_list
+            type_python: "list[EpochProbeMapDAQSystem]"
+        decision_log: "MATLAB is a static method. Python uses classmethod."

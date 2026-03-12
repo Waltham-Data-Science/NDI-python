@@ -41,7 +41,7 @@ from .app.appdoc import AppDoc, DocExistsAction
 # Import session and cache modules (Phase 7)
 from .cache import Cache
 from .calculator import Calculator
-from .common import PathConstants, get_logger, getLogger, timestamp
+from .common import PathConstants, getLogger, timestamp
 from .database import Database, open_database
 from .dataset import Dataset, DatasetDir
 from .document import Document
@@ -100,7 +100,7 @@ __all__ = [
     "open_database",
     "PathConstants",
     "timestamp",
-    "get_logger",
+    "getLogger",
     "time",
     "daq",
     "file",
