@@ -111,8 +111,7 @@ class Dataset:
         existing = self._find_session_in_info(session.id())
         if existing is not None:
             raise ValueError(
-                f"Session with id {session.id()} is already part of "
-                f"dataset {self.id()}."
+                f"Session with id {session.id()} is already part of " f"dataset {self.id()}."
             )
 
         session_info_here = self._make_session_info(session, is_linked=True)
@@ -146,8 +145,7 @@ class Dataset:
         existing = self._find_session_in_info(session.id())
         if existing is not None:
             raise ValueError(
-                f"Session with id {session.id()} is already part of "
-                f"dataset {self.id()}."
+                f"Session with id {session.id()} is already part of " f"dataset {self.id()}."
             )
 
         if hasattr(session, "is_fully_ingested") and not session.is_fully_ingested():
@@ -211,10 +209,7 @@ class Dataset:
 
         match = self._find_session_in_info(session_id)
         if match is None:
-            raise ValueError(
-                f"Session with ID {session_id} not found in "
-                f"dataset {self.id()}."
-            )
+            raise ValueError(f"Session with ID {session_id} not found in " f"dataset {self.id()}.")
 
         if not match.get("is_linked", False):
             raise ValueError(
@@ -477,17 +472,13 @@ class Dataset:
         populates ``_session_info`` and ``_session_array``.
         """
         # Check for legacy dataset_session_info docs and repair
-        q_legacy = Query("").isa("dataset_session_info") & (
-            Query("base.session_id") == self.id()
-        )
+        q_legacy = Query("").isa("dataset_session_info") & (Query("base.session_id") == self.id())
         legacy_docs = self._session.database_search(q_legacy)
         if legacy_docs:
             self.repairDatasetSessionInfo(self, legacy_docs)
 
         # Find session_in_a_dataset docs belonging to this dataset
-        q = Query("").isa("session_in_a_dataset") & (
-            Query("base.session_id") == self.id()
-        )
+        q = Query("").isa("session_in_a_dataset") & (Query("base.session_id") == self.id())
         info_docs = self._session.database_search(q)
 
         self._session_info = []
@@ -500,10 +491,12 @@ class Dataset:
         # Build session_array (sessions opened lazily)
         self._session_array = []
         for si in self._session_info:
-            self._session_array.append({
-                "session_id": si.get("session_id", ""),
-                "session": None,
-            })
+            self._session_array.append(
+                {
+                    "session_id": si.get("session_id", ""),
+                    "session": None,
+                }
+            )
 
     # =========================================================================
     # Static methods (mirrors MATLAB ndi.dataset static methods)
@@ -536,10 +529,16 @@ class Dataset:
             info_list = [info_list]
 
         fields = [
-            "session_id", "session_reference", "is_linked", "session_creator",
-            "session_creator_input1", "session_creator_input2",
-            "session_creator_input3", "session_creator_input4",
-            "session_creator_input5", "session_creator_input6",
+            "session_id",
+            "session_reference",
+            "is_linked",
+            "session_creator",
+            "session_creator_input1",
+            "session_creator_input2",
+            "session_creator_input3",
+            "session_creator_input4",
+            "session_creator_input5",
+            "session_creator_input6",
         ]
 
         for s in info_list:
@@ -590,9 +589,7 @@ class Dataset:
 
         MATLAB equivalent: ``ndi.dataset.removeSessionInfoFromDataset``
         """
-        q = (
-            Query("session_in_a_dataset.session_id") == session_id
-        ) & (
+        q = (Query("session_in_a_dataset.session_id") == session_id) & (
             Query("base.session_id") == dataset_obj.id()
         )
         docs = dataset_obj._session.database_search(q)
@@ -841,37 +838,31 @@ class DatasetDir(Dataset):
         # 1. Check for legacy dataset_session_info docs
         dsi_docs = self.database_search(Query("").isa("dataset_session_info"))
         if dsi_docs:
-            correct_session_id = dsi_docs[0].document_properties.get(
-                "base", {}
-            ).get("session_id", "")
+            correct_session_id = (
+                dsi_docs[0].document_properties.get("base", {}).get("session_id", "")
+            )
         else:
             # 2. Check for session_in_a_dataset docs
             sia_docs = self.database_search(Query("").isa("session_in_a_dataset"))
             if sia_docs:
-                correct_session_id = sia_docs[0].document_properties.get(
-                    "base", {}
-                ).get("session_id", "")
+                correct_session_id = (
+                    sia_docs[0].document_properties.get("base", {}).get("session_id", "")
+                )
             else:
                 # 3. Check for a single session doc
                 session_docs = self.database_search(Query("").isa("session"))
                 if len(session_docs) == 1:
-                    correct_session_id = session_docs[0].document_properties.get(
-                        "base", {}
-                    ).get("session_id", "")
+                    correct_session_id = (
+                        session_docs[0].document_properties.get("base", {}).get("session_id", "")
+                    )
 
         if correct_session_id:
             # Find the session document with this ID
-            q = Query("").isa("session") & (
-                Query("base.session_id") == correct_session_id
-            )
+            q = Query("").isa("session") & (Query("base.session_id") == correct_session_id)
             candidate_docs = self.database_search(q)
             if len(candidate_docs) == 1:
-                ref = candidate_docs[0].document_properties.get(
-                    "session", {}
-                ).get("reference", "")
-                sid = candidate_docs[0].document_properties.get(
-                    "base", {}
-                ).get("session_id", "")
+                ref = candidate_docs[0].document_properties.get("session", {}).get("reference", "")
+                sid = candidate_docs[0].document_properties.get("base", {}).get("session_id", "")
                 # Re-create session with the correct reference and ID
                 self._session = DirSession(ref, self._path, session_id=sid)
 
@@ -893,9 +884,7 @@ class DatasetDir(Dataset):
             return
 
         # Find already-tracked session IDs
-        q_tracked = Query("").isa("session_in_a_dataset") & (
-            Query("base.session_id") == self.id()
-        )
+        q_tracked = Query("").isa("session_in_a_dataset") & (Query("base.session_id") == self.id())
         tracked_docs = self._session.database_search(q_tracked)
         tracked_ids: set[str] = set()
         for doc in tracked_docs:

@@ -22,7 +22,6 @@ from typing import Any
 
 import did.query
 
-
 # ---------------------------------------------------------------------------
 # Module-level convenience functions
 #
