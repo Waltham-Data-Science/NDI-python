@@ -203,10 +203,7 @@ classes:
             type_python: "bool"
           - name: file_path
             type_python: "Path | None"
-        decision_log: >
-          Present in MATLAB ndi.dataset but not yet implemented in Python Dataset base class.
-          Currently only exists on the session level. Needs to be added.
-        status: "not_yet_ported"
+        decision_log: "Delegates to self._session.database_existbinarydoc(). Exact match."
 
       - name: database_closebinarydoc
         input_arguments:
@@ -323,6 +320,6 @@ classes:
             default: "'no'"
         output_arguments: []
         decision_log: >
-          Present in MATLAB but not yet ported to Python.
-          Similar to ndi.session.dir/database_erase.
-        status: "not_yet_ported"
+          Removes the .ndi directory from the dataset path.
+          MATLAB also calls delete(obj); Python does not destroy the object
+          (no equivalent of MATLAB handle delete).

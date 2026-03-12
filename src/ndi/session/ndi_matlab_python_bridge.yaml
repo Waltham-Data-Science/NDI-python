@@ -92,8 +92,9 @@ classes:
         output_arguments:
           - name: refstr
             type_python: "str"
-        decision_log: "Not yet ported to Python."
-        status: "not_yet_ported"
+        decision_log: >
+          Deprecated in MATLAB (warns to use id() instead).
+          Python port mirrors this by issuing a DeprecationWarning.
 
       - name: daqsystem_add
         input_arguments:
@@ -295,8 +296,9 @@ classes:
         output_arguments:
           - name: b
             type_python: "bool"
-        decision_log: "Not yet ported to Python."
-        status: "not_yet_ported"
+        decision_log: >
+          Searches for session_in_a_dataset documents with is_linked=0.
+          Exact match to MATLAB logic.
 
       - name: getprobes
         input_arguments:
@@ -339,9 +341,11 @@ classes:
             type_python: "str"
         output_arguments:
           - name: obj
-            type_python: "Any"
-        decision_log: "Not yet ported to Python."
-        status: "not_yet_ported"
+            type_python: "Any | None"
+        decision_log: >
+          MATLAB uses vlt.matlab.isa_text for class matching.
+          Python uses type(obj).__name__ comparison.
+          Returns None instead of empty array when not found.
 
       - name: eq
         input_arguments:

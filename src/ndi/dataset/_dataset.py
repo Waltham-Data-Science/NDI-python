@@ -395,6 +395,25 @@ class Dataset:
         """Open a binary document file."""
         return self._session.database_openbinarydoc(doc_or_id, filename)
 
+    def database_existbinarydoc(
+        self,
+        doc_or_id: Any,
+        filename: str,
+    ) -> tuple[bool, Path | None]:
+        """
+        Check if a binary document file exists.
+
+        MATLAB equivalent: ``ndi.dataset/database_existbinarydoc``
+
+        Args:
+            doc_or_id: Document or document ID.
+            filename: Name of the binary file.
+
+        Returns:
+            Tuple of (exists, file_path).
+        """
+        return self._session.database_existbinarydoc(doc_or_id, filename)
+
     def database_closebinarydoc(self, fid: Any) -> None:
         """Close a binary document file."""
         self._session.database_closebinarydoc(fid)
@@ -920,6 +939,32 @@ class DatasetDir(Dataset):
                 tracked_ids.add(sid)
             except Exception:
                 logger.debug("Could not register session %s: skipping", sid)
+
+    @staticmethod
+    def dataset_erase(ndi_dataset_dir_obj: DatasetDir, areyousure: str = "no") -> None:
+        """
+        Delete the entire dataset database folder.
+
+        MATLAB equivalent: ``ndi.dataset.dir.dataset_erase``
+
+        Use with care. If *areyousure* is ``'yes'`` the ``.ndi``
+        directory inside the dataset path will be permanently removed.
+
+        Args:
+            ndi_dataset_dir_obj: The DatasetDir instance to erase.
+            areyousure: Must be ``'yes'`` to proceed.
+        """
+        import shutil
+
+        if areyousure.lower() == "yes":
+            ndi_dir = ndi_dataset_dir_obj.getpath() / ".ndi"
+            if ndi_dir.exists():
+                shutil.rmtree(ndi_dir)
+        else:
+            logger.info(
+                "Not erasing dataset directory folder because "
+                "user did not indicate they are sure."
+            )
 
     @staticmethod
     def _dataset_session_id_from_docs(documents: list[Document]) -> str:
