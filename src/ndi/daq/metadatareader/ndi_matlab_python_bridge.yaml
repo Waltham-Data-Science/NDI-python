@@ -1,0 +1,307 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/daq/metadatareader/
+# The Primary Contract for the ndi.daq.metadatareader namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # =========================================================================
+  # ndi.daq.metadatareader (base class)
+  # =========================================================================
+  - name: metadatareader
+    type: class
+    matlab_path: "+ndi/+daq/metadatareader.m"
+    python_path: "ndi/daq/metadatareader/__init__.py"
+    python_class: "MetadataReader"
+    inherits: "ndi.ido"
+
+    properties:
+      - name: tab_separated_file_parameter
+        type_matlab: "char"
+        type_python: "str"
+        access: "property (read-only)"
+        decision_log: "Exact match. Regex pattern for TSV file matching."
+
+    methods:
+      - name: metadatareader
+        kind: constructor
+        input_arguments:
+          - name: tsv_pattern
+            type_matlab: "char"
+            type_python: "str"
+            default: "''"
+          - name: identifier
+            type_python: "str | None"
+            default: "None"
+          - name: session
+            type_python: "Any | None"
+            default: "None"
+          - name: document
+            type_python: "Any | None"
+            default: "None"
+        output_arguments:
+          - name: reader_obj
+            type_python: "MetadataReader"
+        decision_log: "Exact match."
+
+      - name: readmetadata
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+        output_arguments:
+          - name: parameters
+            type_python: "list[dict[str, Any]]"
+        decision_log: >
+          Exact match. Reads tab-separated file matching the pattern.
+          Raises ValueError if no match or multiple matches.
+
+      - name: readmetadatafromfile
+        input_arguments:
+          - name: filepath
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: parameters
+            type_python: "list[dict[str, Any]]"
+        decision_log: "Exact match. Reads metadata from a specific file."
+
+      - name: readmetadata_ingested
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+        output_arguments:
+          - name: parameters
+            type_python: "list[dict[str, Any]]"
+        decision_log: "Exact match."
+
+      - name: get_ingested_document
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+        output_arguments:
+          - name: doc
+            type_python: "Any | None"
+        decision_log: "Exact match."
+
+      - name: ingest_epochfiles
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: epoch_id
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: doc
+            type_python: "Any"
+        decision_log: "Exact match."
+
+      - name: newdocument
+        input_arguments: []
+        output_arguments:
+          - name: doc
+            type_python: "Any"
+        decision_log: "Exact match."
+
+      - name: searchquery
+        input_arguments: []
+        output_arguments:
+          - name: sq
+            type_python: "Any"
+        decision_log: "Exact match."
+
+      - name: eq
+        input_arguments:
+          - name: other
+            type_python: "Any"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: "Mapped to Python __eq__ dunder method."
+
+  # =========================================================================
+  # ndi.daq.metadatareader.NewStimStims
+  # =========================================================================
+  - name: NewStimStims
+    type: class
+    matlab_path: "+ndi/+daq/+metadatareader/NewStimStims.m"
+    python_path: "ndi/daq/metadatareader/newstim_stims.py"
+    python_class: "NewStimStimsReader"
+    inherits: "ndi.daq.metadatareader"
+
+    properties:
+      - name: STIM_FILE_PATTERN
+        type_python: "str"
+        access: "class variable"
+        decision_log: "Value: r'stims\\.mat$'. Pattern for finding stim files."
+
+    methods:
+      - name: NewStimStims
+        kind: constructor
+        input_arguments:
+          - name: tsv_pattern
+            type_python: "str"
+            default: "''"
+          - name: identifier
+            type_python: "str | None"
+            default: "None"
+          - name: session
+            type_python: "Any | None"
+            default: "None"
+          - name: document
+            type_python: "Any | None"
+            default: "None"
+        output_arguments:
+          - name: reader_obj
+            type_python: "NewStimStimsReader"
+        decision_log: "Exact match."
+
+      - name: readmetadata
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+        output_arguments:
+          - name: parameters
+            type_python: "list[dict[str, Any]]"
+        decision_log: >
+          Exact match. Reads from stims.mat via scipy.io.loadmat.
+          Falls back to TSV reading from base class.
+
+    protected_methods:
+      - name: _find_stim_file
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+        output_arguments:
+          - name: filepath
+            type_python: "str | None"
+        decision_log: "Python-specific. Finds stims.mat in epoch files."
+
+      - name: _read_newstim_mat
+        input_arguments:
+          - name: filepath
+            type_python: "str"
+        output_arguments:
+          - name: parameters
+            type_python: "list[dict[str, Any]]"
+        decision_log: "Python-specific. Reads saveScript from .mat file."
+
+    static_methods:
+      - name: _extract_script_parameters
+        input_arguments:
+          - name: script_data
+            type_python: "Any"
+        output_arguments:
+          - name: parameters
+            type_python: "list[dict[str, Any]]"
+        decision_log: >
+          Python-specific. Extracts parameters from NewStim script struct.
+
+  # =========================================================================
+  # ndi.daq.metadatareader.NielsenLabStims
+  # =========================================================================
+  - name: NielsenLabStims
+    type: class
+    matlab_path: "+ndi/+daq/+metadatareader/NielsenLabStims.m"
+    python_path: "ndi/daq/metadatareader/nielsenlab_stims.py"
+    python_class: "NielsenLabStimsReader"
+    inherits: "ndi.daq.metadatareader"
+
+    properties:
+      - name: ANALYZER_FILE_PATTERN
+        type_python: "str"
+        access: "class variable"
+        decision_log: "Value: r'analyzer\\.mat$'. Pattern for finding analyzer files."
+
+    methods:
+      - name: NielsenLabStims
+        kind: constructor
+        input_arguments:
+          - name: tsv_pattern
+            type_python: "str"
+            default: "''"
+          - name: identifier
+            type_python: "str | None"
+            default: "None"
+          - name: session
+            type_python: "Any | None"
+            default: "None"
+          - name: document
+            type_python: "Any | None"
+            default: "None"
+        output_arguments:
+          - name: reader_obj
+            type_python: "NielsenLabStimsReader"
+        decision_log: "Exact match."
+
+      - name: readmetadata
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+        output_arguments:
+          - name: parameters
+            type_python: "list[dict[str, Any]]"
+        decision_log: >
+          Exact match. Reads from analyzer.mat via scipy.io.loadmat.
+          Falls back to TSV reading from base class.
+
+    static_methods:
+      - name: extract_stimulus_parameters
+        input_arguments:
+          - name: analyzer
+            type_matlab: "struct"
+            type_python: "Any"
+        output_arguments:
+          - name: parameters
+            type_python: "list[dict[str, Any]]"
+        decision_log: >
+          Exact match. Extracts parameters from Analyzer struct
+          (M, P.param, loops.conds fields).
+
+      - name: extract_display_order
+        input_arguments:
+          - name: analyzer
+            type_matlab: "struct"
+            type_python: "Any"
+        output_arguments:
+          - name: display_order
+            type_python: "list[int]"
+        decision_log: >
+          Exact match. Returns trial-to-condition mapping.
+          Python returns 0-based condition indices (internal data access).
+
+    protected_methods:
+      - name: _find_analyzer_file
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+        output_arguments:
+          - name: filepath
+            type_python: "str | None"
+        decision_log: "Python-specific. Finds analyzer.mat in epoch files."
+
+      - name: _read_analyzer_mat
+        input_arguments:
+          - name: filepath
+            type_python: "str"
+        output_arguments:
+          - name: parameters
+            type_python: "list[dict[str, Any]]"
+        decision_log: "Python-specific. Reads Analyzer from .mat file."
