@@ -81,7 +81,8 @@ def downloadDataset(
     # Convert to Document objects and add to a local Dataset
     from ndi.dataset import Dataset
 
-    dataset = Dataset(target)
+    dataset_reference = ds_info.get("name", cloud_dataset_id)
+    dataset = Dataset(target, reference=dataset_reference)
     documents = jsons2documents(doc_jsons)
     for doc in documents:
         try:

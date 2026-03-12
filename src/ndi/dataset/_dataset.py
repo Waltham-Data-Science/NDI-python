@@ -70,6 +70,12 @@ class Dataset:
         # Cache of open sessions
         self._session_cache: dict[str, Any] = {}
 
+        # Discover sessions from existing documents in the database.
+        # This mirrors MATLAB ndi.dataset.dir, which scans for session
+        # documents and creates session_in_a_dataset tracking records
+        # when the dataset is opened.
+        self._discover_sessions()
+
     @property
     def reference(self) -> str:
         """Get the dataset reference name."""
@@ -421,6 +427,59 @@ class Dataset:
     # =========================================================================
     # Internal Helpers
     # =========================================================================
+
+    def _discover_sessions(self) -> None:
+        """Scan the database for session documents and register any untracked sessions.
+
+        MATLAB equivalent: part of ndi.dataset.dir constructor logic.
+
+        When a dataset is opened (e.g. after cloud download), the database
+        may contain documents from multiple sessions but no
+        ``session_in_a_dataset`` tracking records yet.  This method finds
+        ``session`` type documents in the database and creates
+        ``session_in_a_dataset`` docs for each session that is not already
+        registered.
+        """
+        if self._session._database is None:
+            return
+
+        # Find already-tracked session IDs
+        q_tracked = Query("").isa("session_in_a_dataset")
+        tracked_docs = self._session.database_search(q_tracked)
+        tracked_ids: set[str] = set()
+        for doc in tracked_docs:
+            props = doc.document_properties.get("session_in_a_dataset", {})
+            sid = props.get("session_id", "")
+            if sid:
+                tracked_ids.add(sid)
+
+        # Find session documents in the database (search directly, not
+        # through the session which filters by session_id)
+        q_session = Query("").isa("session")
+        session_docs = list(self._session._database.search(q_session))
+
+        ds_session_id = self._session.id()
+
+        for sdoc in session_docs:
+            props = sdoc.document_properties
+            sid = props.get("base", {}).get("session_id", "")
+            if not sid or sid == ds_session_id or sid in tracked_ids:
+                continue
+            ref = props.get("session", {}).get("reference", "")
+            tracking_doc = Document(
+                "session_in_a_dataset",
+                **{
+                    "session_in_a_dataset.session_id": sid,
+                    "session_in_a_dataset.session_reference": ref,
+                    "session_in_a_dataset.is_linked": False,
+                    "session_in_a_dataset.session_creator": "DirSession",
+                },
+            )
+            try:
+                self._session.database_add(tracking_doc)
+                tracked_ids.add(sid)
+            except Exception:
+                logger.debug("Could not register session %s: skipping", sid)
 
     def _copy_binary_files(self, source_session: Any, doc: Document) -> None:
         """Copy binary file attachments from a source session to this dataset."""
