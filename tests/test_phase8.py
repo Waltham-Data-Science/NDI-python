@@ -516,22 +516,22 @@ class TestDatasetDatabase:
 class TestDatasetIngestion:
     """Test Dataset ingestion and deletion."""
 
-    def test_delete_ingested_session_requires_confirmation(self, temp_dir, session):
+    def test_deleteIngestedSession_requires_confirmation(self, temp_dir, session):
         """Test that deleting ingested session requires confirmation."""
         ds = Dataset(temp_dir / "dataset1", "Test")
         ds.add_ingested_session(session)
 
         with pytest.raises(ValueError, match="are_you_sure"):
-            ds.delete_ingested_session(session.id())
+            ds.deleteIngestedSession(session.id())
 
-    def test_delete_ingested_session(self, temp_dir, session):
+    def test_deleteIngestedSession(self, temp_dir, session):
         """Test deleting an ingested session."""
         ds = Dataset(temp_dir / "dataset1", "Test")
         ds.add_ingested_session(session)
         refs, session_ids, *_ = ds.session_list()
         assert len(session_ids) == 1
 
-        ds.delete_ingested_session(session.id(), are_you_sure=True)
+        ds.deleteIngestedSession(session.id(), are_you_sure=True)
         refs, session_ids, *_ = ds.session_list()
         assert len(session_ids) == 0
 
@@ -541,7 +541,7 @@ class TestDatasetIngestion:
         ds.add_linked_session(session)
 
         with pytest.raises(ValueError, match="linked"):
-            ds.delete_ingested_session(session.id(), are_you_sure=True)
+            ds.deleteIngestedSession(session.id(), are_you_sure=True)
 
 
 # ===========================================================================

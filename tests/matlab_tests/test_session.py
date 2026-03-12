@@ -38,7 +38,7 @@ class TestDeleteSession:
         assert ndi_dir.exists(), ".ndi directory should exist before delete"
 
         # Not confirmed — should not delete
-        result = session.delete_session_data_structures(are_you_sure=False, ask_user=False)
+        result = session.deleteSessionDataStructures(are_you_sure=False, ask_user=False)
 
         assert ndi_dir.exists(), ".ndi directory should still exist after unconfirmed delete"
         assert result is not None, "Should return self (not deleted)"
@@ -55,7 +55,7 @@ class TestDeleteSession:
         ndi_dir = session_dir / ".ndi"
         assert ndi_dir.exists(), ".ndi directory should exist before delete"
 
-        session.delete_session_data_structures(are_you_sure=True, ask_user=False)
+        session.deleteSessionDataStructures(are_you_sure=True, ask_user=False)
 
         assert not ndi_dir.exists(), ".ndi directory should be gone after confirmed delete"
 
@@ -72,7 +72,7 @@ class TestDeleteSession:
         data_file = session_dir / "my_data.txt"
         data_file.write_text("important data")
 
-        session.delete_session_data_structures(are_you_sure=True, ask_user=False)
+        session.deleteSessionDataStructures(are_you_sure=True, ask_user=False)
 
         assert data_file.exists(), "User data files should be preserved"
         assert data_file.read_text() == "important data"

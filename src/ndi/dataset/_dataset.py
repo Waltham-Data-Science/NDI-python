@@ -215,7 +215,7 @@ class Dataset:
             raise ValueError(
                 f"Session with ID {session_id} is an INGESTED session, "
                 f"not a linked session. Cannot unlink. Use "
-                f"delete_ingested_session() instead."
+                f"deleteIngestedSession() instead."
             )
 
         self.removeSessionInfoFromDataset(self, session_id)
@@ -403,7 +403,7 @@ class Dataset:
     # Ingested Session Management
     # =========================================================================
 
-    def delete_ingested_session(
+    def deleteIngestedSession(
         self,
         session_id: str,
         are_you_sure: bool = False,

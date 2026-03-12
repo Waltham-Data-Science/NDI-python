@@ -208,14 +208,14 @@ class TestSessionList:
 #
 # NOTE: Python API differences:
 # - MATLAB: deleteIngestedSession(id, 'areYouSure', true, 'askUserToConfirm', false)
-# - Python: delete_ingested_session(id, are_you_sure=True)
+# - Python: deleteIngestedSession(id, are_you_sure=True)
 # - MATLAB raises specific error IDs; Python raises ValueError
 # - MATLAB raises on nonexistent session; Python returns self silently
 # ===========================================================================
 
 
 class TestDeleteIngestedSession:
-    """Test the delete_ingested_session method of Dataset."""
+    """Test the deleteIngestedSession method of Dataset."""
 
     def test_delete_success(self, build_dataset):
         """Delete ingested session and verify it's removed.
@@ -235,7 +235,7 @@ class TestDeleteIngestedSession:
         assert len(docs) > 0, "Session documents should exist"
 
         # Delete the session
-        dataset.delete_ingested_session(session_id, are_you_sure=True)
+        dataset.deleteIngestedSession(session_id, are_you_sure=True)
 
         # Verify session is removed from list
         refs_after, ids_after, *_ = dataset.session_list()
@@ -255,7 +255,7 @@ class TestDeleteIngestedSession:
         session_id = session.id()
 
         with pytest.raises(ValueError):
-            dataset.delete_ingested_session(session_id, are_you_sure=False)
+            dataset.deleteIngestedSession(session_id, are_you_sure=False)
 
         # Verify session still exists
         refs, session_ids, *_ = dataset.session_list()
@@ -284,7 +284,7 @@ class TestDeleteIngestedSession:
 
         # Attempt to delete a linked session — should fail
         with pytest.raises(ValueError, match="linked"):
-            dataset.delete_ingested_session(linked_session.id(), are_you_sure=True)
+            dataset.deleteIngestedSession(linked_session.id(), are_you_sure=True)
 
     def test_delete_nonexistent_session(self, build_dataset):
         """Deleting a nonexistent session raises ValueError.
@@ -294,7 +294,7 @@ class TestDeleteIngestedSession:
         """
         dataset, _ = build_dataset
         with pytest.raises(ValueError, match="not found"):
-            dataset.delete_ingested_session("fake_id_xyz", are_you_sure=True)
+            dataset.deleteIngestedSession("fake_id_xyz", are_you_sure=True)
 
 
 # ===========================================================================

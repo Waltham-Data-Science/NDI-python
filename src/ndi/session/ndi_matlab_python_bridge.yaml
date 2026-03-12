@@ -1,0 +1,651 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/session/
+# The Primary Contract for the ndi.session namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Standalone functions
+# =========================================================================
+functions:
+
+  - name: empty_id
+    type: function
+    matlab_path: "+ndi/+session/empty_id.m"
+    python_path: "ndi/session/session_base.py"
+    input_arguments: []
+    output_arguments:
+      - name: id
+        type_python: "str"
+    decision_log: "Exact match. Returns '0000000000000000_0000000000000000'."
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # =========================================================================
+  # ndi.session  (abstract base class)
+  # =========================================================================
+  - name: session
+    type: class
+    matlab_path: "+ndi/session.m"
+    python_path: "ndi/session/session_base.py"
+    python_class: "Session"
+
+    properties:
+      - name: reference
+        type_matlab: "string"
+        type_python: "str"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: "Implemented as @property in Python."
+
+      - name: identifier
+        type_matlab: "unique identifier"
+        type_python: "str"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: "Implemented as @property in Python."
+
+      - name: syncgraph
+        type_matlab: "ndi.time.syncgraph"
+        type_python: "SyncGraph | None"
+        access: "GetAccess=public, SetAccess=protected, Transient"
+        decision_log: "Implemented as @property in Python."
+
+      - name: cache
+        type_matlab: "ndi.cache"
+        type_python: "Cache"
+        access: "GetAccess=public, SetAccess=protected, Transient"
+        decision_log: "Implemented as @property in Python."
+
+      - name: database
+        type_matlab: "ndi.database"
+        type_python: "Database | None"
+        access: "GetAccess={?session, ?ndi.dataset}, SetAccess=protected, Transient"
+        decision_log: "Implemented as @property in Python."
+
+    methods:
+      # --- Constructor ---
+      - name: session
+        kind: constructor
+        input_arguments:
+          - name: reference
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: ndi_session_obj
+            type_python: "Session"
+        decision_log: "Exact match."
+
+      # --- Public instance methods ---
+      - name: id
+        input_arguments: []
+        output_arguments:
+          - name: identifier
+            type_python: "str"
+        decision_log: "Exact match."
+
+      - name: unique_reference_string
+        input_arguments: []
+        output_arguments:
+          - name: refstr
+            type_python: "str"
+        decision_log: "Not yet ported to Python."
+        status: "not_yet_ported"
+
+      - name: daqsystem_add
+        input_arguments:
+          - name: dev
+            type_matlab: "ndi.daq.system"
+            type_python: "Any"
+        output_arguments:
+          - name: ndi_session_obj
+            type_python: "Session"
+        decision_log: "Exact match."
+
+      - name: daqsystem_rm
+        input_arguments:
+          - name: dev
+            type_matlab: "ndi.daq.system"
+            type_python: "Any"
+        output_arguments:
+          - name: ndi_session_obj
+            type_python: "Session"
+        decision_log: "Exact match."
+
+      - name: daqsystem_load
+        input_arguments:
+          - name: name
+            type_matlab: "char (name-value)"
+            type_python: "str | None"
+          - name: kwargs
+            type_matlab: "varargin (name-value pairs)"
+            type_python: "**kwargs"
+        output_arguments:
+          - name: dev
+            type_python: "list[Any] | Any | None"
+        decision_log: "MATLAB uses varargin name-value pairs; Python uses keyword arguments."
+
+      - name: daqsystem_clear
+        input_arguments: []
+        output_arguments:
+          - name: ndi_session_obj
+            type_python: "Session"
+        decision_log: "Exact match."
+
+      - name: newdocument
+        input_arguments:
+          - name: document_type
+            type_matlab: "char"
+            type_python: "str"
+            default: "'base'"
+          - name: properties
+            type_matlab: "varargin"
+            type_python: "**properties"
+        output_arguments:
+          - name: ndi_document_obj
+            type_python: "Document"
+        decision_log: "Exact match."
+
+      - name: searchquery
+        input_arguments: []
+        output_arguments:
+          - name: sq
+            type_python: "Query"
+        decision_log: "Exact match."
+
+      - name: database_add
+        input_arguments:
+          - name: document
+            type_matlab: "ndi.document | cell"
+            type_python: "Document | list[Document]"
+        output_arguments:
+          - name: ndi_session_obj
+            type_python: "Session"
+        decision_log: "Exact match."
+
+      - name: database_rm
+        input_arguments:
+          - name: doc_unique_id
+            type_matlab: "ndi.document | char | cell"
+            type_python: "Document | str | list[Document | str]"
+          - name: error_if_not_found
+            type_matlab: "logical (name-value)"
+            type_python: "bool"
+            default: "False"
+        output_arguments:
+          - name: ndi_session_obj
+            type_python: "Session"
+        decision_log: "Exact match."
+
+      - name: database_search
+        input_arguments:
+          - name: searchparameters
+            type_matlab: "ndi.query"
+            type_python: "Query"
+        output_arguments:
+          - name: ndi_document_obj
+            type_python: "list[Document]"
+        decision_log: "Exact match."
+
+      - name: database_clear
+        input_arguments:
+          - name: areyousure
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments: []
+        decision_log: "Exact match."
+
+      - name: validate_documents
+        input_arguments:
+          - name: document
+            type_matlab: "ndi.document | cell"
+            type_python: "Document | list[Document]"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+          - name: errmsg
+            type_python: "str"
+        decision_log: "Exact match. Returns (bool, str) tuple."
+
+      - name: database_openbinarydoc
+        input_arguments:
+          - name: ndi_document_or_id
+            type_matlab: "ndi.document | char"
+            type_python: "Document | str"
+          - name: filename
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: ndi_binarydoc_obj
+            type_python: "Any"
+        decision_log: >
+          MATLAB has an optional 'autoClose' name-value pair.
+          Python omits this; auto-close is not implemented.
+
+      - name: database_existbinarydoc
+        input_arguments:
+          - name: ndi_document_or_id
+            type_matlab: "ndi.document | char"
+            type_python: "Document | str"
+          - name: filename
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: tf
+            type_python: "bool"
+          - name: file_path
+            type_python: "Path | None"
+        decision_log: "Exact match. Returns (bool, Path | None) tuple."
+
+      - name: database_closebinarydoc
+        input_arguments:
+          - name: ndi_binarydoc_obj
+            type_python: "Any"
+        output_arguments: []
+        decision_log: "Exact match."
+
+      - name: syncgraph_addrule
+        input_arguments:
+          - name: rule
+            type_matlab: "ndi.time.syncrule"
+            type_python: "SyncRule"
+        output_arguments:
+          - name: ndi_session_obj
+            type_python: "Session"
+        decision_log: "Exact match."
+
+      - name: syncgraph_rmrule
+        input_arguments:
+          - name: index
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: ndi_session_obj
+            type_python: "Session"
+        decision_log: "Exact match."
+
+      - name: ingest
+        input_arguments: []
+        output_arguments:
+          - name: b
+            type_python: "bool"
+          - name: errmsg
+            type_python: "str"
+        decision_log: "Exact match. Returns (bool, str) tuple."
+
+      - name: get_ingested_docs
+        input_arguments: []
+        output_arguments:
+          - name: d
+            type_python: "list[Document]"
+        decision_log: "Exact match."
+
+      - name: is_fully_ingested
+        input_arguments: []
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: "Exact match."
+
+      - name: isIngestedInDataset
+        input_arguments: []
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: "Not yet ported to Python."
+        status: "not_yet_ported"
+
+      - name: getprobes
+        input_arguments:
+          - name: classmatch
+            type_matlab: "char (optional)"
+            type_python: "str | None"
+          - name: kwargs
+            type_matlab: "varargin (property-value pairs)"
+            type_python: "**kwargs"
+        output_arguments:
+          - name: probes
+            type_python: "list[Any]"
+        decision_log: "Exact match."
+
+      - name: getelements
+        input_arguments:
+          - name: kwargs
+            type_matlab: "varargin (property-value pairs)"
+            type_python: "**kwargs"
+        output_arguments:
+          - name: elements
+            type_python: "list[Any]"
+        decision_log: "Exact match."
+
+      - name: getpath
+        kind: abstract
+        input_arguments: []
+        output_arguments:
+          - name: p
+            type_python: "Path | None"
+        decision_log: "Exact match. Abstract in both."
+
+      - name: findexpobj
+        input_arguments:
+          - name: obj_name
+            type_matlab: "string"
+            type_python: "str"
+          - name: obj_classname
+            type_matlab: "string"
+            type_python: "str"
+        output_arguments:
+          - name: obj
+            type_python: "Any"
+        decision_log: "Not yet ported to Python."
+        status: "not_yet_ported"
+
+      - name: eq
+        input_arguments:
+          - name: other
+            type_python: "Any"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: "Mapped to Python __eq__ dunder method."
+
+      - name: creator_args
+        kind: abstract
+        input_arguments: []
+        output_arguments:
+          - name: inputs
+            type_python: "list[Any]"
+        decision_log: "Exact match. Abstract in both."
+
+    # --- Static methods ---
+    static_methods:
+      - name: docinput2docs
+        input_arguments:
+          - name: ndi_session_obj
+            type_python: "Session"
+          - name: doc_input
+            type_python: "str | Document | list[str | Document]"
+        output_arguments:
+          - name: doc_list
+            type_python: "list[Document]"
+        decision_log: >
+          MATLAB is a static method. Python implements as instance method
+          _docinput2docs (protected convention). Functionality is equivalent.
+
+    # --- Protected methods ---
+    protected_methods:
+      - name: update_syncgraph_in_db
+        input_arguments: []
+        output_arguments: []
+        decision_log: "Python uses _update_syncgraph_in_db (leading underscore)."
+
+  # =========================================================================
+  # ndi.session.dir  (directory-based session)
+  # =========================================================================
+  - name: dir
+    type: class
+    matlab_path: "+ndi/+session/dir.m"
+    python_path: "ndi/session/dir.py"
+    python_class: "DirSession"
+    inherits: "ndi.session"
+
+    properties:
+      - name: path
+        type_matlab: "char"
+        type_python: "Path"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: "Implemented as @property in Python."
+
+    methods:
+      - name: dir
+        kind: constructor
+        input_arguments:
+          - name: reference
+            type_matlab: "char"
+            type_python: "str | Path"
+          - name: path
+            type_matlab: "char"
+            type_python: "str | Path | None"
+          - name: session_id
+            type_matlab: "(undocumented)"
+            type_python: "str | None"
+        output_arguments:
+          - name: ndi_session_dir_obj
+            type_python: "DirSession"
+        decision_log: >
+          Supports MATLAB calling conventions: dir(path) and dir(reference, path).
+          session_id is an undocumented internal parameter in both languages.
+
+      - name: getpath
+        input_arguments: []
+        output_arguments:
+          - name: p
+            type_python: "Path"
+        decision_log: "Exact match."
+
+      - name: ndipathname
+        input_arguments: []
+        output_arguments:
+          - name: p
+            type_python: "Path"
+        decision_log: "Exact match."
+
+      - name: eq
+        input_arguments:
+          - name: other
+            type_python: "Any"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: "Mapped to Python __eq__ dunder method."
+
+      - name: creator_args
+        input_arguments: []
+        output_arguments:
+          - name: inputs
+            type_python: "list[Any]"
+        decision_log: "Exact match."
+
+      - name: deleteSessionDataStructures
+        input_arguments:
+          - name: areYouSure
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "False"
+          - name: askUserToConfirm
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "True"
+        output_arguments:
+          - name: obj_out
+            type_python: "DirSession | None"
+        decision_log: >
+          MATLAB name is deleteSessionDataStructures (camelCase).
+          Python was previously delete_session_data_structures; renamed to match MATLAB.
+
+    static_methods:
+      - name: exists
+        input_arguments:
+          - name: path
+            type_matlab: "char"
+            type_python: "str | Path"
+        output_arguments:
+          - name: exists
+            type_python: "bool"
+        decision_log: "Exact match."
+
+      - name: database_erase
+        input_arguments:
+          - name: ndi_session_dir_obj
+            type_python: "DirSession"
+          - name: areyousure
+            type_matlab: "char"
+            type_python: "str"
+            default: "'no'"
+        output_arguments: []
+        decision_log: "Exact match."
+
+  # =========================================================================
+  # ndi.session.sessiontable
+  # =========================================================================
+  - name: sessiontable
+    type: class
+    matlab_path: "+ndi/+session/sessiontable.m"
+    python_path: "ndi/session/sessiontable.py"
+    python_class: "SessionTable"
+
+    methods:
+      - name: sessiontable
+        kind: constructor
+        input_arguments:
+          - name: table_path
+            type_python: "Path | None"
+        output_arguments:
+          - name: ndi_sessiontable_obj
+            type_python: "SessionTable"
+        decision_log: "Exact match."
+
+      - name: getsessiontable
+        input_arguments: []
+        output_arguments:
+          - name: t
+            type_matlab: "struct"
+            type_python: "list[dict[str, str]]"
+        decision_log: >
+          MATLAB name is getsessiontable (all lowercase, no separators).
+          Python was previously get_session_table; renamed to match MATLAB.
+
+      - name: getsessionpath
+        input_arguments:
+          - name: session_id
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: thepath
+            type_python: "str | None"
+        decision_log: >
+          MATLAB name is getsessionpath (all lowercase, no separators).
+          Python was previously get_session_path; renamed to match MATLAB.
+
+      - name: addtableentry
+        input_arguments:
+          - name: session_id
+            type_matlab: "char"
+            type_python: "str"
+          - name: path
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments: []
+        decision_log: >
+          MATLAB name is addtableentry (all lowercase, no separators).
+          Python was previously add_entry; renamed to match MATLAB.
+
+      - name: removetableentry
+        input_arguments:
+          - name: session_id
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments: []
+        decision_log: >
+          MATLAB name is removetableentry (all lowercase, no separators).
+          Python was previously remove_entry; renamed to match MATLAB.
+
+      - name: checktable
+        input_arguments: []
+        output_arguments:
+          - name: b
+            type_python: "bool"
+          - name: results
+            type_python: "list[dict[str, Any]]"
+        decision_log: >
+          MATLAB name is checktable (all lowercase, no separators).
+          Python was previously check_table; renamed to match MATLAB.
+
+      - name: isvalidtable
+        input_arguments:
+          - name: t
+            type_matlab: "struct (optional)"
+            type_python: "list[dict[str, str]] | None"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+          - name: msg
+            type_python: "str"
+        decision_log: >
+          MATLAB name is isvalidtable (all lowercase, no separators).
+          Python was previously is_valid_table; renamed to match MATLAB.
+
+      - name: backupsessiontable
+        input_arguments: []
+        output_arguments:
+          - name: backup_path
+            type_python: "Path | None"
+        decision_log: >
+          MATLAB name is backupsessiontable (all lowercase, no separators).
+          Python was previously backup; renamed to match MATLAB.
+          Python returns the backup path; MATLAB returns nothing.
+
+      - name: backupfilelist
+        input_arguments: []
+        output_arguments:
+          - name: f
+            type_python: "list[Path]"
+        decision_log: >
+          MATLAB name is backupfilelist (all lowercase, no separators).
+          Python was previously backup_file_list; renamed to match MATLAB.
+
+      - name: clearsessiontable
+        input_arguments:
+          - name: makebackup
+            type_matlab: "logical (optional)"
+            type_python: "bool"
+            default: "False"
+        output_arguments: []
+        decision_log: >
+          MATLAB name is clearsessiontable (all lowercase, no separators).
+          Python was previously clear; renamed to match MATLAB.
+
+    static_methods:
+      - name: localtablefilename
+        input_arguments: []
+        output_arguments:
+          - name: f
+            type_python: "Path"
+        decision_log: >
+          MATLAB name is localtablefilename (all lowercase, no separators).
+          Python was previously local_table_filename; renamed to match MATLAB.
+
+    protected_methods:
+      - name: writesessiontable
+        input_arguments:
+          - name: t
+            type_python: "list[dict[str, str]]"
+        output_arguments: []
+        decision_log: >
+          MATLAB name is writesessiontable (all lowercase, no separators).
+          Python was previously _write_table; renamed to _writesessiontable.
+
+  # =========================================================================
+  # ndi.session.mock
+  # =========================================================================
+  - name: mock
+    type: class
+    matlab_path: "+ndi/+session/mock.m"
+    python_path: "ndi/session/mock.py"
+    python_class: "MockSession"
+    inherits: "ndi.session.dir"
+
+    methods:
+      - name: mock
+        kind: constructor
+        input_arguments: []
+        output_arguments:
+          - name: ndi_session_mock_obj
+            type_python: "MockSession"
+        decision_log: >
+          MATLAB mock() takes no arguments; Python constructor adds
+          reference, prefix, and cleanup parameters for flexibility.
+          This is a Python-specific enhancement documented here.

@@ -206,7 +206,7 @@ class DirSession(Session):
         """
         return [self._reference, str(self._path), self._identifier]
 
-    def delete_session_data_structures(
+    def deleteSessionDataStructures(
         self,
         are_you_sure: bool = False,
         ask_user: bool = True,

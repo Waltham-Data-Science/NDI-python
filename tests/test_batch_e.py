@@ -177,139 +177,139 @@ class TestSessionTable:
         assert table._table_path == table_dir
 
     def test_empty_table_on_new(self, table):
-        result = table.get_session_table()
+        result = table.getsessiontable()
         assert result == []
 
     def test_add_entry(self, table):
-        table.add_entry("sess1", "/data/experiment1")
-        entries = table.get_session_table()
+        table.addtableentry("sess1", "/data/experiment1")
+        entries = table.getsessiontable()
         assert len(entries) == 1
         assert entries[0]["session_id"] == "sess1"
         assert entries[0]["path"] == "/data/experiment1"
 
     def test_add_multiple_entries(self, table):
-        table.add_entry("sess1", "/data/exp1")
-        table.add_entry("sess2", "/data/exp2")
-        entries = table.get_session_table()
+        table.addtableentry("sess1", "/data/exp1")
+        table.addtableentry("sess2", "/data/exp2")
+        entries = table.getsessiontable()
         assert len(entries) == 2
 
     def test_add_replaces_existing(self, table):
-        table.add_entry("sess1", "/old/path")
-        table.add_entry("sess1", "/new/path")
-        entries = table.get_session_table()
+        table.addtableentry("sess1", "/old/path")
+        table.addtableentry("sess1", "/new/path")
+        entries = table.getsessiontable()
         assert len(entries) == 1
         assert entries[0]["path"] == "/new/path"
 
-    def test_get_session_path_found(self, table):
-        table.add_entry("sess1", "/data/exp1")
-        assert table.get_session_path("sess1") == "/data/exp1"
+    def test_getsessionpath_found(self, table):
+        table.addtableentry("sess1", "/data/exp1")
+        assert table.getsessionpath("sess1") == "/data/exp1"
 
-    def test_get_session_path_not_found(self, table):
-        assert table.get_session_path("nonexistent") is None
+    def test_getsessionpath_not_found(self, table):
+        assert table.getsessionpath("nonexistent") is None
 
     def test_remove_entry(self, table):
-        table.add_entry("sess1", "/data/exp1")
-        table.add_entry("sess2", "/data/exp2")
-        table.remove_entry("sess1")
-        entries = table.get_session_table()
+        table.addtableentry("sess1", "/data/exp1")
+        table.addtableentry("sess2", "/data/exp2")
+        table.removetableentry("sess1")
+        entries = table.getsessiontable()
         assert len(entries) == 1
         assert entries[0]["session_id"] == "sess2"
 
     def test_remove_nonexistent_entry(self, table):
-        table.add_entry("sess1", "/data/exp1")
-        table.remove_entry("nonexistent")
-        entries = table.get_session_table()
+        table.addtableentry("sess1", "/data/exp1")
+        table.removetableentry("nonexistent")
+        entries = table.getsessiontable()
         assert len(entries) == 1
 
     def test_clear(self, table):
-        table.add_entry("sess1", "/data/exp1")
-        table.add_entry("sess2", "/data/exp2")
-        table.clear()
-        entries = table.get_session_table()
+        table.addtableentry("sess1", "/data/exp1")
+        table.addtableentry("sess2", "/data/exp2")
+        table.clearsessiontable()
+        entries = table.getsessiontable()
         assert len(entries) == 0
 
     def test_clear_with_backup(self, table):
-        table.add_entry("sess1", "/data/exp1")
-        table.clear(make_backup=True)
-        entries = table.get_session_table()
+        table.addtableentry("sess1", "/data/exp1")
+        table.clearsessiontable(make_backup=True)
+        entries = table.getsessiontable()
         assert len(entries) == 0
         # Backup file should exist
-        backups = table.backup_file_list()
+        backups = table.backupfilelist()
         assert len(backups) == 1
 
     def test_backup(self, table):
-        table.add_entry("sess1", "/data/exp1")
-        backup_path = table.backup()
+        table.addtableentry("sess1", "/data/exp1")
+        backup_path = table.backupsessiontable()
         assert backup_path is not None
         assert backup_path.exists()
         assert "_bkup001" in backup_path.name
 
     def test_backup_numbered(self, table):
-        table.add_entry("sess1", "/data/exp1")
-        table.backup()
-        table.backup()
-        backups = table.backup_file_list()
+        table.addtableentry("sess1", "/data/exp1")
+        table.backupsessiontable()
+        table.backupsessiontable()
+        backups = table.backupfilelist()
         assert len(backups) == 2
         assert "_bkup001" in backups[0].name
         assert "_bkup002" in backups[1].name
 
     def test_backup_no_file(self, table):
-        result = table.backup()
+        result = table.backupsessiontable()
         assert result is None
 
-    def test_check_table_valid(self, table, tmp_path):
+    def test_checktable_valid(self, table, tmp_path):
         # Use a real existing directory as the path
-        table.add_entry("sess1", str(tmp_path))
-        valid, results = table.check_table()
+        table.addtableentry("sess1", str(tmp_path))
+        valid, results = table.checktable()
         assert valid is True
         assert len(results) == 1
         assert results[0]["exists"] is True
 
-    def test_check_table_nonexistent_path(self, table):
-        table.add_entry("sess1", "/nonexistent/path")
-        valid, results = table.check_table()
+    def test_checktable_nonexistent_path(self, table):
+        table.addtableentry("sess1", "/nonexistent/path")
+        valid, results = table.checktable()
         assert valid is True
         assert len(results) == 1
         assert results[0]["exists"] is False
 
-    def test_is_valid_table(self, table):
+    def test_isvalidtable(self, table):
         entries = [{"session_id": "a", "path": "/b"}]
-        valid, msg = table.is_valid_table(entries)
+        valid, msg = table.isvalidtable(entries)
         assert valid is True
         assert msg == ""
 
-    def test_is_valid_table_missing_path(self, table):
+    def test_isvalidtable_missing_path(self, table):
         entries = [{"session_id": "a"}]
-        valid, msg = table.is_valid_table(entries)
+        valid, msg = table.isvalidtable(entries)
         assert valid is False
         assert "path" in msg
 
-    def test_is_valid_table_missing_session_id(self, table):
+    def test_isvalidtable_missing_session_id(self, table):
         entries = [{"path": "/b"}]
-        valid, msg = table.is_valid_table(entries)
+        valid, msg = table.isvalidtable(entries)
         assert valid is False
         assert "session_id" in msg
 
     def test_add_empty_session_id_raises(self, table):
         with pytest.raises(ValueError, match="session_id"):
-            table.add_entry("", "/data/exp1")
+            table.addtableentry("", "/data/exp1")
 
     def test_add_empty_path_raises(self, table):
         with pytest.raises(ValueError, match="path"):
-            table.add_entry("sess1", "")
+            table.addtableentry("sess1", "")
 
     def test_persistence_across_instances(self, table_dir):
         t1 = SessionTable(table_path=table_dir)
-        t1.add_entry("sess1", "/data/exp1")
+        t1.addtableentry("sess1", "/data/exp1")
 
         t2 = SessionTable(table_path=table_dir)
-        assert t2.get_session_path("sess1") == "/data/exp1"
+        assert t2.getsessionpath("sess1") == "/data/exp1"
 
     def test_repr(self, table):
         assert "SessionTable" in repr(table)
 
-    def test_local_table_filename(self):
-        path = SessionTable.local_table_filename()
+    def test_localtablefilename(self):
+        path = SessionTable.localtablefilename()
         assert "local_sessiontable" in path.name
         assert path.suffix == ".txt"
 
