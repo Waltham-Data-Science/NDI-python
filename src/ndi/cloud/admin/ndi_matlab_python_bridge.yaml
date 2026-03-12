@@ -1,0 +1,219 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/cloud/admin/
+# The Primary Contract for the ndi.cloud.admin namespace.
+#
+# Covers: doi.py, crossref.py
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "N/A (no user-facing counting)"
+
+# =============================================================================
+# Classes — crossref.py
+# Maps to: +cloud/+admin/+crossref/Constants.m
+# =============================================================================
+classes:
+
+  - name: CrossrefConstants
+    type: dataclass
+    matlab_path: "+ndi/+cloud/+admin/+crossref/Constants.m"
+    python_path: "ndi/cloud/admin/crossref.py"
+    python_class: "CrossrefConstants"
+    properties:
+      - name: DOI_PREFIX
+        type_python: "str"
+        default: "'10.63884'"
+      - name: DATABASE_DOI
+        type_python: "str"
+        default: "'10.63884/ndic.00000'"
+      - name: DATABASE_URL
+        type_python: "str"
+        default: "'https://ndi-cloud.com'"
+      - name: DATABASE_TITLE
+        type_python: "str"
+        default: "'NDI Cloud Open Datasets'"
+      - name: DATASET_BASE_URL
+        type_python: "str"
+        default: "'https://www.ndi-cloud.com/datasets/'"
+      - name: DEPOSIT_URL
+        type_python: "str"
+        default: "'https://doi.crossref.org/servlet/deposit'"
+      - name: TEST_DEPOSIT_URL
+        type_python: "str"
+        default: "'https://test.crossref.org/servlet/deposit'"
+    decision_log: >
+      MATLAB uses a Constants class with constant properties.
+      Python uses a frozen dataclass. Field names exact match.
+
+# =============================================================================
+# Functions — doi.py
+# Maps to: +cloud/+admin/
+# =============================================================================
+functions:
+
+  - name: createNewDOI
+    matlab_path: "+ndi/+cloud/+admin/createNewDOI.m"
+    python_path: "ndi/cloud/admin/doi.py"
+    input_arguments:
+      - name: prefix
+        type_matlab: "char"
+        type_python: "str"
+        default: "''"
+    output_arguments:
+      - name: doi
+        type_python: "str"
+    decision_log: "Exact match."
+
+  - name: registerDatasetDOI
+    matlab_path: "+ndi/+cloud/+admin/registerDatasetDOI.m"
+    python_path: "ndi/cloud/admin/doi.py"
+    input_arguments:
+      - name: cloud_dataset_id
+        type_matlab: "char"
+        type_python: "str"
+      - name: use_test
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "False"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: "Exact match."
+
+  - name: checkSubmission
+    matlab_path: "+ndi/+cloud/+admin/checkSubmission.m"
+    python_path: "ndi/cloud/admin/doi.py"
+    input_arguments:
+      - name: filename
+        type_matlab: "char"
+        type_python: "str"
+      - name: data_type
+        type_matlab: "char"
+        type_python: "str"
+        default: "'result'"
+      - name: use_test
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "False"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: "Exact match."
+
+  # --- crossref.py functions ---
+  - name: createDoiBatchSubmission
+    matlab_path: "+ndi/+cloud/+admin/+crossref/createDoiBatchSubmission.m"
+    python_path: "ndi/cloud/admin/crossref.py"
+    input_arguments:
+      - name: dataset_metadata
+        type_matlab: "struct"
+        type_python: "dict[str, Any]"
+      - name: doi
+        type_matlab: "char"
+        type_python: "str"
+    output_arguments:
+      - name: xml
+        type_python: "str"
+    decision_log: "Exact match."
+
+  - name: convertCloudDatasetToCrossrefDataset
+    matlab_path: "+ndi/+cloud/+admin/+crossref/convertCloudDatasetToCrossrefDataset.m"
+    python_path: "ndi/cloud/admin/crossref.py"
+    input_arguments:
+      - name: dataset_metadata
+        type_matlab: "struct"
+        type_python: "dict[str, Any]"
+    output_arguments:
+      - name: crossref_metadata
+        type_python: "dict[str, Any]"
+    decision_log: "Exact match."
+
+  - name: convertContributors
+    matlab_path: "+ndi/+cloud/+admin/+crossref/+conversion/convertContributors.m"
+    python_path: "ndi/cloud/admin/crossref.py"
+    input_arguments:
+      - name: dataset_metadata
+        type_matlab: "struct"
+        type_python: "dict[str, Any]"
+    output_arguments:
+      - name: contributors
+        type_python: "list[dict[str, Any]]"
+    decision_log: >
+      MATLAB places this in +crossref/+conversion. Python places all
+      conversion functions in crossref.py. Exact name match.
+
+  - name: convertDatasetDate
+    matlab_path: "+ndi/+cloud/+admin/+crossref/+conversion/convertDatasetDate.m"
+    python_path: "ndi/cloud/admin/crossref.py"
+    input_arguments:
+      - name: dataset_metadata
+        type_matlab: "struct"
+        type_python: "dict[str, Any]"
+    output_arguments:
+      - name: date_info
+        type_python: "dict[str, str]"
+    decision_log: >
+      MATLAB places this in +crossref/+conversion. Python places it
+      in crossref.py. Exact name match.
+
+  - name: convertFunding
+    matlab_path: "+ndi/+cloud/+admin/+crossref/+conversion/convertFunding.m"
+    python_path: "ndi/cloud/admin/crossref.py"
+    input_arguments:
+      - name: dataset_metadata
+        type_matlab: "struct"
+        type_python: "dict[str, Any]"
+    output_arguments:
+      - name: funding
+        type_python: "list[dict[str, str]]"
+    decision_log: >
+      MATLAB places this in +crossref/+conversion. Python places it
+      in crossref.py. Exact name match.
+
+  - name: convertLicense
+    matlab_path: "+ndi/+cloud/+admin/+crossref/+conversion/convertLicense.m"
+    python_path: "ndi/cloud/admin/crossref.py"
+    input_arguments:
+      - name: dataset_metadata
+        type_matlab: "struct"
+        type_python: "dict[str, Any]"
+    output_arguments:
+      - name: license_info
+        type_python: "dict[str, str]"
+    decision_log: >
+      MATLAB places this in +crossref/+conversion. Python places it
+      in crossref.py. Exact name match.
+
+  - name: convertRelatedPublications
+    matlab_path: "+ndi/+cloud/+admin/+crossref/+conversion/convertRelatedPublications.m"
+    python_path: "ndi/cloud/admin/crossref.py"
+    input_arguments:
+      - name: dataset_metadata
+        type_matlab: "struct"
+        type_python: "dict[str, Any]"
+    output_arguments:
+      - name: publications
+        type_python: "list[dict[str, Any]]"
+    decision_log: >
+      MATLAB places this in +crossref/+conversion. Python places it
+      in crossref.py. Exact name match.
+
+# =============================================================================
+# Not-yet-ported MATLAB functions
+# =============================================================================
+not_yet_ported:
+
+  - name: createDatabaseMetadata
+    matlab_path: "+ndi/+cloud/+admin/+crossref/createDatabaseMetadata.m"
+    status: not_yet_ported
+    decision_log: "MATLAB function to create NDI Cloud database-level metadata for Crossref."
+
+  - name: createDoiBatchHeadElement
+    matlab_path: "+ndi/+cloud/+admin/+crossref/createDoiBatchHeadElement.m"
+    status: not_yet_ported
+    decision_log: >
+      MATLAB helper for creating the XML head element in DOI batch submissions.
+      May be inlined within createDoiBatchSubmission in Python.
