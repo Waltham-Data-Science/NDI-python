@@ -1,5 +1,5 @@
 """
-ndi.time.syncrule.randomPulses - Sync rule based on random pulse sequences on a shared channel.
+ndi.time.syncrule.randomPulses - Sync rule for random pulse sequences.
 
 This module provides the RandomPulses sync rule that synchronizes two DAQ
 systems that recorded a shared random pulse sequence.
@@ -19,18 +19,7 @@ from ..timemapping import TimeMapping
 
 
 def _parse_channel(ch_str: str) -> tuple[str, int]:
-    """
-    Parse a channel string like 'dep1' into ('dep', 1).
-
-    Args:
-        ch_str: Channel string (e.g. 'dep1', 'mk1')
-
-    Returns:
-        Tuple of (channel_type, channel_number)
-
-    Raises:
-        ValueError: If the channel string has no digits.
-    """
+    """Parse a channel string like 'dep1' into ('dep', 1)."""
     match = re.search(r"\d", ch_str)
     if match is None:
         raise ValueError(f"Invalid channel string: {ch_str}")
@@ -40,21 +29,13 @@ def _parse_channel(ch_str: str) -> tuple[str, int]:
 
 def _sync_random_triggers(t1: np.ndarray, t2: np.ndarray) -> tuple[float, float]:
     """
-    Find a linear mapping T1 = scale * T2 + shift by matching random pulse sequences.
+    Find a linear mapping T1 = scale * T2 + shift by matching random pulses.
 
-    This is a simplified version of ndi.time.fun.syncRandomTriggers. It computes
-    inter-pulse intervals, cross-correlates to find the best alignment, then
-    performs a least-squares fit.
-
-    Args:
-        t1: Sorted trigger times from DAQ system 1.
-        t2: Sorted trigger times from DAQ system 2.
+    Uses inter-pulse interval cross-correlation to find the best alignment,
+    then performs a least-squares fit.
 
     Returns:
-        Tuple of (shift, scale) where T1 ≈ scale * T2 + shift.
-
-    Raises:
-        ValueError: If triggers cannot be matched.
+        Tuple of (shift, scale) where T1 ~ scale * T2 + shift.
     """
     if len(t1) < 2 or len(t2) < 2:
         raise ValueError("Need at least 2 triggers in each sequence to synchronize.")
@@ -69,7 +50,7 @@ def _sync_random_triggers(t1: np.ndarray, t2: np.ndarray) -> tuple[float, float]
 
     # Cross-correlate to find best offset
     corr = np.correlate(ipi1_norm, ipi2_norm, mode="full")
-    best_lag = np.argmax(corr) - (len(ipi2_norm) - 1)
+    best_lag = int(np.argmax(corr)) - (len(ipi2_norm) - 1)
 
     # Determine overlapping region
     if best_lag >= 0:
@@ -92,13 +73,11 @@ def _sync_random_triggers(t1: np.ndarray, t2: np.ndarray) -> tuple[float, float]
     # Validate fit quality
     residuals = t1_matched - (scale * t2_matched + shift)
     rms_error = float(np.sqrt(np.mean(residuals**2)))
-
-    # If the fit is poor, the sequences likely don't match
     median_ipi = float(np.median(np.concatenate([ipi1, ipi2])))
     if median_ipi > 0 and rms_error > 0.1 * median_ipi:
         raise ValueError(
-            f"Poor fit quality (RMS={rms_error:.4f}, median IPI={median_ipi:.4f}). "
-            "Sequences may not match."
+            f"Poor fit quality (RMS={rms_error:.4f}, "
+            f"median IPI={median_ipi:.4f}). Sequences may not match."
         )
 
     return shift, scale
@@ -117,8 +96,8 @@ class RandomPulses(SyncRule):
         daqsystem2_name (str): Name of the second DAQ system.
         daqsystem_ch1 (str): Channel to read on DAQ system 1 (e.g., 'dep1').
         daqsystem_ch2 (str): Channel to read on DAQ system 2 (e.g., 'mk1').
-        epochclocktype (str): The epoch clock type to consider (default: 'dev_local_time').
-        errorOnFailure (bool): If True, raise on failure; if False, return (None, None).
+        epochclocktype (str): The epoch clock type to consider.
+        errorOnFailure (bool): If True, raise on failure.
 
     Example:
         >>> rule = RandomPulses({
@@ -134,13 +113,6 @@ class RandomPulses(SyncRule):
         parameters: dict[str, Any] | None = None,
         identifier: str | None = None,
     ):
-        """
-        Create a new RandomPulses sync rule.
-
-        Args:
-            parameters: Dict with DAQ system names, channels, and options.
-            identifier: Optional identifier.
-        """
         if parameters is None:
             parameters = {
                 "daqsystem1_name": "",
@@ -150,19 +122,9 @@ class RandomPulses(SyncRule):
                 "epochclocktype": "dev_local_time",
                 "errorOnFailure": True,
             }
-
         super().__init__(parameters, identifier)
 
     def is_valid_parameters(self, parameters: dict[str, Any]) -> tuple[bool, str]:
-        """
-        Validate parameters for RandomPulses.
-
-        Args:
-            parameters: Dict to validate.
-
-        Returns:
-            Tuple of (is_valid, error_message).
-        """
         if not isinstance(parameters, dict):
             return False, "Parameters must be a dictionary"
 
@@ -174,12 +136,10 @@ class RandomPulses(SyncRule):
             "epochclocktype",
             "errorOnFailure",
         ]
-
         for field in required_fields:
             if field not in parameters:
                 return False, f"Missing required field: {field}"
 
-        # String fields
         for field in [
             "daqsystem1_name",
             "daqsystem2_name",
@@ -190,7 +150,7 @@ class RandomPulses(SyncRule):
             if not isinstance(parameters[field], str):
                 return (
                     False,
-                    "daqsystem names, channels, and epochclocktype must be strings.",
+                    "daqsystem names, channels, and epochclocktype " "must be strings.",
                 )
 
         if not isinstance(parameters["errorOnFailure"], (bool, int)):
@@ -220,18 +180,13 @@ class RandomPulses(SyncRule):
         """
         Apply the sync rule to obtain a cost and mapping between two epoch nodes.
 
-        Given two epoch nodes and the DAQ system for node A, reads random pulse
-        trigger events from each epoch and computes a linear time mapping.
-
         Args:
-            epochnode_a: First epoch node dict with keys: objectname, epoch_id,
-                epoch_clock, underlying_epochs.
+            epochnode_a: First epoch node dict.
             epochnode_b: Second epoch node dict.
             daqsystem_a: The ndi.daq.system corresponding to epochnode_a.
 
         Returns:
-            Tuple of (cost, mapping) where cost=1.0 on success, or (None, None)
-            if synchronization is not possible.
+            Tuple of (cost, mapping) or (None, None) if no sync possible.
         """
         p = self._parameters
 
@@ -250,8 +205,12 @@ class RandomPulses(SyncRule):
         # Check epoch clock type
         clock_a = epochnode_a.get("epoch_clock", {})
         clock_b = epochnode_b.get("epoch_clock", {})
-        clock_type_a = clock_a.get("type", "") if isinstance(clock_a, dict) else getattr(clock_a, "type", "")
-        clock_type_b = clock_b.get("type", "") if isinstance(clock_b, dict) else getattr(clock_b, "type", "")
+        clock_type_a = (
+            clock_a.get("type", "") if isinstance(clock_a, dict) else getattr(clock_a, "type", "")
+        )
+        clock_type_b = (
+            clock_b.get("type", "") if isinstance(clock_b, dict) else getattr(clock_b, "type", "")
+        )
 
         if clock_type_a != p["epochclocktype"] or clock_type_b != p["epochclocktype"]:
             return None, None
@@ -275,7 +234,6 @@ class RandomPulses(SyncRule):
                 raise RuntimeError("Could not load both DAQ systems.")
             return None, None
 
-        # Unwrap if in list/cell
         if isinstance(daqsystem1, list):
             daqsystem1 = daqsystem1[0]
         if isinstance(daqsystem2, list):
@@ -283,7 +241,7 @@ class RandomPulses(SyncRule):
 
         # 2. Check for existing syncrule_mapping in database
         try:
-            from ndi.common import Query
+            from ndi.query import Query
 
             q_existing = (
                 Query("").isa("syncrule_mapping")
@@ -324,7 +282,6 @@ class RandomPulses(SyncRule):
             type1, ch1 = _parse_channel(p["daqsystem_ch1"])
             type2, ch2 = _parse_channel(p["daqsystem_ch2"])
 
-            # Determine which epochnode maps to which system
             if node_a_is_1:
                 epochnode_1 = epochnode_a
                 epochnode_2 = epochnode_b
@@ -360,17 +317,17 @@ class RandomPulses(SyncRule):
 
             # Build mapping from A to B
             if node_a_is_1:
-                # Want A→B, i.e. T1→T2
-                # T1 = scale * T2 + shift → T2 = (T1 - shift) / scale
+                # Want A->B, i.e. T1->T2
+                # T1 = scale * T2 + shift -> T2 = (T1 - shift) / scale
                 mapping = TimeMapping([1.0 / scale, -shift / scale])
             else:
-                # Want A→B, i.e. T2→T1
+                # Want A->B, i.e. T2->T1
                 # T1 = scale * T2 + shift
                 mapping = TimeMapping([scale, shift])
 
             return 1.0, mapping
 
-        except Exception as exc:
+        except Exception:
             if p.get("errorOnFailure", True):
                 raise
             return None, None

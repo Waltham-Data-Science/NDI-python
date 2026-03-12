@@ -306,7 +306,7 @@ classes:
             type_python: "list[str]"
         decision_log: >
           Exact match. Returns ['ndi.daq.system.mfdaq', 'DAQSystem'].
-          Note: MATLAB returns {'ndi.daq.system.mfdaq'} — more
+          Note: MATLAB returns {'ndi.daq.system.mfdaq'} - more
           restrictive than other syncrules.
 
       - name: ineligible_epochsets

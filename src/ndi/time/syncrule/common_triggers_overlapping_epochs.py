@@ -1,5 +1,5 @@
 """
-ndi.time.syncrule.commonTriggersOverlappingEpochs - Sync rule based on common triggers in overlapping embedded epochs.
+ndi.time.syncrule.commonTriggersOverlappingEpochs - Sync rule for common triggers.
 
 This module provides the CommonTriggersOverlappingEpochs sync rule that
 synchronizes two DAQ systems by finding a linear time mapping from shared
@@ -21,18 +21,7 @@ from ..timemapping import TimeMapping
 
 
 def _parse_channel(ch_str: str) -> tuple[str, int]:
-    """
-    Parse a channel string like 'dep1' into ('dep', 1).
-
-    Args:
-        ch_str: Channel string (e.g. 'dep1', 'mk1')
-
-    Returns:
-        Tuple of (channel_type, channel_number)
-
-    Raises:
-        ValueError: If the channel string has no digits.
-    """
+    """Parse a channel string like 'dep1' into ('dep', 1)."""
     match = re.search(r"\d", ch_str)
     if match is None:
         raise ValueError(f"Invalid channel string: {ch_str}")
@@ -42,31 +31,16 @@ def _parse_channel(ch_str: str) -> tuple[str, int]:
 
 def _get_parents(files: list[str]) -> list[str]:
     """Return unique parent directories of the given file paths."""
-    parents: set[str] = set()
-    for f in files:
-        parents.add(os.path.dirname(f))
-    return list(parents)
+    return list({os.path.dirname(f) for f in files})
 
 
 def _get_grandparents(files: list[str]) -> list[str]:
     """Return unique grandparent directories of the given file paths."""
-    grandparents: set[str] = set()
-    for f in files:
-        grandparents.add(os.path.dirname(os.path.dirname(f)))
-    return list(grandparents)
+    return list({os.path.dirname(os.path.dirname(f)) for f in files})
 
 
 def _count_embedded_matches(files_deep: list[str], files_shallow: list[str]) -> int:
-    """
-    Count how many files in files_deep have a grandparent matching a parent of files_shallow.
-
-    Args:
-        files_deep: Files whose grandparents are checked.
-        files_shallow: Files whose parents are checked against.
-
-    Returns:
-        Number of files in files_deep with a matching grandparent.
-    """
+    """Count files in files_deep whose grandparent matches a parent of files_shallow."""
     parent_set = set(_get_parents(files_shallow))
     count = 0
     for f in files_deep:
@@ -80,34 +54,19 @@ def _sync_triggers(t1: np.ndarray, t2: np.ndarray) -> tuple[float, float]:
     """
     Find a linear mapping T2 = scale * T1 + shift via least-squares fit.
 
-    This is a simplified version of vlt.time.syncTriggers.
-
-    Args:
-        t1: Sorted trigger times from DAQ system 1.
-        t2: Sorted trigger times from DAQ system 2.
-
     Returns:
-        Tuple of (shift, scale) where T2 ≈ scale * T1 + shift.
-
-    Raises:
-        ValueError: If triggers cannot be matched.
+        Tuple of (shift, scale) where T2 ~ scale * T1 + shift.
     """
     if len(t1) == 0 or len(t2) == 0:
         raise ValueError("Empty trigger arrays cannot be synchronized.")
-
     if len(t1) != len(t2):
         raise ValueError(
-            f"Trigger count mismatch: {len(t1)} vs {len(t2)}. "
-            "Cannot compute linear mapping."
+            f"Trigger count mismatch: {len(t1)} vs {len(t2)}. " "Cannot compute linear mapping."
         )
-
-    # Least-squares linear fit: T2 = scale * T1 + shift
-    # Using numpy polyfit (degree 1): coefficients [scale, shift]
     coeffs = np.polyfit(t1, t2, 1)
-    scale = coeffs[0]
-    shift = coeffs[1]
-
-    return float(shift), float(scale)
+    scale = float(coeffs[0])
+    shift = float(coeffs[1])
+    return shift, scale
 
 
 def _get_underlying_files(epochnode: dict[str, Any]) -> list[str]:
@@ -115,14 +74,12 @@ def _get_underlying_files(epochnode: dict[str, Any]) -> list[str]:
     underlying = epochnode.get("underlying_epochs")
     if not underlying:
         return []
-
     if isinstance(underlying, dict):
         files = underlying.get("underlying", [])
     elif hasattr(underlying, "underlying"):
         files = underlying.underlying
     else:
         return []
-
     if isinstance(files, list):
         return [str(f) for f in files]
     return []
@@ -133,25 +90,17 @@ class CommonTriggersOverlappingEpochs(SyncRule):
     Synchronization rule based on common triggers in overlapping embedded epochs.
 
     This sync rule assumes that the 'dev_local_time' of the DAQ systems reflects
-    a shared absolute time reference (e.g., time of day) such that sorting disjoint
-    trigger events chronologically aligns them correctly. It is a special case rule
-    for systems that have this property.
-
-    It works by:
-    1. Verifying the two epoch nodes belong to the configured DAQ system pair.
-    2. Checking for embedded file overlap (grandparent/parent directory matching).
-    3. Expanding the epoch group by finding all connected overlapping epochs.
-    4. Reading trigger events from the expanded epoch group.
-    5. Computing a linear time mapping via least-squares fit.
+    a shared absolute time reference (e.g., time of day) such that sorting
+    disjoint trigger events chronologically aligns them correctly.
 
     Parameters:
         daqsystem1_name (str): Name of the first DAQ system.
         daqsystem2_name (str): Name of the second DAQ system.
         daqsystem_ch1 (str): Channel to read on DAQ system 1 (e.g., 'dep1').
         daqsystem_ch2 (str): Channel to read on DAQ system 2 (e.g., 'mk1').
-        epochclocktype (str): The epoch clock type to consider (default: 'dev_local_time').
-        minEmbeddedFileOverlap (int): Minimum number of embedded file matches required (default: 1).
-        errorOnFailure (bool): If True, raise on failure; if False, return (None, None).
+        epochclocktype (str): The epoch clock type to consider.
+        minEmbeddedFileOverlap (int): Minimum embedded file matches required.
+        errorOnFailure (bool): If True, raise on failure.
 
     Example:
         >>> rule = CommonTriggersOverlappingEpochs({
@@ -167,13 +116,6 @@ class CommonTriggersOverlappingEpochs(SyncRule):
         parameters: dict[str, Any] | None = None,
         identifier: str | None = None,
     ):
-        """
-        Create a new CommonTriggersOverlappingEpochs sync rule.
-
-        Args:
-            parameters: Dict with DAQ system names, channels, and options.
-            identifier: Optional identifier.
-        """
         if parameters is None:
             parameters = {
                 "daqsystem1_name": "",
@@ -184,19 +126,9 @@ class CommonTriggersOverlappingEpochs(SyncRule):
                 "minEmbeddedFileOverlap": 1,
                 "errorOnFailure": True,
             }
-
         super().__init__(parameters, identifier)
 
     def is_valid_parameters(self, parameters: dict[str, Any]) -> tuple[bool, str]:
-        """
-        Validate parameters for CommonTriggersOverlappingEpochs.
-
-        Args:
-            parameters: Dict to validate.
-
-        Returns:
-            Tuple of (is_valid, error_message).
-        """
         if not isinstance(parameters, dict):
             return False, "Parameters must be a dictionary"
 
@@ -209,12 +141,10 @@ class CommonTriggersOverlappingEpochs(SyncRule):
             "minEmbeddedFileOverlap",
             "errorOnFailure",
         ]
-
         for field in required_fields:
             if field not in parameters:
                 return False, f"Missing required field: {field}"
 
-        # String fields
         for field in [
             "daqsystem1_name",
             "daqsystem2_name",
@@ -258,19 +188,13 @@ class CommonTriggersOverlappingEpochs(SyncRule):
         """
         Apply the sync rule to obtain a cost and mapping between two epoch nodes.
 
-        Given two epoch nodes and the DAQ system for node A, attempts to compute
-        a linear time mapping by collecting trigger events from all overlapping
-        epochs and fitting a least-squares linear model.
-
         Args:
-            epochnode_a: First epoch node dict with keys: objectname, epoch_id,
-                epoch_clock, underlying_epochs.
+            epochnode_a: First epoch node dict.
             epochnode_b: Second epoch node dict.
             daqsystem_a: The ndi.daq.system corresponding to epochnode_a.
 
         Returns:
-            Tuple of (cost, mapping) where cost=1.0 on success, or (None, None)
-            if synchronization is not possible.
+            Tuple of (cost, mapping) or (None, None) if no sync possible.
         """
         p = self._parameters
 
@@ -289,13 +213,17 @@ class CommonTriggersOverlappingEpochs(SyncRule):
         # Check epoch clock type
         clock_a = epochnode_a.get("epoch_clock", {})
         clock_b = epochnode_b.get("epoch_clock", {})
-        clock_type_a = clock_a.get("type", "") if isinstance(clock_a, dict) else getattr(clock_a, "type", "")
-        clock_type_b = clock_b.get("type", "") if isinstance(clock_b, dict) else getattr(clock_b, "type", "")
+        clock_type_a = (
+            clock_a.get("type", "") if isinstance(clock_a, dict) else getattr(clock_a, "type", "")
+        )
+        clock_type_b = (
+            clock_b.get("type", "") if isinstance(clock_b, dict) else getattr(clock_b, "type", "")
+        )
 
         if clock_type_a != p["epochclocktype"] or clock_type_b != p["epochclocktype"]:
             return None, None
 
-        # Assign roles: determine which is daqsystem1 and which is daqsystem2
+        # Assign roles
         if node_a_is_1:
             daqsystem1 = daqsystem_a
             session = getattr(daqsystem1, "session", None)
@@ -314,7 +242,6 @@ class CommonTriggersOverlappingEpochs(SyncRule):
                 raise RuntimeError("Could not load both DAQ systems.")
             return None, None
 
-        # Unwrap if in list/cell
         if isinstance(daqsystem1, list):
             daqsystem1 = daqsystem1[0]
         if isinstance(daqsystem2, list):
@@ -322,7 +249,7 @@ class CommonTriggersOverlappingEpochs(SyncRule):
 
         # 2. Check for existing syncrule_mapping in database
         try:
-            from ndi.common import Query
+            from ndi.query import Query
 
             q_existing = (
                 Query("").isa("syncrule_mapping")
@@ -379,10 +306,11 @@ class CommonTriggersOverlappingEpochs(SyncRule):
         id_a_seed = epochnode_a.get("epoch_id", "")
         id_b_seed = epochnode_b.get("epoch_id", "")
 
-        # Find seed indices in epoch tables
         def _find_epoch_index(epoch_table: list, epoch_id: str) -> int | None:
             for i, ep in enumerate(epoch_table):
-                eid = ep.get("epoch_id", "") if isinstance(ep, dict) else getattr(ep, "epoch_id", "")
+                eid = (
+                    ep.get("epoch_id", "") if isinstance(ep, dict) else getattr(ep, "epoch_id", "")
+                )
                 if eid == epoch_id:
                     return i
             return None
@@ -393,30 +321,27 @@ class CommonTriggersOverlappingEpochs(SyncRule):
         if idx_a_seed is None or idx_b_seed is None:
             return None, None
 
-        group_a = {idx_a_seed}
-        group_b = {idx_b_seed}
+        group_a: set[int] = {idx_a_seed}
+        group_b: set[int] = {idx_b_seed}
 
         def _get_epoch_files(epoch_table: list, idx: int) -> list[str]:
             ep = epoch_table[idx]
             if isinstance(ep, dict):
                 ue = ep.get("underlying_epochs", {})
-                if isinstance(ue, dict):
-                    return [str(f) for f in ue.get("underlying", [])]
-                elif hasattr(ue, "underlying"):
-                    return [str(f) for f in ue.underlying]
             elif hasattr(ep, "underlying_epochs"):
                 ue = ep.underlying_epochs
-                if isinstance(ue, dict):
-                    return [str(f) for f in ue.get("underlying", [])]
-                elif hasattr(ue, "underlying"):
-                    return [str(f) for f in ue.underlying]
+            else:
+                return []
+            if isinstance(ue, dict):
+                return [str(f) for f in ue.get("underlying", [])]
+            elif hasattr(ue, "underlying"):
+                return [str(f) for f in ue.underlying]
             return []
 
         # Iteratively expand groups
         added = True
         while added:
             added = False
-
             for i in range(len(epochs_a_all)):
                 if i in group_a:
                     continue
@@ -467,19 +392,16 @@ class CommonTriggersOverlappingEpochs(SyncRule):
                     if isinstance(val, (list, tuple, np.ndarray)):
                         return float(val[0])
                     return float(val)
-                if isinstance(t0_t1, (list, tuple, np.ndarray)) and len(t0_t1) >= 1:
-                    return float(t0_t1[0])
                 return 0.0
-
-            # Sort by t0
-            sorted_1 = sorted(indices_1, key=lambda i: _get_t0(epochs_1, i))
-            sorted_2 = sorted(indices_2, key=lambda i: _get_t0(epochs_2, i))
 
             def _get_epoch_id(epoch_table: list, idx: int) -> str:
                 ep = epoch_table[idx]
                 if isinstance(ep, dict):
                     return ep.get("epoch_id", "")
                 return getattr(ep, "epoch_id", "")
+
+            sorted_1 = sorted(indices_1, key=lambda i: _get_t0(epochs_1, i))
+            sorted_2 = sorted(indices_2, key=lambda i: _get_t0(epochs_2, i))
 
             # Read T1
             t1_total: list[float] = []
@@ -508,22 +430,18 @@ class CommonTriggersOverlappingEpochs(SyncRule):
             # 6. Compute mapping
             t1_arr = np.sort(np.array(t1_total))
             t2_arr = np.sort(np.array(t2_total))
-
             shift, scale = _sync_triggers(t1_arr, t2_arr)
 
-            # Mapping from A to B
             if node_a_is_1:
-                # T2 = scale * T1 + shift → map A(1) to B(2)
+                # T2 = scale * T1 + shift -> map A(1) to B(2)
                 mapping = TimeMapping([scale, shift])
             else:
-                # We computed T2 = scale * T1 + shift
-                # But A is system 2, B is system 1
-                # Want T1 = (T2 - shift) / scale = (1/scale)*T2 - shift/scale
+                # Want A(2)->B(1): T1 = (T2 - shift)/scale
                 mapping = TimeMapping([1.0 / scale, -shift / scale])
 
             return 1.0, mapping
 
-        except Exception as exc:
+        except Exception:
             if p.get("errorOnFailure", True):
                 raise
             return None, None
