@@ -123,8 +123,7 @@ class TestDatasetBuild:
         assert isinstance(session, DirSession)
 
         # Session should be in dataset's session list
-        sessions = dataset.session_list()
-        session_ids = [s["session_id"] for s in sessions]
+        refs, session_ids, *_ = dataset.session_list()
         assert session.id() in session_ids, "Session ID should be in dataset session list"
 
         # Should find exactly 5 demoNDI documents
@@ -156,9 +155,8 @@ class TestDatasetBuild:
 # TestSessionList
 # Port of: ndi.unittest.dataset.testSessionList
 #
-# NOTE: MATLAB session_list() returns (refs, ids, sess_docs, dset_doc).
-# Python session_list() returns List[Dict] with keys:
-#   session_id, session_reference, is_linked, document_id
+# MATLAB session_list() returns (refs, ids, sess_docs, dset_doc).
+# Python session_list() now also returns 4 values to match.
 # ===========================================================================
 
 
@@ -172,33 +170,22 @@ class TestSessionList:
         """
         dataset, session = build_dataset
 
-        sessions = dataset.session_list()
+        refs, session_ids, *_ = dataset.session_list()
 
         # Should have exactly 1 session
-        assert len(sessions) == 1
-
-        entry = sessions[0]
+        assert len(session_ids) == 1
+        assert len(refs) == 1
 
         # 1. Verify session_reference
-        assert (
-            entry["session_reference"] == "exp_demo"
-        ), "Session reference should match expected value"
+        assert refs[0] == "exp_demo", "Session reference should match expected value"
 
         # 2. Verify session_id
-        assert (
-            entry["session_id"] == session.id()
-        ), "Session ID should match the ingested session ID"
+        assert session_ids[0] == session.id(), "Session ID should match the ingested session ID"
 
-        # 3. Verify document_id is present
-        assert entry["document_id"], "document_id should be non-empty"
-
-        # 4. Verify is_linked is False (this was ingested)
-        assert entry["is_linked"] is False
-
-        # 5. Verify the session_in_a_dataset document exists and is correct
-        q = Query("base.id") == entry["document_id"]
+        # 3. Verify the session_in_a_dataset document exists and is correct
+        q = Query("").isa("session_in_a_dataset")
         found = dataset.database_search(q)
-        assert len(found) == 1, "Should find exactly one document for the session_in_a_dataset ID"
+        assert len(found) == 1, "Should find exactly one session_in_a_dataset document"
 
         doc = found[0]
         props = doc.document_properties.get("session_in_a_dataset", {})
@@ -239,9 +226,8 @@ class TestDeleteIngestedSession:
         session_id = session.id()
 
         # Verify session exists initially
-        sessions = dataset.session_list()
-        ids = [s["session_id"] for s in sessions]
-        assert session_id in ids, "Session ID should be in dataset"
+        refs, session_ids, *_ = dataset.session_list()
+        assert session_id in session_ids, "Session ID should be in dataset"
 
         # Verify documents exist
         q = Query("base.session_id") == session_id
@@ -252,8 +238,7 @@ class TestDeleteIngestedSession:
         dataset.delete_ingested_session(session_id, are_you_sure=True)
 
         # Verify session is removed from list
-        sessions_after = dataset.session_list()
-        ids_after = [s["session_id"] for s in sessions_after]
+        refs_after, ids_after, *_ = dataset.session_list()
         assert session_id not in ids_after, "Session ID should NOT be in dataset after deletion"
 
         # Verify documents are removed
@@ -273,9 +258,10 @@ class TestDeleteIngestedSession:
             dataset.delete_ingested_session(session_id, are_you_sure=False)
 
         # Verify session still exists
-        sessions = dataset.session_list()
-        ids = [s["session_id"] for s in sessions]
-        assert session_id in ids, "Session ID should still be in dataset after failed delete"
+        refs, session_ids, *_ = dataset.session_list()
+        assert (
+            session_id in session_ids
+        ), "Session ID should still be in dataset after failed delete"
 
     def test_delete_linked_session_error(self, build_dataset, tmp_path):
         """Deleting a linked session raises ValueError.
@@ -293,36 +279,31 @@ class TestDeleteIngestedSession:
         dataset.add_linked_session(linked_session)
 
         # Verify it was added
-        sessions = dataset.session_list()
-        ids = [s["session_id"] for s in sessions]
-        assert linked_session.id() in ids
+        refs, session_ids, *_ = dataset.session_list()
+        assert linked_session.id() in session_ids
 
         # Attempt to delete a linked session — should fail
         with pytest.raises(ValueError, match="linked"):
             dataset.delete_ingested_session(linked_session.id(), are_you_sure=True)
 
     def test_delete_nonexistent_session(self, build_dataset):
-        """Deleting a nonexistent session.
+        """Deleting a nonexistent session raises ValueError.
 
-        NOTE: Python returns self silently (no error).
-        MATLAB raises ndi:dataset:deleteIngestedSession:notFound.
-        We just verify it doesn't crash.
+        MATLAB equivalent: testDeleteIngestedSession.testDeleteNotFound
+        (MATLAB error ID: ndi:dataset:deleteIngestedSession:notFound)
         """
         dataset, _ = build_dataset
-        # Should not raise
-        dataset.delete_ingested_session("fake_id_xyz", are_you_sure=True)
+        with pytest.raises(ValueError, match="not found"):
+            dataset.delete_ingested_session("fake_id_xyz", are_you_sure=True)
 
 
 # ===========================================================================
 # TestUnlinkSession
 # Port of: ndi.unittest.dataset.testUnlinkSession
 #
-# NOTE: Python API differences:
-# - MATLAB: unlink_session(id, 'areYouSure', true, 'askUserToConfirm', false,
-#           'AlsoDeleteSessionAfterUnlinking', true, 'DeleteSessionAskToConfirm', false)
-# - Python: unlink_session(id, remove_documents=False)
-# - Python doesn't have areYouSure for unlink
-# - Python doesn't delete session files — only removes from dataset
+# MATLAB: unlink_session(id, 'areYouSure', true, 'askUserToConfirm', false, ...)
+# Python: unlink_session(id, are_you_sure=True)
+# Both require confirmation and only allow unlinking linked sessions.
 # ===========================================================================
 
 
@@ -347,70 +328,26 @@ class TestUnlinkSession:
         dataset.add_linked_session(session)
 
         # Verify session is linked
-        sessions = dataset.session_list()
-        assert len(sessions) == 1
-        assert sessions[0]["session_id"] == session.id()
-        assert sessions[0]["is_linked"] is True
+        refs, session_ids, *_ = dataset.session_list()
+        assert len(session_ids) == 1
+        assert session_ids[0] == session.id()
 
         # Unlink
-        dataset.unlink_session(session.id())
+        dataset.unlink_session(session.id(), are_you_sure=True)
 
         # Verify session is gone from dataset
-        sessions_after = dataset.session_list()
-        assert len(sessions_after) == 0, "Session list should be empty after unlink"
+        refs_after, ids_after, *_ = dataset.session_list()
+        assert len(ids_after) == 0, "Session list should be empty after unlink"
 
         # Session files should still exist
         assert (
             session.path / ".ndi"
         ).exists(), "Session .ndi directory should still exist after unlink"
 
-    def test_unlink_with_remove_documents(self, tmp_path):
-        """Unlink with remove_documents=True removes session docs from dataset.
-
-        MATLAB equivalent: testUnlinkSession.testUnlinkAndDeleteSession
-        (MATLAB uses 'AlsoDeleteSessionAfterUnlinking'; Python uses remove_documents)
-
-        NOTE: Python does not delete the original session directory.
-        It only removes documents from the dataset's internal database.
-        """
-        # Create session with docs
-        session_dir = tmp_path / "sess_rm"
-        session_dir.mkdir()
-        session = DirSession("exp_rm", session_dir)
-        for i in range(1, 4):
-            _add_doc_with_file(session, i)
-
-        # Create dataset, ingest session
-        ds_dir = tmp_path / "ds_rm"
-        ds_dir.mkdir()
-        dataset = Dataset(ds_dir, "ds_rm")
-        dataset.add_ingested_session(session)
-
-        session_id = session.id()
-
-        # Verify docs were ingested
-        q = Query("base.session_id") == session_id
-        docs_before = dataset.database_search(q)
-        assert len(docs_before) > 0
-
-        # Unlink with document removal
-        dataset.unlink_session(session_id, remove_documents=True)
-
-        # Verify session removed from list
-        sessions_after = dataset.session_list()
-        assert len(sessions_after) == 0, "Session list should be empty"
-
-        # Verify documents removed from dataset
-        docs_after = dataset.database_search(q)
-        assert len(docs_after) == 0, "Session documents should be removed"
-
-    def test_unlink_ingested_session(self, tmp_path):
-        """Unlinking an ingested session (without remove_documents).
+    def test_unlink_ingested_session_error(self, tmp_path):
+        """Unlinking an ingested session raises ValueError.
 
         MATLAB equivalent: testUnlinkSession.testUnlinkIngestedSessionError
-        NOTE: MATLAB raises an error for this case.
-        Python allows it — the session_in_a_dataset doc is removed,
-        but ingested documents remain in the database.
         """
         # Create session
         session_dir = tmp_path / "sess_ing"
@@ -426,28 +363,38 @@ class TestUnlinkSession:
 
         session_id = session.id()
 
-        # In Python, unlink_session works for any session type
-        dataset.unlink_session(session_id)
-
-        # Verify session removed from list
-        sessions_after = dataset.session_list()
-        assert len(sessions_after) == 0
+        # Unlinking an ingested session should raise
+        with pytest.raises(ValueError, match="INGESTED"):
+            dataset.unlink_session(session_id, are_you_sure=True)
 
     def test_unlink_nonexistent_session(self, tmp_path):
-        """Unlinking a nonexistent session does nothing.
+        """Unlinking a nonexistent session raises ValueError.
 
-        MATLAB equivalent: testUnlinkSession.testUnlinkNotConfirmedError
-        NOTE: Python doesn't require areYouSure for unlink.
+        MATLAB equivalent: testUnlinkSession.testUnlinkNotFoundError
         """
         ds_dir = tmp_path / "ds_empty"
         ds_dir.mkdir()
         dataset = Dataset(ds_dir, "ds_empty")
 
-        # Should not raise
-        dataset.unlink_session("nonexistent_id")
+        with pytest.raises(ValueError, match="not found"):
+            dataset.unlink_session("nonexistent_id", are_you_sure=True)
 
-        # Verify still empty
-        assert len(dataset.session_list()) == 0
+    def test_unlink_not_confirmed(self, tmp_path):
+        """Unlinking without are_you_sure raises ValueError.
+
+        MATLAB equivalent: testUnlinkSession.testUnlinkNotConfirmedError
+        """
+        session_dir = tmp_path / "sess_conf"
+        session_dir.mkdir()
+        session = DirSession("exp_conf", session_dir)
+
+        ds_dir = tmp_path / "ds_conf"
+        ds_dir.mkdir()
+        dataset = Dataset(ds_dir, "ds_conf")
+        dataset.add_linked_session(session)
+
+        with pytest.raises(ValueError, match="are_you_sure"):
+            dataset.unlink_session(session.id())
 
 
 # ===========================================================================
@@ -494,10 +441,8 @@ class TestOldDataset:
         assert reopened.id() == original_ds_id, "Reopened dataset should have same ID"
 
         # 4. Verify session list
-        sessions = reopened.session_list()
-        assert len(sessions) >= 1, "Reopened dataset should have at least 1 session"
-
-        session_ids = [s["session_id"] for s in sessions]
+        refs, session_ids, *_ = reopened.session_list()
+        assert len(session_ids) >= 1, "Reopened dataset should have at least 1 session"
         assert (
             original_session_id in session_ids
         ), "Original session should still be in the reopened dataset"

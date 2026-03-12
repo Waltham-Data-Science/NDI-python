@@ -469,7 +469,7 @@ class TestCopySessionToDataset:
         session = MagicMock()
         session.id.return_value = "session_123"
         dataset = MagicMock()
-        dataset.session_list.return_value = (["ref1"], ["session_123"])
+        dataset.session_list.return_value = (["ref1"], ["session_123"], ["doc_123"], "ds_doc_id")
 
         success, msg = copy_session_to_dataset(session, dataset)
         assert not success
@@ -485,7 +485,7 @@ class TestCopySessionToDataset:
         session.database_search.return_value = [doc]
 
         dataset = MagicMock()
-        dataset.session_list.return_value = ([], [])
+        dataset.session_list.return_value = ([], [], [], "")
 
         success, msg = copy_session_to_dataset(session, dataset)
         assert success
