@@ -22,6 +22,40 @@ from typing import Any
 
 import did.query
 
+# ---------------------------------------------------------------------------
+# Module-level convenience functions
+#
+# In MATLAB ``ndi.query`` is a *class*, so ``ndi.query.all()`` reaches a
+# static method directly.  In Python ``ndi.query`` is a *module* that
+# contains the ``Query`` class.  Expose the most common factory methods at
+# module level so callers can write ``ndi.query.all()`` exactly as in
+# MATLAB.
+# ---------------------------------------------------------------------------
+
+
+def all() -> "Query":
+    """Return a query that matches all documents.
+
+    Convenience wrapper so ``ndi.query.all()`` works like MATLAB.
+    """
+    return Query.all()
+
+
+def none() -> "Query":
+    """Return a query that matches no documents.
+
+    Convenience wrapper so ``ndi.query.none()`` works like MATLAB.
+    """
+    return Query.none()
+
+
+def from_search(field: str, operation: str, param1: Any = "", param2: Any = "") -> "Query":
+    """Create a query using MATLAB-style parameters.
+
+    Convenience wrapper so ``ndi.query.from_search(...)`` works like MATLAB.
+    """
+    return Query.from_search(field, operation, param1, param2)
+
 
 class Query(did.query.Query):
     """NDI query class for searching documents.

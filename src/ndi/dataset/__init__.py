@@ -10,13 +10,19 @@ MATLAB equivalents:
     ndi.dataset.dir  -> ndi.dataset.dir (constructor for directory-based datasets)
 """
 
-from ._dataset import Dataset
+from ._dataset import Dataset as _DatasetBase  # noqa: F401
+from ._dataset import DatasetDir
+
+# For backward compatibility, ``ndi.dataset.Dataset`` is ``DatasetDir``.
+# The base class is available as ``ndi.dataset._DatasetBase`` if needed.
+Dataset = DatasetDir
 
 # MATLAB compatibility: ``ndi.dataset.dir(path)`` creates a directory-based
 # dataset, mirroring the MATLAB constructor ``ndi.dataset.dir``.
-dir = Dataset
+dir = DatasetDir
 
 __all__ = [
     "Dataset",
+    "DatasetDir",
     "dir",
 ]
