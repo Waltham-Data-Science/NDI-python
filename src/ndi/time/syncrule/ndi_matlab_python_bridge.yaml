@@ -159,3 +159,191 @@ classes:
           file patterns match in both epochs. Returns (None, None)
           otherwise. Supports match types: exact, contains, regex,
           glob.
+
+  # =========================================================================
+  # ndi.time.syncrule.commonTriggersOverlappingEpochs
+  # =========================================================================
+  - name: commonTriggersOverlappingEpochs
+    type: class
+    matlab_path: "+ndi/+time/+syncrule/commonTriggersOverlappingEpochs.m"
+    python_path: "ndi/time/syncrule/common_triggers_overlapping_epochs.py"
+    python_class: "CommonTriggersOverlappingEpochs"
+    inherits: "ndi.time.syncrule"
+
+    methods:
+      - name: commonTriggersOverlappingEpochs
+        kind: constructor
+        input_arguments:
+          - name: parameters
+            type_matlab: "struct"
+            type_python: "dict[str, Any] | None"
+            default: "None"
+          - name: identifier
+            type_matlab: "char"
+            type_python: "str | None"
+            default: "None"
+        output_arguments:
+          - name: ctoe_obj
+            type_python: "CommonTriggersOverlappingEpochs"
+        decision_log: >
+          Exact match. Default parameters:
+          daqsystem1_name='', daqsystem2_name='',
+          daqsystem_ch1='', daqsystem_ch2='',
+          epochclocktype='dev_local_time',
+          minEmbeddedFileOverlap=1, errorOnFailure=True.
+
+      - name: is_valid_parameters
+        input_arguments:
+          - name: parameters
+            type_matlab: "struct"
+            type_python: "dict[str, Any]"
+        output_arguments:
+          - name: is_valid
+            type_python: "bool"
+          - name: msg
+            type_python: "str"
+        decision_log: >
+          Exact match. Validates all 7 required fields are present
+          and have correct types (strings, numeric, logical).
+
+      - name: eligible_epochsets
+        input_arguments: []
+        output_arguments:
+          - name: classes
+            type_python: "list[str]"
+        decision_log: >
+          Exact match. Returns ['ndi.daq.system', 'DAQSystem'].
+
+      - name: ineligible_epochsets
+        input_arguments: []
+        output_arguments:
+          - name: classes
+            type_python: "list[str]"
+        decision_log: >
+          Exact match. Returns base ineligible list plus
+          ndi.epoch.epochset, ndi.epoch.epochset.param,
+          ndi.file.navigator.
+
+      - name: apply
+        input_arguments:
+          - name: epochnode_a
+            type_matlab: "struct"
+            type_python: "dict[str, Any]"
+          - name: epochnode_b
+            type_matlab: "struct"
+            type_python: "dict[str, Any]"
+          - name: daqsystem_a
+            type_matlab: "ndi.daq.system"
+            type_python: "Any"
+            default: "None"
+        output_arguments:
+          - name: cost
+            type_python: "float | None"
+          - name: mapping
+            type_python: "TimeMapping | None"
+        decision_log: >
+          Exact match. Extended signature vs FileMatch/FileFind:
+          accepts daqsystem_a as third argument. Checks embedded
+          file overlap (grandparent/parent matching), expands
+          epoch group iteratively, reads triggers from all
+          overlapping epochs, and computes linear mapping via
+          least-squares (vlt.time.syncTriggers equivalent).
+          Checks for cached syncrule_mapping documents in the
+          database before computing. Returns (None, None) if
+          no embedded overlap or names/clocks do not match.
+          Raises RuntimeError on failure if errorOnFailure=True.
+
+  # =========================================================================
+  # ndi.time.syncrule.randomPulses
+  # =========================================================================
+  - name: randomPulses
+    type: class
+    matlab_path: "+ndi/+time/+syncrule/randomPulses.m"
+    python_path: "ndi/time/syncrule/random_pulses.py"
+    python_class: "RandomPulses"
+    inherits: "ndi.time.syncrule"
+
+    methods:
+      - name: randomPulses
+        kind: constructor
+        input_arguments:
+          - name: parameters
+            type_matlab: "struct"
+            type_python: "dict[str, Any] | None"
+            default: "None"
+          - name: identifier
+            type_matlab: "char"
+            type_python: "str | None"
+            default: "None"
+        output_arguments:
+          - name: rp_obj
+            type_python: "RandomPulses"
+        decision_log: >
+          Exact match. Default parameters:
+          daqsystem1_name='', daqsystem2_name='',
+          daqsystem_ch1='', daqsystem_ch2='',
+          epochclocktype='dev_local_time',
+          errorOnFailure=True.
+
+      - name: is_valid_parameters
+        input_arguments:
+          - name: parameters
+            type_matlab: "struct"
+            type_python: "dict[str, Any]"
+        output_arguments:
+          - name: is_valid
+            type_python: "bool"
+          - name: msg
+            type_python: "str"
+        decision_log: >
+          Exact match. Validates all 6 required fields are present
+          and have correct types (strings, logical).
+
+      - name: eligible_epochsets
+        input_arguments: []
+        output_arguments:
+          - name: classes
+            type_python: "list[str]"
+        decision_log: >
+          Exact match. Returns ['ndi.daq.system.mfdaq', 'DAQSystem'].
+          Note: MATLAB returns {'ndi.daq.system.mfdaq'} — more
+          restrictive than other syncrules.
+
+      - name: ineligible_epochsets
+        input_arguments: []
+        output_arguments:
+          - name: classes
+            type_python: "list[str]"
+        decision_log: >
+          Exact match. Returns base ineligible list plus
+          ndi.epoch.epochset, ndi.epoch.epochset.param,
+          ndi.file.navigator.
+
+      - name: apply
+        input_arguments:
+          - name: epochnode_a
+            type_matlab: "struct"
+            type_python: "dict[str, Any]"
+          - name: epochnode_b
+            type_matlab: "struct"
+            type_python: "dict[str, Any]"
+          - name: daqsystem_a
+            type_matlab: "ndi.daq.system"
+            type_python: "Any"
+            default: "None"
+        output_arguments:
+          - name: cost
+            type_python: "float | None"
+          - name: mapping
+            type_python: "TimeMapping | None"
+        decision_log: >
+          Exact match. Extended signature vs FileMatch/FileFind:
+          accepts daqsystem_a as third argument. Reads random
+          pulse trigger events from each epoch, uses
+          inter-pulse-interval cross-correlation to align
+          sequences (ndi.time.fun.syncRandomTriggers equivalent),
+          then computes a linear time mapping. Checks for cached
+          syncrule_mapping documents in the database before
+          computing. Returns (None, None) if names/clocks do
+          not match. Raises RuntimeError on failure if
+          errorOnFailure=True.
