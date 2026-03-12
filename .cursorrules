@@ -1,0 +1,18 @@
+# NDI Cursor Rules
+
+## 1. Project Context
+This is the NDI (Neuroscience Data Interface) Python port. It is a "Lead-Follow" project where the MATLAB codebase is the Source of Truth.
+
+## 2. Core Instructions
+Before proposing or writing any code, you MUST read and adhere to the following project-specific files:
+
+- **Entry Point:** Read `AGENTS.md` at the root for a high-level overview of your role.
+- **Porting Logic:** Read `docs/developer_notes/PYTHON_PORTING_GUIDE.md` for technical implementation rules (Pydantic, Naming, etc.).
+- **Parity Principles:** Read `docs/developer_notes/ndi_xlang_principles.md` for indexing vs. counting rules and data handling.
+- **The Contract:** Locate and read the `ndi_matlab_python_bridge.yaml` in the directory you are currently working in.
+
+## 3. Strict Naming Policy
+Do not attempt to convert MATLAB camelCase to snake_case. Maintain the casing defined in the bridge YAML files.
+
+## 4. Active Maintenance
+If a function is missing from the bridge YAML, add it based on the MATLAB source and notify the user: "INTERFACE UPDATE: I have modified the bridge contract for [Function Name]."
