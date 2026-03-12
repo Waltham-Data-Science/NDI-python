@@ -1,0 +1,167 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/daq/reader/
+# The Primary Contract for the ndi.daq.reader namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Standalone functions
+# =========================================================================
+functions:
+
+  - name: _get_extractor_for_file
+    type: function
+    matlab_path: null
+    python_path: "ndi/daq/reader/spikeinterface_adapter.py"
+    input_arguments:
+      - name: filepath
+        type_python: "str"
+    output_arguments:
+      - name: extractor
+        type_python: "Any | None"
+    decision_log: >
+      Python-specific helper. Returns a spikeinterface recording extractor
+      for the given file path based on file extension. No MATLAB equivalent;
+      MATLAB uses dedicated reader classes per format.
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # =========================================================================
+  # ndi.daq.reader.SpikeInterfaceReader
+  # =========================================================================
+  - name: SpikeInterfaceReader
+    type: class
+    matlab_path: null
+    python_path: "ndi/daq/reader/spikeinterface_adapter.py"
+    python_class: "SpikeInterfaceReader"
+    inherits: "ndi.daq.reader.mfdaq_reader"
+
+    methods:
+      - name: SpikeInterfaceReader
+        kind: constructor
+        input_arguments:
+          - name: stream_id
+            type_python: "str | None"
+            default: "None"
+          - name: identifier
+            type_python: "str | None"
+            default: "None"
+          - name: session
+            type_python: "Any | None"
+            default: "None"
+          - name: document
+            type_python: "Any | None"
+            default: "None"
+        output_arguments:
+          - name: reader_obj
+            type_python: "SpikeInterfaceReader"
+        decision_log: >
+          Python-specific class. No direct MATLAB equivalent.
+          Uses spikeinterface library for multi-format data access.
+
+      - name: epochclock
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+        output_arguments:
+          - name: ec
+            type_python: "list[ClockType]"
+        decision_log: "Returns [DEV_LOCAL_TIME]."
+
+      - name: t0_t1
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+        output_arguments:
+          - name: t0t1
+            type_python: "list[tuple[float, float]]"
+        decision_log: "Calculates from recording duration."
+
+      - name: getchannelsepoch
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+        output_arguments:
+          - name: channels
+            type_python: "list[ChannelInfo]"
+        decision_log: "Maps spikeinterface channel metadata to ChannelInfo."
+
+      - name: readchannels_epochsamples
+        input_arguments:
+          - name: channeltype
+            type_python: "str | list[str]"
+          - name: channel
+            type_python: "int | list[int]"
+          - name: epochfiles
+            type_python: "list[str]"
+          - name: s0
+            type_python: "int"
+          - name: s1
+            type_python: "int"
+        output_arguments:
+          - name: data
+            type_python: "np.ndarray"
+        decision_log: >
+          Semantic Parity: channel and s0/s1 are 1-indexed.
+          Converts to 0-indexed for spikeinterface internally.
+
+      - name: samplerate
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+          - name: channeltype
+            type_python: "str | list[str]"
+          - name: channel
+            type_python: "int | list[int]"
+        output_arguments:
+          - name: sr
+            type_python: "np.ndarray"
+        decision_log: "Gets sample rate from spikeinterface recording."
+
+      - name: readevents_epochsamples_native
+        input_arguments:
+          - name: channeltype
+            type_python: "list[str]"
+          - name: channel
+            type_python: "list[int]"
+          - name: epochfiles
+            type_python: "list[str]"
+          - name: t0
+            type_python: "float"
+          - name: t1
+            type_python: "float"
+        output_arguments:
+          - name: timestamps
+            type_python: "list[np.ndarray]"
+          - name: data
+            type_python: "list[np.ndarray]"
+        decision_log: "Not yet implemented. Returns empty arrays."
+
+      - name: underlying_datatype
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+          - name: channeltype
+            type_python: "str"
+          - name: channel
+            type_python: "int | list[int]"
+        output_arguments:
+          - name: datatype
+            type_python: "str"
+          - name: polynomial
+            type_python: "np.ndarray"
+          - name: datasize
+            type_python: "int"
+        decision_log: "Gets dtype and gain/offset from spikeinterface."
+
+      - name: newdocument
+        input_arguments: []
+        output_arguments:
+          - name: doc
+            type_python: "Any"
+        decision_log: "Creates document with class name 'SpikeInterfaceReader'."

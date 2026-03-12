@@ -1,0 +1,342 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/daq/reader/mfdaq/
+# The Primary Contract for the ndi.daq.reader.mfdaq namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # =========================================================================
+  # ndi.daq.reader.mfdaq.intan
+  # =========================================================================
+  - name: intan
+    type: class
+    matlab_path: "+ndi/+daq/+reader/+mfdaq/intan.m"
+    python_path: "ndi/daq/reader/mfdaq/intan.py"
+    python_class: "IntanReader"
+    inherits: "ndi.daq.reader.mfdaq_reader"
+
+    properties:
+      - name: NDI_DAQREADER_CLASS
+        type_python: "str"
+        access: "class variable"
+        decision_log: "Value: 'ndi.daq.reader.mfdaq.intan'. Exact match."
+
+      - name: FILE_EXTENSIONS
+        type_python: "list[str]"
+        access: "class variable"
+        decision_log: "Value: ['.rhd', '.rhs']. Exact match."
+
+    methods:
+      - name: intan
+        kind: constructor
+        input_arguments:
+          - name: identifier
+            type_python: "str | None"
+            default: "None"
+          - name: session
+            type_python: "Any | None"
+            default: "None"
+          - name: document
+            type_python: "Any | None"
+            default: "None"
+        output_arguments:
+          - name: reader_obj
+            type_python: "IntanReader"
+        decision_log: "Exact match."
+
+      - name: getchannelsepoch
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+        output_arguments:
+          - name: channels
+            type_python: "list[ChannelInfo]"
+        decision_log: "Exact match. Delegates to SpikeInterfaceReader."
+
+      - name: readchannels_epochsamples
+        input_arguments:
+          - name: channeltype
+            type_matlab: "char | cell"
+            type_python: "str | list[str]"
+          - name: channel
+            type_matlab: "integer | array"
+            type_python: "int | list[int]"
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: s0
+            type_matlab: "integer"
+            type_python: "int"
+          - name: s1
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: data
+            type_python: "np.ndarray"
+        decision_log: >
+          Semantic Parity: channel and s0/s1 are 1-indexed.
+          Delegates to SpikeInterfaceReader.
+
+      - name: samplerate
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: channeltype
+            type_matlab: "char | cell"
+            type_python: "str | list[str]"
+          - name: channel
+            type_matlab: "integer | array"
+            type_python: "int | list[int]"
+        output_arguments:
+          - name: sr
+            type_python: "np.ndarray"
+        decision_log: "Exact match. Delegates to SpikeInterfaceReader."
+
+  # =========================================================================
+  # ndi.daq.reader.mfdaq.blackrock
+  # =========================================================================
+  - name: blackrock
+    type: class
+    matlab_path: "+ndi/+daq/+reader/+mfdaq/blackrock.m"
+    python_path: "ndi/daq/reader/mfdaq/blackrock.py"
+    python_class: "BlackrockReader"
+    inherits: "ndi.daq.reader.mfdaq_reader"
+
+    properties:
+      - name: NDI_DAQREADER_CLASS
+        type_python: "str"
+        access: "class variable"
+        decision_log: "Value: 'ndi.daq.reader.mfdaq.blackrock'. Exact match."
+
+      - name: FILE_EXTENSIONS
+        type_python: "list[str]"
+        access: "class variable"
+        decision_log: "Value: ['.ns1'..'.ns6', '.nev']. Exact match."
+
+    methods:
+      - name: blackrock
+        kind: constructor
+        input_arguments:
+          - name: identifier
+            type_python: "str | None"
+            default: "None"
+          - name: session
+            type_python: "Any | None"
+            default: "None"
+          - name: document
+            type_python: "Any | None"
+            default: "None"
+        output_arguments:
+          - name: reader_obj
+            type_python: "BlackrockReader"
+        decision_log: "Exact match."
+
+      - name: getchannelsepoch
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+        output_arguments:
+          - name: channels
+            type_python: "list[ChannelInfo]"
+        decision_log: "Exact match. Delegates to SpikeInterfaceReader."
+
+      - name: readchannels_epochsamples
+        input_arguments:
+          - name: channeltype
+            type_python: "str | list[str]"
+          - name: channel
+            type_python: "int | list[int]"
+          - name: epochfiles
+            type_python: "list[str]"
+          - name: s0
+            type_python: "int"
+          - name: s1
+            type_python: "int"
+        output_arguments:
+          - name: data
+            type_python: "np.ndarray"
+        decision_log: >
+          Semantic Parity: channel and s0/s1 are 1-indexed.
+          Delegates to SpikeInterfaceReader.
+
+      - name: samplerate
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+          - name: channeltype
+            type_python: "str | list[str]"
+          - name: channel
+            type_python: "int | list[int]"
+        output_arguments:
+          - name: sr
+            type_python: "np.ndarray"
+        decision_log: "Exact match. Delegates to SpikeInterfaceReader."
+
+  # =========================================================================
+  # ndi.daq.reader.mfdaq.cedspike2
+  # =========================================================================
+  - name: cedspike2
+    type: class
+    matlab_path: "+ndi/+daq/+reader/+mfdaq/cedspike2.m"
+    python_path: "ndi/daq/reader/mfdaq/cedspike2.py"
+    python_class: "CEDSpike2Reader"
+    inherits: "ndi.daq.reader.mfdaq_reader"
+
+    properties:
+      - name: NDI_DAQREADER_CLASS
+        type_python: "str"
+        access: "class variable"
+        decision_log: "Value: 'ndi.daq.reader.mfdaq.cedspike2'. Exact match."
+
+      - name: FILE_EXTENSIONS
+        type_python: "list[str]"
+        access: "class variable"
+        decision_log: "Value: ['.smr', '.smrx']. Exact match."
+
+    methods:
+      - name: cedspike2
+        kind: constructor
+        input_arguments:
+          - name: identifier
+            type_python: "str | None"
+            default: "None"
+          - name: session
+            type_python: "Any | None"
+            default: "None"
+          - name: document
+            type_python: "Any | None"
+            default: "None"
+        output_arguments:
+          - name: reader_obj
+            type_python: "CEDSpike2Reader"
+        decision_log: "Exact match."
+
+      - name: getchannelsepoch
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+        output_arguments:
+          - name: channels
+            type_python: "list[ChannelInfo]"
+        decision_log: "Exact match. Delegates to SpikeInterfaceReader."
+
+      - name: readchannels_epochsamples
+        input_arguments:
+          - name: channeltype
+            type_python: "str | list[str]"
+          - name: channel
+            type_python: "int | list[int]"
+          - name: epochfiles
+            type_python: "list[str]"
+          - name: s0
+            type_python: "int"
+          - name: s1
+            type_python: "int"
+        output_arguments:
+          - name: data
+            type_python: "np.ndarray"
+        decision_log: >
+          Semantic Parity: channel and s0/s1 are 1-indexed.
+          Delegates to SpikeInterfaceReader.
+
+      - name: samplerate
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+          - name: channeltype
+            type_python: "str | list[str]"
+          - name: channel
+            type_python: "int | list[int]"
+        output_arguments:
+          - name: sr
+            type_python: "np.ndarray"
+        decision_log: "Exact match. Delegates to SpikeInterfaceReader."
+
+  # =========================================================================
+  # ndi.daq.reader.mfdaq.spikegadgets
+  # =========================================================================
+  - name: spikegadgets
+    type: class
+    matlab_path: "+ndi/+daq/+reader/+mfdaq/spikegadgets.m"
+    python_path: "ndi/daq/reader/mfdaq/spikegadgets.py"
+    python_class: "SpikeGadgetsReader"
+    inherits: "ndi.daq.reader.mfdaq_reader"
+
+    properties:
+      - name: NDI_DAQREADER_CLASS
+        type_python: "str"
+        access: "class variable"
+        decision_log: "Value: 'ndi.daq.reader.mfdaq.spikegadgets'. Exact match."
+
+      - name: FILE_EXTENSIONS
+        type_python: "list[str]"
+        access: "class variable"
+        decision_log: "Value: ['.rec']. Exact match."
+
+    methods:
+      - name: spikegadgets
+        kind: constructor
+        input_arguments:
+          - name: identifier
+            type_python: "str | None"
+            default: "None"
+          - name: session
+            type_python: "Any | None"
+            default: "None"
+          - name: document
+            type_python: "Any | None"
+            default: "None"
+        output_arguments:
+          - name: reader_obj
+            type_python: "SpikeGadgetsReader"
+        decision_log: "Exact match."
+
+      - name: getchannelsepoch
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+        output_arguments:
+          - name: channels
+            type_python: "list[ChannelInfo]"
+        decision_log: "Exact match. Delegates to SpikeInterfaceReader."
+
+      - name: readchannels_epochsamples
+        input_arguments:
+          - name: channeltype
+            type_python: "str | list[str]"
+          - name: channel
+            type_python: "int | list[int]"
+          - name: epochfiles
+            type_python: "list[str]"
+          - name: s0
+            type_python: "int"
+          - name: s1
+            type_python: "int"
+        output_arguments:
+          - name: data
+            type_python: "np.ndarray"
+        decision_log: >
+          Semantic Parity: channel and s0/s1 are 1-indexed.
+          Delegates to SpikeInterfaceReader.
+
+      - name: samplerate
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+          - name: channeltype
+            type_python: "str | list[str]"
+          - name: channel
+            type_python: "int | list[int]"
+        output_arguments:
+          - name: sr
+            type_python: "np.ndarray"
+        decision_log: "Exact match. Delegates to SpikeInterfaceReader."

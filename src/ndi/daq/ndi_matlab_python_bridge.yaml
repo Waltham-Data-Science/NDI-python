@@ -1,0 +1,1074 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/daq/
+# The Primary Contract for the ndi.daq namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Standalone functions
+# =========================================================================
+functions:
+
+  - name: standardize_channel_type
+    type: function
+    matlab_path: null
+    python_path: "ndi/daq/mfdaq.py"
+    input_arguments:
+      - name: channel_type
+        type_python: "str | ChannelType"
+    output_arguments:
+      - name: standardized
+        type_python: "str"
+    decision_log: >
+      Python-specific utility. Normalizes abbreviations (e.g., 'ai' -> 'analog_in')
+      and ChannelType enum values to canonical string form.
+
+  - name: standardize_channel_types
+    type: function
+    matlab_path: null
+    python_path: "ndi/daq/mfdaq.py"
+    input_arguments:
+      - name: channel_types
+        type_python: "list[str]"
+    output_arguments:
+      - name: standardized
+        type_python: "list[str]"
+    decision_log: >
+      Python-specific utility. Batch version of standardize_channel_type.
+
+# =========================================================================
+# Enums / Dataclasses
+# =========================================================================
+enums:
+
+  - name: ChannelType
+    type: enum
+    matlab_path: null
+    python_path: "ndi/daq/mfdaq.py"
+    values:
+      - ANALOG_IN: "analog_in"
+      - ANALOG_OUT: "analog_out"
+      - DIGITAL_IN: "digital_in"
+      - DIGITAL_OUT: "digital_out"
+      - AUXILIARY_IN: "auxiliary_in"
+      - TIME: "time"
+      - EVENT: "event"
+      - MARKER: "marker"
+      - TEXT: "text"
+    methods:
+      - name: from_abbreviation
+        kind: classmethod
+        input_arguments:
+          - name: abbrev
+            type_python: "str"
+        output_arguments:
+          - name: channel_type
+            type_python: "ChannelType"
+        decision_log: "Python-specific. Converts 'ai' -> ANALOG_IN, etc."
+      - name: abbreviation
+        kind: property
+        output_arguments:
+          - name: abbrev
+            type_python: "str"
+        decision_log: "Python-specific. Returns 'ai' for ANALOG_IN, etc."
+    decision_log: >
+      Python-specific enum. MATLAB uses string constants directly.
+      Provides type safety and abbreviation lookups.
+
+dataclasses:
+
+  - name: ChannelInfo
+    type: dataclass
+    matlab_path: null
+    python_path: "ndi/daq/mfdaq.py"
+    properties:
+      - name: name
+        type_python: "str"
+      - name: type
+        type_python: "str"
+      - name: time_channel
+        type_python: "int | None"
+      - name: number
+        type_python: "int | None"
+      - name: sample_rate
+        type_python: "float | None"
+      - name: offset
+        type_python: "float"
+        default: "0.0"
+      - name: scale
+        type_python: "float"
+        default: "1.0"
+      - name: group
+        type_python: "int"
+        default: "1"
+    decision_log: >
+      Python-specific dataclass. MATLAB uses struct arrays for channel info.
+      Provides typed access to channel metadata.
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # =========================================================================
+  # ndi.daq.daqsystemstring
+  # =========================================================================
+  - name: daqsystemstring
+    type: class
+    matlab_path: "+ndi/+daq/daqsystemstring.m"
+    python_path: "ndi/daq/daqsystemstring.py"
+    python_class: "DAQSystemString"
+
+    properties:
+      - name: devicename
+        type_matlab: "char"
+        type_python: "str"
+        decision_log: "Exact match."
+
+      - name: channels
+        type_matlab: "struct array"
+        type_python: "list[tuple[str, list[int]]]"
+        decision_log: >
+          MATLAB uses struct array with channeltype and channellist fields.
+          Python uses list of (channeltype, channellist) tuples.
+
+    methods:
+      - name: parse
+        kind: classmethod
+        input_arguments:
+          - name: devstr
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: dss
+            type_python: "DAQSystemString"
+        decision_log: >
+          MATLAB constructor parses in-place. Python uses classmethod factory.
+
+      - name: devicestring
+        input_arguments: []
+        output_arguments:
+          - name: devstr
+            type_python: "str"
+        decision_log: "Exact match. Generates device string from components."
+
+      - name: channel_types
+        input_arguments: []
+        output_arguments:
+          - name: types
+            type_python: "list[str]"
+        decision_log: "Exact match. Returns unique channel type strings."
+
+      - name: channel_list
+        input_arguments:
+          - name: channeltype
+            type_matlab: "char (optional)"
+            type_python: "str | None"
+            default: "None"
+        output_arguments:
+          - name: channels
+            type_python: "list[int]"
+        decision_log: "Exact match. Optionally filters by channel type."
+
+      - name: eq
+        input_arguments:
+          - name: other
+            type_python: "Any"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: "Mapped to Python __eq__ dunder method."
+
+  # =========================================================================
+  # ndi.daq.reader (DAQReader base class)
+  # =========================================================================
+  - name: reader
+    type: class
+    matlab_path: "+ndi/+daq/reader.m"
+    python_path: "ndi/daq/reader_base.py"
+    python_class: "DAQReader"
+    inherits: "ndi.ido"
+
+    methods:
+      - name: reader
+        kind: constructor
+        input_arguments:
+          - name: identifier
+            type_matlab: "char (optional)"
+            type_python: "str | None"
+            default: "None"
+          - name: session
+            type_matlab: "ndi.session (optional)"
+            type_python: "Any | None"
+            default: "None"
+          - name: document
+            type_matlab: "ndi.document (optional)"
+            type_python: "Any | None"
+            default: "None"
+        output_arguments:
+          - name: reader_obj
+            type_python: "DAQReader"
+        decision_log: "Exact match."
+
+      - name: epochclock
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+        output_arguments:
+          - name: ec
+            type_python: "list[ClockType]"
+        decision_log: "Exact match. Base class returns [NO_TIME]."
+
+      - name: t0_t1
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+        output_arguments:
+          - name: t0t1
+            type_python: "list[tuple[float, float]]"
+        decision_log: "Exact match. Base class returns [(NaN, NaN)]."
+
+      - name: getingesteddocument
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+        output_arguments:
+          - name: doc
+            type_python: "Any"
+        decision_log: "Exact match."
+
+      - name: ingested2epochs_t0t1_epochclock
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+        output_arguments:
+          - name: maps
+            type_python: "dict[str, dict[str, Any]]"
+        decision_log: >
+          Exact match. Returns dict with 't0t1' and 'epochclock' keys,
+          each mapping epoch_id to the respective values.
+
+      - name: epochclock_ingested
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+        output_arguments:
+          - name: ec
+            type_python: "list[ClockType]"
+        decision_log: "Exact match."
+
+      - name: t0_t1_ingested
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+        output_arguments:
+          - name: t0t1
+            type_python: "list[tuple[float, float]]"
+        decision_log: "Exact match."
+
+      - name: verifyepochprobemap
+        input_arguments:
+          - name: epochprobemap
+            type_matlab: "ndi.epoch.epochprobemap"
+            type_python: "Any"
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+          - name: errormsg
+            type_python: "str"
+        decision_log: "Exact match. Returns (bool, str) tuple."
+
+      - name: ingest_epochfiles
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: epoch_id
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: doc
+            type_python: "Any"
+        decision_log: "Exact match."
+
+      - name: newdocument
+        input_arguments: []
+        output_arguments:
+          - name: doc
+            type_python: "Any"
+        decision_log: "Exact match."
+
+      - name: searchquery
+        input_arguments: []
+        output_arguments:
+          - name: sq
+            type_python: "Any"
+        decision_log: "Exact match."
+
+      - name: eq
+        input_arguments:
+          - name: other
+            type_python: "Any"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: "Mapped to Python __eq__ dunder method."
+
+  # =========================================================================
+  # ndi.daq.reader.mfdaq_reader (MFDAQReader class)
+  # =========================================================================
+  - name: mfdaq_reader
+    type: class
+    matlab_path: "+ndi/+daq/+reader/mfdaq.m"
+    python_path: "ndi/daq/mfdaq.py"
+    python_class: "MFDAQReader"
+    inherits: "ndi.daq.reader"
+
+    methods:
+      - name: epochclock
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+        output_arguments:
+          - name: ec
+            type_python: "list[ClockType]"
+        decision_log: "Exact match. Returns [DEV_LOCAL_TIME]."
+
+      - name: t0_t1
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+        output_arguments:
+          - name: t0t1
+            type_python: "list[tuple[float, float]]"
+        decision_log: "Exact match. Returns [(NaN, NaN)]."
+
+      - name: getchannelsepoch
+        kind: abstract
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+        output_arguments:
+          - name: channels
+            type_python: "list[ChannelInfo]"
+        decision_log: >
+          Exact match. Abstract in both. MATLAB returns struct array;
+          Python returns list[ChannelInfo].
+
+      - name: readchannels_epochsamples
+        kind: abstract
+        input_arguments:
+          - name: channeltype
+            type_matlab: "char | cell"
+            type_python: "str | list[str]"
+          - name: channel
+            type_matlab: "integer | array"
+            type_python: "int | list[int]"
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: s0
+            type_matlab: "integer"
+            type_python: "int"
+          - name: s1
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: data
+            type_python: "np.ndarray"
+        decision_log: >
+          Exact match. Abstract in both.
+          Semantic Parity: channel and s0/s1 are 1-indexed (user concepts).
+
+      - name: samplerate
+        kind: abstract
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: channeltype
+            type_matlab: "char | cell"
+            type_python: "str | list[str]"
+          - name: channel
+            type_matlab: "integer | array"
+            type_python: "int | list[int]"
+        output_arguments:
+          - name: sr
+            type_python: "np.ndarray"
+        decision_log: "Exact match. Abstract in both."
+
+      - name: readevents_epochsamples
+        input_arguments:
+          - name: channeltype
+            type_matlab: "char | cell"
+            type_python: "str | list[str]"
+          - name: channel
+            type_matlab: "integer | array"
+            type_python: "int | list[int]"
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: t0
+            type_matlab: "double"
+            type_python: "float"
+          - name: t1
+            type_matlab: "double"
+            type_python: "float"
+        output_arguments:
+          - name: timestamps
+            type_python: "np.ndarray | list[np.ndarray]"
+          - name: data
+            type_python: "np.ndarray | list[np.ndarray]"
+        decision_log: >
+          Exact match. Supports derived digital event types
+          (dep, den, dimp, dimn). Returns 2-tuple.
+
+      - name: readevents_epochsamples_native
+        input_arguments:
+          - name: channeltype
+            type_matlab: "cell"
+            type_python: "list[str]"
+          - name: channel
+            type_matlab: "array"
+            type_python: "list[int]"
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: t0
+            type_matlab: "double"
+            type_python: "float"
+          - name: t1
+            type_matlab: "double"
+            type_python: "float"
+        output_arguments:
+          - name: timestamps
+            type_python: "list[np.ndarray]"
+          - name: data
+            type_python: "list[np.ndarray]"
+        decision_log: >
+          Exact match. Override in subclasses for native event reading.
+          Base class returns empty arrays.
+
+      - name: epochsamples2times
+        input_arguments:
+          - name: channeltype
+            type_matlab: "char | cell"
+            type_python: "str | list[str]"
+          - name: channel
+            type_matlab: "integer | array"
+            type_python: "int | list[int]"
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: samples
+            type_matlab: "double array"
+            type_python: "np.ndarray"
+        output_arguments:
+          - name: times
+            type_python: "np.ndarray"
+        decision_log: >
+          Exact match. Semantic Parity: samples are 1-indexed (user concept).
+
+      - name: epochtimes2samples
+        input_arguments:
+          - name: channeltype
+            type_matlab: "char | cell"
+            type_python: "str | list[str]"
+          - name: channel
+            type_matlab: "integer | array"
+            type_python: "int | list[int]"
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: times
+            type_matlab: "double array"
+            type_python: "np.ndarray"
+        output_arguments:
+          - name: samples
+            type_python: "np.ndarray"
+        decision_log: >
+          Exact match. Semantic Parity: returned samples are 1-indexed.
+
+      - name: underlying_datatype
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: channeltype
+            type_matlab: "char"
+            type_python: "str"
+          - name: channel
+            type_matlab: "integer | array"
+            type_python: "int | list[int]"
+        output_arguments:
+          - name: datatype
+            type_python: "str"
+          - name: polynomial
+            type_python: "np.ndarray"
+          - name: datasize
+            type_python: "int"
+        decision_log: "Exact match. Returns 3-tuple."
+
+      - name: channel_types
+        kind: static
+        input_arguments: []
+        output_arguments:
+          - name: types
+            type_python: "list[str]"
+          - name: abbreviations
+            type_python: "list[str]"
+        decision_log: "Exact match. Returns 2-tuple of type names and abbreviations."
+
+      # --- Ingested data methods ---
+      - name: getchannelsepoch_ingested
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+        output_arguments:
+          - name: channels
+            type_python: "list[ChannelInfo]"
+        decision_log: "Exact match."
+
+      - name: readchannels_epochsamples_ingested
+        input_arguments:
+          - name: channeltype
+            type_matlab: "char | cell"
+            type_python: "str | list[str]"
+          - name: channel
+            type_matlab: "integer | array"
+            type_python: "int | list[int]"
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: s0
+            type_matlab: "integer"
+            type_python: "int"
+          - name: s1
+            type_matlab: "integer"
+            type_python: "int"
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+        output_arguments:
+          - name: data
+            type_python: "np.ndarray"
+        decision_log: "Exact match."
+
+      - name: samplerate_ingested
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: channeltype
+            type_matlab: "char | cell"
+            type_python: "str | list[str]"
+          - name: channel
+            type_matlab: "integer | array"
+            type_python: "int | list[int]"
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+        output_arguments:
+          - name: sr
+            type_python: "np.ndarray"
+        decision_log: "Exact match."
+
+      - name: epochsamples2times_ingested
+        input_arguments:
+          - name: channeltype
+            type_matlab: "char | cell"
+            type_python: "str | list[str]"
+          - name: channel
+            type_matlab: "integer | array"
+            type_python: "int | list[int]"
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: samples
+            type_matlab: "double array"
+            type_python: "np.ndarray"
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+        output_arguments:
+          - name: times
+            type_python: "np.ndarray"
+        decision_log: "Exact match."
+
+      - name: epochtimes2samples_ingested
+        input_arguments:
+          - name: channeltype
+            type_matlab: "char | cell"
+            type_python: "str | list[str]"
+          - name: channel
+            type_matlab: "integer | array"
+            type_python: "int | list[int]"
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: times
+            type_matlab: "double array"
+            type_python: "np.ndarray"
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+        output_arguments:
+          - name: samples
+            type_python: "np.ndarray"
+        decision_log: "Exact match."
+
+  # =========================================================================
+  # ndi.daq.system
+  # =========================================================================
+  - name: system
+    type: class
+    matlab_path: "+ndi/+daq/system.m"
+    python_path: "ndi/daq/system.py"
+    python_class: "DAQSystem"
+    inherits: "ndi.ido"
+
+    properties:
+      - name: name
+        type_matlab: "char"
+        type_python: "str"
+        access: "property (read-only)"
+        decision_log: "Exact match."
+
+      - name: filenavigator
+        type_matlab: "ndi.file.navigator"
+        type_python: "Any"
+        access: "property (read-only)"
+        decision_log: "Exact match."
+
+      - name: daqreader
+        type_matlab: "ndi.daq.reader"
+        type_python: "DAQReader | None"
+        access: "property (read-only)"
+        decision_log: "Exact match."
+
+      - name: daqmetadatareaders
+        type_matlab: "cell array of ndi.daq.metadatareader"
+        type_python: "list[Any]"
+        access: "property (read-only)"
+        decision_log: "Exact match."
+
+      - name: session
+        type_matlab: "ndi.session"
+        type_python: "Any"
+        access: "property (read-only)"
+        decision_log: "Exact match. Derived from filenavigator when available."
+
+    methods:
+      - name: system
+        kind: constructor
+        input_arguments:
+          - name: name
+            type_matlab: "char"
+            type_python: "str"
+            default: "''"
+          - name: filenavigator
+            type_matlab: "ndi.file.navigator"
+            type_python: "Any | None"
+            default: "None"
+          - name: daqreader
+            type_matlab: "ndi.daq.reader"
+            type_python: "DAQReader | None"
+            default: "None"
+          - name: daqmetadatareaders
+            type_matlab: "cell array"
+            type_python: "list[Any] | None"
+            default: "None"
+          - name: identifier
+            type_python: "str | None"
+            default: "None"
+          - name: session
+            type_python: "Any | None"
+            default: "None"
+          - name: document
+            type_python: "Any | None"
+            default: "None"
+        output_arguments:
+          - name: sys_obj
+            type_python: "DAQSystem"
+        decision_log: >
+          Exact match. Python adds session/document kwargs for
+          loading from database.
+
+      - name: set_daqmetadatareaders
+        input_arguments:
+          - name: readers
+            type_matlab: "cell array of ndi.daq.metadatareader"
+            type_python: "list[Any]"
+        output_arguments:
+          - name: sys_obj
+            type_python: "DAQSystem"
+        decision_log: "Exact match. Returns self for chaining."
+
+      - name: set_session
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+        output_arguments:
+          - name: sys_obj
+            type_python: "DAQSystem"
+        decision_log: "Exact match. Returns self for chaining."
+
+      - name: epochclock
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: ec
+            type_python: "list[ClockType]"
+        decision_log: >
+          Semantic Parity: epoch_number is 1-indexed (user concept).
+          Base class returns [NO_TIME].
+
+      - name: t0_t1
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: t0t1
+            type_python: "list[tuple[float, float]]"
+        decision_log: >
+          Semantic Parity: epoch_number is 1-indexed (user concept).
+          Base class returns [(NaN, NaN)].
+
+      - name: epochid
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: epoch_id
+            type_python: "str"
+        decision_log: >
+          Semantic Parity: epoch_number is 1-indexed (user concept).
+
+      - name: epochtable
+        input_arguments: []
+        output_arguments:
+          - name: et
+            type_python: "list[dict[str, Any]]"
+        decision_log: "Exact match."
+
+      - name: getprobes
+        input_arguments: []
+        output_arguments:
+          - name: probes
+            type_python: "list[dict[str, Any]]"
+        decision_log: "Exact match."
+
+      - name: getepochprobemap
+        input_arguments:
+          - name: epoch
+            type_matlab: "integer"
+            type_python: "int"
+          - name: filenavepochprobemap
+            type_matlab: "ndi.epoch.epochprobemap (optional)"
+            type_python: "Any | None"
+            default: "None"
+        output_arguments:
+          - name: epm
+            type_python: "Any"
+        decision_log: "Exact match."
+
+      - name: getmetadata
+        input_arguments:
+          - name: epoch
+            type_matlab: "integer"
+            type_python: "int"
+          - name: channel
+            type_matlab: "integer"
+            type_python: "int"
+            default: "1"
+        output_arguments:
+          - name: metadata
+            type_python: "list[dict[str, Any]]"
+        decision_log: >
+          Semantic Parity: epoch and channel are 1-indexed (user concepts).
+
+      - name: ingest
+        input_arguments: []
+        output_arguments:
+          - name: success
+            type_python: "bool"
+          - name: documents
+            type_python: "list[Any]"
+        decision_log: "Exact match. Returns 2-tuple."
+
+      - name: deleteepoch
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+          - name: delete_from_disk
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "False"
+        output_arguments:
+          - name: success
+            type_python: "bool"
+          - name: message
+            type_python: "str"
+        decision_log: >
+          Semantic Parity: epoch_number is 1-indexed (user concept).
+          Returns 2-tuple.
+
+      - name: verifyepochprobemap
+        input_arguments:
+          - name: epochprobemap
+            type_matlab: "ndi.epoch.epochprobemap"
+            type_python: "Any"
+          - name: epoch
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+          - name: errormsg
+            type_python: "str"
+        decision_log: "Exact match. Returns 2-tuple."
+
+      - name: newdocument
+        input_arguments: []
+        output_arguments:
+          - name: docs
+            type_python: "list[Any]"
+        decision_log: >
+          Exact match. Returns list of documents
+          (navigator, reader, system, metadata readers).
+
+      - name: searchquery
+        input_arguments: []
+        output_arguments:
+          - name: sq
+            type_python: "Any"
+        decision_log: "Exact match."
+
+      - name: eq
+        input_arguments:
+          - name: other
+            type_python: "Any"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: "Mapped to Python __eq__ dunder method."
+
+  # =========================================================================
+  # ndi.daq.system.mfdaq
+  # =========================================================================
+  - name: system_mfdaq
+    type: class
+    matlab_path: "+ndi/+daq/+system/mfdaq.m"
+    python_path: "ndi/daq/system_mfdaq.py"
+    python_class: "DAQSystemMFDAQ"
+    inherits: "ndi.daq.system"
+
+    methods:
+      - name: epochclock
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: ec
+            type_python: "list[ClockType]"
+        decision_log: >
+          Semantic Parity: epoch_number is 1-indexed (user concept).
+          Returns [DEV_LOCAL_TIME].
+
+      - name: t0_t1
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: t0t1
+            type_python: "list[tuple[float, float]]"
+        decision_log: >
+          Semantic Parity: epoch_number is 1-indexed.
+          Delegates to DAQ reader.
+
+      - name: getchannelsepoch
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: channels
+            type_python: "list[Any]"
+        decision_log: >
+          Semantic Parity: epoch_number is 1-indexed.
+
+      - name: getchannels
+        input_arguments: []
+        output_arguments:
+          - name: channels
+            type_python: "list[Any]"
+        decision_log: "Exact match. Returns unique channels across all epochs."
+
+      - name: readchannels_epochsamples
+        input_arguments:
+          - name: channeltype
+            type_matlab: "char | cell"
+            type_python: "str | list[str]"
+          - name: channel
+            type_matlab: "integer | array"
+            type_python: "int | list[int]"
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+          - name: s0
+            type_matlab: "integer"
+            type_python: "int"
+          - name: s1
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: data
+            type_python: "np.ndarray"
+        decision_log: >
+          Semantic Parity: channel, epoch_number, s0, s1 are 1-indexed.
+
+      - name: readevents_epochsamples
+        input_arguments:
+          - name: channeltype
+            type_matlab: "char | cell"
+            type_python: "str | list[str]"
+          - name: channel
+            type_matlab: "integer | array"
+            type_python: "int | list[int]"
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+          - name: t0
+            type_matlab: "double"
+            type_python: "float"
+          - name: t1
+            type_matlab: "double"
+            type_python: "float"
+        output_arguments:
+          - name: timestamps
+            type_python: "np.ndarray | list[np.ndarray]"
+          - name: data
+            type_python: "np.ndarray | list[np.ndarray]"
+        decision_log: >
+          Semantic Parity: epoch_number is 1-indexed. Returns 2-tuple.
+
+      - name: samplerate
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+          - name: channeltype
+            type_matlab: "char | cell"
+            type_python: "str | list[str]"
+          - name: channel
+            type_matlab: "integer | array"
+            type_python: "int | list[int]"
+        output_arguments:
+          - name: sr
+            type_python: "np.ndarray"
+        decision_log: >
+          Semantic Parity: epoch_number is 1-indexed.
+
+      - name: epochsamples2times
+        input_arguments:
+          - name: channeltype
+            type_matlab: "char | cell"
+            type_python: "str | list[str]"
+          - name: channel
+            type_matlab: "integer | array"
+            type_python: "int | list[int]"
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+          - name: samples
+            type_matlab: "double array"
+            type_python: "np.ndarray"
+        output_arguments:
+          - name: times
+            type_python: "np.ndarray"
+        decision_log: >
+          Semantic Parity: epoch_number and samples are 1-indexed.
+
+      - name: epochtimes2samples
+        input_arguments:
+          - name: channeltype
+            type_matlab: "char | cell"
+            type_python: "str | list[str]"
+          - name: channel
+            type_matlab: "integer | array"
+            type_python: "int | list[int]"
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+          - name: times
+            type_matlab: "double array"
+            type_python: "np.ndarray"
+        output_arguments:
+          - name: samples
+            type_python: "np.ndarray"
+        decision_log: >
+          Semantic Parity: epoch_number is 1-indexed.
+          Returned samples are 1-indexed.
+
+    static_methods:
+      - name: mfdaq_channeltypes
+        input_arguments: []
+        output_arguments:
+          - name: types
+            type_python: "list[str]"
+        decision_log: "Exact match."
+
+      - name: mfdaq_prefix
+        input_arguments:
+          - name: channeltype
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: prefix
+            type_python: "str"
+        decision_log: "Exact match."
+
+      - name: mfdaq_type
+        input_arguments:
+          - name: channeltype
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: fulltype
+            type_python: "str"
+        decision_log: "Exact match."
