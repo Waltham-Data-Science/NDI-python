@@ -43,7 +43,7 @@ from .cache import Cache
 from .calculator import Calculator
 from .common import PathConstants, get_logger, getLogger, timestamp
 from .database import Database, open_database
-from .dataset import Dataset
+from .dataset import Dataset, DatasetDir
 from .document import Document
 from .documentservice import DocumentService
 from .element import Element
@@ -117,6 +117,7 @@ __all__ = [
     "ElementTimeseries",
     "Neuron",
     "Dataset",
+    "DatasetDir",
     "App",
     "AppDoc",
     "DocExistsAction",

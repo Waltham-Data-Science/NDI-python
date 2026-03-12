@@ -78,24 +78,23 @@ def downloadDataset(
         for dj in doc_jsons:
             updateFileInfoForRemoteFiles(dj, cloud_dataset_id)
 
-    # Convert to Document objects and add to a local Dataset
-    from ndi.dataset import Dataset
+    # Convert to Document objects and create Dataset with them.
+    # Mirrors MATLAB: ndi.dataset.dir([], datasetFolder, ndiDocuments)
+    from ndi.dataset import DatasetDir
 
-    dataset_reference = ds_info.get("name", cloud_dataset_id)
-    dataset = Dataset(target, reference=dataset_reference)
     documents = jsons2documents(doc_jsons)
-    for doc in documents:
+    dataset = DatasetDir("", target, documents=documents)
+
+    # Create remote link document if not already present
+    from ndi.query import Query
+
+    existing = dataset.database_search(Query("").isa("dataset_remote"))
+    if not existing:
+        remote_doc = createRemoteDatasetDoc(cloud_dataset_id, dataset)
         try:
-            dataset._session._database.add(doc)
+            dataset._session._database.add(remote_doc)
         except Exception:
             pass
-
-    # Create remote link document
-    remote_doc = createRemoteDatasetDoc(cloud_dataset_id, dataset)
-    try:
-        dataset._session._database.add(remote_doc)
-    except Exception:
-        pass
 
     # Store cloud client for on-demand file fetching
     dataset.cloud_client = client
@@ -175,7 +174,7 @@ def load_dataset_from_json_dir(
             updateFileInfoForRemoteFiles(dj, cloud_dataset_id)
 
     # Create Dataset
-    from ndi.dataset import Dataset
+    from ndi.dataset import DatasetDir
 
     if target_folder is None:
         target = json_path.parent / f"{json_path.name}_dataset"
@@ -183,12 +182,13 @@ def load_dataset_from_json_dir(
         target = Path(target_folder)
     target.mkdir(parents=True, exist_ok=True)
 
-    dataset = Dataset(target)
+    # Convert JSON dicts to Document objects and create dataset with them
+    from .download import jsons2documents as _j2d
 
-    # Use bulk_add for fast insertion (single transaction, no per-doc
-    # duplicate checks).  This bypasses session_id enforcement since
-    # documents come from multiple remote sessions.
-    added, skipped = dataset._session._database._driver.bulk_add(doc_jsons)
+    all_documents = _j2d(doc_jsons)
+    dataset = DatasetDir("", target, documents=all_documents)
+    added = len(all_documents)
+    skipped = 0
 
     # Wire cloud client for on-demand file fetching
     if client is not None:
