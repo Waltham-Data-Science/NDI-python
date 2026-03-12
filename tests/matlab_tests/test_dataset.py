@@ -180,9 +180,7 @@ class TestSessionList:
         assert refs[0] == "exp_demo", "Session reference should match expected value"
 
         # 2. Verify session_id
-        assert (
-            session_ids[0] == session.id()
-        ), "Session ID should match the ingested session ID"
+        assert session_ids[0] == session.id(), "Session ID should match the ingested session ID"
 
         # 3. Verify the session_in_a_dataset document exists and is correct
         q = Query("").isa("session_in_a_dataset")
@@ -261,7 +259,9 @@ class TestDeleteIngestedSession:
 
         # Verify session still exists
         refs, session_ids, *_ = dataset.session_list()
-        assert session_id in session_ids, "Session ID should still be in dataset after failed delete"
+        assert (
+            session_id in session_ids
+        ), "Session ID should still be in dataset after failed delete"
 
     def test_delete_linked_session_error(self, build_dataset, tmp_path):
         """Deleting a linked session raises ValueError.

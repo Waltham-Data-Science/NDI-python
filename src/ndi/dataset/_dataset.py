@@ -115,8 +115,7 @@ class Dataset:
         existing = self._find_session_doc(session.id())
         if existing is not None:
             raise ValueError(
-                f"Session with id {session.id()} is already part of "
-                f"dataset {self.id()}."
+                f"Session with id {session.id()} is already part of " f"dataset {self.id()}."
             )
 
         # Create session_in_a_dataset document
@@ -148,8 +147,7 @@ class Dataset:
         existing = self._find_session_doc(session.id())
         if existing is not None:
             raise ValueError(
-                f"Session with id {session.id()} is already part of "
-                f"dataset {self.id()}."
+                f"Session with id {session.id()} is already part of " f"dataset {self.id()}."
             )
 
         # Check if session is fully ingested
@@ -206,10 +204,7 @@ class Dataset:
 
         doc = self._find_session_doc(session_id)
         if doc is None:
-            raise ValueError(
-                f"Session with ID {session_id} not found in "
-                f"dataset {self.id()}."
-            )
+            raise ValueError(f"Session with ID {session_id} not found in " f"dataset {self.id()}.")
 
         props = doc.document_properties.get("session_in_a_dataset", {})
         if not props.get("is_linked", False):
@@ -292,16 +287,12 @@ class Dataset:
 
         # Find the dataset's own session document
         dataset_session_doc_id = ""
-        q_ds = Query("").isa("session") & (
-            Query("base.session_id") == self.id()
-        )
+        q_ds = Query("").isa("session") & (Query("base.session_id") == self.id())
         ds_docs = self._session.database_search(q_ds)
         if len(ds_docs) == 1:
             dataset_session_doc_id = ds_docs[0].id
         elif len(ds_docs) > 1:
-            raise ValueError(
-                "More than 1 session document for the dataset session found."
-            )
+            raise ValueError("More than 1 session document for the dataset session found.")
 
         return ref_list, id_list, session_doc_ids, dataset_session_doc_id
 
@@ -392,9 +383,7 @@ class Dataset:
 
         doc = self._find_session_doc(session_id)
         if doc is None:
-            raise ValueError(
-                f"Session {session_id} not found in dataset."
-            )
+            raise ValueError(f"Session {session_id} not found in dataset.")
 
         props = doc.document_properties.get("session_in_a_dataset", {})
         if props.get("is_linked", False):
