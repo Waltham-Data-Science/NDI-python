@@ -242,6 +242,8 @@ class SyncRule(Ido, ABC):
             "SyncRule": SyncRule,
             "FileMatch": syncrule_module.FileMatch,
             "FileFind": syncrule_module.FileFind,
+            "CommonTriggersOverlappingEpochs": syncrule_module.CommonTriggersOverlappingEpochs,
+            "RandomPulses": syncrule_module.RandomPulses,
         }
 
         rule_class = class_map.get(class_name, cls)

@@ -1,0 +1,804 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/time/
+# The Primary Contract for the ndi.time namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # =========================================================================
+  # ndi.time.clocktype  (enumeration)
+  # =========================================================================
+  - name: clocktype
+    type: class
+    matlab_path: "+ndi/+time/clocktype.m"
+    python_path: "ndi/time/clocktype.py"
+    python_class: "ClockType"
+
+    properties:
+      - name: UTC
+        type_matlab: "char"
+        type_python: "str"
+        decision_log: "Enum member. Value 'utc'."
+
+      - name: APPROX_UTC
+        type_matlab: "char"
+        type_python: "str"
+        decision_log: "Enum member. Value 'approx_utc'."
+
+      - name: EXP_GLOBAL_TIME
+        type_matlab: "char"
+        type_python: "str"
+        decision_log: "Enum member. Value 'exp_global_time'."
+
+      - name: APPROX_EXP_GLOBAL_TIME
+        type_matlab: "char"
+        type_python: "str"
+        decision_log: "Enum member. Value 'approx_exp_global_time'."
+
+      - name: DEV_GLOBAL_TIME
+        type_matlab: "char"
+        type_python: "str"
+        decision_log: "Enum member. Value 'dev_global_time'."
+
+      - name: APPROX_DEV_GLOBAL_TIME
+        type_matlab: "char"
+        type_python: "str"
+        decision_log: "Enum member. Value 'approx_dev_global_time'."
+
+      - name: DEV_LOCAL_TIME
+        type_matlab: "char"
+        type_python: "str"
+        decision_log: "Enum member. Value 'dev_local_time'."
+
+      - name: NO_TIME
+        type_matlab: "char"
+        type_python: "str"
+        decision_log: "Enum member. Value 'no_time'."
+
+      - name: INHERITED
+        type_matlab: "char"
+        type_python: "str"
+        decision_log: "Enum member. Value 'inherited'."
+
+    methods:
+      - name: from_string
+        kind: classmethod
+        input_arguments:
+          - name: type_str
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: ct
+            type_python: "ClockType"
+        decision_log: >
+          Python-specific factory. MATLAB uses constructor.
+          Case-insensitive matching.
+
+      - name: needs_epoch
+        input_arguments: []
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: >
+          Exact match. Returns True only for DEV_LOCAL_TIME.
+
+      - name: is_global
+        input_arguments: []
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: >
+          Exact match. Returns True for UTC, APPROX_UTC,
+          EXP_GLOBAL_TIME, APPROX_EXP_GLOBAL_TIME,
+          DEV_GLOBAL_TIME, APPROX_DEV_GLOBAL_TIME.
+
+      - name: epochgraph_edge
+        input_arguments:
+          - name: other
+            type_matlab: "ndi.time.clocktype"
+            type_python: "ClockType"
+        output_arguments:
+          - name: cost
+            type_python: "float"
+          - name: mapping
+            type_python: "TimeMapping | None"
+        decision_log: >
+          Exact match. Returns 2-tuple (cost, mapping).
+          Valid transitions (cost=100, identity mapping):
+          utc→utc, utc→approx_utc, exp_global→exp_global,
+          exp_global→approx_exp_global, dev_global→dev_global,
+          dev_global→approx_dev_global.
+
+    static_methods:
+      - name: assert_global
+        input_arguments:
+          - name: clocktype
+            type_python: "ClockType"
+        output_arguments: []
+        decision_log: >
+          Exact match. Raises AssertionError if clock type is
+          not global.
+
+  # =========================================================================
+  # ndi.time.timemapping
+  # =========================================================================
+  - name: timemapping
+    type: class
+    matlab_path: "+ndi/+time/timemapping.m"
+    python_path: "ndi/time/timemapping.py"
+    python_class: "TimeMapping"
+
+    properties:
+      - name: mapping
+        type_matlab: "double array"
+        type_python: "np.ndarray"
+        decision_log: >
+          Polynomial coefficients [a_n, ..., a_1, a_0].
+          Implemented as @property in Python.
+
+      - name: scale
+        type_matlab: "double"
+        type_python: "float"
+        decision_log: >
+          Computed property. First coefficient for linear mappings.
+
+      - name: shift
+        type_matlab: "double"
+        type_python: "float"
+        decision_log: >
+          Computed property. Last coefficient for linear mappings.
+
+    methods:
+      - name: timemapping
+        kind: constructor
+        input_arguments:
+          - name: mapping
+            type_matlab: "double array"
+            type_python: "list[float] | np.ndarray | None"
+            default: "None"
+        output_arguments:
+          - name: tm_obj
+            type_python: "TimeMapping"
+        decision_log: >
+          Exact match. Default is [1, 0] (identity). Tests
+          mapping with t_in=0 on construction.
+
+      - name: map
+        input_arguments:
+          - name: t_in
+            type_matlab: "double"
+            type_python: "float | np.ndarray"
+        output_arguments:
+          - name: t_out
+            type_python: "float | np.ndarray"
+        decision_log: >
+          Exact match. Applies polynomial via numpy.polyval.
+
+      - name: inverse
+        input_arguments: []
+        output_arguments:
+          - name: tm_inv
+            type_python: "TimeMapping"
+        decision_log: >
+          Exact match. Only supports linear mappings. Raises
+          ValueError for higher-order or zero-scale mappings.
+
+      - name: compose
+        input_arguments:
+          - name: other
+            type_matlab: "ndi.time.timemapping"
+            type_python: "TimeMapping"
+        output_arguments:
+          - name: tm_composed
+            type_python: "TimeMapping"
+        decision_log: >
+          Exact match. Composes self then other. Only supports
+          linear mappings. Raises ValueError for higher-order.
+
+      - name: eq
+        input_arguments:
+          - name: other
+            type_python: "Any"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: >
+          Mapped to Python __eq__. Uses numpy.allclose for
+          floating-point comparison.
+
+      - name: to_dict
+        input_arguments: []
+        output_arguments:
+          - name: data
+            type_python: "dict"
+        decision_log: "Python-specific serialization method."
+
+      - name: from_dict
+        kind: classmethod
+        input_arguments:
+          - name: data
+            type_python: "dict"
+        output_arguments:
+          - name: tm_obj
+            type_python: "TimeMapping"
+        decision_log: "Python-specific factory method."
+
+    static_methods:
+      - name: identity
+        kind: classmethod
+        input_arguments: []
+        output_arguments:
+          - name: tm_obj
+            type_python: "TimeMapping"
+        decision_log: "Exact match. Returns TimeMapping([1, 0])."
+
+      - name: linear
+        kind: classmethod
+        input_arguments:
+          - name: scale
+            type_matlab: "double"
+            type_python: "float"
+            default: "1.0"
+          - name: shift
+            type_matlab: "double"
+            type_python: "float"
+            default: "0.0"
+        output_arguments:
+          - name: tm_obj
+            type_python: "TimeMapping"
+        decision_log: >
+          Python-specific convenience factory. Creates
+          TimeMapping([scale, shift]).
+
+  # =========================================================================
+  # ndi.time.timereference
+  # =========================================================================
+  - name: timereference
+    type: class
+    matlab_path: "+ndi/+time/timereference.m"
+    python_path: "ndi/time/timereference.py"
+    python_class: "TimeReference"
+
+    properties:
+      - name: referent
+        type_matlab: "ndi.epoch.epochset"
+        type_python: "Any"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: "Implemented as @property in Python."
+
+      - name: clocktype
+        type_matlab: "ndi.time.clocktype"
+        type_python: "ClockType"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: "Implemented as @property in Python."
+
+      - name: epoch
+        type_matlab: "char"
+        type_python: "str | None"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: >
+          Implemented as @property in Python. Required when
+          clocktype is DEV_LOCAL_TIME.
+
+      - name: time
+        type_matlab: "double"
+        type_python: "float | None"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: "Implemented as @property in Python."
+
+      - name: session_id
+        type_matlab: "char"
+        type_python: "str"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: >
+          Implemented as @property in Python. Extracted from
+          referent if not explicitly provided.
+
+    methods:
+      - name: timereference
+        kind: constructor
+        input_arguments:
+          - name: referent
+            type_matlab: "ndi.epoch.epochset"
+            type_python: "Any"
+          - name: clocktype
+            type_matlab: "ndi.time.clocktype | char"
+            type_python: "ClockType | str"
+          - name: epoch
+            type_matlab: "char"
+            type_python: "str | None"
+            default: "None"
+          - name: time
+            type_matlab: "double"
+            type_python: "float | None"
+            default: "None"
+          - name: session_id
+            type_matlab: "char"
+            type_python: "str | None"
+            default: "None"
+        output_arguments:
+          - name: tr_obj
+            type_python: "TimeReference"
+        decision_log: >
+          Exact match. Accepts clocktype as string or enum.
+          Raises ValueError if DEV_LOCAL_TIME without epoch.
+
+      - name: to_struct
+        input_arguments: []
+        output_arguments:
+          - name: trs
+            type_python: "TimeReferenceStruct"
+        decision_log: >
+          MATLAB: ndi_timereference2struct. Python uses to_struct().
+          Converts to a serializable struct without live objects.
+
+      - name: to_dict
+        input_arguments: []
+        output_arguments:
+          - name: data
+            type_python: "dict"
+        decision_log: "Python-specific serialization method."
+
+      - name: eq
+        input_arguments:
+          - name: other
+            type_python: "Any"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: >
+          Mapped to Python __eq__. Compares session_id, clocktype,
+          epoch, and time. Referent comparison intentionally omitted.
+
+    static_methods:
+      - name: from_struct
+        kind: classmethod
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+          - name: struct
+            type_python: "TimeReferenceStruct"
+        output_arguments:
+          - name: tr_obj
+            type_python: "TimeReference"
+        decision_log: >
+          MATLAB: ndi_timereferencestruct2timereference. Python
+          uses classmethod from_struct(). Resolves referent from
+          session via findexpobj().
+
+  # =========================================================================
+  # ndi.time.timereference_struct (dataclass)
+  # =========================================================================
+  - name: timereference_struct
+    type: class
+    matlab_path: null
+    python_path: "ndi/time/timereference.py"
+    python_class: "TimeReferenceStruct"
+
+    properties:
+      - name: referent_epochsetname
+        type_python: "str"
+        decision_log: "String representation of the referent."
+
+      - name: referent_classname
+        type_python: "str"
+        decision_log: "Class name of the referent."
+
+      - name: clocktypestring
+        type_python: "str"
+        decision_log: "Clock type as string."
+
+      - name: epoch
+        type_python: "str | None"
+        decision_log: "Epoch identifier."
+
+      - name: session_id
+        type_python: "str"
+        decision_log: "Session identifier."
+
+      - name: time
+        type_python: "float | None"
+        decision_log: "Time value."
+
+    decision_log: >
+      Python dataclass for serialization. Mirrors the MATLAB struct
+      used by ndi_timereference2struct / ndi_timereferencestruct2timereference.
+
+  # =========================================================================
+  # ndi.time.syncrule  (abstract base class)
+  # =========================================================================
+  - name: syncrule
+    type: class
+    matlab_path: "+ndi/+time/syncrule.m"
+    python_path: "ndi/time/syncrule_base.py"
+    python_class: "SyncRule"
+    inherits: "ndi.ido"
+
+    properties:
+      - name: parameters
+        type_matlab: "struct"
+        type_python: "dict[str, Any]"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: >
+          Implemented as @property in Python. Returns a copy.
+
+    methods:
+      - name: syncrule
+        kind: constructor
+        input_arguments:
+          - name: parameters
+            type_matlab: "struct"
+            type_python: "dict[str, Any] | None"
+            default: "None"
+          - name: identifier
+            type_matlab: "char"
+            type_python: "str | None"
+            default: "None"
+        output_arguments:
+          - name: sr_obj
+            type_python: "SyncRule"
+        decision_log: >
+          Abstract class. Validates parameters on construction.
+
+      - name: set_parameters
+        input_arguments:
+          - name: parameters
+            type_matlab: "struct"
+            type_python: "dict[str, Any]"
+        output_arguments: []
+        decision_log: >
+          Exact match. Validates then sets parameters. Raises
+          ValueError if invalid.
+
+      - name: is_valid_parameters
+        input_arguments:
+          - name: parameters
+            type_matlab: "struct"
+            type_python: "dict[str, Any]"
+        output_arguments:
+          - name: is_valid
+            type_python: "bool"
+          - name: msg
+            type_python: "str"
+        decision_log: >
+          Exact match. Returns 2-tuple (is_valid, error_message).
+          Base implementation always returns (True, "").
+
+      - name: eligible_clocks
+        input_arguments: []
+        output_arguments:
+          - name: clocks
+            type_python: "list[ClockType]"
+        decision_log: >
+          Exact match. Returns empty list by default (no limits).
+
+      - name: ineligible_clocks
+        input_arguments: []
+        output_arguments:
+          - name: clocks
+            type_python: "list[ClockType]"
+        decision_log: >
+          Exact match. Base returns [ClockType.NO_TIME].
+
+      - name: eligible_epochsets
+        input_arguments: []
+        output_arguments:
+          - name: classes
+            type_python: "list[str]"
+        decision_log: >
+          Exact match. Returns empty list by default.
+
+      - name: ineligible_epochsets
+        input_arguments: []
+        output_arguments:
+          - name: classes
+            type_python: "list[str]"
+        decision_log: >
+          Exact match. Returns empty list by default.
+
+      - name: apply
+        kind: abstract
+        input_arguments:
+          - name: epochnode_a
+            type_matlab: "struct"
+            type_python: "dict[str, Any]"
+          - name: epochnode_b
+            type_matlab: "struct"
+            type_python: "dict[str, Any]"
+        output_arguments:
+          - name: cost
+            type_python: "float | None"
+          - name: mapping
+            type_python: "TimeMapping | None"
+        decision_log: >
+          Exact match. Returns 2-tuple (cost, mapping).
+          Base returns (None, None).
+
+      - name: eq
+        input_arguments:
+          - name: other
+            type_python: "Any"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: >
+          Mapped to Python __eq__. Compares parameters dict.
+
+      - name: new_document
+        input_arguments: []
+        output_arguments:
+          - name: doc
+            type_python: "Any"
+        decision_log: >
+          Exact match. Creates a syncrule document with class
+          name and parameters.
+
+      - name: search_query
+        input_arguments: []
+        output_arguments:
+          - name: q
+            type_python: "Any"
+        decision_log: "Exact match. Returns Query matching base.id."
+
+      - name: to_dict
+        input_arguments: []
+        output_arguments:
+          - name: data
+            type_python: "dict[str, Any]"
+        decision_log: "Python-specific serialization method."
+
+    static_methods:
+      - name: from_document
+        kind: classmethod
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+          - name: doc
+            type_matlab: "ndi.document"
+            type_python: "Any"
+        output_arguments:
+          - name: sr_obj
+            type_python: "SyncRule"
+        decision_log: >
+          Factory method. Creates the appropriate subclass based
+          on the document's syncrule.ndi_syncrule_class field.
+
+  # =========================================================================
+  # ndi.time.syncgraph  (graph-based time conversion)
+  # =========================================================================
+  - name: syncgraph
+    type: class
+    matlab_path: "+ndi/+time/syncgraph.m"
+    python_path: "ndi/time/syncgraph.py"
+    python_class: "SyncGraph"
+    inherits: "ndi.ido"
+
+    properties:
+      - name: session
+        type_matlab: "ndi.session"
+        type_python: "Any"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: "Implemented as @property in Python."
+
+      - name: rules
+        type_matlab: "ndi.time.syncrule array"
+        type_python: "list[SyncRule]"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: >
+          Implemented as @property in Python. Returns a copy.
+
+    methods:
+      - name: syncgraph
+        kind: constructor
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+            default: "None"
+          - name: document
+            type_matlab: "ndi.document"
+            type_python: "Any | None"
+            default: "None"
+          - name: identifier
+            type_matlab: "char"
+            type_python: "str | None"
+            default: "None"
+        output_arguments:
+          - name: sg_obj
+            type_python: "SyncGraph"
+        decision_log: >
+          Exact match. Can load from document. Requires networkx.
+
+      - name: add_rule
+        input_arguments:
+          - name: rule
+            type_matlab: "ndi.time.syncrule"
+            type_python: "SyncRule"
+        output_arguments:
+          - name: sg_obj
+            type_python: "SyncGraph"
+        decision_log: >
+          Exact match. Returns self for chaining. Checks for
+          duplicates. Clears cached graph info.
+
+      - name: remove_rule
+        input_arguments:
+          - name: index
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: sg_obj
+            type_python: "SyncGraph"
+        decision_log: >
+          Exact match. Returns self for chaining.
+          Uses 0-based indexing (internal data structure access).
+
+      - name: graphinfo
+        input_arguments: []
+        output_arguments:
+          - name: ginfo
+            type_python: "GraphInfo"
+        decision_log: >
+          Exact match. Builds graph lazily and returns cached
+          GraphInfo with nodes, cost matrix, mappings.
+
+      - name: time_convert
+        input_arguments:
+          - name: timeref_in
+            type_matlab: "ndi.time.timereference"
+            type_python: "TimeReference"
+          - name: t_in
+            type_matlab: "double"
+            type_python: "float"
+          - name: referent_out
+            type_matlab: "ndi.epoch.epochset"
+            type_python: "Any"
+          - name: clocktype_out
+            type_matlab: "ndi.time.clocktype"
+            type_python: "ClockType"
+        output_arguments:
+          - name: t_out
+            type_python: "float | None"
+          - name: timeref_out
+            type_python: "TimeReference | None"
+          - name: msg
+            type_python: "str"
+        decision_log: >
+          Exact match. Returns 3-tuple (t_out, timeref_out, msg).
+          Uses NetworkX shortest path for graph traversal.
+
+      - name: eq
+        input_arguments:
+          - name: other
+            type_python: "Any"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: >
+          Mapped to Python __eq__. Compares session and rules list.
+
+      - name: new_document
+        input_arguments: []
+        output_arguments:
+          - name: docs
+            type_python: "list[Any]"
+        decision_log: >
+          Exact match. Returns list of Documents (syncgraph doc +
+          rule docs). Adds rule dependencies.
+
+      - name: search_query
+        input_arguments: []
+        output_arguments:
+          - name: q
+            type_python: "Any"
+        decision_log: "Exact match. Returns Query matching base.id and session_id."
+
+  # =========================================================================
+  # ndi.time.syncgraph.epochnode (dataclass)
+  # =========================================================================
+  - name: epochnode
+    type: class
+    matlab_path: null
+    python_path: "ndi/time/syncgraph.py"
+    python_class: "EpochNode"
+
+    properties:
+      - name: epoch_id
+        type_python: "str"
+        decision_log: "Epoch identifier."
+
+      - name: epoch_session_id
+        type_python: "str"
+        decision_log: "Session identifier."
+
+      - name: epochprobemap
+        type_python: "Any"
+        decision_log: "Probe map for this epoch."
+
+      - name: epoch_clock
+        type_python: "ClockType"
+        decision_log: "Clock type for this epoch."
+
+      - name: t0_t1
+        type_python: "tuple[float, float]"
+        decision_log: "Start and end times."
+
+      - name: underlying_epochs
+        type_python: "dict[str, Any] | None"
+        decision_log: "Optional underlying epoch info."
+
+      - name: objectname
+        type_python: "str"
+        decision_log: "Name of the object providing epochs."
+
+      - name: objectclass
+        type_python: "str"
+        decision_log: "Class name of the object providing epochs."
+
+    methods:
+      - name: to_dict
+        input_arguments: []
+        output_arguments:
+          - name: data
+            type_python: "dict[str, Any]"
+        decision_log: "Python-specific serialization."
+
+      - name: from_dict
+        kind: classmethod
+        input_arguments:
+          - name: data
+            type_python: "dict[str, Any]"
+        output_arguments:
+          - name: node
+            type_python: "EpochNode"
+        decision_log: "Python-specific factory."
+
+    decision_log: >
+      Python dataclass. Represents a node in the epoch sync graph.
+      Mirrors the MATLAB struct used in epochgraph operations.
+
+  # =========================================================================
+  # ndi.time.syncgraph.graphinfo (dataclass)
+  # =========================================================================
+  - name: graphinfo
+    type: class
+    matlab_path: null
+    python_path: "ndi/time/syncgraph.py"
+    python_class: "GraphInfo"
+
+    properties:
+      - name: nodes
+        type_python: "list[EpochNode]"
+        decision_log: "List of epoch nodes."
+
+      - name: G
+        type_python: "np.ndarray | None"
+        decision_log: "Cost matrix G[i,j] = cost from node i to j."
+
+      - name: mapping
+        type_python: "list[list[TimeMapping | None]] | None"
+        decision_log: "Matrix of TimeMapping objects."
+
+      - name: diG
+        type_python: "Any"
+        decision_log: "NetworkX DiGraph for path finding."
+
+      - name: syncrule_ids
+        type_python: "list[str]"
+        decision_log: "List of sync rule document IDs."
+
+      - name: syncrule_G
+        type_python: "np.ndarray | None"
+        decision_log: "Matrix indicating which sync rule created each edge."
+
+    decision_log: >
+      Python dataclass. Container for sync graph information.
+      Mirrors the MATLAB struct used to hold graph state.
