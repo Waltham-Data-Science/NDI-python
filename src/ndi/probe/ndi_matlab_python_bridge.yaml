@@ -14,6 +14,7 @@ functions:
   - name: initProbeTypeMap
     type: function
     matlab_path: "+ndi/+probe/+fun/initProbeTypeMap.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/probe/__init__.py"
     input_arguments: []
     output_arguments:
@@ -27,6 +28,7 @@ functions:
   - name: getProbeTypeMap
     type: function
     matlab_path: "+ndi/+probe/+fun/getProbeTypeMap.m"
+    matlab_last_sync_hash: "86f7a0a3"
     python_path: "ndi/probe/__init__.py"
     input_arguments: []
     output_arguments:
@@ -47,6 +49,7 @@ classes:
   - name: probe
     type: class
     matlab_path: "+ndi/probe.m"
+    matlab_last_sync_hash: "e6890be7"
     python_path: "ndi/probe/__init__.py"
     python_class: "Probe"
     inherits: "ndi.element"
@@ -207,6 +210,7 @@ classes:
   - name: timeseries
     type: class
     matlab_path: "+ndi/+probe/timeseries.m"
+    matlab_last_sync_hash: "0b39ad6c"
     python_path: "ndi/probe/timeseries.py"
     python_class: "ProbeTimeseries"
     inherits: "ndi.probe"
@@ -315,6 +319,7 @@ classes:
   - name: mfdaq
     type: class
     matlab_path: "+ndi/+probe/+timeseries/mfdaq.m"
+    matlab_last_sync_hash: "1b188d97"
     python_path: "ndi/probe/timeseries_mfdaq.py"
     python_class: "ProbeTimeseriesMFDAQ"
     inherits: "ndi.probe.timeseries"
@@ -397,6 +402,7 @@ classes:
   - name: stimulator
     type: class
     matlab_path: "+ndi/+probe/+timeseries/stimulator.m"
+    matlab_last_sync_hash: "209d46b3"
     python_path: "ndi/probe/timeseries_stimulator.py"
     python_class: "ProbeTimeseriesStimulator"
     inherits: "ndi.probe.timeseries"

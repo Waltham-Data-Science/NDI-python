@@ -14,6 +14,7 @@ functions:
   - name: empty_id
     type: function
     matlab_path: "+ndi/+session/empty_id.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/session/session_base.py"
     input_arguments: []
     output_arguments:
@@ -32,6 +33,7 @@ classes:
   - name: session
     type: class
     matlab_path: "+ndi/session.m"
+    matlab_last_sync_hash: "a97ab7d0"
     python_path: "ndi/session/session_base.py"
     python_class: "Session"
 
@@ -392,6 +394,7 @@ classes:
   - name: dir
     type: class
     matlab_path: "+ndi/+session/dir.m"
+    matlab_last_sync_hash: "b640e6ff"
     python_path: "ndi/session/dir.py"
     python_class: "DirSession"
     inherits: "ndi.session"
@@ -498,6 +501,7 @@ classes:
   - name: sessiontable
     type: class
     matlab_path: "+ndi/+session/sessiontable.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/session/sessiontable.py"
     python_class: "SessionTable"
 
@@ -638,6 +642,7 @@ classes:
   - name: mock
     type: class
     matlab_path: "+ndi/+session/mock.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/session/mock.py"
     python_class: "MockSession"
     inherits: "ndi.session.dir"

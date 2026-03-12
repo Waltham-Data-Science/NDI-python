@@ -118,6 +118,7 @@ classes:
   - name: daqsystemstring
     type: class
     matlab_path: "+ndi/+daq/daqsystemstring.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/daq/daqsystemstring.py"
     python_class: "DAQSystemString"
 
@@ -187,6 +188,7 @@ classes:
   - name: reader
     type: class
     matlab_path: "+ndi/+daq/reader.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/daq/reader_base.py"
     python_class: "DAQReader"
     inherits: "ndi.ido"
@@ -340,6 +342,7 @@ classes:
   - name: mfdaq_reader
     type: class
     matlab_path: "+ndi/+daq/+reader/mfdaq.m"
+    matlab_last_sync_hash: "41e84fed"
     python_path: "ndi/daq/mfdaq.py"
     python_class: "MFDAQReader"
     inherits: "ndi.daq.reader"
@@ -650,6 +653,7 @@ classes:
   - name: system
     type: class
     matlab_path: "+ndi/+daq/system.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/daq/system.py"
     python_class: "DAQSystem"
     inherits: "ndi.ido"
@@ -892,6 +896,7 @@ classes:
   - name: system_mfdaq
     type: class
     matlab_path: "+ndi/+daq/+system/mfdaq.m"
+    matlab_last_sync_hash: "9f584d8a"
     python_path: "ndi/daq/system_mfdaq.py"
     python_class: "DAQSystemMFDAQ"
     inherits: "ndi.daq.system"

@@ -17,6 +17,7 @@ classes:
   - name: metadatareader
     type: class
     matlab_path: "+ndi/+daq/metadatareader.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/daq/metadatareader/__init__.py"
     python_class: "MetadataReader"
     inherits: "ndi.ido"
@@ -140,6 +141,7 @@ classes:
   - name: NewStimStims
     type: class
     matlab_path: "+ndi/+daq/+metadatareader/NewStimStims.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/daq/metadatareader/newstim_stims.py"
     python_class: "NewStimStimsReader"
     inherits: "ndi.daq.metadatareader"
@@ -219,6 +221,7 @@ classes:
   - name: NielsenLabStims
     type: class
     matlab_path: "+ndi/+daq/+metadatareader/NielsenLabStims.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/daq/metadatareader/nielsenlab_stims.py"
     python_class: "NielsenLabStimsReader"
     inherits: "ndi.daq.metadatareader"

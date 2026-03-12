@@ -17,6 +17,7 @@ classes:
   - name: SyncMode
     type: enum
     matlab_path: "+ndi/+cloud/+sync/+enum/SyncMode.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/cloud/sync/mode.py"
     python_class: "SyncMode"
     members:
@@ -38,6 +39,7 @@ classes:
   - name: SyncOptions
     type: dataclass
     matlab_path: "+ndi/+cloud/+sync/SyncOptions.m"
+    matlab_last_sync_hash: "b7dc4b16"
     python_path: "ndi/cloud/sync/mode.py"
     python_class: "SyncOptions"
     properties:
@@ -114,6 +116,7 @@ functions:
 
   - name: uploadNew
     matlab_path: "+ndi/+cloud/+sync/uploadNew.m"
+    matlab_last_sync_hash: "c372693a"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: dataset_path
@@ -136,6 +139,7 @@ functions:
 
   - name: downloadNew
     matlab_path: "+ndi/+cloud/+sync/downloadNew.m"
+    matlab_last_sync_hash: "c372693a"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: dataset_path
@@ -158,6 +162,7 @@ functions:
 
   - name: mirrorToRemote
     matlab_path: "+ndi/+cloud/+sync/mirrorToRemote.m"
+    matlab_last_sync_hash: "c372693a"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: dataset_path
@@ -180,6 +185,7 @@ functions:
 
   - name: mirrorFromRemote
     matlab_path: "+ndi/+cloud/+sync/mirrorFromRemote.m"
+    matlab_last_sync_hash: "c372693a"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: dataset_path
@@ -202,6 +208,7 @@ functions:
 
   - name: twoWaySync
     matlab_path: "+ndi/+cloud/+sync/twoWaySync.m"
+    matlab_last_sync_hash: "c372693a"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: dataset_path
@@ -224,6 +231,7 @@ functions:
 
   - name: validate
     matlab_path: "+ndi/+cloud/+sync/validate.m"
+    matlab_last_sync_hash: "f3d00bad"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: dataset
@@ -265,6 +273,7 @@ functions:
 
   - name: deleteLocalDocuments
     matlab_path: "+ndi/+cloud/+sync/+internal/deleteLocalDocuments.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: ds_path
@@ -282,6 +291,7 @@ functions:
 
   - name: downloadNdiDocuments
     matlab_path: "+ndi/+cloud/+sync/+internal/downloadNdiDocuments.m"
+    matlab_last_sync_hash: "211a705e"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: cloud_dataset_id
@@ -310,11 +320,13 @@ not_yet_ported:
 
   - name: Constants
     matlab_path: "+ndi/+cloud/+sync/+internal/Constants.m"
+    matlab_last_sync_hash: "fe64a9f5"
     status: not_yet_ported
     decision_log: "MATLAB sync constants class. Values may be inlined in Python."
 
   - name: deleteRemoteDocuments
     matlab_path: "+ndi/+cloud/+sync/+internal/deleteRemoteDocuments.m"
+    matlab_last_sync_hash: "1498b2ea"
     status: not_yet_ported
     decision_log: >
       MATLAB internal for removing remote documents during mirror operations.
@@ -322,6 +334,7 @@ not_yet_ported:
 
   - name: createSyncIndexStruct
     matlab_path: "+ndi/+cloud/+sync/+internal/+index/createSyncIndexStruct.m"
+    matlab_last_sync_hash: "fe64a9f5"
     status: not_applicable
     decision_log: >
       MATLAB struct constructor. Python uses SyncIndex dataclass
@@ -329,6 +342,7 @@ not_yet_ported:
 
   - name: getIndexFilepath
     matlab_path: "+ndi/+cloud/+sync/+internal/+index/getIndexFilepath.m"
+    matlab_last_sync_hash: "fe64a9f5"
     status: not_applicable
     decision_log: >
       MATLAB path resolver. Python handles this inside

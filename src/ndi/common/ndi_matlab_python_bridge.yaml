@@ -26,6 +26,7 @@ functions:
   - name: getLogger
     type: function
     matlab_path: "+ndi/+common/getLogger.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/common/__init__.py"
     input_arguments:
       - name: name
@@ -40,6 +41,7 @@ functions:
   - name: getCache
     type: function
     matlab_path: "+ndi/+common/getCache.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/common/__init__.py"
     input_arguments: []
     output_arguments:
@@ -50,6 +52,7 @@ functions:
   - name: getDatabaseHierarchy
     type: function
     matlab_path: "+ndi/+common/getDatabaseHierarchy.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/common/__init__.py"
     input_arguments: []
     output_arguments:
@@ -62,6 +65,7 @@ functions:
   - name: assertDIDInstalled
     type: function
     matlab_path: "+ndi/+common/assertDIDInstalled.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/common/__init__.py"
     input_arguments: []
     output_arguments: []
@@ -80,6 +84,7 @@ classes:
   - name: PathConstants
     type: class
     matlab_path: "+ndi/+common/PathConstants.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/common/__init__.py"
     python_class: "PathConstants"
 
