@@ -28,9 +28,25 @@ project_metadata:
 # 1. Check:  Does the function/class exist in the YAML?
 # 2. Add/Update: If it is missing or the MATLAB signature has changed,
 #    update the YAML first.
-# 3. Notify: The agent MUST explicitly tell the user:
+# 3. Record Hash: Store the short git hash of the MATLAB .m file being
+#    ported in the `matlab_last_sync_hash` field. Obtain the hash with:
+#      git log -1 --format="%h" -- <path-to-matlab-file>
+# 4. Notify: The agent MUST explicitly tell the user:
 #    "I have updated the ndi_matlab_python_bridge.yaml to include
 #    [Function Name]. Please review the interface contract."
+#
+# =============================================================================
+# 3a. Detecting Upstream MATLAB Changes
+# =============================================================================
+# The `matlab_last_sync_hash` field enables efficient change detection:
+#
+# 1. For each entry, compare `matlab_last_sync_hash` against the current
+#    HEAD hash of the corresponding MATLAB .m file:
+#      git log -1 --format="%h" -- <matlab_path>
+# 2. If the hashes differ, the MATLAB file has changed since the last sync
+#    and the Python port may need to be updated.
+# 3. After re-syncing, update `matlab_last_sync_hash` to the new hash and
+#    record the sync date in `decision_log`.
 
 # =============================================================================
 # 4. Structure for Classes and Functions
@@ -41,6 +57,7 @@ project_metadata:
 #   type: class
 #   matlab_path: "+ndi/Session.m"
 #   python_path: "ndi/session.py"
+#   matlab_last_sync_hash: "a4c9e07"  # Git hash of Session.m when last ported/synced
 #
 #   properties:
 #     - name: reference
@@ -60,6 +77,7 @@ project_metadata:
 #   type: function
 #   matlab_path: "+ndi/+cloud/ListAllDocuments.m"
 #   python_path: "ndi/cloud/ListAllDocuments.py"
+#   matlab_last_sync_hash: "8f3a2b1"  # Git hash of ListAllDocuments.m when last ported/synced
 #   input_arguments:
 #     - name: DatasetID
 #       type_matlab: "string | numeric"
@@ -68,16 +86,19 @@ project_metadata:
 #     - name: docs
 #       type_matlab: "struct array"
 #       type_python: "list[dict]"
-#   decision_log: "Python returns a list of dictionaries to mimic MATLAB struct arrays."
+#   decision_log: "Synchronized with MATLAB main as of 2026-03-12."
 
 # =============================================================================
 # 5. Summary of Field Rules
 # =============================================================================
-# Field             | Rule
-# ------------------|----------------------------------------------------------
-# name              | Strict Match. Case-sensitive match to the MATLAB .m file.
-# input_arguments   | Used to generate Pydantic @validate_call.
-# output_arguments  | Defines the order of the Return Tuple.
-# type_python       | Use Python 3.10+ syntax (e.g., str | int).
-# decision_log      | Mandatory for any divergence (e.g., "Shifted to
-#                   | 0-indexing for internal array access").
+# Field                | Rule
+# ---------------------|----------------------------------------------------------
+# name                 | Strict Match. Case-sensitive match to the MATLAB .m file.
+# matlab_last_sync_hash| The short git hash of the MATLAB .m file at the time it
+#                      | was last examined/ported. Used to detect upstream changes.
+# input_arguments      | Used to generate Pydantic @validate_call.
+# output_arguments     | Defines the order of the Return Tuple.
+# type_python          | Use Python 3.10+ syntax (e.g., str | int).
+# decision_log         | Mandatory for any divergence. Should include the sync
+#                      | date (e.g., "Synchronized with MATLAB main as of
+#                      | 2026-03-12.").

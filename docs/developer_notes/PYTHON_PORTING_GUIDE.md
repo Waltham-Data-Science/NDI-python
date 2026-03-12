@@ -22,8 +22,9 @@ To port or update a function, agents must follow these steps:
 
 1. **Check the Bridge:** Open the `ndi_matlab_python_bridge.yaml` in the target package.
 2. **Sync the Interface:** If the function is missing or outdated, update the YAML entry first based on the MATLAB `.m` file.
-3. **Implement:** Write the Python code to satisfy the `input_arguments` and `output_arguments` defined in the YAML.
-4. **Log & Notify:** Document intentional divergences in the YAML's `decision_log`. Explicitly tell the user what changes were made to the bridge file so they can review the contract.
+3. **Record the Sync Hash:** Store the short git hash of the MATLAB `.m` file being ported in the `matlab_last_sync_hash` field. Obtain it with: `git log -1 --format="%h" -- <path-to-matlab-file>`. This allows future comparison to detect upstream MATLAB changes.
+4. **Implement:** Write the Python code to satisfy the `input_arguments` and `output_arguments` defined in the YAML.
+5. **Log & Notify:** Record the sync date in the YAML's `decision_log` (e.g., `"Synchronized with MATLAB main as of 2026-03-12."`). Document any intentional divergences. Explicitly tell the user what changes were made to the bridge file so they can review the contract.
 
 ## 4. Input Validation: Pydantic is Mandatory
 
