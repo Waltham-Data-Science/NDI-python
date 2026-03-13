@@ -90,9 +90,11 @@ functions:
     output_arguments:
       - name: token
         type_python: "str"
+      - name: organizationID
+        type_python: "str"
     decision_log: >
       MATLAB authenticate returns [token, organizationID].
-      Python returns token only; org_id is stored in config.
+      Python now returns (token, org_id) tuple to match.
 
   - name: login
     matlab_path: "+ndi/+cloud/+api/+auth/login.m"
