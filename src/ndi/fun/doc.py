@@ -181,7 +181,7 @@ def makeSpeciesStrainSex(
 
                 ont_id, name = lookup(pato_id)
             except Exception:
-                ont_id, name = pato_id, sex
+                ont_id, name = pato_id, BiologicalSex
         else:
             ont_id, name = "", BiologicalSex
 
