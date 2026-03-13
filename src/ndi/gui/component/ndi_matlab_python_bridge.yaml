@@ -1,0 +1,479 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/gui/component/
+# The Primary Contract for the ndi.gui.component namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # -----------------------------------------------------------------------
+  # ndi.gui.component.abstract.ProgressMonitor
+  # -----------------------------------------------------------------------
+  - name: ProgressMonitor
+    type: class
+    matlab_path: "+ndi/+gui/+component/+abstract/ProgressMonitor.m"
+    python_path: "ndi/gui/component/abstract/ProgressMonitor.py"
+    python_class: "ProgressMonitor"
+    inherits: "handle (abstract)"
+
+    properties:
+      - name: Title
+        type_matlab: "char"
+        type_python: "str"
+        default: "'In progress...'"
+        decision_log: "Exact match."
+      - name: UpdateInterval
+        type_matlab: "double"
+        type_python: "float"
+        decision_log: "Exact match. Seconds between display refreshes."
+      - name: ProgressTracker
+        type_matlab: "ndi.gui.component.internal.ProgressTracker"
+        type_python: "ProgressTracker"
+        decision_log: "Exact match."
+      - name: DisplayElapsedTime
+        type_matlab: "logical"
+        type_python: "bool"
+        decision_log: "Exact match."
+      - name: DisplayRemainingTime
+        type_matlab: "logical"
+        type_python: "bool"
+        decision_log: "Exact match."
+
+    methods:
+      - name: ProgressMonitor
+        kind: constructor
+        input_arguments:
+          - name: kwargs
+            type_matlab: "name-value pairs"
+            type_python: "**kwargs"
+        output_arguments:
+          - name: obj
+            type_python: "ProgressMonitor"
+        decision_log: >
+          Ported. Accepts property name-value pairs.
+
+      - name: reset
+        input_arguments: []
+        output_arguments: []
+        decision_log: "Exact match. Clears timing and state data."
+
+      - name: markComplete
+        input_arguments: []
+        output_arguments: []
+        decision_log: "Exact match. Signals task completion."
+
+      - name: updateProgressDisplay
+        input_arguments: []
+        output_arguments: []
+        decision_log: "Abstract method. Subclasses implement display update."
+
+      - name: updateMessage
+        input_arguments:
+          - name: message
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments: []
+        decision_log: "Abstract method. Subclasses implement message update."
+
+      - name: finish
+        input_arguments: []
+        output_arguments: []
+        decision_log: "Abstract method. Subclasses implement completion display."
+
+  # -----------------------------------------------------------------------
+  # ndi.gui.component.internal.ProgressTracker
+  # -----------------------------------------------------------------------
+  - name: ProgressTracker
+    type: class
+    matlab_path: "+ndi/+gui/+component/+internal/ProgressTracker.m"
+    python_path: "ndi/gui/component/internal/ProgressTracker.py"
+    python_class: "ProgressTracker"
+    inherits: "handle"
+
+    properties:
+      - name: CurrentStep
+        type_matlab: "double"
+        type_python: "int"
+        decision_log: "Exact match."
+      - name: TotalSteps
+        type_matlab: "double"
+        type_python: "int"
+        decision_log: "Exact match."
+      - name: IsFinished
+        type_matlab: "logical"
+        type_python: "bool"
+        decision_log: "Exact match."
+      - name: PercentageComplete
+        type_matlab: "double (dependent)"
+        type_python: "float (property)"
+        decision_log: "Exact match. Computed as CurrentStep / TotalSteps * 100."
+      - name: Message
+        type_matlab: "char (dependent)"
+        type_python: "str (property)"
+        decision_log: "Exact match. Formatted from TemplateMessage."
+      - name: UpdateInterval
+        type_matlab: "double"
+        type_python: "float"
+        decision_log: "Exact match. Seconds between event notifications."
+      - name: TemplateMessage
+        type_matlab: "char"
+        type_python: "str"
+        decision_log: >
+          Exact match. Uses {{PropertyName}} template syntax.
+      - name: CompletedMessage
+        type_matlab: "char"
+        type_python: "str"
+        decision_log: "Exact match."
+
+    methods:
+      - name: ProgressTracker
+        kind: constructor
+        input_arguments:
+          - name: totalSteps
+            type_matlab: "double"
+            type_python: "int"
+            default: "0"
+        output_arguments:
+          - name: obj
+            type_python: "ProgressTracker"
+        decision_log: "Exact match."
+
+      - name: updateProgress
+        input_arguments:
+          - name: currentStep
+            type_matlab: "double"
+            type_python: "int | None"
+            default: "None"
+        output_arguments: []
+        decision_log: >
+          Exact match. Increments by 1 if no argument, or sets to
+          the given value. Fires ProgressUpdated event.
+
+      - name: setCompleted
+        input_arguments: []
+        output_arguments: []
+        decision_log: "Exact match. Marks task as finished."
+
+      - name: reset
+        input_arguments: []
+        output_arguments: []
+        decision_log: "Exact match. Reinitializes the tracker."
+
+  # -----------------------------------------------------------------------
+  # ndi.gui.component.internal.AsynchProgressTracker
+  # -----------------------------------------------------------------------
+  - name: AsynchProgressTracker
+    type: class
+    matlab_path: "+ndi/+gui/+component/+internal/AsynchProgressTracker.m"
+    python_path: "ndi/gui/component/internal/AsynchProgressTracker.py"
+    python_class: "AsynchProgressTracker"
+    inherits: "ndi.gui.component.internal.ProgressTracker"
+
+    methods:
+      - name: updateProgress
+        input_arguments:
+          - name: currentStep
+            type_matlab: "double"
+            type_python: "int | None"
+            default: "None"
+        output_arguments: []
+        decision_log: >
+          Overrides parent. Adds file-based progress dumping for
+          cross-process monitoring.
+
+  # -----------------------------------------------------------------------
+  # ndi.gui.component.internal.event.ProgressUpdatedEventData
+  # -----------------------------------------------------------------------
+  - name: ProgressUpdatedEventData
+    type: class
+    matlab_path: "+ndi/+gui/+component/+internal/+event/ProgressUpdatedEventData.m"
+    python_path: "ndi/gui/component/internal/event/ProgressUpdatedEventData.py"
+    python_class: "ProgressUpdatedEventData"
+    inherits: "event.EventData"
+
+    properties:
+      - name: PercentageComplete
+        type_matlab: "double"
+        type_python: "float"
+        decision_log: "Exact match."
+
+    methods:
+      - name: ProgressUpdatedEventData
+        kind: constructor
+        input_arguments:
+          - name: percentageComplete
+            type_matlab: "double"
+            type_python: "float"
+        output_arguments:
+          - name: obj
+            type_python: "ProgressUpdatedEventData"
+        decision_log: "Exact match."
+
+  # -----------------------------------------------------------------------
+  # ndi.gui.component.internal.event.MessageUpdatedEventData
+  # -----------------------------------------------------------------------
+  - name: MessageUpdatedEventData
+    type: class
+    matlab_path: "+ndi/+gui/+component/+internal/+event/MessageUpdatedEventData.m"
+    python_path: "ndi/gui/component/internal/event/MessageUpdatedEventData.py"
+    python_class: "MessageUpdatedEventData"
+    inherits: "event.EventData"
+
+    properties:
+      - name: Message
+        type_matlab: "char"
+        type_python: "str"
+        decision_log: "Exact match."
+
+    methods:
+      - name: MessageUpdatedEventData
+        kind: constructor
+        input_arguments:
+          - name: message
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: obj
+            type_python: "MessageUpdatedEventData"
+        decision_log: "Exact match."
+
+  # -----------------------------------------------------------------------
+  # ndi.gui.component.CommandWindowProgressMonitor
+  # -----------------------------------------------------------------------
+  - name: CommandWindowProgressMonitor
+    type: class
+    matlab_path: "+ndi/+gui/+component/CommandWindowProgressMonitor.m"
+    python_path: "ndi/gui/component/CommandWindowProgressMonitor.py"
+    python_class: "CommandWindowProgressMonitor"
+    inherits: "ndi.gui.component.abstract.ProgressMonitor"
+
+    properties:
+      - name: IndentSize
+        type_matlab: "double"
+        type_python: "int"
+        decision_log: "Exact match."
+      - name: ShowTimeStamp
+        type_matlab: "logical"
+        type_python: "bool"
+        decision_log: "Exact match."
+      - name: TimeStampFormat
+        type_matlab: "char"
+        type_python: "str"
+        decision_log: "Exact match."
+      - name: UpdateInplace
+        type_matlab: "logical"
+        type_python: "bool"
+        decision_log: >
+          Exact match. When true, uses carriage return to update
+          in-place on the same line.
+
+    methods:
+      - name: CommandWindowProgressMonitor
+        kind: constructor
+        input_arguments:
+          - name: kwargs
+            type_matlab: "name-value pairs"
+            type_python: "**kwargs"
+        output_arguments:
+          - name: obj
+            type_python: "CommandWindowProgressMonitor"
+        decision_log: "Exact match."
+
+  # -----------------------------------------------------------------------
+  # ndi.gui.component.NDIProgressBar
+  # -----------------------------------------------------------------------
+  - name: NDIProgressBar
+    type: class
+    matlab_path: "+ndi/+gui/+component/NDIProgressBar.m"
+    python_path: "ndi/gui/component/NDIProgressBar.py"
+    python_class: "NDIProgressBar"
+    inherits: "ndi.gui.component.abstract.ProgressMonitor"
+
+    properties:
+      - name: Value
+        type_matlab: "double"
+        type_python: "float"
+        decision_log: "Exact match. Progress fraction 0-1."
+      - name: Message
+        type_matlab: "char"
+        type_python: "str"
+        decision_log: "Exact match."
+      - name: Size
+        type_matlab: "double (1,2)"
+        type_python: "tuple[int, int]"
+        decision_log: "Exact match. Width, height in pixels."
+      - name: Location
+        type_matlab: "double (1,2)"
+        type_python: "tuple[int, int]"
+        decision_log: "Exact match. x, y position."
+
+    methods:
+      - name: NDIProgressBar
+        kind: constructor
+        input_arguments:
+          - name: kwargs
+            type_matlab: "name-value pairs"
+            type_python: "**kwargs"
+        output_arguments:
+          - name: obj
+            type_python: "NDIProgressBar"
+        decision_log: "Ported. Uses PySide6 QProgressBar with NDI styling."
+
+      - name: updateProgressDisplay
+        input_arguments: []
+        output_arguments: []
+        decision_log: "Exact match. Updates the visual progress bar."
+
+      - name: finish
+        input_arguments: []
+        output_arguments: []
+        decision_log: "Exact match. Shows completion message."
+
+  # -----------------------------------------------------------------------
+  # ndi.gui.component.ProgressBarWindow
+  # -----------------------------------------------------------------------
+  - name: ProgressBarWindow
+    type: class
+    matlab_path: "+ndi/+gui/+component/ProgressBarWindow.m"
+    python_path: "ndi/gui/component/ProgressBarWindow.py"
+    python_class: "ProgressBarWindow"
+    inherits: "matlab.apps.AppBase"
+
+    properties:
+      - name: ScreenFrac
+        type_matlab: "double"
+        type_python: "float"
+        default: "0.025"
+        decision_log: "Exact match."
+      - name: Timeout
+        type_matlab: "duration"
+        type_python: "float"
+        decision_log: >
+          Adapted. MATLAB uses duration type (minutes(1));
+          Python uses float seconds (60.0).
+      - name: AutoDelete
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "True"
+        decision_log: "Exact match."
+      - name: ProgressBars
+        type_matlab: "struct array"
+        type_python: "list[dict[str, Any]]"
+        decision_log: >
+          Adapted. MATLAB struct array with fields Tag, Progress,
+          State, Auto, Axes, Patch, Percent, Button, Label, Clock,
+          Timer. Python uses list of dicts with equivalent keys.
+
+    methods:
+      - name: ProgressBarWindow
+        kind: constructor
+        input_arguments:
+          - name: title
+            type_matlab: "char"
+            type_python: "str"
+            default: "''"
+          - name: Overwrite
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "False"
+          - name: AutoDelete
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "True"
+        output_arguments:
+          - name: app
+            type_python: "ProgressBarWindow"
+        decision_log: >
+          Ported. Creates a PySide6 window for managing multiple
+          progress bars. GrabMostRecent and IgnoreTitle options
+          are adapted to Python singleton pattern.
+
+      - name: addBar
+        input_arguments:
+          - name: Label
+            type_matlab: "char"
+            type_python: "str"
+            default: "''"
+          - name: Tag
+            type_matlab: "char"
+            type_python: "str"
+            default: "''"
+          - name: Color
+            type_matlab: "double (1,3)"
+            type_python: "tuple[float, float, float]"
+            default: "(1.0, 1.0, 1.0)"
+          - name: Auto
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "False"
+        output_arguments: []
+        decision_log: "Exact match."
+
+      - name: updateBar
+        input_arguments:
+          - name: barID
+            type_matlab: "numeric | char"
+            type_python: "int | str"
+          - name: progress
+            type_matlab: "double (0-1)"
+            type_python: "float"
+        output_arguments: []
+        decision_log: "Exact match."
+
+      - name: removeBar
+        input_arguments:
+          - name: barID
+            type_matlab: "numeric | char"
+            type_python: "int | str"
+        output_arguments: []
+        decision_log: "Exact match."
+
+      - name: getBarNum
+        input_arguments:
+          - name: barID
+            type_matlab: "numeric | char"
+            type_python: "int | str"
+        output_arguments:
+          - name: barNum
+            type_python: "int | None"
+          - name: status
+            type_python: "dict[str, str]"
+        decision_log: "Exact match."
+
+      - name: getState
+        input_arguments:
+          - name: barID
+            type_matlab: "numeric | char"
+            type_python: "int | str"
+        output_arguments:
+          - name: state
+            type_python: "str"
+        decision_log: "Exact match."
+
+      - name: setTimeout
+        input_arguments:
+          - name: newTimeout
+            type_matlab: "duration"
+            type_python: "float"
+        output_arguments: []
+        decision_log: >
+          Adapted. MATLAB uses duration; Python uses float seconds.
+
+      - name: checkTimeout
+        input_arguments: []
+        output_arguments:
+          - name: barNum
+            type_python: "list[int]"
+        decision_log: "Exact match."
+
+      - name: checkComplete
+        input_arguments: []
+        output_arguments:
+          - name: barNum
+            type_python: "list[int]"
+        decision_log: "Exact match."

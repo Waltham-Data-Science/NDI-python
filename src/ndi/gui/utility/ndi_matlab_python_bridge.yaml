@@ -1,0 +1,35 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/gui/utility/
+# The Primary Contract for the ndi.gui.utility namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Standalone functions
+# =========================================================================
+functions:
+
+  - name: centerFigure
+    type: function
+    matlab_path: "+ndi/+gui/+utility/centerFigure.m"
+    python_path: "ndi/gui/utility/centerFigure.py"
+    input_arguments:
+      - name: figureHandle
+        type_matlab: "matlab.ui.Figure"
+        type_python: "QWidget"
+      - name: referencePosition
+        type_matlab: "double (1,4) | matlab.ui.Figure"
+        type_python: "tuple[int, int, int, int] | QWidget | None"
+        default: "None"
+      - name: offset
+        type_matlab: "double (1,2)"
+        type_python: "tuple[int, int]"
+        default: "(0, 0)"
+    output_arguments: []
+    decision_log: >
+      Ported. Centers a window on screen or relative to a reference
+      widget/position. MATLAB uses setpixelposition; Python uses
+      QWidget.move with screen geometry calculation.
+      Synchronized with MATLAB main as of 2026-03-13.
