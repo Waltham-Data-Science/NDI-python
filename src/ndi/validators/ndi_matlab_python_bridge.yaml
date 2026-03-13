@@ -1,0 +1,214 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/validators/
+# The Primary Contract for the ndi.validators namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Standalone functions
+# =========================================================================
+functions:
+
+  - name: is_iso8601
+    type: function
+    matlab_path: null
+    python_path: "ndi/validators/is_iso8601.py"
+    input_arguments:
+      - name: val
+        type_matlab: "N/A"
+        type_python: "object"
+    output_arguments:
+      - name: validated
+        type_python: "str"
+    decision_log: >
+      Python-specific Pydantic validator. No standalone MATLAB function.
+      MATLAB equivalent is the format validation in the arguments block
+      of ndi.util.datestamp2datetime (format 'yyyy-MM-dd''T''HH:mm:ss.SSSXXX').
+      Raises ValueError if input is not a valid ISO 8601 string.
+
+  - name: is_ndarray
+    type: function
+    matlab_path: null
+    python_path: "ndi/validators/is_ndarray.py"
+    input_arguments:
+      - name: val
+        type_matlab: "N/A"
+        type_python: "object"
+    output_arguments:
+      - name: validated
+        type_python: "np.ndarray"
+    decision_log: >
+      Python-specific Pydantic validator. No standalone MATLAB function.
+      MATLAB equivalent is mustBeA(val, 'numeric') in arguments blocks.
+      Raises ValueError if input is not a numpy.ndarray.
+
+  - name: mustBeCellArrayOfClass
+    type: function
+    matlab_path: "+ndi/+validators/mustBeCellArrayOfClass.m"
+    python_path: "ndi/validators/mustBeCellArrayOfClass.py"
+    input_arguments:
+      - name: c
+        type_matlab: "cell"
+        type_python: "list | tuple"
+      - name: className
+        type_matlab: "char"
+        type_python: "type"
+    output_arguments: []
+    decision_log: >
+      Exact match. In MATLAB className is a string; in Python it is
+      the class object itself. Raises TypeError if any element is not
+      an instance of className.
+
+  - name: mustBeCellArrayOfNdiSessions
+    type: function
+    matlab_path: "+ndi/+validators/mustBeCellArrayOfNdiSessions.m"
+    python_path: "ndi/validators/mustBeCellArrayOfNdiSessions.py"
+    input_arguments:
+      - name: value
+        type_matlab: "cell"
+        type_python: "Sequence"
+    output_arguments: []
+    decision_log: >
+      Exact match. Validates every element is an ndi.session.DirSession.
+      Uses lazy import to avoid circular imports. Raises TypeError
+      if validation fails.
+
+  - name: mustBeCellArrayOfNonEmptyCharacterArrays
+    type: function
+    matlab_path: "+ndi/+validators/mustBeCellArrayOfNonEmptyCharacterArrays.m"
+    python_path: "ndi/validators/mustBeCellArrayOfNonEmptyCharacterArrays.py"
+    input_arguments:
+      - name: value
+        type_matlab: "cell"
+        type_python: "Sequence"
+    output_arguments: []
+    decision_log: >
+      Exact match. Validates every element is a non-empty string.
+      Raises TypeError if any element is not a string, ValueError
+      if any element is empty.
+
+  - name: mustBeClassnameOfType
+    type: function
+    matlab_path: "+ndi/+validators/mustBeClassnameOfType.m"
+    python_path: "ndi/validators/mustBeClassnameOfType.py"
+    input_arguments:
+      - name: classname
+        type_matlab: "char"
+        type_python: "str"
+      - name: requiredType
+        type_matlab: "meta.class"
+        type_python: "type"
+    output_arguments: []
+    decision_log: >
+      Exact match. Dynamically imports the module for classname and
+      checks issubclass against requiredType. Raises ValueError if
+      the class cannot be found or does not inherit from requiredType.
+
+  - name: mustBeEpochInput
+    type: function
+    matlab_path: "+ndi/+validators/mustBeEpochInput.m"
+    python_path: "ndi/validators/mustBeEpochInput.py"
+    input_arguments:
+      - name: v
+        type_matlab: "char | double"
+        type_python: "str | int"
+    output_arguments: []
+    decision_log: >
+      Exact match. Valid epoch input is either a non-empty string or
+      a positive integer (>= 1). Raises TypeError if type is wrong,
+      ValueError if value is invalid.
+
+  - name: mustBeID
+    type: function
+    matlab_path: "+ndi/+validators/mustBeID.m"
+    python_path: "ndi/validators/mustBeID.py"
+    input_arguments:
+      - name: inputArg
+        type_matlab: "char"
+        type_python: "str"
+    output_arguments: []
+    decision_log: >
+      Exact match. Validates NDI identifier format: exactly 33
+      characters — 16 alphanumeric, underscore at position 17, then
+      16 more alphanumeric. Regex: ^[A-Za-z0-9]{16}_[A-Za-z0-9]{16}$.
+
+  - name: mustBeNumericClass
+    type: function
+    matlab_path: "+ndi/+validators/mustBeNumericClass.m"
+    python_path: "ndi/validators/mustBeNumericClass.py"
+    input_arguments:
+      - name: className
+        type_matlab: "char"
+        type_python: "str"
+    output_arguments: []
+    decision_log: >
+      Exact match. Validates className is one of the recognised
+      numeric/logical types: uint8, uint16, uint32, uint64, int8,
+      int16, int32, int64, single, double, logical, float32, float64,
+      bool. Raises ValueError if not.
+
+  - name: mustBeTextLike
+    type: function
+    matlab_path: "+ndi/+validators/mustBeTextLike.m"
+    python_path: "ndi/validators/mustBeTextLike.py"
+    input_arguments:
+      - name: value
+        type_matlab: "char | string | cellstr"
+        type_python: "str | list | tuple"
+    output_arguments: []
+    decision_log: >
+      Exact match. Accepted forms: a str, or a list/tuple where every
+      element is a str. Raises TypeError otherwise.
+
+  - name: mustHaveFields
+    type: function
+    matlab_path: "+ndi/+validators/mustHaveFields.m"
+    python_path: "ndi/validators/mustHaveFields.py"
+    input_arguments:
+      - name: s
+        type_matlab: "struct"
+        type_python: "dict"
+      - name: fields
+        type_matlab: "cellstr"
+        type_python: "Sequence[str]"
+    output_arguments: []
+    decision_log: >
+      Exact match. Validates that a dict (MATLAB struct equivalent)
+      has all required keys. Raises TypeError if s is not a dict,
+      ValueError if any keys are missing.
+
+  - name: mustHaveRequiredColumns
+    type: function
+    matlab_path: "+ndi/+validators/mustHaveRequiredColumns.m"
+    python_path: "ndi/validators/mustHaveRequiredColumns.py"
+    input_arguments:
+      - name: t
+        type_matlab: "table"
+        type_python: "pd.DataFrame"
+      - name: requiredCols
+        type_matlab: "cellstr | char"
+        type_python: "str | list[str]"
+    output_arguments: []
+    decision_log: >
+      Exact match. Validates that a DataFrame (MATLAB table equivalent)
+      contains all required columns. Raises TypeError if t is not a
+      DataFrame, ValueError if any columns are missing.
+
+  - name: mustMatchRegex
+    type: function
+    matlab_path: "+ndi/+validators/mustMatchRegex.m"
+    python_path: "ndi/validators/mustMatchRegex.py"
+    input_arguments:
+      - name: value
+        type_matlab: "char"
+        type_python: "str"
+      - name: pattern
+        type_matlab: "char"
+        type_python: "str"
+    output_arguments: []
+    decision_log: >
+      Exact match. Pattern is anchored (must match the entire string)
+      using re.fullmatch(). Raises TypeError if value or pattern is
+      not a string, ValueError if value does not match pattern.
