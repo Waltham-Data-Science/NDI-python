@@ -71,6 +71,38 @@ classes:
             type_python: "Ido"
         decision_log: "Exact match. Generates new ID if none provided."
 
+      - name: unique_id
+        kind: static
+        input_arguments: []
+        output_arguments:
+          - name: id
+            type_python: "str"
+        decision_log: >
+          Exact match. Generates a new unique hex ID from current time
+          and random number. Synchronized 2026-03-13.
+
+      - name: is_valid
+        kind: static
+        input_arguments:
+          - name: id_value
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: >
+          Exact match. Validates ID format (hex_hex or UUID).
+          Synchronized 2026-03-13.
+
+      - name: eq
+        input_arguments:
+          - name: other
+            type_python: "Any"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: "Mapped to Python __eq__. Compares by ID string."
+
     decision_log: >
       Thin wrapper over did.ido. Python Ido class provides the same
       unique ID generation. Synchronized 2026-03-13.
@@ -114,6 +146,31 @@ classes:
           Abstract-like method. Subclasses override to return
           queries matching their documents.
 
+      - name: load_element_doc
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+        output_arguments:
+          - name: doc
+            type_python: "Document | None"
+        decision_log: >
+          Exact match. Loads this object's document from the database
+          via searchquery(). Returns None if not found.
+          Synchronized 2026-03-13.
+
+      - name: document_id
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+        output_arguments:
+          - name: doc_id
+            type_python: "str | None"
+        decision_log: >
+          Exact match. Returns the document ID for this object,
+          or None if not found. Synchronized 2026-03-13.
+
     decision_log: >
       Interface class for document persistence. Any NDI class that
       can be stored as a document inherits from this.
@@ -137,6 +194,7 @@ classes:
         decision_log: "MATLAB struct; Python uses a dict-like DotDict."
 
     methods:
+      # --- Constructor ---
       - name: document
         kind: constructor
         input_arguments:
@@ -151,6 +209,29 @@ classes:
             type_python: "Document"
         decision_log: "Exact match."
 
+      # --- Identity ---
+      - name: id
+        input_arguments: []
+        output_arguments:
+          - name: doc_id
+            type_python: "str"
+        decision_log: "Exact match. Returns base.id. Implemented as @property."
+
+      - name: session_id
+        input_arguments: []
+        output_arguments:
+          - name: sid
+            type_python: "str"
+        decision_log: "Exact match. Returns base.session_id. Implemented as @property."
+
+      - name: doc_unique_id
+        input_arguments: []
+        output_arguments:
+          - name: uid
+            type_python: "str"
+        decision_log: "Exact match. Alias for id()."
+
+      # --- Session ---
       - name: set_session_id
         input_arguments:
           - name: session_id
@@ -161,6 +242,7 @@ classes:
             type_python: "Document"
         decision_log: "Exact match. Returns self for chaining."
 
+      # --- Dependency Management ---
       - name: set_dependency_value
         input_arguments:
           - name: dependency_name
@@ -169,32 +251,276 @@ classes:
           - name: dependency_value
             type_matlab: "char"
             type_python: "str"
+          - name: error_if_not_found
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "True"
         output_arguments:
           - name: ndi_document_obj
             type_python: "Document"
         decision_log: "Exact match. Returns self for chaining."
 
-      - name: id
+      - name: dependency
         input_arguments: []
         output_arguments:
-          - name: doc_id
-            type_python: "str"
-        decision_log: "Exact match. Returns base.id."
+          - name: names
+            type_python: "list[str]"
+          - name: dependency_structures
+            type_python: "list[dict]"
+        decision_log: >
+          Exact match. Returns 2-tuple (names, dependency_structures).
+          Synchronized 2026-03-13.
 
-      - name: session_id
+      - name: dependency_value
+        input_arguments:
+          - name: dependency_name
+            type_matlab: "char"
+            type_python: "str"
+          - name: error_if_not_found
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "True"
+        output_arguments:
+          - name: value
+            type_python: "str | None"
+        decision_log: >
+          Exact match. Returns dependency value by name. Raises
+          KeyError if not found and error_if_not_found is True.
+          Synchronized 2026-03-13.
+
+      - name: dependency_value_n
+        input_arguments:
+          - name: dependency_name
+            type_matlab: "char"
+            type_python: "str"
+          - name: error_if_not_found
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "True"
+        output_arguments:
+          - name: values
+            type_python: "list[str]"
+        decision_log: >
+          Exact match. Returns values from numbered dependency list
+          (e.g., element_1, element_2). Synchronized 2026-03-13.
+
+      - name: add_dependency_value_n
+        input_arguments:
+          - name: dependency_name
+            type_matlab: "char"
+            type_python: "str"
+          - name: value
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: ndi_document_obj
+            type_python: "Document"
+        decision_log: >
+          Exact match. Appends to numbered dependency list.
+          Returns self for chaining. Synchronized 2026-03-13.
+
+      - name: remove_dependency_value_n
+        input_arguments:
+          - name: dependency_name
+            type_matlab: "char"
+            type_python: "str"
+          - name: index
+            type_matlab: "integer"
+            type_python: "int | None"
+            default: "None"
+        output_arguments:
+          - name: ndi_document_obj
+            type_python: "Document"
+        decision_log: >
+          Exact match. Removes numbered dependency by index, or all
+          if index is None. Returns self for chaining.
+          Synchronized 2026-03-13.
+
+      # --- File Management ---
+      - name: has_files
         input_arguments: []
         output_arguments:
-          - name: sid
-            type_python: "str"
-        decision_log: "Exact match. Returns base.session_id."
+          - name: b
+            type_python: "bool"
+        decision_log: >
+          Exact match. Checks if document has associated files.
+          Synchronized 2026-03-13.
 
-      - name: doc_unique_id
+      - name: add_file
+        input_arguments:
+          - name: name
+            type_matlab: "char"
+            type_python: "str"
+          - name: location
+            type_matlab: "char"
+            type_python: "str"
+          - name: ingest
+            type_matlab: "logical"
+            type_python: "bool | None"
+            default: "None"
+          - name: delete_original
+            type_matlab: "logical"
+            type_python: "bool | None"
+            default: "None"
+          - name: location_type
+            type_matlab: "char"
+            type_python: "str | None"
+            default: "None"
+        output_arguments:
+          - name: ndi_document_obj
+            type_python: "Document"
+        decision_log: >
+          Exact match. Adds a file to the document's file_info.
+          Auto-detects location_type from URL scheme.
+          Returns self for chaining. Synchronized 2026-03-13.
+
+      - name: remove_file
+        input_arguments:
+          - name: name
+            type_matlab: "char"
+            type_python: "str"
+          - name: location
+            type_matlab: "char"
+            type_python: "str | None"
+            default: "None"
+        output_arguments:
+          - name: ndi_document_obj
+            type_python: "Document"
+        decision_log: >
+          Exact match. Removes a file or specific location from
+          the document. Returns self for chaining.
+          Synchronized 2026-03-13.
+
+      - name: current_file_list
         input_arguments: []
         output_arguments:
-          - name: uid
-            type_python: "str"
-        decision_log: "Exact match. Alias for id()."
+          - name: file_names
+            type_python: "list[str]"
+        decision_log: >
+          Exact match. Returns list of file names currently
+          associated with this document. Synchronized 2026-03-13.
 
+      # --- Document Class Information ---
+      - name: doc_class
+        input_arguments: []
+        output_arguments:
+          - name: class_name
+            type_python: "str"
+        decision_log: >
+          Exact match. Returns the document class name
+          (e.g., 'base', 'element'). Synchronized 2026-03-13.
+
+      - name: doc_superclass
+        input_arguments: []
+        output_arguments:
+          - name: superclass_names
+            type_python: "list[str]"
+        decision_log: >
+          Exact match. Returns list of superclass names by
+          walking the document_class hierarchy.
+          Synchronized 2026-03-13.
+
+      - name: doc_isa
+        input_arguments:
+          - name: document_class
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: >
+          Exact match. Checks if document is of a class or
+          inherits from it. Synchronized 2026-03-13.
+
+      # --- Serialization ---
+      - name: write
+        input_arguments:
+          - name: filename
+            type_matlab: "char"
+            type_python: "str"
+          - name: indent
+            type_python: "int"
+            default: "2"
+        output_arguments: []
+        decision_log: >
+          Exact match. Writes document to JSON file.
+          Python adds indent parameter. Synchronized 2026-03-13.
+
+      - name: setproperties
+        input_arguments:
+          - name: varargin
+            type_matlab: "name-value pairs"
+            type_python: "**kwargs"
+        output_arguments:
+          - name: ndi_document_obj
+            type_python: "Document"
+        decision_log: >
+          Exact match. Sets multiple properties at once using
+          dot-notation paths. Returns self for chaining.
+          Synchronized 2026-03-13.
+
+      - name: validate
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+            default: "None"
+        output_arguments:
+          - name: result
+            type_python: "ValidationResult"
+        decision_log: >
+          Exact match. Three-tier validation: this-class properties,
+          superclass properties, dependency references.
+          Synchronized 2026-03-13.
+
+      # --- Conversion ---
+      - name: to_table
+        input_arguments: []
+        output_arguments:
+          - name: T
+            type_matlab: "table"
+            type_python: "pd.DataFrame"
+        decision_log: >
+          Exact match. Converts document to tabular form.
+          MATLAB returns table; Python returns pandas DataFrame.
+          Synchronized 2026-03-13.
+
+      - name: to_dict
+        input_arguments: []
+        output_arguments:
+          - name: d
+            type_python: "dict"
+        decision_log: >
+          Python-specific convenience. Returns deep copy of
+          document_properties. Synchronized 2026-03-13.
+
+      - name: to_json
+        input_arguments:
+          - name: indent
+            type_python: "int"
+            default: "2"
+        output_arguments:
+          - name: json_str
+            type_python: "str"
+        decision_log: >
+          Python-specific convenience. Returns JSON string
+          representation. Synchronized 2026-03-13.
+
+      # --- Merging ---
+      - name: plus
+        input_arguments:
+          - name: other
+            type_matlab: "ndi.document"
+            type_python: "Document"
+        output_arguments:
+          - name: merged_doc
+            type_python: "Document"
+        decision_log: >
+          Exact match. Merges two documents. Fields in self take
+          precedence. Mapped to Python __add__. Merges superclasses,
+          dependencies, and file_lists. Synchronized 2026-03-13.
+
+      # --- Equality ---
       - name: eq
         input_arguments:
           - name: other
@@ -202,7 +528,59 @@ classes:
         output_arguments:
           - name: b
             type_python: "bool"
-        decision_log: "Mapped to Python __eq__."
+        decision_log: "Mapped to Python __eq__. Compares by document ID."
+
+      # --- Static Methods ---
+      - name: find_doc_by_id
+        kind: static
+        input_arguments:
+          - name: doc_array
+            type_matlab: "cell array of ndi.document"
+            type_python: "list[Document]"
+          - name: doc_id
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: doc
+            type_python: "Document | None"
+          - name: index
+            type_python: "int | None"
+        decision_log: >
+          Exact match. Finds a document in a list by ID. Returns
+          2-tuple (document, index) or (None, None).
+          Synchronized 2026-03-13.
+
+      - name: find_newest
+        kind: static
+        input_arguments:
+          - name: doc_array
+            type_matlab: "cell array of ndi.document"
+            type_python: "list[Document]"
+        output_arguments:
+          - name: newest_doc
+            type_python: "Document"
+          - name: index
+            type_python: "int"
+          - name: datestamp
+            type_python: "datetime"
+        decision_log: >
+          Exact match. Finds the newest document by datestamp.
+          Returns 3-tuple (doc, index, datestamp).
+          Synchronized 2026-03-13.
+
+      - name: read_blank_definition
+        kind: static
+        input_arguments:
+          - name: document_type
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: definition
+            type_python: "dict"
+        decision_log: >
+          Exact match. Reads a blank document definition from
+          JSON schema. Recursively merges superclass properties.
+          Synchronized 2026-03-13.
 
     decision_log: >
       Core document class. Both languages use JSON schema-based
@@ -223,8 +601,29 @@ classes:
         type_matlab: "struct"
         type_python: "list[dict]"
         decision_log: "Inherited from did.query."
+      - name: field
+        type_python: "str"
+        decision_log: >
+          Computed property. Returns the field being queried from
+          search_structure. Synchronized 2026-03-13.
+      - name: operator
+        type_python: "str | None"
+        decision_log: >
+          Computed property. Returns the Python-style operator
+          mapped from DID operation. Synchronized 2026-03-13.
+      - name: value
+        type_python: "Any"
+        decision_log: >
+          Computed property. Returns the query value (param1).
+          Synchronized 2026-03-13.
+      - name: queries
+        type_python: "list[Query]"
+        decision_log: >
+          List of sub-queries for composite (AND/OR) queries.
+          Synchronized 2026-03-13.
 
     methods:
+      # --- Constructor ---
       - name: query
         kind: constructor
         input_arguments:
@@ -233,8 +632,8 @@ classes:
             type_python: "str"
           - name: op
             type_matlab: "char"
-            type_python: "str"
-            default: "''"
+            type_python: "str | None"
+            default: "None"
           - name: param1
             type_matlab: "any"
             type_python: "Any"
@@ -248,6 +647,7 @@ classes:
             type_python: "Query"
         decision_log: "Exact match."
 
+      # --- NDI-specific query types ---
       - name: isa
         input_arguments:
           - name: class_name
@@ -266,16 +666,272 @@ classes:
           - name: dependency_value
             type_matlab: "char"
             type_python: "str"
+            default: "''"
         output_arguments:
           - name: q
             type_python: "Query"
         decision_log: "Exact match. Shorthand for depends_on query."
+
+      # --- Comparison operators (MATLAB overloads -> Python __eq__ etc.) ---
+      - name: eq
+        input_arguments:
+          - name: value
+            type_python: "Any"
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: >
+          MATLAB == operator overload. Mapped to Python __eq__.
+          Resolves to exact_string or exact_number.
+          Synchronized 2026-03-13.
+
+      - name: ne
+        input_arguments:
+          - name: value
+            type_python: "Any"
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: >
+          MATLAB ~= operator overload. Mapped to Python __ne__.
+          Synchronized 2026-03-13.
+
+      - name: lt
+        input_arguments:
+          - name: value
+            type_python: "Any"
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: "MATLAB < overload. Mapped to Python __lt__. Synchronized 2026-03-13."
+
+      - name: le
+        input_arguments:
+          - name: value
+            type_python: "Any"
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: "MATLAB <= overload. Mapped to Python __le__. Synchronized 2026-03-13."
+
+      - name: gt
+        input_arguments:
+          - name: value
+            type_python: "Any"
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: "MATLAB > overload. Mapped to Python __gt__. Synchronized 2026-03-13."
+
+      - name: ge
+        input_arguments:
+          - name: value
+            type_python: "Any"
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: "MATLAB >= overload. Mapped to Python __ge__. Synchronized 2026-03-13."
+
+      # --- Logical operators ---
+      - name: and
+        input_arguments:
+          - name: other
+            type_matlab: "ndi.query"
+            type_python: "Query"
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: >
+          MATLAB & overload. Mapped to Python __and__. Concatenates
+          search_structures for AND semantics. Synchronized 2026-03-13.
+
+      - name: or
+        input_arguments:
+          - name: other
+            type_matlab: "ndi.query"
+            type_python: "Query"
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: >
+          MATLAB | overload. Mapped to Python __or__. Creates nested
+          'or' operation in search_structure. Synchronized 2026-03-13.
+
+      - name: not
+        input_arguments: []
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: >
+          MATLAB ~ prefix. Mapped to Python __invert__. Negates all
+          operations by toggling ~ prefix. Synchronized 2026-03-13.
+
+      # --- String/pattern methods ---
+      - name: contains
+        input_arguments:
+          - name: value
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: >
+          Exact match. Resolves to contains_string operation.
+          Synchronized 2026-03-13.
+
+      - name: match
+        input_arguments:
+          - name: pattern
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: >
+          Exact match. Resolves to regexp operation.
+          Synchronized 2026-03-13.
+
+      - name: equals
+        input_arguments:
+          - name: value
+            type_python: "Any"
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: >
+          Explicit equality method. Same as == operator.
+          Synchronized 2026-03-13.
+
+      # --- Comparison methods (explicit) ---
+      - name: less_than
+        input_arguments:
+          - name: value
+            type_python: "Any"
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: "Explicit less-than method. Synchronized 2026-03-13."
+
+      - name: less_than_or_equal_to
+        input_arguments:
+          - name: value
+            type_python: "Any"
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: "Explicit less-than-or-equal method. Synchronized 2026-03-13."
+
+      - name: greater_than
+        input_arguments:
+          - name: value
+            type_python: "Any"
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: "Explicit greater-than method. Synchronized 2026-03-13."
+
+      - name: greater_than_or_equal_to
+        input_arguments:
+          - name: value
+            type_python: "Any"
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: "Explicit greater-than-or-equal method. Synchronized 2026-03-13."
+
+      # --- Field existence ---
+      - name: has_field
+        input_arguments: []
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: >
+          Exact match. Resolves to hasfield operation.
+          Synchronized 2026-03-13.
+
+      - name: has_member
+        input_arguments:
+          - name: value
+            type_python: "Any"
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: >
+          Exact match. Resolves to hasmember operation.
+          Synchronized 2026-03-13.
+
+      # --- Static factory methods ---
+      - name: all
+        kind: static
+        input_arguments: []
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: >
+          Exact match. Returns query matching all documents
+          (isa 'base'). Synchronized 2026-03-13.
+
+      - name: none
+        kind: static
+        input_arguments: []
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: >
+          Exact match. Returns query matching no documents.
+          Synchronized 2026-03-13.
+
+      - name: from_search
+        kind: classmethod
+        input_arguments:
+          - name: field
+            type_matlab: "char"
+            type_python: "str"
+          - name: operation
+            type_matlab: "char"
+            type_python: "str"
+          - name: param1
+            type_matlab: "any"
+            type_python: "Any"
+            default: "''"
+          - name: param2
+            type_matlab: "any"
+            type_python: "Any"
+            default: "''"
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: >
+          Exact match. MATLAB-compatible factory method. Creates
+          query using DID-style operation strings.
+          Synchronized 2026-03-13.
+
+      # --- Serialization ---
+      - name: to_searchstructure
+        input_arguments: []
+        output_arguments:
+          - name: ss
+            type_python: "dict"
+        decision_log: >
+          Converts query to search structure dict with Python-style
+          operators. Synchronized 2026-03-13.
+
+      - name: to_search_structure
+        input_arguments: []
+        output_arguments:
+          - name: ss
+            type_python: "dict | list[dict]"
+        decision_log: >
+          Converts to DID-python compatible search structure.
+          Unwraps single-element lists. Synchronized 2026-03-13.
 
     decision_log: >
       Database query class supporting operators: regexp,
       exact_string, contains_string, exact_number, lessthan,
       lessthaneq, greaterthan, greaterthaneq, hasfield, isa,
       depends_on, hasmember, and negated versions.
+      Module also exposes top-level convenience functions all(),
+      none(), from_search() for MATLAB parity.
       Synchronized 2026-03-13.
 
 # =========================================================================

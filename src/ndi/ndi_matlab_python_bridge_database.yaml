@@ -193,17 +193,117 @@ classes:
           the session object (session.database_closebinarydoc).
           Synchronized 2026-03-13.
 
-    # --- Additional Python methods not in MATLAB base class ---
-    # These are implementation-level or convenience methods in Python
-    # that correspond to the MATLAB didsqlite subclass behavior.
+      # --- Additional Python methods (from didsqlite subclass) ---
+
+      - name: update
+        input_arguments:
+          - name: ndi_document_obj
+            type_python: "Document"
+        output_arguments:
+          - name: ndi_document_obj
+            type_python: "Document"
+        decision_log: >
+          From didsqlite subclass. Updates an existing document.
+          Raises ValueError if not found. Synchronized 2026-03-13.
+
+      - name: add_or_replace
+        input_arguments:
+          - name: ndi_document_obj
+            type_python: "Document"
+        output_arguments:
+          - name: ndi_document_obj
+            type_python: "Document"
+        decision_log: >
+          Python convenience. Upsert: adds if new, replaces if exists.
+          Corresponds to MATLAB add() with Update=1.
+          Synchronized 2026-03-13.
+
+      - name: find_by_id
+        input_arguments:
+          - name: doc_id
+            type_python: "str"
+        output_arguments:
+          - name: ndi_document_obj
+            type_python: "Document | None"
+        decision_log: >
+          Alias for read(). Convenience for MATLAB compatibility.
+          Synchronized 2026-03-13.
+
+      - name: numdocs
+        input_arguments: []
+        output_arguments:
+          - name: n
+            type_python: "int"
+        decision_log: >
+          Python convenience. Returns count of documents in database.
+          Synchronized 2026-03-13.
+
+      - name: find_depends_on
+        input_arguments:
+          - name: document
+            type_python: "Document | str"
+        output_arguments:
+          - name: dependent_docs
+            type_python: "list[Document]"
+        decision_log: >
+          Python convenience. Finds all documents that depend on
+          the given document. Synchronized 2026-03-13.
+
+      - name: find_dependencies
+        input_arguments:
+          - name: document
+            type_python: "Document | str"
+        output_arguments:
+          - name: dependency_docs
+            type_python: "list[Document]"
+        decision_log: >
+          Python convenience. Finds all documents that the given
+          document depends on. Synchronized 2026-03-13.
+
+      - name: add_many
+        input_arguments:
+          - name: documents
+            type_python: "list[Document]"
+        output_arguments:
+          - name: added_docs
+            type_python: "list[Document]"
+        decision_log: >
+          Python convenience. Batch add. Stops on first error.
+          Synchronized 2026-03-13.
+
+      - name: remove_many
+        input_arguments:
+          - name: query
+            type_python: "Query | None"
+            default: "None"
+          - name: documents
+            type_python: "list[Document] | None"
+            default: "None"
+        output_arguments:
+          - name: count
+            type_python: "int"
+        decision_log: >
+          Python convenience. Removes documents matching query
+          and/or explicit list. Returns count removed.
+          Synchronized 2026-03-13.
+
+      - name: get_binary_path
+        input_arguments:
+          - name: document
+            type_python: "Document"
+          - name: file_name
+            type_python: "str"
+        output_arguments:
+          - name: path
+            type_python: "Path"
+        decision_log: >
+          Python convenience. Returns path for storing a
+          document's binary file. Synchronized 2026-03-13.
+
     decision_log: >
       Python Database class merges the abstract ndi.database base class
       with the concrete ndi.database.implementations.database.didsqlite
-      subclass. Additional Python methods: update(), add_or_replace(),
-      find_by_id(), numdocs(), find_depends_on(), find_dependencies(),
-      add_many(), remove_many(), get_binary_path(). These are convenience
-      wrappers not present in the MATLAB abstract base but consistent
-      with didsqlite behavior. Synchronized 2026-03-13.
+      subclass. Synchronized 2026-03-13.
 
 # =========================================================================
 # Standalone functions
