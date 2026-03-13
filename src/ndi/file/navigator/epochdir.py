@@ -3,11 +3,12 @@ ndi.file.navigator.epochdir - Directory-based epoch navigator.
 
 Navigates data organized as one subdirectory per epoch.
 
-MATLAB equivalent: src/ndi/+ndi/+file/navigator_epochdir.m (conceptual)
+MATLAB equivalent: +ndi/+file/+navigator/epochdir.m
 """
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 from . import FileNavigator
@@ -30,6 +31,61 @@ class EpochDirNavigator(FileNavigator):
         >>> #   trial_001/file.rhd  -> epoch 1
         >>> #   trial_002/file.rhd  -> epoch 2
     """
+
+    def epochid(
+        self,
+        epoch_number: int,
+        epochfiles: list[str] | None = None,
+    ) -> str:
+        """
+        Get the epoch ID for a directory-based epoch.
+
+        MATLAB equivalent: ndi.file.navigator_epochdir/epochid
+
+        Overrides the parent to generate deterministic IDs from the
+        epoch directory name rather than creating random IDs.
+
+        Args:
+            epoch_number: Epoch number (1-indexed)
+            epochfiles: Optional file list (fetched if not provided)
+
+        Returns:
+            Epoch identifier string based on directory name
+        """
+        if epochfiles is None:
+            epochfiles = self.getepochfiles_number(epoch_number)
+
+        # Check if ingested
+        if self.isingested(epochfiles):
+            return self.ingestedfiles_epochid(epochfiles)
+
+        # Try to read from epoch ID file (parent behavior)
+        eidfname = self.epochidfilename(epoch_number, epochfiles)
+        if eidfname and Path(eidfname).is_file():
+            with open(eidfname) as f:
+                return f.read().strip()
+
+        # Generate ID from directory name (epochdir-specific behavior)
+        if epochfiles:
+            epoch_dir = Path(epochfiles[0]).parent
+            dir_name = epoch_dir.name
+            # Create deterministic ID from directory name + filematch hash
+            fmstr = self.filematch_hashstring()
+            hash_input = f"{dir_name}_{fmstr}"
+            epoch_hash = hashlib.md5(hash_input.encode()).hexdigest()[:16]
+            new_id = f"epoch_{epoch_hash}"
+        else:
+            from ...ido import Ido
+
+            new_id = f"epoch_{Ido().id}"
+
+        # Save to file if possible
+        if eidfname:
+            Path(eidfname).parent.mkdir(parents=True, exist_ok=True)
+            with open(eidfname, "w") as f:
+                f.write(new_id)
+
+        return new_id
 
     def selectfilegroups_disk(self) -> list[list[str]]:
         """

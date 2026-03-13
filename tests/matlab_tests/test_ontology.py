@@ -8,7 +8,7 @@ Tests for:
 - ndi.ontology.lookup() with mocked providers
 - ndi.ontology.lookup() with live network (when available)
 - ndi.ontology.OntologyResult
-- ndi.ontology.clear_cache()
+- ndi.ontology.clearCache()
 
 The ontology tests REQUIRE network access for live tests.
 Mocked tests run without network.
@@ -18,7 +18,7 @@ import socket
 
 import pytest
 
-from ndi.ontology import OntologyResult, clear_cache, lookup
+from ndi.ontology import OntologyResult, clearCache, lookup
 
 # ---------------------------------------------------------------------------
 # Network availability check
@@ -143,12 +143,12 @@ class TestOntologyLookupMocked:
         assert isinstance(result, OntologyResult)
         assert not result  # clear returns empty result
 
-    def test_clear_cache_function(self):
-        """clear_cache() function clears the cache without error.
+    def test_clearCache_function(self):
+        """clearCache() function clears the cache without error.
 
         MATLAB equivalent: TestOntologyLookup.testClearCache
         """
-        clear_cache()  # Should not raise
+        clearCache()  # Should not raise
 
 
 # ===========================================================================
@@ -169,7 +169,7 @@ class TestOntologyLookupLive:
         MATLAB equivalent: TestOntologyLookup.testNCBITaxon
         """
         # Clear cache first to ensure fresh lookup
-        clear_cache()
+        clearCache()
 
         result = lookup("NCBITaxon:10090")
         assert isinstance(result, OntologyResult)
@@ -183,7 +183,7 @@ class TestOntologyLookupLive:
 
         MATLAB equivalent: TestOntologyLookup.testCLLookup
         """
-        clear_cache()
+        clearCache()
 
         result = lookup("CL:0000540")
         assert isinstance(result, OntologyResult)
@@ -196,7 +196,7 @@ class TestOntologyLookupLive:
 
         MATLAB equivalent: TestOntologyLookup.testInvalidTerm
         """
-        clear_cache()
+        clearCache()
 
         # A valid prefix but non-existent ID -- should return empty
         result = lookup("CL:9999999")
@@ -209,7 +209,7 @@ class TestOntologyLookupLive:
 
         MATLAB equivalent: TestOntologyLookup.testCaching
         """
-        clear_cache()
+        clearCache()
 
         result1 = lookup("NCBITaxon:10090")
         result2 = lookup("NCBITaxon:10090")

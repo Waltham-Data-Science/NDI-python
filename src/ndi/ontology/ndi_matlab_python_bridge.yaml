@@ -1,0 +1,282 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/ontology/
+# The Primary Contract for the ndi.ontology namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # =========================================================================
+  # ndi.ontology (MATLAB is a class with static methods; Python uses a module
+  # with functions + a provider class hierarchy)
+  # =========================================================================
+  - name: ontology
+    type: class
+    matlab_path: "+ndi/ontology.m"
+    python_path: "ndi/ontology/__init__.py"
+    python_class: "module-level functions + OntologyResult"
+    inherits: ""
+
+    properties:
+      # MATLAB has hidden Constant properties for file paths
+      - name: ONTOLOGY_FILENAME
+        type_matlab: "Constant Hidden char"
+        type_python: "N/A (handled by PathConstants)"
+        decision_log: >
+          MATLAB stores ontology file path as class constant.
+          Python resolves paths via ndi.common.PathConstants.
+
+      - name: ONTOLOGY_SUBFOLDER_JSON
+        type_matlab: "Constant Hidden char"
+        type_python: "N/A (handled by PathConstants)"
+        decision_log: "Same as ONTOLOGY_FILENAME."
+
+      - name: ONTOLOGY_SUBFOLDER_NDIC
+        type_matlab: "Constant Hidden char"
+        type_python: "N/A (handled by PathConstants)"
+        decision_log: "Same as ONTOLOGY_FILENAME."
+
+      - name: NDIC_FILENAME
+        type_matlab: "Constant Hidden char"
+        type_python: "N/A (handled by PathConstants)"
+        decision_log: "Same as ONTOLOGY_FILENAME."
+
+    methods:
+      # --- Static: Main lookup entry point ---
+      - name: lookup
+        kind: static
+        input_arguments:
+          - name: lookup_string
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: result
+            type_matlab: "struct with id, name, definition, synonyms, shortName"
+            type_python: "OntologyResult"
+        decision_log: >
+          Functional match. MATLAB returns a struct; Python returns an
+          OntologyResult object with the same fields (id, name, prefix,
+          definition, synonyms, short_name). Python uses a prefix-based
+          dispatcher pattern routing to provider classes; MATLAB uses
+          static methods on the ontology class. Both support the same
+          'prefix:id' format. Uses @pydantic.validate_call.
+          Synchronized 2026-03-13.
+
+      # --- Instance: lookupTermOrID ---
+      - name: lookupTermOrID
+        input_arguments:
+          - name: lookup_string
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: id
+            type_python: "str"
+          - name: name
+            type_python: "str"
+          - name: definition
+            type_python: "str"
+          - name: synonyms
+            type_python: "list[str]"
+          - name: shortName
+            type_python: "str"
+        decision_log: >
+          MATLAB returns 5 separate outputs. Python wraps these in an
+          OntologyResult object. The instance method is not directly
+          exposed in Python; the static lookup() function serves the
+          same role. Documented here for completeness.
+
+      # --- Static: clearCache ---
+      - name: clearCache
+        kind: static
+        input_arguments: []
+        output_arguments: []
+        decision_log: >
+          DISCREPANCY FIXED: Python ad-hoc port used 'clear_cache'
+          (snake_case). Renamed to 'clearCache' to match MATLAB.
+          Synchronized 2026-03-13.
+
+      # --- Static: getOntologyNameFromPrefix ---
+      - name: getOntologyNameFromPrefix
+        kind: static
+        input_arguments:
+          - name: prefix
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: ontology_name
+            type_python: "str"
+        decision_log: >
+          Python implements this as _load_prefix_map() + dict lookup.
+          Not exposed as a public API since the dispatch is internal.
+          Documented for completeness.
+
+      # --- Static: getPrefixOntologyMappings ---
+      - name: getPrefixOntologyMappings
+        kind: static
+        input_arguments: []
+        output_arguments:
+          - name: mappings
+            type_python: "dict[str, str]"
+        decision_log: >
+          Python implements this via _PREFIX_MAP dict and
+          _load_prefix_map(). Not exposed as separate public function.
+          Documented for completeness.
+
+      # --- Static: getOntologies ---
+      - name: getOntologies
+        kind: static
+        input_arguments: []
+        output_arguments:
+          - name: ontologies
+            type_python: "list[str]"
+        decision_log: >
+          Not directly ported. Available via PROVIDER_REGISTRY.keys().
+          Documented for completeness.
+
+      # --- Static: performIriLookup ---
+      - name: performIriLookup
+        kind: static
+        input_arguments:
+          - name: iri
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: result
+            type_python: "OntologyResult"
+        decision_log: >
+          Python implements IRI-based lookup inside OLSProvider subclasses.
+          Not exposed as a separate public function.
+          Documented for completeness.
+
+      # --- Static: searchOLSAndPerformIRILookup ---
+      - name: searchOLSAndPerformIRILookup
+        kind: static
+        input_arguments:
+          - name: term
+            type_matlab: "char"
+            type_python: "str"
+          - name: ontology
+            type_matlab: "char"
+            type_python: "str"
+          - name: queryFields
+            type_matlab: "char"
+            type_python: "str"
+            default: "'label'"
+        output_arguments:
+          - name: result
+            type_python: "OntologyResult"
+        decision_log: >
+          Python implements this inside OLSProvider._search_ols().
+          Not exposed as a separate public function.
+          Documented for completeness.
+
+      # --- Static: lookupOBOFile ---
+      - name: lookupOBOFile
+        kind: static
+        input_arguments:
+          - name: filename
+            type_matlab: "char"
+            type_python: "str"
+          - name: term
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: result
+            type_python: "OntologyResult"
+        decision_log: >
+          MATLAB parses local .obo files for offline lookup. Python
+          EMPTYProvider fetches the ontology as JSON from GitHub.
+          Behavioral parity via different mechanisms.
+          Documented for completeness.
+
+# =========================================================================
+# Provider classes (Python-specific architecture)
+# =========================================================================
+# The following provider classes in providers.py implement the per-ontology
+# lookup logic. MATLAB uses scattered standalone functions instead.
+#
+# Python providers with MATLAB equivalents:
+#   NDICProvider   -> ndi.database.fun.ndicloud_ontology_lookup (deprecated)
+#   NCImProvider   -> ndi.database.fun.queryNCIm
+#   OLSProvider    -> ndi.database.fun.lookup_uberon_term (UBERON-specific)
+#
+# Python providers WITHOUT MATLAB equivalents (Python-ahead):
+#   CLProvider, OMProvider, CHEBIProvider, SNOMEDProvider, EFOProvider,
+#   PATOProvider, NCBITaxonProvider, WBStrainProvider, RRIDProvider,
+#   PubChemProvider, EMPTYProvider
+#
+# These extend Python's ontology coverage beyond MATLAB's current 3
+# ontologies (NDIC, UBERON, NCIm). The MATLAB codebase has a planned
+# ndi.ontology.lookup() that does not yet exist but will likely adopt
+# a similar dispatcher pattern.
+
+# =========================================================================
+# Standalone functions (module-level)
+# =========================================================================
+functions:
+
+  - name: lookup
+    type: function
+    matlab_path: "+ndi/ontology.m (static method)"
+    python_path: "ndi/ontology/__init__.py"
+    input_arguments:
+      - name: lookup_string
+        type_matlab: "char"
+        type_python: "str"
+    output_arguments:
+      - name: result
+        type_python: "OntologyResult"
+    decision_log: >
+      Module-level convenience function. Delegates to provider registry.
+      Uses @pydantic.validate_call. Synchronized 2026-03-13.
+
+  - name: clearCache
+    type: function
+    matlab_path: "+ndi/ontology.m (static method)"
+    python_path: "ndi/ontology/__init__.py"
+    input_arguments: []
+    output_arguments: []
+    decision_log: >
+      DISCREPANCY FIXED: Python ad-hoc port used 'clear_cache'
+      (snake_case). Renamed to 'clearCache' to match MATLAB.
+      Synchronized 2026-03-13.
+
+# =========================================================================
+# Not ported / Not applicable
+# =========================================================================
+not_applicable:
+
+  - name: ndicloud_ontology_lookup
+    matlab_path: "+ndi/+database/+fun/ndicloud_ontology_lookup.m"
+    status: deprecated_in_matlab
+    decision_log: >
+      Deprecated in MATLAB with a warning directing to
+      ndi.ontology.lookup(). Python's NDICProvider handles the
+      same local NDIC.txt file lookup.
+
+  - name: uberon_ontology_lookup
+    matlab_path: "+ndi/+database/+fun/uberon_ontology_lookup.m"
+    status: not_applicable
+    decision_log: >
+      MATLAB standalone function for UBERON lookups with local
+      fallback. Python handles UBERON via the OLS-backed provider
+      system. No direct port needed.
+
+  - name: lookup_uberon_term
+    matlab_path: "+ndi/+database/+fun/lookup_uberon_term.m"
+    status: not_applicable
+    decision_log: >
+      Low-level MATLAB function wrapping EBI OLS API search.
+      Python OLSProvider._search_ols() provides equivalent logic.
+
+  - name: queryNCIm
+    matlab_path: "+ndi/+database/+fun/queryNCIm.m"
+    status: not_applicable
+    decision_log: >
+      Low-level MATLAB function wrapping NCI EVS REST API.
+      Python NCImProvider handles the same API calls.

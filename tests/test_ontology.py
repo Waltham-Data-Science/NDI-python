@@ -95,9 +95,9 @@ class TestLookup:
     """Tests for the lookup() function."""
 
     def setup_method(self):
-        from ndi.ontology import clear_cache
+        from ndi.ontology import clearCache
 
-        clear_cache()
+        clearCache()
 
     def test_no_colon_returns_empty(self):
         from ndi.ontology import lookup
@@ -140,12 +140,12 @@ class TestLookup:
             lookup("CL:new")
         assert len(_lookup_cache) <= _CACHE_MAX
 
-    def test_clear_cache_function(self):
-        from ndi.ontology import OntologyResult, _lookup_cache, clear_cache
+    def test_clearCache_function(self):
+        from ndi.ontology import OntologyResult, _lookup_cache, clearCache
 
         _lookup_cache["test:1"] = OntologyResult(id="test:1")
         assert len(_lookup_cache) > 0
-        clear_cache()
+        clearCache()
         assert len(_lookup_cache) == 0
 
     def test_case_insensitive_prefix(self):
@@ -719,7 +719,7 @@ class TestOntologyImports:
 
         assert hasattr(ontology, "lookup")
         assert hasattr(ontology, "OntologyResult")
-        assert hasattr(ontology, "clear_cache")
+        assert hasattr(ontology, "clearCache")
 
     def test_import_providers(self):
         from ndi.ontology.providers import (
@@ -749,4 +749,4 @@ class TestOntologyImports:
 
         assert "OntologyResult" in __all__
         assert "lookup" in __all__
-        assert "clear_cache" in __all__
+        assert "clearCache" in __all__

@@ -1,0 +1,314 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/
+# The Primary Contract for the root ndi namespace.
+#
+# NOTE: There is NO ndi.OBJECT class in MATLAB. The "base object" concept
+# is factored into two mixable concerns:
+#   - ndi.ido (identity/unique ID, inheriting from did.ido)
+#   - ndi.documentservice (document persistence interface)
+# Classes that need both inherit from both explicitly.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Standalone functions
+# =========================================================================
+functions:
+
+  - name: version
+    type: function
+    matlab_path: "+ndi/version.m"
+    python_path: "ndi/__init__.py"
+    input_arguments: []
+    output_arguments:
+      - name: v
+        type_matlab: "char"
+        type_python: "str"
+      - name: url
+        type_matlab: "char"
+        type_python: "str"
+    decision_log: >
+      Exact match. Returns 2-tuple (version_string, url).
+      MATLAB uses git describe; Python does the same with subprocess
+      fallback to __version__. Synchronized 2026-03-13.
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # =========================================================================
+  # ndi.ido - Identity Object
+  # =========================================================================
+  - name: ido
+    type: class
+    matlab_path: "+ndi/ido.m"
+    python_path: "ndi/ido.py"
+    python_class: "Ido"
+    inherits: "did.ido"
+
+    properties:
+      - name: id
+        type_matlab: "char (inherited from did.ido)"
+        type_python: "str"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: >
+          Inherited from did.ido. Unique hexadecimal identifier
+          sorted by creation time.
+
+    methods:
+      - name: ido
+        kind: constructor
+        input_arguments:
+          - name: identifier
+            type_matlab: "char"
+            type_python: "str | None"
+            default: "None"
+        output_arguments:
+          - name: obj
+            type_python: "Ido"
+        decision_log: "Exact match. Generates new ID if none provided."
+
+    decision_log: >
+      Thin wrapper over did.ido. Python Ido class provides the same
+      unique ID generation. Synchronized 2026-03-13.
+
+  # =========================================================================
+  # ndi.documentservice - Document Interface Mixin
+  # =========================================================================
+  - name: documentservice
+    type: class
+    matlab_path: "+ndi/documentservice.m"
+    python_path: "ndi/documentservice.py"
+    python_class: "DocumentService"
+    inherits: ""
+
+    properties: []
+
+    methods:
+      - name: documentservice
+        kind: constructor
+        input_arguments: []
+        output_arguments:
+          - name: obj
+            type_python: "DocumentService"
+        decision_log: "Exact match."
+
+      - name: newdocument
+        input_arguments: []
+        output_arguments:
+          - name: ndi_document_obj
+            type_python: "Any"
+        decision_log: >
+          Abstract-like method. Subclasses override to create
+          specific document types.
+
+      - name: searchquery
+        input_arguments: []
+        output_arguments:
+          - name: sq
+            type_python: "Any"
+        decision_log: >
+          Abstract-like method. Subclasses override to return
+          queries matching their documents.
+
+    decision_log: >
+      Interface class for document persistence. Any NDI class that
+      can be stored as a document inherits from this.
+      Synchronized 2026-03-13.
+
+  # =========================================================================
+  # ndi.document - Document Model
+  # =========================================================================
+  - name: document
+    type: class
+    matlab_path: "+ndi/document.m"
+    python_path: "ndi/document.py"
+    python_class: "Document"
+    inherits: ""
+
+    properties:
+      - name: document_properties
+        type_matlab: "struct"
+        type_python: "dict | DotDict"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: "MATLAB struct; Python uses a dict-like DotDict."
+
+    methods:
+      - name: document
+        kind: constructor
+        input_arguments:
+          - name: document_type
+            type_matlab: "char"
+            type_python: "str"
+          - name: varargin
+            type_matlab: "varargin"
+            type_python: "**kwargs"
+        output_arguments:
+          - name: ndi_document_obj
+            type_python: "Document"
+        decision_log: "Exact match."
+
+      - name: set_session_id
+        input_arguments:
+          - name: session_id
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: ndi_document_obj
+            type_python: "Document"
+        decision_log: "Exact match. Returns self for chaining."
+
+      - name: set_dependency_value
+        input_arguments:
+          - name: dependency_name
+            type_matlab: "char"
+            type_python: "str"
+          - name: dependency_value
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: ndi_document_obj
+            type_python: "Document"
+        decision_log: "Exact match. Returns self for chaining."
+
+      - name: id
+        input_arguments: []
+        output_arguments:
+          - name: doc_id
+            type_python: "str"
+        decision_log: "Exact match. Returns base.id."
+
+      - name: session_id
+        input_arguments: []
+        output_arguments:
+          - name: sid
+            type_python: "str"
+        decision_log: "Exact match. Returns base.session_id."
+
+      - name: doc_unique_id
+        input_arguments: []
+        output_arguments:
+          - name: uid
+            type_python: "str"
+        decision_log: "Exact match. Alias for id()."
+
+      - name: eq
+        input_arguments:
+          - name: other
+            type_python: "Any"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: "Mapped to Python __eq__."
+
+    decision_log: >
+      Core document class. Both languages use JSON schema-based
+      document definitions. Synchronized 2026-03-13.
+
+  # =========================================================================
+  # ndi.query - Database Query
+  # =========================================================================
+  - name: query
+    type: class
+    matlab_path: "+ndi/query.m"
+    python_path: "ndi/query.py"
+    python_class: "Query"
+    inherits: "did.query"
+
+    properties:
+      - name: searchstructure
+        type_matlab: "struct"
+        type_python: "list[dict]"
+        decision_log: "Inherited from did.query."
+
+    methods:
+      - name: query
+        kind: constructor
+        input_arguments:
+          - name: field
+            type_matlab: "char"
+            type_python: "str"
+          - name: op
+            type_matlab: "char"
+            type_python: "str"
+            default: "''"
+          - name: param1
+            type_matlab: "any"
+            type_python: "Any"
+            default: "None"
+          - name: param2
+            type_matlab: "any"
+            type_python: "Any"
+            default: "None"
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: "Exact match."
+
+      - name: isa
+        input_arguments:
+          - name: class_name
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: "Exact match. Shorthand for isa query."
+
+      - name: depends_on
+        input_arguments:
+          - name: dependency_name
+            type_matlab: "char"
+            type_python: "str"
+          - name: dependency_value
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: "Exact match. Shorthand for depends_on query."
+
+    decision_log: >
+      Database query class supporting operators: regexp,
+      exact_string, contains_string, exact_number, lessthan,
+      lessthaneq, greaterthan, greaterthaneq, hasfield, isa,
+      depends_on, hasmember, and negated versions.
+      Synchronized 2026-03-13.
+
+# =========================================================================
+# Not ported / Not applicable
+# =========================================================================
+not_applicable:
+
+  - name: OBJECT
+    matlab_path: "N/A"
+    status: does_not_exist
+    decision_log: >
+      ndi.OBJECT does not exist in either MATLAB or Python.
+      The "base object" pattern is factored into ndi.ido (identity)
+      and ndi.documentservice (persistence). There is no universal
+      root object class.
+
+  - name: filesep
+    matlab_path: "+ndi/filesep.m"
+    status: not_applicable
+    decision_log: >
+      MATLAB utility returning '/' for cross-platform path
+      consistency. Python uses pathlib/os.sep natively.
+
+  - name: toolboxdir
+    matlab_path: "+ndi/toolboxdir.m"
+    status: not_applicable
+    decision_log: >
+      MATLAB-specific path resolution. Python uses
+      ndi.common.PathConstants.
+
+  - name: cpipeline
+    matlab_path: "+ndi/cpipeline.m"
+    status: not_applicable
+    decision_log: >
+      MATLAB calculation pipeline registry with GUI editing.
+      Not ported to Python.
