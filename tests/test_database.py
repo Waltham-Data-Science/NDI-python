@@ -64,7 +64,7 @@ class TestDatabaseCreation:
         db = Database(temp_session)
         assert db.session_path == temp_session
         assert (temp_session / ".ndi").exists()
-        assert (temp_session / ".ndi" / "ndi.db").exists()
+        assert (temp_session / ".ndi" / "did-sqlite.sqlite").exists()
 
     def test_create_with_custom_db_name(self, temp_session):
         """Test creating database with custom name."""
@@ -395,7 +395,7 @@ class TestDatabasePaths:
         """Test database_path property points to SQLite file."""
         db = Database(temp_session)
         assert db.database_path.exists()
-        assert str(db.database_path).endswith("ndi.db")
+        assert str(db.database_path).endswith("did-sqlite.sqlite")
 
     def test_binary_path(self, temp_session):
         """Test binary_path property."""

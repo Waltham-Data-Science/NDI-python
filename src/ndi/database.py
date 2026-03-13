@@ -216,17 +216,18 @@ class Database:
         db_dir.mkdir(parents=True, exist_ok=True)
 
         # Initialize SQLite driver (wraps DID-python's SQLiteDB)
-        db_path = db_dir / "ndi.db"
+        db_path = db_dir / "did-sqlite.sqlite"
         self._driver = SQLiteDriver(db_path, **backend_kwargs)
 
-        # Binary directory for file attachments
-        self._binary_dir = self.session_path / db_name / "binary"
+        # Binary/files directory for file attachments
+        # Named "files" for compatibility with NDI-MATLAB
+        self._binary_dir = self.session_path / db_name / "files"
         self._binary_dir.mkdir(parents=True, exist_ok=True)
 
     @property
     def database_path(self) -> Path:
         """Path to the SQLite database file."""
-        return self.session_path / self._db_name / "ndi.db"
+        return self.session_path / self._db_name / "did-sqlite.sqlite"
 
     @property
     def binary_path(self) -> Path:
