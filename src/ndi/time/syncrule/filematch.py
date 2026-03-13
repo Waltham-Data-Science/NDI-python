@@ -90,6 +90,7 @@ class FileMatch(SyncRule):
         self,
         epochnode_a: dict[str, Any],
         epochnode_b: dict[str, Any],
+        daqsystem1: Any = None,
     ) -> tuple[float | None, TimeMapping | None]:
         """
         Apply FileMatch rule to determine if epochs can be synchronized.

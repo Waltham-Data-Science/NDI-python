@@ -66,15 +66,15 @@ class Probe(Element):
             identifier: Optional unique identifier
             document: Optional document to load from
         """
-        # Probes are always direct=False (build from devices)
-        # and have no underlying_element
+        # MATLAB probe constructor sets direct=True (inputs{6}=1)
+        # and has no underlying_element
         super().__init__(
             session=session,
             name=name,
             reference=reference,
             type=type,
             underlying_element=None,
-            direct=False,
+            direct=True,
             subject_id=subject_id,
             dependencies=None,
             identifier=identifier,
@@ -323,7 +323,7 @@ class Probe(Element):
                 "element.name": self._name,
                 "element.reference": self._reference,
                 "element.type": self._type,
-                "element.direct": False,  # Probes are never direct
+                "element.direct": True,  # MATLAB sets direct=1 for probes
                 "base.id": self.id,
             },
         )
