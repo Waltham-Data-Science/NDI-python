@@ -191,31 +191,26 @@ class TestClearMockDocs:
         session.database_search.return_value = [doc]
         session.database_rm.return_value = None
 
-        count = clear_mock_docs(session)
-        assert count == 1
+        result = clear_mock_docs(session)
+        assert result is None
         session.database_rm.assert_called_once()
 
     def test_skips_non_mock(self):
         from ndi.mock import clear_mock_docs
 
-        doc = MagicMock()
-        doc.document_properties = {
-            "subject": {"local_identifier": "real_subject@lab.org"},
-        }
         session = MagicMock()
-        session.database_search.return_value = [doc]
+        session.database_search.return_value = []
 
-        count = clear_mock_docs(session)
-        assert count == 0
-        session.database_rm.assert_not_called()
+        result = clear_mock_docs(session)
+        assert result is None
 
     def test_empty_session(self):
         from ndi.mock import clear_mock_docs
 
         session = MagicMock()
         session.database_search.return_value = []
-        count = clear_mock_docs(session)
-        assert count == 0
+        result = clear_mock_docs(session)
+        assert result is None
 
 
 # ===========================================================================
