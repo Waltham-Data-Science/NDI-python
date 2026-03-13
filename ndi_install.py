@@ -334,7 +334,7 @@ def install_ndi_and_deps(ndi_root: Path, include_dev: bool = False) -> bool:
     info("Installing NDI-python (editable)...")
     extras = "tutorials"
     if include_dev:
-        extras = "dev,tutorials,scipy,openminds"
+        extras = "dev,tutorials"
     result = subprocess.run(
         [
             sys.executable,
