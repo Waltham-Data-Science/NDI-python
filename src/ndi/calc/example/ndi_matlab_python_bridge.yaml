@@ -1,0 +1,79 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/calc/example/
+# The Primary Contract for the ndi.calc.example namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # =========================================================================
+  # ndi.calc.example.simple
+  # =========================================================================
+  - name: simple
+    type: class
+    matlab_path: "src/ndi/+ndi/+calc/+example/simple.m"
+    python_path: "ndi/calc/example/simple.py"
+    python_class: "SimpleCalc"
+    inherits: "ndi.calculator"
+
+    methods:
+      - name: simple
+        kind: constructor
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Session | None"
+            default: "None"
+        output_arguments:
+          - name: obj
+            type_python: "SimpleCalc"
+        decision_log: "Exact match."
+
+      - name: calculate
+        input_arguments:
+          - name: parameters
+            type_matlab: "struct"
+            type_python: "dict"
+        output_arguments:
+          - name: doc
+            type_python: "list[Document]"
+        decision_log: "Exact match."
+
+      - name: default_search_for_input_parameters
+        input_arguments: []
+        output_arguments:
+          - name: parameters
+            type_python: "dict"
+        decision_log: "Exact match."
+
+      - name: generate_mock_docs
+        input_arguments:
+          - name: scope
+            type_matlab: "char"
+            type_python: "str"
+          - name: number_of_tests
+            type_matlab: "integer"
+            type_python: "int"
+          - name: generate_expected_docs
+            type_matlab: "logical (Name-Value)"
+            type_python: "bool"
+            default: "False"
+          - name: specific_test_inds
+            type_matlab: "double array (Name-Value)"
+            type_python: "list[int] | None"
+            default: "None"
+        output_arguments:
+          - name: docs
+            type_python: "list[Any]"
+          - name: doc_output
+            type_python: "list[Any]"
+          - name: doc_expected_output
+            type_python: "list[Any]"
+        decision_log: >
+          Exact match. Returns 3-tuple. Inherited from calculator
+          but overridden in MATLAB simple.m.

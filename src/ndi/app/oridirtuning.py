@@ -53,14 +53,16 @@ class OriDirTuning(App, AppDoc):
 
     def calculate_all_tuning_curves(
         self,
-        element_obj: Any,
+        ndi_element_obj: Any,
         docexistsaction: str = "Replace",
     ) -> list[Document]:
         """
         Calculate tuning curves for all stimulus responses.
 
+        MATLAB equivalent: ndi.app.oridirtuning/calculate_all_tuning_curves
+
         Args:
-            element_obj: Neural element
+            ndi_element_obj: Neural element
             docexistsaction: What to do if docs exist
 
         Returns:
@@ -68,16 +70,41 @@ class OriDirTuning(App, AppDoc):
         """
         raise NotImplementedError("Full tuning curve calculation requires stimulus response data.")
 
+    def calculate_tuning_curve(
+        self,
+        ndi_element_obj: Any,
+        ndi_response_doc: Document,
+        do_add: bool = True,
+    ) -> Document | None:
+        """
+        Calculate a single tuning curve from a response document.
+
+        MATLAB equivalent: ndi.app.oridirtuning/calculate_tuning_curve
+
+        Args:
+            ndi_element_obj: Neural element
+            ndi_response_doc: Stimulus response document
+            do_add: If True, add to database
+
+        Returns:
+            Tuning curve document, or None
+        """
+        raise NotImplementedError(
+            "Single tuning curve calculation requires response data analysis."
+        )
+
     def calculate_all_oridir_indexes(
         self,
-        element_obj: Any,
+        ndi_element_obj: Any,
         docexistsaction: str = "Replace",
     ) -> list[Document]:
         """
         Calculate orientation/direction indices for all responses.
 
+        MATLAB equivalent: ndi.app.oridirtuning/calculate_all_oridir_indexes
+
         Args:
-            element_obj: Neural element
+            ndi_element_obj: Neural element
             docexistsaction: What to do if docs exist
 
         Returns:
@@ -85,10 +112,33 @@ class OriDirTuning(App, AppDoc):
         """
         raise NotImplementedError("Full index calculation requires circular statistics (numpy).")
 
+    def calculate_oridir_indexes(
+        self,
+        tuning_doc: Document,
+        do_add: bool = True,
+        do_plot: bool = False,
+    ) -> Document | None:
+        """
+        Calculate orientation/direction indices from a tuning curve.
+
+        MATLAB equivalent: ndi.app.oridirtuning/calculate_oridir_indexes
+
+        Args:
+            tuning_doc: Tuning curve document
+            do_add: If True, add to database
+            do_plot: If True, plot results (not applicable in Python)
+
+        Returns:
+            Orientation/direction tuning document, or None
+        """
+        raise NotImplementedError("Index calculation requires circular statistics.")
+
     @staticmethod
     def is_oridir_stimulus_response(response_doc: Document) -> bool:
         """
         Check if a response document contains orientation/direction data.
+
+        MATLAB equivalent: ndi.app.oridirtuning/is_oridir_stimulus_response
 
         Args:
             response_doc: stimulus_response_scalar document
@@ -97,12 +147,26 @@ class OriDirTuning(App, AppDoc):
             True if the stimulus varies in angle
         """
         props = getattr(response_doc, "document_properties", response_doc)
-        # Check if independent variable is angle-like
         try:
             indep = props.stimulus_tuningcurve.independent_variable_label
             return indep.lower() in ("angle", "direction", "orientation")
         except AttributeError:
             return False
+
+    def plot_oridir_response(self, oriprops_doc: Document) -> None:
+        """
+        Plot orientation/direction response.
+
+        MATLAB equivalent: ndi.app.oridirtuning/plot_oridir_response
+
+        Args:
+            oriprops_doc: Orientation/direction tuning document
+
+        Python-specific Notes:
+            Not applicable in Python without GUI. Use matplotlib
+            directly for plotting.
+        """
+        raise NotImplementedError("Plotting requires matplotlib. Use matplotlib directly.")
 
     def struct2doc(self, appdoc_type: str, appdoc_struct: dict, **kwargs) -> Document:
         from ..document import Document
@@ -119,8 +183,16 @@ class OriDirTuning(App, AppDoc):
 
         return self._session.database_search(Query("").isa(appdoc_type))
 
-    def isvalid_appdoc_struct(self, appdoc_type: str, appdoc_struct: dict) -> bool:
-        return True
+    def isvalid_appdoc_struct(self, appdoc_type: str, appdoc_struct: dict) -> tuple[bool, str]:
+        """
+        Validate an appdoc struct.
+
+        MATLAB equivalent: ndi.app.oridirtuning/isvalid_appdoc_struct
+
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        return True, ""
 
     def __repr__(self) -> str:
         return f"OriDirTuning(session={self._session is not None})"

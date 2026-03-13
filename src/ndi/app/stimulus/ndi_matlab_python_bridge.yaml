@@ -1,0 +1,232 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/app/stimulus/
+# The Primary Contract for the ndi.app.stimulus namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # =========================================================================
+  # ndi.app.stimulus.decoder
+  # =========================================================================
+  - name: decoder
+    type: class
+    matlab_path: "src/ndi/+ndi/+app/+stimulus/decoder.m"
+    python_path: "ndi/app/stimulus/decoder.py"
+    python_class: "StimulusDecoder"
+    inherits: "ndi.app"
+
+    methods:
+      - name: decoder
+        kind: constructor
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session (optional, via varargin)"
+            type_python: "Session | None"
+            default: "None"
+        output_arguments:
+          - name: obj
+            type_python: "StimulusDecoder"
+        decision_log: "Exact match."
+
+      - name: parse_stimuli
+        input_arguments:
+          - name: ndi_element_stim
+            type_matlab: "ndi.element"
+            type_python: "Any"
+          - name: reset
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "False"
+        output_arguments:
+          - name: newdocs
+            type_matlab: "cell array of ndi.document"
+            type_python: "list[Document]"
+          - name: existingdocs
+            type_matlab: "cell array of ndi.document"
+            type_python: "list[Document]"
+        decision_log: >
+          DISCREPANCY FIXED: MATLAB returns [newdocs, existingdocs]
+          2-tuple. Python was returning single list. Updated Python
+          to return tuple of (newdocs, existingdocs).
+
+      - name: load_presentation_time
+        input_arguments:
+          - name: stimulus_presentation_doc
+            type_matlab: "ndi.document"
+            type_python: "Document"
+        output_arguments:
+          - name: presentation_time
+            type_matlab: "struct"
+            type_python: "dict[str, Any] | None"
+        decision_log: "Exact match."
+
+  # =========================================================================
+  # ndi.app.stimulus.tuning_response
+  # =========================================================================
+  - name: tuning_response
+    type: class
+    matlab_path: "src/ndi/+ndi/+app/+stimulus/tuning_response.m"
+    python_path: "ndi/app/stimulus/tuning_response.py"
+    python_class: "TuningResponse"
+    inherits: "ndi.app"
+
+    methods:
+      - name: tuning_response
+        kind: constructor
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session (optional, via varargin)"
+            type_python: "Session | None"
+            default: "None"
+        output_arguments:
+          - name: obj
+            type_python: "TuningResponse"
+        decision_log: "Exact match."
+
+      - name: stimulus_responses
+        input_arguments:
+          - name: ndi_element_stim
+            type_matlab: "ndi.element"
+            type_python: "Any"
+          - name: ndi_timeseries_obj
+            type_matlab: "ndi.element.timeseries"
+            type_python: "Any"
+          - name: reset
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "False"
+          - name: do_mean_only
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "False"
+        output_arguments:
+          - name: rdocs
+            type_python: "list[Document]"
+        decision_log: "Exact match."
+
+      - name: compute_stimulus_response_scalar
+        input_arguments:
+          - name: ndi_stim_obj
+            type_matlab: "ndi.element"
+            type_python: "Any"
+          - name: ndi_timeseries_obj
+            type_matlab: "ndi.element.timeseries"
+            type_python: "Any"
+          - name: stim_doc
+            type_matlab: "ndi.document"
+            type_python: "Document"
+          - name: control_doc
+            type_matlab: "ndi.document"
+            type_python: "Document | None"
+        output_arguments:
+          - name: response_doc
+            type_python: "Document | None"
+        decision_log: >
+          DISCREPANCY FIXED: Method was missing from Python.
+          Added stub.
+
+      - name: tuning_curve
+        input_arguments:
+          - name: stim_response_doc
+            type_matlab: "ndi.document"
+            type_python: "Document"
+          - name: independent_label
+            type_matlab: "char (Name-Value via varargin)"
+            type_python: "str"
+            default: "'angle'"
+          - name: independent_parameter
+            type_matlab: "char (Name-Value via varargin)"
+            type_python: "str"
+            default: "'angle'"
+        output_arguments:
+          - name: tuning_doc
+            type_python: "Document | None"
+        decision_log: "Exact match."
+
+      - name: label_control_stimuli
+        input_arguments:
+          - name: stimulus_element_obj
+            type_matlab: "ndi.element"
+            type_python: "Any"
+          - name: reset
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "False"
+        output_arguments:
+          - name: cs_doc
+            type_python: "list[Document]"
+        decision_log: "Exact match."
+
+      - name: control_stimulus
+        input_arguments:
+          - name: stim_doc
+            type_matlab: "ndi.document"
+            type_python: "Document"
+        output_arguments:
+          - name: cs_ids
+            type_python: "list[int]"
+          - name: cs_doc
+            type_python: "Document | None"
+        decision_log: >
+          DISCREPANCY FIXED: Method was missing from Python.
+          Added stub. Returns 2-tuple.
+
+      - name: find_tuningcurve_document
+        input_arguments:
+          - name: ndi_element_obj
+            type_matlab: "ndi.element"
+            type_python: "Any"
+          - name: epochid
+            type_matlab: "char"
+            type_python: "str"
+          - name: response_type
+            type_matlab: "char"
+            type_python: "str"
+            default: "'mean'"
+        output_arguments:
+          - name: tc_doc
+            type_python: "list[Document]"
+          - name: srs_doc
+            type_python: "list[Document]"
+        decision_log: >
+          DISCREPANCY FIXED: MATLAB returns [tc_doc, srs_doc] 2-tuple.
+          Python was returning single list. Updated to return tuple.
+
+      - name: make_1d_tuning
+        input_arguments:
+          - name: stim_response_doc
+            type_matlab: "ndi.document"
+            type_python: "Document"
+          - name: param_to_vary
+            type_matlab: "char"
+            type_python: "str"
+          - name: param_to_vary_label
+            type_matlab: "char"
+            type_python: "str"
+          - name: param_to_fix
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+        output_arguments:
+          - name: tuning_docs
+            type_python: "list[Document]"
+        decision_log: >
+          DISCREPANCY FIXED: Method was missing from Python.
+          Added stub.
+
+    not_applicable:
+      - name: tuningcurvedoc2vhlabrespstruct
+        reason: "Static utility for VH-lab specific format. No Python equivalent needed."
+      - name: tuningdoc_fixcellarrays
+        reason: "Deprecated MATLAB method for cell array formatting."
+      - name: tuningdoc_fixcellarrays_static
+        reason: "Static version of deprecated method."
+      - name: modulated_or_mean
+        reason: >
+          Static analysis method. May be added in future if needed
+          for downstream analysis.

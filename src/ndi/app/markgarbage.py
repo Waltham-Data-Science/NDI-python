@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 from . import App
 
 if TYPE_CHECKING:
+    from ..document import Document
     from ..session.session_base import Session
 
 
@@ -27,7 +28,7 @@ class MarkGarbage(App):
     Example:
         >>> app = MarkGarbage(session)
         >>> app.markvalidinterval(epochset, 0.5, timeref, 10.0, timeref)
-        >>> intervals = app.loadvalidinterval(epochset)
+        >>> intervals, docs = app.loadvalidinterval(epochset)
     """
 
     def __init__(self, session: Session | None = None):
@@ -40,9 +41,11 @@ class MarkGarbage(App):
         timeref_t0: Any,
         t1: float,
         timeref_t1: Any,
-    ) -> None:
+    ) -> bool:
         """
         Mark a valid time interval.
+
+        MATLAB equivalent: ndi.app.markgarbage/markvalidinterval
 
         Args:
             epochset_obj: EpochSet or Element to mark
@@ -50,6 +53,9 @@ class MarkGarbage(App):
             timeref_t0: Time reference for t0
             t1: End time of valid interval
             timeref_t1: Time reference for t1
+
+        Returns:
+            True if interval was saved successfully
         """
         interval = {
             "t0": t0,
@@ -57,19 +63,24 @@ class MarkGarbage(App):
             "t1": t1,
             "timeref_t1": str(timeref_t1),
         }
-        self.savevalidinterval(epochset_obj, interval)
+        return self.savevalidinterval(epochset_obj, interval)
 
     def savevalidinterval(
         self,
         epochset_obj: Any,
         interval_struct: dict[str, Any],
-    ) -> None:
+    ) -> bool:
         """
         Save a valid interval to the database.
+
+        MATLAB equivalent: ndi.app.markgarbage/savevalidinterval
 
         Args:
             epochset_obj: EpochSet or Element
             interval_struct: Dict with t0, timeref_t0, t1, timeref_t1
+
+        Returns:
+            True if interval was saved successfully
         """
         if self._session is None:
             raise RuntimeError("No session configured")
@@ -85,10 +96,13 @@ class MarkGarbage(App):
                 error_if_not_found=False,
             )
         self._session.database_add(doc)
+        return True
 
     def clearvalidinterval(self, epochset_obj: Any) -> None:
         """
         Clear all valid intervals for an epochset.
+
+        MATLAB equivalent: ndi.app.markgarbage/clearvalidinterval
 
         Args:
             epochset_obj: EpochSet or Element
@@ -106,18 +120,21 @@ class MarkGarbage(App):
         for doc in docs:
             self._session.database_remove(doc)
 
-    def loadvalidinterval(self, epochset_obj: Any) -> list[dict[str, Any]]:
+    def loadvalidinterval(self, epochset_obj: Any) -> tuple[list[dict[str, Any]], list[Document]]:
         """
         Load stored valid intervals.
+
+        MATLAB equivalent: ndi.app.markgarbage/loadvalidinterval
 
         Args:
             epochset_obj: EpochSet or Element
 
         Returns:
-            List of interval dicts
+            Tuple of (intervals, docs) where intervals is a list of
+            interval dicts and docs is the list of matching Documents.
         """
         if self._session is None:
-            return []
+            return [], []
 
         from ..query import Query
 
@@ -135,7 +152,32 @@ class MarkGarbage(App):
                 vi = getattr(props, "valid_interval", None)
             if vi:
                 intervals.append(vi if isinstance(vi, dict) else vars(vi))
-        return intervals
+        return intervals, docs
+
+    def identifyvalidintervals(
+        self,
+        epochset_obj: Any,
+        timeref: Any,
+        t0: float,
+        t1: float,
+    ) -> list[tuple[float, float]]:
+        """
+        Identify valid regions within an interval.
+
+        MATLAB equivalent: ndi.app.markgarbage/identifyvalidintervals
+
+        Args:
+            epochset_obj: EpochSet or Element
+            timeref: Time reference for the query interval
+            t0: Start time of query interval
+            t1: End time of query interval
+
+        Returns:
+            List of (start, end) tuples representing valid sub-intervals
+        """
+        raise NotImplementedError(
+            "identifyvalidintervals requires time reference conversion infrastructure."
+        )
 
     def __repr__(self) -> str:
         return f"MarkGarbage(session={self._session is not None})"

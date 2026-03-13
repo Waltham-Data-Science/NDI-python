@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
+
 from . import App
 from .appdoc import AppDoc
 
@@ -58,20 +60,63 @@ class SpikeSorter(App, AppDoc):
             "num_start": 5,
         }
 
+    def check_sorting_parameters(
+        self,
+        sorting_parameters_struct: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Validate and fill defaults for sorting parameters.
+
+        MATLAB equivalent: ndi.app.spikesorter/check_sorting_parameters
+
+        Args:
+            sorting_parameters_struct: Input sorting parameters
+
+        Returns:
+            Validated sorting parameters with defaults filled in
+        """
+        defaults = self.default_sorting_parameters()
+        for key, value in defaults.items():
+            if key not in sorting_parameters_struct:
+                sorting_parameters_struct[key] = value
+        return sorting_parameters_struct
+
+    def loadwaveforms(
+        self,
+        ndi_timeseries_obj: Any,
+        extraction_name: str = "default",
+    ) -> tuple[np.ndarray, dict[str, Any], np.ndarray, list[dict], Any, list]:
+        """
+        Load extracted spike waveforms.
+
+        MATLAB equivalent: ndi.app.spikesorter/loadwaveforms
+
+        Args:
+            ndi_timeseries_obj: Source timeseries element
+            extraction_name: Name of extraction parameters
+
+        Returns:
+            Tuple of (waveforms, waveformparams, spiketimes,
+            epochinfo, extraction_params_doc, waveform_docs)
+        """
+        raise NotImplementedError("loadwaveforms requires spike extraction results in database.")
+
     def spike_sort(
         self,
-        timeseries_obj: Any,
+        ndi_timeseries_obj: Any,
         extraction_name: str = "default",
-        sorting_name: str = "default",
+        sorting_parameters_name: str = "default",
         redo: bool = False,
     ) -> list[Document]:
         """
         Perform spike sorting on extracted spikes.
 
+        MATLAB equivalent: ndi.app.spikesorter/spike_sort
+
         Args:
-            timeseries_obj: Source timeseries element
+            ndi_timeseries_obj: Source timeseries element
             extraction_name: Name of extraction parameters
-            sorting_name: Name of sorting parameters
+            sorting_parameters_name: Name of sorting parameters
             redo: Re-sort even if results exist
 
         Returns:
@@ -84,22 +129,21 @@ class SpikeSorter(App, AppDoc):
 
     def clusters2neurons(
         self,
-        timeseries_obj: Any,
-        sorting_name: str = "default",
-        extraction_name: str = "default",
+        ndi_timeseries_obj: Any,
+        sorting_parameters_name: str = "default",
+        extraction_parameters_name: str = "default",
         redo: bool = False,
-    ) -> list[Any]:
+    ) -> None:
         """
         Create Neuron elements from cluster assignments.
 
-        Args:
-            timeseries_obj: Source timeseries element
-            sorting_name: Name of sorting parameters
-            extraction_name: Name of extraction parameters
-            redo: Re-create even if neurons exist
+        MATLAB equivalent: ndi.app.spikesorter/clusters2neurons
 
-        Returns:
-            List of Neuron objects
+        Args:
+            ndi_timeseries_obj: Source timeseries element
+            sorting_parameters_name: Name of sorting parameters
+            extraction_parameters_name: Name of extraction parameters
+            redo: Re-create even if neurons exist
         """
         raise NotImplementedError(
             "Full neuron creation from clusters requires additional infrastructure."
@@ -120,10 +164,28 @@ class SpikeSorter(App, AppDoc):
 
         return self._session.database_search(Query("").isa(appdoc_type))
 
-    def isvalid_appdoc_struct(self, appdoc_type: str, appdoc_struct: dict) -> bool:
+    def isvalid_appdoc_struct(self, appdoc_type: str, appdoc_struct: dict) -> tuple[bool, str]:
+        """
+        Validate an appdoc struct.
+
+        MATLAB equivalent: ndi.app.spikesorter/isvalid_appdoc_struct
+
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
         if appdoc_type == "sorting_parameters":
-            return "num_pca_features" in appdoc_struct
-        return True
+            if "num_pca_features" not in appdoc_struct:
+                return False, "sorting_parameters requires 'num_pca_features'"
+            return True, ""
+        return True, ""
+
+    def loaddata_appdoc(self, appdoc_type: str, *args, **kwargs) -> Any:
+        """
+        Load data from an app document.
+
+        MATLAB equivalent: ndi.app.spikesorter/loaddata_appdoc
+        """
+        return None
 
     def __repr__(self) -> str:
         return f"SpikeSorter(session={self._session is not None})"

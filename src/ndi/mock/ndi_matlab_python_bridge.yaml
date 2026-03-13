@@ -1,0 +1,340 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/mock/
+# The Primary Contract for the ndi.mock namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Standalone functions  (ndi.mock.fun.*)
+# =========================================================================
+functions:
+
+  - name: subject_stimulator_neuron
+    type: function
+    matlab_path: "src/ndi/+ndi/+mock/+fun/subject_stimulator_neuron.m"
+    python_path: "ndi/mock/__init__.py"
+    input_arguments:
+      - name: ndi_session_obj
+        type_matlab: "ndi.session"
+        type_python: "Any"
+    output_arguments:
+      - name: output
+        type_matlab: "struct"
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Exact match. MATLAB returns struct with fields: mock_subject,
+      mock_stimulator, mock_spikes, refNum. Python returns dict with
+      keys: subject, stimulator, spikes, subject_name, ref_num.
+      Key names differ slightly but semantics match.
+
+  - name: stimulus_presentation
+    type: function
+    matlab_path: "src/ndi/+ndi/+mock/+fun/stimulus_presentation.m"
+    python_path: "ndi/mock/__init__.py"
+    input_arguments:
+      - name: S
+        type_matlab: "ndi.session"
+        type_python: "n/a (not used in Python)"
+      - name: stimulus_element_id
+        type_matlab: "char"
+        type_python: "n/a (not used in Python)"
+      - name: parameter_struct
+        type_matlab: "struct"
+        type_python: "n/a (not used in Python)"
+      - name: independent_variables
+        type_matlab: "cell array of char"
+        type_python: "list[str]"
+      - name: X
+        type_matlab: "double array"
+        type_python: "n/a (encoded as param_values)"
+      - name: R
+        type_matlab: "double array"
+        type_python: "list[float] (response_rates)"
+      - name: noise
+        type_matlab: "double"
+        type_python: "float"
+        default: "0.0"
+      - name: reps
+        type_matlab: "integer"
+        type_python: "int"
+        default: "5"
+      - name: stim_duration
+        type_matlab: "double (Name-Value)"
+        type_python: "float"
+        default: "10.0"
+      - name: interstimulus_interval
+        type_matlab: "double (Name-Value)"
+        type_python: "float"
+        default: "5.0"
+      - name: epoch_id
+        type_matlab: "char (Name-Value)"
+        type_python: "str"
+        default: "'mockepoch'"
+    output_arguments:
+      - name: stim_pres_doc
+        type_matlab: "ndi.document"
+        type_python: "n/a (Python returns dict)"
+      - name: spiketimes
+        type_matlab: "double array"
+        type_python: "n/a (included in dict)"
+    decision_log: >
+      SIGNIFICANT DIVERGENCE: MATLAB version takes a session and
+      creates actual ndi.documents in the database. Python version
+      is a standalone data generator that returns a plain dict with
+      'presentations', 'spike_times', 'epoch_id' keys. The Python
+      version does not interact with the database.
+      This is an intentional simplification for the Python port where
+      the function serves as a test data generator. The MATLAB version
+      also accepts a stim_duration_min parameter (default 0.2) that
+      Python lacks.
+
+  - name: stimulus_response
+    type: function
+    matlab_path: "src/ndi/+ndi/+mock/+fun/stimulus_response.m"
+    python_path: "ndi/mock/__init__.py"
+    input_arguments:
+      - name: S
+        type_matlab: "ndi.session"
+        type_python: "Any"
+      - name: parameter_struct
+        type_matlab: "struct"
+        type_python: "dict[str, Any]"
+      - name: independent_variables
+        type_matlab: "cell array of char"
+        type_python: "list[str]"
+      - name: X
+        type_matlab: "double array"
+        type_python: "numpy.ndarray"
+      - name: R
+        type_matlab: "double array"
+        type_python: "numpy.ndarray"
+      - name: noise
+        type_matlab: "double"
+        type_python: "float"
+      - name: reps
+        type_matlab: "integer"
+        type_python: "int"
+      - name: stim_duration
+        type_matlab: "double (Name-Value)"
+        type_python: "float"
+        default: "2.0"
+      - name: interstimulus_interval
+        type_matlab: "double (Name-Value)"
+        type_python: "float"
+        default: "3.0"
+      - name: epochid
+        type_matlab: "char (Name-Value)"
+        type_python: "str"
+        default: "'mockepoch'"
+    output_arguments:
+      - name: docs
+        type_matlab: "cell array of ndi.document"
+        type_python: "dict[str, Any]"
+    decision_log: >
+      DISCREPANCY FIXED: Function was entirely missing from Python.
+      Added stub implementation. MATLAB version creates a complete
+      set of mock documents (subject, stimulator, spikes, stimulus
+      presentation, control stimulus labels, stimulus response, and
+      tuning curve) all added to the session database. Python stub
+      returns a dict with the same keys.
+
+  - name: clear
+    type: function
+    matlab_path: "src/ndi/+ndi/+mock/+fun/clear.m"
+    python_path: "ndi/mock/__init__.py"
+    python_name: "clear_mock_docs"
+    input_arguments:
+      - name: S
+        type_matlab: "ndi.session"
+        type_python: "Any"
+    output_arguments: []
+    decision_log: >
+      DISCREPANCY FIXED: MATLAB returns void. Python was returning
+      int (count of removed docs). Updated Python to return None
+      to match MATLAB. Python name is 'clear_mock_docs' to avoid
+      conflict with built-in 'clear'. This is documented in the
+      bridge decision_log as an allowed Pythonization.
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # =========================================================================
+  # ndi.mock.ctest
+  # =========================================================================
+  - name: ctest
+    type: class
+    matlab_path: "src/ndi/+ndi/+mock/ctest.m"
+    python_path: "ndi/mock/__init__.py"
+    python_class: "CalculatorTest"
+
+    methods:
+      - name: ctest
+        kind: constructor
+        input_arguments:
+          - name: calculator
+            type_matlab: "implicit (no args in MATLAB)"
+            type_python: "Any"
+            default: "None"
+        output_arguments:
+          - name: obj
+            type_python: "CalculatorTest"
+        decision_log: >
+          MATLAB constructor takes no args. Python accepts optional
+          calculator parameter for convenience.
+
+      - name: test
+        input_arguments:
+          - name: scope
+            type_matlab: "char"
+            type_python: "str"
+            default: "'highSNR'"
+          - name: number_of_tests
+            type_matlab: "integer"
+            type_python: "int"
+            default: "1"
+          - name: plot_it
+            type_matlab: "logical"
+            type_python: "n/a (omitted)"
+        output_arguments:
+          - name: b
+            type_matlab: "logical"
+            type_python: "n/a (in result dict)"
+          - name: reports
+            type_matlab: "cell array"
+            type_python: "n/a (in result dict)"
+          - name: b_expected
+            type_matlab: "logical"
+            type_python: "n/a (in result dict)"
+          - name: doc_output
+            type_matlab: "cell array"
+            type_python: "n/a (in result dict)"
+          - name: doc_expected_output
+            type_matlab: "cell array"
+            type_python: "n/a (in result dict)"
+        decision_log: >
+          MATLAB returns [b, reports, b_expected, doc_output,
+          doc_expected_output] 5-tuple. Python returns a dict with
+          'passed' and 'results' keys. This is an intentional
+          divergence — Python uses a dict for clearer semantics
+          since Python doesn't have MATLAB's nargout pattern.
+          The plot_it argument is omitted in Python (no GUI).
+
+      - name: generate_mock_docs
+        input_arguments:
+          - name: scope
+            type_matlab: "char"
+            type_python: "str"
+            default: "'highSNR'"
+          - name: number
+            type_matlab: "integer"
+            type_python: "int"
+            default: "1"
+        output_arguments:
+          - name: docs
+            type_python: "dict[str, Any]"
+        decision_log: >
+          MATLAB returns [docs, doc_output, doc_expected_output].
+          Python returns dict with 'input_docs' and 'expected_output'.
+
+      - name: compare_mock_docs
+        input_arguments:
+          - name: expected_doc
+            type_matlab: "ndi.document"
+            type_python: "Any"
+          - name: actual_doc
+            type_matlab: "ndi.document"
+            type_python: "Any"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+          - name: report
+            type_python: "str"
+        decision_log: >
+          Exact match. Returns 2-tuple (match, report_string).
+
+      - name: clean_mock_docs
+        input_arguments: []
+        output_arguments: []
+        decision_log: >
+          DISCREPANCY NOTED: Method exists in MATLAB but is not
+          implemented in Python CalculatorTest. Not critical —
+          Python tests use pytest fixtures for cleanup.
+
+      - name: calc_path
+        input_arguments: []
+        output_arguments:
+          - name: path
+            type_python: "str"
+        decision_log: >
+          DISCREPANCY NOTED: Not a standalone method in Python.
+          Functionality is in mock_path().
+
+      - name: mock_path
+        input_arguments: []
+        output_arguments:
+          - name: mp
+            type_python: "Path"
+        decision_log: "Exact match."
+
+      - name: mock_expected_filename
+        input_arguments:
+          - name: number
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: fname
+            type_python: "str"
+        decision_log: "Exact match."
+
+      - name: mock_comparison_filename
+        input_arguments:
+          - name: number
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: fname
+            type_python: "str"
+        decision_log: "Exact match."
+
+      - name: load_mock_expected_output
+        input_arguments:
+          - name: number
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: doc
+            type_python: "dict | None"
+        decision_log: "Exact match."
+
+      - name: write_mock_expected_output
+        input_arguments:
+          - name: number
+            type_matlab: "integer"
+            type_python: "int"
+          - name: doc
+            type_matlab: "ndi.document"
+            type_python: "Any"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: "Exact match."
+
+      - name: load_mock_comparison
+        input_arguments:
+          - name: number
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: docCompare
+            type_python: "dict | None"
+        decision_log: >
+          DISCREPANCY NOTED: Not implemented in Python.
+          Not critical for current testing infrastructure.
+
+    not_applicable:
+      - name: plot
+        reason: "MATLAB GUI plotting. Python uses matplotlib."
