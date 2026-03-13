@@ -48,7 +48,9 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
         - t.analog: Analog sample times
 
     Example:
-        >>> stim = ProbeTimeseriesStimulator(session, 'visual_stim', 1, 'stimulator')
+        >>> stim = ProbeTimeseriesStimulator(
+        ...     session, 'visual_stim', 1, 'stimulator'
+        ... )
         >>> data, t, timeref = stim.readtimeseriesepoch(1, 0, 100)
     """
 
@@ -106,27 +108,25 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
             "stimevents": [],
         }
 
-        # Get device and channel info
-        devinfo = self.getchanneldevinfo(epoch)
-        if devinfo is None:
+        # Get device and channel info (MATLAB 5-tuple)
+        try:
+            dev_list, devname, devepoch, channeltype, channel = self.getchanneldevinfo(epoch)
+        except (IndexError, ValueError):
             return empty_data, empty_t, self._get_epoch_timeref(epoch)
 
-        dev = devinfo.get("daqsystem")
-        devepoch = devinfo.get("device_epoch_id")
-        channeltype = devinfo.get("channeltype", [])
-        channel = devinfo.get("channel", [])
-
-        if dev is None:
+        if not dev_list:
             return empty_data, empty_t, self._get_epoch_timeref(epoch)
 
-        # Ensure lists
-        if isinstance(channeltype, str):
-            channeltype = [channeltype]
-        if isinstance(channel, (int, float)):
-            channel = [channel]
+        # All channels must be on the same device (MATLAB enforces this)
+        unique_devnames = list(set(devname))
+        if len(unique_devnames) > 1:
+            raise ValueError("Right now, all channels must be on the same device.")
 
-        data = {}
-        t = {}
+        dev = dev_list[0]
+        dev_epoch_id = devepoch[0]
+
+        data: dict[str, Any] = {}
+        t: dict[str, Any] = {}
 
         # Separate metadata channels from other channels
         md_indices = [i for i, ct in enumerate(channeltype) if ct == "md"]
@@ -141,14 +141,12 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
         analog_indices = [i for i, ct in enumerate(channeltype_nonmd) if ct == "ai"]
         if analog_indices:
             try:
-                sr = dev.samplerate(
-                    devepoch, channeltype_nonmd, channel_nonmd
-                )
+                sr = dev.samplerate(dev_epoch_id, channeltype_nonmd, channel_nonmd)
                 if hasattr(sr, "__len__"):
                     sr_vals = [float(s) for s in sr]
                     if len(set(sr_vals)) != 1:
                         raise ValueError(
-                            "Do not know how to handle multiple sampling rates across channels."
+                            "Do not know how to handle multiple " "sampling rates across channels."
                         )
                     sr_val = sr_vals[0]
                 else:
@@ -157,17 +155,15 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
                 s0 = 1 + round(sr_val * t0)
                 s1 = 1 + round(sr_val * t1)
 
-                analog_channeltype = [channeltype_nonmd[i] for i in analog_indices]
-                analog_channel = [channel_nonmd[i] for i in analog_indices]
+                analog_ct = [channeltype_nonmd[i] for i in analog_indices]
+                analog_ch = [channel_nonmd[i] for i in analog_indices]
                 data["analog"] = dev.readchannels_epochsamples(
-                    analog_channeltype, analog_channel, devepoch, s0, s1
+                    analog_ct, analog_ch, dev_epoch_id, s0, s1
                 )
 
                 # Try to read time channel for analog data
                 try:
-                    t_analog = dev.readchannels_epochsamples(
-                        ["time"], [1], devepoch, s0, s1
-                    )
+                    t_analog = dev.readchannels_epochsamples(["time"], [1], dev_epoch_id, s0, s1)
                     t["analog"] = np.asarray(t_analog).ravel()
                 except Exception:
                     t["analog"] = np.nan
@@ -181,38 +177,31 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
         event_channeltype = [
             ct for i, ct in enumerate(channeltype_nonmd) if i not in analog_indices
         ]
-        event_channel = [
-            ch for i, ch in enumerate(channel_nonmd) if i not in analog_indices
-        ]
+        event_channel = [ch for i, ch in enumerate(channel_nonmd) if i not in analog_indices]
 
-        timestamps_list = []
-        edata_list = []
+        timestamps_list: list[Any] = []
+        edata_list: list[Any] = []
         if event_channeltype:
             try:
                 result = dev.readevents_epochsamples(
-                    event_channeltype, event_channel, devepoch, t0, t1
+                    event_channeltype, event_channel, dev_epoch_id, t0, t1
                 )
                 if isinstance(result, tuple) and len(result) == 2:
                     ts, ed = result
-                    # Ensure lists of arrays
                     if not isinstance(ts, list):
                         timestamps_list = [ts]
                         edata_list = [ed]
                     else:
                         timestamps_list = ts
                         edata_list = ed
-                else:
-                    timestamps_list = []
-                    edata_list = []
             except Exception:
-                timestamps_list = []
-                edata_list = []
+                pass
 
         # Determine mode: marker vs dimension
         marker_types = {"mk", "marker", "text", "e", "event", "dep", "den"}
         dim_types = {"dimp", "dimn"}
 
-        # Reconstruct full channel type/channel lists (event channels + metadata)
+        # Reconstruct full channel lists (event channels + metadata)
         all_channeltype = event_channeltype + channeltype_metadata
         all_channel = event_channel + channel_metadata
 
@@ -221,140 +210,34 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
 
         event_data_list: list[Any] = []
         mk_count = 0
-        e_count = 0
 
         if markermode:
-            for i, ct in enumerate(all_channeltype):
-                if ct in ("mk", "marker", "text"):
-                    mk_count += 1
-                    if i < len(timestamps_list):
-                        ts_i = np.asarray(timestamps_list[i])
-                        ed_i = np.asarray(edata_list[i])
-                    else:
-                        ts_i = np.array([])
-                        ed_i = np.array([])
-
-                    if mk_count == 1:
-                        # First marker: stim on/off times
-                        if ed_i.size > 0:
-                            vals = ed_i.ravel() if ed_i.ndim == 1 else ed_i[:, 0]
-                            t_vals = ts_i.ravel() if ts_i.ndim == 1 else ts_i[:, 0]
-                            on_mask = vals > 0
-                            off_mask = vals == -1
-                            t["stimon"] = t_vals[on_mask]
-                            t["stimoff"] = t_vals[off_mask]
-                        else:
-                            t["stimon"] = np.array([])
-                            t["stimoff"] = np.array([])
-
-                    elif mk_count == 2:
-                        # Second marker: stimulus IDs
-                        stimids = []
-                        if ed_i.size > 0:
-                            for dd in range(len(ed_i)):
-                                if ct == "text" and isinstance(ed_i[dd], str):
-                                    try:
-                                        stimids.append(int(ed_i[dd]))
-                                    except (ValueError, SyntaxError):
-                                        stimids.append(0)
-                                else:
-                                    row = ed_i[dd] if ed_i.ndim > 1 else ed_i[dd:dd+1]
-                                    stimids.append(row)
-                        data["stimid"] = np.array(stimids)
-
-                    elif mk_count == 3:
-                        # Third marker: stim open/close
-                        if ed_i.size > 0:
-                            vals = ed_i.ravel() if ed_i.ndim == 1 else ed_i[:, 0]
-                            t_vals = ts_i.ravel() if ts_i.ndim == 1 else ts_i[:, 0]
-                            on_ = t_vals[vals > 0]
-                            off_ = t_vals[vals == -1]
-                            openclose = np.full((max(len(on_), len(off_)), 2), np.nan)
-                            if len(on_) > 0:
-                                openclose[: len(on_), 0] = on_
-                            if len(off_) > 0:
-                                openclose[: len(off_), 1] = off_
-                                # If no stimoff from mk1, use mk3 off times
-                                if "stimoff" not in t or len(t["stimoff"]) == 0:
-                                    t["stimoff"] = off_
-                            t["stimopenclose"] = openclose
-                        else:
-                            t["stimopenclose"] = np.array([]).reshape(0, 2)
-                    else:
-                        raise ValueError("Got more mark channels than expected.")
-
-                elif ct in ("e", "event", "dep", "den"):
-                    e_count += 1
-                    if i < len(timestamps_list):
-                        event_data_list.append(np.asarray(timestamps_list[i]))
-                    else:
-                        event_data_list.append(np.array([]))
-
-                elif ct == "md":
-                    # Read metadata
-                    try:
-                        md_ch_idx = all_channel[i]
-                        data["parameters"] = dev.getmetadata(devepoch, md_ch_idx)
-                    except Exception:
-                        data["parameters"] = []
-
+            self._process_marker_mode(
+                all_channeltype,
+                all_channel,
+                timestamps_list,
+                edata_list,
+                dev,
+                dev_epoch_id,
+                data,
+                t,
+                event_data_list,
+                mk_count,
+            )
             t["stimevents"] = event_data_list
 
         elif dimmode:
-            t["stimon"] = np.array([])
-            t["stimoff"] = np.array([])
-            data["stimid"] = np.array([], dtype=int)
-            counter = 0
-            event_data_list = []
-
-            for i, ct in enumerate(all_channeltype):
-                if ct in ("dimp", "dimn"):
-                    counter += 1
-                    if i < len(timestamps_list):
-                        ts_i = np.asarray(timestamps_list[i])
-                        ed_i = np.asarray(edata_list[i])
-                    else:
-                        continue
-
-                    if ed_i.size > 0:
-                        vals = ed_i.ravel() if ed_i.ndim == 1 else ed_i[:, 0]
-                        t_vals = ts_i.ravel() if ts_i.ndim == 1 else ts_i[:, 0]
-
-                        on_mask = vals > 0
-                        off_mask = vals == -1
-
-                        t["stimon"] = np.concatenate([t["stimon"], t_vals[on_mask]])
-                        t["stimoff"] = np.concatenate([t["stimoff"], t_vals[off_mask]])
-                        n_on = int(np.sum(vals == 1))
-                        data["stimid"] = np.concatenate([
-                            data["stimid"],
-                            np.full(n_on, counter, dtype=int),
-                        ])
-
-                elif ct == "md":
-                    try:
-                        md_ch_idx = all_channel[i]
-                        data["parameters"] = dev.getmetadata(devepoch, md_ch_idx)
-                    except Exception:
-                        data["parameters"] = []
-
-                elif ct in ("e", "event"):
-                    if i < len(timestamps_list):
-                        event_data_list.append(np.asarray(timestamps_list[i]))
-
-            # Sort by stimon time
-            if len(t["stimon"]) > 0:
-                order = np.argsort(t["stimon"])
-                t["stimon"] = t["stimon"][order]
-                t["stimoff"] = t["stimoff"][order] if len(t["stimoff"]) == len(order) else t["stimoff"]
-                data["stimid"] = data["stimid"][order] if len(data["stimid"]) == len(order) else data["stimid"]
-
-            # In dim mode, stimopenclose = [stimon, stimoff]
-            if len(t["stimon"]) > 0:
-                t["stimopenclose"] = np.column_stack([t["stimon"], t["stimoff"]]) if len(t["stimoff"]) == len(t["stimon"]) else np.column_stack([t["stimon"], np.full_like(t["stimon"], np.nan)])
-            else:
-                t["stimopenclose"] = np.array([]).reshape(0, 2)
-
+            self._process_dim_mode(
+                all_channeltype,
+                all_channel,
+                timestamps_list,
+                edata_list,
+                dev,
+                dev_epoch_id,
+                data,
+                t,
+                event_data_list,
+            )
             t["stimevents"] = event_data_list
 
         # Ensure defaults for missing fields
@@ -380,61 +263,158 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
 
         return data, t, timeref
 
-    def getchanneldevinfo(
+    def _process_marker_mode(
         self,
-        epoch: int | str,
-    ) -> dict[str, Any] | None:
-        """
-        Get device and channel information for an epoch.
+        all_channeltype: list[str],
+        all_channel: list[int],
+        timestamps_list: list[Any],
+        edata_list: list[Any],
+        dev: Any,
+        dev_epoch_id: str,
+        data: dict[str, Any],
+        t: dict[str, Any],
+        event_data_list: list[Any],
+        mk_count: int,
+    ) -> None:
+        """Process channels in marker mode."""
+        for i, ct in enumerate(all_channeltype):
+            if ct in ("mk", "marker", "text"):
+                mk_count += 1
+                if i < len(timestamps_list):
+                    ts_i = np.asarray(timestamps_list[i])
+                    ed_i = np.asarray(edata_list[i])
+                else:
+                    ts_i = np.array([])
+                    ed_i = np.array([])
 
-        Returns device, device epoch, and per-channel type/number arrays
-        needed by readtimeseriesepoch.
+                if mk_count == 1:
+                    # First marker: stim on/off times
+                    if ed_i.size > 0:
+                        vals = ed_i.ravel() if ed_i.ndim == 1 else ed_i[:, 0]
+                        t_vals = ts_i.ravel() if ts_i.ndim == 1 else ts_i[:, 0]
+                        t["stimon"] = t_vals[vals > 0]
+                        t["stimoff"] = t_vals[vals == -1]
+                    else:
+                        t["stimon"] = np.array([])
+                        t["stimoff"] = np.array([])
 
-        Args:
-            epoch: Epoch number (1-indexed) or epoch_id
+                elif mk_count == 2:
+                    # Second marker: stimulus IDs
+                    stimids = []
+                    if ed_i.size > 0:
+                        for dd in range(len(ed_i)):
+                            if ct == "text" and isinstance(ed_i[dd], str):
+                                try:
+                                    stimids.append(int(ed_i[dd]))
+                                except (ValueError, SyntaxError):
+                                    stimids.append(0)
+                            else:
+                                row = ed_i[dd] if ed_i.ndim > 1 else ed_i[dd : dd + 1]
+                                stimids.append(row)
+                    data["stimid"] = np.array(stimids)
 
-        Returns:
-            Dict with daqsystem, device_epoch_id, channeltype, channel
-        """
-        # Use the parent Probe.getchanneldevinfo which returns a dict
-        # with daqsystem, device_epoch_id, epochprobemap
-        try:
-            base_info = super().getchanneldevinfo(epoch)
-        except (IndexError, KeyError):
-            return None
-        if base_info is None:
-            return None
+                elif mk_count == 3:
+                    # Third marker: stim open/close
+                    if ed_i.size > 0:
+                        vals = ed_i.ravel() if ed_i.ndim == 1 else ed_i[:, 0]
+                        t_vals = ts_i.ravel() if ts_i.ndim == 1 else ts_i[:, 0]
+                        on_ = t_vals[vals > 0]
+                        off_ = t_vals[vals == -1]
+                        openclose = np.full((max(len(on_), len(off_)), 2), np.nan)
+                        if len(on_) > 0:
+                            openclose[: len(on_), 0] = on_
+                        if len(off_) > 0:
+                            openclose[: len(off_), 1] = off_
+                            if "stimoff" not in t or len(t["stimoff"]) == 0:
+                                t["stimoff"] = off_
+                        t["stimopenclose"] = openclose
+                    else:
+                        t["stimopenclose"] = np.array([]).reshape(0, 2)
+                else:
+                    raise ValueError("Got more mark channels than expected.")
 
-        dev = base_info.get("daqsystem")
-        devepoch = base_info.get("device_epoch_id")
+            elif ct in ("e", "event", "dep", "den"):
+                if i < len(timestamps_list):
+                    event_data_list.append(np.asarray(timestamps_list[i]))
+                else:
+                    event_data_list.append(np.array([]))
 
-        if dev is None:
-            return None
-
-        # Get channel info from the epochprobemap's devicestring
-        epms = base_info.get("epochprobemap", [])
-        channeltype = []
-        channel = []
-
-        for epm in epms:
-            if hasattr(epm, "devicestring") and epm.devicestring:
+            elif ct == "md":
                 try:
-                    from ..daq.daqsystemstring import DAQSystemString
-
-                    dss = DAQSystemString.parse(epm.devicestring)
-                    for ct, ch_list in dss.channels:
-                        for ch in ch_list:
-                            channeltype.append(ct)
-                            channel.append(ch)
+                    data["parameters"] = dev.getmetadata(dev_epoch_id, all_channel[i])
                 except Exception:
-                    pass
+                    data["parameters"] = []
 
-        return {
-            "daqsystem": dev,
-            "device_epoch_id": devepoch,
-            "channeltype": channeltype,
-            "channel": channel,
-        }
+    def _process_dim_mode(
+        self,
+        all_channeltype: list[str],
+        all_channel: list[int],
+        timestamps_list: list[Any],
+        edata_list: list[Any],
+        dev: Any,
+        dev_epoch_id: str,
+        data: dict[str, Any],
+        t: dict[str, Any],
+        event_data_list: list[Any],
+    ) -> None:
+        """Process channels in dimension mode."""
+        t["stimon"] = np.array([])
+        t["stimoff"] = np.array([])
+        data["stimid"] = np.array([], dtype=int)
+        counter = 0
+
+        for i, ct in enumerate(all_channeltype):
+            if ct in ("dimp", "dimn"):
+                counter += 1
+                if i >= len(timestamps_list):
+                    continue
+
+                ts_i = np.asarray(timestamps_list[i])
+                ed_i = np.asarray(edata_list[i])
+
+                if ed_i.size > 0:
+                    vals = ed_i.ravel() if ed_i.ndim == 1 else ed_i[:, 0]
+                    t_vals = ts_i.ravel() if ts_i.ndim == 1 else ts_i[:, 0]
+
+                    t["stimon"] = np.concatenate([t["stimon"], t_vals[vals > 0]])
+                    t["stimoff"] = np.concatenate([t["stimoff"], t_vals[vals == -1]])
+                    n_on = int(np.sum(vals == 1))
+                    data["stimid"] = np.concatenate(
+                        [
+                            data["stimid"],
+                            np.full(n_on, counter, dtype=int),
+                        ]
+                    )
+
+            elif ct == "md":
+                try:
+                    data["parameters"] = dev.getmetadata(dev_epoch_id, all_channel[i])
+                except Exception:
+                    data["parameters"] = []
+
+            elif ct in ("e", "event"):
+                if i < len(timestamps_list):
+                    event_data_list.append(np.asarray(timestamps_list[i]))
+
+        # Sort by stimon time
+        if len(t["stimon"]) > 0:
+            order = np.argsort(t["stimon"])
+            t["stimon"] = t["stimon"][order]
+            if len(t["stimoff"]) == len(order):
+                t["stimoff"] = t["stimoff"][order]
+            if len(data["stimid"]) == len(order):
+                data["stimid"] = data["stimid"][order]
+
+        # In dim mode, stimopenclose = [stimon, stimoff]
+        if len(t["stimon"]) > 0:
+            if len(t["stimoff"]) == len(t["stimon"]):
+                t["stimopenclose"] = np.column_stack([t["stimon"], t["stimoff"]])
+            else:
+                t["stimopenclose"] = np.column_stack(
+                    [t["stimon"], np.full_like(t["stimon"], np.nan)]
+                )
+        else:
+            t["stimopenclose"] = np.array([]).reshape(0, 2)
 
     def _get_epoch_timeref(self, epoch: int | str) -> Any | None:
         """Get the time reference for an epoch."""
@@ -476,10 +456,10 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
         if mk_values.ndim == 1:
             mk_values = mk_values.reshape(-1, 1)
 
-        stimon_times = []
-        stimoff_times = []
-        stimids = []
-        openclose_times = []
+        stimon_times: list[float] = []
+        stimoff_times: list[float] = []
+        stimids: list[int] = []
+        openclose_times: list[list[float]] = []
 
         ncols = min(mk_values.shape[1], mk_timestamps.shape[1])
 
@@ -495,7 +475,6 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
         # Parse mk2 (stimulus ID) if available
         if ncols >= 2:
             col1_vals = mk_values[:, 1]
-            # IDs recorded at onset events
             id_mask = col1_vals > 0
             stimids = col1_vals[id_mask].astype(int).tolist()
 

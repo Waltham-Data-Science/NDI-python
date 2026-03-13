@@ -276,21 +276,41 @@ class Probe(Element):
 
     def getchanneldevinfo(
         self,
-        epoch_number: int,
-    ) -> dict[str, Any]:
+        epoch_number_or_id: int | str,
+    ) -> tuple[list[Any], list[str], list[str], list[str], list[int]]:
         """
-        Get device and channel information for an epoch.
+        Get device, channel type, and channel list for a given epoch.
+
+        MATLAB equivalent: ndi.probe.getchanneldevinfo
+
+        For C channels corresponding to this probe, returns:
+            dev: C-length list of DAQ system objects (one per channel)
+            devname: C-length list of device names
+            devepoch: C-length list of epoch IDs on each device
+            channeltype: C-length list of channel type strings
+            channellist: C-length list of channel numbers
 
         Args:
-            epoch_number: Epoch number (1-indexed)
+            epoch_number_or_id: Epoch number (1-indexed) or epoch_id string
 
         Returns:
-            Dict with:
-            - daqsystem: The DAQ system object
-            - device_epochnumber: Epoch number in device
-            - channels: Channel mappings
+            Tuple of (dev, devname, devepoch, channeltype, channellist)
         """
-        et, _ = self.epochtable()
+        et = self.epochtable()
+        if isinstance(et, tuple):
+            et = et[0]
+
+        # Resolve epoch_id to epoch_number
+        if isinstance(epoch_number_or_id, str):
+            epoch_number = None
+            for i, e in enumerate(et):
+                if e.get("epoch_id") == epoch_number_or_id:
+                    epoch_number = i + 1
+                    break
+            if epoch_number is None:
+                raise ValueError(f"Could not identify epoch with id {epoch_number_or_id}.")
+        else:
+            epoch_number = epoch_number_or_id
 
         if epoch_number < 1 or epoch_number > len(et):
             raise IndexError(f"Epoch {epoch_number} out of range (1..{len(et)})")
@@ -298,11 +318,57 @@ class Probe(Element):
         entry = et[epoch_number - 1]
         underlying = entry.get("underlying_epochs", {})
 
-        return {
-            "daqsystem": underlying.get("underlying"),
-            "device_epoch_id": underlying.get("epoch_id"),
-            "epochprobemap": entry.get("epochprobemap", []),
-        }
+        dev: list[Any] = []
+        devname: list[str] = []
+        devepoch: list[str] = []
+        channeltype: list[str] = []
+        channellist: list[int] = []
+
+        # Get the underlying device
+        underlying_dev = None
+        if isinstance(underlying, dict):
+            underlying_dev = underlying.get("underlying")
+        elif hasattr(underlying, "underlying"):
+            underlying_dev = underlying.underlying
+
+        underlying_epoch_id = ""
+        if isinstance(underlying, dict):
+            underlying_epoch_id = underlying.get("epoch_id", "")
+        elif hasattr(underlying, "epoch_id"):
+            underlying_epoch_id = underlying.epoch_id
+
+        # Get epochprobemaps that match this probe
+        epms = underlying.get("epochprobemap", []) if isinstance(underlying, dict) else []
+        if not epms:
+            epms = entry.get("epochprobemap", [])
+        if not isinstance(epms, list):
+            epms = [epms]
+
+        from ..daq.daqsystemstring import DAQSystemString
+
+        for epm in epms:
+            if not self.epochprobemapmatch(epm):
+                continue
+
+            ds_str = ""
+            if hasattr(epm, "devicestring"):
+                ds_str = epm.devicestring
+            elif isinstance(epm, dict):
+                ds_str = epm.get("devicestring", "")
+
+            if not ds_str:
+                continue
+
+            dss = DAQSystemString.parse(ds_str)
+            for ct, ch_list in dss.channels:
+                for ch in ch_list:
+                    dev.append(underlying_dev)
+                    devname.append(dss.devicename)
+                    devepoch.append(underlying_epoch_id)
+                    channeltype.append(ct)
+                    channellist.append(ch)
+
+        return dev, devname, devepoch, channeltype, channellist
 
     # =========================================================================
     # DocumentService Override

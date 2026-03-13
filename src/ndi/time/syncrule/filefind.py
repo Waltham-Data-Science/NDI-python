@@ -214,9 +214,7 @@ def _get_underlying_files(epochnode: dict[str, Any]) -> list[str]:
     return []
 
 
-def _find_and_read_syncfile(
-    files: list[str], syncfilename: str
-) -> tuple[float, float] | None:
+def _find_and_read_syncfile(files: list[str], syncfilename: str) -> tuple[float, float] | None:
     """
     Find and read a sync file from a list of file paths.
 

@@ -684,10 +684,13 @@ class TestProbeTimeseriesMFDAQ:
         assert pt.samplerate(1) == -1.0
 
     def test_getchanneldevinfo_no_session(self):
+        import pytest
+
         from ndi.probe.timeseries_mfdaq import ProbeTimeseriesMFDAQ
 
         pt = ProbeTimeseriesMFDAQ(name="test", reference=1, type="n-trode")
-        assert pt.getchanneldevinfo(1) is None
+        with pytest.raises(IndexError):
+            pt.getchanneldevinfo(1)
 
     def test_read_epochsamples_no_device(self):
         from ndi.probe.timeseries_mfdaq import ProbeTimeseriesMFDAQ
