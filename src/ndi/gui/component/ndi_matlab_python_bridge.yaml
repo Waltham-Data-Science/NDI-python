@@ -85,6 +85,47 @@ classes:
         output_arguments: []
         decision_log: "Abstract method. Subclasses implement completion display."
 
+      - name: setProgressTracker
+        input_arguments:
+          - name: tracker
+            type_matlab: "ndi.gui.component.internal.ProgressTracker"
+            type_python: "ProgressTracker"
+        output_arguments: []
+        decision_log: >
+          Exact match. Detaches from previous tracker and attaches
+          listeners to the new one. Synchronized 2026-03-13.
+
+      - name: getProgressValue
+        input_arguments: []
+        output_arguments:
+          - name: value
+            type_python: "float"
+        decision_log: >
+          Exact match. Returns current progress as a fraction 0-1
+          from the attached ProgressTracker. Synchronized 2026-03-13.
+
+      - name: getProgressTitle
+        input_arguments: []
+        output_arguments:
+          - name: title
+            type_python: "str"
+        decision_log: >
+          Exact match. Returns the tracker's rendered message, or
+          falls back to the Title property. Synchronized 2026-03-13.
+
+      - name: formatMessage
+        input_arguments:
+          - name: message
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: formattedMessage
+            type_python: "str"
+        decision_log: >
+          Exact match. Appends estimated remaining time to the
+          message string if DisplayRemainingTime is enabled.
+          Synchronized 2026-03-13.
+
   # -----------------------------------------------------------------------
   # ndi.gui.component.internal.ProgressTracker
   # -----------------------------------------------------------------------
@@ -129,6 +170,12 @@ classes:
         type_matlab: "char"
         type_python: "str"
         decision_log: "Exact match."
+      - name: DumpFilePath
+        type_matlab: "char"
+        type_python: "str | None"
+        decision_log: >
+          Exact match. Path for async file-based progress dumps.
+          Used by AsynchProgressTracker subclass. Synchronized 2026-03-13.
 
     methods:
       - name: ProgressTracker
@@ -185,6 +232,20 @@ classes:
         decision_log: >
           Overrides parent. Adds file-based progress dumping for
           cross-process monitoring.
+
+      - name: getAsynchTaskProgress
+        kind: static
+        input_arguments:
+          - name: filepath
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: progressData
+            type_python: "dict"
+        decision_log: >
+          Exact match. Reads progress state from a JSON dump file
+          written by updateProgress. Returns dict with CurrentStep,
+          TotalSteps, TemplateMessage keys. Synchronized 2026-03-13.
 
   # -----------------------------------------------------------------------
   # ndi.gui.component.internal.event.ProgressUpdatedEventData

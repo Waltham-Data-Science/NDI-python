@@ -347,3 +347,120 @@ functions:
       Note: the MATLAB .m file is named extract_docs_files.m but the
       function inside is named extract_doc_files. Using the function
       name. Synchronized 2026-03-13.
+
+# =========================================================================
+# Not Applicable — MATLAB functions intentionally not ported to Python
+# =========================================================================
+not_applicable:
+
+  - name: createGenBankControlledVocabulary
+    matlab_path: "+ndi/+database/+fun/createGenBankControlledVocabulary.m"
+    status: not_applicable
+    decision_log: >
+      MATLAB utility for creating a controlled vocabulary from GenBank
+      taxonomy data. Bioinformatics-specific helper for populating
+      ontology tables. Not needed in Python; equivalent functionality
+      available via BioPython or direct GenBank API access.
+
+  - name: readGenBankNames
+    matlab_path: "+ndi/+database/+fun/readGenBankNames.m"
+    status: not_applicable
+    decision_log: >
+      MATLAB utility for reading GenBank taxonomy names from flat files.
+      Bioinformatics-specific parser. Python users can use BioPython
+      (Bio.Entrez) or pandas to parse GenBank taxonomy files directly.
+
+  - name: readGenBankNodes
+    matlab_path: "+ndi/+database/+fun/readGenBankNodes.m"
+    status: not_applicable
+    decision_log: >
+      MATLAB utility for reading GenBank taxonomy node hierarchy from
+      flat files. Bioinformatics-specific parser. Python users can use
+      BioPython or pandas to parse GenBank taxonomy files directly.
+
+  - name: createNIFbrainareas
+    matlab_path: "+ndi/+database/+fun/createNIFbrainareas.m"
+    status: not_applicable
+    decision_log: >
+      MATLAB utility for creating NIF (Neuroscience Information
+      Framework) brain area vocabulary entries. One-time data import
+      script for populating ontology tables. Not needed as a library
+      function in Python.
+
+  - name: create_new_database
+    matlab_path: "+ndi/+database/+fun/create_new_database.m"
+    status: not_applicable
+    decision_log: >
+      MATLAB factory for instantiating a new database based on the
+      database hierarchy preferences. In Python, this functionality is
+      absorbed into Database.__init__() which directly creates the
+      SQLite backend. No separate factory needed.
+
+  - name: databasehierarchyinit
+    matlab_path: "+ndi/+database/+fun/databasehierarchyinit.m"
+    status: not_applicable
+    decision_log: >
+      MATLAB function for initializing the database implementation
+      hierarchy (preference list of database backends). In Python, the
+      equivalent is ndi.common.getDatabaseHierarchy() which returns the
+      single SQLite backend. The MATLAB multi-backend discovery pattern
+      is not needed.
+
+  - name: dataset_metadata
+    matlab_path: "+ndi/+database/+fun/dataset_metadata.m"
+    status: not_applicable
+    decision_log: >
+      MATLAB utility for reading/writing dataset metadata structures.
+      In Python, dataset metadata is handled natively via dict/JSON
+      serialization in the Document class. No separate utility needed.
+
+  - name: openMINDSobj2ndi_document
+    matlab_path: "+ndi/+database/+fun/openMINDSobj2ndi_document.m"
+    status: not_applicable
+    decision_log: >
+      MATLAB function for converting openMINDS objects to NDI documents.
+      In Python, this functionality is handled by the dedicated
+      ndi/openminds_convert.py module which provides a more Pythonic
+      approach to openMINDS integration.
+
+  - name: openMINDSobj2struct
+    matlab_path: "+ndi/+database/+fun/openMINDSobj2struct.m"
+    status: not_applicable
+    decision_log: >
+      MATLAB function for converting openMINDS objects to MATLAB structs.
+      In Python, openMINDS objects are naturally represented as dicts.
+      The ndi/openminds_convert.py module handles conversion directly.
+
+  - name: plotinteractivedocgraph
+    matlab_path: "+ndi/+database/+fun/plotinteractivedocgraph.m"
+    status: not_applicable
+    decision_log: >
+      MATLAB interactive GUI for visualizing document dependency graphs.
+      Uses MATLAB-specific figure/axes/callback infrastructure. Python
+      users can use networkx + matplotlib or graphviz for equivalent
+      visualization from the docs2graph adjacency dict output.
+
+  - name: projectvardef
+    matlab_path: "+ndi/+database/+fun/projectvardef.m"
+    status: not_applicable
+    decision_log: >
+      MATLAB utility for defining project-level variable definitions
+      used in the MATLAB workspace/project system. No equivalent
+      concept in the Python package; configuration is handled via
+      JSON/YAML files and ndi.common settings.
+
+  - name: readtablechar
+    matlab_path: "+ndi/+database/+fun/readtablechar.m"
+    status: not_applicable
+    decision_log: >
+      MATLAB utility for reading table data from character-delimited
+      files into MATLAB table objects. Python equivalent is
+      pandas.read_csv() which is more capable and widely used.
+
+  - name: writetablechar
+    matlab_path: "+ndi/+database/+fun/writetablechar.m"
+    status: not_applicable
+    decision_log: >
+      MATLAB utility for writing MATLAB table objects to
+      character-delimited files. Python equivalent is
+      pandas.DataFrame.to_csv() which is more capable and widely used.
