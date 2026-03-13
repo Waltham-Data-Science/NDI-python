@@ -29,6 +29,7 @@ def identifyMatchingRows(
     df: pd.DataFrame,
     column: str | list[str],
     value: Any,
+    match_mode: str | None = None,
     *,
     stringMatch: str = "identical",
     numericMatch: str = "eq",
@@ -52,6 +53,15 @@ def identifyMatchingRows(
     """
     _require_pandas()
 
+    # Allow passing match mode as positional argument
+    if match_mode is not None:
+        _string_modes = {"identical", "ignorecase", "contains"}
+        _numeric_modes = {"eq", "ne", "lt", "le", "gt", "ge"}
+        if match_mode.lower() in _string_modes:
+            stringMatch = match_mode
+        elif match_mode.lower() in _numeric_modes:
+            numericMatch = match_mode
+
     # Normalize to lists for multi-column support
     if isinstance(column, str):
         columns = [column]
@@ -66,7 +76,7 @@ def identifyMatchingRows(
         col = df[col_name]
 
         # Determine effective mode based on column dtype
-        if col.dtype == object:
+        if col.dtype == object or pd.api.types.is_string_dtype(col):
             effective_mode = stringMatch.lower()
         else:
             effective_mode = numericMatch.lower()
@@ -101,6 +111,8 @@ def identifyValidRows(
     df: pd.DataFrame,
     checkVariables: list[str] | None = None,
     invalidValues: Any = None,
+    *,
+    columns: list[str] | None = None,
 ) -> pd.Series:
     """Identify rows where specified columns have valid (non-NaN) values.
 
@@ -116,10 +128,13 @@ def identifyValidRows(
     """
     _require_pandas()
 
-    columns = checkVariables if checkVariables is not None else list(df.columns)
+    # Support 'columns' as alias for 'checkVariables'
+    if columns is not None and checkVariables is None:
+        checkVariables = columns
+    cols = checkVariables if checkVariables is not None else list(df.columns)
 
     mask = pd.Series(True, index=df.index)
-    for col in columns:
+    for col in cols:
         if col not in df.columns:
             continue
         if invalidValues is not None:

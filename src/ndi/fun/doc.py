@@ -83,6 +83,9 @@ def makeSpeciesStrainSex(
     Strain: str = "",
     BiologicalSex: str = "",
     AddToSession: bool = False,
+    species: str | None = None,
+    strain: str | None = None,
+    sex: str | None = None,
 ) -> list[Any]:
     """Create OpenMINDS-standard documents for species, strain, and sex.
 
@@ -107,7 +110,19 @@ def makeSpeciesStrainSex(
     """
     from ndi.openminds_convert import openminds_obj_to_ndi_document
 
-    subject_id = subjectID
+    # Support lowercase aliases
+    if species is not None and not Species:
+        Species = species
+    if strain is not None and not Strain:
+        Strain = strain
+    if sex is not None and not BiologicalSex:
+        BiologicalSex = sex
+
+    # Accept document objects or string IDs
+    if hasattr(subjectID, "document_properties"):
+        subject_id = subjectID.document_properties.get("base", {}).get("id", str(subjectID))
+    else:
+        subject_id = subjectID
     openminds_objects: list[Any] = []
     species_obj = None
 
@@ -293,8 +308,10 @@ def diff(
     doc2: Any,
     *,
     ignoreFields: list[str] | None = None,
+    exclude_fields: list[str] | None = None,
     checkFiles: bool = False,
     checkFileList: bool = True,
+    compare_files: bool | None = None,
     session1: Any = None,
     session2: Any = None,
 ) -> dict[str, Any]:
@@ -321,9 +338,14 @@ def diff(
     Returns:
         Dict with ``'equal'`` (bool) and ``'details'`` (list of strings).
     """
+    # Support both MATLAB-style and Pythonic parameter names
+    if exclude_fields is not None and ignoreFields is None:
+        ignoreFields = exclude_fields
     if ignoreFields is None:
         ignoreFields = ["base.session_id"]
-    exclude_fields = list(ignoreFields)
+    if compare_files is not None:
+        checkFileList = compare_files
+    _exclude_fields = list(ignoreFields)
     details: list[str] = []
 
     p1 = doc1.document_properties if hasattr(doc1, "document_properties") else doc1
@@ -335,7 +357,7 @@ def diff(
         return {"equal": len(details) == 0, "details": details}
 
     def _exclude(path: str) -> bool:
-        return any(path == e or path.startswith(e + ".") for e in exclude_fields)
+        return any(path == e or path.startswith(e + ".") for e in _exclude_fields)
 
     def _compare(a: Any, b: Any, path: str = "") -> None:
         if _exclude(path):
@@ -368,7 +390,7 @@ def diff(
 
     # Skip file list comparison unless requested
     if not checkFileList:
-        exclude_fields = list(exclude_fields) + ["files"]
+        _exclude_fields.append("files")
     elif not checkFiles:
         # checkFileList is True but checkFiles is False:
         # compare file_info metadata but not actual file contents
