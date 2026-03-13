@@ -141,9 +141,7 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
         analog_indices = [i for i, ct in enumerate(channeltype_nonmd) if ct == "ai"]
         if analog_indices:
             try:
-                sr = dev.samplerate(
-                    devepoch, channeltype_nonmd, channel_nonmd
-                )
+                sr = dev.samplerate(devepoch, channeltype_nonmd, channel_nonmd)
                 if hasattr(sr, "__len__"):
                     sr_vals = [float(s) for s in sr]
                     if len(set(sr_vals)) != 1:
@@ -165,9 +163,7 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
 
                 # Try to read time channel for analog data
                 try:
-                    t_analog = dev.readchannels_epochsamples(
-                        ["time"], [1], devepoch, s0, s1
-                    )
+                    t_analog = dev.readchannels_epochsamples(["time"], [1], devepoch, s0, s1)
                     t["analog"] = np.asarray(t_analog).ravel()
                 except Exception:
                     t["analog"] = np.nan
@@ -181,9 +177,7 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
         event_channeltype = [
             ct for i, ct in enumerate(channeltype_nonmd) if i not in analog_indices
         ]
-        event_channel = [
-            ch for i, ch in enumerate(channel_nonmd) if i not in analog_indices
-        ]
+        event_channel = [ch for i, ch in enumerate(channel_nonmd) if i not in analog_indices]
 
         timestamps_list = []
         edata_list = []
@@ -258,7 +252,7 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
                                     except (ValueError, SyntaxError):
                                         stimids.append(0)
                                 else:
-                                    row = ed_i[dd] if ed_i.ndim > 1 else ed_i[dd:dd+1]
+                                    row = ed_i[dd] if ed_i.ndim > 1 else ed_i[dd : dd + 1]
                                     stimids.append(row)
                         data["stimid"] = np.array(stimids)
 
@@ -326,10 +320,12 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
                         t["stimon"] = np.concatenate([t["stimon"], t_vals[on_mask]])
                         t["stimoff"] = np.concatenate([t["stimoff"], t_vals[off_mask]])
                         n_on = int(np.sum(vals == 1))
-                        data["stimid"] = np.concatenate([
-                            data["stimid"],
-                            np.full(n_on, counter, dtype=int),
-                        ])
+                        data["stimid"] = np.concatenate(
+                            [
+                                data["stimid"],
+                                np.full(n_on, counter, dtype=int),
+                            ]
+                        )
 
                 elif ct == "md":
                     try:
@@ -346,12 +342,20 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
             if len(t["stimon"]) > 0:
                 order = np.argsort(t["stimon"])
                 t["stimon"] = t["stimon"][order]
-                t["stimoff"] = t["stimoff"][order] if len(t["stimoff"]) == len(order) else t["stimoff"]
-                data["stimid"] = data["stimid"][order] if len(data["stimid"]) == len(order) else data["stimid"]
+                t["stimoff"] = (
+                    t["stimoff"][order] if len(t["stimoff"]) == len(order) else t["stimoff"]
+                )
+                data["stimid"] = (
+                    data["stimid"][order] if len(data["stimid"]) == len(order) else data["stimid"]
+                )
 
             # In dim mode, stimopenclose = [stimon, stimoff]
             if len(t["stimon"]) > 0:
-                t["stimopenclose"] = np.column_stack([t["stimon"], t["stimoff"]]) if len(t["stimoff"]) == len(t["stimon"]) else np.column_stack([t["stimon"], np.full_like(t["stimon"], np.nan)])
+                t["stimopenclose"] = (
+                    np.column_stack([t["stimon"], t["stimoff"]])
+                    if len(t["stimoff"]) == len(t["stimon"])
+                    else np.column_stack([t["stimon"], np.full_like(t["stimon"], np.nan)])
+                )
             else:
                 t["stimopenclose"] = np.array([]).reshape(0, 2)
 

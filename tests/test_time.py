@@ -350,12 +350,14 @@ class TestFileFind:
         syncfile.write_text("0.5 1.0")
         common_file = str(tmp_path / "shared.dat")
 
-        rule = FileFind({
-            "number_fullpath_matches": 1,
-            "syncfilename": "syncfile.txt",
-            "daqsystem1": "daq1",
-            "daqsystem2": "daq2",
-        })
+        rule = FileFind(
+            {
+                "number_fullpath_matches": 1,
+                "syncfilename": "syncfile.txt",
+                "daqsystem1": "daq1",
+                "daqsystem2": "daq2",
+            }
+        )
 
         node_a = {
             "objectname": "daq1",
@@ -374,12 +376,14 @@ class TestFileFind:
 
     def test_apply_no_match_wrong_daqs(self):
         """Test apply when DAQ system names don't match parameters."""
-        rule = FileFind({
-            "number_fullpath_matches": 1,
-            "syncfilename": "syncfile.txt",
-            "daqsystem1": "daq1",
-            "daqsystem2": "daq2",
-        })
+        rule = FileFind(
+            {
+                "number_fullpath_matches": 1,
+                "syncfilename": "syncfile.txt",
+                "daqsystem1": "daq1",
+                "daqsystem2": "daq2",
+            }
+        )
 
         node_a = {
             "objectname": "wrong_daq",
@@ -397,12 +401,14 @@ class TestFileFind:
 
     def test_apply_no_common_files(self):
         """Test apply when there are no common files."""
-        rule = FileFind({
-            "number_fullpath_matches": 1,
-            "syncfilename": "syncfile.txt",
-            "daqsystem1": "daq1",
-            "daqsystem2": "daq2",
-        })
+        rule = FileFind(
+            {
+                "number_fullpath_matches": 1,
+                "syncfilename": "syncfile.txt",
+                "daqsystem1": "daq1",
+                "daqsystem2": "daq2",
+            }
+        )
 
         node_a = {
             "objectname": "daq1",
