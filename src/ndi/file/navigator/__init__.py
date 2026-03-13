@@ -216,9 +216,11 @@ class FileNavigator(Ido):
             raise ValueError("No valid session associated with this navigator")
         return self._session.getpath()
 
-    def set_session(self, session: Any) -> FileNavigator:
+    def setsession(self, session: Any) -> FileNavigator:
         """
         Set the session for this navigator.
+
+        MATLAB equivalent: ndi.file.navigator/setsession
 
         Args:
             session: The session object
@@ -274,7 +276,7 @@ class FileNavigator(Ido):
         disk_epochs = self.selectfilegroups_disk()
 
         # Check for ingested epochs
-        ingested_epochs = self._get_ingested_epochs()
+        ingested_epochs = self.find_ingested_documents()
 
         if not ingested_epochs:
             return disk_epochs, [None] * len(disk_epochs)
@@ -334,8 +336,11 @@ class FileNavigator(Ido):
 
         return filtered
 
-    def _get_ingested_epochs(self) -> list[dict[str, Any]]:
-        """Get ingested epochs from database."""
+    def find_ingested_documents(self) -> list[dict[str, Any]]:
+        """Find ingested epoch documents from database.
+
+        MATLAB equivalent: ndi.file.navigator/find_ingested_documents
+        """
         if self._session is None:
             return []
 
@@ -547,7 +552,7 @@ class FileNavigator(Ido):
 
         # If ingested, get from document
         if self.isingested(epochfiles):
-            doc = self._get_epoch_ingested_doc(epochfiles)
+            doc = self.getepochingesteddoc(epochfiles)
             if doc:
                 props = doc.document_properties
                 return getattr(props.epochfiles_ingested, "epochprobemap", None)
@@ -561,11 +566,14 @@ class FileNavigator(Ido):
 
         return None
 
-    def _get_epoch_ingested_doc(
+    def getepochingesteddoc(
         self,
         epochfiles: list[str],
     ) -> Any | None:
-        """Get the ingested document for epochfiles."""
+        """Get the ingested document for epochfiles.
+
+        MATLAB equivalent: ndi.file.navigator/getepochingesteddoc
+        """
         if not self.isingested(epochfiles) or self._session is None:
             return None
 
@@ -588,15 +596,19 @@ class FileNavigator(Ido):
     def getepochfiles(
         self,
         epoch_number_or_id: int | str | list[int] | list[str],
-    ) -> list[str] | list[list[str]]:
+    ) -> tuple[list[str] | list[list[str]], str | list[str]]:
         """
         Get files for one or more epochs.
+
+        MATLAB equivalent: ndi.file.navigator/getepochfiles
 
         Args:
             epoch_number_or_id: Epoch number(s) or ID(s)
 
         Returns:
-            List of file paths, or list of lists if multiple epochs
+            Tuple of (fullpathfilenames, epochid):
+            - fullpathfilenames: List of file paths (or list of lists)
+            - epochid: Epoch ID string (or list of strings)
         """
         et = self.epochtable()
 
@@ -611,7 +623,8 @@ class FileNavigator(Ido):
         # Determine if using IDs or numbers
         use_ids = isinstance(items[0], str)
 
-        results = []
+        file_results = []
+        id_results = []
         for item in items:
             if use_ids:
                 # Find by epoch ID
@@ -630,11 +643,12 @@ class FileNavigator(Ido):
 
             underlying = match.get("underlying_epochs", {})
             files = underlying.get("underlying", [])
-            results.append(files)
+            file_results.append(files)
+            id_results.append(match["epoch_id"])
 
         if multiple:
-            return results
-        return results[0]
+            return file_results, id_results
+        return file_results[0], id_results[0]
 
     def getepochfiles_number(
         self,
@@ -693,7 +707,7 @@ class FileNavigator(Ido):
                 continue
 
             # Check if already have ingested doc
-            if self._get_epoch_ingested_doc(files) is not None:
+            if self.getepochingesteddoc(files) is not None:
                 continue
 
             # Create ingested document

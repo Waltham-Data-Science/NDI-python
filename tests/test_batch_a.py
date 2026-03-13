@@ -414,15 +414,17 @@ class TestMFDAQEpochChannel:
         ]
         mec = MFDAQEpochChannel(channels)
         filepath = str(tmp_path / "channels.json")
-        mec.write_to_file(filepath)
+        b, errmsg = mec.writeToFile(filepath)
+        assert b is True
+        assert errmsg == ""
 
         mec2 = MFDAQEpochChannel()
-        mec2.read_from_file(filepath)
+        mec2.readFromFile(filepath)
         assert len(mec2) == 1
         assert mec2.channel_information[0].name == "ai1"
         assert mec2.channel_information[0].sample_rate == 30000.0
 
-    def test_channel_group_decoding(self):
+    def test_channelgroupdecoding(self):
         from ndi.file.type.mfdaq_epoch_channel import ChannelInfo, MFDAQEpochChannel
 
         channels = [
@@ -430,8 +432,12 @@ class TestMFDAQEpochChannel:
             ChannelInfo(name="ai2", type="analog_in", number=2, group=1),
             ChannelInfo(name="ai3", type="analog_in", number=3, group=2),
         ]
-        groups = MFDAQEpochChannel.channel_group_decoding(channels, "analog_in", [1, 3])
+        groups, ch_in_groups, ch_in_output = MFDAQEpochChannel.channelgroupdecoding(
+            channels, "analog_in", [1, 3]
+        )
         assert groups == [1, 2]
+        assert ch_in_groups == [[1], [3]]
+        assert ch_in_output == [[0], [1]]
 
     def test_repr(self):
         from ndi.file.type.mfdaq_epoch_channel import MFDAQEpochChannel

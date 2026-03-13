@@ -1,0 +1,430 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/file/
+# The Primary Contract for the ndi.file namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Standalone functions
+# =========================================================================
+functions:
+
+  - name: pfilemirror
+    type: function
+    matlab_path: "+ndi/+file/pfilemirror.m"
+    python_path: "ndi/file/pfilemirror.py"
+    input_arguments:
+      - name: m_path
+        type_matlab: "(1,1) string {mustBeFolder}"
+        type_python: "str"
+      - name: p_path
+        type_matlab: "(1,:) char"
+        type_python: "str"
+      - name: CopyNonMFiles
+        type_matlab: "(1,1) logical"
+        type_python: "bool"
+        default: "False"
+      - name: CopyHiddenFiles
+        type_matlab: "(1,1) logical"
+        type_python: "bool"
+        default: "False"
+      - name: verbose
+        type_matlab: "(1,1) logical"
+        type_python: "bool"
+        default: "True"
+      - name: dryRun
+        type_matlab: "(1,1) logical"
+        type_python: "bool"
+        default: "False"
+    output_arguments:
+      - name: b
+        type_python: "bool"
+    decision_log: >
+      Functional match. MATLAB mirrors .m -> .p (p-code) files;
+      Python mirrors .py files and optionally compiles to .pyc.
+      Parameter names preserved from MATLAB: CopyNonMFiles maps
+      to copy_non_py_files semantically. Python adds compile_pyc
+      option not in MATLAB. Synchronized 2026-03-13.
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # =========================================================================
+  # ndi.file.navigator (extends Ido + EpochSet.param + DocumentService +
+  #                      database.ingestion_help)
+  # =========================================================================
+  - name: navigator
+    type: class
+    matlab_path: "+ndi/+file/navigator.m"
+    python_path: "ndi/file/navigator/__init__.py"
+    python_class: "FileNavigator"
+    inherits: "ndi.ido, ndi.epoch.epochset.param, ndi.documentservice, ndi.database.ingestion_help"
+
+    properties:
+      - name: session
+        type_matlab: "ndi.session"
+        type_python: "Any | None"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: "Implemented as @property in Python."
+
+      - name: fileparameters
+        type_matlab: "struct"
+        type_python: "dict[str, list[str]]"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: "Implemented as @property in Python."
+
+      - name: epochprobemap_fileparameters
+        type_matlab: "struct"
+        type_python: "dict[str, list[str]]"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: "Implemented as @property in Python."
+
+    methods:
+      # --- Constructor ---
+      - name: navigator
+        kind: constructor
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any | None"
+            default: "None"
+          - name: fileparameters
+            type_matlab: "struct | char | cell"
+            type_python: "str | list[str] | dict[str, Any] | None"
+            default: "None"
+          - name: epochprobemap_class
+            type_matlab: "char"
+            type_python: "str"
+            default: "'ndi.epoch.EpochProbeMap'"
+          - name: epochprobemap_fileparameters
+            type_matlab: "struct | char | cell"
+            type_python: "str | list[str] | dict[str, Any] | None"
+            default: "None"
+          - name: identifier
+            type_matlab: "char"
+            type_python: "str | None"
+            default: "None"
+          - name: document
+            type_matlab: "ndi.document"
+            type_python: "Any | None"
+            default: "None"
+        output_arguments:
+          - name: ndi_filenavigator_obj
+            type_python: "FileNavigator"
+        decision_log: >
+          Exact match. Python adds identifier and document kwargs for
+          reconstruction from database. MATLAB also accepts these via
+          varargin patterns.
+
+      # --- EpochSet Implementation ---
+      - name: buildepochtable
+        input_arguments: []
+        output_arguments:
+          - name: et
+            type_python: "list[dict[str, Any]]"
+        decision_log: "Exact match. Returns epoch table entries."
+
+      # --- File Selection ---
+      - name: selectfilegroups
+        input_arguments: []
+        output_arguments:
+          - name: epochfiles
+            type_python: "list[list[str]]"
+          - name: epochprobemaps
+            type_python: "list[Any | None]"
+        decision_log: >
+          Exact match. Returns 2-tuple (epochfiles, epochprobemaps).
+
+      - name: selectfilegroups_disk
+        input_arguments: []
+        output_arguments:
+          - name: epochfiles_disk
+            type_python: "list[list[str]]"
+        decision_log: "Exact match. Scans disk for matching file groups."
+
+      # --- Epoch File Access ---
+      - name: getepochfiles
+        input_arguments:
+          - name: epoch_number_or_id
+            type_matlab: "integer | char"
+            type_python: "int | str | list[int] | list[str]"
+        output_arguments:
+          - name: fullpathfilenames
+            type_python: "list[str] | list[list[str]]"
+          - name: epochid
+            type_python: "str | list[str]"
+        decision_log: >
+          DISCREPANCY FIXED: MATLAB returns (fullpathfilenames, epochid).
+          Python ad-hoc port only returned filenames. Updated Python to
+          return 2-tuple matching MATLAB. Synchronized 2026-03-13.
+
+      - name: getepochfiles_number
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: fullpathfilenames
+            type_python: "list[str]"
+        decision_log: "Exact match. Returns file paths for an epoch by number."
+
+      # --- Epoch ID ---
+      - name: epochid
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str] | None"
+            default: "None"
+        output_arguments:
+          - name: id
+            type_python: "str"
+        decision_log: "Exact match. 1-based epoch_number."
+
+      - name: epochidfilename
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str] | None"
+            default: "None"
+        output_arguments:
+          - name: eidfname
+            type_python: "str | None"
+        decision_log: "Exact match."
+
+      # --- Epoch Probe Map ---
+      - name: getepochprobemap
+        input_arguments:
+          - name: N
+            type_matlab: "integer"
+            type_python: "int"
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str] | None"
+            default: "None"
+        output_arguments:
+          - name: epochprobemap
+            type_python: "Any | None"
+        decision_log: "Exact match. Arg name N matches MATLAB."
+
+      - name: epochprobemapfilename
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: ecfname
+            type_python: "str | None"
+        decision_log: "Exact match."
+
+      - name: defaultepochprobemapfilename
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: ecfname
+            type_python: "str | None"
+        decision_log: "Exact match."
+
+      # --- Setters ---
+      - name: setsession
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+        output_arguments:
+          - name: ndi_filenavigator_obj
+            type_python: "FileNavigator"
+        decision_log: >
+          DISCREPANCY FIXED: Python ad-hoc port used 'set_session'
+          (snake_case). Renamed to 'setsession' to match MATLAB.
+          Synchronized 2026-03-13.
+
+      - name: setfileparameters
+        input_arguments:
+          - name: thefileparameters
+            type_matlab: "struct | char | cell"
+            type_python: "str | list[str] | dict[str, Any]"
+        output_arguments:
+          - name: ndi_filenavigator_obj
+            type_python: "FileNavigator"
+        decision_log: "Exact match."
+
+      - name: setepochprobemapfileparameters
+        input_arguments:
+          - name: theepochprobemapfileparameters
+            type_matlab: "struct | char | cell"
+            type_python: "str | list[str] | dict[str, Any]"
+        output_arguments:
+          - name: ndi_filenavigator_obj
+            type_python: "FileNavigator"
+        decision_log: "Exact match."
+
+      # --- Path ---
+      - name: path
+        input_arguments: []
+        output_arguments:
+          - name: thepath
+            type_python: "str"
+        decision_log: "Exact match. Returns session path."
+
+      # --- Hash ---
+      - name: filematch_hashstring
+        input_arguments: []
+        output_arguments:
+          - name: fmstr
+            type_python: "str"
+        decision_log: "Exact match."
+
+      # --- Ingestion ---
+      - name: ingest
+        input_arguments: []
+        output_arguments:
+          - name: docs_out
+            type_python: "list[Any]"
+        decision_log: "Exact match. Returns created ingestion documents."
+
+      - name: find_ingested_documents
+        input_arguments: []
+        output_arguments:
+          - name: d_ingested
+            type_python: "list[Any]"
+        decision_log: >
+          DISCREPANCY FIXED: Python ad-hoc port named this
+          '_get_ingested_epochs' (private, snake_case). Renamed to
+          'find_ingested_documents' to match MATLAB public API.
+          Synchronized 2026-03-13.
+
+      - name: getepochingesteddoc
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+        output_arguments:
+          - name: d
+            type_python: "Any | None"
+        decision_log: >
+          DISCREPANCY FIXED: Python ad-hoc port named this
+          '_get_epoch_ingested_doc' (private, snake_case). Renamed to
+          'getepochingesteddoc' to match MATLAB public API.
+          Synchronized 2026-03-13.
+
+      # --- DocumentService ---
+      - name: newdocument
+        input_arguments: []
+        output_arguments:
+          - name: ndi_document_obj
+            type_python: "Any"
+        decision_log: "Exact match."
+
+      - name: searchquery
+        input_arguments: []
+        output_arguments:
+          - name: sq
+            type_python: "Any"
+        decision_log: "Exact match."
+
+      # --- Cache ---
+      - name: getcache
+        input_arguments: []
+        output_arguments:
+          - name: cache
+            type_python: "Any | None"
+          - name: key
+            type_python: "str"
+        decision_log: "Exact match. Returns 2-tuple (cache, key)."
+
+      # --- Equality ---
+      - name: eq
+        input_arguments:
+          - name: other
+            type_python: "Any"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: "Mapped to Python __eq__."
+
+      # --- Static Methods ---
+      - name: isingested
+        kind: static
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: "Exact match."
+
+      - name: ingestedfiles_epochid
+        kind: static
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+        output_arguments:
+          - name: epoch_id
+            type_python: "str"
+        decision_log: "Exact match."
+
+  # =========================================================================
+  # ndi.file.navigator_epochdir (subclass of navigator)
+  # =========================================================================
+  - name: navigator_epochdir
+    type: class
+    matlab_path: "+ndi/+file/+navigator/epochdir.m"
+    python_path: "ndi/file/navigator/epochdir.py"
+    python_class: "EpochDirNavigator"
+    inherits: "ndi.file.navigator"
+
+    properties: []
+
+    methods:
+      - name: epochdir
+        kind: constructor
+        input_arguments:
+          - name: varargin
+            type_matlab: "varargin"
+            type_python: "*args, **kwargs"
+        output_arguments:
+          - name: obj
+            type_python: "EpochDirNavigator"
+        decision_log: >
+          Exact match. Passes all arguments to parent constructor.
+
+      - name: selectfilegroups_disk
+        input_arguments: []
+        output_arguments:
+          - name: epochfiles_disk
+            type_python: "list[list[str]]"
+        decision_log: >
+          Exact match. Override scans subdirectories
+          (one directory = one epoch).
+
+      - name: epochid
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str] | None"
+            default: "None"
+        output_arguments:
+          - name: id
+            type_python: "str"
+        decision_log: >
+          DISCREPANCY FIXED: MATLAB epochdir overrides epochid to
+          generate IDs from directory names. Python ad-hoc port was
+          missing this override. Added to match MATLAB.
+          Synchronized 2026-03-13.

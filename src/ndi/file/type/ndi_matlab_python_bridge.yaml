@@ -1,0 +1,143 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/file/type/
+# The Primary Contract for the ndi.file.type namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # =========================================================================
+  # ndi.file.type.mfdaq_epoch_channel
+  # =========================================================================
+  - name: mfdaq_epoch_channel
+    type: class
+    matlab_path: "+ndi/+file/+type/mfdaq_epoch_channel.m"
+    python_path: "ndi/file/type/mfdaq_epoch_channel.py"
+    python_class: "MFDAQEpochChannel"
+    inherits: ""
+
+    properties:
+      - name: channel_information
+        type_matlab: "struct array"
+        type_python: "list[ChannelInfo]"
+        decision_log: >
+          MATLAB uses a struct array; Python uses a list of ChannelInfo
+          dataclass instances.
+
+    methods:
+      # --- Constructor ---
+      - name: mfdaq_epoch_channel
+        kind: constructor
+        input_arguments:
+          - name: varargin
+            type_matlab: "varargin"
+            type_python: "list[ChannelInfo] | None"
+            default: "None"
+        output_arguments:
+          - name: obj
+            type_python: "MFDAQEpochChannel"
+        decision_log: >
+          Exact match. MATLAB accepts variable arguments; Python
+          accepts an optional list of ChannelInfo.
+
+      # --- Properties ---
+      - name: create_properties
+        input_arguments:
+          - name: channel_structure
+            type_matlab: "struct array"
+            type_python: "list[dict[str, Any]] | list[ChannelInfo]"
+          - name: varargin
+            type_matlab: "varargin"
+            type_python: "**kwargs"
+        output_arguments:
+          - name: obj
+            type_python: "MFDAQEpochChannel"
+        decision_log: >
+          DISCREPANCY FIXED: Python ad-hoc port was missing this method.
+          Added to match MATLAB. Sets channel_information from a struct
+          array or list of dicts. Synchronized 2026-03-13.
+
+      # --- File I/O ---
+      - name: readFromFile
+        input_arguments:
+          - name: filename
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: mfdaq_epoch_channel_obj
+            type_python: "MFDAQEpochChannel"
+        decision_log: >
+          DISCREPANCY FIXED: Python ad-hoc port used 'read_from_file'
+          (snake_case). Renamed to 'readFromFile' to match MATLAB.
+          Returns self for chaining. Synchronized 2026-03-13.
+
+      - name: writeToFile
+        input_arguments:
+          - name: filename
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+          - name: errmsg
+            type_python: "str"
+        decision_log: >
+          DISCREPANCY FIXED: Python ad-hoc port used 'write_to_file'
+          (snake_case) and returned None. Renamed to 'writeToFile' and
+          updated to return 2-tuple (success_bool, error_message)
+          matching MATLAB. Synchronized 2026-03-13.
+
+      # --- Channel Queries ---
+      - name: channels_of_type
+        input_arguments:
+          - name: channel_type
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: channels
+            type_python: "list[ChannelInfo]"
+        decision_log: "Exact match."
+
+      - name: channel_numbers
+        input_arguments:
+          - name: channel_type
+            type_matlab: "char"
+            type_python: "str | None"
+            default: "None"
+        output_arguments:
+          - name: numbers
+            type_python: "list[int]"
+        decision_log: "Exact match."
+
+      # --- Static Methods ---
+      - name: channelgroupdecoding
+        kind: static
+        input_arguments:
+          - name: channel_info
+            type_matlab: "struct array"
+            type_python: "list[ChannelInfo]"
+          - name: channel_type
+            type_matlab: "char"
+            type_python: "str"
+          - name: channels
+            type_matlab: "integer array"
+            type_python: "list[int]"
+        output_arguments:
+          - name: groups
+            type_python: "list[int]"
+          - name: channel_indexes_in_groups
+            type_python: "list[list[int]]"
+          - name: channel_indexes_in_output
+            type_python: "list[list[int]]"
+        decision_log: >
+          DISCREPANCY FIXED: Python ad-hoc port used
+          'channel_group_decoding' (snake_case) and only returned
+          groups. Renamed to 'channelgroupdecoding' and updated to
+          return 3-tuple (groups, channel_indexes_in_groups,
+          channel_indexes_in_output) matching MATLAB.
+          Synchronized 2026-03-13.

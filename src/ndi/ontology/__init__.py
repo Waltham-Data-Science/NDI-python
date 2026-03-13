@@ -176,9 +176,12 @@ def lookup(lookup_string: str) -> OntologyResult:
     return result
 
 
-def clear_cache() -> None:
-    """Clear all ontology caches."""
+def clearCache() -> None:
+    """Clear all ontology caches.
+
+    MATLAB equivalent: ndi.ontology.clearCache
+    """
     _lookup_cache.clear()
 
 
-__all__ = ["OntologyResult", "lookup", "clear_cache"]
+__all__ = ["OntologyResult", "lookup", "clearCache"]

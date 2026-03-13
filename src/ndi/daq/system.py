@@ -223,7 +223,7 @@ class DAQSystem(Ido):
             Self for chaining
         """
         if self._filenavigator is not None:
-            self._filenavigator = self._filenavigator.set_session(session)
+            self._filenavigator = self._filenavigator.setsession(session)
         self._session = session
         return self
 
