@@ -80,6 +80,7 @@ functions:
   # --- auth.py functions ---
   - name: authenticate
     matlab_path: "+ndi/+cloud/authenticate.m"
+    matlab_last_sync_hash: "80092b7c"
     python_path: "ndi/cloud/auth.py"
     input_arguments:
       - name: config
@@ -95,6 +96,7 @@ functions:
 
   - name: login
     matlab_path: "+ndi/+cloud/+api/+auth/login.m"
+    matlab_last_sync_hash: "9b75c0fe"
     python_path: "ndi/cloud/auth.py"
     input_arguments:
       - name: email
@@ -113,6 +115,7 @@ functions:
 
   - name: logout
     matlab_path: "+ndi/+cloud/logout.m"
+    matlab_last_sync_hash: "23a1f8d8"
     python_path: "ndi/cloud/auth.py"
     input_arguments:
       - name: config
@@ -123,6 +126,7 @@ functions:
 
   - name: changePassword
     matlab_path: "+ndi/+cloud/+api/+auth/changePassword.m"
+    matlab_last_sync_hash: "9b75c0fe"
     python_path: "ndi/cloud/auth.py"
     input_arguments:
       - name: old_password
@@ -141,6 +145,7 @@ functions:
 
   - name: resetPassword
     matlab_path: "+ndi/+cloud/+api/+auth/resetPassword.m"
+    matlab_last_sync_hash: "9b75c0fe"
     python_path: "ndi/cloud/auth.py"
     input_arguments:
       - name: email
@@ -156,6 +161,7 @@ functions:
 
   - name: verifyUser
     matlab_path: "+ndi/+cloud/+api/+auth/verifyUser.m"
+    matlab_last_sync_hash: "9b75c0fe"
     python_path: "ndi/cloud/auth.py"
     input_arguments:
       - name: email
@@ -174,6 +180,7 @@ functions:
 
   - name: resendConfirmation
     matlab_path: "+ndi/+cloud/+api/+auth/resendConfirmation.m"
+    matlab_last_sync_hash: "43de1651"
     python_path: "ndi/cloud/auth.py"
     input_arguments:
       - name: email
@@ -189,6 +196,7 @@ functions:
 
   - name: decodeJwt
     matlab_path: "+ndi/+cloud/+internal/decodeJwt.m"
+    matlab_last_sync_hash: "7ab96514"
     python_path: "ndi/cloud/auth.py"
     input_arguments:
       - name: token
@@ -203,6 +211,7 @@ functions:
 
   - name: getTokenExpiration
     matlab_path: "+ndi/+cloud/+internal/getTokenExpiration.m"
+    matlab_last_sync_hash: "7ab96514"
     python_path: "ndi/cloud/auth.py"
     input_arguments:
       - name: token
@@ -228,6 +237,7 @@ functions:
 
   - name: getActiveToken
     matlab_path: "+ndi/+cloud/+internal/getActiveToken.m"
+    matlab_last_sync_hash: "7ab96514"
     python_path: "ndi/cloud/auth.py"
     input_arguments:
       - name: config
@@ -245,6 +255,7 @@ functions:
   # --- orchestration.py functions ---
   - name: downloadDataset
     matlab_path: "+ndi/+cloud/downloadDataset.m"
+    matlab_last_sync_hash: "7e01b56d"
     python_path: "ndi/cloud/orchestration.py"
     input_arguments:
       - name: cloud_dataset_id
@@ -274,6 +285,7 @@ functions:
 
   - name: uploadDataset
     matlab_path: "+ndi/+cloud/uploadDataset.m"
+    matlab_last_sync_hash: "629d9bad"
     python_path: "ndi/cloud/orchestration.py"
     input_arguments:
       - name: dataset
@@ -311,6 +323,7 @@ functions:
 
   - name: syncDataset
     matlab_path: "+ndi/+cloud/syncDataset.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/cloud/orchestration.py"
     input_arguments:
       - name: dataset
@@ -341,6 +354,7 @@ functions:
 
   - name: newDataset
     matlab_path: "+ndi/+cloud/+upload/newDataset.m"
+    matlab_last_sync_hash: "80092b7c"
     python_path: "ndi/cloud/orchestration.py"
     input_arguments:
       - name: dataset
@@ -386,6 +400,7 @@ functions:
   # --- download.py functions ---
   - name: dataset
     matlab_path: "+ndi/+cloud/+download/dataset.m"
+    matlab_last_sync_hash: "211a705e"
     python_path: "ndi/cloud/download.py"
     python_qualified: "ndi.cloud.download.dataset"
     input_arguments:
@@ -412,6 +427,7 @@ functions:
 
   - name: downloadDocumentCollection
     matlab_path: "+ndi/+cloud/+download/downloadDocumentCollection.m"
+    matlab_last_sync_hash: "fbf6d337"
     python_path: "ndi/cloud/download.py"
     input_arguments:
       - name: dataset_id
@@ -462,6 +478,7 @@ functions:
 
   - name: downloadDatasetFiles
     matlab_path: "+ndi/+cloud/+download/downloadDatasetFiles.m"
+    matlab_last_sync_hash: "211a705e"
     python_path: "ndi/cloud/download.py"
     input_arguments:
       - name: dataset_id
@@ -485,6 +502,7 @@ functions:
 
   - name: jsons2documents
     matlab_path: "+ndi/+cloud/+download/jsons2documents.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/cloud/download.py"
     input_arguments:
       - name: doc_jsons
@@ -497,6 +515,7 @@ functions:
 
   - name: datasetDocuments
     matlab_path: "+ndi/+cloud/+download/datasetDocuments.m"
+    matlab_last_sync_hash: "211a705e"
     python_path: "ndi/cloud/download.py"
     input_arguments:
       - name: dataset_info
@@ -528,6 +547,7 @@ functions:
 
   - name: downloadGenericFiles
     matlab_path: "+ndi/+cloud/+download/downloadGenericFiles.m"
+    matlab_last_sync_hash: "cafbfe74"
     python_path: "ndi/cloud/download.py"
     input_arguments:
       - name: ndi_dataset
@@ -565,6 +585,7 @@ functions:
 
   - name: setFileInfo
     matlab_path: "+ndi/+cloud/+download/+internal/setFileInfo.m"
+    matlab_last_sync_hash: "211a705e"
     python_path: "ndi/cloud/download.py"
     input_arguments:
       - name: doc_struct
@@ -585,6 +606,7 @@ functions:
 
   - name: structsToNdiDocuments
     matlab_path: "+ndi/+cloud/+download/+internal/structsToNdiDocuments.m"
+    matlab_last_sync_hash: "211a705e"
     python_path: "ndi/cloud/download.py"
     input_arguments:
       - name: ndi_document_structs
@@ -605,6 +627,7 @@ functions:
   # --- upload.py functions ---
   - name: uploadDocumentCollection
     matlab_path: "+ndi/+cloud/+upload/uploadDocumentCollection.m"
+    matlab_last_sync_hash: "f3d00bad"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
       - name: dataset_id
@@ -630,6 +653,7 @@ functions:
 
   - name: zipForUpload
     matlab_path: "+ndi/+cloud/+upload/zipForUpload.m"
+    matlab_last_sync_hash: "97ead30b"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
       - name: documents
@@ -650,6 +674,7 @@ functions:
 
   - name: uploadFilesForDatasetDocuments
     matlab_path: "+ndi/+cloud/+sync/+internal/uploadFilesForDatasetDocuments.m"
+    matlab_last_sync_hash: "7026d493"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
       - name: org_id
@@ -673,6 +698,7 @@ functions:
 
   - name: uploadSingleFile
     matlab_path: "+ndi/+cloud/uploadSingleFile.m"
+    matlab_last_sync_hash: "7026d493"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
       - name: dataset_id
@@ -700,6 +726,7 @@ functions:
 
   - name: uploadToNDICloud
     matlab_path: "+ndi/+cloud/+upload/uploadToNDICloud.m"
+    matlab_last_sync_hash: "80092b7c"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
       - name: dataset
@@ -724,6 +751,7 @@ functions:
 
   - name: scanForUpload
     matlab_path: "+ndi/+cloud/+upload/scanForUpload.m"
+    matlab_last_sync_hash: "092aab34"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
       - name: dataset
@@ -747,6 +775,7 @@ functions:
   # --- filehandler.py functions ---
   - name: updateFileInfoForRemoteFiles
     matlab_path: "+ndi/+cloud/+sync/+internal/updateFileInfoForRemoteFiles.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/cloud/filehandler.py"
     input_arguments:
       - name: doc_props
@@ -762,6 +791,7 @@ functions:
 
   - name: updateFileInfoForLocalFiles
     matlab_path: "+ndi/+cloud/+sync/+internal/updateFileInfoForLocalFiles.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/cloud/filehandler.py"
     input_arguments:
       - name: doc_props
@@ -815,6 +845,7 @@ functions:
   # --- internal.py functions ---
   - name: listRemoteDocumentIds
     matlab_path: "+ndi/+cloud/+sync/+internal/listRemoteDocumentIds.m"
+    matlab_last_sync_hash: "4347a3b1"
     python_path: "ndi/cloud/internal.py"
     input_arguments:
       - name: cloud_dataset_id
@@ -832,6 +863,7 @@ functions:
 
   - name: getCloudDatasetIdForLocalDataset
     matlab_path: "+ndi/+cloud/+internal/getCloudDatasetIdForLocalDataset.m"
+    matlab_last_sync_hash: "7ab96514"
     python_path: "ndi/cloud/internal.py"
     input_arguments:
       - name: dataset
@@ -849,6 +881,7 @@ functions:
 
   - name: createRemoteDatasetDoc
     matlab_path: "+ndi/+cloud/+internal/createRemoteDatasetDoc.m"
+    matlab_last_sync_hash: "7e01b56d"
     python_path: "ndi/cloud/internal.py"
     input_arguments:
       - name: cloud_dataset_id
@@ -864,6 +897,7 @@ functions:
 
   - name: listLocalDocuments
     matlab_path: "+ndi/+cloud/+sync/+internal/listLocalDocuments.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/cloud/internal.py"
     input_arguments:
       - name: dataset
@@ -880,6 +914,7 @@ functions:
 
   - name: getFileUidsFromDocuments
     matlab_path: "+ndi/+cloud/+sync/+internal/getFileUidsFromDocuments.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/cloud/internal.py"
     input_arguments:
       - name: documents
@@ -894,6 +929,7 @@ functions:
 
   - name: filesNotYetUploaded
     matlab_path: "+ndi/+cloud/+sync/+internal/filesNotYetUploaded.m"
+    matlab_last_sync_hash: "92369e08"
     python_path: "ndi/cloud/internal.py"
     input_arguments:
       - name: file_manifest
@@ -932,6 +968,7 @@ functions:
 
   - name: datasetSessionIdFromDocs
     matlab_path: "+ndi/+cloud/+sync/+internal/datasetSessionIdFromDocs.m"
+    matlab_last_sync_hash: "9d726436"
     python_path: "ndi/cloud/internal.py"
     input_arguments:
       - name: documents
@@ -946,6 +983,7 @@ functions:
 
   - name: duplicateDocuments
     matlab_path: "+ndi/+cloud/+internal/duplicateDocuments.m"
+    matlab_last_sync_hash: "aae6bd82"
     python_path: "ndi/cloud/internal.py"
     input_arguments:
       - name: cloud_dataset_id
@@ -979,11 +1017,13 @@ not_yet_ported:
 
   - name: dropDuplicateDocsFromJsonDecode
     matlab_path: "+ndi/+cloud/+internal/dropDuplicateDocsFromJsonDecode.m"
+    matlab_last_sync_hash: "fbf6d337"
     status: not_yet_ported
     decision_log: "MATLAB internal utility. May not be needed in Python."
 
   - name: getUploadedDocumentIds
     matlab_path: "+ndi/+cloud/+internal/getUploadedDocumentIds.m"
+    matlab_last_sync_hash: "092aab34"
     status: not_yet_ported
     decision_log: >
       MATLAB internal. Python uses listRemoteDocumentIds instead
@@ -991,11 +1031,13 @@ not_yet_ported:
 
   - name: getUploadedFileIds
     matlab_path: "+ndi/+cloud/+internal/getUploadedFileIds.m"
+    matlab_last_sync_hash: "7ab96514"
     status: not_yet_ported
     decision_log: "MATLAB internal for file upload tracking."
 
   - name: getWeboptionsWithAuthHeader
     matlab_path: "+ndi/+cloud/+internal/getWeboptionsWithAuthHeader.m"
+    matlab_last_sync_hash: "7ab96514"
     status: not_applicable
     decision_log: >
       MATLAB-specific HTTP configuration. Python uses CloudClient
@@ -1003,26 +1045,31 @@ not_yet_ported:
 
   - name: createCloudMetadataStruct
     matlab_path: "+ndi/+cloud/+utility/createCloudMetadataStruct.m"
+    matlab_last_sync_hash: "80092b7c"
     status: not_yet_ported
     decision_log: "MATLAB utility for metadata struct creation."
 
   - name: mustBeValidMetadata
     matlab_path: "+ndi/+cloud/+utility/mustBeValidMetadata.m"
+    matlab_last_sync_hash: "fe64a9f5"
     status: not_yet_ported
     decision_log: "MATLAB validation function for metadata."
 
   - name: authenticateOriginal
     matlab_path: "+ndi/+cloud/authenticateOriginal.m"
+    matlab_last_sync_hash: "80092b7c"
     status: not_applicable
     decision_log: "Deprecated MATLAB function. Not needed in Python."
 
   - name: uilogin
     matlab_path: "+ndi/+cloud/uilogin.m"
+    matlab_last_sync_hash: "80092b7c"
     status: not_applicable
     decision_log: "MATLAB GUI login. No Python equivalent needed."
 
   - name: zip_documents_for_upload
     matlab_path: "+ndi/+cloud/+upload/+internal/zip_documents_for_upload.m"
+    matlab_last_sync_hash: "c6aef552"
     status: not_applicable
     decision_log: >
       MATLAB internal helper. Python uses zipForUpload which handles

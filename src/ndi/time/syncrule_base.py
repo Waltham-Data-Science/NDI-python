@@ -147,6 +147,7 @@ class SyncRule(Ido, ABC):
         self,
         epochnode_a: dict[str, Any],
         epochnode_b: dict[str, Any],
+        daqsystem1: Any = None,
     ) -> tuple[float | None, TimeMapping | None]:
         """
         Apply the sync rule to obtain cost and mapping between two epoch nodes.
@@ -156,6 +157,7 @@ class SyncRule(Ido, ABC):
         Args:
             epochnode_a: First epoch node (dict with epoch_id, epoch_clock, etc.)
             epochnode_b: Second epoch node
+            daqsystem1: The DAQ system object corresponding to epochnode_a
 
         Returns:
             Tuple of (cost, mapping) where:

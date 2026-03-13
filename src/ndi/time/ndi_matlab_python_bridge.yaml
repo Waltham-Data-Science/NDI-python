@@ -17,6 +17,7 @@ classes:
   - name: clocktype
     type: class
     matlab_path: "+ndi/+time/clocktype.m"
+    matlab_last_sync_hash: "821b5af5"
     python_path: "ndi/time/clocktype.py"
     python_class: "ClockType"
 
@@ -131,6 +132,7 @@ classes:
   - name: timemapping
     type: class
     matlab_path: "+ndi/+time/timemapping.m"
+    matlab_last_sync_hash: "89d6b45f"
     python_path: "ndi/time/timemapping.py"
     python_class: "TimeMapping"
 
@@ -262,6 +264,7 @@ classes:
   - name: timereference
     type: class
     matlab_path: "+ndi/+time/timereference.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/time/timereference.py"
     python_class: "TimeReference"
 
@@ -417,6 +420,7 @@ classes:
   - name: syncrule
     type: class
     matlab_path: "+ndi/+time/syncrule.m"
+    matlab_last_sync_hash: "85b35859"
     python_path: "ndi/time/syncrule_base.py"
     python_class: "SyncRule"
     inherits: "ndi.ido"
@@ -577,6 +581,7 @@ classes:
   - name: syncgraph
     type: class
     matlab_path: "+ndi/+time/syncgraph.m"
+    matlab_last_sync_hash: "dde9edf9"
     python_path: "ndi/time/syncgraph.py"
     python_class: "SyncGraph"
     inherits: "ndi.ido"

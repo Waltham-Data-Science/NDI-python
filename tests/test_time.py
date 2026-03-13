@@ -338,53 +338,81 @@ class TestFileFind:
     def test_default_parameters(self):
         """Test default parameters."""
         rule = FileFind()
-        assert rule.parameters["file_patterns"] == []
-        assert rule.parameters["match_type"] == "exact"
+        assert rule.parameters["number_fullpath_matches"] == 1
+        assert rule.parameters["syncfilename"] == "syncfile.txt"
+        assert rule.parameters["daqsystem1"] == "mydaq1"
+        assert rule.parameters["daqsystem2"] == "mydaq2"
 
-    def test_apply_exact_match(self):
-        """Test apply with exact file match."""
-        rule = FileFind({"file_patterns": ["sync.txt"], "match_type": "exact"})
+    def test_apply_forward_match(self, tmp_path):
+        """Test apply with forward DAQ system matching and sync file."""
+        # Create a sync file with shift=0.5, scale=1.0
+        syncfile = tmp_path / "syncfile.txt"
+        syncfile.write_text("0.5 1.0")
+        common_file = str(tmp_path / "shared.dat")
+
+        rule = FileFind({
+            "number_fullpath_matches": 1,
+            "syncfilename": "syncfile.txt",
+            "daqsystem1": "daq1",
+            "daqsystem2": "daq2",
+        })
 
         node_a = {
+            "objectname": "daq1",
             "objectclass": "ndi.daq.system",
-            "underlying_epochs": {"underlying": ["/data/sync.txt", "/data/other.dat"]},
+            "underlying_epochs": {"underlying": [str(syncfile), common_file]},
         }
         node_b = {
+            "objectname": "daq2",
             "objectclass": "ndi.daq.system",
-            "underlying_epochs": {"underlying": ["/data/sync.txt", "/data/more.dat"]},
+            "underlying_epochs": {"underlying": [common_file, "/other.dat"]},
         }
 
         cost, mapping = rule.apply(node_a, node_b)
         assert cost == 1.0
         assert mapping is not None
 
-    def test_apply_contains_match(self):
-        """Test apply with contains match."""
-        rule = FileFind({"file_patterns": ["sync"], "match_type": "contains"})
+    def test_apply_no_match_wrong_daqs(self):
+        """Test apply when DAQ system names don't match parameters."""
+        rule = FileFind({
+            "number_fullpath_matches": 1,
+            "syncfilename": "syncfile.txt",
+            "daqsystem1": "daq1",
+            "daqsystem2": "daq2",
+        })
 
         node_a = {
-            "objectclass": "ndi.daq.system",
-            "underlying_epochs": {"underlying": ["/data/my_sync_file.txt"]},
-        }
-        node_b = {
-            "objectclass": "ndi.daq.system",
-            "underlying_epochs": {"underlying": ["/data/sync_data.dat"]},
-        }
-
-        cost, mapping = rule.apply(node_a, node_b)
-        assert cost == 1.0
-
-    def test_apply_no_match(self):
-        """Test apply when patterns don't match."""
-        rule = FileFind({"file_patterns": ["missing.txt"], "match_type": "exact"})
-
-        node_a = {
+            "objectname": "wrong_daq",
             "objectclass": "ndi.daq.system",
             "underlying_epochs": {"underlying": ["/data/file.txt"]},
         }
         node_b = {
+            "objectname": "also_wrong",
             "objectclass": "ndi.daq.system",
             "underlying_epochs": {"underlying": ["/data/other.txt"]},
+        }
+
+        cost, mapping = rule.apply(node_a, node_b)
+        assert cost is None
+
+    def test_apply_no_common_files(self):
+        """Test apply when there are no common files."""
+        rule = FileFind({
+            "number_fullpath_matches": 1,
+            "syncfilename": "syncfile.txt",
+            "daqsystem1": "daq1",
+            "daqsystem2": "daq2",
+        })
+
+        node_a = {
+            "objectname": "daq1",
+            "objectclass": "ndi.daq.system",
+            "underlying_epochs": {"underlying": ["/data/file_a.txt"]},
+        }
+        node_b = {
+            "objectname": "daq2",
+            "objectclass": "ndi.daq.system",
+            "underlying_epochs": {"underlying": ["/data/file_b.txt"]},
         }
 
         cost, mapping = rule.apply(node_a, node_b)

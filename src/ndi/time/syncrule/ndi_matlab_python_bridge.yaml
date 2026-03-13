@@ -17,6 +17,7 @@ classes:
   - name: filematch
     type: class
     matlab_path: "+ndi/+time/+syncrule/filematch.m"
+    matlab_last_sync_hash: "85b35859"
     python_path: "ndi/time/syncrule/filematch.py"
     python_class: "FileMatch"
     inherits: "ndi.time.syncrule"
@@ -96,6 +97,7 @@ classes:
   - name: filefind
     type: class
     matlab_path: "+ndi/+time/+syncrule/filefind.m"
+    matlab_last_sync_hash: "85b35859"
     python_path: "ndi/time/syncrule/filefind.py"
     python_class: "FileFind"
     inherits: "ndi.time.syncrule"
@@ -166,6 +168,7 @@ classes:
   - name: commonTriggersOverlappingEpochs
     type: class
     matlab_path: "+ndi/+time/+syncrule/commonTriggersOverlappingEpochs.m"
+    matlab_last_sync_hash: "ca27911b"
     python_path: "ndi/time/syncrule/common_triggers_overlapping_epochs.py"
     python_class: "CommonTriggersOverlappingEpochs"
     inherits: "ndi.time.syncrule"
@@ -259,6 +262,7 @@ classes:
   - name: randomPulses
     type: class
     matlab_path: "+ndi/+time/+syncrule/randomPulses.m"
+    matlab_last_sync_hash: "a009ea96"
     python_path: "ndi/time/syncrule/random_pulses.py"
     python_class: "RandomPulses"
     inherits: "ndi.time.syncrule"

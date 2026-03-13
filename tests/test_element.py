@@ -487,10 +487,10 @@ class TestProbe:
         assert probe.type == "n-trode"
         assert probe.subject_id == "subj001"
 
-    def test_probe_is_never_direct(self):
-        """Test that probes are always direct=False."""
+    def test_probe_is_direct(self):
+        """Test that probes are always direct=True (matching MATLAB)."""
         probe = Probe(name="e1", reference=1, type="probe")
-        assert probe.direct is False
+        assert probe.direct is True
 
     def test_epochsetname(self):
         """Test epochsetname method."""

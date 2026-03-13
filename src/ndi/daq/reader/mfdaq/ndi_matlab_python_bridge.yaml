@@ -17,6 +17,7 @@ classes:
   - name: intan
     type: class
     matlab_path: "+ndi/+daq/+reader/+mfdaq/intan.m"
+    matlab_last_sync_hash: "80385294"
     python_path: "ndi/daq/reader/mfdaq/intan.py"
     python_class: "IntanReader"
     inherits: "ndi.daq.reader.mfdaq_reader"
@@ -106,6 +107,7 @@ classes:
   - name: blackrock
     type: class
     matlab_path: "+ndi/+daq/+reader/+mfdaq/blackrock.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/daq/reader/mfdaq/blackrock.py"
     python_class: "BlackrockReader"
     inherits: "ndi.daq.reader.mfdaq_reader"
@@ -187,6 +189,7 @@ classes:
   - name: cedspike2
     type: class
     matlab_path: "+ndi/+daq/+reader/+mfdaq/cedspike2.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/daq/reader/mfdaq/cedspike2.py"
     python_class: "CEDSpike2Reader"
     inherits: "ndi.daq.reader.mfdaq_reader"
@@ -267,6 +270,7 @@ classes:
   - name: spikegadgets
     type: class
     matlab_path: "+ndi/+daq/+reader/+mfdaq/spikegadgets.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/daq/reader/mfdaq/spikegadgets.py"
     python_class: "SpikeGadgetsReader"
     inherits: "ndi.daq.reader.mfdaq_reader"

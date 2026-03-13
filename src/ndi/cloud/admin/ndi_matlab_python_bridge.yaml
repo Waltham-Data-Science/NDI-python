@@ -17,6 +17,7 @@ classes:
   - name: CrossrefConstants
     type: dataclass
     matlab_path: "+ndi/+cloud/+admin/+crossref/Constants.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/cloud/admin/crossref.py"
     python_class: "CrossrefConstants"
     properties:
@@ -53,6 +54,7 @@ functions:
 
   - name: createNewDOI
     matlab_path: "+ndi/+cloud/+admin/createNewDOI.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/cloud/admin/doi.py"
     input_arguments:
       - name: prefix
@@ -66,6 +68,7 @@ functions:
 
   - name: registerDatasetDOI
     matlab_path: "+ndi/+cloud/+admin/registerDatasetDOI.m"
+    matlab_last_sync_hash: "d0d802b0"
     python_path: "ndi/cloud/admin/doi.py"
     input_arguments:
       - name: cloud_dataset_id
@@ -85,6 +88,7 @@ functions:
 
   - name: checkSubmission
     matlab_path: "+ndi/+cloud/+admin/checkSubmission.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/cloud/admin/doi.py"
     input_arguments:
       - name: filename
@@ -106,6 +110,7 @@ functions:
   # --- crossref.py functions ---
   - name: createDoiBatchSubmission
     matlab_path: "+ndi/+cloud/+admin/+crossref/createDoiBatchSubmission.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/cloud/admin/crossref.py"
     input_arguments:
       - name: dataset_metadata
@@ -121,6 +126,7 @@ functions:
 
   - name: convertCloudDatasetToCrossrefDataset
     matlab_path: "+ndi/+cloud/+admin/+crossref/convertCloudDatasetToCrossrefDataset.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/cloud/admin/crossref.py"
     input_arguments:
       - name: dataset_metadata
@@ -133,6 +139,7 @@ functions:
 
   - name: convertContributors
     matlab_path: "+ndi/+cloud/+admin/+crossref/+conversion/convertContributors.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/cloud/admin/crossref.py"
     input_arguments:
       - name: dataset_metadata
@@ -147,6 +154,7 @@ functions:
 
   - name: convertDatasetDate
     matlab_path: "+ndi/+cloud/+admin/+crossref/+conversion/convertDatasetDate.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/cloud/admin/crossref.py"
     input_arguments:
       - name: dataset_metadata
@@ -161,6 +169,7 @@ functions:
 
   - name: convertFunding
     matlab_path: "+ndi/+cloud/+admin/+crossref/+conversion/convertFunding.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/cloud/admin/crossref.py"
     input_arguments:
       - name: dataset_metadata
@@ -175,6 +184,7 @@ functions:
 
   - name: convertLicense
     matlab_path: "+ndi/+cloud/+admin/+crossref/+conversion/convertLicense.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/cloud/admin/crossref.py"
     input_arguments:
       - name: dataset_metadata
@@ -189,6 +199,7 @@ functions:
 
   - name: convertRelatedPublications
     matlab_path: "+ndi/+cloud/+admin/+crossref/+conversion/convertRelatedPublications.m"
+    matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/cloud/admin/crossref.py"
     input_arguments:
       - name: dataset_metadata
@@ -208,11 +219,13 @@ not_yet_ported:
 
   - name: createDatabaseMetadata
     matlab_path: "+ndi/+cloud/+admin/+crossref/createDatabaseMetadata.m"
+    matlab_last_sync_hash: "fe64a9f5"
     status: not_yet_ported
     decision_log: "MATLAB function to create NDI Cloud database-level metadata for Crossref."
 
   - name: createDoiBatchHeadElement
     matlab_path: "+ndi/+cloud/+admin/+crossref/createDoiBatchHeadElement.m"
+    matlab_last_sync_hash: "fe64a9f5"
     status: not_yet_ported
     decision_log: >
       MATLAB helper for creating the XML head element in DOI batch submissions.
