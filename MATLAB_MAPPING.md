@@ -123,15 +123,15 @@ Complete reference mapping every MATLAB NDI function/class to its Python equival
 | `ndi.database.fun.docs_from_ids` | `ndi.database_fun.docs_from_ids()` | `ndi.database_fun` |
 | `ndi.database.fun.docs2graph` | `ndi.database_fun.docs_to_graph()` | `ndi.database_fun` |
 | `ndi.database.fun.find_ingested_docs` | `ndi.database_fun.find_ingested_docs()` | `ndi.database_fun` |
-| `ndi.database.fun.finddocs_elementEpochType` | `ndi.database_fun.find_docs_element_epoch_type()` | `ndi.database_fun` |
-| `ndi.database.fun.ndi_document2ndi_object` | `ndi.database_fun.ndi_document_to_object()` | `ndi.database_fun` |
+| `ndi.database.fun.finddocs_elementEpochType` | `ndi.database_fun.finddocs_elementEpochType()` | `ndi.database_fun` |
+| `ndi.database.fun.ndi_document2ndi_object` | `ndi.database_fun.ndi_document2ndi_object()` | `ndi.database_fun` |
 | `ndi.database.fun.copy_session_to_dataset` | `ndi.database_fun.copy_session_to_dataset()` | `ndi.database_fun` |
-| `ndi.database.fun.finddocs_missing_dependencies` | `ndi.database_fun.find_docs_missing_dependencies()` | `ndi.database_fun` |
+| `ndi.database.fun.finddocs_missing_dependencies` | `ndi.database_fun.finddocs_missing_dependencies()` | `ndi.database_fun` |
 | `ndi.database.fun.write_presentation_time_structure` | `ndi.database_fun.write_presentation_time_structure()` | `ndi.database_fun` |
 | `ndi.database.fun.read_presentation_time_structure` | `ndi.database_fun.read_presentation_time_structure()` | `ndi.database_fun` |
-| `ndi.database.fun.database2json` | `ndi.database_fun.database_to_json()` | `ndi.database_fun` |
-| `ndi.database.fun.copydocfile2temp` | `ndi.database_fun.copy_doc_file_to_temp()` | `ndi.database_fun` |
-| `ndi.database.fun.extract_doc_files` | `ndi.database_fun.extract_docs_files()` | `ndi.database_fun` |
+| `ndi.database.fun.database2json` | `ndi.database_fun.database2json()` | `ndi.database_fun` |
+| `ndi.database.fun.copydocfile2temp` | `ndi.database_fun.copydocfile2temp()` | `ndi.database_fun` |
+| `ndi.database.fun.extract_doc_files` | `ndi.database_fun.extract_doc_files()` | `ndi.database_fun` |
 
 ## Database Ingestion
 

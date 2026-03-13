@@ -1,0 +1,102 @@
+# ndi_matlab_python_bridge.yaml — ndi.database.implementations.fun (ingestion)
+# The Primary Contract for the ndi.database.implementations.fun namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Standalone functions
+# =========================================================================
+functions:
+
+  - name: ingest_plan
+    type: function
+    matlab_path: "+ndi/+database/+implementations/+fun/ingest_plan.m"
+    matlab_last_sync_hash: "9f516a88"
+    python_path: "ndi/database_ingestion.py"
+    input_arguments:
+      - name: ndi_document_obj
+        type_matlab: "ndi.document"
+        type_python: "Any"
+      - name: ingestion_directory
+        type_matlab: "char"
+        type_python: "str"
+    output_arguments:
+      - name: source_filename_list
+        type_matlab: "cell array of char"
+        type_python: "list[str]"
+      - name: destination_filename_list
+        type_matlab: "cell array of char"
+        type_python: "list[str]"
+      - name: to_delete_list
+        type_matlab: "cell array of char"
+        type_python: "list[str]"
+    decision_log: >
+      FIXED: Added file-existence validation matching MATLAB: raises
+      FileNotFoundError if source does not exist, FileExistsError if
+      destination already exists. Synchronized 2026-03-13.
+
+  - name: ingest
+    type: function
+    matlab_path: "+ndi/+database/+implementations/+fun/ingest.m"
+    matlab_last_sync_hash: "f223ff4a"
+    python_path: "ndi/database_ingestion.py"
+    input_arguments:
+      - name: source_filename_list
+        type_matlab: "cell array of char"
+        type_python: "list[str]"
+      - name: destination_filename_list
+        type_matlab: "cell array of char"
+        type_python: "list[str]"
+      - name: to_delete_list
+        type_matlab: "cell array of char"
+        type_python: "list[str]"
+    output_arguments:
+      - name: b
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: msg
+        type_matlab: "char"
+        type_python: "str"
+    decision_log: "Exact match. Synchronized with MATLAB main as of 2026-03-13."
+
+  - name: expell_plan
+    type: function
+    matlab_path: "+ndi/+database/+implementations/+fun/expell_plan.m"
+    matlab_last_sync_hash: "7f0e0225"
+    python_path: "ndi/database_ingestion.py"
+    input_arguments:
+      - name: ndi_document_obj
+        type_matlab: "ndi.document"
+        type_python: "Any"
+      - name: ingestion_directory
+        type_matlab: "char"
+        type_python: "str"
+    output_arguments:
+      - name: to_delete_list
+        type_matlab: "cell array of char"
+        type_python: "list[str]"
+    decision_log: >
+      FIXED: Added file-existence validation matching MATLAB: raises
+      FileNotFoundError if file to delete does not exist.
+      Synchronized 2026-03-13.
+
+  - name: expell
+    type: function
+    matlab_path: "+ndi/+database/+implementations/+fun/expell.m"
+    matlab_last_sync_hash: "93ba72b4"
+    python_path: "ndi/database_ingestion.py"
+    input_arguments:
+      - name: to_delete_list
+        type_matlab: "cell array of char"
+        type_python: "list[str]"
+    output_arguments:
+      - name: b
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: msg
+        type_matlab: "char"
+        type_python: "str"
+    decision_log: "Exact match. Synchronized with MATLAB main as of 2026-03-13."

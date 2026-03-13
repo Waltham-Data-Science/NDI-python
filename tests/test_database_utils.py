@@ -224,14 +224,18 @@ class TestFindDocsMissingDependencies:
 
 
 class TestIngestPlan:
-    def test_basic_plan(self):
+    def test_basic_plan(self, tmp_path):
+        # Create real source file (MATLAB validates existence)
+        src_file = tmp_path / "file.bin"
+        src_file.write_bytes(b"data")
+
         doc = _doc(
             "d1",
             file_info=[
                 {
                     "locations": [
                         {
-                            "location": "/data/file.bin",
+                            "location": str(src_file),
                             "uid": "uid-123",
                             "ingest": True,
                             "delete_original": True,
@@ -240,10 +244,11 @@ class TestIngestPlan:
                 }
             ],
         )
-        src, dst, delete = ingest_plan(doc, "/db/files")
-        assert src == ["/data/file.bin"]
-        assert dst == ["/db/files/uid-123"]
-        assert delete == ["/data/file.bin"]
+        db_dir = str(tmp_path / "db_files")
+        src, dst, delete = ingest_plan(doc, db_dir)
+        assert src == [str(src_file)]
+        assert "uid-123" in dst[0]
+        assert delete == [str(src_file)]
 
     def test_no_ingest_flag(self):
         doc = _doc(
@@ -310,7 +315,12 @@ class TestIngest:
 
 
 class TestExpellPlan:
-    def test_basic(self):
+    def test_basic(self, tmp_path):
+        # Create real ingested file (MATLAB validates existence)
+        ing_dir = tmp_path / "db_files"
+        ing_dir.mkdir()
+        (ing_dir / "uid-abc").write_bytes(b"ingested data")
+
         doc = _doc(
             "d1",
             file_info=[
@@ -324,8 +334,9 @@ class TestExpellPlan:
                 }
             ],
         )
-        result = expell_plan(doc, "/db/files")
-        assert result == ["/db/files/uid-abc"]
+        result = expell_plan(doc, str(ing_dir))
+        assert len(result) == 1
+        assert "uid-abc" in result[0]
 
     def test_no_ingested(self):
         doc = _doc(

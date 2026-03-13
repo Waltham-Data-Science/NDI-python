@@ -3,7 +3,7 @@ Tests for Phase 2 low-priority gap implementations.
 
 Covers:
 - Batch 1: stimulus_tuningcurve_log, t0_t1cell2array, ontologyTableRowVars
-- Batch 2: database_to_json, copy_doc_file_to_temp, extract_docs_files
+- Batch 2: database2json, copydocfile2temp, extract_doc_files
 - Batch 3: getProbeTypeMap, initProbeTypeMap
 - Batch 4: uploadSingleFile
 - Batch 5: openminds_convert (4 functions)
@@ -179,10 +179,10 @@ class TestOntologyTableRowVars:
 
 
 class TestDatabaseToJson:
-    """Tests for ndi.database_fun.database_to_json."""
+    """Tests for ndi.database_fun.database2json."""
 
     def test_exports_docs_to_json(self):
-        from ndi.database_fun import database_to_json
+        from ndi.database_fun import database2json
 
         doc1 = MagicMock()
         doc1.document_properties = {
@@ -200,7 +200,7 @@ class TestDatabaseToJson:
         session.database_search.return_value = [doc1, doc2]
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            count = database_to_json(session, tmpdir)
+            count = database2json(session, tmpdir)
             assert count == 2
             assert (Path(tmpdir) / "doc-001.json").exists()
             assert (Path(tmpdir) / "doc-002.json").exists()
@@ -210,21 +210,21 @@ class TestDatabaseToJson:
             assert loaded["data"] == "hello"
 
     def test_empty_database(self):
-        from ndi.database_fun import database_to_json
+        from ndi.database_fun import database2json
 
         session = MagicMock()
         session.database_search.return_value = []
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            count = database_to_json(session, tmpdir)
+            count = database2json(session, tmpdir)
             assert count == 0
 
 
 class TestCopyDocFileToTemp:
-    """Tests for ndi.database_fun.copy_doc_file_to_temp."""
+    """Tests for ndi.database_fun.copydocfile2temp."""
 
     def test_copies_file(self):
-        from ndi.database_fun import copy_doc_file_to_temp
+        from ndi.database_fun import copydocfile2temp
 
         # Mock binary doc
         mock_file = MagicMock()
@@ -235,7 +235,7 @@ class TestCopyDocFileToTemp:
 
         doc = MagicMock()
 
-        tname, tname_no_ext = copy_doc_file_to_temp(doc, session, "data.bin", ".bin")
+        tname, tname_no_ext = copydocfile2temp(doc, session, "data.bin", ".bin")
 
         try:
             assert os.path.exists(tname)
@@ -247,7 +247,7 @@ class TestCopyDocFileToTemp:
                 os.unlink(tname)
 
     def test_no_extension(self):
-        from ndi.database_fun import copy_doc_file_to_temp
+        from ndi.database_fun import copydocfile2temp
 
         mock_file = MagicMock()
         mock_file.read.return_value = b"xyz"
@@ -257,7 +257,7 @@ class TestCopyDocFileToTemp:
 
         doc = MagicMock()
 
-        tname, tname_no_ext = copy_doc_file_to_temp(doc, session, "data", "")
+        tname, tname_no_ext = copydocfile2temp(doc, session, "data", "")
 
         try:
             assert os.path.exists(tname)
@@ -268,10 +268,10 @@ class TestCopyDocFileToTemp:
 
 
 class TestExtractDocsFiles:
-    """Tests for ndi.database_fun.extract_docs_files."""
+    """Tests for ndi.database_fun.extract_doc_files."""
 
     def test_extracts_docs(self):
-        from ndi.database_fun import extract_docs_files
+        from ndi.database_fun import extract_doc_files
 
         doc1 = MagicMock()
         doc1.document_properties = {
@@ -283,17 +283,17 @@ class TestExtractDocsFiles:
         session.database_search.return_value = [doc1]
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            docs, path = extract_docs_files(session, tmpdir)
+            docs, path = extract_doc_files(session, tmpdir)
             assert len(docs) == 1
             assert (Path(tmpdir) / "doc-abc" / "document.json").exists()
 
     def test_creates_temp_dir_if_none(self):
-        from ndi.database_fun import extract_docs_files
+        from ndi.database_fun import extract_doc_files
 
         session = MagicMock()
         session.database_search.return_value = []
 
-        docs, path = extract_docs_files(session)
+        docs, path = extract_doc_files(session)
         assert os.path.isdir(path)
         # Clean up
         os.rmdir(path)

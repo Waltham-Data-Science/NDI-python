@@ -1,0 +1,233 @@
+# ndi_matlab_python_bridge.yaml — ndi.database (core class)
+# The Primary Contract for the ndi.database namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # =========================================================================
+  # ndi.database  (abstract base class)
+  # =========================================================================
+  - name: database
+    type: class
+    matlab_path: "+ndi/database.m"
+    matlab_last_sync_hash: "ad81fd7a"
+    python_path: "ndi/database.py"
+    python_class: "Database"
+
+    properties:
+      - name: path
+        type_matlab: "char"
+        type_python: "Path"
+        access: "SetAccess=protected, GetAccess=public"
+        decision_log: >
+          MATLAB stores as 'path'. Python stores as 'session_path' (a Path object).
+          Semantic equivalent; Python also derives database_path and binary_path
+          from session_path.
+
+      - name: session_unique_reference
+        type_matlab: "char"
+        type_python: "str"
+        access: "SetAccess=protected, GetAccess=public"
+        decision_log: >
+          MATLAB stores as a property. Python does not expose this directly;
+          the session reference is managed by the session object.
+
+    methods:
+      # --- Constructor ---
+      - name: database
+        kind: constructor
+        input_arguments:
+          - name: path
+            type_matlab: "char"
+            type_python: "str | Path"
+          - name: session_unique_reference
+            type_matlab: "char"
+            type_python: "str"
+            default: "''"
+        output_arguments:
+          - name: ndi_database_obj
+            type_python: "Database"
+        decision_log: >
+          MATLAB: database(PATH, REFERENCE).
+          Python: Database(session_path, db_name='.ndi', **backend_kwargs).
+          Python adds db_name parameter for directory naming flexibility.
+
+      - name: newdocument
+        input_arguments:
+          - name: document_type
+            type_matlab: "char"
+            type_python: "str"
+            default: "'base'"
+        output_arguments:
+          - name: ndi_document_obj
+            type_python: "Document"
+        decision_log: >
+          Present in MATLAB database.m. In Python this is handled by
+          the session object (session.newdocument), not the Database class directly.
+
+      - name: add
+        input_arguments:
+          - name: ndi_document_obj
+            type_matlab: "ndi.document"
+            type_python: "Document"
+          - name: Update
+            type_matlab: "logical (name-value)"
+            type_python: "bool"
+            default: "True"
+        output_arguments:
+          - name: ndi_database_obj
+            type_python: "Database"
+        decision_log: >
+          MATLAB add() supports an 'Update' name-value pair (default 1)
+          that controls whether an existing document is updated or errors.
+          Python separates this into add() (error on duplicate) and
+          add_or_replace() (upsert). Synchronized 2026-03-13.
+
+      - name: read
+        input_arguments:
+          - name: ndi_document_id
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: ndi_document_obj
+            type_python: "Document | None"
+        decision_log: >
+          MATLAB returns empty [] when not found; Python returns None.
+          Synchronized 2026-03-13.
+
+      - name: remove
+        input_arguments:
+          - name: ndi_document_id
+            type_matlab: "ndi.document | char | cell"
+            type_python: "Document | str"
+        output_arguments:
+          - name: ndi_database_obj
+            type_python: "bool"
+        decision_log: >
+          MATLAB accepts cell arrays; Python handles single doc/id.
+          MATLAB modifies in-place; Python returns bool success.
+          Synchronized 2026-03-13.
+
+      - name: search
+        input_arguments:
+          - name: searchparams
+            type_matlab: "ndi.query"
+            type_python: "Query | None"
+        output_arguments:
+          - name: ndi_document_objs
+            type_python: "list[Document]"
+        decision_log: >
+          MATLAB returns cell array of ndi.document; Python returns list.
+          Synchronized 2026-03-13.
+
+      - name: alldocids
+        input_arguments: []
+        output_arguments:
+          - name: docids
+            type_python: "list[str]"
+        decision_log: >
+          Exact match. MATLAB returns cell array; Python returns list.
+          Synchronized 2026-03-13.
+
+      - name: clear
+        input_arguments:
+          - name: areyousure
+            type_matlab: "char"
+            type_python: "str"
+            default: "'no'"
+        output_arguments: []
+        decision_log: >
+          Present in MATLAB. Not yet implemented in Python Database class.
+          Should be added for parity. Synchronized 2026-03-13.
+
+      - name: openbinarydoc
+        input_arguments:
+          - name: ndi_document_or_id
+            type_matlab: "ndi.document | char"
+            type_python: "Document | str"
+          - name: filename
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: ndi_binarydoc_obj
+            type_python: "Any"
+        decision_log: >
+          Present in MATLAB database.m. In Python this is handled by
+          the session object (session.database_openbinarydoc), not
+          the Database class directly. Synchronized 2026-03-13.
+
+      - name: existbinarydoc
+        input_arguments:
+          - name: ndi_document_or_id
+            type_matlab: "ndi.document | char"
+            type_python: "Document | str"
+          - name: filename
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: tf
+            type_python: "bool"
+          - name: file_path
+            type_python: "Path | None"
+        decision_log: >
+          Present in MATLAB database.m. In Python this is handled by
+          the session object (session.database_existbinarydoc).
+          Synchronized 2026-03-13.
+
+      - name: closebinarydoc
+        input_arguments:
+          - name: ndi_binarydoc_obj
+            type_python: "Any"
+        output_arguments:
+          - name: ndi_binarydoc_obj
+            type_python: "Any"
+        decision_log: >
+          Present in MATLAB database.m. In Python this is handled by
+          the session object (session.database_closebinarydoc).
+          Synchronized 2026-03-13.
+
+    # --- Additional Python methods not in MATLAB base class ---
+    # These are implementation-level or convenience methods in Python
+    # that correspond to the MATLAB didsqlite subclass behavior.
+    decision_log: >
+      Python Database class merges the abstract ndi.database base class
+      with the concrete ndi.database.implementations.database.didsqlite
+      subclass. Additional Python methods: update(), add_or_replace(),
+      find_by_id(), numdocs(), find_depends_on(), find_dependencies(),
+      add_many(), remove_many(), get_binary_path(). These are convenience
+      wrappers not present in the MATLAB abstract base but consistent
+      with didsqlite behavior. Synchronized 2026-03-13.
+
+# =========================================================================
+# Standalone functions
+# =========================================================================
+functions:
+
+  - name: open_database
+    type: function
+    matlab_path: "+ndi/+database/+fun/opendatabase.m"
+    matlab_last_sync_hash: "0d40859f"
+    python_path: "ndi/database.py"
+    python_name: "open_database"
+    input_arguments:
+      - name: session_path
+        type_matlab: "char"
+        type_python: "str | Path"
+      - name: kwargs
+        type_python: "**kwargs"
+    output_arguments:
+      - name: db
+        type_python: "Database"
+    decision_log: >
+      MATLAB: opendatabase(database_path, session_unique_reference).
+      Python: open_database(session_path, **kwargs). The Python version
+      is a simpler factory that creates a Database instance directly,
+      while MATLAB searches a hierarchy of database implementations.
+      Synchronized 2026-03-13.

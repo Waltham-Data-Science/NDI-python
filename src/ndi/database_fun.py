@@ -251,7 +251,7 @@ def find_ingested_docs(session_or_dataset: Any) -> list[Any]:
             return []
 
 
-def finddocs_element_epoch_type(
+def finddocs_elementEpochType(
     session_or_dataset: Any,
     element_id: str,
     epoch_id: str,
@@ -277,7 +277,7 @@ def finddocs_element_epoch_type(
 
     q1 = Query("").isa(document_type)
     q2 = Query("").depends_on("element_id", element_id)
-    q3 = Query("epochid") == epoch_id
+    q3 = Query("epochid.epochid") == epoch_id
     q = q1 & q2 & q3
 
     try:
@@ -547,8 +547,8 @@ def write_presentation_time_structure(
 
 def read_presentation_time_structure(
     filename: str,
-    n0: int | None = None,
-    n1: int | None = None,
+    N0: int | None = None,
+    N1: int | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     """Read presentation time structure from a binary file.
 
@@ -556,12 +556,16 @@ def read_presentation_time_structure(
 
     Args:
         filename: Binary file path.
-        n0: Start index (0-based, inclusive). Default: 0.
-        n1: End index (0-based, inclusive). Default: last entry.
+        N0: Start index (1-based, inclusive). Default: 1.
+        N1: End index (1-based, inclusive). Default: num_entries.
 
     Returns:
         Tuple ``(header, entries)`` where header is the description
         string and entries is a list of dicts.
+
+    Python-specific Notes:
+        N0 and N1 use 1-based indexing to match MATLAB Semantic Parity.
+        N0=1 means the first entry.
     """
     import struct
 
@@ -583,16 +587,17 @@ def read_presentation_time_structure(
         # Seek to 512
         f.seek(512)
 
-        if n0 is None:
-            n0 = 0
-        if n1 is None:
-            n1 = num_entries - 1
-        n1 = min(n1, num_entries - 1)
+        # 1-based indexing to match MATLAB
+        if N0 is None:
+            N0 = 1
+        if N1 is None:
+            N1 = num_entries
+        N1 = min(N1, num_entries)
 
         entries: list[dict[str, Any]] = []
 
-        # Read all entries up to n1
-        for _i in range(n1 + 1):
+        # Read all entries up to N1 (1-based)
+        for _i in range(N1):
             # Clocktype
             ct = b""
             while True:
@@ -625,8 +630,8 @@ def read_presentation_time_structure(
                 }
             )
 
-        # Slice to [n0, n1]
-        entries = entries[n0:]
+        # Slice to [N0, N1] (convert 1-based to 0-based for internal list access)
+        entries = entries[N0 - 1 :]
 
     return header_str, entries
 
@@ -636,7 +641,7 @@ def read_presentation_time_structure(
 # =========================================================================
 
 
-def database_to_json(
+def database2json(
     session: Any,
     output_path: str,
 ) -> int:
@@ -677,7 +682,7 @@ def database_to_json(
     return count
 
 
-def copy_doc_file_to_temp(
+def copydocfile2temp(
     doc: Any,
     session: Any,
     filename: str,
@@ -722,7 +727,7 @@ def copy_doc_file_to_temp(
     return base_path, path_without_ext
 
 
-def extract_docs_files(
+def extract_doc_files(
     session: Any,
     target_path: str | None = None,
 ) -> tuple[list[Any], str]:
