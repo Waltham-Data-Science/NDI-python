@@ -40,7 +40,7 @@ functions:
     python_path: "ndi/fun/utils.py"
     input_arguments:
       - name: name
-        type_matlab: "char"
+        type_matlab: "char {mustBeTextScalar}"
         type_python: "str"
     output_arguments:
       - name: variableName
@@ -49,8 +49,8 @@ functions:
       Exact match. Converts arbitrary string to camelCase variable name.
       Replaces non-alphanumeric chars (except underscore) with spaces,
       splits into words, capitalizes each. Prepends 'x' if result
-      starts with digit. Also available in ndi/fun/name_utils.py as
-      PascalCase variant.
+      starts with digit. A PascalCase variant also exists in
+      ndi/fun/name_utils.py (Python-only convenience).
 
   - name: pseudorandomint
     type: function
@@ -78,8 +78,7 @@ functions:
       leap-second artefact by clamping second=60 to 59.999.
 
   # =========================================================================
-  # Functions — name_utils.py
-  # MATLAB: +ndi/+fun/name2variableName.m (PascalCase variant)
+  # Functions — name_utils.py (Python-only variant)
   # =========================================================================
 
   - name: name2variableName (PascalCase variant)
@@ -94,10 +93,10 @@ functions:
       - name: variableName
         type_python: "str"
     decision_log: >
-      PascalCase variant of name2variableName in utils.py.
-      Algorithm: Replace ':', '-' with '_', replace other
-      non-alphanumeric with spaces, split into words, capitalize each,
-      join, prepend 'var_' if starts with non-letter.
+      Python-only PascalCase variant of name2variableName. The canonical
+      MATLAB-matching implementation is in utils.py. This variant uses a
+      slightly different algorithm (Replace ':', '-' with '_', prepend
+      'var_' if starts with non-letter) and is provided as a convenience.
 
   # =========================================================================
   # Functions — data.py
@@ -110,7 +109,7 @@ functions:
     python_path: "ndi/fun/data.py"
     input_arguments:
       - name: file_path
-        type_matlab: "char"
+        type_matlab: "char (fileName_or_fileObj)"
         type_python: "str | Path"
       - name: data_size
         type_matlab: "double (vector)"
@@ -151,10 +150,10 @@ functions:
     python_path: "ndi/fun/data.py"
     input_arguments:
       - name: data
-        type_matlab: "numeric"
+        type_matlab: "numeric (x)"
         type_python: "np.ndarray"
       - name: coordinates
-        type_matlab: "cell"
+        type_matlab: "varargin (cell)"
         type_python: "list[np.ndarray] | None"
         default: "None"
     output_arguments:
@@ -163,24 +162,27 @@ functions:
     decision_log: >
       Exact match. Converts n-dimensional array to ngrid metadata
       structure with keys: data_size, data_type, data_dim, coordinates.
+      MATLAB uses varargin for optional coordinates; Python uses a
+      single list argument.
 
   - name: evaluate_fitcurve
     type: function
-    matlab_path: "+ndi/+fun/+data/evaluate_fitcurve.m"
+    matlab_path: "N/A"
     python_path: "ndi/fun/data.py"
     input_arguments:
       - name: fitcurve_doc
-        type_matlab: "ndi.document"
+        type_matlab: "N/A"
         type_python: "Any"
       - name: "*args"
-        type_matlab: "double (vectors)"
+        type_matlab: "N/A"
         type_python: "np.ndarray"
     output_arguments:
       - name: values
         type_python: "np.ndarray"
     decision_log: >
-      Exact match. Evaluates a fitted curve at given independent
-      variable values.
+      Python-only function. No MATLAB equivalent exists in
+      +ndi/+fun/+data/. Evaluates a fitted curve at given
+      independent variable values.
 
   - name: readImageStack
     type: function
@@ -199,8 +201,10 @@ functions:
         default: "'auto'"
     output_arguments:
       - name: image_data
+        type_matlab: "imageStack"
         type_python: "np.ndarray"
       - name: info
+        type_matlab: "imageStack_info"
         type_python: "dict[str, Any]"
     decision_log: >
       Exact match. Reads an image stack or video from a database
@@ -211,28 +215,31 @@ functions:
   # MATLAB: +ndi/+fun/+dataset/diff.m
   # =========================================================================
 
-  - name: diff
+  - name: diff (dataset)
     type: function
     matlab_path: "+ndi/+fun/+dataset/diff.m"
     python_path: "ndi/fun/dataset.py"
     python_qualified: "ndi.fun.dataset.diff"
     input_arguments:
       - name: dataset1
-        type_matlab: "ndi.dataset"
+        type_matlab: "ndi.dataset (D1)"
         type_python: "Any"
       - name: dataset2
-        type_matlab: "ndi.dataset"
+        type_matlab: "ndi.dataset (D2)"
         type_python: "Any"
       - name: exclude_fields
-        type_matlab: "cellstr"
+        type_matlab: "N/A"
         type_python: "list[str]"
         default: "None"
     output_arguments:
       - name: result
+        type_matlab: "report (struct)"
         type_python: "dict[str, Any]"
     decision_log: >
-      Exact match. Compares two datasets for document and file
-      differences. Returns dict with 'equal' and 'session_diff' keys.
+      PARTIAL MATCH. MATLAB has options.verbose (logical, default true)
+      and options.recheckFileReport (default []). Python has
+      exclude_fields instead (not in MATLAB). The verbose and
+      recheckFileReport options are not yet ported to Python.
 
   # =========================================================================
   # Functions — doc.py
@@ -257,7 +264,7 @@ functions:
     python_path: "ndi/fun/doc.py"
     input_arguments:
       - name: session
-        type_matlab: "ndi.session"
+        type_matlab: "ndi.session (ndi_obj)"
         type_python: "Any"
       - name: fuid
         type_matlab: "char"
@@ -277,33 +284,38 @@ functions:
     python_path: "ndi/fun/doc.py"
     input_arguments:
       - name: session
-        type_matlab: "ndi.session"
+        type_matlab: "ndi.session (ndiSession)"
         type_python: "Any"
       - name: subject_doc
-        type_matlab: "ndi.document"
-        type_python: "Any"
+        type_matlab: "char (subjectID — a string ID)"
+        type_python: "Any (document object)"
       - name: species
-        type_matlab: "char"
+        type_matlab: "options.Species (char, default '')"
         type_python: "str"
         default: "''"
       - name: strain
-        type_matlab: "char"
+        type_matlab: "options.Strain (char, default '')"
         type_python: "str"
         default: "''"
       - name: sex
-        type_matlab: "char"
+        type_matlab: "options.BiologicalSex (char, default '')"
         type_python: "str"
         default: "''"
       - name: add_to_database
-        type_matlab: "logical"
+        type_matlab: "options.AddToSession (logical, default false)"
         type_python: "bool"
         default: "False"
     output_arguments:
       - name: documents
+        type_matlab: "ndiDocArray"
         type_python: "list[Any]"
     decision_log: >
-      Exact match. Creates OpenMINDS-standard documents for species,
-      strain, and sex.
+      INTERFACE MISMATCH. MATLAB 2nd argument is subjectID (a string
+      identifier). Python 2nd argument is subject_doc (a document
+      object). MATLAB option names differ: BiologicalSex vs sex,
+      Species vs species, Strain vs strain, AddToSession vs
+      add_to_database. MATLAB also returns a second output
+      openMindsObj which Python does not return.
 
   - name: probeLocations4probes
     type: function
@@ -311,23 +323,28 @@ functions:
     python_path: "ndi/fun/doc.py"
     input_arguments:
       - name: session
-        type_matlab: "ndi.session"
+        type_matlab: "ndi.session (S)"
         type_python: "Any"
       - name: probe_docs
-        type_matlab: "cell"
+        type_matlab: "cell (probes)"
         type_python: "list[Any]"
       - name: locations
-        type_matlab: "cell of structs"
+        type_matlab: "cell of char (ontology_lookup_strings)"
         type_python: "list[dict[str, str]]"
       - name: add_to_database
-        type_matlab: "logical"
+        type_matlab: "options.doAdd (logical, default true)"
         type_python: "bool"
         default: "False"
     output_arguments:
       - name: documents
         type_python: "list[Any]"
     decision_log: >
-      Exact match. Creates probe_location documents for a list of probes.
+      INTERFACE MISMATCH. (1) MATLAB 3rd arg is ontology_lookup_strings
+      (cell of char). Python 3rd arg is locations (list of dicts) —
+      different structure. (2) MATLAB option name is doAdd (default
+      true). Python kwarg is add_to_database (default False) — both
+      the name and default differ. (3) MATLAB default is to add to
+      database; Python default is to not add.
 
   - name: diff (doc)
     type: function
@@ -342,20 +359,26 @@ functions:
         type_matlab: "ndi.document"
         type_python: "Any"
       - name: exclude_fields
-        type_matlab: "cellstr"
+        type_matlab: "options.ignoreFields (cellstr, default {'base.session_id'})"
         type_python: "list[str] | None"
         default: "None"
       - name: compare_files
-        type_matlab: "logical"
+        type_matlab: "options.checkFiles (logical, default false)"
         type_python: "bool"
         default: "False"
     output_arguments:
       - name: result
+        type_matlab: "[are_equal, report] (2 outputs)"
         type_python: "dict[str, Any]"
     decision_log: >
-      Exact match. Compares two NDI documents for equality. Uses
-      order-independent comparison for depends_on and file lists.
-      Returns dict with 'equal' (bool) and 'details' (list[str]).
+      PARTIAL MATCH. Key differences: (1) MATLAB returns 2 outputs
+      [are_equal, report]; Python returns 1 dict with 'equal' and
+      'details' keys. (2) MATLAB option names differ: ignoreFields
+      vs exclude_fields, checkFiles vs compare_files. (3) MATLAB has
+      additional options not in Python: checkFileList (logical,
+      default true), session1, session2 (for cross-session file
+      comparison). (4) MATLAB default for ignoreFields is
+      {'base.session_id'}; Python default for exclude_fields is None.
 
   - name: ontologyTableRowVars
     type: function
@@ -363,7 +386,7 @@ functions:
     python_path: "ndi/fun/doc.py"
     input_arguments:
       - name: session
-        type_matlab: "ndi.session"
+        type_matlab: "ndi.session (S)"
         type_python: "Any"
     output_arguments:
       - name: names
@@ -395,7 +418,7 @@ functions:
 
   # =========================================================================
   # Functions — doc_table.py
-  # MATLAB: +ndi/+fun/+docTable/*.m
+  # MATLAB: +ndi/+fun/+docTable/*.m, +ndi/+fun/+doc/ontologyTableRowDoc2Table.m
   # =========================================================================
 
   - name: ontologyTableRowDoc2Table
@@ -404,20 +427,26 @@ functions:
     python_path: "ndi/fun/doc_table.py"
     input_arguments:
       - name: documents
-        type_matlab: "cell"
+        type_matlab: "cell (tableRowDoc)"
         type_python: "list[Any]"
       - name: stack_all
-        type_matlab: "logical"
+        type_matlab: "options.StackAll (logical, default false)"
         type_python: "bool"
         default: "False"
     output_arguments:
       - name: data_tables
+        type_matlab: "dataTables"
         type_python: "list[pd.DataFrame]"
       - name: doc_ids
+        type_matlab: "docIDs"
         type_python: "list[list[str]]"
     decision_log: >
-      Exact match. Converts ontologyTableRow documents to grouped
-      DataFrames.
+      PARTIAL MATCH. MATLAB option name is StackAll; Python uses
+      stack_all (Pythonized). MATLAB returns 4 outputs [dataTables,
+      docIDs, sessionIDs, dependencyIDs]; Python returns only 2
+      (data_tables, doc_ids). The sessionIDs and dependencyIDs
+      outputs are not yet ported. MATLAB source is in +doc/;
+      Python places it in doc_table.py.
 
   - name: docCellArray2Table
     type: function
@@ -425,7 +454,7 @@ functions:
     python_path: "ndi/fun/doc_table.py"
     input_arguments:
       - name: documents
-        type_matlab: "cell"
+        type_matlab: "cell (doc_cell_array)"
         type_python: "list[Any]"
     output_arguments:
       - name: table
@@ -441,7 +470,7 @@ functions:
     python_qualified: "ndi.fun.doc_table.element"
     input_arguments:
       - name: session
-        type_matlab: "ndi.session"
+        type_matlab: "ndi.session | ndi.dataset"
         type_python: "Any"
     output_arguments:
       - name: table
@@ -456,7 +485,7 @@ functions:
     python_qualified: "ndi.fun.doc_table.subjectBasic"
     input_arguments:
       - name: session
-        type_matlab: "ndi.session"
+        type_matlab: "ndi.session | ndi.dataset"
         type_python: "Any"
     output_arguments:
       - name: table
@@ -471,7 +500,7 @@ functions:
     python_qualified: "ndi.fun.doc_table.probe"
     input_arguments:
       - name: session
-        type_matlab: "ndi.session"
+        type_matlab: "ndi.session | ndi.dataset"
         type_python: "Any"
     output_arguments:
       - name: table
@@ -489,7 +518,7 @@ functions:
     python_qualified: "ndi.fun.doc_table.epoch"
     input_arguments:
       - name: session
-        type_matlab: "ndi.session"
+        type_matlab: "ndi.session | ndi.dataset"
         type_python: "Any"
     output_arguments:
       - name: table
@@ -500,37 +529,49 @@ functions:
       ProbeDocumentIdentifier, SubjectDocumentIdentifier, MixtureName,
       MixtureOntology, ApproachName, ApproachOntology.
 
-  - name: openminds
+  - name: openminds (docTable)
     type: function
     matlab_path: "+ndi/+fun/+docTable/openminds.m"
     python_path: "ndi/fun/doc_table.py"
     input_arguments:
       - name: session
-        type_matlab: "ndi.session"
+        type_matlab: "ndi.session | ndi.dataset"
         type_python: "Any"
       - name: doc_type
-        type_matlab: "char"
+        type_matlab: "char (type — required positional in MATLAB)"
         type_python: "str"
         default: "'openminds'"
     output_arguments:
       - name: table
+        type_matlab: "openmindsTable"
         type_python: "pd.DataFrame"
     decision_log: >
-      Exact match. Gathers OpenMINDS document properties into a table.
+      PARTIAL MATCH. MATLAB returns 3 outputs [openmindsTable, docIDs,
+      dependencyIDs]; Python returns only 1 (DataFrame). MATLAB has
+      additional options: depends_on (default {''}), errorIfEmpty
+      (default false), depends_on_docs (default {}),
+      allOpenMindsDocs (default {}). Python exposes none of these.
+      MATLAB 'type' is a required positional arg; Python 'doc_type'
+      is optional with default 'openminds'.
 
-  - name: treatment
+  - name: treatment (docTable)
     type: function
     matlab_path: "+ndi/+fun/+docTable/treatment.m"
     python_path: "ndi/fun/doc_table.py"
     input_arguments:
       - name: session
-        type_matlab: "ndi.session"
+        type_matlab: "ndi.session | ndi.dataset"
         type_python: "Any"
     output_arguments:
       - name: table
+        type_matlab: "treatmentTable"
         type_python: "pd.DataFrame"
     decision_log: >
-      Exact match. Gathers treatment document properties into a table.
+      PARTIAL MATCH. MATLAB returns 3 outputs [treatmentTable, docIDs,
+      dependencyIDs]; Python returns only 1 (DataFrame). MATLAB has
+      additional options: depends_on (default 'subject_id'),
+      errorIfEmpty (default false), depends_on_docs (default {}),
+      hideMixtureTable (default true). Python exposes none of these.
 
   - name: subject (docTable)
     type: function
@@ -539,16 +580,16 @@ functions:
     python_qualified: "ndi.fun.doc_table.subject"
     input_arguments:
       - name: session
-        type_matlab: "ndi.session"
+        type_matlab: "ndi.session | ndi.dataset"
         type_python: "Any"
     output_arguments:
       - name: table
         type_python: "pd.DataFrame"
     decision_log: >
-      Exact match. Creates a rich subject summary joining subject,
-      openminds, and treatment data. Columns include
-      SubjectDocumentIdentifier, SessionDocumentIdentifier, and
-      various strain/species/sex ontology fields.
+      PARTIAL MATCH. MATLAB has options.hideMixtureTable (logical,
+      default true) which is not present in the Python implementation.
+      This parameter controls whether mixture-related columns are
+      included in the subject summary table.
 
   # =========================================================================
   # Functions — epoch.py
@@ -564,22 +605,23 @@ functions:
         type_matlab: "ndi.session"
         type_python: "Any"
       - name: epoch_ids
-        type_matlab: "cellstr"
+        type_matlab: "char | cellstr (epochid — can be single)"
         type_python: "list[str]"
       - name: element_name
-        type_matlab: "char"
+        type_matlab: "options.name (char, default '')"
         type_python: "str"
         default: "''"
       - name: element_type
-        type_matlab: "char"
+        type_matlab: "options.type (char, default '')"
         type_python: "str"
         default: "''"
     output_arguments:
       - name: result
         type_python: "dict[str, list[Any]]"
     decision_log: >
-      Exact match. Finds elements containing specified epoch IDs.
-      Returns dict mapping each epoch_id to a list of matching elements.
+      Exact match. MATLAB option names are 'name' and 'type'; Python
+      uses 'element_name' and 'element_type' (Pythonized to avoid
+      shadowing builtins). Finds elements containing specified epoch IDs.
 
   - name: filename2epochid
     type: function
@@ -590,7 +632,7 @@ functions:
         type_matlab: "ndi.session"
         type_python: "Any"
       - name: filenames
-        type_matlab: "cellstr"
+        type_matlab: "char | cellstr (filename — can be single)"
         type_python: "list[str]"
     output_arguments:
       - name: result
@@ -612,7 +654,9 @@ functions:
         type_python: "np.ndarray"
     decision_log: >
       Exact match. Converts list of [t0, t1] interval pairs to Nx2
-      numpy array. Returns shape (N, 2) or empty (0, 2) if input is empty.
+      numpy array. Returns shape (N, 2) or empty (0, 2) if input is
+      empty. NOTE: MATLAB source is in +ndi/+fun/+doc/; Python places
+      it in ndi.fun.epoch (different namespace).
 
   # =========================================================================
   # Functions — file.py
@@ -625,7 +669,7 @@ functions:
     python_path: "ndi/fun/file.py"
     input_arguments:
       - name: file_path
-        type_matlab: "char"
+        type_matlab: "char (fileName)"
         type_python: "str"
     output_arguments:
       - name: checksum
@@ -640,10 +684,11 @@ functions:
     python_path: "ndi/fun/file.py"
     input_arguments:
       - name: file_path
-        type_matlab: "char"
+        type_matlab: "char (fileName)"
         type_python: "str"
     output_arguments:
       - name: dt
+        type_matlab: "creationDate"
         type_python: "datetime | None"
     decision_log: >
       Exact match. Gets the creation date of a file. Uses
@@ -656,10 +701,11 @@ functions:
     python_path: "ndi/fun/file.py"
     input_arguments:
       - name: file_path
-        type_matlab: "char"
+        type_matlab: "char (fileName)"
         type_python: "str"
     output_arguments:
       - name: dt
+        type_matlab: "updatedDate"
         type_python: "datetime | None"
     decision_log: >
       Exact match. Gets the last modification date of a file.
@@ -676,13 +722,13 @@ functions:
     python_path: "ndi/fun/plot.py"
     input_arguments:
       - name: data_table
-        type_matlab: "table"
+        type_matlab: "table (dataTable)"
         type_python: "Any"
       - name: grouping_variables
-        type_matlab: "cellstr (1x3)"
+        type_matlab: "cellstr (1x3) (groupingVariables)"
         type_python: "list[str]"
       - name: plotting_variable
-        type_matlab: "char"
+        type_matlab: "char (plottingVariable)"
         type_python: "str"
     output_arguments:
       - name: fig
@@ -707,6 +753,7 @@ functions:
         type_python: "float"
     output_arguments:
       - name: lines
+        type_matlab: "h (line handles)"
         type_python: "list[matplotlib.lines.Line2D]"
     decision_log: >
       Exact match. Plots multiple channels of data with vertical spacing.
@@ -717,58 +764,65 @@ functions:
     python_path: "ndi/fun/plot.py"
     input_arguments:
       - name: stimulus_probe
-        type_matlab: "ndi.probe"
+        type_matlab: "(1,1) ndi.epoch.epochset (stimulusProbe)"
         type_python: "Any"
       - name: timeref
-        type_matlab: "ndi.time.timereference"
+        type_matlab: "(1,1) ndi.time.timereference"
         type_python: "Any"
       - name: y
-        type_matlab: "double (scalar)"
+        type_matlab: "(1,1) double"
         type_python: "float"
       - name: stimid
-        type_matlab: "double (vector)"
+        type_matlab: "options.stimid (default [])"
         type_python: "list | np.ndarray | None"
         default: "None"
       - name: linewidth
-        type_matlab: "double"
+        type_matlab: "options.linewidth (1,1) double (default 2)"
         type_python: "float"
         default: "2.0"
       - name: linecolor
-        type_matlab: "double (1x3)"
+        type_matlab: "options.linecolor (1,3) double (default [0 0 0])"
         type_python: "tuple[float, float, float]"
         default: "(0.0, 0.0, 0.0)"
       - name: fontsize
-        type_matlab: "double"
+        type_matlab: "options.FontSize (1,1) double (default 12)"
         type_python: "float"
         default: "12.0"
       - name: fontweight
-        type_matlab: "char"
+        type_matlab: "options.FontWeight (1,:) char (default 'normal')"
         type_python: "str"
         default: "'normal'"
       - name: fontcolor
-        type_matlab: "double (1x3)"
+        type_matlab: "options.FontColor (1,3) double (default [0 0 0])"
         type_python: "tuple[float, float, float]"
         default: "(0.0, 0.0, 0.0)"
       - name: textycoord
-        type_matlab: "double"
+        type_matlab: "options.textycoord (:,:) double (default [])"
         type_python: "float | None"
         default: "None"
       - name: horizontal_alignment
-        type_matlab: "char"
+        type_matlab: "options.HorizontalAlignment (1,:) char (default 'center')"
         type_python: "str"
         default: "'center'"
     output_arguments:
       - name: h_lines
+        type_matlab: "h"
         type_python: "list[Any]"
       - name: h_texts
+        type_matlab: "htext"
         type_python: "list[Any]"
       - name: stimulus_data
+        type_matlab: "stimulusData"
         type_python: "Any"
       - name: stimulus_time_data
+        type_matlab: "stimulusTimeData"
         type_python: "Any"
     decision_log: >
-      Exact match. Plots stimulus occurrence as thick bars on a
-      time series plot.
+      NAMING MISMATCH. Python Pythonizes several MATLAB option names:
+      FontSize -> fontsize, FontWeight -> fontweight, FontColor ->
+      fontcolor, HorizontalAlignment -> horizontal_alignment. Per
+      Strict MATLAB Mirror policy these should use the MATLAB names.
+      This is a known deviation in the Python implementation.
 
   # =========================================================================
   # Functions — session.py
@@ -782,26 +836,30 @@ functions:
     python_qualified: "ndi.fun.session.diff"
     input_arguments:
       - name: session1
-        type_matlab: "ndi.session"
+        type_matlab: "ndi.session (S1)"
         type_python: "Any"
       - name: session2
-        type_matlab: "ndi.session"
+        type_matlab: "ndi.session (S2)"
         type_python: "Any"
       - name: exclude_fields
-        type_matlab: "cellstr"
+        type_matlab: "N/A"
         type_python: "list[str]"
         default: "None"
     output_arguments:
       - name: result
+        type_matlab: "report (struct)"
         type_python: "dict[str, Any]"
     decision_log: >
-      Exact match. Compares two sessions for document differences.
-      Default exclude_fields: ['base.session_id']. Returns dict with
-      keys: equal, only_in_s1, only_in_s2, common_count, mismatches.
+      PARTIAL MATCH. MATLAB has options.verbose (logical, default true)
+      and options.recheckFileReport (default []). Python has
+      exclude_fields instead (not in MATLAB). The verbose and
+      recheckFileReport options are not yet ported to Python.
+      Default exclude_fields: ['base.session_id'].
 
   # =========================================================================
   # Functions — stimulus.py
-  # MATLAB: +ndi/+fun/+stimulus/*.m, +ndi/+fun/stimulustemporalfrequency.m
+  # MATLAB: +ndi/+fun/+stimulus/*.m, +ndi/+fun/stimulustemporalfrequency.m,
+  #         +ndi/+fun/+calc/stimulus_tuningcurve_log.m
   # =========================================================================
 
   - name: tuning_curve_to_response_type
@@ -810,24 +868,24 @@ functions:
     python_path: "ndi/fun/stimulus.py"
     input_arguments:
       - name: session
-        type_matlab: "ndi.session"
+        type_matlab: "ndi.session (S)"
         type_python: "Any"
       - name: doc
         type_matlab: "ndi.document"
         type_python: "Any"
       - name: response_index
-        type_matlab: "double"
+        type_matlab: "N/A (not in MATLAB)"
         type_python: "int | None"
         default: "None"
     output_arguments:
       - name: response_type
         type_python: "str"
       - name: stimulus_response_scalar_doc
+        type_matlab: "stim_response_scalar_doc"
         type_python: "Any | None"
     decision_log: >
-      Exact match. Resolves response type from a tuning curve
-      document. Recursively follows dependencies to find response
-      type ('mean', 'F1', etc.).
+      Exact match for the 2-arg form. Python adds an optional
+      response_index parameter not present in MATLAB.
 
   - name: f0_f1_responses
     type: function
@@ -835,21 +893,24 @@ functions:
     python_path: "ndi/fun/stimulus.py"
     input_arguments:
       - name: session
-        type_matlab: "ndi.session"
+        type_matlab: "ndi.session (S)"
         type_python: "Any"
       - name: doc
         type_matlab: "ndi.document"
         type_python: "Any"
       - name: response_index
-        type_matlab: "double"
+        type_matlab: "double (response_index)"
         type_python: "int | None"
         default: "None"
     output_arguments:
       - name: result
+        type_matlab: "[f0, f1, f0_tuningcurve_doc, f1_tuningcurve_doc] (4 outputs)"
         type_python: "dict[str, Any]"
     decision_log: >
-      Exact match. Extracts F0 and F1 responses for a tuning curve.
-      Returns dict with 'f0', 'f1', 'response_type' keys.
+      OUTPUT MISMATCH. MATLAB returns 4 separate outputs: f0, f1,
+      f0_tuningcurve_doc, f1_tuningcurve_doc. Python returns a single
+      dict with 'f0', 'f1', 'response_type' keys. The tuningcurve_doc
+      outputs are not included in the Python return value.
 
   - name: findMixtureName
     type: function
@@ -857,13 +918,14 @@ functions:
     python_path: "ndi/fun/stimulus.py"
     input_arguments:
       - name: dictionary_path
-        type_matlab: "char"
+        type_matlab: "char (mixtureDictionaryPath)"
         type_python: "str"
       - name: mixture
         type_matlab: "cell of structs"
         type_python: "list[dict[str, Any]]"
     output_arguments:
       - name: names
+        type_matlab: "matchingNames"
         type_python: "list[str]"
     decision_log: >
       Exact match. Matches mixture against a JSON mixture dictionary.
@@ -875,21 +937,22 @@ functions:
     python_path: "ndi/fun/stimulus.py"
     input_arguments:
       - name: stimulus_parameters
-        type_matlab: "struct"
+        type_matlab: "struct {mustBeA(stimulus_parameters,'struct')}"
         type_python: "dict[str, Any]"
       - name: config_path
-        type_matlab: "char"
+        type_matlab: "N/A (not in MATLAB)"
         type_python: "str | None"
         default: "None"
     output_arguments:
       - name: tf_value
         type_python: "float | None"
       - name: param_name
+        type_matlab: "tf_name"
         type_python: "str"
     decision_log: >
-      Exact match. Extracts temporal frequency from stimulus
-      parameters. Uses JSON config that maps parameter names to
-      temporal frequency. Returns (None, '') if not found.
+      Exact match for the 1-arg form. Python adds an optional
+      config_path parameter not present in MATLAB (Python-only
+      convenience for specifying custom config file path).
 
   - name: stimulus_tuningcurve_log
     type: function
@@ -897,17 +960,18 @@ functions:
     python_path: "ndi/fun/stimulus.py"
     input_arguments:
       - name: session
-        type_matlab: "ndi.session"
+        type_matlab: "ndi.session (S)"
         type_python: "Any"
       - name: doc
         type_matlab: "ndi.document"
         type_python: "Any"
     output_arguments:
       - name: log_string
+        type_matlab: "log_str"
         type_python: "str"
     decision_log: >
-      Exact match. Retrieves the log string from a dependent
-      tuningcurve_calc document. Returns '' if not found.
+      Exact match. NOTE: MATLAB source is in +ndi/+fun/+calc/;
+      Python places it in ndi.fun.stimulus (different namespace).
 
   # =========================================================================
   # Functions — table.py
@@ -920,33 +984,35 @@ functions:
     python_path: "ndi/fun/table.py"
     input_arguments:
       - name: df
-        type_matlab: "table"
+        type_matlab: "table (dataTable)"
         type_python: "pd.DataFrame"
       - name: column
-        type_matlab: "char | cellstr"
+        type_matlab: "cellstr (columnNames)"
         type_python: "str | list[str]"
       - name: value
-        type_matlab: "any"
+        type_matlab: "any (dataValues)"
         type_python: "Any"
       - name: mode
-        type_matlab: "char"
+        type_matlab: "N/A"
         type_python: "str"
         default: "'identical'"
       - name: string_match
-        type_matlab: "char"
+        type_matlab: "options.stringMatch (default 'identical', validated member)"
         type_python: "str | None"
         default: "None"
       - name: numeric_match
-        type_matlab: "char"
+        type_matlab: "options.numericMatch (default 'eq', validated member)"
         type_python: "str | None"
         default: "None"
     output_arguments:
       - name: mask
+        type_matlab: "rowInd (logical vector)"
         type_python: "pd.Series"
     decision_log: >
-      Exact match. Identifies rows in a DataFrame matching given
-      criteria. Modes: identical, ignoreCase, contains, eq, ne, lt,
-      le, gt, ge. Returns boolean Series.
+      INTERFACE DIFFERENCE. MATLAB uses options.stringMatch (default
+      'identical') and options.numericMatch (default 'eq'). Python
+      adds a positional 'mode' parameter (not in MATLAB) plus
+      'string_match' and 'numeric_match' kwargs (Pythonized names).
 
   - name: identifyValidRows
     type: function
@@ -954,22 +1020,24 @@ functions:
     python_path: "ndi/fun/table.py"
     input_arguments:
       - name: df
-        type_matlab: "table"
+        type_matlab: "table (variableTable)"
         type_python: "pd.DataFrame"
       - name: columns
-        type_matlab: "cellstr"
+        type_matlab: "cellstr (checkVariables, default {})"
         type_python: "list[str] | None"
         default: "None"
       - name: invalid_value
-        type_matlab: "any"
+        type_matlab: "cell (invalidValues, default {NaN})"
         type_python: "Any"
         default: "None"
     output_arguments:
       - name: mask
+        type_matlab: "validInd (logical vector)"
         type_python: "pd.Series"
     decision_log: >
-      Exact match. Identifies rows where specified columns have valid
-      (non-NaN) values. Returns boolean Series (True for valid rows).
+      PARTIAL MATCH. Argument names differ: checkVariables vs columns,
+      invalidValues vs invalid_value. MATLAB default for invalidValues
+      is {NaN}; Python default for invalid_value is None.
 
   - name: join
     type: function
@@ -981,15 +1049,17 @@ functions:
         type_matlab: "cell of tables"
         type_python: "list[pd.DataFrame]"
       - name: unique_variables
-        type_matlab: "cellstr"
+        type_matlab: "options.uniqueVariables (char, default '')"
         type_python: "list[str] | None"
         default: "None"
     output_arguments:
       - name: merged
+        type_matlab: "combinedTable"
         type_python: "pd.DataFrame"
     decision_log: >
       Exact match. Combines multiple DataFrames using common columns
-      as keys. Performs inner merge on common columns.
+      as keys. Performs inner merge on common columns. MATLAB option
+      name is uniqueVariables; Python uses unique_variables.
 
   - name: moveColumnsLeft
     type: function
@@ -997,10 +1067,10 @@ functions:
     python_path: "ndi/fun/table.py"
     input_arguments:
       - name: df
-        type_matlab: "table"
+        type_matlab: "table (dataTable)"
         type_python: "pd.DataFrame"
       - name: columns
-        type_matlab: "cellstr"
+        type_matlab: "cellstr (columnNames)"
         type_python: "list[str]"
     output_arguments:
       - name: reordered
@@ -1014,12 +1084,68 @@ functions:
     python_path: "ndi/fun/table.py"
     input_arguments:
       - name: tables
-        type_matlab: "cell of tables"
+        type_matlab: "cell of tables (tablesCellArray)"
         type_python: "list[pd.DataFrame]"
     output_arguments:
       - name: stacked
+        type_matlab: "T_stacked"
         type_python: "pd.DataFrame"
     decision_log: >
       Exact match. Vertically stacks DataFrames with dissimilar
       columns. Discovers union of all column names and fills missing
       with NaN.
+
+# =========================================================================
+# Not ported / Not applicable
+# =========================================================================
+not_applicable:
+
+  - name: assertAddonOnPath
+    matlab_path: "+ndi/+fun/assertAddonOnPath.m"
+    status: not_applicable
+    decision_log: "MATLAB-specific path/addon management."
+
+  - name: check_Matlab_toolboxes
+    matlab_path: "+ndi/+fun/check_Matlab_toolboxes.m"
+    status: not_applicable
+    decision_log: "MATLAB-specific toolbox checker."
+
+  - name: console
+    matlab_path: "+ndi/+fun/console.m"
+    status: not_applicable
+    decision_log: "MATLAB-specific console utility."
+
+  - name: convertoldnsd2ndi
+    matlab_path: "+ndi/+fun/convertoldnsd2ndi.m"
+    status: not_applicable
+    decision_log: "Legacy NSD-to-NDI migration tool. MATLAB-specific."
+
+  - name: debuglog
+    matlab_path: "+ndi/+fun/debuglog.m"
+    status: not_applicable
+    decision_log: "MATLAB logging utility. Python uses standard logging."
+
+  - name: errlog
+    matlab_path: "+ndi/+fun/errlog.m"
+    status: not_applicable
+    decision_log: "MATLAB logging utility. Python uses standard logging."
+
+  - name: find_calc_directories
+    matlab_path: "+ndi/+fun/find_calc_directories.m"
+    status: not_applicable
+    decision_log: "MATLAB path/toolbox discovery."
+
+  - name: plot_extracellular_spikeshapes
+    matlab_path: "+ndi/+fun/plot_extracellular_spikeshapes.m"
+    status: not_applicable
+    decision_log: "MATLAB GUI plotting function."
+
+  - name: run_Linux_checks
+    matlab_path: "+ndi/+fun/run_Linux_checks.m"
+    status: not_applicable
+    decision_log: "MATLAB Linux environment checks."
+
+  - name: syslog
+    matlab_path: "+ndi/+fun/syslog.m"
+    status: not_applicable
+    decision_log: "MATLAB logging utility. Python uses standard logging."

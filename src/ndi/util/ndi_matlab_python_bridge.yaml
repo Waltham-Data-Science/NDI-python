@@ -32,10 +32,10 @@ functions:
     python_path: "ndi/util/downsampleTimeseries.py"
     input_arguments:
       - name: t_in
-        type_matlab: "double (column vector)"
+        type_matlab: "numeric | datetime (vector, mustBeNumericOrDatetime)"
         type_python: "np.ndarray"
       - name: d_in
-        type_matlab: "double (matrix)"
+        type_matlab: "(:,:) double {mustHaveCompatibleDimensions(d_in, t_in)}"
         type_python: "np.ndarray"
       - name: LP
         type_matlab: "double (scalar, positive)"
@@ -49,7 +49,8 @@ functions:
       Exact match. Downsamples a timeseries with anti-aliasing.
       If sampling frequency > 2*LP, applies a 4th-order Chebyshev
       Type I low-pass filter before downsampling; otherwise returns
-      data unchanged.
+      data unchanged. NOTE: MATLAB also accepts datetime vectors for
+      t_in; Python only accepts np.ndarray.
 
   - name: getHexDiffFromFileObj
     type: function
@@ -57,10 +58,10 @@ functions:
     python_path: "ndi/util/getHexDiffFromFileObj.py"
     input_arguments:
       - name: file_obj1
-        type_matlab: "file handle"
+        type_matlab: "(1,1) did.file.fileobj"
         type_python: "IO[bytes]"
       - name: file_obj2
-        type_matlab: "file handle"
+        type_matlab: "(1,1) did.file.fileobj"
         type_python: "IO[bytes]"
       - name: chunkSize
         type_matlab: "double (scalar, positive)"
@@ -99,6 +100,7 @@ functions:
     decision_log: >
       Exact match. Compares two files and prints only the 16-byte
       lines where they differ. Output is printed to console (no return value).
+      MATLAB default for StopByte is Inf; Python uses None (semantically equivalent).
 
   - name: hexDiffBytes
     type: function
@@ -143,6 +145,7 @@ functions:
     decision_log: >
       Exact match. Prints a hex dump of a file showing hexadecimal
       and ASCII content. Output is printed to console (no return value).
+      MATLAB default for StopByte is Inf; Python uses None (semantically equivalent).
 
   - name: rehydrateJSONNanNull
     type: function
@@ -186,3 +189,33 @@ functions:
       Exact match. Recursively unwraps nested lists (up to 10 levels)
       to retrieve the innermost value. Returns float('nan') if the
       value is None or an empty list (matching MATLAB's NaN for empty cells).
+
+# =========================================================================
+# Not ported / Not applicable
+# =========================================================================
+not_applicable:
+
+  - name: choosefile
+    matlab_path: "+ndi/+util/choosefile.m"
+    status: not_applicable
+    decision_log: "MATLAB GUI dialog (inputdlg). No Python equivalent needed."
+
+  - name: choosefileordir
+    matlab_path: "+ndi/+util/choosefileordir.m"
+    status: not_applicable
+    decision_log: "MATLAB GUI dialog. No Python equivalent needed."
+
+  - name: toolboxdir
+    matlab_path: "+ndi/+util/toolboxdir.m"
+    status: not_applicable
+    decision_log: >
+      MATLAB-specific path resolution using mfilename('fullpath').
+      Python uses ndi.common.PathConstants instead.
+
+  - name: "+openminds sub-package"
+    matlab_path: "+ndi/+util/+openminds/"
+    status: ported_elsewhere
+    decision_log: >
+      MATLAB sub-package with find_instance_name.m and
+      find_techniques_names.m. Ported to ndi.openminds_convert
+      module in Python (different namespace).
