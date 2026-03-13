@@ -178,14 +178,16 @@ class TestMarkGarbageMocked:
         app.clearvalidinterval(probe)
         session.database_remove.assert_not_called()
 
-    def test_loadvalidinterval_returns_list(self):
-        """loadvalidinterval returns a list of intervals."""
+    def test_loadvalidinterval_returns_tuple(self):
+        """loadvalidinterval returns a (intervals, docs) tuple."""
         app, session, probe, timeref = self._make_app_and_probe()
         session.database_search.return_value = []
 
         result = app.loadvalidinterval(probe)
-        assert isinstance(result, list)
-        assert len(result) == 0
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        assert result[0] == []
+        assert result[1] == []
 
     def test_loadvalidinterval_with_real_documents(self):
         """loadvalidinterval correctly reads intervals from real Documents."""
@@ -199,10 +201,11 @@ class TestMarkGarbageMocked:
         )
         session.database_search.return_value = [real_doc]
 
-        result = app.loadvalidinterval(probe)
-        assert len(result) == 1
-        assert result[0]["t0"] == 1.0
-        assert result[0]["t1"] == 3.0
+        intervals, docs = app.loadvalidinterval(probe)
+        assert len(intervals) == 1
+        assert intervals[0]["t0"] == 1.0
+        assert intervals[0]["t1"] == 3.0
+        assert len(docs) == 1
 
     def test_markvalidinterval_no_session_raises(self):
         """markvalidinterval without session raises RuntimeError."""
@@ -225,14 +228,15 @@ class TestMarkGarbageMocked:
         app.clearvalidinterval(probe)
 
     def test_loadvalidinterval_no_session_returns_empty(self):
-        """loadvalidinterval without session returns empty list."""
+        """loadvalidinterval without session returns empty tuple."""
         from ndi.app.markgarbage import MarkGarbage
 
         app = MarkGarbage()
         probe = MagicMock()
 
-        result = app.loadvalidinterval(probe)
-        assert result == []
+        intervals, docs = app.loadvalidinterval(probe)
+        assert intervals == []
+        assert docs == []
 
     def test_mark_then_load_workflow(self):
         """Full mark → load workflow using real Documents."""
@@ -249,7 +253,7 @@ class TestMarkGarbageMocked:
         # Mock the search to return that same real Document
         session.database_search.return_value = [added_doc]
 
-        intervals = app.loadvalidinterval(probe)
+        intervals, docs = app.loadvalidinterval(probe)
         assert len(intervals) == 1
         assert intervals[0]["t0"] == 2.0
         assert intervals[0]["t1"] == 5.0
@@ -269,7 +273,7 @@ class TestMarkGarbageMocked:
 
         # Load after clear (empty)
         session.database_search.return_value = []
-        intervals = app.loadvalidinterval(probe)
+        intervals, docs = app.loadvalidinterval(probe)
         assert len(intervals) == 0
 
     def test_multiple_intervals_workflow(self):
@@ -290,7 +294,7 @@ class TestMarkGarbageMocked:
         # Mock search returning both real docs
         session.database_search.return_value = [doc1, doc2]
 
-        intervals = app.loadvalidinterval(probe)
+        intervals, docs = app.loadvalidinterval(probe)
         assert len(intervals) == 2
         times = sorted([(i["t0"], i["t1"]) for i in intervals])
         assert times[0] == (2.0, 4.0)

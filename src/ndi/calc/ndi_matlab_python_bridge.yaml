@@ -1,0 +1,94 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/calc/
+# The Primary Contract for the ndi.calc namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # =========================================================================
+  # ndi.calc.tuning_fit  (abstract base)
+  # =========================================================================
+  - name: tuning_fit
+    type: class
+    matlab_path: "src/ndi/+ndi/+calc/tuning_fit.m"
+    python_path: "ndi/calc/tuning_fit.py"
+    python_class: "TuningFit"
+    inherits: "ndi.calculator"
+
+    methods:
+      - name: tuning_fit
+        kind: constructor
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Session | None"
+            default: "None"
+          - name: name
+            type_matlab: "char"
+            type_python: "str"
+            default: "''"
+          - name: doc_type
+            type_matlab: "char"
+            type_python: "str"
+            default: "''"
+        output_arguments:
+          - name: obj
+            type_python: "TuningFit"
+        decision_log: >
+          MATLAB constructor takes (session, name, doc_type).
+          Python takes (session, document_type, path_to_doc_type).
+          Semantically equivalent.
+
+      - name: generate_mock_docs
+        input_arguments:
+          - name: scope
+            type_matlab: "char"
+            type_python: "str"
+          - name: number_of_tests
+            type_matlab: "integer"
+            type_python: "int"
+          - name: generate_expected_docs
+            type_matlab: "logical (Name-Value)"
+            type_python: "bool"
+            default: "False"
+          - name: specific_test_inds
+            type_matlab: "double array (Name-Value)"
+            type_python: "list[int] | None"
+            default: "None"
+        output_arguments:
+          - name: docs
+            type_python: "list[Any]"
+          - name: doc_output
+            type_python: "list[Any]"
+          - name: doc_expected_output
+            type_python: "list[Any]"
+        decision_log: >
+          Exact match. Returns 3-tuple. Scope presets: 'highSNR', 'lowSNR'.
+
+      - name: generate_mock_parameters
+        kind: abstract
+        input_arguments:
+          - name: scope
+            type_matlab: "char"
+            type_python: "str"
+          - name: index
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: param_struct
+            type_python: "dict[str, Any]"
+          - name: independent_variable
+            type_python: "list[str]"
+          - name: x
+            type_python: "numpy.ndarray"
+          - name: r
+            type_python: "numpy.ndarray"
+        decision_log: >
+          Exact match. Abstract in both. Returns 4-tuple.
+          Index is 1-based (test number).

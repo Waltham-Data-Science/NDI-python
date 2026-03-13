@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
+
 from . import App
 from .appdoc import AppDoc
 
@@ -48,26 +50,63 @@ class SpikeExtractor(App, AppDoc):
             ],
         )
 
+    def makefilterstruct(
+        self,
+        extraction_doc: Document,
+        sample_rate: float,
+    ) -> dict[str, Any]:
+        """
+        Create a filter structure from extraction parameters.
+
+        MATLAB equivalent: ndi.app.spikeextractor/makefilterstruct
+
+        Args:
+            extraction_doc: Extraction parameters document
+            sample_rate: Sampling rate in Hz
+
+        Returns:
+            Dict with filter coefficients and parameters
+        """
+        raise NotImplementedError("makefilterstruct requires scipy.signal for filter design.")
+
+    def filter(
+        self,
+        data_in: np.ndarray,
+        filterstruct: dict[str, Any],
+    ) -> np.ndarray:
+        """
+        Apply filter to data.
+
+        MATLAB equivalent: ndi.app.spikeextractor/filter
+
+        Args:
+            data_in: Input data array
+            filterstruct: Filter structure from makefilterstruct
+
+        Returns:
+            Filtered data array
+        """
+        raise NotImplementedError("filter requires scipy.signal for signal filtering.")
+
     def extract(
         self,
-        timeseries_obj: Any,
+        ndi_timeseries_obj: Any,
         epoch: Any = None,
         extraction_name: str = "default",
         redo: bool = False,
         t0_t1: Any | None = None,
-    ) -> list[Document]:
+    ) -> None:
         """
         Extract spikes from a timeseries element.
 
+        MATLAB equivalent: ndi.app.spikeextractor/extract
+
         Args:
-            timeseries_obj: Timeseries element or probe
+            ndi_timeseries_obj: Timeseries element or probe
             epoch: Epoch number/id or None for all epochs
             extraction_name: Name of extraction parameters to use
             redo: If True, re-extract even if results exist
             t0_t1: Optional time bounds [t0, t1]
-
-        Returns:
-            List of spikewaves documents created
         """
         raise NotImplementedError(
             "Full spike extraction requires scipy.signal. "
@@ -117,10 +156,28 @@ class SpikeExtractor(App, AppDoc):
         q = Query("").isa(appdoc_type)
         return self._session.database_search(q)
 
-    def isvalid_appdoc_struct(self, appdoc_type: str, appdoc_struct: dict) -> bool:
+    def isvalid_appdoc_struct(self, appdoc_type: str, appdoc_struct: dict) -> tuple[bool, str]:
+        """
+        Validate an appdoc struct.
+
+        MATLAB equivalent: ndi.app.spikeextractor/isvalid_appdoc_struct
+
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
         if appdoc_type == "extraction_parameters":
-            return "filter" in appdoc_struct and "threshold" in appdoc_struct
-        return True
+            if "filter" not in appdoc_struct or "threshold" not in appdoc_struct:
+                return False, "extraction_parameters requires 'filter' and 'threshold' fields"
+            return True, ""
+        return True, ""
+
+    def loaddata_appdoc(self, appdoc_type: str, *args, **kwargs) -> Any:
+        """
+        Load data from an app document.
+
+        MATLAB equivalent: ndi.app.spikeextractor/loaddata_appdoc
+        """
+        return None
 
     def __repr__(self) -> str:
         return f"SpikeExtractor(session={self._session is not None})"

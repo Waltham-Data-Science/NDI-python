@@ -28,7 +28,7 @@ class StimulusDecoder(App):
 
     Example:
         >>> decoder = StimulusDecoder(session)
-        >>> docs = decoder.parse_stimuli(stim_element)
+        >>> newdocs, existingdocs = decoder.parse_stimuli(stim_element)
     """
 
     def __init__(self, session: Session | None = None):
@@ -36,37 +36,42 @@ class StimulusDecoder(App):
 
     def parse_stimuli(
         self,
-        stimulus_element: Any,
+        ndi_element_stim: Any,
         reset: bool = False,
-    ) -> list[Document]:
+    ) -> tuple[list[Document], list[Document]]:
         """
         Parse stimulus presentations from a stimulus element.
 
+        MATLAB equivalent: ndi.app.stimulus.decoder/parse_stimuli
+
         Args:
-            stimulus_element: Stimulus element or probe
+            ndi_element_stim: Stimulus element or probe
             reset: If True, clear existing and re-parse
 
         Returns:
-            List of stimulus_presentation documents
+            Tuple of (newdocs, existingdocs) where newdocs are newly
+            created documents and existingdocs are pre-existing ones.
         """
         if self._session is None:
             raise RuntimeError("No session configured")
 
         if reset:
-            self._clear_presentations(stimulus_element)
+            self._clear_presentations(ndi_element_stim)
 
         # Framework method - actual parsing depends on stimulus format
-        return []
+        return [], []
 
     def load_presentation_time(
         self,
-        stim_doc: Document,
+        stimulus_presentation_doc: Document,
     ) -> dict[str, Any] | None:
         """
         Load presentation timing from a stimulus_presentation document.
 
+        MATLAB equivalent: ndi.app.stimulus.decoder/load_presentation_time
+
         Args:
-            stim_doc: stimulus_presentation document
+            stimulus_presentation_doc: stimulus_presentation document
 
         Returns:
             Dict with 'stimon', 'stimoff' timing arrays, or None
@@ -76,15 +81,15 @@ class StimulusDecoder(App):
         # Framework method
         return None
 
-    def _clear_presentations(self, stimulus_element: Any) -> None:
+    def _clear_presentations(self, ndi_element_stim: Any) -> None:
         """Clear existing stimulus presentation documents."""
         if self._session is None:
             return
         from ...query import Query
 
         q = Query("").isa("stimulus_presentation")
-        if hasattr(stimulus_element, "id"):
-            q = q & Query("").depends_on("stimulus_element_id", stimulus_element.id)
+        if hasattr(ndi_element_stim, "id"):
+            q = q & Query("").depends_on("stimulus_element_id", ndi_element_stim.id)
         docs = self._session.database_search(q)
         for doc in docs:
             self._session.database_remove(doc)

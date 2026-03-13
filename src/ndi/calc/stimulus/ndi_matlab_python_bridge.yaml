@@ -1,0 +1,164 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/calc/stimulus/
+# The Primary Contract for the ndi.calc.stimulus namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # =========================================================================
+  # ndi.calc.stimulus.tuningcurve
+  # =========================================================================
+  - name: tuningcurve
+    type: class
+    matlab_path: "src/ndi/+ndi/+calc/+stimulus/tuningcurve.m"
+    python_path: "ndi/calc/stimulus/tuningcurve.py"
+    python_class: "TuningCurveCalc"
+    inherits: "ndi.calculator"
+
+    methods:
+      - name: tuningcurve
+        kind: constructor
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Session | None"
+            default: "None"
+        output_arguments:
+          - name: obj
+            type_python: "TuningCurveCalc"
+        decision_log: "Exact match."
+
+      - name: calculate
+        input_arguments:
+          - name: parameters
+            type_matlab: "struct"
+            type_python: "dict"
+        output_arguments:
+          - name: doc
+            type_python: "list[Document]"
+        decision_log: "Exact match."
+
+      - name: default_search_for_input_parameters
+        input_arguments: []
+        output_arguments:
+          - name: parameters
+            type_python: "dict"
+        decision_log: "Exact match."
+
+      - name: default_parameters_query
+        input_arguments:
+          - name: parameters_specification
+            type_matlab: "struct"
+            type_python: "dict"
+        output_arguments:
+          - name: query
+            type_python: "list[dict]"
+        decision_log: "Exact match."
+
+      - name: is_valid_dependency_input
+        input_arguments:
+          - name: name
+            type_matlab: "char"
+            type_python: "str"
+          - name: value
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: >
+          DISCREPANCY NOTED: Method exists in MATLAB but is not
+          overridden in Python TuningCurveCalc. Base class default
+          (always True) is used, which is acceptable for now.
+
+      - name: generate_mock_docs
+        input_arguments:
+          - name: scope
+            type_matlab: "char"
+            type_python: "str"
+            default: "'standard'"
+          - name: number_of_tests
+            type_matlab: "integer"
+            type_python: "int"
+            default: "4"
+          - name: generate_expected_docs
+            type_matlab: "logical (Name-Value)"
+            type_python: "bool"
+            default: "False"
+          - name: specific_test_inds
+            type_matlab: "double array (Name-Value)"
+            type_python: "list[int] | None"
+            default: "None"
+        output_arguments:
+          - name: docs
+            type_python: "list[Any]"
+          - name: doc_output
+            type_python: "list[Any]"
+          - name: doc_expected_output
+            type_python: "list[Any]"
+        decision_log: "Exact match. Returns 3-tuple."
+
+      - name: best_value
+        input_arguments:
+          - name: algorithm
+            type_matlab: "char"
+            type_python: "str"
+          - name: stim_response_doc
+            type_matlab: "ndi.document"
+            type_python: "Document"
+          - name: property
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: n
+            type_python: "int"
+          - name: v
+            type_python: "float"
+          - name: property_value
+            type_python: "Any"
+        decision_log: >
+          Exact match. Returns 3-tuple. n is 0-based in Python
+          (internal array index), 1-based in MATLAB.
+
+      - name: best_value_empirical
+        input_arguments:
+          - name: stim_response_doc
+            type_matlab: "ndi.document"
+            type_python: "Document"
+          - name: property
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: n
+            type_python: "int"
+          - name: v
+            type_python: "float"
+          - name: property_value
+            type_python: "Any"
+        decision_log: >
+          Exact match. Returns 3-tuple.
+
+      - name: property_value_array
+        input_arguments:
+          - name: stim_response_doc
+            type_matlab: "ndi.document"
+            type_python: "Document"
+          - name: property
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: pva
+            type_python: "list[Any]"
+        decision_log: "Exact match."
+
+    not_applicable:
+      - name: doc_about
+        reason: "MATLAB documentation method. Python uses docstrings."
+      - name: plot
+        reason: "MATLAB GUI plotting. Python should use matplotlib if needed."

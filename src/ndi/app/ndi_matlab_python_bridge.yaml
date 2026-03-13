@@ -1,0 +1,808 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/app/
+# The Primary Contract for the ndi.app namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # =========================================================================
+  # ndi.app  (base class)
+  # =========================================================================
+  - name: app
+    type: class
+    matlab_path: "src/ndi/+ndi/app.m"
+    python_path: "ndi/app/__init__.py"
+    python_class: "App"
+    inherits: "ndi.documentservice"
+
+    properties:
+      - name: session
+        type_matlab: "ndi.session"
+        type_python: "Session | None"
+        access: "protected set, public get"
+        decision_log: "Exact match."
+
+      - name: name
+        type_matlab: "char"
+        type_python: "str"
+        access: "protected set, public get"
+        decision_log: "Exact match."
+
+    methods:
+      - name: app
+        kind: constructor
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session (optional, via varargin)"
+            type_python: "Session | None"
+            default: "None"
+          - name: name
+            type_matlab: "char (optional, via varargin)"
+            type_python: "str"
+            default: "'generic'"
+        output_arguments:
+          - name: app_obj
+            type_python: "App"
+        decision_log: >
+          MATLAB uses varargin for optional session and name.
+          Python uses explicit keyword arguments with defaults.
+
+      - name: varappname
+        input_arguments: []
+        output_arguments:
+          - name: an
+            type_python: "str"
+        decision_log: >
+          Exact match. MATLAB uses regexprep for sanitization;
+          Python uses re.sub. Both produce valid variable names.
+
+      - name: version_url
+        input_arguments: []
+        output_arguments:
+          - name: version
+            type_python: "str"
+          - name: url
+            type_python: "str"
+        decision_log: >
+          Exact match. Returns 2-tuple (version, url).
+          Both read from git; both fall back to defaults.
+
+      - name: newdocument
+        input_arguments: []
+        output_arguments:
+          - name: doc
+            type_python: "Document"
+        decision_log: >
+          Exact match. Creates 'app' document with name, version,
+          url, os, os_version, interpreter, interpreter_version.
+          MATLAB uses 'Matlab' for interpreter; Python uses 'Python'.
+
+      - name: searchquery
+        input_arguments: []
+        output_arguments:
+          - name: q
+            type_python: "Query"
+        decision_log: >
+          Exact match. Returns query for isa('app') & app.name matches.
+
+  # =========================================================================
+  # ndi.app.appdoc  (mixin)
+  # =========================================================================
+  - name: appdoc
+    type: class
+    matlab_path: "src/ndi/+ndi/+app/appdoc.m"
+    python_path: "ndi/app/appdoc.py"
+    python_class: "AppDoc"
+
+    properties:
+      - name: doc_types
+        type_matlab: "cell array of char"
+        type_python: "list[str]"
+        decision_log: "Exact match."
+
+      - name: doc_document_types
+        type_matlab: "cell array of char"
+        type_python: "list[str]"
+        decision_log: "Exact match."
+
+      - name: doc_session
+        type_matlab: "ndi.session"
+        type_python: "Any"
+        decision_log: "Exact match."
+
+    methods:
+      - name: appdoc
+        kind: constructor
+        input_arguments:
+          - name: doc_types
+            type_matlab: "cell array"
+            type_python: "list[str] | None"
+          - name: doc_document_types
+            type_matlab: "cell array"
+            type_python: "list[str] | None"
+          - name: doc_session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+            default: "None"
+        output_arguments:
+          - name: appdoc_obj
+            type_python: "AppDoc"
+        decision_log: "Exact match."
+
+      - name: add_appdoc
+        input_arguments:
+          - name: appdoc_type
+            type_matlab: "char"
+            type_python: "str"
+          - name: appdoc_struct
+            type_matlab: "struct | char | ndi.document | empty"
+            type_python: "Any"
+            default: "None"
+          - name: docexistsaction
+            type_matlab: "char"
+            type_python: "DocExistsAction"
+            default: "DocExistsAction.ERROR"
+        output_arguments:
+          - name: doc
+            type_matlab: "cell array of ndi.document"
+            type_python: "list[Document]"
+        decision_log: >
+          Exact match. MATLAB accepts struct/char/document/empty for
+          appdoc_struct; Python accepts dict or None. MATLAB returns
+          cell array; Python returns list. DocExistsAction enum mirrors
+          MATLAB string options.
+
+      - name: struct2doc
+        input_arguments:
+          - name: appdoc_type
+            type_matlab: "char"
+            type_python: "str"
+          - name: appdoc_struct
+            type_matlab: "struct"
+            type_python: "dict"
+        output_arguments:
+          - name: doc
+            type_python: "Document | None"
+        decision_log: >
+          Exact match. Base class returns empty/None.
+          Subclasses must override.
+
+      - name: doc2struct
+        input_arguments:
+          - name: appdoc_type
+            type_matlab: "char"
+            type_python: "str"
+          - name: doc
+            type_matlab: "ndi.document"
+            type_python: "Document"
+        output_arguments:
+          - name: appdoc_struct
+            type_python: "dict"
+        decision_log: >
+          Exact match. Reads property_list_name from document.
+
+      - name: defaultstruct_appdoc
+        input_arguments:
+          - name: appdoc_type
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: appdoc_struct
+            type_python: "dict"
+        decision_log: "Exact match."
+
+      - name: loaddata_appdoc
+        input_arguments:
+          - name: appdoc_type
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: data
+            type_python: "Any"
+        decision_log: >
+          Exact match. Base class returns empty/None.
+
+      - name: clear_appdoc
+        input_arguments:
+          - name: appdoc_type
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: b
+            type_matlab: "logical"
+            type_python: "bool"
+        decision_log: >
+          Exact match. Returns True/1 if document was found and removed.
+
+      - name: find_appdoc
+        input_arguments:
+          - name: appdoc_type
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: doc
+            type_matlab: "cell array of ndi.document"
+            type_python: "list[Document]"
+        decision_log: >
+          Exact match. Base class returns empty/[].
+
+      - name: isvalid_appdoc_struct
+        input_arguments:
+          - name: appdoc_type
+            type_matlab: "char"
+            type_python: "str"
+          - name: appdoc_struct
+            type_matlab: "struct"
+            type_python: "dict"
+        output_arguments:
+          - name: b
+            type_matlab: "logical"
+            type_python: "bool"
+          - name: errormsg
+            type_matlab: "char"
+            type_python: "str"
+        decision_log: >
+          DISCREPANCY FIXED: MATLAB returns [b, errormsg] 2-tuple.
+          Python was returning only bool. Updated Python to return
+          tuple[bool, str] to match MATLAB.
+
+      - name: isequal_appdoc_struct
+        input_arguments:
+          - name: appdoc_type
+            type_matlab: "char"
+            type_python: "str"
+          - name: appdoc_struct1
+            type_matlab: "struct"
+            type_python: "dict"
+          - name: appdoc_struct2
+            type_matlab: "struct"
+            type_python: "dict"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: "Exact match."
+
+  # =========================================================================
+  # ndi.app.markgarbage
+  # =========================================================================
+  - name: markgarbage
+    type: class
+    matlab_path: "src/ndi/+ndi/+app/markgarbage.m"
+    python_path: "ndi/app/markgarbage.py"
+    python_class: "MarkGarbage"
+    inherits: "ndi.app"
+
+    methods:
+      - name: markgarbage
+        kind: constructor
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session (optional, via varargin)"
+            type_python: "Session | None"
+            default: "None"
+        output_arguments:
+          - name: obj
+            type_python: "MarkGarbage"
+        decision_log: "Exact match. Name is 'ndi_app_markgarbage'."
+
+      - name: markvalidinterval
+        input_arguments:
+          - name: ndi_epochset_obj
+            type_matlab: "ndi.epoch.epochset"
+            type_python: "Any"
+          - name: t0
+            type_matlab: "double"
+            type_python: "float"
+          - name: timeref_t0
+            type_matlab: "ndi.time.timereference"
+            type_python: "Any"
+          - name: t1
+            type_matlab: "double"
+            type_python: "float"
+          - name: timeref_t1
+            type_matlab: "ndi.time.timereference"
+            type_python: "Any"
+        output_arguments:
+          - name: b
+            type_matlab: "logical"
+            type_python: "bool"
+        decision_log: >
+          DISCREPANCY FIXED: MATLAB returns b (logical). Python was
+          returning None. Updated Python to return bool.
+
+      - name: savevalidinterval
+        input_arguments:
+          - name: ndi_epochset_obj
+            type_matlab: "ndi.epoch.epochset"
+            type_python: "Any"
+          - name: validintervalstruct
+            type_matlab: "struct"
+            type_python: "dict[str, Any]"
+        output_arguments:
+          - name: b
+            type_matlab: "logical"
+            type_python: "bool"
+        decision_log: >
+          DISCREPANCY FIXED: MATLAB returns b (logical). Python was
+          returning None. Updated Python to return bool.
+
+      - name: clearvalidinterval
+        input_arguments:
+          - name: ndi_epochset_obj
+            type_matlab: "ndi.epoch.epochset"
+            type_python: "Any"
+        output_arguments: []
+        decision_log: "Exact match."
+
+      - name: loadvalidinterval
+        input_arguments:
+          - name: ndi_epochset_obj
+            type_matlab: "ndi.epoch.epochset"
+            type_python: "Any"
+        output_arguments:
+          - name: vi
+            type_matlab: "struct array"
+            type_python: "list[dict[str, Any]]"
+          - name: mydoc
+            type_matlab: "cell array of ndi.document"
+            type_python: "list[Document]"
+        decision_log: >
+          DISCREPANCY FIXED: MATLAB returns [vi, mydoc] 2-tuple.
+          Python was returning only intervals list. Updated Python
+          to return tuple of (intervals, docs).
+
+      - name: identifyvalidintervals
+        input_arguments:
+          - name: ndi_epochset_obj
+            type_matlab: "ndi.epoch.epochset"
+            type_python: "Any"
+          - name: timeref
+            type_matlab: "ndi.time.timereference"
+            type_python: "Any"
+          - name: t0
+            type_matlab: "double"
+            type_python: "float"
+          - name: t1
+            type_matlab: "double"
+            type_python: "float"
+        output_arguments:
+          - name: intervals
+            type_matlab: "cell array"
+            type_python: "list[tuple[float, float]]"
+        decision_log: >
+          DISCREPANCY FIXED: Method was missing from Python entirely.
+          Added stub implementation.
+
+  # =========================================================================
+  # ndi.app.spikeextractor
+  # =========================================================================
+  - name: spikeextractor
+    type: class
+    matlab_path: "src/ndi/+ndi/+app/spikeextractor.m"
+    python_path: "ndi/app/spikeextractor.py"
+    python_class: "SpikeExtractor"
+    inherits: "ndi.app & ndi.app.appdoc"
+
+    methods:
+      - name: spikeextractor
+        kind: constructor
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session (optional, via varargin)"
+            type_python: "Session | None"
+            default: "None"
+        output_arguments:
+          - name: obj
+            type_python: "SpikeExtractor"
+        decision_log: "Exact match."
+
+      - name: makefilterstruct
+        input_arguments:
+          - name: extraction_doc
+            type_matlab: "ndi.document"
+            type_python: "Document"
+          - name: sample_rate
+            type_matlab: "double"
+            type_python: "float"
+        output_arguments:
+          - name: filterstruct
+            type_python: "dict[str, Any]"
+        decision_log: >
+          DISCREPANCY FIXED: Method was missing from Python.
+          Added stub implementation.
+
+      - name: filter
+        input_arguments:
+          - name: data_in
+            type_matlab: "double array"
+            type_python: "numpy.ndarray"
+          - name: filterstruct
+            type_matlab: "struct"
+            type_python: "dict[str, Any]"
+        output_arguments:
+          - name: data_out
+            type_python: "numpy.ndarray"
+        decision_log: >
+          DISCREPANCY FIXED: Method was missing from Python.
+          Added stub that requires scipy.signal.
+
+      - name: extract
+        input_arguments:
+          - name: ndi_timeseries_obj
+            type_matlab: "ndi.element.timeseries"
+            type_python: "Any"
+          - name: epoch
+            type_matlab: "integer | char (optional)"
+            type_python: "Any"
+            default: "None"
+          - name: extraction_name
+            type_matlab: "char"
+            type_python: "str"
+            default: "'default'"
+          - name: redo
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "False"
+          - name: t0_t1
+            type_matlab: "double array (optional)"
+            type_python: "Any | None"
+            default: "None"
+        output_arguments: []
+        decision_log: >
+          MATLAB returns void. Python had return type list[Document]
+          which was incorrect. Fixed to return None.
+
+      - name: struct2doc
+        input_arguments:
+          - name: appdoc_type
+            type_matlab: "char"
+            type_python: "str"
+          - name: appdoc_struct
+            type_matlab: "struct"
+            type_python: "dict"
+        output_arguments:
+          - name: doc
+            type_python: "Document"
+        decision_log: "Exact match."
+
+      - name: isvalid_appdoc_struct
+        input_arguments:
+          - name: appdoc_type
+            type_matlab: "char"
+            type_python: "str"
+          - name: appdoc_struct
+            type_matlab: "struct"
+            type_python: "dict"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+          - name: errormsg
+            type_python: "str"
+        decision_log: >
+          DISCREPANCY FIXED: MATLAB returns [b, errormsg]. Python
+          was returning only bool. Updated to return tuple.
+
+      - name: find_appdoc
+        input_arguments:
+          - name: appdoc_type
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: doc
+            type_python: "list[Document]"
+        decision_log: "Exact match."
+
+      - name: loaddata_appdoc
+        input_arguments:
+          - name: appdoc_type
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: data
+            type_python: "Any"
+        decision_log: >
+          DISCREPANCY FIXED: Method was missing from Python.
+          Added stub.
+
+  # =========================================================================
+  # ndi.app.spikesorter
+  # =========================================================================
+  - name: spikesorter
+    type: class
+    matlab_path: "src/ndi/+ndi/+app/spikesorter.m"
+    python_path: "ndi/app/spikesorter.py"
+    python_class: "SpikeSorter"
+    inherits: "ndi.app & ndi.app.appdoc"
+
+    methods:
+      - name: spikesorter
+        kind: constructor
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session (optional, via varargin)"
+            type_python: "Session | None"
+            default: "None"
+        output_arguments:
+          - name: obj
+            type_python: "SpikeSorter"
+        decision_log: "Exact match."
+
+      - name: check_sorting_parameters
+        input_arguments:
+          - name: sorting_parameters_struct
+            type_matlab: "struct"
+            type_python: "dict[str, Any]"
+        output_arguments:
+          - name: sorting_parameters_struct
+            type_python: "dict[str, Any]"
+        decision_log: >
+          DISCREPANCY FIXED: Method was missing from Python.
+          Added implementation that validates and fills defaults.
+
+      - name: loadwaveforms
+        input_arguments:
+          - name: ndi_timeseries_obj
+            type_matlab: "ndi.element.timeseries"
+            type_python: "Any"
+          - name: extraction_name
+            type_matlab: "char"
+            type_python: "str"
+            default: "'default'"
+        output_arguments:
+          - name: waveforms
+            type_python: "numpy.ndarray"
+          - name: waveformparams
+            type_python: "dict[str, Any]"
+          - name: spiketimes
+            type_python: "numpy.ndarray"
+          - name: epochinfo
+            type_python: "list[dict]"
+          - name: extraction_params_doc
+            type_python: "Document"
+          - name: waveform_docs
+            type_python: "list[Document]"
+        decision_log: >
+          DISCREPANCY FIXED: Method was missing from Python.
+          Added stub. Returns 6-tuple matching MATLAB.
+
+      - name: spike_sort
+        input_arguments:
+          - name: ndi_timeseries_obj
+            type_matlab: "ndi.element.timeseries"
+            type_python: "Any"
+          - name: extraction_name
+            type_matlab: "char"
+            type_python: "str"
+            default: "'default'"
+          - name: sorting_parameters_name
+            type_matlab: "char"
+            type_python: "str"
+            default: "'default'"
+          - name: redo
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "False"
+        output_arguments:
+          - name: spike_cluster_doc
+            type_python: "list[Document]"
+        decision_log: "Exact match."
+
+      - name: clusters2neurons
+        input_arguments:
+          - name: ndi_timeseries_obj
+            type_matlab: "ndi.element.timeseries"
+            type_python: "Any"
+          - name: sorting_parameters_name
+            type_matlab: "char"
+            type_python: "str"
+            default: "'default'"
+          - name: extraction_parameters_name
+            type_matlab: "char"
+            type_python: "str"
+            default: "'default'"
+          - name: redo
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "False"
+        output_arguments: []
+        decision_log: >
+          MATLAB returns void. Python had return type list[Any]
+          which was incorrect. Fixed to return None.
+
+      - name: struct2doc
+        input_arguments:
+          - name: appdoc_type
+            type_python: "str"
+          - name: appdoc_struct
+            type_python: "dict"
+        output_arguments:
+          - name: doc
+            type_python: "Document"
+        decision_log: "Exact match."
+
+      - name: isvalid_appdoc_struct
+        input_arguments:
+          - name: appdoc_type
+            type_python: "str"
+          - name: appdoc_struct
+            type_python: "dict"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+          - name: errormsg
+            type_python: "str"
+        decision_log: >
+          DISCREPANCY FIXED: MATLAB returns [b, errormsg]. Python
+          was returning only bool. Updated to return tuple.
+
+      - name: find_appdoc
+        input_arguments:
+          - name: appdoc_type
+            type_python: "str"
+        output_arguments:
+          - name: doc
+            type_python: "list[Document]"
+        decision_log: "Exact match."
+
+      - name: loaddata_appdoc
+        input_arguments:
+          - name: appdoc_type
+            type_python: "str"
+        output_arguments:
+          - name: data
+            type_python: "Any"
+        decision_log: >
+          DISCREPANCY FIXED: Method was missing from Python.
+          Added stub.
+
+  # =========================================================================
+  # ndi.app.oridirtuning
+  # =========================================================================
+  - name: oridirtuning
+    type: class
+    matlab_path: "src/ndi/+ndi/+app/oridirtuning.m"
+    python_path: "ndi/app/oridirtuning.py"
+    python_class: "OriDirTuning"
+    inherits: "ndi.app & ndi.app.appdoc"
+
+    methods:
+      - name: oridirtuning
+        kind: constructor
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session (optional, via varargin)"
+            type_python: "Session | None"
+            default: "None"
+        output_arguments:
+          - name: obj
+            type_python: "OriDirTuning"
+        decision_log: "Exact match."
+
+      - name: calculate_all_tuning_curves
+        input_arguments:
+          - name: ndi_element_obj
+            type_matlab: "ndi.element"
+            type_python: "Any"
+          - name: docexistsaction
+            type_matlab: "char"
+            type_python: "str"
+            default: "'Replace'"
+        output_arguments:
+          - name: tuning_doc
+            type_python: "list[Document]"
+        decision_log: "Exact match."
+
+      - name: calculate_tuning_curve
+        input_arguments:
+          - name: ndi_element_obj
+            type_matlab: "ndi.element"
+            type_python: "Any"
+          - name: ndi_response_doc
+            type_matlab: "ndi.document"
+            type_python: "Document"
+          - name: do_add
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "True"
+        output_arguments:
+          - name: tuning_doc
+            type_python: "Document | None"
+        decision_log: >
+          DISCREPANCY FIXED: Method was missing from Python.
+          Added stub.
+
+      - name: calculate_all_oridir_indexes
+        input_arguments:
+          - name: ndi_element_obj
+            type_matlab: "ndi.element"
+            type_python: "Any"
+          - name: docexistsaction
+            type_matlab: "char"
+            type_python: "str"
+            default: "'Replace'"
+        output_arguments:
+          - name: oriprops
+            type_python: "list[Document]"
+        decision_log: "Exact match."
+
+      - name: calculate_oridir_indexes
+        input_arguments:
+          - name: tuning_doc
+            type_matlab: "ndi.document"
+            type_python: "Document"
+          - name: do_add
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "True"
+          - name: do_plot
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "False"
+        output_arguments:
+          - name: oriprops
+            type_python: "Document | None"
+        decision_log: >
+          DISCREPANCY FIXED: Method was missing from Python.
+          Added stub.
+
+      - name: is_oridir_stimulus_response
+        input_arguments:
+          - name: response_doc
+            type_matlab: "ndi.document"
+            type_python: "Document"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: "Exact match."
+
+      - name: plot_oridir_response
+        input_arguments:
+          - name: oriprops_doc
+            type_matlab: "ndi.document"
+            type_python: "Document"
+        output_arguments: []
+        decision_log: >
+          DISCREPANCY FIXED: Method was missing from Python.
+          Added stub (plotting not applicable without GUI).
+        not_applicable: "Python has no direct GUI equivalent."
+
+      - name: struct2doc
+        input_arguments:
+          - name: appdoc_type
+            type_python: "str"
+          - name: appdoc_struct
+            type_python: "dict"
+        output_arguments:
+          - name: doc
+            type_python: "Document"
+        decision_log: "Exact match."
+
+      - name: find_appdoc
+        input_arguments:
+          - name: appdoc_type
+            type_python: "str"
+        output_arguments:
+          - name: doc
+            type_python: "list[Document]"
+        decision_log: "Exact match."
+
+      - name: isvalid_appdoc_struct
+        input_arguments:
+          - name: appdoc_type
+            type_python: "str"
+          - name: appdoc_struct
+            type_python: "dict"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+          - name: errormsg
+            type_python: "str"
+        decision_log: >
+          DISCREPANCY FIXED: MATLAB returns [b, errormsg]. Python
+          was returning only bool. Updated to return tuple.

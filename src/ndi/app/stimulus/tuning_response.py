@@ -37,17 +37,19 @@ class TuningResponse(App):
 
     def stimulus_responses(
         self,
-        stimulus_element: Any,
-        timeseries_obj: Any,
+        ndi_element_stim: Any,
+        ndi_timeseries_obj: Any,
         reset: bool = False,
         do_mean_only: bool = False,
     ) -> list[Document]:
         """
         Compute responses to a stimulus set.
 
+        MATLAB equivalent: ndi.app.stimulus.tuning_response/stimulus_responses
+
         Args:
-            stimulus_element: Stimulus element with presentations
-            timeseries_obj: Response timeseries (e.g., neuron)
+            ndi_element_stim: Stimulus element with presentations
+            ndi_timeseries_obj: Response timeseries (e.g., neuron)
             reset: Clear existing results first
             do_mean_only: Only compute mean (not frequency components)
 
@@ -59,17 +61,44 @@ class TuningResponse(App):
             "This class provides the framework structure."
         )
 
+    def compute_stimulus_response_scalar(
+        self,
+        ndi_stim_obj: Any,
+        ndi_timeseries_obj: Any,
+        stim_doc: Document,
+        control_doc: Document | None = None,
+    ) -> Document | None:
+        """
+        Compute scalar response for a single stimulus presentation.
+
+        MATLAB equivalent: ndi.app.stimulus.tuning_response/compute_stimulus_response_scalar
+
+        Args:
+            ndi_stim_obj: Stimulus element
+            ndi_timeseries_obj: Response timeseries element
+            stim_doc: Stimulus presentation document
+            control_doc: Control stimulus document, or None
+
+        Returns:
+            stimulus_response_scalar document, or None
+        """
+        raise NotImplementedError(
+            "Stimulus response scalar computation requires signal processing."
+        )
+
     def tuning_curve(
         self,
-        response_doc: Document,
+        stim_response_doc: Document,
         independent_label: str = "angle",
         independent_parameter: str = "angle",
     ) -> Document | None:
         """
         Create a tuning curve from stimulus responses.
 
+        MATLAB equivalent: ndi.app.stimulus.tuning_response/tuning_curve
+
         Args:
-            response_doc: stimulus_response_scalar document
+            stim_response_doc: stimulus_response_scalar document
             independent_label: Label for independent variable
             independent_parameter: Parameter name to vary
 
@@ -80,14 +109,16 @@ class TuningResponse(App):
 
     def label_control_stimuli(
         self,
-        stimulus_element: Any,
+        stimulus_element_obj: Any,
         reset: bool = False,
     ) -> list[Document]:
         """
         Label control stimuli in a stimulus set.
 
+        MATLAB equivalent: ndi.app.stimulus.tuning_response/label_control_stimuli
+
         Args:
-            stimulus_element: Stimulus element
+            stimulus_element_obj: Stimulus element
             reset: Clear existing labels first
 
         Returns:
@@ -95,32 +126,86 @@ class TuningResponse(App):
         """
         return []
 
+    def control_stimulus(
+        self,
+        stim_doc: Document,
+    ) -> tuple[list[int], Document | None]:
+        """
+        Determine control stimulus IDs for a stimulus presentation.
+
+        MATLAB equivalent: ndi.app.stimulus.tuning_response/control_stimulus
+
+        Args:
+            stim_doc: Stimulus presentation document
+
+        Returns:
+            Tuple of (cs_ids, cs_doc) where cs_ids is a list of
+            control stimulus indices and cs_doc is the control
+            stimulus document.
+        """
+        raise NotImplementedError("Control stimulus identification requires stimulus analysis.")
+
     def find_tuningcurve_document(
         self,
-        element_obj: Any,
+        ndi_element_obj: Any,
         epochid: str,
         response_type: str = "mean",
-    ) -> list[Document]:
+    ) -> tuple[list[Document], list[Document]]:
         """
         Find existing tuning curve documents.
 
+        MATLAB equivalent: ndi.app.stimulus.tuning_response/find_tuningcurve_document
+
         Args:
-            element_obj: Neural element
+            ndi_element_obj: Neural element
             epochid: Epoch ID
             response_type: Response type (mean, f1, etc.)
 
         Returns:
-            List of matching tuning curve documents
+            Tuple of (tc_docs, srs_docs) where tc_docs are tuning curve
+            documents and srs_docs are stimulus response scalar documents.
         """
         if self._session is None:
-            return []
+            return [], []
 
         from ...query import Query
 
         q = Query("").isa("stimulus_tuningcurve") & Query("").depends_on(
-            "element_id", element_obj.id
+            "element_id", ndi_element_obj.id
         )
-        return self._session.database_search(q)
+        tc_docs = self._session.database_search(q)
+
+        q_srs = Query("").isa("stimulus_response_scalar") & Query("").depends_on(
+            "element_id", ndi_element_obj.id
+        )
+        srs_docs = self._session.database_search(q_srs)
+
+        return tc_docs, srs_docs
+
+    def make_1d_tuning(
+        self,
+        stim_response_doc: Document,
+        param_to_vary: str,
+        param_to_vary_label: str,
+        param_to_fix: list[str],
+    ) -> list[Document]:
+        """
+        Create 1D tuning curves from a multi-dimensional parameter space.
+
+        MATLAB equivalent: ndi.app.stimulus.tuning_response/make_1d_tuning
+
+        Args:
+            stim_response_doc: stimulus_response_scalar document
+            param_to_vary: Parameter name to vary
+            param_to_vary_label: Label for the varying parameter
+            param_to_fix: List of parameter names to hold fixed
+
+        Returns:
+            List of stimulus_tuningcurve documents
+        """
+        raise NotImplementedError(
+            "1D tuning curve extraction requires multi-dimensional response analysis."
+        )
 
     def __repr__(self) -> str:
         return f"TuningResponse(session={self._session is not None})"

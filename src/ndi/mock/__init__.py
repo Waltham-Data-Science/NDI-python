@@ -14,7 +14,9 @@ from __future__ import annotations
 import json
 import random
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
+
+import numpy as np
 
 
 def subject_stimulator_neuron(
@@ -138,7 +140,80 @@ def stimulus_presentation(
     }
 
 
-def clear_mock_docs(session: Any) -> int:
+def stimulus_response(
+    session: Any,
+    parameter_struct: dict[str, Any],
+    independent_variables: list[str],
+    X: np.ndarray,
+    R: np.ndarray,
+    noise: float,
+    reps: int,
+    stim_duration: float = 2.0,
+    interstimulus_interval: float = 3.0,
+    epochid: str = "mockepoch",
+) -> dict[str, Any]:
+    """Create a complete mock stimulus-response dataset.
+
+    MATLAB equivalent: ndi.mock.fun.stimulus_response
+
+    Creates a mock subject, stimulator, neuron, stimulus presentation,
+    control stimulus labels, stimulus response data, and tuning curve
+    documents.
+
+    Args:
+        session: An NDI session instance.
+        parameter_struct: Base parameters common to all stimuli.
+        independent_variables: List of parameter names that vary.
+        X: Independent variable values array. Shape (N,) for 1D or
+            (N, M) for M variables.
+        R: Response values (firing rates) for each stimulus.
+        noise: Noise level relative to response magnitude.
+        reps: Number of repetitions per stimulus.
+        stim_duration: Duration of each stimulus in seconds.
+        interstimulus_interval: Gap between stimuli in seconds.
+        epochid: Epoch identifier.
+
+    Returns:
+        Dict with keys: ``'subject'``, ``'stimulator'``, ``'spikes'``,
+        ``'stimulus_presentation'``, ``'control_stimulus'``,
+        ``'stimulus_response'``, ``'tuning_curve'``.
+    """
+    X = np.asarray(X, dtype=float)
+    R = np.asarray(R, dtype=float)
+
+    # Build param_values from X
+    if X.ndim == 1:
+        param_values = [[float(x)] for x in X]
+    else:
+        param_values = [list(row) for row in X]
+
+    # Create mock elements
+    mock_elements = subject_stimulator_neuron(session)
+
+    # Create stimulus presentation data
+    pres_data = stimulus_presentation(
+        independent_variables=independent_variables,
+        param_values=param_values,
+        response_rates=R.tolist(),
+        noise=noise,
+        reps=reps,
+        stim_duration=stim_duration,
+        interstimulus_interval=interstimulus_interval,
+        epoch_id=epochid,
+    )
+
+    return {
+        "subject": mock_elements["subject"],
+        "stimulator": mock_elements["stimulator"],
+        "spikes": mock_elements["spikes"],
+        "stimulus_presentation": pres_data,
+        "control_stimulus": None,
+        "stimulus_response": None,
+        "tuning_curve": None,
+    }
+
+
+def clear_mock_docs(session: Any) -> None:
     """Remove all mock documents from a session.
 
     MATLAB equivalent: ndi.mock.fun.clear
@@ -147,28 +222,28 @@ def clear_mock_docs(session: Any) -> int:
 
     Args:
         session: An NDI session instance.
-
-    Returns:
-        Number of documents removed.
     """
     from ndi.query import Query
 
-    count = 0
     try:
-        docs = session.database_search(Query("").isa("subject"))
-        for doc in docs:
-            props = doc.document_properties if hasattr(doc, "document_properties") else doc
-            if isinstance(props, dict):
-                local_id = props.get("subject", {}).get("local_identifier", "")
-                if "mock" in local_id.lower():
-                    try:
-                        session.database_rm(doc)
-                        count += 1
-                    except Exception:
-                        pass
+        docs = session.database_search(Query("subject.local_identifier", "contains_string", "mock"))
+        if docs:
+            session.database_rm(docs)
     except Exception:
-        pass
-    return count
+        # Fallback: search and remove individually
+        try:
+            docs = session.database_search(Query("").isa("subject"))
+            for doc in docs:
+                props = doc.document_properties if hasattr(doc, "document_properties") else doc
+                if isinstance(props, dict):
+                    local_id = props.get("subject", {}).get("local_identifier", "")
+                    if "mock" in local_id.lower():
+                        try:
+                            session.database_rm(doc)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
 
 
 class CalculatorTest:
@@ -296,6 +371,7 @@ class CalculatorTest:
 __all__ = [
     "subject_stimulator_neuron",
     "stimulus_presentation",
+    "stimulus_response",
     "clear_mock_docs",
     "CalculatorTest",
 ]

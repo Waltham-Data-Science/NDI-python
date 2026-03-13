@@ -95,8 +95,9 @@ class TestMarkGarbage:
 
     def test_load_no_session(self):
         app = MarkGarbage()
-        result = app.loadvalidinterval(SimpleNamespace(id="elem1"))
-        assert result == []
+        intervals, docs = app.loadvalidinterval(SimpleNamespace(id="elem1"))
+        assert intervals == []
+        assert docs == []
 
     def test_markvalidinterval_calls_save(self):
         """Verify markvalidinterval builds struct and calls savevalidinterval."""
@@ -168,24 +169,26 @@ class TestSpikeExtractor:
 
     def test_isvalid_struct_valid(self):
         app = SpikeExtractor()
-        result = app.isvalid_appdoc_struct(
+        b, errormsg = app.isvalid_appdoc_struct(
             "extraction_parameters",
             {"filter": {}, "threshold": {}},
         )
-        assert result is True
+        assert b is True
+        assert errormsg == ""
 
     def test_isvalid_struct_invalid(self):
         app = SpikeExtractor()
-        result = app.isvalid_appdoc_struct(
+        b, errormsg = app.isvalid_appdoc_struct(
             "extraction_parameters",
             {"filter": {}},  # missing threshold
         )
-        assert result is False
+        assert b is False
+        assert "filter" in errormsg or "threshold" in errormsg
 
     def test_isvalid_struct_other_type(self):
         app = SpikeExtractor()
-        result = app.isvalid_appdoc_struct("spikewaves", {})
-        assert result is True
+        b, errormsg = app.isvalid_appdoc_struct("spikewaves", {})
+        assert b is True
 
     def test_find_appdoc_no_session(self):
         app = SpikeExtractor()
@@ -250,19 +253,21 @@ class TestSpikeSorter:
 
     def test_isvalid_struct_valid(self):
         app = SpikeSorter()
-        result = app.isvalid_appdoc_struct(
+        b, errormsg = app.isvalid_appdoc_struct(
             "sorting_parameters",
             {"num_pca_features": 4},
         )
-        assert result is True
+        assert b is True
+        assert errormsg == ""
 
     def test_isvalid_struct_invalid(self):
         app = SpikeSorter()
-        result = app.isvalid_appdoc_struct(
+        b, errormsg = app.isvalid_appdoc_struct(
             "sorting_parameters",
             {"interpolation": 2},  # missing num_pca_features
         )
-        assert result is False
+        assert b is False
+        assert "num_pca_features" in errormsg
 
     def test_find_appdoc_no_session(self):
         app = SpikeSorter()
@@ -300,15 +305,16 @@ class TestStimulusDecoder:
         with pytest.raises(RuntimeError, match="No session"):
             app.parse_stimuli(SimpleNamespace())
 
-    def test_parse_returns_empty_list(self):
+    def test_parse_returns_empty_tuple(self):
         session = SimpleNamespace(
             id=lambda: "s1",
             database_search=lambda q: [],
             database_remove=lambda d: None,
         )
         app = StimulusDecoder(session=session)
-        result = app.parse_stimuli(SimpleNamespace(id="stim1"))
-        assert result == []
+        newdocs, existingdocs = app.parse_stimuli(SimpleNamespace(id="stim1"))
+        assert newdocs == []
+        assert existingdocs == []
 
     def test_load_presentation_time_no_session(self):
         app = StimulusDecoder()
@@ -374,11 +380,12 @@ class TestTuningResponse:
 
     def test_find_tuningcurve_no_session(self):
         app = TuningResponse()
-        result = app.find_tuningcurve_document(
+        tc_docs, srs_docs = app.find_tuningcurve_document(
             SimpleNamespace(id="elem1"),
             "epoch1",
         )
-        assert result == []
+        assert tc_docs == []
+        assert srs_docs == []
 
     def test_find_tuningcurve_with_session(self):
         session = SimpleNamespace(
@@ -386,11 +393,12 @@ class TestTuningResponse:
             database_search=lambda q: [],
         )
         app = TuningResponse(session=session)
-        result = app.find_tuningcurve_document(
+        tc_docs, srs_docs = app.find_tuningcurve_document(
             SimpleNamespace(id="elem1"),
             "epoch1",
         )
-        assert result == []
+        assert tc_docs == []
+        assert srs_docs == []
 
     def test_repr(self):
         assert "TuningResponse" in repr(TuningResponse())
@@ -492,7 +500,9 @@ class TestOriDirTuning:
 
     def test_isvalid(self):
         app = OriDirTuning()
-        assert app.isvalid_appdoc_struct("tuning_curve", {}) is True
+        b, errormsg = app.isvalid_appdoc_struct("tuning_curve", {})
+        assert b is True
+        assert errormsg == ""
 
     def test_repr(self):
         assert "OriDirTuning" in repr(OriDirTuning())
