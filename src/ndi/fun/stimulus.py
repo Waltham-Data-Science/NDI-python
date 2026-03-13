@@ -77,7 +77,7 @@ def f0_f1_responses(
     session: Any,
     doc: Any,
     response_index: int | None = None,
-) -> dict[str, Any]:
+) -> tuple[Any, Any, Any | None, Any | None]:
     """Extract F0 and F1 responses for a tuning curve.
 
     MATLAB equivalent: ndi.fun.stimulus.f0_f1_responses
@@ -88,19 +88,22 @@ def f0_f1_responses(
         response_index: Stimulus index (0-based). If None, uses max response.
 
     Returns:
-        Dict with ``'f0'``, ``'f1'``, ``'response_type'`` keys.
+        Tuple of ``(f0, f1, f0_tuningcurve_doc, f1_tuningcurve_doc)``
+        where *f0* and *f1* are the response values (or None), and
+        *f0_tuningcurve_doc* and *f1_tuningcurve_doc* are the
+        corresponding tuning curve documents (or None).
     """
     response_type, scalar_doc = tuning_curve_to_response_type(session, doc)
 
     props = doc.document_properties if hasattr(doc, "document_properties") else doc
     if not isinstance(props, dict):
-        return {"f0": None, "f1": None, "response_type": response_type}
+        return None, None, None, None
 
     tc_data = props.get("stimulus_tuningcurve", {})
     responses = tc_data.get("responses", [])
 
     if not responses:
-        return {"f0": None, "f1": None, "response_type": response_type}
+        return None, None, None, None
 
     if response_index is not None and 0 <= response_index < len(responses):
         val = responses[response_index]
@@ -108,11 +111,12 @@ def f0_f1_responses(
         # Use max
         val = max(responses) if responses else None
 
-    return {
-        "f0": val if response_type == "mean" else None,
-        "f1": val if response_type == "F1" else None,
-        "response_type": response_type,
-    }
+    f0 = val if response_type == "mean" else None
+    f1 = val if response_type == "F1" else None
+    f0_doc = doc if response_type == "mean" else None
+    f1_doc = doc if response_type == "F1" else None
+
+    return f0, f1, f0_doc, f1_doc
 
 
 def findMixtureName(

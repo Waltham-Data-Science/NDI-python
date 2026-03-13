@@ -170,11 +170,11 @@ def stimulusTimeseries(
     stimid: list | np.ndarray | None = None,
     linewidth: float = 2.0,
     linecolor: tuple[float, float, float] = (0.0, 0.0, 0.0),
-    fontsize: float = 12.0,
-    fontweight: str = "normal",
-    fontcolor: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    FontSize: float = 12.0,
+    FontWeight: str = "normal",
+    FontColor: tuple[float, float, float] = (0.0, 0.0, 0.0),
     textycoord: float | None = None,
-    horizontal_alignment: str = "center",
+    HorizontalAlignment: str = "center",
 ) -> tuple[list[Any], list[Any], Any, Any]:
     """Plot stimulus occurrence as thick bars on a time series plot.
 
@@ -193,11 +193,11 @@ def stimulusTimeseries(
             attempts to read ``stimid`` from the probe data.
         linewidth: Width of the stimulus bars.
         linecolor: RGB tuple for bar color.
-        fontsize: Font size for stimulus ID labels.
-        fontweight: Font weight for labels (``'normal'`` or ``'bold'``).
-        fontcolor: RGB tuple for label color.
+        FontSize: Font size for stimulus ID labels.
+        FontWeight: Font weight for labels (``'normal'`` or ``'bold'``).
+        FontColor: RGB tuple for label color.
         textycoord: Y-coordinate for text labels.  Defaults to ``y + 1``.
-        horizontal_alignment: Horizontal alignment for labels.
+        HorizontalAlignment: Horizontal alignment for labels.
 
     Returns:
         Tuple ``(h_lines, h_texts, stimulus_data, stimulus_time_data)``
@@ -273,10 +273,10 @@ def stimulusTimeseries(
                 mid,
                 textycoord,
                 str(stimid[idx]),
-                fontsize=fontsize,
-                fontweight=fontweight,
-                color=fontcolor,
-                ha=horizontal_alignment,
+                fontsize=FontSize,
+                fontweight=FontWeight,
+                color=FontColor,
+                ha=HorizontalAlignment,
                 va="bottom",
             )
             h_texts.append(ht)

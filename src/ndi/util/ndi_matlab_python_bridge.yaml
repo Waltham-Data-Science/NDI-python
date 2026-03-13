@@ -1,0 +1,221 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/util/
+# The Primary Contract for the ndi.util namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Standalone functions
+# =========================================================================
+functions:
+
+  - name: datestamp2datetime
+    type: function
+    matlab_path: "+ndi/+util/datestamp2datetime.m"
+    python_path: "ndi/util/datestamp2datetime.py"
+    input_arguments:
+      - name: datestampStr
+        type_matlab: "char"
+        type_python: "str"
+    output_arguments:
+      - name: dt
+        type_python: "datetime.datetime"
+    decision_log: >
+      Exact match. Converts an NDI datestamp string (ISO 8601 with
+      milliseconds and timezone offset) to a Python datetime object in UTC.
+
+  - name: downsampleTimeseries
+    type: function
+    matlab_path: "+ndi/+util/downsampleTimeseries.m"
+    python_path: "ndi/util/downsampleTimeseries.py"
+    input_arguments:
+      - name: t_in
+        type_matlab: "numeric | datetime (vector, mustBeNumericOrDatetime)"
+        type_python: "np.ndarray"
+      - name: d_in
+        type_matlab: "(:,:) double {mustHaveCompatibleDimensions(d_in, t_in)}"
+        type_python: "np.ndarray"
+      - name: LP
+        type_matlab: "double (scalar, positive)"
+        type_python: "Annotated[float, Field(gt=0)]"
+    output_arguments:
+      - name: t_out
+        type_python: "np.ndarray"
+      - name: d_out
+        type_python: "np.ndarray"
+    decision_log: >
+      Exact match. Downsamples a timeseries with anti-aliasing.
+      If sampling frequency > 2*LP, applies a 4th-order Chebyshev
+      Type I low-pass filter before downsampling; otherwise returns
+      data unchanged. NOTE: MATLAB also accepts datetime vectors for
+      t_in; Python only accepts np.ndarray.
+
+  - name: getHexDiffFromFileObj
+    type: function
+    matlab_path: "+ndi/+util/getHexDiffFromFileObj.m"
+    python_path: "ndi/util/getHexDiffFromFileObj.py"
+    input_arguments:
+      - name: file_obj1
+        type_matlab: "(1,1) did.file.fileobj"
+        type_python: "IO[bytes]"
+      - name: file_obj2
+        type_matlab: "(1,1) did.file.fileobj"
+        type_python: "IO[bytes]"
+      - name: chunkSize
+        type_matlab: "double (scalar, positive)"
+        type_python: "Annotated[int, Field(gt=0)]"
+        default: "1048576"
+    output_arguments:
+      - name: are_identical
+        type_python: "bool"
+      - name: diff_output
+        type_python: "str"
+    decision_log: >
+      Exact match. Compares two file-like objects chunk by chunk.
+      Returns (True, '') if identical, or (False, hex_diff_string)
+      for first mismatched chunk.
+
+  - name: hexDiff
+    type: function
+    matlab_path: "+ndi/+util/hexDiff.m"
+    python_path: "ndi/util/hexDiff.py"
+    input_arguments:
+      - name: filename1
+        type_matlab: "char"
+        type_python: "str | Path"
+      - name: filename2
+        type_matlab: "char"
+        type_python: "str | Path"
+      - name: StartByte
+        type_matlab: "double (scalar, non-negative)"
+        type_python: "Annotated[int, Field(ge=0)]"
+        default: "0"
+      - name: StopByte
+        type_matlab: "double (scalar, non-negative)"
+        type_python: "Annotated[int, Field(ge=0)] | None"
+        default: "None"
+    output_arguments: []
+    decision_log: >
+      Exact match. Compares two files and prints only the 16-byte
+      lines where they differ. Output is printed to console (no return value).
+      MATLAB default for StopByte is Inf; Python uses None (semantically equivalent).
+
+  - name: hexDiffBytes
+    type: function
+    matlab_path: "+ndi/+util/hexDiffBytes.m"
+    python_path: "ndi/util/hexDiffBytes.py"
+    input_arguments:
+      - name: data1
+        type_matlab: "uint8 (vector)"
+        type_python: "bytes"
+      - name: data2
+        type_matlab: "uint8 (vector)"
+        type_python: "bytes"
+      - name: StartOffset
+        type_matlab: "double (scalar, non-negative)"
+        type_python: "Annotated[int, Field(ge=0)]"
+        default: "0"
+    output_arguments:
+      - name: diff_string
+        type_python: "str"
+    decision_log: >
+      Exact match. Compares two byte sequences and returns a formatted
+      hex diff string showing only differing 16-byte lines. Returns
+      empty string if identical.
+
+  - name: hexDump
+    type: function
+    matlab_path: "+ndi/+util/hexDump.m"
+    python_path: "ndi/util/hexDump.py"
+    input_arguments:
+      - name: filename
+        type_matlab: "char"
+        type_python: "str | Path"
+      - name: StartByte
+        type_matlab: "double (scalar, non-negative)"
+        type_python: "Annotated[int, Field(ge=0)]"
+        default: "0"
+      - name: StopByte
+        type_matlab: "double (scalar, non-negative)"
+        type_python: "Annotated[int, Field(ge=0)] | None"
+        default: "None"
+    output_arguments: []
+    decision_log: >
+      Exact match. Prints a hex dump of a file showing hexadecimal
+      and ASCII content. Output is printed to console (no return value).
+      MATLAB default for StopByte is Inf; Python uses None (semantically equivalent).
+
+  - name: rehydrateJSONNanNull
+    type: function
+    matlab_path: "+ndi/+util/rehydrateJSONNanNull.m"
+    python_path: "ndi/util/rehydrateJSONNanNull.py"
+    input_arguments:
+      - name: jsonText
+        type_matlab: "char"
+        type_python: "str"
+      - name: nan_string
+        type_matlab: "char"
+        type_python: "str"
+        default: "'\"__NDI__NaN__\"'"
+      - name: inf_string
+        type_matlab: "char"
+        type_python: "str"
+        default: "'\"__NDI__Infinity__\"'"
+      - name: ninf_string
+        type_matlab: "char"
+        type_python: "str"
+        default: "'\"__NDI__-Infinity__\"'"
+    output_arguments:
+      - name: rehydratedJsonText
+        type_python: "str"
+    decision_log: >
+      Exact match. Replaces NDI sentinel strings for NaN, Infinity,
+      and -Infinity in JSON text with Python-compatible representations.
+
+  - name: unwrapTableCellContent
+    type: function
+    matlab_path: "+ndi/+util/unwrapTableCellContent.m"
+    python_path: "ndi/util/unwrapTableCellContent.py"
+    input_arguments:
+      - name: cellValue
+        type_matlab: "any"
+        type_python: "Any"
+    output_arguments:
+      - name: unwrappedValue
+        type_python: "Any"
+    decision_log: >
+      Exact match. Recursively unwraps nested lists (up to 10 levels)
+      to retrieve the innermost value. Returns float('nan') if the
+      value is None or an empty list (matching MATLAB's NaN for empty cells).
+
+# =========================================================================
+# Not ported / Not applicable
+# =========================================================================
+not_applicable:
+
+  - name: choosefile
+    matlab_path: "+ndi/+util/choosefile.m"
+    status: not_applicable
+    decision_log: "MATLAB GUI dialog (inputdlg). No Python equivalent needed."
+
+  - name: choosefileordir
+    matlab_path: "+ndi/+util/choosefileordir.m"
+    status: not_applicable
+    decision_log: "MATLAB GUI dialog. No Python equivalent needed."
+
+  - name: toolboxdir
+    matlab_path: "+ndi/+util/toolboxdir.m"
+    status: not_applicable
+    decision_log: >
+      MATLAB-specific path resolution using mfilename('fullpath').
+      Python uses ndi.common.PathConstants instead.
+
+  - name: "+openminds sub-package"
+    matlab_path: "+ndi/+util/+openminds/"
+    status: ported_elsewhere
+    decision_log: >
+      MATLAB sub-package with find_instance_name.m and
+      find_techniques_names.m. Ported to ndi.openminds_convert
+      module in Python (different namespace).

@@ -1,0 +1,90 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/fun/probe/
+# The Primary Contract for the ndi.fun.probe namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Standalone functions
+# =========================================================================
+functions:
+
+  - name: export_binary
+    type: function
+    matlab_path: "+ndi/+fun/+probe/export_binary.m"
+    python_path: "ndi/fun/probe/export_binary.py"
+    input_arguments:
+      - name: probe
+        type_matlab: "ndi.element or ndi.probe"
+        type_python: "Any"
+      - name: outputfile
+        type_matlab: "char"
+        type_python: "str | Path"
+      - name: multiplier
+        type_matlab: "double"
+        type_python: "float"
+        default: "1.0"
+      - name: verbose
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "True"
+      - name: precision
+        type_matlab: "char"
+        type_python: "str"
+        default: "'int16'"
+    output_arguments: []
+    decision_log: >
+      Exact match. Exports data from a probe to a binary file.
+      Creates metadata file alongside outputfile with .metadata
+      extension. Probe must be an ndi.element.Element or
+      ndi.probe.Probe of type 'n-trode'.
+
+  - name: export_all_binary
+    type: function
+    matlab_path: "+ndi/+fun/+probe/export_all_binary.m"
+    python_path: "ndi/fun/probe/export_binary.py"
+    input_arguments:
+      - name: session
+        type_matlab: "ndi.session"
+        type_python: "Any"
+      - name: kilosort_dir
+        type_matlab: "char"
+        type_python: "str"
+        default: "'kilosort'"
+      - name: verbose
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "True"
+      - name: multiplier
+        type_matlab: "double"
+        type_python: "float"
+        default: "5.128205128205128"
+    output_arguments: []
+    decision_log: >
+      Exact match. Exports all n-trode probes in a session to binary
+      files. Creates subdirectories and kilosort.bin files. Default
+      multiplier is 1/0.195 (approx 5.128).
+
+  - name: location
+    type: function
+    matlab_path: "+ndi/+fun/+probe/location.m"
+    python_path: "ndi/fun/probe/location.py"
+    input_arguments:
+      - name: session
+        type_matlab: "ndi.session"
+        type_python: "Any"
+      - name: element
+        type_matlab: "ndi.element or char"
+        type_python: "Any | str"
+    output_arguments:
+      - name: probe_locations
+        type_python: "list[Any]"
+      - name: probe_obj
+        type_python: "Any | None"
+    decision_log: >
+      Exact match. Finds probe location documents and probe object
+      for an NDI element. Traverses underlying_element dependency
+      tree until Probe object is found. element can be an
+      ndi.element.Element object or string identifier.
