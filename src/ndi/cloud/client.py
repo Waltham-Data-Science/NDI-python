@@ -321,7 +321,7 @@ class CloudClient:
         from .auth import authenticate
 
         config = CloudConfig.from_env()
-        config.token = authenticate(config)
+        config.token, config.org_id = authenticate(config)
         return cls(config)
 
     def __repr__(self) -> str:

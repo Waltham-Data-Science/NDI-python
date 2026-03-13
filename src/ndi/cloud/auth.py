@@ -222,8 +222,8 @@ def logout(config: CloudConfig | None = None) -> None:
     config.org_id = ""
 
 
-def authenticate(config: CloudConfig | None = None) -> str:
-    """Return an active token, attempting login if needed.
+def authenticate(config: CloudConfig | None = None) -> tuple[str, str]:
+    """Return an active token and organization ID, attempting login if needed.
 
     Priority (matching MATLAB ``authenticate.m``):
     1. Existing valid token in config/env.
@@ -233,7 +233,8 @@ def authenticate(config: CloudConfig | None = None) -> str:
         config: Optional config.
 
     Returns:
-        A valid JWT token string.
+        A ``(token, organization_id)`` tuple, matching the two-output
+        convention of the MATLAB ``authenticate.m`` function.
 
     Raises:
         CloudAuthError: If authentication fails.
@@ -243,14 +244,14 @@ def authenticate(config: CloudConfig | None = None) -> str:
 
     # 1. Already have a valid token?
     if config.token and verifyToken(config.token):
-        return config.token
+        return config.token, config.org_id
 
     # 2. Try env-var credentials
     email = config.username or os.environ.get("NDI_CLOUD_USERNAME", "")
     password = config.password or os.environ.get("NDI_CLOUD_PASSWORD", "")
     if email and password:
         updated = login(email, password, config)
-        return updated.token
+        return updated.token, updated.org_id
 
     raise CloudAuthError(
         "No valid token and no credentials available. "
