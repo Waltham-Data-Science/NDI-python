@@ -29,10 +29,9 @@ def identifyMatchingRows(
     df: pd.DataFrame,
     column: str | list[str],
     value: Any,
-    mode: str = "identical",
     *,
-    string_match: str | None = None,
-    numeric_match: str | None = None,
+    stringMatch: str = "identical",
+    numericMatch: str = "eq",
 ) -> pd.Series:
     """Identify rows in a DataFrame matching the given criteria.
 
@@ -43,12 +42,9 @@ def identifyMatchingRows(
         column: Column name(s) to match against.
         value: Value(s) to match.  When *column* is a list, *value*
             should be a list of the same length.
-        mode: Legacy match mode — ``'identical'``, ``'ignoreCase'``,
-            ``'contains'``, ``'eq'``, ``'ne'``, ``'lt'``,
-            ``'le'``, ``'gt'``, ``'ge'``.
-        string_match: String match mode (overrides *mode* for text):
+        stringMatch: String match mode:
             ``'identical'``, ``'ignoreCase'``, ``'contains'``.
-        numeric_match: Numeric match mode (overrides *mode* for numbers):
+        numericMatch: Numeric match mode:
             ``'eq'``, ``'ne'``, ``'lt'``, ``'le'``, ``'gt'``, ``'ge'``.
 
     Returns:
@@ -69,13 +65,11 @@ def identifyMatchingRows(
     for col_name, val in zip(columns, values):
         col = df[col_name]
 
-        # Determine effective mode
-        if string_match is not None and col.dtype == object:
-            effective_mode = string_match.lower()
-        elif numeric_match is not None and col.dtype != object:
-            effective_mode = numeric_match.lower()
+        # Determine effective mode based on column dtype
+        if col.dtype == object:
+            effective_mode = stringMatch.lower()
         else:
-            effective_mode = mode.lower()
+            effective_mode = numericMatch.lower()
 
         if effective_mode == "identical":
             col_match = col == val
@@ -105,8 +99,8 @@ def identifyMatchingRows(
 
 def identifyValidRows(
     df: pd.DataFrame,
-    columns: list[str] | None = None,
-    invalid_value: Any = None,
+    checkVariables: list[str] | None = None,
+    invalidValues: Any = None,
 ) -> pd.Series:
     """Identify rows where specified columns have valid (non-NaN) values.
 
@@ -114,23 +108,22 @@ def identifyValidRows(
 
     Args:
         df: Input DataFrame.
-        columns: Columns to check.  If *None*, check all columns.
-        invalid_value: Custom invalid sentinel (default: NaN/NaT/None).
+        checkVariables: Columns to check.  If *None*, check all columns.
+        invalidValues: Custom invalid sentinel (default: NaN/NaT/None).
 
     Returns:
         Boolean Series — True for valid rows.
     """
     _require_pandas()
 
-    if columns is None:
-        columns = list(df.columns)
+    columns = checkVariables if checkVariables is not None else list(df.columns)
 
     mask = pd.Series(True, index=df.index)
     for col in columns:
         if col not in df.columns:
             continue
-        if invalid_value is not None:
-            mask = mask & (df[col] != invalid_value)
+        if invalidValues is not None:
+            mask = mask & (df[col] != invalidValues)
         else:
             mask = mask & df[col].notna()
 

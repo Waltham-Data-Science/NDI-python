@@ -15,6 +15,9 @@ def diff(
     dataset1: Any,
     dataset2: Any,
     exclude_fields: list[str] = None,
+    *,
+    verbose: bool = True,
+    recheckFileReport: list | None = None,
 ) -> dict[str, Any]:
     """Compare two datasets for document and file differences.
 
@@ -26,6 +29,9 @@ def diff(
         dataset1: First dataset.
         dataset2: Second dataset.
         exclude_fields: Field paths to exclude.
+        verbose: If True (default), print progress information.
+        recheckFileReport: Optional list of previous file report
+            entries to recheck.
 
     Returns:
         Dict with ``'equal'``, ``'session_diff'`` keys.
@@ -33,7 +39,13 @@ def diff(
     s1 = dataset1.session if hasattr(dataset1, "session") else dataset1
     s2 = dataset2.session if hasattr(dataset2, "session") else dataset2
 
-    s_diff = session_diff(s1, s2, exclude_fields=exclude_fields)
+    s_diff = session_diff(
+        s1,
+        s2,
+        exclude_fields=exclude_fields,
+        verbose=verbose,
+        recheckFileReport=recheckFileReport,
+    )
 
     return {
         "equal": s_diff["equal"],

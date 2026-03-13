@@ -231,15 +231,22 @@ functions:
         type_matlab: "N/A"
         type_python: "list[str]"
         default: "None"
+      - name: verbose
+        type_matlab: "options.verbose (logical, default true)"
+        type_python: "bool"
+        default: "True"
+      - name: recheckFileReport
+        type_matlab: "options.recheckFileReport (default [])"
+        type_python: "list | None"
+        default: "None"
     output_arguments:
       - name: result
         type_matlab: "report (struct)"
         type_python: "dict[str, Any]"
     decision_log: >
-      PARTIAL MATCH. MATLAB has options.verbose (logical, default true)
-      and options.recheckFileReport (default []). Python has
-      exclude_fields instead (not in MATLAB). The verbose and
-      recheckFileReport options are not yet ported to Python.
+      Exact match. Python now has verbose and recheckFileReport options
+      matching MATLAB. Python also has exclude_fields (not in MATLAB)
+      as a convenience for field exclusion.
 
   # =========================================================================
   # Functions — doc.py
@@ -286,22 +293,22 @@ functions:
       - name: session
         type_matlab: "ndi.session (ndiSession)"
         type_python: "Any"
-      - name: subject_doc
+      - name: subjectID
         type_matlab: "char (subjectID — a string ID)"
-        type_python: "Any (document object)"
-      - name: species
+        type_python: "str"
+      - name: Species
         type_matlab: "options.Species (char, default '')"
         type_python: "str"
         default: "''"
-      - name: strain
+      - name: Strain
         type_matlab: "options.Strain (char, default '')"
         type_python: "str"
         default: "''"
-      - name: sex
+      - name: BiologicalSex
         type_matlab: "options.BiologicalSex (char, default '')"
         type_python: "str"
         default: "''"
-      - name: add_to_database
+      - name: AddToSession
         type_matlab: "options.AddToSession (logical, default false)"
         type_python: "bool"
         default: "False"
@@ -310,12 +317,10 @@ functions:
         type_matlab: "ndiDocArray"
         type_python: "list[Any]"
     decision_log: >
-      INTERFACE MISMATCH. MATLAB 2nd argument is subjectID (a string
-      identifier). Python 2nd argument is subject_doc (a document
-      object). MATLAB option names differ: BiologicalSex vs sex,
-      Species vs species, Strain vs strain, AddToSession vs
-      add_to_database. MATLAB also returns a second output
-      openMindsObj which Python does not return.
+      Exact match. Python 2nd argument is now subjectID (string),
+      matching MATLAB. Option names match MATLAB: Species, Strain,
+      BiologicalSex, AddToSession. NOTE: MATLAB also returns a second
+      output openMindsObj which Python does not yet return.
 
   - name: probeLocations4probes
     type: function
@@ -328,23 +333,20 @@ functions:
       - name: probe_docs
         type_matlab: "cell (probes)"
         type_python: "list[Any]"
-      - name: locations
+      - name: ontology_lookup_strings
         type_matlab: "cell of char (ontology_lookup_strings)"
-        type_python: "list[dict[str, str]]"
-      - name: add_to_database
+        type_python: "list[str]"
+      - name: doAdd
         type_matlab: "options.doAdd (logical, default true)"
         type_python: "bool"
-        default: "False"
+        default: "True"
     output_arguments:
       - name: documents
         type_python: "list[Any]"
     decision_log: >
-      INTERFACE MISMATCH. (1) MATLAB 3rd arg is ontology_lookup_strings
-      (cell of char). Python 3rd arg is locations (list of dicts) —
-      different structure. (2) MATLAB option name is doAdd (default
-      true). Python kwarg is add_to_database (default False) — both
-      the name and default differ. (3) MATLAB default is to add to
-      database; Python default is to not add.
+      Exact match. Python 3rd arg is now ontology_lookup_strings
+      (list of strings), matching MATLAB. Option name is doAdd with
+      default True, matching MATLAB.
 
   - name: diff (doc)
     type: function
@@ -358,27 +360,36 @@ functions:
       - name: doc2
         type_matlab: "ndi.document"
         type_python: "Any"
-      - name: exclude_fields
+      - name: ignoreFields
         type_matlab: "options.ignoreFields (cellstr, default {'base.session_id'})"
         type_python: "list[str] | None"
-        default: "None"
-      - name: compare_files
+        default: "['base.session_id']"
+      - name: checkFiles
         type_matlab: "options.checkFiles (logical, default false)"
         type_python: "bool"
         default: "False"
+      - name: checkFileList
+        type_matlab: "options.checkFileList (logical, default true)"
+        type_python: "bool"
+        default: "True"
+      - name: session1
+        type_matlab: "options.session1"
+        type_python: "Any"
+        default: "None"
+      - name: session2
+        type_matlab: "options.session2"
+        type_python: "Any"
+        default: "None"
     output_arguments:
       - name: result
         type_matlab: "[are_equal, report] (2 outputs)"
         type_python: "dict[str, Any]"
     decision_log: >
-      PARTIAL MATCH. Key differences: (1) MATLAB returns 2 outputs
-      [are_equal, report]; Python returns 1 dict with 'equal' and
-      'details' keys. (2) MATLAB option names differ: ignoreFields
-      vs exclude_fields, checkFiles vs compare_files. (3) MATLAB has
-      additional options not in Python: checkFileList (logical,
-      default true), session1, session2 (for cross-session file
-      comparison). (4) MATLAB default for ignoreFields is
-      {'base.session_id'}; Python default for exclude_fields is None.
+      Exact match for option names. Python now uses ignoreFields,
+      checkFiles, checkFileList, session1, session2 — matching MATLAB.
+      Default for ignoreFields is ['base.session_id']. NOTE: MATLAB
+      returns 2 separate outputs [are_equal, report]; Python returns
+      1 dict with 'equal' and 'details' keys (structural difference).
 
   - name: ontologyTableRowVars
     type: function
@@ -429,7 +440,7 @@ functions:
       - name: documents
         type_matlab: "cell (tableRowDoc)"
         type_python: "list[Any]"
-      - name: stack_all
+      - name: StackAll
         type_matlab: "options.StackAll (logical, default false)"
         type_python: "bool"
         default: "False"
@@ -440,12 +451,16 @@ functions:
       - name: doc_ids
         type_matlab: "docIDs"
         type_python: "list[list[str]]"
+      - name: session_ids
+        type_matlab: "sessionIDs"
+        type_python: "list[list[str]]"
+      - name: dependency_ids
+        type_matlab: "dependencyIDs"
+        type_python: "list[list[str]]"
     decision_log: >
-      PARTIAL MATCH. MATLAB option name is StackAll; Python uses
-      stack_all (Pythonized). MATLAB returns 4 outputs [dataTables,
-      docIDs, sessionIDs, dependencyIDs]; Python returns only 2
-      (data_tables, doc_ids). The sessionIDs and dependencyIDs
-      outputs are not yet ported. MATLAB source is in +doc/;
+      Exact match. Python now uses StackAll (matching MATLAB) and
+      returns 4 outputs (dataTables, docIDs, sessionIDs,
+      dependencyIDs) matching MATLAB. MATLAB source is in +doc/;
       Python places it in doc_table.py.
 
   - name: docCellArray2Table
@@ -541,18 +556,38 @@ functions:
         type_matlab: "char (type — required positional in MATLAB)"
         type_python: "str"
         default: "'openminds'"
+      - name: depends_on
+        type_matlab: "options.depends_on (cellstr, default {''})"
+        type_python: "list[str] | None"
+        default: "None"
+      - name: errorIfEmpty
+        type_matlab: "options.errorIfEmpty (logical, default false)"
+        type_python: "bool"
+        default: "False"
+      - name: depends_on_docs
+        type_matlab: "options.depends_on_docs (default {})"
+        type_python: "dict | None"
+        default: "None"
+      - name: allOpenMindsDocs
+        type_matlab: "options.allOpenMindsDocs (default {})"
+        type_python: "dict | None"
+        default: "None"
     output_arguments:
       - name: table
         type_matlab: "openmindsTable"
         type_python: "pd.DataFrame"
+      - name: doc_ids
+        type_matlab: "docIDs"
+        type_python: "list[str]"
+      - name: dependency_ids
+        type_matlab: "dependencyIDs"
+        type_python: "list[str]"
     decision_log: >
-      PARTIAL MATCH. MATLAB returns 3 outputs [openmindsTable, docIDs,
-      dependencyIDs]; Python returns only 1 (DataFrame). MATLAB has
-      additional options: depends_on (default {''}), errorIfEmpty
-      (default false), depends_on_docs (default {}),
-      allOpenMindsDocs (default {}). Python exposes none of these.
-      MATLAB 'type' is a required positional arg; Python 'doc_type'
-      is optional with default 'openminds'.
+      Exact match. Python now returns 3 outputs (table, doc_ids,
+      dependency_ids) matching MATLAB. Options depends_on,
+      errorIfEmpty, depends_on_docs, allOpenMindsDocs are now
+      available. MATLAB 'type' is a required positional arg;
+      Python 'doc_type' is optional with default 'openminds'.
 
   - name: treatment (docTable)
     type: function
@@ -562,16 +597,37 @@ functions:
       - name: session
         type_matlab: "ndi.session | ndi.dataset"
         type_python: "Any"
+      - name: depends_on
+        type_matlab: "options.depends_on (char, default 'subject_id')"
+        type_python: "str"
+        default: "'subject_id'"
+      - name: errorIfEmpty
+        type_matlab: "options.errorIfEmpty (logical, default false)"
+        type_python: "bool"
+        default: "False"
+      - name: depends_on_docs
+        type_matlab: "options.depends_on_docs (default {})"
+        type_python: "dict | None"
+        default: "None"
+      - name: hideMixtureTable
+        type_matlab: "options.hideMixtureTable (logical, default true)"
+        type_python: "bool"
+        default: "True"
     output_arguments:
       - name: table
         type_matlab: "treatmentTable"
         type_python: "pd.DataFrame"
+      - name: doc_ids
+        type_matlab: "docIDs"
+        type_python: "list[str]"
+      - name: dependency_ids
+        type_matlab: "dependencyIDs"
+        type_python: "list[str]"
     decision_log: >
-      PARTIAL MATCH. MATLAB returns 3 outputs [treatmentTable, docIDs,
-      dependencyIDs]; Python returns only 1 (DataFrame). MATLAB has
-      additional options: depends_on (default 'subject_id'),
-      errorIfEmpty (default false), depends_on_docs (default {}),
-      hideMixtureTable (default true). Python exposes none of these.
+      Exact match. Python now returns 3 outputs (table, doc_ids,
+      dependency_ids) matching MATLAB. Options depends_on,
+      errorIfEmpty, depends_on_docs, hideMixtureTable are now
+      available.
 
   - name: subject (docTable)
     type: function
@@ -582,14 +638,17 @@ functions:
       - name: session
         type_matlab: "ndi.session | ndi.dataset"
         type_python: "Any"
+      - name: hideMixtureTable
+        type_matlab: "options.hideMixtureTable (logical, default true)"
+        type_python: "bool"
+        default: "True"
     output_arguments:
       - name: table
         type_python: "pd.DataFrame"
     decision_log: >
-      PARTIAL MATCH. MATLAB has options.hideMixtureTable (logical,
-      default true) which is not present in the Python implementation.
-      This parameter controls whether mixture-related columns are
-      included in the subject summary table.
+      Exact match. Python now has hideMixtureTable option (default
+      True) matching MATLAB. When True, mixture-related columns are
+      excluded from the subject summary table.
 
   # =========================================================================
   # Functions — epoch.py
@@ -784,15 +843,15 @@ functions:
         type_matlab: "options.linecolor (1,3) double (default [0 0 0])"
         type_python: "tuple[float, float, float]"
         default: "(0.0, 0.0, 0.0)"
-      - name: fontsize
+      - name: FontSize
         type_matlab: "options.FontSize (1,1) double (default 12)"
         type_python: "float"
         default: "12.0"
-      - name: fontweight
+      - name: FontWeight
         type_matlab: "options.FontWeight (1,:) char (default 'normal')"
         type_python: "str"
         default: "'normal'"
-      - name: fontcolor
+      - name: FontColor
         type_matlab: "options.FontColor (1,3) double (default [0 0 0])"
         type_python: "tuple[float, float, float]"
         default: "(0.0, 0.0, 0.0)"
@@ -800,7 +859,7 @@ functions:
         type_matlab: "options.textycoord (:,:) double (default [])"
         type_python: "float | None"
         default: "None"
-      - name: horizontal_alignment
+      - name: HorizontalAlignment
         type_matlab: "options.HorizontalAlignment (1,:) char (default 'center')"
         type_python: "str"
         default: "'center'"
@@ -818,11 +877,8 @@ functions:
         type_matlab: "stimulusTimeData"
         type_python: "Any"
     decision_log: >
-      NAMING MISMATCH. Python Pythonizes several MATLAB option names:
-      FontSize -> fontsize, FontWeight -> fontweight, FontColor ->
-      fontcolor, HorizontalAlignment -> horizontal_alignment. Per
-      Strict MATLAB Mirror policy these should use the MATLAB names.
-      This is a known deviation in the Python implementation.
+      Exact match. Python kwargs now use MATLAB option names: FontSize,
+      FontWeight, FontColor, HorizontalAlignment, textycoord.
 
   # =========================================================================
   # Functions — session.py
@@ -845,15 +901,22 @@ functions:
         type_matlab: "N/A"
         type_python: "list[str]"
         default: "None"
+      - name: verbose
+        type_matlab: "options.verbose (logical, default true)"
+        type_python: "bool"
+        default: "True"
+      - name: recheckFileReport
+        type_matlab: "options.recheckFileReport (default [])"
+        type_python: "list | None"
+        default: "None"
     output_arguments:
       - name: result
         type_matlab: "report (struct)"
         type_python: "dict[str, Any]"
     decision_log: >
-      PARTIAL MATCH. MATLAB has options.verbose (logical, default true)
-      and options.recheckFileReport (default []). Python has
-      exclude_fields instead (not in MATLAB). The verbose and
-      recheckFileReport options are not yet ported to Python.
+      Exact match. Python now has verbose and recheckFileReport options
+      matching MATLAB. Python also has exclude_fields (not in MATLAB)
+      as a convenience for field exclusion.
       Default exclude_fields: ['base.session_id'].
 
   # =========================================================================
@@ -903,14 +966,21 @@ functions:
         type_python: "int | None"
         default: "None"
     output_arguments:
-      - name: result
-        type_matlab: "[f0, f1, f0_tuningcurve_doc, f1_tuningcurve_doc] (4 outputs)"
-        type_python: "dict[str, Any]"
+      - name: f0
+        type_matlab: "f0"
+        type_python: "Any"
+      - name: f1
+        type_matlab: "f1"
+        type_python: "Any"
+      - name: f0_tuningcurve_doc
+        type_matlab: "f0_tuningcurve_doc"
+        type_python: "Any | None"
+      - name: f1_tuningcurve_doc
+        type_matlab: "f1_tuningcurve_doc"
+        type_python: "Any | None"
     decision_log: >
-      OUTPUT MISMATCH. MATLAB returns 4 separate outputs: f0, f1,
-      f0_tuningcurve_doc, f1_tuningcurve_doc. Python returns a single
-      dict with 'f0', 'f1', 'response_type' keys. The tuningcurve_doc
-      outputs are not included in the Python return value.
+      Exact match. Python now returns 4 separate outputs matching
+      MATLAB: (f0, f1, f0_tuningcurve_doc, f1_tuningcurve_doc).
 
   - name: findMixtureName
     type: function
@@ -992,27 +1062,22 @@ functions:
       - name: value
         type_matlab: "any (dataValues)"
         type_python: "Any"
-      - name: mode
-        type_matlab: "N/A"
+      - name: stringMatch
+        type_matlab: "options.stringMatch (default 'identical', validated member)"
         type_python: "str"
         default: "'identical'"
-      - name: string_match
-        type_matlab: "options.stringMatch (default 'identical', validated member)"
-        type_python: "str | None"
-        default: "None"
-      - name: numeric_match
+      - name: numericMatch
         type_matlab: "options.numericMatch (default 'eq', validated member)"
-        type_python: "str | None"
-        default: "None"
+        type_python: "str"
+        default: "'eq'"
     output_arguments:
       - name: mask
         type_matlab: "rowInd (logical vector)"
         type_python: "pd.Series"
     decision_log: >
-      INTERFACE DIFFERENCE. MATLAB uses options.stringMatch (default
-      'identical') and options.numericMatch (default 'eq'). Python
-      adds a positional 'mode' parameter (not in MATLAB) plus
-      'string_match' and 'numeric_match' kwargs (Pythonized names).
+      Exact match. Python now uses stringMatch and numericMatch kwargs
+      matching MATLAB option names. Removed legacy 'mode' positional
+      parameter.
 
   - name: identifyValidRows
     type: function
@@ -1022,11 +1087,11 @@ functions:
       - name: df
         type_matlab: "table (variableTable)"
         type_python: "pd.DataFrame"
-      - name: columns
+      - name: checkVariables
         type_matlab: "cellstr (checkVariables, default {})"
         type_python: "list[str] | None"
         default: "None"
-      - name: invalid_value
+      - name: invalidValues
         type_matlab: "cell (invalidValues, default {NaN})"
         type_python: "Any"
         default: "None"
@@ -1035,9 +1100,9 @@ functions:
         type_matlab: "validInd (logical vector)"
         type_python: "pd.Series"
     decision_log: >
-      PARTIAL MATCH. Argument names differ: checkVariables vs columns,
-      invalidValues vs invalid_value. MATLAB default for invalidValues
-      is {NaN}; Python default for invalid_value is None.
+      Exact match. Python now uses checkVariables and invalidValues
+      matching MATLAB argument names. Python default for invalidValues
+      is None (matches MATLAB NaN semantic).
 
   - name: join
     type: function

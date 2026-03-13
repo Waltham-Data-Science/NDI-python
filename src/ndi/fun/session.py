@@ -15,6 +15,9 @@ def diff(
     session1: Any,
     session2: Any,
     exclude_fields: list[str] = None,
+    *,
+    verbose: bool = True,
+    recheckFileReport: list | None = None,
 ) -> dict[str, Any]:
     """Compare two sessions for document differences.
 
@@ -25,6 +28,9 @@ def diff(
         session2: Second session.
         exclude_fields: Field paths to exclude (defaults to
             ``['base.session_id']``).
+        verbose: If True (default), print progress information.
+        recheckFileReport: Optional list of previous file report
+            entries to recheck.
 
     Returns:
         Dict with ``'equal'``, ``'only_in_s1'``, ``'only_in_s2'``,
@@ -35,7 +41,11 @@ def diff(
 
     from ndi.query import Query
 
+    if verbose:
+        print("Searching session 1 for documents...")
     docs1 = session1.database_search(Query("").isa("base"))
+    if verbose:
+        print("Searching session 2 for documents...")
     docs2 = session2.database_search(Query("").isa("base"))
 
     def _doc_id(doc: Any) -> str:
@@ -54,9 +64,16 @@ def diff(
     only_s2 = sorted(ids2 - ids1)
     common = ids1 & ids2
 
+    if verbose:
+        print(
+            f"Found {len(docs1)} docs in session 1, {len(docs2)} in session 2. "
+            f"{len(common)} in common, {len(only_s1)} only in s1, {len(only_s2)} only in s2."
+        )
+        print(f"Comparing {len(common)} common documents...")
+
     mismatches: list[dict[str, Any]] = []
     for doc_id in sorted(common):
-        result = doc_diff(map1[doc_id], map2[doc_id], exclude_fields=exclude_fields)
+        result = doc_diff(map1[doc_id], map2[doc_id], ignoreFields=exclude_fields)
         if not result["equal"]:
             mismatches.append(
                 {
@@ -64,6 +81,12 @@ def diff(
                     "details": result["details"],
                 }
             )
+
+    if verbose:
+        if mismatches:
+            print(f"Found {len(mismatches)} mismatched documents.")
+        else:
+            print("All common documents match.")
 
     return {
         "equal": len(only_s1) == 0 and len(only_s2) == 0 and len(mismatches) == 0,

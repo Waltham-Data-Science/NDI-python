@@ -26,8 +26,9 @@ def _require_pandas() -> None:
 
 def ontologyTableRowDoc2Table(
     documents: list[Any],
-    stack_all: bool = False,
-) -> tuple[list[pd.DataFrame], list[list[str]]]:
+    *,
+    StackAll: bool = False,
+) -> tuple[list[pd.DataFrame], list[list[str]], list[list[str]], list[list[str]]]:
     """Convert ontologyTableRow documents to grouped DataFrames.
 
     MATLAB equivalent: ndi.fun.doc.ontologyTableRowDoc2Table
@@ -38,21 +39,26 @@ def ontologyTableRowDoc2Table(
 
     Args:
         documents: List of NDI Document objects with ontologyTableRow data.
-        stack_all: If True, stack all documents into a single table
+        StackAll: If True, stack all documents into a single table
             regardless of variable names.  Default groups by variable names.
 
     Returns:
-        Tuple ``(data_tables, doc_ids)`` where *data_tables* is a list of
-        DataFrames (one per group) and *doc_ids* is a list of string lists
-        containing the document IDs for each group.
+        Tuple ``(data_tables, doc_ids, session_ids, dependency_ids)``
+        where *data_tables* is a list of DataFrames (one per group),
+        *doc_ids* is a list of string lists containing the document IDs
+        for each group, *session_ids* is a list of string lists containing
+        the session IDs, and *dependency_ids* is a list of string lists
+        containing the dependency IDs.
     """
     _require_pandas()
     from ndi.fun.table import vstack
 
-    # Extract per-document data rows, variable names, and IDs
+    # Extract per-document data rows, variable names, IDs, session IDs, and dependency IDs
     table_rows: list[pd.DataFrame] = []
     variable_names: list[str] = []
     doc_id_list: list[str] = []
+    session_id_list: list[str] = []
+    dependency_id_list: list[str] = []
 
     for doc in documents:
         props = doc.document_properties if hasattr(doc, "document_properties") else doc
@@ -70,17 +76,28 @@ def ontologyTableRowDoc2Table(
         var_names = otr.get("variableNames", "")
         base = props.get("base", {})
         doc_id = base.get("id", "")
+        session_id = base.get("session_id", "")
+
+        # Extract primary dependency ID
+        dep_id = ""
+        depends = props.get("depends_on", [])
+        if isinstance(depends, list) and depends:
+            first_dep = depends[0]
+            if isinstance(first_dep, dict):
+                dep_id = first_dep.get("value", "")
 
         table_rows.append(pd.DataFrame([data]))
         variable_names.append(var_names)
         doc_id_list.append(doc_id)
+        session_id_list.append(session_id)
+        dependency_id_list.append(dep_id)
 
     if not table_rows:
-        return [], []
+        return [], [], [], []
 
-    if stack_all:
+    if StackAll:
         combined = vstack(table_rows)
-        return [combined], [doc_id_list]
+        return [combined], [doc_id_list], [session_id_list], [dependency_id_list]
 
     # Group by variableNames (preserving first-occurrence order)
     groups: dict[str, list[int]] = {}
@@ -93,14 +110,20 @@ def ontologyTableRowDoc2Table(
 
     data_tables: list[pd.DataFrame] = []
     doc_ids: list[list[str]] = []
+    session_ids: list[list[str]] = []
+    dependency_ids: list[list[str]] = []
     for vn in seen_order:
         indices = groups[vn]
         group_rows = [table_rows[i] for i in indices]
-        group_ids = [doc_id_list[i] for i in indices]
+        group_doc_ids = [doc_id_list[i] for i in indices]
+        group_session_ids = [session_id_list[i] for i in indices]
+        group_dep_ids = [dependency_id_list[i] for i in indices]
         data_tables.append(vstack(group_rows))
-        doc_ids.append(group_ids)
+        doc_ids.append(group_doc_ids)
+        session_ids.append(group_session_ids)
+        dependency_ids.append(group_dep_ids)
 
-    return data_tables, doc_ids
+    return data_tables, doc_ids, session_ids, dependency_ids
 
 
 def docCellArray2Table(
@@ -427,7 +450,12 @@ def epoch(
 def openminds(
     session: Any,
     doc_type: str = "openminds",
-) -> pd.DataFrame:
+    *,
+    depends_on: list[str] | None = None,
+    errorIfEmpty: bool = False,
+    depends_on_docs: dict | None = None,
+    allOpenMindsDocs: dict | None = None,
+) -> tuple[pd.DataFrame, list[str], list[str]]:
     """Gather OpenMINDS document properties into a table.
 
     MATLAB equivalent: ndi.fun.docTable.openminds
@@ -435,57 +463,117 @@ def openminds(
     Args:
         session: NDI session instance.
         doc_type: OpenMINDS document type to query.
+        depends_on: Dependency names to extract.
+        errorIfEmpty: If True, raise an error when no documents found.
+        depends_on_docs: Pre-fetched dependency documents (optimization).
+        allOpenMindsDocs: Pre-fetched openminds documents (optimization).
 
     Returns:
-        DataFrame with OpenMINDS document properties.
+        Tuple of ``(table, doc_ids, dependency_ids)`` where *table* is a
+        DataFrame with OpenMINDS document properties, *doc_ids* is a list
+        of document IDs, and *dependency_ids* is a list of primary
+        dependency IDs.
     """
     _require_pandas()
     from ndi.query import Query
 
     docs = session.database_search(Query("").isa(doc_type))
     rows: list[dict[str, Any]] = []
+    doc_ids: list[str] = []
+    dependency_ids: list[str] = []
 
     for doc in docs:
         props = doc.document_properties
         base = props.get("base", {})
         om = props.get(doc_type, {})
-        row = {"id": base.get("id", "")}
+        doc_id = base.get("id", "")
+        row = {"id": doc_id}
         if isinstance(om, dict):
             row.update(om)
         rows.append(row)
+        doc_ids.append(doc_id)
 
-    return pd.DataFrame(rows) if rows else pd.DataFrame()
+        # Extract primary dependency
+        dep_id = ""
+        dep_list = props.get("depends_on", [])
+        if isinstance(dep_list, list) and dep_list:
+            first = dep_list[0]
+            if isinstance(first, dict):
+                dep_id = first.get("value", "")
+        dependency_ids.append(dep_id)
+
+    if errorIfEmpty and not rows:
+        raise ValueError(f"No documents of type '{doc_type}' found in session.")
+
+    table = pd.DataFrame(rows) if rows else pd.DataFrame()
+    return table, doc_ids, dependency_ids
 
 
 def treatment(
     session: Any,
-) -> pd.DataFrame:
+    *,
+    depends_on: str = "subject_id",
+    errorIfEmpty: bool = False,
+    depends_on_docs: dict | None = None,
+    hideMixtureTable: bool = True,
+) -> tuple[pd.DataFrame, list[str], list[str]]:
     """Gather treatment document properties into a table.
 
     MATLAB equivalent: ndi.fun.docTable.treatment
 
     Args:
         session: NDI session instance.
+        depends_on: Dependency name to extract (default ``'subject_id'``).
+        errorIfEmpty: If True, raise an error when no documents found.
+        depends_on_docs: Pre-fetched dependency documents (optimization).
+        hideMixtureTable: If True (default), exclude mixture-related
+            columns from the output table.
 
     Returns:
-        DataFrame with treatment document properties.
+        Tuple of ``(table, doc_ids, dependency_ids)`` where *table* is a
+        DataFrame with treatment document properties, *doc_ids* is a list
+        of document IDs, and *dependency_ids* is a list of dependency IDs.
     """
     _require_pandas()
     from ndi.query import Query
 
     docs = session.database_search(Query("").isa("treatment"))
     rows: list[dict[str, Any]] = []
+    doc_ids: list[str] = []
+    dependency_ids: list[str] = []
 
     for doc in docs:
         props = doc.document_properties
         base = props.get("base", {})
         treat = props.get("treatment", {})
-        row = {"id": base.get("id", "")}
+        doc_id = base.get("id", "")
+        row = {"id": doc_id}
         if isinstance(treat, dict):
             row.update(treat)
         rows.append(row)
+        doc_ids.append(doc_id)
 
-    return pd.DataFrame(rows) if rows else pd.DataFrame()
+        # Extract dependency
+        dep_id = ""
+        dep_list = props.get("depends_on", [])
+        if isinstance(dep_list, list):
+            for dep in dep_list:
+                if isinstance(dep, dict) and dep.get("name") == depends_on:
+                    dep_id = dep.get("value", "")
+                    break
+        dependency_ids.append(dep_id)
+
+    if errorIfEmpty and not rows:
+        raise ValueError("No treatment documents found in session.")
+
+    table = pd.DataFrame(rows) if rows else pd.DataFrame()
+
+    if hideMixtureTable:
+        mixture_cols = [c for c in table.columns if "Mixture" in c or "mixture" in c]
+        if mixture_cols:
+            table = table.drop(columns=mixture_cols)
+
+    return table, doc_ids, dependency_ids
 
 
 def _get_depends_on(props: dict, name: str) -> str:
@@ -504,6 +592,8 @@ def _get_depends_on(props: dict, name: str) -> str:
 
 def subject(
     session: Any,
+    *,
+    hideMixtureTable: bool = True,
 ) -> pd.DataFrame:
     """Create a rich subject summary joining subject, openminds, and treatment data.
 
@@ -515,6 +605,8 @@ def subject(
 
     Args:
         session: NDI session or dataset instance.
+        hideMixtureTable: If True (default), exclude mixture-related
+            columns from the output table.
 
     Returns:
         DataFrame with columns: SubjectDocumentIdentifier,
@@ -754,7 +846,15 @@ def subject(
     all_cols = list(df.columns)
     treatment_cols = sorted(c for c in all_cols if c not in fixed_cols)
     col_order = [c for c in fixed_cols if c in all_cols] + treatment_cols
-    return df[col_order]
+    df = df[col_order]
+
+    if hideMixtureTable:
+        # Remove mixture-related columns when hideMixtureTable is True
+        mixture_cols = [c for c in df.columns if "Mixture" in c or "mixture" in c]
+        if mixture_cols:
+            df = df.drop(columns=mixture_cols)
+
+    return df
 
 
 # Backward-compatible aliases

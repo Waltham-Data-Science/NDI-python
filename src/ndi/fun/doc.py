@@ -77,12 +77,12 @@ def findFuid(session: Any, fuid: str) -> tuple[Any | None, str]:
 
 def makeSpeciesStrainSex(
     session: Any,
-    subject_doc: Any,
+    subjectID: str,
     *,
-    species: str = "",
-    strain: str = "",
-    sex: str = "",
-    add_to_database: bool = False,
+    Species: str = "",
+    Strain: str = "",
+    BiologicalSex: str = "",
+    AddToSession: bool = False,
 ) -> list[Any]:
     """Create OpenMINDS-standard documents for species, strain, and sex.
 
@@ -94,31 +94,31 @@ def makeSpeciesStrainSex(
 
     Args:
         session: NDI session instance.
-        subject_doc: Subject document to link via dependency.
-        species: Species ontology identifier (e.g. ``'NCBITaxon:10116'``).
-        strain: Strain ontology identifier (e.g. ``'RRID:RGD_70508'``).
-            Requires ``species`` to also be provided.
-        sex: Biological sex (``'male'``, ``'female'``, ``'hermaphrodite'``,
-            or ``'notDetectable'``).
-        add_to_database: If True, add documents to the session database.
+        subjectID: Subject document identifier string.
+        Species: Species ontology identifier (e.g. ``'NCBITaxon:10116'``).
+        Strain: Strain ontology identifier (e.g. ``'RRID:RGD_70508'``).
+            Requires ``Species`` to also be provided.
+        BiologicalSex: Biological sex (``'male'``, ``'female'``,
+            ``'hermaphrodite'``, or ``'notDetectable'``).
+        AddToSession: If True, add documents to the session database.
 
     Returns:
         List of created NDI Document objects.
     """
     from ndi.openminds_convert import openminds_obj_to_ndi_document
 
-    subject_id = subject_doc.document_properties.get("base", {}).get("id", "")
+    subject_id = subjectID
     openminds_objects: list[Any] = []
     species_obj = None
 
     # 1. Handle Species
-    if species:
+    if Species:
         try:
             from ndi.ontology import lookup
 
-            ont_id, name = lookup(species)
+            ont_id, name = lookup(Species)
         except Exception:
-            ont_id, name = species, species
+            ont_id, name = Species, Species
 
         try:
             from openminds.latest.controlled_terms import Species as OMSpecies
@@ -137,22 +137,22 @@ def makeSpeciesStrainSex(
             )
 
     # 2. Handle Strain (requires species)
-    if strain:
+    if Strain:
         if species_obj is None:
             import warnings
 
             warnings.warn(
                 "Cannot create a Strain document without a valid Species. "
-                "Please provide the 'species' option.",
+                "Please provide the 'Species' option.",
                 stacklevel=2,
             )
         else:
             try:
                 from ndi.ontology import lookup
 
-                ont_id, name = lookup(strain)
+                ont_id, name = lookup(Strain)
             except Exception:
-                ont_id, name = strain, strain
+                ont_id, name = Strain, Strain
 
             try:
                 from openminds.latest.core import Strain as OMStrain
@@ -168,13 +168,13 @@ def makeSpeciesStrainSex(
                 )
 
     # 3. Handle Biological Sex
-    if sex:
+    if BiologicalSex:
         _sex_ontology = {
             "male": "PATO:0000384",
             "female": "PATO:0000383",
             "hermaphrodite": "PATO:0001340",
         }
-        pato_id = _sex_ontology.get(sex.lower(), "")
+        pato_id = _sex_ontology.get(BiologicalSex.lower(), "")
         if pato_id:
             try:
                 from ndi.ontology import lookup
@@ -183,7 +183,7 @@ def makeSpeciesStrainSex(
             except Exception:
                 ont_id, name = pato_id, sex
         else:
-            ont_id, name = "", sex
+            ont_id, name = "", BiologicalSex
 
         try:
             from openminds.latest.controlled_terms import BiologicalSex as OMSex
@@ -216,7 +216,7 @@ def makeSpeciesStrainSex(
                 stacklevel=2,
             )
 
-    if add_to_database:
+    if AddToSession:
         for d in docs:
             try:
                 session.database_add(d)
@@ -229,9 +229,9 @@ def makeSpeciesStrainSex(
 def probeLocations4probes(
     session: Any,
     probe_docs: list[Any],
-    locations: list[dict[str, str]],
+    ontology_lookup_strings: list[str],
     *,
-    add_to_database: bool = False,
+    doAdd: bool = True,
 ) -> list[Any]:
     """Create probe_location documents for a list of probes.
 
@@ -240,9 +240,10 @@ def probeLocations4probes(
     Args:
         session: NDI session instance.
         probe_docs: List of probe documents.
-        locations: List of dicts with ``'name'`` and optional ``'ontology'``
-            keys, one per probe.
-        add_to_database: If True, add documents to the session database.
+        ontology_lookup_strings: List of ontology lookup strings, one per
+            probe. Each string is looked up to resolve a location name
+            and ontology identifier.
+        doAdd: If True (default), add documents to the session database.
 
     Returns:
         List of created probe_location documents.
@@ -250,20 +251,34 @@ def probeLocations4probes(
     from ndi.document import Document
 
     docs: list[Any] = []
-    for probe_doc, loc in zip(probe_docs, locations):
+    for probe_doc, lookup_str in zip(probe_docs, ontology_lookup_strings):
         probe_id = probe_doc.document_properties.get("base", {}).get("id", "")
         doc = Document("probe/probe_location")
         doc = doc.set_session_id(session.id())
-        doc._set_nested_property("probe_location.name", loc.get("name", ""))
-        if "ontology" in loc:
+
+        # Resolve ontology lookup string to name and ontology ID
+        loc_name = lookup_str
+        loc_ontology = ""
+        try:
+            from ndi.ontology import lookup
+
+            result = lookup(lookup_str)
+            if result:
+                loc_name = getattr(result, "name", lookup_str) or lookup_str
+                loc_ontology = getattr(result, "id", "") or ""
+        except Exception:
+            pass
+
+        doc._set_nested_property("probe_location.name", loc_name)
+        if loc_ontology:
             doc._set_nested_property(
                 "probe_location.ontology",
-                loc["ontology"],
+                loc_ontology,
             )
         doc = doc.set_dependency_value("probe_id", probe_id)
         docs.append(doc)
 
-    if add_to_database:
+    if doAdd:
         for d in docs:
             try:
                 session.database_add(d)
@@ -276,8 +291,12 @@ def probeLocations4probes(
 def diff(
     doc1: Any,
     doc2: Any,
-    exclude_fields: list[str] | None = None,
-    compare_files: bool = False,
+    *,
+    ignoreFields: list[str] | None = None,
+    checkFiles: bool = False,
+    checkFileList: bool = True,
+    session1: Any = None,
+    session2: Any = None,
 ) -> dict[str, Any]:
     """Compare two NDI documents for equality.
 
@@ -288,14 +307,23 @@ def diff(
     Args:
         doc1: First document.
         doc2: Second document.
-        exclude_fields: Dot-separated field paths to skip
-            (e.g. ``['base.session_id']``).
-        compare_files: Whether to compare file lists.
+        ignoreFields: Dot-separated field paths to skip
+            (e.g. ``['base.session_id']``). Defaults to
+            ``['base.session_id']``.
+        checkFiles: Whether to compare file contents.
+        checkFileList: Whether to compare the file_info lists
+            (default True).
+        session1: Session for doc1 (used for cross-session file
+            comparison when *checkFiles* is True).
+        session2: Session for doc2 (used for cross-session file
+            comparison when *checkFiles* is True).
 
     Returns:
         Dict with ``'equal'`` (bool) and ``'details'`` (list of strings).
     """
-    exclude_fields = exclude_fields or []
+    if ignoreFields is None:
+        ignoreFields = ["base.session_id"]
+    exclude_fields = list(ignoreFields)
     details: list[str] = []
 
     p1 = doc1.document_properties if hasattr(doc1, "document_properties") else doc1
@@ -338,9 +366,13 @@ def diff(
             if a != b:
                 details.append(f"{path}: {a!r} != {b!r}")
 
-    # Skip file comparison unless requested
-    if not compare_files:
+    # Skip file list comparison unless requested
+    if not checkFileList:
         exclude_fields = list(exclude_fields) + ["files"]
+    elif not checkFiles:
+        # checkFileList is True but checkFiles is False:
+        # compare file_info metadata but not actual file contents
+        pass
 
     _compare(p1, p2)
     return {"equal": len(details) == 0, "details": details}
@@ -448,5 +480,6 @@ all_types = allTypes
 find_fuid = findFuid
 make_species_strain_sex = makeSpeciesStrainSex
 probe_locations_for_probes = probeLocations4probes
+probe_locations4probes_legacy = probeLocations4probes
 ontology_table_row_vars = ontologyTableRowVars
 get_doc_types = getDocTypes
