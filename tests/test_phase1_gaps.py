@@ -3,7 +3,7 @@ Tests for Phase 1 gap-fill implementations.
 
 Covers:
 - TuningCurve analysis methods (Batch 1)
-- finddocs_element_epoch_type (Batch 2)
+- finddocs_elementEpochType (Batch 2)
 - evaluate_fitcurve (Batch 3)
 - ndi_document2ndi_object (Batch 4)
 - doc_table conversions (Batch 5)
@@ -156,41 +156,41 @@ class TestTuningCurveAnalysis:
 
 
 # =========================================================================
-# Batch 2: finddocs_element_epoch_type
+# Batch 2: finddocs_elementEpochType
 # =========================================================================
 
 
 class TestFinddocsElementEpochType:
 
     def test_basic_search(self):
-        from ndi.database_fun import finddocs_element_epoch_type
+        from ndi.database_fun import finddocs_elementEpochType
 
         session = MagicMock()
         doc = MagicMock()
         session.database_search.return_value = [doc]
 
-        result = finddocs_element_epoch_type(session, "elem_123", "epoch_001", "spectrogram")
+        result = finddocs_elementEpochType(session, "elem_123", "epoch_001", "spectrogram")
         assert result == [doc]
         session.database_search.assert_called_once()
 
     def test_no_results(self):
-        from ndi.database_fun import finddocs_element_epoch_type
+        from ndi.database_fun import finddocs_elementEpochType
 
         session = MagicMock()
         session.database_search.return_value = []
 
-        result = finddocs_element_epoch_type(session, "elem_123", "epoch_001", "spectrogram")
+        result = finddocs_elementEpochType(session, "elem_123", "epoch_001", "spectrogram")
         assert result == []
 
     def test_exception_fallback(self):
-        from ndi.database_fun import finddocs_element_epoch_type
+        from ndi.database_fun import finddocs_elementEpochType
 
         session = MagicMock()
         session.database_search.side_effect = Exception("DB error")
         session.session = MagicMock()
         session.session.database_search.return_value = ["doc1"]
 
-        result = finddocs_element_epoch_type(session, "elem_123", "epoch_001", "spectrogram")
+        result = finddocs_elementEpochType(session, "elem_123", "epoch_001", "spectrogram")
         assert result == ["doc1"]
 
 
@@ -604,8 +604,8 @@ class TestPresentationTime:
 
         try:
             write_presentation_time_structure(fname, entries)
-            # Read entries 2-3 (0-based)
-            header, result = read_presentation_time_structure(fname, 2, 3)
+            # Read entries 3-4 (1-based, matching MATLAB Semantic Parity)
+            header, result = read_presentation_time_structure(fname, 3, 4)
             assert len(result) == 2
             assert result[0]["clocktype"] == "clock_2"
             assert result[1]["clocktype"] == "clock_3"

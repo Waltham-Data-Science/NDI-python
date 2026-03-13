@@ -57,9 +57,13 @@ class TestIngestionPlan:
         assert dst == []
         assert delete == []
 
-    def test_ingest_plan_with_files(self):
+    def test_ingest_plan_with_files(self, tmp_path):
         """ingest_plan correctly identifies files to copy."""
         from ndi.database_ingestion import ingest_plan
+
+        # Create real source file (MATLAB validates existence)
+        src_file = tmp_path / "data.bin"
+        src_file.write_bytes(b"test data")
 
         doc = MagicMock()
         doc.document_properties = {
@@ -70,7 +74,7 @@ class TestIngestionPlan:
                         "locations": [
                             {
                                 "uid": "uid-001",
-                                "location": "/data/raw/data.bin",
+                                "location": str(src_file),
                                 "ingest": True,
                                 "delete_original": False,
                             }
@@ -79,15 +83,20 @@ class TestIngestionPlan:
                 ]
             }
         }
-        src, dst, delete = ingest_plan(doc, "/tmp/ingest")
+        ing_dir = str(tmp_path / "ingest_dest")
+        src, dst, delete = ingest_plan(doc, ing_dir)
         assert len(src) == 1
-        assert src[0] == "/data/raw/data.bin"
+        assert src[0] == str(src_file)
         assert "uid-001" in dst[0]
         assert delete == []
 
-    def test_ingest_plan_with_delete_original(self):
+    def test_ingest_plan_with_delete_original(self, tmp_path):
         """ingest_plan includes delete list when delete_original is set."""
         from ndi.database_ingestion import ingest_plan
+
+        # Create real source file (MATLAB validates existence)
+        src_file = tmp_path / "data.bin"
+        src_file.write_bytes(b"test data")
 
         doc = MagicMock()
         doc.document_properties = {
@@ -98,7 +107,7 @@ class TestIngestionPlan:
                         "locations": [
                             {
                                 "uid": "uid-002",
-                                "location": "/data/raw/data.bin",
+                                "location": str(src_file),
                                 "ingest": True,
                                 "delete_original": True,
                             }
@@ -107,10 +116,11 @@ class TestIngestionPlan:
                 ]
             }
         }
-        src, dst, delete = ingest_plan(doc, "/tmp/ingest")
+        ing_dir = str(tmp_path / "ingest_dest")
+        src, dst, delete = ingest_plan(doc, ing_dir)
         assert len(src) == 1
         assert len(delete) == 1
-        assert delete[0] == "/data/raw/data.bin"
+        assert delete[0] == str(src_file)
 
     def test_ingest_plan_no_ingest_flag(self):
         """ingest_plan skips locations without ingest=True."""
@@ -138,9 +148,15 @@ class TestIngestionPlan:
         assert src == []
         assert dst == []
 
-    def test_ingest_plan_multiple_files(self):
+    def test_ingest_plan_multiple_files(self, tmp_path):
         """ingest_plan handles multiple file_info entries."""
         from ndi.database_ingestion import ingest_plan
+
+        # Create real source files (MATLAB validates existence)
+        src1 = tmp_path / "file1.bin"
+        src1.write_bytes(b"data1")
+        src2 = tmp_path / "file2.bin"
+        src2.write_bytes(b"data2")
 
         doc = MagicMock()
         doc.document_properties = {
@@ -151,7 +167,7 @@ class TestIngestionPlan:
                         "locations": [
                             {
                                 "uid": "uid-a",
-                                "location": "/data/file1.bin",
+                                "location": str(src1),
                                 "ingest": True,
                                 "delete_original": False,
                             }
@@ -162,7 +178,7 @@ class TestIngestionPlan:
                         "locations": [
                             {
                                 "uid": "uid-b",
-                                "location": "/data/file2.bin",
+                                "location": str(src2),
                                 "ingest": True,
                                 "delete_original": True,
                             }
@@ -171,14 +187,21 @@ class TestIngestionPlan:
                 ]
             }
         }
-        src, dst, delete = ingest_plan(doc, "/tmp/ingest")
+        ing_dir = str(tmp_path / "ingest_dest")
+        src, dst, delete = ingest_plan(doc, ing_dir)
         assert len(src) == 2
         assert len(dst) == 2
         assert len(delete) == 1
 
-    def test_expell_plan_identifies_ingested_files(self):
+    def test_expell_plan_identifies_ingested_files(self, tmp_path):
         """expell_plan returns files to delete from ingestion directory."""
         from ndi.database_ingestion import expell_plan
+
+        # Create real ingested file (MATLAB validates existence)
+        ing_dir = tmp_path / "ingest"
+        ing_dir.mkdir()
+        ingested = ing_dir / "uid-004"
+        ingested.write_bytes(b"ingested data")
 
         doc = MagicMock()
         doc.document_properties = {
@@ -197,7 +220,7 @@ class TestIngestionPlan:
                 ]
             }
         }
-        to_delete = expell_plan(doc, "/tmp/ingest")
+        to_delete = expell_plan(doc, str(ing_dir))
         assert len(to_delete) == 1
         assert "uid-004" in to_delete[0]
 

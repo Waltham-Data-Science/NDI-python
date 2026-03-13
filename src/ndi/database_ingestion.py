@@ -63,6 +63,10 @@ def ingest_plan(
 
             if should_ingest and source and uid:
                 dest = str(ing_dir / uid)
+                if not Path(source).is_file():
+                    raise FileNotFoundError(f"File to ingest does not exist: {source}")
+                if Path(dest).is_file():
+                    raise FileExistsError(f"Destination file already exists: {dest}")
                 source_files.append(source)
                 dest_files.append(dest)
 
@@ -140,7 +144,10 @@ def expell_plan(
             if loc.get("ingest", False):
                 uid = loc.get("uid", "")
                 if uid:
-                    to_delete.append(str(ing_dir / uid))
+                    target = str(ing_dir / uid)
+                    if not Path(target).is_file():
+                        raise FileNotFoundError(f"File to delete does not exist: {target}")
+                    to_delete.append(target)
 
     return to_delete
 

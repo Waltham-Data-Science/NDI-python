@@ -1,0 +1,349 @@
+# ndi_matlab_python_bridge.yaml — ndi.database.fun (utility functions)
+# The Primary Contract for the ndi.database.fun namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Standalone functions
+# =========================================================================
+functions:
+
+  - name: findallantecedents
+    type: function
+    matlab_path: "+ndi/+database/+fun/findallantecedents.m"
+    matlab_last_sync_hash: "25cd329a"
+    python_path: "ndi/database_fun.py"
+    input_arguments:
+      - name: E
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "Any"
+        decision_log: "session_or_dataset in Python."
+      - name: visited
+        type_matlab: "cell | empty"
+        type_python: "set[str] | None"
+        decision_log: >
+          MATLAB: positional (E, visited, doc1, doc2, ...).
+          Python: findallantecedents(session_or_dataset, *documents, visited=None).
+          Parameter order differs; visited is keyword-only in Python.
+      - name: varargin
+        type_matlab: "ndi.document ..."
+        type_python: "*documents"
+    output_arguments:
+      - name: d
+        type_matlab: "cell array of ndi.document"
+        type_python: "list[Document]"
+    decision_log: "Synchronized with MATLAB main as of 2026-03-13."
+
+  - name: findalldependencies
+    type: function
+    matlab_path: "+ndi/+database/+fun/findalldependencies.m"
+    matlab_last_sync_hash: "738739e2"
+    python_path: "ndi/database_fun.py"
+    input_arguments:
+      - name: E
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "Any"
+      - name: visited
+        type_matlab: "cell | empty"
+        type_python: "set[str] | None"
+      - name: varargin
+        type_matlab: "ndi.document ..."
+        type_python: "*documents"
+    output_arguments:
+      - name: d
+        type_matlab: "cell array of ndi.document"
+        type_python: "list[Document]"
+    decision_log: "Synchronized with MATLAB main as of 2026-03-13."
+
+  - name: docs_from_ids
+    type: function
+    matlab_path: "+ndi/+database/+fun/docs_from_ids.m"
+    matlab_last_sync_hash: "c44ecb1b"
+    python_path: "ndi/database_fun.py"
+    input_arguments:
+      - name: D_or_S
+        type_matlab: "ndi.dataset | ndi.session"
+        type_python: "Any"
+      - name: document_ids
+        type_matlab: "cell array of char"
+        type_python: "list[str]"
+    output_arguments:
+      - name: docs
+        type_matlab: "cell array (same size as document_ids)"
+        type_python: "list[Document | None]"
+    decision_log: "Exact match. Synchronized with MATLAB main as of 2026-03-13."
+
+  - name: docs2graph
+    type: function
+    matlab_path: "+ndi/+database/+fun/docs2graph.m"
+    matlab_last_sync_hash: "2e056a3a"
+    python_path: "ndi/database_fun.py"
+    input_arguments:
+      - name: ndi_document_obj
+        type_matlab: "cell array of ndi.document"
+        type_python: "list[Document]"
+    output_arguments:
+      - name: G
+        type_matlab: "sparse adjacency matrix"
+        type_python: "dict[str, list[str]]"
+        decision_log: >
+          MATLAB returns a sparse matrix G. Python returns an adjacency
+          dict mapping node IDs to lists of dependency IDs. Structural
+          divergence; functionally equivalent for graph traversal.
+      - name: nodes
+        type_matlab: "cell array of char"
+        type_python: "list[str]"
+      - name: mdigraph
+        type_matlab: "digraph object"
+        type_python: "N/A"
+        decision_log: >
+          MATLAB returns a MATLAB digraph object. Python does not return
+          this third value. If needed, users can construct a networkx
+          graph from the adjacency dict.
+    decision_log: >
+      MATLAB returns (G, nodes, mdigraph); Python returns (adjacency_dict, nodes).
+      The mdigraph output is MATLAB-specific. Synchronized 2026-03-13.
+
+  - name: find_ingested_docs
+    type: function
+    matlab_path: "+ndi/+database/+fun/find_ingested_docs.m"
+    matlab_last_sync_hash: "59381b77"
+    python_path: "ndi/database_fun.py"
+    input_arguments:
+      - name: S
+        type_matlab: "ndi.session"
+        type_python: "Any"
+    output_arguments:
+      - name: d
+        type_matlab: "cell array of ndi.document"
+        type_python: "list[Document]"
+    decision_log: "Exact match. Synchronized with MATLAB main as of 2026-03-13."
+
+  - name: finddocs_elementEpochType
+    type: function
+    matlab_path: "+ndi/+database/+fun/finddocs_elementEpochType.m"
+    matlab_last_sync_hash: "43051900"
+    python_path: "ndi/database_fun.py"
+    python_name: "finddocs_elementEpochType"
+    input_arguments:
+      - name: S
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "Any"
+      - name: elementID
+        type_matlab: "char"
+        type_python: "str"
+      - name: epochID
+        type_matlab: "char"
+        type_python: "str"
+      - name: documentType
+        type_matlab: "char"
+        type_python: "str"
+    output_arguments:
+      - name: docs
+        type_matlab: "cell array of ndi.document"
+        type_python: "list[Document]"
+    decision_log: >
+      RENAMED from finddocs_element_epoch_type to finddocs_elementEpochType
+      to match MATLAB. MATLAB queries 'epochid.epochid' field; Python was
+      incorrectly querying 'epochid'. Fixed. Synchronized 2026-03-13.
+
+  - name: ndi_document2ndi_object
+    type: function
+    matlab_path: "+ndi/+database/+fun/ndi_document2ndi_object.m"
+    matlab_last_sync_hash: "62f7fa5e"
+    python_path: "ndi/database_fun.py"
+    input_arguments:
+      - name: ndi_document_obj
+        type_matlab: "ndi.document | char"
+        type_python: "Document | str"
+      - name: ndi_session_obj
+        type_matlab: "ndi.session"
+        type_python: "Any"
+    output_arguments:
+      - name: o
+        type_matlab: "ndi object"
+        type_python: "Any | None"
+    decision_log: >
+      MATLAB uses eval-based class resolution from document_class fields.
+      Python uses a hardcoded class_map. Both look up from document_class.class_name.
+      Python returns None on failure; MATLAB throws error.
+      Synchronized 2026-03-13.
+
+  - name: copy_session_to_dataset
+    type: function
+    matlab_path: "+ndi/+database/+fun/copy_session_to_dataset.m"
+    matlab_last_sync_hash: "c58397b5"
+    python_path: "ndi/database_fun.py"
+    input_arguments:
+      - name: ndi_session_obj
+        type_matlab: "ndi.session"
+        type_python: "Any"
+      - name: ndi_dataset_obj
+        type_matlab: "ndi.dataset"
+        type_python: "Any"
+    output_arguments:
+      - name: b
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: errmsg
+        type_matlab: "char"
+        type_python: "str"
+    decision_log: >
+      MATLAB uses extract_doc_files then creates a surrogate session.
+      Python simplified approach adds docs directly. Both return (bool, str).
+      Synchronized 2026-03-13.
+
+  - name: finddocs_missing_dependencies
+    type: function
+    matlab_path: "+ndi/+database/+fun/finddocs_missing_dependencies.m"
+    matlab_last_sync_hash: "6372fef5"
+    python_path: "ndi/database_fun.py"
+    input_arguments:
+      - name: E
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "Any"
+      - name: dep_names
+        type_matlab: "varargin (char)"
+        type_python: "*dep_names: str"
+    output_arguments:
+      - name: d
+        type_matlab: "cell array of ndi.document"
+        type_python: "list[Document]"
+    decision_log: >
+      MATLAB searches for docs with 'depends_on' hasfield first,
+      then validates each dependency against a cache. Python gets
+      all docs. Functionally equivalent. Synchronized 2026-03-13.
+
+  - name: write_presentation_time_structure
+    type: function
+    matlab_path: "+ndi/+database/+fun/write_presentation_time_structure.m"
+    matlab_last_sync_hash: "12cb5d54"
+    python_path: "ndi/database_fun.py"
+    input_arguments:
+      - name: filename
+        type_matlab: "char"
+        type_python: "str"
+      - name: presentation_time
+        type_matlab: "struct array"
+        type_python: "list[dict[str, Any]]"
+    output_arguments: []
+    decision_log: "Exact match. Binary format parity verified. Synchronized 2026-03-13."
+
+  - name: read_presentation_time_structure
+    type: function
+    matlab_path: "+ndi/+database/+fun/read_presentation_time_structure.m"
+    matlab_last_sync_hash: "31718f35"
+    python_path: "ndi/database_fun.py"
+    input_arguments:
+      - name: filename
+        type_matlab: "char"
+        type_python: "str"
+      - name: N0
+        type_matlab: "integer (1-based)"
+        type_python: "int (1-based)"
+        default: "1"
+        decision_log: >
+          FIXED: Was 0-based in Python. Changed to 1-based to match
+          MATLAB Semantic Parity. N0=1 means first entry.
+      - name: N1
+        type_matlab: "integer (1-based)"
+        type_python: "int (1-based)"
+        default: "num_entries"
+        decision_log: >
+          FIXED: Was 0-based in Python. Changed to 1-based to match
+          MATLAB Semantic Parity.
+    output_arguments:
+      - name: header
+        type_matlab: "char"
+        type_python: "str"
+      - name: presentation_time
+        type_matlab: "struct array"
+        type_python: "list[dict[str, Any]]"
+    decision_log: >
+      FIXED N0/N1 indexing from 0-based to 1-based for Semantic Parity.
+      Synchronized 2026-03-13.
+
+  - name: database2json
+    type: function
+    matlab_path: "+ndi/+database/+fun/database2json.m"
+    matlab_last_sync_hash: "ff445350"
+    python_path: "ndi/database_fun.py"
+    python_name: "database2json"
+    input_arguments:
+      - name: S
+        type_matlab: "ndi.session"
+        type_python: "Any"
+      - name: output_path
+        type_matlab: "char"
+        type_python: "str"
+    output_arguments:
+      - name: count
+        type_python: "int"
+        decision_log: >
+          MATLAB does not return a count; Python returns number exported
+          as a convenience. This is a minor Python-specific enhancement.
+    decision_log: >
+      RENAMED from database_to_json to database2json to match MATLAB.
+      Synchronized 2026-03-13.
+
+  - name: copydocfile2temp
+    type: function
+    matlab_path: "+ndi/+database/+fun/copydocfile2temp.m"
+    matlab_last_sync_hash: "6db763c9"
+    python_path: "ndi/database_fun.py"
+    python_name: "copydocfile2temp"
+    input_arguments:
+      - name: doc
+        type_matlab: "ndi.document"
+        type_python: "Any"
+      - name: S
+        type_matlab: "ndi.session"
+        type_python: "Any"
+      - name: filename
+        type_matlab: "char"
+        type_python: "str"
+      - name: extension
+        type_matlab: "char"
+        type_python: "str"
+        default: "''"
+    output_arguments:
+      - name: tname
+        type_matlab: "char"
+        type_python: "str"
+      - name: tname_without_extension
+        type_matlab: "char"
+        type_python: "str"
+    decision_log: >
+      RENAMED from copy_doc_file_to_temp to copydocfile2temp to match MATLAB.
+      Synchronized 2026-03-13.
+
+  - name: extract_doc_files
+    type: function
+    matlab_path: "+ndi/+database/+fun/extract_docs_files.m"
+    matlab_last_sync_hash: "9dc96e22"
+    python_path: "ndi/database_fun.py"
+    python_name: "extract_doc_files"
+    input_arguments:
+      - name: ndi_session_obj
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "Any"
+      - name: target_path
+        type_matlab: "char (optional)"
+        type_python: "str | None"
+        default: "None"
+    output_arguments:
+      - name: docs
+        type_matlab: "cell array of ndi.document"
+        type_python: "list[Document]"
+      - name: target_path
+        type_matlab: "char"
+        type_python: "str"
+    decision_log: >
+      RENAMED from extract_docs_files to extract_doc_files to match
+      MATLAB function name (extract_doc_files, singular 'doc').
+      Note: the MATLAB .m file is named extract_docs_files.m but the
+      function inside is named extract_doc_files. Using the function
+      name. Synchronized 2026-03-13.
