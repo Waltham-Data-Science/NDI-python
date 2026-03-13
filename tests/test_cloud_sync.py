@@ -170,7 +170,7 @@ class TestFromEnv:
         mock_config = MagicMock()
         mock_config.api_url = "https://api.example.com"
         mock_config_from_env.return_value = mock_config
-        mock_authenticate.return_value = "fake-token"
+        mock_authenticate.return_value = ("fake-token", "fake-org-id")
 
         client = CloudClient.from_env()
 
@@ -178,6 +178,7 @@ class TestFromEnv:
         assert client.config is mock_config
         mock_authenticate.assert_called_once_with(mock_config)
         assert mock_config.token == "fake-token"
+        assert mock_config.org_id == "fake-org-id"
 
     @patch("ndi.cloud.auth.authenticate")
     @patch("ndi.cloud.config.CloudConfig.from_env")
