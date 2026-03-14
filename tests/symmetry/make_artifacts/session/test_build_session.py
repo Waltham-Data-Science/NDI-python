@@ -16,16 +16,13 @@ The artifacts are left on disk so that the MATLAB ``readArtifacts`` suite
 
 import json
 import shutil
-from pathlib import Path
 
 import pytest
 
-from tests.symmetry.conftest import PYTHON_ARTIFACTS
-
-from ndi.document import Document
 from ndi.query import Query
 from ndi.session.dir import DirSession
 from ndi.subject import Subject
+from tests.symmetry.conftest import PYTHON_ARTIFACTS
 
 ARTIFACT_DIR = PYTHON_ARTIFACTS / "session" / "buildSession" / "testBuildSessionArtifacts"
 

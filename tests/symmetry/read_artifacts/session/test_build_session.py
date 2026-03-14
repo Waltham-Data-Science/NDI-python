@@ -18,10 +18,9 @@ import json
 
 import pytest
 
-from tests.symmetry.conftest import SOURCE_TYPES, SYMMETRY_BASE
-
 from ndi.query import Query
 from ndi.session.dir import DirSession
+from tests.symmetry.conftest import SOURCE_TYPES, SYMMETRY_BASE
 
 
 @pytest.fixture(params=SOURCE_TYPES)
