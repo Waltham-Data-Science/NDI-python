@@ -35,11 +35,7 @@ class TestBuildSession:
 
     def _artifact_dir(self, source_type: str):
         return (
-            SYMMETRY_BASE
-            / source_type
-            / "session"
-            / "buildSession"
-            / "testBuildSessionArtifacts"
+            SYMMETRY_BASE / source_type / "session" / "buildSession" / "testBuildSessionArtifacts"
         )
 
     # -- tests ---------------------------------------------------------------
@@ -84,8 +80,7 @@ class TestBuildSession:
                         assert getattr(actual, "subject_id", "") == expected.get(
                             "subject_id", ""
                         ), (
-                            f"Subject ID mismatch for probe {expected['name']} "
-                            f"in {source_type}"
+                            f"Subject ID mismatch for probe {expected['name']} " f"in {source_type}"
                         )
                         break
                 assert found, (
@@ -100,9 +95,7 @@ class TestBuildSession:
 
         json_files = list(json_docs_dir.glob("*.json"))
 
-        actual_docs = session.database_search(
-            Query("base.id").match("(.*)")
-        )
+        actual_docs = session.database_search(Query("base.id").match("(.*)"))
 
         assert len(actual_docs) == len(json_files), (
             f"Number of documents in session ({len(actual_docs)}) does not match "
@@ -118,15 +111,12 @@ class TestBuildSession:
                 if actual.id == expected_id:
                     found = True
                     actual_props = actual.document_properties
-                    assert (
-                        actual_props.get("document_class", {}).get("class_name")
-                        == expected_doc.get("document_class", {}).get("class_name")
-                    ), (
-                        f"Document class mismatch for id: {expected_id} "
-                        f"in {source_type}"
+                    assert actual_props.get("document_class", {}).get(
+                        "class_name"
+                    ) == expected_doc.get("document_class", {}).get("class_name"), (
+                        f"Document class mismatch for id: {expected_id} " f"in {source_type}"
                     )
                     break
             assert found, (
-                f"Document from {source_type} artifact not found in session: "
-                f"{expected_id}"
+                f"Document from {source_type} artifact not found in session: " f"{expected_id}"
             )

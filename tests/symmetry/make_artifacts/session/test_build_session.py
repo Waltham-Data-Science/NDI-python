@@ -27,10 +27,7 @@ from ndi.query import Query
 from ndi.session.dir import DirSession
 from ndi.subject import Subject
 
-
-ARTIFACT_DIR = (
-    PYTHON_ARTIFACTS / "session" / "buildSession" / "testBuildSessionArtifacts"
-)
+ARTIFACT_DIR = PYTHON_ARTIFACTS / "session" / "buildSession" / "testBuildSessionArtifacts"
 
 
 class TestBuildSession:
@@ -67,9 +64,7 @@ class TestBuildSession:
                 "subjectmeasurement.datestamp": "2017-03-17T19:53:57.066Z",
             },
         )
-        doc = doc.set_dependency_value(
-            "subject_id", subject.id, error_if_not_found=False
-        )
+        doc = doc.set_dependency_value("subject_id", subject.id, error_if_not_found=False)
         session.database_add(doc)
 
         self.session = session
@@ -110,21 +105,15 @@ class TestBuildSession:
         json_docs_dir = artifact_dir / "jsonDocuments"
         json_docs_dir.mkdir(exist_ok=True)
 
-        docs = self.session.database_search(
-            Query("base.id").match("(.*)")
-        )
+        docs = self.session.database_search(Query("base.id").match("(.*)"))
         for doc in docs:
             props = doc.document_properties
             doc_path = json_docs_dir / f"{doc.id}.json"
-            doc_path.write_text(
-                json.dumps(props, indent=2, allow_nan=True), encoding="utf-8"
-            )
+            doc_path.write_text(json.dumps(props, indent=2, allow_nan=True), encoding="utf-8")
 
         # Write probes.json
         probes_path = artifact_dir / "probes.json"
-        probes_path.write_text(
-            json.dumps(probe_dicts, indent=2, allow_nan=True), encoding="utf-8"
-        )
+        probes_path.write_text(json.dumps(probe_dicts, indent=2, allow_nan=True), encoding="utf-8")
 
         # Verify artifacts were created
         assert artifact_dir.exists()
