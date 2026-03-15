@@ -29,8 +29,8 @@ class SQLiteDriver:
     """SQLite database driver using DID-python's SQLiteDB.
 
     This driver wraps DID-python's SQLiteDB implementation to provide
-    a consistent interface for the NDI Database class. Uses DID-python's
-    field_search() for query evaluation.
+    a consistent interface for the NDI Database class. DID-python handles
+    doc_data population and SQL-based search natively.
     """
 
     def __init__(self, db_path: Path, branch_id: str = "a"):
@@ -42,14 +42,12 @@ class SQLiteDriver:
                 NDI-matlab have always used ``"a"`` as the default
                 branch, so we match that for cross-language compatibility.
         """
-        from did.datastructures import field_search
         from did.document import Document as DIDDocument
         from did.implementations.sqlitedb import SQLiteDB
 
         self._db_path = db_path
         self._branch_id = branch_id
         self._DIDDocument = DIDDocument
-        self._field_search = field_search
 
         # Initialize SQLiteDB
         self._db = SQLiteDB(str(db_path))
@@ -70,126 +68,34 @@ class SQLiteDriver:
         if doc_id in existing_ids:
             raise FileExistsError(f"Document {doc_id} already exists")
 
-        # Create DID Document and add
+        # Create DID Document and add (DID-python now populates doc_data)
         did_doc = self._DIDDocument(document)
         self._db.add_docs([did_doc], self._branch_id)
-
-        # Populate doc_data indexed fields for cross-language compatibility.
-        # DID-python's _do_add_doc does not populate the fields/doc_data
-        # tables, but DID-matlab's search relies on them.
-        self._populate_doc_data(doc_id, document)
 
     def bulk_add(self, documents: list[dict]) -> tuple[int, int]:
         """Add many documents at once, bypassing per-doc duplicate checks.
 
-        Uses a single transaction for all inserts.  Duplicates (by
-        ``base.id``) are silently skipped.
+        Duplicates (by ``base.id``) are silently skipped.
 
         Returns:
             ``(added, skipped)`` counts.
         """
-        import json as json_mod
-        import time
-
         existing_ids = set(self._db.get_doc_ids(self._branch_id))
 
         added = 0
         skipped = 0
-        cursor = self._db.dbid.cursor()
-        try:
-            for doc in documents:
-                doc_id = doc.get("base", {}).get("id", "")
-                if not doc_id or doc_id in existing_ids:
-                    skipped += 1
-                    continue
+        for doc in documents:
+            doc_id = doc.get("base", {}).get("id", "")
+            if not doc_id or doc_id in existing_ids:
+                skipped += 1
+                continue
 
-                json_code = json_mod.dumps(doc)
-                cursor.execute(
-                    "INSERT INTO docs (doc_id, json_code, timestamp) VALUES (?, ?, ?)",
-                    (doc_id, json_code, time.time()),
-                )
-                doc_idx = cursor.lastrowid
-                try:
-                    cursor.execute(
-                        "INSERT INTO branch_docs (branch_id, doc_idx, timestamp) VALUES (?, ?, ?)",
-                        (self._branch_id, doc_idx, time.time()),
-                    )
-                except Exception:
-                    pass
-                # Populate doc_data for cross-language compatibility
-                self._populate_doc_data_with_cursor(cursor, doc_idx, doc)
-
-                existing_ids.add(doc_id)
-                added += 1
-            self._db.dbid.commit()
-        except Exception:
-            self._db.dbid.rollback()
-            raise
+            did_doc = self._DIDDocument(doc)
+            self._db.add_docs([did_doc], self._branch_id)
+            existing_ids.add(doc_id)
+            added += 1
 
         return added, skipped
-
-    # -----------------------------------------------------------------
-    # doc_data population for MATLAB DID compatibility
-    # -----------------------------------------------------------------
-
-    @staticmethod
-    def _flatten_document(doc: dict, prefix: str = "") -> list[tuple[str, str]]:
-        """Flatten a document dict into (field_path, value) pairs.
-
-        Only includes leaf scalar values (str, int, float, bool).
-        Skips lists and nested dicts (those are traversed recursively).
-        """
-        pairs: list[tuple[str, str]] = []
-        for key, val in doc.items():
-            path = f"{prefix}.{key}" if prefix else key
-            if isinstance(val, dict):
-                pairs.extend(SQLiteDriver._flatten_document(val, path))
-            elif isinstance(val, list):
-                # Index list elements for depends_on etc.
-                for i, item in enumerate(val):
-                    if isinstance(item, dict):
-                        pairs.extend(SQLiteDriver._flatten_document(item, f"{path}({i})"))
-                    elif item is not None:
-                        pairs.append((f"{path}({i})", str(item)))
-            elif val is not None:
-                pairs.append((path, str(val)))
-        return pairs
-
-    def _get_or_create_field_idx(self, cursor, field_name: str, doc_class: str = "") -> int:
-        """Get field_idx from the fields table, creating a new entry if needed."""
-        cursor.execute("SELECT field_idx FROM fields WHERE field_name = ?", (field_name,))
-        row = cursor.fetchone()
-        if row:
-            return row[0] if isinstance(row, (tuple, list)) else row["field_idx"]
-        cursor.execute(
-            "INSERT INTO fields (class, field_name, json_name, field_idx) "
-            "VALUES (?, ?, ?, NULL)",
-            (doc_class, field_name, field_name),
-        )
-        return cursor.lastrowid
-
-    def _populate_doc_data(self, doc_id: str, document: dict) -> None:
-        """Populate the doc_data table for a document after insertion."""
-        cursor = self._db.dbid.cursor()
-        # Look up doc_idx
-        cursor.execute("SELECT doc_idx FROM docs WHERE doc_id = ?", (doc_id,))
-        row = cursor.fetchone()
-        if not row:
-            return
-        doc_idx = row[0] if isinstance(row, (tuple, list)) else row["doc_idx"]
-        self._populate_doc_data_with_cursor(cursor, doc_idx, document)
-        self._db.dbid.commit()
-
-    def _populate_doc_data_with_cursor(self, cursor, doc_idx: int, document: dict) -> None:
-        """Populate doc_data for a document using an existing cursor."""
-        doc_class = document.get("document_class", {}).get("class_name", "")
-        pairs = self._flatten_document(document)
-        for field_name, value in pairs:
-            field_idx = self._get_or_create_field_idx(cursor, field_name, doc_class)
-            cursor.execute(
-                "INSERT INTO doc_data (doc_idx, field_idx, value) VALUES (?, ?, ?)",
-                (doc_idx, field_idx, value),
-            )
 
     def update(self, document: dict) -> None:
         """Update an existing document."""
@@ -200,22 +106,10 @@ class SQLiteDriver:
         if doc_id not in existing_ids:
             raise FileNotFoundError(f"Document {doc_id} not found")
 
-        # Remove old doc_data entries
-        cursor = self._db.dbid.cursor()
-        cursor.execute("SELECT doc_idx FROM docs WHERE doc_id = ?", (doc_id,))
-        row = cursor.fetchone()
-        if row:
-            old_idx = row[0] if isinstance(row, (tuple, list)) else row["doc_idx"]
-            cursor.execute("DELETE FROM doc_data WHERE doc_idx = ?", (old_idx,))
-        self._db.dbid.commit()
-
-        # Remove old and add new (SQLiteDB doesn't have direct update)
+        # Remove old and add new (DID handles doc_data cleanup and repopulation)
         self._db.remove_docs([doc_id], self._branch_id)
         did_doc = self._DIDDocument(document)
         self._db.add_docs([did_doc], self._branch_id)
-
-        # Repopulate doc_data
-        self._populate_doc_data(doc_id, document)
 
     def delete_by_id(self, doc_id: str) -> bool:
         """Delete a document by ID."""
@@ -239,30 +133,36 @@ class SQLiteDriver:
     def find(self, query=None) -> list[dict]:
         """Find all documents matching query.
 
-        Uses DID-python's field_search() for query evaluation.
+        Uses DID-python's SQL-based search against the doc_data table
+        for query evaluation, falling back to brute-force for unsupported
+        operations.
         """
         import json as json_mod
 
-        # Fetch all JSON blobs in a single SQL query instead of one-by-one.
-        rows = self._db.do_run_sql_query(
-            "SELECT d.json_code FROM docs d "
-            "JOIN branch_docs bd ON d.doc_idx = bd.doc_idx "
-            "WHERE bd.branch_id = ?",
-            (self._branch_id,),
-        )
+        if query is not None:
+            # Use DID-python's SQL-based search
+            doc_ids = self._db.search(query, self._branch_id)
+            if not doc_ids:
+                return []
+            # Fetch full documents for matched IDs
+            placeholders = ",".join("?" for _ in doc_ids)
+            rows = self._db.do_run_sql_query(
+                f"SELECT json_code FROM docs WHERE doc_id IN ({placeholders})",
+                tuple(doc_ids),
+            )
+        else:
+            # No query: return all documents in branch
+            rows = self._db.do_run_sql_query(
+                "SELECT d.json_code FROM docs d "
+                "JOIN branch_docs bd ON d.doc_idx = bd.doc_idx "
+                "WHERE bd.branch_id = ?",
+                (self._branch_id,),
+            )
 
         if not rows:
             return []
 
-        documents = [json_mod.loads(r["json_code"]) for r in rows]
-
-        # Filter by query if provided using DID-python's field_search
-        if query is not None:
-            # Convert to DID-python compatible format
-            search_params = query.to_search_structure()
-            documents = [d for d in documents if self._field_search(d, search_params)]
-
-        return documents
+        return [json_mod.loads(r["json_code"]) for r in rows]
 
 
 class Database:
