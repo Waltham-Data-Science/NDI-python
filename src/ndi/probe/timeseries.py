@@ -32,6 +32,10 @@ class ProbeTimeseries(Probe):
         >>> data, t, timeref = probe.readtimeseries(epoch=1, t0=0, t1=10)
     """
 
+    def ndi_element_class(self) -> str:
+        """Return ``'ndi.probe.timeseries'``."""
+        return "ndi.probe.timeseries"
+
     def readtimeseries(
         self,
         epoch: int | str | Any = None,

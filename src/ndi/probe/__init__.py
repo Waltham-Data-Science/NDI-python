@@ -313,16 +313,14 @@ class Probe(Element):
 
         MATLAB equivalent: ``class(ndi_probe_obj)``
 
-        Uses the ``probetype2object.json`` mapping to translate the
-        probe *type* (e.g. ``'n-trode'``) to the MATLAB class name
-        (e.g. ``'ndi.probe.timeseries.mfdaq'``).  Falls back to
-        ``'ndi.probe'`` when the type is not in the mapping.
+        Returns ``'ndi.probe'``.  Subclasses (e.g.
+        ``ProbeTimeseriesMFDAQ``) override this to return their own
+        MATLAB class name.
 
         Returns:
             MATLAB class name string.
         """
-        type_map = getProbeTypeMap()
-        return type_map.get(self._type, "ndi.probe")
+        return "ndi.probe"
 
     # =========================================================================
     # Static Methods
