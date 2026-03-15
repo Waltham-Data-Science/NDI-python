@@ -64,10 +64,10 @@ class Ido:
         """
         # Get current time in microseconds since epoch
         time_us = int(time.time() * 1000000)
-        time_hex = format(time_us, "x")
+        time_hex = format(time_us, "016x")
 
         # Generate random component
-        random_hex = format(random.getrandbits(48), "012x")
+        random_hex = format(random.getrandbits(64), "016x")
 
         return f"{time_hex}_{random_hex}"
 

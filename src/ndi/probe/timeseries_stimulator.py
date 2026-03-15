@@ -58,13 +58,19 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
         name: str = "",
         reference: int = 1,
         type: str = "stimulator",
+        **kwargs: Any,
     ):
         super().__init__(
             session=session,
             name=name,
             reference=reference,
             type=type,
+            **kwargs,
         )
+
+    def ndi_element_class(self) -> str:
+        """Return ``'ndi.probe.timeseries.stimulator'``."""
+        return "ndi.probe.timeseries.stimulator"
 
     def readtimeseriesepoch(
         self,

@@ -35,6 +35,10 @@ class ProbeTimeseriesMFDAQ(ProbeTimeseries):
         >>> sr = probe.samplerate(1)
     """
 
+    def ndi_element_class(self) -> str:
+        """Return ``'ndi.probe.timeseries.mfdaq'``."""
+        return "ndi.probe.timeseries.mfdaq"
+
     def read_epochsamples(
         self,
         epoch: int | str,

@@ -94,20 +94,27 @@ class DAQSystem(Ido):
         """Load DAQSystem from a document."""
         doc_props = getattr(document, "document_properties", document)
 
-        # Get IDs from document
-        daqreader_id = document.dependency_value("daqreader_id")
-        filenavigator_id = document.dependency_value("filenavigator_id")
+        # Extract basic properties using dict access
+        base = doc_props.get("base", {}) if isinstance(doc_props, dict) else {}
+        self._name = base.get("name", "")
+        if "id" in base:
+            self._id = base["id"]
+        self._session = session
+
+        # Get dependency IDs from document
+        daqreader_id = document.dependency_value("daqreader_id", error_if_not_found=False)
+        filenavigator_id = document.dependency_value("filenavigator_id", error_if_not_found=False)
 
         # Load reader and navigator from database
         from ..query import Query
 
-        reader_docs = session.database_search(Query("base.id") == daqreader_id)
-        if len(reader_docs) != 1:
-            raise ValueError(f"Could not find daqreader with id {daqreader_id}")
+        reader_docs = []
+        if daqreader_id:
+            reader_docs = session.database_search(Query("base.id") == daqreader_id)
 
-        nav_docs = session.database_search(Query("base.id") == filenavigator_id)
-        if len(nav_docs) != 1:
-            raise ValueError(f"Could not find filenavigator with id {filenavigator_id}")
+        nav_docs = []
+        if filenavigator_id:
+            nav_docs = session.database_search(Query("base.id") == filenavigator_id)
 
         # Load metadata readers
         metadata_ids = (
@@ -117,49 +124,65 @@ class DAQSystem(Ido):
         for mid in metadata_ids:
             m_docs = session.database_search(Query("base.id") == mid)
             if len(m_docs) == 1:
-                # Create reader from document
                 from .metadatareader import MetadataReader
 
-                metadata_readers.append(MetadataReader(session=session, document=m_docs[0]))
-
-        self._name = doc_props.base.name if hasattr(doc_props, "base") else ""
-        self.identifier = doc_props.base.id if hasattr(doc_props, "base") else self.identifier
-        self._session = session
+                try:
+                    metadata_readers.append(MetadataReader(session=session, document=m_docs[0]))
+                except Exception:
+                    pass
         self._daqmetadatareaders = metadata_readers
 
         # Reconstruct reader from its document
-        reader_doc = reader_docs[0]
-        reader_class_name = reader_doc._get_nested_property("daqreader.ndi_daqreader_class", "")
-        _READER_CLASSES = {
-            "IntanReader": "ndi.daq.reader.mfdaq.intan.IntanReader",
-            "BlackrockReader": "ndi.daq.reader.mfdaq.blackrock.BlackrockReader",
-            "CEDSpike2Reader": "ndi.daq.reader.mfdaq.cedspike2.CEDSpike2Reader",
-            "SpikeGadgetsReader": "ndi.daq.reader.mfdaq.spikegadgets.SpikeGadgetsReader",
-        }
-        reader_path = _READER_CLASSES.get(reader_class_name)
-        if reader_path:
-            try:
-                module_path, cls_name = reader_path.rsplit(".", 1)
-                import importlib
+        self._daqreader = None
+        if len(reader_docs) == 1:
+            reader_doc = reader_docs[0]
+            reader_class_name = ""
+            reader_props = reader_doc.document_properties
+            if isinstance(reader_props, dict):
+                reader_class_name = reader_props.get("daqreader", {}).get("ndi_daqreader_class", "")
+            else:
+                reader_class_name = reader_doc._get_nested_property(
+                    "daqreader.ndi_daqreader_class", ""
+                )
 
-                mod = importlib.import_module(module_path)
-                ReaderCls = getattr(mod, cls_name)
-                self._daqreader = ReaderCls(session=session, document=reader_doc)
-            except Exception as exc:
-                logger.warning("Could not reconstruct DAQ reader %s: %s", reader_class_name, exc)
-                self._daqreader = None
-        else:
-            logger.debug("Unknown DAQ reader class: %s", reader_class_name)
-            self._daqreader = None
+            # Map both Python class names and MATLAB class names
+            _READER_CLASSES = {
+                # Python class names
+                "IntanReader": "ndi.daq.reader.mfdaq.intan.IntanReader",
+                "BlackrockReader": "ndi.daq.reader.mfdaq.blackrock.BlackrockReader",
+                "CEDSpike2Reader": "ndi.daq.reader.mfdaq.cedspike2.CEDSpike2Reader",
+                "SpikeGadgetsReader": "ndi.daq.reader.mfdaq.spikegadgets.SpikeGadgetsReader",
+                # MATLAB class names
+                "ndi.daq.reader.mfdaq.intan": "ndi.daq.reader.mfdaq.intan.IntanReader",
+                "ndi.daq.reader.mfdaq.blackrock": "ndi.daq.reader.mfdaq.blackrock.BlackrockReader",
+                "ndi.daq.reader.mfdaq.cedspike2": "ndi.daq.reader.mfdaq.cedspike2.CEDSpike2Reader",
+                "ndi.daq.reader.mfdaq.spikegadgets": "ndi.daq.reader.mfdaq.spikegadgets.SpikeGadgetsReader",
+            }
+            reader_path = _READER_CLASSES.get(reader_class_name)
+            if reader_path:
+                try:
+                    module_path, cls_name = reader_path.rsplit(".", 1)
+                    import importlib
+
+                    mod = importlib.import_module(module_path)
+                    ReaderCls = getattr(mod, cls_name)
+                    self._daqreader = ReaderCls(session=session, document=reader_doc)
+                except Exception as exc:
+                    logger.warning(
+                        "Could not reconstruct DAQ reader %s: %s", reader_class_name, exc
+                    )
+            else:
+                logger.debug("Unknown DAQ reader class: %s", reader_class_name)
 
         # Reconstruct file navigator from its document
-        from ..file.navigator import FileNavigator
+        self._filenavigator = None
+        if len(nav_docs) == 1:
+            from ..file.navigator import FileNavigator
 
-        try:
-            self._filenavigator = FileNavigator(session=session, document=nav_docs[0])
-        except Exception as exc:
-            logger.warning("Could not reconstruct file navigator: %s", exc)
-            self._filenavigator = None
+            try:
+                self._filenavigator = FileNavigator(session=session, document=nav_docs[0])
+            except Exception as exc:
+                logger.warning("Could not reconstruct file navigator: %s", exc)
 
     @property
     def name(self) -> str:

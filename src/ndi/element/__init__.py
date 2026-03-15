@@ -114,21 +114,19 @@ class Element(Ido, EpochSet, DocumentService):
         """Load element from a document."""
         props = getattr(document, "document_properties", document)
 
-        # Get basic properties
-        if hasattr(props, "element"):
-            self._name = getattr(props.element, "name", "")
-            self._reference = getattr(props.element, "reference", 0)
-            self._type = getattr(props.element, "type", "")
-            self._direct = getattr(props.element, "direct", True)
-        else:
-            self._name = ""
-            self._reference = 0
-            self._type = ""
-            self._direct = True
+        # Get basic properties from the element dict
+        elem = props.get("element", {}) if isinstance(props, dict) else {}
+        self._name = elem.get("name", "")
+        ref = elem.get("reference", 0)
+        self._reference = int(ref) if ref != "" else 0
+        self._type = elem.get("type", "")
+        direct_val = elem.get("direct", True)
+        self._direct = bool(int(direct_val)) if direct_val != "" else True
 
         # Get ID from base
-        if hasattr(props, "base") and hasattr(props.base, "id"):
-            self.identifier = props.base.id
+        base = props.get("base", {}) if isinstance(props, dict) else {}
+        if "id" in base:
+            self._id = base["id"]
 
         self._session = session
         self._subject_id = document.dependency_value("subject_id", error_if_not_found=False) or ""
@@ -184,6 +182,20 @@ class Element(Ido, EpochSet, DocumentService):
     def dependencies(self) -> dict[str, str]:
         """Get additional dependencies."""
         return self._dependencies
+
+    def ndi_element_class(self) -> str:
+        """Return the NDI element class name for document storage.
+
+        MATLAB equivalent: ``class(ndi_element_obj)``
+
+        Returns the MATLAB-compatible class name string used in the
+        ``element.ndi_element_class`` document field.  Subclasses
+        override this to return their own class name.
+
+        Returns:
+            MATLAB class name string, e.g. ``'ndi.element'``.
+        """
+        return "ndi.element"
 
     def elementstring(self) -> str:
         """
@@ -395,6 +407,7 @@ class Element(Ido, EpochSet, DocumentService):
         doc = Document(
             "element",
             **{
+                "element.ndi_element_class": self.ndi_element_class(),
                 "element.name": self._name,
                 "element.reference": self._reference,
                 "element.type": self._type,
@@ -423,12 +436,22 @@ class Element(Ido, EpochSet, DocumentService):
         """
         Create a query to find this element.
 
+        MATLAB equivalent: ``ndi.element/searchquery``
+
+        Builds a query matching session_id, element name, type,
+        ndi_element_class, and reference — the same fields used
+        by the MATLAB implementation.
+
         Returns:
             Query matching this element's document
         """
         from ..query import Query
 
-        q = Query("base.id") == self.id
+        q = self._session.searchquery() if self._session is not None else Query("")
+        q = q & (Query("element.name") == self._name)
+        q = q & (Query("element.type") == self._type)
+        q = q & (Query("element.ndi_element_class") == self.ndi_element_class())
+        q = q & (Query("element.reference") == self._reference)
         return q
 
     # =========================================================================

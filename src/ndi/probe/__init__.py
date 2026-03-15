@@ -305,38 +305,22 @@ class Probe(Element):
         }
 
     # =========================================================================
-    # DocumentService Override
+    # Element overrides
     # =========================================================================
 
-    def newdocument(self) -> Any:
-        """
-        Create a new document for this probe.
+    def ndi_element_class(self) -> str:
+        """Return the NDI element class name for document storage.
+
+        MATLAB equivalent: ``class(ndi_probe_obj)``
+
+        Returns ``'ndi.probe'``.  Subclasses (e.g.
+        ``ProbeTimeseriesMFDAQ``) override this to return their own
+        MATLAB class name.
 
         Returns:
-            Document representing this probe
+            MATLAB class name string.
         """
-        from ..document import Document
-
-        doc = Document(
-            "element",
-            **{
-                "element.name": self._name,
-                "element.reference": self._reference,
-                "element.type": self._type,
-                "element.direct": True,  # MATLAB sets direct=1 for probes
-                "base.id": self.id,
-            },
-        )
-
-        # Set session ID
-        if self._session is not None:
-            doc.set_session_id(self._session.id)
-
-        # Set subject dependency
-        if self._subject_id:
-            doc.set_dependency_value("subject_id", self._subject_id)
-
-        return doc
+        return "ndi.probe"
 
     # =========================================================================
     # Static Methods
