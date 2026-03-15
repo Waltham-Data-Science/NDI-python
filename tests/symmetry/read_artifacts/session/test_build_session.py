@@ -55,9 +55,7 @@ class TestBuildSession:
 
         summary_path = artifact_dir / "sessionSummary.json"
         if not summary_path.exists():
-            pytest.skip(
-                f"sessionSummary.json not found in {source_type} artifact directory."
-            )
+            pytest.skip(f"sessionSummary.json not found in {source_type} artifact directory.")
 
         expected_summary = json.loads(summary_path.read_text(encoding="utf-8"))
         actual_summary = sessionSummary(session)
@@ -68,9 +66,10 @@ class TestBuildSession:
             excludeFiles=["sessionSummary.json", "jsonDocuments"],
         )
 
-        assert len(report) == 0, (
-            f"Session summary mismatch against {source_type} generated artifacts:\n"
-            + "\n".join(report)
+        assert (
+            len(report) == 0
+        ), f"Session summary mismatch against {source_type} generated artifacts:\n" + "\n".join(
+            report
         )
 
     def test_build_session_documents(self, source_type):

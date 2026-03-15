@@ -90,9 +90,7 @@ def compareSessionSummary(
                         n1 = os.path.basename(s1)
                         n2 = os.path.basename(s2)
                         if not (n1 and n1 == n2):
-                            report.append(
-                                f'Field {field}[{j}] differs: "{s1}" vs "{s2}"'
-                            )
+                            report.append(f'Field {field}[{j}] differs: "{s1}" vs "{s2}"')
                 elif isinstance(item1, dict) and isinstance(item2, dict):
                     sub = compareSessionSummary(item1, item2)
                     for s in sub:
@@ -142,8 +140,7 @@ def compareSessionSummary(
                     v1s = "<unprintable>"
                     v2s = "<unprintable>"
                 report.append(
-                    f"Field {field} differs in value/object:\n"
-                    f"  Val1: {v1s}\n  Val2: {v2s}"
+                    f"Field {field} differs in value/object:\n" f"  Val1: {v1s}\n  Val2: {v2s}"
                 )
 
     return report

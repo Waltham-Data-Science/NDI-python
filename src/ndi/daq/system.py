@@ -102,12 +102,8 @@ class DAQSystem(Ido):
         self._session = session
 
         # Get dependency IDs from document
-        daqreader_id = document.dependency_value(
-            "daqreader_id", error_if_not_found=False
-        )
-        filenavigator_id = document.dependency_value(
-            "filenavigator_id", error_if_not_found=False
-        )
+        daqreader_id = document.dependency_value("daqreader_id", error_if_not_found=False)
+        filenavigator_id = document.dependency_value("filenavigator_id", error_if_not_found=False)
 
         # Load reader and navigator from database
         from ..query import Query
@@ -143,9 +139,7 @@ class DAQSystem(Ido):
             reader_class_name = ""
             reader_props = reader_doc.document_properties
             if isinstance(reader_props, dict):
-                reader_class_name = reader_props.get("daqreader", {}).get(
-                    "ndi_daqreader_class", ""
-                )
+                reader_class_name = reader_props.get("daqreader", {}).get("ndi_daqreader_class", "")
             else:
                 reader_class_name = reader_doc._get_nested_property(
                     "daqreader.ndi_daqreader_class", ""
@@ -174,7 +168,9 @@ class DAQSystem(Ido):
                     ReaderCls = getattr(mod, cls_name)
                     self._daqreader = ReaderCls(session=session, document=reader_doc)
                 except Exception as exc:
-                    logger.warning("Could not reconstruct DAQ reader %s: %s", reader_class_name, exc)
+                    logger.warning(
+                        "Could not reconstruct DAQ reader %s: %s", reader_class_name, exc
+                    )
             else:
                 logger.debug("Unknown DAQ reader class: %s", reader_class_name)
 

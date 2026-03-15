@@ -148,9 +148,7 @@ class SQLiteDriver:
                 # Index list elements for depends_on etc.
                 for i, item in enumerate(val):
                     if isinstance(item, dict):
-                        pairs.extend(
-                            SQLiteDriver._flatten_document(item, f"{path}({i})")
-                        )
+                        pairs.extend(SQLiteDriver._flatten_document(item, f"{path}({i})"))
                     elif item is not None:
                         pairs.append((f"{path}({i})", str(item)))
             elif val is not None:
@@ -159,9 +157,7 @@ class SQLiteDriver:
 
     def _get_or_create_field_idx(self, cursor, field_name: str, doc_class: str = "") -> int:
         """Get field_idx from the fields table, creating a new entry if needed."""
-        cursor.execute(
-            "SELECT field_idx FROM fields WHERE field_name = ?", (field_name,)
-        )
+        cursor.execute("SELECT field_idx FROM fields WHERE field_name = ?", (field_name,))
         row = cursor.fetchone()
         if row:
             return row[0] if isinstance(row, (tuple, list)) else row["field_idx"]
@@ -184,13 +180,9 @@ class SQLiteDriver:
         self._populate_doc_data_with_cursor(cursor, doc_idx, document)
         self._db.dbid.commit()
 
-    def _populate_doc_data_with_cursor(
-        self, cursor, doc_idx: int, document: dict
-    ) -> None:
+    def _populate_doc_data_with_cursor(self, cursor, doc_idx: int, document: dict) -> None:
         """Populate doc_data for a document using an existing cursor."""
-        doc_class = (
-            document.get("document_class", {}).get("class_name", "")
-        )
+        doc_class = document.get("document_class", {}).get("class_name", "")
         pairs = self._flatten_document(document)
         for field_name, value in pairs:
             field_idx = self._get_or_create_field_idx(cursor, field_name, doc_class)
