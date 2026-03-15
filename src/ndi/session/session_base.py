@@ -1088,7 +1088,13 @@ class Session(ABC):
             from ..daq.system import DAQSystem
 
             return DAQSystem(session=self, document=document)
-        elif document.doc_isa("probe"):
+
+        # Probes are stored as "element" documents, so doc_isa("probe")
+        # never matches.  Instead, check the ndi_element_class field which
+        # MATLAB sets to values like "ndi.probe.timeseries.mfdaq".
+        props = document.document_properties
+        ndi_class = props.get("element", {}).get("ndi_element_class", "")
+        if "probe" in ndi_class or document.doc_isa("probe"):
             from ..probe import Probe
 
             return Probe(session=self, document=document)

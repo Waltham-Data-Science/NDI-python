@@ -114,21 +114,19 @@ class Element(Ido, EpochSet, DocumentService):
         """Load element from a document."""
         props = getattr(document, "document_properties", document)
 
-        # Get basic properties
-        if hasattr(props, "element"):
-            self._name = getattr(props.element, "name", "")
-            self._reference = getattr(props.element, "reference", 0)
-            self._type = getattr(props.element, "type", "")
-            self._direct = getattr(props.element, "direct", True)
-        else:
-            self._name = ""
-            self._reference = 0
-            self._type = ""
-            self._direct = True
+        # Get basic properties from the element dict
+        elem = props.get("element", {}) if isinstance(props, dict) else {}
+        self._name = elem.get("name", "")
+        ref = elem.get("reference", 0)
+        self._reference = int(ref) if ref != "" else 0
+        self._type = elem.get("type", "")
+        direct_val = elem.get("direct", True)
+        self._direct = bool(int(direct_val)) if direct_val != "" else True
 
         # Get ID from base
-        if hasattr(props, "base") and hasattr(props.base, "id"):
-            self.identifier = props.base.id
+        base = props.get("base", {}) if isinstance(props, dict) else {}
+        if "id" in base:
+            self._id = base["id"]
 
         self._session = session
         self._subject_id = document.dependency_value("subject_id", error_if_not_found=False) or ""
