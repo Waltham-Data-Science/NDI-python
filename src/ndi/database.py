@@ -33,12 +33,14 @@ class SQLiteDriver:
     field_search() for query evaluation.
     """
 
-    def __init__(self, db_path: Path, branch_id: str = "main"):
+    def __init__(self, db_path: Path, branch_id: str = "a"):
         """Initialize the SQLite driver.
 
         Args:
             db_path: Path to the SQLite database file.
-            branch_id: Default branch ID to use.
+            branch_id: Default branch ID to use.  DID-matlab and
+                NDI-matlab have always used ``"a"`` as the default
+                branch, so we match that for cross-language compatibility.
         """
         from did.datastructures import field_search
         from did.document import Document as DIDDocument
@@ -52,7 +54,7 @@ class SQLiteDriver:
         # Initialize SQLiteDB
         self._db = SQLiteDB(str(db_path))
 
-        # Create main branch if it doesn't exist
+        # Create branch if it doesn't exist
         existing_branches = self._db.all_branch_ids()
         if branch_id not in existing_branches:
             self._db.add_branch(branch_id, "")  # Empty string for root branch
@@ -203,7 +205,7 @@ class Database:
             db_name: Name of the database directory within session.
                      Default is '.ndi'.
             **backend_kwargs: Additional arguments passed to SQLiteDriver
-                             (e.g., branch_id='main').
+                             (e.g., branch_id='a').
         """
         self.session_path = Path(session_path)
         self._db_name = db_name
