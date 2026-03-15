@@ -95,7 +95,10 @@ class DirSession(Session):
         # Try to load session info from database
         read_from_database = False
         if should_read_from_database:
-            session_docs = self.database_search(Query("").isa("session"))
+            # Search without the session_id filter so we can discover the
+            # existing session_id from documents already in the database
+            # (e.g. artifacts produced by MATLAB).
+            session_docs = self._database.search(Query("").isa("session"))
             if session_docs:
                 # Use the oldest session document
                 oldest_doc = session_docs[0]
@@ -108,10 +111,10 @@ class DirSession(Session):
                 oldest_doc = session_docs[0]
 
                 props = oldest_doc.document_properties
-                if hasattr(props, "base"):
-                    self._identifier = getattr(props.base, "session_id", self._identifier)
-                if hasattr(props, "session"):
-                    self._reference = getattr(props.session, "reference", self._reference)
+                if "base" in props and isinstance(props["base"], dict):
+                    self._identifier = props["base"].get("session_id", self._identifier)
+                if "session" in props and isinstance(props["session"], dict):
+                    self._reference = props["session"].get("reference", self._reference)
                 read_from_database = True
 
         # If not read from database, try reference file or create new
