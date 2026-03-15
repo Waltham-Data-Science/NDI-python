@@ -183,6 +183,20 @@ class Element(Ido, EpochSet, DocumentService):
         """Get additional dependencies."""
         return self._dependencies
 
+    def ndi_element_class(self) -> str:
+        """Return the NDI element class name for document storage.
+
+        MATLAB equivalent: ``class(ndi_element_obj)``
+
+        Returns the MATLAB-compatible class name string used in the
+        ``element.ndi_element_class`` document field.  Subclasses
+        override this to return their own class name.
+
+        Returns:
+            MATLAB class name string, e.g. ``'ndi.element'``.
+        """
+        return "ndi.element"
+
     def elementstring(self) -> str:
         """
         Format element as human-readable string.
@@ -393,6 +407,7 @@ class Element(Ido, EpochSet, DocumentService):
         doc = Document(
             "element",
             **{
+                "element.ndi_element_class": self.ndi_element_class(),
                 "element.name": self._name,
                 "element.reference": self._reference,
                 "element.type": self._type,
@@ -421,12 +436,22 @@ class Element(Ido, EpochSet, DocumentService):
         """
         Create a query to find this element.
 
+        MATLAB equivalent: ``ndi.element/searchquery``
+
+        Builds a query matching session_id, element name, type,
+        ndi_element_class, and reference — the same fields used
+        by the MATLAB implementation.
+
         Returns:
             Query matching this element's document
         """
         from ..query import Query
 
-        q = Query("base.id") == self.id
+        q = self._session.searchquery() if self._session is not None else Query("")
+        q = q & (Query("element.name") == self._name)
+        q = q & (Query("element.type") == self._type)
+        q = q & (Query("element.ndi_element_class") == self.ndi_element_class())
+        q = q & (Query("element.reference") == self._reference)
         return q
 
     # =========================================================================
