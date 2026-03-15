@@ -65,6 +65,41 @@ class TestBuildSession:
         doc = doc.set_dependency_value("subject_id", subject.id, error_if_not_found=False)
         session.database_add(doc)
 
+        # Add DAQ system documents (filenavigator, daqreader, daqsystem).
+        # MATLAB's buildSession creates an Intan DAQ system with actual
+        # data files.  We create the same document structure without raw
+        # data files so the database search / load round-trip is tested.
+        fn_doc = session.newdocument(
+            "daq/filenavigator",
+            **{
+                "base.name": "unknown",
+                "filenavigator.ndi_filenavigator_class": "ndi.file.navigator",
+            },
+        )
+        session.database_add(fn_doc)
+
+        dr_doc = session.newdocument(
+            "daq/daqreader",
+            **{
+                "base.name": "intan_reader",
+                "daqreader.ndi_daqreader_class": "ndi.daq.reader.mfdaq.intan",
+            },
+        )
+        session.database_add(dr_doc)
+
+        daq_doc = session.newdocument(
+            "daq/daqsystem",
+            **{
+                "base.name": "intan1",
+                "daqsystem.ndi_daqsystem_class": "ndi.daq.system.mfdaq",
+            },
+        )
+        daq_doc = daq_doc.set_dependency_value(
+            "filenavigator_id", fn_doc.id, error_if_not_found=False
+        )
+        daq_doc = daq_doc.set_dependency_value("daqreader_id", dr_doc.id, error_if_not_found=False)
+        session.database_add(daq_doc)
+
         self.session = session
         # No teardown — artifacts must persist for readArtifacts.
 
