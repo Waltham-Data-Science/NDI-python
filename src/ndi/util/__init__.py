@@ -21,8 +21,11 @@ from .hexDiffBytes import hexDiffBytes
 from .hexDump import hexDump
 from .rehydrateJSONNanNull import rehydrateJSONNanNull
 from .unwrapTableCellContent import unwrapTableCellContent
+from .compare_session_summary import compareSessionSummary
+from .session_summary import sessionSummary
 
 __all__ = [
+    "compareSessionSummary",
     "datestamp2datetime",
     "downsampleTimeseries",
     "getHexDiffFromFileObj",
@@ -30,5 +33,6 @@ __all__ = [
     "hexDiffBytes",
     "hexDump",
     "rehydrateJSONNanNull",
+    "sessionSummary",
     "unwrapTableCellContent",
 ]

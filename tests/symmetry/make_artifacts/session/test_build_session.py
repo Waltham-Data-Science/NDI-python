@@ -4,8 +4,8 @@ Python equivalent of:
     tests/+ndi/+symmetry/+makeArtifacts/+session/buildSession.m
 
 This test creates an NDI DirSession with a subject and a subjectmeasurement
-document, then persists the session database, a ``probes.json`` manifest,
-and individual JSON representations of every document into:
+document, then persists the session database, a ``sessionSummary.json``
+manifest, and individual JSON representations of every document into:
 
     <tempdir>/NDI/symmetryTest/pythonArtifacts/session/buildSession/
              testBuildSessionArtifacts/
@@ -22,6 +22,7 @@ import pytest
 from ndi.query import Query
 from ndi.session.dir import DirSession
 from ndi.subject import Subject
+from ndi.util import sessionSummary
 from tests.symmetry.conftest import PYTHON_ARTIFACTS
 
 ARTIFACT_DIR = PYTHON_ARTIFACTS / "session" / "buildSession" / "testBuildSessionArtifacts"
@@ -77,23 +78,16 @@ class TestBuildSession:
         if artifact_dir.exists():
             shutil.rmtree(artifact_dir)
 
-        # Gather probe information *before* copying the session so that
-        # any internally-generated documents are captured.
-        probes = self.session.getprobes()
-        probe_dicts = []
-        for p in probes:
-            probe_dicts.append(
-                {
-                    "name": p.name,
-                    "reference": p.reference,
-                    "type": p.type,
-                    "subject_id": getattr(p, "subject_id", ""),
-                }
-            )
+        # Call getprobes() BEFORE copying to generate any internal documents.
+        self.session.getprobes()
 
         # Re-open the session to ensure all internal documents are flushed.
         session_path = self.session.path
         self.session = DirSession("exp1", session_path)
+
+        # Create comprehensive session summary
+        summary = sessionSummary(self.session)
+        summary_json = json.dumps(summary, indent=2, allow_nan=True)
 
         # Copy the entire session directory to the persistent artifact dir.
         shutil.copytree(str(session_path), str(artifact_dir))
@@ -108,12 +102,12 @@ class TestBuildSession:
             doc_path = json_docs_dir / f"{doc.id}.json"
             doc_path.write_text(json.dumps(props, indent=2, allow_nan=True), encoding="utf-8")
 
-        # Write probes.json
-        probes_path = artifact_dir / "probes.json"
-        probes_path.write_text(json.dumps(probe_dicts, indent=2, allow_nan=True), encoding="utf-8")
+        # Write sessionSummary.json
+        summary_path = artifact_dir / "sessionSummary.json"
+        summary_path.write_text(summary_json, encoding="utf-8")
 
         # Verify artifacts were created
         assert artifact_dir.exists()
-        assert probes_path.exists()
+        assert summary_path.exists()
         assert json_docs_dir.exists()
         assert len(list(json_docs_dir.glob("*.json"))) > 0

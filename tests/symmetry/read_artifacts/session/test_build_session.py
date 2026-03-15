@@ -7,8 +7,8 @@ This test loads artifacts produced by *either* the MATLAB or the Python
 ``makeArtifacts`` suite and verifies that the Python NDI stack can:
 
 1. Open the copied session database.
-2. Load every document whose JSON was exported to ``jsonDocuments/``.
-3. Reconstruct probes that match ``probes.json``.
+2. Generate a live session summary that matches the stored ``sessionSummary.json``.
+3. Load every document whose JSON was exported to ``jsonDocuments/``.
 
 The test is parameterized over ``source_type`` so that a single test class
 covers both ``matlabArtifacts`` and ``pythonArtifacts``.
@@ -20,6 +20,7 @@ import pytest
 
 from ndi.query import Query
 from ndi.session.dir import DirSession
+from ndi.util import compareSessionSummary, sessionSummary
 from tests.symmetry.conftest import SOURCE_TYPES, SYMMETRY_BASE
 
 
@@ -46,7 +47,31 @@ class TestBuildSession:
             )
         return artifact_dir, DirSession("exp1", artifact_dir)
 
-    # -- tests (documents first, then probes) --------------------------------
+    # -- tests ---------------------------------------------------------------
+
+    def test_build_session_summary(self, source_type):
+        """Verify that the live session summary matches sessionSummary.json."""
+        artifact_dir, session = self._open_session(source_type)
+
+        summary_path = artifact_dir / "sessionSummary.json"
+        if not summary_path.exists():
+            pytest.skip(
+                f"sessionSummary.json not found in {source_type} artifact directory."
+            )
+
+        expected_summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        actual_summary = sessionSummary(session)
+
+        report = compareSessionSummary(
+            actual_summary,
+            expected_summary,
+            excludeFiles=["sessionSummary.json", "jsonDocuments"],
+        )
+
+        assert len(report) == 0, (
+            f"Session summary mismatch against {source_type} generated artifacts:\n"
+            + "\n".join(report)
+        )
 
     def test_build_session_documents(self, source_type):
         """Verify that every exported JSON document can be loaded from the session DB."""
@@ -82,40 +107,4 @@ class TestBuildSession:
                     break
             assert found, (
                 f"Document from {source_type} artifact not found in session: " f"{expected_id}"
-            )
-
-    def test_build_session_probes(self, source_type):
-        """Verify that probes reconstructed from the session match probes.json."""
-        artifact_dir, session = self._open_session(source_type)
-
-        probes_json_path = artifact_dir / "probes.json"
-        if not probes_json_path.exists():
-            pytest.skip(f"probes.json not found in {source_type} artifact directory.")
-
-        expected_probes = json.loads(probes_json_path.read_text(encoding="utf-8"))
-        actual_probes = session.getprobes()
-
-        assert len(actual_probes) == len(expected_probes), (
-            f"Number of actual probes ({len(actual_probes)}) does not match "
-            f"{source_type} generated artifacts ({len(expected_probes)})."
-        )
-
-        for expected in expected_probes:
-            found = False
-            for actual in actual_probes:
-                if (
-                    actual.name == expected["name"]
-                    and actual.reference == expected["reference"]
-                    and actual.type == expected["type"]
-                ):
-                    found = True
-                    assert getattr(actual, "subject_id", "") == expected.get(
-                        "subject_id", ""
-                    ), (
-                        f"Subject ID mismatch for probe {expected['name']} " f"in {source_type}"
-                    )
-                    break
-            assert found, (
-                f"Probe from {source_type} artifact not found in session: "
-                f"{expected['name']}"
             )
