@@ -256,13 +256,16 @@ class SQLiteDriver:
 
         documents = [json_mod.loads(r["json_code"]) for r in rows]
 
-        # Normalize depends_on: the MATLAB-compatible storage may unwrap
-        # single-element lists (e.g. {"name":..,"value":..} instead of
-        # [{"name":..,"value":..}]).  Re-wrap so field_search works.
+        # Normalize fields that MATLAB-compatible storage may have unwrapped
+        # from single-element lists.  Mirrors sqlitedb._normalize_loaded_props.
         for doc in documents:
             dep = doc.get("depends_on")
-            if isinstance(dep, dict):
+            if dep is not None and not isinstance(dep, list):
                 doc["depends_on"] = [dep]
+            dc = doc.get("document_class", {})
+            sc = dc.get("superclasses")
+            if sc is not None and not isinstance(sc, list):
+                dc["superclasses"] = [sc]
 
         # Filter by query if provided using DID-python's field_search
         if query is not None:

@@ -19,7 +19,6 @@ def compareSessionSummary(
     summary2: dict[str, Any],
     *,
     excludeFiles: list[str] | None = None,
-    skipFieldsIfOneEmpty: list[str] | None = None,
 ) -> list[str]:
     """Compare two session summaries and return a report.
 
@@ -30,18 +29,12 @@ def compareSessionSummary(
         summary2: Second session summary dict.
         excludeFiles: Filenames to ignore when comparing ``files``
             and ``filesInDotNDI`` fields.
-        skipFieldsIfOneEmpty: Field names to skip when one side is empty
-            and the other is not. Useful for cross-language comparisons
-            where one implementation may not support certain features
-            (e.g. Python cannot reconstruct MATLAB DAQ systems).
 
     Returns:
         List of difference strings. Empty list means summaries match.
     """
     if excludeFiles is None:
         excludeFiles = []
-    if skipFieldsIfOneEmpty is None:
-        skipFieldsIfOneEmpty = []
 
     report: list[str] = []
 
@@ -72,10 +65,6 @@ def compareSessionSummary(
         _empty1 = val1 is None or (isinstance(val1, (list, dict)) and len(val1) == 0)
         _empty2 = val2 is None or (isinstance(val2, (list, dict)) and len(val2) == 0)
         if _empty1 and _empty2:
-            continue
-
-        # Skip fields where one side is empty and asymmetry is expected
-        if field in skipFieldsIfOneEmpty and (_empty1 or _empty2):
             continue
 
         # Unwrap single-element lists for comparison

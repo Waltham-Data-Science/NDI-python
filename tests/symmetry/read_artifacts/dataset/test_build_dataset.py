@@ -126,11 +126,6 @@ class TestBuildDataset:
                 actual_summary,
                 expected_summary,
                 excludeFiles=["datasetSummary.json", "jsonDocuments"],
-                skipFieldsIfOneEmpty=[
-                    "daqSystemNames",
-                    "daqSystemDetails",
-                    "probes",
-                ],
             )
 
             assert len(report) == 0, (
