@@ -135,42 +135,18 @@ class SQLiteDriver:
 
         Uses DID-python's SQL-based search against the doc_data table
         for query evaluation, falling back to brute-force for unsupported
-        operations.
+        operations.  Retrieval and MATLAB normalization are handled by
+        DID-python's :meth:`get_docs` / :meth:`get_docs_by_branch`.
         """
-        import json as json_mod
-
         if query is not None:
-            # Use DID-python's SQL-based search
             doc_ids = self._db.search(query, self._branch_id)
             if not doc_ids:
                 return []
-            # Fetch full documents for matched IDs
-            placeholders = ",".join("?" for _ in doc_ids)
-            rows = self._db.do_run_sql_query(
-                f"SELECT json_code FROM docs WHERE doc_id IN ({placeholders})",
-                tuple(doc_ids),
-            )
+            docs = self._db.get_docs(doc_ids, self._branch_id, OnMissing="ignore")
         else:
-            # No query: return all documents in branch
-            rows = self._db.do_run_sql_query(
-                "SELECT d.json_code FROM docs d "
-                "JOIN branch_docs bd ON d.doc_idx = bd.doc_idx "
-                "WHERE bd.branch_id = ?",
-                (self._branch_id,),
-            )
+            docs = self._db.get_docs_by_branch(self._branch_id)
 
-        if not rows:
-            return []
-
-        results = []
-        for r in rows:
-            props = json_mod.loads(r["json_code"])
-            # Normalize MATLAB-style scalar dicts back to lists
-            from did.implementations.sqlitedb import SQLiteDB
-
-            props = SQLiteDB._normalize_loaded_props(props)
-            results.append(props)
-        return results
+        return [d.document_properties for d in docs if d is not None]
 
 
 class Database:
