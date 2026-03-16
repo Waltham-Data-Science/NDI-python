@@ -1079,12 +1079,9 @@ class Session(ABC):
 
         MATLAB equivalent: ``ndi.database.fun.ndi_document2ndi_object``
 
-        For element documents MATLAB reads
-        ``element.ndi_element_class`` (e.g.
-        ``'ndi.probe.timeseries.mfdaq'``) and calls
-        ``eval([class_string '(session, doc)'])``.  Python mirrors
-        this by maintaining a registry that maps MATLAB class name
-        strings to the corresponding Python classes.
+        Uses the unified :mod:`ndi.class_registry` to map NDI class
+        identifier strings (stored in document properties) to their
+        Python implementations.
 
         Args:
             document: Document to convert
@@ -1092,6 +1089,8 @@ class Session(ABC):
         Returns:
             The NDI object or None
         """
+        from ..class_registry import get_class
+
         # Check document type
         if document.doc_isa("daqsystem"):
             from ..daq.system import DAQSystem
@@ -1099,31 +1098,19 @@ class Session(ABC):
             return DAQSystem(session=self, document=document)
 
         if document.doc_isa("element"):
-            # Mirror MATLAB ndi_document2ndi_object: read the
-            # ndi_element_class field and construct the right class.
-            from ..element import Element
-            from ..probe import Probe
-            from ..probe.timeseries import ProbeTimeseries
-            from ..probe.timeseries_mfdaq import ProbeTimeseriesMFDAQ
-            from ..probe.timeseries_stimulator import ProbeTimeseriesStimulator
-
-            _NDI_CLASS_REGISTRY: dict[str, type] = {
-                "ndi.element": Element,
-                "ndi.probe": Probe,
-                "ndi.probe.timeseries": ProbeTimeseries,
-                "ndi.probe.timeseries.mfdaq": ProbeTimeseriesMFDAQ,
-                "ndi.probe.timeseries.stimulator": ProbeTimeseriesStimulator,
-            }
-
             props = document.document_properties
             ndi_class = props.get("element", {}).get("ndi_element_class", "")
-            cls = _NDI_CLASS_REGISTRY.get(ndi_class)
+            cls = get_class(ndi_class)
             if cls is not None:
                 return cls(session=self, document=document)
             # Fallback: if ndi_element_class contains "probe" but
             # isn't a known key (e.g. "ndi.probe.timage"), use Probe.
+            from ..probe import Probe
+
             if "probe" in ndi_class:
                 return Probe(session=self, document=document)
+            from ..element import Element
+
             return Element(session=self, document=document)
 
         if document.doc_isa("syncgraph"):

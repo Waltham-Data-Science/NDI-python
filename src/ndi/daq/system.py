@@ -147,27 +147,11 @@ class DAQSystem(Ido):
                     "daqreader.ndi_daqreader_class", ""
                 )
 
-            # Map both Python class names and MATLAB class names
-            _READER_CLASSES = {
-                # Python class names
-                "IntanReader": "ndi.daq.reader.mfdaq.intan.IntanReader",
-                "BlackrockReader": "ndi.daq.reader.mfdaq.blackrock.BlackrockReader",
-                "CEDSpike2Reader": "ndi.daq.reader.mfdaq.cedspike2.CEDSpike2Reader",
-                "SpikeGadgetsReader": "ndi.daq.reader.mfdaq.spikegadgets.SpikeGadgetsReader",
-                # MATLAB class names
-                "ndi.daq.reader.mfdaq.intan": "ndi.daq.reader.mfdaq.intan.IntanReader",
-                "ndi.daq.reader.mfdaq.blackrock": "ndi.daq.reader.mfdaq.blackrock.BlackrockReader",
-                "ndi.daq.reader.mfdaq.cedspike2": "ndi.daq.reader.mfdaq.cedspike2.CEDSpike2Reader",
-                "ndi.daq.reader.mfdaq.spikegadgets": "ndi.daq.reader.mfdaq.spikegadgets.SpikeGadgetsReader",
-            }
-            reader_path = _READER_CLASSES.get(reader_class_name)
-            if reader_path:
-                try:
-                    module_path, cls_name = reader_path.rsplit(".", 1)
-                    import importlib
+            from ..class_registry import get_class
 
-                    mod = importlib.import_module(module_path)
-                    ReaderCls = getattr(mod, cls_name)
+            ReaderCls = get_class(reader_class_name)
+            if ReaderCls is not None:
+                try:
                     self._daqreader = ReaderCls(session=session, document=reader_doc)
                 except Exception as exc:
                     logger.warning(

@@ -19,6 +19,43 @@ from ...ido import Ido
 from ...time import NO_TIME, ClockType
 
 
+def _parse_fileparameters(fp_str: str) -> list[str] | None:
+    """Parse a fileparameters string, preserving element order.
+
+    MATLAB stores file parameters as cell-array syntax, e.g.
+    ``"{ '#.rhd', '#.epochprobemap.ndi' }"``.  ``eval()`` would turn
+    this into a Python ``set`` and lose the ordering, which matters
+    for epoch-ID filename generation.  This helper extracts the
+    quoted elements in document order.
+
+    Returns:
+        Ordered list of pattern strings, or *None* when the string is
+        empty or cannot be parsed (callers should fall back to an
+        empty filematch list).
+    """
+    if not fp_str:
+        return None
+    # Fast path: MATLAB cell-array literal  { 'a', 'b', ... }
+    stripped = fp_str.strip()
+    if stripped.startswith("{") and stripped.endswith("}"):
+        inner = stripped[1:-1]
+        items = re.findall(r"'([^']*)'", inner)
+        if items:
+            return items
+    # Fallback: try Python eval (handles repr() output from Python-created docs)
+    try:
+        result = eval(fp_str)  # noqa: S307
+        if isinstance(result, (list, tuple)):
+            return list(result)
+        if isinstance(result, (set, frozenset)):
+            return sorted(result)
+        if isinstance(result, str):
+            return [result]
+    except Exception:
+        pass
+    return None
+
+
 @lru_cache(maxsize=10)
 def find_file_groups(
     base_path: str,
@@ -57,26 +94,30 @@ def find_file_groups(
     groups = []
 
     for _directory, files in all_files.items():
-        matched_files = []
+        # Track which pattern matched each file so we can preserve
+        # pattern order (MATLAB returns epochfiles ordered by pattern).
+        matched_files: list[tuple[int, str]] = []
         for f in files:
             filename = os.path.basename(f)
-            for pattern in patterns:
+            for pat_idx, pattern in enumerate(patterns):
                 # Convert MATLAB '#' wildcard to glob '*'
                 glob_pattern = pattern.replace("#", "*")
                 # Try glob pattern first
                 if fnmatch.fnmatch(filename, glob_pattern):
-                    matched_files.append(f)
+                    matched_files.append((pat_idx, f))
                     break
                 # Try regex pattern
                 try:
                     if re.search(pattern, filename):
-                        matched_files.append(f)
+                        matched_files.append((pat_idx, f))
                         break
                 except re.error:
                     pass
 
         if matched_files:
-            groups.append(sorted(matched_files))
+            # Sort by pattern index first, then by filename for stability
+            matched_files.sort(key=lambda x: (x[0], x[1]))
+            groups.append([f for _, f in matched_files])
 
     return groups
 
@@ -128,6 +169,7 @@ class FileNavigator(Ido):
         super().__init__(identifier)
         self._session = session
         self._epochprobemap_class = epochprobemap_class
+        self._raw_fileparameters_str = ""
         self._cached_epoch_filenames: dict[int, list[str]] = {}
 
         # Load from document if provided
@@ -160,13 +202,16 @@ class FileNavigator(Ido):
         filenavigator = _prop(doc_props, "filenavigator")
         if filenavigator:
             fp = _prop(filenavigator, "fileparameters", "")
-            self._fileparameters = self._normalize_fileparameters(eval(fp) if fp else None)
+            self._raw_fileparameters_str = fp
+            self._fileparameters = self._normalize_fileparameters(
+                _parse_fileparameters(fp)
+            )
             self._epochprobemap_class = _prop(
                 filenavigator, "epochprobemap_class", "ndi.epoch.EpochProbeMap"
             )
             epfp = _prop(filenavigator, "epochprobemap_fileparameters", "")
             self._epochprobemap_fileparameters = self._normalize_fileparameters(
-                eval(epfp) if epfp else None
+                _parse_fileparameters(epfp)
             )
         else:
             self._fileparameters = {"filematch": []}
@@ -492,7 +537,8 @@ class FileNavigator(Ido):
 
         fmstr = self.filematch_hashstring()
         parent, filename = os.path.split(epochfiles[0])
-        return os.path.join(parent, f".{filename}.{fmstr}.epochid.ndi")
+        stem, _ = os.path.splitext(filename)
+        return os.path.join(parent, f".{stem}.{fmstr}.epochid.ndi")
 
     def epochprobemapfilename(
         self,
@@ -693,9 +739,18 @@ class FileNavigator(Ido):
         """
         Get a hash string based on file match patterns.
 
+        MATLAB hashes the raw ``fileparameters`` string stored in the
+        document (e.g. ``"{ '#.rhd', '#.epochprobemap.ndi' }"``).
+        When a navigator is loaded from a document we preserve that
+        raw string so the hash matches across languages.
+
         Returns:
-            MD5 hash of concatenated patterns
+            MD5 hash of the file-parameter representation
         """
+        # Prefer the raw document string so epoch-ID filenames match MATLAB
+        if self._raw_fileparameters_str:
+            return hashlib.md5(self._raw_fileparameters_str.encode()).hexdigest()
+
         patterns = self._fileparameters.get("filematch", [])
         if not patterns:
             return ""
