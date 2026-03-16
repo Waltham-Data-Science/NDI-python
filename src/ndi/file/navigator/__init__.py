@@ -19,6 +19,21 @@ from ...ido import ndi_ido
 from ...time import NO_TIME, ndi_time_clocktype
 
 
+def _to_matlab_cell_str(items: list[str]) -> str:
+    """Convert a list of strings to MATLAB cell-array syntax.
+
+    Example: ``['#.rhd', '#.epochprobemap.ndi']`` becomes
+    ``"{ '#.rhd', '#.epochprobemap.ndi' }"``.
+
+    Returns an empty string when *items* is empty or falsy, matching
+    the NDI document schema default.
+    """
+    if not items:
+        return ""
+    quoted = ", ".join(f"'{s}'" for s in items)
+    return f"{{ {quoted} }}"
+
+
 def _parse_fileparameters(fp_str: str) -> list[str] | None:
     """Parse a fileparameters string, preserving element order.
 
@@ -807,10 +822,10 @@ class ndi_file_navigator(ndi_ido):
         from ...document import ndi_document
 
         fp = self._fileparameters.get("filematch", [])
-        fp_str = repr(fp) if fp else ""
+        fp_str = _to_matlab_cell_str(fp)
 
         epfp = self._epochprobemap_fileparameters.get("filematch", [])
-        epfp_str = repr(epfp) if epfp else ""
+        epfp_str = _to_matlab_cell_str(epfp)
 
         filenavigator_struct = {
             "ndi_filenavigator_class": self.NDI_FILENAVIGATOR_CLASS,

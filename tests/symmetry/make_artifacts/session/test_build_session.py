@@ -74,6 +74,9 @@ class TestBuildSession:
             **{
                 "base.name": "unknown",
                 "filenavigator.ndi_filenavigator_class": "ndi.file.navigator",
+                "filenavigator.fileparameters": "{ '#.rhd' }",
+                "filenavigator.epochprobemap_class": "ndi.epoch.epochprobemap_daqsystem",
+                "filenavigator.epochprobemap_fileparameters": "{ '#.epochprobemap.ndi' }",
             },
         )
         session.database_add(fn_doc)
