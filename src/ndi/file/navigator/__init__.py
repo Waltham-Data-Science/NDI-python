@@ -61,8 +61,10 @@ def find_file_groups(
         for f in files:
             filename = os.path.basename(f)
             for pattern in patterns:
+                # Convert MATLAB '#' wildcard to glob '*'
+                glob_pattern = pattern.replace("#", "*")
                 # Try glob pattern first
-                if fnmatch.fnmatch(filename, pattern):
+                if fnmatch.fnmatch(filename, glob_pattern):
                     matched_files.append(f)
                     break
                 # Try regex pattern
@@ -97,6 +99,8 @@ class FileNavigator(Ido):
         >>> epochs = nav.selectfilegroups()
         >>> files = nav.getepochfiles(1)  # Get files for epoch 1
     """
+
+    NDI_FILENAVIGATOR_CLASS = "ndi.file.navigator"
 
     def __init__(
         self,
@@ -141,17 +145,26 @@ class FileNavigator(Ido):
         """Load navigator from a document."""
         doc_props = getattr(document, "document_properties", document)
 
-        if hasattr(doc_props, "base") and hasattr(doc_props.base, "id"):
-            self.identifier = doc_props.base.id
+        def _prop(obj: Any, key: str, default: Any = None) -> Any:
+            """Get a property from a dict or object."""
+            if isinstance(obj, dict):
+                return obj.get(key, default)
+            return getattr(obj, key, default)
 
-        filenavigator = getattr(doc_props, "filenavigator", None)
+        base = _prop(doc_props, "base")
+        if base is not None:
+            base_id = _prop(base, "id")
+            if base_id is not None:
+                self.identifier = base_id
+
+        filenavigator = _prop(doc_props, "filenavigator")
         if filenavigator:
-            fp = getattr(filenavigator, "fileparameters", "")
+            fp = _prop(filenavigator, "fileparameters", "")
             self._fileparameters = self._normalize_fileparameters(eval(fp) if fp else None)
-            self._epochprobemap_class = getattr(
+            self._epochprobemap_class = _prop(
                 filenavigator, "epochprobemap_class", "ndi.epoch.EpochProbeMap"
             )
-            epfp = getattr(filenavigator, "epochprobemap_fileparameters", "")
+            epfp = _prop(filenavigator, "epochprobemap_fileparameters", "")
             self._epochprobemap_fileparameters = self._normalize_fileparameters(
                 eval(epfp) if epfp else None
             )
@@ -168,8 +181,10 @@ class FileNavigator(Ido):
             return {"filematch": []}
         if isinstance(params, str):
             return {"filematch": [params]}
-        if isinstance(params, list):
-            return {"filematch": params}
+        if isinstance(params, (set, frozenset)):
+            return {"filematch": sorted(params)}
+        if isinstance(params, (list, tuple)):
+            return {"filematch": list(params)}
         if isinstance(params, dict):
             fm = params.get("filematch", [])
             if isinstance(fm, str):
@@ -745,7 +760,7 @@ class FileNavigator(Ido):
         epfp_str = repr(epfp) if epfp else ""
 
         filenavigator_struct = {
-            "ndi_filenavigator_class": self.__class__.__name__,
+            "ndi_filenavigator_class": self.NDI_FILENAVIGATOR_CLASS,
             "fileparameters": fp_str,
             "epochprobemap_class": self._epochprobemap_class,
             "epochprobemap_fileparameters": epfp_str,

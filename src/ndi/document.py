@@ -455,6 +455,10 @@ class Document:
         doc_class = self._document_properties.get("document_class", {})
         superclasses = doc_class.get("superclasses", [])
 
+        # MATLAB may store superclasses as a single dict instead of a list
+        if isinstance(superclasses, dict):
+            superclasses = [superclasses]
+
         sc_names = []
         for sc in superclasses:
             # Each superclass has a 'definition' pointing to its JSON

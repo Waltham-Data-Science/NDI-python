@@ -50,6 +50,8 @@ class DAQSystem(Ido):
         >>> et = sys.epochtable()
     """
 
+    NDI_DAQSYSTEM_CLASS = "ndi.daq.system.mfdaq"
+
     def __init__(
         self,
         name: str = "",
@@ -650,7 +652,7 @@ class DAQSystem(Ido):
         sys_doc = Document(
             "daq/daqsystem",
             **{
-                "daqsystem.ndi_daqsystem_class": self.__class__.__name__,
+                "daqsystem.ndi_daqsystem_class": self.NDI_DAQSYSTEM_CLASS,
                 "base.id": self.id,
                 "base.name": self._name,
             },

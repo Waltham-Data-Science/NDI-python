@@ -60,10 +60,25 @@ class TestBuildSession:
         expected_summary = json.loads(summary_path.read_text(encoding="utf-8"))
         actual_summary = sessionSummary(session)
 
+        # Epoch node details contain machine-specific paths and runtime-generated
+        # IDs that will differ when artifacts are read on a different machine or
+        # across language implementations.  Exclude them from comparison.
+        exclude_fields = ["epochNodes_filenavigator", "epochNodes_daqsystem"]
+
+        # Python may create .epochid.ndi files as a side effect of loading
+        # the session.  Filter these runtime-generated hidden files from both
+        # summaries so they don't cause spurious mismatches.
+        def _filter_epochid(files: list[str]) -> list[str]:
+            return [f for f in files if not f.endswith(".epochid.ndi")]
+
+        actual_summary["files"] = _filter_epochid(actual_summary.get("files", []))
+        expected_summary["files"] = _filter_epochid(expected_summary.get("files", []))
+
         report = compareSessionSummary(
             actual_summary,
             expected_summary,
             excludeFiles=["sessionSummary.json", "jsonDocuments"],
+            excludeFields=exclude_fields,
         )
 
         assert (
