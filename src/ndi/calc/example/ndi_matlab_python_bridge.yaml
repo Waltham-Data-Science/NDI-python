@@ -18,7 +18,7 @@ classes:
     type: class
     matlab_path: "src/ndi/+ndi/+calc/+example/simple.m"
     python_path: "ndi/calc/example/simple.py"
-    python_class: "SimpleCalc"
+    python_class: "ndi_calc_example_simple"
     inherits: "ndi.calculator"
 
     methods:
@@ -27,11 +27,11 @@ classes:
         input_arguments:
           - name: session
             type_matlab: "ndi.session"
-            type_python: "Session | None"
+            type_python: "ndi_session | None"
             default: "None"
         output_arguments:
           - name: obj
-            type_python: "SimpleCalc"
+            type_python: "ndi_calc_example_simple"
         decision_log: "Exact match."
 
       - name: calculate
@@ -41,7 +41,7 @@ classes:
             type_python: "dict"
         output_arguments:
           - name: doc
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: "Exact match."
 
       - name: default_search_for_input_parameters

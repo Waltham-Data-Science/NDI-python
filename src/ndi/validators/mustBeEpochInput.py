@@ -31,12 +31,12 @@ def mustBeEpochInput(v: str | int) -> None:
     """
     if isinstance(v, str):
         if not v:
-            raise ValueError("Epoch input string must not be empty.")
+            raise ValueError("ndi_epoch_epoch input string must not be empty.")
         return
 
     if isinstance(v, (int,)) and not isinstance(v, bool):
         if v < 1:
-            raise ValueError("Epoch input integer must be positive.")
+            raise ValueError("ndi_epoch_epoch input integer must be positive.")
         return
 
     raise TypeError("Value must be a string or positive integer scalar.")

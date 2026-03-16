@@ -12,7 +12,7 @@ These tests exercise the two-phase file ingestion/expulsion system:
 Since the MATLAB tests require real Intan (.rhd) / Axon (.abf) data
 files and a full DAQ system pipeline, we provide:
   - Mocked unit tests (always run) testing the ingestion functions
-  - Integration tests (skip if DirSession unavailable) for full flow
+  - Integration tests (skip if ndi_session_dir unavailable) for full flow
 """
 
 from unittest.mock import MagicMock
@@ -26,9 +26,9 @@ import pytest
 
 def _have_example_data() -> bool:
     """Check if example Intan data is available."""
-    from ndi.common import PathConstants
+    from ndi.common import ndi_common_PathConstants
 
-    example = PathConstants.COMMON_FOLDER / "example_sessions"
+    example = ndi_common_PathConstants.COMMON_FOLDER / "example_sessions"
     return example.exists() and any(example.rglob("*.rhd"))
 
 

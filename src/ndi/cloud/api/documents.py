@@ -1,5 +1,5 @@
 """
-ndi.cloud.api.documents - Document CRUD and bulk operations.
+ndi.cloud.api.documents - ndi_document CRUD and bulk operations.
 
 All functions accept an optional ``client`` keyword argument.  When omitted,
 a client is created automatically from environment variables.
@@ -21,16 +21,16 @@ _Client = Annotated[CloudClient | None, SkipValidation()]
 
 
 def _coerce_search_structure(search_structure: Any) -> Any:
-    """Convert Query objects to JSON-serializable dicts.
+    """Convert ndi_query objects to JSON-serializable dicts.
 
-    Accepts :class:`~ndi.query.Query` objects, raw dicts/lists, or lists
+    Accepts :class:`~ndi.query.ndi_query` objects, raw dicts/lists, or lists
     containing a mix of both.  Returns a JSON-serializable value suitable
     for the cloud ``searchstructure`` POST body.
     """
-    # Single Query object
+    # Single ndi_query object
     if hasattr(search_structure, "to_search_structure"):
         return search_structure.to_search_structure()
-    # List that may contain Query objects
+    # List that may contain ndi_query objects
     if isinstance(search_structure, list):
         return [
             q.to_search_structure() if hasattr(q, "to_search_structure") else q
@@ -263,14 +263,14 @@ def ndiquery(
     *,
     client: _Client = None,
 ) -> dict[str, Any]:
-    """Query documents across datasets via the NDI query API.
+    """ndi_query documents across datasets via the NDI query API.
 
     MATLAB equivalent: +cloud/+api/+documents/ndiquery.m
 
     Args:
         scope: One of ``'public'``, ``'private'``, ``'all'``.
-        search_structure: Query object, search structure dict, or list.
-            Accepts :class:`~ndi.query.Query` objects (auto-converted),
+        search_structure: ndi_query object, search structure dict, or list.
+            Accepts :class:`~ndi.query.ndi_query` objects (auto-converted),
             raw dicts, or lists of either.
         page: Page number (1-based).
         page_size: Results per page.

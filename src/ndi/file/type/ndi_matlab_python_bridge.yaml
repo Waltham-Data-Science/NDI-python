@@ -18,7 +18,7 @@ classes:
     type: class
     matlab_path: "+ndi/+file/+type/mfdaq_epoch_channel.m"
     python_path: "ndi/file/type/mfdaq_epoch_channel.py"
-    python_class: "MFDAQEpochChannel"
+    python_class: "ndi_file_type_mfdaq__epoch__channel"
     inherits: ""
 
     properties:
@@ -40,7 +40,7 @@ classes:
             default: "None"
         output_arguments:
           - name: obj
-            type_python: "MFDAQEpochChannel"
+            type_python: "ndi_file_type_mfdaq__epoch__channel"
         decision_log: >
           Exact match. MATLAB accepts variable arguments; Python
           accepts an optional list of ChannelInfo.
@@ -56,7 +56,7 @@ classes:
             type_python: "**kwargs"
         output_arguments:
           - name: obj
-            type_python: "MFDAQEpochChannel"
+            type_python: "ndi_file_type_mfdaq__epoch__channel"
         decision_log: >
           DISCREPANCY FIXED: Python ad-hoc port was missing this method.
           Added to match MATLAB. Sets channel_information from a struct
@@ -70,7 +70,7 @@ classes:
             type_python: "str"
         output_arguments:
           - name: mfdaq_epoch_channel_obj
-            type_python: "MFDAQEpochChannel"
+            type_python: "ndi_file_type_mfdaq__epoch__channel"
         decision_log: >
           DISCREPANCY FIXED: Python ad-hoc port used 'read_from_file'
           (snake_case). Renamed to 'readFromFile' to match MATLAB.

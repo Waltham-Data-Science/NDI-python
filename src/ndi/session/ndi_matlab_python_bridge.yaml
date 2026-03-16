@@ -35,7 +35,7 @@ classes:
     matlab_path: "+ndi/session.m"
     matlab_last_sync_hash: "a97ab7d0"
     python_path: "ndi/session/session_base.py"
-    python_class: "Session"
+    python_class: "ndi_session"
 
     properties:
       - name: reference
@@ -52,19 +52,19 @@ classes:
 
       - name: syncgraph
         type_matlab: "ndi.time.syncgraph"
-        type_python: "SyncGraph | None"
+        type_python: "ndi_time_syncgraph | None"
         access: "GetAccess=public, SetAccess=protected, Transient"
         decision_log: "Implemented as @property in Python."
 
       - name: cache
         type_matlab: "ndi.cache"
-        type_python: "Cache"
+        type_python: "ndi_cache"
         access: "GetAccess=public, SetAccess=protected, Transient"
         decision_log: "Implemented as @property in Python."
 
       - name: database
         type_matlab: "ndi.database"
-        type_python: "Database | None"
+        type_python: "ndi_database | None"
         access: "GetAccess={?session, ?ndi.dataset}, SetAccess=protected, Transient"
         decision_log: "Implemented as @property in Python."
 
@@ -78,7 +78,7 @@ classes:
             type_python: "str"
         output_arguments:
           - name: ndi_session_obj
-            type_python: "Session"
+            type_python: "ndi_session"
         decision_log: "Exact match."
 
       # --- Public instance methods ---
@@ -105,7 +105,7 @@ classes:
             type_python: "Any"
         output_arguments:
           - name: ndi_session_obj
-            type_python: "Session"
+            type_python: "ndi_session"
         decision_log: "Exact match."
 
       - name: daqsystem_rm
@@ -115,7 +115,7 @@ classes:
             type_python: "Any"
         output_arguments:
           - name: ndi_session_obj
-            type_python: "Session"
+            type_python: "ndi_session"
         decision_log: "Exact match."
 
       - name: daqsystem_load
@@ -135,7 +135,7 @@ classes:
         input_arguments: []
         output_arguments:
           - name: ndi_session_obj
-            type_python: "Session"
+            type_python: "ndi_session"
         decision_log: "Exact match."
 
       - name: newdocument
@@ -149,48 +149,48 @@ classes:
             type_python: "**properties"
         output_arguments:
           - name: ndi_document_obj
-            type_python: "Document"
+            type_python: "ndi_document"
         decision_log: "Exact match."
 
       - name: searchquery
         input_arguments: []
         output_arguments:
           - name: sq
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: "Exact match."
 
       - name: database_add
         input_arguments:
           - name: document
             type_matlab: "ndi.document | cell"
-            type_python: "Document | list[Document]"
+            type_python: "ndi_document | list[ndi_document]"
         output_arguments:
           - name: ndi_session_obj
-            type_python: "Session"
+            type_python: "ndi_session"
         decision_log: "Exact match."
 
       - name: database_rm
         input_arguments:
           - name: doc_unique_id
             type_matlab: "ndi.document | char | cell"
-            type_python: "Document | str | list[Document | str]"
+            type_python: "ndi_document | str | list[ndi_document | str]"
           - name: error_if_not_found
             type_matlab: "logical (name-value)"
             type_python: "bool"
             default: "False"
         output_arguments:
           - name: ndi_session_obj
-            type_python: "Session"
+            type_python: "ndi_session"
         decision_log: "Exact match."
 
       - name: database_search
         input_arguments:
           - name: searchparameters
             type_matlab: "ndi.query"
-            type_python: "Query"
+            type_python: "ndi_query"
         output_arguments:
           - name: ndi_document_obj
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: "Exact match."
 
       - name: database_clear
@@ -205,7 +205,7 @@ classes:
         input_arguments:
           - name: document
             type_matlab: "ndi.document | cell"
-            type_python: "Document | list[Document]"
+            type_python: "ndi_document | list[ndi_document]"
         output_arguments:
           - name: b
             type_python: "bool"
@@ -217,7 +217,7 @@ classes:
         input_arguments:
           - name: ndi_document_or_id
             type_matlab: "ndi.document | char"
-            type_python: "Document | str"
+            type_python: "ndi_document | str"
           - name: filename
             type_matlab: "char"
             type_python: "str"
@@ -232,7 +232,7 @@ classes:
         input_arguments:
           - name: ndi_document_or_id
             type_matlab: "ndi.document | char"
-            type_python: "Document | str"
+            type_python: "ndi_document | str"
           - name: filename
             type_matlab: "char"
             type_python: "str"
@@ -254,10 +254,10 @@ classes:
         input_arguments:
           - name: rule
             type_matlab: "ndi.time.syncrule"
-            type_python: "SyncRule"
+            type_python: "ndi_time_syncrule"
         output_arguments:
           - name: ndi_session_obj
-            type_python: "Session"
+            type_python: "ndi_session"
         decision_log: "Exact match."
 
       - name: syncgraph_rmrule
@@ -267,7 +267,7 @@ classes:
             type_python: "int"
         output_arguments:
           - name: ndi_session_obj
-            type_python: "Session"
+            type_python: "ndi_session"
         decision_log: "Exact match."
 
       - name: ingest
@@ -283,7 +283,7 @@ classes:
         input_arguments: []
         output_arguments:
           - name: d
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: "Exact match."
 
       - name: is_fully_ingested
@@ -371,12 +371,12 @@ classes:
       - name: docinput2docs
         input_arguments:
           - name: ndi_session_obj
-            type_python: "Session"
+            type_python: "ndi_session"
           - name: doc_input
-            type_python: "str | Document | list[str | Document]"
+            type_python: "str | ndi_document | list[str | ndi_document]"
         output_arguments:
           - name: doc_list
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: >
           MATLAB is a static method. Python implements as instance method
           _docinput2docs (protected convention). Functionality is equivalent.
@@ -396,7 +396,7 @@ classes:
     matlab_path: "+ndi/+session/dir.m"
     matlab_last_sync_hash: "b640e6ff"
     python_path: "ndi/session/dir.py"
-    python_class: "DirSession"
+    python_class: "ndi_session_dir"
     inherits: "ndi.session"
 
     properties:
@@ -421,7 +421,7 @@ classes:
             type_python: "str | None"
         output_arguments:
           - name: ndi_session_dir_obj
-            type_python: "DirSession"
+            type_python: "ndi_session_dir"
         decision_log: >
           Supports MATLAB calling conventions: dir(path) and dir(reference, path).
           session_id is an undocumented internal parameter in both languages.
@@ -468,7 +468,7 @@ classes:
             default: "True"
         output_arguments:
           - name: obj_out
-            type_python: "DirSession | None"
+            type_python: "ndi_session_dir | None"
         decision_log: >
           MATLAB name is deleteSessionDataStructures (camelCase).
           Python was previously delete_session_data_structures; renamed to match MATLAB.
@@ -487,7 +487,7 @@ classes:
       - name: database_erase
         input_arguments:
           - name: ndi_session_dir_obj
-            type_python: "DirSession"
+            type_python: "ndi_session_dir"
           - name: areyousure
             type_matlab: "char"
             type_python: "str"
@@ -503,7 +503,7 @@ classes:
     matlab_path: "+ndi/+session/sessiontable.m"
     matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/session/sessiontable.py"
-    python_class: "SessionTable"
+    python_class: "ndi_session_sessiontable"
 
     methods:
       - name: sessiontable
@@ -513,7 +513,7 @@ classes:
             type_python: "Path | None"
         output_arguments:
           - name: ndi_sessiontable_obj
-            type_python: "SessionTable"
+            type_python: "ndi_session_sessiontable"
         decision_log: "Exact match."
 
       - name: getsessiontable
@@ -644,7 +644,7 @@ classes:
     matlab_path: "+ndi/+session/mock.m"
     matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/session/mock.py"
-    python_class: "MockSession"
+    python_class: "ndi_session_mock"
     inherits: "ndi.session.dir"
 
     methods:
@@ -653,7 +653,7 @@ classes:
         input_arguments: []
         output_arguments:
           - name: ndi_session_mock_obj
-            type_python: "MockSession"
+            type_python: "ndi_session_mock"
         decision_log: >
           MATLAB mock() takes no arguments; Python constructor adds
           reference, prefix, and cleanup parameters for flexibility.

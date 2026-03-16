@@ -1,8 +1,8 @@
 """
 ndi.probe.timeseries - Timeseries probe class.
 
-Provides the ProbeTimeseries class that adds time-domain data reading
-capabilities to the base Probe class.
+Provides the ndi_probe_timeseries class that adds time-domain data reading
+capabilities to the base ndi_probe class.
 
 MATLAB equivalent: src/ndi/+ndi/+probe/timeseries.m
 """
@@ -13,22 +13,22 @@ from typing import Any
 
 import numpy as np
 
-from . import Probe
+from . import ndi_probe
 
 
-class ProbeTimeseries(Probe):
+class ndi_probe_timeseries(ndi_probe):
     """
-    Probe that reads timeseries data.
+    ndi_probe that reads timeseries data.
 
-    Extends Probe with the ability to read timeseries data across
+    Extends ndi_probe with the ability to read timeseries data across
     epochs, using the session's syncgraph for time conversion when
     reading across different time references.
 
-    This is a base class. Subclasses (e.g., ProbeTimeseriesMFDAQ)
+    This is a base class. Subclasses (e.g., ndi_probe_timeseries_mfdaq)
     implement readtimeseriesepoch() for specific data formats.
 
     Example:
-        >>> probe = ProbeTimeseriesMFDAQ(session, 'electrode1', 1, 'n-trode')
+        >>> probe = ndi_probe_timeseries_mfdaq(session, 'electrode1', 1, 'n-trode')
         >>> data, t, timeref = probe.readtimeseries(epoch=1, t0=0, t1=10)
     """
 
@@ -50,7 +50,7 @@ class ProbeTimeseries(Probe):
         timeref is provided, converts time using the session's syncgraph.
 
         Args:
-            epoch: Epoch number (1-indexed) or epoch_id string
+            epoch: ndi_epoch_epoch number (1-indexed) or epoch_id string
             t0: Start time
             t1: End time
             timeref: Optional time reference for cross-epoch reading
@@ -123,7 +123,7 @@ class ProbeTimeseries(Probe):
         Subclasses must override this method with format-specific reading.
 
         Args:
-            epoch: Epoch number (1-indexed) or epoch_id
+            epoch: ndi_epoch_epoch number (1-indexed) or epoch_id
             t0: Start time
             t1: End time
 
@@ -138,7 +138,7 @@ class ProbeTimeseries(Probe):
         Get sample rate for this probe in an epoch.
 
         Args:
-            epoch: Epoch number or epoch_id
+            epoch: ndi_epoch_epoch number or epoch_id
 
         Returns:
             Sample rate in Hz, or -1 if not applicable
@@ -154,7 +154,7 @@ class ProbeTimeseries(Probe):
         Convert times to sample indices.
 
         Args:
-            epoch: Epoch number or epoch_id
+            epoch: ndi_epoch_epoch number or epoch_id
             times: Time values
 
         Returns:
@@ -175,7 +175,7 @@ class ProbeTimeseries(Probe):
         Convert sample indices to times.
 
         Args:
-            epoch: Epoch number or epoch_id
+            epoch: ndi_epoch_epoch number or epoch_id
             samples: Sample indices (1-indexed)
 
         Returns:
@@ -189,6 +189,6 @@ class ProbeTimeseries(Probe):
 
     def __repr__(self) -> str:
         return (
-            f"ProbeTimeseries(name='{self._name}', "
+            f"ndi_probe_timeseries(name='{self._name}', "
             f"reference={self._reference}, type='{self._type}')"
         )

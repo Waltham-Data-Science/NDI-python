@@ -1,7 +1,7 @@
 """
 ndi.daq.system - DAQ system class combining navigator, reader, and metadata.
 
-This module provides the DAQSystem class that combines file navigation,
+This module provides the ndi_daq_system class that combines file navigation,
 data reading, and metadata reading for a complete data acquisition system.
 """
 
@@ -12,21 +12,21 @@ from typing import Any
 
 import numpy as np
 
-from ..ido import Ido
-from ..time import NO_TIME, ClockType
-from .reader_base import DAQReader
+from ..ido import ndi_ido
+from ..time import NO_TIME, ndi_time_clocktype
+from .reader_base import ndi_daq_reader
 
 logger = logging.getLogger(__name__)
 
 
-class DAQSystem(Ido):
+class ndi_daq_system(ndi_ido):
     """
     Complete data acquisition system.
 
-    DAQSystem combines:
-    - FileNavigator: Finds and organizes data files
-    - DAQReader: Reads data from files
-    - MetadataReader(s): Read stimulus/experiment metadata
+    ndi_daq_system combines:
+    - ndi_file_navigator: Finds and organizes data files
+    - ndi_daq_reader: Reads data from files
+    - ndi_daq_metadatareader(s): Read stimulus/experiment metadata
 
     This provides a unified interface for accessing experimental data
     organized by epochs.
@@ -38,30 +38,32 @@ class DAQSystem(Ido):
         daqmetadatareaders: List of metadata readers
 
     Example:
-        >>> from ndi.daq import DAQSystem
-        >>> from ndi.file import FileNavigator
-        >>> from ndi.daq.reader import IntanReader
+        >>> from ndi.daq import ndi_daq_system
+        >>> from ndi.file import ndi_file_navigator
+        >>> from ndi.daq.reader import ndi_daq_reader_mfdaq_intan
         >>>
-        >>> nav = FileNavigator(session, '*.rhd')
-        >>> reader = IntanReader()
-        >>> sys = DAQSystem('my_daq', nav, reader)
+        >>> nav = ndi_file_navigator(session, '*.rhd')
+        >>> reader = ndi_daq_reader_mfdaq_intan()
+        >>> sys = ndi_daq_system('my_daq', nav, reader)
         >>>
         >>> # Get epoch table
         >>> et = sys.epochtable()
     """
 
+    NDI_DAQSYSTEM_CLASS = "ndi.daq.system.mfdaq"
+
     def __init__(
         self,
         name: str = "",
         filenavigator: Any | None = None,
-        daqreader: DAQReader | None = None,
+        daqreader: ndi_daq_reader | None = None,
         daqmetadatareaders: list[Any] | None = None,
         identifier: str | None = None,
         session: Any | None = None,
         document: Any | None = None,
     ):
         """
-        Create a new DAQSystem.
+        Create a new ndi_daq_system.
 
         Args:
             name: Name for this DAQ system
@@ -87,11 +89,11 @@ class DAQSystem(Ido):
         self._session = session
 
         # Validate reader
-        if daqreader is not None and not isinstance(daqreader, DAQReader):
-            raise TypeError("daqreader must be a DAQReader instance")
+        if daqreader is not None and not isinstance(daqreader, ndi_daq_reader):
+            raise TypeError("daqreader must be a ndi_daq_reader instance")
 
     def _load_from_document(self, session: Any, document: Any) -> None:
-        """Load DAQSystem from a document."""
+        """Load ndi_daq_system from a document."""
         doc_props = getattr(document, "document_properties", document)
 
         # Extract basic properties using dict access
@@ -106,15 +108,15 @@ class DAQSystem(Ido):
         filenavigator_id = document.dependency_value("filenavigator_id", error_if_not_found=False)
 
         # Load reader and navigator from database
-        from ..query import Query
+        from ..query import ndi_query
 
         reader_docs = []
         if daqreader_id:
-            reader_docs = session.database_search(Query("base.id") == daqreader_id)
+            reader_docs = session.database_search(ndi_query("base.id") == daqreader_id)
 
         nav_docs = []
         if filenavigator_id:
-            nav_docs = session.database_search(Query("base.id") == filenavigator_id)
+            nav_docs = session.database_search(ndi_query("base.id") == filenavigator_id)
 
         # Load metadata readers
         metadata_ids = (
@@ -122,12 +124,14 @@ class DAQSystem(Ido):
         )
         metadata_readers = []
         for mid in metadata_ids:
-            m_docs = session.database_search(Query("base.id") == mid)
+            m_docs = session.database_search(ndi_query("base.id") == mid)
             if len(m_docs) == 1:
-                from .metadatareader import MetadataReader
+                from .metadatareader import ndi_daq_metadatareader
 
                 try:
-                    metadata_readers.append(MetadataReader(session=session, document=m_docs[0]))
+                    metadata_readers.append(
+                        ndi_daq_metadatareader(session=session, document=m_docs[0])
+                    )
                 except Exception:
                     pass
         self._daqmetadatareaders = metadata_readers
@@ -145,27 +149,11 @@ class DAQSystem(Ido):
                     "daqreader.ndi_daqreader_class", ""
                 )
 
-            # Map both Python class names and MATLAB class names
-            _READER_CLASSES = {
-                # Python class names
-                "IntanReader": "ndi.daq.reader.mfdaq.intan.IntanReader",
-                "BlackrockReader": "ndi.daq.reader.mfdaq.blackrock.BlackrockReader",
-                "CEDSpike2Reader": "ndi.daq.reader.mfdaq.cedspike2.CEDSpike2Reader",
-                "SpikeGadgetsReader": "ndi.daq.reader.mfdaq.spikegadgets.SpikeGadgetsReader",
-                # MATLAB class names
-                "ndi.daq.reader.mfdaq.intan": "ndi.daq.reader.mfdaq.intan.IntanReader",
-                "ndi.daq.reader.mfdaq.blackrock": "ndi.daq.reader.mfdaq.blackrock.BlackrockReader",
-                "ndi.daq.reader.mfdaq.cedspike2": "ndi.daq.reader.mfdaq.cedspike2.CEDSpike2Reader",
-                "ndi.daq.reader.mfdaq.spikegadgets": "ndi.daq.reader.mfdaq.spikegadgets.SpikeGadgetsReader",
-            }
-            reader_path = _READER_CLASSES.get(reader_class_name)
-            if reader_path:
-                try:
-                    module_path, cls_name = reader_path.rsplit(".", 1)
-                    import importlib
+            from ..class_registry import get_class
 
-                    mod = importlib.import_module(module_path)
-                    ReaderCls = getattr(mod, cls_name)
+            ReaderCls = get_class(reader_class_name)
+            if ReaderCls is not None:
+                try:
                     self._daqreader = ReaderCls(session=session, document=reader_doc)
                 except Exception as exc:
                     logger.warning(
@@ -177,10 +165,10 @@ class DAQSystem(Ido):
         # Reconstruct file navigator from its document
         self._filenavigator = None
         if len(nav_docs) == 1:
-            from ..file.navigator import FileNavigator
+            from ..file.navigator import ndi_file_navigator
 
             try:
-                self._filenavigator = FileNavigator(session=session, document=nav_docs[0])
+                self._filenavigator = ndi_file_navigator(session=session, document=nav_docs[0])
             except Exception as exc:
                 logger.warning("Could not reconstruct file navigator: %s", exc)
 
@@ -195,7 +183,7 @@ class DAQSystem(Ido):
         return self._filenavigator
 
     @property
-    def daqreader(self) -> DAQReader | None:
+    def daqreader(self) -> ndi_daq_reader | None:
         """Get the DAQ reader."""
         return self._daqreader
 
@@ -214,28 +202,28 @@ class DAQSystem(Ido):
     def set_daqmetadatareaders(
         self,
         readers: list[Any],
-    ) -> DAQSystem:
+    ) -> ndi_daq_system:
         """
         Set the metadata readers.
 
         Args:
-            readers: List of MetadataReader objects
+            readers: List of ndi_daq_metadatareader objects
 
         Returns:
             Self for chaining
 
         Raises:
-            TypeError: If any reader is not a MetadataReader
+            TypeError: If any reader is not a ndi_daq_metadatareader
         """
-        from .metadatareader import MetadataReader
+        from .metadatareader import ndi_daq_metadatareader
 
         for i, r in enumerate(readers):
-            if not isinstance(r, MetadataReader):
-                raise TypeError(f"Element {i} is not a MetadataReader instance")
+            if not isinstance(r, ndi_daq_metadatareader):
+                raise TypeError(f"ndi_element {i} is not a ndi_daq_metadatareader instance")
         self._daqmetadatareaders = readers
         return self
 
-    def set_session(self, session: Any) -> DAQSystem:
+    def set_session(self, session: Any) -> ndi_daq_system:
         """
         Set the session for this DAQ system.
 
@@ -253,7 +241,7 @@ class DAQSystem(Ido):
     def epochclock(
         self,
         epoch_number: int,
-    ) -> list[ClockType]:
+    ) -> list[ndi_time_clocktype]:
         """
         Return clock types for an epoch.
 
@@ -261,7 +249,7 @@ class DAQSystem(Ido):
             epoch_number: The epoch number (1-indexed)
 
         Returns:
-            List of ClockType objects
+            List of ndi_time_clocktype objects
 
         Note:
             The base class returns [NO_TIME].
@@ -294,7 +282,7 @@ class DAQSystem(Ido):
             epoch_number: The epoch number (1-indexed)
 
         Returns:
-            Epoch identifier string
+            ndi_epoch_epoch identifier string
         """
         if self._filenavigator is not None:
             return self._filenavigator.epochid(epoch_number)
@@ -308,7 +296,7 @@ class DAQSystem(Ido):
             List of epoch entries with fields:
             - epoch_number: The epoch number
             - epoch_id: Unique epoch identifier
-            - epochprobemap: Probe mapping for the epoch
+            - epochprobemap: ndi_probe mapping for the epoch
             - epoch_clock: List of clock types
             - t0_t1: List of (t0, t1) tuples
             - underlying_epochs: Underlying file information
@@ -368,10 +356,10 @@ class DAQSystem(Ido):
 
         Returns:
             List of probe dicts with:
-            - name: Probe name
-            - reference: Probe reference
-            - type: Probe type
-            - subject_id: Subject identifier
+            - name: ndi_probe name
+            - reference: ndi_probe reference
+            - type: ndi_probe type
+            - subject_id: ndi_subject identifier
         """
         et = self.epochtable()
         probes = []
@@ -418,11 +406,11 @@ class DAQSystem(Ido):
         Get the epoch probe map for an epoch.
 
         Args:
-            epoch: Epoch number
+            epoch: ndi_epoch_epoch number
             filenavepochprobemap: Optional probe map from navigator
 
         Returns:
-            Epoch probe map object
+            ndi_epoch_epoch probe map object
         """
         # Check if reader has getepochprobemap method
         if self._daqreader is not None and hasattr(self._daqreader, "getepochprobemap"):
@@ -447,7 +435,7 @@ class DAQSystem(Ido):
         Get metadata for an epoch.
 
         Args:
-            epoch: Epoch number
+            epoch: ndi_epoch_epoch number
             channel: Metadata reader channel (1-indexed)
 
         Returns:
@@ -550,7 +538,7 @@ class DAQSystem(Ido):
 
         et = self.epochtable()
         if epoch_number < 1 or epoch_number > len(et):
-            return False, f"Epoch {epoch_number} out of range (1..{len(et)})"
+            return False, f"ndi_epoch_epoch {epoch_number} out of range (1..{len(et)})"
 
         entry = et[epoch_number - 1]
         epoch_id = entry.get("epoch_id", "")
@@ -565,14 +553,14 @@ class DAQSystem(Ido):
 
         # Delete from database if session exists
         if self.session is not None:
-            from ..query import Query
+            from ..query import ndi_query
 
             # Delete ingested epoch data documents
             if self._daqreader is not None:
                 q = (
-                    Query("").isa("daqreader_epochdata_ingested")
-                    & Query("").depends_on("daqreader_id", self._daqreader.id)
-                    & (Query("epochid.epochid") == epoch_id)
+                    ndi_query("").isa("daqreader_epochdata_ingested")
+                    & ndi_query("").depends_on("daqreader_id", self._daqreader.id)
+                    & (ndi_query("epochid.epochid") == epoch_id)
                 )
                 docs = self.session.database_search(q)
                 for doc in docs:
@@ -581,9 +569,9 @@ class DAQSystem(Ido):
             # Delete ingested metadata documents
             for mreader in self._daqmetadatareaders:
                 q = (
-                    Query("").isa("daqmetadatareader_epochdata_ingested")
-                    & Query("").depends_on("daqmetadatareader_id", mreader.id)
-                    & (Query("epochid.epochid") == epoch_id)
+                    ndi_query("").isa("daqmetadatareader_epochdata_ingested")
+                    & ndi_query("").depends_on("daqmetadatareader_id", mreader.id)
+                    & (ndi_query("epochid.epochid") == epoch_id)
                 )
                 docs = self.session.database_search(q)
                 for doc in docs:
@@ -600,7 +588,7 @@ class DAQSystem(Ido):
                     except OSError:
                         pass  # Best effort deletion
 
-        return True, f"Epoch {epoch_number} deleted"
+        return True, f"ndi_epoch_epoch {epoch_number} deleted"
 
     def verifyepochprobemap(
         self,
@@ -612,7 +600,7 @@ class DAQSystem(Ido):
 
         Args:
             epochprobemap: The probe map to verify
-            epoch: Epoch number
+            epoch: ndi_epoch_epoch number
 
         Returns:
             Tuple of (is_valid, error_message)
@@ -629,12 +617,12 @@ class DAQSystem(Ido):
 
         Returns:
             List of documents:
-            - [0]: FileNavigator document
-            - [1]: DAQReader document
-            - [2]: DAQSystem document
-            - [3+]: MetadataReader documents
+            - [0]: ndi_file_navigator document
+            - [1]: ndi_daq_reader document
+            - [2]: ndi_daq_system document
+            - [3+]: ndi_daq_metadatareader documents
         """
-        from ..document import Document
+        from ..document import ndi_document
 
         docs = []
 
@@ -647,10 +635,10 @@ class DAQSystem(Ido):
             docs.append(self._daqreader.newdocument())
 
         # System document
-        sys_doc = Document(
+        sys_doc = ndi_document(
             "daq/daqsystem",
             **{
-                "daqsystem.ndi_daqsystem_class": self.__class__.__name__,
+                "daqsystem.ndi_daqsystem_class": self.NDI_DAQSYSTEM_CLASS,
                 "base.id": self.id,
                 "base.name": self._name,
             },
@@ -678,21 +666,21 @@ class DAQSystem(Ido):
         Create a search query for this DAQ system.
 
         Returns:
-            Query object
+            ndi_query object
         """
-        from ..query import Query
+        from ..query import ndi_query
 
-        q = Query("base.id") == self.id
+        q = ndi_query("base.id") == self.id
         if self._name:
-            q = q & (Query("base.name") == self._name)
+            q = q & (ndi_query("base.name") == self._name)
         if self.session is not None:
-            q = q & (Query("base.session_id") == self.session.id)
+            q = q & (ndi_query("base.session_id") == self.session.id)
 
         return q
 
     def __eq__(self, other: Any) -> bool:
         """Test equality by name and class."""
-        if not isinstance(other, DAQSystem):
+        if not isinstance(other, ndi_daq_system):
             return False
         return self._name == other._name and self.__class__.__name__ == other.__class__.__name__
 

@@ -19,6 +19,7 @@ def compareSessionSummary(
     summary2: dict[str, Any],
     *,
     excludeFiles: list[str] | None = None,
+    excludeFields: list[str] | None = None,
 ) -> list[str]:
     """Compare two session summaries and return a report.
 
@@ -29,12 +30,15 @@ def compareSessionSummary(
         summary2: Second session summary dict.
         excludeFiles: Filenames to ignore when comparing ``files``
             and ``filesInDotNDI`` fields.
+        excludeFields: Field names to skip entirely during comparison.
 
     Returns:
         List of difference strings. Empty list means summaries match.
     """
     if excludeFiles is None:
         excludeFiles = []
+    if excludeFields is None:
+        excludeFields = []
 
     report: list[str] = []
 
@@ -51,6 +55,8 @@ def compareSessionSummary(
 
     # 2. Compare common fields
     for field in common_fields:
+        if field in excludeFields:
+            continue
         val1 = summary1[field]
         val2 = summary2[field]
 
@@ -92,7 +98,7 @@ def compareSessionSummary(
                         if not (n1 and n1 == n2):
                             report.append(f'Field {field}[{j}] differs: "{s1}" vs "{s2}"')
                 elif isinstance(item1, dict) and isinstance(item2, dict):
-                    sub = compareSessionSummary(item1, item2)
+                    sub = compareSessionSummary(item1, item2, excludeFields=excludeFields)
                     for s in sub:
                         report.append(f"Field {field}[{j}] struct diff: {s}")
                 else:
@@ -101,7 +107,7 @@ def compareSessionSummary(
 
         elif isinstance(val1, dict) and isinstance(val2, dict):
             # Both are dicts — could be a single struct or a struct array
-            sub = compareSessionSummary(val1, val2)
+            sub = compareSessionSummary(val1, val2, excludeFields=excludeFields)
             for s in sub:
                 report.append(f"Field {field} struct diff: {s}")
 

@@ -18,7 +18,7 @@ classes:
     type: class
     matlab_path: "src/ndi/+ndi/+app/+stimulus/decoder.m"
     python_path: "ndi/app/stimulus/decoder.py"
-    python_class: "StimulusDecoder"
+    python_class: "ndi_app_stimulus_decoder"
     inherits: "ndi.app"
 
     methods:
@@ -27,11 +27,11 @@ classes:
         input_arguments:
           - name: session
             type_matlab: "ndi.session (optional, via varargin)"
-            type_python: "Session | None"
+            type_python: "ndi_session | None"
             default: "None"
         output_arguments:
           - name: obj
-            type_python: "StimulusDecoder"
+            type_python: "ndi_app_stimulus_decoder"
         decision_log: "Exact match."
 
       - name: parse_stimuli
@@ -46,10 +46,10 @@ classes:
         output_arguments:
           - name: newdocs
             type_matlab: "cell array of ndi.document"
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
           - name: existingdocs
             type_matlab: "cell array of ndi.document"
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: >
           DISCREPANCY FIXED: MATLAB returns [newdocs, existingdocs]
           2-tuple. Python was returning single list. Updated Python
@@ -59,7 +59,7 @@ classes:
         input_arguments:
           - name: stimulus_presentation_doc
             type_matlab: "ndi.document"
-            type_python: "Document"
+            type_python: "ndi_document"
         output_arguments:
           - name: presentation_time
             type_matlab: "struct"
@@ -73,7 +73,7 @@ classes:
     type: class
     matlab_path: "src/ndi/+ndi/+app/+stimulus/tuning_response.m"
     python_path: "ndi/app/stimulus/tuning_response.py"
-    python_class: "TuningResponse"
+    python_class: "ndi_app_stimulus_tuning__response"
     inherits: "ndi.app"
 
     methods:
@@ -82,11 +82,11 @@ classes:
         input_arguments:
           - name: session
             type_matlab: "ndi.session (optional, via varargin)"
-            type_python: "Session | None"
+            type_python: "ndi_session | None"
             default: "None"
         output_arguments:
           - name: obj
-            type_python: "TuningResponse"
+            type_python: "ndi_app_stimulus_tuning__response"
         decision_log: "Exact match."
 
       - name: stimulus_responses
@@ -107,7 +107,7 @@ classes:
             default: "False"
         output_arguments:
           - name: rdocs
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: "Exact match."
 
       - name: compute_stimulus_response_scalar
@@ -120,13 +120,13 @@ classes:
             type_python: "Any"
           - name: stim_doc
             type_matlab: "ndi.document"
-            type_python: "Document"
+            type_python: "ndi_document"
           - name: control_doc
             type_matlab: "ndi.document"
-            type_python: "Document | None"
+            type_python: "ndi_document | None"
         output_arguments:
           - name: response_doc
-            type_python: "Document | None"
+            type_python: "ndi_document | None"
         decision_log: >
           DISCREPANCY FIXED: Method was missing from Python.
           Added stub.
@@ -135,7 +135,7 @@ classes:
         input_arguments:
           - name: stim_response_doc
             type_matlab: "ndi.document"
-            type_python: "Document"
+            type_python: "ndi_document"
           - name: independent_label
             type_matlab: "char (Name-Value via varargin)"
             type_python: "str"
@@ -146,7 +146,7 @@ classes:
             default: "'angle'"
         output_arguments:
           - name: tuning_doc
-            type_python: "Document | None"
+            type_python: "ndi_document | None"
         decision_log: "Exact match."
 
       - name: label_control_stimuli
@@ -160,19 +160,19 @@ classes:
             default: "False"
         output_arguments:
           - name: cs_doc
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: "Exact match."
 
       - name: control_stimulus
         input_arguments:
           - name: stim_doc
             type_matlab: "ndi.document"
-            type_python: "Document"
+            type_python: "ndi_document"
         output_arguments:
           - name: cs_ids
             type_python: "list[int]"
           - name: cs_doc
-            type_python: "Document | None"
+            type_python: "ndi_document | None"
         decision_log: >
           DISCREPANCY FIXED: Method was missing from Python.
           Added stub. Returns 2-tuple.
@@ -191,9 +191,9 @@ classes:
             default: "'mean'"
         output_arguments:
           - name: tc_doc
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
           - name: srs_doc
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: >
           DISCREPANCY FIXED: MATLAB returns [tc_doc, srs_doc] 2-tuple.
           Python was returning single list. Updated to return tuple.
@@ -202,7 +202,7 @@ classes:
         input_arguments:
           - name: stim_response_doc
             type_matlab: "ndi.document"
-            type_python: "Document"
+            type_python: "ndi_document"
           - name: param_to_vary
             type_matlab: "char"
             type_python: "str"
@@ -214,7 +214,7 @@ classes:
             type_python: "list[str]"
         output_arguments:
           - name: tuning_docs
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: >
           DISCREPANCY FIXED: Method was missing from Python.
           Added stub.

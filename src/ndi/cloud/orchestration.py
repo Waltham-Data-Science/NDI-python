@@ -40,7 +40,7 @@ def downloadDataset(
         client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
-        An ndi.Dataset backed by the target folder.
+        An ndi.ndi_dataset backed by the target folder.
     """
     from .api import datasets as ds_api
     from .download import (
@@ -78,17 +78,17 @@ def downloadDataset(
         for dj in doc_jsons:
             updateFileInfoForRemoteFiles(dj, cloud_dataset_id)
 
-    # Convert to Document objects and create Dataset with them.
+    # Convert to ndi_document objects and create ndi_dataset with them.
     # Mirrors MATLAB: ndi.dataset.dir([], datasetFolder, ndiDocuments)
-    from ndi.dataset import DatasetDir
+    from ndi.dataset import ndi_dataset_dir
 
     documents = jsons2documents(doc_jsons)
-    dataset = DatasetDir("", target, documents=documents)
+    dataset = ndi_dataset_dir("", target, documents=documents)
 
     # Create remote link document if not already present
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
-    existing = dataset.database_search(Query("").isa("dataset_remote"))
+    existing = dataset.database_search(ndi_query("").isa("dataset_remote"))
     if not existing:
         remote_doc = createRemoteDatasetDoc(cloud_dataset_id, dataset)
         try:
@@ -127,7 +127,7 @@ def load_dataset_from_json_dir(
 
     Args:
         json_dir: Directory containing ``*.json`` document files.
-        target_folder: Path for the local Dataset. If *None*, a
+        target_folder: Path for the local ndi_dataset. If *None*, a
             temporary directory is created next to *json_dir*.
         verbose: Print progress messages.
         cloud_dataset_id: If given, rewrite file_info locations to
@@ -138,7 +138,7 @@ def load_dataset_from_json_dir(
             dataset for on-demand file fetching.
 
     Returns:
-        An :class:`ndi.Dataset` backed by the target folder.
+        An :class:`ndi.ndi_dataset` backed by the target folder.
     """
     import json as json_mod
 
@@ -156,7 +156,7 @@ def load_dataset_from_json_dir(
             doc_jsons.append(json_mod.load(fh))
 
     if verbose:
-        print(f"  Read {len(doc_jsons)} documents, bulk-inserting into Dataset...")
+        print(f"  Read {len(doc_jsons)} documents, bulk-inserting into ndi_dataset...")
 
     # Auto-detect cloud dataset ID from dataset_remote document
     if cloud_dataset_id is None:
@@ -173,8 +173,8 @@ def load_dataset_from_json_dir(
         for dj in doc_jsons:
             updateFileInfoForRemoteFiles(dj, cloud_dataset_id)
 
-    # Create Dataset
-    from ndi.dataset import DatasetDir
+    # Create ndi_dataset
+    from ndi.dataset import ndi_dataset_dir
 
     if target_folder is None:
         target = json_path.parent / f"{json_path.name}_dataset"
@@ -182,11 +182,11 @@ def load_dataset_from_json_dir(
         target = Path(target_folder)
     target.mkdir(parents=True, exist_ok=True)
 
-    # Convert JSON dicts to Document objects and create dataset with them
+    # Convert JSON dicts to ndi_document objects and create dataset with them
     from .download import jsons2documents as _j2d
 
     all_documents = _j2d(doc_jsons)
-    dataset = DatasetDir("", target, documents=all_documents)
+    dataset = ndi_dataset_dir("", target, documents=all_documents)
     added = len(all_documents)
     skipped = 0
 
@@ -195,7 +195,7 @@ def load_dataset_from_json_dir(
         dataset.cloud_client = client
 
     if verbose:
-        print(f"  Dataset created at {target} with {added} documents ({skipped} skipped).")
+        print(f"  ndi_dataset created at {target} with {added} documents ({skipped} skipped).")
 
     return dataset
 
@@ -215,7 +215,7 @@ def uploadDataset(
     MATLAB equivalent: ndi.cloud.uploadDataset
 
     Args:
-        dataset: Local ndi.Dataset.
+        dataset: Local ndi.ndi_dataset.
         upload_as_new: If True, always create a new remote dataset.
         remote_name: Name for the remote dataset.
         sync_files: Upload binary files.
@@ -236,7 +236,7 @@ def uploadDataset(
 
     if not cloud_id:
         # Create new remote dataset
-        name = remote_name or getattr(dataset, "name", "Unnamed Dataset")
+        name = remote_name or getattr(dataset, "name", "Unnamed ndi_dataset")
         org_id = client.config.org_id
         try:
             result = ds_api.createDataset(org_id, name, client=client)
@@ -255,10 +255,10 @@ def uploadDataset(
         print(f"Uploading to cloud dataset: {cloud_id}")
 
     # Gather local documents
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
     try:
-        all_docs = dataset.session.database_search(Query(""))
+        all_docs = dataset.session.database_search(ndi_query(""))
     except Exception:
         all_docs = []
 
@@ -302,7 +302,7 @@ def syncDataset(
     MATLAB equivalent: ndi.cloud.syncDataset
 
     Args:
-        dataset: Local ndi.Dataset.
+        dataset: Local ndi.ndi_dataset.
         sync_mode: One of ``'download_new'``, ``'upload_new'``,
             ``'mirror_from_remote'``, ``'mirror_to_remote'``,
             ``'two_way_sync'``.
@@ -401,10 +401,10 @@ def _sync_download_new(
     remote_docs = docs_api.listDatasetDocumentsAll(cloud_id, client=client).data
 
     # Find local IDs
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
     try:
-        local_docs = dataset.session.database_search(Query(""))
+        local_docs = dataset.session.database_search(ndi_query(""))
     except Exception:
         local_docs = []
 
@@ -450,10 +450,10 @@ def _sync_upload_new(
 
     remote_ids = listRemoteDocumentIds(cloud_id, client=client)
 
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
     try:
-        local_docs = dataset.session.database_search(Query(""))
+        local_docs = dataset.session.database_search(ndi_query(""))
     except Exception:
         local_docs = []
 

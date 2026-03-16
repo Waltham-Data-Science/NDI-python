@@ -39,7 +39,7 @@ def mustBeCellArrayOfNonEmptyCharacterArrays(value: Sequence) -> None:
         if not isinstance(item, str):
             raise TypeError(
                 f"All elements must be non-empty strings. "
-                f"Element {i} is of type {type(item).__name__!r}."
+                f"ndi_element {i} is of type {type(item).__name__!r}."
             )
         if not item:
-            raise ValueError(f"All elements must be non-empty strings. Element {i} is empty.")
+            raise ValueError(f"All elements must be non-empty strings. ndi_element {i} is empty.")

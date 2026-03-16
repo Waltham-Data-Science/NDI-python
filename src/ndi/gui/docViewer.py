@@ -1,6 +1,6 @@
-"""docViewer — Standalone NDI document viewer window.
+"""ndi_gui_docViewer — Standalone NDI document viewer window.
 
-Mirrors MATLAB: ndi.gui.docViewer
+Mirrors MATLAB: ndi.gui.ndi_gui_docViewer
 
 A self-contained window with a document table, detail panel, search/filter
 controls, and dependency-graph visualisation.
@@ -19,7 +19,7 @@ except ImportError:
     pass
 
 
-class docViewer:
+class ndi_gui_docViewer:
     """Standalone document viewer window.
 
     Opens its own :class:`QMainWindow`.  Populate it with :meth:`addDoc`.
@@ -36,7 +36,7 @@ class docViewer:
         self.docs: list[Any] = []
 
         self.fig = QtWidgets.QMainWindow()
-        self.fig.setWindowTitle("Document Viewer")
+        self.fig.setWindowTitle("ndi_document Viewer")
         self.fig.resize(900, 600)
 
         central = QtWidgets.QWidget()
@@ -389,7 +389,7 @@ class docViewer:
                 if isinstance(v, str) and value in v.lower():
                     return True
             if isinstance(v, dict):
-                if docViewer._field_contains(v, field_name, value):
+                if ndi_gui_docViewer._field_contains(v, field_name, value):
                     return True
         return False
 
@@ -400,6 +400,6 @@ class docViewer:
             if k.lower() == field_name:
                 return True
             if isinstance(v, dict):
-                if docViewer._has_field(v, field_name):
+                if ndi_gui_docViewer._has_field(v, field_name):
                     return True
         return False

@@ -19,8 +19,8 @@ from typing import Any
 
 import numpy as np
 
-from ...time import DEV_LOCAL_TIME, ClockType
-from ..mfdaq import ChannelInfo, MFDAQReader, standardize_channel_type
+from ...time import DEV_LOCAL_TIME, ndi_time_clocktype
+from ..mfdaq import ChannelInfo, ndi_daq_reader_mfdaq, standardize_channel_type
 
 # Try to import spikeinterface
 try:
@@ -83,12 +83,12 @@ def _get_extractor_for_file(filepath: str) -> Any | None:
         return None
 
 
-class SpikeInterfaceReader(MFDAQReader):
+class ndi_daq_reader_SpikeInterfaceReader(ndi_daq_reader_mfdaq):
     """
     DAQ reader using spikeinterface for data access.
 
     This reader wraps the spikeinterface library to provide access
-    to many neuroscience data formats. It implements the MFDAQReader
+    to many neuroscience data formats. It implements the ndi_daq_reader_mfdaq
     interface for seamless integration with NDI.
 
     Supported formats include:
@@ -102,7 +102,7 @@ class SpikeInterfaceReader(MFDAQReader):
         stream_id: Stream ID for multi-stream formats
 
     Example:
-        >>> reader = SpikeInterfaceReader()
+        >>> reader = ndi_daq_reader_SpikeInterfaceReader()
         >>> channels = reader.getchannelsepoch(['recording.rhd'])
         >>> data = reader.readchannels_epochsamples('ai', [1, 2], ['recording.rhd'], 0, 1000)
     """
@@ -115,7 +115,7 @@ class SpikeInterfaceReader(MFDAQReader):
         document: Any | None = None,
     ):
         """
-        Create a SpikeInterfaceReader.
+        Create a ndi_daq_reader_SpikeInterfaceReader.
 
         Args:
             stream_id: Stream ID for multi-stream formats (e.g., Intan)
@@ -125,7 +125,7 @@ class SpikeInterfaceReader(MFDAQReader):
         """
         if not HAS_SPIKEINTERFACE:
             raise ImportError(
-                "spikeinterface is required for SpikeInterfaceReader. "
+                "spikeinterface is required for ndi_daq_reader_SpikeInterfaceReader. "
                 "Install with: pip install spikeinterface"
             )
 
@@ -155,7 +155,7 @@ class SpikeInterfaceReader(MFDAQReader):
     def epochclock(
         self,
         epochfiles: list[str],
-    ) -> list[ClockType]:
+    ) -> list[ndi_time_clocktype]:
         """Return clock types for epoch. Returns DEV_LOCAL_TIME."""
         return [DEV_LOCAL_TIME]
 
@@ -441,12 +441,12 @@ class SpikeInterfaceReader(MFDAQReader):
 
     def newdocument(self) -> Any:
         """Create document for this reader."""
-        from ...document import Document
+        from ...document import ndi_document
 
-        doc = Document(
+        doc = ndi_document(
             "daq/daqreader",
             **{
-                "daqreader.ndi_daqreader_class": "SpikeInterfaceReader",
+                "daqreader.ndi_daqreader_class": "ndi_daq_reader_SpikeInterfaceReader",
                 "base.id": self.id,
             },
         )

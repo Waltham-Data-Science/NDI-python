@@ -62,7 +62,7 @@ def updateFileInfoForRemoteFiles(doc_props: dict, cloud_dataset_id: str) -> None
     and ``locations`` fields.
 
     Args:
-        doc_props: Document properties dict (as from JSON).
+        doc_props: ndi_document properties dict (as from JSON).
         cloud_dataset_id: The cloud dataset ID to embed in URIs.
     """
     files = doc_props.get("files")
@@ -209,7 +209,7 @@ def updateFileInfoForLocalFiles(
     and sets ``delete_original=1``, ``ingest=1``.
 
     Args:
-        doc_props: Document properties dict (as from JSON).
+        doc_props: ndi_document properties dict (as from JSON).
         file_directory: Directory where local files are stored.
     """
     import os

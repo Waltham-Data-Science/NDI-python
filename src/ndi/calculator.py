@@ -1,7 +1,7 @@
 """
 ndi.calculator - Base class for NDI calculators.
 
-A Calculator is an App that can discover input parameters,
+A ndi_calculator is an ndi_app that can discover input parameters,
 check for existing results, and run computations that produce
 Documents stored in the session database.
 
@@ -14,21 +14,21 @@ import itertools
 import logging
 from typing import TYPE_CHECKING
 
-from .app import App
-from .app.appdoc import AppDoc, DocExistsAction
+from .app import ndi_app
+from .app.appdoc import DocExistsAction, ndi_app_appdoc
 
 if TYPE_CHECKING:
-    from .document import Document
-    from .session.session_base import Session
+    from .document import ndi_document
+    from .session.session_base import ndi_session
 
 logger = logging.getLogger(__name__)
 
 
-class Calculator(App, AppDoc):
+class ndi_calculator(ndi_app, ndi_app_appdoc):
     """
     Base class for NDI calculators.
 
-    A Calculator discovers inputs from the database, checks for
+    A ndi_calculator discovers inputs from the database, checks for
     existing results, runs computations, and stores output documents.
     Subclasses override `calculate()` to implement specific analyses.
 
@@ -46,26 +46,26 @@ class Calculator(App, AppDoc):
 
     def __init__(
         self,
-        session: Session | None = None,
+        session: ndi_session | None = None,
         document_type: str = "",
         path_to_doc_type: str = "",
     ):
         """
-        Create a new Calculator.
+        Create a new ndi_calculator.
 
         Args:
-            session: Session for database access
+            session: ndi_session for database access
             document_type: NDI document type for calculator outputs
             path_to_doc_type: Path to the document type schema
         """
-        # Initialize App (session + name from class)
+        # Initialize ndi_app (session + name from class)
         name = type(self).__name__
-        App.__init__(self, session=session, name=name)
+        ndi_app.__init__(self, session=session, name=name)
 
-        # Initialize AppDoc
+        # Initialize ndi_app_appdoc
         doc_types = [document_type] if document_type else []
         doc_document_types = [path_to_doc_type or document_type] if document_type else []
-        AppDoc.__init__(
+        ndi_app_appdoc.__init__(
             self,
             doc_types=doc_types,
             doc_document_types=doc_document_types,
@@ -80,7 +80,7 @@ class Calculator(App, AppDoc):
         self,
         doc_exists_action: DocExistsAction = DocExistsAction.ERROR,
         parameters: dict | None = None,
-    ) -> list[Document]:
+    ) -> list[ndi_document]:
         """
         Run the calculator pipeline.
 
@@ -106,8 +106,8 @@ class Calculator(App, AppDoc):
             len(all_parameters),
         )
 
-        docs: list[Document] = []
-        docs_to_add: list[Document] = []
+        docs: list[ndi_document] = []
+        docs_to_add: list[ndi_document] = []
 
         for i, params in enumerate(all_parameters):
             logger.debug("Processing parameter set %d of %d", i + 1, len(all_parameters))
@@ -120,7 +120,7 @@ class Calculator(App, AppDoc):
             if existing:
                 if doc_exists_action == DocExistsAction.ERROR:
                     raise RuntimeError(
-                        f"Calculator document already exists for parameter set {i + 1}"
+                        f"ndi_calculator document already exists for parameter set {i + 1}"
                     )
                 elif doc_exists_action == DocExistsAction.NO_ACTION:
                     docs.extend(existing)
@@ -168,7 +168,7 @@ class Calculator(App, AppDoc):
             try:
                 self._session.database_add(app_doc)
             except Exception:
-                pass  # App doc may already exist
+                pass  # ndi_app doc may already exist
 
             for doc in docs_to_add:
                 try:
@@ -179,7 +179,7 @@ class Calculator(App, AppDoc):
         logger.debug("Concluding calculator %s", type(self).__name__)
         return docs
 
-    def calculate(self, parameters: dict) -> list[Document]:
+    def calculate(self, parameters: dict) -> list[ndi_document]:
         """
         Perform the calculation.
 
@@ -328,7 +328,7 @@ class Calculator(App, AppDoc):
     def search_for_calculator_docs(
         self,
         parameters: dict,
-    ) -> list[Document]:
+    ) -> list[ndi_document]:
         """
         Find existing calculator documents matching the given parameters.
 
@@ -344,11 +344,11 @@ class Calculator(App, AppDoc):
         if self._session is None or not self.doc_types:
             return []
 
-        from .query import Query
+        from .query import ndi_query
 
         # Build query for calculator class name (not schema path)
         doc_type = self.doc_types[0]
-        q = Query("").isa(doc_type)
+        q = ndi_query("").isa(doc_type)
 
         # Add dependency constraints
         depends_on = parameters.get("depends_on", [])
@@ -356,7 +356,7 @@ class Calculator(App, AppDoc):
             dep_name = dep.get("name", "")
             dep_value = dep.get("value", "")
             if dep_value:
-                q = q & Query("").depends_on(dep_name, dep_value)
+                q = q & ndi_query("").depends_on(dep_name, dep_value)
 
         # Search database
         candidates = self._session.database_search(q)
@@ -409,7 +409,7 @@ class Calculator(App, AppDoc):
 
         Args:
             name: Dependency name
-            value: Document ID
+            value: ndi_document ID
 
         Returns:
             True if valid
@@ -420,7 +420,7 @@ class Calculator(App, AppDoc):
     # Internal Helpers
     # =========================================================================
 
-    def _extract_input_parameters(self, doc: Document) -> dict | None:
+    def _extract_input_parameters(self, doc: ndi_document) -> dict | None:
         """Extract input_parameters from a calculator document."""
         props = doc.document_properties
         doc_type = self.doc_types[0] if self.doc_types else ""
@@ -429,7 +429,7 @@ class Calculator(App, AppDoc):
             return section.get("input_parameters")
         return None
 
-    def _remove_docs(self, docs: list[Document]) -> None:
+    def _remove_docs(self, docs: list[ndi_document]) -> None:
         """Remove documents from the database."""
         if self._session is None:
             return
@@ -441,4 +441,4 @@ class Calculator(App, AppDoc):
 
     def __repr__(self) -> str:
         doc_type = self.doc_document_types[0] if self.doc_document_types else "none"
-        return f"Calculator({self._name}, type={doc_type})"
+        return f"ndi_calculator({self._name}, type={doc_type})"

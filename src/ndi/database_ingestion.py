@@ -29,7 +29,7 @@ def ingest_plan(
     originals should be deleted afterward.
 
     Args:
-        document: An ndi.Document object.
+        document: An ndi.ndi_document object.
         ingestion_directory: Target directory for ingested files.
 
     Returns:

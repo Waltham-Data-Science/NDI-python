@@ -1,8 +1,8 @@
 """
 ndi.calc.tuning_fit - Abstract base class for tuning curve fitting calculators.
 
-Extends Calculator with a mock document generation framework that
-subclasses (e.g., OriDirTuning) use for self-testing.
+Extends ndi_calculator with a mock document generation framework that
+subclasses (e.g., ndi_app_oridirtuning) use for self-testing.
 
 MATLAB equivalent: src/ndi/+ndi/+calc/tuning_fit.m
 """
@@ -14,13 +14,13 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from ..calculator import Calculator
+from ..calculator import ndi_calculator
 
 if TYPE_CHECKING:
-    from ..session.session_base import Session
+    from ..session.session_base import ndi_session
 
 
-class TuningFit(Calculator):
+class ndi_calc_tuning__fit(ndi_calculator):
     """
     Abstract base for stimulus tuning curve fitting calculators.
 
@@ -29,11 +29,11 @@ class TuningFit(Calculator):
     - ``generate_mock_docs()`` — creates synthetic stimulus-response data
       for self-testing at two noise levels (highSNR / lowSNR)
 
-    Subclasses must implement both ``calculate()`` (from Calculator)
+    Subclasses must implement both ``calculate()`` (from ndi_calculator)
     and ``generate_mock_parameters()``.
 
     Example:
-        >>> class MyFit(TuningFit):
+        >>> class MyFit(ndi_calc_tuning__fit):
         ...     def calculate(self, parameters): ...
         ...     def generate_mock_parameters(self, scope, index): ...
         >>> fit = MyFit(session, 'my_fit', 'apps/calculators/my_fit')
@@ -47,7 +47,7 @@ class TuningFit(Calculator):
 
     def __init__(
         self,
-        session: Session | None = None,
+        session: ndi_session | None = None,
         document_type: str = "",
         path_to_doc_type: str = "",
     ):
@@ -197,4 +197,4 @@ class TuningFit(Calculator):
 
     def __repr__(self) -> str:
         doc_type = self.doc_document_types[0] if self.doc_document_types else "none"
-        return f"TuningFit(type={doc_type!r}, " f"session={self._session is not None})"
+        return f"ndi_calc_tuning__fit(type={doc_type!r}, " f"session={self._session is not None})"

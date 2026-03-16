@@ -5,8 +5,8 @@ MATLAB source files:
   +element/OneEpochTest.m → TestOneEpoch
 
 Tests the element module including:
-  - Element instantiation and basic properties
-  - Element epoch table management
+  - ndi_element instantiation and basic properties
+  - ndi_element epoch table management
   - oneepoch() function for creating single-epoch concatenated elements
   - missingepochs() function for comparing epoch tables
   - downsample_timeseries() for signal processing
@@ -21,7 +21,7 @@ import numpy as np
 import pytest
 
 # ===========================================================================
-# TestElementInstantiation — Element creation and basic properties
+# TestElementInstantiation — ndi_element creation and basic properties
 # ===========================================================================
 
 
@@ -29,21 +29,21 @@ class TestElementInstantiation:
     """Port of ndi.unittest.element basic tests."""
 
     def test_create_element_no_session(self):
-        """Element can be created without a session."""
-        from ndi.element import Element
+        """ndi_element can be created without a session."""
+        from ndi.element import ndi_element
 
-        elem = Element(name="electrode1", reference=1, type="n-trode")
+        elem = ndi_element(name="electrode1", reference=1, type="n-trode")
         assert elem is not None
         assert elem.name == "electrode1"
         assert elem.reference == 1
 
     def test_create_element_with_session(self):
-        """Element can be created with a mocked session."""
-        from ndi.element import Element
+        """ndi_element can be created with a mocked session."""
+        from ndi.element import ndi_element
 
         session = MagicMock()
         session.id.return_value = "session-123"
-        elem = Element(
+        elem = ndi_element(
             session=session,
             name="cortex",
             reference=1,
@@ -53,25 +53,25 @@ class TestElementInstantiation:
         assert elem.name == "cortex"
 
     def test_element_type_attribute(self):
-        """Element stores type correctly."""
-        from ndi.element import Element
+        """ndi_element stores type correctly."""
+        from ndi.element import ndi_element
 
-        elem = Element(name="stim", reference=0, type="stimulator")
+        elem = ndi_element(name="stim", reference=0, type="stimulator")
         assert elem._type == "stimulator"
 
     def test_element_default_values(self):
-        """Element has correct default values."""
-        from ndi.element import Element
+        """ndi_element has correct default values."""
+        from ndi.element import ndi_element
 
-        elem = Element()
+        elem = ndi_element()
         assert elem.name == ""
         assert elem.reference == 0
 
     def test_element_subject_id(self):
-        """Element stores subject_id."""
-        from ndi.element import Element
+        """ndi_element stores subject_id."""
+        from ndi.element import ndi_element
 
-        elem = Element(
+        elem = ndi_element(
             name="e1",
             reference=1,
             type="n-trode",
@@ -80,11 +80,11 @@ class TestElementInstantiation:
         assert elem.subject_id == "subj-001"
 
     def test_element_underlying_element(self):
-        """Element stores underlying_element reference."""
-        from ndi.element import Element
+        """ndi_element stores underlying_element reference."""
+        from ndi.element import ndi_element
 
-        parent = Element(name="parent", reference=1, type="n-trode")
-        child = Element(
+        parent = ndi_element(name="parent", reference=1, type="n-trode")
+        child = ndi_element(
             name="child",
             reference=1,
             type="timeseries",
@@ -93,39 +93,39 @@ class TestElementInstantiation:
         assert child.underlying_element is parent
 
     def test_element_direct_flag(self):
-        """Element stores direct flag."""
-        from ndi.element import Element
+        """ndi_element stores direct flag."""
+        from ndi.element import ndi_element
 
-        elem = Element(name="e1", reference=1, direct=False)
+        elem = ndi_element(name="e1", reference=1, direct=False)
         assert elem.direct is False
 
     def test_element_inherits_ido(self):
-        """Element inherits from Ido (has unique identifier)."""
-        from ndi.element import Element
-        from ndi.ido import Ido
+        """ndi_element inherits from ndi_ido (has unique identifier)."""
+        from ndi.element import ndi_element
+        from ndi.ido import ndi_ido
 
-        elem = Element(name="e1", reference=1)
-        assert isinstance(elem, Ido)
+        elem = ndi_element(name="e1", reference=1)
+        assert isinstance(elem, ndi_ido)
 
     def test_element_inherits_epochset(self):
-        """Element inherits from EpochSet."""
-        from ndi.element import Element
-        from ndi.epoch.epochset import EpochSet
+        """ndi_element inherits from ndi_epoch_epochset."""
+        from ndi.element import ndi_element
+        from ndi.epoch.epochset import ndi_epoch_epochset
 
-        elem = Element(name="e1", reference=1)
-        assert isinstance(elem, EpochSet)
+        elem = ndi_element(name="e1", reference=1)
+        assert isinstance(elem, ndi_epoch_epochset)
 
     def test_element_inherits_documentservice(self):
-        """Element inherits from DocumentService."""
-        from ndi.documentservice import DocumentService
-        from ndi.element import Element
+        """ndi_element inherits from ndi_documentservice."""
+        from ndi.documentservice import ndi_documentservice
+        from ndi.element import ndi_element
 
-        elem = Element(name="e1", reference=1)
-        assert isinstance(elem, DocumentService)
+        elem = ndi_element(name="e1", reference=1)
+        assert isinstance(elem, ndi_documentservice)
 
 
 # ===========================================================================
-# TestElementEpochTable — Epoch table operations
+# TestElementEpochTable — ndi_epoch_epoch table operations
 # ===========================================================================
 
 
@@ -134,26 +134,26 @@ class TestElementEpochTable:
 
     def test_epochtable_no_session(self):
         """epochtable returns empty for element with no session."""
-        from ndi.element import Element
+        from ndi.element import ndi_element
 
-        elem = Element(name="e1", reference=1)
+        elem = ndi_element(name="e1", reference=1)
         et = elem.buildepochtable()
         assert isinstance(et, list)
         assert len(et) == 0
 
     def test_elementstring(self):
         """elementstring returns formatted string."""
-        from ndi.element import Element
+        from ndi.element import ndi_element
 
-        elem = Element(name="cortex", reference=1)
+        elem = ndi_element(name="cortex", reference=1)
         s = elem.elementstring()
         assert "cortex" in s
 
     def test_epochsetname(self):
         """epochsetname returns name string."""
-        from ndi.element import Element
+        from ndi.element import ndi_element
 
-        elem = Element(name="cortex", reference=1, type="n-trode")
+        elem = ndi_element(name="cortex", reference=1, type="n-trode")
         name = elem.epochsetname()
         assert isinstance(name, str)
         assert len(name) > 0
@@ -168,8 +168,8 @@ class TestOneEpoch:
     """Port of ndi.unittest.element.OneEpochTest — oneepoch function tests."""
 
     def test_oneepoch_creates_element(self):
-        """oneepoch() creates a new Element."""
-        from ndi.element import Element
+        """oneepoch() creates a new ndi_element."""
+        from ndi.element import ndi_element
         from ndi.element.functions import oneepoch
 
         session = MagicMock()
@@ -185,7 +185,7 @@ class TestOneEpoch:
         ]
 
         result = oneepoch(session, input_elem, "probe1_oneepoch", 1)
-        assert isinstance(result, Element)
+        assert isinstance(result, ndi_element)
         assert result.name == "probe1_oneepoch"
         assert result.reference == 1
 
@@ -216,7 +216,7 @@ class TestOneEpoch:
 
     def test_oneepoch_multiple_epochs(self):
         """oneepoch() works with multiple input epochs."""
-        from ndi.element import Element
+        from ndi.element import ndi_element
         from ndi.element.functions import oneepoch
 
         session = MagicMock()
@@ -228,7 +228,7 @@ class TestOneEpoch:
         ]
 
         result = oneepoch(session, input_elem, "combined", 1)
-        assert isinstance(result, Element)
+        assert isinstance(result, ndi_element)
 
     def test_oneepoch_with_list_epochs(self):
         """oneepoch() works when epoch table is provided as a list."""
@@ -331,7 +331,7 @@ class TestSpikesForProbe:
 
     def test_creates_spike_element(self):
         """spikesForProbe creates an element of type 'spikes'."""
-        from ndi.element import Element
+        from ndi.element import ndi_element
         from ndi.element.functions import spikesForProbe
 
         session = MagicMock()
@@ -345,7 +345,7 @@ class TestSpikesForProbe:
         ]
 
         result = spikesForProbe(session, probe, "unit1", 1, spikedata)
-        assert isinstance(result, Element)
+        assert isinstance(result, ndi_element)
         assert result._type == "spikes"
 
     def test_invalid_epoch_raises(self):
@@ -430,8 +430,8 @@ class TestDownsampleTimeseries:
         assert len(t_out) < len(t)
 
     def test_downsample_element_function(self):
-        """downsample() creates a new Element."""
-        from ndi.element import Element
+        """downsample() creates a new ndi_element."""
+        from ndi.element import ndi_element
         from ndi.element.functions import downsample
 
         session = MagicMock()
@@ -442,7 +442,7 @@ class TestDownsampleTimeseries:
         ]
 
         result = downsample(session, input_elem, 50.0, "ds_output", 1)
-        assert isinstance(result, Element)
+        assert isinstance(result, ndi_element)
 
     def test_downsample_invalid_frequency_raises(self):
         """downsample() raises for non-positive frequency."""

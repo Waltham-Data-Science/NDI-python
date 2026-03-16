@@ -18,13 +18,13 @@ classes:
     type: class
     matlab_path: "src/ndi/+ndi/app.m"
     python_path: "ndi/app/__init__.py"
-    python_class: "App"
+    python_class: "ndi_app"
     inherits: "ndi.documentservice"
 
     properties:
       - name: session
         type_matlab: "ndi.session"
-        type_python: "Session | None"
+        type_python: "ndi_session | None"
         access: "protected set, public get"
         decision_log: "Exact match."
 
@@ -40,7 +40,7 @@ classes:
         input_arguments:
           - name: session
             type_matlab: "ndi.session (optional, via varargin)"
-            type_python: "Session | None"
+            type_python: "ndi_session | None"
             default: "None"
           - name: name
             type_matlab: "char (optional, via varargin)"
@@ -48,7 +48,7 @@ classes:
             default: "'generic'"
         output_arguments:
           - name: app_obj
-            type_python: "App"
+            type_python: "ndi_app"
         decision_log: >
           MATLAB uses varargin for optional session and name.
           Python uses explicit keyword arguments with defaults.
@@ -77,7 +77,7 @@ classes:
         input_arguments: []
         output_arguments:
           - name: doc
-            type_python: "Document"
+            type_python: "ndi_document"
         decision_log: >
           Exact match. Creates 'app' document with name, version,
           url, os, os_version, interpreter, interpreter_version.
@@ -87,7 +87,7 @@ classes:
         input_arguments: []
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: >
           Exact match. Returns query for isa('app') & app.name matches.
 
@@ -98,7 +98,7 @@ classes:
     type: class
     matlab_path: "src/ndi/+ndi/+app/appdoc.m"
     python_path: "ndi/app/appdoc.py"
-    python_class: "AppDoc"
+    python_class: "ndi_app_appdoc"
 
     properties:
       - name: doc_types
@@ -132,7 +132,7 @@ classes:
             default: "None"
         output_arguments:
           - name: appdoc_obj
-            type_python: "AppDoc"
+            type_python: "ndi_app_appdoc"
         decision_log: "Exact match."
 
       - name: add_appdoc
@@ -151,7 +151,7 @@ classes:
         output_arguments:
           - name: doc
             type_matlab: "cell array of ndi.document"
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: >
           Exact match. MATLAB accepts struct/char/document/empty for
           appdoc_struct; Python accepts dict or None. MATLAB returns
@@ -168,7 +168,7 @@ classes:
             type_python: "dict"
         output_arguments:
           - name: doc
-            type_python: "Document | None"
+            type_python: "ndi_document | None"
         decision_log: >
           Exact match. Base class returns empty/None.
           Subclasses must override.
@@ -180,7 +180,7 @@ classes:
             type_python: "str"
           - name: doc
             type_matlab: "ndi.document"
-            type_python: "Document"
+            type_python: "ndi_document"
         output_arguments:
           - name: appdoc_struct
             type_python: "dict"
@@ -228,7 +228,7 @@ classes:
         output_arguments:
           - name: doc
             type_matlab: "cell array of ndi.document"
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: >
           Exact match. Base class returns empty/[].
 
@@ -275,7 +275,7 @@ classes:
     type: class
     matlab_path: "src/ndi/+ndi/+app/markgarbage.m"
     python_path: "ndi/app/markgarbage.py"
-    python_class: "MarkGarbage"
+    python_class: "ndi_app_markgarbage"
     inherits: "ndi.app"
 
     methods:
@@ -284,11 +284,11 @@ classes:
         input_arguments:
           - name: session
             type_matlab: "ndi.session (optional, via varargin)"
-            type_python: "Session | None"
+            type_python: "ndi_session | None"
             default: "None"
         output_arguments:
           - name: obj
-            type_python: "MarkGarbage"
+            type_python: "ndi_app_markgarbage"
         decision_log: "Exact match. Name is 'ndi_app_markgarbage'."
 
       - name: markvalidinterval
@@ -351,7 +351,7 @@ classes:
             type_python: "list[dict[str, Any]]"
           - name: mydoc
             type_matlab: "cell array of ndi.document"
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: >
           DISCREPANCY FIXED: MATLAB returns [vi, mydoc] 2-tuple.
           Python was returning only intervals list. Updated Python
@@ -386,7 +386,7 @@ classes:
     type: class
     matlab_path: "src/ndi/+ndi/+app/spikeextractor.m"
     python_path: "ndi/app/spikeextractor.py"
-    python_class: "SpikeExtractor"
+    python_class: "ndi_app_spikeextractor"
     inherits: "ndi.app & ndi.app.appdoc"
 
     methods:
@@ -395,18 +395,18 @@ classes:
         input_arguments:
           - name: session
             type_matlab: "ndi.session (optional, via varargin)"
-            type_python: "Session | None"
+            type_python: "ndi_session | None"
             default: "None"
         output_arguments:
           - name: obj
-            type_python: "SpikeExtractor"
+            type_python: "ndi_app_spikeextractor"
         decision_log: "Exact match."
 
       - name: makefilterstruct
         input_arguments:
           - name: extraction_doc
             type_matlab: "ndi.document"
-            type_python: "Document"
+            type_python: "ndi_document"
           - name: sample_rate
             type_matlab: "double"
             type_python: "float"
@@ -455,7 +455,7 @@ classes:
             default: "None"
         output_arguments: []
         decision_log: >
-          MATLAB returns void. Python had return type list[Document]
+          MATLAB returns void. Python had return type list[ndi_document]
           which was incorrect. Fixed to return None.
 
       - name: struct2doc
@@ -468,7 +468,7 @@ classes:
             type_python: "dict"
         output_arguments:
           - name: doc
-            type_python: "Document"
+            type_python: "ndi_document"
         decision_log: "Exact match."
 
       - name: isvalid_appdoc_struct
@@ -495,7 +495,7 @@ classes:
             type_python: "str"
         output_arguments:
           - name: doc
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: "Exact match."
 
       - name: loaddata_appdoc
@@ -517,7 +517,7 @@ classes:
     type: class
     matlab_path: "src/ndi/+ndi/+app/spikesorter.m"
     python_path: "ndi/app/spikesorter.py"
-    python_class: "SpikeSorter"
+    python_class: "ndi_app_spikesorter"
     inherits: "ndi.app & ndi.app.appdoc"
 
     methods:
@@ -526,11 +526,11 @@ classes:
         input_arguments:
           - name: session
             type_matlab: "ndi.session (optional, via varargin)"
-            type_python: "Session | None"
+            type_python: "ndi_session | None"
             default: "None"
         output_arguments:
           - name: obj
-            type_python: "SpikeSorter"
+            type_python: "ndi_app_spikesorter"
         decision_log: "Exact match."
 
       - name: check_sorting_parameters
@@ -564,9 +564,9 @@ classes:
           - name: epochinfo
             type_python: "list[dict]"
           - name: extraction_params_doc
-            type_python: "Document"
+            type_python: "ndi_document"
           - name: waveform_docs
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: >
           DISCREPANCY FIXED: Method was missing from Python.
           Added stub. Returns 6-tuple matching MATLAB.
@@ -590,7 +590,7 @@ classes:
             default: "False"
         output_arguments:
           - name: spike_cluster_doc
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: "Exact match."
 
       - name: clusters2neurons
@@ -623,7 +623,7 @@ classes:
             type_python: "dict"
         output_arguments:
           - name: doc
-            type_python: "Document"
+            type_python: "ndi_document"
         decision_log: "Exact match."
 
       - name: isvalid_appdoc_struct
@@ -647,7 +647,7 @@ classes:
             type_python: "str"
         output_arguments:
           - name: doc
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: "Exact match."
 
       - name: loaddata_appdoc
@@ -668,7 +668,7 @@ classes:
     type: class
     matlab_path: "src/ndi/+ndi/+app/oridirtuning.m"
     python_path: "ndi/app/oridirtuning.py"
-    python_class: "OriDirTuning"
+    python_class: "ndi_app_oridirtuning"
     inherits: "ndi.app & ndi.app.appdoc"
 
     methods:
@@ -677,11 +677,11 @@ classes:
         input_arguments:
           - name: session
             type_matlab: "ndi.session (optional, via varargin)"
-            type_python: "Session | None"
+            type_python: "ndi_session | None"
             default: "None"
         output_arguments:
           - name: obj
-            type_python: "OriDirTuning"
+            type_python: "ndi_app_oridirtuning"
         decision_log: "Exact match."
 
       - name: calculate_all_tuning_curves
@@ -695,7 +695,7 @@ classes:
             default: "'Replace'"
         output_arguments:
           - name: tuning_doc
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: "Exact match."
 
       - name: calculate_tuning_curve
@@ -705,14 +705,14 @@ classes:
             type_python: "Any"
           - name: ndi_response_doc
             type_matlab: "ndi.document"
-            type_python: "Document"
+            type_python: "ndi_document"
           - name: do_add
             type_matlab: "logical"
             type_python: "bool"
             default: "True"
         output_arguments:
           - name: tuning_doc
-            type_python: "Document | None"
+            type_python: "ndi_document | None"
         decision_log: >
           DISCREPANCY FIXED: Method was missing from Python.
           Added stub.
@@ -728,14 +728,14 @@ classes:
             default: "'Replace'"
         output_arguments:
           - name: oriprops
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: "Exact match."
 
       - name: calculate_oridir_indexes
         input_arguments:
           - name: tuning_doc
             type_matlab: "ndi.document"
-            type_python: "Document"
+            type_python: "ndi_document"
           - name: do_add
             type_matlab: "logical"
             type_python: "bool"
@@ -746,7 +746,7 @@ classes:
             default: "False"
         output_arguments:
           - name: oriprops
-            type_python: "Document | None"
+            type_python: "ndi_document | None"
         decision_log: >
           DISCREPANCY FIXED: Method was missing from Python.
           Added stub.
@@ -755,7 +755,7 @@ classes:
         input_arguments:
           - name: response_doc
             type_matlab: "ndi.document"
-            type_python: "Document"
+            type_python: "ndi_document"
         output_arguments:
           - name: b
             type_python: "bool"
@@ -765,7 +765,7 @@ classes:
         input_arguments:
           - name: oriprops_doc
             type_matlab: "ndi.document"
-            type_python: "Document"
+            type_python: "ndi_document"
         output_arguments: []
         decision_log: >
           DISCREPANCY FIXED: Method was missing from Python.
@@ -780,7 +780,7 @@ classes:
             type_python: "dict"
         output_arguments:
           - name: doc
-            type_python: "Document"
+            type_python: "ndi_document"
         decision_log: "Exact match."
 
       - name: find_appdoc
@@ -789,7 +789,7 @@ classes:
             type_python: "str"
         output_arguments:
           - name: doc
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: "Exact match."
 
       - name: isvalid_appdoc_struct

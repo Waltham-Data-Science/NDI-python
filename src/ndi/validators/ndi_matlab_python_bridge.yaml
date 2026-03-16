@@ -71,7 +71,7 @@ functions:
         type_python: "Sequence"
     output_arguments: []
     decision_log: >
-      Exact match. Validates every element is an ndi.session.DirSession.
+      Exact match. Validates every element is an ndi.session.ndi_session_dir.
       Uses lazy import to avoid circular imports. Raises TypeError
       if validation fails.
 

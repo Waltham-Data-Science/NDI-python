@@ -1,6 +1,6 @@
-"""Icon — Draggable visual icon for the Lab view.
+"""ndi_gui_Icon — Draggable visual icon for the ndi_gui_Lab view.
 
-Mirrors MATLAB: ndi.gui.Icon
+Mirrors MATLAB: ndi.gui.ndi_gui_Icon
 
 Represents a subject, probe, or DAQ device as a coloured rectangle with
 an image and a connection terminal in the QGraphicsScene.
@@ -18,13 +18,13 @@ except ImportError:
     pass
 
 
-class Icon:
-    """Graphical icon shown in the :class:`Lab` view.
+class ndi_gui_Icon:
+    """Graphical icon shown in the :class:`ndi_gui_Lab` view.
 
     Parameters
     ----------
-    src : Lab
-        The parent Lab instance.
+    src : ndi_gui_Lab
+        The parent ndi_gui_Lab instance.
     length : int
         Sequence index (used for initial positioning).
     elem : Any
@@ -46,7 +46,7 @@ class Icon:
 
     def __init__(
         self,
-        src: Any,  # Lab
+        src: Any,  # ndi_gui_Lab
         length: int,
         elem: Any,
         hShift: float,

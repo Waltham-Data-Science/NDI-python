@@ -4,68 +4,68 @@ import json
 
 import pytest
 
-from ndi import Query
+from ndi import ndi_query
 
 
 class TestQueryBasic:
-    """Test basic Query construction."""
+    """Test basic ndi_query construction."""
 
     def test_create_query_with_field(self):
         """Test creating a query with a field name."""
-        q = Query("base.name")
+        q = ndi_query("base.name")
         assert q.field == "base.name"
 
     def test_create_query_empty_field(self):
         """Test creating a query with empty field (for isa queries)."""
-        q = Query("")
+        q = ndi_query("")
         assert q.field == ""
 
     def test_query_equals(self):
         """Test equals operator."""
-        q = Query("base.name") == "test_doc"
+        q = ndi_query("base.name") == "test_doc"
         assert q.field == "base.name"
         assert q.operator == "=="
         assert q.value == "test_doc"
 
     def test_query_not_equals(self):
         """Test not equals operator."""
-        q = Query("base.name") != "test_doc"
+        q = ndi_query("base.name") != "test_doc"
         assert q.operator == "!="
         assert q.value == "test_doc"
 
     def test_query_greater_than(self):
         """Test greater than operator."""
-        q = Query("ephys.sample_rate") > 30000
+        q = ndi_query("ephys.sample_rate") > 30000
         assert q.operator == ">"
         assert q.value == 30000
 
     def test_query_greater_than_or_equal(self):
         """Test greater than or equal operator."""
-        q = Query("ephys.num_channels") >= 4
+        q = ndi_query("ephys.num_channels") >= 4
         assert q.operator == ">="
         assert q.value == 4
 
     def test_query_less_than(self):
         """Test less than operator."""
-        q = Query("ephys.duration") < 100
+        q = ndi_query("ephys.duration") < 100
         assert q.operator == "<"
         assert q.value == 100
 
     def test_query_less_than_or_equal(self):
         """Test less than or equal operator."""
-        q = Query("count") <= 10
+        q = ndi_query("count") <= 10
         assert q.operator == "<="
         assert q.value == 10
 
     def test_query_contains(self):
         """Test contains method."""
-        q = Query("base.name").contains("electrode")
+        q = ndi_query("base.name").contains("electrode")
         assert q.operator == "contains"
         assert q.value == "electrode"
 
     def test_query_match(self):
         """Test match (regex) method."""
-        q = Query("base.name").match(r"^test_\d+$")
+        q = ndi_query("base.name").match(r"^test_\d+$")
         assert q.operator == "match"
         assert q.value == r"^test_\d+$"
 
@@ -75,25 +75,25 @@ class TestQueryNDISpecific:
 
     def test_query_isa(self):
         """Test isa method for document class checking."""
-        q = Query("").isa("ndi.document.element")
+        q = ndi_query("").isa("ndi.document.element")
         assert q.operator == "isa"
         assert q.value == "ndi.document.element"
 
     def test_query_depends_on(self):
         """Test depends_on method."""
-        q = Query("").depends_on("element_id", "abc123")
+        q = ndi_query("").depends_on("element_id", "abc123")
         assert q.operator == "depends_on"
         assert q.value == ("element_id", "abc123")
 
     def test_query_has_field(self):
         """Test has_field method."""
-        q = Query("optional_field").has_field()
+        q = ndi_query("optional_field").has_field()
         assert q.operator == "hasfield"
         assert q.value
 
     def test_query_has_member(self):
         """Test has_member method."""
-        q = Query("tags").has_member("important")
+        q = ndi_query("tags").has_member("important")
         assert q.operator == "hasmember"
         assert q.value == "important"
 
@@ -102,14 +102,14 @@ class TestQueryStaticMethods:
     """Test static methods."""
 
     def test_query_all(self):
-        """Test Query.all() returns a query matching all documents."""
-        q = Query.all()
+        """Test ndi_query.all() returns a query matching all documents."""
+        q = ndi_query.all()
         assert q.operator == "isa"
         assert q.value == "base"
 
     def test_query_none(self):
-        """Test Query.none() returns a query matching no documents."""
-        q = Query.none()
+        """Test ndi_query.none() returns a query matching no documents."""
+        q = ndi_query.none()
         assert q.operator == "isa"
         # Value should be something that will never match
         assert "impossible" in q.value.lower() or len(q.value) > 20
@@ -120,55 +120,55 @@ class TestQueryFromSearch:
 
     def test_from_search_exact_string(self):
         """Test from_search with exact_string operation."""
-        q = Query.from_search("base.name", "exact_string", "my_doc")
+        q = ndi_query.from_search("base.name", "exact_string", "my_doc")
         assert q.field == "base.name"
         assert q.value == "my_doc"
 
     def test_from_search_regexp(self):
         """Test from_search with regexp operation."""
-        q = Query.from_search("base.name", "regexp", r"test_\d+")
+        q = ndi_query.from_search("base.name", "regexp", r"test_\d+")
         assert q.operator == "match"
         assert q.value == r"test_\d+"
 
     def test_from_search_isa(self):
         """Test from_search with isa operation."""
-        q = Query.from_search("", "isa", "ndi.document.base")
+        q = ndi_query.from_search("", "isa", "ndi.document.base")
         assert q.operator == "isa"
         assert q.value == "ndi.document.base"
 
     def test_from_search_depends_on(self):
         """Test from_search with depends_on operation."""
-        q = Query.from_search("", "depends_on", "session_id", "sess_123")
+        q = ndi_query.from_search("", "depends_on", "session_id", "sess_123")
         assert q.operator == "depends_on"
         assert q.value == ("session_id", "sess_123")
 
     def test_from_search_lessthan(self):
         """Test from_search with lessthan operation."""
-        q = Query.from_search("count", "lessthan", 10)
+        q = ndi_query.from_search("count", "lessthan", 10)
         assert q.operator == "<"
         assert q.value == 10
 
     def test_from_search_greaterthaneq(self):
         """Test from_search with greaterthaneq operation."""
-        q = Query.from_search("rate", "greaterthaneq", 1000)
+        q = ndi_query.from_search("rate", "greaterthaneq", 1000)
         assert q.operator == ">="
         assert q.value == 1000
 
     def test_from_search_hasfield(self):
         """Test from_search with hasfield operation."""
-        q = Query.from_search("optional", "hasfield", "")
+        q = ndi_query.from_search("optional", "hasfield", "")
         assert q.operator == "hasfield"
 
     def test_from_search_contains_string(self):
         """Test from_search with contains_string operation."""
-        q = Query.from_search("description", "contains_string", "electrode")
+        q = ndi_query.from_search("description", "contains_string", "electrode")
         assert q.operator == "contains"
         assert q.value == "electrode"
 
     def test_from_search_invalid_operation(self):
         """Test from_search with invalid operation raises error."""
         with pytest.raises(ValueError):
-            Query.from_search("field", "invalid_op", "value")
+            ndi_query.from_search("field", "invalid_op", "value")
 
 
 class TestQueryCombination:
@@ -176,8 +176,8 @@ class TestQueryCombination:
 
     def test_query_and(self):
         """Test combining queries with AND (&)."""
-        q1 = Query("base.name") == "test"
-        q2 = Query("ephys.channels") > 4
+        q1 = ndi_query("base.name") == "test"
+        q2 = ndi_query("ephys.channels") > 4
         combined = q1 & q2
         # Combined query should contain both queries
         assert hasattr(combined, "queries")
@@ -185,17 +185,17 @@ class TestQueryCombination:
 
     def test_query_or(self):
         """Test combining queries with OR (|)."""
-        q1 = Query("type") == "ephys"
-        q2 = Query("type") == "digital"
+        q1 = ndi_query("type") == "ephys"
+        q2 = ndi_query("type") == "digital"
         combined = q1 | q2
         assert hasattr(combined, "queries")
         assert len(list(combined)) == 2
 
     def test_query_complex_combination(self):
         """Test complex query combination."""
-        q1 = Query("base.name") == "test"
-        q2 = Query("channels") > 4
-        q3 = Query("rate") >= 30000
+        q1 = ndi_query("base.name") == "test"
+        q2 = ndi_query("channels") > 4
+        q3 = ndi_query("rate") >= 30000
         combined = (q1 & q2) | q3
         # Should be an OrQuery containing AndQuery and q3
         assert hasattr(combined, "queries")
@@ -206,7 +206,7 @@ class TestQueryToSearchStructure:
 
     def test_to_searchstructure_simple(self):
         """Test converting simple query to search structure."""
-        q = Query("base.name") == "test"
+        q = ndi_query("base.name") == "test"
         ss = q.to_searchstructure()
         assert ss["field"] == "base.name"
         assert ss["operation"] == "=="
@@ -215,7 +215,7 @@ class TestQueryToSearchStructure:
 
     def test_to_searchstructure_depends_on(self):
         """Test converting depends_on query to search structure."""
-        q = Query("").depends_on("element_id", "abc123")
+        q = ndi_query("").depends_on("element_id", "abc123")
         ss = q.to_searchstructure()
         assert ss["operation"] == "depends_on"
         assert ss["param1"] == "element_id"
@@ -223,76 +223,76 @@ class TestQueryToSearchStructure:
 
 
 class TestQueryMATLABConstructor:
-    """Test MATLAB-style Query(field, operation, param1, param2)."""
+    """Test MATLAB-style ndi_query(field, operation, param1, param2)."""
 
     def test_isa_constructor(self):
-        """Query('', 'isa', 'base') should work like Query.from_search."""
-        q = Query("", "isa", "base")
+        """ndi_query('', 'isa', 'base') should work like ndi_query.from_search."""
+        q = ndi_query("", "isa", "base")
         assert q.operator == "isa"
         assert q.value == "base"
         assert q._resolved
 
     def test_exact_string_constructor(self):
-        """Query('base.name', 'exact_string', 'test') should resolve."""
-        q = Query("base.name", "exact_string", "test")
+        """ndi_query('base.name', 'exact_string', 'test') should resolve."""
+        q = ndi_query("base.name", "exact_string", "test")
         assert q.field == "base.name"
         assert q.operator == "=="
         assert q.value == "test"
 
     def test_regexp_constructor(self):
-        """Query('base.name', 'regexp', '.*probe.*') should resolve."""
-        q = Query("base.name", "regexp", ".*probe.*")
+        """ndi_query('base.name', 'regexp', '.*probe.*') should resolve."""
+        q = ndi_query("base.name", "regexp", ".*probe.*")
         assert q.operator == "match"
         assert q.value == ".*probe.*"
 
     def test_depends_on_constructor(self):
-        """Query('', 'depends_on', 'session_id', 'abc') should resolve."""
-        q = Query("", "depends_on", "session_id", "abc")
+        """ndi_query('', 'depends_on', 'session_id', 'abc') should resolve."""
+        q = ndi_query("", "depends_on", "session_id", "abc")
         assert q.operator == "depends_on"
         assert q.value == ("session_id", "abc")
 
     def test_negated_constructor(self):
-        """Query('', '~isa', 'base') should resolve negated."""
-        q = Query("", "~isa", "base")
+        """ndi_query('', '~isa', 'base') should resolve negated."""
+        q = ndi_query("", "~isa", "base")
         assert q.operator == "~isa"
         assert q.value == "base"
 
     def test_matches_from_search(self):
         """MATLAB constructor should produce same result as from_search."""
-        q1 = Query("", "isa", "element")
-        q2 = Query.from_search("", "isa", "element")
+        q1 = ndi_query("", "isa", "element")
+        q2 = ndi_query.from_search("", "isa", "element")
         assert q1.field == q2.field
         assert q1.operator == q2.operator
         assert q1.value == q2.value
 
     def test_no_operation_still_works(self):
-        """Query('base.name') should still work as before (Pythonic style)."""
-        q = Query("base.name")
+        """ndi_query('base.name') should still work as before (Pythonic style)."""
+        q = ndi_query("base.name")
         assert q.field == "base.name"
         assert not q._resolved
 
 
 class TestQueryJSONSerialization:
-    """Test that Query objects serialize to JSON-compatible dicts."""
+    """Test that ndi_query objects serialize to JSON-compatible dicts."""
 
     def test_simple_query_json_serializable(self):
         """to_search_structure() output should be JSON serializable."""
-        q = Query("base.name") == "test"
+        q = ndi_query("base.name") == "test"
         ss = q.to_search_structure()
         result = json.dumps(ss)
         assert '"exact_string"' in result
 
     def test_isa_query_json_serializable(self):
         """isa query should serialize cleanly."""
-        q = Query("", "isa", "base")
+        q = ndi_query("", "isa", "base")
         ss = q.to_search_structure()
         result = json.dumps(ss)
         assert '"isa"' in result
 
     def test_and_query_json_serializable(self):
         """AND composite query should produce JSON-serializable list."""
-        q1 = Query("base.name") == "test"
-        q2 = Query("").isa("element")
+        q1 = ndi_query("base.name") == "test"
+        q2 = ndi_query("").isa("element")
         combined = q1 & q2
         ss = combined.to_search_structure()
         json.dumps(ss)  # should not raise
@@ -301,8 +301,8 @@ class TestQueryJSONSerialization:
 
     def test_or_query_json_serializable(self):
         """OR composite query should produce JSON-serializable dict."""
-        q1 = Query("type") == "ephys"
-        q2 = Query("type") == "digital"
+        q1 = ndi_query("type") == "ephys"
+        q2 = ndi_query("type") == "digital"
         combined = q1 | q2
         ss = combined.to_search_structure()
         json.dumps(ss)  # should not raise
@@ -310,7 +310,7 @@ class TestQueryJSONSerialization:
 
     def test_depends_on_json_serializable(self):
         """depends_on query should have param1/param2 in serialized form."""
-        q = Query("", "depends_on", "element_id", "abc123")
+        q = ndi_query("", "depends_on", "element_id", "abc123")
         ss = q.to_search_structure()
         json.dumps(ss)  # should not raise
         assert ss["param1"] == "element_id"
@@ -318,25 +318,25 @@ class TestQueryJSONSerialization:
 
 
 class TestQueryDIDInheritance:
-    """Test that ndi.Query properly inherits from did.query.Query (Issue #3)."""
+    """Test that ndi.ndi_query properly inherits from did.query.Query (Issue #3)."""
 
     def test_isinstance_did_query(self):
-        """ndi.Query instances must be instances of did.query.Query."""
+        """ndi.ndi_query instances must be instances of did.query.Query."""
         import did.query
 
-        q = Query("", "isa", "base")
+        q = ndi_query("", "isa", "base")
         assert isinstance(q, did.query.Query)
 
     def test_isinstance_pythonic_query(self):
         """Pythonic-constructed queries are also did.query.Query instances."""
         import did.query
 
-        q = Query("base.name") == "test"
+        q = ndi_query("base.name") == "test"
         assert isinstance(q, did.query.Query)
 
     def test_search_structure_attribute(self):
-        """Query should have search_structure attribute from did.Query."""
-        q = Query("base.name", "exact_string", "test")
+        """ndi_query should have search_structure attribute from did.ndi_query."""
+        q = ndi_query("base.name", "exact_string", "test")
         assert hasattr(q, "search_structure")
         assert isinstance(q.search_structure, list)
         assert len(q.search_structure) == 1
@@ -344,7 +344,7 @@ class TestQueryDIDInheritance:
 
     def test_search_structure_pythonic(self):
         """Pythonic query should also populate search_structure."""
-        q = Query("base.name") == "test"
+        q = ndi_query("base.name") == "test"
         assert isinstance(q.search_structure, list)
         assert len(q.search_structure) == 1
         assert q.search_structure[0]["operation"] == "exact_string"
@@ -353,16 +353,16 @@ class TestQueryDIDInheritance:
 
     def test_search_structure_and(self):
         """AND combination should concatenate search_structures."""
-        q1 = Query("base.name") == "test"
-        q2 = Query("").isa("element")
+        q1 = ndi_query("base.name") == "test"
+        q2 = ndi_query("").isa("element")
         combined = q1 & q2
         assert isinstance(combined.search_structure, list)
         assert len(combined.search_structure) == 2
 
     def test_search_structure_or(self):
         """OR combination should nest search_structures."""
-        q1 = Query("type") == "ephys"
-        q2 = Query("type") == "digital"
+        q1 = ndi_query("type") == "ephys"
+        q2 = ndi_query("type") == "digital"
         combined = q1 | q2
         assert isinstance(combined.search_structure, list)
         assert len(combined.search_structure) == 1
@@ -370,14 +370,14 @@ class TestQueryDIDInheritance:
 
     def test_to_search_structure_inherited(self):
         """to_search_structure() should return DID-format operations."""
-        q = Query("base.name") == "test"
+        q = ndi_query("base.name") == "test"
         ss = q.to_search_structure()
         # DID format uses 'exact_string', not '=='
         assert ss["operation"] == "exact_string"
 
     def test_numeric_uses_exact_number(self):
         """Numeric == comparisons should use exact_number in DID format."""
-        q = Query("count") == 42
+        q = ndi_query("count") == 42
         ss = q.to_search_structure()
         assert ss["operation"] == "exact_number"
         # But Python-style operator property still shows '=='

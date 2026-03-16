@@ -210,7 +210,7 @@ not_applicable:
     status: not_applicable
     decision_log: >
       MATLAB-specific path resolution using mfilename('fullpath').
-      Python uses ndi.common.PathConstants instead.
+      Python uses ndi.common.ndi_common_PathConstants instead.
 
   - name: "+openminds sub-package"
     matlab_path: "+ndi/+util/+openminds/"

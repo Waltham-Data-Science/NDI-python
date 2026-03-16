@@ -54,14 +54,14 @@ functions:
 classes:
 
   # =========================================================================
-  # ndi.file.navigator (extends Ido + EpochSet.param + DocumentService +
+  # ndi.file.navigator (extends ndi_ido + ndi_epoch_epochset.param + ndi_documentservice +
   #                      database.ingestion_help)
   # =========================================================================
   - name: navigator
     type: class
     matlab_path: "+ndi/+file/navigator.m"
     python_path: "ndi/file/navigator/__init__.py"
-    python_class: "FileNavigator"
+    python_class: "ndi_file_navigator"
     inherits: "ndi.ido, ndi.epoch.epochset.param, ndi.documentservice, ndi.database.ingestion_help"
 
     properties:
@@ -99,7 +99,7 @@ classes:
           - name: epochprobemap_class
             type_matlab: "char"
             type_python: "str"
-            default: "'ndi.epoch.EpochProbeMap'"
+            default: "'ndi.epoch.ndi_epoch_epochprobemap'"
           - name: epochprobemap_fileparameters
             type_matlab: "struct | char | cell"
             type_python: "str | list[str] | dict[str, Any] | None"
@@ -114,13 +114,13 @@ classes:
             default: "None"
         output_arguments:
           - name: ndi_filenavigator_obj
-            type_python: "FileNavigator"
+            type_python: "ndi_file_navigator"
         decision_log: >
           Exact match. Python adds identifier and document kwargs for
           reconstruction from database. MATLAB also accepts these via
           varargin patterns.
 
-      # --- EpochSet Implementation ---
+      # --- ndi_epoch_epochset Implementation ---
       - name: buildepochtable
         input_arguments: []
         output_arguments:
@@ -146,7 +146,7 @@ classes:
             type_python: "list[list[str]]"
         decision_log: "Exact match. Scans disk for matching file groups."
 
-      # --- Epoch File Access ---
+      # --- ndi_epoch_epoch File Access ---
       - name: getepochfiles
         input_arguments:
           - name: epoch_number_or_id
@@ -172,7 +172,7 @@ classes:
             type_python: "list[str]"
         decision_log: "Exact match. Returns file paths for an epoch by number."
 
-      # --- Epoch ID ---
+      # --- ndi_epoch_epoch ID ---
       - name: epochid
         input_arguments:
           - name: epoch_number
@@ -201,7 +201,7 @@ classes:
             type_python: "str | None"
         decision_log: "Exact match."
 
-      # --- Epoch Probe Map ---
+      # --- ndi_epoch_epoch ndi_probe Map ---
       - name: getepochprobemap
         input_arguments:
           - name: N
@@ -244,7 +244,7 @@ classes:
             type_python: "Any"
         output_arguments:
           - name: ndi_filenavigator_obj
-            type_python: "FileNavigator"
+            type_python: "ndi_file_navigator"
         decision_log: >
           DISCREPANCY FIXED: Python ad-hoc port used 'set_session'
           (snake_case). Renamed to 'setsession' to match MATLAB.
@@ -257,7 +257,7 @@ classes:
             type_python: "str | list[str] | dict[str, Any]"
         output_arguments:
           - name: ndi_filenavigator_obj
-            type_python: "FileNavigator"
+            type_python: "ndi_file_navigator"
         decision_log: "Exact match."
 
       - name: setepochprobemapfileparameters
@@ -267,7 +267,7 @@ classes:
             type_python: "str | list[str] | dict[str, Any]"
         output_arguments:
           - name: ndi_filenavigator_obj
-            type_python: "FileNavigator"
+            type_python: "ndi_file_navigator"
         decision_log: "Exact match."
 
       # --- Path ---
@@ -319,7 +319,7 @@ classes:
           'getepochingesteddoc' to match MATLAB public API.
           Synchronized 2026-03-13.
 
-      # --- DocumentService ---
+      # --- ndi_documentservice ---
       - name: newdocument
         input_arguments: []
         output_arguments:
@@ -334,7 +334,7 @@ classes:
             type_python: "Any"
         decision_log: "Exact match."
 
-      # --- Cache ---
+      # --- ndi_cache ---
       - name: getcache
         input_arguments: []
         output_arguments:
@@ -384,7 +384,7 @@ classes:
     type: class
     matlab_path: "+ndi/+file/+navigator/epochdir.m"
     python_path: "ndi/file/navigator/epochdir.py"
-    python_class: "EpochDirNavigator"
+    python_class: "ndi_file_navigator_epochdir"
     inherits: "ndi.file.navigator"
 
     properties: []
@@ -398,7 +398,7 @@ classes:
             type_python: "*args, **kwargs"
         output_arguments:
           - name: obj
-            type_python: "EpochDirNavigator"
+            type_python: "ndi_file_navigator_epochdir"
         decision_log: >
           Exact match. Passes all arguments to parent constructor.
 

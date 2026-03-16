@@ -1,7 +1,7 @@
 """
-ndi.neuron - Neuron element class.
+ndi.neuron - ndi_neuron element class.
 
-A Neuron is an ElementTimeseries with type='neuron'. It represents
+A ndi_neuron is an ndi_element_timeseries with type='neuron'. It represents
 a single neuron identified through spike sorting or other means.
 
 Neurons are typically derived from probe-type elements and produce
@@ -12,18 +12,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .element_timeseries import ElementTimeseries
+from .element_timeseries import ndi_element_timeseries
 
 if TYPE_CHECKING:
-    from .document import Document
-    from .query import Query
+    from .document import ndi_document
+    from .query import ndi_query
 
 
-class Neuron(ElementTimeseries):
+class ndi_neuron(ndi_element_timeseries):
     """
     Represents a single neuron.
 
-    Neurons are ElementTimeseries objects with type='neuron'. They
+    Neurons are ndi_element_timeseries objects with type='neuron'. They
     are typically derived from electrode/probe data through spike
     sorting.
 
@@ -32,7 +32,7 @@ class Neuron(ElementTimeseries):
     - subject_id: The experimental subject
 
     Example:
-        >>> neuron = Neuron(
+        >>> neuron = ndi_neuron(
         ...     session=session,
         ...     name='neuron1',
         ...     reference=1,
@@ -54,15 +54,15 @@ class Neuron(ElementTimeseries):
         document: Any | None = None,
     ):
         """
-        Create a new Neuron.
+        Create a new ndi_neuron.
 
         Args:
-            session: Session with database access
-            name: Neuron name
+            session: ndi_session with database access
+            name: ndi_neuron name
             reference: Reference number
-            underlying_element: Probe/electrode this neuron was sorted from
+            underlying_element: ndi_probe/electrode this neuron was sorted from
             direct: If True, use underlying element epochs
-            subject_id: Subject document ID
+            subject_id: ndi_subject document ID
             dependencies: Additional named dependencies
             identifier: Optional unique identifier
             document: Optional document to load from
@@ -80,26 +80,26 @@ class Neuron(ElementTimeseries):
             document=document,
         )
 
-    def newdocument(self) -> Document:
+    def newdocument(self) -> ndi_document:
         """
         Create a new document for this neuron.
 
         Returns:
-            Document representing this neuron element
+            ndi_document representing this neuron element
         """
         # Use parent's newdocument - type is already 'neuron'
         return super().newdocument()
 
-    def searchquery(self) -> Query:
+    def searchquery(self) -> ndi_query:
         """
         Create a query to find this neuron.
 
         Returns:
-            Query matching this neuron by ID and type
+            ndi_query matching this neuron by ID and type
         """
-        from .query import Query
+        from .query import ndi_query
 
-        return Query("base.id") == self.id
+        return ndi_query("base.id") == self.id
 
     def epochsetname(self) -> str:
         """Return the name of this epoch set."""
@@ -111,4 +111,4 @@ class Neuron(ElementTimeseries):
 
     def __repr__(self) -> str:
         """String representation."""
-        return f"Neuron({self._name}|{self._reference})"
+        return f"ndi_neuron({self._name}|{self._reference})"

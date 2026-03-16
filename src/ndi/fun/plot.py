@@ -186,7 +186,7 @@ def stimulusTimeseries(
     Args:
         stimulus_probe: An NDI probe/element object with a
             ``readtimeseries`` method.
-        timeref: An :class:`ndi.time.TimeReference` specifying the time
+        timeref: An :class:`ndi.time.ndi_time_timereference` specifying the time
             reference for the plot.
         y: Y-coordinate at which to draw the stimulus bars.
         stimid: Optional stimulus ID numbers.  If *None*, the function

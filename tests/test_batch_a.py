@@ -1,16 +1,16 @@
 """
 Tests for Batch A: Core infrastructure gap-fill.
 
-Tests DAQSystemString, EpochProbeMapDAQSystem, epoch functions,
-MFDAQEpochChannel, DAQSystemMFDAQ, EpochDirNavigator,
-ProbeTimeseries, ProbeTimeseriesMFDAQ, and element utility functions.
+Tests ndi_daq_daqsystemstring, ndi_epoch_epochprobemap__daqsystem, epoch functions,
+ndi_file_type_mfdaq__epoch__channel, ndi_daq_system_mfdaq, ndi_file_navigator_epochdir,
+ndi_probe_timeseries, ndi_probe_timeseries_mfdaq, and element utility functions.
 """
 
 import numpy as np
 import pytest
 
 # ============================================================================
-# DAQSystemString Tests
+# ndi_daq_daqsystemstring Tests
 # ============================================================================
 
 
@@ -18,116 +18,116 @@ class TestDAQSystemString:
     """Tests for ndi.daq.daqsystemstring."""
 
     def test_import(self):
-        from ndi.daq.daqsystemstring import DAQSystemString
+        from ndi.daq.daqsystemstring import ndi_daq_daqsystemstring
 
-        assert DAQSystemString is not None
+        assert ndi_daq_daqsystemstring is not None
 
     def test_parse_simple(self):
-        from ndi.daq.daqsystemstring import DAQSystemString
+        from ndi.daq.daqsystemstring import ndi_daq_daqsystemstring
 
-        dss = DAQSystemString.parse("mydevice:ai1-5")
+        dss = ndi_daq_daqsystemstring.parse("mydevice:ai1-5")
         assert dss.devicename == "mydevice"
         assert len(dss.channels) == 1
         assert dss.channels[0][0] == "ai"
         assert dss.channels[0][1] == [1, 2, 3, 4, 5]
 
     def test_parse_multiple_groups(self):
-        from ndi.daq.daqsystemstring import DAQSystemString
+        from ndi.daq.daqsystemstring import ndi_daq_daqsystemstring
 
-        dss = DAQSystemString.parse("intan1:ai1-3;di1,2")
+        dss = ndi_daq_daqsystemstring.parse("intan1:ai1-3;di1,2")
         assert dss.devicename == "intan1"
         assert len(dss.channels) == 2
         assert dss.channels[0] == ("ai", [1, 2, 3])
         assert dss.channels[1] == ("di", [1, 2])
 
     def test_parse_comma_separated(self):
-        from ndi.daq.daqsystemstring import DAQSystemString
+        from ndi.daq.daqsystemstring import ndi_daq_daqsystemstring
 
-        dss = DAQSystemString.parse("dev:ai1,3,7")
+        dss = ndi_daq_daqsystemstring.parse("dev:ai1,3,7")
         assert dss.channel_list("ai") == [1, 3, 7]
 
     def test_parse_mixed_ranges_and_singles(self):
-        from ndi.daq.daqsystemstring import DAQSystemString
+        from ndi.daq.daqsystemstring import ndi_daq_daqsystemstring
 
-        dss = DAQSystemString.parse("dev:ai1-3,7,10-12")
+        dss = ndi_daq_daqsystemstring.parse("dev:ai1-3,7,10-12")
         assert dss.channel_list("ai") == [1, 2, 3, 7, 10, 11, 12]
 
     def test_parse_device_only(self):
-        from ndi.daq.daqsystemstring import DAQSystemString
+        from ndi.daq.daqsystemstring import ndi_daq_daqsystemstring
 
-        dss = DAQSystemString.parse("mydevice")
+        dss = ndi_daq_daqsystemstring.parse("mydevice")
         assert dss.devicename == "mydevice"
         assert dss.channels == []
 
     def test_parse_empty(self):
-        from ndi.daq.daqsystemstring import DAQSystemString
+        from ndi.daq.daqsystemstring import ndi_daq_daqsystemstring
 
-        dss = DAQSystemString.parse("")
+        dss = ndi_daq_daqsystemstring.parse("")
         assert dss.devicename == ""
         assert dss.channels == []
 
     def test_parse_device_colon_no_channels(self):
-        from ndi.daq.daqsystemstring import DAQSystemString
+        from ndi.daq.daqsystemstring import ndi_daq_daqsystemstring
 
-        dss = DAQSystemString.parse("dev:")
+        dss = ndi_daq_daqsystemstring.parse("dev:")
         assert dss.devicename == "dev"
         assert dss.channels == []
 
     def test_devicestring_roundtrip(self):
-        from ndi.daq.daqsystemstring import DAQSystemString
+        from ndi.daq.daqsystemstring import ndi_daq_daqsystemstring
 
         original = "intan1:ai1-5;di1-3"
-        dss = DAQSystemString.parse(original)
+        dss = ndi_daq_daqsystemstring.parse(original)
         result = dss.devicestring()
-        dss2 = DAQSystemString.parse(result)
+        dss2 = ndi_daq_daqsystemstring.parse(result)
         assert dss2.devicename == dss.devicename
         assert dss2.channels == dss.channels
 
     def test_channel_types(self):
-        from ndi.daq.daqsystemstring import DAQSystemString
+        from ndi.daq.daqsystemstring import ndi_daq_daqsystemstring
 
-        dss = DAQSystemString.parse("dev:ai1-3;di1;ao2")
+        dss = ndi_daq_daqsystemstring.parse("dev:ai1-3;di1;ao2")
         assert set(dss.channel_types()) == {"ai", "di", "ao"}
 
     def test_channel_list_filtered(self):
-        from ndi.daq.daqsystemstring import DAQSystemString
+        from ndi.daq.daqsystemstring import ndi_daq_daqsystemstring
 
-        dss = DAQSystemString.parse("dev:ai1-3;di5,6")
+        dss = ndi_daq_daqsystemstring.parse("dev:ai1-3;di5,6")
         assert dss.channel_list("ai") == [1, 2, 3]
         assert dss.channel_list("di") == [5, 6]
         assert dss.channel_list("ao") == []
 
     def test_channel_list_all(self):
-        from ndi.daq.daqsystemstring import DAQSystemString
+        from ndi.daq.daqsystemstring import ndi_daq_daqsystemstring
 
-        dss = DAQSystemString.parse("dev:ai1,2;di5")
+        dss = ndi_daq_daqsystemstring.parse("dev:ai1,2;di5")
         assert dss.channel_list() == [1, 2, 5]
 
     def test_str_repr(self):
-        from ndi.daq.daqsystemstring import DAQSystemString
+        from ndi.daq.daqsystemstring import ndi_daq_daqsystemstring
 
-        dss = DAQSystemString.parse("dev:ai1")
+        dss = ndi_daq_daqsystemstring.parse("dev:ai1")
         assert "dev" in str(dss)
-        assert "DAQSystemString" in repr(dss)
+        assert "ndi_daq_daqsystemstring" in repr(dss)
 
     def test_equality(self):
-        from ndi.daq.daqsystemstring import DAQSystemString
+        from ndi.daq.daqsystemstring import ndi_daq_daqsystemstring
 
-        dss1 = DAQSystemString.parse("dev:ai1-3")
-        dss2 = DAQSystemString.parse("dev:ai1-3")
-        dss3 = DAQSystemString.parse("dev:ai1-4")
+        dss1 = ndi_daq_daqsystemstring.parse("dev:ai1-3")
+        dss2 = ndi_daq_daqsystemstring.parse("dev:ai1-3")
+        dss3 = ndi_daq_daqsystemstring.parse("dev:ai1-4")
         assert dss1 == dss2
         assert dss1 != dss3
 
     def test_invalid_range(self):
-        from ndi.daq.daqsystemstring import DAQSystemString
+        from ndi.daq.daqsystemstring import ndi_daq_daqsystemstring
 
         with pytest.raises(ValueError):
-            DAQSystemString.parse("dev:aiabc-def")
+            ndi_daq_daqsystemstring.parse("dev:aiabc-def")
 
 
 # ============================================================================
-# EpochProbeMapDAQSystem Tests
+# ndi_epoch_epochprobemap__daqsystem Tests
 # ============================================================================
 
 
@@ -135,14 +135,14 @@ class TestEpochProbeMapDAQSystem:
     """Tests for ndi.epoch.epochprobemap_daqsystem."""
 
     def test_import(self):
-        from ndi.epoch.epochprobemap_daqsystem import EpochProbeMapDAQSystem
+        from ndi.epoch.epochprobemap_daqsystem import ndi_epoch_epochprobemap__daqsystem
 
-        assert EpochProbeMapDAQSystem is not None
+        assert ndi_epoch_epochprobemap__daqsystem is not None
 
     def test_construction(self):
-        from ndi.epoch.epochprobemap_daqsystem import EpochProbeMapDAQSystem
+        from ndi.epoch.epochprobemap_daqsystem import ndi_epoch_epochprobemap__daqsystem
 
-        epm = EpochProbeMapDAQSystem(
+        epm = ndi_epoch_epochprobemap__daqsystem(
             name="probe1",
             reference=1,
             type="n-trode",
@@ -155,9 +155,9 @@ class TestEpochProbeMapDAQSystem:
         assert epm.devicestring == "intan1:ai1-4"
 
     def test_daqsystemstring_property(self):
-        from ndi.epoch.epochprobemap_daqsystem import EpochProbeMapDAQSystem
+        from ndi.epoch.epochprobemap_daqsystem import ndi_epoch_epochprobemap__daqsystem
 
-        epm = EpochProbeMapDAQSystem(
+        epm = ndi_epoch_epochprobemap__daqsystem(
             name="probe1",
             reference=1,
             type="n-trode",
@@ -168,9 +168,9 @@ class TestEpochProbeMapDAQSystem:
         assert dss.channel_list("ai") == [1, 2, 3, 4]
 
     def test_serialization(self):
-        from ndi.epoch.epochprobemap_daqsystem import EpochProbeMapDAQSystem
+        from ndi.epoch.epochprobemap_daqsystem import ndi_epoch_epochprobemap__daqsystem
 
-        epm = EpochProbeMapDAQSystem(
+        epm = ndi_epoch_epochprobemap__daqsystem(
             name="probe1",
             reference=1,
             type="n-trode",
@@ -184,9 +184,9 @@ class TestEpochProbeMapDAQSystem:
         assert parts[0] == "probe1"
 
     def test_decode_roundtrip(self):
-        from ndi.epoch.epochprobemap_daqsystem import EpochProbeMapDAQSystem
+        from ndi.epoch.epochprobemap_daqsystem import ndi_epoch_epochprobemap__daqsystem
 
-        epm = EpochProbeMapDAQSystem(
+        epm = ndi_epoch_epochprobemap__daqsystem(
             name="probe1",
             reference=1,
             type="n-trode",
@@ -194,7 +194,7 @@ class TestEpochProbeMapDAQSystem:
             subjectstring="mouse001",
         )
         s = epm.serialize()
-        decoded = EpochProbeMapDAQSystem.decode(s)
+        decoded = ndi_epoch_epochprobemap__daqsystem.decode(s)
         assert decoded.name == epm.name
         assert decoded.reference == epm.reference
         assert decoded.type == epm.type
@@ -202,9 +202,9 @@ class TestEpochProbeMapDAQSystem:
         assert decoded.subjectstring == epm.subjectstring
 
     def test_file_io(self, tmp_path):
-        from ndi.epoch.epochprobemap_daqsystem import EpochProbeMapDAQSystem
+        from ndi.epoch.epochprobemap_daqsystem import ndi_epoch_epochprobemap__daqsystem
 
-        epm = EpochProbeMapDAQSystem(
+        epm = ndi_epoch_epochprobemap__daqsystem(
             name="probe1",
             reference=1,
             type="n-trode",
@@ -213,34 +213,34 @@ class TestEpochProbeMapDAQSystem:
         )
         filepath = str(tmp_path / "test_epm.txt")
         epm.savetofile(filepath)
-        loaded = EpochProbeMapDAQSystem.loadfromfile(filepath)
+        loaded = ndi_epoch_epochprobemap__daqsystem.loadfromfile(filepath)
         assert len(loaded) == 1
         assert loaded[0].name == "probe1"
 
     def test_decode_invalid(self):
-        from ndi.epoch.epochprobemap_daqsystem import EpochProbeMapDAQSystem
+        from ndi.epoch.epochprobemap_daqsystem import ndi_epoch_epochprobemap__daqsystem
 
         with pytest.raises(ValueError):
-            EpochProbeMapDAQSystem.decode("only\ttwo\tfields")
+            ndi_epoch_epochprobemap__daqsystem.decode("only\ttwo\tfields")
 
     def test_inherits_epochprobemap(self):
-        from ndi.epoch.epochprobemap import EpochProbeMap
-        from ndi.epoch.epochprobemap_daqsystem import EpochProbeMapDAQSystem
+        from ndi.epoch.epochprobemap import ndi_epoch_epochprobemap
+        from ndi.epoch.epochprobemap_daqsystem import ndi_epoch_epochprobemap__daqsystem
 
-        epm = EpochProbeMapDAQSystem(
+        epm = ndi_epoch_epochprobemap__daqsystem(
             name="probe1",
             reference=1,
             type="n-trode",
             devicestring="intan1:ai1-4",
         )
-        assert isinstance(epm, EpochProbeMap)
+        assert isinstance(epm, ndi_epoch_epochprobemap)
         assert epm.matches(name="probe1")
         assert not epm.matches(name="probe2")
 
     def test_serialization_struct(self):
-        from ndi.epoch.epochprobemap_daqsystem import EpochProbeMapDAQSystem
+        from ndi.epoch.epochprobemap_daqsystem import ndi_epoch_epochprobemap__daqsystem
 
-        epm = EpochProbeMapDAQSystem(
+        epm = ndi_epoch_epochprobemap__daqsystem(
             name="p1",
             reference=2,
             type="t",
@@ -253,7 +253,7 @@ class TestEpochProbeMapDAQSystem:
 
 
 # ============================================================================
-# Epoch Functions Tests
+# ndi_epoch_epoch Functions Tests
 # ============================================================================
 
 
@@ -340,7 +340,7 @@ class TestEpochFunctions:
 
 
 # ============================================================================
-# MFDAQEpochChannel Tests
+# ndi_file_type_mfdaq__epoch__channel Tests
 # ============================================================================
 
 
@@ -348,9 +348,12 @@ class TestMFDAQEpochChannel:
     """Tests for ndi.file.type.mfdaq_epoch_channel."""
 
     def test_import(self):
-        from ndi.file.type.mfdaq_epoch_channel import ChannelInfo, MFDAQEpochChannel
+        from ndi.file.type.mfdaq_epoch_channel import (
+            ChannelInfo,
+            ndi_file_type_mfdaq__epoch__channel,
+        )
 
-        assert MFDAQEpochChannel is not None
+        assert ndi_file_type_mfdaq__epoch__channel is not None
         assert ChannelInfo is not None
 
     def test_channel_info_creation(self):
@@ -371,83 +374,98 @@ class TestMFDAQEpochChannel:
         assert ch2.sample_rate == ch.sample_rate
 
     def test_mfdaq_epoch_channel_creation(self):
-        from ndi.file.type.mfdaq_epoch_channel import ChannelInfo, MFDAQEpochChannel
+        from ndi.file.type.mfdaq_epoch_channel import (
+            ChannelInfo,
+            ndi_file_type_mfdaq__epoch__channel,
+        )
 
         channels = [
             ChannelInfo(name="ai1", type="analog_in", number=1, sample_rate=30000.0),
             ChannelInfo(name="ai2", type="analog_in", number=2, sample_rate=30000.0),
             ChannelInfo(name="di1", type="digital_in", number=1, sample_rate=30000.0),
         ]
-        mec = MFDAQEpochChannel(channels)
+        mec = ndi_file_type_mfdaq__epoch__channel(channels)
         assert len(mec) == 3
 
     def test_channels_of_type(self):
-        from ndi.file.type.mfdaq_epoch_channel import ChannelInfo, MFDAQEpochChannel
+        from ndi.file.type.mfdaq_epoch_channel import (
+            ChannelInfo,
+            ndi_file_type_mfdaq__epoch__channel,
+        )
 
         channels = [
             ChannelInfo(name="ai1", type="analog_in", number=1),
             ChannelInfo(name="ai2", type="analog_in", number=2),
             ChannelInfo(name="di1", type="digital_in", number=1),
         ]
-        mec = MFDAQEpochChannel(channels)
+        mec = ndi_file_type_mfdaq__epoch__channel(channels)
         ai_channels = mec.channels_of_type("analog_in")
         assert len(ai_channels) == 2
         di_channels = mec.channels_of_type("digital_in")
         assert len(di_channels) == 1
 
     def test_channel_numbers(self):
-        from ndi.file.type.mfdaq_epoch_channel import ChannelInfo, MFDAQEpochChannel
+        from ndi.file.type.mfdaq_epoch_channel import (
+            ChannelInfo,
+            ndi_file_type_mfdaq__epoch__channel,
+        )
 
         channels = [
             ChannelInfo(name="ai1", type="analog_in", number=1),
             ChannelInfo(name="ai3", type="analog_in", number=3),
         ]
-        mec = MFDAQEpochChannel(channels)
+        mec = ndi_file_type_mfdaq__epoch__channel(channels)
         assert mec.channel_numbers("analog_in") == [1, 3]
         assert mec.channel_numbers() == [1, 3]
 
     def test_file_io(self, tmp_path):
-        from ndi.file.type.mfdaq_epoch_channel import ChannelInfo, MFDAQEpochChannel
+        from ndi.file.type.mfdaq_epoch_channel import (
+            ChannelInfo,
+            ndi_file_type_mfdaq__epoch__channel,
+        )
 
         channels = [
             ChannelInfo(name="ai1", type="analog_in", number=1, sample_rate=30000.0),
         ]
-        mec = MFDAQEpochChannel(channels)
+        mec = ndi_file_type_mfdaq__epoch__channel(channels)
         filepath = str(tmp_path / "channels.json")
         b, errmsg = mec.writeToFile(filepath)
         assert b is True
         assert errmsg == ""
 
-        mec2 = MFDAQEpochChannel()
+        mec2 = ndi_file_type_mfdaq__epoch__channel()
         mec2.readFromFile(filepath)
         assert len(mec2) == 1
         assert mec2.channel_information[0].name == "ai1"
         assert mec2.channel_information[0].sample_rate == 30000.0
 
     def test_channelgroupdecoding(self):
-        from ndi.file.type.mfdaq_epoch_channel import ChannelInfo, MFDAQEpochChannel
+        from ndi.file.type.mfdaq_epoch_channel import (
+            ChannelInfo,
+            ndi_file_type_mfdaq__epoch__channel,
+        )
 
         channels = [
             ChannelInfo(name="ai1", type="analog_in", number=1, group=1),
             ChannelInfo(name="ai2", type="analog_in", number=2, group=1),
             ChannelInfo(name="ai3", type="analog_in", number=3, group=2),
         ]
-        groups, ch_in_groups, ch_in_output = MFDAQEpochChannel.channelgroupdecoding(
-            channels, "analog_in", [1, 3]
+        groups, ch_in_groups, ch_in_output = (
+            ndi_file_type_mfdaq__epoch__channel.channelgroupdecoding(channels, "analog_in", [1, 3])
         )
         assert groups == [1, 2]
         assert ch_in_groups == [[1], [3]]
         assert ch_in_output == [[0], [1]]
 
     def test_repr(self):
-        from ndi.file.type.mfdaq_epoch_channel import MFDAQEpochChannel
+        from ndi.file.type.mfdaq_epoch_channel import ndi_file_type_mfdaq__epoch__channel
 
-        mec = MFDAQEpochChannel()
-        assert "MFDAQEpochChannel" in repr(mec)
+        mec = ndi_file_type_mfdaq__epoch__channel()
+        assert "ndi_file_type_mfdaq__epoch__channel" in repr(mec)
 
 
 # ============================================================================
-# DAQSystemMFDAQ Tests
+# ndi_daq_system_mfdaq Tests
 # ============================================================================
 
 
@@ -455,69 +473,69 @@ class TestDAQSystemMFDAQ:
     """Tests for ndi.daq.system_mfdaq."""
 
     def test_import(self):
-        from ndi.daq.system_mfdaq import DAQSystemMFDAQ
+        from ndi.daq.system_mfdaq import ndi_daq_system_mfdaq
 
-        assert DAQSystemMFDAQ is not None
+        assert ndi_daq_system_mfdaq is not None
 
     def test_construction(self):
-        from ndi.daq.system_mfdaq import DAQSystemMFDAQ
+        from ndi.daq.system_mfdaq import ndi_daq_system_mfdaq
 
-        sys = DAQSystemMFDAQ(name="intan1")
+        sys = ndi_daq_system_mfdaq(name="intan1")
         assert sys.name == "intan1"
 
     def test_inherits_daqsystem(self):
-        from ndi.daq.system import DAQSystem
-        from ndi.daq.system_mfdaq import DAQSystemMFDAQ
+        from ndi.daq.system import ndi_daq_system
+        from ndi.daq.system_mfdaq import ndi_daq_system_mfdaq
 
-        sys = DAQSystemMFDAQ(name="intan1")
-        assert isinstance(sys, DAQSystem)
+        sys = ndi_daq_system_mfdaq(name="intan1")
+        assert isinstance(sys, ndi_daq_system)
 
     def test_epochclock_returns_dev_local_time(self):
-        from ndi.daq.system_mfdaq import DAQSystemMFDAQ
+        from ndi.daq.system_mfdaq import ndi_daq_system_mfdaq
         from ndi.time import DEV_LOCAL_TIME
 
-        sys = DAQSystemMFDAQ(name="test")
+        sys = ndi_daq_system_mfdaq(name="test")
         clocks = sys.epochclock(1)
         assert len(clocks) == 1
         assert clocks[0] == DEV_LOCAL_TIME
 
     def test_static_channel_types(self):
-        from ndi.daq.system_mfdaq import DAQSystemMFDAQ
+        from ndi.daq.system_mfdaq import ndi_daq_system_mfdaq
 
-        types = DAQSystemMFDAQ.mfdaq_channeltypes()
+        types = ndi_daq_system_mfdaq.mfdaq_channeltypes()
         assert "analog_in" in types
         assert "digital_in" in types
         assert "event" in types
 
     def test_mfdaq_prefix(self):
-        from ndi.daq.system_mfdaq import DAQSystemMFDAQ
+        from ndi.daq.system_mfdaq import ndi_daq_system_mfdaq
 
-        assert DAQSystemMFDAQ.mfdaq_prefix("analog_in") == "ai"
-        assert DAQSystemMFDAQ.mfdaq_prefix("digital_in") == "di"
-        assert DAQSystemMFDAQ.mfdaq_prefix("event") == "e"
+        assert ndi_daq_system_mfdaq.mfdaq_prefix("analog_in") == "ai"
+        assert ndi_daq_system_mfdaq.mfdaq_prefix("digital_in") == "di"
+        assert ndi_daq_system_mfdaq.mfdaq_prefix("event") == "e"
 
     def test_mfdaq_type(self):
-        from ndi.daq.system_mfdaq import DAQSystemMFDAQ
+        from ndi.daq.system_mfdaq import ndi_daq_system_mfdaq
 
-        assert DAQSystemMFDAQ.mfdaq_type("ai") == "analog_in"
-        assert DAQSystemMFDAQ.mfdaq_type("di") == "digital_in"
+        assert ndi_daq_system_mfdaq.mfdaq_type("ai") == "analog_in"
+        assert ndi_daq_system_mfdaq.mfdaq_type("di") == "digital_in"
 
     def test_no_reader_getchannels(self):
-        from ndi.daq.system_mfdaq import DAQSystemMFDAQ
+        from ndi.daq.system_mfdaq import ndi_daq_system_mfdaq
 
-        sys = DAQSystemMFDAQ(name="test")
+        sys = ndi_daq_system_mfdaq(name="test")
         assert sys.getchannelsepoch(1) == []
 
     def test_no_reader_raises_on_read(self):
-        from ndi.daq.system_mfdaq import DAQSystemMFDAQ
+        from ndi.daq.system_mfdaq import ndi_daq_system_mfdaq
 
-        sys = DAQSystemMFDAQ(name="test")
+        sys = ndi_daq_system_mfdaq(name="test")
         with pytest.raises(RuntimeError):
             sys.readchannels_epochsamples("ai", [1], 1, 0, 100)
 
 
 # ============================================================================
-# EpochDirNavigator Tests
+# ndi_file_navigator_epochdir Tests
 # ============================================================================
 
 
@@ -525,19 +543,19 @@ class TestEpochDirNavigator:
     """Tests for ndi.file.navigator.epochdir."""
 
     def test_import(self):
-        from ndi.file.navigator.epochdir import EpochDirNavigator
+        from ndi.file.navigator.epochdir import ndi_file_navigator_epochdir
 
-        assert EpochDirNavigator is not None
+        assert ndi_file_navigator_epochdir is not None
 
     def test_inherits_filenavigator(self):
-        from ndi.file import FileNavigator
-        from ndi.file.navigator.epochdir import EpochDirNavigator
+        from ndi.file import ndi_file_navigator
+        from ndi.file.navigator.epochdir import ndi_file_navigator_epochdir
 
-        nav = EpochDirNavigator()
-        assert isinstance(nav, FileNavigator)
+        nav = ndi_file_navigator_epochdir()
+        assert isinstance(nav, ndi_file_navigator)
 
     def test_selectfilegroups_disk(self, tmp_path):
-        from ndi.file.navigator.epochdir import EpochDirNavigator
+        from ndi.file.navigator.epochdir import ndi_file_navigator_epochdir
 
         # Create test directory structure
         (tmp_path / "trial_001").mkdir()
@@ -547,53 +565,53 @@ class TestEpochDirNavigator:
         (tmp_path / "trial_003").mkdir()
         # trial_003 has no matching files
 
-        class MockSession:
+        class ndi_session_mock:
             def getpath(self):
                 return str(tmp_path)
 
-        nav = EpochDirNavigator(
-            session=MockSession(),
+        nav = ndi_file_navigator_epochdir(
+            session=ndi_session_mock(),
             fileparameters="*.rhd",
         )
         groups = nav.selectfilegroups_disk()
         assert len(groups) == 2
 
     def test_selectfilegroups_disk_empty(self, tmp_path):
-        from ndi.file.navigator.epochdir import EpochDirNavigator
+        from ndi.file.navigator.epochdir import ndi_file_navigator_epochdir
 
-        class MockSession:
+        class ndi_session_mock:
             def getpath(self):
                 return str(tmp_path)
 
-        nav = EpochDirNavigator(session=MockSession(), fileparameters="*.rhd")
+        nav = ndi_file_navigator_epochdir(session=ndi_session_mock(), fileparameters="*.rhd")
         groups = nav.selectfilegroups_disk()
         assert groups == []
 
     def test_selectfilegroups_disk_hidden_dirs(self, tmp_path):
-        from ndi.file.navigator.epochdir import EpochDirNavigator
+        from ndi.file.navigator.epochdir import ndi_file_navigator_epochdir
 
         (tmp_path / ".hidden").mkdir()
         (tmp_path / ".hidden" / "data.rhd").write_text("test")
         (tmp_path / "visible").mkdir()
         (tmp_path / "visible" / "data.rhd").write_text("test")
 
-        class MockSession:
+        class ndi_session_mock:
             def getpath(self):
                 return str(tmp_path)
 
-        nav = EpochDirNavigator(session=MockSession(), fileparameters="*.rhd")
+        nav = ndi_file_navigator_epochdir(session=ndi_session_mock(), fileparameters="*.rhd")
         groups = nav.selectfilegroups_disk()
         assert len(groups) == 1  # Only visible dir
 
     def test_repr(self):
-        from ndi.file.navigator.epochdir import EpochDirNavigator
+        from ndi.file.navigator.epochdir import ndi_file_navigator_epochdir
 
-        nav = EpochDirNavigator(fileparameters=["*.rhd", "*.dat"])
-        assert "EpochDirNavigator" in repr(nav)
+        nav = ndi_file_navigator_epochdir(fileparameters=["*.rhd", "*.dat"])
+        assert "ndi_file_navigator_epochdir" in repr(nav)
 
 
 # ============================================================================
-# ProbeTimeseries Tests
+# ndi_probe_timeseries Tests
 # ============================================================================
 
 
@@ -601,41 +619,41 @@ class TestProbeTimeseries:
     """Tests for ndi.probe.timeseries."""
 
     def test_import(self):
-        from ndi.probe.timeseries import ProbeTimeseries
+        from ndi.probe.timeseries import ndi_probe_timeseries
 
-        assert ProbeTimeseries is not None
+        assert ndi_probe_timeseries is not None
 
     def test_inherits_probe(self):
-        from ndi.probe import Probe
-        from ndi.probe.timeseries import ProbeTimeseries
+        from ndi.probe import ndi_probe
+        from ndi.probe.timeseries import ndi_probe_timeseries
 
-        pt = ProbeTimeseries(name="test", reference=1, type="n-trode")
-        assert isinstance(pt, Probe)
+        pt = ndi_probe_timeseries(name="test", reference=1, type="n-trode")
+        assert isinstance(pt, ndi_probe)
 
     def test_samplerate_default(self):
-        from ndi.probe.timeseries import ProbeTimeseries
+        from ndi.probe.timeseries import ndi_probe_timeseries
 
-        pt = ProbeTimeseries(name="test", reference=1, type="n-trode")
+        pt = ndi_probe_timeseries(name="test", reference=1, type="n-trode")
         assert pt.samplerate(1) == -1.0
 
     def test_readtimeseries_needs_epoch_or_timeref(self):
-        from ndi.probe.timeseries import ProbeTimeseries
+        from ndi.probe.timeseries import ndi_probe_timeseries
 
-        pt = ProbeTimeseries(name="test", reference=1, type="n-trode")
+        pt = ndi_probe_timeseries(name="test", reference=1, type="n-trode")
         with pytest.raises(ValueError):
             pt.readtimeseries()
 
     def test_readtimeseriesepoch_returns_none(self):
-        from ndi.probe.timeseries import ProbeTimeseries
+        from ndi.probe.timeseries import ndi_probe_timeseries
 
-        pt = ProbeTimeseries(name="test", reference=1, type="n-trode")
+        pt = ndi_probe_timeseries(name="test", reference=1, type="n-trode")
         data, t, tr = pt.readtimeseriesepoch(1, 0, 10)
         assert data is None
 
     def test_times2samples(self):
-        from ndi.probe.timeseries import ProbeTimeseries
+        from ndi.probe.timeseries import ndi_probe_timeseries
 
-        class MockTimeseries(ProbeTimeseries):
+        class MockTimeseries(ndi_probe_timeseries):
             def samplerate(self, epoch):
                 return 1000.0
 
@@ -646,9 +664,9 @@ class TestProbeTimeseries:
         assert samples[2] == 11
 
     def test_samples2times(self):
-        from ndi.probe.timeseries import ProbeTimeseries
+        from ndi.probe.timeseries import ndi_probe_timeseries
 
-        class MockTimeseries(ProbeTimeseries):
+        class MockTimeseries(ndi_probe_timeseries):
             def samplerate(self, epoch):
                 return 1000.0
 
@@ -657,14 +675,14 @@ class TestProbeTimeseries:
         np.testing.assert_allclose(times, [0.0, 0.001, 0.01])
 
     def test_repr(self):
-        from ndi.probe.timeseries import ProbeTimeseries
+        from ndi.probe.timeseries import ndi_probe_timeseries
 
-        pt = ProbeTimeseries(name="test", reference=1, type="n-trode")
-        assert "ProbeTimeseries" in repr(pt)
+        pt = ndi_probe_timeseries(name="test", reference=1, type="n-trode")
+        assert "ndi_probe_timeseries" in repr(pt)
 
 
 # ============================================================================
-# ProbeTimeseriesMFDAQ Tests
+# ndi_probe_timeseries_mfdaq Tests
 # ============================================================================
 
 
@@ -672,45 +690,45 @@ class TestProbeTimeseriesMFDAQ:
     """Tests for ndi.probe.timeseries_mfdaq."""
 
     def test_import(self):
-        from ndi.probe.timeseries_mfdaq import ProbeTimeseriesMFDAQ
+        from ndi.probe.timeseries_mfdaq import ndi_probe_timeseries_mfdaq
 
-        assert ProbeTimeseriesMFDAQ is not None
+        assert ndi_probe_timeseries_mfdaq is not None
 
     def test_inherits_probe_timeseries(self):
-        from ndi.probe.timeseries import ProbeTimeseries
-        from ndi.probe.timeseries_mfdaq import ProbeTimeseriesMFDAQ
+        from ndi.probe.timeseries import ndi_probe_timeseries
+        from ndi.probe.timeseries_mfdaq import ndi_probe_timeseries_mfdaq
 
-        pt = ProbeTimeseriesMFDAQ(name="test", reference=1, type="n-trode")
-        assert isinstance(pt, ProbeTimeseries)
+        pt = ndi_probe_timeseries_mfdaq(name="test", reference=1, type="n-trode")
+        assert isinstance(pt, ndi_probe_timeseries)
 
     def test_samplerate_no_session(self):
-        from ndi.probe.timeseries_mfdaq import ProbeTimeseriesMFDAQ
+        from ndi.probe.timeseries_mfdaq import ndi_probe_timeseries_mfdaq
 
-        pt = ProbeTimeseriesMFDAQ(name="test", reference=1, type="n-trode")
+        pt = ndi_probe_timeseries_mfdaq(name="test", reference=1, type="n-trode")
         assert pt.samplerate(1) == -1.0
 
     def test_getchanneldevinfo_no_session(self):
-        from ndi.probe.timeseries_mfdaq import ProbeTimeseriesMFDAQ
+        from ndi.probe.timeseries_mfdaq import ndi_probe_timeseries_mfdaq
 
-        pt = ProbeTimeseriesMFDAQ(name="test", reference=1, type="n-trode")
+        pt = ndi_probe_timeseries_mfdaq(name="test", reference=1, type="n-trode")
         assert pt.getchanneldevinfo(1) is None
 
     def test_read_epochsamples_no_device(self):
-        from ndi.probe.timeseries_mfdaq import ProbeTimeseriesMFDAQ
+        from ndi.probe.timeseries_mfdaq import ndi_probe_timeseries_mfdaq
 
-        pt = ProbeTimeseriesMFDAQ(name="test", reference=1, type="n-trode")
+        pt = ndi_probe_timeseries_mfdaq(name="test", reference=1, type="n-trode")
         data, t, tr = pt.read_epochsamples(1, 0, 100)
         assert data is None
 
     def test_repr(self):
-        from ndi.probe.timeseries_mfdaq import ProbeTimeseriesMFDAQ
+        from ndi.probe.timeseries_mfdaq import ndi_probe_timeseries_mfdaq
 
-        pt = ProbeTimeseriesMFDAQ(name="test", reference=1, type="n-trode")
-        assert "ProbeTimeseriesMFDAQ" in repr(pt)
+        pt = ndi_probe_timeseries_mfdaq(name="test", reference=1, type="n-trode")
+        assert "ndi_probe_timeseries_mfdaq" in repr(pt)
 
 
 # ============================================================================
-# Element Functions Tests
+# ndi_element Functions Tests
 # ============================================================================
 
 
@@ -787,11 +805,11 @@ class TestElementFunctions:
 
     def test_spikesForProbe_validates_epochs(self, tmp_path):
         from ndi.element.functions import spikesForProbe
-        from ndi.session import DirSession
+        from ndi.session import ndi_session_dir
 
         session_path = tmp_path / "test_session"
         session_path.mkdir()
-        session = DirSession("test_ref", str(session_path))
+        session = ndi_session_dir("test_ref", str(session_path))
 
         class MockProbe:
             def epochtable(self):
@@ -814,19 +832,19 @@ class TestBatchAImports:
     """Test that all Batch A classes are importable from expected locations."""
 
     def test_daqsystemstring_from_daq(self):
-        from ndi.daq import DAQSystemString
+        from ndi.daq import ndi_daq_daqsystemstring
 
-        assert DAQSystemString is not None
+        assert ndi_daq_daqsystemstring is not None
 
     def test_daqsystemmfdaq_from_daq(self):
-        from ndi.daq import DAQSystemMFDAQ
+        from ndi.daq import ndi_daq_system_mfdaq
 
-        assert DAQSystemMFDAQ is not None
+        assert ndi_daq_system_mfdaq is not None
 
     def test_epochprobemap_daqsystem_from_epoch(self):
-        from ndi.epoch import EpochProbeMapDAQSystem
+        from ndi.epoch import ndi_epoch_epochprobemap__daqsystem
 
-        assert EpochProbeMapDAQSystem is not None
+        assert ndi_epoch_epochprobemap__daqsystem is not None
 
     def test_epochrange_from_epoch(self):
         from ndi.epoch import epochrange
@@ -834,24 +852,24 @@ class TestBatchAImports:
         assert epochrange is not None
 
     def test_epochdir_from_file(self):
-        from ndi.file import EpochDirNavigator
+        from ndi.file import ndi_file_navigator_epochdir
 
-        assert EpochDirNavigator is not None
+        assert ndi_file_navigator_epochdir is not None
 
     def test_mfdaq_epoch_channel_from_file_type(self):
-        from ndi.file.type import MFDAQEpochChannel
+        from ndi.file.type import ndi_file_type_mfdaq__epoch__channel
 
-        assert MFDAQEpochChannel is not None
+        assert ndi_file_type_mfdaq__epoch__channel is not None
 
     def test_probe_timeseries(self):
-        from ndi.probe.timeseries import ProbeTimeseries
+        from ndi.probe.timeseries import ndi_probe_timeseries
 
-        assert ProbeTimeseries is not None
+        assert ndi_probe_timeseries is not None
 
     def test_probe_timeseries_mfdaq(self):
-        from ndi.probe.timeseries_mfdaq import ProbeTimeseriesMFDAQ
+        from ndi.probe.timeseries_mfdaq import ndi_probe_timeseries_mfdaq
 
-        assert ProbeTimeseriesMFDAQ is not None
+        assert ndi_probe_timeseries_mfdaq is not None
 
     def test_element_functions(self):
         from ndi.element.functions import missingepochs, oneepoch, spikesForProbe

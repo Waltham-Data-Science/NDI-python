@@ -1,5 +1,5 @@
 """
-ndi.validate - Document schema validation for NDI.
+ndi.validate - ndi_document schema validation for NDI.
 
 MATLAB equivalent: +ndi/validate.m
 
@@ -17,11 +17,11 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from .common import PathConstants
+from .common import ndi_common_PathConstants
 
 if TYPE_CHECKING:
-    from .document import Document
-    from .session.session_base import Session
+    from .document import ndi_document
+    from .session.session_base import ndi_session
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +79,7 @@ _schema_cache: dict[str, dict] = {}
 def _load_schema(schema_name: str) -> dict | None:
     """Load a schema JSON file by name.
 
-    Searches in PathConstants.SCHEMA_PATH for ``{name}_schema.json``.
+    Searches in ndi_common_PathConstants.SCHEMA_PATH for ``{name}_schema.json``.
     Handles subdirectory paths (e.g. 'apps/calculations/simple_calc').
 
     Args:
@@ -92,7 +92,7 @@ def _load_schema(schema_name: str) -> dict | None:
         return _schema_cache[schema_name]
 
     try:
-        schema_path = PathConstants.SCHEMA_PATH
+        schema_path = ndi_common_PathConstants.SCHEMA_PATH
     except (ValueError, AttributeError):
         return None
 
@@ -117,14 +117,14 @@ def _load_schema(schema_name: str) -> dict | None:
         return None
 
 
-def _get_schema_for_document(doc: Document) -> dict | None:
+def _get_schema_for_document(doc: ndi_document) -> dict | None:
     """Get the schema for a document based on its document_class.
 
     Reads the document's ``document_class.definition`` path to find
     the corresponding schema file.
 
     Args:
-        doc: NDI Document object.
+        doc: NDI ndi_document object.
 
     Returns:
         Schema dict or None.
@@ -275,12 +275,12 @@ def _validate_properties(
 def _validate_depends_on(
     doc_props: dict,
     schema: dict,
-    session: Session | None = None,
+    session: ndi_session | None = None,
 ) -> dict[str, str]:
     """Validate dependency references.
 
     Args:
-        doc_props: Document properties dict.
+        doc_props: ndi_document properties dict.
         schema: Schema dict with depends_on definitions.
         session: Optional session for database lookups.
 
@@ -320,9 +320,9 @@ def _validate_depends_on(
         # If session available, verify the referenced document exists
         if session is not None:
             try:
-                from .query import Query
+                from .query import ndi_query
 
-                found = session.database_search(Query("base.id") == dep_value)
+                found = session.database_search(ndi_query("base.id") == dep_value)
                 if found:
                     results[dep_name] = "ok"
                 else:
@@ -336,8 +336,8 @@ def _validate_depends_on(
 
 
 def validate(
-    doc: Document,
-    session: Session | None = None,
+    doc: ndi_document,
+    session: ndi_session | None = None,
 ) -> ValidationResult:
     """Validate an NDI document against its schema.
 
@@ -347,7 +347,7 @@ def validate(
       3. Dependency references: check depends_on targets exist
 
     Args:
-        doc: NDI Document to validate.
+        doc: NDI ndi_document to validate.
         session: Optional session for dependency checking.
 
     Returns:

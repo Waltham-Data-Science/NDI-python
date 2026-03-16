@@ -1,7 +1,7 @@
 """
 ndi.app.spikesorter - Spike sorting and clustering.
 
-Provides the SpikeSorter app for clustering extracted spike waveforms
+Provides the ndi_app_spikesorter app for clustering extracted spike waveforms
 into putative single-neuron units.
 
 MATLAB equivalent: src/ndi/+ndi/+app/spikesorter.m
@@ -13,19 +13,19 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from . import App
-from .appdoc import AppDoc
+from . import ndi_app
+from .appdoc import ndi_app_appdoc
 
 if TYPE_CHECKING:
-    from ..document import Document
-    from ..session.session_base import Session
+    from ..document import ndi_document
+    from ..session.session_base import ndi_session
 
 
-class SpikeSorter(App, AppDoc):
+class ndi_app_spikesorter(ndi_app, ndi_app_appdoc):
     """
-    App for clustering spikes into neuron units.
+    ndi_app for clustering spikes into neuron units.
 
-    Takes extracted spike waveforms (from SpikeExtractor) and
+    Takes extracted spike waveforms (from ndi_app_spikeextractor) and
     clusters them using PCA and K-means or similar algorithms.
 
     Doc types:
@@ -33,13 +33,13 @@ class SpikeSorter(App, AppDoc):
         - spike_clusters: Cluster assignments and statistics
 
     Example:
-        >>> sorter = SpikeSorter(session)
+        >>> sorter = ndi_app_spikesorter(session)
         >>> sorter.spike_sort(timeseries_obj, 'default', 'default')
     """
 
-    def __init__(self, session: Session | None = None):
-        App.__init__(self, session=session, name="ndi_app_spikesorter")
-        AppDoc.__init__(
+    def __init__(self, session: ndi_session | None = None):
+        ndi_app.__init__(self, session=session, name="ndi_app_spikesorter")
+        ndi_app_appdoc.__init__(
             self,
             doc_types=["sorting_parameters", "spike_clusters"],
             doc_document_types=[
@@ -107,7 +107,7 @@ class SpikeSorter(App, AppDoc):
         extraction_name: str = "default",
         sorting_parameters_name: str = "default",
         redo: bool = False,
-    ) -> list[Document]:
+    ) -> list[ndi_document]:
         """
         Perform spike sorting on extracted spikes.
 
@@ -135,7 +135,7 @@ class SpikeSorter(App, AppDoc):
         redo: bool = False,
     ) -> None:
         """
-        Create Neuron elements from cluster assignments.
+        Create ndi_neuron elements from cluster assignments.
 
         MATLAB equivalent: ndi.app.spikesorter/clusters2neurons
 
@@ -149,20 +149,20 @@ class SpikeSorter(App, AppDoc):
             "Full neuron creation from clusters requires additional infrastructure."
         )
 
-    def struct2doc(self, appdoc_type: str, appdoc_struct: dict, **kwargs) -> Document:
-        from ..document import Document
+    def struct2doc(self, appdoc_type: str, appdoc_struct: dict, **kwargs) -> ndi_document:
+        from ..document import ndi_document
 
-        return Document(
+        return ndi_document(
             self.doc_document_types[self.doc_types.index(appdoc_type)],
             **{appdoc_type: appdoc_struct},
         )
 
-    def find_appdoc(self, appdoc_type: str, **kwargs) -> list[Document]:
+    def find_appdoc(self, appdoc_type: str, **kwargs) -> list[ndi_document]:
         if self._session is None:
             return []
-        from ..query import Query
+        from ..query import ndi_query
 
-        return self._session.database_search(Query("").isa(appdoc_type))
+        return self._session.database_search(ndi_query("").isa(appdoc_type))
 
     def isvalid_appdoc_struct(self, appdoc_type: str, appdoc_struct: dict) -> tuple[bool, str]:
         """
@@ -188,4 +188,4 @@ class SpikeSorter(App, AppDoc):
         return None
 
     def __repr__(self) -> str:
-        return f"SpikeSorter(session={self._session is not None})"
+        return f"ndi_app_spikesorter(session={self._session is not None})"

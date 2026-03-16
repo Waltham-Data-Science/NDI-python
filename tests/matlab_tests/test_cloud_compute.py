@@ -178,7 +178,7 @@ class TestCompute:
             for s in sessions:
                 sid = s.get("sessionId") or s.get("id", "")
                 session_ids.append(sid)
-            assert session_id in session_ids, f"Session {session_id} not in list: {session_ids}"
+            assert session_id in session_ids, f"ndi_session {session_id} not in list: {session_ids}"
 
             # 4. Abort session (cleanup)
             try:
@@ -284,7 +284,7 @@ class TestZombie:
         # 3. Verify session in list
         sessions = listSessions(client=client).data
         session_ids = [s.get("sessionId") or s.get("id", "") for s in sessions]
-        assert session_id in session_ids, f"Session {session_id} not in list: {session_ids}"
+        assert session_id in session_ids, f"ndi_session {session_id} not in list: {session_ids}"
 
         # 4. Polling loop — wait for final status
         max_iterations = 60  # 60 * 10s = 600s = 10 min

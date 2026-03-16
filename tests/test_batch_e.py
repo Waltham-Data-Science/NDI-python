@@ -1,7 +1,7 @@
 """
 Tests for Batch E: Minor remaining MATLAB gaps.
 
-Tests findepochnode(), SessionTable, TuningFit.
+Tests findepochnode(), ndi_session_sessiontable, ndi_calc_tuning__fit.
 """
 
 from pathlib import Path
@@ -9,13 +9,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from ndi.calc.tuning_fit import TuningFit
+from ndi.calc.tuning_fit import ndi_calc_tuning__fit
 
 # ---------------------------------------------------------------------------
 # Imports
 # ---------------------------------------------------------------------------
 from ndi.epoch.functions import findepochnode
-from ndi.session.sessiontable import SessionTable
+from ndi.session.sessiontable import ndi_session_sessiontable
 
 
 class TestImports:
@@ -27,14 +27,14 @@ class TestImports:
         assert fen is findepochnode
 
     def test_import_session_table_from_session(self):
-        from ndi.session import SessionTable as ST
+        from ndi.session import ndi_session_sessiontable as ST
 
-        assert ST is SessionTable
+        assert ST is ndi_session_sessiontable
 
     def test_import_tuning_fit_from_calc(self):
-        from ndi.calc import TuningFit as TF
+        from ndi.calc import ndi_calc_tuning__fit as TF
 
-        assert TF is TuningFit
+        assert TF is ndi_calc_tuning__fit
 
 
 # ===========================================================================
@@ -51,7 +51,7 @@ class TestFindEpochNode:
         return [
             {
                 "objectname": "probe1",
-                "objectclass": "Probe",
+                "objectclass": "ndi_probe",
                 "epoch_id": "e1",
                 "epoch_session_id": "s1",
                 "epoch_clock": "dev_local_time",
@@ -59,7 +59,7 @@ class TestFindEpochNode:
             },
             {
                 "objectname": "probe2",
-                "objectclass": "Probe",
+                "objectclass": "ndi_probe",
                 "epoch_id": "e2",
                 "epoch_session_id": "s1",
                 "epoch_clock": "dev_local_time",
@@ -67,7 +67,7 @@ class TestFindEpochNode:
             },
             {
                 "objectname": "probe1",
-                "objectclass": "Element",
+                "objectclass": "ndi_element",
                 "epoch_id": "e3",
                 "epoch_session_id": "s2",
                 "epoch_clock": "utc",
@@ -89,7 +89,7 @@ class TestFindEpochNode:
         assert result == [0, 2]
 
     def test_search_by_objectclass(self, sample_nodes):
-        result = findepochnode({"objectclass": "Probe"}, sample_nodes)
+        result = findepochnode({"objectclass": "ndi_probe"}, sample_nodes)
         assert result == [0, 1]
 
     def test_search_by_session_id(self, sample_nodes):
@@ -98,7 +98,7 @@ class TestFindEpochNode:
 
     def test_search_by_multiple_fields(self, sample_nodes):
         result = findepochnode(
-            {"objectname": "probe1", "objectclass": "Probe"},
+            {"objectname": "probe1", "objectclass": "ndi_probe"},
             sample_nodes,
         )
         assert result == [0]
@@ -149,7 +149,7 @@ class TestFindEpochNode:
 
 
 # ===========================================================================
-# SessionTable
+# ndi_session_sessiontable
 # ===========================================================================
 
 
@@ -164,16 +164,16 @@ class TestSessionTable:
 
     @pytest.fixture
     def table(self, table_dir):
-        """Create a SessionTable instance using a temp file."""
-        return SessionTable(table_path=table_dir)
+        """Create a ndi_session_sessiontable instance using a temp file."""
+        return ndi_session_sessiontable(table_path=table_dir)
 
     def test_init_default_path(self):
-        table = SessionTable()
+        table = ndi_session_sessiontable()
         expected = Path.home() / ".ndi" / "preferences" / "local_sessiontable.txt"
         assert table._table_path == expected
 
     def test_init_custom_path(self, table_dir):
-        table = SessionTable(table_path=table_dir)
+        table = ndi_session_sessiontable(table_path=table_dir)
         assert table._table_path == table_dir
 
     def test_empty_table_on_new(self, table):
@@ -299,37 +299,37 @@ class TestSessionTable:
             table.addtableentry("sess1", "")
 
     def test_persistence_across_instances(self, table_dir):
-        t1 = SessionTable(table_path=table_dir)
+        t1 = ndi_session_sessiontable(table_path=table_dir)
         t1.addtableentry("sess1", "/data/exp1")
 
-        t2 = SessionTable(table_path=table_dir)
+        t2 = ndi_session_sessiontable(table_path=table_dir)
         assert t2.getsessionpath("sess1") == "/data/exp1"
 
     def test_repr(self, table):
-        assert "SessionTable" in repr(table)
+        assert "ndi_session_sessiontable" in repr(table)
 
     def test_localtablefilename(self):
-        path = SessionTable.localtablefilename()
+        path = ndi_session_sessiontable.localtablefilename()
         assert "local_sessiontable" in path.name
         assert path.suffix == ".txt"
 
 
 # ===========================================================================
-# TuningFit
+# ndi_calc_tuning__fit
 # ===========================================================================
 
 
-class ConcreteTuningFit(TuningFit):
-    """Concrete subclass for testing the abstract TuningFit."""
+class ConcreteTuningFit(ndi_calc_tuning__fit):
+    """Concrete subclass for testing the abstract ndi_calc_tuning__fit."""
 
     def calculate(self, parameters):
-        from ndi.document import Document
+        from ndi.document import ndi_document
 
-        doc = Document("base")
+        doc = ndi_document("base")
         return [doc]
 
     def default_search_for_input_parameters(self):
-        from ndi.query import Query
+        from ndi.query import ndi_query
 
         return {
             "input_parameters": {
@@ -337,7 +337,7 @@ class ConcreteTuningFit(TuningFit):
             },
             "depends_on": [],
             "query": [
-                {"name": "document_id", "query": Query("").isa("stimulus_response_scalar")},
+                {"name": "document_id", "query": ndi_query("").isa("stimulus_response_scalar")},
             ],
         }
 
@@ -353,28 +353,28 @@ class ConcreteTuningFit(TuningFit):
 
 
 class TestTuningFit:
-    """Tests for the TuningFit abstract base class."""
+    """Tests for the ndi_calc_tuning__fit abstract base class."""
 
     def test_is_subclass_of_calculator(self):
-        from ndi.calculator import Calculator
+        from ndi.calculator import ndi_calculator
 
-        assert issubclass(TuningFit, Calculator)
+        assert issubclass(ndi_calc_tuning__fit, ndi_calculator)
 
     def test_cannot_instantiate_directly(self):
         with pytest.raises(TypeError):
-            TuningFit()
+            ndi_calc_tuning__fit()
 
     def test_concrete_subclass_instantiates(self):
         fit = ConcreteTuningFit()
-        assert isinstance(fit, TuningFit)
+        assert isinstance(fit, ndi_calc_tuning__fit)
 
     def test_scope_presets(self):
-        assert "highSNR" in TuningFit.SCOPE_PRESETS
-        assert "lowSNR" in TuningFit.SCOPE_PRESETS
-        assert TuningFit.SCOPE_PRESETS["highSNR"]["reps"] == 5
-        assert TuningFit.SCOPE_PRESETS["highSNR"]["noise"] == 0.001
-        assert TuningFit.SCOPE_PRESETS["lowSNR"]["reps"] == 10
-        assert TuningFit.SCOPE_PRESETS["lowSNR"]["noise"] == 1.0
+        assert "highSNR" in ndi_calc_tuning__fit.SCOPE_PRESETS
+        assert "lowSNR" in ndi_calc_tuning__fit.SCOPE_PRESETS
+        assert ndi_calc_tuning__fit.SCOPE_PRESETS["highSNR"]["reps"] == 5
+        assert ndi_calc_tuning__fit.SCOPE_PRESETS["highSNR"]["noise"] == 0.001
+        assert ndi_calc_tuning__fit.SCOPE_PRESETS["lowSNR"]["reps"] == 10
+        assert ndi_calc_tuning__fit.SCOPE_PRESETS["lowSNR"]["noise"] == 1.0
 
     def test_generate_mock_parameters(self):
         fit = ConcreteTuningFit()
@@ -440,4 +440,4 @@ class TestTuningFit:
 
     def test_repr(self):
         fit = ConcreteTuningFit()
-        assert "TuningFit" in repr(fit)
+        assert "ndi_calc_tuning__fit" in repr(fit)

@@ -37,7 +37,7 @@ def downsampleTimeseries(
         1-D array of time values (seconds).  Samples are assumed to be
         equally spaced.
     d_in : numpy.ndarray
-        Data matrix.  Each column is a channel; rows correspond to samples
+        ndi_gui_Data matrix.  Each column is a channel; rows correspond to samples
         in *t_in*.
     LP : float
         Low-pass cutoff frequency in Hz.  Must be positive.

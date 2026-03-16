@@ -7,13 +7,13 @@ existing DID-python and NDI-Matlab databases.
 
 Example:
     # Create a database for a session
-    db = Database('/path/to/session')
+    db = ndi_database('/path/to/session')
 
     # Add documents
     db.add(doc)
 
-    # Query documents
-    results = db.search(Query('element.name') == 'electrode1')
+    # ndi_query documents
+    results = db.search(ndi_query('element.name') == 'electrode1')
 
     # Find by ID
     doc = db.read(doc_id)
@@ -21,16 +21,16 @@ Example:
 
 from pathlib import Path
 
-from .document import Document
-from .query import Query
+from .document import ndi_document
+from .query import ndi_query
 
 
 class SQLiteDriver:
     """SQLite database driver using DID-python's SQLiteDB.
 
     This driver wraps DID-python's SQLiteDB implementation to provide
-    a consistent interface for the NDI Database class. Uses DID-python's
-    field_search() for query evaluation.
+    a consistent interface for the NDI ndi_database class. DID-python handles
+    doc_data population and SQL-based search natively.
     """
 
     def __init__(self, db_path: Path, branch_id: str = "a"):
@@ -42,14 +42,12 @@ class SQLiteDriver:
                 NDI-matlab have always used ``"a"`` as the default
                 branch, so we match that for cross-language compatibility.
         """
-        from did.datastructures import field_search
         from did.document import Document as DIDDocument
         from did.implementations.sqlitedb import SQLiteDB
 
         self._db_path = db_path
         self._branch_id = branch_id
         self._DIDDocument = DIDDocument
-        self._field_search = field_search
 
         # Initialize SQLiteDB
         self._db = SQLiteDB(str(db_path))
@@ -63,133 +61,41 @@ class SQLiteDriver:
         """Add a document to the database."""
         doc_id = document.get("base", {}).get("id", "")
         if not doc_id:
-            raise ValueError("Document must have a base.id")
+            raise ValueError("ndi_document must have a base.id")
 
         # Check if document already exists
         existing_ids = self._db.get_doc_ids(self._branch_id)
         if doc_id in existing_ids:
-            raise FileExistsError(f"Document {doc_id} already exists")
+            raise FileExistsError(f"ndi_document {doc_id} already exists")
 
-        # Create DID Document and add
+        # Create DID ndi_document and add (DID-python now populates doc_data)
         did_doc = self._DIDDocument(document)
         self._db.add_docs([did_doc], self._branch_id)
-
-        # Populate doc_data indexed fields for cross-language compatibility.
-        # DID-python's _do_add_doc does not populate the fields/doc_data
-        # tables, but DID-matlab's search relies on them.
-        self._populate_doc_data(doc_id, document)
 
     def bulk_add(self, documents: list[dict]) -> tuple[int, int]:
         """Add many documents at once, bypassing per-doc duplicate checks.
 
-        Uses a single transaction for all inserts.  Duplicates (by
-        ``base.id``) are silently skipped.
+        Duplicates (by ``base.id``) are silently skipped.
 
         Returns:
             ``(added, skipped)`` counts.
         """
-        import json as json_mod
-        import time
-
         existing_ids = set(self._db.get_doc_ids(self._branch_id))
 
         added = 0
         skipped = 0
-        cursor = self._db.dbid.cursor()
-        try:
-            for doc in documents:
-                doc_id = doc.get("base", {}).get("id", "")
-                if not doc_id or doc_id in existing_ids:
-                    skipped += 1
-                    continue
+        for doc in documents:
+            doc_id = doc.get("base", {}).get("id", "")
+            if not doc_id or doc_id in existing_ids:
+                skipped += 1
+                continue
 
-                json_code = json_mod.dumps(doc)
-                cursor.execute(
-                    "INSERT INTO docs (doc_id, json_code, timestamp) VALUES (?, ?, ?)",
-                    (doc_id, json_code, time.time()),
-                )
-                doc_idx = cursor.lastrowid
-                try:
-                    cursor.execute(
-                        "INSERT INTO branch_docs (branch_id, doc_idx, timestamp) VALUES (?, ?, ?)",
-                        (self._branch_id, doc_idx, time.time()),
-                    )
-                except Exception:
-                    pass
-                # Populate doc_data for cross-language compatibility
-                self._populate_doc_data_with_cursor(cursor, doc_idx, doc)
-
-                existing_ids.add(doc_id)
-                added += 1
-            self._db.dbid.commit()
-        except Exception:
-            self._db.dbid.rollback()
-            raise
+            did_doc = self._DIDDocument(doc)
+            self._db.add_docs([did_doc], self._branch_id)
+            existing_ids.add(doc_id)
+            added += 1
 
         return added, skipped
-
-    # -----------------------------------------------------------------
-    # doc_data population for MATLAB DID compatibility
-    # -----------------------------------------------------------------
-
-    @staticmethod
-    def _flatten_document(doc: dict, prefix: str = "") -> list[tuple[str, str]]:
-        """Flatten a document dict into (field_path, value) pairs.
-
-        Only includes leaf scalar values (str, int, float, bool).
-        Skips lists and nested dicts (those are traversed recursively).
-        """
-        pairs: list[tuple[str, str]] = []
-        for key, val in doc.items():
-            path = f"{prefix}.{key}" if prefix else key
-            if isinstance(val, dict):
-                pairs.extend(SQLiteDriver._flatten_document(val, path))
-            elif isinstance(val, list):
-                # Index list elements for depends_on etc.
-                for i, item in enumerate(val):
-                    if isinstance(item, dict):
-                        pairs.extend(SQLiteDriver._flatten_document(item, f"{path}({i})"))
-                    elif item is not None:
-                        pairs.append((f"{path}({i})", str(item)))
-            elif val is not None:
-                pairs.append((path, str(val)))
-        return pairs
-
-    def _get_or_create_field_idx(self, cursor, field_name: str, doc_class: str = "") -> int:
-        """Get field_idx from the fields table, creating a new entry if needed."""
-        cursor.execute("SELECT field_idx FROM fields WHERE field_name = ?", (field_name,))
-        row = cursor.fetchone()
-        if row:
-            return row[0] if isinstance(row, (tuple, list)) else row["field_idx"]
-        cursor.execute(
-            "INSERT INTO fields (class, field_name, json_name, field_idx) "
-            "VALUES (?, ?, ?, NULL)",
-            (doc_class, field_name, field_name),
-        )
-        return cursor.lastrowid
-
-    def _populate_doc_data(self, doc_id: str, document: dict) -> None:
-        """Populate the doc_data table for a document after insertion."""
-        cursor = self._db.dbid.cursor()
-        # Look up doc_idx
-        cursor.execute("SELECT doc_idx FROM docs WHERE doc_id = ?", (doc_id,))
-        row = cursor.fetchone()
-        if not row:
-            return
-        doc_idx = row[0] if isinstance(row, (tuple, list)) else row["doc_idx"]
-        self._populate_doc_data_with_cursor(cursor, doc_idx, document)
-        self._db.dbid.commit()
-
-    def _populate_doc_data_with_cursor(self, cursor, doc_idx: int, document: dict) -> None:
-        """Populate doc_data for a document using an existing cursor."""
-        doc_class = document.get("document_class", {}).get("class_name", "")
-        pairs = self._flatten_document(document)
-        for field_name, value in pairs:
-            field_idx = self._get_or_create_field_idx(cursor, field_name, doc_class)
-            cursor.execute(
-                "INSERT INTO doc_data (doc_idx, field_idx, value) VALUES (?, ?, ?)",
-                (doc_idx, field_idx, value),
-            )
 
     def update(self, document: dict) -> None:
         """Update an existing document."""
@@ -198,24 +104,12 @@ class SQLiteDriver:
         # Check if document exists
         existing_ids = self._db.get_doc_ids(self._branch_id)
         if doc_id not in existing_ids:
-            raise FileNotFoundError(f"Document {doc_id} not found")
+            raise FileNotFoundError(f"ndi_document {doc_id} not found")
 
-        # Remove old doc_data entries
-        cursor = self._db.dbid.cursor()
-        cursor.execute("SELECT doc_idx FROM docs WHERE doc_id = ?", (doc_id,))
-        row = cursor.fetchone()
-        if row:
-            old_idx = row[0] if isinstance(row, (tuple, list)) else row["doc_idx"]
-            cursor.execute("DELETE FROM doc_data WHERE doc_idx = ?", (old_idx,))
-        self._db.dbid.commit()
-
-        # Remove old and add new (SQLiteDB doesn't have direct update)
+        # Remove old and add new (DID handles doc_data cleanup and repopulation)
         self._db.remove_docs([doc_id], self._branch_id)
         did_doc = self._DIDDocument(document)
         self._db.add_docs([did_doc], self._branch_id)
-
-        # Repopulate doc_data
-        self._populate_doc_data(doc_id, document)
 
     def delete_by_id(self, doc_id: str) -> bool:
         """Delete a document by ID."""
@@ -239,33 +133,23 @@ class SQLiteDriver:
     def find(self, query=None) -> list[dict]:
         """Find all documents matching query.
 
-        Uses DID-python's field_search() for query evaluation.
+        Uses DID-python's SQL-based search against the doc_data table
+        for query evaluation, falling back to brute-force for unsupported
+        operations.  Retrieval and MATLAB normalization are handled by
+        DID-python's :meth:`get_docs` / :meth:`get_docs_by_branch`.
         """
-        import json as json_mod
-
-        # Fetch all JSON blobs in a single SQL query instead of one-by-one.
-        rows = self._db.do_run_sql_query(
-            "SELECT d.json_code FROM docs d "
-            "JOIN branch_docs bd ON d.doc_idx = bd.doc_idx "
-            "WHERE bd.branch_id = ?",
-            (self._branch_id,),
-        )
-
-        if not rows:
-            return []
-
-        documents = [json_mod.loads(r["json_code"]) for r in rows]
-
-        # Filter by query if provided using DID-python's field_search
         if query is not None:
-            # Convert to DID-python compatible format
-            search_params = query.to_search_structure()
-            documents = [d for d in documents if self._field_search(d, search_params)]
+            doc_ids = self._db.search(query, self._branch_id)
+            if not doc_ids:
+                return []
+            docs = self._db.get_docs(doc_ids, self._branch_id, OnMissing="ignore")
+        else:
+            docs = self._db.get_docs_by_branch(self._branch_id)
 
-        return documents
+        return [d.document_properties for d in docs if d is not None]
 
 
-class Database:
+class ndi_database:
     """NDI database interface.
 
     Provides document storage and querying using DID-python's SQLiteDB.
@@ -275,9 +159,9 @@ class Database:
         session_path: Path to the session directory.
 
     Example:
-        db = Database('/path/to/session')
+        db = ndi_database('/path/to/session')
         db.add(doc)
-        docs = db.search(Query('element.type') == 'probe')
+        docs = db.search(ndi_query('element.type') == 'probe')
     """
 
     def __init__(self, session_path: str | Path, db_name: str = ".ndi", **backend_kwargs):
@@ -321,11 +205,11 @@ class Database:
 
     # === CRUD Operations ===
 
-    def add(self, document: Document) -> Document:
+    def add(self, document: ndi_document) -> ndi_document:
         """Add a document to the database.
 
         Args:
-            document: The Document to add.
+            document: The ndi_document to add.
 
         Returns:
             The added document.
@@ -334,19 +218,19 @@ class Database:
             ValueError: If document already exists in database.
 
         Example:
-            doc = Document({'base': {'id': '...', ...}})
+            doc = ndi_document({'base': {'id': '...', ...}})
             db.add(doc)
         """
         try:
             self._driver.add(document.document_properties)
         except FileExistsError as exc:
             raise ValueError(
-                f"Document with ID {document.id} already exists. "
+                f"ndi_document with ID {document.id} already exists. "
                 f"Use update() or add_or_replace()."
             ) from exc
         return document
 
-    def read(self, doc_id: str, isa_class: str | None = None) -> Document | None:
+    def read(self, doc_id: str, isa_class: str | None = None) -> ndi_document | None:
         """Read a document by ID.
 
         Args:
@@ -355,7 +239,7 @@ class Database:
                       if document is not of that class.
 
         Returns:
-            The Document, or None if not found.
+            The ndi_document, or None if not found.
 
         Example:
             doc = db.read('abc123')
@@ -364,18 +248,18 @@ class Database:
         if result is None:
             return None
 
-        doc = Document(result)
+        doc = ndi_document(result)
 
         if isa_class and not doc.doc_isa(isa_class):
             return None
 
         return doc
 
-    def remove(self, document: Document | str) -> bool:
+    def remove(self, document: ndi_document | str) -> bool:
         """Remove a document from the database.
 
         Args:
-            document: The Document or document ID to remove.
+            document: The ndi_document or document ID to remove.
 
         Returns:
             True if removed, False if not found.
@@ -384,14 +268,14 @@ class Database:
             db.remove(doc)
             db.remove('abc123')
         """
-        doc_id = document.id if isinstance(document, Document) else document
+        doc_id = document.id if isinstance(document, ndi_document) else document
         return self._driver.delete_by_id(doc_id)
 
-    def update(self, document: Document) -> Document:
+    def update(self, document: ndi_document) -> ndi_document:
         """Update an existing document.
 
         Args:
-            document: The Document with updated properties.
+            document: The ndi_document with updated properties.
 
         Returns:
             The updated document.
@@ -408,17 +292,17 @@ class Database:
             self._driver.update(document.document_properties)
         except FileNotFoundError as exc:
             raise ValueError(
-                f"Document with ID {document.id} not found. " f"Use add() for new documents."
+                f"ndi_document with ID {document.id} not found. " f"Use add() for new documents."
             ) from exc
         return document
 
-    def add_or_replace(self, document: Document) -> Document:
+    def add_or_replace(self, document: ndi_document) -> ndi_document:
         """Add or replace a document.
 
         If document exists, replaces it. Otherwise, adds it.
 
         Args:
-            document: The Document to add or replace.
+            document: The ndi_document to add or replace.
 
         Returns:
             The document.
@@ -434,13 +318,15 @@ class Database:
 
         return document
 
-    # === Query Operations ===
+    # === ndi_query Operations ===
 
-    def search(self, query: Query | None = None, isa_class: str | None = None) -> list[Document]:
+    def search(
+        self, query: ndi_query | None = None, isa_class: str | None = None
+    ) -> list[ndi_document]:
         """Search for documents matching a query.
 
         Args:
-            query: The Query to match. If None, returns all documents.
+            query: The ndi_query to match. If None, returns all documents.
             isa_class: Optional class filter. If provided, only returns
                       documents that are instances of that class.
 
@@ -452,30 +338,30 @@ class Database:
             all_docs = db.search()
 
             # Find by query
-            probes = db.search(Query('element.type') == 'probe')
+            probes = db.search(ndi_query('element.type') == 'probe')
 
             # Find all of a class
             elements = db.search(isa_class='element')
 
             # Combined
             my_probes = db.search(
-                Query('element.name').contains('elec'),
+                ndi_query('element.name').contains('elec'),
                 isa_class='probe'
             )
         """
         # Build combined query
         combined = query
         if isa_class:
-            isa_query = Query("").isa(isa_class)
+            isa_query = ndi_query("").isa(isa_class)
             combined = (combined & isa_query) if combined else isa_query
 
         # Execute search
         results = self._driver.find(combined)
 
-        # Convert results to ndi.Document
-        return [Document(r) for r in results]
+        # Convert results to ndi.ndi_document
+        return [ndi_document(r) for r in results]
 
-    def find_by_id(self, doc_id: str) -> Document | None:
+    def find_by_id(self, doc_id: str) -> ndi_document | None:
         """Find a document by its ID.
 
         Alias for read() for MATLAB compatibility.
@@ -484,7 +370,7 @@ class Database:
             doc_id: The document ID.
 
         Returns:
-            The Document or None.
+            The ndi_document or None.
         """
         return self.read(doc_id)
 
@@ -507,20 +393,20 @@ class Database:
 
     # === Dependency Operations ===
 
-    def find_depends_on(self, document: Document | str) -> list[Document]:
+    def find_depends_on(self, document: ndi_document | str) -> list[ndi_document]:
         """Find all documents that depend on a given document.
 
         Args:
-            document: The Document or document ID.
+            document: The ndi_document or document ID.
 
         Returns:
             List of Documents that depend on the given document.
         """
-        doc_id = document.id if isinstance(document, Document) else document
+        doc_id = document.id if isinstance(document, ndi_document) else document
         # DID's depends_on query requires both name and value, but we want
         # all documents that depend on doc_id regardless of dependency name.
         # Search all documents and filter by depends_on value.
-        all_docs = self.search(Query.all())
+        all_docs = self.search(ndi_query.all())
         return [
             doc
             for doc in all_docs
@@ -531,11 +417,11 @@ class Database:
             )
         ]
 
-    def find_dependencies(self, document: Document | str) -> list[Document]:
+    def find_dependencies(self, document: ndi_document | str) -> list[ndi_document]:
         """Find all documents that a given document depends on.
 
         Args:
-            document: The Document or document ID.
+            document: The ndi_document or document ID.
 
         Returns:
             List of Documents that the given document depends on.
@@ -555,7 +441,7 @@ class Database:
 
     # === Batch Operations ===
 
-    def add_many(self, documents: list[Document]) -> list[Document]:
+    def add_many(self, documents: list[ndi_document]) -> list[ndi_document]:
         """Add multiple documents.
 
         Args:
@@ -573,12 +459,12 @@ class Database:
         return added
 
     def remove_many(
-        self, query: Query | None = None, documents: list[Document] | None = None
+        self, query: ndi_query | None = None, documents: list[ndi_document] | None = None
     ) -> int:
         """Remove multiple documents.
 
         Args:
-            query: Query to select documents to remove.
+            query: ndi_query to select documents to remove.
             documents: Explicit list of documents to remove.
 
         Returns:
@@ -596,7 +482,7 @@ class Database:
 
         if documents:
             for doc in documents:
-                to_remove.add(doc.id if isinstance(doc, Document) else doc)
+                to_remove.add(doc.id if isinstance(doc, ndi_document) else doc)
 
         count = 0
         for doc_id in to_remove:
@@ -606,7 +492,7 @@ class Database:
 
     # === File Management ===
 
-    def get_binary_path(self, document: Document, file_name: str) -> Path:
+    def get_binary_path(self, document: ndi_document, file_name: str) -> Path:
         """Get the path where a document's binary file should be stored.
 
         Args:
@@ -619,14 +505,14 @@ class Database:
         return self._binary_dir / f"{document.id}_{file_name}"
 
     def __repr__(self) -> str:
-        return f"Database('{self.session_path}')"
+        return f"ndi_database('{self.session_path}')"
 
 
 # Convenience function
-def open_database(session_path: str | Path, **kwargs) -> Database:
+def open_database(session_path: str | Path, **kwargs) -> ndi_database:
     """Open or create an NDI database.
 
-    This is a convenience function for Database(). Uses DID-python's
+    This is a convenience function for ndi_database(). Uses DID-python's
     SQLiteDB for storage, ensuring compatibility with existing databases.
 
     Args:
@@ -634,9 +520,9 @@ def open_database(session_path: str | Path, **kwargs) -> Database:
         **kwargs: Additional options (e.g., db_name, branch_id).
 
     Returns:
-        Database instance.
+        ndi_database instance.
 
     Example:
         db = open_database('/path/to/session')
     """
-    return Database(session_path, **kwargs)
+    return ndi_database(session_path, **kwargs)

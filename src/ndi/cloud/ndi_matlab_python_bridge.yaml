@@ -25,7 +25,7 @@ infrastructure:
     python_path: "ndi/cloud/client.py"
     decision_log: >
       Python-only HTTP client. MATLAB uses webread/webwrite/call.m;
-      Python wraps requests.Session for all REST calls.
+      Python wraps requests.ndi_session for all REST calls.
 
   - name: APIResponse
     type: class
@@ -1043,7 +1043,7 @@ not_yet_ported:
     status: not_applicable
     decision_log: >
       MATLAB-specific HTTP configuration. Python uses CloudClient
-      with requests.Session which handles auth headers internally.
+      with requests.ndi_session which handles auth headers internally.
 
   - name: createCloudMetadataStruct
     matlab_path: "+ndi/+cloud/+utility/createCloudMetadataStruct.m"

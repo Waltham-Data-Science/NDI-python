@@ -1,12 +1,12 @@
-"""MessageUpdatedEventData — Event data for message update notifications.
+"""ndi_gui_component_internal_event_MessageUpdatedEventData — Event data for message update notifications.
 
-Mirrors MATLAB: ndi.gui.component.internal.event.MessageUpdatedEventData
+Mirrors MATLAB: ndi.gui.component.internal.event.ndi_gui_component_internal_event_MessageUpdatedEventData
 """
 
 from __future__ import annotations
 
 
-class MessageUpdatedEventData:
+class ndi_gui_component_internal_event_MessageUpdatedEventData:
     """Event data carrying an updated status message.
 
     Parameters

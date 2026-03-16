@@ -1,7 +1,7 @@
 """
 ndi.time.syncrule.filematch - File match synchronization rule.
 
-This module provides the FileMatch sync rule that synchronizes epochs
+This module provides the ndi_time_syncrule_filematch sync rule that synchronizes epochs
 based on shared underlying files.
 """
 
@@ -9,15 +9,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..syncrule_base import SyncRule
-from ..timemapping import TimeMapping
+from ..syncrule_base import ndi_time_syncrule
+from ..timemapping import ndi_time_timemapping
 
 
-class FileMatch(SyncRule):
+class ndi_time_syncrule_filematch(ndi_time_syncrule):
     """
     Synchronization rule based on matching underlying files.
 
-    FileMatch identifies epochs that share underlying files and creates
+    ndi_time_syncrule_filematch identifies epochs that share underlying files and creates
     a synchronization mapping between them. This is useful when multiple
     DAQ systems record to a shared file system.
 
@@ -27,8 +27,8 @@ class FileMatch(SyncRule):
             Default is 2.
 
     Example:
-        >>> rule = FileMatch()  # Default: require 2 matching files
-        >>> rule = FileMatch({'number_fullpath_matches': 3})  # Require 3 matches
+        >>> rule = ndi_time_syncrule_filematch()  # Default: require 2 matching files
+        >>> rule = ndi_time_syncrule_filematch({'number_fullpath_matches': 3})  # Require 3 matches
     """
 
     def __init__(
@@ -37,7 +37,7 @@ class FileMatch(SyncRule):
         identifier: str | None = None,
     ):
         """
-        Create a new FileMatch sync rule.
+        Create a new ndi_time_syncrule_filematch sync rule.
 
         Args:
             parameters: Dict with 'number_fullpath_matches' key (default 2)
@@ -50,7 +50,7 @@ class FileMatch(SyncRule):
 
     def is_valid_parameters(self, parameters: dict[str, Any]) -> tuple[bool, str]:
         """
-        Validate parameters for FileMatch.
+        Validate parameters for ndi_time_syncrule_filematch.
 
         Args:
             parameters: Dict to validate
@@ -75,7 +75,7 @@ class FileMatch(SyncRule):
 
     def eligible_epochsets(self) -> list[str]:
         """Return eligible epochset class names."""
-        return ["ndi.daq.system", "DAQSystem"]
+        return ["ndi.daq.system", "ndi_daq_system"]
 
     def ineligible_epochsets(self) -> list[str]:
         """Return ineligible epochset class names."""
@@ -91,9 +91,9 @@ class FileMatch(SyncRule):
         epochnode_a: dict[str, Any],
         epochnode_b: dict[str, Any],
         daqsystem1: Any = None,
-    ) -> tuple[float | None, TimeMapping | None]:
+    ) -> tuple[float | None, ndi_time_timemapping | None]:
         """
-        Apply FileMatch rule to determine if epochs can be synchronized.
+        Apply ndi_time_syncrule_filematch rule to determine if epochs can be synchronized.
 
         Checks if the epochs share enough underlying files to establish
         a synchronization. If they do, returns cost=1 and identity mapping.
@@ -133,7 +133,7 @@ class FileMatch(SyncRule):
         required_matches = self._parameters.get("number_fullpath_matches", 2)
         if len(common) >= required_matches:
             # Epochs match - return cost=1 and identity mapping
-            return 1.0, TimeMapping.identity()
+            return 1.0, ndi_time_timemapping.identity()
 
         return None, None
 
@@ -142,7 +142,7 @@ class FileMatch(SyncRule):
         """Check if a classname represents a DAQ system."""
         daq_classes = [
             "ndi.daq.system",
-            "DAQSystem",
+            "ndi_daq_system",
             "daq.system",
         ]
         return any(c in classname for c in daq_classes)

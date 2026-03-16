@@ -7,10 +7,10 @@ MATLAB equivalents:
     ndi.file.type.mfdaq_epoch_channel -> ndi.file.type.mfdaq_epoch_channel
 """
 
-from .mfdaq_epoch_channel import MFDAQEpochChannel
+from .mfdaq_epoch_channel import ndi_file_type_mfdaq__epoch__channel
 
 # MATLAB compatibility: ``ndi.file.type.mfdaq_epoch_channel(...)`` creates an
-# MFDAQEpochChannel, mirroring the MATLAB constructor.
-mfdaq_epoch_channel = MFDAQEpochChannel
+# ndi_file_type_mfdaq__epoch__channel, mirroring the MATLAB constructor.
+mfdaq_epoch_channel = ndi_file_type_mfdaq__epoch__channel
 
-__all__ = ["MFDAQEpochChannel", "mfdaq_epoch_channel"]
+__all__ = ["ndi_file_type_mfdaq__epoch__channel", "mfdaq_epoch_channel"]

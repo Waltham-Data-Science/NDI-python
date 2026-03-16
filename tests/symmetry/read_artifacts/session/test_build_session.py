@@ -18,8 +18,8 @@ import json
 
 import pytest
 
-from ndi.query import Query
-from ndi.session.dir import DirSession
+from ndi.query import ndi_query
+from ndi.session.dir import ndi_session_dir
 from ndi.util import compareSessionSummary, sessionSummary
 from tests.symmetry.conftest import SOURCE_TYPES, SYMMETRY_BASE
 
@@ -45,7 +45,7 @@ class TestBuildSession:
                 f"Artifact directory from {source_type} does not exist. "
                 f"Run the corresponding makeArtifacts suite first."
             )
-        return artifact_dir, DirSession("exp1", artifact_dir)
+        return artifact_dir, ndi_session_dir("exp1", artifact_dir)
 
     # -- tests ---------------------------------------------------------------
 
@@ -60,16 +60,30 @@ class TestBuildSession:
         expected_summary = json.loads(summary_path.read_text(encoding="utf-8"))
         actual_summary = sessionSummary(session)
 
+        # ndi_epoch_epoch node details contain machine-specific paths and runtime-generated
+        # IDs that will differ when artifacts are read on a different machine or
+        # across language implementations.  Exclude them from comparison.
+        exclude_fields = ["epochNodes_filenavigator", "epochNodes_daqsystem"]
+
+        # Python may create .epochid.ndi files as a side effect of loading
+        # the session.  Filter these runtime-generated hidden files from both
+        # summaries so they don't cause spurious mismatches.
+        def _filter_epochid(files: list[str]) -> list[str]:
+            return [f for f in files if not f.endswith(".epochid.ndi")]
+
+        actual_summary["files"] = _filter_epochid(actual_summary.get("files", []))
+        expected_summary["files"] = _filter_epochid(expected_summary.get("files", []))
+
         report = compareSessionSummary(
             actual_summary,
             expected_summary,
             excludeFiles=["sessionSummary.json", "jsonDocuments"],
+            excludeFields=exclude_fields,
         )
 
-        assert (
-            len(report) == 0
-        ), f"Session summary mismatch against {source_type} generated artifacts:\n" + "\n".join(
-            report
+        assert len(report) == 0, (
+            f"ndi_session summary mismatch against {source_type} generated artifacts:\n"
+            + "\n".join(report)
         )
 
     def test_build_session_documents(self, source_type):
@@ -82,7 +96,7 @@ class TestBuildSession:
 
         json_files = list(json_docs_dir.glob("*.json"))
 
-        actual_docs = session.database_search(Query("base.id").match("(.*)"))
+        actual_docs = session.database_search(ndi_query("base.id").match("(.*)"))
 
         assert len(actual_docs) == len(json_files), (
             f"Number of documents in session ({len(actual_docs)}) does not match "
@@ -101,9 +115,9 @@ class TestBuildSession:
                     assert actual_props.get("document_class", {}).get(
                         "class_name"
                     ) == expected_doc.get("document_class", {}).get("class_name"), (
-                        f"Document class mismatch for id: {expected_id} " f"in {source_type}"
+                        f"ndi_document class mismatch for id: {expected_id} " f"in {source_type}"
                     )
                     break
             assert found, (
-                f"Document from {source_type} artifact not found in session: " f"{expected_id}"
+                f"ndi_document from {source_type} artifact not found in session: " f"{expected_id}"
             )

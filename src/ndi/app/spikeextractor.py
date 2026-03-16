@@ -1,7 +1,7 @@
 """
 ndi.app.spikeextractor - Spike extraction from timeseries data.
 
-Provides the SpikeExtractor app for detecting and extracting spike
+Provides the ndi_app_spikeextractor app for detecting and extracting spike
 waveforms from continuous electrophysiology recordings.
 
 MATLAB equivalent: src/ndi/+ndi/+app/spikeextractor.m
@@ -13,17 +13,17 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from . import App
-from .appdoc import AppDoc
+from . import ndi_app
+from .appdoc import ndi_app_appdoc
 
 if TYPE_CHECKING:
-    from ..document import Document
-    from ..session.session_base import Session
+    from ..document import ndi_document
+    from ..session.session_base import ndi_session
 
 
-class SpikeExtractor(App, AppDoc):
+class ndi_app_spikeextractor(ndi_app, ndi_app_appdoc):
     """
-    App for extracting spike waveforms from timeseries data.
+    ndi_app for extracting spike waveforms from timeseries data.
 
     Detects threshold crossings in filtered neural data and extracts
     spike waveforms around each detected event.
@@ -34,13 +34,13 @@ class SpikeExtractor(App, AppDoc):
         - spikewaves: Extracted waveform binary data
 
     Example:
-        >>> extractor = SpikeExtractor(session)
+        >>> extractor = ndi_app_spikeextractor(session)
         >>> extractor.extract(timeseries_obj, epoch=1)
     """
 
-    def __init__(self, session: Session | None = None):
-        App.__init__(self, session=session, name="ndi_app_spikeextractor")
-        AppDoc.__init__(
+    def __init__(self, session: ndi_session | None = None):
+        ndi_app.__init__(self, session=session, name="ndi_app_spikeextractor")
+        ndi_app_appdoc.__init__(
             self,
             doc_types=["extraction_parameters", "extraction_parameters_modification", "spikewaves"],
             doc_document_types=[
@@ -52,7 +52,7 @@ class SpikeExtractor(App, AppDoc):
 
     def makefilterstruct(
         self,
-        extraction_doc: Document,
+        extraction_doc: ndi_document,
         sample_rate: float,
     ) -> dict[str, Any]:
         """
@@ -103,7 +103,7 @@ class SpikeExtractor(App, AppDoc):
 
         Args:
             ndi_timeseries_obj: Timeseries element or probe
-            epoch: Epoch number/id or None for all epochs
+            epoch: ndi_epoch_epoch number/id or None for all epochs
             extraction_name: Name of extraction parameters to use
             redo: If True, re-extract even if results exist
             t0_t1: Optional time bounds [t0, t1]
@@ -140,20 +140,20 @@ class SpikeExtractor(App, AppDoc):
             },
         }
 
-    def struct2doc(self, appdoc_type: str, appdoc_struct: dict, **kwargs) -> Document:
-        from ..document import Document
+    def struct2doc(self, appdoc_type: str, appdoc_struct: dict, **kwargs) -> ndi_document:
+        from ..document import ndi_document
 
-        return Document(
+        return ndi_document(
             self.doc_document_types[self.doc_types.index(appdoc_type)],
             **{appdoc_type: appdoc_struct},
         )
 
-    def find_appdoc(self, appdoc_type: str, **kwargs) -> list[Document]:
+    def find_appdoc(self, appdoc_type: str, **kwargs) -> list[ndi_document]:
         if self._session is None:
             return []
-        from ..query import Query
+        from ..query import ndi_query
 
-        q = Query("").isa(appdoc_type)
+        q = ndi_query("").isa(appdoc_type)
         return self._session.database_search(q)
 
     def isvalid_appdoc_struct(self, appdoc_type: str, appdoc_struct: dict) -> tuple[bool, str]:
@@ -180,4 +180,4 @@ class SpikeExtractor(App, AppDoc):
         return None
 
     def __repr__(self) -> str:
-        return f"SpikeExtractor(session={self._session is not None})"
+        return f"ndi_app_spikeextractor(session={self._session is not None})"

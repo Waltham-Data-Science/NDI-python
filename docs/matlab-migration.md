@@ -2,11 +2,11 @@
 
 This page summarizes key differences when migrating from MATLAB NDI to Python NDI.
 
-For the complete function-by-function mapping, see [MATLAB_MAPPING.md](https://github.com/Waltham-Data-Science/NDI-python/blob/main/MATLAB_MAPPING.md).
+For the complete function-by-function mapping, see [MATLAB_MAPPING.md](https://github.com/Waltham-ndi_gui_Data-Science/NDI-python/blob/main/MATLAB_MAPPING.md).
 
 ## Key API Differences
 
-### Query Syntax
+### ndi_query Syntax
 
 **MATLAB:**
 ```matlab
@@ -17,8 +17,8 @@ q_combined = ndi.query(q, '&', q_type);
 
 **Python:**
 ```python
-q = Query('base.name') == 'my_experiment'
-q_type = Query('').isa('subject')
+q = ndi_query('base.name') == 'my_experiment'
+q_type = ndi_query('').isa('subject')
 q_combined = q & q_type
 ```
 
@@ -54,6 +54,6 @@ doc = ndi.document('base');
 
 **Python:**
 ```python
-session = DirSession('my_experiment', '/path/to/data')
-doc = Document('base')
+session = ndi_session_dir('my_experiment', '/path/to/data')
+doc = ndi_document('base')
 ```

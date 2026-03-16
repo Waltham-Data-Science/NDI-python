@@ -1,7 +1,7 @@
 """
 ndi.file.type.mfdaq_epoch_channel - Channel metadata for MFDAQ epoch files.
 
-Provides the MFDAQEpochChannel dataclass describing channel information
+Provides the ndi_file_type_mfdaq__epoch__channel dataclass describing channel information
 for multi-function DAQ recordings.
 
 MATLAB equivalent: src/ndi/+ndi/+file/+type/mfdaq_epoch_channel.m
@@ -48,7 +48,7 @@ class ChannelInfo:
 
 
 @dataclass
-class MFDAQEpochChannel:
+class ndi_file_type_mfdaq__epoch__channel:
     """
     Channel metadata for a multi-function DAQ epoch.
 
@@ -60,7 +60,7 @@ class MFDAQEpochChannel:
 
     Example:
         >>> ch = ChannelInfo(name='ai1', type='analog_in', sample_rate=30000.0, number=1)
-        >>> mec = MFDAQEpochChannel([ch])
+        >>> mec = ndi_file_type_mfdaq__epoch__channel([ch])
         >>> mec.channels_of_type('analog_in')
         [ChannelInfo(name='ai1', ...)]
     """
@@ -97,7 +97,7 @@ class MFDAQEpochChannel:
         self,
         channel_structure: list[dict[str, Any]] | list[ChannelInfo],
         **kwargs: Any,
-    ) -> MFDAQEpochChannel:
+    ) -> ndi_file_type_mfdaq__epoch__channel:
         """
         Create/set channel properties from a structure.
 
@@ -118,7 +118,7 @@ class MFDAQEpochChannel:
                 self.channel_information.append(ChannelInfo.from_dict(item))
         return self
 
-    def readFromFile(self, filename: str) -> MFDAQEpochChannel:
+    def readFromFile(self, filename: str) -> ndi_file_type_mfdaq__epoch__channel:
         """
         Read channel information from a JSON file.
 
@@ -224,4 +224,4 @@ class MFDAQEpochChannel:
         return len(self.channel_information)
 
     def __repr__(self) -> str:
-        return f"MFDAQEpochChannel(n_channels={len(self.channel_information)})"
+        return f"ndi_file_type_mfdaq__epoch__channel(n_channels={len(self.channel_information)})"

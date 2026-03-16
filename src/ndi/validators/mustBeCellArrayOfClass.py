@@ -15,7 +15,7 @@ def mustBeCellArrayOfClass(c: list | tuple, className: type) -> None:
     MATLAB equivalent: ``ndi.validators.mustBeCellArrayOfClass(c, className)``
 
     In MATLAB, *className* is a string naming a class.  In Python it is
-    the class object itself (e.g. ``ndi.session.DirSession``).
+    the class object itself (e.g. ``ndi.session.ndi_session_dir``).
 
     Parameters
     ----------
@@ -36,5 +36,5 @@ def mustBeCellArrayOfClass(c: list | tuple, className: type) -> None:
         if not isinstance(item, className):
             raise TypeError(
                 f"All elements must be of class {className.__name__}. "
-                f"Element {i} is of class {type(item).__name__}."
+                f"ndi_element {i} is of class {type(item).__name__}."
             )

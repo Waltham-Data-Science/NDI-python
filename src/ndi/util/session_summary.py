@@ -1,4 +1,4 @@
-"""Session summary utility for symmetry testing.
+"""ndi_session summary utility for symmetry testing.
 
 MATLAB equivalent: ``ndi.util.sessionSummary``
 
@@ -27,7 +27,7 @@ def sessionSummary(session_obj: Any) -> dict[str, Any]:
     """
     summary: dict[str, Any] = {}
 
-    # 1. Session basics
+    # 1. ndi_session basics
     summary["reference"] = session_obj.reference
     summary["sessionId"] = session_obj.id()
 
@@ -65,7 +65,9 @@ def sessionSummary(session_obj: Any) -> dict[str, Any]:
         # Get filenavigator class
         fn = getattr(sys, "filenavigator", None)
         if fn is not None:
-            details["filenavigator_class"] = type(fn).__qualname__
+            details["filenavigator_class"] = getattr(
+                fn, "NDI_FILENAVIGATOR_CLASS", type(fn).__qualname__
+            )
             try:
                 details["epochNodes_filenavigator"] = fn.epochnodes()
             except Exception:
@@ -77,7 +79,7 @@ def sessionSummary(session_obj: Any) -> dict[str, Any]:
         # Get daqreader class
         dr = getattr(sys, "daqreader", None)
         if dr is not None:
-            details["daqreader_class"] = type(dr).__qualname__
+            details["daqreader_class"] = getattr(dr, "NDI_DAQREADER_CLASS", type(dr).__qualname__)
         else:
             details["daqreader_class"] = ""
 

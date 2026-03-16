@@ -1,5 +1,5 @@
 """
-ndi.fun.probe - Probe utility functions.
+ndi.fun.probe - ndi_probe utility functions.
 
 MATLAB equivalent: +ndi/+fun/+probe/
 

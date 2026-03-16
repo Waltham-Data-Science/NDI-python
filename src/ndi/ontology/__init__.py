@@ -91,9 +91,9 @@ _PREFIX_MAP: dict[str, str] = {
 def _load_prefix_map() -> dict[str, str]:
     """Load prefix mappings from ontology_list.json if available."""
     try:
-        from ndi.common import PathConstants
+        from ndi.common import ndi_common_PathConstants
 
-        json_path = PathConstants.COMMON_FOLDER / "ontology" / "ontology_list.json"
+        json_path = ndi_common_PathConstants.COMMON_FOLDER / "ontology" / "ontology_list.json"
         if json_path.exists():
             with open(json_path) as f:
                 data = json.load(f)
@@ -166,7 +166,7 @@ def lookup(lookup_string: str) -> OntologyResult:
     except Exception:
         result = OntologyResult()
 
-    # Cache (with eviction)
+    # ndi_cache (with eviction)
     if len(_lookup_cache) >= _CACHE_MAX:
         # Remove oldest entry
         oldest = next(iter(_lookup_cache))

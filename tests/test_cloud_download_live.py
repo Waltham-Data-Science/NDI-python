@@ -101,7 +101,7 @@ def run_test(username: str, password: str) -> dict:
     # =================================================================
     # Step 2: Download dataset (docs only, ndic:// rewrite)
     # =================================================================
-    section("Step 2: Download Dataset (docs only, ndic:// URIs)")
+    section("Step 2: Download ndi_dataset (docs only, ndic:// URIs)")
 
     from ndi.cloud.orchestration import downloadDataset
 
@@ -129,9 +129,9 @@ def run_test(username: str, password: str) -> dict:
         section("Step 3: Verify ndic:// URI Rewriting")
 
         from ndi.cloud.filehandler import NDIC_SCHEME
-        from ndi.query import Query
+        from ndi.query import ndi_query
 
-        all_docs = dataset.database_search(Query("").isa("base"))
+        all_docs = dataset.database_search(ndi_query("").isa("base"))
         ndic_count = 0
         file_docs = []
         for doc in all_docs:
@@ -158,11 +158,11 @@ def run_test(username: str, password: str) -> dict:
         # =================================================================
         # Step 4: NDI-python Analysis — Queries
         # =================================================================
-        section("Step 4: NDI-python Analysis — Document Queries")
+        section("Step 4: NDI-python Analysis — ndi_document Queries")
 
         doc_count = len(all_docs)
         check(
-            "Document count",
+            "ndi_document count",
             doc_count >= EXPECTED_DOCS,
             f"{doc_count} docs (expected >= {EXPECTED_DOCS})",
         )
@@ -173,7 +173,7 @@ def run_test(username: str, password: str) -> dict:
             cname = doc.document_properties.get("document_class", {}).get("class_name", "unknown")
             type_counts[cname] += 1
 
-        check("Document types", len(type_counts) >= 27, f"{len(type_counts)} types found")
+        check("ndi_document types", len(type_counts) >= 27, f"{len(type_counts)} types found")
 
         # Test isa queries for each major type
         for doc_type, expected in [
@@ -183,7 +183,7 @@ def run_test(username: str, password: str) -> dict:
             ("tuningcurve_calc", EXPECTED_TUNING_CURVES),
             ("element_epoch", EXPECTED_ELEMENT_EPOCHS),
         ]:
-            found = dataset.database_search(Query("").isa(doc_type))
+            found = dataset.database_search(ndi_query("").isa(doc_type))
             check(
                 f"  isa('{doc_type}')",
                 len(found) == expected,
@@ -197,10 +197,10 @@ def run_test(username: str, password: str) -> dict:
         # =================================================================
         section("Step 5: NDI-python Analysis — Elements & Structure")
 
-        elements = dataset.database_search(Query("").isa("element"))
+        elements = dataset.database_search(ndi_query("").isa("element"))
         element_types = {d.document_properties.get("element", {}).get("type", "") for d in elements}
         check(
-            "Element types",
+            "ndi_element types",
             element_types == {"n-trode", "spikes", "stimulator"},
             f"{element_types}",
         )
@@ -216,7 +216,7 @@ def run_test(username: str, password: str) -> dict:
         check("Spike elements", len(spikes) == 17, "one per neuron")
 
         # Check element -> subject dependency chain
-        subjects = dataset.database_search(Query("").isa("subject"))
+        subjects = dataset.database_search(ndi_query("").isa("subject"))
         subject_id = (
             subjects[0].document_properties.get("base", {}).get("id", "") if subjects else ""
         )
@@ -229,7 +229,7 @@ def run_test(username: str, password: str) -> dict:
             if not subj_deps or subj_deps[0].get("value") != subject_id:
                 deps_ok = False
                 break
-        check("Element -> Subject deps", deps_ok)
+        check("ndi_element -> ndi_subject deps", deps_ok)
         results["analysis_elements"] = deps_ok
 
         # =================================================================
@@ -237,8 +237,8 @@ def run_test(username: str, password: str) -> dict:
         # =================================================================
         section("Step 6: NDI-python Analysis — Neurons")
 
-        neurons = dataset.database_search(Query("").isa("neuron_extracellular"))
-        check("Neuron count", len(neurons) == EXPECTED_NEURONS)
+        neurons = dataset.database_search(ndi_query("").isa("neuron_extracellular"))
+        check("ndi_neuron count", len(neurons) == EXPECTED_NEURONS)
 
         waveform_ok = True
         for n in neurons:
@@ -249,7 +249,7 @@ def run_test(username: str, password: str) -> dict:
                 waveform_ok = False
             if not ne.get("mean_waveform"):
                 waveform_ok = False
-        check("Neuron waveform shape (21x16)", waveform_ok)
+        check("ndi_neuron waveform shape (21x16)", waveform_ok)
 
         # Check neuron -> element chain
         element_ids = {d.document_properties.get("base", {}).get("id", "") for d in elements}
@@ -262,7 +262,7 @@ def run_test(username: str, password: str) -> dict:
             if not elem_dep or elem_dep[0].get("value") not in element_ids:
                 chain_ok = False
                 break
-        check("Neuron -> Element chain", chain_ok)
+        check("ndi_neuron -> ndi_element chain", chain_ok)
 
         app_ok = all(n.document_properties.get("app", {}).get("name") == "JRCLUST" for n in neurons)
         check("All neurons sorted by JRCLUST", app_ok)
@@ -273,7 +273,7 @@ def run_test(username: str, password: str) -> dict:
         # =================================================================
         section("Step 7: NDI-python Analysis — Tuning Curves")
 
-        tcs = dataset.database_search(Query("").isa("tuningcurve_calc"))
+        tcs = dataset.database_search(ndi_query("").isa("tuningcurve_calc"))
         check("Tuning curve count", len(tcs) == EXPECTED_TUNING_CURVES)
 
         label_counts: Counter[tuple] = Counter()
@@ -313,7 +313,7 @@ def run_test(username: str, password: str) -> dict:
         # =================================================================
         # Step 8: Cross-document referential integrity
         # =================================================================
-        section("Step 8: Cross-Document Referential Integrity")
+        section("Step 8: Cross-ndi_document Referential Integrity")
 
         all_ids = {d.document_properties.get("base", {}).get("id", "") for d in all_docs}
         missing_refs = 0
@@ -368,7 +368,7 @@ def run_test(username: str, password: str) -> dict:
             from ndi.cloud.filehandler import parse_ndic_uri
 
             ds_id, file_uid = parse_ndic_uri(test_uri)
-            print(f"  Dataset ID: {ds_id}")
+            print(f"  ndi_dataset ID: {ds_id}")
             print(f"  File UID: {file_uid}")
 
             try:
@@ -516,7 +516,7 @@ def main():
         sys.exit(1)
 
     print("NDI Cloud Live Integration Test")
-    print(f"Dataset: Carbon fiber microelectrode ({CARBON_FIBER_ID})")
+    print(f"ndi_dataset: Carbon fiber microelectrode ({CARBON_FIBER_ID})")
     print(f"User: {username}")
 
     results = run_test(username, password)

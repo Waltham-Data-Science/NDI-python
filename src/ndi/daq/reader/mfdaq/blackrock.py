@@ -1,7 +1,7 @@
 """
 ndi.daq.reader.mfdaq.blackrock - Blackrock NSx/NEV reader.
 
-Thin wrapper around SpikeInterfaceReader for Blackrock data files.
+Thin wrapper around ndi_daq_reader_SpikeInterfaceReader for Blackrock data files.
 
 MATLAB equivalent: src/ndi/+ndi/+daq/+reader/+mfdaq/blackrock.m
 """
@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import logging
 
-from ...mfdaq import ChannelInfo, MFDAQReader
+from ...mfdaq import ChannelInfo, ndi_daq_reader_mfdaq
 
 logger = logging.getLogger(__name__)
 
 
-class BlackrockReader(MFDAQReader):
+class ndi_daq_reader_mfdaq_blackrock(ndi_daq_reader_mfdaq):
     """
     Reader for Blackrock Microsystems NSx/NEV data files.
 
@@ -31,9 +31,9 @@ class BlackrockReader(MFDAQReader):
 
     def _get_si_reader(self):
         try:
-            from ..spikeinterface_adapter import SpikeInterfaceReader
+            from ..spikeinterface_adapter import ndi_daq_reader_SpikeInterfaceReader
 
-            return SpikeInterfaceReader
+            return ndi_daq_reader_SpikeInterfaceReader
         except ImportError:
             return None
 
@@ -44,7 +44,7 @@ class BlackrockReader(MFDAQReader):
         try:
             return SI().getchannelsepoch(epochfiles)
         except Exception as exc:
-            logger.warning("BlackrockReader.getchannelsepoch failed: %s", exc)
+            logger.warning("ndi_daq_reader_mfdaq_blackrock.getchannelsepoch failed: %s", exc)
             return []
 
     def readchannels_epochsamples(self, channeltype, channel, epochfiles, s0, s1):
@@ -60,4 +60,4 @@ class BlackrockReader(MFDAQReader):
         return SI().samplerate(epochfiles, channeltype, channel)
 
     def __repr__(self):
-        return f"BlackrockReader(id={self.id[:8]}...)"
+        return f"ndi_daq_reader_mfdaq_blackrock(id={self.id[:8]}...)"

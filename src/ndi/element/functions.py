@@ -1,5 +1,5 @@
 """
-ndi.element.functions - Element utility functions.
+ndi.element.functions - ndi_element utility functions.
 
 Standalone functions that operate on elements for common operations
 like finding missing epochs, creating single-epoch versions,
@@ -84,7 +84,7 @@ def oneepoch(
         specific element/probe type being used. The function
         creates the structural scaffolding.
     """
-    from . import Element
+    from . import ndi_element
 
     # Get epochs from input
     et = _get_epoch_table(element_in)
@@ -92,7 +92,7 @@ def oneepoch(
         raise ValueError("Input element has no epochs")
 
     # Create output element
-    elem_out = Element(
+    elem_out = ndi_element(
         session=session,
         name=name_out,
         reference=reference_out,
@@ -115,14 +115,14 @@ def spikesForProbe(
     Args:
         session: NDI session
         probe: Source probe object
-        name: Neuron name
+        name: ndi_neuron name
         reference: Reference number (used as unit_id)
         spikedata: List of dicts with:
-            - 'epochid': Epoch ID string
+            - 'epochid': ndi_epoch_epoch ID string
             - 'spiketimes': Array of spike times
 
     Returns:
-        Neuron element object
+        ndi_neuron element object
 
     Example:
         >>> spikes = [
@@ -133,9 +133,9 @@ def spikesForProbe(
 
     Note:
         This creates the structural framework for a neuron element.
-        Full neuron creation requires the Neuron class from ndi.neuron.
+        Full neuron creation requires the ndi_neuron class from ndi.neuron.
     """
-    from . import Element
+    from . import ndi_element
 
     # Validate spikedata
     probe_et = _get_epoch_table(probe)
@@ -147,7 +147,7 @@ def spikesForProbe(
             raise ValueError(f"Spike data epoch_id '{epoch_id}' not found in probe epochs")
 
     # Create neuron element
-    neuron = Element(
+    neuron = ndi_element(
         session=session,
         name=name,
         reference=reference,
@@ -186,7 +186,7 @@ def downsample(
         filter. This function creates the framework structure and
         delegates to downsample_timeseries() for the actual processing.
     """
-    from . import Element
+    from . import ndi_element
 
     et = _get_epoch_table(element_in)
     if not et:
@@ -195,7 +195,7 @@ def downsample(
     if lp_freq <= 0:
         raise ValueError(f"Low-pass frequency must be positive, got {lp_freq}")
 
-    elem_out = Element(
+    elem_out = ndi_element(
         session=session,
         name=name_out,
         reference=reference_out,
@@ -221,7 +221,7 @@ def downsample_timeseries(
 
     Args:
         t_in: Time vector of shape (N,)
-        d_in: Data matrix of shape (N, C) where C is number of channels
+        d_in: ndi_gui_Data matrix of shape (N, C) where C is number of channels
         lp_freq: Low-pass cutoff frequency in Hz
 
     Returns:
@@ -293,7 +293,7 @@ def _get_epoch_table(obj: Any) -> list[dict]:
     """
     Get epoch table from various object types.
 
-    Handles Element, Probe, and dict-like objects.
+    Handles ndi_element, ndi_probe, and dict-like objects.
     """
     if hasattr(obj, "epochtable"):
         return obj.epochtable()

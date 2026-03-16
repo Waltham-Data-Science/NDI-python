@@ -1,7 +1,7 @@
 """
 ndi.time.syncrule.randomPulses - Sync rule for random pulse sequences.
 
-This module provides the RandomPulses sync rule that synchronizes two DAQ
+This module provides the ndi_time_syncrule_randomPulses sync rule that synchronizes two DAQ
 systems that recorded a shared random pulse sequence.
 
 MATLAB path: +ndi/+time/+syncrule/randomPulses.m
@@ -14,8 +14,8 @@ from typing import Any
 
 import numpy as np
 
-from ..syncrule_base import SyncRule
-from ..timemapping import TimeMapping
+from ..syncrule_base import ndi_time_syncrule
+from ..timemapping import ndi_time_timemapping
 
 
 def _parse_channel(ch_str: str) -> tuple[str, int]:
@@ -83,7 +83,7 @@ def _sync_random_triggers(t1: np.ndarray, t2: np.ndarray) -> tuple[float, float]
     return shift, scale
 
 
-class RandomPulses(SyncRule):
+class ndi_time_syncrule_randomPulses(ndi_time_syncrule):
     """
     Synchronization rule based on random pulse sequences on a shared channel.
 
@@ -100,7 +100,7 @@ class RandomPulses(SyncRule):
         errorOnFailure (bool): If True, raise on failure.
 
     Example:
-        >>> rule = RandomPulses({
+        >>> rule = ndi_time_syncrule_randomPulses({
         ...     'daqsystem1_name': 'daq1',
         ...     'daqsystem2_name': 'daq2',
         ...     'daqsystem_ch1': 'dep1',
@@ -160,7 +160,7 @@ class RandomPulses(SyncRule):
 
     def eligible_epochsets(self) -> list[str]:
         """Return eligible epochset class names."""
-        return ["ndi.daq.system.mfdaq", "DAQSystem"]
+        return ["ndi.daq.system.mfdaq", "ndi_daq_system"]
 
     def ineligible_epochsets(self) -> list[str]:
         """Return ineligible epochset class names."""
@@ -176,7 +176,7 @@ class RandomPulses(SyncRule):
         epochnode_a: dict[str, Any],
         epochnode_b: dict[str, Any],
         daqsystem_a: Any = None,
-    ) -> tuple[float | None, TimeMapping | None]:
+    ) -> tuple[float | None, ndi_time_timemapping | None]:
         """
         Apply the sync rule to obtain a cost and mapping between two epoch nodes.
 
@@ -241,26 +241,26 @@ class RandomPulses(SyncRule):
 
         # 2. Check for existing syncrule_mapping in database
         try:
-            from ndi.query import Query
+            from ndi.query import ndi_query
 
             q_existing = (
-                Query("").isa("syncrule_mapping")
-                & Query(
+                ndi_query("").isa("syncrule_mapping")
+                & ndi_query(
                     "syncrule_mapping.epochnode_a.epoch_id",
                     "exact_string",
                     epochnode_a.get("epoch_id", ""),
                 )
-                & Query(
+                & ndi_query(
                     "syncrule_mapping.epochnode_b.epoch_id",
                     "exact_string",
                     epochnode_b.get("epoch_id", ""),
                 )
-                & Query(
+                & ndi_query(
                     "syncrule_mapping.epochnode_a.objectname",
                     "exact_string",
                     name_a,
                 )
-                & Query(
+                & ndi_query(
                     "syncrule_mapping.epochnode_b.objectname",
                     "exact_string",
                     name_b,
@@ -272,7 +272,7 @@ class RandomPulses(SyncRule):
                 props = doc.document_properties
                 sm = props.get("syncrule_mapping", {})
                 cost = sm.get("cost", 1.0)
-                mapping = TimeMapping(sm.get("mapping", [1, 0]))
+                mapping = ndi_time_timemapping(sm.get("mapping", [1, 0]))
                 return cost, mapping
         except Exception:
             pass  # No cached mapping, compute fresh
@@ -319,11 +319,11 @@ class RandomPulses(SyncRule):
             if node_a_is_1:
                 # Want A->B, i.e. T1->T2
                 # T1 = scale * T2 + shift -> T2 = (T1 - shift) / scale
-                mapping = TimeMapping([1.0 / scale, -shift / scale])
+                mapping = ndi_time_timemapping([1.0 / scale, -shift / scale])
             else:
                 # Want A->B, i.e. T2->T1
                 # T1 = scale * T2 + shift
-                mapping = TimeMapping([scale, shift])
+                mapping = ndi_time_timemapping([scale, shift])
 
             return 1.0, mapping
 

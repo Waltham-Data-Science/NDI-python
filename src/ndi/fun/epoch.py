@@ -1,5 +1,5 @@
 """
-ndi.fun.epoch - Epoch utility functions.
+ndi.fun.epoch - ndi_epoch_epoch utility functions.
 
 MATLAB equivalents: +ndi/+fun/+epoch/epochid2element.m, filename2epochid.m
 """
@@ -30,12 +30,12 @@ def epochid2element(
     Returns:
         Dict mapping each epoch_id to a list of matching elements.
     """
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
     # Get all elements
-    q = Query("").isa("element")
+    q = ndi_query("").isa("element")
     if element_name:
-        q = q & (Query("element.name") == element_name)
+        q = q & (ndi_query("element.name") == element_name)
     docs = session.database_search(q)
 
     result: dict[str, list[Any]] = {eid: [] for eid in epoch_ids}
@@ -84,10 +84,10 @@ def filename2epochid(
     Returns:
         Dict mapping each filename to a list of matching epoch IDs.
     """
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
     # Search for DAQ system documents
-    docs = session.database_search(Query("").isa("daq_system"))
+    docs = session.database_search(ndi_query("").isa("daq_system"))
 
     result: dict[str, list[str]] = {fn: [] for fn in filenames}
 

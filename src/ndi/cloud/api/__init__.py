@@ -2,8 +2,8 @@
 ndi.cloud.api - REST API endpoint modules for NDI Cloud.
 
 Submodules:
-    datasets  — Dataset CRUD, publish, branch
-    documents — Document CRUD, bulk operations
+    datasets  — ndi_dataset CRUD, publish, branch
+    documents — ndi_document CRUD, bulk operations
     files     — Presigned URL retrieval, file upload
     users     — User creation, profile
     compute   — Compute session management

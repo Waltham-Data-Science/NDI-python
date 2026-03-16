@@ -18,7 +18,7 @@ classes:
     type: class
     matlab_path: "src/ndi/+ndi/+calc/+stimulus/tuningcurve.m"
     python_path: "ndi/calc/stimulus/tuningcurve.py"
-    python_class: "TuningCurveCalc"
+    python_class: "ndi_calc_stimulus_tuningcurve"
     inherits: "ndi.calculator"
 
     methods:
@@ -27,11 +27,11 @@ classes:
         input_arguments:
           - name: session
             type_matlab: "ndi.session"
-            type_python: "Session | None"
+            type_python: "ndi_session | None"
             default: "None"
         output_arguments:
           - name: obj
-            type_python: "TuningCurveCalc"
+            type_python: "ndi_calc_stimulus_tuningcurve"
         decision_log: "Exact match."
 
       - name: calculate
@@ -41,7 +41,7 @@ classes:
             type_python: "dict"
         output_arguments:
           - name: doc
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: "Exact match."
 
       - name: default_search_for_input_parameters
@@ -74,7 +74,7 @@ classes:
             type_python: "bool"
         decision_log: >
           DISCREPANCY NOTED: Method exists in MATLAB but is not
-          overridden in Python TuningCurveCalc. Base class default
+          overridden in Python ndi_calc_stimulus_tuningcurve. Base class default
           (always True) is used, which is acceptable for now.
 
       - name: generate_mock_docs
@@ -111,7 +111,7 @@ classes:
             type_python: "str"
           - name: stim_response_doc
             type_matlab: "ndi.document"
-            type_python: "Document"
+            type_python: "ndi_document"
           - name: property
             type_matlab: "char"
             type_python: "str"
@@ -130,7 +130,7 @@ classes:
         input_arguments:
           - name: stim_response_doc
             type_matlab: "ndi.document"
-            type_python: "Document"
+            type_python: "ndi_document"
           - name: property
             type_matlab: "char"
             type_python: "str"
@@ -148,7 +148,7 @@ classes:
         input_arguments:
           - name: stim_response_doc
             type_matlab: "ndi.document"
-            type_python: "Document"
+            type_python: "ndi_document"
           - name: property
             type_matlab: "char"
             type_python: "str"
