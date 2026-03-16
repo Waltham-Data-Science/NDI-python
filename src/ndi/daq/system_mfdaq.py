@@ -75,7 +75,8 @@ class DAQSystemMFDAQ(DAQSystem):
             List of (t0, t1) tuples per clock type
         """
         if self._daqreader is not None and self._filenavigator is not None:
-            epochfiles = self._filenavigator.getepochfiles(epoch_number)
+            result = self._filenavigator.getepochfiles(epoch_number)
+            epochfiles = result[0] if isinstance(result, tuple) else result
             return self._daqreader.t0_t1(epochfiles)
         return [(np.nan, np.nan)]
 

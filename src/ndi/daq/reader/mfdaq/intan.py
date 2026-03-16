@@ -80,6 +80,16 @@ class IntanReader(MFDAQReader):
         reader = SI()
         return reader.readchannels_epochsamples(channeltype, channel, epochfiles, s0, s1)
 
+    def t0_t1(self, epochfiles: list[str]) -> list[tuple[float, float]]:
+        SI = self._get_si_reader()
+        if SI is None:
+            return [(np.nan, np.nan)]
+        try:
+            reader = SI()
+            return reader.t0_t1(epochfiles)
+        except Exception:
+            return [(np.nan, np.nan)]
+
     def samplerate(self, epochfiles, channeltype, channel) -> np.ndarray:
         SI = self._get_si_reader()
         if SI is None:

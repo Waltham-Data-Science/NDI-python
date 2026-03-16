@@ -270,6 +270,14 @@ class DAQSystem(Ido):
             return self._filenavigator.session
         return self._session
 
+    def _get_session_id(self) -> str | None:
+        """Return the session id, handling both method and property access."""
+        s = self.session
+        if s is None:
+            return None
+        sid = s.id
+        return sid() if callable(sid) else sid
+
     def set_daqmetadatareaders(
         self,
         readers: list[Any],
@@ -411,7 +419,7 @@ class DAQSystem(Ido):
                 {
                     "epoch_number": epoch_number,
                     "epoch_id": epoch_id,
-                    "epoch_session_id": self.session.id if self.session else None,
+                    "epoch_session_id": self._get_session_id(),
                     "epochprobemap": epochprobemap,
                     "epoch_clock": epoch_clock,
                     "t0_t1": t0_t1,

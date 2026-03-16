@@ -57,24 +57,29 @@ def find_file_groups(
     groups = []
 
     for _directory, files in all_files.items():
-        matched_files = []
+        # Track (pattern_index, filepath) so we can order by pattern
+        matched_files: list[tuple[int, str]] = []
         for f in files:
             filename = os.path.basename(f)
-            for pattern in patterns:
+            for pi, pattern in enumerate(patterns):
+                # MATLAB uses '#' as wildcard (equivalent to '*' in glob)
+                glob_pattern = pattern.replace("#", "*")
                 # Try glob pattern first
-                if fnmatch.fnmatch(filename, pattern):
-                    matched_files.append(f)
+                if fnmatch.fnmatch(filename, glob_pattern):
+                    matched_files.append((pi, f))
                     break
                 # Try regex pattern
                 try:
                     if re.search(pattern, filename):
-                        matched_files.append(f)
+                        matched_files.append((pi, f))
                         break
                 except re.error:
                     pass
 
         if matched_files:
-            groups.append(sorted(matched_files))
+            # Order by pattern index, then alphabetically within same pattern
+            matched_files.sort()
+            groups.append([f for _, f in matched_files])
 
     return groups
 
@@ -145,28 +150,67 @@ class FileNavigator(Ido):
         """Load navigator from a document."""
         doc_props = getattr(document, "document_properties", document)
 
-        if hasattr(doc_props, "base") and hasattr(doc_props.base, "id"):
-            self.identifier = doc_props.base.id
-        # Store the document name (used by epochnodes for objectname)
         if isinstance(doc_props, dict):
-            self._name = doc_props.get("base", {}).get("name", "unknown")
-        elif hasattr(doc_props, "base") and hasattr(doc_props.base, "name"):
-            self._name = doc_props.base.name
+            base = doc_props.get("base", {})
+            if "id" in base:
+                self.identifier = base["id"]
+            self._name = base.get("name", "") or "unknown"
+        else:
+            if hasattr(doc_props, "base") and hasattr(doc_props.base, "id"):
+                self.identifier = doc_props.base.id
+            if hasattr(doc_props, "base") and hasattr(doc_props.base, "name"):
+                self._name = doc_props.base.name
 
-        filenavigator = getattr(doc_props, "filenavigator", None)
+        # doc_props may be a dict (from DB) or an object with attributes.
+        if isinstance(doc_props, dict):
+            filenavigator = doc_props.get("filenavigator")
+        else:
+            filenavigator = getattr(doc_props, "filenavigator", None)
+
         if filenavigator:
-            fp = getattr(filenavigator, "fileparameters", "")
-            self._fileparameters = self._normalize_fileparameters(eval(fp) if fp else None)
-            self._epochprobemap_class = getattr(
-                filenavigator, "epochprobemap_class", "ndi.epoch.EpochProbeMap"
+            if isinstance(filenavigator, dict):
+                fp = filenavigator.get("fileparameters", "")
+                epm_class = filenavigator.get(
+                    "epochprobemap_class", "ndi.epoch.EpochProbeMap"
+                )
+                epfp = filenavigator.get("epochprobemap_fileparameters", "")
+            else:
+                fp = getattr(filenavigator, "fileparameters", "")
+                epm_class = getattr(
+                    filenavigator, "epochprobemap_class", "ndi.epoch.EpochProbeMap"
+                )
+                epfp = getattr(filenavigator, "epochprobemap_fileparameters", "")
+            self._fileparameters_raw = fp  # preserve raw string for hashing
+            self._fileparameters = self._normalize_fileparameters(
+                self._parse_fileparameters(fp) if fp else None
             )
-            epfp = getattr(filenavigator, "epochprobemap_fileparameters", "")
+            self._epochprobemap_class = epm_class
             self._epochprobemap_fileparameters = self._normalize_fileparameters(
-                eval(epfp) if epfp else None
+                self._parse_fileparameters(epfp) if epfp else None
             )
         else:
             self._fileparameters = {"filematch": []}
             self._epochprobemap_fileparameters = {"filematch": []}
+
+    @staticmethod
+    def _parse_fileparameters(raw: str) -> Any:
+        """Parse a fileparameters string, handling MATLAB cell array syntax.
+
+        MATLAB stores cell arrays as ``"{ '#.rhd', '#.dat' }"`` which
+        ``eval()`` turns into a Python ``set`` (losing order).  We detect
+        this pattern and parse it as an ordered list instead.
+        """
+        stripped = raw.strip()
+        if stripped.startswith("{") and stripped.endswith("}"):
+            # MATLAB cell array — extract quoted strings in order
+            items = re.findall(r"'([^']*)'", stripped)
+            if items:
+                return items
+        # Fall back to eval for Python-native formats (list, dict)
+        try:
+            return eval(stripped)  # noqa: S307
+        except Exception:
+            return stripped
 
     @staticmethod
     def _normalize_fileparameters(
@@ -177,19 +221,29 @@ class FileNavigator(Ido):
             return {"filematch": []}
         if isinstance(params, str):
             return {"filematch": [params]}
-        if isinstance(params, list):
-            return {"filematch": params}
         if isinstance(params, dict):
             fm = params.get("filematch", [])
             if isinstance(fm, str):
                 fm = [fm]
-            return {"filematch": fm}
-        return {"filematch": []}
+            return {"filematch": list(fm)}
+        # list, set, tuple, or any iterable (MATLAB cell arrays eval to
+        # Python sets when they use { 'a', 'b' } syntax)
+        try:
+            return {"filematch": list(params)}
+        except TypeError:
+            return {"filematch": []}
 
     @property
     def session(self) -> Any:
         """Get the session."""
         return self._session
+
+    def _get_session_id(self) -> str | None:
+        """Return the session id, handling both method and property access."""
+        if self._session is None:
+            return None
+        sid = self._session.id
+        return sid() if callable(sid) else sid
 
     @property
     def fileparameters(self) -> dict[str, list[str]]:
@@ -401,7 +455,8 @@ class FileNavigator(Ido):
             underlying = {
                 "underlying": files,
                 "epoch_id": epoch_id,
-                "epoch_session_id": self._session.id if self._session else None,
+                "epoch_session_id": self._get_session_id(),
+                "epochprobemap": [],
                 "epoch_clock": [NO_TIME],
                 "t0_t1": [(float("nan"), float("nan"))],
             }
@@ -409,7 +464,7 @@ class FileNavigator(Ido):
             entry = {
                 "epoch_number": epoch_number,
                 "epoch_id": epoch_id,
-                "epoch_session_id": self._session.id if self._session else None,
+                "epoch_session_id": self._get_session_id(),
                 "epochprobemap": epochprobemaps[i] or self.getepochprobemap(epoch_number, files),
                 "epoch_clock": [NO_TIME],
                 "t0_t1": [(float("nan"), float("nan"))],
@@ -505,8 +560,21 @@ class FileNavigator(Ido):
             return None
 
         fmstr = self.filematch_hashstring()
-        parent, filename = os.path.split(epochfiles[0])
-        return os.path.join(parent, f".{filename}.{fmstr}.epochid.ndi")
+        parent = os.path.dirname(epochfiles[0])
+        stem = self._epoch_stem(epochfiles)
+        return os.path.join(parent, f".{stem}.{fmstr}.epochid.ndi")
+
+    @staticmethod
+    def _epoch_stem(epochfiles: list[str]) -> str:
+        """Return the common filename stem for a group of epoch files.
+
+        MATLAB uses the common prefix of basenames (stripping trailing
+        dot) so that ``['foo.rhd', 'foo.epochprobemap.ndi']`` yields
+        ``'foo'``.
+        """
+        basenames = [os.path.basename(f) for f in epochfiles]
+        stem = os.path.commonprefix(basenames).rstrip(".")
+        return stem if stem else basenames[0]
 
     def epochprobemapfilename(
         self,
@@ -558,8 +626,9 @@ class FileNavigator(Ido):
             return None
 
         fmstr = self.filematch_hashstring()
-        parent, filename = os.path.split(epochfiles[0])
-        return os.path.join(parent, f".{filename}.{fmstr}.epochprobemap.ndi")
+        parent = os.path.dirname(epochfiles[0])
+        stem = self._epoch_stem(epochfiles)
+        return os.path.join(parent, f".{stem}.{fmstr}.epochprobemap.ndi")
 
     def getepochprobemap(
         self,
@@ -586,14 +655,60 @@ class FileNavigator(Ido):
                 props = doc.document_properties
                 return getattr(props.epochfiles_ingested, "epochprobemap", None)
 
-        # Try to load from file
+        # Try to find a probe map file within the epoch files
+        epm_patterns = self._epochprobemap_fileparameters.get("filematch", [])
+        for f in epochfiles:
+            fname = os.path.basename(f)
+            for pat in epm_patterns:
+                glob_pat = pat.replace("#", "*")
+                if fnmatch.fnmatch(fname, glob_pat):
+                    return self._load_epochprobemap_file(f)
+                try:
+                    if re.search(pat, fname):
+                        return self._load_epochprobemap_file(f)
+                except re.error:
+                    pass
+
+        # Fall back to generated probe map file
         filename = self.epochprobemapfilename(epoch_number)
         if filename and Path(filename).is_file():
-            # Load probe map from file
-            # This would need to be implemented based on the probe map format
-            pass
+            return self._load_epochprobemap_file(filename)
 
         return None
+
+    @staticmethod
+    def _load_epochprobemap_file(filepath: str) -> Any | None:
+        """Load an epoch probe map from a TSV file.
+
+        The file format is tab-separated with a header row:
+        ``name  reference  type  devicestring  subjectstring``
+        """
+        from ...epoch.epochprobemap import EpochProbeMap
+
+        try:
+            with open(filepath, encoding="utf-8") as f:
+                lines = f.read().strip().splitlines()
+            if len(lines) < 2:
+                return None
+            # Skip header, parse data lines
+            maps = []
+            for line in lines[1:]:
+                parts = line.split("\t")
+                if len(parts) >= 3:
+                    maps.append(
+                        EpochProbeMap(
+                            name=parts[0].strip(),
+                            reference=int(parts[1].strip()),
+                            type=parts[2].strip(),
+                            devicestring=parts[3].strip() if len(parts) > 3 else "",
+                            subjectstring=parts[4].strip() if len(parts) > 4 else "",
+                        )
+                    )
+            if len(maps) == 1:
+                return maps[0]
+            return maps if maps else None
+        except Exception:
+            return None
 
     def getepochingesteddoc(
         self,
@@ -707,13 +822,19 @@ class FileNavigator(Ido):
         """
         Get a hash string based on file match patterns.
 
+        MATLAB hashes the raw ``fileparameters`` string as stored in the
+        document (e.g. ``"{ '#.rhd', '#.epochprobemap.ndi' }"``).  We
+        mirror that behavior so epoch-id filenames match across languages.
+
         Returns:
-            MD5 hash of concatenated patterns
+            MD5 hash string
         """
+        raw = getattr(self, "_fileparameters_raw", "")
+        if raw:
+            return hashlib.md5(raw.encode()).hexdigest()
         patterns = self._fileparameters.get("filematch", [])
         if not patterns:
             return ""
-
         concat = "".join(patterns)
         return hashlib.md5(concat.encode()).hexdigest()
 

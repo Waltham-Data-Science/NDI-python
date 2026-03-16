@@ -1094,6 +1094,16 @@ class Session(ABC):
         """
         # Check document type
         if document.doc_isa("daqsystem"):
+            props = document.document_properties
+            daq_class_name = ""
+            if isinstance(props, dict):
+                daq_class_name = props.get("daqsystem", {}).get("ndi_daqsystem_class", "")
+
+            if "mfdaq" in daq_class_name:
+                from ..daq.system_mfdaq import DAQSystemMFDAQ
+
+                return DAQSystemMFDAQ(session=self, document=document)
+
             from ..daq.system import DAQSystem
 
             return DAQSystem(session=self, document=document)
