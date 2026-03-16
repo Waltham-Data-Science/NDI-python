@@ -29,8 +29,7 @@ class SQLiteDriver:
     """SQLite database driver using DID-python's SQLiteDB.
 
     This driver wraps DID-python's SQLiteDB implementation to provide
-    a consistent interface for the NDI Database class. Uses DID-python's
-    field_search() for query evaluation.
+    a consistent interface for the NDI Database class.
     """
 
     def __init__(self, db_path: Path, branch_id: str = "a"):
@@ -42,14 +41,12 @@ class SQLiteDriver:
                 NDI-matlab have always used ``"a"`` as the default
                 branch, so we match that for cross-language compatibility.
         """
-        from did.datastructures import field_search
         from did.document import Document as DIDDocument
         from did.implementations.sqlitedb import SQLiteDB
 
         self._db_path = db_path
         self._branch_id = branch_id
         self._DIDDocument = DIDDocument
-        self._field_search = field_search
 
         # Initialize SQLiteDB
         self._db = SQLiteDB(str(db_path))
@@ -239,41 +236,21 @@ class SQLiteDriver:
     def find(self, query=None) -> list[dict]:
         """Find all documents matching query.
 
-        Uses DID-python's field_search() for query evaluation.
+        Delegates to DID-python's ``search()`` + ``get_docs()`` so that
+        normalization (``_normalize_loaded_props``) is handled in one
+        place rather than duplicated here.
         """
-        import json as json_mod
-
-        # Fetch all JSON blobs in a single SQL query instead of one-by-one.
-        rows = self._db.do_run_sql_query(
-            "SELECT d.json_code FROM docs d "
-            "JOIN branch_docs bd ON d.doc_idx = bd.doc_idx "
-            "WHERE bd.branch_id = ?",
-            (self._branch_id,),
-        )
-
-        if not rows:
-            return []
-
-        documents = [json_mod.loads(r["json_code"]) for r in rows]
-
-        # Normalize fields that MATLAB-compatible storage may have unwrapped
-        # from single-element lists.  Mirrors sqlitedb._normalize_loaded_props.
-        for doc in documents:
-            dep = doc.get("depends_on")
-            if dep is not None and not isinstance(dep, list):
-                doc["depends_on"] = [dep]
-            dc = doc.get("document_class", {})
-            sc = dc.get("superclasses")
-            if sc is not None and not isinstance(sc, list):
-                dc["superclasses"] = [sc]
-
-        # Filter by query if provided using DID-python's field_search
         if query is not None:
-            # Convert to DID-python compatible format
-            search_params = query.to_search_structure()
-            documents = [d for d in documents if self._field_search(d, search_params)]
+            doc_ids = self._db.search(query, self._branch_id)
+            if not doc_ids:
+                return []
+            docs = self._db.get_docs(doc_ids, self._branch_id, OnMissing="ignore")
+        else:
+            docs = self._db.get_docs_by_branch(self._branch_id)
 
-        return documents
+        if not docs:
+            return []
+        return [d.document_properties for d in docs]
 
 
 class Database:

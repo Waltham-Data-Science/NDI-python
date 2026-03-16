@@ -89,6 +89,8 @@ class FileNavigator(Ido):
     Attributes:
         session: The NDI session
         fileparameters: Parameters for finding epoch files
+    Class Attributes:
+        NDI_FILENAVIGATOR_CLASS: MATLAB-compatible class name string.
         epochprobemap_fileparameters: Parameters for finding probe map files
         epochprobemap_class: Class to use for epoch probe maps
 
@@ -97,6 +99,8 @@ class FileNavigator(Ido):
         >>> epochs = nav.selectfilegroups()
         >>> files = nav.getepochfiles(1)  # Get files for epoch 1
     """
+
+    NDI_FILENAVIGATOR_CLASS = "ndi.file.navigator"
 
     def __init__(
         self,
@@ -143,6 +147,11 @@ class FileNavigator(Ido):
 
         if hasattr(doc_props, "base") and hasattr(doc_props.base, "id"):
             self.identifier = doc_props.base.id
+        # Store the document name (used by epochnodes for objectname)
+        if isinstance(doc_props, dict):
+            self._name = doc_props.get("base", {}).get("name", "unknown")
+        elif hasattr(doc_props, "base") and hasattr(doc_props.base, "name"):
+            self._name = doc_props.base.name
 
         filenavigator = getattr(doc_props, "filenavigator", None)
         if filenavigator:
@@ -409,6 +418,26 @@ class FileNavigator(Ido):
             table.append(entry)
 
         return table
+
+    def epochnodes(self) -> list[dict[str, Any]]:
+        """Return epoch node structs for this file navigator.
+
+        Same as ``epochtable`` (minus ``epoch_number``) with
+        ``objectname`` and ``objectclass`` appended, matching MATLAB's
+        ``epochnodes`` output.  Values are serialized for cross-language
+        comparison.
+        """
+        from ...daq.system import _serialize_epochnode
+
+        et = self.epochtable()
+        nodes = []
+        for entry in et:
+            node = {k: v for k, v in entry.items() if k != "epoch_number"}
+            node["objectname"] = self._name if hasattr(self, "_name") else "unknown"
+            node["objectclass"] = self.NDI_FILENAVIGATOR_CLASS
+            _serialize_epochnode(node)
+            nodes.append(node)
+        return nodes
 
     def epochid(
         self,

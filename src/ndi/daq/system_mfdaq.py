@@ -35,6 +35,8 @@ class DAQSystemMFDAQ(DAQSystem):
         >>> data = sys.readchannels_epochsamples('ai', [1, 2], 1, 0, 1000)
     """
 
+    NDI_DAQSYSTEM_CLASS = "ndi.daq.system.mfdaq"
+
     CHANNEL_TYPES = {
         "analog_in": "ai",
         "analog_out": "ao",
