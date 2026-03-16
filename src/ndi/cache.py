@@ -1,7 +1,7 @@
 """
-ndi.cache - Cache class for NDI.
+ndi.cache - ndi_cache class for NDI.
 
-This module provides the Cache class for session-level caching
+This module provides the ndi_cache class for session-level caching
 of computed results with memory limits and eviction policies.
 """
 
@@ -25,9 +25,9 @@ class CacheEntry:
     data: Any
 
 
-class Cache:
+class ndi_cache:
     """
-    Cache class for NDI session caching.
+    ndi_cache class for NDI session caching.
 
     Provides key-type based caching with memory limits and
     configurable eviction policies (FIFO, LIFO, or error).
@@ -37,7 +37,7 @@ class Cache:
         replacement_rule: Eviction policy ('fifo', 'lifo', 'error')
 
     Example:
-        >>> cache = Cache(max_memory=1e9)
+        >>> cache = ndi_cache(max_memory=1e9)
         >>> cache.add('element_123', 'epochtable', my_data)
         >>> entry = cache.lookup('element_123', 'epochtable')
         >>> if entry:
@@ -52,7 +52,7 @@ class Cache:
         replacement_rule: str = "fifo",
     ):
         """
-        Create a new Cache.
+        Create a new ndi_cache.
 
         Args:
             max_memory: Maximum memory in bytes (default 10GB)
@@ -72,7 +72,7 @@ class Cache:
         """Get current replacement rule."""
         return self._replacement_rule
 
-    def set_replacement_rule(self, rule: str) -> Cache:
+    def set_replacement_rule(self, rule: str) -> ndi_cache:
         """
         Set the replacement rule for cache eviction.
 
@@ -99,7 +99,7 @@ class Cache:
         type: str,
         data: Any,
         priority: float = 0,
-    ) -> Cache:
+    ) -> ndi_cache:
         """
         Add data to the cache.
 
@@ -121,7 +121,8 @@ class Cache:
 
         if data_bytes > self._max_memory:
             raise MemoryError(
-                f"Data ({data_bytes} bytes) exceeds cache max_memory " f"({self._max_memory} bytes)"
+                f"ndi_gui_Data ({data_bytes} bytes) exceeds cache max_memory "
+                f"({self._max_memory} bytes)"
             )
 
         # Create new entry
@@ -138,7 +139,7 @@ class Cache:
         total_memory = self.bytes() + data_bytes
         if total_memory > self._max_memory:
             if self._replacement_rule == "error":
-                raise MemoryError("Cache is full and replacement_rule is 'error'")
+                raise MemoryError("ndi_cache is full and replacement_rule is 'error'")
 
             free_needed = total_memory - self._max_memory
             indices_to_remove, safe_to_add = self._evaluate_items_for_removal(
@@ -157,7 +158,7 @@ class Cache:
         self,
         key_or_index: Any,
         type: str | None = None,
-    ) -> Cache:
+    ) -> ndi_cache:
         """
         Remove data from the cache.
 
@@ -195,7 +196,7 @@ class Cache:
             if 0 <= i < len(self._table):
                 del self._table[i]
 
-    def clear(self) -> Cache:
+    def clear(self) -> ndi_cache:
         """
         Clear all entries from the cache.
 
@@ -318,7 +319,7 @@ class Cache:
     def __repr__(self) -> str:
         """String representation."""
         return (
-            f"Cache(entries={len(self._table)}, "
+            f"ndi_cache(entries={len(self._table)}, "
             f"bytes={self.bytes()}, "
             f"max_memory={self._max_memory})"
         )

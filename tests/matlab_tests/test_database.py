@@ -14,10 +14,10 @@ import json
 
 import pytest
 
-from ndi.common import PathConstants
-from ndi.document import Document
-from ndi.query import Query
-from ndi.session.dir import DirSession
+from ndi.common import ndi_common_PathConstants
+from ndi.document import ndi_document
+from ndi.query import ndi_query
+from ndi.session.dir import ndi_session_dir
 
 # ===========================================================================
 # TestNDIDocument
@@ -36,7 +36,7 @@ class TestNDIDocument:
         # Create session
         session_dir = tmp_path / "doc_session"
         session_dir.mkdir()
-        session = DirSession("doc_test", session_dir)
+        session = ndi_session_dir("doc_test", session_dir)
 
         # Create document with custom fields
         doc = session.newdocument(
@@ -49,7 +49,7 @@ class TestNDIDocument:
 
         # Write a binary file
         binary_file = tmp_path / "test_binary.dat"
-        binary_file.write_bytes(b"Hello NDI Binary Data")
+        binary_file.write_bytes(b"Hello NDI Binary ndi_gui_Data")
 
         # Attach file to document
         doc = doc.add_file("filename1.ext", str(binary_file))
@@ -58,13 +58,13 @@ class TestNDIDocument:
         session.database_add(doc)
 
         # Search by name
-        q_name = Query("base.name") == "my_demo_doc"
+        q_name = ndi_query("base.name") == "my_demo_doc"
         results = session.database_search(q_name)
         assert len(results) == 1, "Should find 1 document by name"
         assert results[0].id == doc.id
 
         # Search by isa
-        q_type = Query("").isa("demoNDI")
+        q_type = ndi_query("").isa("demoNDI")
         results_isa = session.database_search(q_type)
         assert len(results_isa) == 1, "Should find 1 demoNDI document"
 
@@ -72,14 +72,16 @@ class TestNDIDocument:
         fid = session.database_openbinarydoc(doc, "filename1.ext")
         content = fid.read()
         session.database_closebinarydoc(fid)
-        assert content == b"Hello NDI Binary Data", "Binary content should match what was written"
+        assert (
+            content == b"Hello NDI Binary ndi_gui_Data"
+        ), "Binary content should match what was written"
 
         # Remove document
         session.database_rm(doc)
 
         # Verify removal
         results_after = session.database_search(q_name)
-        assert len(results_after) == 0, "Document should be removed"
+        assert len(results_after) == 0, "ndi_document should be removed"
 
 
 # ===========================================================================
@@ -97,7 +99,7 @@ class TestNDIDocumentFields:
         MATLAB equivalent: TestNDIDocumentFields.testFieldDiscoveryAndValidation
         """
         # Locate schema files
-        doc_folder = PathConstants.COMMON_FOLDER / "database_documents"
+        doc_folder = ndi_common_PathConstants.COMMON_FOLDER / "database_documents"
         if not doc_folder.exists():
             pytest.skip(f"Schema folder not found: {doc_folder}")
 
@@ -135,7 +137,7 @@ class TestNDIDocumentFields:
 
 def _discover_document_types():
     """Discover all document types from JSON schema files."""
-    doc_folder = PathConstants.COMMON_FOLDER / "database_documents"
+    doc_folder = ndi_common_PathConstants.COMMON_FOLDER / "database_documents"
     if not doc_folder.exists():
         return []
 
@@ -156,11 +158,11 @@ class TestNDIDocumentJSON:
 
     @pytest.mark.parametrize("doc_type", _DOC_TYPES, ids=_DOC_TYPES)
     def test_single_json_definition(self, doc_type):
-        """Verify Document(doc_type) succeeds for each schema.
+        """Verify ndi_document(doc_type) succeeds for each schema.
 
         MATLAB equivalent: TestNDIDocumentJSON.testSingleJsonDefinition
         """
-        doc = Document(doc_type)
+        doc = ndi_document(doc_type)
 
         assert doc is not None
         assert doc.document_properties is not None
@@ -190,7 +192,7 @@ class TestNDIDocumentPersistence:
         """
         session_dir = tmp_path / "persist"
         session_dir.mkdir()
-        session = DirSession("persist_test", session_dir)
+        session = ndi_session_dir("persist_test", session_dir)
 
         # Create document
         doc = session.newdocument(
@@ -206,7 +208,7 @@ class TestNDIDocumentPersistence:
         session.database_add(doc)
 
         # Retrieve
-        q = Query("base.id") == original_id
+        q = ndi_query("base.id") == original_id
         results = session.database_search(q)
         assert len(results) == 1
 
@@ -219,7 +221,7 @@ class TestNDIDocumentPersistence:
         """Multiple document types can coexist in the same database."""
         session_dir = tmp_path / "multi"
         session_dir.mkdir()
-        session = DirSession("multi_test", session_dir)
+        session = ndi_session_dir("multi_test", session_dir)
 
         # Add several document types
         doc_types = ["base", "demoNDI", "subject"]
@@ -231,7 +233,7 @@ class TestNDIDocumentPersistence:
                 pass  # Some types may not be available
 
         # Search for all
-        all_docs = session.database_search(Query("").isa("base"))
+        all_docs = session.database_search(ndi_query("").isa("base"))
         # At minimum, base docs + session doc
         assert len(all_docs) >= 1
 
@@ -250,7 +252,7 @@ class TestNDIDocumentDiscovery:
 
         MATLAB equivalent: TestNDIDocumentDiscovery.testDocumentDiscoveryAndValidation
         """
-        doc_folder = PathConstants.COMMON_FOLDER / "database_documents"
+        doc_folder = ndi_common_PathConstants.COMMON_FOLDER / "database_documents"
         if not doc_folder.exists():
             pytest.skip(f"Schema folder not found: {doc_folder}")
 
@@ -266,7 +268,7 @@ class TestNDIDocumentDiscovery:
 
     def test_schema_count(self):
         """Verify we have a reasonable number of schemas."""
-        doc_folder = PathConstants.COMMON_FOLDER / "database_documents"
+        doc_folder = ndi_common_PathConstants.COMMON_FOLDER / "database_documents"
         if not doc_folder.exists():
             pytest.skip(f"Schema folder not found: {doc_folder}")
 
@@ -333,17 +335,17 @@ class TestDocComparison:
             tolerance=0.5,
         )
 
-        doc1 = Document("demoNDI")
+        doc1 = ndi_document("demoNDI")
         props1 = doc1.document_properties
         props1["base"]["name"] = "test"
         props1["demoNDI"]["value"] = 10
-        doc1 = Document(props1)
+        doc1 = ndi_document(props1)
 
-        doc2 = Document("demoNDI")
+        doc2 = ndi_document("demoNDI")
         props2 = doc2.document_properties
         props2["base"]["name"] = "test"
         props2["demoNDI"]["value"] = 10.3
-        doc2 = Document(props2)
+        doc2 = ndi_document(props2)
 
         result = dc.compare(doc1, doc2)
         assert result is not None
@@ -361,15 +363,15 @@ class TestDocComparison:
             method="character_exact",
         )
 
-        doc1 = Document("demoNDI")
+        doc1 = ndi_document("demoNDI")
         props1 = doc1.document_properties
         props1["base"]["name"] = "alpha"
-        doc1 = Document(props1)
+        doc1 = ndi_document(props1)
 
-        doc2 = Document("demoNDI")
+        doc2 = ndi_document("demoNDI")
         props2 = doc2.document_properties
         props2["base"]["name"] = "beta"
-        doc2 = Document(props2)
+        doc2 = ndi_document(props2)
 
         result = dc.compare(doc1, doc2)
         # Result should indicate mismatch

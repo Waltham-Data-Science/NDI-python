@@ -1,7 +1,7 @@
 """
 ndi.daq.system_mfdaq - Multi-function DAQ system class.
 
-Extends DAQSystem with multi-function DAQ specific behavior including
+Extends ndi_daq_system with multi-function DAQ specific behavior including
 support for various channel types and time/sample conversions.
 
 MATLAB equivalent: src/ndi/+ndi/+daq/+system/mfdaq.m
@@ -13,24 +13,24 @@ from typing import Any
 
 import numpy as np
 
-from ..time import DEV_LOCAL_TIME, ClockType
-from .mfdaq import MFDAQReader, standardize_channel_type
-from .system import DAQSystem
+from ..time import DEV_LOCAL_TIME, ndi_time_clocktype
+from .mfdaq import ndi_daq_reader_mfdaq, standardize_channel_type
+from .system import ndi_daq_system
 
 
-class DAQSystemMFDAQ(DAQSystem):
+class ndi_daq_system_mfdaq(ndi_daq_system):
     """
     Multi-function DAQ system.
 
-    Extends DAQSystem for multi-function data acquisition systems
+    Extends ndi_daq_system for multi-function data acquisition systems
     that support various channel types (analog, digital, time,
     auxiliary, event, marker).
 
-    The MFDAQ system delegates data reading to its MFDAQReader and
+    The MFDAQ system delegates data reading to its ndi_daq_reader_mfdaq and
     provides time/sample conversion methods.
 
     Example:
-        >>> sys = DAQSystemMFDAQ('intan1', navigator, reader)
+        >>> sys = ndi_daq_system_mfdaq('intan1', navigator, reader)
         >>> channels = sys.getchannelsepoch(1)
         >>> data = sys.readchannels_epochsamples('ai', [1, 2], 1, 0, 1000)
     """
@@ -48,14 +48,14 @@ class DAQSystemMFDAQ(DAQSystem):
         "marker": "mk",
     }
 
-    def epochclock(self, epoch_number: int) -> list[ClockType]:
+    def epochclock(self, epoch_number: int) -> list[ndi_time_clocktype]:
         """
         Return clock types for an epoch.
 
         MFDAQ systems return DEV_LOCAL_TIME by default.
 
         Args:
-            epoch_number: Epoch number (1-indexed)
+            epoch_number: ndi_epoch_epoch number (1-indexed)
 
         Returns:
             List containing DEV_LOCAL_TIME
@@ -69,7 +69,7 @@ class DAQSystemMFDAQ(DAQSystem):
         Delegates to the DAQ reader if available.
 
         Args:
-            epoch_number: Epoch number (1-indexed)
+            epoch_number: ndi_epoch_epoch number (1-indexed)
 
         Returns:
             List of (t0, t1) tuples per clock type
@@ -85,7 +85,7 @@ class DAQSystemMFDAQ(DAQSystem):
         Get available channels for an epoch.
 
         Args:
-            epoch_number: Epoch number (1-indexed)
+            epoch_number: ndi_epoch_epoch number (1-indexed)
 
         Returns:
             List of ChannelInfo objects
@@ -95,7 +95,7 @@ class DAQSystemMFDAQ(DAQSystem):
 
         epochfiles = self._filenavigator.getepochfiles(epoch_number)
 
-        if isinstance(self._daqreader, MFDAQReader):
+        if isinstance(self._daqreader, ndi_daq_reader_mfdaq):
             return self._daqreader.getchannelsepoch(epochfiles)
         return []
 
@@ -135,7 +135,7 @@ class DAQSystemMFDAQ(DAQSystem):
         Args:
             channeltype: Channel type(s) (e.g., 'ai', 'analog_in')
             channel: Channel number(s) (1-indexed)
-            epoch_number: Epoch number (1-indexed)
+            epoch_number: ndi_epoch_epoch number (1-indexed)
             s0: Start sample (1-indexed)
             s1: End sample (1-indexed)
 
@@ -146,11 +146,11 @@ class DAQSystemMFDAQ(DAQSystem):
             raise RuntimeError("No DAQ reader or file navigator configured")
 
         epochfiles = self._filenavigator.getepochfiles(epoch_number)
-        if isinstance(self._daqreader, MFDAQReader):
+        if isinstance(self._daqreader, ndi_daq_reader_mfdaq):
             return self._daqreader.readchannels_epochsamples(
                 channeltype, channel, epochfiles, s0, s1
             )
-        raise TypeError("DAQ reader is not an MFDAQReader")
+        raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
 
     def readevents_epochsamples(
         self,
@@ -166,7 +166,7 @@ class DAQSystemMFDAQ(DAQSystem):
         Args:
             channeltype: Event channel type(s)
             channel: Channel number(s)
-            epoch_number: Epoch number (1-indexed)
+            epoch_number: ndi_epoch_epoch number (1-indexed)
             t0: Start time
             t1: End time
 
@@ -177,9 +177,9 @@ class DAQSystemMFDAQ(DAQSystem):
             raise RuntimeError("No DAQ reader or file navigator configured")
 
         epochfiles = self._filenavigator.getepochfiles(epoch_number)
-        if isinstance(self._daqreader, MFDAQReader):
+        if isinstance(self._daqreader, ndi_daq_reader_mfdaq):
             return self._daqreader.readevents_epochsamples(channeltype, channel, epochfiles, t0, t1)
-        raise TypeError("DAQ reader is not an MFDAQReader")
+        raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
 
     def samplerate(
         self,
@@ -191,7 +191,7 @@ class DAQSystemMFDAQ(DAQSystem):
         Get sample rate for channels in an epoch.
 
         Args:
-            epoch_number: Epoch number (1-indexed)
+            epoch_number: ndi_epoch_epoch number (1-indexed)
             channeltype: Channel type(s)
             channel: Channel number(s)
 
@@ -202,9 +202,9 @@ class DAQSystemMFDAQ(DAQSystem):
             raise RuntimeError("No DAQ reader or file navigator configured")
 
         epochfiles = self._filenavigator.getepochfiles(epoch_number)
-        if isinstance(self._daqreader, MFDAQReader):
+        if isinstance(self._daqreader, ndi_daq_reader_mfdaq):
             return self._daqreader.samplerate(epochfiles, channeltype, channel)
-        raise TypeError("DAQ reader is not an MFDAQReader")
+        raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
 
     def epochsamples2times(
         self,
@@ -219,7 +219,7 @@ class DAQSystemMFDAQ(DAQSystem):
         Args:
             channeltype: Channel type(s)
             channel: Channel number(s)
-            epoch_number: Epoch number (1-indexed)
+            epoch_number: ndi_epoch_epoch number (1-indexed)
             samples: Sample indices (1-indexed)
 
         Returns:
@@ -229,9 +229,9 @@ class DAQSystemMFDAQ(DAQSystem):
             raise RuntimeError("No DAQ reader or file navigator configured")
 
         epochfiles = self._filenavigator.getepochfiles(epoch_number)
-        if isinstance(self._daqreader, MFDAQReader):
+        if isinstance(self._daqreader, ndi_daq_reader_mfdaq):
             return self._daqreader.epochsamples2times(channeltype, channel, epochfiles, samples)
-        raise TypeError("DAQ reader is not an MFDAQReader")
+        raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
 
     def epochtimes2samples(
         self,
@@ -246,7 +246,7 @@ class DAQSystemMFDAQ(DAQSystem):
         Args:
             channeltype: Channel type(s)
             channel: Channel number(s)
-            epoch_number: Epoch number (1-indexed)
+            epoch_number: ndi_epoch_epoch number (1-indexed)
             times: Time values
 
         Returns:
@@ -256,9 +256,9 @@ class DAQSystemMFDAQ(DAQSystem):
             raise RuntimeError("No DAQ reader or file navigator configured")
 
         epochfiles = self._filenavigator.getepochfiles(epoch_number)
-        if isinstance(self._daqreader, MFDAQReader):
+        if isinstance(self._daqreader, ndi_daq_reader_mfdaq):
             return self._daqreader.epochtimes2samples(channeltype, channel, epochfiles, times)
-        raise TypeError("DAQ reader is not an MFDAQReader")
+        raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
 
     @staticmethod
     def mfdaq_channeltypes() -> list[str]:

@@ -1,0 +1,122 @@
+name: Test Cross-Language Symmetry
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  symmetry:
+    name: MATLAB ↔ Python symmetry tests
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Checkout both repos ────────────────────────────────────────────
+      - name: Check out NDI-python
+        uses: actions/checkout@v4
+        with:
+          path: NDI-python
+
+      - name: Check out NDI-matlab
+        uses: actions/checkout@v4
+        with:
+          repository: VH-Lab/NDI-matlab
+          path: NDI-matlab
+
+      # ── Runtime setup ──────────────────────────────────────────────────
+      - name: Start virtual display server
+        run: |
+          sudo apt-get install -y xvfb
+          Xvfb :99 &
+          echo "DISPLAY=:99" >> $GITHUB_ENV
+
+      - name: Set up MATLAB
+        uses: matlab-actions/setup-matlab@v2
+        with:
+          release: latest
+          cache: true
+          products: |
+            Communications_Toolbox
+            Statistics_and_Machine_Learning_Toolbox
+            Signal_Processing_Toolbox
+
+      - name: Install MatBox
+        uses: ehennestad/matbox-actions/install-matbox@v1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install NDI-python
+        working-directory: NDI-python
+        run: |
+          python -m pip install --upgrade pip
+          python ndi_install.py --dev --no-validate --verbose
+
+      # ── Stage 1: MATLAB makeArtifacts ──────────────────────────────────
+      - name: "Stage 1: MATLAB makeArtifacts"
+        uses: matlab-actions/run-command@v2
+        with:
+          command: |
+            cd("NDI-matlab");
+            addpath(genpath("src"));
+            addpath(genpath("tests"));
+            addpath(genpath("tools"));
+            matbox.installRequirements(fullfile(pwd, "tests"));
+
+            import matlab.unittest.TestSuite
+            import matlab.unittest.TestRunner
+
+            suite = TestSuite.fromPackage("ndi.symmetry.makeArtifacts", "IncludingSubpackages", true);
+            fprintf("\n=== MATLAB makeArtifacts: %d test(s) ===\n", numel(suite));
+            assert(~isempty(suite), "No MATLAB makeArtifacts tests found.")
+
+            runner = TestRunner.withTextOutput("Verbosity", "Detailed");
+            results = runner.run(suite);
+
+            fprintf("\n=== MATLAB makeArtifacts: %d passed, %d failed ===\n", ...
+                nnz([results.Passed]), nnz([results.Failed]));
+            assert(all(~[results.Failed]), "MATLAB makeArtifacts failed")
+
+      # ── Stage 2: Python makeArtifacts + readArtifacts ──────────────────
+      - name: "Stage 2: Python symmetry tests (make + read)"
+        working-directory: NDI-python
+        run: |
+          echo "=== Running Python makeArtifacts ==="
+          pytest tests/symmetry/make_artifacts/ -v --tb=short
+
+          echo ""
+          echo "=== Running Python readArtifacts (reads both MATLAB and Python artifacts) ==="
+          pytest tests/symmetry/read_artifacts/ -v --tb=short
+
+      # ── Stage 3: MATLAB readArtifacts ──────────────────────────────────
+      - name: "Stage 3: MATLAB readArtifacts (reads Python artifacts)"
+        uses: matlab-actions/run-command@v2
+        with:
+          command: |
+            cd("NDI-matlab");
+            addpath(genpath("src"));
+            addpath(genpath("tests"));
+            addpath(genpath("tools"));
+            matbox.installRequirements(fullfile(pwd, "tests"));
+
+            import matlab.unittest.TestSuite
+            import matlab.unittest.TestRunner
+
+            suite = TestSuite.fromPackage("ndi.symmetry.readArtifacts", "IncludingSubpackages", true);
+            fprintf("\n=== MATLAB readArtifacts: %d test(s) ===\n", numel(suite));
+            assert(~isempty(suite), "No MATLAB readArtifacts tests found.")
+
+            runner = TestRunner.withTextOutput("Verbosity", "Detailed");
+            results = runner.run(suite);
+
+            fprintf("\n=== MATLAB readArtifacts: %d passed, %d failed ===\n", ...
+                nnz([results.Passed]), nnz([results.Failed]));
+            assert(all(~[results.Failed]), "MATLAB readArtifacts failed")

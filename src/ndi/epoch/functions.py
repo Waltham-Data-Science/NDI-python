@@ -1,5 +1,5 @@
 """
-ndi.epoch.functions - Epoch utility functions.
+ndi.epoch.functions - ndi_epoch_epoch utility functions.
 
 MATLAB equivalents:
 - src/ndi/+ndi/+epoch/epochrange.m
@@ -13,13 +13,13 @@ from typing import Any
 import pydantic
 from pydantic import ConfigDict
 
-from ..time import ClockType
+from ..time import ndi_time_clocktype
 
 
 @pydantic.validate_call(config=ConfigDict(arbitrary_types_allowed=True))
 def epochrange(
     epochset_obj: Any,
-    clocktype: ClockType,
+    clocktype: ndi_time_clocktype,
     first_epoch: int | str,
     last_epoch: int | str,
 ) -> tuple[list[str], list[dict], list[tuple[float, float]]]:
@@ -27,7 +27,7 @@ def epochrange(
     Return range of epochs between first and last epoch.
 
     Args:
-        epochset_obj: An object with epochtable() method (EpochSet, Element, etc.)
+        epochset_obj: An object with epochtable() method (ndi_epoch_epochset, ndi_element, etc.)
         clocktype: Clock type to use for t0_t1
         first_epoch: First epoch number (1-indexed) or epoch_id string
         last_epoch: Last epoch number (1-indexed) or epoch_id string
@@ -100,7 +100,7 @@ def _resolve_epoch_index(
 
     Args:
         epoch_table: The epoch table
-        epoch: Epoch number (1-indexed) or epoch_id string
+        epoch: ndi_epoch_epoch number (1-indexed) or epoch_id string
 
     Returns:
         0-based index into epoch_table
@@ -111,7 +111,7 @@ def _resolve_epoch_index(
     if isinstance(epoch, int):
         idx = epoch - 1  # Convert 1-indexed to 0-indexed
         if idx < 0 or idx >= len(epoch_table):
-            raise ValueError(f"Epoch number {epoch} out of range [1, {len(epoch_table)}]")
+            raise ValueError(f"ndi_epoch_epoch number {epoch} out of range [1, {len(epoch_table)}]")
         return idx
 
     # Search by epoch_id
@@ -119,7 +119,7 @@ def _resolve_epoch_index(
         if entry.get("epoch_id") == epoch:
             return i
 
-    raise ValueError(f"Epoch ID '{epoch}' not found")
+    raise ValueError(f"ndi_epoch_epoch ID '{epoch}' not found")
 
 
 @pydantic.validate_call(config=ConfigDict(arbitrary_types_allowed=True))
@@ -139,7 +139,7 @@ def findepochnode(
         objectname, objectclass, epoch_id, epoch_session_id
 
     Special fields:
-        epoch_clock  - uses ``==`` (ClockType equality)
+        epoch_clock  - uses ``==`` (ndi_time_clocktype equality)
         time_value   - checks whether the value falls within the
                        candidate's ``t0_t1`` range ``[t0, t1]``
 

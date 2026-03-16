@@ -11,34 +11,34 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .. import App
+from .. import ndi_app
 
 if TYPE_CHECKING:
-    from ...document import Document
-    from ...session.session_base import Session
+    from ...document import ndi_document
+    from ...session.session_base import ndi_session
 
 
-class StimulusDecoder(App):
+class ndi_app_stimulus_decoder(ndi_app):
     """
-    App for decoding stimulus presentations.
+    ndi_app for decoding stimulus presentations.
 
     Reads raw stimulus data from stimulus probes/elements and
     converts it into structured stimulus_presentation documents
     with timing and parameter information.
 
     Example:
-        >>> decoder = StimulusDecoder(session)
+        >>> decoder = ndi_app_stimulus_decoder(session)
         >>> newdocs, existingdocs = decoder.parse_stimuli(stim_element)
     """
 
-    def __init__(self, session: Session | None = None):
+    def __init__(self, session: ndi_session | None = None):
         super().__init__(session=session, name="ndi_app_stimulus_decoder")
 
     def parse_stimuli(
         self,
         ndi_element_stim: Any,
         reset: bool = False,
-    ) -> tuple[list[Document], list[Document]]:
+    ) -> tuple[list[ndi_document], list[ndi_document]]:
         """
         Parse stimulus presentations from a stimulus element.
 
@@ -63,7 +63,7 @@ class StimulusDecoder(App):
 
     def load_presentation_time(
         self,
-        stimulus_presentation_doc: Document,
+        stimulus_presentation_doc: ndi_document,
     ) -> dict[str, Any] | None:
         """
         Load presentation timing from a stimulus_presentation document.
@@ -85,14 +85,14 @@ class StimulusDecoder(App):
         """Clear existing stimulus presentation documents."""
         if self._session is None:
             return
-        from ...query import Query
+        from ...query import ndi_query
 
-        q = Query("").isa("stimulus_presentation")
+        q = ndi_query("").isa("stimulus_presentation")
         if hasattr(ndi_element_stim, "id"):
-            q = q & Query("").depends_on("stimulus_element_id", ndi_element_stim.id)
+            q = q & ndi_query("").depends_on("stimulus_element_id", ndi_element_stim.id)
         docs = self._session.database_search(q)
         for doc in docs:
             self._session.database_remove(doc)
 
     def __repr__(self) -> str:
-        return f"StimulusDecoder(session={self._session is not None})"
+        return f"ndi_app_stimulus_decoder(session={self._session is not None})"

@@ -5,12 +5,12 @@
 ### Prerequisites
 
 - Python 3.10 or later
-- Git (for installing VH-Lab dependencies)
+- Git (for installing VH-ndi_gui_Lab dependencies)
 
 ### Install from source
 
 ```bash
-git clone https://github.com/Waltham-Data-Science/NDI-python.git
+git clone https://github.com/Waltham-ndi_gui_Data-Science/NDI-python.git
 cd NDI-python
 python -m venv venv
 source venv/bin/activate  # Linux/macOS (venv\Scripts\activate on Windows)
@@ -25,10 +25,10 @@ Run `python -m ndi check` at any time to verify your installation.
 ### Creating Documents
 
 ```python
-from ndi import Document
+from ndi import ndi_document
 
 # Create a document from a schema
-doc = Document('base')
+doc = ndi_document('base')
 print(f"ID: {doc.id}")
 print(f"Type: {doc.document_properties['document_class']['class_name']}")
 ```
@@ -36,46 +36,46 @@ print(f"Type: {doc.document_properties['document_class']['class_name']}")
 ### Querying
 
 ```python
-from ndi import Query
+from ndi import ndi_query
 
 # Exact match
-q = Query('base.name') == 'my_experiment'
+q = ndi_query('base.name') == 'my_experiment'
 
 # Type query
-q_type = Query('').isa('subject')
+q_type = ndi_query('').isa('subject')
 
 # Combine with logical operators
 q_combined = q & q_type
 
 # Dependency query
-q_dep = Query('').depends_on('element_id', 'some-uuid')
+q_dep = ndi_query('').depends_on('element_id', 'some-uuid')
 ```
 
 ### Sessions
 
 ```python
-from ndi import DirSession, Document, Query
+from ndi import ndi_session_dir, ndi_document, ndi_query
 
 # Create a directory-backed session
-session = DirSession('my_experiment', '/path/to/data')
+session = ndi_session_dir('my_experiment', '/path/to/data')
 
 # Add documents
-doc = Document('base')
+doc = ndi_document('base')
 session.database_add(doc)
 
 # Search
-results = session.database_search(Query.all())
+results = session.database_search(ndi_query.all())
 ```
 
-### Testing with MockSession
+### Testing with ndi_session_mock
 
 ```python
-from ndi.session import MockSession
-from ndi import Document, Query
+from ndi.session import ndi_session_mock
+from ndi import ndi_document, ndi_query
 
-with MockSession('test') as session:
-    session.database_add(Document('base'))
-    results = session.database_search(Query('').isa('base'))
+with ndi_session_mock('test') as session:
+    session.database_add(ndi_document('base'))
+    results = session.database_search(ndi_query('').isa('base'))
     assert len(results) == 1
 ```
 

@@ -977,7 +977,7 @@ class TestSoftDelete:
             time.sleep(2)
             deleted = listDeletedDatasets(client=client)
             deleted_ids = {d.get("_id", d.get("id", "")) for d in deleted.get("datasets", [])}
-            assert ds_id in deleted_ids, f"Dataset {ds_id} not found in deleted list"
+            assert ds_id in deleted_ids, f"ndi_dataset {ds_id} not found in deleted list"
 
             # Undelete
             undelete_result = undeleteDataset(ds_id, client=client)
@@ -1192,7 +1192,7 @@ class TestReadOnlyPublicDatasets:
         small_count = countDocuments(SMALL_DATASET, client=client)
         # On dev, either dataset may have 0 docs — comparison is meaningless
         if env == "dev" and (large_count == 0 or small_count == 0):
-            pytest.skip("Dataset(s) have no documents on dev environment")
+            pytest.skip("ndi_dataset(s) have no documents on dev environment")
         assert large_count > small_count
 
     def test_both_published(self, large_dataset_info, small_dataset_info):

@@ -4,7 +4,7 @@ Tests for NDI-python against the Dabrowska electrophysiology dataset.
 Mirrors the MATLAB tutorial workflow from:
   ndi.setup.conv.dabrowska.tutorial_67f723d574f5f79c6062389d.mlx
 
-Dataset: 14,646 documents (SQLite), 215 subjects, 606 probes, ~4800 epochs
+ndi_dataset: 14,646 documents (SQLite), 215 subjects, 606 probes, ~4800 epochs
 Source: NDI Cloud dataset 67f723d574f5f79c6062389d
 
 Dabrowska dataset contains:
@@ -17,10 +17,10 @@ Dabrowska dataset contains:
 
 MATLAB tutorial steps tested:
   1. Load dataset + document types
-  2. Subject summary (docTable.subject) — 215 subjects, dynamic treatments
+  2. ndi_subject summary (docTable.subject) — 215 subjects, dynamic treatments
   3. Filter subjects by strain (identifyMatchingRows)
-  4. Probe summary (docTable.probe) — 606 probes, 9 columns
-  5. Epoch summary (docTable.epoch) — ~4800 epochs, 8 columns
+  4. ndi_probe summary (docTable.probe) — 606 probes, 9 columns
+  5. ndi_epoch_epoch summary (docTable.epoch) — ~4800 epochs, 8 columns
   6. Combined table + filtering
   7. Electrophysiology data exploration
   8. Elevated Plus Maze analysis
@@ -35,7 +35,7 @@ from pathlib import Path
 import pytest
 
 # ---------------------------------------------------------------------------
-# Dataset paths — skip entire file if not downloaded locally
+# ndi_dataset paths — skip entire file if not downloaded locally
 # ---------------------------------------------------------------------------
 
 DABROWSKA_PATH = Path(os.path.expanduser("~/Documents/ndi-projects/datasets/dabrowska"))
@@ -63,7 +63,7 @@ EXPECTED_TYPE_COUNTS = {
 
 
 # ---------------------------------------------------------------------------
-# Session-scoped fixtures — loaded once for all tests
+# ndi_session-scoped fixtures — loaded once for all tests
 # ---------------------------------------------------------------------------
 
 
@@ -72,7 +72,7 @@ def dabrowska_dataset():
     """Load the Dabrowska dataset from SQLite."""
     import ndi.dataset
 
-    return ndi.dataset.Dataset(DABROWSKA_PATH)
+    return ndi.dataset.ndi_dataset(DABROWSKA_PATH)
 
 
 @pytest.fixture(scope="session")
@@ -101,11 +101,11 @@ def epoch_summary(dabrowska_dataset):
 
 @pytest.fixture(scope="session")
 def epm_table(dabrowska_dataset):
-    """Query and convert EPM OTR docs to table."""
+    """ndi_query and convert EPM OTR docs to table."""
     from ndi.fun.doc_table import ontologyTableRowDoc2Table
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
-    query = Query("ontologyTableRow.variableNames").contains("ElevatedPlusMaze")
+    query = ndi_query("ontologyTableRow.variableNames").contains("ElevatedPlusMaze")
     docs = dabrowska_dataset.database_search(query)
     tables, _ = ontologyTableRowDoc2Table(docs)
     return tables[0]
@@ -113,11 +113,11 @@ def epm_table(dabrowska_dataset):
 
 @pytest.fixture(scope="session")
 def fps_table(dabrowska_dataset):
-    """Query and convert FPS OTR docs to table."""
+    """ndi_query and convert FPS OTR docs to table."""
     from ndi.fun.doc_table import ontologyTableRowDoc2Table
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
-    query = Query("ontologyTableRow.variableNames").contains("Fear_potentiatedStartle")
+    query = ndi_query("ontologyTableRow.variableNames").contains("Fear_potentiatedStartle")
     docs = dabrowska_dataset.database_search(query)
     tables, _ = ontologyTableRowDoc2Table(docs)
     return tables[0]
@@ -132,7 +132,7 @@ class TestDatasetLoading:
     """Validate dataset loading and document type counts."""
 
     def test_dataset_loads(self, dabrowska_dataset):
-        """Dataset object is created successfully."""
+        """ndi_dataset object is created successfully."""
         assert dabrowska_dataset is not None
 
     def test_document_type_counts(self, dabrowska_dataset):
@@ -152,16 +152,16 @@ class TestDatasetLoading:
 
     def test_total_document_count(self, dabrowska_dataset):
         """Total documents >= 14,646."""
-        from ndi.query import Query
+        from ndi.query import ndi_query
 
-        docs = dabrowska_dataset.database_search(Query("").isa("base"))
+        docs = dabrowska_dataset.database_search(ndi_query("").isa("base"))
         assert len(docs) >= 14646, f"Expected >= 14646, got {len(docs)}"
 
     def test_session_docs_exist(self, dabrowska_dataset):
         """At least 3 session documents exist."""
-        from ndi.query import Query
+        from ndi.query import ndi_query
 
-        docs = dabrowska_dataset.database_search(Query("").isa("session"))
+        docs = dabrowska_dataset.database_search(ndi_query("").isa("session"))
         assert len(docs) >= 3
 
 
@@ -392,9 +392,9 @@ class TestEPMAnalysis:
 
     def test_epm_doc_count(self, dabrowska_dataset):
         """45 EPM OTR documents."""
-        from ndi.query import Query
+        from ndi.query import ndi_query
 
-        query = Query("ontologyTableRow.variableNames").contains("ElevatedPlusMaze")
+        query = ndi_query("ontologyTableRow.variableNames").contains("ElevatedPlusMaze")
         docs = dabrowska_dataset.database_search(query)
         assert len(docs) == 45
 
@@ -444,9 +444,9 @@ class TestFPSAnalysis:
 
     def test_fps_doc_count(self, dabrowska_dataset):
         """6160 FPS OTR documents."""
-        from ndi.query import Query
+        from ndi.query import ndi_query
 
-        query = Query("ontologyTableRow.variableNames").contains("Fear_potentiatedStartle")
+        query = ndi_query("ontologyTableRow.variableNames").contains("Fear_potentiatedStartle")
         docs = dabrowska_dataset.database_search(query)
         assert len(docs) == 6160
 

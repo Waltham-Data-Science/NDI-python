@@ -1,7 +1,7 @@
 """
 ndi.epoch.epoch - Immutable epoch data class.
 
-This module provides the Epoch class that represents a single
+This module provides the ndi_epoch_epoch class that represents a single
 recording epoch with all its metadata.
 """
 
@@ -14,13 +14,13 @@ import pydantic
 from pydantic import ConfigDict
 
 if TYPE_CHECKING:
-    from ..time import ClockType
-    from .epochprobemap import EpochProbeMap
-    from .epochset import EpochSet
+    from ..time import ndi_time_clocktype
+    from .epochprobemap import ndi_epoch_epochprobemap
+    from .epochset import ndi_epoch_epochset
 
 
 @dataclass(frozen=True)
-class Epoch:
+class ndi_epoch_epoch:
     """
     Immutable data class representing a single epoch.
 
@@ -38,19 +38,19 @@ class Epoch:
         epochprobemap: List of probe-device mappings
         epoch_clock: List of clock types for this epoch
         t0_t1: List of (t0, t1) time ranges per clock
-        epochset_object: Reference to containing EpochSet
+        epochset_object: Reference to containing ndi_epoch_epochset
         underlying_epochs: List of underlying epoch references
         underlying_files: List of associated file paths
 
     Example:
-        >>> from ndi.epoch import Epoch, EpochProbeMap
+        >>> from ndi.epoch import ndi_epoch_epoch, ndi_epoch_epochprobemap
         >>> from ndi.time import DEV_LOCAL_TIME
         >>>
-        >>> epoch = Epoch(
+        >>> epoch = ndi_epoch_epoch(
         ...     epoch_number=1,
         ...     epoch_id='ep_abc123',
         ...     epoch_session_id='sess_xyz',
-        ...     epochprobemap=[EpochProbeMap('elec1', 1, 'n-trode', 'intan1::', '')],
+        ...     epochprobemap=[ndi_epoch_epochprobemap('elec1', 1, 'n-trode', 'intan1::', '')],
         ...     epoch_clock=[DEV_LOCAL_TIME],
         ...     t0_t1=[(0.0, 100.0)],
         ... )
@@ -59,11 +59,11 @@ class Epoch:
     epoch_number: int = 0
     epoch_id: str = ""
     epoch_session_id: str = ""
-    epochprobemap: tuple[EpochProbeMap, ...] = field(default_factory=tuple)
-    epoch_clock: tuple[ClockType, ...] = field(default_factory=tuple)
+    epochprobemap: tuple[ndi_epoch_epochprobemap, ...] = field(default_factory=tuple)
+    epoch_clock: tuple[ndi_time_clocktype, ...] = field(default_factory=tuple)
     t0_t1: tuple[tuple[float, float], ...] = field(default_factory=tuple)
-    epochset_object: EpochSet | None = None
-    underlying_epochs: tuple[Epoch, ...] = field(default_factory=tuple)
+    epochset_object: ndi_epoch_epochset | None = None
+    underlying_epochs: tuple[ndi_epoch_epoch, ...] = field(default_factory=tuple)
     underlying_files: tuple[str, ...] = field(default_factory=tuple)
 
     def __post_init__(self):
@@ -83,36 +83,36 @@ class Epoch:
             object.__setattr__(self, "underlying_files", tuple(self.underlying_files))
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> Epoch:
+    def from_dict(cls, data: dict[str, Any]) -> ndi_epoch_epoch:
         """
-        Create an Epoch from a dictionary.
+        Create an ndi_epoch_epoch from a dictionary.
 
         Args:
             data: Dictionary with epoch fields
 
         Returns:
-            New Epoch instance
+            New ndi_epoch_epoch instance
         """
-        from ..time import ClockType
-        from .epochprobemap import EpochProbeMap
+        from ..time import ndi_time_clocktype
+        from .epochprobemap import ndi_epoch_epochprobemap
 
         # Parse epochprobemap
         epm_raw = data.get("epochprobemap", [])
         epochprobemap = []
         for epm in epm_raw:
-            if isinstance(epm, EpochProbeMap):
+            if isinstance(epm, ndi_epoch_epochprobemap):
                 epochprobemap.append(epm)
             elif isinstance(epm, dict):
-                epochprobemap.append(EpochProbeMap.from_dict(epm))
+                epochprobemap.append(ndi_epoch_epochprobemap.from_dict(epm))
 
         # Parse epoch_clock
         clock_raw = data.get("epoch_clock", [])
         epoch_clock = []
         for clock in clock_raw:
-            if isinstance(clock, ClockType):
+            if isinstance(clock, ndi_time_clocktype):
                 epoch_clock.append(clock)
             elif isinstance(clock, str):
-                epoch_clock.append(ClockType(clock))
+                epoch_clock.append(ndi_time_clocktype(clock))
 
         # Parse t0_t1
         t0t1_raw = data.get("t0_t1", [])
@@ -125,7 +125,7 @@ class Epoch:
         underlying_raw = data.get("underlying_epochs", [])
         underlying_epochs = []
         for ue in underlying_raw:
-            if isinstance(ue, Epoch):
+            if isinstance(ue, ndi_epoch_epoch):
                 underlying_epochs.append(ue)
             elif isinstance(ue, dict):
                 underlying_epochs.append(cls.from_dict(ue))
@@ -162,24 +162,24 @@ class Epoch:
             "underlying_files": list(self.underlying_files),
         }
 
-    def has_clock(self, clock: ClockType) -> bool:
+    def has_clock(self, clock: ndi_time_clocktype) -> bool:
         """
         Check if this epoch has a specific clock type.
 
         Args:
-            clock: ClockType to check for
+            clock: ndi_time_clocktype to check for
 
         Returns:
             True if the clock type is present
         """
         return clock in self.epoch_clock
 
-    def time_range(self, clock: ClockType) -> tuple[float, float] | None:
+    def time_range(self, clock: ndi_time_clocktype) -> tuple[float, float] | None:
         """
         Get time range for a specific clock type.
 
         Args:
-            clock: ClockType to get range for
+            clock: ndi_time_clocktype to get range for
 
         Returns:
             (t0, t1) tuple or None if clock not present
@@ -200,9 +200,9 @@ class Epoch:
         Check if any epochprobemap matches the probe criteria.
 
         Args:
-            name: Probe name
+            name: ndi_probe name
             reference: Reference number
-            type: Probe type
+            type: ndi_probe type
 
         Returns:
             True if any epochprobemap matches
@@ -216,20 +216,20 @@ class Epoch:
 @pydantic.validate_call(config=ConfigDict(arbitrary_types_allowed=True))
 def is_epoch_or_empty(value: Any) -> bool:
     """
-    Validate that a value is an Epoch or empty.
+    Validate that a value is an ndi_epoch_epoch or empty.
 
     Args:
         value: Value to check
 
     Returns:
-        True if value is Epoch, None, or empty
+        True if value is ndi_epoch_epoch, None, or empty
     """
     if value is None:
         return True
-    if isinstance(value, Epoch):
+    if isinstance(value, ndi_epoch_epoch):
         return True
     if isinstance(value, (list, tuple)) and len(value) == 0:
         return True
-    if isinstance(value, (list, tuple)) and all(isinstance(x, Epoch) for x in value):
+    if isinstance(value, (list, tuple)) and all(isinstance(x, ndi_epoch_epoch) for x in value):
         return True
     return False

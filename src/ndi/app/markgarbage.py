@@ -1,7 +1,7 @@
 """
 ndi.app.markgarbage - Mark valid/invalid time intervals.
 
-Provides the MarkGarbage app for identifying and storing valid
+Provides the ndi_app_markgarbage app for identifying and storing valid
 time intervals within recording epochs.
 
 MATLAB equivalent: src/ndi/+ndi/+app/markgarbage.m
@@ -11,27 +11,27 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from . import App
+from . import ndi_app
 
 if TYPE_CHECKING:
-    from ..document import Document
-    from ..session.session_base import Session
+    from ..document import ndi_document
+    from ..session.session_base import ndi_session
 
 
-class MarkGarbage(App):
+class ndi_app_markgarbage(ndi_app):
     """
-    App for marking valid/invalid time intervals in recordings.
+    ndi_app for marking valid/invalid time intervals in recordings.
 
     Allows users to identify and store which portions of a recording
     are valid (not "garbage") for analysis.
 
     Example:
-        >>> app = MarkGarbage(session)
+        >>> app = ndi_app_markgarbage(session)
         >>> app.markvalidinterval(epochset, 0.5, timeref, 10.0, timeref)
         >>> intervals, docs = app.loadvalidinterval(epochset)
     """
 
-    def __init__(self, session: Session | None = None):
+    def __init__(self, session: ndi_session | None = None):
         super().__init__(session=session, name="ndi_app_markgarbage")
 
     def markvalidinterval(
@@ -48,7 +48,7 @@ class MarkGarbage(App):
         MATLAB equivalent: ndi.app.markgarbage/markvalidinterval
 
         Args:
-            epochset_obj: EpochSet or Element to mark
+            epochset_obj: ndi_epoch_epochset or ndi_element to mark
             t0: Start time of valid interval
             timeref_t0: Time reference for t0
             t1: End time of valid interval
@@ -76,7 +76,7 @@ class MarkGarbage(App):
         MATLAB equivalent: ndi.app.markgarbage/savevalidinterval
 
         Args:
-            epochset_obj: EpochSet or Element
+            epochset_obj: ndi_epoch_epochset or ndi_element
             interval_struct: Dict with t0, timeref_t0, t1, timeref_t1
 
         Returns:
@@ -85,9 +85,9 @@ class MarkGarbage(App):
         if self._session is None:
             raise RuntimeError("No session configured")
 
-        from ..document import Document
+        from ..document import ndi_document
 
-        doc = Document("apps/markgarbage/valid_interval", valid_interval=interval_struct)
+        doc = ndi_document("apps/markgarbage/valid_interval", valid_interval=interval_struct)
         doc = doc.set_session_id(self._session.id())
         if hasattr(epochset_obj, "id"):
             doc = doc.set_dependency_value(
@@ -105,29 +105,31 @@ class MarkGarbage(App):
         MATLAB equivalent: ndi.app.markgarbage/clearvalidinterval
 
         Args:
-            epochset_obj: EpochSet or Element
+            epochset_obj: ndi_epoch_epochset or ndi_element
         """
         if self._session is None:
             return
 
-        from ..query import Query
+        from ..query import ndi_query
 
-        q = Query("").isa("valid_interval")
+        q = ndi_query("").isa("valid_interval")
         if hasattr(epochset_obj, "id"):
-            q = q & Query("").depends_on("element_id", epochset_obj.id)
+            q = q & ndi_query("").depends_on("element_id", epochset_obj.id)
 
         docs = self._session.database_search(q)
         for doc in docs:
             self._session.database_remove(doc)
 
-    def loadvalidinterval(self, epochset_obj: Any) -> tuple[list[dict[str, Any]], list[Document]]:
+    def loadvalidinterval(
+        self, epochset_obj: Any
+    ) -> tuple[list[dict[str, Any]], list[ndi_document]]:
         """
         Load stored valid intervals.
 
         MATLAB equivalent: ndi.app.markgarbage/loadvalidinterval
 
         Args:
-            epochset_obj: EpochSet or Element
+            epochset_obj: ndi_epoch_epochset or ndi_element
 
         Returns:
             Tuple of (intervals, docs) where intervals is a list of
@@ -136,11 +138,11 @@ class MarkGarbage(App):
         if self._session is None:
             return [], []
 
-        from ..query import Query
+        from ..query import ndi_query
 
-        q = Query("").isa("valid_interval")
+        q = ndi_query("").isa("valid_interval")
         if hasattr(epochset_obj, "id"):
-            q = q & Query("").depends_on("element_id", epochset_obj.id)
+            q = q & ndi_query("").depends_on("element_id", epochset_obj.id)
 
         docs = self._session.database_search(q)
         intervals = []
@@ -167,7 +169,7 @@ class MarkGarbage(App):
         MATLAB equivalent: ndi.app.markgarbage/identifyvalidintervals
 
         Args:
-            epochset_obj: EpochSet or Element
+            epochset_obj: ndi_epoch_epochset or ndi_element
             timeref: Time reference for the query interval
             t0: Start time of query interval
             t1: End time of query interval
@@ -180,4 +182,4 @@ class MarkGarbage(App):
         )
 
     def __repr__(self) -> str:
-        return f"MarkGarbage(session={self._session is not None})"
+        return f"ndi_app_markgarbage(session={self._session is not None})"

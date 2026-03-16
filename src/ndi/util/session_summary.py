@@ -1,4 +1,4 @@
-"""Session summary utility for symmetry testing.
+"""ndi_session summary utility for symmetry testing.
 
 MATLAB equivalent: ``ndi.util.sessionSummary``
 
@@ -27,7 +27,7 @@ def sessionSummary(session_obj: Any) -> dict[str, Any]:
     """
     summary: dict[str, Any] = {}
 
-    # 1. Session basics
+    # 1. ndi_session basics
     summary["reference"] = session_obj.reference
     summary["sessionId"] = session_obj.id()
 
@@ -79,9 +79,7 @@ def sessionSummary(session_obj: Any) -> dict[str, Any]:
         # Get daqreader class (use MATLAB-compatible name for symmetry)
         dr = getattr(sys, "daqreader", None)
         if dr is not None:
-            details["daqreader_class"] = getattr(
-                dr, "NDI_DAQREADER_CLASS", type(dr).__qualname__
-            )
+            details["daqreader_class"] = getattr(dr, "NDI_DAQREADER_CLASS", type(dr).__qualname__)
         else:
             details["daqreader_class"] = ""
 

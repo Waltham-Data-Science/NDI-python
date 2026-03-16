@@ -120,7 +120,7 @@ classes:
     matlab_path: "+ndi/+daq/daqsystemstring.m"
     matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/daq/daqsystemstring.py"
-    python_class: "DAQSystemString"
+    python_class: "ndi_daq_daqsystemstring"
 
     properties:
       - name: devicename
@@ -144,7 +144,7 @@ classes:
             type_python: "str"
         output_arguments:
           - name: dss
-            type_python: "DAQSystemString"
+            type_python: "ndi_daq_daqsystemstring"
         decision_log: >
           MATLAB constructor parses in-place. Python uses classmethod factory.
 
@@ -183,14 +183,14 @@ classes:
         decision_log: "Mapped to Python __eq__ dunder method."
 
   # =========================================================================
-  # ndi.daq.reader (DAQReader base class)
+  # ndi.daq.reader (ndi_daq_reader base class)
   # =========================================================================
   - name: reader
     type: class
     matlab_path: "+ndi/+daq/reader.m"
     matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/daq/reader_base.py"
-    python_class: "DAQReader"
+    python_class: "ndi_daq_reader"
     inherits: "ndi.ido"
 
     methods:
@@ -211,7 +211,7 @@ classes:
             default: "None"
         output_arguments:
           - name: reader_obj
-            type_python: "DAQReader"
+            type_python: "ndi_daq_reader"
         decision_log: "Exact match."
 
       - name: epochclock
@@ -221,7 +221,7 @@ classes:
             type_python: "list[str]"
         output_arguments:
           - name: ec
-            type_python: "list[ClockType]"
+            type_python: "list[ndi_time_clocktype]"
         decision_log: "Exact match. Base class returns [NO_TIME]."
 
       - name: t0_t1
@@ -269,7 +269,7 @@ classes:
             type_python: "Any"
         output_arguments:
           - name: ec
-            type_python: "list[ClockType]"
+            type_python: "list[ndi_time_clocktype]"
         decision_log: "Exact match."
 
       - name: t0_t1_ingested
@@ -337,14 +337,14 @@ classes:
         decision_log: "Mapped to Python __eq__ dunder method."
 
   # =========================================================================
-  # ndi.daq.reader.mfdaq_reader (MFDAQReader class)
+  # ndi.daq.reader.mfdaq_reader (ndi_daq_reader_mfdaq class)
   # =========================================================================
   - name: mfdaq_reader
     type: class
     matlab_path: "+ndi/+daq/+reader/mfdaq.m"
     matlab_last_sync_hash: "41e84fed"
     python_path: "ndi/daq/mfdaq.py"
-    python_class: "MFDAQReader"
+    python_class: "ndi_daq_reader_mfdaq"
     inherits: "ndi.daq.reader"
 
     methods:
@@ -355,7 +355,7 @@ classes:
             type_python: "list[str]"
         output_arguments:
           - name: ec
-            type_python: "list[ClockType]"
+            type_python: "list[ndi_time_clocktype]"
         decision_log: "Exact match. Returns [DEV_LOCAL_TIME]."
 
       - name: t0_t1
@@ -655,7 +655,7 @@ classes:
     matlab_path: "+ndi/+daq/system.m"
     matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/daq/system.py"
-    python_class: "DAQSystem"
+    python_class: "ndi_daq_system"
     inherits: "ndi.ido"
 
     properties:
@@ -673,7 +673,7 @@ classes:
 
       - name: daqreader
         type_matlab: "ndi.daq.reader"
-        type_python: "DAQReader | None"
+        type_python: "ndi_daq_reader | None"
         access: "property (read-only)"
         decision_log: "Exact match."
 
@@ -703,7 +703,7 @@ classes:
             default: "None"
           - name: daqreader
             type_matlab: "ndi.daq.reader"
-            type_python: "DAQReader | None"
+            type_python: "ndi_daq_reader | None"
             default: "None"
           - name: daqmetadatareaders
             type_matlab: "cell array"
@@ -720,7 +720,7 @@ classes:
             default: "None"
         output_arguments:
           - name: sys_obj
-            type_python: "DAQSystem"
+            type_python: "ndi_daq_system"
         decision_log: >
           Exact match. Python adds session/document kwargs for
           loading from database.
@@ -732,7 +732,7 @@ classes:
             type_python: "list[Any]"
         output_arguments:
           - name: sys_obj
-            type_python: "DAQSystem"
+            type_python: "ndi_daq_system"
         decision_log: "Exact match. Returns self for chaining."
 
       - name: set_session
@@ -742,7 +742,7 @@ classes:
             type_python: "Any"
         output_arguments:
           - name: sys_obj
-            type_python: "DAQSystem"
+            type_python: "ndi_daq_system"
         decision_log: "Exact match. Returns self for chaining."
 
       - name: epochclock
@@ -752,7 +752,7 @@ classes:
             type_python: "int"
         output_arguments:
           - name: ec
-            type_python: "list[ClockType]"
+            type_python: "list[ndi_time_clocktype]"
         decision_log: >
           Semantic Parity: epoch_number is 1-indexed (user concept).
           Base class returns [NO_TIME].
@@ -898,7 +898,7 @@ classes:
     matlab_path: "+ndi/+daq/+system/mfdaq.m"
     matlab_last_sync_hash: "9f584d8a"
     python_path: "ndi/daq/system_mfdaq.py"
-    python_class: "DAQSystemMFDAQ"
+    python_class: "ndi_daq_system_mfdaq"
     inherits: "ndi.daq.system"
 
     methods:
@@ -909,7 +909,7 @@ classes:
             type_python: "int"
         output_arguments:
           - name: ec
-            type_python: "list[ClockType]"
+            type_python: "list[ndi_time_clocktype]"
         decision_log: >
           Semantic Parity: epoch_number is 1-indexed (user concept).
           Returns [DEV_LOCAL_TIME].

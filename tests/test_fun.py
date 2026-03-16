@@ -383,7 +383,7 @@ class TestDocFindFuid:
 # ===========================================================================
 
 
-class TestEpochId2Element:
+class TestEpochId2ndi_element:
     """Tests for epoch.epochid2element."""
 
     def test_basic(self):

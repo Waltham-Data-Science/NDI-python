@@ -7,15 +7,15 @@ Tests for Phase 9: ndi.app, ndi.app.appdoc, ndi.calculator, ndi.calc.example.sim
 import pytest
 
 from ndi import (
-    App,
-    AppDoc,
-    Calculator,
-    DirSession,
     DocExistsAction,
-    Document,
-    Query,
+    ndi_app,
+    ndi_app_appdoc,
+    ndi_calculator,
+    ndi_document,
+    ndi_query,
+    ndi_session_dir,
 )
-from ndi.calc.example import SimpleCalc
+from ndi.calc.example import ndi_calc_example_simple
 
 # ===========================================================================
 # Fixtures
@@ -30,70 +30,70 @@ def temp_dir(tmp_path):
 
 @pytest.fixture
 def session(temp_dir):
-    """Create a DirSession for testing."""
+    """Create a ndi_session_dir for testing."""
     session_path = temp_dir / "session1"
     session_path.mkdir(parents=True, exist_ok=True)
-    return DirSession("TestSession", session_path)
+    return ndi_session_dir("TestSession", session_path)
 
 
 # ===========================================================================
-# App Tests
+# ndi_app Tests
 # ===========================================================================
 
 
 class TestAppCreation:
-    """Test App construction."""
+    """Test ndi_app construction."""
 
     def test_default_construction(self):
-        app = App()
+        app = ndi_app()
         assert app.session is None
         assert app.name == "generic"
 
     def test_construction_with_session(self, session):
-        app = App(session=session, name="my_analysis")
+        app = ndi_app(session=session, name="my_analysis")
         assert app.session is session
         assert app.name == "my_analysis"
 
     def test_repr(self):
-        app = App(name="test_app")
-        assert repr(app) == "App('test_app')"
+        app = ndi_app(name="test_app")
+        assert repr(app) == "ndi_app('test_app')"
 
 
 class TestAppVarAppName:
-    """Test App.varappname() sanitization."""
+    """Test ndi_app.varappname() sanitization."""
 
     def test_simple_name(self):
-        app = App(name="my_app")
+        app = ndi_app(name="my_app")
         assert app.varappname() == "my_app"
 
     def test_name_with_dots(self):
-        app = App(name="my.app.v2")
+        app = ndi_app(name="my.app.v2")
         assert app.varappname() == "my_app_v2"
 
     def test_name_with_spaces(self):
-        app = App(name="my app name")
+        app = ndi_app(name="my app name")
         assert app.varappname() == "my_app_name"
 
     def test_name_starting_with_digit(self):
-        app = App(name="3dplot")
+        app = ndi_app(name="3dplot")
         assert app.varappname() == "_3dplot"
 
     def test_empty_name(self):
-        app = App(name="")
+        app = ndi_app(name="")
         assert app.varappname() == "_app"
 
     def test_special_characters(self):
-        app = App(name="test@app#v1")
+        app = ndi_app(name="test@app#v1")
         result = app.varappname()
         assert result == "test_app_v1"
         assert result.isidentifier()
 
 
 class TestAppVersionUrl:
-    """Test App.version_url()."""
+    """Test ndi_app.version_url()."""
 
     def test_returns_tuple(self):
-        app = App(name="test")
+        app = ndi_app(name="test")
         version, url = app.version_url()
         assert isinstance(version, str)
         assert isinstance(url, str)
@@ -102,44 +102,44 @@ class TestAppVersionUrl:
 
 
 class TestAppNewDocument:
-    """Test App.newdocument()."""
+    """Test ndi_app.newdocument()."""
 
     def test_creates_app_document(self):
-        app = App(name="my_analysis")
+        app = ndi_app(name="my_analysis")
         doc = app.newdocument()
-        assert isinstance(doc, Document)
+        assert isinstance(doc, ndi_document)
         props = doc.document_properties
         assert "app" in props
         assert props["app"]["name"] == "my_analysis"
 
     def test_includes_interpreter_info(self):
-        app = App(name="test")
+        app = ndi_app(name="test")
         doc = app.newdocument()
         props = doc.document_properties
         assert props["app"]["interpreter"] == "Python"
         assert "interpreter_version" in props["app"]
 
     def test_includes_os_info(self):
-        app = App(name="test")
+        app = ndi_app(name="test")
         doc = app.newdocument()
         props = doc.document_properties
         assert "os" in props["app"]
         assert "os_version" in props["app"]
 
     def test_includes_version_and_url(self):
-        app = App(name="test")
+        app = ndi_app(name="test")
         doc = app.newdocument()
         props = doc.document_properties
         assert "version" in props["app"]
         assert "url" in props["app"]
 
     def test_sets_session_id_when_session_provided(self, session):
-        app = App(session=session, name="test")
+        app = ndi_app(session=session, name="test")
         doc = app.newdocument()
         assert doc.session_id == session.id()
 
     def test_no_session_id_when_no_session(self):
-        app = App(name="test")
+        app = ndi_app(name="test")
         doc = app.newdocument()
         # session_id should be empty or unset
         sid = doc.session_id
@@ -147,15 +147,15 @@ class TestAppNewDocument:
 
 
 class TestAppSearchQuery:
-    """Test App.searchquery()."""
+    """Test ndi_app.searchquery()."""
 
     def test_returns_query(self):
-        app = App(name="my_analysis")
+        app = ndi_app(name="my_analysis")
         q = app.searchquery()
         assert q is not None
 
     def test_query_matches_app_document(self, session):
-        app = App(session=session, name="my_analysis")
+        app = ndi_app(session=session, name="my_analysis")
         doc = app.newdocument()
         session.database_add(doc)
 
@@ -165,7 +165,7 @@ class TestAppSearchQuery:
 
 
 # ===========================================================================
-# AppDoc Tests
+# ndi_app_appdoc Tests
 # ===========================================================================
 
 
@@ -187,16 +187,16 @@ class TestDocExistsAction:
 
 
 class TestAppDocCreation:
-    """Test AppDoc construction."""
+    """Test ndi_app_appdoc construction."""
 
     def test_default_construction(self):
-        ad = AppDoc()
+        ad = ndi_app_appdoc()
         assert ad.doc_types == []
         assert ad.doc_document_types == []
         assert ad.doc_session is None
 
     def test_construction_with_types(self):
-        ad = AppDoc(
+        ad = ndi_app_appdoc(
             doc_types=["my_type"],
             doc_document_types=["my_doc_type"],
         )
@@ -205,55 +205,55 @@ class TestAppDocCreation:
 
 
 class TestAppDocBaseMethods:
-    """Test AppDoc base class method defaults."""
+    """Test ndi_app_appdoc base class method defaults."""
 
     def test_struct2doc_returns_none(self):
-        ad = AppDoc()
+        ad = ndi_app_appdoc()
         result = ad.struct2doc("test_type", {"key": "value"})
         assert result is None
 
     def test_find_appdoc_returns_empty(self):
-        ad = AppDoc()
+        ad = ndi_app_appdoc()
         result = ad.find_appdoc("test_type")
         assert result == []
 
     def test_defaultstruct_returns_empty_dict(self):
-        ad = AppDoc()
+        ad = ndi_app_appdoc()
         result = ad.defaultstruct_appdoc("test_type")
         assert result == {}
 
     def test_loaddata_returns_none(self):
-        ad = AppDoc()
+        ad = ndi_app_appdoc()
         result = ad.loaddata_appdoc("test_type")
         assert result is None
 
     def test_isvalid_returns_false(self):
-        ad = AppDoc()
+        ad = ndi_app_appdoc()
         valid, msg = ad.isvalid_appdoc_struct("test_type", {})
         assert valid is False
         assert isinstance(msg, str)
 
     def test_isequal_compares_dicts(self):
-        ad = AppDoc()
+        ad = ndi_app_appdoc()
         assert ad.isequal_appdoc_struct("t", {"a": 1}, {"a": 1}) is True
         assert ad.isequal_appdoc_struct("t", {"a": 1}, {"a": 2}) is False
 
 
 class TestAppDocAddAppdoc:
-    """Test AppDoc.add_appdoc() with doc_exists_action."""
+    """Test ndi_app_appdoc.add_appdoc() with doc_exists_action."""
 
     def test_add_appdoc_no_existing_no_struct2doc(self):
         """Base class struct2doc returns None, so add returns empty."""
-        ad = AppDoc()
+        ad = ndi_app_appdoc()
         result = ad.add_appdoc("test_type")
         assert result == []
 
     def test_add_appdoc_error_when_exists(self):
         """Test that ERROR action raises when doc exists."""
 
-        class FakeAppDoc(AppDoc):
+        class FakeAppDoc(ndi_app_appdoc):
             def find_appdoc(self, appdoc_type, *args, **kwargs):
-                return [Document("base")]
+                return [ndi_document("base")]
 
         ad = FakeAppDoc()
         with pytest.raises(RuntimeError, match="already exists"):
@@ -261,9 +261,9 @@ class TestAppDocAddAppdoc:
 
     def test_add_appdoc_no_action_returns_existing(self):
         """Test that NO_ACTION returns existing docs."""
-        existing = [Document("base")]
+        existing = [ndi_document("base")]
 
-        class FakeAppDoc(AppDoc):
+        class FakeAppDoc(ndi_app_appdoc):
             def find_appdoc(self, appdoc_type, *args, **kwargs):
                 return existing
 
@@ -273,17 +273,17 @@ class TestAppDocAddAppdoc:
 
 
 class TestAppDocClear:
-    """Test AppDoc.clear_appdoc()."""
+    """Test ndi_app_appdoc.clear_appdoc()."""
 
     def test_clear_no_docs(self):
-        ad = AppDoc()
+        ad = ndi_app_appdoc()
         result = ad.clear_appdoc("test_type")
         assert result is False
 
     def test_clear_with_docs_no_session(self):
-        class FakeAppDoc(AppDoc):
+        class FakeAppDoc(ndi_app_appdoc):
             def find_appdoc(self, appdoc_type, *args, **kwargs):
-                return [Document("base")]
+                return [ndi_document("base")]
 
         ad = FakeAppDoc()
         result = ad.clear_appdoc("test_type")
@@ -291,44 +291,44 @@ class TestAppDocClear:
 
 
 # ===========================================================================
-# Calculator Tests
+# ndi_calculator Tests
 # ===========================================================================
 
 
 class TestCalculatorCreation:
-    """Test Calculator construction."""
+    """Test ndi_calculator construction."""
 
     def test_default_construction(self):
-        calc = Calculator()
+        calc = ndi_calculator()
         assert calc.session is None
         assert calc.doc_types == []
 
     def test_construction_with_session(self, session):
-        calc = Calculator(session=session, document_type="my_calc")
+        calc = ndi_calculator(session=session, document_type="my_calc")
         assert calc.session is session
         assert calc.doc_types == ["my_calc"]
         assert calc.doc_document_types == ["my_calc"]
 
     def test_name_is_class_name(self):
-        calc = Calculator()
-        assert calc.name == "Calculator"
+        calc = ndi_calculator()
+        assert calc.name == "ndi_calculator"
 
     def test_repr(self):
-        calc = Calculator(document_type="my_calc")
-        assert "Calculator" in repr(calc)
+        calc = ndi_calculator(document_type="my_calc")
+        assert "ndi_calculator" in repr(calc)
         assert "my_calc" in repr(calc)
 
 
 class TestCalculatorDefaultMethods:
-    """Test Calculator base class defaults."""
+    """Test ndi_calculator base class defaults."""
 
     def test_calculate_returns_empty(self):
-        calc = Calculator()
+        calc = ndi_calculator()
         result = calc.calculate({"input_parameters": {}, "depends_on": []})
         assert result == []
 
     def test_default_search_for_input_parameters(self):
-        calc = Calculator()
+        calc = ndi_calculator()
         params = calc.default_search_for_input_parameters()
         assert "input_parameters" in params
         assert "depends_on" in params
@@ -336,25 +336,25 @@ class TestCalculatorDefaultMethods:
         assert params["depends_on"] == []
 
     def test_are_input_parameters_equivalent(self):
-        calc = Calculator()
+        calc = ndi_calculator()
         assert calc.are_input_parameters_equivalent({"a": 1}, {"a": 1}) is True
         assert calc.are_input_parameters_equivalent({"a": 1}, {"a": 2}) is False
 
     def test_is_valid_dependency_input(self):
-        calc = Calculator()
+        calc = ndi_calculator()
         assert calc.is_valid_dependency_input("doc_id", "abc123") is True
 
     def test_default_parameters_query(self):
-        calc = Calculator()
+        calc = ndi_calculator()
         result = calc.default_parameters_query({})
         assert result == []
 
 
 class TestCalculatorSearchForInputParameters:
-    """Test Calculator.search_for_input_parameters()."""
+    """Test ndi_calculator.search_for_input_parameters()."""
 
     def test_no_queries_returns_single_set(self):
-        calc = Calculator()
+        calc = ndi_calculator()
         params = {
             "input_parameters": {"answer": 5},
             "depends_on": [],
@@ -364,27 +364,27 @@ class TestCalculatorSearchForInputParameters:
         assert result[0]["input_parameters"] == {"answer": 5}
 
     def test_no_session_returns_empty(self):
-        calc = Calculator()
+        calc = ndi_calculator()
         params = {
             "input_parameters": {"answer": 5},
             "depends_on": [],
-            "query": [{"name": "doc_id", "query": Query("").isa("base")}],
+            "query": [{"name": "doc_id", "query": ndi_query("").isa("base")}],
         }
         result = calc.search_for_input_parameters(params)
         assert result == []
 
     def test_with_session_and_query(self, session):
         # Add some documents to the session
-        doc1 = Document("base", **{"base.name": "test1"})
-        doc2 = Document("base", **{"base.name": "test2"})
+        doc1 = ndi_document("base", **{"base.name": "test1"})
+        doc2 = ndi_document("base", **{"base.name": "test2"})
         session.database_add(doc1)
         session.database_add(doc2)
 
-        calc = Calculator(session=session, document_type="test_calc")
+        calc = ndi_calculator(session=session, document_type="test_calc")
         params = {
             "input_parameters": {"answer": 5},
             "depends_on": [],
-            "query": [{"name": "document_id", "query": Query("").isa("base")}],
+            "query": [{"name": "document_id", "query": ndi_query("").isa("base")}],
         }
         result = calc.search_for_input_parameters(params)
         # Should find one parameter set per base document
@@ -394,7 +394,7 @@ class TestCalculatorSearchForInputParameters:
             assert len(p["depends_on"]) >= 1
 
     def test_fixed_depends_on_preserved(self):
-        calc = Calculator()
+        calc = ndi_calculator()
         params = {
             "input_parameters": {"x": 1},
             "depends_on": [{"name": "fixed_dep", "value": "abc"}],
@@ -405,10 +405,10 @@ class TestCalculatorSearchForInputParameters:
 
 
 class TestCalculatorSearchForDocs:
-    """Test Calculator.search_for_calculator_docs()."""
+    """Test ndi_calculator.search_for_calculator_docs()."""
 
     def test_no_session_returns_empty(self):
-        calc = Calculator(document_type="my_calc")
+        calc = ndi_calculator(document_type="my_calc")
         result = calc.search_for_calculator_docs(
             {
                 "input_parameters": {},
@@ -418,7 +418,7 @@ class TestCalculatorSearchForDocs:
         assert result == []
 
     def test_no_doc_types_returns_empty(self, session):
-        calc = Calculator(session=session)
+        calc = ndi_calculator(session=session)
         result = calc.search_for_calculator_docs(
             {
                 "input_parameters": {},
@@ -429,16 +429,16 @@ class TestCalculatorSearchForDocs:
 
 
 class TestCalculatorRun:
-    """Test Calculator.run() pipeline."""
+    """Test ndi_calculator.run() pipeline."""
 
     def test_run_no_session(self):
-        calc = Calculator()
+        calc = ndi_calculator()
         result = calc.run(DocExistsAction.ERROR)
         assert result == []
 
     def test_run_with_empty_calculate(self, session):
-        """Calculator base returns [] from calculate, so run returns []."""
-        calc = Calculator(session=session, document_type="test")
+        """ndi_calculator base returns [] from calculate, so run returns []."""
+        calc = ndi_calculator(session=session, document_type="test")
         # No matching inputs, so calculate never called
         result = calc.run(DocExistsAction.ERROR)
         assert isinstance(result, list)
@@ -446,9 +446,9 @@ class TestCalculatorRun:
     def test_run_error_on_existing(self, session):
         """Test that ERROR action raises when docs already exist."""
 
-        class TestCalc(Calculator):
+        class TestCalc(ndi_calculator):
             def calculate(self, parameters):
-                doc = Document("base", **{"base.name": "calc_result"})
+                doc = ndi_document("base", **{"base.name": "calc_result"})
                 doc = doc.set_session_id(self._session.id())
                 return [doc]
 
@@ -466,11 +466,11 @@ class TestCalculatorRun:
 
     def test_run_no_action_does_not_error(self, session):
         """NO_ACTION should not raise on second run."""
-        # Use SimpleCalc which properly stores input_parameters
-        base_doc = Document("base", **{"base.name": "input"})
+        # Use ndi_calc_example_simple which properly stores input_parameters
+        base_doc = ndi_document("base", **{"base.name": "input"})
         session.database_add(base_doc)
 
-        sc = SimpleCalc(session=session)
+        sc = ndi_calc_example_simple(session=session)
         # First run creates docs
         docs1 = sc.run(DocExistsAction.REPLACE)
         assert len(docs1) >= 1
@@ -481,42 +481,42 @@ class TestCalculatorRun:
 
 
 # ===========================================================================
-# SimpleCalc Tests
+# ndi_calc_example_simple Tests
 # ===========================================================================
 
 
 class TestSimpleCalcCreation:
-    """Test SimpleCalc construction."""
+    """Test ndi_calc_example_simple construction."""
 
     def test_default_construction(self):
-        sc = SimpleCalc()
+        sc = ndi_calc_example_simple()
         assert sc.session is None
         assert sc.doc_types == ["simple_calc"]
         assert sc.doc_document_types == ["apps/calculators/simple_calc"]
 
     def test_construction_with_session(self, session):
-        sc = SimpleCalc(session=session)
+        sc = ndi_calc_example_simple(session=session)
         assert sc.session is session
 
     def test_repr(self):
-        sc = SimpleCalc()
-        assert "SimpleCalc" in repr(sc)
+        sc = ndi_calc_example_simple()
+        assert "ndi_calc_example_simple" in repr(sc)
 
     def test_name_is_class_name(self):
-        sc = SimpleCalc()
-        assert sc.name == "SimpleCalc"
+        sc = ndi_calc_example_simple()
+        assert sc.name == "ndi_calc_example_simple"
 
 
 class TestSimpleCalcDefaultParameters:
-    """Test SimpleCalc.default_search_for_input_parameters()."""
+    """Test ndi_calc_example_simple.default_search_for_input_parameters()."""
 
     def test_returns_answer_5(self):
-        sc = SimpleCalc()
+        sc = ndi_calc_example_simple()
         params = sc.default_search_for_input_parameters()
         assert params["input_parameters"] == {"answer": 5}
 
     def test_has_query_for_base(self):
-        sc = SimpleCalc()
+        sc = ndi_calc_example_simple()
         params = sc.default_search_for_input_parameters()
         assert "query" in params
         assert len(params["query"]) == 1
@@ -524,20 +524,20 @@ class TestSimpleCalcDefaultParameters:
 
 
 class TestSimpleCalcCalculate:
-    """Test SimpleCalc.calculate()."""
+    """Test ndi_calc_example_simple.calculate()."""
 
     def test_calculate_returns_document(self):
-        sc = SimpleCalc()
+        sc = ndi_calc_example_simple()
         params = {
             "input_parameters": {"answer": 42},
             "depends_on": [],
         }
         docs = sc.calculate(params)
         assert len(docs) == 1
-        assert isinstance(docs[0], Document)
+        assert isinstance(docs[0], ndi_document)
 
     def test_calculate_stores_answer(self):
-        sc = SimpleCalc()
+        sc = ndi_calc_example_simple()
         params = {
             "input_parameters": {"answer": 42},
             "depends_on": [],
@@ -547,7 +547,7 @@ class TestSimpleCalcCalculate:
         assert props["simple_calc"]["answer"] == 42
 
     def test_calculate_stores_input_parameters(self):
-        sc = SimpleCalc()
+        sc = ndi_calc_example_simple()
         params = {
             "input_parameters": {"answer": 7},
             "depends_on": [],
@@ -557,7 +557,7 @@ class TestSimpleCalcCalculate:
         assert props["simple_calc"]["input_parameters"] == {"answer": 7}
 
     def test_calculate_sets_session_id(self, session):
-        sc = SimpleCalc(session=session)
+        sc = ndi_calc_example_simple(session=session)
         params = {
             "input_parameters": {"answer": 5},
             "depends_on": [],
@@ -566,7 +566,7 @@ class TestSimpleCalcCalculate:
         assert docs[0].session_id == session.id()
 
     def test_calculate_sets_dependency(self):
-        sc = SimpleCalc()
+        sc = ndi_calc_example_simple()
         params = {
             "input_parameters": {"answer": 5},
             "depends_on": [{"name": "document_id", "value": "abc-123"}],
@@ -580,15 +580,15 @@ class TestSimpleCalcCalculate:
 
 
 class TestSimpleCalcRun:
-    """Test SimpleCalc end-to-end run."""
+    """Test ndi_calc_example_simple end-to-end run."""
 
     def test_run_with_session(self, session):
-        """Full pipeline: add a base doc, run SimpleCalc, verify output."""
-        # Add a base document for SimpleCalc to find
-        base_doc = Document("base", **{"base.name": "input_data"})
+        """Full pipeline: add a base doc, run ndi_calc_example_simple, verify output."""
+        # Add a base document for ndi_calc_example_simple to find
+        base_doc = ndi_document("base", **{"base.name": "input_data"})
         session.database_add(base_doc)
 
-        sc = SimpleCalc(session=session)
+        sc = ndi_calc_example_simple(session=session)
         docs = sc.run(DocExistsAction.REPLACE)
         assert len(docs) >= 1
 
@@ -600,20 +600,20 @@ class TestSimpleCalcRun:
 
     def test_run_replace_mode(self, session):
         """Running twice with REPLACE should succeed."""
-        base_doc = Document("base", **{"base.name": "input"})
+        base_doc = ndi_document("base", **{"base.name": "input"})
         session.database_add(base_doc)
 
-        sc = SimpleCalc(session=session)
+        sc = ndi_calc_example_simple(session=session)
         sc.run(DocExistsAction.REPLACE)
         docs2 = sc.run(DocExistsAction.REPLACE)
         assert len(docs2) >= 1
 
     def test_run_no_action_mode(self, session):
         """Running with NO_ACTION should return existing on second run."""
-        base_doc = Document("base", **{"base.name": "input"})
+        base_doc = ndi_document("base", **{"base.name": "input"})
         session.database_add(base_doc)
 
-        sc = SimpleCalc(session=session)
+        sc = ndi_calc_example_simple(session=session)
         sc.run(DocExistsAction.REPLACE)
         # NO_ACTION should not error
         docs2 = sc.run(DocExistsAction.NO_ACTION)
@@ -621,14 +621,14 @@ class TestSimpleCalcRun:
 
     def test_run_multiple_inputs(self, session):
         """Multiple base docs should produce multiple calculator outputs."""
-        doc1 = Document("base", **{"base.name": "input1"})
-        doc2 = Document("base", **{"base.name": "input2"})
-        doc3 = Document("base", **{"base.name": "input3"})
+        doc1 = ndi_document("base", **{"base.name": "input1"})
+        doc2 = ndi_document("base", **{"base.name": "input2"})
+        doc3 = ndi_document("base", **{"base.name": "input3"})
         session.database_add(doc1)
         session.database_add(doc2)
         session.database_add(doc3)
 
-        sc = SimpleCalc(session=session)
+        sc = ndi_calc_example_simple(session=session)
         docs = sc.run(DocExistsAction.REPLACE)
         # Should produce at least 3 results (one per input)
         assert len(docs) >= 3
@@ -643,14 +643,14 @@ class TestPhase9Imports:
     """Test that all Phase 9 classes are importable from ndi."""
 
     def test_import_app(self):
-        from ndi import App
+        from ndi import ndi_app
 
-        assert App is not None
+        assert ndi_app is not None
 
     def test_import_appdoc(self):
-        from ndi import AppDoc
+        from ndi import ndi_app_appdoc
 
-        assert AppDoc is not None
+        assert ndi_app_appdoc is not None
 
     def test_import_doc_exists_action(self):
         from ndi import DocExistsAction
@@ -658,9 +658,9 @@ class TestPhase9Imports:
         assert DocExistsAction is not None
 
     def test_import_calculator(self):
-        from ndi import Calculator
+        from ndi import ndi_calculator
 
-        assert Calculator is not None
+        assert ndi_calculator is not None
 
     def test_import_calc_module(self):
         from ndi import calc
@@ -668,36 +668,36 @@ class TestPhase9Imports:
         assert calc is not None
 
     def test_import_simple_calc(self):
-        from ndi.calc.example import SimpleCalc
+        from ndi.calc.example import ndi_calc_example_simple
 
-        assert SimpleCalc is not None
+        assert ndi_calc_example_simple is not None
 
     def test_import_simple_calc_full_path(self):
-        from ndi.calc.example.simple import SimpleCalc
+        from ndi.calc.example.simple import ndi_calc_example_simple
 
-        assert SimpleCalc is not None
+        assert ndi_calc_example_simple is not None
 
 
 class TestPhase9Inheritance:
     """Test class hierarchies are correct."""
 
     def test_app_extends_document_service(self):
-        from ndi import App, DocumentService
+        from ndi import ndi_app, ndi_documentservice
 
-        assert issubclass(App, DocumentService)
+        assert issubclass(ndi_app, ndi_documentservice)
 
     def test_calculator_extends_app(self):
-        assert issubclass(Calculator, App)
+        assert issubclass(ndi_calculator, ndi_app)
 
     def test_calculator_extends_appdoc(self):
-        assert issubclass(Calculator, AppDoc)
+        assert issubclass(ndi_calculator, ndi_app_appdoc)
 
     def test_simple_calc_extends_calculator(self):
-        assert issubclass(SimpleCalc, Calculator)
+        assert issubclass(ndi_calc_example_simple, ndi_calculator)
 
     def test_calculator_mro(self):
-        """Calculator MRO should have App before AppDoc."""
-        mro = Calculator.__mro__
-        app_idx = mro.index(App)
-        appdoc_idx = mro.index(AppDoc)
+        """ndi_calculator MRO should have ndi_app before ndi_app_appdoc."""
+        mro = ndi_calculator.__mro__
+        app_idx = mro.index(ndi_app)
+        appdoc_idx = mro.index(ndi_app_appdoc)
         assert app_idx < appdoc_idx

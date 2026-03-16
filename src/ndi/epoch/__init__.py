@@ -1,26 +1,26 @@
 """
-ndi.epoch - Epoch management classes.
+ndi.epoch - ndi_epoch_epoch management classes.
 
 This module provides classes for managing epochs (recording periods)
 in neuroscience experiments.
 
 Classes:
-    Epoch: Immutable data class representing a single epoch
-    EpochSet: Abstract base class for epoch management
-    EpochProbeMap: Mapping between probes and devices for an epoch
+    ndi_epoch_epoch: Immutable data class representing a single epoch
+    ndi_epoch_epochset: Abstract base class for epoch management
+    ndi_epoch_epochprobemap: Mapping between probes and devices for an epoch
 """
 
-from .epoch import Epoch
-from .epochprobemap import EpochProbeMap, build_devicestring, parse_devicestring
-from .epochprobemap_daqsystem import EpochProbeMapDAQSystem
-from .epochset import EpochSet
+from .epoch import ndi_epoch_epoch
+from .epochprobemap import build_devicestring, ndi_epoch_epochprobemap, parse_devicestring
+from .epochprobemap_daqsystem import ndi_epoch_epochprobemap__daqsystem
+from .epochset import ndi_epoch_epochset
 from .functions import epochrange, findepochnode
 
 __all__ = [
-    "Epoch",
-    "EpochSet",
-    "EpochProbeMap",
-    "EpochProbeMapDAQSystem",
+    "ndi_epoch_epoch",
+    "ndi_epoch_epochset",
+    "ndi_epoch_epochprobemap",
+    "ndi_epoch_epochprobemap__daqsystem",
     "build_devicestring",
     "epochrange",
     "findepochnode",

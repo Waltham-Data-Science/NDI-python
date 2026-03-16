@@ -19,7 +19,7 @@ classes:
     matlab_path: "+ndi/+time/clocktype.m"
     matlab_last_sync_hash: "821b5af5"
     python_path: "ndi/time/clocktype.py"
-    python_class: "ClockType"
+    python_class: "ndi_time_clocktype"
 
     properties:
       - name: UTC
@@ -76,7 +76,7 @@ classes:
             type_python: "str"
         output_arguments:
           - name: ct
-            type_python: "ClockType"
+            type_python: "ndi_time_clocktype"
         decision_log: >
           Python-specific factory. MATLAB uses constructor.
           Case-insensitive matching.
@@ -103,12 +103,12 @@ classes:
         input_arguments:
           - name: other
             type_matlab: "ndi.time.clocktype"
-            type_python: "ClockType"
+            type_python: "ndi_time_clocktype"
         output_arguments:
           - name: cost
             type_python: "float"
           - name: mapping
-            type_python: "TimeMapping | None"
+            type_python: "ndi_time_timemapping | None"
         decision_log: >
           Exact match. Returns 2-tuple (cost, mapping).
           Valid transitions (cost=100, identity mapping):
@@ -120,7 +120,7 @@ classes:
       - name: assert_global
         input_arguments:
           - name: clocktype
-            type_python: "ClockType"
+            type_python: "ndi_time_clocktype"
         output_arguments: []
         decision_log: >
           Exact match. Raises AssertionError if clock type is
@@ -134,7 +134,7 @@ classes:
     matlab_path: "+ndi/+time/timemapping.m"
     matlab_last_sync_hash: "89d6b45f"
     python_path: "ndi/time/timemapping.py"
-    python_class: "TimeMapping"
+    python_class: "ndi_time_timemapping"
 
     properties:
       - name: mapping
@@ -166,7 +166,7 @@ classes:
             default: "None"
         output_arguments:
           - name: tm_obj
-            type_python: "TimeMapping"
+            type_python: "ndi_time_timemapping"
         decision_log: >
           Exact match. Default is [1, 0] (identity). Tests
           mapping with t_in=0 on construction.
@@ -186,7 +186,7 @@ classes:
         input_arguments: []
         output_arguments:
           - name: tm_inv
-            type_python: "TimeMapping"
+            type_python: "ndi_time_timemapping"
         decision_log: >
           Exact match. Only supports linear mappings. Raises
           ValueError for higher-order or zero-scale mappings.
@@ -195,10 +195,10 @@ classes:
         input_arguments:
           - name: other
             type_matlab: "ndi.time.timemapping"
-            type_python: "TimeMapping"
+            type_python: "ndi_time_timemapping"
         output_arguments:
           - name: tm_composed
-            type_python: "TimeMapping"
+            type_python: "ndi_time_timemapping"
         decision_log: >
           Exact match. Composes self then other. Only supports
           linear mappings. Raises ValueError for higher-order.
@@ -228,7 +228,7 @@ classes:
             type_python: "dict"
         output_arguments:
           - name: tm_obj
-            type_python: "TimeMapping"
+            type_python: "ndi_time_timemapping"
         decision_log: "Python-specific factory method."
 
     static_methods:
@@ -237,8 +237,8 @@ classes:
         input_arguments: []
         output_arguments:
           - name: tm_obj
-            type_python: "TimeMapping"
-        decision_log: "Exact match. Returns TimeMapping([1, 0])."
+            type_python: "ndi_time_timemapping"
+        decision_log: "Exact match. Returns ndi_time_timemapping([1, 0])."
 
       - name: linear
         kind: classmethod
@@ -253,10 +253,10 @@ classes:
             default: "0.0"
         output_arguments:
           - name: tm_obj
-            type_python: "TimeMapping"
+            type_python: "ndi_time_timemapping"
         decision_log: >
           Python-specific convenience factory. Creates
-          TimeMapping([scale, shift]).
+          ndi_time_timemapping([scale, shift]).
 
   # =========================================================================
   # ndi.time.timereference
@@ -266,7 +266,7 @@ classes:
     matlab_path: "+ndi/+time/timereference.m"
     matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/time/timereference.py"
-    python_class: "TimeReference"
+    python_class: "ndi_time_timereference"
 
     properties:
       - name: referent
@@ -277,7 +277,7 @@ classes:
 
       - name: clocktype
         type_matlab: "ndi.time.clocktype"
-        type_python: "ClockType"
+        type_python: "ndi_time_clocktype"
         access: "GetAccess=public, SetAccess=protected"
         decision_log: "Implemented as @property in Python."
 
@@ -312,7 +312,7 @@ classes:
             type_python: "Any"
           - name: clocktype
             type_matlab: "ndi.time.clocktype | char"
-            type_python: "ClockType | str"
+            type_python: "ndi_time_clocktype | str"
           - name: epoch
             type_matlab: "char"
             type_python: "str | None"
@@ -327,7 +327,7 @@ classes:
             default: "None"
         output_arguments:
           - name: tr_obj
-            type_python: "TimeReference"
+            type_python: "ndi_time_timereference"
         decision_log: >
           Exact match. Accepts clocktype as string or enum.
           Raises ValueError if DEV_LOCAL_TIME without epoch.
@@ -336,7 +336,7 @@ classes:
         input_arguments: []
         output_arguments:
           - name: trs
-            type_python: "TimeReferenceStruct"
+            type_python: "ndi_time_timereference__struct"
         decision_log: >
           MATLAB: ndi_timereference2struct. Python uses to_struct().
           Converts to a serializable struct without live objects.
@@ -367,10 +367,10 @@ classes:
             type_matlab: "ndi.session"
             type_python: "Any"
           - name: struct
-            type_python: "TimeReferenceStruct"
+            type_python: "ndi_time_timereference__struct"
         output_arguments:
           - name: tr_obj
-            type_python: "TimeReference"
+            type_python: "ndi_time_timereference"
         decision_log: >
           MATLAB: ndi_timereferencestruct2timereference. Python
           uses classmethod from_struct(). Resolves referent from
@@ -383,7 +383,7 @@ classes:
     type: class
     matlab_path: null
     python_path: "ndi/time/timereference.py"
-    python_class: "TimeReferenceStruct"
+    python_class: "ndi_time_timereference__struct"
 
     properties:
       - name: referent_epochsetname
@@ -400,11 +400,11 @@ classes:
 
       - name: epoch
         type_python: "str | None"
-        decision_log: "Epoch identifier."
+        decision_log: "ndi_epoch_epoch identifier."
 
       - name: session_id
         type_python: "str"
-        decision_log: "Session identifier."
+        decision_log: "ndi_session identifier."
 
       - name: time
         type_python: "float | None"
@@ -422,7 +422,7 @@ classes:
     matlab_path: "+ndi/+time/syncrule.m"
     matlab_last_sync_hash: "85b35859"
     python_path: "ndi/time/syncrule_base.py"
-    python_class: "SyncRule"
+    python_class: "ndi_time_syncrule"
     inherits: "ndi.ido"
 
     properties:
@@ -447,7 +447,7 @@ classes:
             default: "None"
         output_arguments:
           - name: sr_obj
-            type_python: "SyncRule"
+            type_python: "ndi_time_syncrule"
         decision_log: >
           Abstract class. Validates parameters on construction.
 
@@ -479,7 +479,7 @@ classes:
         input_arguments: []
         output_arguments:
           - name: clocks
-            type_python: "list[ClockType]"
+            type_python: "list[ndi_time_clocktype]"
         decision_log: >
           Exact match. Returns empty list by default (no limits).
 
@@ -487,9 +487,9 @@ classes:
         input_arguments: []
         output_arguments:
           - name: clocks
-            type_python: "list[ClockType]"
+            type_python: "list[ndi_time_clocktype]"
         decision_log: >
-          Exact match. Base returns [ClockType.NO_TIME].
+          Exact match. Base returns [ndi_time_clocktype.NO_TIME].
 
       - name: eligible_epochsets
         input_arguments: []
@@ -520,7 +520,7 @@ classes:
           - name: cost
             type_python: "float | None"
           - name: mapping
-            type_python: "TimeMapping | None"
+            type_python: "ndi_time_timemapping | None"
         decision_log: >
           Exact match. Returns 2-tuple (cost, mapping).
           Base returns (None, None).
@@ -549,7 +549,7 @@ classes:
         output_arguments:
           - name: q
             type_python: "Any"
-        decision_log: "Exact match. Returns Query matching base.id."
+        decision_log: "Exact match. Returns ndi_query matching base.id."
 
       - name: to_dict
         input_arguments: []
@@ -570,7 +570,7 @@ classes:
             type_python: "Any"
         output_arguments:
           - name: sr_obj
-            type_python: "SyncRule"
+            type_python: "ndi_time_syncrule"
         decision_log: >
           Factory method. Creates the appropriate subclass based
           on the document's syncrule.ndi_syncrule_class field.
@@ -583,7 +583,7 @@ classes:
     matlab_path: "+ndi/+time/syncgraph.m"
     matlab_last_sync_hash: "dde9edf9"
     python_path: "ndi/time/syncgraph.py"
-    python_class: "SyncGraph"
+    python_class: "ndi_time_syncgraph"
     inherits: "ndi.ido"
 
     properties:
@@ -595,7 +595,7 @@ classes:
 
       - name: rules
         type_matlab: "ndi.time.syncrule array"
-        type_python: "list[SyncRule]"
+        type_python: "list[ndi_time_syncrule]"
         access: "GetAccess=public, SetAccess=protected"
         decision_log: >
           Implemented as @property in Python. Returns a copy.
@@ -618,7 +618,7 @@ classes:
             default: "None"
         output_arguments:
           - name: sg_obj
-            type_python: "SyncGraph"
+            type_python: "ndi_time_syncgraph"
         decision_log: >
           Exact match. Can load from document. Requires networkx.
 
@@ -626,10 +626,10 @@ classes:
         input_arguments:
           - name: rule
             type_matlab: "ndi.time.syncrule"
-            type_python: "SyncRule"
+            type_python: "ndi_time_syncrule"
         output_arguments:
           - name: sg_obj
-            type_python: "SyncGraph"
+            type_python: "ndi_time_syncgraph"
         decision_log: >
           Exact match. Returns self for chaining. Checks for
           duplicates. Clears cached graph info.
@@ -641,7 +641,7 @@ classes:
             type_python: "int"
         output_arguments:
           - name: sg_obj
-            type_python: "SyncGraph"
+            type_python: "ndi_time_syncgraph"
         decision_log: >
           Exact match. Returns self for chaining.
           Uses 0-based indexing (internal data structure access).
@@ -650,16 +650,16 @@ classes:
         input_arguments: []
         output_arguments:
           - name: ginfo
-            type_python: "GraphInfo"
+            type_python: "ndi_time_graphinfo"
         decision_log: >
           Exact match. Builds graph lazily and returns cached
-          GraphInfo with nodes, cost matrix, mappings.
+          ndi_time_graphinfo with nodes, cost matrix, mappings.
 
       - name: time_convert
         input_arguments:
           - name: timeref_in
             type_matlab: "ndi.time.timereference"
-            type_python: "TimeReference"
+            type_python: "ndi_time_timereference"
           - name: t_in
             type_matlab: "double"
             type_python: "float"
@@ -668,12 +668,12 @@ classes:
             type_python: "Any"
           - name: clocktype_out
             type_matlab: "ndi.time.clocktype"
-            type_python: "ClockType"
+            type_python: "ndi_time_clocktype"
         output_arguments:
           - name: t_out
             type_python: "float | None"
           - name: timeref_out
-            type_python: "TimeReference | None"
+            type_python: "ndi_time_timereference | None"
           - name: msg
             type_python: "str"
         decision_log: >
@@ -704,7 +704,7 @@ classes:
         output_arguments:
           - name: q
             type_python: "Any"
-        decision_log: "Exact match. Returns Query matching base.id and session_id."
+        decision_log: "Exact match. Returns ndi_query matching base.id and session_id."
 
   # =========================================================================
   # ndi.time.syncgraph.epochnode (dataclass)
@@ -713,23 +713,23 @@ classes:
     type: class
     matlab_path: null
     python_path: "ndi/time/syncgraph.py"
-    python_class: "EpochNode"
+    python_class: "ndi_time_epochnode"
 
     properties:
       - name: epoch_id
         type_python: "str"
-        decision_log: "Epoch identifier."
+        decision_log: "ndi_epoch_epoch identifier."
 
       - name: epoch_session_id
         type_python: "str"
-        decision_log: "Session identifier."
+        decision_log: "ndi_session identifier."
 
       - name: epochprobemap
         type_python: "Any"
-        decision_log: "Probe map for this epoch."
+        decision_log: "ndi_probe map for this epoch."
 
       - name: epoch_clock
-        type_python: "ClockType"
+        type_python: "ndi_time_clocktype"
         decision_log: "Clock type for this epoch."
 
       - name: t0_t1
@@ -763,7 +763,7 @@ classes:
             type_python: "dict[str, Any]"
         output_arguments:
           - name: node
-            type_python: "EpochNode"
+            type_python: "ndi_time_epochnode"
         decision_log: "Python-specific factory."
 
     decision_log: >
@@ -777,11 +777,11 @@ classes:
     type: class
     matlab_path: null
     python_path: "ndi/time/syncgraph.py"
-    python_class: "GraphInfo"
+    python_class: "ndi_time_graphinfo"
 
     properties:
       - name: nodes
-        type_python: "list[EpochNode]"
+        type_python: "list[ndi_time_epochnode]"
         decision_log: "List of epoch nodes."
 
       - name: G
@@ -789,8 +789,8 @@ classes:
         decision_log: "Cost matrix G[i,j] = cost from node i to j."
 
       - name: mapping
-        type_python: "list[list[TimeMapping | None]] | None"
-        decision_log: "Matrix of TimeMapping objects."
+        type_python: "list[list[ndi_time_timemapping | None]] | None"
+        decision_log: "Matrix of ndi_time_timemapping objects."
 
       - name: diG
         type_python: "Any"

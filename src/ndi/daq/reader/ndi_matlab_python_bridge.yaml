@@ -32,17 +32,17 @@ functions:
 classes:
 
   # =========================================================================
-  # ndi.daq.reader.SpikeInterfaceReader
+  # ndi.daq.reader.ndi_daq_reader_SpikeInterfaceReader
   # =========================================================================
-  - name: SpikeInterfaceReader
+  - name: ndi_daq_reader_SpikeInterfaceReader
     type: class
     matlab_path: null
     python_path: "ndi/daq/reader/spikeinterface_adapter.py"
-    python_class: "SpikeInterfaceReader"
+    python_class: "ndi_daq_reader_SpikeInterfaceReader"
     inherits: "ndi.daq.reader.mfdaq_reader"
 
     methods:
-      - name: SpikeInterfaceReader
+      - name: ndi_daq_reader_SpikeInterfaceReader
         kind: constructor
         input_arguments:
           - name: stream_id
@@ -59,7 +59,7 @@ classes:
             default: "None"
         output_arguments:
           - name: reader_obj
-            type_python: "SpikeInterfaceReader"
+            type_python: "ndi_daq_reader_SpikeInterfaceReader"
         decision_log: >
           Python-specific class. No direct MATLAB equivalent.
           Uses spikeinterface library for multi-format data access.
@@ -70,7 +70,7 @@ classes:
             type_python: "list[str]"
         output_arguments:
           - name: ec
-            type_python: "list[ClockType]"
+            type_python: "list[ndi_time_clocktype]"
         decision_log: "Returns [DEV_LOCAL_TIME]."
 
       - name: t0_t1
@@ -164,4 +164,4 @@ classes:
         output_arguments:
           - name: doc
             type_python: "Any"
-        decision_log: "Creates document with class name 'SpikeInterfaceReader'."
+        decision_log: "Creates document with class name 'ndi_daq_reader_SpikeInterfaceReader'."

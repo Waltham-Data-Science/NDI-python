@@ -4,7 +4,7 @@ Comprehensive tests for NDI-python against the Jess Haley C. elegans dataset.
 Mirrors the MATLAB tutorial workflow from:
   ndi.setup.conv.haley.tutorial_682e7772cdf3f24938176fac.mlx
 
-Dataset: 78,687 JSON documents + 11,163 binary files (15 GB)
+ndi_dataset: 78,687 JSON documents + 11,163 binary files (15 GB)
 Source: NDI Cloud dataset 682e7772cdf3f24938176fac
 
 MATLAB tutorial steps tested:
@@ -13,10 +13,10 @@ MATLAB tutorial steps tested:
   3. View document types (getDocTypes)
   4. View ontology variables (ontologyTableRowVars)
   5. Extract metadata tables (ontologyTableRowDoc2Table)
-  6. Subject summary (docTable.subject)
+  6. ndi_subject summary (docTable.subject)
   7. Table join (table.join)
   8. Filter subjects (identifyMatchingRows)
-  9. Query elements (position/distance)
+  9. ndi_query elements (position/distance)
   10. Read images (readImageStack)
   11. Plot image + position overlay
 """
@@ -30,7 +30,7 @@ from pathlib import Path
 import pytest
 
 # ---------------------------------------------------------------------------
-# Dataset paths — skip entire file if not downloaded locally
+# ndi_dataset paths — skip entire file if not downloaded locally
 # ---------------------------------------------------------------------------
 
 JESS_HALEY_DOCS = Path(os.path.expanduser("~/Documents/ndi-projects/datasets/jess-haley/documents"))
@@ -61,7 +61,7 @@ EXPECTED_TYPE_COUNTS = {
     "treatment": 56,
 }
 
-# Total documents in JSON files (Dataset init adds 1 extra session doc)
+# Total documents in JSON files (ndi_dataset init adds 1 extra session doc)
 TOTAL_JSON_DOCS = 78687
 
 # Expected ontologyTableRow group sizes (sorted descending, order-independent)
@@ -71,13 +71,13 @@ EXPECTED_OTR_GROUP_SIZES_SORTED = sorted(
 
 
 # ---------------------------------------------------------------------------
-# Session-scoped fixture — loads dataset once for all tests
+# ndi_session-scoped fixture — loads dataset once for all tests
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture(scope="session")
 def jess_haley_dataset(tmp_path_factory):
-    """Load 78K JSON docs into a Dataset object (once per session)."""
+    """Load 78K JSON docs into a ndi_dataset object (once per session)."""
     from ndi.cloud.orchestration import load_dataset_from_json_dir
 
     target = tmp_path_factory.mktemp("jess_haley_ds")
@@ -91,7 +91,7 @@ def jess_haley_dataset(tmp_path_factory):
 
 @pytest.fixture(scope="session")
 def all_docs_raw():
-    """Load all raw JSON dicts (no Dataset overhead)."""
+    """Load all raw JSON dicts (no ndi_dataset overhead)."""
     docs = []
     for f in sorted(JESS_HALEY_DOCS.glob("*.json")):
         with open(f) as fh:
@@ -101,10 +101,10 @@ def all_docs_raw():
 
 @pytest.fixture(scope="session")
 def ontology_table_row_docs(jess_haley_dataset):
-    """Query all ontologyTableRow documents from the dataset."""
-    from ndi.query import Query
+    """ndi_query all ontologyTableRow documents from the dataset."""
+    from ndi.query import ndi_query
 
-    return jess_haley_dataset.database_search(Query("").isa("ontologyTableRow"))
+    return jess_haley_dataset.database_search(ndi_query("").isa("ontologyTableRow"))
 
 
 @pytest.fixture(scope="session")
@@ -124,10 +124,10 @@ class TestDatasetLoading:
     """Validate the bulk load of 78K documents."""
 
     def test_load_document_count(self, jess_haley_dataset):
-        """At least 78,687 documents load (Dataset init adds 1 session doc)."""
-        from ndi.query import Query
+        """At least 78,687 documents load (ndi_dataset init adds 1 session doc)."""
+        from ndi.query import ndi_query
 
-        docs = jess_haley_dataset.database_search(Query("").isa("base"))
+        docs = jess_haley_dataset.database_search(ndi_query("").isa("base"))
         assert len(docs) >= TOTAL_JSON_DOCS, f"Expected >= {TOTAL_JSON_DOCS}, got {len(docs)}"
 
     def test_document_type_counts(self, jess_haley_dataset):
@@ -139,7 +139,7 @@ class TestDatasetLoading:
         for dtype, expected in EXPECTED_TYPE_COUNTS.items():
             actual_count = actual.get(dtype, 0)
             if dtype == "session":
-                # Dataset init adds 1 extra session doc
+                # ndi_dataset init adds 1 extra session doc
                 assert (
                     actual_count >= expected
                 ), f"{dtype}: expected >= {expected}, got {actual_count}"
@@ -173,25 +173,25 @@ class TestSessionDiscovery:
     """MATLAB: dataset.session_list(), dataset.open_session()."""
 
     def test_session_docs_exist(self, jess_haley_dataset):
-        """Session documents exist in the dataset."""
-        from ndi.query import Query
+        """ndi_session documents exist in the dataset."""
+        from ndi.query import ndi_query
 
-        docs = jess_haley_dataset.database_search(Query("").isa("session"))
-        # 3 from JSON + 1 auto-created by Dataset init
+        docs = jess_haley_dataset.database_search(ndi_query("").isa("session"))
+        # 3 from JSON + 1 auto-created by ndi_dataset init
         assert len(docs) >= 3
 
     def test_session_count(self, jess_haley_dataset):
         """At least 3 session documents from the Jess Haley dataset."""
-        from ndi.query import Query
+        from ndi.query import ndi_query
 
-        docs = jess_haley_dataset.database_search(Query("").isa("session"))
+        docs = jess_haley_dataset.database_search(ndi_query("").isa("session"))
         assert len(docs) >= 3
 
     def test_session_refs_contain_celegans_and_ecoli(self, jess_haley_dataset):
-        """Session documents have reference fields."""
-        from ndi.query import Query
+        """ndi_session documents have reference fields."""
+        from ndi.query import ndi_query
 
-        docs = jess_haley_dataset.database_search(Query("").isa("session"))
+        docs = jess_haley_dataset.database_search(ndi_query("").isa("session"))
         refs = []
         for doc in docs:
             props = doc.document_properties
@@ -313,9 +313,9 @@ class TestSubjectQueries:
     """MATLAB: ndi.fun.docTable.subject(session)."""
 
     def test_subject_count(self, jess_haley_dataset):
-        from ndi.query import Query
+        from ndi.query import ndi_query
 
-        docs = jess_haley_dataset.database_search(Query("").isa("subject"))
+        docs = jess_haley_dataset.database_search(ndi_query("").isa("subject"))
         assert len(docs) == 1656
 
     def test_subject_table(self, jess_haley_dataset):
@@ -415,15 +415,15 @@ class TestElementQueries:
     """MATLAB: query elements by type (position, distance)."""
 
     def test_element_count(self, jess_haley_dataset):
-        from ndi.query import Query
+        from ndi.query import ndi_query
 
-        docs = jess_haley_dataset.database_search(Query("").isa("element"))
+        docs = jess_haley_dataset.database_search(ndi_query("").isa("element"))
         assert len(docs) == 4156
 
     def test_element_types_include_position_and_distance(self, jess_haley_dataset):
-        from ndi.query import Query
+        from ndi.query import ndi_query
 
-        docs = jess_haley_dataset.database_search(Query("").isa("element"))
+        docs = jess_haley_dataset.database_search(ndi_query("").isa("element"))
         types = set()
         for doc in docs:
             t = doc.document_properties.get("element", {}).get("type", "")
@@ -432,9 +432,9 @@ class TestElementQueries:
         assert "distance" in types, f"'distance' not in element types: {types}"
 
     def test_position_metadata_links_to_element(self, jess_haley_dataset):
-        from ndi.query import Query
+        from ndi.query import ndi_query
 
-        docs = jess_haley_dataset.database_search(Query("").isa("position_metadata"))
+        docs = jess_haley_dataset.database_search(ndi_query("").isa("position_metadata"))
         assert len(docs) > 0
         # depends_on can be a dict or a list of dicts
         sample = docs[0]
@@ -448,9 +448,9 @@ class TestElementQueries:
         assert "element_id" in dep_names, f"No element_id in depends_on: {dep_names}"
 
     def test_distance_metadata_links_to_element(self, jess_haley_dataset):
-        from ndi.query import Query
+        from ndi.query import ndi_query
 
-        docs = jess_haley_dataset.database_search(Query("").isa("distance_metadata"))
+        docs = jess_haley_dataset.database_search(ndi_query("").isa("distance_metadata"))
         assert len(docs) > 0
         sample = docs[0]
         deps = sample.document_properties.get("depends_on", [])
@@ -472,23 +472,23 @@ class TestImageStack:
     """MATLAB: readImageStack, imageStack document structure."""
 
     def test_image_stack_count(self, jess_haley_dataset):
-        from ndi.query import Query
+        from ndi.query import ndi_query
 
-        docs = jess_haley_dataset.database_search(Query("").isa("imageStack"))
+        docs = jess_haley_dataset.database_search(ndi_query("").isa("imageStack"))
         assert len(docs) == 7007
 
     def test_image_stack_has_parameters(self, jess_haley_dataset):
-        from ndi.query import Query
+        from ndi.query import ndi_query
 
-        docs = jess_haley_dataset.database_search(Query("").isa("imageStack"))
+        docs = jess_haley_dataset.database_search(ndi_query("").isa("imageStack"))
         sample = docs[0]
         assert "imageStack_parameters" in sample.document_properties
 
     def test_image_stack_types(self, jess_haley_dataset):
-        """Dataset has uint8 videos, logical masks, and uint16 fluorescence."""
-        from ndi.query import Query
+        """ndi_dataset has uint8 videos, logical masks, and uint16 fluorescence."""
+        from ndi.query import ndi_query
 
-        docs = jess_haley_dataset.database_search(Query("").isa("imageStack"))
+        docs = jess_haley_dataset.database_search(ndi_query("").isa("imageStack"))
         data_types = set()
         for doc in docs[:500]:  # sample first 500
             params = doc.document_properties.get("imageStack_parameters", {})
@@ -522,9 +522,9 @@ class TestImageStack:
         assert missing == 0, f"{missing}/{total} imageStack docs missing binary files"
 
     def test_ontology_label_count(self, jess_haley_dataset):
-        from ndi.query import Query
+        from ndi.query import ndi_query
 
-        docs = jess_haley_dataset.database_search(Query("").isa("ontologyLabel"))
+        docs = jess_haley_dataset.database_search(ndi_query("").isa("ontologyLabel"))
         assert len(docs) == 7007
 
 
@@ -534,36 +534,36 @@ class TestImageStack:
 
 
 class TestEpochAndMetadata:
-    """Epoch/position/distance document relationships."""
+    """ndi_epoch_epoch/position/distance document relationships."""
 
     def test_element_epoch_count(self, jess_haley_dataset):
-        from ndi.query import Query
+        from ndi.query import ndi_query
 
-        docs = jess_haley_dataset.database_search(Query("").isa("element_epoch"))
+        docs = jess_haley_dataset.database_search(ndi_query("").isa("element_epoch"))
         assert len(docs) == 4156
 
     def test_position_metadata_count(self, jess_haley_dataset):
-        from ndi.query import Query
+        from ndi.query import ndi_query
 
-        docs = jess_haley_dataset.database_search(Query("").isa("position_metadata"))
+        docs = jess_haley_dataset.database_search(ndi_query("").isa("position_metadata"))
         assert len(docs) == 2078
 
     def test_distance_metadata_count(self, jess_haley_dataset):
-        from ndi.query import Query
+        from ndi.query import ndi_query
 
-        docs = jess_haley_dataset.database_search(Query("").isa("distance_metadata"))
+        docs = jess_haley_dataset.database_search(ndi_query("").isa("distance_metadata"))
         assert len(docs) == 2078
 
     def test_metadata_depends_on_references_exist(self, jess_haley_dataset):
         """Position/distance metadata depends_on values reference existing elements."""
-        from ndi.query import Query
+        from ndi.query import ndi_query
 
         # Build set of all element IDs
-        elements = jess_haley_dataset.database_search(Query("").isa("element"))
+        elements = jess_haley_dataset.database_search(ndi_query("").isa("element"))
         element_ids = {doc.document_properties.get("base", {}).get("id", "") for doc in elements}
 
         # Check first 50 position_metadata docs
-        pos_docs = jess_haley_dataset.database_search(Query("").isa("position_metadata"))
+        pos_docs = jess_haley_dataset.database_search(ndi_query("").isa("position_metadata"))
         missing = 0
         for doc in pos_docs[:50]:
             deps = doc.document_properties.get("depends_on", [])
@@ -589,9 +589,9 @@ class TestCrossDocumentRelationships:
 
     def test_depends_on_references_exist(self, jess_haley_dataset):
         """Sampled depends_on values point to existing doc IDs."""
-        from ndi.query import Query
+        from ndi.query import ndi_query
 
-        all_docs = jess_haley_dataset.database_search(Query("").isa("base"))
+        all_docs = jess_haley_dataset.database_search(ndi_query("").isa("base"))
         all_ids = {doc.document_properties.get("base", {}).get("id", "") for doc in all_docs}
 
         # Sample 200 docs with depends_on
@@ -616,9 +616,9 @@ class TestCrossDocumentRelationships:
 
     def test_session_id_consistency(self, jess_haley_dataset):
         """All docs share one of a small number of session_ids."""
-        from ndi.query import Query
+        from ndi.query import ndi_query
 
-        all_docs = jess_haley_dataset.database_search(Query("").isa("base"))
+        all_docs = jess_haley_dataset.database_search(ndi_query("").isa("base"))
         # Collect all unique session_ids across the dataset
         session_ids: set[str] = set()
         for doc in all_docs:
@@ -664,7 +664,7 @@ class TestDatasetVisualization:
         fig, ax = plt.subplots(figsize=(12, 6))
         ax.barh(doc_types, doc_counts, color="steelblue")
         ax.set_xlabel("Count")
-        ax.set_title("Jess Haley Dataset: Document Type Distribution")
+        ax.set_title("Jess Haley ndi_dataset: ndi_document Type Distribution")
         for i, (_t, c) in enumerate(zip(doc_types, doc_counts)):
             ax.text(c + 100, i, str(c), va="center", fontsize=8)
         plt.tight_layout()
@@ -703,8 +703,8 @@ class TestDatasetVisualization:
         fig, ax = plt.subplots(figsize=(10, 5))
         ax.bar(types, counts, color="coral")
         ax.set_xlabel("Experiment Type")
-        ax.set_ylabel("Subject Count")
-        ax.set_title("Jess Haley: Subject Experiment Types")
+        ax.set_ylabel("ndi_subject Count")
+        ax.set_title("Jess Haley: ndi_subject Experiment Types")
         plt.xticks(rotation=30, ha="right")
         plt.tight_layout()
         plt.savefig(out / "subject_experiment_types.png", dpi=150)
@@ -982,14 +982,14 @@ class TestDatasetVisualization:
         out = self._ensure_output_dir()
         fig, axes = plt.subplots(2, 3, figsize=(20, 12))
 
-        # (1) Document type distribution
+        # (1) ndi_document type distribution
         ax = axes[0, 0]
         doc_types, doc_counts = getDocTypes(jess_haley_dataset)
         ax.barh(doc_types, doc_counts, color="steelblue")
         ax.set_xlabel("Count")
-        ax.set_title("Document Types")
+        ax.set_title("ndi_document Types")
 
-        # (2) Subject experiment types
+        # (2) ndi_subject experiment types
         ax = axes[0, 1]
         from collections import Counter
 
@@ -1001,7 +1001,7 @@ class TestDatasetVisualization:
                 type_counter[parts[2]] += 1
         types_sorted = sorted(type_counter.keys())
         ax.bar(types_sorted, [type_counter[t] for t in types_sorted], color="coral")
-        ax.set_title("Subject Experiment Types")
+        ax.set_title("ndi_subject Experiment Types")
         ax.tick_params(axis="x", rotation=20)
 
         # (3) OTR group sizes
@@ -1083,7 +1083,7 @@ class TestDatasetVisualization:
                     ha="center",
                 )
 
-        plt.suptitle("Jess Haley Dataset: Summary Dashboard", fontsize=16)
+        plt.suptitle("Jess Haley ndi_dataset: Summary Dashboard", fontsize=16)
         plt.tight_layout()
         plt.savefig(out / "summary_dashboard.png", dpi=150)
         plt.close()

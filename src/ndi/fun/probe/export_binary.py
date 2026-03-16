@@ -26,8 +26,8 @@ def export_binary(
 
     MATLAB equivalent: ndi.fun.probe.export_binary
 
-    Exports data from *probe* (an :class:`ndi.element.Element` or
-    :class:`ndi.probe.Probe` of type ``n-trode``) to a binary file.
+    Exports data from *probe* (an :class:`ndi.element.ndi_element` or
+    :class:`ndi.probe.ndi_probe` of type ``n-trode``) to a binary file.
     Before converting to the output precision the data are scaled by
     *multiplier*.  A text metadata file is created alongside *outputfile*
     with the extension ``.metadata``.

@@ -11,10 +11,10 @@ MATLAB source files:
 
 import pytest
 
-from ndi.dataset import Dataset
-from ndi.document import Document
-from ndi.query import Query
-from ndi.session.dir import DirSession
+from ndi.dataset import ndi_dataset
+from ndi.document import ndi_document
+from ndi.query import ndi_query
+from ndi.session.dir import ndi_session_dir
 
 # ===========================================================================
 # TestDeleteSession
@@ -32,7 +32,7 @@ class TestDeleteSession:
         """
         session_dir = tmp_path / "del_session"
         session_dir.mkdir()
-        session = DirSession("del_test", session_dir)
+        session = ndi_session_dir("del_test", session_dir)
 
         ndi_dir = session_dir / ".ndi"
         assert ndi_dir.exists(), ".ndi directory should exist before delete"
@@ -50,7 +50,7 @@ class TestDeleteSession:
         """
         session_dir = tmp_path / "del_session"
         session_dir.mkdir()
-        session = DirSession("del_test", session_dir)
+        session = ndi_session_dir("del_test", session_dir)
 
         ndi_dir = session_dir / ".ndi"
         assert ndi_dir.exists(), ".ndi directory should exist before delete"
@@ -66,7 +66,7 @@ class TestDeleteSession:
         """
         session_dir = tmp_path / "del_session"
         session_dir.mkdir()
-        session = DirSession("del_test", session_dir)
+        session = ndi_session_dir("del_test", session_dir)
 
         # Create a user data file
         data_file = session_dir / "my_data.txt"
@@ -98,12 +98,12 @@ class TestIsIngestedInDataset:
         """
         session_dir = tmp_path / "standalone"
         session_dir.mkdir()
-        session = DirSession("standalone", session_dir)
+        session = ndi_session_dir("standalone", session_dir)
 
         # Create a dataset without the session
         ds_dir = tmp_path / "ds_empty"
         ds_dir.mkdir()
-        dataset = Dataset(ds_dir, "ds_empty")
+        dataset = ndi_dataset(ds_dir, "ds_empty")
 
         refs, session_ids, *_ = dataset.session_list()
         assert session.id() not in session_ids, "Standalone session should not be in dataset"
@@ -116,27 +116,27 @@ class TestIsIngestedInDataset:
         # Create session with a doc
         session_dir = tmp_path / "sess"
         session_dir.mkdir()
-        session = DirSession("exp", session_dir)
+        session = ndi_session_dir("exp", session_dir)
 
-        doc = Document("demoNDI")
+        doc = ndi_document("demoNDI")
         props = doc.document_properties
         props["base"]["name"] = "test_doc"
         props["demoNDI"]["value"] = 42
         props["base"]["session_id"] = session.id()
-        doc = Document(props)
+        doc = ndi_document(props)
         session.database_add(doc)
 
         # Create dataset and ingest
         ds_dir = tmp_path / "ds"
         ds_dir.mkdir()
-        dataset = Dataset(ds_dir, "ds")
+        dataset = ndi_dataset(ds_dir, "ds")
         dataset.add_ingested_session(session)
 
         refs, session_ids, *_ = dataset.session_list()
         assert session.id() in session_ids, "Ingested session should appear in dataset session list"
 
         # Also verify the document was ingested
-        q = Query("").isa("demoNDI")
+        q = ndi_query("").isa("demoNDI")
         docs = dataset.database_search(q)
         assert len(docs) == 1
         assert docs[0].document_properties["base"]["name"] == "test_doc"
@@ -145,11 +145,11 @@ class TestIsIngestedInDataset:
         """A linked session appears in the dataset session list as linked."""
         session_dir = tmp_path / "linked_sess"
         session_dir.mkdir()
-        session = DirSession("linked", session_dir)
+        session = ndi_session_dir("linked", session_dir)
 
         ds_dir = tmp_path / "ds_link"
         ds_dir.mkdir()
-        dataset = Dataset(ds_dir, "ds_link")
+        dataset = ndi_dataset(ds_dir, "ds_link")
         dataset.add_linked_session(session)
 
         refs, session_ids, *_ = dataset.session_list()
@@ -167,10 +167,10 @@ class TestSessionBasics:
     """Test basic session creation and properties."""
 
     def test_session_creation(self, tmp_path):
-        """DirSession can be created with reference and path."""
+        """ndi_session_dir can be created with reference and path."""
         session_dir = tmp_path / "sess"
         session_dir.mkdir()
-        session = DirSession("my_session", session_dir)
+        session = ndi_session_dir("my_session", session_dir)
 
         assert session.reference == "my_session"
         assert session.path == session_dir
@@ -178,10 +178,10 @@ class TestSessionBasics:
         assert isinstance(session.id(), str)
 
     def test_session_has_ndi_directory(self, tmp_path):
-        """DirSession creates a .ndi directory for database storage."""
+        """ndi_session_dir creates a .ndi directory for database storage."""
         session_dir = tmp_path / "sess"
         session_dir.mkdir()
-        DirSession("my_session", session_dir)
+        ndi_session_dir("my_session", session_dir)
 
         ndi_dir = session_dir / ".ndi"
         assert ndi_dir.exists(), ".ndi directory should be created"
@@ -190,25 +190,25 @@ class TestSessionBasics:
         """Reopening a session from the same path gives the same ID."""
         session_dir = tmp_path / "sess"
         session_dir.mkdir()
-        s1 = DirSession("my_session", session_dir)
+        s1 = ndi_session_dir("my_session", session_dir)
         original_id = s1.id()
 
         # Reopen
-        s2 = DirSession("my_session", session_dir)
+        s2 = ndi_session_dir("my_session", session_dir)
         assert s2.id() == original_id, "Reopened session should have same ID"
 
     def test_session_requires_existing_directory(self, tmp_path):
-        """DirSession raises ValueError for non-existent path."""
+        """ndi_session_dir raises ValueError for non-existent path."""
         nonexistent = tmp_path / "does_not_exist"
 
         with pytest.raises(ValueError):
-            DirSession("bad_session", nonexistent)
+            ndi_session_dir("bad_session", nonexistent)
 
     def test_newdocument(self, tmp_path):
-        """Session.newdocument() creates a document with session_id set."""
+        """ndi_session.newdocument() creates a document with session_id set."""
         session_dir = tmp_path / "sess"
         session_dir.mkdir()
-        session = DirSession("my_session", session_dir)
+        session = ndi_session_dir("my_session", session_dir)
 
         doc = session.newdocument(
             "demoNDI",
@@ -222,10 +222,10 @@ class TestSessionBasics:
         assert doc.document_properties["base"]["name"] == "test"
 
     def test_creator_args(self, tmp_path):
-        """DirSession.creator_args() returns the construction arguments."""
+        """ndi_session_dir.creator_args() returns the construction arguments."""
         session_dir = tmp_path / "sess"
         session_dir.mkdir()
-        session = DirSession("my_session", session_dir)
+        session = ndi_session_dir("my_session", session_dir)
 
         args = session.creator_args()
         assert len(args) >= 2

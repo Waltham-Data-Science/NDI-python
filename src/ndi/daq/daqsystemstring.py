@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 
 
 @dataclass
-class DAQSystemString:
+class ndi_daq_daqsystemstring:
     """
     Describes a device and its channels.
 
@@ -34,15 +34,15 @@ class DAQSystemString:
     channels: list[tuple[str, list[int]]] = field(default_factory=list)
 
     @classmethod
-    def parse(cls, devstr: str) -> DAQSystemString:
+    def parse(cls, devstr: str) -> ndi_daq_daqsystemstring:
         """
-        Parse a device string into a DAQSystemString.
+        Parse a device string into a ndi_daq_daqsystemstring.
 
         Args:
             devstr: Device string like 'mydevice:ai1-5,7;di1'
 
         Returns:
-            Parsed DAQSystemString
+            Parsed ndi_daq_daqsystemstring
 
         Raises:
             ValueError: If the string format is invalid
@@ -130,10 +130,10 @@ class DAQSystemString:
         return self.devicestring()
 
     def __repr__(self) -> str:
-        return f"DAQSystemString('{self.devicestring()}')"
+        return f"ndi_daq_daqsystemstring('{self.devicestring()}')"
 
     def __eq__(self, other) -> bool:
-        if not isinstance(other, DAQSystemString):
+        if not isinstance(other, ndi_daq_daqsystemstring):
             return False
         return self.devicename == other.devicename and self.channels == other.channels
 

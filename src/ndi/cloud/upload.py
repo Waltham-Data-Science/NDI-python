@@ -94,7 +94,7 @@ def zipForUpload(
     """Serialize documents to JSON and create a ZIP archive.
 
     Args:
-        documents: Document property dicts.
+        documents: ndi_document property dicts.
         dataset_id: Used for the archive filename.
         target_dir: Directory for the ZIP file. Defaults to a temp dir.
 
@@ -248,14 +248,16 @@ def uploadToNDICloud(
     Returns:
         Tuple of ``(success, error_message)``.
     """
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
     from .api import documents as docs_api
 
     try:
         if verbose:
             print("Loading documents...")
-        all_docs = dataset.database_search(Query("")) if hasattr(dataset, "database_search") else []
+        all_docs = (
+            dataset.database_search(ndi_query("")) if hasattr(dataset, "database_search") else []
+        )
 
         if verbose:
             print("Getting list of previously uploaded documents...")
@@ -318,12 +320,14 @@ def scanForUpload(
     Returns:
         Tuple of ``(doc_structs, file_structs, total_size_kb)``.
     """
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
     from .internal import listRemoteDocumentIds
 
     try:
-        all_docs = dataset.database_search(Query("")) if hasattr(dataset, "database_search") else []
+        all_docs = (
+            dataset.database_search(ndi_query("")) if hasattr(dataset, "database_search") else []
+        )
     except Exception:
         all_docs = []
 

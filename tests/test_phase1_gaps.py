@@ -10,7 +10,7 @@ Covers:
 - table utilities (Batch 6)
 - copy_session_to_dataset (Batch 7)
 - Presentation time read/write (Batch 8)
-- Subject/Probe doc helpers (Batch 9)
+- ndi_subject/ndi_probe doc helpers (Batch 9)
 - pfilemirror (Batch 10)
 - readImageStack (Batch 11)
 - docComparison (Batch 13)
@@ -32,9 +32,9 @@ import pytest
 class TestTuningCurveAnalysis:
 
     def _make_calc(self):
-        from ndi.calc.stimulus.tuningcurve import TuningCurveCalc
+        from ndi.calc.stimulus.tuningcurve import ndi_calc_stimulus_tuningcurve
 
-        return TuningCurveCalc(session=None)
+        return ndi_calc_stimulus_tuningcurve(session=None)
 
     def test_best_value_unknown_algorithm(self):
         calc = self._make_calc()
@@ -321,7 +321,7 @@ class TestNdiDocument2NdiObject:
 
 
 # =========================================================================
-# Batch 5: Document-to-Table conversions
+# Batch 5: ndi_document-to-Table conversions
 # =========================================================================
 
 
@@ -614,7 +614,7 @@ class TestPresentationTime:
 
 
 # =========================================================================
-# Batch 9: Subject/Probe doc helpers
+# Batch 9: ndi_subject/ndi_probe doc helpers
 # =========================================================================
 
 
@@ -623,7 +623,7 @@ class TestDocHelpers:
     def test_make_species_strain_sex(self):
         """makeSpeciesStrainSex creates real openMINDS NDI Documents."""
         pytest.importorskip("openminds", reason="openminds package not installed")
-        from ndi.document import Document
+        from ndi.document import ndi_document
         from ndi.fun.doc import makeSpeciesStrainSex
 
         session = MagicMock()
@@ -642,7 +642,7 @@ class TestDocHelpers:
         # Species + Strain + BiologicalSex = 3 documents
         assert len(docs) == 3
         for doc in docs:
-            assert isinstance(doc, Document)
+            assert isinstance(doc, ndi_document)
             props = doc.document_properties
             # All should be openminds_subject docs linked to subject
             assert props.get("document_class", {}).get("class_name") == "openminds_subject"
@@ -652,7 +652,7 @@ class TestDocHelpers:
     def test_make_species_only(self):
         """makeSpeciesStrainSex with species only creates 1 document."""
         pytest.importorskip("openminds", reason="openminds package not installed")
-        from ndi.document import Document
+        from ndi.document import ndi_document
         from ndi.fun.doc import makeSpeciesStrainSex
 
         session = MagicMock()
@@ -662,13 +662,13 @@ class TestDocHelpers:
 
         docs = makeSpeciesStrainSex(session, subj_doc, species="Rattus")
         assert len(docs) == 1
-        assert isinstance(docs[0], Document)
+        assert isinstance(docs[0], ndi_document)
         om = docs[0].document_properties.get("openminds", {})
         assert "Species" in om.get("openminds_type", "")
 
     def test_probe_locations_for_probes(self):
         """probeLocations4probes creates real probe_location Documents."""
-        from ndi.document import Document
+        from ndi.document import ndi_document
         from ndi.fun.doc import probeLocations4probes
 
         session = MagicMock()
@@ -691,7 +691,7 @@ class TestDocHelpers:
         )
         assert len(docs) == 2
         for doc in docs:
-            assert isinstance(doc, Document)
+            assert isinstance(doc, ndi_document)
             props = doc.document_properties
             assert props.get("document_class", {}).get("class_name") == "probe_location"
 

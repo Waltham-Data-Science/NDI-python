@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from ndi import Database, Document, Ido, Query, open_database
+from ndi import ndi_database, ndi_document, ndi_ido, ndi_query, open_database
 from ndi.common import timestamp
 
 
@@ -21,8 +21,8 @@ def temp_session():
 @pytest.fixture
 def sample_doc():
     """Create a sample document for testing."""
-    ido = Ido()
-    return Document(
+    ido = ndi_ido()
+    return ndi_document(
         {
             "base": {
                 "id": ido.id,
@@ -38,8 +38,8 @@ def sample_doc():
 @pytest.fixture
 def element_doc():
     """Create a sample element document for testing."""
-    ido = Ido()
-    return Document(
+    ido = ndi_ido()
+    return ndi_document(
         {
             "base": {
                 "id": ido.id,
@@ -57,56 +57,56 @@ def element_doc():
 
 
 class TestDatabaseCreation:
-    """Test Database creation."""
+    """Test ndi_database creation."""
 
     def test_create_database(self, temp_session):
         """Test creating a database (uses DID-python SQLite)."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
         assert db.session_path == temp_session
         assert (temp_session / ".ndi").exists()
         assert (temp_session / ".ndi" / "did-sqlite.sqlite").exists()
 
     def test_create_with_custom_db_name(self, temp_session):
         """Test creating database with custom name."""
-        Database(temp_session, db_name=".mydb")
+        ndi_database(temp_session, db_name=".mydb")
         assert (temp_session / ".mydb").exists()
 
     def test_open_database_function(self, temp_session):
         """Test open_database convenience function."""
         db = open_database(temp_session)
-        assert isinstance(db, Database)
+        assert isinstance(db, ndi_database)
         assert db.session_path == temp_session
 
     def test_database_repr(self, temp_session):
         """Test database string representation."""
-        db = Database(temp_session)
-        assert "Database" in repr(db)
+        db = ndi_database(temp_session)
+        assert "ndi_database" in repr(db)
         assert str(temp_session) in repr(db)
 
 
 class TestDatabaseAdd:
-    """Test Database add operations."""
+    """Test ndi_database add operations."""
 
     def test_add_document(self, temp_session, sample_doc):
         """Test adding a document."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
         result = db.add(sample_doc)
         assert result.id == sample_doc.id
 
     def test_add_duplicate_raises(self, temp_session, sample_doc):
         """Test that adding duplicate raises error."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
         db.add(sample_doc)
         with pytest.raises(ValueError, match="already exists"):
             db.add(sample_doc)
 
     def test_add_many(self, temp_session):
         """Test adding multiple documents."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
         docs = []
         for i in range(3):
-            ido = Ido()
-            doc = Document(
+            ido = ndi_ido()
+            doc = ndi_document(
                 {
                     "base": {
                         "id": ido.id,
@@ -125,11 +125,11 @@ class TestDatabaseAdd:
 
 
 class TestDatabaseRead:
-    """Test Database read operations."""
+    """Test ndi_database read operations."""
 
     def test_read_existing(self, temp_session, sample_doc):
         """Test reading an existing document."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
         db.add(sample_doc)
 
         result = db.read(sample_doc.id)
@@ -138,13 +138,13 @@ class TestDatabaseRead:
 
     def test_read_nonexistent(self, temp_session):
         """Test reading nonexistent document returns None."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
         result = db.read("nonexistent_id")
         assert result is None
 
     def test_find_by_id_alias(self, temp_session, sample_doc):
         """Test find_by_id is alias for read."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
         db.add(sample_doc)
 
         result = db.find_by_id(sample_doc.id)
@@ -153,11 +153,11 @@ class TestDatabaseRead:
 
 
 class TestDatabaseUpdate:
-    """Test Database update operations."""
+    """Test ndi_database update operations."""
 
     def test_update_existing(self, temp_session, sample_doc):
         """Test updating an existing document."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
         db.add(sample_doc)
 
         # Modify and update
@@ -171,17 +171,17 @@ class TestDatabaseUpdate:
 
     def test_update_nonexistent_raises(self, temp_session, sample_doc):
         """Test updating nonexistent document raises error."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
         with pytest.raises(ValueError, match="not found"):
             db.update(sample_doc)
 
 
 class TestDatabaseRemove:
-    """Test Database remove operations."""
+    """Test ndi_database remove operations."""
 
     def test_remove_existing(self, temp_session, sample_doc):
         """Test removing an existing document."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
         db.add(sample_doc)
 
         result = db.remove(sample_doc)
@@ -190,7 +190,7 @@ class TestDatabaseRemove:
 
     def test_remove_by_id(self, temp_session, sample_doc):
         """Test removing by ID string."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
         db.add(sample_doc)
 
         result = db.remove(sample_doc.id)
@@ -198,24 +198,24 @@ class TestDatabaseRemove:
 
     def test_remove_nonexistent(self, temp_session):
         """Test removing nonexistent returns False."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
         result = db.remove("nonexistent_id")
         assert result is False
 
 
 class TestDatabaseAddOrReplace:
-    """Test Database add_or_replace operations."""
+    """Test ndi_database add_or_replace operations."""
 
     def test_add_or_replace_new(self, temp_session, sample_doc):
         """Test add_or_replace adds new document."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
         result = db.add_or_replace(sample_doc)
         assert result.id == sample_doc.id
         assert db.numdocs() == 1
 
     def test_add_or_replace_existing(self, temp_session, sample_doc):
         """Test add_or_replace replaces existing document."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
         db.add(sample_doc)
 
         sample_doc = sample_doc.setproperties(**{"base.name": "replaced_name"})
@@ -227,16 +227,16 @@ class TestDatabaseAddOrReplace:
 
 
 class TestDatabaseSearch:
-    """Test Database search operations."""
+    """Test ndi_database search operations."""
 
     def test_search_all(self, temp_session):
         """Test searching for all documents."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
 
         # Add some documents
         for i in range(3):
-            ido = Ido()
-            doc = Document(
+            ido = ndi_ido()
+            doc = ndi_document(
                 {
                     "base": {
                         "id": ido.id,
@@ -254,12 +254,12 @@ class TestDatabaseSearch:
 
     def test_search_with_query(self, temp_session):
         """Test searching with a query."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
 
         # Add documents with different names
         for name in ["alpha", "beta", "gamma"]:
-            ido = Ido()
-            doc = Document(
+            ido = ndi_ido()
+            doc = ndi_document(
                 {
                     "base": {
                         "id": ido.id,
@@ -273,36 +273,36 @@ class TestDatabaseSearch:
             db.add(doc)
 
         # Search for specific name
-        query = Query("base.name") == "beta"
+        query = ndi_query("base.name") == "beta"
         results = db.search(query)
         assert len(results) == 1
         assert results[0].document_properties["base"]["name"] == "beta"
 
     def test_search_empty_result(self, temp_session, sample_doc):
         """Test search returns empty list when no matches."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
         db.add(sample_doc)
 
-        query = Query("base.name") == "nonexistent"
+        query = ndi_query("base.name") == "nonexistent"
         results = db.search(query)
         assert results == []
 
 
 class TestDatabaseCounts:
-    """Test Database counting operations."""
+    """Test ndi_database counting operations."""
 
     def test_numdocs_empty(self, temp_session):
         """Test numdocs on empty database."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
         assert db.numdocs() == 0
 
     def test_numdocs_with_docs(self, temp_session):
         """Test numdocs with documents."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
 
         for i in range(5):
-            ido = Ido()
-            doc = Document(
+            ido = ndi_ido()
+            doc = ndi_document(
                 {
                     "base": {
                         "id": ido.id,
@@ -319,12 +319,12 @@ class TestDatabaseCounts:
 
     def test_alldocids(self, temp_session):
         """Test getting all document IDs."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
         added_ids = []
 
         for i in range(3):
-            ido = Ido()
-            doc = Document(
+            ido = ndi_ido()
+            doc = ndi_document(
                 {
                     "base": {
                         "id": ido.id,
@@ -345,15 +345,15 @@ class TestDatabaseCounts:
 
 
 class TestDatabaseDependencies:
-    """Test Database dependency operations."""
+    """Test ndi_database dependency operations."""
 
     def test_find_dependencies(self, temp_session):
         """Test finding dependencies of a document."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
 
         # Create parent document
-        parent_ido = Ido()
-        parent = Document(
+        parent_ido = ndi_ido()
+        parent = ndi_document(
             {
                 "base": {
                     "id": parent_ido.id,
@@ -367,8 +367,8 @@ class TestDatabaseDependencies:
         db.add(parent)
 
         # Create child document with dependency
-        child_ido = Ido()
-        child = Document(
+        child_ido = ndi_ido()
+        child = ndi_document(
             {
                 "base": {
                     "id": child_ido.id,
@@ -389,37 +389,37 @@ class TestDatabaseDependencies:
 
 
 class TestDatabasePaths:
-    """Test Database path properties."""
+    """Test ndi_database path properties."""
 
     def test_database_path(self, temp_session):
         """Test database_path property points to SQLite file."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
         assert db.database_path.exists()
         assert str(db.database_path).endswith("did-sqlite.sqlite")
 
     def test_binary_path(self, temp_session):
         """Test binary_path property."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
         assert db.binary_path.exists()
 
     def test_get_binary_path(self, temp_session, sample_doc):
         """Test get_binary_path method."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
         path = db.get_binary_path(sample_doc, "data.bin")
         assert str(path).endswith(f"{sample_doc.id}_data.bin")
 
 
 class TestDatabaseRemoveMany:
-    """Test Database remove_many operation."""
+    """Test ndi_database remove_many operation."""
 
     def test_remove_many_by_query(self, temp_session):
         """Test removing multiple documents by query."""
-        db = Database(temp_session)
+        db = ndi_database(temp_session)
 
         # Add documents with different types
         for name, doc_type in [("a", "alpha"), ("b", "alpha"), ("c", "beta")]:
-            ido = Ido()
-            doc = Document(
+            ido = ndi_ido()
+            doc = ndi_document(
                 {
                     "base": {
                         "id": ido.id,
@@ -436,7 +436,7 @@ class TestDatabaseRemoveMany:
         assert db.numdocs() == 3
 
         # Remove all alpha type
-        query = Query("meta.type") == "alpha"
+        query = ndi_query("meta.type") == "alpha"
         count = db.remove_many(query=query)
         assert count == 2
         assert db.numdocs() == 1

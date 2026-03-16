@@ -31,7 +31,7 @@ def tuning_curve_to_response_type(
     Returns:
         Tuple of ``(response_type, stimulus_response_scalar_doc)``.
     """
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
     props = doc.document_properties if hasattr(doc, "document_properties") else doc
     if not isinstance(props, dict):
@@ -46,7 +46,7 @@ def tuning_curve_to_response_type(
         dep_name = dep.get("name", "")
         dep_value = dep.get("value", "")
         if "stimulus_response_scalar" in dep_name and dep_value:
-            results = session.database_search(Query("base.id") == dep_value)
+            results = session.database_search(ndi_query("base.id") == dep_value)
             if results:
                 scalar_doc = results[0]
                 sp = (
@@ -66,7 +66,7 @@ def tuning_curve_to_response_type(
         dep_name = dep.get("name", "")
         dep_value = dep.get("value", "")
         if "stimulus_tuningcurve" in dep_name and dep_value:
-            results = session.database_search(Query("base.id") == dep_value)
+            results = session.database_search(ndi_query("base.id") == dep_value)
             if results:
                 return tuning_curve_to_response_type(session, results[0])
 
@@ -193,10 +193,12 @@ def stimulustemporalfrequency(
     """
     if config_path is None:
         try:
-            from ndi.common import PathConstants
+            from ndi.common import ndi_common_PathConstants
 
             config_path = str(
-                PathConstants.COMMON_FOLDER / "stimulus" / "temporal_frequency_rules.json"
+                ndi_common_PathConstants.COMMON_FOLDER
+                / "stimulus"
+                / "temporal_frequency_rules.json"
             )
         except Exception:
             return None, ""
@@ -262,7 +264,7 @@ def stimulus_tuningcurve_log(
     Returns:
         The log string, or ``''`` if not found.
     """
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
     props = doc.document_properties if hasattr(doc, "document_properties") else doc
     if not isinstance(props, dict):
@@ -278,7 +280,7 @@ def stimulus_tuningcurve_log(
     if not stim_tune_doc_id:
         return ""
 
-    q = (Query("base.id") == stim_tune_doc_id) & Query("").isa("tuningcurve_calc")
+    q = (ndi_query("base.id") == stim_tune_doc_id) & ndi_query("").isa("tuningcurve_calc")
     results = session.database_search(q)
 
     if results:

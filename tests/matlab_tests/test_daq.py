@@ -7,9 +7,9 @@ MATLAB source files:
   mfdaqNDRIntanTest.m     -> skipped (NDR Intan reader not ported; uses SpikeInterface)
 
 Python replacement modules:
-  ndi.daq.reader.mfdaq.intan.IntanReader  (wraps SpikeInterface)
-  ndi.daq.reader.spikeinterface_adapter.SpikeInterfaceReader
-  ndi.daq.mfdaq.MFDAQReader (base with epochsamples2times / epochtimes2samples)
+  ndi.daq.reader.mfdaq.intan.ndi_daq_reader_mfdaq_intan  (wraps SpikeInterface)
+  ndi.daq.reader.spikeinterface_adapter.ndi_daq_reader_SpikeInterfaceReader
+  ndi.daq.mfdaq.ndi_daq_reader_mfdaq (base with epochsamples2times / epochtimes2samples)
   ndi.fun.utils.channelname2prefixnumber
 """
 
@@ -20,8 +20,8 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from ndi.daq.mfdaq import ChannelInfo, ChannelType, MFDAQReader, standardize_channel_type
-from ndi.daq.reader.mfdaq.intan import IntanReader
+from ndi.daq.mfdaq import ChannelInfo, ChannelType, ndi_daq_reader_mfdaq, standardize_channel_type
+from ndi.daq.reader.mfdaq.intan import ndi_daq_reader_mfdaq_intan
 from ndi.fun.utils import channelname2prefixnumber
 
 # ---------------------------------------------------------------------------
@@ -71,50 +71,50 @@ requires_data = pytest.mark.skipif(
 class TestIntanReader:
     """Port of ndi.unittest.daq.reader.mfdaqIntanTest.
 
-    The MATLAB test creates an IntanReader, points it at real .rhd files,
+    The MATLAB test creates an ndi_daq_reader_mfdaq_intan, points it at real .rhd files,
     and checks channel discovery, epochsamples2times, epochtimes2samples.
     The Python reader delegates to SpikeInterface under the hood.
     """
 
     def test_intan_reader_instantiation(self):
-        """IntanReader can be created with no arguments.
+        """ndi_daq_reader_mfdaq_intan can be created with no arguments.
 
         MATLAB equivalent: mfdaqIntanTest - reader construction
         """
-        reader = IntanReader()
+        reader = ndi_daq_reader_mfdaq_intan()
 
         assert reader is not None
-        assert isinstance(reader, IntanReader)
-        assert isinstance(reader, MFDAQReader)
+        assert isinstance(reader, ndi_daq_reader_mfdaq_intan)
+        assert isinstance(reader, ndi_daq_reader_mfdaq)
         assert reader.NDI_DAQREADER_CLASS == "ndi.daq.reader.mfdaq.intan"
         assert reader.FILE_EXTENSIONS == [".rhd", ".rhs"]
-        assert reader.id  # Ido gives a non-empty id string
+        assert reader.id  # ndi_ido gives a non-empty id string
         assert isinstance(reader.id, str)
 
     def test_intan_reader_with_identifier(self):
-        """IntanReader can be created with an explicit identifier.
+        """ndi_daq_reader_mfdaq_intan can be created with an explicit identifier.
 
         MATLAB equivalent: mfdaqIntanTest - reader construction with identifier
         """
-        reader = IntanReader(identifier="test_reader_id")
-        # The identifier is stored via Ido but may not be directly the same
-        # because Ido might override it; just verify we got a valid object
-        assert isinstance(reader, IntanReader)
+        reader = ndi_daq_reader_mfdaq_intan(identifier="test_reader_id")
+        # The identifier is stored via ndi_ido but may not be directly the same
+        # because ndi_ido might override it; just verify we got a valid object
+        assert isinstance(reader, ndi_daq_reader_mfdaq_intan)
 
     def test_intan_reader_ndi_class(self):
-        """IntanReader reports the correct NDI DAQ reader class string.
+        """ndi_daq_reader_mfdaq_intan reports the correct NDI DAQ reader class string.
 
         MATLAB equivalent: mfdaqIntanTest - class property check
         """
-        reader = IntanReader()
+        reader = ndi_daq_reader_mfdaq_intan()
         assert reader._ndi_daqreader_class == "ndi.daq.reader.mfdaq.intan"
 
     def test_intan_reader_channel_types(self):
-        """MFDAQReader.channel_types() returns known channel types.
+        """ndi_daq_reader_mfdaq.channel_types() returns known channel types.
 
         MATLAB equivalent: mfdaqIntanTest - channel type discovery
         """
-        types, abbrevs = MFDAQReader.channel_types()
+        types, abbrevs = ndi_daq_reader_mfdaq.channel_types()
 
         assert "analog_in" in types
         assert "digital_in" in types
@@ -125,13 +125,13 @@ class TestIntanReader:
         assert len(types) == len(abbrevs)
 
     def test_intan_reader_mocked_getchannels(self):
-        """IntanReader.getchannelsepoch works via mocked SpikeInterface.
+        """ndi_daq_reader_mfdaq_intan.getchannelsepoch works via mocked SpikeInterface.
 
-        The IntanReader delegates to SpikeInterfaceReader internally.
+        The ndi_daq_reader_mfdaq_intan delegates to ndi_daq_reader_SpikeInterfaceReader internally.
         We mock that to simulate a successful channel discovery without
         needing real data files.
         """
-        reader = IntanReader()
+        reader = ndi_daq_reader_mfdaq_intan()
 
         mock_channels = [
             ChannelInfo(
@@ -159,11 +159,11 @@ class TestIntanReader:
         assert channels[2].type == "time"
 
     def test_intan_reader_no_spikeinterface(self):
-        """IntanReader.getchannelsepoch returns [] when SI is unavailable.
+        """ndi_daq_reader_mfdaq_intan.getchannelsepoch returns [] when SI is unavailable.
 
         MATLAB tests always had NDR; Python gracefully degrades.
         """
-        reader = IntanReader()
+        reader = ndi_daq_reader_mfdaq_intan()
 
         # Mock _get_si_reader to return None (no spikeinterface)
         with patch.object(reader, "_get_si_reader", return_value=None):
@@ -172,26 +172,26 @@ class TestIntanReader:
         assert channels == []
 
     def test_intan_reader_readchannels_no_si_raises(self):
-        """IntanReader.readchannels_epochsamples raises ImportError without SI."""
-        reader = IntanReader()
+        """ndi_daq_reader_mfdaq_intan.readchannels_epochsamples raises ImportError without SI."""
+        reader = ndi_daq_reader_mfdaq_intan()
 
         with patch.object(reader, "_get_si_reader", return_value=None):
             with pytest.raises(ImportError, match="spikeinterface"):
                 reader.readchannels_epochsamples("ai", [1], ["fake.rhd"], 1, 100)
 
     def test_intan_reader_samplerate_no_si_raises(self):
-        """IntanReader.samplerate raises ImportError without SI."""
-        reader = IntanReader()
+        """ndi_daq_reader_mfdaq_intan.samplerate raises ImportError without SI."""
+        reader = ndi_daq_reader_mfdaq_intan()
 
         with patch.object(reader, "_get_si_reader", return_value=None):
             with pytest.raises(ImportError, match="spikeinterface"):
                 reader.samplerate(["fake.rhd"], "ai", [1])
 
     def test_intan_reader_repr(self):
-        """IntanReader has a useful repr."""
-        reader = IntanReader()
+        """ndi_daq_reader_mfdaq_intan has a useful repr."""
+        reader = ndi_daq_reader_mfdaq_intan()
         r = repr(reader)
-        assert "IntanReader" in r
+        assert "ndi_daq_reader_mfdaq_intan" in r
 
     @requires_data
     def test_intan_reader_live(self):
@@ -204,7 +204,7 @@ class TestIntanReader:
         rhd_path = _find_example_rhd()
         assert rhd_path, "Should have found an .rhd file"
 
-        reader = IntanReader()
+        reader = ndi_daq_reader_mfdaq_intan()
         channels = reader.getchannelsepoch([rhd_path])
 
         # Should discover at least one analog input channel
@@ -222,12 +222,12 @@ class TestIntanReader:
 # TestEpochSampleTimeConversion
 # Port of: mfdaqIntanTest - epochsamples2times / epochtimes2samples
 #
-# These methods live on MFDAQReader. We test them with a concrete mock
+# These methods live on ndi_daq_reader_mfdaq. We test them with a concrete mock
 # subclass rather than needing real data.
 # ===========================================================================
 
 
-class _MockMFDAQReader(MFDAQReader):
+class _MockMFDAQReader(ndi_daq_reader_mfdaq):
     """Concrete MFDAQ reader for testing time/sample conversions."""
 
     def __init__(self, sample_rate=30000.0, t0=0.0, num_samples=300000):
@@ -260,7 +260,7 @@ class _MockMFDAQReader(MFDAQReader):
 class TestEpochSampleTimeConversion:
     """Port of mfdaqIntanTest - epochsamples2times / epochtimes2samples.
 
-    Tests the MFDAQReader methods for converting between sample indices
+    Tests the ndi_daq_reader_mfdaq methods for converting between sample indices
     and time values. Uses a mock reader with known sample rate and t0.
     """
 
@@ -471,7 +471,7 @@ class TestChannelTypeStandardization:
 
 
 class TestMFDAQReaderBase:
-    """Test MFDAQReader base class methods that don't need real data."""
+    """Test ndi_daq_reader_mfdaq base class methods that don't need real data."""
 
     def test_underlying_datatype_analog(self):
         """underlying_datatype returns float64 for analog_in channels."""
@@ -496,7 +496,7 @@ class TestMFDAQReaderBase:
             reader.underlying_datatype(["dummy.rhd"], "bogus_type", [1])
 
     def test_epochclock_returns_dev_local_time(self):
-        """MFDAQReader.epochclock returns DEV_LOCAL_TIME."""
+        """ndi_daq_reader_mfdaq.epochclock returns DEV_LOCAL_TIME."""
         from ndi.time import DEV_LOCAL_TIME
 
         reader = _MockMFDAQReader()

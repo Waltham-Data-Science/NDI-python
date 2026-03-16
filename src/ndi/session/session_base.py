@@ -1,7 +1,7 @@
 """
 ndi.session.session_base - Base class for NDI sessions.
 
-This module provides the Session abstract base class that manages
+This module provides the ndi_session abstract base class that manages
 NDI experiments including DAQ systems, database, syncgraph, and probes.
 """
 
@@ -12,13 +12,13 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
-from ..cache import Cache
-from ..database import Database
-from ..document import Document
-from ..ido import Ido
-from ..query import Query
-from ..time.syncgraph import SyncGraph
-from ..time.syncrule_base import SyncRule
+from ..cache import ndi_cache
+from ..database import ndi_database
+from ..document import ndi_document
+from ..ido import ndi_ido
+from ..query import ndi_query
+from ..time.syncgraph import ndi_time_syncgraph
+from ..time.syncrule_base import ndi_time_syncrule
 
 logger = logging.getLogger(__name__)
 
@@ -33,22 +33,22 @@ def empty_id() -> str:
     Returns:
         String '0000000000000000_0000000000000000'
     """
-    ido = Ido()
+    ido = ndi_ido()
     base_id = ido.id
     # Replace all non-underscore characters with '0'
     return "".join("0" if c != "_" else "_" for c in base_id)
 
 
-class Session(ABC):
+class ndi_session(ABC):
     """
     Abstract base class for NDI sessions.
 
-    Session represents a neuroscience experiment/recording session and
+    ndi_session represents a neuroscience experiment/recording session and
     provides access to:
-    - Database for document storage
+    - ndi_database for document storage
     - DAQ systems for data acquisition
-    - SyncGraph for time synchronization
-    - Cache for performance optimization
+    - ndi_time_syncgraph for time synchronization
+    - ndi_cache for performance optimization
 
     Subclasses must implement:
     - getpath(): Return the storage path
@@ -59,23 +59,23 @@ class Session(ABC):
         identifier: Unique session ID
 
     Example:
-        >>> session = DirSession('/path/to/experiment')
+        >>> session = ndi_session_dir('/path/to/experiment')
         >>> session.daqsystem_add(my_daq)
-        >>> docs = session.database_search(Query('element.type') == 'probe')
+        >>> docs = session.database_search(ndi_query('element.type') == 'probe')
     """
 
     def __init__(self, reference: str):
         """
-        Create a new Session.
+        Create a new ndi_session.
 
         Args:
             reference: Human-readable reference for the session
         """
         self._reference = reference
-        self._identifier = Ido().id
-        self._syncgraph: SyncGraph | None = None
-        self._cache = Cache()
-        self._database: Database | None = None
+        self._identifier = ndi_ido().id
+        self._syncgraph: ndi_time_syncgraph | None = None
+        self._cache = ndi_cache()
+        self._database: ndi_database | None = None
         self._cloud_client: Any = None
 
     @property
@@ -122,17 +122,17 @@ class Session(ABC):
         return f"{self._reference}_{self._identifier}"
 
     @property
-    def syncgraph(self) -> SyncGraph | None:
+    def syncgraph(self) -> ndi_time_syncgraph | None:
         """Get the session's syncgraph."""
         return self._syncgraph
 
     @property
-    def cache(self) -> Cache:
+    def cache(self) -> ndi_cache:
         """Get the session's cache."""
         return self._cache
 
     @property
-    def database(self) -> Database | None:
+    def database(self) -> ndi_database | None:
         """Get the session's database."""
         return self._database
 
@@ -150,24 +150,24 @@ class Session(ABC):
     # DAQ System Methods
     # =========================================================================
 
-    def daqsystem_add(self, dev: Any) -> Session:
+    def daqsystem_add(self, dev: Any) -> ndi_session:
         """
         Add a DAQ system to the session.
 
         Args:
-            dev: The DAQSystem object to add
+            dev: The ndi_daq_system object to add
 
         Returns:
             self for chaining
 
         Raises:
-            TypeError: If dev is not a DAQSystem
+            TypeError: If dev is not a ndi_daq_system
             ValueError: If DAQ system already exists
         """
-        from ..daq.system import DAQSystem
+        from ..daq.system import ndi_daq_system
 
-        if not isinstance(dev, DAQSystem):
-            raise TypeError("dev must be an ndi.daq.DAQSystem")
+        if not isinstance(dev, ndi_daq_system):
+            raise TypeError("dev must be an ndi.daq.ndi_daq_system")
 
         # Set the session on the DAQ system
         dev = dev.setsession(self)
@@ -177,7 +177,7 @@ class Session(ABC):
         search_result = self.database_search(sq)
 
         # Also check by name
-        sq1 = Query("").isa("daqsystem") & (Query("base.name") == dev.name)
+        sq1 = ndi_query("").isa("daqsystem") & (ndi_query("base.name") == dev.name)
         search_result1 = self.database_search(sq1)
 
         if len(search_result) == 0 and len(search_result1) == 0:
@@ -192,24 +192,24 @@ class Session(ABC):
 
         return self
 
-    def daqsystem_rm(self, dev: Any) -> Session:
+    def daqsystem_rm(self, dev: Any) -> ndi_session:
         """
         Remove a DAQ system from the session.
 
         Args:
-            dev: The DAQSystem to remove
+            dev: The ndi_daq_system to remove
 
         Returns:
             self for chaining
 
         Raises:
-            TypeError: If dev is not a DAQSystem
+            TypeError: If dev is not a ndi_daq_system
             ValueError: If DAQ system not found
         """
-        from ..daq.system import DAQSystem
+        from ..daq.system import ndi_daq_system
 
-        if not isinstance(dev, DAQSystem):
-            raise TypeError("dev must be an ndi.daq.DAQSystem")
+        if not isinstance(dev, ndi_daq_system):
+            raise TypeError("dev must be an ndi.daq.ndi_daq_system")
 
         daqsys = self.daqsystem_load(name=dev.name)
         if not daqsys:
@@ -224,7 +224,7 @@ class Session(ABC):
                 # Remove dependencies first
                 names, deps = doc.dependency()
                 for dep in deps:
-                    dep_docs = self.database_search(Query("base.id") == dep["value"])
+                    dep_docs = self.database_search(ndi_query("base.id") == dep["value"])
                     for dep_doc in dep_docs:
                         self.database_rm(dep_doc)
                 # Remove the document itself
@@ -241,7 +241,7 @@ class Session(ABC):
             **kwargs: Additional field=value pairs to match
 
         Returns:
-            List of DAQSystem objects, single DAQSystem if only one,
+            List of ndi_daq_system objects, single ndi_daq_system if only one,
             or None if none found.
 
         Example:
@@ -250,23 +250,23 @@ class Session(ABC):
         """
 
         # Build query
-        q = Query("").isa("daqsystem")
-        q = q & (Query("base.session_id") == self.id())
+        q = ndi_query("").isa("daqsystem")
+        q = q & (ndi_query("base.session_id") == self.id())
 
         # Add name filter (using regex match for compatibility)
         if name is not None:
-            q = q & (Query("base.name").match(name))
+            q = q & (ndi_query("base.name").match(name))
 
         # Add other filters
         for field, value in kwargs.items():
             if field == "name":
                 continue  # Already handled
-            q = q & (Query(field) == value)
+            q = q & (ndi_query(field) == value)
 
         # Search database
         dev_docs = self.database_search(q)
 
-        # Convert to DAQSystem objects
+        # Convert to ndi_daq_system objects
         dev = []
         for doc in dev_docs:
             try:
@@ -283,7 +283,7 @@ class Session(ABC):
         else:
             return dev
 
-    def daqsystem_clear(self) -> Session:
+    def daqsystem_clear(self) -> ndi_session:
         """
         Remove all DAQ systems from the session.
 
@@ -299,15 +299,15 @@ class Session(ABC):
         return self
 
     # =========================================================================
-    # Database Methods
+    # ndi_database Methods
     # =========================================================================
 
-    def database_add(self, document: Document | list[Document]) -> Session:
+    def database_add(self, document: ndi_document | list[ndi_document]) -> ndi_session:
         """
         Add a document to the session database.
 
         Args:
-            document: Document or list of Documents to add
+            document: ndi_document or list of Documents to add
 
         Returns:
             self for chaining
@@ -316,7 +316,7 @@ class Session(ABC):
             ValueError: If document session_id doesn't match
         """
         if self._database is None:
-            raise RuntimeError("Session has no database")
+            raise RuntimeError("ndi_session has no database")
 
         if not isinstance(document, list):
             document = [document]
@@ -326,7 +326,8 @@ class Session(ABC):
             session_id = doc.session_id
             if session_id and session_id != self.id() and session_id != empty_id():
                 raise ValueError(
-                    f"Document session_id '{session_id}' doesn't match " f"session id '{self.id()}'"
+                    f"ndi_document session_id '{session_id}' doesn't match "
+                    f"session id '{self.id()}'"
                 )
             # Set session ID if empty or unset
             if not session_id or session_id == empty_id():
@@ -339,7 +340,7 @@ class Session(ABC):
 
         return self
 
-    def _ingest_binary_files(self, doc: Document) -> None:
+    def _ingest_binary_files(self, doc: ndi_document) -> None:
         """Copy binary file attachments into the database's binary directory.
 
         For each file location with ``ingest=True``, the source file is
@@ -375,21 +376,21 @@ class Session(ABC):
 
     def database_rm(
         self,
-        doc_or_id: Document | str | list[Document | str],
+        doc_or_id: ndi_document | str | list[ndi_document | str],
         error_if_not_found: bool = False,
-    ) -> Session:
+    ) -> ndi_session:
         """
         Remove a document from the session database.
 
         Args:
-            doc_or_id: Document, document ID, or list of either
+            doc_or_id: ndi_document, document ID, or list of either
             error_if_not_found: If True, raise error when not found
 
         Returns:
             self for chaining
         """
         if self._database is None:
-            raise RuntimeError("Session has no database")
+            raise RuntimeError("ndi_session has no database")
 
         if not isinstance(doc_or_id, list):
             doc_or_id = [doc_or_id]
@@ -405,12 +406,12 @@ class Session(ABC):
 
         return self
 
-    def database_search(self, query: Query) -> list[Document]:
+    def database_search(self, query: ndi_query) -> list[ndi_document]:
         """
         Search for documents in the session database.
 
         Args:
-            query: Query to match
+            query: ndi_query to match
 
         Returns:
             List of matching Documents
@@ -419,10 +420,10 @@ class Session(ABC):
             return []
 
         # Add session filter
-        in_session = Query("base.session_id") == self.id()
+        in_session = ndi_query("base.session_id") == self.id()
         return self._database.search(query & in_session)
 
-    def database_clear(self, areyousure: str) -> Session:
+    def database_clear(self, areyousure: str) -> ndi_session:
         """
         Delete all documents from the database.
 
@@ -442,12 +443,12 @@ class Session(ABC):
 
         return self
 
-    def validate_documents(self, documents: Document | list[Document]) -> tuple[bool, str]:
+    def validate_documents(self, documents: ndi_document | list[ndi_document]) -> tuple[bool, str]:
         """
         Validate that documents belong to this session.
 
         Args:
-            documents: Document or list to validate
+            documents: ndi_document or list to validate
 
         Returns:
             Tuple of (is_valid, error_message)
@@ -456,32 +457,32 @@ class Session(ABC):
             documents = [documents]
 
         for doc in documents:
-            if not isinstance(doc, Document):
-                return False, "All entries must be Document objects"
+            if not isinstance(doc, ndi_document):
+                return False, "All entries must be ndi_document objects"
 
             session_id = doc.session_id
             if session_id != self.id() and session_id != empty_id():
                 return False, (
-                    f"Document {doc.id} has session_id '{session_id}' "
+                    f"ndi_document {doc.id} has session_id '{session_id}' "
                     f"which doesn't match session id '{self.id()}'"
                 )
 
         return True, ""
 
     # =========================================================================
-    # Binary Document Methods
+    # Binary ndi_document Methods
     # =========================================================================
 
     def database_openbinarydoc(
         self,
-        doc_or_id: Document | str,
+        doc_or_id: ndi_document | str,
         filename: str,
     ) -> Any:
         """
         Open a binary document for reading.
 
         Args:
-            doc_or_id: Document or document ID
+            doc_or_id: ndi_document or document ID
             filename: Name of the binary file
 
         Returns:
@@ -491,12 +492,12 @@ class Session(ABC):
             The file must be closed with database_closebinarydoc()
         """
         if self._database is None:
-            raise RuntimeError("Session has no database")
+            raise RuntimeError("ndi_session has no database")
 
-        doc_id = doc_or_id.id if isinstance(doc_or_id, Document) else doc_or_id
+        doc_id = doc_or_id.id if isinstance(doc_or_id, ndi_document) else doc_or_id
         doc = self._database.read(doc_id)
         if doc is None:
-            raise FileNotFoundError(f"Document {doc_id} not found")
+            raise FileNotFoundError(f"ndi_document {doc_id} not found")
 
         file_path = self._database.get_binary_path(doc, filename)
         if not file_path.exists():
@@ -514,14 +515,14 @@ class Session(ABC):
 
     def database_existbinarydoc(
         self,
-        doc_or_id: Document | str,
+        doc_or_id: ndi_document | str,
         filename: str,
     ) -> tuple[bool, Path | None]:
         """
         Check if a binary document exists.
 
         Args:
-            doc_or_id: Document or document ID
+            doc_or_id: ndi_document or document ID
             filename: Name of the binary file
 
         Returns:
@@ -530,7 +531,7 @@ class Session(ABC):
         if self._database is None:
             return False, None
 
-        doc_id = doc_or_id.id if isinstance(doc_or_id, Document) else doc_or_id
+        doc_id = doc_or_id.id if isinstance(doc_or_id, ndi_document) else doc_or_id
         doc = self._database.read(doc_id)
         if doc is None:
             return False, None
@@ -550,7 +551,7 @@ class Session(ABC):
 
     def _try_cloud_fetch(
         self,
-        doc: Document,
+        doc: ndi_document,
         filename: str,
         target_path: Path,
     ) -> bool:
@@ -626,27 +627,27 @@ class Session(ABC):
         return False
 
     # =========================================================================
-    # SyncGraph Methods
+    # ndi_time_syncgraph Methods
     # =========================================================================
 
-    def syncgraph_addrule(self, rule: SyncRule) -> Session:
+    def syncgraph_addrule(self, rule: ndi_time_syncrule) -> ndi_session:
         """
         Add a sync rule to the session's syncgraph.
 
         Args:
-            rule: SyncRule to add
+            rule: ndi_time_syncrule to add
 
         Returns:
             self for chaining
         """
         if self._syncgraph is None:
-            self._syncgraph = SyncGraph(self)
+            self._syncgraph = ndi_time_syncgraph(self)
 
         self._syncgraph.add_rule(rule)
         self._update_syncgraph_in_db()
         return self
 
-    def syncgraph_rmrule(self, index: int) -> Session:
+    def syncgraph_rmrule(self, index: int) -> ndi_session:
         """
         Remove a sync rule from the session's syncgraph.
 
@@ -668,14 +669,14 @@ class Session(ABC):
 
         # Remove old syncgraph docs
         old_docs = self.database_search(
-            Query("").isa("syncgraph") & (Query("base.session_id") == self.id())
+            ndi_query("").isa("syncgraph") & (ndi_query("base.session_id") == self.id())
         )
         for doc in old_docs:
             self._database.remove(doc)
 
         # Remove old syncrule docs
         old_rules = self.database_search(
-            Query("").isa("syncrule") & (Query("base.session_id") == self.id())
+            ndi_query("").isa("syncrule") & (ndi_query("base.session_id") == self.id())
         )
         for doc in old_rules:
             self._database.remove(doc)
@@ -739,17 +740,17 @@ class Session(ABC):
 
         return success, errmsg
 
-    def get_ingested_docs(self) -> list[Document]:
+    def get_ingested_docs(self) -> list[ndi_document]:
         """
         Get all documents related to ingested data.
 
         Returns:
             List of ingested data documents
         """
-        q_i1 = Query("").isa("daqreader_mfdaq_epochdata_ingested")
-        q_i2 = Query("").isa("daqmetadatareader_epochdata_ingested")
-        q_i3 = Query("").isa("epochfiles_ingested")
-        q_i4 = Query("").isa("syncrule_mapping")
+        q_i1 = ndi_query("").isa("daqreader_mfdaq_epochdata_ingested")
+        q_i2 = ndi_query("").isa("daqmetadatareader_epochdata_ingested")
+        q_i3 = ndi_query("").isa("epochfiles_ingested")
+        q_i4 = ndi_query("").isa("syncrule_mapping")
 
         return self.database_search(q_i1 | q_i2 | q_i3 | q_i4)
 
@@ -789,8 +790,8 @@ class Session(ABC):
         if self._database is None:
             return False
 
-        q = Query("").isa("session_in_a_dataset") & (
-            Query("session_in_a_dataset.session_id") == self.id()
+        q = ndi_query("").isa("session_in_a_dataset") & (
+            ndi_query("session_in_a_dataset.session_id") == self.id()
         )
         docs = self._database.search(q)
 
@@ -806,7 +807,7 @@ class Session(ABC):
         return False
 
     # =========================================================================
-    # Probe and Element Methods
+    # ndi_probe and ndi_element Methods
     # =========================================================================
 
     def getprobes(self, classmatch: str | None = None, **kwargs) -> list[Any]:
@@ -818,9 +819,9 @@ class Session(ABC):
             **kwargs: Property filters (name, reference, type, subject_id)
 
         Returns:
-            List of Probe objects
+            List of ndi_probe objects
         """
-        from ..probe import Probe
+        from ..probe import ndi_probe
 
         # Get probe structs from all DAQ systems
         probestructs = []
@@ -844,7 +845,9 @@ class Session(ABC):
                 unique_probes.append(ps)
 
         # Get existing probes from database
-        existing_docs = self.database_search(Query("element.ndi_element_class").contains("probe"))
+        existing_docs = self.database_search(
+            ndi_query("element.ndi_element_class").contains("probe")
+        )
 
         # Convert existing docs to probe objects
         existing_probes = []
@@ -870,7 +873,7 @@ class Session(ABC):
                     found = True
                     break
             if not found:
-                probe = Probe(
+                probe = ndi_probe(
                     session=self,
                     name=ps.get("name", ""),
                     reference=ps.get("reference", 0),
@@ -883,12 +886,12 @@ class Session(ABC):
 
         # Filter by class
         if classmatch is not None:
-            from ..element import Element
-            from ..probe import Probe
+            from ..element import ndi_element
+            from ..probe import ndi_probe
 
             _CLASS_LOOKUP = {
-                "Probe": Probe,
-                "Element": Element,
+                "ndi_probe": ndi_probe,
+                "ndi_element": ndi_element,
             }
             cls = _CLASS_LOOKUP.get(classmatch)
             if cls is None:
@@ -928,15 +931,15 @@ class Session(ABC):
             **kwargs: Property filters (e.g., element.name, element.type)
 
         Returns:
-            List of Element objects
+            List of ndi_element objects
         """
-        q = Query("").isa("element")
+        q = ndi_query("").isa("element")
 
         for field, value in kwargs.items():
             if "reference" in field:
-                q = q & (Query(field) == value)
+                q = q & (ndi_query(field) == value)
             else:
-                q = q & (Query(field) == value)
+                q = q & (ndi_query(field) == value)
 
         docs = self.database_search(q)
 
@@ -962,8 +965,8 @@ class Session(ABC):
 
         Args:
             obj_name: Name of the object to find.
-            obj_classname: Class name to match (e.g. ``'Probe'``,
-                ``'DAQSystem'``).
+            obj_classname: Class name to match (e.g. ``'ndi_probe'``,
+                ``'ndi_daq_system'``).
 
         Returns:
             The matching object, or None if not found.
@@ -1009,46 +1012,48 @@ class Session(ABC):
         return None
 
     # =========================================================================
-    # Document Service Methods
+    # ndi_document Service Methods
     # =========================================================================
 
-    def newdocument(self, document_type: str = "base", **properties) -> Document:
+    def newdocument(self, document_type: str = "base", **properties) -> ndi_document:
         """
         Create a new document for this session.
 
         Args:
             document_type: Type of document to create
-            **properties: Document properties
+            **properties: ndi_document properties
 
         Returns:
-            New Document with session_id set
+            New ndi_document with session_id set
         """
         # Add session_id to properties
         properties["base.session_id"] = self.id()
 
-        return Document(document_type, **properties)
+        return ndi_document(document_type, **properties)
 
-    def searchquery(self) -> Query:
+    def searchquery(self) -> ndi_query:
         """
         Create a query for documents in this session.
 
         Returns:
-            Query matching this session's documents
+            ndi_query matching this session's documents
         """
-        return Query("base.session_id") == self.id()
+        return ndi_query("base.session_id") == self.id()
 
     # =========================================================================
     # Helper Methods
     # =========================================================================
 
-    def _docinput2docs(self, doc_input: str | Document | list[str | Document]) -> list[Document]:
+    def _docinput2docs(
+        self, doc_input: str | ndi_document | list[str | ndi_document]
+    ) -> list[ndi_document]:
         """Convert document IDs or Documents to Documents."""
         if not isinstance(doc_input, list):
             doc_input = [doc_input]
 
         doc_list = []
         for item in doc_input:
-            if isinstance(item, Document):
+            if isinstance(item, ndi_document):
                 doc_list.append(item)
             elif isinstance(item, str):
                 doc = self._database.read(item) if self._database else None
@@ -1057,13 +1062,13 @@ class Session(ABC):
 
         return doc_list
 
-    def _find_all_dependencies(self, document: Document) -> list[Document]:
+    def _find_all_dependencies(self, document: ndi_document) -> list[ndi_document]:
         """Find all documents that depend on the given document."""
         dependents = []
         if self._database is None:
             return dependents
 
-        q = Query("").depends_on("", document.id)
+        q = ndi_query("").depends_on("", document.id)
         results = self.database_search(q)
 
         for doc in results:
@@ -1073,25 +1078,24 @@ class Session(ABC):
 
         return dependents
 
-    def _document_to_object(self, document: Document) -> Any:
+    def _document_to_object(self, document: ndi_document) -> Any:
         """
         Convert a document to its corresponding NDI object.
 
         MATLAB equivalent: ``ndi.database.fun.ndi_document2ndi_object``
 
-        For element documents MATLAB reads
-        ``element.ndi_element_class`` (e.g.
-        ``'ndi.probe.timeseries.mfdaq'``) and calls
-        ``eval([class_string '(session, doc)'])``.  Python mirrors
-        this by maintaining a registry that maps MATLAB class name
-        strings to the corresponding Python classes.
+        Uses the unified :mod:`ndi.class_registry` to map NDI class
+        identifier strings (stored in document properties) to their
+        Python implementations.
 
         Args:
-            document: Document to convert
+            document: ndi_document to convert
 
         Returns:
             The NDI object or None
         """
+        from ..class_registry import get_class
+
         # Check document type
         if document.doc_isa("daqsystem"):
             props = document.document_properties
@@ -1100,44 +1104,32 @@ class Session(ABC):
                 daq_class_name = props.get("daqsystem", {}).get("ndi_daqsystem_class", "")
 
             if "mfdaq" in daq_class_name:
-                from ..daq.system_mfdaq import DAQSystemMFDAQ
+                from ..daq.system_mfdaq import ndi_daq_system_mfdaq
 
-                return DAQSystemMFDAQ(session=self, document=document)
+                return ndi_daq_system_mfdaq(session=self, document=document)
 
-            from ..daq.system import DAQSystem
+            from ..daq.system import ndi_daq_system
 
-            return DAQSystem(session=self, document=document)
+            return ndi_daq_system(session=self, document=document)
 
         if document.doc_isa("element"):
-            # Mirror MATLAB ndi_document2ndi_object: read the
-            # ndi_element_class field and construct the right class.
-            from ..element import Element
-            from ..probe import Probe
-            from ..probe.timeseries import ProbeTimeseries
-            from ..probe.timeseries_mfdaq import ProbeTimeseriesMFDAQ
-            from ..probe.timeseries_stimulator import ProbeTimeseriesStimulator
-
-            _NDI_CLASS_REGISTRY: dict[str, type] = {
-                "ndi.element": Element,
-                "ndi.probe": Probe,
-                "ndi.probe.timeseries": ProbeTimeseries,
-                "ndi.probe.timeseries.mfdaq": ProbeTimeseriesMFDAQ,
-                "ndi.probe.timeseries.stimulator": ProbeTimeseriesStimulator,
-            }
-
             props = document.document_properties
             ndi_class = props.get("element", {}).get("ndi_element_class", "")
-            cls = _NDI_CLASS_REGISTRY.get(ndi_class)
+            cls = get_class(ndi_class)
             if cls is not None:
                 return cls(session=self, document=document)
             # Fallback: if ndi_element_class contains "probe" but
-            # isn't a known key (e.g. "ndi.probe.timage"), use Probe.
+            # isn't a known key (e.g. "ndi.probe.timage"), use ndi_probe.
+            from ..probe import ndi_probe
+
             if "probe" in ndi_class:
-                return Probe(session=self, document=document)
-            return Element(session=self, document=document)
+                return ndi_probe(session=self, document=document)
+            from ..element import ndi_element
+
+            return ndi_element(session=self, document=document)
 
         if document.doc_isa("syncgraph"):
-            return SyncGraph(session=self, document=document)
+            return ndi_time_syncgraph(session=self, document=document)
 
         return None
 
@@ -1171,7 +1163,7 @@ class Session(ABC):
 
     def __eq__(self, other: Any) -> bool:
         """Check equality by identifier."""
-        if not isinstance(other, Session):
+        if not isinstance(other, ndi_session):
             return False
         return self.id() == other.id()
 

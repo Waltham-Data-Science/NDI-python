@@ -1,5 +1,5 @@
 """
-ndi.fun.doc - Document utility functions.
+ndi.fun.doc - ndi_document utility functions.
 
 MATLAB equivalents: +ndi/+fun/+doc/diff.m, findFuid.m, allTypes.m, getDocTypes.m
 """
@@ -18,10 +18,10 @@ def allTypes() -> list[str]:
     Returns:
         Sorted list of document type names.
     """
-    from ndi.common import PathConstants
+    from ndi.common import ndi_common_PathConstants
 
     types: set[str] = set()
-    doc_folder = PathConstants.COMMON_FOLDER / "database_documents"
+    doc_folder = ndi_common_PathConstants.COMMON_FOLDER / "database_documents"
     search_paths = [doc_folder]
 
     # Also check calculator doc paths
@@ -56,9 +56,9 @@ def findFuid(session: Any, fuid: str) -> tuple[Any | None, str]:
     Returns:
         Tuple of ``(document, filename)`` or ``(None, '')`` if not found.
     """
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
-    docs = session.database_search(Query("").isa("base"))
+    docs = session.database_search(ndi_query("").isa("base"))
     for doc in docs:
         props = doc.document_properties if hasattr(doc, "document_properties") else doc
         if not isinstance(props, dict):
@@ -97,7 +97,7 @@ def makeSpeciesStrainSex(
 
     Args:
         session: NDI session instance.
-        subjectID: Subject document identifier string.
+        subjectID: ndi_subject document identifier string.
         Species: Species ontology identifier (e.g. ``'NCBITaxon:10116'``).
         Strain: Strain ontology identifier (e.g. ``'RRID:RGD_70508'``).
             Requires ``Species`` to also be provided.
@@ -106,7 +106,7 @@ def makeSpeciesStrainSex(
         AddToSession: If True, add documents to the session database.
 
     Returns:
-        List of created NDI Document objects.
+        List of created NDI ndi_document objects.
     """
     from ndi.openminds_convert import openminds_obj_to_ndi_document
 
@@ -263,12 +263,12 @@ def probeLocations4probes(
     Returns:
         List of created probe_location documents.
     """
-    from ndi.document import Document
+    from ndi.document import ndi_document
 
     docs: list[Any] = []
     for probe_doc, lookup_str in zip(probe_docs, ontology_lookup_strings):
         probe_id = probe_doc.document_properties.get("base", {}).get("id", "")
-        doc = Document("probe/probe_location")
+        doc = ndi_document("probe/probe_location")
         doc = doc.set_session_id(session.id())
 
         # Resolve ontology lookup string to name and ontology ID
@@ -330,9 +330,9 @@ def diff(
         checkFiles: Whether to compare file contents.
         checkFileList: Whether to compare the file_info lists
             (default True).
-        session1: Session for doc1 (used for cross-session file
+        session1: ndi_session for doc1 (used for cross-session file
             comparison when *checkFiles* is True).
-        session2: Session for doc2 (used for cross-session file
+        session2: ndi_session for doc2 (used for cross-session file
             comparison when *checkFiles* is True).
 
     Returns:
@@ -418,9 +418,9 @@ def ontologyTableRowVars(
         Tuple of ``(names, variable_names, ontology_nodes)`` where each
         is a sorted list of unique strings.
     """
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
-    docs = session.database_search(Query("").isa("ontologyTableRow"))
+    docs = session.database_search(ndi_query("").isa("ontologyTableRow"))
 
     names_set: dict[str, tuple[str, str]] = {}
 
@@ -480,9 +480,9 @@ def getDocTypes(
     """
     from collections import Counter
 
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
-    docs = session.database_search(Query("").isa("base"))
+    docs = session.database_search(ndi_query("").isa("base"))
 
     type_counter: Counter[str] = Counter()
     for doc in docs:

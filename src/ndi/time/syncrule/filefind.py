@@ -1,7 +1,7 @@
 """
 ndi.time.syncrule.filefind - File find synchronization rule.
 
-This module provides the FileFind sync rule that synchronizes epochs
+This module provides the ndi_time_syncrule_filefind sync rule that synchronizes epochs
 based on a synchronization text file shared between two named DAQ systems.
 
 The sync file contains two numbers (shift and scale) defining:
@@ -15,15 +15,15 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from ..syncrule_base import SyncRule
-from ..timemapping import TimeMapping
+from ..syncrule_base import ndi_time_syncrule
+from ..timemapping import ndi_time_timemapping
 
 
-class FileFind(SyncRule):
+class ndi_time_syncrule_filefind(ndi_time_syncrule):
     """
     Synchronization rule based on finding a sync file between two DAQ systems.
 
-    FileFind looks for a specific synchronization text file in the epoch's
+    ndi_time_syncrule_filefind looks for a specific synchronization text file in the epoch's
     underlying files. The file should contain two numbers: a shift and a scale,
     defining the time relationship between two named DAQ systems:
 
@@ -37,7 +37,7 @@ class FileFind(SyncRule):
         daqsystem2 (str): Name of the second DAQ system. Default: 'mydaq2'.
 
     Example:
-        >>> rule = FileFind({
+        >>> rule = ndi_time_syncrule_filefind({
         ...     'number_fullpath_matches': 1,
         ...     'syncfilename': 'syncfile.txt',
         ...     'daqsystem1': 'daq_vis',
@@ -51,7 +51,7 @@ class FileFind(SyncRule):
         identifier: str | None = None,
     ):
         """
-        Create a new FileFind sync rule.
+        Create a new ndi_time_syncrule_filefind sync rule.
 
         Args:
             parameters: Dict with sync file matching parameters
@@ -69,7 +69,7 @@ class FileFind(SyncRule):
 
     def is_valid_parameters(self, parameters: dict[str, Any]) -> tuple[bool, str]:
         """
-        Validate parameters for FileFind.
+        Validate parameters for ndi_time_syncrule_filefind.
 
         Args:
             parameters: Dict to validate
@@ -101,7 +101,7 @@ class FileFind(SyncRule):
 
     def eligible_epochsets(self) -> list[str]:
         """Return eligible epochset class names."""
-        return ["ndi.daq.system", "DAQSystem"]
+        return ["ndi.daq.system", "ndi_daq_system"]
 
     def ineligible_epochsets(self) -> list[str]:
         """Return ineligible epochset class names."""
@@ -113,13 +113,13 @@ class FileFind(SyncRule):
         epochnode_a: dict[str, Any],
         epochnode_b: dict[str, Any],
         daqsystem1: Any = None,
-    ) -> tuple[float | None, TimeMapping | None]:
+    ) -> tuple[float | None, ndi_time_timemapping | None]:
         """
-        Apply FileFind rule to determine if epochs can be synchronized.
+        Apply ndi_time_syncrule_filefind rule to determine if epochs can be synchronized.
 
         Checks if the two epoch nodes come from the configured DAQ systems,
         share enough underlying files, and contain the sync file. If so,
-        reads shift and scale from the sync file and returns a TimeMapping.
+        reads shift and scale from the sync file and returns a ndi_time_timemapping.
 
         Args:
             epochnode_a: First epoch node
@@ -163,7 +163,7 @@ class FileFind(SyncRule):
             if syncdata is None:
                 raise FileNotFoundError(f"No file matched {syncfilename}.")
             shift, scale = syncdata
-            return 1.0, TimeMapping([scale, shift])
+            return 1.0, ndi_time_timemapping([scale, shift])
 
         if backward:
             # Look for sync file in epochnode_b's files
@@ -175,7 +175,7 @@ class FileFind(SyncRule):
             # then T1 = -shift/scale + (1/scale)*T2
             scale_reverse = 1.0 / scale
             shift_reverse = -shift / scale
-            return 1.0, TimeMapping([scale_reverse, shift_reverse])
+            return 1.0, ndi_time_timemapping([scale_reverse, shift_reverse])
 
         return None, None
 

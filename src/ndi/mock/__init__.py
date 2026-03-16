@@ -33,22 +33,22 @@ def subject_stimulator_neuron(
         Dict with ``'subject'``, ``'stimulator'``, ``'spikes'`` keys
         containing document/element objects.
     """
-    from ndi.document import Document
+    from ndi.document import ndi_document
 
     ref_num = 20000 + random.randint(0, 999)
     subject_name = f"mock{ref_num}@nosuchlab.org"
 
     # Create subject document
-    subject_doc = Document("subject")
+    subject_doc = ndi_document("subject")
     subject_doc._set_nested_property("subject.local_identifier", subject_name)
 
     # Create stimulator element document
-    stim_doc = Document("element")
+    stim_doc = ndi_document("element")
     stim_doc._set_nested_property("element.name", f"mock_stimulator_{ref_num}")
     stim_doc._set_nested_property("element.type", "stimulator")
 
     # Create spiking neuron element document
-    spikes_doc = Document("element")
+    spikes_doc = ndi_document("element")
     spikes_doc._set_nested_property("element.name", f"mock_spikes_{ref_num}")
     spikes_doc._set_nested_property("element.type", "spikes")
 
@@ -84,7 +84,7 @@ def stimulus_presentation(
         reps: Number of repetitions of each stimulus.
         stim_duration: Duration of each stimulus in seconds.
         interstimulus_interval: Gap between stimuli in seconds.
-        epoch_id: Epoch identifier.
+        epoch_id: ndi_epoch_epoch identifier.
 
     Returns:
         Dict with ``'presentations'`` (list of dicts with timing info),
@@ -171,7 +171,7 @@ def stimulus_response(
         reps: Number of repetitions per stimulus.
         stim_duration: Duration of each stimulus in seconds.
         interstimulus_interval: Gap between stimuli in seconds.
-        epochid: Epoch identifier.
+        epochid: ndi_epoch_epoch identifier.
 
     Returns:
         Dict with keys: ``'subject'``, ``'stimulator'``, ``'spikes'``,
@@ -223,16 +223,18 @@ def clear_mock_docs(session: Any) -> None:
     Args:
         session: An NDI session instance.
     """
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
     try:
-        docs = session.database_search(Query("subject.local_identifier", "contains_string", "mock"))
+        docs = session.database_search(
+            ndi_query("subject.local_identifier", "contains_string", "mock")
+        )
         if docs:
             session.database_rm(docs)
     except Exception:
         # Fallback: search and remove individually
         try:
-            docs = session.database_search(Query("").isa("subject"))
+            docs = session.database_search(ndi_query("").isa("subject"))
             for doc in docs:
                 props = doc.document_properties if hasattr(doc, "document_properties") else doc
                 if isinstance(props, dict):
@@ -246,7 +248,7 @@ def clear_mock_docs(session: Any) -> None:
             pass
 
 
-class CalculatorTest:
+class ndi_mock_ctest:
     """Base class for calculator testing framework.
 
     MATLAB equivalent: ndi.mock.ctest
@@ -355,7 +357,7 @@ class CalculatorTest:
                 try:
                     actual = self.calculator.run(mock_data.get("input_docs", []))
                 except Exception as e:
-                    results.append((False, f"Calculator error: {e}"))
+                    results.append((False, f"ndi_calculator error: {e}"))
                     continue
             else:
                 results.append((False, "No calculator configured"))
@@ -373,5 +375,5 @@ __all__ = [
     "stimulus_presentation",
     "stimulus_response",
     "clear_mock_docs",
-    "CalculatorTest",
+    "ndi_mock_ctest",
 ]

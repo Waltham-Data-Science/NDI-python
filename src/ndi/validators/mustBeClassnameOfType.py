@@ -19,7 +19,7 @@ def mustBeClassnameOfType(classname: str, requiredType: type) -> None:
     ``ndi.validators.mustBeClassnameOfType(classname, requiredType)``
 
     *classname* is a fully-qualified Python class name
-    (e.g. ``"ndi.session.DirSession"``).  The function dynamically imports
+    (e.g. ``"ndi.session.ndi_session_dir"``).  The function dynamically imports
     the module, looks up the class, and checks ``issubclass``.
 
     Parameters

@@ -6,15 +6,15 @@ MATLAB source files:
   +calc/+stimulus/testCalcTuningCurve.m     -> TestTuningCurveCalc
 
 Tests for:
-- ndi.calc.example.simple.SimpleCalc
-- ndi.calc.stimulus.tuningcurve.TuningCurveCalc
+- ndi.calc.example.simple.ndi_calc_example_simple
+- ndi.calc.stimulus.tuningcurve.ndi_calc_stimulus_tuningcurve
 
 These calculators require a session. Tests use the session_with_docs
 fixture from conftest.py and also test sessionless instantiation.
 """
 
-from ndi.calc.example.simple import SimpleCalc
-from ndi.calc.stimulus.tuningcurve import TuningCurveCalc
+from ndi.calc.example.simple import ndi_calc_example_simple
+from ndi.calc.stimulus.tuningcurve import ndi_calc_stimulus_tuningcurve
 
 # ===========================================================================
 # TestSimpleCalc
@@ -25,66 +25,66 @@ from ndi.calc.stimulus.tuningcurve import TuningCurveCalc
 class TestSimpleCalc:
     """Port of ndi.unittest.calc.example.testSimple.
 
-    Verifies SimpleCalc instantiation, interface properties, and
+    Verifies ndi_calc_example_simple instantiation, interface properties, and
     basic calculation output.
     """
 
     def test_simple_calc_instantiation_no_session(self):
-        """SimpleCalc can be created without a session.
+        """ndi_calc_example_simple can be created without a session.
 
         MATLAB equivalent: testSimple (setup)
         """
-        calc = SimpleCalc()
+        calc = ndi_calc_example_simple()
         assert calc is not None
         assert calc._session is None
 
     def test_simple_calc_instantiation(self, session_with_docs):
-        """SimpleCalc can be created with a session.
+        """ndi_calc_example_simple can be created with a session.
 
         MATLAB equivalent: testSimple.testCalcSimple
         """
         session, _ = session_with_docs
-        calc = SimpleCalc(session=session)
+        calc = ndi_calc_example_simple(session=session)
         assert calc is not None
         assert calc._session is session
 
     def test_simple_calc_doc_types(self):
-        """SimpleCalc has doc_types=['simple_calc'].
+        """ndi_calc_example_simple has doc_types=['simple_calc'].
 
         MATLAB equivalent: testSimple (property check)
         """
-        calc = SimpleCalc()
+        calc = ndi_calc_example_simple()
         assert hasattr(calc, "doc_types")
         assert isinstance(calc.doc_types, list)
         assert len(calc.doc_types) == 1
         assert calc.doc_types[0] == "simple_calc"
 
     def test_simple_calc_doc_document_types(self):
-        """SimpleCalc has doc_document_types=['apps/calculators/simple_calc'].
+        """ndi_calc_example_simple has doc_document_types=['apps/calculators/simple_calc'].
 
         MATLAB equivalent: testSimple (property check)
         """
-        calc = SimpleCalc()
+        calc = ndi_calc_example_simple()
         assert hasattr(calc, "doc_document_types")
         assert isinstance(calc.doc_document_types, list)
         assert len(calc.doc_document_types) == 1
         assert calc.doc_document_types[0] == "apps/calculators/simple_calc"
 
     def test_simple_calc_has_run_method(self):
-        """SimpleCalc inherits run() from Calculator.
+        """ndi_calc_example_simple inherits run() from ndi_calculator.
 
         MATLAB equivalent: testSimple (interface check)
         """
-        calc = SimpleCalc()
+        calc = ndi_calc_example_simple()
         assert hasattr(calc, "run")
         assert callable(calc.run)
 
     def test_simple_calc_has_calculate_method(self):
-        """SimpleCalc implements calculate().
+        """ndi_calc_example_simple implements calculate().
 
         MATLAB equivalent: testSimple (interface check)
         """
-        calc = SimpleCalc()
+        calc = ndi_calc_example_simple()
         assert hasattr(calc, "calculate")
         assert callable(calc.calculate)
 
@@ -93,7 +93,7 @@ class TestSimpleCalc:
 
         MATLAB equivalent: testSimple (default parameters)
         """
-        calc = SimpleCalc()
+        calc = ndi_calc_example_simple()
         params = calc.default_search_for_input_parameters()
         assert isinstance(params, dict)
         assert "input_parameters" in params
@@ -105,7 +105,7 @@ class TestSimpleCalc:
 
         MATLAB equivalent: testSimple.testCalcSimple (calculation)
         """
-        calc = SimpleCalc()
+        calc = ndi_calc_example_simple()
         parameters = {
             "input_parameters": {"answer": 42},
             "depends_on": [],
@@ -121,13 +121,13 @@ class TestSimpleCalc:
         assert props["simple_calc"]["answer"] == 42
 
     def test_simple_calc_repr(self):
-        """SimpleCalc has a useful repr.
+        """ndi_calc_example_simple has a useful repr.
 
         MATLAB equivalent: testSimple (implicit)
         """
-        calc = SimpleCalc()
+        calc = ndi_calc_example_simple()
         r = repr(calc)
-        assert "SimpleCalc" in r
+        assert "ndi_calc_example_simple" in r
 
 
 # ===========================================================================
@@ -139,66 +139,66 @@ class TestSimpleCalc:
 class TestTuningCurveCalc:
     """Port of ndi.unittest.calc.stimulus.testCalcTuningCurve.
 
-    Verifies TuningCurveCalc instantiation, interface properties,
+    Verifies ndi_calc_stimulus_tuningcurve instantiation, interface properties,
     and mock doc generation.
     """
 
     def test_tuning_curve_instantiation_no_session(self):
-        """TuningCurveCalc can be created without a session.
+        """ndi_calc_stimulus_tuningcurve can be created without a session.
 
         MATLAB equivalent: testCalcTuningCurve (setup)
         """
-        calc = TuningCurveCalc()
+        calc = ndi_calc_stimulus_tuningcurve()
         assert calc is not None
         assert calc._session is None
 
     def test_tuning_curve_instantiation(self, session_with_docs):
-        """TuningCurveCalc can be created with a session.
+        """ndi_calc_stimulus_tuningcurve can be created with a session.
 
         MATLAB equivalent: testCalcTuningCurve.testCalcTuningCurve
         """
         session, _ = session_with_docs
-        calc = TuningCurveCalc(session=session)
+        calc = ndi_calc_stimulus_tuningcurve(session=session)
         assert calc is not None
         assert calc._session is session
 
     def test_tuning_curve_doc_types(self):
-        """TuningCurveCalc has doc_types=['tuningcurve_calc'].
+        """ndi_calc_stimulus_tuningcurve has doc_types=['tuningcurve_calc'].
 
         MATLAB equivalent: testCalcTuningCurve (property check)
         """
-        calc = TuningCurveCalc()
+        calc = ndi_calc_stimulus_tuningcurve()
         assert hasattr(calc, "doc_types")
         assert isinstance(calc.doc_types, list)
         assert len(calc.doc_types) == 1
         assert calc.doc_types[0] == "tuningcurve_calc"
 
     def test_tuning_curve_doc_document_types(self):
-        """TuningCurveCalc has doc_document_types for schema path.
+        """ndi_calc_stimulus_tuningcurve has doc_document_types for schema path.
 
         MATLAB equivalent: testCalcTuningCurve (property check)
         """
-        calc = TuningCurveCalc()
+        calc = ndi_calc_stimulus_tuningcurve()
         assert hasattr(calc, "doc_document_types")
         assert isinstance(calc.doc_document_types, list)
         assert len(calc.doc_document_types) == 1
         assert calc.doc_document_types[0] == "apps/calculators/tuningcurve_calc"
 
     def test_tuning_curve_has_run_method(self):
-        """TuningCurveCalc inherits run() from Calculator.
+        """ndi_calc_stimulus_tuningcurve inherits run() from ndi_calculator.
 
         MATLAB equivalent: testCalcTuningCurve (interface check)
         """
-        calc = TuningCurveCalc()
+        calc = ndi_calc_stimulus_tuningcurve()
         assert hasattr(calc, "run")
         assert callable(calc.run)
 
     def test_tuning_curve_has_calculate_method(self):
-        """TuningCurveCalc implements calculate().
+        """ndi_calc_stimulus_tuningcurve implements calculate().
 
         MATLAB equivalent: testCalcTuningCurve (interface check)
         """
-        calc = TuningCurveCalc()
+        calc = ndi_calc_stimulus_tuningcurve()
         assert hasattr(calc, "calculate")
         assert callable(calc.calculate)
 
@@ -207,7 +207,7 @@ class TestTuningCurveCalc:
 
         MATLAB equivalent: testCalcTuningCurve (default parameters)
         """
-        calc = TuningCurveCalc()
+        calc = ndi_calc_stimulus_tuningcurve()
         params = calc.default_search_for_input_parameters()
         assert isinstance(params, dict)
         assert "input_parameters" in params
@@ -221,7 +221,7 @@ class TestTuningCurveCalc:
 
         MATLAB equivalent: testCalcTuningCurve (calculation)
         """
-        calc = TuningCurveCalc()
+        calc = ndi_calc_stimulus_tuningcurve()
         parameters = {
             "input_parameters": {
                 "independent_label": "angle",
@@ -242,7 +242,7 @@ class TestTuningCurveCalc:
 
         MATLAB equivalent: testCalcTuningCurve.testGenerateMockDocs
         """
-        calc = TuningCurveCalc()
+        calc = ndi_calc_stimulus_tuningcurve()
         docs, doc_output, doc_expected = calc.generate_mock_docs(
             scope="standard",
             number_of_tests=4,
@@ -260,10 +260,10 @@ class TestTuningCurveCalc:
         assert "independent_variables" in docs[0]
 
     def test_tuning_curve_repr(self):
-        """TuningCurveCalc has a useful repr.
+        """ndi_calc_stimulus_tuningcurve has a useful repr.
 
         MATLAB equivalent: testCalcTuningCurve (implicit)
         """
-        calc = TuningCurveCalc()
+        calc = ndi_calc_stimulus_tuningcurve()
         r = repr(calc)
-        assert "TuningCurveCalc" in r
+        assert "ndi_calc_stimulus_tuningcurve" in r

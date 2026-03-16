@@ -11,28 +11,28 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .. import App
+from .. import ndi_app
 
 if TYPE_CHECKING:
-    from ...document import Document
-    from ...session.session_base import Session
+    from ...document import ndi_document
+    from ...session.session_base import ndi_session
 
 
-class TuningResponse(App):
+class ndi_app_stimulus_tuning__response(ndi_app):
     """
-    App for computing stimulus-response relationships.
+    ndi_app for computing stimulus-response relationships.
 
     Computes scalar response measures (mean firing rate, F1 component, etc.)
     of neural elements to each stimulus in a set, then organizes these
     into tuning curves.
 
     Example:
-        >>> tr = TuningResponse(session)
+        >>> tr = ndi_app_stimulus_tuning__response(session)
         >>> docs = tr.stimulus_responses(stim_element, timeseries_obj)
         >>> tuning = tr.tuning_curve(response_doc)
     """
 
-    def __init__(self, session: Session | None = None):
+    def __init__(self, session: ndi_session | None = None):
         super().__init__(session=session, name="ndi_app_tuning_response")
 
     def stimulus_responses(
@@ -41,7 +41,7 @@ class TuningResponse(App):
         ndi_timeseries_obj: Any,
         reset: bool = False,
         do_mean_only: bool = False,
-    ) -> list[Document]:
+    ) -> list[ndi_document]:
         """
         Compute responses to a stimulus set.
 
@@ -65,9 +65,9 @@ class TuningResponse(App):
         self,
         ndi_stim_obj: Any,
         ndi_timeseries_obj: Any,
-        stim_doc: Document,
-        control_doc: Document | None = None,
-    ) -> Document | None:
+        stim_doc: ndi_document,
+        control_doc: ndi_document | None = None,
+    ) -> ndi_document | None:
         """
         Compute scalar response for a single stimulus presentation.
 
@@ -88,10 +88,10 @@ class TuningResponse(App):
 
     def tuning_curve(
         self,
-        stim_response_doc: Document,
+        stim_response_doc: ndi_document,
         independent_label: str = "angle",
         independent_parameter: str = "angle",
-    ) -> Document | None:
+    ) -> ndi_document | None:
         """
         Create a tuning curve from stimulus responses.
 
@@ -111,7 +111,7 @@ class TuningResponse(App):
         self,
         stimulus_element_obj: Any,
         reset: bool = False,
-    ) -> list[Document]:
+    ) -> list[ndi_document]:
         """
         Label control stimuli in a stimulus set.
 
@@ -128,8 +128,8 @@ class TuningResponse(App):
 
     def control_stimulus(
         self,
-        stim_doc: Document,
-    ) -> tuple[list[int], Document | None]:
+        stim_doc: ndi_document,
+    ) -> tuple[list[int], ndi_document | None]:
         """
         Determine control stimulus IDs for a stimulus presentation.
 
@@ -150,7 +150,7 @@ class TuningResponse(App):
         ndi_element_obj: Any,
         epochid: str,
         response_type: str = "mean",
-    ) -> tuple[list[Document], list[Document]]:
+    ) -> tuple[list[ndi_document], list[ndi_document]]:
         """
         Find existing tuning curve documents.
 
@@ -158,7 +158,7 @@ class TuningResponse(App):
 
         Args:
             ndi_element_obj: Neural element
-            epochid: Epoch ID
+            epochid: ndi_epoch_epoch ID
             response_type: Response type (mean, f1, etc.)
 
         Returns:
@@ -168,14 +168,14 @@ class TuningResponse(App):
         if self._session is None:
             return [], []
 
-        from ...query import Query
+        from ...query import ndi_query
 
-        q = Query("").isa("stimulus_tuningcurve") & Query("").depends_on(
+        q = ndi_query("").isa("stimulus_tuningcurve") & ndi_query("").depends_on(
             "element_id", ndi_element_obj.id
         )
         tc_docs = self._session.database_search(q)
 
-        q_srs = Query("").isa("stimulus_response_scalar") & Query("").depends_on(
+        q_srs = ndi_query("").isa("stimulus_response_scalar") & ndi_query("").depends_on(
             "element_id", ndi_element_obj.id
         )
         srs_docs = self._session.database_search(q_srs)
@@ -184,11 +184,11 @@ class TuningResponse(App):
 
     def make_1d_tuning(
         self,
-        stim_response_doc: Document,
+        stim_response_doc: ndi_document,
         param_to_vary: str,
         param_to_vary_label: str,
         param_to_fix: list[str],
-    ) -> list[Document]:
+    ) -> list[ndi_document]:
         """
         Create 1D tuning curves from a multi-dimensional parameter space.
 
@@ -208,4 +208,4 @@ class TuningResponse(App):
         )
 
     def __repr__(self) -> str:
-        return f"TuningResponse(session={self._session is not None})"
+        return f"ndi_app_stimulus_tuning__response(session={self._session is not None})"

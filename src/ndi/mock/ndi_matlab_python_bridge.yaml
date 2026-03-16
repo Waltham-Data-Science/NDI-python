@@ -169,7 +169,7 @@ classes:
     type: class
     matlab_path: "src/ndi/+ndi/+mock/ctest.m"
     python_path: "ndi/mock/__init__.py"
-    python_class: "CalculatorTest"
+    python_class: "ndi_mock_ctest"
 
     methods:
       - name: ctest
@@ -181,7 +181,7 @@ classes:
             default: "None"
         output_arguments:
           - name: obj
-            type_python: "CalculatorTest"
+            type_python: "ndi_mock_ctest"
         decision_log: >
           MATLAB constructor takes no args. Python accepts optional
           calculator parameter for convenience.
@@ -261,7 +261,7 @@ classes:
         output_arguments: []
         decision_log: >
           DISCREPANCY NOTED: Method exists in MATLAB but is not
-          implemented in Python CalculatorTest. Not critical —
+          implemented in Python ndi_mock_ctest. Not critical —
           Python tests use pytest fixtures for cleanup.
 
       - name: calc_path

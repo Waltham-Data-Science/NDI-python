@@ -1,5 +1,5 @@
 """
-Tests for ndi.validate — Document schema validation.
+Tests for ndi.validate — ndi_document schema validation.
 
 Tests three-tier validation:
   1. This-class property type checking
@@ -75,7 +75,7 @@ def element_schema():
 
 
 def _make_doc(props):
-    """Create a mock Document with the given document_properties."""
+    """Create a mock ndi_document with the given document_properties."""
     doc = MagicMock()
     doc.document_properties = props
     return doc
@@ -524,7 +524,7 @@ class TestValidateDependsOn:
 
 class TestValidate:
     def test_validate_no_schema(self):
-        """Document with no matching schema passes (can't validate)."""
+        """ndi_document with no matching schema passes (can't validate)."""
         doc = _make_doc({"document_class": {"definition": "", "class_name": ""}})
         result = validate(doc)
         assert result.is_valid is True
@@ -691,13 +691,13 @@ class TestValidate:
 
 
 # ===========================================================================
-# Document.validate() integration
+# ndi_document.validate() integration
 # ===========================================================================
 
 
 class TestDocumentValidateIntegration:
     def test_document_validate_returns_result(self, base_schema):
-        """Document.validate() should return a ValidationResult."""
+        """ndi_document.validate() should return a ValidationResult."""
         _schema_cache["base"] = base_schema
 
         doc = _make_doc(

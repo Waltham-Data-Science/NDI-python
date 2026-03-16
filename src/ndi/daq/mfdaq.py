@@ -1,7 +1,7 @@
 """
 ndi.daq.mfdaq - Multi-function DAQ reader class.
 
-This module provides the MFDAQReader class for reading data from
+This module provides the ndi_daq_reader_mfdaq class for reading data from
 multi-function data acquisition systems that sample various data types.
 """
 
@@ -14,8 +14,8 @@ from typing import Any
 
 import numpy as np
 
-from ..time import DEV_LOCAL_TIME, ClockType
-from .reader_base import DAQReader
+from ..time import DEV_LOCAL_TIME, ndi_time_clocktype
+from .reader_base import ndi_daq_reader
 
 
 class ChannelType(Enum):
@@ -112,7 +112,7 @@ def standardize_channel_types(channel_types: list[str]) -> list[str]:
     return [standardize_channel_type(ct) for ct in channel_types]
 
 
-class MFDAQReader(DAQReader):
+class ndi_daq_reader_mfdaq(ndi_daq_reader):
     """
     Multi-function DAQ reader for various data types.
 
@@ -138,7 +138,7 @@ class MFDAQReader(DAQReader):
         - 'text' / 'tx': Text markers
 
     Example:
-        >>> class IntanReader(MFDAQReader):
+        >>> class ndi_daq_reader_mfdaq_intan(ndi_daq_reader_mfdaq):
         ...     def getchannelsepoch(self, epochfiles):
         ...         # Return channels from Intan file
         ...         ...
@@ -165,7 +165,7 @@ class MFDAQReader(DAQReader):
         document: Any | None = None,
     ):
         """
-        Create a new MFDAQReader.
+        Create a new ndi_daq_reader_mfdaq.
 
         Args:
             identifier: Optional identifier
@@ -177,7 +177,7 @@ class MFDAQReader(DAQReader):
     def epochclock(
         self,
         epochfiles: list[str],
-    ) -> list[ClockType]:
+    ) -> list[ndi_time_clocktype]:
         """
         Return the clock types for an epoch.
 
@@ -560,7 +560,7 @@ class MFDAQReader(DAQReader):
 
         Args:
             epochfiles: List of file paths (starting with epochid://)
-            session: Session object with database access
+            session: ndi_session object with database access
 
         Returns:
             List of ChannelInfo objects
@@ -610,7 +610,7 @@ class MFDAQReader(DAQReader):
             epochfiles: Files for this epoch (starting with epochid://)
             s0: Start sample (1-indexed)
             s1: End sample (1-indexed)
-            session: Session object with database access
+            session: ndi_session object with database access
 
         Returns:
             Array with shape (num_samples, num_channels)
@@ -662,7 +662,7 @@ class MFDAQReader(DAQReader):
             epochfiles: Files for this epoch (starting with epochid://)
             channeltype: Type(s) of channel
             channel: Channel number(s)
-            session: Session object with database access
+            session: ndi_session object with database access
 
         Returns:
             Array of sample rates
@@ -704,7 +704,7 @@ class MFDAQReader(DAQReader):
             channel: Channel number(s)
             epochfiles: Files for this epoch (starting with epochid://)
             samples: Sample indices (1-indexed)
-            session: Session object with database access
+            session: ndi_session object with database access
 
         Returns:
             Time values
@@ -750,7 +750,7 @@ class MFDAQReader(DAQReader):
             channel: Channel number(s)
             epochfiles: Files for this epoch (starting with epochid://)
             times: Time values
-            session: Session object with database access
+            session: ndi_session object with database access
 
         Returns:
             Sample indices (1-indexed)

@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from ndi.cache import Cache, CacheEntry
-from ndi.ido import Ido
-from ndi.query import Query
-from ndi.session import DirSession, empty_id
+from ndi.cache import CacheEntry, ndi_cache
+from ndi.ido import ndi_ido
+from ndi.query import ndi_query
+from ndi.session import empty_id, ndi_session_dir
 
 # ==============================================================================
-# Cache Tests
+# ndi_cache Tests
 # ==============================================================================
 
 
@@ -39,29 +39,29 @@ class TestCacheEntry:
 
 
 class TestCache:
-    """Tests for the Cache class."""
+    """Tests for the ndi_cache class."""
 
     def test_create_default_cache(self):
         """Test creating a cache with defaults."""
-        cache = Cache()
+        cache = ndi_cache()
         assert cache.max_memory == 10e9
         assert cache.replacement_rule == "fifo"
         assert len(cache) == 0
 
     def test_create_custom_cache(self):
         """Test creating a cache with custom settings."""
-        cache = Cache(max_memory=1e6, replacement_rule="lifo")
+        cache = ndi_cache(max_memory=1e6, replacement_rule="lifo")
         assert cache.max_memory == 1e6
         assert cache.replacement_rule == "lifo"
 
     def test_invalid_replacement_rule(self):
         """Test that invalid replacement rule raises error."""
         with pytest.raises(ValueError, match="Unknown replacement rule"):
-            Cache(replacement_rule="invalid")
+            ndi_cache(replacement_rule="invalid")
 
     def test_set_replacement_rule(self):
         """Test changing replacement rule."""
-        cache = Cache()
+        cache = ndi_cache()
         cache.set_replacement_rule("lifo")
         assert cache.replacement_rule == "lifo"
         cache.set_replacement_rule("error")
@@ -69,7 +69,7 @@ class TestCache:
 
     def test_add_and_lookup(self):
         """Test adding and looking up data."""
-        cache = Cache()
+        cache = ndi_cache()
         cache.add("key1", "type1", {"value": 42})
 
         entry = cache.lookup("key1", "type1")
@@ -80,12 +80,12 @@ class TestCache:
 
     def test_lookup_not_found(self):
         """Test lookup returns None when not found."""
-        cache = Cache()
+        cache = ndi_cache()
         assert cache.lookup("nonexistent", "type") is None
 
     def test_add_with_priority(self):
         """Test adding data with priority."""
-        cache = Cache()
+        cache = ndi_cache()
         cache.add("key1", "type1", "data1", priority=1)
         cache.add("key2", "type2", "data2", priority=5)
 
@@ -97,7 +97,7 @@ class TestCache:
 
     def test_remove_by_key(self):
         """Test removing by key and type."""
-        cache = Cache()
+        cache = ndi_cache()
         cache.add("key1", "type1", "data1")
         cache.add("key2", "type2", "data2")
 
@@ -108,7 +108,7 @@ class TestCache:
 
     def test_remove_by_index(self):
         """Test removing by index."""
-        cache = Cache()
+        cache = ndi_cache()
         cache.add("key1", "type1", "data1")
         cache.add("key2", "type2", "data2")
 
@@ -118,7 +118,7 @@ class TestCache:
 
     def test_clear(self):
         """Test clearing all entries."""
-        cache = Cache()
+        cache = ndi_cache()
         cache.add("key1", "type1", "data1")
         cache.add("key2", "type2", "data2")
 
@@ -128,14 +128,14 @@ class TestCache:
 
     def test_bytes(self):
         """Test bytes calculation."""
-        cache = Cache()
+        cache = ndi_cache()
         cache.add("key1", "type1", "x" * 100)
 
         assert cache.bytes() > 0
 
     def test_eviction_fifo(self):
         """Test FIFO eviction when memory exceeded."""
-        cache = Cache(max_memory=1000, replacement_rule="fifo")
+        cache = ndi_cache(max_memory=1000, replacement_rule="fifo")
 
         # Add data that will approach limit
         cache.add("key1", "type1", "a" * 100, priority=1)
@@ -151,7 +151,7 @@ class TestCache:
 
     def test_eviction_respects_priority(self):
         """Test that eviction respects priority."""
-        cache = Cache(max_memory=500, replacement_rule="fifo")
+        cache = ndi_cache(max_memory=500, replacement_rule="fifo")
 
         cache.add("low_priority", "type", "a" * 100, priority=0)
         cache.add("high_priority", "type", "b" * 100, priority=10)
@@ -166,7 +166,7 @@ class TestCache:
 
     def test_memory_error_too_large(self):
         """Test error when single item exceeds max_memory."""
-        cache = Cache(max_memory=100)
+        cache = ndi_cache(max_memory=100)
 
         with pytest.raises(MemoryError, match="exceeds cache max_memory"):
             cache.add("key", "type", "x" * 1000)
@@ -174,7 +174,7 @@ class TestCache:
     def test_memory_error_rule(self):
         """Test error when replacement_rule is 'error' and full."""
         # Use a larger max_memory so individual items fit
-        cache = Cache(max_memory=500, replacement_rule="error")
+        cache = ndi_cache(max_memory=500, replacement_rule="error")
         cache.add("key1", "type1", "x" * 100)
         cache.add("key2", "type2", "y" * 100)
 
@@ -184,17 +184,17 @@ class TestCache:
 
     def test_repr(self):
         """Test string representation."""
-        cache = Cache()
+        cache = ndi_cache()
         cache.add("key", "type", "data")
         repr_str = repr(cache)
-        assert "Cache" in repr_str
+        assert "ndi_cache" in repr_str
         assert "entries=1" in repr_str
 
     def test_numpy_array_size_estimation(self):
-        """Cache must use ndarray.nbytes, not sys.getsizeof."""
+        """ndi_cache must use ndarray.nbytes, not sys.getsizeof."""
         import numpy as np
 
-        cache = Cache()
+        cache = ndi_cache()
         arr = np.zeros((1000, 1000), dtype=np.float64)  # 8 MB
         expected_bytes = arr.nbytes  # 8_000_000
 
@@ -209,7 +209,7 @@ class TestCache:
         import numpy as np
 
         # 500 KB cache
-        cache = Cache(max_memory=500_000, replacement_rule="fifo")
+        cache = ndi_cache(max_memory=500_000, replacement_rule="fifo")
         small = np.ones(10_000, dtype=np.float64)  # 80 KB
         big = np.ones(50_000, dtype=np.float64)  # 400 KB
 
@@ -224,7 +224,7 @@ class TestCache:
         """FIFO evicts oldest items first."""
         import time
 
-        cache = Cache(max_memory=500, replacement_rule="fifo")
+        cache = ndi_cache(max_memory=500, replacement_rule="fifo")
         cache.add("first", "t", "a" * 100, priority=0)
         time.sleep(0.01)
         cache.add("second", "t", "b" * 100, priority=0)
@@ -245,7 +245,7 @@ class TestCache:
         """
         import time
 
-        cache = Cache(max_memory=500, replacement_rule="lifo")
+        cache = ndi_cache(max_memory=500, replacement_rule="lifo")
         cache.add("first", "t", "a" * 100, priority=0)
         time.sleep(0.01)
         cache.add("second", "t", "b" * 100, priority=0)
@@ -263,7 +263,7 @@ class TestCache:
 
     def test_priority_preserved_during_eviction(self):
         """Higher priority items survive eviction over lower priority ones."""
-        cache = Cache(max_memory=500, replacement_rule="fifo")
+        cache = ndi_cache(max_memory=500, replacement_rule="fifo")
         cache.add("low", "t", "a" * 100, priority=0)
         cache.add("high", "t", "b" * 100, priority=10)
 
@@ -274,7 +274,7 @@ class TestCache:
 
 
 # ==============================================================================
-# Session Tests
+# ndi_session Tests
 # ==============================================================================
 
 
@@ -296,12 +296,12 @@ class TestEmptyId:
         """Test empty_id has correct length."""
         eid = empty_id()
         # Should match the format of regular IDs
-        regular_id = Ido().id
+        regular_id = ndi_ido().id
         assert len(eid) == len(regular_id)
 
 
 class TestDirSession:
-    """Tests for DirSession class."""
+    """Tests for ndi_session_dir class."""
 
     @pytest.fixture
     def temp_dir(self):
@@ -312,7 +312,7 @@ class TestDirSession:
 
     def test_create_session_from_path(self, temp_dir):
         """Test creating a session from a path."""
-        session = DirSession("TestSession", temp_dir)
+        session = ndi_session_dir("TestSession", temp_dir)
 
         assert session.reference == "TestSession"
         assert session.path == temp_dir
@@ -321,7 +321,7 @@ class TestDirSession:
 
     def test_session_creates_ndi_dir(self, temp_dir):
         """Test that session creates .ndi directory."""
-        DirSession("Test", temp_dir)
+        ndi_session_dir("Test", temp_dir)
 
         ndi_dir = temp_dir / ".ndi"
         assert ndi_dir.exists()
@@ -329,7 +329,7 @@ class TestDirSession:
 
     def test_session_writes_reference_files(self, temp_dir):
         """Test that session writes reference files."""
-        session = DirSession("MyReference", temp_dir)
+        session = ndi_session_dir("MyReference", temp_dir)
 
         ref_file = temp_dir / ".ndi" / "reference.txt"
         unique_ref_file = temp_dir / ".ndi" / "unique_reference.txt"
@@ -342,12 +342,12 @@ class TestDirSession:
 
     def test_session_getpath(self, temp_dir):
         """Test getpath returns the session path."""
-        session = DirSession("Test", temp_dir)
+        session = ndi_session_dir("Test", temp_dir)
         assert session.getpath() == temp_dir
 
     def test_session_creator_args(self, temp_dir):
         """Test creator_args returns correct arguments."""
-        session = DirSession("TestRef", temp_dir)
+        session = ndi_session_dir("TestRef", temp_dir)
         args = session.creator_args()
 
         assert len(args) == 3
@@ -357,44 +357,44 @@ class TestDirSession:
 
     def test_session_cache(self, temp_dir):
         """Test session has a cache."""
-        session = DirSession("Test", temp_dir)
+        session = ndi_session_dir("Test", temp_dir)
 
         assert session.cache is not None
-        assert isinstance(session.cache, Cache)
+        assert isinstance(session.cache, ndi_cache)
 
     def test_session_database(self, temp_dir):
         """Test session has a database."""
-        session = DirSession("Test", temp_dir)
+        session = ndi_session_dir("Test", temp_dir)
 
         assert session.database is not None
 
     def test_session_equality(self, temp_dir):
         """Test session equality by ID."""
-        session1 = DirSession("Test", temp_dir)
+        session1 = ndi_session_dir("Test", temp_dir)
 
         # Same session
         assert session1 == session1
 
         # Different ID means different session
-        session2 = DirSession("Test2", tempfile.mkdtemp())
+        session2 = ndi_session_dir("Test2", tempfile.mkdtemp())
         assert session1 != session2
         shutil.rmtree(session2.path, ignore_errors=True)
 
     def test_session_exists_check(self, temp_dir):
         """Test static exists method."""
         # Not a session yet
-        assert DirSession.exists(temp_dir) is False
+        assert ndi_session_dir.exists(temp_dir) is False
 
         # Create a session
-        DirSession("Test", temp_dir)
+        ndi_session_dir("Test", temp_dir)
 
         # Now it exists
-        assert DirSession.exists(temp_dir) is True
+        assert ndi_session_dir.exists(temp_dir) is True
 
     def test_invalid_path_raises(self):
         """Test that invalid path raises error."""
         with pytest.raises(ValueError, match="does not exist"):
-            DirSession("Test", "/nonexistent/path/12345")
+            ndi_session_dir("Test", "/nonexistent/path/12345")
 
     def test_file_path_raises(self, temp_dir):
         """Test that file path raises error."""
@@ -402,19 +402,19 @@ class TestDirSession:
         file_path.write_text("test")
 
         with pytest.raises(ValueError, match="not a directory"):
-            DirSession("Test", file_path)
+            ndi_session_dir("Test", file_path)
 
     def test_session_repr(self, temp_dir):
         """Test string representation."""
-        session = DirSession("TestRef", temp_dir)
+        session = ndi_session_dir("TestRef", temp_dir)
         repr_str = repr(session)
 
-        assert "DirSession" in repr_str
+        assert "ndi_session_dir" in repr_str
         assert "TestRef" in repr_str
 
     def test_newdocument(self, temp_dir):
         """Test creating a new document with session ID."""
-        session = DirSession("Test", temp_dir)
+        session = ndi_session_dir("Test", temp_dir)
 
         try:
             doc = session.newdocument("base", **{"base.name": "test"})
@@ -424,14 +424,14 @@ class TestDirSession:
 
     def test_searchquery(self, temp_dir):
         """Test creating a search query."""
-        session = DirSession("Test", temp_dir)
+        session = ndi_session_dir("Test", temp_dir)
 
         q = session.searchquery()
         assert q is not None
 
     def test_validate_documents(self, temp_dir):
         """Test document validation."""
-        session = DirSession("Test", temp_dir)
+        session = ndi_session_dir("Test", temp_dir)
 
         try:
             doc = session.newdocument()
@@ -443,13 +443,13 @@ class TestDirSession:
 
     def test_database_add_search(self, temp_dir):
         """Test adding and searching documents."""
-        session = DirSession("Test", temp_dir)
+        session = ndi_session_dir("Test", temp_dir)
 
         try:
             doc = session.newdocument("base", **{"base.name": "testdoc"})
             session.database_add(doc)
 
-            results = session.database_search(Query("base.name") == "testdoc")
+            results = session.database_search(ndi_query("base.name") == "testdoc")
             assert len(results) >= 1
         except FileNotFoundError:
             pytest.skip("Schema not available")
@@ -457,17 +457,17 @@ class TestDirSession:
     def test_reopen_session(self, temp_dir):
         """Test reopening an existing session."""
         # Create session
-        session1 = DirSession("MySession", temp_dir)
+        session1 = ndi_session_dir("MySession", temp_dir)
         original_id = session1.id()
 
         # Reopen by path
-        session2 = DirSession("MySession", temp_dir, session_id=original_id)
+        session2 = ndi_session_dir("MySession", temp_dir, session_id=original_id)
 
         assert session2.id() == original_id
 
     def test_delete_session_data(self, temp_dir):
         """Test deleting session data structures."""
-        session = DirSession("Test", temp_dir)
+        session = ndi_session_dir("Test", temp_dir)
         ndi_dir = temp_dir / ".ndi"
         assert ndi_dir.exists()
 
@@ -477,7 +477,7 @@ class TestDirSession:
 
     def test_delete_session_requires_confirmation(self, temp_dir):
         """Test that delete requires confirmation."""
-        session = DirSession("Test", temp_dir)
+        session = ndi_session_dir("Test", temp_dir)
         ndi_dir = temp_dir / ".ndi"
 
         result = session.deleteSessionDataStructures(are_you_sure=False)
@@ -486,13 +486,13 @@ class TestDirSession:
 
 
 class TestSessionMethods:
-    """Tests for Session methods using DirSession."""
+    """Tests for ndi_session methods using ndi_session_dir."""
 
     @pytest.fixture
     def session(self):
         """Create a test session."""
         tmpdir = tempfile.mkdtemp()
-        sess = DirSession("TestSession", tmpdir)
+        sess = ndi_session_dir("TestSession", tmpdir)
         yield sess
         shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -535,25 +535,25 @@ class TestSessionMethods:
 
             # Without confirmation
             session.database_clear("no")
-            results = session.database_search(Query("base.name") == "test")
+            results = session.database_search(ndi_query("base.name") == "test")
             # Should still exist
 
             # With confirmation
             session.database_clear("yes")
-            results = session.database_search(Query("base.name") == "test")
+            results = session.database_search(ndi_query("base.name") == "test")
             assert len(results) == 0
         except FileNotFoundError:
             pytest.skip("Schema not available")
 
 
 class TestSessionSyncGraph:
-    """Tests for Session syncgraph methods."""
+    """Tests for ndi_session syncgraph methods."""
 
     @pytest.fixture
     def session(self):
         """Create a test session."""
         tmpdir = tempfile.mkdtemp()
-        sess = DirSession("TestSession", tmpdir)
+        sess = ndi_session_dir("TestSession", tmpdir)
         yield sess
         shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -563,9 +563,9 @@ class TestSessionSyncGraph:
 
     def test_syncgraph_addrule(self, session):
         """Test adding a sync rule."""
-        from ndi.time.syncrule.filematch import FileMatch
+        from ndi.time.syncrule.filematch import ndi_time_syncrule_filematch
 
-        rule = FileMatch()
+        rule = ndi_time_syncrule_filematch()
         try:
             session.syncgraph_addrule(rule)
             assert len(session.syncgraph.rules) == 1
@@ -574,9 +574,9 @@ class TestSessionSyncGraph:
 
     def test_syncgraph_rmrule(self, session):
         """Test removing a sync rule."""
-        from ndi.time.syncrule.filematch import FileMatch
+        from ndi.time.syncrule.filematch import ndi_time_syncrule_filematch
 
-        rule = FileMatch()
+        rule = ndi_time_syncrule_filematch()
         try:
             session.syncgraph_addrule(rule)
             session.syncgraph_rmrule(0)
@@ -591,13 +591,13 @@ class TestSessionSyncGraph:
 
 
 class TestSessionIntegration:
-    """Integration tests for Session functionality."""
+    """Integration tests for ndi_session functionality."""
 
     @pytest.fixture
     def session(self):
         """Create a test session with full setup."""
         tmpdir = tempfile.mkdtemp()
-        sess = DirSession("IntegrationTest", tmpdir)
+        sess = ndi_session_dir("IntegrationTest", tmpdir)
         yield sess
         shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -613,16 +613,16 @@ class TestSessionIntegration:
             session.database_add(doc2)
 
             # Search
-            results = session.database_search(Query("base.name") == "doc1")
+            results = session.database_search(ndi_query("base.name") == "doc1")
             assert len(results) == 1
 
             # Remove
             session.database_rm(doc1)
-            results = session.database_search(Query("base.name") == "doc1")
+            results = session.database_search(ndi_query("base.name") == "doc1")
             assert len(results) == 0
 
             # doc2 should still exist
-            results = session.database_search(Query("base.name") == "doc2")
+            results = session.database_search(ndi_query("base.name") == "doc2")
             assert len(results) == 1
         except FileNotFoundError:
             pytest.skip("Schema not available")
@@ -633,7 +633,7 @@ class TestSessionIntegration:
 
         try:
             # Create session and add data
-            session1 = DirSession("Persist", tmpdir)
+            session1 = ndi_session_dir("Persist", tmpdir)
             session_id = session1.id()
 
             try:
@@ -643,8 +643,8 @@ class TestSessionIntegration:
                 pytest.skip("Schema not available")
 
             # Reopen and check data
-            session2 = DirSession("Persist", tmpdir, session_id=session_id)
-            results = session2.database_search(Query("base.name") == "persistent")
+            session2 = ndi_session_dir("Persist", tmpdir, session_id=session_id)
+            results = session2.database_search(ndi_query("base.name") == "persistent")
             assert len(results) >= 1
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)

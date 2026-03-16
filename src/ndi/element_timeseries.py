@@ -1,10 +1,10 @@
 """
 ndi.element_timeseries - Time series element class.
 
-This module provides ElementTimeseries, an extension of Element that
+This module provides ndi_element_timeseries, an extension of ndi_element that
 can read and write time series data (e.g., voltage traces, spike times).
 
-ElementTimeseries is the intermediate class between Element and Neuron.
+ndi_element_timeseries is the intermediate class between ndi_element and ndi_neuron.
 """
 
 from __future__ import annotations
@@ -13,23 +13,23 @@ from typing import Any
 
 import numpy as np
 
-from .element import Element
-from .time import ClockType
+from .element import ndi_element
+from .time import ndi_time_clocktype
 
 
-class ElementTimeseries(Element):
+class ndi_element_timeseries(ndi_element):
     """
-    Element that can store and retrieve time series data.
+    ndi_element that can store and retrieve time series data.
 
-    Extends Element with:
+    Extends ndi_element with:
     - readtimeseries(): Read recorded data for an epoch
     - addepoch(): Add epoch with actual data (stores in VHSB format)
     - samplerate(): Get the sampling rate for a channel/epoch
 
-    This is the base class for Neuron and other data-producing elements.
+    This is the base class for ndi_neuron and other data-producing elements.
 
     Example:
-        >>> ts_elem = ElementTimeseries(
+        >>> ts_elem = ndi_element_timeseries(
         ...     session=session, name='neuron1', reference=1,
         ...     type='neuron', underlying_element=probe,
         ... )
@@ -38,9 +38,9 @@ class ElementTimeseries(Element):
 
     def __init__(self, **kwargs):
         """
-        Create a new ElementTimeseries.
+        Create a new ndi_element_timeseries.
 
-        Takes the same arguments as Element.
+        Takes the same arguments as ndi_element.
         """
         super().__init__(**kwargs)
 
@@ -57,7 +57,7 @@ class ElementTimeseries(Element):
         and time range.
 
         Args:
-            timeref_or_epoch: TimeReference object or epoch number/id
+            timeref_or_epoch: ndi_time_timereference object or epoch number/id
             t0: Start time (seconds)
             t1: End time (seconds). -1 means end of epoch.
 
@@ -65,13 +65,13 @@ class ElementTimeseries(Element):
             Tuple of (data, times, timeref):
                 - data: numpy array of shape (n_samples, n_channels)
                 - times: numpy array of timestamps
-                - timeref: TimeReference for the returned data
+                - timeref: ndi_time_timereference for the returned data
 
         Raises:
             ValueError: If no underlying element or data source available
         """
         if self._session is None:
-            raise ValueError("Session required to read time series")
+            raise ValueError("ndi_session required to read time series")
 
         # Resolve epoch
         epoch_number = self._resolve_epoch(timeref_or_epoch)
@@ -105,7 +105,7 @@ class ElementTimeseries(Element):
                     return entry.get("epoch_number")
             return None
 
-        # Try TimeReference
+        # Try ndi_time_timereference
         if hasattr(timeref_or_epoch, "epoch"):
             epoch = timeref_or_epoch.epoch
             if isinstance(epoch, int):
@@ -131,10 +131,10 @@ class ElementTimeseries(Element):
         if self._session is None:
             return None, None
 
-        from .query import Query
+        from .query import ndi_query
 
         # Find epoch document
-        q = Query("").isa("element_epoch") & Query("").depends_on("element_id", self.id)
+        q = ndi_query("").isa("element_epoch") & ndi_query("").depends_on("element_id", self.id)
         epoch_docs = self._session.database_search(q)
 
         if epoch_number < 1 or epoch_number > len(epoch_docs):
@@ -180,15 +180,15 @@ class ElementTimeseries(Element):
     def addepoch(
         self,
         epoch_id: str,
-        epoch_clock: list[ClockType],
+        epoch_clock: list[ndi_time_clocktype],
         t0_t1: list[tuple[float, float]],
         timepoints: np.ndarray | None = None,
         datapoints: np.ndarray | None = None,
-    ) -> tuple[ElementTimeseries, Any]:
+    ) -> tuple[ndi_element_timeseries, Any]:
         """
         Add a new epoch with optional time series data.
 
-        Extends Element.addepoch() to also store binary data
+        Extends ndi_element.addepoch() to also store binary data
         if timepoints and datapoints are provided.
 
         Args:
@@ -251,9 +251,11 @@ class ElementTimeseries(Element):
         if self._session is not None and epoch is not None:
             epoch_number = self._resolve_epoch(epoch) if not isinstance(epoch, int) else epoch
             if epoch_number is not None:
-                from .query import Query
+                from .query import ndi_query
 
-                q = Query("").isa("element_epoch") & Query("").depends_on("element_id", self.id)
+                q = ndi_query("").isa("element_epoch") & ndi_query("").depends_on(
+                    "element_id", self.id
+                )
                 epoch_docs = self._session.database_search(q)
                 if 0 < epoch_number <= len(epoch_docs):
                     return self._get_samplerate_from_doc(epoch_docs[epoch_number - 1])
@@ -262,4 +264,4 @@ class ElementTimeseries(Element):
 
     def __repr__(self) -> str:
         """String representation."""
-        return f"ElementTimeseries({self._name}|{self._reference}|{self._type})"
+        return f"ndi_element_timeseries({self._name}|{self._reference}|{self._type})"

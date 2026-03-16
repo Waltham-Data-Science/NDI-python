@@ -1,8 +1,8 @@
 """
-Tests for Batch D: Lab-specific + advanced.
+Tests for Batch D: ndi_gui_Lab-specific + advanced.
 
-Tests NewStimStimsReader, NielsenLabStimsReader,
-ProbeTimeseriesStimulator, downsample, downsample_timeseries.
+Tests ndi_daq_metadatareader_NewStimStims, ndi_daq_metadatareader_NielsenLabStims,
+ndi_probe_timeseries_stimulator, downsample, downsample_timeseries.
 """
 
 import os
@@ -15,44 +15,52 @@ import pytest
 # ---------------------------------------------------------------------------
 # Imports
 # ---------------------------------------------------------------------------
-from ndi.daq.metadatareader import MetadataReader, NewStimStimsReader, NielsenLabStimsReader
-from ndi.daq.metadatareader.newstim_stims import NewStimStimsReader as NewStimDirect
-from ndi.daq.metadatareader.nielsenlab_stims import NielsenLabStimsReader as NielsenDirect
+from ndi.daq.metadatareader import (
+    ndi_daq_metadatareader,
+    ndi_daq_metadatareader_NewStimStims,
+    ndi_daq_metadatareader_NielsenLabStims,
+)
+from ndi.daq.metadatareader.newstim_stims import (
+    ndi_daq_metadatareader_NewStimStims as NewStimDirect,
+)
+from ndi.daq.metadatareader.nielsenlab_stims import (
+    ndi_daq_metadatareader_NielsenLabStims as NielsenDirect,
+)
 from ndi.element.functions import downsample, downsample_timeseries
-from ndi.probe.timeseries_stimulator import ProbeTimeseriesStimulator
+from ndi.probe.timeseries_stimulator import ndi_probe_timeseries_stimulator
 
 
 class TestImports:
     """Verify all Batch D classes are importable."""
 
     def test_import_newstim_from_package(self):
-        assert NewStimStimsReader is NewStimDirect
+        assert ndi_daq_metadatareader_NewStimStims is NewStimDirect
 
     def test_import_nielsen_from_package(self):
-        assert NielsenLabStimsReader is NielsenDirect
+        assert ndi_daq_metadatareader_NielsenLabStims is NielsenDirect
 
     def test_import_stimulator(self):
-        assert ProbeTimeseriesStimulator is not None
+        assert ndi_probe_timeseries_stimulator is not None
 
     def test_import_downsample_functions(self):
         assert downsample is not None
         assert downsample_timeseries is not None
 
     def test_metadatareader_still_importable_from_daq(self):
-        from ndi.daq import MetadataReader as MR
+        from ndi.daq import ndi_daq_metadatareader as MR
 
-        assert MR is MetadataReader
+        assert MR is ndi_daq_metadatareader
 
     def test_readers_importable_from_daq(self):
-        from ndi.daq import NewStimStimsReader as NS
-        from ndi.daq import NielsenLabStimsReader as NL
+        from ndi.daq import ndi_daq_metadatareader_NewStimStims as NS
+        from ndi.daq import ndi_daq_metadatareader_NielsenLabStims as NL
 
-        assert NS is NewStimStimsReader
-        assert NL is NielsenLabStimsReader
+        assert NS is ndi_daq_metadatareader_NewStimStims
+        assert NL is ndi_daq_metadatareader_NielsenLabStims
 
 
 # ===========================================================================
-# NewStimStimsReader
+# ndi_daq_metadatareader_NewStimStims
 # ===========================================================================
 
 
@@ -60,46 +68,46 @@ class TestNewStimStimsReader:
     """Tests for the NewStim metadata reader."""
 
     def test_init(self):
-        reader = NewStimStimsReader()
-        assert isinstance(reader, MetadataReader)
+        reader = ndi_daq_metadatareader_NewStimStims()
+        assert isinstance(reader, ndi_daq_metadatareader)
         assert reader.tab_separated_file_parameter == ""
 
     def test_init_with_tsv_pattern(self):
-        reader = NewStimStimsReader(tsv_pattern=r"stim\.tsv")
+        reader = ndi_daq_metadatareader_NewStimStims(tsv_pattern=r"stim\.tsv")
         assert reader.tab_separated_file_parameter == r"stim\.tsv"
 
     def test_stim_file_pattern(self):
-        assert "stims" in NewStimStimsReader.STIM_FILE_PATTERN
+        assert "stims" in ndi_daq_metadatareader_NewStimStims.STIM_FILE_PATTERN
 
     def test_find_stim_file_found(self):
-        reader = NewStimStimsReader()
+        reader = ndi_daq_metadatareader_NewStimStims()
         result = reader._find_stim_file(["data.rhd", "events.nev", "stims.mat"])
         assert result == "stims.mat"
 
     def test_find_stim_file_not_found(self):
-        reader = NewStimStimsReader()
+        reader = ndi_daq_metadatareader_NewStimStims()
         result = reader._find_stim_file(["data.rhd", "events.nev"])
         assert result is None
 
     def test_find_stim_file_case_insensitive(self):
-        reader = NewStimStimsReader()
+        reader = ndi_daq_metadatareader_NewStimStims()
         result = reader._find_stim_file(["data.rhd", "Stims.MAT"])
         assert result == "Stims.MAT"
 
     def test_readmetadata_no_stim_file(self):
-        reader = NewStimStimsReader()
+        reader = ndi_daq_metadatareader_NewStimStims()
         result = reader.readmetadata(["data.rhd", "events.nev"])
         assert result == []
 
     def test_readmetadata_falls_back_to_tsv(self):
         """With a TSV pattern set, tries TSV first."""
-        reader = NewStimStimsReader(tsv_pattern=r"nonexistent\.tsv")
+        reader = ndi_daq_metadatareader_NewStimStims(tsv_pattern=r"nonexistent\.tsv")
         # No matching TSV and no stims.mat → empty
         result = reader.readmetadata(["data.rhd"])
         assert result == []
 
     def test_read_newstim_mat_nonexistent(self):
-        reader = NewStimStimsReader()
+        reader = ndi_daq_metadatareader_NewStimStims()
         result = reader._read_newstim_mat("/nonexistent/stims.mat")
         # scipy may or may not be installed
         # If scipy not installed, raises ImportError
@@ -107,41 +115,41 @@ class TestNewStimStimsReader:
         assert isinstance(result, list)
 
     def test_extract_script_parameters_empty(self):
-        result = NewStimStimsReader._extract_script_parameters(np.array([]))
+        result = ndi_daq_metadatareader_NewStimStims._extract_script_parameters(np.array([]))
         assert isinstance(result, list)
 
     def test_repr(self):
-        reader = NewStimStimsReader()
-        assert "NewStimStimsReader" in repr(reader)
+        reader = ndi_daq_metadatareader_NewStimStims()
+        assert "ndi_daq_metadatareader_NewStimStims" in repr(reader)
 
 
 # ===========================================================================
-# NielsenLabStimsReader
+# ndi_daq_metadatareader_NielsenLabStims
 # ===========================================================================
 
 
 class TestNielsenLabStimsReader:
-    """Tests for the Nielsen Lab metadata reader."""
+    """Tests for the Nielsen ndi_gui_Lab metadata reader."""
 
     def test_init(self):
-        reader = NielsenLabStimsReader()
-        assert isinstance(reader, MetadataReader)
+        reader = ndi_daq_metadatareader_NielsenLabStims()
+        assert isinstance(reader, ndi_daq_metadatareader)
 
     def test_analyzer_file_pattern(self):
-        assert "analyzer" in NielsenLabStimsReader.ANALYZER_FILE_PATTERN
+        assert "analyzer" in ndi_daq_metadatareader_NielsenLabStims.ANALYZER_FILE_PATTERN
 
     def test_find_analyzer_file_found(self):
-        reader = NielsenLabStimsReader()
+        reader = ndi_daq_metadatareader_NielsenLabStims()
         result = reader._find_analyzer_file(["data.rhd", "analyzer.mat"])
         assert result == "analyzer.mat"
 
     def test_find_analyzer_file_not_found(self):
-        reader = NielsenLabStimsReader()
+        reader = ndi_daq_metadatareader_NielsenLabStims()
         result = reader._find_analyzer_file(["data.rhd"])
         assert result is None
 
     def test_readmetadata_no_analyzer(self):
-        reader = NielsenLabStimsReader()
+        reader = ndi_daq_metadatareader_NielsenLabStims()
         result = reader.readmetadata(["data.rhd"])
         assert result == []
 
@@ -149,34 +157,34 @@ class TestNielsenLabStimsReader:
         # Create a minimal structured array with correct dtype
         dt = np.dtype([("M", "O"), ("P", "O"), ("loops", "O")])
         analyzer = np.zeros((), dtype=dt)
-        result = NielsenLabStimsReader.extract_stimulus_parameters(analyzer)
+        result = ndi_daq_metadatareader_NielsenLabStims.extract_stimulus_parameters(analyzer)
         assert isinstance(result, list)
 
     def test_extract_display_order_empty(self):
         dt = np.dtype([("loops", "O")])
         analyzer = np.zeros((), dtype=dt)
-        result = NielsenLabStimsReader.extract_display_order(analyzer)
+        result = ndi_daq_metadatareader_NielsenLabStims.extract_display_order(analyzer)
         assert isinstance(result, list)
 
     def test_repr(self):
-        reader = NielsenLabStimsReader()
-        assert "NielsenLabStimsReader" in repr(reader)
+        reader = ndi_daq_metadatareader_NielsenLabStims()
+        assert "ndi_daq_metadatareader_NielsenLabStims" in repr(reader)
 
 
 # ===========================================================================
-# MetadataReader (regression - ensure package refactoring didn't break)
+# ndi_daq_metadatareader (regression - ensure package refactoring didn't break)
 # ===========================================================================
 
 
 class TestMetadataReaderRegression:
-    """Verify MetadataReader still works after file→package refactoring."""
+    """Verify ndi_daq_metadatareader still works after file→package refactoring."""
 
     def test_base_class_works(self):
-        reader = MetadataReader()
+        reader = ndi_daq_metadatareader()
         assert reader.tab_separated_file_parameter == ""
 
     def test_base_readmetadata_empty_pattern(self):
-        reader = MetadataReader()
+        reader = ndi_daq_metadatareader()
         result = reader.readmetadata(["file.txt"])
         assert result == []
 
@@ -189,7 +197,7 @@ class TestMetadataReaderRegression:
             filepath = f.name
 
         try:
-            reader = MetadataReader(tsv_pattern=os.path.basename(filepath))
+            reader = ndi_daq_metadatareader(tsv_pattern=os.path.basename(filepath))
             result = reader.readmetadata([filepath])
             assert len(result) == 2
             assert result[0]["STIMID"] == 1
@@ -199,24 +207,24 @@ class TestMetadataReaderRegression:
             os.unlink(filepath)
 
     def test_equality(self):
-        r1 = MetadataReader(tsv_pattern="test")
-        r2 = MetadataReader(tsv_pattern="test")
+        r1 = ndi_daq_metadatareader(tsv_pattern="test")
+        r2 = ndi_daq_metadatareader(tsv_pattern="test")
         assert r1 == r2
 
     def test_inequality(self):
-        r1 = MetadataReader(tsv_pattern="test")
-        r2 = MetadataReader(tsv_pattern="other")
+        r1 = ndi_daq_metadatareader(tsv_pattern="test")
+        r2 = ndi_daq_metadatareader(tsv_pattern="other")
         assert r1 != r2
 
     def test_newdocument_class_name(self):
         """Verify the reader knows its own class for serialization."""
-        reader = MetadataReader(tsv_pattern="stim.tsv")
-        assert reader.__class__.__name__ == "MetadataReader"
+        reader = ndi_daq_metadatareader(tsv_pattern="stim.tsv")
+        assert reader.__class__.__name__ == "ndi_daq_metadatareader"
         assert reader.tab_separated_file_parameter == "stim.tsv"
 
 
 # ===========================================================================
-# ProbeTimeseriesStimulator
+# ndi_probe_timeseries_stimulator
 # ===========================================================================
 
 
@@ -224,7 +232,7 @@ class TestProbeTimeseriesStimulator:
     """Tests for the stimulus delivery probe."""
 
     def test_init(self):
-        stim = ProbeTimeseriesStimulator()
+        stim = ndi_probe_timeseries_stimulator()
         assert stim._type == "stimulator"
 
     def test_init_with_args(self):
@@ -232,7 +240,7 @@ class TestProbeTimeseriesStimulator:
             id=lambda: "s1",
             database_search=lambda q: [],
         )
-        stim = ProbeTimeseriesStimulator(
+        stim = ndi_probe_timeseries_stimulator(
             session=session,
             name="vis_stim",
             reference=2,
@@ -241,12 +249,12 @@ class TestProbeTimeseriesStimulator:
         assert stim._reference == 2
 
     def test_inherits_probe_timeseries(self):
-        from ndi.probe.timeseries import ProbeTimeseries
+        from ndi.probe.timeseries import ndi_probe_timeseries
 
-        assert issubclass(ProbeTimeseriesStimulator, ProbeTimeseries)
+        assert issubclass(ndi_probe_timeseries_stimulator, ndi_probe_timeseries)
 
     def test_readtimeseriesepoch_no_session(self):
-        stim = ProbeTimeseriesStimulator()
+        stim = ndi_probe_timeseries_stimulator()
         data, times, timeref = stim.readtimeseriesepoch(1, 0, 10)
         assert data is None
         assert times is None
@@ -257,7 +265,7 @@ class TestProbeTimeseriesStimulator:
             id=lambda: "s1",
             database_search=lambda q: [],
         )
-        stim = ProbeTimeseriesStimulator(session=session, name="test")
+        stim = ndi_probe_timeseries_stimulator(session=session, name="test")
         data, times, timeref = stim.readtimeseriesepoch(1, 0, 10)
         assert isinstance(data, dict)
         assert "stimid" in data
@@ -270,7 +278,7 @@ class TestProbeTimeseriesStimulator:
         assert "stimevents" in times
 
     def test_parse_marker_data_empty(self):
-        stim = ProbeTimeseriesStimulator()
+        stim = ndi_probe_timeseries_stimulator()
         result = stim.parse_marker_data(np.array([]), np.array([]))
         assert len(result["stimid"]) == 0
         assert len(result["stimon"]) == 0
@@ -278,7 +286,7 @@ class TestProbeTimeseriesStimulator:
         assert result["stimopenclose"].shape == (0, 2)
 
     def test_parse_marker_data_onset_offset(self):
-        stim = ProbeTimeseriesStimulator()
+        stim = ndi_probe_timeseries_stimulator()
         # 3 marker channels: on/off, stim_id, setup/clear
         timestamps = np.array(
             [
@@ -304,19 +312,19 @@ class TestProbeTimeseriesStimulator:
         assert result["stimopenclose"][0, 1] == 3.0
 
     def test_get_epoch_timeref_no_session(self):
-        stim = ProbeTimeseriesStimulator()
+        stim = ndi_probe_timeseries_stimulator()
         assert stim._get_epoch_timeref(1) is None
 
     def test_get_epoch_timeref_with_session(self):
-        from ndi.time import ClockType
+        from ndi.time import ndi_time_clocktype
 
         session = SimpleNamespace(id=lambda: "s1")
-        stim = ProbeTimeseriesStimulator(session=session)
-        assert stim._get_epoch_timeref(1) == ClockType.DEV_LOCAL_TIME
+        stim = ndi_probe_timeseries_stimulator(session=session)
+        assert stim._get_epoch_timeref(1) == ndi_time_clocktype.DEV_LOCAL_TIME
 
     def test_repr(self):
-        stim = ProbeTimeseriesStimulator(name="vis")
-        assert "ProbeTimeseriesStimulator" in repr(stim)
+        stim = ndi_probe_timeseries_stimulator(name="vis")
+        assert "ndi_probe_timeseries_stimulator" in repr(stim)
         assert "vis" in repr(stim)
 
 
@@ -344,7 +352,7 @@ class TestDownsample:
             downsample(session, element_in, -10.0, "ds_out", 1)
 
     def test_downsample_returns_element(self):
-        from ndi.element import Element
+        from ndi.element import ndi_element
 
         session = SimpleNamespace(id=lambda: "s1")
         element_in = SimpleNamespace(
@@ -352,7 +360,7 @@ class TestDownsample:
             _type="timeseries",
         )
         result = downsample(session, element_in, 100.0, "ds_out", 1)
-        assert isinstance(result, Element)
+        assert isinstance(result, ndi_element)
 
 
 # ===========================================================================

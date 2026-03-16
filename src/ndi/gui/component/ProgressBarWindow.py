@@ -1,6 +1,6 @@
-"""ProgressBarWindow — Multi-bar progress window.
+"""ndi_gui_component_ProgressBarWindow — Multi-bar progress window.
 
-Mirrors MATLAB: ndi.gui.component.ProgressBarWindow
+Mirrors MATLAB: ndi.gui.component.ndi_gui_component_ProgressBarWindow
 
 Creates and manages a PySide6 window that can display one or more
 progress bars.  Bars can be added, updated, and removed dynamically.
@@ -22,7 +22,7 @@ except ImportError:
     pass
 
 # Module-level registry of existing windows (mirrors MATLAB findall)
-_ACTIVE_WINDOWS: dict[str, ProgressBarWindow] = {}
+_ACTIVE_WINDOWS: dict[str, ndi_gui_component_ProgressBarWindow] = {}
 
 
 class _BarRecord:
@@ -60,7 +60,7 @@ class _BarRecord:
         self.btn_widget: QtWidgets.QPushButton | None = None
 
 
-class ProgressBarWindow:
+class ndi_gui_component_ProgressBarWindow:
     """Multi-bar progress window using PySide6.
 
     Parameters
@@ -315,14 +315,14 @@ class ProgressBarWindow:
         """
         status: dict[str, str] = {"identifier": "", "message": ""}
         if not self._bars:
-            status["identifier"] = "ProgressBarWindow:NoBarsExist"
+            status["identifier"] = "ndi_gui_component_ProgressBarWindow:NoBarsExist"
             status["message"] = "No progress bars have been added yet."
             return None, status
 
         if isinstance(barID, int):
             if 0 <= barID < len(self._bars):
                 return barID, status
-            status["identifier"] = "ProgressBarWindow:InvalidBarIndex"
+            status["identifier"] = "ndi_gui_component_ProgressBarWindow:InvalidBarIndex"
             status["message"] = f"Numeric BarID {barID} is out of bounds (0-{len(self._bars) - 1})."
             return None, status
 
@@ -330,7 +330,7 @@ class ProgressBarWindow:
         for i, rec in enumerate(self._bars):
             if rec.Tag.lower() == str(barID).lower():
                 return i, status
-        status["identifier"] = "ProgressBarWindow:InvalidBarTag"
+        status["identifier"] = "ndi_gui_component_ProgressBarWindow:InvalidBarTag"
         status["message"] = f'BarID Tag "{barID}" not found.'
         return None, status
 

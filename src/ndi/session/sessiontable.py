@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 
-class SessionTable:
+class ndi_session_sessiontable:
     """
     Persistent local registry of NDI sessions.
 
@@ -27,7 +27,7 @@ class SessionTable:
     by default.
 
     Example:
-        >>> table = SessionTable()
+        >>> table = ndi_session_sessiontable()
         >>> table.addtableentry('abc123', '/data/experiment1')
         >>> table.getsessionpath('abc123')
         '/data/experiment1'
@@ -37,7 +37,7 @@ class SessionTable:
 
     def __init__(self, table_path: Path | None = None):
         """
-        Create a SessionTable instance.
+        Create a ndi_session_sessiontable instance.
 
         Args:
             table_path: Override the default table file location.
@@ -118,7 +118,7 @@ class SessionTable:
         If *session_id* already exists it is replaced with the new *path*.
 
         Args:
-            session_id: Session identifier (must be a non-empty string).
+            session_id: ndi_session identifier (must be a non-empty string).
             path: Filesystem path to the session directory.
 
         Raises:
@@ -290,4 +290,4 @@ class SessionTable:
             writer.writerows(entries)
 
     def __repr__(self) -> str:
-        return f"SessionTable(path={self._table_path})"
+        return f"ndi_session_sessiontable(path={self._table_path})"

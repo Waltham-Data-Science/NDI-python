@@ -26,24 +26,24 @@ classes:
       # MATLAB has hidden Constant properties for file paths
       - name: ONTOLOGY_FILENAME
         type_matlab: "Constant Hidden char"
-        type_python: "N/A (handled by PathConstants)"
+        type_python: "N/A (handled by ndi_common_PathConstants)"
         decision_log: >
           MATLAB stores ontology file path as class constant.
-          Python resolves paths via ndi.common.PathConstants.
+          Python resolves paths via ndi.common.ndi_common_PathConstants.
 
       - name: ONTOLOGY_SUBFOLDER_JSON
         type_matlab: "Constant Hidden char"
-        type_python: "N/A (handled by PathConstants)"
+        type_python: "N/A (handled by ndi_common_PathConstants)"
         decision_log: "Same as ONTOLOGY_FILENAME."
 
       - name: ONTOLOGY_SUBFOLDER_NDIC
         type_matlab: "Constant Hidden char"
-        type_python: "N/A (handled by PathConstants)"
+        type_python: "N/A (handled by ndi_common_PathConstants)"
         decision_log: "Same as ONTOLOGY_FILENAME."
 
       - name: NDIC_FILENAME
         type_matlab: "Constant Hidden char"
-        type_python: "N/A (handled by PathConstants)"
+        type_python: "N/A (handled by ndi_common_PathConstants)"
         decision_log: "Same as ONTOLOGY_FILENAME."
 
     methods:

@@ -1,7 +1,7 @@
 """
 ndi.time.timereference - Time reference class for NDI framework.
 
-This module provides the TimeReference class for specifying time
+This module provides the ndi_time_timereference class for specifying time
 relative to an NDI clock type within a specific epoch.
 """
 
@@ -10,16 +10,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from .clocktype import ClockType
+from .clocktype import ndi_time_clocktype
 
 if TYPE_CHECKING:
     pass  # Future imports for type checking
 
 
 @dataclass
-class TimeReferenceStruct:
+class ndi_time_timereference__struct:
     """
-    Structure representation of a TimeReference without live objects.
+    Structure representation of a ndi_time_timereference without live objects.
 
     Used for serialization and database storage.
     """
@@ -32,11 +32,11 @@ class TimeReferenceStruct:
     time: float | None
 
 
-class TimeReference:
+class ndi_time_timereference:
     """
     A class for specifying time relative to an NDI clock.
 
-    TimeReference describes a specific time point in the context of:
+    ndi_time_timereference describes a specific time point in the context of:
     - A referent (the object keeping time, e.g., DAQ system, element)
     - A clock type (utc, exp_global_time, dev_local_time, etc.)
     - An epoch (required for dev_local_time)
@@ -44,17 +44,17 @@ class TimeReference:
 
     Example:
         >>> # Create a time reference for UTC time
-        >>> tr = TimeReference(
+        >>> tr = ndi_time_timereference(
         ...     referent=my_daq_system,
-        ...     clocktype=ClockType.UTC,
+        ...     clocktype=ndi_time_clocktype.UTC,
         ...     epoch=None,
         ...     time=1234567890.0
         ... )
 
         >>> # Create a local time reference (requires epoch)
-        >>> tr = TimeReference(
+        >>> tr = ndi_time_timereference(
         ...     referent=my_daq_system,
-        ...     clocktype=ClockType.DEV_LOCAL_TIME,
+        ...     clocktype=ndi_time_clocktype.DEV_LOCAL_TIME,
         ...     epoch="epoch_001",
         ...     time=0.5
         ... )
@@ -63,7 +63,7 @@ class TimeReference:
     def __init__(
         self,
         referent: Any,
-        clocktype: ClockType | str,
+        clocktype: ndi_time_clocktype | str,
         epoch: str | None = None,
         time: float | None = None,
         session_id: str | None = None,
@@ -74,21 +74,21 @@ class TimeReference:
         Args:
             referent: The object that serves as the time reference source.
                      Must have a 'session' property with a valid id.
-            clocktype: The clock type (ClockType enum or string)
+            clocktype: The clock type (ndi_time_clocktype enum or string)
             epoch: The epoch identifier (required if clocktype is DEV_LOCAL_TIME)
             time: The time value at the reference point
             session_id: Optional session ID (extracted from referent if not provided)
 
         Raises:
-            TypeError: If clocktype is not a ClockType
+            TypeError: If clocktype is not a ndi_time_clocktype
             ValueError: If epoch is required but not provided
         """
         # Handle clocktype as string or enum
         if isinstance(clocktype, str):
-            clocktype = ClockType.from_string(clocktype)
+            clocktype = ndi_time_clocktype.from_string(clocktype)
 
-        if not isinstance(clocktype, ClockType):
-            raise TypeError("clocktype must be a ClockType instance or valid string")
+        if not isinstance(clocktype, ndi_time_clocktype):
+            raise TypeError("clocktype must be a ndi_time_clocktype instance or valid string")
 
         # Validate epoch requirement
         if clocktype.needs_epoch() and epoch is None:
@@ -113,7 +113,7 @@ class TimeReference:
             referent: Object with session property
 
         Returns:
-            Session ID string
+            ndi_session ID string
 
         Raises:
             ValueError: If session ID cannot be extracted
@@ -139,7 +139,7 @@ class TimeReference:
         return self._referent
 
     @property
-    def clocktype(self) -> ClockType:
+    def clocktype(self) -> ndi_time_clocktype:
         """Get the clock type."""
         return self._clocktype
 
@@ -158,14 +158,14 @@ class TimeReference:
         """Get the session ID."""
         return self._session_id
 
-    def to_struct(self) -> TimeReferenceStruct:
+    def to_struct(self) -> ndi_time_timereference__struct:
         """
         Convert to a structure that lacks live Matlab/Python objects.
 
         Useful for serialization and database storage.
 
         Returns:
-            TimeReferenceStruct with string-based representation
+            ndi_time_timereference__struct with string-based representation
         """
         # Get epochsetname
         if hasattr(self._referent, "epochsetname"):
@@ -181,7 +181,7 @@ class TimeReference:
         # Get class name
         referent_classname = type(self._referent).__name__
 
-        return TimeReferenceStruct(
+        return ndi_time_timereference__struct(
             referent_epochsetname=epochsetname,
             referent_classname=referent_classname,
             clocktypestring=self._clocktype.value,
@@ -194,17 +194,17 @@ class TimeReference:
     def from_struct(
         cls,
         session: Any,
-        struct: TimeReferenceStruct,
-    ) -> TimeReference:
+        struct: ndi_time_timereference__struct,
+    ) -> ndi_time_timereference:
         """
-        Create a TimeReference from a struct and session.
+        Create a ndi_time_timereference from a struct and session.
 
         Args:
             session: The session object to search for the referent
-            struct: TimeReferenceStruct with serialized data
+            struct: ndi_time_timereference__struct with serialized data
 
         Returns:
-            TimeReference with live referent object
+            ndi_time_timereference with live referent object
 
         Raises:
             ValueError: If referent cannot be found in session
@@ -213,9 +213,9 @@ class TimeReference:
         if hasattr(session, "findexpobj"):
             referent = session.findexpobj(struct.referent_epochsetname, struct.referent_classname)
         else:
-            raise ValueError("Session does not support finding experiment objects")
+            raise ValueError("ndi_session does not support finding experiment objects")
 
-        clocktype = ClockType.from_string(struct.clocktypestring)
+        clocktype = ndi_time_clocktype.from_string(struct.clocktypestring)
 
         return cls(
             referent=referent,
@@ -244,7 +244,7 @@ class TimeReference:
 
     def __eq__(self, other: object) -> bool:
         """Check equality of time references."""
-        if not isinstance(other, TimeReference):
+        if not isinstance(other, ndi_time_timereference):
             return NotImplemented
 
         return (
@@ -262,4 +262,4 @@ class TimeReference:
             f"epoch={self._epoch!r}",
             f"time={self._time}",
         ]
-        return f"TimeReference({', '.join(parts)})"
+        return f"ndi_time_timereference({', '.join(parts)})"

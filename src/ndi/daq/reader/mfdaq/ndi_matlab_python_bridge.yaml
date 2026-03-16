@@ -19,7 +19,7 @@ classes:
     matlab_path: "+ndi/+daq/+reader/+mfdaq/intan.m"
     matlab_last_sync_hash: "80385294"
     python_path: "ndi/daq/reader/mfdaq/intan.py"
-    python_class: "IntanReader"
+    python_class: "ndi_daq_reader_mfdaq_intan"
     inherits: "ndi.daq.reader.mfdaq_reader"
 
     properties:
@@ -48,7 +48,7 @@ classes:
             default: "None"
         output_arguments:
           - name: reader_obj
-            type_python: "IntanReader"
+            type_python: "ndi_daq_reader_mfdaq_intan"
         decision_log: "Exact match."
 
       - name: getchannelsepoch
@@ -59,7 +59,7 @@ classes:
         output_arguments:
           - name: channels
             type_python: "list[ChannelInfo]"
-        decision_log: "Exact match. Delegates to SpikeInterfaceReader."
+        decision_log: "Exact match. Delegates to ndi_daq_reader_SpikeInterfaceReader."
 
       - name: readchannels_epochsamples
         input_arguments:
@@ -83,7 +83,7 @@ classes:
             type_python: "np.ndarray"
         decision_log: >
           Semantic Parity: channel and s0/s1 are 1-indexed.
-          Delegates to SpikeInterfaceReader.
+          Delegates to ndi_daq_reader_SpikeInterfaceReader.
 
       - name: samplerate
         input_arguments:
@@ -99,7 +99,7 @@ classes:
         output_arguments:
           - name: sr
             type_python: "np.ndarray"
-        decision_log: "Exact match. Delegates to SpikeInterfaceReader."
+        decision_log: "Exact match. Delegates to ndi_daq_reader_SpikeInterfaceReader."
 
   # =========================================================================
   # ndi.daq.reader.mfdaq.blackrock
@@ -109,7 +109,7 @@ classes:
     matlab_path: "+ndi/+daq/+reader/+mfdaq/blackrock.m"
     matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/daq/reader/mfdaq/blackrock.py"
-    python_class: "BlackrockReader"
+    python_class: "ndi_daq_reader_mfdaq_blackrock"
     inherits: "ndi.daq.reader.mfdaq_reader"
 
     properties:
@@ -138,7 +138,7 @@ classes:
             default: "None"
         output_arguments:
           - name: reader_obj
-            type_python: "BlackrockReader"
+            type_python: "ndi_daq_reader_mfdaq_blackrock"
         decision_log: "Exact match."
 
       - name: getchannelsepoch
@@ -149,7 +149,7 @@ classes:
         output_arguments:
           - name: channels
             type_python: "list[ChannelInfo]"
-        decision_log: "Exact match. Delegates to SpikeInterfaceReader."
+        decision_log: "Exact match. Delegates to ndi_daq_reader_SpikeInterfaceReader."
 
       - name: readchannels_epochsamples
         input_arguments:
@@ -168,7 +168,7 @@ classes:
             type_python: "np.ndarray"
         decision_log: >
           Semantic Parity: channel and s0/s1 are 1-indexed.
-          Delegates to SpikeInterfaceReader.
+          Delegates to ndi_daq_reader_SpikeInterfaceReader.
 
       - name: samplerate
         input_arguments:
@@ -181,7 +181,7 @@ classes:
         output_arguments:
           - name: sr
             type_python: "np.ndarray"
-        decision_log: "Exact match. Delegates to SpikeInterfaceReader."
+        decision_log: "Exact match. Delegates to ndi_daq_reader_SpikeInterfaceReader."
 
   # =========================================================================
   # ndi.daq.reader.mfdaq.cedspike2
@@ -191,7 +191,7 @@ classes:
     matlab_path: "+ndi/+daq/+reader/+mfdaq/cedspike2.m"
     matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/daq/reader/mfdaq/cedspike2.py"
-    python_class: "CEDSpike2Reader"
+    python_class: "ndi_daq_reader_mfdaq_cedspike2"
     inherits: "ndi.daq.reader.mfdaq_reader"
 
     properties:
@@ -220,7 +220,7 @@ classes:
             default: "None"
         output_arguments:
           - name: reader_obj
-            type_python: "CEDSpike2Reader"
+            type_python: "ndi_daq_reader_mfdaq_cedspike2"
         decision_log: "Exact match."
 
       - name: getchannelsepoch
@@ -230,7 +230,7 @@ classes:
         output_arguments:
           - name: channels
             type_python: "list[ChannelInfo]"
-        decision_log: "Exact match. Delegates to SpikeInterfaceReader."
+        decision_log: "Exact match. Delegates to ndi_daq_reader_SpikeInterfaceReader."
 
       - name: readchannels_epochsamples
         input_arguments:
@@ -249,7 +249,7 @@ classes:
             type_python: "np.ndarray"
         decision_log: >
           Semantic Parity: channel and s0/s1 are 1-indexed.
-          Delegates to SpikeInterfaceReader.
+          Delegates to ndi_daq_reader_SpikeInterfaceReader.
 
       - name: samplerate
         input_arguments:
@@ -262,7 +262,7 @@ classes:
         output_arguments:
           - name: sr
             type_python: "np.ndarray"
-        decision_log: "Exact match. Delegates to SpikeInterfaceReader."
+        decision_log: "Exact match. Delegates to ndi_daq_reader_SpikeInterfaceReader."
 
   # =========================================================================
   # ndi.daq.reader.mfdaq.spikegadgets
@@ -272,7 +272,7 @@ classes:
     matlab_path: "+ndi/+daq/+reader/+mfdaq/spikegadgets.m"
     matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/daq/reader/mfdaq/spikegadgets.py"
-    python_class: "SpikeGadgetsReader"
+    python_class: "ndi_daq_reader_mfdaq_spikegadgets"
     inherits: "ndi.daq.reader.mfdaq_reader"
 
     properties:
@@ -301,7 +301,7 @@ classes:
             default: "None"
         output_arguments:
           - name: reader_obj
-            type_python: "SpikeGadgetsReader"
+            type_python: "ndi_daq_reader_mfdaq_spikegadgets"
         decision_log: "Exact match."
 
       - name: getchannelsepoch
@@ -311,7 +311,7 @@ classes:
         output_arguments:
           - name: channels
             type_python: "list[ChannelInfo]"
-        decision_log: "Exact match. Delegates to SpikeInterfaceReader."
+        decision_log: "Exact match. Delegates to ndi_daq_reader_SpikeInterfaceReader."
 
       - name: readchannels_epochsamples
         input_arguments:
@@ -330,7 +330,7 @@ classes:
             type_python: "np.ndarray"
         decision_log: >
           Semantic Parity: channel and s0/s1 are 1-indexed.
-          Delegates to SpikeInterfaceReader.
+          Delegates to ndi_daq_reader_SpikeInterfaceReader.
 
       - name: samplerate
         input_arguments:
@@ -343,4 +343,4 @@ classes:
         output_arguments:
           - name: sr
             type_python: "np.ndarray"
-        decision_log: "Exact match. Delegates to SpikeInterfaceReader."
+        decision_log: "Exact match. Delegates to ndi_daq_reader_SpikeInterfaceReader."

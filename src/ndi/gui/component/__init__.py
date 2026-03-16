@@ -6,32 +6,36 @@ infrastructure.
 Subpackages
 -----------
 abstract
-    Abstract base classes (``ProgressMonitor``).
+    Abstract base classes (``ndi_gui_component_abstract_ProgressMonitor``).
 internal
-    Progress tracking internals (``ProgressTracker``,
-    ``AsynchProgressTracker``, event data classes).
+    Progress tracking internals (``ndi_gui_component_internal_ProgressTracker``,
+    ``ndi_gui_component_internal_AsynchProgressTracker``, event data classes).
 """
 
-from ndi.gui.component.CommandWindowProgressMonitor import (
-    CommandWindowProgressMonitor,
+from ndi.gui.component.ndi_gui_component_CommandWindowProgressMonitor import (
+    ndi_gui_component_CommandWindowProgressMonitor,
 )
 
 # Lazy imports for Qt-dependent components to avoid hard PySide6
 # dependency at module load time.
 __all__ = [
-    "CommandWindowProgressMonitor",
-    "NDIProgressBar",
-    "ProgressBarWindow",
+    "ndi_gui_component_CommandWindowProgressMonitor",
+    "ndi_gui_component_NDIProgressBar",
+    "ndi_gui_component_ProgressBarWindow",
 ]
 
 
 def __getattr__(name: str):  # noqa: ANN204
-    if name == "NDIProgressBar":
-        from ndi.gui.component.NDIProgressBar import NDIProgressBar
+    if name == "ndi_gui_component_NDIProgressBar":
+        from ndi.gui.component.ndi_gui_component_NDIProgressBar import (
+            ndi_gui_component_NDIProgressBar,
+        )
 
-        return NDIProgressBar
-    if name == "ProgressBarWindow":
-        from ndi.gui.component.ProgressBarWindow import ProgressBarWindow
+        return ndi_gui_component_NDIProgressBar
+    if name == "ndi_gui_component_ProgressBarWindow":
+        from ndi.gui.component.ndi_gui_component_ProgressBarWindow import (
+            ndi_gui_component_ProgressBarWindow,
+        )
 
-        return ProgressBarWindow
+        return ndi_gui_component_ProgressBarWindow
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

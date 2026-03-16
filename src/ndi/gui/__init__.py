@@ -9,24 +9,24 @@ Top-level functions
 gui
     Simple session viewer (v1).
 gui_v2
-    Enhanced viewer with Lab and Database tabs.
+    Enhanced viewer with ndi_gui_Lab and ndi_database tabs.
 
 Classes
 -------
-Data
-    Document table view with search/filter and graph visualisation.
-Icon
-    Draggable icon for the Lab view.
-Lab
+ndi_gui_Data
+    ndi_document table view with search/filter and graph visualisation.
+ndi_gui_Icon
+    Draggable icon for the ndi_gui_Lab view.
+ndi_gui_Lab
     Experiment view with connection wires.
-docViewer
+ndi_gui_docViewer
     Standalone document viewer window.
 
 Sub-packages
 ------------
 component
-    Progress bars and monitors (``ProgressBarWindow``,
-    ``NDIProgressBar``, ``CommandWindowProgressMonitor``).
+    Progress bars and monitors (``ndi_gui_component_ProgressBarWindow``,
+    ``ndi_gui_component_NDIProgressBar``, ``ndi_gui_component_CommandWindowProgressMonitor``).
 utility
     Helper functions (``centerFigure``).
 
@@ -38,10 +38,10 @@ Install the GUI dependency with::
 __all__ = [
     "gui",
     "gui_v2",
-    "Data",
-    "Icon",
-    "Lab",
-    "docViewer",
+    "ndi_gui_Data",
+    "ndi_gui_Icon",
+    "ndi_gui_Lab",
+    "ndi_gui_docViewer",
 ]
 
 
@@ -51,10 +51,10 @@ def __getattr__(name: str):  # noqa: ANN204
     _lazy = {
         "gui": ("ndi.gui.gui", "gui"),
         "gui_v2": ("ndi.gui.gui_v2", "gui_v2"),
-        "Data": ("ndi.gui.data", "Data"),
-        "Icon": ("ndi.gui.icon", "Icon"),
-        "Lab": ("ndi.gui.lab", "Lab"),
-        "docViewer": ("ndi.gui.docViewer", "docViewer"),
+        "ndi_gui_Data": ("ndi.gui.data", "ndi_gui_Data"),
+        "ndi_gui_Icon": ("ndi.gui.icon", "ndi_gui_Icon"),
+        "ndi_gui_Lab": ("ndi.gui.lab", "ndi_gui_Lab"),
+        "ndi_gui_docViewer": ("ndi.gui.ndi_gui_docViewer", "ndi_gui_docViewer"),
     }
     if name in _lazy:
         import importlib

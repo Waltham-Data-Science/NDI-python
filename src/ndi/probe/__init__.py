@@ -1,7 +1,7 @@
 """
 ndi.probe - Specialized element for measurement devices.
 
-This module provides the Probe class that represents measurement
+This module provides the ndi_probe class that represents measurement
 or stimulation devices in neuroscience experiments.
 """
 
@@ -11,16 +11,16 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ..element import Element
-from ..epoch.epochprobemap import EpochProbeMap
-from ..time import ClockType
+from ..element import ndi_element
+from ..epoch.epochprobemap import ndi_epoch_epochprobemap
+from ..time import ndi_time_clocktype
 
 
-class Probe(Element):
+class ndi_probe(ndi_element):
     """
     Specialized element for measurement/stimulation devices.
 
-    Probe represents a physical or virtual device that records or
+    ndi_probe represents a physical or virtual device that records or
     stimulates (e.g., electrodes, optical fibers, cameras). Probes
     build their epoch tables by matching epochprobemap entries from
     DAQ systems.
@@ -31,10 +31,10 @@ class Probe(Element):
     - Match by name, reference, and type against device probe maps
 
     Attributes:
-        Inherits all from Element
+        Inherits all from ndi_element
 
     Example:
-        >>> probe = Probe(
+        >>> probe = ndi_probe(
         ...     session=my_session,
         ...     name='electrode1',
         ...     reference=1,
@@ -55,14 +55,14 @@ class Probe(Element):
         document: Any | None = None,
     ):
         """
-        Create a new Probe.
+        Create a new ndi_probe.
 
         Args:
-            session: Session object with database access
-            name: Probe name (no whitespace allowed)
+            session: ndi_session object with database access
+            name: ndi_probe name (no whitespace allowed)
             reference: Reference number (non-negative integer)
-            type: Probe type identifier (no whitespace)
-            subject_id: Subject document ID
+            type: ndi_probe type identifier (no whitespace)
+            subject_id: ndi_subject document ID
             identifier: Optional unique identifier
             document: Optional document to load from
         """
@@ -82,7 +82,7 @@ class Probe(Element):
         )
 
     # =========================================================================
-    # EpochSet Overrides
+    # ndi_epoch_epochset Overrides
     # =========================================================================
 
     def buildepochtable(self) -> list[dict[str, Any]]:
@@ -155,18 +155,18 @@ class Probe(Element):
             return self._session.daqsystems
 
         # Fall back to querying database
-        from ..query import Query
+        from ..query import ndi_query
 
-        q = Query("").isa("daqsystem")
+        q = ndi_query("").isa("daqsystem")
         docs = self._session.database_search(q)
 
-        # Load DAQSystem objects from documents
-        from ..daq.system import DAQSystem
+        # Load ndi_daq_system objects from documents
+        from ..daq.system import ndi_daq_system
 
         systems = []
         for doc in docs:
             try:
-                sys = DAQSystem(session=self._session, document=doc)
+                sys = ndi_daq_system(session=self._session, document=doc)
                 systems.append(sys)
             except Exception:
                 pass
@@ -176,7 +176,7 @@ class Probe(Element):
     def _find_matching_epochprobemap(
         self,
         epochprobemaps: list[Any],
-    ) -> EpochProbeMap | None:
+    ) -> ndi_epoch_epochprobemap | None:
         """
         Find an epochprobemap matching this probe.
 
@@ -184,11 +184,11 @@ class Probe(Element):
             epochprobemaps: List of probe maps to search
 
         Returns:
-            Matching EpochProbeMap or None
+            Matching ndi_epoch_epochprobemap or None
         """
         for epm in epochprobemaps:
-            # Handle both EpochProbeMap objects and dicts
-            if isinstance(epm, EpochProbeMap):
+            # Handle both ndi_epoch_epochprobemap objects and dicts
+            if isinstance(epm, ndi_epoch_epochprobemap):
                 if epm.matches(self._name, self._reference, self._type):
                     return epm
             elif isinstance(epm, dict):
@@ -197,14 +197,14 @@ class Probe(Element):
                     and epm.get("reference") == self._reference
                     and epm.get("type") == self._type
                 ):
-                    return EpochProbeMap.from_dict(epm)
+                    return ndi_epoch_epochprobemap.from_dict(epm)
             elif hasattr(epm, "name") and hasattr(epm, "reference") and hasattr(epm, "type"):
                 if (
                     epm.name == self._name
                     and epm.reference == self._reference
                     and epm.type == self._type
                 ):
-                    return EpochProbeMap(
+                    return ndi_epoch_epochprobemap(
                         name=epm.name,
                         reference=epm.reference,
                         type=epm.type,
@@ -231,7 +231,7 @@ class Probe(Element):
         return False
 
     # =========================================================================
-    # Probe-specific Methods
+    # ndi_probe-specific Methods
     # =========================================================================
 
     def probestring(self) -> str:
@@ -253,12 +253,12 @@ class Probe(Element):
         Check if an epochprobemap matches this probe.
 
         Args:
-            epochprobemap: EpochProbeMap to check
+            epochprobemap: ndi_epoch_epochprobemap to check
 
         Returns:
             True if matches this probe's name, reference, type
         """
-        if isinstance(epochprobemap, EpochProbeMap):
+        if isinstance(epochprobemap, ndi_epoch_epochprobemap):
             return epochprobemap.matches(self._name, self._reference, self._type)
         elif isinstance(epochprobemap, dict):
             return (
@@ -282,18 +282,18 @@ class Probe(Element):
         Get device and channel information for an epoch.
 
         Args:
-            epoch_number: Epoch number (1-indexed)
+            epoch_number: ndi_epoch_epoch number (1-indexed)
 
         Returns:
             Dict with:
             - daqsystem: The DAQ system object
-            - device_epochnumber: Epoch number in device
+            - device_epochnumber: ndi_epoch_epoch number in device
             - channels: Channel mappings
         """
         et, _ = self.epochtable()
 
         if epoch_number < 1 or epoch_number > len(et):
-            raise IndexError(f"Epoch {epoch_number} out of range (1..{len(et)})")
+            raise IndexError(f"ndi_epoch_epoch {epoch_number} out of range (1..{len(et)})")
 
         entry = et[epoch_number - 1]
         underlying = entry.get("underlying_epochs", {})
@@ -305,7 +305,7 @@ class Probe(Element):
         }
 
     # =========================================================================
-    # Element overrides
+    # ndi_element overrides
     # =========================================================================
 
     def ndi_element_class(self) -> str:
@@ -314,7 +314,7 @@ class Probe(Element):
         MATLAB equivalent: ``class(ndi_probe_obj)``
 
         Returns ``'ndi.probe'``.  Subclasses (e.g.
-        ``ProbeTimeseriesMFDAQ``) override this to return their own
+        ``ndi_probe_timeseries_mfdaq``) override this to return their own
         MATLAB class name.
 
         Returns:
@@ -328,7 +328,7 @@ class Probe(Element):
 
     @staticmethod
     def buildmultipleepochtables(
-        probes: list[Probe],
+        probes: list[ndi_probe],
         session: Any,
     ) -> dict[str, list[dict[str, Any]]]:
         """
@@ -338,8 +338,8 @@ class Probe(Element):
         avoiding redundant database queries.
 
         Args:
-            probes: List of Probe objects
-            session: Session object
+            probes: List of ndi_probe objects
+            session: ndi_session object
 
         Returns:
             Dict mapping probe.id to epoch table
@@ -350,16 +350,16 @@ class Probe(Element):
         elif hasattr(session, "daqsystems"):
             daqsystems = session.daqsystems
         else:
-            from ..query import Query
+            from ..query import ndi_query
 
-            q = Query("").isa("daqsystem")
+            q = ndi_query("").isa("daqsystem")
             docs = session.database_search(q)
-            from ..daq.system import DAQSystem
+            from ..daq.system import ndi_daq_system
 
             daqsystems = []
             for doc in docs:
                 try:
-                    sys = DAQSystem(session=session, document=doc)
+                    sys = ndi_daq_system(session=session, document=doc)
                     daqsystems.append(sys)
                 except Exception:
                     pass
@@ -413,11 +413,11 @@ class Probe(Element):
 
     def __repr__(self) -> str:
         """String representation."""
-        return f"Probe({self._name}|{self._reference}|{self._type})"
+        return f"ndi_probe({self._name}|{self._reference}|{self._type})"
 
 
 # =========================================================================
-# Probe Type Map utilities
+# ndi_probe Type Map utilities
 # =========================================================================
 
 _PROBE_TYPE_MAP: dict[str, str] | None = None
@@ -437,9 +437,9 @@ def initProbeTypeMap() -> dict[str, str]:
     import json
 
     try:
-        from ..common import PathConstants
+        from ..common import ndi_common_PathConstants
 
-        json_path = PathConstants.COMMON_FOLDER / "probe" / "probetype2object.json"
+        json_path = ndi_common_PathConstants.COMMON_FOLDER / "probe" / "probetype2object.json"
     except Exception:
         return {}
 

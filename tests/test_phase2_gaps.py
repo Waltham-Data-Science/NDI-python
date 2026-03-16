@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 
 # =========================================================================
-# Batch 1: Calculator & Doc Utilities
+# Batch 1: ndi_calculator & Doc Utilities
 # =========================================================================
 
 
@@ -174,7 +174,7 @@ class TestOntologyTableRowVars:
 
 
 # =========================================================================
-# Batch 2: Database Export/Extract
+# Batch 2: ndi_database Export/Extract
 # =========================================================================
 
 
@@ -300,7 +300,7 @@ class TestExtractDocsFiles:
 
 
 # =========================================================================
-# Batch 3: Probe Type Map
+# Batch 3: ndi_probe Type Map
 # =========================================================================
 
 
@@ -437,7 +437,7 @@ class TestOpenmindsObjToNdiDocument:
     @patch("ndi.openminds_convert.openminds_obj_to_dict")
     def test_creates_documents(self, mock_to_dict):
         """openminds_obj_to_ndi_document creates real NDI Documents."""
-        from ndi.document import Document
+        from ndi.document import ndi_document
         from ndi.openminds_convert import openminds_obj_to_ndi_document
 
         mock_to_dict.return_value = [
@@ -453,14 +453,14 @@ class TestOpenmindsObjToNdiDocument:
         result = openminds_obj_to_ndi_document(MagicMock(), session_id="sess-1")
 
         assert len(result) == 1
-        assert isinstance(result[0], Document)
+        assert isinstance(result[0], ndi_document)
         props = result[0].document_properties
         assert props.get("document_class", {}).get("class_name") == "openminds"
 
     @patch("ndi.openminds_convert.openminds_obj_to_dict")
     def test_subject_dependency(self, mock_to_dict):
         """openminds_obj_to_ndi_document creates openminds_subject Documents with dependency."""
-        from ndi.document import Document
+        from ndi.document import ndi_document
         from ndi.openminds_convert import openminds_obj_to_ndi_document
 
         mock_to_dict.return_value = [
@@ -481,7 +481,7 @@ class TestOpenmindsObjToNdiDocument:
         )
 
         assert len(result) == 1
-        assert isinstance(result[0], Document)
+        assert isinstance(result[0], ndi_document)
         props = result[0].document_properties
         assert props.get("document_class", {}).get("class_name") == "openminds_subject"
         dep_names = {d["name"]: d["value"] for d in props.get("depends_on", [])}

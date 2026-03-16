@@ -46,7 +46,7 @@ functions:
     input_arguments: []
     output_arguments:
       - name: cache
-        type_python: "Cache"
+        type_python: "ndi_cache"
     decision_log: "Exact match. Returns a global singleton."
 
   - name: getDatabaseHierarchy
@@ -79,14 +79,14 @@ functions:
 classes:
 
   # =========================================================================
-  # ndi.common.PathConstants
+  # ndi.common.ndi_common_PathConstants
   # =========================================================================
-  - name: PathConstants
+  - name: ndi_common_PathConstants
     type: class
-    matlab_path: "+ndi/+common/PathConstants.m"
+    matlab_path: "+ndi/+common/ndi_common_PathConstants.m"
     matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/common/__init__.py"
-    python_class: "PathConstants"
+    python_class: "ndi_common_PathConstants"
 
     properties:
       - name: NDI_ROOT

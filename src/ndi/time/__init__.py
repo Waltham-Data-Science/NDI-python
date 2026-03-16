@@ -5,26 +5,26 @@ This module provides classes for managing time synchronization across
 epochs and devices in neuroscience data.
 
 Classes:
-    ClockType: Enumeration of clock types (UTC, dev_local_time, etc.)
-    TimeMapping: Polynomial time transformation
-    TimeReference: Time specification relative to a clock
-    SyncRule: Abstract base for synchronization rules
-    SyncGraph: Graph-based time conversion
+    ndi_time_clocktype: Enumeration of clock types (UTC, dev_local_time, etc.)
+    ndi_time_timemapping: Polynomial time transformation
+    ndi_time_timereference: Time specification relative to a clock
+    ndi_time_syncrule: Abstract base for synchronization rules
+    ndi_time_syncgraph: Graph-based time conversion
 
 Submodules:
-    syncrule: Concrete SyncRule implementations (FileMatch, FileFind)
+    syncrule: Concrete ndi_time_syncrule implementations (ndi_time_syncrule_filematch, ndi_time_syncrule_filefind)
 
 Example:
-    >>> from ndi.time import ClockType, TimeMapping, SyncGraph
-    >>> from ndi.time.syncrule import FileMatch
+    >>> from ndi.time import ndi_time_clocktype, ndi_time_timemapping, ndi_time_syncgraph
+    >>> from ndi.time.syncrule import ndi_time_syncrule_filematch
     >>>
     >>> # Create a sync graph
-    >>> sg = SyncGraph(session)
-    >>> sg.add_rule(FileMatch())
+    >>> sg = ndi_time_syncgraph(session)
+    >>> sg.add_rule(ndi_time_syncrule_filematch())
     >>>
     >>> # Convert time between epochs
     >>> t_out, ref_out, msg = sg.time_convert(
-    ...     timeref_in, t_in, referent_out, ClockType.UTC
+    ...     timeref_in, t_in, referent_out, ndi_time_clocktype.UTC
     ... )
 """
 
@@ -40,16 +40,16 @@ from .clocktype import (
     INHERITED,
     NO_TIME,
     UTC,
-    ClockType,
+    ndi_time_clocktype,
 )
-from .syncgraph import EpochNode, GraphInfo, SyncGraph
-from .syncrule_base import SyncRule
-from .timemapping import TimeMapping
-from .timereference import TimeReference, TimeReferenceStruct
+from .syncgraph import ndi_time_epochnode, ndi_time_graphinfo, ndi_time_syncgraph
+from .syncrule_base import ndi_time_syncrule
+from .timemapping import ndi_time_timemapping
+from .timereference import ndi_time_timereference, ndi_time_timereference__struct
 
 __all__ = [
     # Clock types
-    "ClockType",
+    "ndi_time_clocktype",
     "UTC",
     "APPROX_UTC",
     "EXP_GLOBAL_TIME",
@@ -60,16 +60,16 @@ __all__ = [
     "NO_TIME",
     "INHERITED",
     # Time mapping
-    "TimeMapping",
+    "ndi_time_timemapping",
     # Time reference
-    "TimeReference",
-    "TimeReferenceStruct",
+    "ndi_time_timereference",
+    "ndi_time_timereference__struct",
     # Sync rule
-    "SyncRule",
+    "ndi_time_syncrule",
     # Sync graph
-    "SyncGraph",
-    "EpochNode",
-    "GraphInfo",
+    "ndi_time_syncgraph",
+    "ndi_time_epochnode",
+    "ndi_time_graphinfo",
     # Submodule
     "syncrule",
 ]

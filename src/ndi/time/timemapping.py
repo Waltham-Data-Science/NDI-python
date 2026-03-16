@@ -1,7 +1,7 @@
 """
 ndi.time.timemapping - Time mapping class for NDI framework.
 
-This module provides the TimeMapping class for managing mapping of time
+This module provides the ndi_time_timemapping class for managing mapping of time
 across epochs and devices using polynomial transformations.
 """
 
@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 
 
-class TimeMapping:
+class ndi_time_timemapping:
     """
     Class for managing mapping of time across epochs and devices.
 
@@ -26,17 +26,17 @@ class TimeMapping:
         t_out = scale * t_in + shift
 
     Example:
-        >>> tm = TimeMapping([1, 0])  # Identity mapping
+        >>> tm = ndi_time_timemapping([1, 0])  # Identity mapping
         >>> tm.map(5.0)
         5.0
-        >>> tm = TimeMapping([2, 10])  # t_out = 2*t_in + 10
+        >>> tm = ndi_time_timemapping([2, 10])  # t_out = 2*t_in + 10
         >>> tm.map(5.0)
         20.0
     """
 
     def __init__(self, mapping: list[float] | np.ndarray | None = None):
         """
-        Create a new TimeMapping object.
+        Create a new ndi_time_timemapping object.
 
         Args:
             mapping: Polynomial coefficients [a_n, a_{n-1}, ..., a_1, a_0]
@@ -99,17 +99,17 @@ class TimeMapping:
         return self.map(t_in)
 
     @classmethod
-    def identity(cls) -> TimeMapping:
+    def identity(cls) -> ndi_time_timemapping:
         """
         Create an identity mapping (t_out = t_in).
 
         Returns:
-            TimeMapping with [1, 0] coefficients
+            ndi_time_timemapping with [1, 0] coefficients
         """
         return cls([1.0, 0.0])
 
     @classmethod
-    def linear(cls, scale: float = 1.0, shift: float = 0.0) -> TimeMapping:
+    def linear(cls, scale: float = 1.0, shift: float = 0.0) -> ndi_time_timemapping:
         """
         Create a linear mapping: t_out = scale * t_in + shift.
 
@@ -118,11 +118,11 @@ class TimeMapping:
             shift: Offset/shift (default 0.0)
 
         Returns:
-            TimeMapping with [scale, shift] coefficients
+            ndi_time_timemapping with [scale, shift] coefficients
         """
         return cls([scale, shift])
 
-    def inverse(self) -> TimeMapping:
+    def inverse(self) -> ndi_time_timemapping:
         """
         Compute the inverse mapping (for linear mappings only).
 
@@ -130,7 +130,7 @@ class TimeMapping:
         t_in = (1/scale) * t_out - shift/scale
 
         Returns:
-            TimeMapping representing the inverse transformation
+            ndi_time_timemapping representing the inverse transformation
 
         Raises:
             ValueError: If mapping is not linear or scale is zero
@@ -142,9 +142,9 @@ class TimeMapping:
 
         inv_scale = 1.0 / self._mapping[0]
         inv_shift = -self._mapping[1] / self._mapping[0]
-        return TimeMapping([inv_scale, inv_shift])
+        return ndi_time_timemapping([inv_scale, inv_shift])
 
-    def compose(self, other: TimeMapping) -> TimeMapping:
+    def compose(self, other: ndi_time_timemapping) -> ndi_time_timemapping:
         """
         Compose two mappings: apply self first, then other.
 
@@ -158,7 +158,7 @@ class TimeMapping:
             other: The mapping to apply after this one
 
         Returns:
-            Composed TimeMapping
+            Composed ndi_time_timemapping
 
         Raises:
             ValueError: If either mapping is not linear
@@ -172,19 +172,19 @@ class TimeMapping:
         new_scale = c * a
         new_shift = c * b + d
 
-        return TimeMapping([new_scale, new_shift])
+        return ndi_time_timemapping([new_scale, new_shift])
 
     def __eq__(self, other: object) -> bool:
         """Check equality of two time mappings."""
-        if not isinstance(other, TimeMapping):
+        if not isinstance(other, ndi_time_timemapping):
             return NotImplemented
         return np.allclose(self._mapping, other._mapping)
 
     def __repr__(self) -> str:
         """Return string representation."""
         if len(self._mapping) == 2:
-            return f"TimeMapping(scale={self.scale}, shift={self.shift})"
-        return f"TimeMapping({list(self._mapping)})"
+            return f"ndi_time_timemapping(scale={self.scale}, shift={self.shift})"
+        return f"ndi_time_timemapping({list(self._mapping)})"
 
     def to_dict(self) -> dict:
         """
@@ -196,14 +196,14 @@ class TimeMapping:
         return {"mapping": self._mapping.tolist()}
 
     @classmethod
-    def from_dict(cls, data: dict) -> TimeMapping:
+    def from_dict(cls, data: dict) -> ndi_time_timemapping:
         """
-        Create TimeMapping from dictionary.
+        Create ndi_time_timemapping from dictionary.
 
         Args:
             data: Dictionary with 'mapping' key
 
         Returns:
-            TimeMapping instance
+            ndi_time_timemapping instance
         """
         return cls(data["mapping"])

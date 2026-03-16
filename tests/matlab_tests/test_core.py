@@ -12,10 +12,10 @@ import json
 
 import pytest
 
-from ndi.cache import Cache
-from ndi.document import Document
-from ndi.query import Query
-from ndi.session.dir import DirSession
+from ndi.cache import ndi_cache
+from ndi.document import ndi_document
+from ndi.query import ndi_query
+from ndi.session.dir import ndi_session_dir
 
 # ===========================================================================
 # TestCache
@@ -31,13 +31,13 @@ class TestCache:
 
         MATLAB equivalent: CacheTest.testCacheCreation
         """
-        c = Cache()
+        c = ndi_cache()
         assert c.max_memory == 10e9
         assert c.replacement_rule == "fifo"
 
     def test_cache_creation_custom(self):
         """Test creating a cache with custom parameters."""
-        c = Cache(max_memory=5e6, replacement_rule="lifo")
+        c = ndi_cache(max_memory=5e6, replacement_rule="lifo")
         assert c.max_memory == 5e6
         assert c.replacement_rule == "lifo"
 
@@ -46,7 +46,7 @@ class TestCache:
 
         MATLAB equivalent: CacheTest.testAddAndLookup
         """
-        c = Cache(max_memory=1e6)
+        c = ndi_cache(max_memory=1e6)
         test_data = list(range(100))
 
         c.add("mykey", "mytype", test_data)
@@ -60,7 +60,7 @@ class TestCache:
 
         MATLAB equivalent: CacheTest.testRemove
         """
-        c = Cache(max_memory=1e6)
+        c = ndi_cache(max_memory=1e6)
         test_data = [1, 2, 3]
 
         c.add("mykey", "mytype", test_data)
@@ -74,7 +74,7 @@ class TestCache:
 
         MATLAB equivalent: CacheTest.testClear
         """
-        c = Cache(max_memory=1e6)
+        c = ndi_cache(max_memory=1e6)
         c.add("key1", "mytype", [1, 2, 3])
         c.add("key2", "mytype", [4, 5, 6])
         c.clear()
@@ -87,7 +87,7 @@ class TestCache:
         MATLAB equivalent: CacheTest.testFifoReplacement
         """
         # Use a small max_memory that will force eviction
-        c = Cache(max_memory=1000, replacement_rule="fifo")
+        c = ndi_cache(max_memory=1000, replacement_rule="fifo")
 
         # Add first item
         c.add("key1", "type1", b"x" * 800)
@@ -105,7 +105,7 @@ class TestCache:
 
         MATLAB equivalent: CacheTest.testLifoReplacement
         """
-        c = Cache(max_memory=1000, replacement_rule="lifo")
+        c = ndi_cache(max_memory=1000, replacement_rule="lifo")
 
         c.add("key1", "type1", b"x" * 800)
         c.add("key2", "type2", b"y" * 800)
@@ -123,7 +123,7 @@ class TestCache:
 
         MATLAB equivalent: CacheTest.testErrorReplacement
         """
-        c = Cache(max_memory=1000, replacement_rule="error")
+        c = ndi_cache(max_memory=1000, replacement_rule="error")
         c.add("key1", "type1", b"x" * 800)
 
         # Adding another item that exceeds capacity should raise
@@ -132,7 +132,7 @@ class TestCache:
 
     def test_lookup_miss(self):
         """Looking up a non-existent key returns None."""
-        c = Cache(max_memory=1e6)
+        c = ndi_cache(max_memory=1e6)
         assert c.lookup("nonexistent", "type") is None
 
 
@@ -146,11 +146,11 @@ class TestQuery:
     """Test query construction."""
 
     def test_all_query(self):
-        """Query.all() matches all base documents.
+        """ndi_query.all() matches all base documents.
 
         MATLAB equivalent: QueryTest.test_all_query
         """
-        q = Query.all()
+        q = ndi_query.all()
         assert q is not None
 
         # Verify the query searches for isa('base')
@@ -159,11 +159,11 @@ class TestQuery:
         assert ss["param1"] == "base"
 
     def test_none_query(self):
-        """Query.none() matches nothing.
+        """ndi_query.none() matches nothing.
 
         MATLAB equivalent: QueryTest.test_none_query
         """
-        q = Query.none()
+        q = ndi_query.none()
         assert q is not None
 
         # Should search for a nonsensical type
@@ -172,16 +172,16 @@ class TestQuery:
         # param1 should be a nonsense string that no document matches
 
     def test_exact_string_query(self):
-        """Query for exact string match."""
-        q = Query("base.name") == "test_doc"
+        """ndi_query for exact string match."""
+        q = ndi_query("base.name") == "test_doc"
 
         ss = q.to_search_structure()
         assert ss["field"] == "base.name"
         assert ss["param1"] == "test_doc"
 
     def test_isa_query(self):
-        """Query.isa() searches by document class."""
-        q = Query("").isa("demoNDI")
+        """ndi_query.isa() searches by document class."""
+        q = ndi_query("").isa("demoNDI")
 
         ss = q.to_search_structure()
         assert ss["operation"] == "isa"
@@ -189,16 +189,16 @@ class TestQuery:
 
     def test_and_query(self):
         """Combining queries with & creates AND query."""
-        q1 = Query("base.name") == "test"
-        q2 = Query("").isa("demoNDI")
+        q1 = ndi_query("base.name") == "test"
+        q2 = ndi_query("").isa("demoNDI")
         combined = q1 & q2
 
         assert combined is not None
 
     def test_or_query(self):
         """Combining queries with | creates OR query."""
-        q1 = Query("base.name") == "alpha"
-        q2 = Query("base.name") == "beta"
+        q1 = ndi_query("base.name") == "alpha"
+        q2 = ndi_query("base.name") == "beta"
         combined = q1 | q2
 
         assert combined is not None
@@ -207,7 +207,7 @@ class TestQuery:
         """Queries work against a real session database."""
         session_dir = tmp_path / "query_test"
         session_dir.mkdir()
-        session = DirSession("q_test", session_dir)
+        session = ndi_session_dir("q_test", session_dir)
 
         # Add documents
         doc1 = session.newdocument(
@@ -227,17 +227,17 @@ class TestQuery:
         session.database_add(doc1)
         session.database_add(doc2)
 
-        # Query by name
-        results = session.database_search(Query("base.name") == "alpha")
+        # ndi_query by name
+        results = session.database_search(ndi_query("base.name") == "alpha")
         assert len(results) == 1
         assert results[0].document_properties["base"]["name"] == "alpha"
 
-        # Query by isa
-        results = session.database_search(Query("").isa("demoNDI"))
+        # ndi_query by isa
+        results = session.database_search(ndi_query("").isa("demoNDI"))
         assert len(results) == 2
 
-        # Query.all() should find demoNDI docs + session doc
-        all_docs = session.database_search(Query.all())
+        # ndi_query.all() should find demoNDI docs + session doc
+        all_docs = session.database_search(ndi_query.all())
         assert len(all_docs) >= 3  # 2 demoNDI + 1 session doc
 
 
@@ -255,10 +255,10 @@ class TestDocumentWrite:
 
         MATLAB equivalent: DocumentWriteTest.testWriteJSON
         """
-        doc = Document("base")
+        doc = ndi_document("base")
         props = doc.document_properties
         props["base"]["name"] = "test_doc"
-        doc = Document(props)
+        doc = ndi_document(props)
 
         output_file = tmp_path / "test_output.json"
         doc.write(str(output_file))
@@ -271,7 +271,7 @@ class TestDocumentWrite:
 
     def test_write_preserves_id(self, tmp_path):
         """Written document retains its original ID."""
-        doc = Document("demoNDI")
+        doc = ndi_document("demoNDI")
         original_id = doc.id
 
         output_file = tmp_path / "test_id.json"
@@ -286,7 +286,7 @@ class TestDocumentWrite:
 # Port of: ndi.unittest.NDIFileNavigatorTest (adapted)
 #
 # NOTE: The MATLAB test relies on creating specific file structures
-# with epoch patterns. We test the FileNavigator with a minimal
+# with epoch patterns. We test the ndi_file_navigator with a minimal
 # synthetic directory structure.
 # ===========================================================================
 
@@ -295,38 +295,38 @@ class TestFileNavigator:
     """Test file navigator epoch discovery."""
 
     def test_navigator_creation(self, tmp_path):
-        """FileNavigator can be created for a session.
+        """ndi_file_navigator can be created for a session.
 
         MATLAB equivalent: NDIFileNavigatorTest.testFileNavigatorFields
         """
-        from ndi.file.navigator import FileNavigator
+        from ndi.file.navigator import ndi_file_navigator
 
         session_dir = tmp_path / "nav_session"
         session_dir.mkdir()
-        session = DirSession("nav_test", session_dir)
+        session = ndi_session_dir("nav_test", session_dir)
 
-        fn = FileNavigator(session, ["myfile_#.ext1", "myfile_#.ext2"])
+        fn = ndi_file_navigator(session, ["myfile_#.ext1", "myfile_#.ext2"])
         assert fn is not None
 
     def test_navigator_no_epochs_in_empty_dir(self, tmp_path):
-        """FileNavigator finds no epochs in an empty directory."""
+        """ndi_file_navigator finds no epochs in an empty directory."""
         session_dir = tmp_path / "empty_session"
         session_dir.mkdir()
-        session = DirSession("empty_test", session_dir)
+        session = ndi_session_dir("empty_test", session_dir)
 
-        from ndi.file.navigator import FileNavigator
+        from ndi.file.navigator import ndi_file_navigator
 
-        fn = FileNavigator(session, ["data_#.bin"])
+        fn = ndi_file_navigator(session, ["data_#.bin"])
 
         et = fn.epochtable()
         assert isinstance(et, list)
 
     def test_navigator_finds_epochs(self, tmp_path):
-        """FileNavigator discovers epochs from matching file patterns.
+        """ndi_file_navigator discovers epochs from matching file patterns.
 
         MATLAB equivalent: NDIFileNavigatorTest.testNumberOfEpochs
         """
-        from ndi.file.navigator import FileNavigator
+        from ndi.file.navigator import ndi_file_navigator
 
         session_dir = tmp_path / "epoch_session"
         session_dir.mkdir()
@@ -338,8 +338,8 @@ class TestFileNavigator:
             (subdir / f"data_{i}.ext1").write_text(f"data{i}")
             (subdir / f"data_{i}.ext2").write_text(f"meta{i}")
 
-        session = DirSession("epoch_test", session_dir)
-        fn = FileNavigator(session, ["data_#.ext1", "data_#.ext2"])
+        session = ndi_session_dir("epoch_test", session_dir)
+        fn = ndi_file_navigator(session, ["data_#.ext1", "data_#.ext2"])
 
         et = fn.epochtable()
         # Should discover some epochs

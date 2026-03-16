@@ -44,14 +44,14 @@ functions:
 classes:
 
   # =========================================================================
-  # ndi.probe  (base probe class, extends Element)
+  # ndi.probe  (base probe class, extends ndi_element)
   # =========================================================================
   - name: probe
     type: class
     matlab_path: "+ndi/probe.m"
     matlab_last_sync_hash: "e6890be7"
     python_path: "ndi/probe/__init__.py"
-    python_class: "Probe"
+    python_class: "ndi_probe"
     inherits: "ndi.element"
 
     properties:
@@ -59,19 +59,19 @@ classes:
         type_matlab: "char"
         type_python: "str"
         access: "GetAccess=public, SetAccess=protected"
-        decision_log: "Inherited from Element. @property in Python."
+        decision_log: "Inherited from ndi_element. @property in Python."
 
       - name: reference
         type_matlab: "integer"
         type_python: "int"
         access: "GetAccess=public, SetAccess=protected"
-        decision_log: "Inherited from Element. @property in Python."
+        decision_log: "Inherited from ndi_element. @property in Python."
 
       - name: type
         type_matlab: "char"
         type_python: "str"
         access: "GetAccess=public, SetAccess=protected"
-        decision_log: "Inherited from Element. @property in Python."
+        decision_log: "Inherited from ndi_element. @property in Python."
 
     methods:
       # --- Constructor ---
@@ -107,19 +107,19 @@ classes:
             default: "None"
         output_arguments:
           - name: probe_obj
-            type_python: "Probe"
+            type_python: "ndi_probe"
         decision_log: >
           Probes are always direct=False and have no underlying_element.
           These are hardcoded in the constructor.
 
-      # --- EpochSet Overrides ---
+      # --- ndi_epoch_epochset Overrides ---
       - name: buildepochtable
         input_arguments: []
         output_arguments:
           - name: et
             type_python: "list[dict[str, Any]]"
         decision_log: >
-          Overrides Element. Scans all DAQ systems in the session and
+          Overrides ndi_element. Scans all DAQ systems in the session and
           collects epochs where the epochprobemap matches this probe.
 
       - name: epochsetname
@@ -138,7 +138,7 @@ classes:
           Always returns False for probes (continue traversal
           to underlying DAQ systems).
 
-      # --- Probe-specific methods ---
+      # --- ndi_probe-specific methods ---
       - name: probestring
         input_arguments: []
         output_arguments:
@@ -169,14 +169,14 @@ classes:
           Internally maps to 0-based index. Returns dict with
           daqsystem, device_epoch_id, epochprobemap.
 
-      # --- DocumentService Override ---
+      # --- ndi_documentservice Override ---
       - name: newdocument
         input_arguments: []
         output_arguments:
           - name: doc
             type_python: "Any"
         decision_log: >
-          Overrides Element. Sets element.direct=False for probes.
+          Overrides ndi_element. Sets element.direct=False for probes.
 
       - name: eq
         input_arguments:
@@ -185,14 +185,14 @@ classes:
         output_arguments:
           - name: b
             type_python: "bool"
-        decision_log: "Inherited from Element. Mapped to Python __eq__ dunder method."
+        decision_log: "Inherited from ndi_element. Mapped to Python __eq__ dunder method."
 
     static_methods:
       - name: buildmultipleepochtables
         input_arguments:
           - name: probes
             type_matlab: "ndi.probe array"
-            type_python: "list[Probe]"
+            type_python: "list[ndi_probe]"
           - name: session
             type_matlab: "ndi.session"
             type_python: "Any"
@@ -205,14 +205,14 @@ classes:
           mapping probe.id to epoch table.
 
   # =========================================================================
-  # ndi.probe.timeseries  (timeseries probe, extends Probe)
+  # ndi.probe.timeseries  (timeseries probe, extends ndi_probe)
   # =========================================================================
   - name: timeseries
     type: class
     matlab_path: "+ndi/+probe/timeseries.m"
     matlab_last_sync_hash: "0b39ad6c"
     python_path: "ndi/probe/timeseries.py"
-    python_class: "ProbeTimeseries"
+    python_class: "ndi_probe_timeseries"
     inherits: "ndi.probe"
 
     methods:
@@ -321,7 +321,7 @@ classes:
     matlab_path: "+ndi/+probe/+timeseries/mfdaq.m"
     matlab_last_sync_hash: "1b188d97"
     python_path: "ndi/probe/timeseries_mfdaq.py"
-    python_class: "ProbeTimeseriesMFDAQ"
+    python_class: "ndi_probe_timeseries_mfdaq"
     inherits: "ndi.probe.timeseries"
 
     methods:
@@ -368,7 +368,7 @@ classes:
           - name: timeref_out
             type_python: "Any | None"
         decision_log: >
-          Overrides ProbeTimeseries. Converts t0/t1 to sample
+          Overrides ndi_probe_timeseries. Converts t0/t1 to sample
           indices and delegates to read_epochsamples.
 
       - name: samplerate
@@ -380,7 +380,7 @@ classes:
           - name: sr
             type_python: "float"
         decision_log: >
-          Overrides ProbeTimeseries. Gets sample rate from
+          Overrides ndi_probe_timeseries. Gets sample rate from
           underlying DAQ device.
 
       - name: getchanneldevinfo
@@ -392,7 +392,7 @@ classes:
           - name: devinfo
             type_python: "tuple[Any, Any, Any, list[int]] | None"
         decision_log: >
-          Overrides Probe.getchanneldevinfo. Returns 4-tuple
+          Overrides ndi_probe.getchanneldevinfo. Returns 4-tuple
           (device, device_epoch, channeltype, channellist) or
           None. Semantic Parity: epoch is 1-indexed.
 
@@ -404,7 +404,7 @@ classes:
     matlab_path: "+ndi/+probe/+timeseries/stimulator.m"
     matlab_last_sync_hash: "209d46b3"
     python_path: "ndi/probe/timeseries_stimulator.py"
-    python_class: "ProbeTimeseriesStimulator"
+    python_class: "ndi_probe_timeseries_stimulator"
     inherits: "ndi.probe.timeseries"
 
     methods:
@@ -429,7 +429,7 @@ classes:
             default: "'stimulator'"
         output_arguments:
           - name: stim_obj
-            type_python: "ProbeTimeseriesStimulator"
+            type_python: "ndi_probe_timeseries_stimulator"
         decision_log: >
           Exact match. Defaults type to 'stimulator' and
           reference to 1.
@@ -455,7 +455,7 @@ classes:
           - name: timeref_out
             type_python: "Any | None"
         decision_log: >
-          Overrides ProbeTimeseries. Returns structured data dicts
+          Overrides ndi_probe_timeseries. Returns structured data dicts
           instead of arrays. data has keys: stimid, parameters,
           analog. times has keys: stimon, stimoff, stimopenclose,
           stimevents. Semantic Parity: epoch is 1-indexed.

@@ -1,7 +1,7 @@
 """
 ndi.session.mock - Mock session for testing.
 
-Provides MockSession that creates a temporary directory-based session,
+Provides ndi_session_mock that creates a temporary directory-based session,
 useful for unit tests and interactive experimentation.
 
 MATLAB equivalent: Conceptual (MATLAB tests create sessions manually)
@@ -13,26 +13,26 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from .dir import DirSession
+from .dir import ndi_session_dir
 
 
-class MockSession(DirSession):
+class ndi_session_mock(ndi_session_dir):
     """
     Temporary session for testing.
 
-    Creates a DirSession backed by a temporary directory that is
+    Creates a ndi_session_dir backed by a temporary directory that is
     automatically cleaned up when the session is closed or garbage
     collected.
 
     Example:
-        >>> with MockSession('test') as session:
-        ...     doc = Document('base')
+        >>> with ndi_session_mock('test') as session:
+        ...     doc = ndi_document('base')
         ...     session.database_add(doc)
-        ...     results = session.database_search(Query('').isa('base'))
+        ...     results = session.database_search(ndi_query('').isa('base'))
         >>> # temp directory is cleaned up
 
         >>> # Or without context manager:
-        >>> session = MockSession('test')
+        >>> session = ndi_session_mock('test')
         >>> # ... use session ...
         >>> session.close()  # cleans up temp directory
     """
@@ -47,7 +47,7 @@ class MockSession(DirSession):
         Create a mock session with a temporary directory.
 
         Args:
-            reference: Session reference string
+            reference: ndi_session reference string
             prefix: Prefix for temp directory name
             cleanup: If True, remove temp dir on close/del
         """
@@ -60,7 +60,7 @@ class MockSession(DirSession):
         if self._cleanup and Path(self._tmpdir).exists():
             shutil.rmtree(self._tmpdir, ignore_errors=True)
 
-    def __enter__(self) -> MockSession:
+    def __enter__(self) -> ndi_session_mock:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
@@ -73,4 +73,4 @@ class MockSession(DirSession):
             pass
 
     def __repr__(self) -> str:
-        return f"MockSession(path='{self._tmpdir}')"
+        return f"ndi_session_mock(path='{self._tmpdir}')"

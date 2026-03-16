@@ -1,7 +1,7 @@
 """
 ndi.calc.example.simple - Simple demonstration calculator.
 
-A minimal calculator that demonstrates the ndi.Calculator pattern.
+A minimal calculator that demonstrates the ndi.ndi_calculator pattern.
 It takes an 'answer' input parameter and stores it in a simple_calc
 document.
 
@@ -12,14 +12,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ...calculator import Calculator
+from ...calculator import ndi_calculator
 
 if TYPE_CHECKING:
-    from ...document import Document
-    from ...session.session_base import Session
+    from ...document import ndi_document
+    from ...session.session_base import ndi_session
 
 
-class SimpleCalc(Calculator):
+class ndi_calc_example_simple(ndi_calculator):
     """
     Simple demonstration calculator.
 
@@ -28,18 +28,18 @@ class SimpleCalc(Calculator):
     and as a template for new calculators.
 
     Example:
-        >>> calc = SimpleCalc(session)
+        >>> calc = ndi_calc_example_simple(session)
         >>> docs = calc.run(DocExistsAction.REPLACE)
     """
 
-    def __init__(self, session: Session | None = None):
+    def __init__(self, session: ndi_session | None = None):
         super().__init__(
             session=session,
             document_type="simple_calc",
             path_to_doc_type="apps/calculators/simple_calc",
         )
 
-    def calculate(self, parameters: dict) -> list[Document]:
+    def calculate(self, parameters: dict) -> list[ndi_document]:
         """
         Perform the simple calculation.
 
@@ -50,9 +50,9 @@ class SimpleCalc(Calculator):
             parameters: Dict with 'input_parameters' and 'depends_on'
 
         Returns:
-            List containing one simple_calc Document
+            List containing one simple_calc ndi_document
         """
-        from ...document import Document
+        from ...document import ndi_document
 
         input_params = parameters.get("input_parameters", {})
 
@@ -63,7 +63,7 @@ class SimpleCalc(Calculator):
         }
 
         # Create document using full schema path
-        doc = Document(
+        doc = ndi_document(
             "apps/calculators/simple_calc",
             **{"simple_calc": simple_calc_data},
         )
@@ -93,7 +93,7 @@ class SimpleCalc(Calculator):
         Returns:
             Parameter specification dict
         """
-        from ...query import Query
+        from ...query import ndi_query
 
         return {
             "input_parameters": {"answer": 5},
@@ -101,10 +101,10 @@ class SimpleCalc(Calculator):
             "query": [
                 {
                     "name": "document_id",
-                    "query": Query("").isa("base"),
+                    "query": ndi_query("").isa("base"),
                 },
             ],
         }
 
     def __repr__(self) -> str:
-        return f"SimpleCalc(session={self._session is not None})"
+        return f"ndi_calc_example_simple(session={self._session is not None})"

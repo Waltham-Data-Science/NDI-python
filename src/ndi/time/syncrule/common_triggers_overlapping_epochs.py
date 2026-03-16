@@ -1,7 +1,7 @@
 """
 ndi.time.syncrule.commonTriggersOverlappingEpochs - Sync rule for common triggers.
 
-This module provides the CommonTriggersOverlappingEpochs sync rule that
+This module provides the ndi_time_syncrule_commonTriggersOverlappingEpochs sync rule that
 synchronizes two DAQ systems by finding a linear time mapping from shared
 trigger events recorded on overlapping (embedded) epochs.
 
@@ -16,8 +16,8 @@ from typing import Any
 
 import numpy as np
 
-from ..syncrule_base import SyncRule
-from ..timemapping import TimeMapping
+from ..syncrule_base import ndi_time_syncrule
+from ..timemapping import ndi_time_timemapping
 
 
 def _parse_channel(ch_str: str) -> tuple[str, int]:
@@ -85,7 +85,7 @@ def _get_underlying_files(epochnode: dict[str, Any]) -> list[str]:
     return []
 
 
-class CommonTriggersOverlappingEpochs(SyncRule):
+class ndi_time_syncrule_commonTriggersOverlappingEpochs(ndi_time_syncrule):
     """
     Synchronization rule based on common triggers in overlapping embedded epochs.
 
@@ -103,7 +103,7 @@ class CommonTriggersOverlappingEpochs(SyncRule):
         errorOnFailure (bool): If True, raise on failure.
 
     Example:
-        >>> rule = CommonTriggersOverlappingEpochs({
+        >>> rule = ndi_time_syncrule_commonTriggersOverlappingEpochs({
         ...     'daqsystem1_name': 'daq1',
         ...     'daqsystem2_name': 'daq2',
         ...     'daqsystem_ch1': 'dep1',
@@ -168,7 +168,7 @@ class CommonTriggersOverlappingEpochs(SyncRule):
 
     def eligible_epochsets(self) -> list[str]:
         """Return eligible epochset class names."""
-        return ["ndi.daq.system", "DAQSystem"]
+        return ["ndi.daq.system", "ndi_daq_system"]
 
     def ineligible_epochsets(self) -> list[str]:
         """Return ineligible epochset class names."""
@@ -184,7 +184,7 @@ class CommonTriggersOverlappingEpochs(SyncRule):
         epochnode_a: dict[str, Any],
         epochnode_b: dict[str, Any],
         daqsystem_a: Any = None,
-    ) -> tuple[float | None, TimeMapping | None]:
+    ) -> tuple[float | None, ndi_time_timemapping | None]:
         """
         Apply the sync rule to obtain a cost and mapping between two epoch nodes.
 
@@ -249,26 +249,26 @@ class CommonTriggersOverlappingEpochs(SyncRule):
 
         # 2. Check for existing syncrule_mapping in database
         try:
-            from ndi.query import Query
+            from ndi.query import ndi_query
 
             q_existing = (
-                Query("").isa("syncrule_mapping")
-                & Query(
+                ndi_query("").isa("syncrule_mapping")
+                & ndi_query(
                     "syncrule_mapping.epochnode_a.epoch_id",
                     "exact_string",
                     epochnode_a.get("epoch_id", ""),
                 )
-                & Query(
+                & ndi_query(
                     "syncrule_mapping.epochnode_b.epoch_id",
                     "exact_string",
                     epochnode_b.get("epoch_id", ""),
                 )
-                & Query(
+                & ndi_query(
                     "syncrule_mapping.epochnode_a.objectname",
                     "exact_string",
                     name_a,
                 )
-                & Query(
+                & ndi_query(
                     "syncrule_mapping.epochnode_b.objectname",
                     "exact_string",
                     name_b,
@@ -280,7 +280,7 @@ class CommonTriggersOverlappingEpochs(SyncRule):
                 props = doc.document_properties
                 sm = props.get("syncrule_mapping", {})
                 cost = sm.get("cost", 1.0)
-                mapping = TimeMapping(sm.get("mapping", [1, 0]))
+                mapping = ndi_time_timemapping(sm.get("mapping", [1, 0]))
                 return cost, mapping
         except Exception:
             pass  # No cached mapping, compute fresh
@@ -434,10 +434,10 @@ class CommonTriggersOverlappingEpochs(SyncRule):
 
             if node_a_is_1:
                 # T2 = scale * T1 + shift -> map A(1) to B(2)
-                mapping = TimeMapping([scale, shift])
+                mapping = ndi_time_timemapping([scale, shift])
             else:
                 # Want A(2)->B(1): T1 = (T2 - shift)/scale
-                mapping = TimeMapping([1.0 / scale, -shift / scale])
+                mapping = ndi_time_timemapping([1.0 / scale, -shift / scale])
 
             return 1.0, mapping
 

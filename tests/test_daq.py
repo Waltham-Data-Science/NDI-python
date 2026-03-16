@@ -2,11 +2,11 @@
 Tests for ndi.daq module (Phase 5).
 
 Tests cover:
-- DAQReader abstract base class
-- MFDAQReader multi-function DAQ reader
-- DAQSystem complete system
-- MetadataReader metadata reading
-- FileNavigator file navigation
+- ndi_daq_reader abstract base class
+- ndi_daq_reader_mfdaq multi-function DAQ reader
+- ndi_daq_system complete system
+- ndi_daq_metadatareader metadata reading
+- ndi_file_navigator file navigation
 """
 
 import os
@@ -17,31 +17,31 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from ndi.daq.metadatareader import MetadataReader
+from ndi.daq.metadatareader import ndi_daq_metadatareader
 from ndi.daq.mfdaq import (
     ChannelInfo,
     ChannelType,
-    MFDAQReader,
+    ndi_daq_reader_mfdaq,
     standardize_channel_type,
     standardize_channel_types,
 )
-from ndi.daq.reader_base import DAQReader
-from ndi.daq.system import DAQSystem
-from ndi.file.navigator import FileNavigator, find_file_groups
+from ndi.daq.reader_base import ndi_daq_reader
+from ndi.daq.system import ndi_daq_system
+from ndi.file.navigator import find_file_groups, ndi_file_navigator
 from ndi.time import DEV_LOCAL_TIME, NO_TIME
 
 # =============================================================================
-# DAQReader Tests
+# ndi_daq_reader Tests
 # =============================================================================
 
 
 class TestDAQReader:
-    """Tests for DAQReader base class."""
+    """Tests for ndi_daq_reader base class."""
 
     def test_daqreader_creation(self):
-        """Test creating a DAQReader."""
+        """Test creating a ndi_daq_reader."""
 
-        class SimpleReader(DAQReader):
+        class SimpleReader(ndi_daq_reader):
             pass
 
         reader = SimpleReader()
@@ -49,9 +49,9 @@ class TestDAQReader:
         assert len(reader.id) > 0
 
     def test_daqreader_with_identifier(self):
-        """Test creating DAQReader with custom identifier."""
+        """Test creating ndi_daq_reader with custom identifier."""
 
-        class SimpleReader(DAQReader):
+        class SimpleReader(ndi_daq_reader):
             pass
 
         reader = SimpleReader(identifier="test_reader_123")
@@ -60,7 +60,7 @@ class TestDAQReader:
     def test_daqreader_epochclock(self):
         """Test default epochclock returns NO_TIME."""
 
-        class SimpleReader(DAQReader):
+        class SimpleReader(ndi_daq_reader):
             pass
 
         reader = SimpleReader()
@@ -71,7 +71,7 @@ class TestDAQReader:
     def test_daqreader_t0_t1(self):
         """Test default t0_t1 returns NaN."""
 
-        class SimpleReader(DAQReader):
+        class SimpleReader(ndi_daq_reader):
             pass
 
         reader = SimpleReader()
@@ -83,7 +83,7 @@ class TestDAQReader:
     def test_daqreader_verifyepochprobemap(self):
         """Test verifyepochprobemap accepts anything by default."""
 
-        class SimpleReader(DAQReader):
+        class SimpleReader(ndi_daq_reader):
             pass
 
         reader = SimpleReader()
@@ -92,9 +92,9 @@ class TestDAQReader:
         assert msg == ""
 
     def test_daqreader_equality(self):
-        """Test DAQReader equality by ID."""
+        """Test ndi_daq_reader equality by ID."""
 
-        class SimpleReader(DAQReader):
+        class SimpleReader(ndi_daq_reader):
             pass
 
         reader1 = SimpleReader(identifier="abc")
@@ -159,11 +159,11 @@ class TestStandardizeChannelType:
 
 
 # =============================================================================
-# MFDAQReader Tests
+# ndi_daq_reader_mfdaq Tests
 # =============================================================================
 
 
-class ConcreteMFDAQReader(MFDAQReader):
+class ConcreteMFDAQReader(ndi_daq_reader_mfdaq):
     """Concrete implementation for testing."""
 
     def __init__(self, channels=None, **kwargs):
@@ -192,10 +192,10 @@ class ConcreteMFDAQReader(MFDAQReader):
 
 
 class TestMFDAQReader:
-    """Tests for MFDAQReader class."""
+    """Tests for ndi_daq_reader_mfdaq class."""
 
     def test_mfdaq_creation(self):
-        """Test creating MFDAQReader."""
+        """Test creating ndi_daq_reader_mfdaq."""
         channels = [
             ChannelInfo(name="ai1", type="analog_in", number=1, sample_rate=30000),
             ChannelInfo(name="ai2", type="analog_in", number=2, sample_rate=30000),
@@ -204,7 +204,7 @@ class TestMFDAQReader:
         assert reader.id is not None
 
     def test_mfdaq_epochclock(self):
-        """Test MFDAQReader returns DEV_LOCAL_TIME."""
+        """Test ndi_daq_reader_mfdaq returns DEV_LOCAL_TIME."""
         reader = ConcreteMFDAQReader()
         clocks = reader.epochclock(["test.dat"])
         assert len(clocks) == 1
@@ -254,7 +254,7 @@ class TestMFDAQReader:
 
     def test_mfdaq_channel_types(self):
         """Test channel_types static method."""
-        types, abbrevs = MFDAQReader.channel_types()
+        types, abbrevs = ndi_daq_reader_mfdaq.channel_types()
         assert "analog_in" in types
         assert "ai" in abbrevs
         assert len(types) == len(abbrevs)
@@ -269,81 +269,81 @@ class TestMFDAQReader:
 
 
 # =============================================================================
-# DAQSystem Tests
+# ndi_daq_system Tests
 # =============================================================================
 
 
 class TestDAQSystem:
-    """Tests for DAQSystem class."""
+    """Tests for ndi_daq_system class."""
 
     def test_daqsystem_creation(self):
-        """Test creating a DAQSystem."""
-        sys = DAQSystem(name="test_daq")
+        """Test creating a ndi_daq_system."""
+        sys = ndi_daq_system(name="test_daq")
         assert sys.name == "test_daq"
         assert sys.id is not None
 
     def test_daqsystem_with_components(self):
-        """Test creating DAQSystem with components."""
+        """Test creating ndi_daq_system with components."""
         reader = ConcreteMFDAQReader()
-        sys = DAQSystem(name="test_daq", daqreader=reader)
+        sys = ndi_daq_system(name="test_daq", daqreader=reader)
         assert sys.daqreader is reader
 
     def test_daqsystem_invalid_reader(self):
-        """Test DAQSystem rejects invalid reader."""
+        """Test ndi_daq_system rejects invalid reader."""
         with pytest.raises(TypeError):
-            DAQSystem(name="test", daqreader="not a reader")
+            ndi_daq_system(name="test", daqreader="not a reader")
 
     def test_daqsystem_epochclock(self):
-        """Test DAQSystem epochclock returns NO_TIME by default."""
-        sys = DAQSystem()
+        """Test ndi_daq_system epochclock returns NO_TIME by default."""
+        sys = ndi_daq_system()
         clocks = sys.epochclock(1)
         assert len(clocks) == 1
         assert clocks[0] == NO_TIME
 
     def test_daqsystem_set_metadatareaders(self):
         """Test setting metadata readers."""
-        sys = DAQSystem()
-        readers = [MetadataReader(), MetadataReader()]
+        sys = ndi_daq_system()
+        readers = [ndi_daq_metadatareader(), ndi_daq_metadatareader()]
         sys.set_daqmetadatareaders(readers)
         assert len(sys.daqmetadatareaders) == 2
 
     def test_daqsystem_set_invalid_metadatareaders(self):
         """Test setting invalid metadata readers."""
-        sys = DAQSystem()
+        sys = ndi_daq_system()
         with pytest.raises(TypeError):
             sys.set_daqmetadatareaders(["not a reader"])
 
     def test_daqsystem_equality(self):
-        """Test DAQSystem equality."""
-        sys1 = DAQSystem(name="test")
-        sys2 = DAQSystem(name="test")
-        sys3 = DAQSystem(name="other")
+        """Test ndi_daq_system equality."""
+        sys1 = ndi_daq_system(name="test")
+        sys2 = ndi_daq_system(name="test")
+        sys3 = ndi_daq_system(name="other")
 
         assert sys1 == sys2
         assert sys1 != sys3
 
 
 # =============================================================================
-# MetadataReader Tests
+# ndi_daq_metadatareader Tests
 # =============================================================================
 
 
 class TestMetadataReader:
-    """Tests for MetadataReader class."""
+    """Tests for ndi_daq_metadatareader class."""
 
     def test_metadatareader_creation(self):
-        """Test creating a MetadataReader."""
-        reader = MetadataReader()
+        """Test creating a ndi_daq_metadatareader."""
+        reader = ndi_daq_metadatareader()
         assert reader.id is not None
 
     def test_metadatareader_with_pattern(self):
-        """Test creating MetadataReader with pattern."""
-        reader = MetadataReader(tsv_pattern=r"stim.*\.txt")
+        """Test creating ndi_daq_metadatareader with pattern."""
+        reader = ndi_daq_metadatareader(tsv_pattern=r"stim.*\.txt")
         assert reader.tab_separated_file_parameter == r"stim.*\.txt"
 
     def test_metadatareader_readmetadata_no_pattern(self):
         """Test readmetadata with no pattern returns empty."""
-        reader = MetadataReader()
+        reader = ndi_daq_metadatareader()
         result = reader.readmetadata(["file1.dat", "file2.dat"])
         assert result == []
 
@@ -356,7 +356,7 @@ class TestMetadataReader:
             filepath = f.name
 
         try:
-            reader = MetadataReader()
+            reader = ndi_daq_metadatareader()
             params = reader.readmetadatafromfile(filepath)
             assert len(params) == 2
             assert params[0]["stimid"] == 1
@@ -376,27 +376,27 @@ class TestMetadataReader:
             data_file = Path(tmpdir) / "data.bin"
             data_file.write_bytes(b"\x00" * 100)
 
-            reader = MetadataReader(tsv_pattern=r"stim.*\.txt")
+            reader = ndi_daq_metadatareader(tsv_pattern=r"stim.*\.txt")
             params = reader.readmetadata([str(data_file), str(stim_file)])
             assert len(params) == 2
             assert params[0]["stimid"] == 1
 
     def test_metadatareader_equality(self):
-        """Test MetadataReader equality."""
-        r1 = MetadataReader(tsv_pattern=".*\\.txt")
-        r2 = MetadataReader(tsv_pattern=".*\\.txt")
-        r3 = MetadataReader(tsv_pattern=".*\\.csv")
+        """Test ndi_daq_metadatareader equality."""
+        r1 = ndi_daq_metadatareader(tsv_pattern=".*\\.txt")
+        r2 = ndi_daq_metadatareader(tsv_pattern=".*\\.txt")
+        r3 = ndi_daq_metadatareader(tsv_pattern=".*\\.csv")
 
         assert r1 == r2
         assert r1 != r3
 
 
 # =============================================================================
-# FileNavigator Tests
+# ndi_file_navigator Tests
 # =============================================================================
 
 
-class MockSession:
+class ndi_session_mock:
     """Mock session for testing."""
 
     def __init__(self, path):
@@ -415,59 +415,59 @@ class MockSession:
 
 
 class TestFileNavigator:
-    """Tests for FileNavigator class."""
+    """Tests for ndi_file_navigator class."""
 
     def test_filenavigator_creation(self):
-        """Test creating a FileNavigator."""
-        nav = FileNavigator()
+        """Test creating a ndi_file_navigator."""
+        nav = ndi_file_navigator()
         assert nav.id is not None
 
     def test_filenavigator_with_session(self):
-        """Test FileNavigator with session."""
+        """Test ndi_file_navigator with session."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            session = MockSession(tmpdir)
-            nav = FileNavigator(session=session)
+            session = ndi_session_mock(tmpdir)
+            nav = ndi_file_navigator(session=session)
             assert nav.session is session
 
     def test_filenavigator_with_fileparameters(self):
-        """Test FileNavigator with file parameters."""
-        nav = FileNavigator(fileparameters="*.dat")
+        """Test ndi_file_navigator with file parameters."""
+        nav = ndi_file_navigator(fileparameters="*.dat")
         assert nav.fileparameters == {"filematch": ["*.dat"]}
 
     def test_filenavigator_with_list_parameters(self):
-        """Test FileNavigator with list file parameters."""
-        nav = FileNavigator(fileparameters=["*.dat", "*.bin"])
+        """Test ndi_file_navigator with list file parameters."""
+        nav = ndi_file_navigator(fileparameters=["*.dat", "*.bin"])
         assert nav.fileparameters == {"filematch": ["*.dat", "*.bin"]}
 
     def test_filenavigator_setfileparameters(self):
         """Test setting file parameters."""
-        nav = FileNavigator()
+        nav = ndi_file_navigator()
         nav.setfileparameters(["*.rhd", "*.dat"])
         assert nav.fileparameters == {"filematch": ["*.rhd", "*.dat"]}
 
     def test_filenavigator_filematch_hashstring(self):
         """Test filematch hash string generation."""
-        nav = FileNavigator(fileparameters=["*.dat", "*.bin"])
+        nav = ndi_file_navigator(fileparameters=["*.dat", "*.bin"])
         hash1 = nav.filematch_hashstring()
         assert len(hash1) == 32  # MD5 hex digest
 
-        nav2 = FileNavigator(fileparameters=["*.dat", "*.bin"])
+        nav2 = ndi_file_navigator(fileparameters=["*.dat", "*.bin"])
         hash2 = nav2.filematch_hashstring()
         assert hash1 == hash2  # Same patterns = same hash
 
-        nav3 = FileNavigator(fileparameters=["*.rhd"])
+        nav3 = ndi_file_navigator(fileparameters=["*.rhd"])
         hash3 = nav3.filematch_hashstring()
         assert hash1 != hash3  # Different patterns = different hash
 
     def test_filenavigator_isingested(self):
         """Test isingested static method."""
-        assert FileNavigator.isingested(["epochid://abc123", "file.dat"]) is True
-        assert FileNavigator.isingested(["file.dat"]) is False
-        assert FileNavigator.isingested([]) is False
+        assert ndi_file_navigator.isingested(["epochid://abc123", "file.dat"]) is True
+        assert ndi_file_navigator.isingested(["file.dat"]) is False
+        assert ndi_file_navigator.isingested([]) is False
 
     def test_filenavigator_ingestedfiles_epochid(self):
         """Test extracting epoch ID from ingested files."""
-        epochid = FileNavigator.ingestedfiles_epochid(["epochid://abc123", "file.dat"])
+        epochid = ndi_file_navigator.ingestedfiles_epochid(["epochid://abc123", "file.dat"])
         assert epochid == "abc123"
 
     def test_filenavigator_selectfilegroups_disk(self):
@@ -479,8 +479,8 @@ class TestFileNavigator:
             (Path(tmpdir) / "epoch2" / "data.rhd").parent.mkdir(parents=True)
             (Path(tmpdir) / "epoch2" / "data.rhd").touch()
 
-            session = MockSession(tmpdir)
-            nav = FileNavigator(session=session, fileparameters="*.rhd")
+            session = ndi_session_mock(tmpdir)
+            nav = ndi_file_navigator(session=session, fileparameters="*.rhd")
             groups = nav.selectfilegroups_disk()
 
             assert len(groups) == 2
@@ -491,8 +491,8 @@ class TestFileNavigator:
             # Create test file
             (Path(tmpdir) / "data.dat").touch()
 
-            session = MockSession(tmpdir)
-            nav = FileNavigator(session=session, fileparameters="*.dat")
+            session = ndi_session_mock(tmpdir)
+            nav = ndi_file_navigator(session=session, fileparameters="*.dat")
 
             # First call should generate new ID
             epochfiles = [str(Path(tmpdir) / "data.dat")]
@@ -500,10 +500,10 @@ class TestFileNavigator:
             assert epoch_id.startswith("epoch_")
 
     def test_filenavigator_equality(self):
-        """Test FileNavigator equality."""
-        nav1 = FileNavigator(fileparameters="*.dat")
-        nav2 = FileNavigator(fileparameters="*.dat")
-        nav3 = FileNavigator(fileparameters="*.bin")
+        """Test ndi_file_navigator equality."""
+        nav1 = ndi_file_navigator(fileparameters="*.dat")
+        nav2 = ndi_file_navigator(fileparameters="*.dat")
+        nav3 = ndi_file_navigator(fileparameters="*.bin")
 
         assert nav1 == nav2
         assert nav1 != nav3
@@ -589,11 +589,11 @@ class TestDAQIntegration:
             # Create test file
             (Path(tmpdir) / "data.dat").touch()
 
-            session = MockSession(tmpdir)
+            session = ndi_session_mock(tmpdir)
             reader = ConcreteMFDAQReader()
-            nav = FileNavigator(session=session, fileparameters="*.dat")
+            nav = ndi_file_navigator(session=session, fileparameters="*.dat")
 
-            sys = DAQSystem(
+            sys = ndi_daq_system(
                 name="test_system",
                 filenavigator=nav,
                 daqreader=reader,
@@ -611,14 +611,14 @@ class TestDAQIntegration:
             epoch_dir.mkdir()
             (epoch_dir / "recording.dat").touch()
 
-            session = MockSession(tmpdir)
+            session = ndi_session_mock(tmpdir)
 
             channels = [
                 ChannelInfo(name="ai1", type="analog_in", number=1, sample_rate=30000),
                 ChannelInfo(name="ai2", type="analog_in", number=2, sample_rate=30000),
             ]
             reader = ConcreteMFDAQReader(channels=channels)
-            nav = FileNavigator(session=session, fileparameters="*.dat")
+            nav = ndi_file_navigator(session=session, fileparameters="*.dat")
 
             # Get epoch files
             groups = nav.selectfilegroups_disk()
@@ -634,12 +634,12 @@ class TestDAQIntegration:
 
 
 # =============================================================================
-# Ingested Data Tests
+# Ingested ndi_gui_Data Tests
 # =============================================================================
 
 
 class TestIngestedDataMethods:
-    """Tests for ingested data methods in MFDAQReader."""
+    """Tests for ingested data methods in ndi_daq_reader_mfdaq."""
 
     def test_samplerate_ingested_no_session(self):
         """Test samplerate_ingested with mock session."""
@@ -736,16 +736,16 @@ class TestIngestedDataMethods:
 
 
 # =============================================================================
-# DAQSystem deleteepoch Tests
+# ndi_daq_system deleteepoch Tests
 # =============================================================================
 
 
 class TestDAQSystemDeleteEpoch:
-    """Tests for DAQSystem.deleteepoch method."""
+    """Tests for ndi_daq_system.deleteepoch method."""
 
     def test_deleteepoch_no_navigator(self):
         """Test deleteepoch with no file navigator."""
-        sys = DAQSystem(name="test")
+        sys = ndi_daq_system(name="test")
         success, msg = sys.deleteepoch(1)
         assert success is False
         assert "No file navigator" in msg
@@ -753,9 +753,9 @@ class TestDAQSystemDeleteEpoch:
     def test_deleteepoch_out_of_range(self):
         """Test deleteepoch with epoch out of range."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            session = MockSession(tmpdir)
-            nav = FileNavigator(session=session, fileparameters="*.dat")
-            sys = DAQSystem(name="test", filenavigator=nav)
+            session = ndi_session_mock(tmpdir)
+            nav = ndi_file_navigator(session=session, fileparameters="*.dat")
+            sys = ndi_daq_system(name="test", filenavigator=nav)
 
             success, msg = sys.deleteepoch(10)
             assert success is False
@@ -767,13 +767,13 @@ class TestDAQSystemDeleteEpoch:
             # Create test file
             (Path(tmpdir) / "data.dat").touch()
 
-            session = MockSession(tmpdir)
-            nav = FileNavigator(session=session, fileparameters="*.dat")
+            session = ndi_session_mock(tmpdir)
+            nav = ndi_file_navigator(session=session, fileparameters="*.dat")
 
             # Add deleteepoch method to navigator
             nav.deleteepoch = MagicMock()
 
-            sys = DAQSystem(name="test", filenavigator=nav)
+            sys = ndi_daq_system(name="test", filenavigator=nav)
 
             success, msg = sys.deleteepoch(1)
             assert success is True

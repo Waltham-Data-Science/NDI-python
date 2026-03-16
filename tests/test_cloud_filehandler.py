@@ -312,20 +312,20 @@ class TestGetOrCreateCloudClient:
 
 
 class TestTryCloudFetch:
-    """Tests for Session._try_cloud_fetch with mocked cloud calls."""
+    """Tests for ndi_session._try_cloud_fetch with mocked cloud calls."""
 
     def _make_session_with_doc(self, tmp_path, file_info):
-        """Create a DirSession with a document containing given file_info."""
-        from ndi.session.dir import DirSession
+        """Create a ndi_session_dir with a document containing given file_info."""
+        from ndi.session.dir import ndi_session_dir
 
         session_dir = tmp_path / "session"
         session_dir.mkdir()
-        session = DirSession("test_session", session_dir)
+        session = ndi_session_dir("test_session", session_dir)
 
         # Create and add a document with file_info
-        from ndi.document import Document
+        from ndi.document import ndi_document
 
-        doc = Document("base")
+        doc = ndi_document("base")
         doc = doc.set_session_id(session.id())
 
         # Inject file_info into the document properties
@@ -482,9 +482,9 @@ class TestRewriteWithRealDocs:
         )
 
         # Find documents with file_info and verify ndic:// URIs
-        from ndi.query import Query
+        from ndi.query import ndi_query
 
-        all_docs = dataset.database_search(Query("").isa("base"))
+        all_docs = dataset.database_search(ndi_query("").isa("base"))
         ndic_count = 0
         for doc in all_docs:
             props = doc.document_properties

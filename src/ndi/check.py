@@ -49,9 +49,9 @@ def run_checks() -> tuple[list[tuple[str, bool, str]], int, int]:
 
     # ndi_common data folder
     try:
-        from ndi.common import PathConstants
+        from ndi.common import ndi_common_PathConstants
 
-        folder = PathConstants.COMMON_FOLDER
+        folder = ndi_common_PathConstants.COMMON_FOLDER
         if folder.is_dir():
             check("ndi_common data folder", True, str(folder))
         else:
@@ -93,15 +93,15 @@ def run_checks() -> tuple[list[tuple[str, bool, str]], int, int]:
 
     # Smoke test
     try:
-        from ndi.document import Document
+        from ndi.document import ndi_document
 
-        doc = Document("base")
+        doc = ndi_document("base")
         if doc.id:
-            check("Smoke test: Document('base')", True, f"id={doc.id[:12]}...")
+            check("Smoke test: ndi_document('base')", True, f"id={doc.id[:12]}...")
         else:
-            check("Smoke test: Document('base')", False, "created but has no ID")
+            check("Smoke test: ndi_document('base')", False, "created but has no ID")
     except Exception as e:
-        check("Smoke test: Document('base')", False, str(e))
+        check("Smoke test: ndi_document('base')", False, str(e))
 
     return results, passed, total
 

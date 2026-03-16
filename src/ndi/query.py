@@ -1,7 +1,7 @@
 """
 ndi.query - search an ndi.database for ndi.documents
 
-Query objects define searches for ndi.documents; they are passed to the
+ndi_query objects define searches for ndi.documents; they are passed to the
 ndi.database.search() function.
 
 Inherits from did.query.Query, using search_structure as the single
@@ -9,13 +9,13 @@ source of truth. Provides both Pythonic query construction (via
 operators) and MATLAB-compatible construction (via operation strings).
 
 Pythonic examples:
-    q = Query('element.name') == 'electrode1'
-    q = (Query('element.type') == 'probe') & (Query('element.name').contains('elec'))
+    q = ndi_query('element.name') == 'electrode1'
+    q = (ndi_query('element.type') == 'probe') & (ndi_query('element.name').contains('elec'))
 
 MATLAB-compatible examples:
-    q = Query('', 'isa', 'base')
-    q = Query('base.name', 'exact_string', 'test')
-    q = Query.from_search('ndi_document_property.name', 'regexp', '(.*)')
+    q = ndi_query('', 'isa', 'base')
+    q = ndi_query('base.name', 'exact_string', 'test')
+    q = ndi_query.from_search('ndi_document_property.name', 'regexp', '(.*)')
 """
 
 from typing import Any
@@ -27,37 +27,37 @@ import did.query
 #
 # In MATLAB ``ndi.query`` is a *class*, so ``ndi.query.all()`` reaches a
 # static method directly.  In Python ``ndi.query`` is a *module* that
-# contains the ``Query`` class.  Expose the most common factory methods at
+# contains the ``ndi_query`` class.  Expose the most common factory methods at
 # module level so callers can write ``ndi.query.all()`` exactly as in
 # MATLAB.
 # ---------------------------------------------------------------------------
 
 
-def all() -> "Query":
+def all() -> "ndi_query":
     """Return a query that matches all documents.
 
     Convenience wrapper so ``ndi.query.all()`` works like MATLAB.
     """
-    return Query.all()
+    return ndi_query.all()
 
 
-def none() -> "Query":
+def none() -> "ndi_query":
     """Return a query that matches no documents.
 
     Convenience wrapper so ``ndi.query.none()`` works like MATLAB.
     """
-    return Query.none()
+    return ndi_query.none()
 
 
-def from_search(field: str, operation: str, param1: Any = "", param2: Any = "") -> "Query":
+def from_search(field: str, operation: str, param1: Any = "", param2: Any = "") -> "ndi_query":
     """Create a query using MATLAB-style parameters.
 
     Convenience wrapper so ``ndi.query.from_search(...)`` works like MATLAB.
     """
-    return Query.from_search(field, operation, param1, param2)
+    return ndi_query.from_search(field, operation, param1, param2)
 
 
-class Query(did.query.Query):
+class ndi_query(did.query.Query):
     """NDI query class for searching documents.
 
     Inherits from did.query.Query, using ``search_structure`` as the
@@ -68,14 +68,14 @@ class Query(did.query.Query):
 
     1. Pythonic (recommended)::
 
-        q = Query('field') == 'value'
-        q = Query('field').contains('substring')
+        q = ndi_query('field') == 'value'
+        q = ndi_query('field').contains('substring')
 
     2. MATLAB-compatible::
 
-        q = Query('', 'isa', 'base')
-        q = Query('base.name', 'exact_string', 'test')
-        q = Query.from_search('field', 'exact_string', 'value')
+        q = ndi_query('', 'isa', 'base')
+        q = ndi_query('base.name', 'exact_string', 'test')
+        q = ndi_query.from_search('field', 'exact_string', 'value')
 
     Attributes:
         field (str): The field being queried (computed from search_structure).
@@ -128,12 +128,12 @@ class Query(did.query.Query):
 
         Pythonic (chain operators after construction)::
 
-            q = Query('base.name') == 'test'
+            q = ndi_query('base.name') == 'test'
 
         MATLAB-compatible (pass operation and params directly)::
 
-            q = Query('', 'isa', 'base')
-            q = Query('base.name', 'exact_string', 'test')
+            q = ndi_query('', 'isa', 'base')
+            q = ndi_query('base.name', 'exact_string', 'test')
 
         Args:
             field: The document field to query (e.g., 'base.name',
@@ -208,7 +208,7 @@ class Query(did.query.Query):
         return None
 
     @property
-    def queries(self) -> list["Query"]:
+    def queries(self) -> list["ndi_query"]:
         """Get the list of sub-queries for composite queries."""
         return self._queries
 
@@ -216,7 +216,7 @@ class Query(did.query.Query):
     # Internal
     # ------------------------------------------------------------------
 
-    def _resolve(self, py_op: str, value: Any) -> "Query":
+    def _resolve(self, py_op: str, value: Any) -> "ndi_query":
         """Set the query condition by building a DID search_structure entry."""
         if self._resolved:
             raise ValueError("This query has already been resolved")
@@ -250,39 +250,39 @@ class Query(did.query.Query):
     # Pythonic operators
     # ------------------------------------------------------------------
 
-    def __eq__(self, other: Any) -> "Query":
+    def __eq__(self, other: Any) -> "ndi_query":
         """Equality comparison."""
-        if isinstance(other, Query):
+        if isinstance(other, ndi_query):
             return NotImplemented
         return self._resolve("==", other)
 
-    def __ne__(self, other: Any) -> "Query":
+    def __ne__(self, other: Any) -> "ndi_query":
         """Inequality comparison."""
-        if isinstance(other, Query):
+        if isinstance(other, ndi_query):
             return NotImplemented
         return self._resolve("!=", other)
 
-    def __lt__(self, other: Any) -> "Query":
+    def __lt__(self, other: Any) -> "ndi_query":
         """Less than comparison."""
         return self._resolve("<", other)
 
-    def __le__(self, other: Any) -> "Query":
+    def __le__(self, other: Any) -> "ndi_query":
         """Less than or equal comparison."""
         return self._resolve("<=", other)
 
-    def __gt__(self, other: Any) -> "Query":
+    def __gt__(self, other: Any) -> "ndi_query":
         """Greater than comparison."""
         return self._resolve(">", other)
 
-    def __ge__(self, other: Any) -> "Query":
+    def __ge__(self, other: Any) -> "ndi_query":
         """Greater than or equal comparison."""
         return self._resolve(">=", other)
 
-    def __and__(self, other: "Query") -> "Query":
+    def __and__(self, other: "ndi_query") -> "ndi_query":
         """Combine queries with AND (list concatenation of search_structures)."""
-        if not isinstance(other, Query):
+        if not isinstance(other, ndi_query):
             return NotImplemented
-        q = Query()
+        q = ndi_query()
         q.search_structure = self.search_structure + other.search_structure
         q._resolved = True
         q._composite = True
@@ -290,11 +290,11 @@ class Query(did.query.Query):
         q._queries = [self, other]
         return q
 
-    def __or__(self, other: "Query") -> "Query":
+    def __or__(self, other: "ndi_query") -> "ndi_query":
         """Combine queries with OR (nested 'or' operation)."""
-        if not isinstance(other, Query):
+        if not isinstance(other, ndi_query):
             return NotImplemented
-        q = Query()
+        q = ndi_query()
         q.search_structure = [
             {
                 "field": "",
@@ -309,11 +309,11 @@ class Query(did.query.Query):
         q._queries = [self, other]
         return q
 
-    def __invert__(self) -> "Query":
+    def __invert__(self) -> "ndi_query":
         """Negate a query."""
         if not self._resolved:
             raise ValueError("Cannot negate an unresolved query")
-        q = Query()
+        q = ndi_query()
         q._pending_field = self._pending_field
         q._resolved = True
         q._composite = self._composite
@@ -335,36 +335,36 @@ class Query(did.query.Query):
     # String methods
     # ------------------------------------------------------------------
 
-    def contains(self, value: str) -> "Query":
+    def contains(self, value: str) -> "ndi_query":
         """Check if field contains substring.
 
         Args:
             value: The substring to search for.
 
         Returns:
-            Resolved Query object.
+            Resolved ndi_query object.
         """
         return self._resolve("contains", value)
 
-    def match(self, pattern: str) -> "Query":
+    def match(self, pattern: str) -> "ndi_query":
         """Match field against regex pattern.
 
         Args:
             pattern: Regular expression pattern.
 
         Returns:
-            Resolved Query object.
+            Resolved ndi_query object.
         """
         return self._resolve("match", pattern)
 
-    def equals(self, value: Any) -> "Query":
+    def equals(self, value: Any) -> "ndi_query":
         """Exact equality check.
 
         Args:
             value: The value to compare.
 
         Returns:
-            Resolved Query object.
+            Resolved ndi_query object.
         """
         return self._resolve("==", value)
 
@@ -372,19 +372,19 @@ class Query(did.query.Query):
     # Comparison methods (for explicit calls)
     # ------------------------------------------------------------------
 
-    def less_than(self, value: Any) -> "Query":
+    def less_than(self, value: Any) -> "ndi_query":
         """Check if field is less than value."""
         return self._resolve("<", value)
 
-    def less_than_or_equal_to(self, value: Any) -> "Query":
+    def less_than_or_equal_to(self, value: Any) -> "ndi_query":
         """Check if field is less than or equal to value."""
         return self._resolve("<=", value)
 
-    def greater_than(self, value: Any) -> "Query":
+    def greater_than(self, value: Any) -> "ndi_query":
         """Check if field is greater than value."""
         return self._resolve(">", value)
 
-    def greater_than_or_equal_to(self, value: Any) -> "Query":
+    def greater_than_or_equal_to(self, value: Any) -> "ndi_query":
         """Check if field is greater than or equal to value."""
         return self._resolve(">=", value)
 
@@ -392,22 +392,22 @@ class Query(did.query.Query):
     # Field existence
     # ------------------------------------------------------------------
 
-    def has_field(self) -> "Query":
+    def has_field(self) -> "ndi_query":
         """Check if the field exists in the document.
 
         Returns:
-            Resolved Query object.
+            Resolved ndi_query object.
         """
         return self._resolve("hasfield", True)
 
-    def has_member(self, value: Any) -> "Query":
+    def has_member(self, value: Any) -> "ndi_query":
         """Check if field (array) contains a specific member.
 
         Args:
             value: The value to look for in the array.
 
         Returns:
-            Resolved Query object.
+            Resolved ndi_query object.
         """
         return self._resolve("hasmember", value)
 
@@ -415,18 +415,18 @@ class Query(did.query.Query):
     # NDI-specific queries
     # ------------------------------------------------------------------
 
-    def isa(self, document_class: str) -> "Query":
+    def isa(self, document_class: str) -> "ndi_query":
         """Check if document is of a specific class or inherits from it.
 
         Args:
             document_class: The document class name to check against.
 
         Returns:
-            Resolved Query object.
+            Resolved ndi_query object.
         """
         return self._resolve("isa", document_class)
 
-    def depends_on(self, name: str, value: str = "") -> "Query":
+    def depends_on(self, name: str, value: str = "") -> "ndi_query":
         """Check if document depends on another document.
 
         Args:
@@ -434,7 +434,7 @@ class Query(did.query.Query):
             value: The dependency value (document ID).
 
         Returns:
-            Resolved Query object.
+            Resolved ndi_query object.
         """
         return self._resolve("depends_on", (name, value))
 
@@ -443,23 +443,25 @@ class Query(did.query.Query):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def all() -> "Query":
+    def all() -> "ndi_query":
         """Return a query that matches all documents.
 
         Returns:
-            Query that matches any document with class 'base' or its subclasses.
+            ndi_query that matches any document with class 'base' or its subclasses.
         """
-        q = Query("")
+        q = ndi_query("")
         return q.isa("base")
 
     @staticmethod
-    def none() -> "Query":
+    def none() -> "ndi_query":
         """Return a query that matches no documents."""
-        q = Query("")
+        q = ndi_query("")
         return q.isa("_impossible_class_name_that_will_never_exist_")
 
     @classmethod
-    def from_search(cls, field: str, operation: str, param1: Any = "", param2: Any = "") -> "Query":
+    def from_search(
+        cls, field: str, operation: str, param1: Any = "", param2: Any = ""
+    ) -> "ndi_query":
         """Create a query using MATLAB-style parameters.
 
         This provides compatibility with MATLAB ndi.query construction.
@@ -479,18 +481,18 @@ class Query(did.query.Query):
                 - 'greaterthaneq': Field >= param1
                 - 'hasfield': Field exists (param1 ignored)
                 - 'hasmember': Field array contains param1
-                - 'isa': Document is or inherits from class param1
-                - 'depends_on': Document depends on doc with ID param1
+                - 'isa': ndi_document is or inherits from class param1
+                - 'depends_on': ndi_document depends on doc with ID param1
                 - Prefix with '~' to negate (e.g., '~exact_string')
             param1: First parameter (meaning depends on operation).
             param2: Second parameter (used by some operations).
 
         Returns:
-            Resolved Query object.
+            Resolved ndi_query object.
 
         Example:
-            q = Query.from_search('base.name', 'exact_string', 'my_document')
-            q = Query.from_search('', 'isa', 'element')
+            q = ndi_query.from_search('base.name', 'exact_string', 'my_document')
+            q = ndi_query.from_search('', 'isa', 'element')
         """
         # Translate Python-style aliases to DID ops
         _ALIAS = {"==": "exact_string", "notequal": "~exact_string"}
@@ -515,7 +517,7 @@ class Query(did.query.Query):
             or for composite queries: 'operation' and 'search' list.
 
         Example:
-            q = Query('base.name') == 'test'
+            q = ndi_query('base.name') == 'test'
             ss = q.to_searchstructure()
             # {'field': 'base.name', 'operation': '==', 'param1': 'test', 'param2': ''}
         """
@@ -570,12 +572,12 @@ class Query(did.query.Query):
         return len(self._queries)
 
     def __bool__(self) -> bool:
-        """Query is truthy if it has been resolved."""
+        """ndi_query is truthy if it has been resolved."""
         return self._resolved
 
     def __repr__(self) -> str:
         if self._composite:
-            return f"Query({self._composite_op}: {self._queries})"
+            return f"ndi_query({self._composite_op}: {self._queries})"
         if self._resolved:
-            return f"Query('{self.field}' {self.operator} {self.value!r})"
-        return f"Query('{self.field}')"
+            return f"ndi_query('{self.field}' {self.operator} {self.value!r})"
+        return f"ndi_query('{self.field}')"

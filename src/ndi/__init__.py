@@ -1,29 +1,29 @@
 """
-NDI - Neuroscience Data Interface
+NDI - Neuroscience ndi_gui_Data Interface
 
 Python implementation of NDI for managing neuroscience experimental data.
 
 This package provides:
-- Document management with JSON schemas
-- Database operations for storing and querying documents
+- ndi_document management with JSON schemas
+- ndi_database operations for storing and querying documents
 - Time synchronization across data sources
-- Data acquisition system abstraction
+- ndi_gui_Data acquisition system abstraction
 
 Example:
-    from ndi import Document, Query, Ido, Database
+    from ndi import ndi_document, ndi_query, ndi_ido, ndi_database
 
     # Create a new document
-    doc = Document('base', **{'base.name': 'my_experiment'})
+    doc = ndi_document('base', **{'base.name': 'my_experiment'})
 
     # Create a query
-    q = Query('base.name') == 'my_experiment'
+    q = ndi_query('base.name') == 'my_experiment'
 
     # Generate unique IDs
-    ido = Ido()
+    ido = ndi_ido()
     print(ido.id)
 
     # Open a database
-    db = Database('/path/to/session')
+    db = ndi_database('/path/to/session')
     db.add(doc)
 """
 
@@ -34,31 +34,31 @@ Example:
 # Import Phase 11: Schema validation
 from . import calc, cloud, common, daq, epoch, file, session, time, util, validate, validators
 
-# Import Phase 9: App framework and calculators
-from .app import App
-from .app.appdoc import AppDoc, DocExistsAction
+# Import Phase 9: ndi_app framework and calculators
+from .app import ndi_app
+from .app.appdoc import DocExistsAction, ndi_app_appdoc
 
 # Import session and cache modules (Phase 7)
-from .cache import Cache
-from .calculator import Calculator
-from .common import PathConstants, getLogger, timestamp
-from .database import Database, open_database
-from .dataset import Dataset, DatasetDir
-from .document import Document
-from .documentservice import DocumentService
-from .element import Element
-from .element_timeseries import ElementTimeseries
-from .ido import Ido
-from .neuron import Neuron
-from .probe import Probe
-from .query import Query
-from .session import DirSession, Session, empty_id
+from .cache import ndi_cache
+from .calculator import ndi_calculator
+from .common import getLogger, ndi_common_PathConstants, timestamp
+from .database import ndi_database, open_database
+from .dataset import ndi_dataset, ndi_dataset_dir
+from .document import ndi_document
+from .documentservice import ndi_documentservice
+from .element import ndi_element
+from .element_timeseries import ndi_element_timeseries
+from .ido import ndi_ido
+from .neuron import ndi_neuron
+from .probe import ndi_probe
+from .query import ndi_query
+from .session import empty_id, ndi_session, ndi_session_dir
 
 # Import Phase 8 classes
-from .subject import Subject
+from .subject import ndi_subject
 
 __version__ = "0.1.0"
-__author__ = "VH-Lab"
+__author__ = "VH-ndi_gui_Lab"
 
 
 def version() -> tuple:
@@ -74,7 +74,7 @@ def version() -> tuple:
     import subprocess
     from pathlib import Path as _Path
 
-    url = "https://github.com/Waltham-Data-Science/NDI-python"
+    url = "https://github.com/Waltham-ndi_gui_Data-Science/NDI-python"
     # Try git describe from the repo root
     repo = _Path(__file__).resolve().parent.parent.parent
     try:
@@ -93,35 +93,35 @@ def version() -> tuple:
 
 
 __all__ = [
-    "Ido",
-    "Query",
-    "Document",
-    "Database",
+    "ndi_ido",
+    "ndi_query",
+    "ndi_document",
+    "ndi_database",
     "open_database",
-    "PathConstants",
+    "ndi_common_PathConstants",
     "timestamp",
     "getLogger",
     "time",
     "daq",
     "file",
     "epoch",
-    "Element",
-    "Probe",
-    "DocumentService",
-    "Cache",
+    "ndi_element",
+    "ndi_probe",
+    "ndi_documentservice",
+    "ndi_cache",
     "session",
-    "Session",
-    "DirSession",
+    "ndi_session",
+    "ndi_session_dir",
     "empty_id",
-    "Subject",
-    "ElementTimeseries",
-    "Neuron",
-    "Dataset",
-    "DatasetDir",
-    "App",
-    "AppDoc",
+    "ndi_subject",
+    "ndi_element_timeseries",
+    "ndi_neuron",
+    "ndi_dataset",
+    "ndi_dataset_dir",
+    "ndi_app",
+    "ndi_app_appdoc",
     "DocExistsAction",
-    "Calculator",
+    "ndi_calculator",
     "calc",
     "cloud",
     "util",

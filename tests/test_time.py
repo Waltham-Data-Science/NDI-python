@@ -6,17 +6,17 @@ import numpy as np
 import pytest
 
 from ndi.time import (
-    ClockType,
-    EpochNode,
-    SyncGraph,
-    TimeMapping,
-    TimeReference,
+    ndi_time_clocktype,
+    ndi_time_epochnode,
+    ndi_time_syncgraph,
+    ndi_time_timemapping,
+    ndi_time_timereference,
 )
-from ndi.time.syncrule import FileFind, FileMatch
+from ndi.time.syncrule import ndi_time_syncrule_filefind, ndi_time_syncrule_filematch
 
 
 class TestClockType:
-    """Tests for ClockType enum."""
+    """Tests for ndi_time_clocktype enum."""
 
     def test_all_clock_types_exist(self):
         """Test that all 9 clock types are defined."""
@@ -31,94 +31,94 @@ class TestClockType:
             "no_time",
             "inherited",
         ]
-        actual = [ct.value for ct in ClockType]
+        actual = [ct.value for ct in ndi_time_clocktype]
         assert sorted(actual) == sorted(expected)
 
     def test_from_string(self):
-        """Test creating ClockType from string."""
-        assert ClockType.from_string("utc") == ClockType.UTC
-        assert ClockType.from_string("UTC") == ClockType.UTC
-        assert ClockType.from_string("dev_local_time") == ClockType.DEV_LOCAL_TIME
+        """Test creating ndi_time_clocktype from string."""
+        assert ndi_time_clocktype.from_string("utc") == ndi_time_clocktype.UTC
+        assert ndi_time_clocktype.from_string("UTC") == ndi_time_clocktype.UTC
+        assert ndi_time_clocktype.from_string("dev_local_time") == ndi_time_clocktype.DEV_LOCAL_TIME
 
     def test_from_string_invalid(self):
         """Test that invalid string raises ValueError."""
         with pytest.raises(ValueError):
-            ClockType.from_string("invalid_clock")
+            ndi_time_clocktype.from_string("invalid_clock")
 
     def test_str(self):
         """Test string conversion."""
-        assert str(ClockType.UTC) == "utc"
-        assert str(ClockType.DEV_LOCAL_TIME) == "dev_local_time"
+        assert str(ndi_time_clocktype.UTC) == "utc"
+        assert str(ndi_time_clocktype.DEV_LOCAL_TIME) == "dev_local_time"
 
     def test_needs_epoch(self):
         """Test needs_epoch method."""
-        assert ClockType.DEV_LOCAL_TIME.needs_epoch()
-        assert not ClockType.UTC.needs_epoch()
-        assert not ClockType.EXP_GLOBAL_TIME.needs_epoch()
+        assert ndi_time_clocktype.DEV_LOCAL_TIME.needs_epoch()
+        assert not ndi_time_clocktype.UTC.needs_epoch()
+        assert not ndi_time_clocktype.EXP_GLOBAL_TIME.needs_epoch()
 
     def test_is_global(self):
         """Test is_global method."""
-        assert ClockType.UTC.is_global()
-        assert ClockType.APPROX_UTC.is_global()
-        assert ClockType.EXP_GLOBAL_TIME.is_global()
-        assert not ClockType.DEV_LOCAL_TIME.is_global()
-        assert not ClockType.NO_TIME.is_global()
+        assert ndi_time_clocktype.UTC.is_global()
+        assert ndi_time_clocktype.APPROX_UTC.is_global()
+        assert ndi_time_clocktype.EXP_GLOBAL_TIME.is_global()
+        assert not ndi_time_clocktype.DEV_LOCAL_TIME.is_global()
+        assert not ndi_time_clocktype.NO_TIME.is_global()
 
     def test_assert_global(self):
         """Test assert_global static method."""
         # Should not raise
-        ClockType.assert_global(ClockType.UTC)
-        ClockType.assert_global(ClockType.EXP_GLOBAL_TIME)
+        ndi_time_clocktype.assert_global(ndi_time_clocktype.UTC)
+        ndi_time_clocktype.assert_global(ndi_time_clocktype.EXP_GLOBAL_TIME)
 
         # Should raise
         with pytest.raises(AssertionError):
-            ClockType.assert_global(ClockType.DEV_LOCAL_TIME)
+            ndi_time_clocktype.assert_global(ndi_time_clocktype.DEV_LOCAL_TIME)
         with pytest.raises(AssertionError):
-            ClockType.assert_global(ClockType.NO_TIME)
+            ndi_time_clocktype.assert_global(ndi_time_clocktype.NO_TIME)
 
     def test_epochgraph_edge_utc_to_utc(self):
         """Test epochgraph_edge for utc->utc transition."""
-        cost, mapping = ClockType.UTC.epochgraph_edge(ClockType.UTC)
+        cost, mapping = ndi_time_clocktype.UTC.epochgraph_edge(ndi_time_clocktype.UTC)
         assert cost == 100.0
         assert mapping is not None
         assert mapping.map(5.0) == 5.0  # Identity mapping
 
     def test_epochgraph_edge_utc_to_approx_utc(self):
         """Test epochgraph_edge for utc->approx_utc transition."""
-        cost, mapping = ClockType.UTC.epochgraph_edge(ClockType.APPROX_UTC)
+        cost, mapping = ndi_time_clocktype.UTC.epochgraph_edge(ndi_time_clocktype.APPROX_UTC)
         assert cost == 100.0
         assert mapping is not None
 
     def test_epochgraph_edge_no_time(self):
         """Test epochgraph_edge with no_time."""
-        cost, mapping = ClockType.NO_TIME.epochgraph_edge(ClockType.UTC)
+        cost, mapping = ndi_time_clocktype.NO_TIME.epochgraph_edge(ndi_time_clocktype.UTC)
         assert cost == float("inf")
         assert mapping is None
 
-        cost, mapping = ClockType.UTC.epochgraph_edge(ClockType.NO_TIME)
+        cost, mapping = ndi_time_clocktype.UTC.epochgraph_edge(ndi_time_clocktype.NO_TIME)
         assert cost == float("inf")
         assert mapping is None
 
     def test_epochgraph_edge_no_transition(self):
         """Test epochgraph_edge for invalid transition."""
-        cost, mapping = ClockType.DEV_LOCAL_TIME.epochgraph_edge(ClockType.UTC)
+        cost, mapping = ndi_time_clocktype.DEV_LOCAL_TIME.epochgraph_edge(ndi_time_clocktype.UTC)
         assert cost == float("inf")
         assert mapping is None
 
 
 class TestTimeMapping:
-    """Tests for TimeMapping class."""
+    """Tests for ndi_time_timemapping class."""
 
     def test_default_mapping(self):
         """Test default identity mapping."""
-        tm = TimeMapping()
+        tm = ndi_time_timemapping()
         assert tm.scale == 1.0
         assert tm.shift == 0.0
         assert tm.map(5.0) == 5.0
 
     def test_linear_mapping(self):
         """Test linear mapping t_out = 2*t_in + 10."""
-        tm = TimeMapping([2.0, 10.0])
+        tm = ndi_time_timemapping([2.0, 10.0])
         assert tm.scale == 2.0
         assert tm.shift == 10.0
         assert tm.map(5.0) == 20.0
@@ -126,46 +126,46 @@ class TestTimeMapping:
 
     def test_identity_classmethod(self):
         """Test identity classmethod."""
-        tm = TimeMapping.identity()
+        tm = ndi_time_timemapping.identity()
         assert tm.scale == 1.0
         assert tm.shift == 0.0
         assert tm.map(100.0) == 100.0
 
     def test_linear_classmethod(self):
         """Test linear classmethod."""
-        tm = TimeMapping.linear(scale=3.0, shift=-5.0)
+        tm = ndi_time_timemapping.linear(scale=3.0, shift=-5.0)
         assert tm.map(0.0) == -5.0
         assert tm.map(2.0) == 1.0
 
     def test_callable(self):
         """Test calling mapping directly."""
-        tm = TimeMapping([2.0, 1.0])
+        tm = ndi_time_timemapping([2.0, 1.0])
         assert tm(5.0) == 11.0
 
     def test_array_input(self):
         """Test with numpy array input."""
-        tm = TimeMapping([2.0, 1.0])
+        tm = ndi_time_timemapping([2.0, 1.0])
         t_in = np.array([1.0, 2.0, 3.0])
         t_out = tm.map(t_in)
         np.testing.assert_array_equal(t_out, np.array([3.0, 5.0, 7.0]))
 
     def test_inverse(self):
         """Test inverse mapping."""
-        tm = TimeMapping([2.0, 10.0])
+        tm = ndi_time_timemapping([2.0, 10.0])
         inv = tm.inverse()
         assert inv.map(20.0) == pytest.approx(5.0)
         assert inv.map(10.0) == pytest.approx(0.0)
 
     def test_inverse_zero_scale(self):
         """Test inverse with zero scale raises error."""
-        tm = TimeMapping([0.0, 10.0])
+        tm = ndi_time_timemapping([0.0, 10.0])
         with pytest.raises(ValueError):
             tm.inverse()
 
     def test_compose(self):
         """Test composing two mappings."""
-        tm1 = TimeMapping([2.0, 1.0])  # t1 = 2*t0 + 1
-        tm2 = TimeMapping([3.0, 4.0])  # t2 = 3*t1 + 4
+        tm1 = ndi_time_timemapping([2.0, 1.0])  # t1 = 2*t0 + 1
+        tm2 = ndi_time_timemapping([3.0, 4.0])  # t2 = 3*t1 + 4
         composed = tm1.compose(tm2)
 
         # t2 = 3*(2*t0 + 1) + 4 = 6*t0 + 7
@@ -175,35 +175,35 @@ class TestTimeMapping:
 
     def test_equality(self):
         """Test equality comparison."""
-        tm1 = TimeMapping([2.0, 1.0])
-        tm2 = TimeMapping([2.0, 1.0])
-        tm3 = TimeMapping([3.0, 1.0])
+        tm1 = ndi_time_timemapping([2.0, 1.0])
+        tm2 = ndi_time_timemapping([2.0, 1.0])
+        tm3 = ndi_time_timemapping([3.0, 1.0])
 
         assert tm1 == tm2
         assert tm1 != tm3
 
     def test_to_dict_from_dict(self):
         """Test serialization."""
-        tm = TimeMapping([2.5, -3.0])
+        tm = ndi_time_timemapping([2.5, -3.0])
         d = tm.to_dict()
-        tm2 = TimeMapping.from_dict(d)
+        tm2 = ndi_time_timemapping.from_dict(d)
         assert tm == tm2
 
 
 class TestTimeReference:
-    """Tests for TimeReference class."""
+    """Tests for ndi_time_timereference class."""
 
     @pytest.fixture
     def mock_referent(self):
         """Create a mock referent object."""
 
-        class MockSession:
+        class ndi_session_mock:
             def id(self):
                 return "session_123"
 
         class MockReferent:
             def __init__(self):
-                self.session = MockSession()
+                self.session = ndi_session_mock()
                 self.name = "test_daq"
 
             def epochsetname(self):
@@ -213,8 +213,10 @@ class TestTimeReference:
 
     def test_create_utc_reference(self, mock_referent):
         """Test creating a UTC time reference."""
-        tr = TimeReference(referent=mock_referent, clocktype=ClockType.UTC, time=1234567890.0)
-        assert tr.clocktype == ClockType.UTC
+        tr = ndi_time_timereference(
+            referent=mock_referent, clocktype=ndi_time_clocktype.UTC, time=1234567890.0
+        )
+        assert tr.clocktype == ndi_time_clocktype.UTC
         assert tr.time == 1234567890.0
         assert tr.epoch is None
         assert tr.session_id == "session_123"
@@ -222,26 +224,31 @@ class TestTimeReference:
     def test_create_local_reference_requires_epoch(self, mock_referent):
         """Test that DEV_LOCAL_TIME requires epoch."""
         with pytest.raises(ValueError):
-            TimeReference(referent=mock_referent, clocktype=ClockType.DEV_LOCAL_TIME, time=0.5)
+            ndi_time_timereference(
+                referent=mock_referent, clocktype=ndi_time_clocktype.DEV_LOCAL_TIME, time=0.5
+            )
 
     def test_create_local_reference_with_epoch(self, mock_referent):
         """Test creating a local time reference with epoch."""
-        tr = TimeReference(
-            referent=mock_referent, clocktype=ClockType.DEV_LOCAL_TIME, epoch="epoch_001", time=0.5
+        tr = ndi_time_timereference(
+            referent=mock_referent,
+            clocktype=ndi_time_clocktype.DEV_LOCAL_TIME,
+            epoch="epoch_001",
+            time=0.5,
         )
-        assert tr.clocktype == ClockType.DEV_LOCAL_TIME
+        assert tr.clocktype == ndi_time_clocktype.DEV_LOCAL_TIME
         assert tr.epoch == "epoch_001"
         assert tr.time == 0.5
 
     def test_clocktype_from_string(self, mock_referent):
         """Test creating with string clocktype."""
-        tr = TimeReference(referent=mock_referent, clocktype="utc", time=100.0)
-        assert tr.clocktype == ClockType.UTC
+        tr = ndi_time_timereference(referent=mock_referent, clocktype="utc", time=100.0)
+        assert tr.clocktype == ndi_time_clocktype.UTC
 
     def test_to_struct(self, mock_referent):
         """Test converting to struct."""
-        tr = TimeReference(
-            referent=mock_referent, clocktype=ClockType.UTC, epoch="epoch_001", time=100.0
+        tr = ndi_time_timereference(
+            referent=mock_referent, clocktype=ndi_time_clocktype.UTC, epoch="epoch_001", time=100.0
         )
         struct = tr.to_struct()
         assert struct.referent_epochsetname == "test_daq"
@@ -251,33 +258,35 @@ class TestTimeReference:
 
     def test_to_dict(self, mock_referent):
         """Test converting to dict."""
-        tr = TimeReference(referent=mock_referent, clocktype=ClockType.UTC, time=100.0)
+        tr = ndi_time_timereference(
+            referent=mock_referent, clocktype=ndi_time_clocktype.UTC, time=100.0
+        )
         d = tr.to_dict()
         assert d["clocktypestring"] == "utc"
         assert d["time"] == 100.0
 
 
 class TestFileMatch:
-    """Tests for FileMatch sync rule."""
+    """Tests for ndi_time_syncrule_filematch sync rule."""
 
     def test_default_parameters(self):
         """Test default parameters."""
-        rule = FileMatch()
+        rule = ndi_time_syncrule_filematch()
         assert rule.parameters["number_fullpath_matches"] == 2
 
     def test_custom_parameters(self):
         """Test custom parameters."""
-        rule = FileMatch({"number_fullpath_matches": 3})
+        rule = ndi_time_syncrule_filematch({"number_fullpath_matches": 3})
         assert rule.parameters["number_fullpath_matches"] == 3
 
     def test_invalid_parameters(self):
         """Test invalid parameters raise error."""
         with pytest.raises(ValueError):
-            FileMatch({"number_fullpath_matches": "not_a_number"})
+            ndi_time_syncrule_filematch({"number_fullpath_matches": "not_a_number"})
 
     def test_apply_matching_files(self):
         """Test apply with matching files."""
-        rule = FileMatch({"number_fullpath_matches": 2})
+        rule = ndi_time_syncrule_filematch({"number_fullpath_matches": 2})
 
         node_a = {
             "objectclass": "ndi.daq.system",
@@ -299,7 +308,7 @@ class TestFileMatch:
 
     def test_apply_not_enough_matches(self):
         """Test apply with not enough matching files."""
-        rule = FileMatch({"number_fullpath_matches": 2})
+        rule = ndi_time_syncrule_filematch({"number_fullpath_matches": 2})
 
         node_a = {
             "objectclass": "ndi.daq.system",
@@ -316,7 +325,7 @@ class TestFileMatch:
 
     def test_apply_non_daq_system(self):
         """Test apply with non-DAQ system returns None."""
-        rule = FileMatch()
+        rule = ndi_time_syncrule_filematch()
 
         node_a = {
             "objectclass": "some.other.class",
@@ -333,11 +342,11 @@ class TestFileMatch:
 
 
 class TestFileFind:
-    """Tests for FileFind sync rule."""
+    """Tests for ndi_time_syncrule_filefind sync rule."""
 
     def test_default_parameters(self):
         """Test default parameters."""
-        rule = FileFind()
+        rule = ndi_time_syncrule_filefind()
         assert rule.parameters["number_fullpath_matches"] == 1
         assert rule.parameters["syncfilename"] == "syncfile.txt"
         assert rule.parameters["daqsystem1"] == "mydaq1"
@@ -350,7 +359,7 @@ class TestFileFind:
         syncfile.write_text("0.5 1.0")
         common_file = str(tmp_path / "shared.dat")
 
-        rule = FileFind(
+        rule = ndi_time_syncrule_filefind(
             {
                 "number_fullpath_matches": 1,
                 "syncfilename": "syncfile.txt",
@@ -376,7 +385,7 @@ class TestFileFind:
 
     def test_apply_no_match_wrong_daqs(self):
         """Test apply when DAQ system names don't match parameters."""
-        rule = FileFind(
+        rule = ndi_time_syncrule_filefind(
             {
                 "number_fullpath_matches": 1,
                 "syncfilename": "syncfile.txt",
@@ -401,7 +410,7 @@ class TestFileFind:
 
     def test_apply_no_common_files(self):
         """Test apply when there are no common files."""
-        rule = FileFind(
+        rule = ndi_time_syncrule_filefind(
             {
                 "number_fullpath_matches": 1,
                 "syncfilename": "syncfile.txt",
@@ -426,30 +435,30 @@ class TestFileFind:
 
 
 class TestEpochNode:
-    """Tests for EpochNode dataclass."""
+    """Tests for ndi_time_epochnode dataclass."""
 
     def test_create_epoch_node(self):
         """Test creating an epoch node."""
-        node = EpochNode(
+        node = ndi_time_epochnode(
             epoch_id="epoch_001",
             epoch_session_id="session_123",
             epochprobemap=None,
-            epoch_clock=ClockType.UTC,
+            epoch_clock=ndi_time_clocktype.UTC,
             t0_t1=(0.0, 100.0),
             objectname="daq1",
             objectclass="ndi.daq.system",
         )
         assert node.epoch_id == "epoch_001"
-        assert node.epoch_clock == ClockType.UTC
+        assert node.epoch_clock == ndi_time_clocktype.UTC
         assert node.t0_t1 == (0.0, 100.0)
 
     def test_to_dict(self):
         """Test converting to dict."""
-        node = EpochNode(
+        node = ndi_time_epochnode(
             epoch_id="epoch_001",
             epoch_session_id="session_123",
             epochprobemap=None,
-            epoch_clock=ClockType.UTC,
+            epoch_clock=ndi_time_clocktype.UTC,
             t0_t1=(0.0, 100.0),
             objectname="daq1",
             objectclass="ndi.daq.system",
@@ -470,25 +479,25 @@ class TestEpochNode:
             "objectname": "daq1",
             "objectclass": "ndi.daq.system",
         }
-        node = EpochNode.from_dict(d)
+        node = ndi_time_epochnode.from_dict(d)
         assert node.epoch_id == "epoch_001"
-        assert node.epoch_clock == ClockType.UTC
+        assert node.epoch_clock == ndi_time_clocktype.UTC
         assert node.t0_t1 == (0.0, 100.0)
 
 
 class TestSyncGraph:
-    """Tests for SyncGraph class."""
+    """Tests for ndi_time_syncgraph class."""
 
     def test_create_empty_syncgraph(self):
         """Test creating an empty sync graph."""
-        sg = SyncGraph()
+        sg = ndi_time_syncgraph()
         assert sg.rules == []
         assert sg.session is None
 
     def test_add_rule(self):
         """Test adding a sync rule."""
-        sg = SyncGraph()
-        rule = FileMatch()
+        sg = ndi_time_syncgraph()
+        rule = ndi_time_syncrule_filematch()
         sg.add_rule(rule)
 
         assert len(sg.rules) == 1
@@ -496,8 +505,8 @@ class TestSyncGraph:
 
     def test_add_duplicate_rule(self):
         """Test that duplicate rules aren't added."""
-        sg = SyncGraph()
-        rule = FileMatch({"number_fullpath_matches": 2})
+        sg = ndi_time_syncgraph()
+        rule = ndi_time_syncrule_filematch({"number_fullpath_matches": 2})
         sg.add_rule(rule)
         sg.add_rule(rule)  # Same rule
 
@@ -505,9 +514,9 @@ class TestSyncGraph:
 
     def test_remove_rule(self):
         """Test removing a sync rule."""
-        sg = SyncGraph()
-        rule1 = FileMatch({"number_fullpath_matches": 2})
-        rule2 = FileMatch({"number_fullpath_matches": 3})
+        sg = ndi_time_syncgraph()
+        rule1 = ndi_time_syncrule_filematch({"number_fullpath_matches": 2})
+        rule2 = ndi_time_syncrule_filematch({"number_fullpath_matches": 3})
         sg.add_rule(rule1)
         sg.add_rule(rule2)
 
@@ -517,6 +526,6 @@ class TestSyncGraph:
 
     def test_has_unique_id(self):
         """Test that sync graph has unique ID."""
-        sg1 = SyncGraph()
-        sg2 = SyncGraph()
+        sg1 = ndi_time_syncgraph()
+        sg2 = ndi_time_syncgraph()
         assert sg1.id != sg2.id

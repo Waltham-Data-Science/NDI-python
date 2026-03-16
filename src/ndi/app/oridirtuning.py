@@ -11,17 +11,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from . import App
-from .appdoc import AppDoc
+from . import ndi_app
+from .appdoc import ndi_app_appdoc
 
 if TYPE_CHECKING:
-    from ..document import Document
-    from ..session.session_base import Session
+    from ..document import ndi_document
+    from ..session.session_base import ndi_session
 
 
-class OriDirTuning(App, AppDoc):
+class ndi_app_oridirtuning(ndi_app, ndi_app_appdoc):
     """
-    App for orientation/direction tuning analysis.
+    ndi_app for orientation/direction tuning analysis.
 
     Computes orientation and direction selectivity measures from
     stimulus tuning curves, including:
@@ -35,14 +35,14 @@ class OriDirTuning(App, AppDoc):
         - tuning_curve: Stimulus tuning curves
 
     Example:
-        >>> odt = OriDirTuning(session)
+        >>> odt = ndi_app_oridirtuning(session)
         >>> odt.calculate_all_tuning_curves(element_obj)
         >>> odt.calculate_all_oridir_indexes(element_obj)
     """
 
-    def __init__(self, session: Session | None = None):
-        App.__init__(self, session=session, name="ndi_app_oridirtuning")
-        AppDoc.__init__(
+    def __init__(self, session: ndi_session | None = None):
+        ndi_app.__init__(self, session=session, name="ndi_app_oridirtuning")
+        ndi_app_appdoc.__init__(
             self,
             doc_types=["orientation_direction_tuning", "tuning_curve"],
             doc_document_types=[
@@ -55,7 +55,7 @@ class OriDirTuning(App, AppDoc):
         self,
         ndi_element_obj: Any,
         docexistsaction: str = "Replace",
-    ) -> list[Document]:
+    ) -> list[ndi_document]:
         """
         Calculate tuning curves for all stimulus responses.
 
@@ -73,9 +73,9 @@ class OriDirTuning(App, AppDoc):
     def calculate_tuning_curve(
         self,
         ndi_element_obj: Any,
-        ndi_response_doc: Document,
+        ndi_response_doc: ndi_document,
         do_add: bool = True,
-    ) -> Document | None:
+    ) -> ndi_document | None:
         """
         Calculate a single tuning curve from a response document.
 
@@ -97,7 +97,7 @@ class OriDirTuning(App, AppDoc):
         self,
         ndi_element_obj: Any,
         docexistsaction: str = "Replace",
-    ) -> list[Document]:
+    ) -> list[ndi_document]:
         """
         Calculate orientation/direction indices for all responses.
 
@@ -114,10 +114,10 @@ class OriDirTuning(App, AppDoc):
 
     def calculate_oridir_indexes(
         self,
-        tuning_doc: Document,
+        tuning_doc: ndi_document,
         do_add: bool = True,
         do_plot: bool = False,
-    ) -> Document | None:
+    ) -> ndi_document | None:
         """
         Calculate orientation/direction indices from a tuning curve.
 
@@ -134,7 +134,7 @@ class OriDirTuning(App, AppDoc):
         raise NotImplementedError("Index calculation requires circular statistics.")
 
     @staticmethod
-    def is_oridir_stimulus_response(response_doc: Document) -> bool:
+    def is_oridir_stimulus_response(response_doc: ndi_document) -> bool:
         """
         Check if a response document contains orientation/direction data.
 
@@ -153,7 +153,7 @@ class OriDirTuning(App, AppDoc):
         except AttributeError:
             return False
 
-    def plot_oridir_response(self, oriprops_doc: Document) -> None:
+    def plot_oridir_response(self, oriprops_doc: ndi_document) -> None:
         """
         Plot orientation/direction response.
 
@@ -168,20 +168,20 @@ class OriDirTuning(App, AppDoc):
         """
         raise NotImplementedError("Plotting requires matplotlib. Use matplotlib directly.")
 
-    def struct2doc(self, appdoc_type: str, appdoc_struct: dict, **kwargs) -> Document:
-        from ..document import Document
+    def struct2doc(self, appdoc_type: str, appdoc_struct: dict, **kwargs) -> ndi_document:
+        from ..document import ndi_document
 
-        return Document(
+        return ndi_document(
             self.doc_document_types[self.doc_types.index(appdoc_type)],
             **{appdoc_type: appdoc_struct},
         )
 
-    def find_appdoc(self, appdoc_type: str, **kwargs) -> list[Document]:
+    def find_appdoc(self, appdoc_type: str, **kwargs) -> list[ndi_document]:
         if self._session is None:
             return []
-        from ..query import Query
+        from ..query import ndi_query
 
-        return self._session.database_search(Query("").isa(appdoc_type))
+        return self._session.database_search(ndi_query("").isa(appdoc_type))
 
     def isvalid_appdoc_struct(self, appdoc_type: str, appdoc_struct: dict) -> tuple[bool, str]:
         """
@@ -195,4 +195,4 @@ class OriDirTuning(App, AppDoc):
         return True, ""
 
     def __repr__(self) -> str:
-        return f"OriDirTuning(session={self._session is not None})"
+        return f"ndi_app_oridirtuning(session={self._session is not None})"
