@@ -48,38 +48,27 @@ def _add_doc_with_file(session: DirSession, doc_number: int) -> None:
     session.database_add(doc)
 
 
-def _dataset_summary(dataset: Dataset, session: DirSession) -> dict:
-    """Create a summary structure for a dataset, analogous to sessionSummary.
+def _dataset_summary(dataset: Dataset) -> dict:
+    """Create a summary structure for a dataset.
 
-    Captures the dataset identity, session list, ingested session summary,
-    and document inventory so that both languages can compare them.
+    Mirrors MATLAB's ``ndi.symmetry.makeArtifacts.dataset.buildDataset``
+    which writes: numSessions, references, sessionIds, sessionSummaries.
     """
-    summary: dict = {}
+    refs, session_ids, *_ = dataset.session_list()
+    num_sessions = len(refs)
 
-    # Dataset identity
-    summary["datasetReference"] = dataset.reference
-    summary["datasetId"] = dataset.id()
+    # Build a session summary for each session in the dataset
+    session_summaries = []
+    for sid in session_ids:
+        sess = dataset.open_session(sid)
+        session_summaries.append(sessionSummary(sess))
 
-    # Session list
-    refs, session_ids, session_doc_ids, ds_doc_id = dataset.session_list()
-    summary["sessionReferences"] = refs
-    summary["sessionIds"] = session_ids
-    summary["sessionDocIds"] = session_doc_ids
-    summary["datasetSessionDocId"] = ds_doc_id
-
-    # Session summary for the ingested session (via the dataset's view)
-    summary["ingestedSessionSummary"] = sessionSummary(session)
-
-    # Document count by class
-    all_docs = dataset.database_search(Query("base.id").match("(.*)"))
-    doc_classes: dict[str, int] = {}
-    for doc in all_docs:
-        cls = doc.document_properties.get("document_class", {}).get("class_name", "unknown")
-        doc_classes[cls] = doc_classes.get(cls, 0) + 1
-    summary["documentClassCounts"] = doc_classes
-    summary["totalDocumentCount"] = len(all_docs)
-
-    return summary
+    return {
+        "numSessions": num_sessions,
+        "references": refs,
+        "sessionIds": session_ids,
+        "sessionSummaries": session_summaries,
+    }
 
 
 class TestBuildDataset:
@@ -136,14 +125,10 @@ class TestBuildDataset:
             )
 
         # Write datasetSummary.json
-        summary = _dataset_summary(self.dataset, self.session)
+        summary = _dataset_summary(self.dataset)
         summary_json = json.dumps(summary, indent=2, allow_nan=True)
         summary_path = artifact_dir / "datasetSummary.json"
         summary_path.write_text(summary_json, encoding="utf-8")
-
-        # Write probes.json (empty array — dataset has no probes directly)
-        probes_path = artifact_dir / "probes.json"
-        probes_path.write_text(json.dumps([], indent=2), encoding="utf-8")
 
         # Verify artifacts were created
         assert artifact_dir.exists()

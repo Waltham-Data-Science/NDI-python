@@ -60,10 +60,18 @@ class TestBuildSession:
         expected_summary = json.loads(summary_path.read_text(encoding="utf-8"))
         actual_summary = sessionSummary(session)
 
+        # Python cannot reconstruct MATLAB DAQ systems or probes from a
+        # copied session directory, so skip those fields when one side is
+        # empty (cross-language asymmetry).
         report = compareSessionSummary(
             actual_summary,
             expected_summary,
             excludeFiles=["sessionSummary.json", "jsonDocuments"],
+            skipFieldsIfOneEmpty=[
+                "daqSystemNames",
+                "daqSystemDetails",
+                "probes",
+            ],
         )
 
         assert (
