@@ -203,9 +203,7 @@ class FileNavigator(Ido):
         if filenavigator:
             fp = _prop(filenavigator, "fileparameters", "")
             self._raw_fileparameters_str = fp
-            self._fileparameters = self._normalize_fileparameters(
-                _parse_fileparameters(fp)
-            )
+            self._fileparameters = self._normalize_fileparameters(_parse_fileparameters(fp))
             self._epochprobemap_class = _prop(
                 filenavigator, "epochprobemap_class", "ndi.epoch.EpochProbeMap"
             )

@@ -313,7 +313,9 @@ class DAQReader(Ido, ABC):
         doc = Document(
             "daq/daqreader",
             **{
-                "daqreader.ndi_daqreader_class": getattr(self, "NDI_DAQREADER_CLASS", self.__class__.__name__),
+                "daqreader.ndi_daqreader_class": getattr(
+                    self, "NDI_DAQREADER_CLASS", self.__class__.__name__
+                ),
                 "base.id": self.id,
             },
         )

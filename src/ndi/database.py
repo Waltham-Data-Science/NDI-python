@@ -162,7 +162,15 @@ class SQLiteDriver:
         if not rows:
             return []
 
-        return [json_mod.loads(r["json_code"]) for r in rows]
+        results = []
+        for r in rows:
+            props = json_mod.loads(r["json_code"])
+            # Normalize MATLAB-style scalar dicts back to lists
+            from did.implementations.sqlitedb import SQLiteDB
+
+            props = SQLiteDB._normalize_loaded_props(props)
+            results.append(props)
+        return results
 
 
 class Database:

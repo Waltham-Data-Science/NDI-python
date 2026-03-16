@@ -79,9 +79,7 @@ def sessionSummary(session_obj: Any) -> dict[str, Any]:
         # Get daqreader class
         dr = getattr(sys, "daqreader", None)
         if dr is not None:
-            details["daqreader_class"] = getattr(
-                dr, "NDI_DAQREADER_CLASS", type(dr).__qualname__
-            )
+            details["daqreader_class"] = getattr(dr, "NDI_DAQREADER_CLASS", type(dr).__qualname__)
         else:
             details["daqreader_class"] = ""
 
