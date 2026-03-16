@@ -15,7 +15,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from .app import ndi_app
-from .app.appdoc import ndi_app_appdoc, DocExistsAction
+from .app.appdoc import DocExistsAction, ndi_app_appdoc
 
 if TYPE_CHECKING:
     from .document import ndi_document

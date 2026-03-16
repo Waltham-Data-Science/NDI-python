@@ -196,7 +196,9 @@ def stimulustemporalfrequency(
             from ndi.common import ndi_common_PathConstants
 
             config_path = str(
-                ndi_common_PathConstants.COMMON_FOLDER / "stimulus" / "temporal_frequency_rules.json"
+                ndi_common_PathConstants.COMMON_FOLDER
+                / "stimulus"
+                / "temporal_frequency_rules.json"
             )
         except Exception:
             return None, ""

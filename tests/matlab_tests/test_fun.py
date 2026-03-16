@@ -61,7 +61,9 @@ def _make_session_with_docs(tmp_path, ref, doc_specs):
         doc = _make_demo_doc(name, value, session.id())
         session.database_add(doc)
         # Re-fetch from DB so we have the stored version
-        results = session.database_search(ndi_query("base.id") == doc.document_properties["base"]["id"])
+        results = session.database_search(
+            ndi_query("base.id") == doc.document_properties["base"]["id"]
+        )
         added.append(results[0] if results else doc)
 
     return session, added

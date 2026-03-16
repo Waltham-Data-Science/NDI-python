@@ -7,13 +7,13 @@ Tests for Phase 9: ndi.app, ndi.app.appdoc, ndi.calculator, ndi.calc.example.sim
 import pytest
 
 from ndi import (
+    DocExistsAction,
     ndi_app,
     ndi_app_appdoc,
     ndi_calculator,
-    ndi_session_dir,
-    DocExistsAction,
     ndi_document,
     ndi_query,
+    ndi_session_dir,
 )
 from ndi.calc.example import ndi_calc_example_simple
 

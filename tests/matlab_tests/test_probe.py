@@ -10,7 +10,7 @@ Tests for:
 - ndi.probe.ndi_probe instantiation and basic interface
 """
 
-from ndi.probe import ndi_probe, getProbeTypeMap, initProbeTypeMap
+from ndi.probe import getProbeTypeMap, initProbeTypeMap, ndi_probe
 
 # ===========================================================================
 # TestProbeMap

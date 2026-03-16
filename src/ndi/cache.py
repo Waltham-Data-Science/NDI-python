@@ -121,7 +121,8 @@ class ndi_cache:
 
         if data_bytes > self._max_memory:
             raise MemoryError(
-                f"ndi_gui_Data ({data_bytes} bytes) exceeds cache max_memory " f"({self._max_memory} bytes)"
+                f"ndi_gui_Data ({data_bytes} bytes) exceeds cache max_memory "
+                f"({self._max_memory} bytes)"
             )
 
         # Create new entry

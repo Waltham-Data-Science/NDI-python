@@ -13,7 +13,9 @@ import time
 from abc import ABC, abstractmethod
 from typing import Any
 
-from ndi.gui.component.internal.ndi_gui_component_internal_ProgressTracker import ndi_gui_component_internal_ProgressTracker
+from ndi.gui.component.internal.ndi_gui_component_internal_ProgressTracker import (
+    ndi_gui_component_internal_ProgressTracker,
+)
 
 
 class ndi_gui_component_abstract_ProgressMonitor(ABC):
@@ -33,7 +35,9 @@ class ndi_gui_component_abstract_ProgressMonitor(ABC):
         self.DisplayElapsedTime: bool = kwargs.get("DisplayElapsedTime", False)
         self.DisplayRemainingTime: bool = kwargs.get("DisplayRemainingTime", True)
 
-        self.ndi_gui_component_internal_ProgressTracker: ndi_gui_component_internal_ProgressTracker | None = kwargs.get("ndi_gui_component_internal_ProgressTracker", None)
+        self.ndi_gui_component_internal_ProgressTracker: (
+            ndi_gui_component_internal_ProgressTracker | None
+        ) = kwargs.get("ndi_gui_component_internal_ProgressTracker", None)
 
         self._start_time: float | None = None
         self._last_update_time: float = 0.0
@@ -87,7 +91,10 @@ class ndi_gui_component_abstract_ProgressMonitor(ABC):
 
     def getProgressTitle(self) -> str:
         """Return the tracker's rendered message, or *Title*."""
-        if self.ndi_gui_component_internal_ProgressTracker is not None and self.ndi_gui_component_internal_ProgressTracker.Message:
+        if (
+            self.ndi_gui_component_internal_ProgressTracker is not None
+            and self.ndi_gui_component_internal_ProgressTracker.Message
+        ):
             return self.ndi_gui_component_internal_ProgressTracker.Message
         return self.Title
 

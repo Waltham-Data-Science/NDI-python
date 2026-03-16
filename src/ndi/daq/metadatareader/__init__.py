@@ -306,4 +306,8 @@ class ndi_daq_metadatareader(ndi_ido):
 from .newstim_stims import ndi_daq_metadatareader_NewStimStims
 from .nielsenlab_stims import ndi_daq_metadatareader_NielsenLabStims
 
-__all__ = ["ndi_daq_metadatareader", "ndi_daq_metadatareader_NewStimStims", "ndi_daq_metadatareader_NielsenLabStims"]
+__all__ = [
+    "ndi_daq_metadatareader",
+    "ndi_daq_metadatareader_NewStimStims",
+    "ndi_daq_metadatareader_NielsenLabStims",
+]

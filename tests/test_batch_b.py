@@ -247,12 +247,31 @@ class TestReaderPackageImports:
             ndi_daq_reader_mfdaq_spikegadgets,
         )
 
-        assert all([ndi_daq_reader_mfdaq_intan, ndi_daq_reader_mfdaq_blackrock, ndi_daq_reader_mfdaq_cedspike2, ndi_daq_reader_mfdaq_spikegadgets])
+        assert all(
+            [
+                ndi_daq_reader_mfdaq_intan,
+                ndi_daq_reader_mfdaq_blackrock,
+                ndi_daq_reader_mfdaq_cedspike2,
+                ndi_daq_reader_mfdaq_spikegadgets,
+            ]
+        )
 
     def test_from_reader(self):
-        from ndi.daq.reader import ndi_daq_reader_mfdaq_blackrock, ndi_daq_reader_mfdaq_cedspike2, ndi_daq_reader_mfdaq_intan, ndi_daq_reader_mfdaq_spikegadgets
+        from ndi.daq.reader import (
+            ndi_daq_reader_mfdaq_blackrock,
+            ndi_daq_reader_mfdaq_cedspike2,
+            ndi_daq_reader_mfdaq_intan,
+            ndi_daq_reader_mfdaq_spikegadgets,
+        )
 
-        assert all([ndi_daq_reader_mfdaq_intan, ndi_daq_reader_mfdaq_blackrock, ndi_daq_reader_mfdaq_cedspike2, ndi_daq_reader_mfdaq_spikegadgets])
+        assert all(
+            [
+                ndi_daq_reader_mfdaq_intan,
+                ndi_daq_reader_mfdaq_blackrock,
+                ndi_daq_reader_mfdaq_cedspike2,
+                ndi_daq_reader_mfdaq_spikegadgets,
+            ]
+        )
 
     def test_all_inherit_from_mfdaq_reader(self):
         from ndi.daq.mfdaq import ndi_daq_reader_mfdaq
@@ -263,7 +282,12 @@ class TestReaderPackageImports:
             ndi_daq_reader_mfdaq_spikegadgets,
         )
 
-        for cls in [ndi_daq_reader_mfdaq_intan, ndi_daq_reader_mfdaq_blackrock, ndi_daq_reader_mfdaq_cedspike2, ndi_daq_reader_mfdaq_spikegadgets]:
+        for cls in [
+            ndi_daq_reader_mfdaq_intan,
+            ndi_daq_reader_mfdaq_blackrock,
+            ndi_daq_reader_mfdaq_cedspike2,
+            ndi_daq_reader_mfdaq_spikegadgets,
+        ]:
             reader = cls()
             assert isinstance(reader, ndi_daq_reader_mfdaq)
 
@@ -276,7 +300,12 @@ class TestReaderPackageImports:
         )
 
         classes = set()
-        for cls in [ndi_daq_reader_mfdaq_intan, ndi_daq_reader_mfdaq_blackrock, ndi_daq_reader_mfdaq_cedspike2, ndi_daq_reader_mfdaq_spikegadgets]:
+        for cls in [
+            ndi_daq_reader_mfdaq_intan,
+            ndi_daq_reader_mfdaq_blackrock,
+            ndi_daq_reader_mfdaq_cedspike2,
+            ndi_daq_reader_mfdaq_spikegadgets,
+        ]:
             reader = cls()
             classes.add(reader._ndi_daqreader_class)
         assert len(classes) == 4

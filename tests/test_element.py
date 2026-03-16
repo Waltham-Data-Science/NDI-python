@@ -15,8 +15,8 @@ import pytest
 
 from ndi.documentservice import ndi_documentservice
 from ndi.element import ndi_element
-from ndi.epoch.epoch import ndi_epoch_epoch, is_epoch_or_empty
-from ndi.epoch.epochprobemap import ndi_epoch_epochprobemap, build_devicestring, parse_devicestring
+from ndi.epoch.epoch import is_epoch_or_empty, ndi_epoch_epoch
+from ndi.epoch.epochprobemap import build_devicestring, ndi_epoch_epochprobemap, parse_devicestring
 from ndi.epoch.epochset import ndi_epoch_epochset
 from ndi.probe import ndi_probe
 from ndi.time import DEV_LOCAL_TIME, UTC, ndi_time_clocktype
@@ -60,14 +60,20 @@ class TestEpochProbeMap:
     def test_devicename_property(self):
         """Test devicename property extraction."""
         epm = ndi_epoch_epochprobemap(
-            name="e1", reference=1, type="probe", devicestring="intan1:ndi_daq_reader_SpikeInterfaceReader:details"
+            name="e1",
+            reference=1,
+            type="probe",
+            devicestring="intan1:ndi_daq_reader_SpikeInterfaceReader:details",
         )
         assert epm.devicename == "intan1"
 
     def test_deviceclass_property(self):
         """Test deviceclass property extraction."""
         epm = ndi_epoch_epochprobemap(
-            name="e1", reference=1, type="probe", devicestring="intan1:ndi_daq_reader_SpikeInterfaceReader:details"
+            name="e1",
+            reference=1,
+            type="probe",
+            devicestring="intan1:ndi_daq_reader_SpikeInterfaceReader:details",
         )
         assert epm.deviceclass == "ndi_daq_reader_SpikeInterfaceReader"
 
@@ -510,7 +516,8 @@ class TestProbe:
 
         assert probe.epochprobemapmatch(epm) is True
         assert (
-            probe.epochprobemapmatch(ndi_epoch_epochprobemap(name="e2", reference=1, type="probe")) is False
+            probe.epochprobemapmatch(ndi_epoch_epochprobemap(name="e2", reference=1, type="probe"))
+            is False
         )
 
     def test_epochprobemapmatch_dict(self):
@@ -558,7 +565,9 @@ class TestProbeBuildEpochtable:
                 "epoch_id": "dev_ep1",
                 "epoch_session_id": "sess1",
                 "epochprobemap": [
-                    ndi_epoch_epochprobemap(name="e1", reference=1, type="probe", devicestring="dev1::"),
+                    ndi_epoch_epochprobemap(
+                        name="e1", reference=1, type="probe", devicestring="dev1::"
+                    ),
                 ],
                 "epoch_clock": [DEV_LOCAL_TIME],
                 "t0_t1": [(0.0, 10.0)],

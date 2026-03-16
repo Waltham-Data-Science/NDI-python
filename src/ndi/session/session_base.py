@@ -326,7 +326,8 @@ class ndi_session(ABC):
             session_id = doc.session_id
             if session_id and session_id != self.id() and session_id != empty_id():
                 raise ValueError(
-                    f"ndi_document session_id '{session_id}' doesn't match " f"session id '{self.id()}'"
+                    f"ndi_document session_id '{session_id}' doesn't match "
+                    f"session id '{self.id()}'"
                 )
             # Set session ID if empty or unset
             if not session_id or session_id == empty_id():
@@ -844,7 +845,9 @@ class ndi_session(ABC):
                 unique_probes.append(ps)
 
         # Get existing probes from database
-        existing_docs = self.database_search(ndi_query("element.ndi_element_class").contains("probe"))
+        existing_docs = self.database_search(
+            ndi_query("element.ndi_element_class").contains("probe")
+        )
 
         # Convert existing docs to probe objects
         existing_probes = []
@@ -1041,7 +1044,9 @@ class ndi_session(ABC):
     # Helper Methods
     # =========================================================================
 
-    def _docinput2docs(self, doc_input: str | ndi_document | list[str | ndi_document]) -> list[ndi_document]:
+    def _docinput2docs(
+        self, doc_input: str | ndi_document | list[str | ndi_document]
+    ) -> list[ndi_document]:
         """Convert document IDs or Documents to Documents."""
         if not isinstance(doc_input, list):
             doc_input = [doc_input]

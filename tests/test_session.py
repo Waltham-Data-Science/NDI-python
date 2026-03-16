@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from ndi.cache import ndi_cache, CacheEntry
+from ndi.cache import CacheEntry, ndi_cache
 from ndi.ido import ndi_ido
 from ndi.query import ndi_query
-from ndi.session import ndi_session_dir, empty_id
+from ndi.session import empty_id, ndi_session_dir
 
 # ==============================================================================
 # ndi_cache Tests

@@ -36,12 +36,12 @@ from . import calc, cloud, common, daq, epoch, file, session, time, util, valida
 
 # Import Phase 9: ndi_app framework and calculators
 from .app import ndi_app
-from .app.appdoc import ndi_app_appdoc, DocExistsAction
+from .app.appdoc import DocExistsAction, ndi_app_appdoc
 
 # Import session and cache modules (Phase 7)
 from .cache import ndi_cache
 from .calculator import ndi_calculator
-from .common import ndi_common_PathConstants, getLogger, timestamp
+from .common import getLogger, ndi_common_PathConstants, timestamp
 from .database import ndi_database, open_database
 from .dataset import ndi_dataset, ndi_dataset_dir
 from .document import ndi_document
@@ -52,7 +52,7 @@ from .ido import ndi_ido
 from .neuron import ndi_neuron
 from .probe import ndi_probe
 from .query import ndi_query
-from .session import ndi_session_dir, ndi_session, empty_id
+from .session import empty_id, ndi_session, ndi_session_dir
 
 # Import Phase 8 classes
 from .subject import ndi_subject

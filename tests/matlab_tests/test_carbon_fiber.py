@@ -472,21 +472,27 @@ class TestTuningCurves:
         """34 spatial frequency tuning documents."""
         from ndi.query import ndi_query
 
-        docs = carbon_fiber_dataset.database_search(ndi_query("").isa("spatial_frequency_tuning_calc"))
+        docs = carbon_fiber_dataset.database_search(
+            ndi_query("").isa("spatial_frequency_tuning_calc")
+        )
         assert len(docs) == 34
 
     def test_temporal_frequency_tuning_count(self, carbon_fiber_dataset):
         """58 temporal frequency tuning documents."""
         from ndi.query import ndi_query
 
-        docs = carbon_fiber_dataset.database_search(ndi_query("").isa("temporal_frequency_tuning_calc"))
+        docs = carbon_fiber_dataset.database_search(
+            ndi_query("").isa("temporal_frequency_tuning_calc")
+        )
         assert len(docs) == 58
 
     def test_temporal_frequency_has_5_frequencies(self, carbon_fiber_dataset):
         """Temporal frequency tuning samples 5 frequencies (1,2,4,8,16 Hz)."""
         from ndi.query import ndi_query
 
-        docs = carbon_fiber_dataset.database_search(ndi_query("").isa("temporal_frequency_tuning_calc"))
+        docs = carbon_fiber_dataset.database_search(
+            ndi_query("").isa("temporal_frequency_tuning_calc")
+        )
         for doc in docs[:5]:
             tft = doc.document_properties.get("temporal_frequency_tuning", {})
             tc = tft.get("tuning_curve", {})
@@ -638,7 +644,9 @@ class TestCrossDocumentRelationships:
         from ndi.query import ndi_query
 
         tcs = carbon_fiber_dataset.database_search(ndi_query("").isa("tuningcurve_calc"))
-        sr_docs = carbon_fiber_dataset.database_search(ndi_query("").isa("stimulus_response_scalar"))
+        sr_docs = carbon_fiber_dataset.database_search(
+            ndi_query("").isa("stimulus_response_scalar")
+        )
         sr_ids = {doc.document_properties.get("base", {}).get("id", "") for doc in sr_docs}
 
         for tc in tcs:

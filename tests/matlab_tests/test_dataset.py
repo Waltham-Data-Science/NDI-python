@@ -199,7 +199,9 @@ class TestSessionList:
         assert props.get("session_reference") == "exp_demo", "session_reference should match"
 
         # Check session_creator
-        assert props.get("session_creator") == "ndi_session_dir", "session_creator should be ndi_session_dir"
+        assert (
+            props.get("session_creator") == "ndi_session_dir"
+        ), "session_creator should be ndi_session_dir"
 
 
 # ===========================================================================

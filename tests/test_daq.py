@@ -27,7 +27,7 @@ from ndi.daq.mfdaq import (
 )
 from ndi.daq.reader_base import ndi_daq_reader
 from ndi.daq.system import ndi_daq_system
-from ndi.file.navigator import ndi_file_navigator, find_file_groups
+from ndi.file.navigator import find_file_groups, ndi_file_navigator
 from ndi.time import DEV_LOCAL_TIME, NO_TIME
 
 # =============================================================================

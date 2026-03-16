@@ -72,7 +72,9 @@ class TestNDIDocument:
         fid = session.database_openbinarydoc(doc, "filename1.ext")
         content = fid.read()
         session.database_closebinarydoc(fid)
-        assert content == b"Hello NDI Binary ndi_gui_Data", "Binary content should match what was written"
+        assert (
+            content == b"Hello NDI Binary ndi_gui_Data"
+        ), "Binary content should match what was written"
 
         # Remove document
         session.database_rm(doc)

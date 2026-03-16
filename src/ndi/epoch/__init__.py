@@ -11,7 +11,7 @@ Classes:
 """
 
 from .epoch import ndi_epoch_epoch
-from .epochprobemap import ndi_epoch_epochprobemap, build_devicestring, parse_devicestring
+from .epochprobemap import build_devicestring, ndi_epoch_epochprobemap, parse_devicestring
 from .epochprobemap_daqsystem import ndi_epoch_epochprobemap__daqsystem
 from .epochset import ndi_epoch_epochset
 from .functions import epochrange, findepochnode

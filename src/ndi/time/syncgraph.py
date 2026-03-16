@@ -269,7 +269,9 @@ class ndi_time_syncgraph(ndi_ido):
         # Get epoch nodes from the DAQ system
         if hasattr(daqsystem, "epochnodes"):
             newnodes_data = daqsystem.epochnodes()
-            newnodes = [ndi_time_epochnode.from_dict(n) if isinstance(n, dict) else n for n in newnodes_data]
+            newnodes = [
+                ndi_time_epochnode.from_dict(n) if isinstance(n, dict) else n for n in newnodes_data
+            ]
         else:
             newnodes = []
 

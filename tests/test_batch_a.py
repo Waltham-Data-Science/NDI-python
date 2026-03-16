@@ -348,7 +348,10 @@ class TestMFDAQEpochChannel:
     """Tests for ndi.file.type.mfdaq_epoch_channel."""
 
     def test_import(self):
-        from ndi.file.type.mfdaq_epoch_channel import ChannelInfo, ndi_file_type_mfdaq__epoch__channel
+        from ndi.file.type.mfdaq_epoch_channel import (
+            ChannelInfo,
+            ndi_file_type_mfdaq__epoch__channel,
+        )
 
         assert ndi_file_type_mfdaq__epoch__channel is not None
         assert ChannelInfo is not None
@@ -371,7 +374,10 @@ class TestMFDAQEpochChannel:
         assert ch2.sample_rate == ch.sample_rate
 
     def test_mfdaq_epoch_channel_creation(self):
-        from ndi.file.type.mfdaq_epoch_channel import ChannelInfo, ndi_file_type_mfdaq__epoch__channel
+        from ndi.file.type.mfdaq_epoch_channel import (
+            ChannelInfo,
+            ndi_file_type_mfdaq__epoch__channel,
+        )
 
         channels = [
             ChannelInfo(name="ai1", type="analog_in", number=1, sample_rate=30000.0),
@@ -382,7 +388,10 @@ class TestMFDAQEpochChannel:
         assert len(mec) == 3
 
     def test_channels_of_type(self):
-        from ndi.file.type.mfdaq_epoch_channel import ChannelInfo, ndi_file_type_mfdaq__epoch__channel
+        from ndi.file.type.mfdaq_epoch_channel import (
+            ChannelInfo,
+            ndi_file_type_mfdaq__epoch__channel,
+        )
 
         channels = [
             ChannelInfo(name="ai1", type="analog_in", number=1),
@@ -396,7 +405,10 @@ class TestMFDAQEpochChannel:
         assert len(di_channels) == 1
 
     def test_channel_numbers(self):
-        from ndi.file.type.mfdaq_epoch_channel import ChannelInfo, ndi_file_type_mfdaq__epoch__channel
+        from ndi.file.type.mfdaq_epoch_channel import (
+            ChannelInfo,
+            ndi_file_type_mfdaq__epoch__channel,
+        )
 
         channels = [
             ChannelInfo(name="ai1", type="analog_in", number=1),
@@ -407,7 +419,10 @@ class TestMFDAQEpochChannel:
         assert mec.channel_numbers() == [1, 3]
 
     def test_file_io(self, tmp_path):
-        from ndi.file.type.mfdaq_epoch_channel import ChannelInfo, ndi_file_type_mfdaq__epoch__channel
+        from ndi.file.type.mfdaq_epoch_channel import (
+            ChannelInfo,
+            ndi_file_type_mfdaq__epoch__channel,
+        )
 
         channels = [
             ChannelInfo(name="ai1", type="analog_in", number=1, sample_rate=30000.0),
@@ -425,15 +440,18 @@ class TestMFDAQEpochChannel:
         assert mec2.channel_information[0].sample_rate == 30000.0
 
     def test_channelgroupdecoding(self):
-        from ndi.file.type.mfdaq_epoch_channel import ChannelInfo, ndi_file_type_mfdaq__epoch__channel
+        from ndi.file.type.mfdaq_epoch_channel import (
+            ChannelInfo,
+            ndi_file_type_mfdaq__epoch__channel,
+        )
 
         channels = [
             ChannelInfo(name="ai1", type="analog_in", number=1, group=1),
             ChannelInfo(name="ai2", type="analog_in", number=2, group=1),
             ChannelInfo(name="ai3", type="analog_in", number=3, group=2),
         ]
-        groups, ch_in_groups, ch_in_output = ndi_file_type_mfdaq__epoch__channel.channelgroupdecoding(
-            channels, "analog_in", [1, 3]
+        groups, ch_in_groups, ch_in_output = (
+            ndi_file_type_mfdaq__epoch__channel.channelgroupdecoding(channels, "analog_in", [1, 3])
         )
         assert groups == [1, 2]
         assert ch_in_groups == [[1], [3]]

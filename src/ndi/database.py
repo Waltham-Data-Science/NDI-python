@@ -320,7 +320,9 @@ class ndi_database:
 
     # === ndi_query Operations ===
 
-    def search(self, query: ndi_query | None = None, isa_class: str | None = None) -> list[ndi_document]:
+    def search(
+        self, query: ndi_query | None = None, isa_class: str | None = None
+    ) -> list[ndi_document]:
         """Search for documents matching a query.
 
         Args:

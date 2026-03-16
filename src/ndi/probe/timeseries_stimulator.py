@@ -532,4 +532,6 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
         }
 
     def __repr__(self) -> str:
-        return f"ndi_probe_timeseries_stimulator(name='{self._name}', " f"reference={self._reference})"
+        return (
+            f"ndi_probe_timeseries_stimulator(name='{self._name}', " f"reference={self._reference})"
+        )

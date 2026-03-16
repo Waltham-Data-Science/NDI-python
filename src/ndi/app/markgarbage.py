@@ -120,7 +120,9 @@ class ndi_app_markgarbage(ndi_app):
         for doc in docs:
             self._session.database_remove(doc)
 
-    def loadvalidinterval(self, epochset_obj: Any) -> tuple[list[dict[str, Any]], list[ndi_document]]:
+    def loadvalidinterval(
+        self, epochset_obj: Any
+    ) -> tuple[list[dict[str, Any]], list[ndi_document]]:
         """
         Load stored valid intervals.
 

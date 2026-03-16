@@ -209,7 +209,9 @@ class ndi_dataset:
 
         match = self._find_session_in_info(session_id)
         if match is None:
-            raise ValueError(f"ndi_session with ID {session_id} not found in " f"dataset {self.id()}.")
+            raise ValueError(
+                f"ndi_session with ID {session_id} not found in " f"dataset {self.id()}."
+            )
 
         if not match.get("is_linked", False):
             raise ValueError(
@@ -491,7 +493,9 @@ class ndi_dataset:
         populates ``_session_info`` and ``_session_array``.
         """
         # Check for legacy dataset_session_info docs and repair
-        q_legacy = ndi_query("").isa("dataset_session_info") & (ndi_query("base.session_id") == self.id())
+        q_legacy = ndi_query("").isa("dataset_session_info") & (
+            ndi_query("base.session_id") == self.id()
+        )
         legacy_docs = self._session.database_search(q_legacy)
         if legacy_docs:
             self.repairDatasetSessionInfo(self, legacy_docs)
@@ -903,7 +907,9 @@ class ndi_dataset_dir(ndi_dataset):
             return
 
         # Find already-tracked session IDs
-        q_tracked = ndi_query("").isa("session_in_a_dataset") & (ndi_query("base.session_id") == self.id())
+        q_tracked = ndi_query("").isa("session_in_a_dataset") & (
+            ndi_query("base.session_id") == self.id()
+        )
         tracked_docs = self._session.database_search(q_tracked)
         tracked_ids: set[str] = set()
         for doc in tracked_docs:

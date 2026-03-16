@@ -11,7 +11,9 @@ from __future__ import annotations
 import json
 import time
 
-from ndi.gui.component.internal.ndi_gui_component_internal_ProgressTracker import ndi_gui_component_internal_ProgressTracker
+from ndi.gui.component.internal.ndi_gui_component_internal_ProgressTracker import (
+    ndi_gui_component_internal_ProgressTracker,
+)
 
 
 class ndi_gui_component_internal_AsynchProgressTracker(ndi_gui_component_internal_ProgressTracker):

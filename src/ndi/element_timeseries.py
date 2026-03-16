@@ -253,7 +253,9 @@ class ndi_element_timeseries(ndi_element):
             if epoch_number is not None:
                 from .query import ndi_query
 
-                q = ndi_query("").isa("element_epoch") & ndi_query("").depends_on("element_id", self.id)
+                q = ndi_query("").isa("element_epoch") & ndi_query("").depends_on(
+                    "element_id", self.id
+                )
                 epoch_docs = self._session.database_search(q)
                 if 0 < epoch_number <= len(epoch_docs):
                     return self._get_samplerate_from_doc(epoch_docs[epoch_number - 1])

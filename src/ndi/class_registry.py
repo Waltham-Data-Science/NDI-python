@@ -42,11 +42,22 @@ def _build_registry() -> dict[str, type]:
     registry: dict[str, type] = {}
 
     # Elements / probes (keyed by ndi_element_class() return value)
-    for cls in (ndi_element, ndi_probe, ndi_probe_timeseries, ndi_probe_timeseries_mfdaq, ndi_probe_timeseries_stimulator):
+    for cls in (
+        ndi_element,
+        ndi_probe,
+        ndi_probe_timeseries,
+        ndi_probe_timeseries_mfdaq,
+        ndi_probe_timeseries_stimulator,
+    ):
         registry[cls().ndi_element_class()] = cls
 
     # DAQ readers (keyed by NDI_DAQREADER_CLASS constant)
-    for cls in (ndi_daq_reader_mfdaq_intan, ndi_daq_reader_mfdaq_blackrock, ndi_daq_reader_mfdaq_cedspike2, ndi_daq_reader_mfdaq_spikegadgets):
+    for cls in (
+        ndi_daq_reader_mfdaq_intan,
+        ndi_daq_reader_mfdaq_blackrock,
+        ndi_daq_reader_mfdaq_cedspike2,
+        ndi_daq_reader_mfdaq_spikegadgets,
+    ):
         registry[cls.NDI_DAQREADER_CLASS] = cls
 
     # DAQ system

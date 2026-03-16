@@ -129,7 +129,9 @@ class ndi_daq_system(ndi_ido):
                 from .metadatareader import ndi_daq_metadatareader
 
                 try:
-                    metadata_readers.append(ndi_daq_metadatareader(session=session, document=m_docs[0]))
+                    metadata_readers.append(
+                        ndi_daq_metadatareader(session=session, document=m_docs[0])
+                    )
                 except Exception:
                     pass
         self._daqmetadatareaders = metadata_readers

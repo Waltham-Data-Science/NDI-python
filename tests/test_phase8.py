@@ -8,12 +8,12 @@ import pytest
 
 from ndi import (
     ndi_dataset,
-    ndi_session_dir,
     ndi_document,
     ndi_element,
     ndi_element_timeseries,
     ndi_neuron,
     ndi_query,
+    ndi_session_dir,
     ndi_subject,
 )
 

@@ -12,7 +12,7 @@ MATLAB equivalents:
 
 from .dir import ndi_session_dir
 from .mock import ndi_session_mock
-from .session_base import ndi_session, empty_id
+from .session_base import empty_id, ndi_session
 from .sessiontable import ndi_session_sessiontable
 
 # MATLAB compatibility: ``ndi.session.dir(path)`` creates a directory-based

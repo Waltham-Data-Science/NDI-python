@@ -15,9 +15,17 @@ import pytest
 # ---------------------------------------------------------------------------
 # Imports
 # ---------------------------------------------------------------------------
-from ndi.daq.metadatareader import ndi_daq_metadatareader, ndi_daq_metadatareader_NewStimStims, ndi_daq_metadatareader_NielsenLabStims
-from ndi.daq.metadatareader.newstim_stims import ndi_daq_metadatareader_NewStimStims as NewStimDirect
-from ndi.daq.metadatareader.nielsenlab_stims import ndi_daq_metadatareader_NielsenLabStims as NielsenDirect
+from ndi.daq.metadatareader import (
+    ndi_daq_metadatareader,
+    ndi_daq_metadatareader_NewStimStims,
+    ndi_daq_metadatareader_NielsenLabStims,
+)
+from ndi.daq.metadatareader.newstim_stims import (
+    ndi_daq_metadatareader_NewStimStims as NewStimDirect,
+)
+from ndi.daq.metadatareader.nielsenlab_stims import (
+    ndi_daq_metadatareader_NielsenLabStims as NielsenDirect,
+)
 from ndi.element.functions import downsample, downsample_timeseries
 from ndi.probe.timeseries_stimulator import ndi_probe_timeseries_stimulator
 

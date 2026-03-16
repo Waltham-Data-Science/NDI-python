@@ -19,7 +19,11 @@ Example:
 """
 
 from .daqsystemstring import ndi_daq_daqsystemstring
-from .metadatareader import ndi_daq_metadatareader, ndi_daq_metadatareader_NewStimStims, ndi_daq_metadatareader_NielsenLabStims
+from .metadatareader import (
+    ndi_daq_metadatareader,
+    ndi_daq_metadatareader_NewStimStims,
+    ndi_daq_metadatareader_NielsenLabStims,
+)
 from .mfdaq import ndi_daq_reader_mfdaq
 from .reader_base import ndi_daq_reader
 from .system import ndi_daq_system

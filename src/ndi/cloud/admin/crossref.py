@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
-from xml.etree.ElementTree import ndi_element, SubElement, tostring
+from xml.etree.ElementTree import SubElement, ndi_element, tostring
 
 
 @dataclass(frozen=True)

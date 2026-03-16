@@ -255,7 +255,9 @@ def uploadToNDICloud(
     try:
         if verbose:
             print("Loading documents...")
-        all_docs = dataset.database_search(ndi_query("")) if hasattr(dataset, "database_search") else []
+        all_docs = (
+            dataset.database_search(ndi_query("")) if hasattr(dataset, "database_search") else []
+        )
 
         if verbose:
             print("Getting list of previously uploaded documents...")
@@ -323,7 +325,9 @@ def scanForUpload(
     from .internal import listRemoteDocumentIds
 
     try:
-        all_docs = dataset.database_search(ndi_query("")) if hasattr(dataset, "database_search") else []
+        all_docs = (
+            dataset.database_search(ndi_query("")) if hasattr(dataset, "database_search") else []
+        )
     except Exception:
         all_docs = []
 

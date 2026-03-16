@@ -11,7 +11,9 @@ from __future__ import annotations
 from typing import Any
 
 from ndi.gui._qt_helpers import require_qt
-from ndi.gui.component.abstract.ndi_gui_component_abstract_ProgressMonitor import ndi_gui_component_abstract_ProgressMonitor
+from ndi.gui.component.abstract.ndi_gui_component_abstract_ProgressMonitor import (
+    ndi_gui_component_abstract_ProgressMonitor,
+)
 
 # Guard the Qt import so the module can still be *imported* without
 # PySide6 installed (the error fires only on construction).

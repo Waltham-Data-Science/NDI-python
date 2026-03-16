@@ -14,7 +14,12 @@ Example:
     >>> channels = reader.getchannelsepoch(['data.rhd'])
 """
 
-from .mfdaq import ndi_daq_reader_mfdaq_blackrock, ndi_daq_reader_mfdaq_cedspike2, ndi_daq_reader_mfdaq_intan, ndi_daq_reader_mfdaq_spikegadgets
+from .mfdaq import (
+    ndi_daq_reader_mfdaq_blackrock,
+    ndi_daq_reader_mfdaq_cedspike2,
+    ndi_daq_reader_mfdaq_intan,
+    ndi_daq_reader_mfdaq_spikegadgets,
+)
 from .spikeinterface_adapter import ndi_daq_reader_SpikeInterfaceReader
 
 __all__ = [

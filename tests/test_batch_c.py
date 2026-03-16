@@ -21,7 +21,9 @@ from ndi.app.spikeextractor import ndi_app_spikeextractor
 from ndi.app.spikesorter import ndi_app_spikesorter
 from ndi.app.stimulus import ndi_app_stimulus_decoder, ndi_app_stimulus_tuning__response
 from ndi.app.stimulus.decoder import ndi_app_stimulus_decoder as StimulusDecoderDirect
-from ndi.app.stimulus.tuning_response import ndi_app_stimulus_tuning__response as TuningResponseDirect
+from ndi.app.stimulus.tuning_response import (
+    ndi_app_stimulus_tuning__response as TuningResponseDirect,
+)
 from ndi.calc.stimulus import ndi_calc_stimulus_tuningcurve
 from ndi.calc.stimulus.tuningcurve import ndi_calc_stimulus_tuningcurve as TuningCurveCalcDirect
 from ndi.calculator import ndi_calculator

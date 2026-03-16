@@ -213,7 +213,9 @@ class TestTimeReference:
 
     def test_create_utc_reference(self, mock_referent):
         """Test creating a UTC time reference."""
-        tr = ndi_time_timereference(referent=mock_referent, clocktype=ndi_time_clocktype.UTC, time=1234567890.0)
+        tr = ndi_time_timereference(
+            referent=mock_referent, clocktype=ndi_time_clocktype.UTC, time=1234567890.0
+        )
         assert tr.clocktype == ndi_time_clocktype.UTC
         assert tr.time == 1234567890.0
         assert tr.epoch is None
@@ -222,12 +224,17 @@ class TestTimeReference:
     def test_create_local_reference_requires_epoch(self, mock_referent):
         """Test that DEV_LOCAL_TIME requires epoch."""
         with pytest.raises(ValueError):
-            ndi_time_timereference(referent=mock_referent, clocktype=ndi_time_clocktype.DEV_LOCAL_TIME, time=0.5)
+            ndi_time_timereference(
+                referent=mock_referent, clocktype=ndi_time_clocktype.DEV_LOCAL_TIME, time=0.5
+            )
 
     def test_create_local_reference_with_epoch(self, mock_referent):
         """Test creating a local time reference with epoch."""
         tr = ndi_time_timereference(
-            referent=mock_referent, clocktype=ndi_time_clocktype.DEV_LOCAL_TIME, epoch="epoch_001", time=0.5
+            referent=mock_referent,
+            clocktype=ndi_time_clocktype.DEV_LOCAL_TIME,
+            epoch="epoch_001",
+            time=0.5,
         )
         assert tr.clocktype == ndi_time_clocktype.DEV_LOCAL_TIME
         assert tr.epoch == "epoch_001"
@@ -251,7 +258,9 @@ class TestTimeReference:
 
     def test_to_dict(self, mock_referent):
         """Test converting to dict."""
-        tr = ndi_time_timereference(referent=mock_referent, clocktype=ndi_time_clocktype.UTC, time=100.0)
+        tr = ndi_time_timereference(
+            referent=mock_referent, clocktype=ndi_time_clocktype.UTC, time=100.0
+        )
         d = tr.to_dict()
         assert d["clocktypestring"] == "utc"
         assert d["time"] == 100.0

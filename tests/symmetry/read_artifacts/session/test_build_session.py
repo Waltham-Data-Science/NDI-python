@@ -81,10 +81,9 @@ class TestBuildSession:
             excludeFields=exclude_fields,
         )
 
-        assert (
-            len(report) == 0
-        ), f"ndi_session summary mismatch against {source_type} generated artifacts:\n" + "\n".join(
-            report
+        assert len(report) == 0, (
+            f"ndi_session summary mismatch against {source_type} generated artifacts:\n"
+            + "\n".join(report)
         )
 
     def test_build_session_documents(self, source_type):

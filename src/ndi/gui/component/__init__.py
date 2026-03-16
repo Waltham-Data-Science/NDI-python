@@ -27,11 +27,15 @@ __all__ = [
 
 def __getattr__(name: str):  # noqa: ANN204
     if name == "ndi_gui_component_NDIProgressBar":
-        from ndi.gui.component.ndi_gui_component_NDIProgressBar import ndi_gui_component_NDIProgressBar
+        from ndi.gui.component.ndi_gui_component_NDIProgressBar import (
+            ndi_gui_component_NDIProgressBar,
+        )
 
         return ndi_gui_component_NDIProgressBar
     if name == "ndi_gui_component_ProgressBarWindow":
-        from ndi.gui.component.ndi_gui_component_ProgressBarWindow import ndi_gui_component_ProgressBarWindow
+        from ndi.gui.component.ndi_gui_component_ProgressBarWindow import (
+            ndi_gui_component_ProgressBarWindow,
+        )
 
         return ndi_gui_component_ProgressBarWindow
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

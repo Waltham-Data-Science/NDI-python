@@ -119,7 +119,9 @@ class ndi_time_clocktype(Enum):
                 f"Clock type must be one of: {valid_types}. Got: {clocktype.value}"
             )
 
-    def epochgraph_edge(self, other: ndi_time_clocktype) -> tuple[float, ndi_time_timemapping | None]:
+    def epochgraph_edge(
+        self, other: ndi_time_clocktype
+    ) -> tuple[float, ndi_time_timemapping | None]:
         """
         Provide epochgraph edge based purely on clock type.
 

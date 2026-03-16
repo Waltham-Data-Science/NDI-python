@@ -115,14 +115,18 @@ class ndi_gui_component_internal_ProgressTracker:
     # -- Event helpers ----------------------------------------------------
 
     def _fire_progress_updated(self) -> None:
-        from ndi.gui.component.internal.event import ndi_gui_component_internal_event_ProgressUpdatedEventData
+        from ndi.gui.component.internal.event import (
+            ndi_gui_component_internal_event_ProgressUpdatedEventData,
+        )
 
         evt = ndi_gui_component_internal_event_ProgressUpdatedEventData(self.PercentageComplete)
         for cb in self.on_progress_updated:
             cb(self, evt)
 
     def _fire_message_updated(self) -> None:
-        from ndi.gui.component.internal.event import ndi_gui_component_internal_event_MessageUpdatedEventData
+        from ndi.gui.component.internal.event import (
+            ndi_gui_component_internal_event_MessageUpdatedEventData,
+        )
 
         evt = ndi_gui_component_internal_event_MessageUpdatedEventData(self.Message)
         for cb in self.on_message_updated:

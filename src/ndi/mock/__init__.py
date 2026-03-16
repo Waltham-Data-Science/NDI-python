@@ -226,7 +226,9 @@ def clear_mock_docs(session: Any) -> None:
     from ndi.query import ndi_query
 
     try:
-        docs = session.database_search(ndi_query("subject.local_identifier", "contains_string", "mock"))
+        docs = session.database_search(
+            ndi_query("subject.local_identifier", "contains_string", "mock")
+        )
         if docs:
             session.database_rm(docs)
     except Exception:
