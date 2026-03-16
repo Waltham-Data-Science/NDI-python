@@ -1,7 +1,7 @@
 """
 ndi.session.dir - Directory-based NDI session.
 
-This module provides DirSession, a Session implementation that
+This module provides ndi_session_dir, a ndi_session implementation that
 stores all data in a directory on the filesystem.
 """
 
@@ -10,27 +10,27 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ..database import Database
-from ..ido import Ido
-from ..query import Query
-from ..time.syncgraph import SyncGraph
-from .session_base import Session
+from ..database import ndi_database
+from ..ido import ndi_ido
+from ..query import ndi_query
+from ..time.syncgraph import ndi_time_syncgraph
+from .session_base import ndi_session
 
 
-class DirSession(Session):
+class ndi_session_dir(ndi_session):
     """
     Directory-based session implementation.
 
-    DirSession stores session data in a directory structure with:
+    ndi_session_dir stores session data in a directory structure with:
     - .ndi/ subdirectory for database and metadata
     - reference.txt and unique_reference.txt for session identification
 
     Example:
         # Create or open a session
-        >>> session = DirSession('/path/to/experiment')
+        >>> session = ndi_session_dir('/path/to/experiment')
 
         # Create with explicit reference
-        >>> session = DirSession('MyExperiment', '/path/to/experiment')
+        >>> session = ndi_session_dir('MyExperiment', '/path/to/experiment')
 
         # Access session data
         >>> probes = session.getprobes()
@@ -46,8 +46,8 @@ class DirSession(Session):
         Create or open a directory-based session.
 
         Can be called in two ways:
-        - DirSession(path) - Open existing session from path
-        - DirSession(reference, path) - Create/open with explicit reference
+        - ndi_session_dir(path) - Open existing session from path
+        - ndi_session_dir(reference, path) - Create/open with explicit reference
 
         Args:
             reference_or_path: Either the session reference or path
@@ -87,10 +87,10 @@ class DirSession(Session):
                 self._identifier = unique_ref_file.read_text().strip()
             else:
                 # Create a new identifier
-                self._identifier = Ido().id
+                self._identifier = ndi_ido().id
 
         # Initialize database
-        self._database = Database(self._ndi_pathname(), db_name=".")
+        self._database = ndi_database(self._ndi_pathname(), db_name=".")
 
         # Try to load session info from database
         read_from_database = False
@@ -98,7 +98,7 @@ class DirSession(Session):
             # Search without the session_id filter so we can discover the
             # existing session_id from documents already in the database
             # (e.g. artifacts produced by MATLAB).
-            session_docs = self._database.search(Query("").isa("session"))
+            session_docs = self._database.search(ndi_query("").isa("session"))
             if session_docs:
                 # Use the oldest session document
                 oldest_doc = session_docs[0]
@@ -129,10 +129,10 @@ class DirSession(Session):
                 )
 
             # Create session document
-            from ..document import Document
+            from ..document import ndi_document
 
             try:
-                session_doc = Document("session", **{"session.reference": self._reference})
+                session_doc = ndi_document("session", **{"session.reference": self._reference})
                 session_doc = session_doc.set_session_id(self._identifier)
                 self.database_add(session_doc)
             except Exception:
@@ -141,15 +141,15 @@ class DirSession(Session):
 
         # Load or create syncgraph
         syncgraph_docs = self.database_search(
-            Query("").isa("syncgraph") & (Query("base.session_id") == self.id())
+            ndi_query("").isa("syncgraph") & (ndi_query("base.session_id") == self.id())
         )
 
         if not syncgraph_docs:
-            self._syncgraph = SyncGraph(self)
+            self._syncgraph = ndi_time_syncgraph(self)
         else:
             if len(syncgraph_docs) > 1:
                 raise ValueError("Too many syncgraph documents found. There should be only 1.")
-            self._syncgraph = SyncGraph(session=self, document=syncgraph_docs[0])
+            self._syncgraph = ndi_time_syncgraph(session=self, document=syncgraph_docs[0])
 
         # Write reference files
         self._write_reference_files()
@@ -213,7 +213,7 @@ class DirSession(Session):
         self,
         are_you_sure: bool = False,
         ask_user: bool = True,
-    ) -> DirSession | None:
+    ) -> ndi_session_dir | None:
         """
         Delete the session's data structures.
 
@@ -256,12 +256,12 @@ class DirSession(Session):
         return ref_file.exists()
 
     @staticmethod
-    def database_erase(session: DirSession, areyousure: str) -> None:
+    def database_erase(session: ndi_session_dir, areyousure: str) -> None:
         """
         Delete the entire session database.
 
         Args:
-            session: Session to erase
+            session: ndi_session to erase
             areyousure: Must be 'yes' to proceed
         """
         import shutil
@@ -276,7 +276,7 @@ class DirSession(Session):
 
     def __eq__(self, other: Any) -> bool:
         """Check equality by ID and path."""
-        if not isinstance(other, DirSession):
+        if not isinstance(other, ndi_session_dir):
             return False
         if not super().__eq__(other):
             return False
@@ -284,4 +284,4 @@ class DirSession(Session):
 
     def __repr__(self) -> str:
         """String representation."""
-        return f"DirSession(reference='{self._reference}', path='{self._path}')"
+        return f"ndi_session_dir(reference='{self._reference}', path='{self._path}')"

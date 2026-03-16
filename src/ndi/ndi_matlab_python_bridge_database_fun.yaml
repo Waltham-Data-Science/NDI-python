@@ -34,7 +34,7 @@ functions:
     output_arguments:
       - name: d
         type_matlab: "cell array of ndi.document"
-        type_python: "list[Document]"
+        type_python: "list[ndi_document]"
     decision_log: "Synchronized with MATLAB main as of 2026-03-13."
 
   - name: findalldependencies
@@ -55,7 +55,7 @@ functions:
     output_arguments:
       - name: d
         type_matlab: "cell array of ndi.document"
-        type_python: "list[Document]"
+        type_python: "list[ndi_document]"
     decision_log: "Synchronized with MATLAB main as of 2026-03-13."
 
   - name: docs_from_ids
@@ -73,7 +73,7 @@ functions:
     output_arguments:
       - name: docs
         type_matlab: "cell array (same size as document_ids)"
-        type_python: "list[Document | None]"
+        type_python: "list[ndi_document | None]"
     decision_log: "Exact match. Synchronized with MATLAB main as of 2026-03-13."
 
   - name: docs2graph
@@ -84,7 +84,7 @@ functions:
     input_arguments:
       - name: ndi_document_obj
         type_matlab: "cell array of ndi.document"
-        type_python: "list[Document]"
+        type_python: "list[ndi_document]"
     output_arguments:
       - name: G
         type_matlab: "sparse adjacency matrix"
@@ -119,7 +119,7 @@ functions:
     output_arguments:
       - name: d
         type_matlab: "cell array of ndi.document"
-        type_python: "list[Document]"
+        type_python: "list[ndi_document]"
     decision_log: "Exact match. Synchronized with MATLAB main as of 2026-03-13."
 
   - name: finddocs_elementEpochType
@@ -144,7 +144,7 @@ functions:
     output_arguments:
       - name: docs
         type_matlab: "cell array of ndi.document"
-        type_python: "list[Document]"
+        type_python: "list[ndi_document]"
     decision_log: >
       RENAMED from finddocs_element_epoch_type to finddocs_elementEpochType
       to match MATLAB. MATLAB queries 'epochid.epochid' field; Python was
@@ -158,7 +158,7 @@ functions:
     input_arguments:
       - name: ndi_document_obj
         type_matlab: "ndi.document | char"
-        type_python: "Document | str"
+        type_python: "ndi_document | str"
       - name: ndi_session_obj
         type_matlab: "ndi.session"
         type_python: "Any"
@@ -211,7 +211,7 @@ functions:
     output_arguments:
       - name: d
         type_matlab: "cell array of ndi.document"
-        type_python: "list[Document]"
+        type_python: "list[ndi_document]"
     decision_log: >
       MATLAB searches for docs with 'depends_on' hasfield first,
       then validates each dependency against a cache. Python gets
@@ -337,7 +337,7 @@ functions:
     output_arguments:
       - name: docs
         type_matlab: "cell array of ndi.document"
-        type_python: "list[Document]"
+        type_python: "list[ndi_document]"
       - name: target_path
         type_matlab: "char"
         type_python: "str"
@@ -393,7 +393,7 @@ not_applicable:
     decision_log: >
       MATLAB factory for instantiating a new database based on the
       database hierarchy preferences. In Python, this functionality is
-      absorbed into Database.__init__() which directly creates the
+      absorbed into ndi_database.__init__() which directly creates the
       SQLite backend. No separate factory needed.
 
   - name: databasehierarchyinit
@@ -412,7 +412,7 @@ not_applicable:
     decision_log: >
       MATLAB utility for reading/writing dataset metadata structures.
       In Python, dataset metadata is handled natively via dict/JSON
-      serialization in the Document class. No separate utility needed.
+      serialization in the ndi_document class. No separate utility needed.
 
   - name: openMINDSobj2ndi_document
     matlab_path: "+ndi/+database/+fun/openMINDSobj2ndi_document.m"

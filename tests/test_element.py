@@ -2,40 +2,40 @@
 Tests for ndi.epoch, ndi.element, and ndi.probe (Phase 6).
 
 Tests cover:
-- EpochProbeMap dataclass
-- EpochSet abstract base class
-- Epoch immutable data class
-- Element base class
-- Probe specialized element
+- ndi_epoch_epochprobemap dataclass
+- ndi_epoch_epochset abstract base class
+- ndi_epoch_epoch immutable data class
+- ndi_element base class
+- ndi_probe specialized element
 """
 
 from unittest.mock import MagicMock
 
 import pytest
 
-from ndi.documentservice import DocumentService
-from ndi.element import Element
-from ndi.epoch.epoch import Epoch, is_epoch_or_empty
-from ndi.epoch.epochprobemap import EpochProbeMap, build_devicestring, parse_devicestring
-from ndi.epoch.epochset import EpochSet
-from ndi.probe import Probe
-from ndi.time import DEV_LOCAL_TIME, UTC, ClockType
+from ndi.documentservice import ndi_documentservice
+from ndi.element import ndi_element
+from ndi.epoch.epoch import ndi_epoch_epoch, is_epoch_or_empty
+from ndi.epoch.epochprobemap import ndi_epoch_epochprobemap, build_devicestring, parse_devicestring
+from ndi.epoch.epochset import ndi_epoch_epochset
+from ndi.probe import ndi_probe
+from ndi.time import DEV_LOCAL_TIME, UTC, ndi_time_clocktype
 
 # =============================================================================
-# EpochProbeMap Tests
+# ndi_epoch_epochprobemap Tests
 # =============================================================================
 
 
 class TestEpochProbeMap:
-    """Tests for EpochProbeMap dataclass."""
+    """Tests for ndi_epoch_epochprobemap dataclass."""
 
     def test_creation(self):
-        """Test creating an EpochProbeMap."""
-        epm = EpochProbeMap(
+        """Test creating an ndi_epoch_epochprobemap."""
+        epm = ndi_epoch_epochprobemap(
             name="electrode1",
             reference=1,
             type="n-trode",
-            devicestring="intan1:SpikeInterfaceReader:",
+            devicestring="intan1:ndi_daq_reader_SpikeInterfaceReader:",
             subjectstring="mouse001",
         )
         assert epm.name == "electrode1"
@@ -45,41 +45,41 @@ class TestEpochProbeMap:
     def test_whitespace_in_name_raises(self):
         """Test that whitespace in name raises error."""
         with pytest.raises(ValueError, match="name cannot contain whitespace"):
-            EpochProbeMap(name="electrode 1", reference=1, type="n-trode")
+            ndi_epoch_epochprobemap(name="electrode 1", reference=1, type="n-trode")
 
     def test_whitespace_in_type_raises(self):
         """Test that whitespace in type raises error."""
         with pytest.raises(ValueError, match="type cannot contain whitespace"):
-            EpochProbeMap(name="electrode1", reference=1, type="n trode")
+            ndi_epoch_epochprobemap(name="electrode1", reference=1, type="n trode")
 
     def test_negative_reference_raises(self):
         """Test that negative reference raises error."""
         with pytest.raises(ValueError, match="reference must be non-negative"):
-            EpochProbeMap(name="electrode1", reference=-1, type="n-trode")
+            ndi_epoch_epochprobemap(name="electrode1", reference=-1, type="n-trode")
 
     def test_devicename_property(self):
         """Test devicename property extraction."""
-        epm = EpochProbeMap(
-            name="e1", reference=1, type="probe", devicestring="intan1:SpikeInterfaceReader:details"
+        epm = ndi_epoch_epochprobemap(
+            name="e1", reference=1, type="probe", devicestring="intan1:ndi_daq_reader_SpikeInterfaceReader:details"
         )
         assert epm.devicename == "intan1"
 
     def test_deviceclass_property(self):
         """Test deviceclass property extraction."""
-        epm = EpochProbeMap(
-            name="e1", reference=1, type="probe", devicestring="intan1:SpikeInterfaceReader:details"
+        epm = ndi_epoch_epochprobemap(
+            name="e1", reference=1, type="probe", devicestring="intan1:ndi_daq_reader_SpikeInterfaceReader:details"
         )
-        assert epm.deviceclass == "SpikeInterfaceReader"
+        assert epm.deviceclass == "ndi_daq_reader_SpikeInterfaceReader"
 
     def test_matches_all(self):
         """Test matches with all criteria."""
-        epm = EpochProbeMap(name="e1", reference=1, type="probe")
+        epm = ndi_epoch_epochprobemap(name="e1", reference=1, type="probe")
         assert epm.matches(name="e1", reference=1, type="probe") is True
         assert epm.matches(name="e2", reference=1, type="probe") is False
 
     def test_matches_partial(self):
         """Test matches with partial criteria."""
-        epm = EpochProbeMap(name="e1", reference=1, type="probe")
+        epm = ndi_epoch_epochprobemap(name="e1", reference=1, type="probe")
         assert epm.matches(name="e1") is True
         assert epm.matches(reference=1) is True
         assert epm.matches(type="probe") is True
@@ -87,7 +87,7 @@ class TestEpochProbeMap:
 
     def test_to_dict(self):
         """Test conversion to dictionary."""
-        epm = EpochProbeMap(
+        epm = ndi_epoch_epochprobemap(
             name="e1", reference=1, type="probe", devicestring="dev:class:", subjectstring="subj"
         )
         d = epm.to_dict()
@@ -98,20 +98,20 @@ class TestEpochProbeMap:
     def test_from_dict(self):
         """Test creation from dictionary."""
         d = {"name": "e1", "reference": 1, "type": "probe"}
-        epm = EpochProbeMap.from_dict(d)
+        epm = ndi_epoch_epochprobemap.from_dict(d)
         assert epm.name == "e1"
         assert epm.reference == 1
 
     def test_str(self):
         """Test string representation."""
-        epm = EpochProbeMap(name="e1", reference=1, type="probe")
+        epm = ndi_epoch_epochprobemap(name="e1", reference=1, type="probe")
         assert str(epm) == "e1|1|probe"
 
     def test_equality(self):
         """Test equality comparison."""
-        epm1 = EpochProbeMap(name="e1", reference=1, type="probe")
-        epm2 = EpochProbeMap(name="e1", reference=1, type="probe")
-        epm3 = EpochProbeMap(name="e2", reference=1, type="probe")
+        epm1 = ndi_epoch_epochprobemap(name="e1", reference=1, type="probe")
+        epm2 = ndi_epoch_epochprobemap(name="e1", reference=1, type="probe")
+        epm3 = ndi_epoch_epochprobemap(name="e2", reference=1, type="probe")
         assert epm1 == epm2
         assert epm1 != epm3
 
@@ -121,9 +121,9 @@ class TestDeviceStringHelpers:
 
     def test_parse_devicestring(self):
         """Test parsing device string."""
-        result = parse_devicestring("intan1:SpikeInterfaceReader:extra:info")
+        result = parse_devicestring("intan1:ndi_daq_reader_SpikeInterfaceReader:extra:info")
         assert result["name"] == "intan1"
-        assert result["class"] == "SpikeInterfaceReader"
+        assert result["class"] == "ndi_daq_reader_SpikeInterfaceReader"
         assert result["details"] == "extra:info"
 
     def test_build_devicestring(self):
@@ -134,11 +134,11 @@ class TestDeviceStringHelpers:
 
 
 # =============================================================================
-# EpochSet Tests
+# ndi_epoch_epochset Tests
 # =============================================================================
 
 
-class ConcreteEpochSet(EpochSet):
+class ConcreteEpochSet(ndi_epoch_epochset):
     """Concrete implementation for testing."""
 
     def __init__(self, epochs=None):
@@ -156,7 +156,7 @@ class ConcreteEpochSet(EpochSet):
 
 
 class TestEpochSet:
-    """Tests for EpochSet abstract base class."""
+    """Tests for ndi_epoch_epochset abstract base class."""
 
     def test_epochtable_caching(self):
         """Test epoch table caching."""
@@ -245,16 +245,16 @@ class TestEpochSet:
 
 
 # =============================================================================
-# Epoch Tests
+# ndi_epoch_epoch Tests
 # =============================================================================
 
 
 class TestEpoch:
-    """Tests for Epoch immutable data class."""
+    """Tests for ndi_epoch_epoch immutable data class."""
 
     def test_creation(self):
-        """Test creating an Epoch."""
-        epoch = Epoch(
+        """Test creating an ndi_epoch_epoch."""
+        epoch = ndi_epoch_epoch(
             epoch_number=1,
             epoch_id="ep_abc123",
             epoch_session_id="sess_xyz",
@@ -263,13 +263,13 @@ class TestEpoch:
         assert epoch.epoch_id == "ep_abc123"
 
     def test_immutability(self):
-        """Test that Epoch is immutable."""
-        epoch = Epoch(epoch_number=1, epoch_id="ep1")
+        """Test that ndi_epoch_epoch is immutable."""
+        epoch = ndi_epoch_epoch(epoch_number=1, epoch_id="ep1")
         with pytest.raises(AttributeError):
             epoch.epoch_number = 2
 
     def test_from_dict(self):
-        """Test creating Epoch from dictionary."""
+        """Test creating ndi_epoch_epoch from dictionary."""
         data = {
             "epoch_number": 1,
             "epoch_id": "ep1",
@@ -278,14 +278,14 @@ class TestEpoch:
             "epoch_clock": ["dev_local_time"],
             "t0_t1": [(0.0, 10.0)],
         }
-        epoch = Epoch.from_dict(data)
+        epoch = ndi_epoch_epoch.from_dict(data)
         assert epoch.epoch_number == 1
         assert len(epoch.epochprobemap) == 1
 
     def test_to_dict(self):
-        """Test converting Epoch to dictionary."""
-        epm = EpochProbeMap(name="e1", reference=1, type="probe")
-        epoch = Epoch(
+        """Test converting ndi_epoch_epoch to dictionary."""
+        epm = ndi_epoch_epochprobemap(name="e1", reference=1, type="probe")
+        epoch = ndi_epoch_epoch(
             epoch_number=1,
             epoch_id="ep1",
             epochprobemap=(epm,),
@@ -298,17 +298,17 @@ class TestEpoch:
 
     def test_has_clock(self):
         """Test has_clock method."""
-        epoch = Epoch(
+        epoch = ndi_epoch_epoch(
             epoch_number=1,
             epoch_id="ep1",
             epoch_clock=(DEV_LOCAL_TIME, UTC),
         )
         assert epoch.has_clock(DEV_LOCAL_TIME) is True
-        assert epoch.has_clock(ClockType.EXP_GLOBAL_TIME) is False
+        assert epoch.has_clock(ndi_time_clocktype.EXP_GLOBAL_TIME) is False
 
     def test_time_range(self):
         """Test time_range method."""
-        epoch = Epoch(
+        epoch = ndi_epoch_epoch(
             epoch_number=1,
             epoch_id="ep1",
             epoch_clock=(DEV_LOCAL_TIME, UTC),
@@ -319,8 +319,8 @@ class TestEpoch:
 
     def test_matches_probe(self):
         """Test matches_probe method."""
-        epm = EpochProbeMap(name="e1", reference=1, type="probe")
-        epoch = Epoch(
+        epm = ndi_epoch_epochprobemap(name="e1", reference=1, type="probe")
+        epoch = ndi_epoch_epoch(
             epoch_number=1,
             epoch_id="ep1",
             epochprobemap=(epm,),
@@ -337,8 +337,8 @@ class TestIsEpochOrEmpty:
         assert is_epoch_or_empty(None) is True
 
     def test_epoch(self):
-        """Test with Epoch."""
-        epoch = Epoch(epoch_number=1, epoch_id="ep1")
+        """Test with ndi_epoch_epoch."""
+        epoch = ndi_epoch_epoch(epoch_number=1, epoch_id="ep1")
         assert is_epoch_or_empty(epoch) is True
 
     def test_empty_list(self):
@@ -347,7 +347,7 @@ class TestIsEpochOrEmpty:
 
     def test_list_of_epochs(self):
         """Test with list of Epochs."""
-        epochs = [Epoch(epoch_number=i, epoch_id=f"ep{i}") for i in range(3)]
+        epochs = [ndi_epoch_epoch(epoch_number=i, epoch_id=f"ep{i}") for i in range(3)]
         assert is_epoch_or_empty(epochs) is True
 
     def test_invalid(self):
@@ -356,16 +356,16 @@ class TestIsEpochOrEmpty:
 
 
 # =============================================================================
-# Element Tests
+# ndi_element Tests
 # =============================================================================
 
 
 class TestElement:
-    """Tests for Element base class."""
+    """Tests for ndi_element base class."""
 
     def test_creation(self):
-        """Test creating an Element."""
-        elem = Element(
+        """Test creating an ndi_element."""
+        elem = ndi_element(
             name="electrode1",
             reference=1,
             type="n-trode",
@@ -377,33 +377,33 @@ class TestElement:
     def test_whitespace_in_name_raises(self):
         """Test that whitespace in name raises error."""
         with pytest.raises(ValueError, match="name cannot contain whitespace"):
-            Element(name="electrode 1", reference=1, type="n-trode")
+            ndi_element(name="electrode 1", reference=1, type="n-trode")
 
     def test_negative_reference_raises(self):
         """Test that negative reference raises error."""
         with pytest.raises(ValueError, match="reference must be non-negative"):
-            Element(name="electrode1", reference=-1, type="n-trode")
+            ndi_element(name="electrode1", reference=-1, type="n-trode")
 
     def test_elementstring(self):
         """Test elementstring method."""
-        elem = Element(name="electrode1", reference=1, type="n-trode")
+        elem = ndi_element(name="electrode1", reference=1, type="n-trode")
         assert elem.elementstring() == "electrode1 | 1"
 
     def test_epochsetname(self):
         """Test epochsetname method."""
-        elem = Element(name="electrode1", reference=1, type="n-trode")
+        elem = ndi_element(name="electrode1", reference=1, type="n-trode")
         assert "element" in elem.epochsetname()
         assert "electrode1" in elem.epochsetname()
 
     def test_issyncgraphroot_no_underlying(self):
         """Test issyncgraphroot with no underlying element."""
-        elem = Element(name="e1", reference=1, type="probe")
+        elem = ndi_element(name="e1", reference=1, type="probe")
         assert elem.issyncgraphroot() is True
 
     def test_issyncgraphroot_with_underlying(self):
         """Test issyncgraphroot with underlying element."""
-        underlying = Element(name="base", reference=0, type="base")
-        elem = Element(
+        underlying = ndi_element(name="base", reference=0, type="base")
+        elem = ndi_element(
             name="derived",
             reference=1,
             type="derived",
@@ -414,13 +414,13 @@ class TestElement:
     def test_direct_epochtable(self):
         """Test epoch table from direct underlying element."""
         # Create underlying with mock epoch table
-        underlying = Element(name="base", reference=0, type="base")
+        underlying = ndi_element(name="base", reference=0, type="base")
         underlying._epochtable_cache = [
             {"epoch_number": 1, "epoch_id": "ep1", "epoch_clock": [], "t0_t1": []}
         ]
         underlying._epochtable_hash = "hash1"
 
-        elem = Element(
+        elem = ndi_element(
             name="derived",
             reference=1,
             type="derived",
@@ -434,22 +434,22 @@ class TestElement:
 
     def test_equality(self):
         """Test element equality."""
-        elem1 = Element(name="e1", reference=1, type="probe")
-        elem2 = Element(name="e1", reference=1, type="probe")
-        elem3 = Element(name="e2", reference=1, type="probe")
+        elem1 = ndi_element(name="e1", reference=1, type="probe")
+        elem2 = ndi_element(name="e1", reference=1, type="probe")
+        elem3 = ndi_element(name="e2", reference=1, type="probe")
 
         assert elem1 == elem2
         assert elem1 != elem3
 
     def test_has_unique_id(self):
         """Test that elements have unique IDs."""
-        elem1 = Element(name="e1", reference=1, type="probe")
-        elem2 = Element(name="e1", reference=1, type="probe")
+        elem1 = ndi_element(name="e1", reference=1, type="probe")
+        elem2 = ndi_element(name="e1", reference=1, type="probe")
         assert elem1.id != elem2.id
 
     def test_newdocument(self):
         """Test newdocument method."""
-        elem = Element(name="e1", reference=1, type="probe")
+        elem = ndi_element(name="e1", reference=1, type="probe")
         try:
             doc = elem.newdocument()
             assert doc is not None
@@ -457,26 +457,26 @@ class TestElement:
             assert hasattr(doc, "document_properties")
         except FileNotFoundError:
             # Schema not available in test environment
-            pytest.skip("Element JSON schema not available")
+            pytest.skip("ndi_element JSON schema not available")
 
     def test_searchquery(self):
         """Test searchquery method."""
-        elem = Element(name="e1", reference=1, type="probe")
+        elem = ndi_element(name="e1", reference=1, type="probe")
         q = elem.searchquery()
         assert q is not None
 
 
 # =============================================================================
-# Probe Tests
+# ndi_probe Tests
 # =============================================================================
 
 
 class TestProbe:
-    """Tests for Probe specialized element."""
+    """Tests for ndi_probe specialized element."""
 
     def test_creation(self):
-        """Test creating a Probe."""
-        probe = Probe(
+        """Test creating a ndi_probe."""
+        probe = ndi_probe(
             name="electrode1",
             reference=1,
             type="n-trode",
@@ -489,60 +489,60 @@ class TestProbe:
 
     def test_probe_is_direct(self):
         """Test that probes are always direct=True (matching MATLAB)."""
-        probe = Probe(name="e1", reference=1, type="probe")
+        probe = ndi_probe(name="e1", reference=1, type="probe")
         assert probe.direct is True
 
     def test_epochsetname(self):
         """Test epochsetname method."""
-        probe = Probe(name="electrode1", reference=1, type="n-trode")
+        probe = ndi_probe(name="electrode1", reference=1, type="n-trode")
         assert "probe" in probe.epochsetname()
         assert "electrode1" in probe.epochsetname()
 
     def test_issyncgraphroot(self):
         """Test issyncgraphroot returns False for probes."""
-        probe = Probe(name="e1", reference=1, type="probe")
+        probe = ndi_probe(name="e1", reference=1, type="probe")
         assert probe.issyncgraphroot() is False
 
     def test_epochprobemapmatch(self):
         """Test epochprobemapmatch method."""
-        probe = Probe(name="e1", reference=1, type="probe")
-        epm = EpochProbeMap(name="e1", reference=1, type="probe")
+        probe = ndi_probe(name="e1", reference=1, type="probe")
+        epm = ndi_epoch_epochprobemap(name="e1", reference=1, type="probe")
 
         assert probe.epochprobemapmatch(epm) is True
         assert (
-            probe.epochprobemapmatch(EpochProbeMap(name="e2", reference=1, type="probe")) is False
+            probe.epochprobemapmatch(ndi_epoch_epochprobemap(name="e2", reference=1, type="probe")) is False
         )
 
     def test_epochprobemapmatch_dict(self):
         """Test epochprobemapmatch with dict."""
-        probe = Probe(name="e1", reference=1, type="probe")
+        probe = ndi_probe(name="e1", reference=1, type="probe")
         epm_dict = {"name": "e1", "reference": 1, "type": "probe"}
 
         assert probe.epochprobemapmatch(epm_dict) is True
 
     def test_newdocument(self):
         """Test newdocument creates probe document."""
-        probe = Probe(name="e1", reference=1, type="probe", subject_id="subj1")
+        probe = ndi_probe(name="e1", reference=1, type="probe", subject_id="subj1")
         try:
             doc = probe.newdocument()
             assert doc is not None
         except FileNotFoundError:
             # Schema not available in test environment
-            pytest.skip("Probe JSON schema not available")
+            pytest.skip("ndi_probe JSON schema not available")
 
     def test_repr(self):
         """Test string representation."""
-        probe = Probe(name="e1", reference=1, type="probe")
-        assert "Probe" in repr(probe)
+        probe = ndi_probe(name="e1", reference=1, type="probe")
+        assert "ndi_probe" in repr(probe)
         assert "e1" in repr(probe)
 
 
 class TestProbeBuildEpochtable:
-    """Tests for Probe.buildepochtable with mocked DAQ systems."""
+    """Tests for ndi_probe.buildepochtable with mocked DAQ systems."""
 
     def test_buildepochtable_no_session(self):
         """Test buildepochtable with no session returns empty."""
-        probe = Probe(name="e1", reference=1, type="probe")
+        probe = ndi_probe(name="e1", reference=1, type="probe")
         et = probe.buildepochtable()
         assert et == []
 
@@ -558,7 +558,7 @@ class TestProbeBuildEpochtable:
                 "epoch_id": "dev_ep1",
                 "epoch_session_id": "sess1",
                 "epochprobemap": [
-                    EpochProbeMap(name="e1", reference=1, type="probe", devicestring="dev1::"),
+                    ndi_epoch_epochprobemap(name="e1", reference=1, type="probe", devicestring="dev1::"),
                 ],
                 "epoch_clock": [DEV_LOCAL_TIME],
                 "t0_t1": [(0.0, 10.0)],
@@ -567,7 +567,7 @@ class TestProbeBuildEpochtable:
 
         mock_session.getdaqsystems.return_value = [mock_daqsys]
 
-        probe = Probe(session=mock_session, name="e1", reference=1, type="probe")
+        probe = ndi_probe(session=mock_session, name="e1", reference=1, type="probe")
         et = probe.buildepochtable()
 
         assert len(et) == 1
@@ -583,7 +583,7 @@ class TestProbeBuildEpochtable:
                 "epoch_number": 1,
                 "epoch_id": "dev_ep1",
                 "epochprobemap": [
-                    EpochProbeMap(name="other", reference=99, type="other"),
+                    ndi_epoch_epochprobemap(name="other", reference=99, type="other"),
                 ],
                 "epoch_clock": [],
                 "t0_t1": [],
@@ -592,31 +592,31 @@ class TestProbeBuildEpochtable:
 
         mock_session.getdaqsystems.return_value = [mock_daqsys]
 
-        probe = Probe(session=mock_session, name="e1", reference=1, type="probe")
+        probe = ndi_probe(session=mock_session, name="e1", reference=1, type="probe")
         et = probe.buildepochtable()
 
         assert len(et) == 0
 
 
 # =============================================================================
-# DocumentService Tests
+# ndi_documentservice Tests
 # =============================================================================
 
 
 class TestDocumentService:
-    """Tests for DocumentService mixin."""
+    """Tests for ndi_documentservice mixin."""
 
     def test_element_implements_documentservice(self):
-        """Test that Element implements DocumentService."""
-        elem = Element(name="e1", reference=1, type="probe")
-        assert isinstance(elem, DocumentService)
+        """Test that ndi_element implements ndi_documentservice."""
+        elem = ndi_element(name="e1", reference=1, type="probe")
+        assert isinstance(elem, ndi_documentservice)
         assert hasattr(elem, "newdocument")
         assert hasattr(elem, "searchquery")
 
     def test_probe_implements_documentservice(self):
-        """Test that Probe implements DocumentService."""
-        probe = Probe(name="e1", reference=1, type="probe")
-        assert isinstance(probe, DocumentService)
+        """Test that ndi_probe implements ndi_documentservice."""
+        probe = ndi_probe(name="e1", reference=1, type="probe")
+        assert isinstance(probe, ndi_documentservice)
 
 
 if __name__ == "__main__":

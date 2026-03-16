@@ -16,7 +16,7 @@ classes:
     matlab_path: "+ndi/dataset.m"
     matlab_last_sync_hash: "7512bcb0"
     python_path: "ndi/dataset/_dataset.py"
-    python_class: "Dataset"
+    python_class: "ndi_dataset"
 
     properties:
       - name: session
@@ -47,7 +47,7 @@ classes:
             type_python: "str"
         output_arguments:
           - name: ndi_dataset_obj
-            type_python: "Dataset"
+            type_python: "ndi_dataset"
         decision_log: "Python __init__ takes no arguments; session is set by subclass."
 
       # --- Public instance methods ---
@@ -78,7 +78,7 @@ classes:
             type_python: "Any"
         output_arguments:
           - name: ndi_dataset_obj
-            type_python: "Dataset"
+            type_python: "ndi_dataset"
         decision_log: "MATLAB name uses underscores. Exact match."
 
       - name: add_ingested_session
@@ -88,7 +88,7 @@ classes:
             type_python: "Any"
         output_arguments:
           - name: ndi_dataset_obj
-            type_python: "Dataset"
+            type_python: "ndi_dataset"
         decision_log: "MATLAB name uses underscores. Exact match."
 
       - name: deleteIngestedSession
@@ -102,7 +102,7 @@ classes:
             default: "False"
         output_arguments:
           - name: ndi_dataset_obj
-            type_python: "Dataset"
+            type_python: "ndi_dataset"
         decision_log: >
           MATLAB name is deleteIngestedSession (camelCase).
           Python was previously delete_ingested_session; renamed to match MATLAB.
@@ -118,7 +118,7 @@ classes:
             default: "False"
         output_arguments:
           - name: ndi_dataset_obj
-            type_python: "Dataset"
+            type_python: "ndi_dataset"
         decision_log: "MATLAB name uses underscores. Exact match."
 
       - name: open_session
@@ -148,34 +148,34 @@ classes:
         input_arguments:
           - name: document
             type_matlab: "ndi.document | cell"
-            type_python: "Document | list[Document]"
+            type_python: "ndi_document | list[ndi_document]"
         output_arguments:
           - name: ndi_dataset_obj
-            type_python: "Dataset"
+            type_python: "ndi_dataset"
         decision_log: "Exact match."
 
       - name: database_rm
         input_arguments:
           - name: doc_unique_id
             type_matlab: "ndi.document | char | cell"
-            type_python: "Document | str | list"
+            type_python: "ndi_document | str | list"
           - name: error_if_not_found
             type_matlab: "logical (name-value)"
             type_python: "bool"
             default: "False"
         output_arguments:
           - name: ndi_dataset_obj
-            type_python: "Dataset"
+            type_python: "ndi_dataset"
         decision_log: "Exact match."
 
       - name: database_search
         input_arguments:
           - name: searchparameters
             type_matlab: "ndi.query"
-            type_python: "Query"
+            type_python: "ndi_query"
         output_arguments:
           - name: ndi_document_obj
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: "Exact match."
 
       - name: database_openbinarydoc
@@ -218,7 +218,7 @@ classes:
         input_arguments:
           - name: ndi_document_obj
             type_matlab: "ndi.document"
-            type_python: "Document"
+            type_python: "ndi_document"
         output_arguments:
           - name: ndi_session_obj
             type_python: "Any | None"
@@ -242,31 +242,31 @@ classes:
         kind: static
         input_arguments:
           - name: ndi_dataset_obj
-            type_python: "Dataset"
+            type_python: "ndi_dataset"
           - name: doc
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         output_arguments:
           - name: new_docs
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: "MATLAB camelCase preserved exactly."
 
       - name: addSessionInfoToDataset
         kind: static
         input_arguments:
           - name: ndi_dataset_obj
-            type_python: "Dataset"
+            type_python: "ndi_dataset"
           - name: session_info
             type_python: "dict[str, Any]"
         output_arguments:
           - name: new_doc
-            type_python: "Document"
+            type_python: "ndi_document"
         decision_log: "MATLAB camelCase preserved exactly."
 
       - name: removeSessionInfoFromDataset
         kind: static
         input_arguments:
           - name: ndi_dataset_obj
-            type_python: "Dataset"
+            type_python: "ndi_dataset"
           - name: session_id
             type_python: "str"
         output_arguments: []
@@ -280,7 +280,7 @@ classes:
     matlab_path: "+ndi/+dataset/dir.m"
     matlab_last_sync_hash: "7512bcb0"
     python_path: "ndi/dataset/_dataset.py"
-    python_class: "DatasetDir"
+    python_class: "ndi_dataset_dir"
     inherits: "ndi.dataset"
 
     properties:
@@ -302,10 +302,10 @@ classes:
             type_python: "str | Path | None"
           - name: docs
             type_matlab: "cell (hidden)"
-            type_python: "list[Document] | None"
+            type_python: "list[ndi_document] | None"
         output_arguments:
           - name: ndi_dataset_dir_obj
-            type_python: "DatasetDir"
+            type_python: "ndi_dataset_dir"
         decision_log: >
           Python constructor supports MATLAB calling conventions:
           dir(path), dir(reference, path), dir(reference, path, docs).
@@ -315,7 +315,7 @@ classes:
         input_arguments:
           - name: ndi_dataset_dir_obj
             type_matlab: "ndi.dataset.dir"
-            type_python: "DatasetDir"
+            type_python: "ndi_dataset_dir"
           - name: areyousure
             type_matlab: "char"
             type_python: "str"

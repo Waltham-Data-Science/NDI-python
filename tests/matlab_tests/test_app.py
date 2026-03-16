@@ -4,21 +4,21 @@ Port of MATLAB ndi.unittest.app.TestMarkGarbage tests.
 MATLAB source files:
   +app/TestMarkGarbage.m → TestMarkGarbage
 
-Tests the MarkGarbage app for marking, loading, and clearing
+Tests the ndi_app_markgarbage app for marking, loading, and clearing
 valid time intervals on recording elements.
 
 The MATLAB tests require a full session with Intan data and probes.
 We provide:
   - Tests with mocked session (database_add/search/remove) but REAL
-    Document creation — ensuring the schema path and Document API work.
-  - Integration tests (skip if DirSession unavailable) for full flow.
+    ndi_document creation — ensuring the schema path and ndi_document API work.
+  - Integration tests (skip if ndi_session_dir unavailable) for full flow.
 """
 
 from unittest.mock import MagicMock
 
 import pytest
 
-from ndi.document import Document
+from ndi.document import ndi_document
 
 # ===========================================================================
 # TestMarkGarbageInstantiation — Basic API tests
@@ -29,51 +29,51 @@ class TestMarkGarbageInstantiation:
     """Port of ndi.unittest.app.TestMarkGarbage — instantiation tests."""
 
     def test_create_without_session(self):
-        """MarkGarbage can be created without a session."""
-        from ndi.app.markgarbage import MarkGarbage
+        """ndi_app_markgarbage can be created without a session."""
+        from ndi.app.markgarbage import ndi_app_markgarbage
 
-        app = MarkGarbage()
+        app = ndi_app_markgarbage()
         assert app is not None
         assert app.session is None
         assert app.name == "ndi_app_markgarbage"
 
     def test_create_with_session(self):
-        """MarkGarbage can be created with a session."""
-        from ndi.app.markgarbage import MarkGarbage
+        """ndi_app_markgarbage can be created with a session."""
+        from ndi.app.markgarbage import ndi_app_markgarbage
 
         session = MagicMock()
         session.id.return_value = "session-123"
-        app = MarkGarbage(session)
+        app = ndi_app_markgarbage(session)
         assert app.session is session
 
     def test_repr(self):
-        """MarkGarbage has a useful repr."""
-        from ndi.app.markgarbage import MarkGarbage
+        """ndi_app_markgarbage has a useful repr."""
+        from ndi.app.markgarbage import ndi_app_markgarbage
 
-        app = MarkGarbage()
-        assert "MarkGarbage" in repr(app)
+        app = ndi_app_markgarbage()
+        assert "ndi_app_markgarbage" in repr(app)
 
     def test_repr_with_session(self):
-        """MarkGarbage repr reflects session state."""
-        from ndi.app.markgarbage import MarkGarbage
+        """ndi_app_markgarbage repr reflects session state."""
+        from ndi.app.markgarbage import ndi_app_markgarbage
 
         session = MagicMock()
-        app = MarkGarbage(session)
+        app = ndi_app_markgarbage(session)
         r = repr(app)
-        assert "MarkGarbage" in r
+        assert "ndi_app_markgarbage" in r
         assert "True" in r  # session=True
 
     def test_inherits_from_app(self):
-        """MarkGarbage inherits from App."""
-        from ndi.app import App
-        from ndi.app.markgarbage import MarkGarbage
+        """ndi_app_markgarbage inherits from ndi_app."""
+        from ndi.app import ndi_app
+        from ndi.app.markgarbage import ndi_app_markgarbage
 
-        app = MarkGarbage()
-        assert isinstance(app, App)
+        app = ndi_app_markgarbage()
+        assert isinstance(app, ndi_app)
 
 
 # ===========================================================================
-# TestMarkGarbageMocked — Tests with real Document, mocked session
+# TestMarkGarbageMocked — Tests with real ndi_document, mocked session
 # ===========================================================================
 
 
@@ -81,15 +81,15 @@ class TestMarkGarbageMocked:
     """Port of ndi.unittest.app.TestMarkGarbage — mocked database tests.
 
     These tests use a mock session (database_add/search/remove) but let
-    markvalidinterval create REAL Document objects from the actual
+    markvalidinterval create REAL ndi_document objects from the actual
     apps/markgarbage/valid_interval schema. This ensures the schema
-    path, Document constructor, set_session_id, and set_dependency_value
+    path, ndi_document constructor, set_session_id, and set_dependency_value
     all work correctly.
     """
 
     def _make_app_and_probe(self):
-        """Create a MarkGarbage app with mocked session and probe."""
-        from ndi.app.markgarbage import MarkGarbage
+        """Create a ndi_app_markgarbage app with mocked session and probe."""
+        from ndi.app.markgarbage import ndi_app_markgarbage
 
         session = MagicMock()
         session.id.return_value = "session-test-123"
@@ -105,22 +105,22 @@ class TestMarkGarbageMocked:
         timeref = MagicMock()
         timeref.__str__ = MagicMock(return_value="timeref-epoch1")
 
-        app = MarkGarbage(session)
+        app = ndi_app_markgarbage(session)
         return app, session, probe, timeref
 
     def test_markvalidinterval_calls_database_add(self):
-        """markvalidinterval creates a real Document and adds to database."""
+        """markvalidinterval creates a real ndi_document and adds to database."""
         app, session, probe, timeref = self._make_app_and_probe()
 
         app.markvalidinterval(probe, 1.0, timeref, 3.0, timeref)
 
         session.database_add.assert_called_once()
         doc = session.database_add.call_args[0][0]
-        # Verify it's a real Document, not a mock
-        assert isinstance(doc, Document)
+        # Verify it's a real ndi_document, not a mock
+        assert isinstance(doc, ndi_document)
 
     def test_markvalidinterval_creates_correct_document(self):
-        """markvalidinterval creates Document with correct schema and properties."""
+        """markvalidinterval creates ndi_document with correct schema and properties."""
         app, session, probe, timeref = self._make_app_and_probe()
 
         app.markvalidinterval(probe, 1.0, timeref, 3.0, timeref)
@@ -139,7 +139,7 @@ class TestMarkGarbageMocked:
         assert vi["t1"] == 3.0
 
     def test_markvalidinterval_sets_session_id(self):
-        """markvalidinterval sets the session ID on the Document."""
+        """markvalidinterval sets the session ID on the ndi_document."""
         app, session, probe, timeref = self._make_app_and_probe()
 
         app.markvalidinterval(probe, 1.0, timeref, 3.0, timeref)
@@ -148,7 +148,7 @@ class TestMarkGarbageMocked:
         assert doc.session_id == "session-test-123"
 
     def test_markvalidinterval_sets_dependency(self):
-        """markvalidinterval sets element_id dependency on the Document."""
+        """markvalidinterval sets element_id dependency on the ndi_document."""
         app, session, probe, timeref = self._make_app_and_probe()
 
         app.markvalidinterval(probe, 1.0, timeref, 3.0, timeref)
@@ -193,9 +193,9 @@ class TestMarkGarbageMocked:
         """loadvalidinterval correctly reads intervals from real Documents."""
         app, session, probe, timeref = self._make_app_and_probe()
 
-        # Create a real Document (as markvalidinterval would)
+        # Create a real ndi_document (as markvalidinterval would)
         interval = {"t0": 1.0, "timeref_t0": "tr", "t1": 3.0, "timeref_t1": "tr"}
-        real_doc = Document(
+        real_doc = ndi_document(
             "apps/markgarbage/valid_interval",
             valid_interval=interval,
         )
@@ -209,9 +209,9 @@ class TestMarkGarbageMocked:
 
     def test_markvalidinterval_no_session_raises(self):
         """markvalidinterval without session raises RuntimeError."""
-        from ndi.app.markgarbage import MarkGarbage
+        from ndi.app.markgarbage import ndi_app_markgarbage
 
-        app = MarkGarbage()  # No session
+        app = ndi_app_markgarbage()  # No session
         probe = MagicMock()
         probe.id = "probe-001"
         timeref = MagicMock()
@@ -221,17 +221,17 @@ class TestMarkGarbageMocked:
 
     def test_clearvalidinterval_no_session_noop(self):
         """clearvalidinterval without session is a no-op."""
-        from ndi.app.markgarbage import MarkGarbage
+        from ndi.app.markgarbage import ndi_app_markgarbage
 
-        app = MarkGarbage()
+        app = ndi_app_markgarbage()
         probe = MagicMock()
         app.clearvalidinterval(probe)
 
     def test_loadvalidinterval_no_session_returns_empty(self):
         """loadvalidinterval without session returns empty tuple."""
-        from ndi.app.markgarbage import MarkGarbage
+        from ndi.app.markgarbage import ndi_app_markgarbage
 
-        app = MarkGarbage()
+        app = ndi_app_markgarbage()
         probe = MagicMock()
 
         intervals, docs = app.loadvalidinterval(probe)
@@ -242,15 +242,15 @@ class TestMarkGarbageMocked:
         """Full mark → load workflow using real Documents."""
         app, session, probe, timeref = self._make_app_and_probe()
 
-        # Mark an interval (creates real Document internally)
+        # Mark an interval (creates real ndi_document internally)
         app.markvalidinterval(probe, 2.0, timeref, 5.0, timeref)
         session.database_add.assert_called_once()
 
-        # Capture the real Document that was added
+        # Capture the real ndi_document that was added
         added_doc = session.database_add.call_args[0][0]
-        assert isinstance(added_doc, Document)
+        assert isinstance(added_doc, ndi_document)
 
-        # Mock the search to return that same real Document
+        # Mock the search to return that same real ndi_document
         session.database_search.return_value = [added_doc]
 
         intervals, docs = app.loadvalidinterval(probe)
@@ -288,8 +288,8 @@ class TestMarkGarbageMocked:
         # Capture both real Documents
         doc1 = session.database_add.call_args_list[0][0][0]
         doc2 = session.database_add.call_args_list[1][0][0]
-        assert isinstance(doc1, Document)
-        assert isinstance(doc2, Document)
+        assert isinstance(doc1, ndi_document)
+        assert isinstance(doc2, ndi_document)
 
         # Mock search returning both real docs
         session.database_search.return_value = [doc1, doc2]

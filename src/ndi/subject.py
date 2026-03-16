@@ -1,5 +1,5 @@
 """
-ndi.subject - Subject class for managing experimental subjects.
+ndi.subject - ndi_subject class for managing experimental subjects.
 
 Subjects represent the experimental entities (animals, humans, etc.)
 that are the source of recorded data. Each subject has a unique
@@ -10,19 +10,19 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .documentservice import DocumentService
-from .ido import Ido
+from .documentservice import ndi_documentservice
+from .ido import ndi_ido
 
 if TYPE_CHECKING:
-    from .document import Document
-    from .query import Query
+    from .document import ndi_document
+    from .query import ndi_query
 
 
-class Subject(Ido, DocumentService):
+class ndi_subject(ndi_ido, ndi_documentservice):
     """
     Represents an experimental subject.
 
-    A Subject is identified by a local_identifier that must contain '@'
+    A ndi_subject is identified by a local_identifier that must contain '@'
     (e.g., 'anteater23@nosuchlab.org') and an optional description.
 
     Can be created from scratch or loaded from a session database document.
@@ -32,7 +32,7 @@ class Subject(Ido, DocumentService):
         description: Free-form description string
 
     Example:
-        >>> subject = Subject('mouse23@vhlab.org', 'Laboratory mouse, strain C57BL/6')
+        >>> subject = ndi_subject('mouse23@vhlab.org', 'Laboratory mouse, strain C57BL/6')
         >>> doc = subject.newdocument()
     """
 
@@ -43,20 +43,20 @@ class Subject(Ido, DocumentService):
         identifier: str | None = None,
     ):
         """
-        Create a new Subject.
+        Create a new ndi_subject.
 
         Forms:
-            Subject(local_identifier, description)
-            Subject(session, document_or_id)
+            ndi_subject(local_identifier, description)
+            ndi_subject(session, document_or_id)
 
         Args:
             local_identifier_or_session: Either a local_identifier string
-                or a Session object (when loading from document)
+                or a ndi_session object (when loading from document)
             description_or_document: Either a description string
-                or a Document/document_id (when loading from session)
+                or a ndi_document/document_id (when loading from session)
             identifier: Optional unique identifier (auto-generated if None)
         """
-        Ido.__init__(self, identifier)
+        ndi_ido.__init__(self, identifier)
 
         # Determine construction mode
         if hasattr(local_identifier_or_session, "database_search"):
@@ -72,7 +72,7 @@ class Subject(Ido, DocumentService):
             description = str(description_or_document) if description_or_document else ""
 
             if local_identifier:
-                valid, msg = Subject.is_valid_local_identifier(local_identifier)
+                valid, msg = ndi_subject.is_valid_local_identifier(local_identifier)
                 if not valid:
                     raise ValueError(msg)
 
@@ -81,21 +81,21 @@ class Subject(Ido, DocumentService):
 
     def _load_from_session(self, session: Any, doc_or_id: Any) -> None:
         """Load subject from a session database document."""
-        from .document import Document
+        from .document import ndi_document
 
         if isinstance(doc_or_id, str):
             # It's a document ID - look it up
-            from .query import Query
+            from .query import ndi_query
 
-            q = Query("base.id") == doc_or_id
+            q = ndi_query("base.id") == doc_or_id
             docs = session.database_search(q)
             if not docs:
                 raise ValueError(f"No document found with id '{doc_or_id}'")
             doc = docs[0]
-        elif isinstance(doc_or_id, Document):
+        elif isinstance(doc_or_id, ndi_document):
             doc = doc_or_id
         else:
-            raise TypeError(f"Expected Document or document ID string, got {type(doc_or_id)}")
+            raise TypeError(f"Expected ndi_document or document ID string, got {type(doc_or_id)}")
 
         props = doc.document_properties
         subject_props = props.get("subject", {})
@@ -119,19 +119,19 @@ class Subject(Ido, DocumentService):
         return self._description
 
     # =========================================================================
-    # DocumentService Implementation
+    # ndi_documentservice Implementation
     # =========================================================================
 
-    def newdocument(self) -> Document:
+    def newdocument(self) -> ndi_document:
         """
         Create a new subject document.
 
         Returns:
-            Document of type 'subject' with local_identifier and description
+            ndi_document of type 'subject' with local_identifier and description
         """
-        from .document import Document
+        from .document import ndi_document
 
-        doc = Document(
+        doc = ndi_document(
             "subject",
             **{
                 "subject.local_identifier": self._local_identifier,
@@ -141,17 +141,17 @@ class Subject(Ido, DocumentService):
         )
         return doc
 
-    def searchquery(self) -> Query:
+    def searchquery(self) -> ndi_query:
         """
         Create a query to find this subject in the database.
 
         Returns:
-            Query matching subject by local_identifier
+            ndi_query matching subject by local_identifier
         """
-        from .query import Query
+        from .query import ndi_query
 
-        return Query("").isa("subject") & (
-            Query("subject.local_identifier") == self._local_identifier
+        return ndi_query("").isa("subject") & (
+            ndi_query("subject.local_identifier") == self._local_identifier
         )
 
     # =========================================================================
@@ -195,23 +195,23 @@ class Subject(Ido, DocumentService):
         Check if a subject string matches a subject in the session database.
 
         Args:
-            session: Session to search
-            subjectstring: Subject local_identifier to search for
+            session: ndi_session to search
+            subjectstring: ndi_subject local_identifier to search for
             make_if_missing: If True, create the subject if not found
 
         Returns:
             Tuple of (found, subject_document_id)
         """
-        from .query import Query
+        from .query import ndi_query
 
-        q = Query("").isa("subject") & (Query("subject.local_identifier") == subjectstring)
+        q = ndi_query("").isa("subject") & (ndi_query("subject.local_identifier") == subjectstring)
         docs = session.database_search(q)
 
         if docs:
             return True, docs[0].id
 
         if make_if_missing:
-            subject = Subject(subjectstring, "")
+            subject = ndi_subject(subjectstring, "")
             doc = subject.newdocument()
             session.database_add(doc)
             return True, doc.id
@@ -224,7 +224,7 @@ class Subject(Ido, DocumentService):
 
     def __eq__(self, other: Any) -> bool:
         """Test equality by local_identifier."""
-        if not isinstance(other, Subject):
+        if not isinstance(other, ndi_subject):
             return False
         return self._local_identifier == other._local_identifier
 
@@ -234,4 +234,4 @@ class Subject(Ido, DocumentService):
 
     def __repr__(self) -> str:
         """String representation."""
-        return f"Subject('{self._local_identifier}')"
+        return f"ndi_subject('{self._local_identifier}')"

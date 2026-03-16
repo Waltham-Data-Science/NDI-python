@@ -1,7 +1,7 @@
 """
-ndi.daq.metadatareader.nielsenlab_stims - Nielsen Lab stimulus metadata reader.
+ndi.daq.metadatareader.nielsenlab_stims - Nielsen ndi_gui_Lab stimulus metadata reader.
 
-Reads stimulus parameters from Nielsen Lab .mat files containing
+Reads stimulus parameters from Nielsen ndi_gui_Lab .mat files containing
 an 'Analyzer' structure with stimulus conditions and trial ordering.
 
 MATLAB equivalent: src/ndi/+ndi/+daq/+metadatareader/NielsenLabStims.m
@@ -13,12 +13,12 @@ import re
 from pathlib import Path
 from typing import Any
 
-from ..metadatareader import MetadataReader
+from ..metadatareader import ndi_daq_metadatareader
 
 
-class NielsenLabStimsReader(MetadataReader):
+class ndi_daq_metadatareader_NielsenLabStims(ndi_daq_metadatareader):
     """
-    Metadata reader for Nielsen Lab stimulus systems.
+    Metadata reader for Nielsen ndi_gui_Lab stimulus systems.
 
     Reads stimulus parameters from .mat files containing an 'Analyzer'
     structure. The Analyzer has:
@@ -27,7 +27,7 @@ class NielsenLabStimsReader(MetadataReader):
     - loops.conds: Condition-specific parameter values
 
     Example:
-        >>> reader = NielsenLabStimsReader()
+        >>> reader = ndi_daq_metadatareader_NielsenLabStims()
         >>> params = reader.readmetadata(['data.rhd', 'analyzer.mat'])
     """
 
@@ -52,7 +52,7 @@ class NielsenLabStimsReader(MetadataReader):
         epochfiles: list[str],
     ) -> list[dict[str, Any]]:
         """
-        Read stimulus metadata from Nielsen Lab files.
+        Read stimulus metadata from Nielsen ndi_gui_Lab files.
 
         Args:
             epochfiles: List of file paths for the epoch
@@ -84,7 +84,7 @@ class NielsenLabStimsReader(MetadataReader):
 
     def _read_analyzer_mat(self, filepath: str) -> list[dict[str, Any]]:
         """
-        Read stimulus parameters from a Nielsen Lab analyzer .mat file.
+        Read stimulus parameters from a Nielsen ndi_gui_Lab analyzer .mat file.
 
         Args:
             filepath: Path to analyzer.mat file
@@ -96,7 +96,7 @@ class NielsenLabStimsReader(MetadataReader):
             from scipy.io import loadmat
         except ImportError as exc:
             raise ImportError(
-                "scipy is required to read Nielsen Lab .mat files. "
+                "scipy is required to read Nielsen ndi_gui_Lab .mat files. "
                 "Install with: pip install scipy"
             ) from exc
 
@@ -241,4 +241,4 @@ class NielsenLabStimsReader(MetadataReader):
             return []
 
     def __repr__(self) -> str:
-        return f"NielsenLabStimsReader(id='{self.id[:8]}...')"
+        return f"ndi_daq_metadatareader_NielsenLabStims(id='{self.id[:8]}...')"

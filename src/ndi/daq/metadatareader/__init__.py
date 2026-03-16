@@ -1,7 +1,7 @@
 """
 ndi.daq.metadatareader - Metadata reader for experiment metadata.
 
-This module provides the MetadataReader class for reading stimulus
+This module provides the ndi_daq_metadatareader class for reading stimulus
 and experiment metadata from data files, plus format-specific
 subclasses for different stimulus systems.
 """
@@ -13,14 +13,14 @@ import re
 from pathlib import Path
 from typing import Any
 
-from ...ido import Ido
+from ...ido import ndi_ido
 
 
-class MetadataReader(Ido):
+class ndi_daq_metadatareader(ndi_ido):
     """
     Reader for experiment metadata such as stimulus parameters.
 
-    MetadataReader reads metadata from files associated with epochs,
+    ndi_daq_metadatareader reads metadata from files associated with epochs,
     typically containing stimulus parameters or experimental conditions.
 
     The base class supports tab-separated value (TSV) files with
@@ -33,7 +33,7 @@ class MetadataReader(Ido):
         tab_separated_file_parameter: Regex pattern to find TSV files
 
     Example:
-        >>> reader = MetadataReader(r'.*stim.*\\.txt')
+        >>> reader = ndi_daq_metadatareader(r'.*stim.*\\.txt')
         >>> metadata = reader.readmetadata(['epoch1.txt', 'stim_params.txt'])
     """
 
@@ -45,7 +45,7 @@ class MetadataReader(Ido):
         document: Any | None = None,
     ):
         """
-        Create a new MetadataReader.
+        Create a new ndi_daq_metadatareader.
 
         Args:
             tsv_pattern: Regular expression to find TSV parameter files
@@ -89,7 +89,7 @@ class MetadataReader(Ido):
             ValueError: If multiple files match or no files match
 
         Example:
-            >>> reader = MetadataReader(r'stim.*\\.tsv')
+            >>> reader = ndi_daq_metadatareader(r'stim.*\\.tsv')
             >>> params = reader.readmetadata(['data.bin', 'stim_params.tsv'])
             >>> print(params[0])  # First stimulus parameters
         """
@@ -177,7 +177,7 @@ class MetadataReader(Ido):
 
         Args:
             epochfiles: List of file paths (starting with epochid://)
-            session: Session object with database access
+            session: ndi_session object with database access
 
         Returns:
             List of parameter dictionaries
@@ -201,12 +201,12 @@ class MetadataReader(Ido):
 
         Args:
             epochfiles: List of file paths
-            session: Session object
+            session: ndi_session object
 
         Returns:
-            Document object or None
+            ndi_document object or None
         """
-        from ...query import Query
+        from ...query import ndi_query
 
         # Check if ingested
         if not epochfiles or not epochfiles[0].startswith("epochid://"):
@@ -214,8 +214,8 @@ class MetadataReader(Ido):
 
         epochid = epochfiles[0][len("epochid://") :]
 
-        q = Query("").depends_on("daqmetadatareader_id", self.id) & (
-            Query("epochid.epochid") == epochid
+        q = ndi_query("").depends_on("daqmetadatareader_id", self.id) & (
+            ndi_query("epochid.epochid") == epochid
         )
         results = session.database_search(q)
 
@@ -233,16 +233,16 @@ class MetadataReader(Ido):
 
         Args:
             epochfiles: List of file paths
-            epoch_id: Epoch identifier
+            epoch_id: ndi_epoch_epoch identifier
 
         Returns:
-            Document object
+            ndi_document object
         """
-        from ...document import Document
+        from ...document import ndi_document
 
         epochid_struct = {"epochid": epoch_id}
 
-        doc = Document(
+        doc = ndi_document(
             "ingestion/daqmetadatareader_epochdata_ingested",
             epochid=epochid_struct,
         )
@@ -260,14 +260,14 @@ class MetadataReader(Ido):
 
     def newdocument(self) -> Any:
         """
-        Create a new document for this MetadataReader.
+        Create a new document for this ndi_daq_metadatareader.
 
         Returns:
-            Document object
+            ndi_document object
         """
-        from ...document import Document
+        from ...document import ndi_document
 
-        doc = Document(
+        doc = ndi_document(
             "daq/daqmetadatareader",
             **{
                 "daqmetadatareader.ndi_daqmetadatareader_class": self.__class__.__name__,
@@ -279,18 +279,18 @@ class MetadataReader(Ido):
 
     def searchquery(self) -> Any:
         """
-        Create a search query for this MetadataReader.
+        Create a search query for this ndi_daq_metadatareader.
 
         Returns:
-            Query object
+            ndi_query object
         """
-        from ...query import Query
+        from ...query import ndi_query
 
-        return Query("base.id") == self.id
+        return ndi_query("base.id") == self.id
 
     def __eq__(self, other: Any) -> bool:
         """Test equality by class and properties."""
-        if not isinstance(other, MetadataReader):
+        if not isinstance(other, ndi_daq_metadatareader):
             return False
         return (
             self.__class__.__name__ == other.__class__.__name__
@@ -303,7 +303,7 @@ class MetadataReader(Ido):
 
 
 # Import subclass readers
-from .newstim_stims import NewStimStimsReader
-from .nielsenlab_stims import NielsenLabStimsReader
+from .newstim_stims import ndi_daq_metadatareader_NewStimStims
+from .nielsenlab_stims import ndi_daq_metadatareader_NielsenLabStims
 
-__all__ = ["MetadataReader", "NewStimStimsReader", "NielsenLabStimsReader"]
+__all__ = ["ndi_daq_metadatareader", "ndi_daq_metadatareader_NewStimStims", "ndi_daq_metadatareader_NielsenLabStims"]

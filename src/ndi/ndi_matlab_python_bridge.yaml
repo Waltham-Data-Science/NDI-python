@@ -46,7 +46,7 @@ classes:
     type: class
     matlab_path: "+ndi/ido.m"
     python_path: "ndi/ido.py"
-    python_class: "Ido"
+    python_class: "ndi_ido"
     inherits: "did.ido"
 
     properties:
@@ -68,7 +68,7 @@ classes:
             default: "None"
         output_arguments:
           - name: obj
-            type_python: "Ido"
+            type_python: "ndi_ido"
         decision_log: "Exact match. Generates new ID if none provided."
 
       - name: unique_id
@@ -104,17 +104,17 @@ classes:
         decision_log: "Mapped to Python __eq__. Compares by ID string."
 
     decision_log: >
-      Thin wrapper over did.ido. Python Ido class provides the same
+      Thin wrapper over did.ido. Python ndi_ido class provides the same
       unique ID generation. Synchronized 2026-03-13.
 
   # =========================================================================
-  # ndi.documentservice - Document Interface Mixin
+  # ndi.documentservice - ndi_document Interface Mixin
   # =========================================================================
   - name: documentservice
     type: class
     matlab_path: "+ndi/documentservice.m"
     python_path: "ndi/documentservice.py"
-    python_class: "DocumentService"
+    python_class: "ndi_documentservice"
     inherits: ""
 
     properties: []
@@ -125,7 +125,7 @@ classes:
         input_arguments: []
         output_arguments:
           - name: obj
-            type_python: "DocumentService"
+            type_python: "ndi_documentservice"
         decision_log: "Exact match."
 
       - name: newdocument
@@ -153,7 +153,7 @@ classes:
             type_python: "Any"
         output_arguments:
           - name: doc
-            type_python: "Document | None"
+            type_python: "ndi_document | None"
         decision_log: >
           Exact match. Loads this object's document from the database
           via searchquery(). Returns None if not found.
@@ -177,13 +177,13 @@ classes:
       Synchronized 2026-03-13.
 
   # =========================================================================
-  # ndi.document - Document Model
+  # ndi.document - ndi_document Model
   # =========================================================================
   - name: document
     type: class
     matlab_path: "+ndi/document.m"
     python_path: "ndi/document.py"
-    python_class: "Document"
+    python_class: "ndi_document"
     inherits: ""
 
     properties:
@@ -206,7 +206,7 @@ classes:
             type_python: "**kwargs"
         output_arguments:
           - name: ndi_document_obj
-            type_python: "Document"
+            type_python: "ndi_document"
         decision_log: "Exact match."
 
       # --- Identity ---
@@ -231,7 +231,7 @@ classes:
             type_python: "str"
         decision_log: "Exact match. Alias for id()."
 
-      # --- Session ---
+      # --- ndi_session ---
       - name: set_session_id
         input_arguments:
           - name: session_id
@@ -239,7 +239,7 @@ classes:
             type_python: "str"
         output_arguments:
           - name: ndi_document_obj
-            type_python: "Document"
+            type_python: "ndi_document"
         decision_log: "Exact match. Returns self for chaining."
 
       # --- Dependency Management ---
@@ -257,7 +257,7 @@ classes:
             default: "True"
         output_arguments:
           - name: ndi_document_obj
-            type_python: "Document"
+            type_python: "ndi_document"
         decision_log: "Exact match. Returns self for chaining."
 
       - name: dependency
@@ -314,7 +314,7 @@ classes:
             type_python: "str"
         output_arguments:
           - name: ndi_document_obj
-            type_python: "Document"
+            type_python: "ndi_document"
         decision_log: >
           Exact match. Appends to numbered dependency list.
           Returns self for chaining. Synchronized 2026-03-13.
@@ -330,7 +330,7 @@ classes:
             default: "None"
         output_arguments:
           - name: ndi_document_obj
-            type_python: "Document"
+            type_python: "ndi_document"
         decision_log: >
           Exact match. Removes numbered dependency by index, or all
           if index is None. Returns self for chaining.
@@ -368,7 +368,7 @@ classes:
             default: "None"
         output_arguments:
           - name: ndi_document_obj
-            type_python: "Document"
+            type_python: "ndi_document"
         decision_log: >
           Exact match. Adds a file to the document's file_info.
           Auto-detects location_type from URL scheme.
@@ -385,7 +385,7 @@ classes:
             default: "None"
         output_arguments:
           - name: ndi_document_obj
-            type_python: "Document"
+            type_python: "ndi_document"
         decision_log: >
           Exact match. Removes a file or specific location from
           the document. Returns self for chaining.
@@ -400,7 +400,7 @@ classes:
           Exact match. Returns list of file names currently
           associated with this document. Synchronized 2026-03-13.
 
-      # --- Document Class Information ---
+      # --- ndi_document Class Information ---
       - name: doc_class
         input_arguments: []
         output_arguments:
@@ -453,7 +453,7 @@ classes:
             type_python: "**kwargs"
         output_arguments:
           - name: ndi_document_obj
-            type_python: "Document"
+            type_python: "ndi_document"
         decision_log: >
           Exact match. Sets multiple properties at once using
           dot-notation paths. Returns self for chaining.
@@ -511,10 +511,10 @@ classes:
         input_arguments:
           - name: other
             type_matlab: "ndi.document"
-            type_python: "Document"
+            type_python: "ndi_document"
         output_arguments:
           - name: merged_doc
-            type_python: "Document"
+            type_python: "ndi_document"
         decision_log: >
           Exact match. Merges two documents. Fields in self take
           precedence. Mapped to Python __add__. Merges superclasses,
@@ -536,13 +536,13 @@ classes:
         input_arguments:
           - name: doc_array
             type_matlab: "cell array of ndi.document"
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
           - name: doc_id
             type_matlab: "char"
             type_python: "str"
         output_arguments:
           - name: doc
-            type_python: "Document | None"
+            type_python: "ndi_document | None"
           - name: index
             type_python: "int | None"
         decision_log: >
@@ -555,10 +555,10 @@ classes:
         input_arguments:
           - name: doc_array
             type_matlab: "cell array of ndi.document"
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         output_arguments:
           - name: newest_doc
-            type_python: "Document"
+            type_python: "ndi_document"
           - name: index
             type_python: "int"
           - name: datestamp
@@ -587,13 +587,13 @@ classes:
       document definitions. Synchronized 2026-03-13.
 
   # =========================================================================
-  # ndi.query - Database Query
+  # ndi.query - ndi_database ndi_query
   # =========================================================================
   - name: query
     type: class
     matlab_path: "+ndi/query.m"
     python_path: "ndi/query.py"
-    python_class: "Query"
+    python_class: "ndi_query"
     inherits: "did.query"
 
     properties:
@@ -617,7 +617,7 @@ classes:
           Computed property. Returns the query value (param1).
           Synchronized 2026-03-13.
       - name: queries
-        type_python: "list[Query]"
+        type_python: "list[ndi_query]"
         decision_log: >
           List of sub-queries for composite (AND/OR) queries.
           Synchronized 2026-03-13.
@@ -644,7 +644,7 @@ classes:
             default: "None"
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: "Exact match."
 
       # --- NDI-specific query types ---
@@ -655,7 +655,7 @@ classes:
             type_python: "str"
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: "Exact match. Shorthand for isa query."
 
       - name: depends_on
@@ -669,7 +669,7 @@ classes:
             default: "''"
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: "Exact match. Shorthand for depends_on query."
 
       # --- Comparison operators (MATLAB overloads -> Python __eq__ etc.) ---
@@ -679,7 +679,7 @@ classes:
             type_python: "Any"
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: >
           MATLAB == operator overload. Mapped to Python __eq__.
           Resolves to exact_string or exact_number.
@@ -691,7 +691,7 @@ classes:
             type_python: "Any"
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: >
           MATLAB ~= operator overload. Mapped to Python __ne__.
           Synchronized 2026-03-13.
@@ -702,7 +702,7 @@ classes:
             type_python: "Any"
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: "MATLAB < overload. Mapped to Python __lt__. Synchronized 2026-03-13."
 
       - name: le
@@ -711,7 +711,7 @@ classes:
             type_python: "Any"
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: "MATLAB <= overload. Mapped to Python __le__. Synchronized 2026-03-13."
 
       - name: gt
@@ -720,7 +720,7 @@ classes:
             type_python: "Any"
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: "MATLAB > overload. Mapped to Python __gt__. Synchronized 2026-03-13."
 
       - name: ge
@@ -729,7 +729,7 @@ classes:
             type_python: "Any"
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: "MATLAB >= overload. Mapped to Python __ge__. Synchronized 2026-03-13."
 
       # --- Logical operators ---
@@ -737,10 +737,10 @@ classes:
         input_arguments:
           - name: other
             type_matlab: "ndi.query"
-            type_python: "Query"
+            type_python: "ndi_query"
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: >
           MATLAB & overload. Mapped to Python __and__. Concatenates
           search_structures for AND semantics. Synchronized 2026-03-13.
@@ -749,10 +749,10 @@ classes:
         input_arguments:
           - name: other
             type_matlab: "ndi.query"
-            type_python: "Query"
+            type_python: "ndi_query"
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: >
           MATLAB | overload. Mapped to Python __or__. Creates nested
           'or' operation in search_structure. Synchronized 2026-03-13.
@@ -761,7 +761,7 @@ classes:
         input_arguments: []
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: >
           MATLAB ~ prefix. Mapped to Python __invert__. Negates all
           operations by toggling ~ prefix. Synchronized 2026-03-13.
@@ -774,7 +774,7 @@ classes:
             type_python: "str"
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: >
           Exact match. Resolves to contains_string operation.
           Synchronized 2026-03-13.
@@ -786,7 +786,7 @@ classes:
             type_python: "str"
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: >
           Exact match. Resolves to regexp operation.
           Synchronized 2026-03-13.
@@ -797,7 +797,7 @@ classes:
             type_python: "Any"
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: >
           Explicit equality method. Same as == operator.
           Synchronized 2026-03-13.
@@ -809,7 +809,7 @@ classes:
             type_python: "Any"
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: "Explicit less-than method. Synchronized 2026-03-13."
 
       - name: less_than_or_equal_to
@@ -818,7 +818,7 @@ classes:
             type_python: "Any"
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: "Explicit less-than-or-equal method. Synchronized 2026-03-13."
 
       - name: greater_than
@@ -827,7 +827,7 @@ classes:
             type_python: "Any"
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: "Explicit greater-than method. Synchronized 2026-03-13."
 
       - name: greater_than_or_equal_to
@@ -836,7 +836,7 @@ classes:
             type_python: "Any"
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: "Explicit greater-than-or-equal method. Synchronized 2026-03-13."
 
       # --- Field existence ---
@@ -844,7 +844,7 @@ classes:
         input_arguments: []
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: >
           Exact match. Resolves to hasfield operation.
           Synchronized 2026-03-13.
@@ -855,7 +855,7 @@ classes:
             type_python: "Any"
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: >
           Exact match. Resolves to hasmember operation.
           Synchronized 2026-03-13.
@@ -866,7 +866,7 @@ classes:
         input_arguments: []
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: >
           Exact match. Returns query matching all documents
           (isa 'base'). Synchronized 2026-03-13.
@@ -876,7 +876,7 @@ classes:
         input_arguments: []
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: >
           Exact match. Returns query matching no documents.
           Synchronized 2026-03-13.
@@ -900,7 +900,7 @@ classes:
             default: "''"
         output_arguments:
           - name: q
-            type_python: "Query"
+            type_python: "ndi_query"
         decision_log: >
           Exact match. MATLAB-compatible factory method. Creates
           query using DID-style operation strings.
@@ -926,7 +926,7 @@ classes:
           Unwraps single-element lists. Synchronized 2026-03-13.
 
     decision_log: >
-      Database query class supporting operators: regexp,
+      ndi_database query class supporting operators: regexp,
       exact_string, contains_string, exact_number, lessthan,
       lessthaneq, greaterthan, greaterthaneq, hasfield, isa,
       depends_on, hasmember, and negated versions.
@@ -960,7 +960,7 @@ not_applicable:
     status: not_applicable
     decision_log: >
       MATLAB-specific path resolution. Python uses
-      ndi.common.PathConstants.
+      ndi.common.ndi_common_PathConstants.
 
   - name: cpipeline
     matlab_path: "+ndi/cpipeline.m"

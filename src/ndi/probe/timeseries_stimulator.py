@@ -1,7 +1,7 @@
 """
 ndi.probe.timeseries_stimulator - Stimulus delivery probe.
 
-Provides the ProbeTimeseriesStimulator class for reading stimulus
+Provides the ndi_probe_timeseries_stimulator class for reading stimulus
 delivery data from probes that control stimulus presentation.
 
 MATLAB equivalent: src/ndi/+ndi/+probe/+timeseries/stimulator.m
@@ -13,12 +13,12 @@ from typing import Any
 
 import numpy as np
 
-from .timeseries import ProbeTimeseries
+from .timeseries import ndi_probe_timeseries
 
 
-class ProbeTimeseriesStimulator(ProbeTimeseries):
+class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
     """
-    Probe for stimulus delivery devices.
+    ndi_probe for stimulus delivery devices.
 
     Reads stimulus presentation data from probes that deliver stimuli,
     extracting stimulus identity, timing, and parameters from marker,
@@ -48,7 +48,7 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
         - t.analog: Analog sample times
 
     Example:
-        >>> stim = ProbeTimeseriesStimulator(session, 'visual_stim', 1, 'stimulator')
+        >>> stim = ndi_probe_timeseries_stimulator(session, 'visual_stim', 1, 'stimulator')
         >>> data, t, timeref = stim.readtimeseriesepoch(1, 0, 100)
     """
 
@@ -85,7 +85,7 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
         parameters, and optional analog data.
 
         Args:
-            epoch: Epoch number (1-indexed) or epoch_id
+            epoch: ndi_epoch_epoch number (1-indexed) or epoch_id
             t0: Start time
             t1: End time
 
@@ -377,16 +377,16 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
         t.setdefault("stimevents", [])
 
         # Build time reference
-        from ..time import ClockType
+        from ..time import ndi_time_clocktype
 
         eid = self.epochid(epoch) if hasattr(self, "epochid") else str(epoch)
 
         try:
-            from ..time.timereference import TimeReference
+            from ..time.timereference import ndi_time_timereference
 
-            timeref = TimeReference(self, ClockType.DEV_LOCAL_TIME, eid, 0)
+            timeref = ndi_time_timereference(self, ndi_time_clocktype.DEV_LOCAL_TIME, eid, 0)
         except Exception:
-            timeref = ClockType.DEV_LOCAL_TIME
+            timeref = ndi_time_clocktype.DEV_LOCAL_TIME
 
         return data, t, timeref
 
@@ -401,12 +401,12 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
         needed by readtimeseriesepoch.
 
         Args:
-            epoch: Epoch number (1-indexed) or epoch_id
+            epoch: ndi_epoch_epoch number (1-indexed) or epoch_id
 
         Returns:
             Dict with daqsystem, device_epoch_id, channeltype, channel
         """
-        # Use the parent Probe.getchanneldevinfo which returns a dict
+        # Use the parent ndi_probe.getchanneldevinfo which returns a dict
         # with daqsystem, device_epoch_id, epochprobemap
         try:
             base_info = super().getchanneldevinfo(epoch)
@@ -429,9 +429,9 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
         for epm in epms:
             if hasattr(epm, "devicestring") and epm.devicestring:
                 try:
-                    from ..daq.daqsystemstring import DAQSystemString
+                    from ..daq.daqsystemstring import ndi_daq_daqsystemstring
 
-                    dss = DAQSystemString.parse(epm.devicestring)
+                    dss = ndi_daq_daqsystemstring.parse(epm.devicestring)
                     for ct, ch_list in dss.channels:
                         for ch in ch_list:
                             channeltype.append(ct)
@@ -450,9 +450,9 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
         """Get the time reference for an epoch."""
         if self._session is None:
             return None
-        from ..time import ClockType
+        from ..time import ndi_time_clocktype
 
-        return ClockType.DEV_LOCAL_TIME
+        return ndi_time_clocktype.DEV_LOCAL_TIME
 
     def parse_marker_data(
         self,
@@ -532,4 +532,4 @@ class ProbeTimeseriesStimulator(ProbeTimeseries):
         }
 
     def __repr__(self) -> str:
-        return f"ProbeTimeseriesStimulator(name='{self._name}', " f"reference={self._reference})"
+        return f"ndi_probe_timeseries_stimulator(name='{self._name}', " f"reference={self._reference})"

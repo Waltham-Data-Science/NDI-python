@@ -2,7 +2,7 @@
 ndi.calc.stimulus.tuningcurve - Tuning curve calculator.
 
 Computes tuning curves from stimulus_response_scalar documents
-using the Calculator pipeline.
+using the ndi_calculator pipeline.
 
 MATLAB equivalent: src/ndi/+ndi/+calc/+stimulus/tuningcurve.m
 """
@@ -14,33 +14,33 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from ...calculator import Calculator
+from ...calculator import ndi_calculator
 
 if TYPE_CHECKING:
-    from ...document import Document
-    from ...session.session_base import Session
+    from ...document import ndi_document
+    from ...session.session_base import ndi_session
 
 
-class TuningCurveCalc(Calculator):
+class ndi_calc_stimulus_tuningcurve(ndi_calculator):
     """
-    Calculator for stimulus tuning curves.
+    ndi_calculator for stimulus tuning curves.
 
     Takes stimulus_response_scalar documents as input and produces
     tuningcurve_calc documents containing organized tuning curve data.
 
     Example:
-        >>> calc = TuningCurveCalc(session)
+        >>> calc = ndi_calc_stimulus_tuningcurve(session)
         >>> docs = calc.run(DocExistsAction.REPLACE)
     """
 
-    def __init__(self, session: Session | None = None):
+    def __init__(self, session: ndi_session | None = None):
         super().__init__(
             session=session,
             document_type="tuningcurve_calc",
             path_to_doc_type="apps/calculators/tuningcurve_calc",
         )
 
-    def calculate(self, parameters: dict) -> list[Document]:
+    def calculate(self, parameters: dict) -> list[ndi_document]:
         """
         Calculate tuning curves from stimulus responses.
 
@@ -54,7 +54,7 @@ class TuningCurveCalc(Calculator):
         Returns:
             List of tuningcurve_calc documents
         """
-        from ...document import Document
+        from ...document import ndi_document
 
         input_params = parameters.get("input_parameters", {})
 
@@ -65,7 +65,7 @@ class TuningCurveCalc(Calculator):
             "response_stderr": [],
         }
 
-        doc = Document(
+        doc = ndi_document(
             "apps/calculators/tuningcurve_calc",
             **{"tuningcurve_calc": tuningcurve_data},
         )
@@ -85,7 +85,7 @@ class TuningCurveCalc(Calculator):
 
     def default_search_for_input_parameters(self) -> dict:
         """Return default search parameters for tuning curves."""
-        from ...query import Query
+        from ...query import ndi_query
 
         return {
             "input_parameters": {
@@ -98,7 +98,7 @@ class TuningCurveCalc(Calculator):
             "query": [
                 {
                     "name": "document_id",
-                    "query": Query("").isa("stimulus_response_scalar"),
+                    "query": ndi_query("").isa("stimulus_response_scalar"),
                 },
             ],
         }
@@ -125,20 +125,20 @@ class TuningCurveCalc(Calculator):
         Returns:
             List of query spec dicts ``[{name, query}]``.
         """
-        from ...query import Query
+        from ...query import ndi_query
 
         q_default = super().default_parameters_query(parameters_specification)
         if q_default:
             return q_default
 
-        q1 = Query("").isa("stimulus_response_scalar")
-        q2 = Query.from_search(
+        q1 = ndi_query("").isa("stimulus_response_scalar")
+        q2 = ndi_query.from_search(
             "stimulus_response_scalar.response_type",
             "contains_string",
             "mean",
             "",
         )
-        q3 = Query.from_search(
+        q3 = ndi_query.from_search(
             "stimulus_response_scalar.response_type",
             "contains_string",
             "F1",
@@ -151,7 +151,7 @@ class TuningCurveCalc(Calculator):
     def best_value(
         self,
         algorithm: str,
-        stim_response_doc: Document,
+        stim_response_doc: ndi_document,
         prop: str,
     ) -> tuple[int, float, Any]:
         """Find the stimulus with the "best" response.
@@ -160,7 +160,7 @@ class TuningCurveCalc(Calculator):
 
         Args:
             algorithm: Algorithm name (e.g. ``'empirical_maximum'``).
-            stim_response_doc: A stimulus_response_scalar Document.
+            stim_response_doc: A stimulus_response_scalar ndi_document.
             prop: Stimulus property name to examine.
 
         Returns:
@@ -178,7 +178,7 @@ class TuningCurveCalc(Calculator):
 
     def best_value_empirical(
         self,
-        stim_response_doc: Document,
+        stim_response_doc: ndi_document,
         prop: str,
     ) -> tuple[int, float, Any]:
         """Find the stimulus with the largest empirical mean response.
@@ -190,7 +190,7 @@ class TuningCurveCalc(Calculator):
         with the highest value.
 
         Args:
-            stim_response_doc: A stimulus_response_scalar Document.
+            stim_response_doc: A stimulus_response_scalar ndi_document.
             prop: Stimulus property name.
 
         Returns:
@@ -267,7 +267,7 @@ class TuningCurveCalc(Calculator):
 
     def property_value_array(
         self,
-        stim_response_doc: Document,
+        stim_response_doc: ndi_document,
         prop: str,
     ) -> list[Any]:
         """Find all unique values of a stimulus property.
@@ -275,7 +275,7 @@ class TuningCurveCalc(Calculator):
         MATLAB equivalent: tuningcurve.property_value_array
 
         Args:
-            stim_response_doc: A stimulus_response_scalar Document.
+            stim_response_doc: A stimulus_response_scalar ndi_document.
             prop: Stimulus property name.
 
         Returns:
@@ -442,16 +442,16 @@ class TuningCurveCalc(Calculator):
 
     def _get_stim_presentation_doc(
         self,
-        stim_response_doc: Document,
-    ) -> Document:
+        stim_response_doc: ndi_document,
+    ) -> ndi_document:
         """Retrieve the stimulus_presentation doc linked to a response doc."""
-        from ...query import Query
+        from ...query import ndi_query
 
         if self._session is None:
-            raise RuntimeError("Session is required for stimulus lookup")
+            raise RuntimeError("ndi_session is required for stimulus lookup")
 
         dep_id = stim_response_doc.dependency_value("stimulus_presentation_id")
-        results = self._session.database_search(Query("base.id") == dep_id)
+        results = self._session.database_search(ndi_query("base.id") == dep_id)
         if len(results) != 1:
             doc_id = stim_response_doc.document_properties.get("base", {}).get("id", "<unknown>")
             raise RuntimeError(
@@ -460,7 +460,7 @@ class TuningCurveCalc(Calculator):
         return results[0]
 
     def __repr__(self) -> str:
-        return f"TuningCurveCalc(session={self._session is not None})"
+        return f"ndi_calc_stimulus_tuningcurve(session={self._session is not None})"
 
 
 def _is_nan(value: Any) -> bool:

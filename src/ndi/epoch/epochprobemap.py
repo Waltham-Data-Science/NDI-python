@@ -1,7 +1,7 @@
 """
-ndi.epoch.epochprobemap - Probe-device mapping for epochs.
+ndi.epoch.epochprobemap - ndi_probe-device mapping for epochs.
 
-This module provides the EpochProbeMap class that describes how
+This module provides the ndi_epoch_epochprobemap class that describes how
 probes (logical measurement devices) map to physical DAQ channels
 during an epoch.
 """
@@ -15,27 +15,27 @@ import pydantic
 
 
 @dataclass
-class EpochProbeMap:
+class ndi_epoch_epochprobemap:
     """
     Mapping between a probe and a device for an epoch.
 
-    EpochProbeMap describes how a logical probe (e.g., an electrode)
+    ndi_epoch_epochprobemap describes how a logical probe (e.g., an electrode)
     maps to physical channels on a data acquisition device during
     a specific epoch.
 
     Attributes:
-        name: Probe name (no whitespace allowed)
+        name: ndi_probe name (no whitespace allowed)
         reference: Reference number (non-negative integer)
-        type: Probe type identifier (no whitespace)
+        type: ndi_probe type identifier (no whitespace)
         devicestring: Device identifier string (format: "devicename:class:details")
-        subjectstring: Subject identifier string
+        subjectstring: ndi_subject identifier string
 
     Example:
-        >>> epm = EpochProbeMap(
+        >>> epm = ndi_epoch_epochprobemap(
         ...     name='electrode1',
         ...     reference=1,
         ...     type='n-trode',
-        ...     devicestring='intan1:SpikeInterfaceReader:',
+        ...     devicestring='intan1:ndi_daq_reader_SpikeInterfaceReader:',
         ...     subjectstring='mouse001',
         ... )
     """
@@ -86,9 +86,9 @@ class EpochProbeMap:
         Check if this probe map matches the given criteria.
 
         Args:
-            name: Probe name to match (None = any)
+            name: ndi_probe name to match (None = any)
             reference: Reference number to match (None = any)
-            type: Probe type to match (None = any)
+            type: ndi_probe type to match (None = any)
 
         Returns:
             True if all specified criteria match
@@ -112,7 +112,7 @@ class EpochProbeMap:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> EpochProbeMap:
+    def from_dict(cls, data: dict[str, Any]) -> ndi_epoch_epochprobemap:
         """Create from dictionary representation."""
         return cls(
             name=data.get("name", ""),
@@ -128,7 +128,7 @@ class EpochProbeMap:
 
     def __eq__(self, other: Any) -> bool:
         """Test equality by all fields."""
-        if not isinstance(other, EpochProbeMap):
+        if not isinstance(other, ndi_epoch_epochprobemap):
             return False
         return (
             self.name == other.name

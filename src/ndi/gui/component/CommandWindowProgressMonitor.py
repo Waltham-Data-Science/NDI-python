@@ -1,6 +1,6 @@
-"""CommandWindowProgressMonitor — Console-based progress display.
+"""ndi_gui_component_CommandWindowProgressMonitor — Console-based progress display.
 
-Mirrors MATLAB: ndi.gui.component.CommandWindowProgressMonitor
+Mirrors MATLAB: ndi.gui.component.ndi_gui_component_CommandWindowProgressMonitor
 
 Displays progress updates in the terminal/console with optional
 timestamps and in-place updating.
@@ -12,17 +12,17 @@ import sys
 from datetime import datetime
 from typing import Any
 
-from ndi.gui.component.abstract.ProgressMonitor import ProgressMonitor
+from ndi.gui.component.abstract.ndi_gui_component_abstract_ProgressMonitor import ndi_gui_component_abstract_ProgressMonitor
 
 
-class CommandWindowProgressMonitor(ProgressMonitor):
+class ndi_gui_component_CommandWindowProgressMonitor(ndi_gui_component_abstract_ProgressMonitor):
     """Progress monitor that prints updates to stdout.
 
     Parameters
     ----------
     **kwargs
         Property overrides.  In addition to those accepted by
-        :class:`ProgressMonitor`, this class supports:
+        :class:`ndi_gui_component_abstract_ProgressMonitor`, this class supports:
 
         * ``IndentSize`` (int, default 0)
         * ``ShowTimeStamp`` (bool, default False)
@@ -38,7 +38,7 @@ class CommandWindowProgressMonitor(ProgressMonitor):
         self.UpdateInplace: bool = kwargs.get("UpdateInplace", False)
         self._prev_msg_len: int = 0
 
-    # -- ProgressMonitor overrides ----------------------------------------
+    # -- ndi_gui_component_abstract_ProgressMonitor overrides ----------------------------------------
 
     def updateProgressDisplay(self) -> None:
         """Print current progress to stdout."""

@@ -4,12 +4,12 @@ import json
 
 import pytest
 
-from ndi import Document, Ido
+from ndi import ndi_document, ndi_ido
 from ndi.common import timestamp
 
 
 class TestDocumentCreation:
-    """Test Document creation."""
+    """Test ndi_document creation."""
 
     def test_create_document_with_dict(self):
         """Test creating document from a dictionary."""
@@ -22,7 +22,7 @@ class TestDocumentCreation:
             },
             "document_class": {"class_name": "base", "superclasses": []},
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         assert doc.id == "test_id_123"
         assert doc.document_properties["base"]["name"] == "test_doc"
 
@@ -36,24 +36,24 @@ class TestDocumentCreation:
             "base": {"name": "test_doc", "session_id": ""},
             "document_class": {"class_name": "base", "superclasses": []},
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         # ID should be empty since none was provided in the dict
         assert doc.id == ""
 
     def test_create_document_with_ido_generates_id(self):
-        """Test that using Ido directly generates a valid ID."""
-        ido = Ido()
+        """Test that using ndi_ido directly generates a valid ID."""
+        ido = ndi_ido()
         props = {
             "base": {"id": ido.id, "datestamp": timestamp(), "name": "test_doc", "session_id": ""},
             "document_class": {"class_name": "base", "superclasses": []},
         }
-        doc = Document(props)
-        # ID should match the Ido we created
+        doc = ndi_document(props)
+        # ID should match the ndi_ido we created
         assert doc.id == ido.id
         assert len(doc.id) > 0
 
     def test_create_document_from_another(self):
-        """Test creating document from another Document."""
+        """Test creating document from another ndi_document."""
         props = {
             "base": {
                 "id": "original_id",
@@ -63,8 +63,8 @@ class TestDocumentCreation:
             },
             "document_class": {"class_name": "base", "superclasses": []},
         }
-        doc1 = Document(props)
-        doc2 = Document(doc1)
+        doc1 = ndi_document(props)
+        doc2 = ndi_document(doc1)
 
         # Should be a copy with same properties
         assert doc2.id == doc1.id
@@ -76,7 +76,7 @@ class TestDocumentCreation:
 
 
 class TestDocumentProperties:
-    """Test Document property access."""
+    """Test ndi_document property access."""
 
     def test_id_property(self):
         """Test id property."""
@@ -84,7 +84,7 @@ class TestDocumentProperties:
             "base": {"id": "my_id", "datestamp": "", "session_id": ""},
             "document_class": {"class_name": "base", "superclasses": []},
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         assert doc.id == "my_id"
 
     def test_session_id_property(self):
@@ -93,7 +93,7 @@ class TestDocumentProperties:
             "base": {"id": "id", "datestamp": "", "session_id": "sess_123"},
             "document_class": {"class_name": "base", "superclasses": []},
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         assert doc.session_id == "sess_123"
 
     def test_set_session_id(self):
@@ -102,7 +102,7 @@ class TestDocumentProperties:
             "base": {"id": "id", "datestamp": "", "session_id": ""},
             "document_class": {"class_name": "base", "superclasses": []},
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         doc = doc.set_session_id("new_session")
         assert doc.session_id == "new_session"
 
@@ -112,7 +112,7 @@ class TestDocumentProperties:
             "base": {"id": "id", "datestamp": "", "session_id": ""},
             "document_class": {"class_name": "base", "superclasses": []},
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         result = doc.set_session_id("sess")
         assert result is doc
 
@@ -126,7 +126,7 @@ class TestDocumentClass:
             "base": {"id": "id", "datestamp": "", "session_id": ""},
             "document_class": {"class_name": "ndi_element", "superclasses": []},
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         assert doc.doc_class() == "ndi_element"
 
     def test_doc_isa_true(self):
@@ -135,7 +135,7 @@ class TestDocumentClass:
             "base": {"id": "id", "datestamp": "", "session_id": ""},
             "document_class": {"class_name": "ndi_element", "superclasses": []},
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         assert doc.doc_isa("ndi_element")
 
     def test_doc_isa_false(self):
@@ -144,7 +144,7 @@ class TestDocumentClass:
             "base": {"id": "id", "datestamp": "", "session_id": ""},
             "document_class": {"class_name": "ndi_element", "superclasses": []},
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         assert not doc.doc_isa("ndi_probe")
 
 
@@ -157,7 +157,7 @@ class TestDocumentDependencies:
             "base": {"id": "id", "datestamp": "", "session_id": ""},
             "document_class": {"class_name": "base", "superclasses": []},
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         names, deps = doc.dependency()
         assert names == []
         assert deps == []
@@ -172,7 +172,7 @@ class TestDocumentDependencies:
                 {"name": "element_id", "value": "elem_456"},
             ],
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         names, deps = doc.dependency()
         assert "session_id" in names
         assert "element_id" in names
@@ -185,7 +185,7 @@ class TestDocumentDependencies:
             "document_class": {"class_name": "base", "superclasses": []},
             "depends_on": [{"name": "session_id", "value": "sess_123"}],
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         assert doc.dependency_value("session_id") == "sess_123"
 
     def test_dependency_value_not_found(self):
@@ -195,7 +195,7 @@ class TestDocumentDependencies:
             "document_class": {"class_name": "base", "superclasses": []},
             "depends_on": [],
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         with pytest.raises(KeyError):
             doc.dependency_value("nonexistent")
 
@@ -206,7 +206,7 @@ class TestDocumentDependencies:
             "document_class": {"class_name": "base", "superclasses": []},
             "depends_on": [],
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         result = doc.dependency_value("nonexistent", error_if_not_found=False)
         assert result is None
 
@@ -217,7 +217,7 @@ class TestDocumentDependencies:
             "document_class": {"class_name": "base", "superclasses": []},
             "depends_on": [{"name": "session_id", "value": "old_value"}],
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         doc = doc.set_dependency_value("session_id", "new_value")
         assert doc.dependency_value("session_id") == "new_value"
 
@@ -228,7 +228,7 @@ class TestDocumentDependencies:
             "document_class": {"class_name": "base", "superclasses": []},
             "depends_on": [],
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         doc = doc.set_dependency_value("new_dep", "new_value", error_if_not_found=False)
         assert doc.dependency_value("new_dep") == "new_value"
 
@@ -243,7 +243,7 @@ class TestDocumentDependencies:
                 {"name": "element_3", "value": "elem_c"},
             ],
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         values = doc.dependency_value_n("element")
         assert values == ["elem_a", "elem_b", "elem_c"]
 
@@ -254,7 +254,7 @@ class TestDocumentDependencies:
             "document_class": {"class_name": "base", "superclasses": []},
             "depends_on": [{"name": "element_1", "value": "elem_a"}],
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         doc = doc.add_dependency_value_n("element", "elem_b")
         values = doc.dependency_value_n("element")
         assert values == ["elem_a", "elem_b"]
@@ -270,7 +270,7 @@ class TestDocumentFiles:
             "document_class": {"class_name": "base", "superclasses": []},
             "files": {"file_list": [], "file_info": []},
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         assert not doc.has_files()
 
     def test_has_files_true(self):
@@ -283,7 +283,7 @@ class TestDocumentFiles:
                 "file_info": [{"name": "data.bin", "locations": []}],
             },
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         assert doc.has_files()
 
     def test_current_file_list_empty(self):
@@ -293,7 +293,7 @@ class TestDocumentFiles:
             "document_class": {"class_name": "base", "superclasses": []},
             "files": {"file_list": ["allowed.bin"], "file_info": []},
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         assert doc.current_file_list() == []
 
     def test_add_file(self):
@@ -303,7 +303,7 @@ class TestDocumentFiles:
             "document_class": {"class_name": "base", "superclasses": []},
             "files": {"file_list": ["data.bin"], "file_info": []},
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         doc = doc.add_file("data.bin", "/path/to/data.bin")
         assert "data.bin" in doc.current_file_list()
 
@@ -314,7 +314,7 @@ class TestDocumentFiles:
             "document_class": {"class_name": "base", "superclasses": []},
             "files": {"file_list": ["allowed.bin"], "file_info": []},
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         with pytest.raises(ValueError):
             doc.add_file("not_allowed.bin", "/path/to/file")
 
@@ -324,7 +324,7 @@ class TestDocumentFiles:
             "base": {"id": "id", "datestamp": "", "session_id": ""},
             "document_class": {"class_name": "base", "superclasses": []},
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         with pytest.raises(ValueError):
             doc.add_file("data.bin", "/path/to/data.bin")
 
@@ -342,8 +342,8 @@ class TestDocumentEquality:
             "base": {"id": "same_id", "datestamp": "", "session_id": ""},
             "document_class": {"class_name": "other", "superclasses": []},
         }
-        doc1 = Document(props1)
-        doc2 = Document(props2)
+        doc1 = ndi_document(props1)
+        doc2 = ndi_document(props2)
         assert doc1 == doc2
 
     def test_eq_different_id(self):
@@ -356,8 +356,8 @@ class TestDocumentEquality:
             "base": {"id": "id2", "datestamp": "", "session_id": ""},
             "document_class": {"class_name": "base", "superclasses": []},
         }
-        doc1 = Document(props1)
-        doc2 = Document(props2)
+        doc1 = ndi_document(props1)
+        doc2 = ndi_document(props2)
         assert doc1 != doc2
 
     def test_eq_non_document(self):
@@ -366,7 +366,7 @@ class TestDocumentEquality:
             "base": {"id": "id", "datestamp": "", "session_id": ""},
             "document_class": {"class_name": "base", "superclasses": []},
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         assert doc != "not a document"
         assert doc != 123
 
@@ -380,7 +380,7 @@ class TestDocumentConversion:
             "base": {"id": "id", "datestamp": "", "session_id": ""},
             "document_class": {"class_name": "base", "superclasses": []},
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         d = doc.to_dict()
         assert d == props
         # Modifying returned dict shouldn't affect document
@@ -393,7 +393,7 @@ class TestDocumentConversion:
             "base": {"id": "id", "datestamp": "", "session_id": ""},
             "document_class": {"class_name": "base", "superclasses": []},
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         json_str = doc.to_json()
         # Should be valid JSON
         parsed = json.loads(json_str)
@@ -405,7 +405,7 @@ class TestDocumentConversion:
             "base": {"id": "id", "datestamp": "", "session_id": "", "name": "old"},
             "document_class": {"class_name": "base", "superclasses": []},
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         doc = doc.setproperties(**{"base.name": "new_name", "base.session_id": "sess"})
         assert doc.document_properties["base"]["name"] == "new_name"
         assert doc.session_id == "sess"
@@ -417,26 +417,26 @@ class TestDocumentStaticMethods:
     def test_find_doc_by_id_found(self):
         """Test find_doc_by_id finds document."""
         docs = [
-            Document(
+            ndi_document(
                 {
                     "base": {"id": "id1", "datestamp": "", "session_id": ""},
                     "document_class": {"class_name": "base", "superclasses": []},
                 }
             ),
-            Document(
+            ndi_document(
                 {
                     "base": {"id": "id2", "datestamp": "", "session_id": ""},
                     "document_class": {"class_name": "base", "superclasses": []},
                 }
             ),
-            Document(
+            ndi_document(
                 {
                     "base": {"id": "id3", "datestamp": "", "session_id": ""},
                     "document_class": {"class_name": "base", "superclasses": []},
                 }
             ),
         ]
-        found, idx = Document.find_doc_by_id(docs, "id2")
+        found, idx = ndi_document.find_doc_by_id(docs, "id2")
         assert found is not None
         assert found.id == "id2"
         assert idx == 1
@@ -444,21 +444,21 @@ class TestDocumentStaticMethods:
     def test_find_doc_by_id_not_found(self):
         """Test find_doc_by_id returns None when not found."""
         docs = [
-            Document(
+            ndi_document(
                 {
                     "base": {"id": "id1", "datestamp": "", "session_id": ""},
                     "document_class": {"class_name": "base", "superclasses": []},
                 }
             ),
         ]
-        found, idx = Document.find_doc_by_id(docs, "nonexistent")
+        found, idx = ndi_document.find_doc_by_id(docs, "nonexistent")
         assert found is None
         assert idx is None
 
     def test_find_newest(self):
         """Test find_newest finds most recent document."""
         docs = [
-            Document(
+            ndi_document(
                 {
                     "base": {
                         "id": "id1",
@@ -468,7 +468,7 @@ class TestDocumentStaticMethods:
                     "document_class": {"class_name": "base", "superclasses": []},
                 }
             ),
-            Document(
+            ndi_document(
                 {
                     "base": {
                         "id": "id2",
@@ -478,7 +478,7 @@ class TestDocumentStaticMethods:
                     "document_class": {"class_name": "base", "superclasses": []},
                 }
             ),
-            Document(
+            ndi_document(
                 {
                     "base": {
                         "id": "id3",
@@ -489,14 +489,14 @@ class TestDocumentStaticMethods:
                 }
             ),
         ]
-        newest, idx, ts = Document.find_newest(docs)
+        newest, idx, ts = ndi_document.find_newest(docs)
         assert newest.id == "id2"  # Jan 3 is newest
         assert idx == 1
 
     def test_find_newest_empty_raises(self):
         """Test find_newest raises error for empty array."""
         with pytest.raises(ValueError):
-            Document.find_newest([])
+            ndi_document.find_newest([])
 
 
 class TestDocumentRepr:
@@ -508,8 +508,8 @@ class TestDocumentRepr:
             "base": {"id": "my_id", "datestamp": "", "session_id": ""},
             "document_class": {"class_name": "ndi_element", "superclasses": []},
         }
-        doc = Document(props)
+        doc = ndi_document(props)
         r = repr(doc)
-        assert "Document" in r
+        assert "ndi_document" in r
         assert "ndi_element" in r
         assert "my_id" in r

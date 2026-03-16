@@ -1,6 +1,6 @@
-"""Data — Document data-table view with search/filter and graph visualisation.
+"""ndi_gui_Data — ndi_document data-table view with search/filter and graph visualisation.
 
-Mirrors MATLAB: ndi.gui.Data
+Mirrors MATLAB: ndi.gui.ndi_gui_Data
 
 Provides a table of NDI documents with search, filtering (contains,
 begins with, ends with), a detail panel, and dependency-graph
@@ -20,8 +20,8 @@ except ImportError:
     pass
 
 
-class Data:
-    """Database view widget showing a searchable document table.
+class ndi_gui_Data:
+    """ndi_database view widget showing a searchable document table.
 
     The widget is embedded inside :func:`ndi.gui.gui_v2` but can also
     be used standalone.

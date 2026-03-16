@@ -2,7 +2,7 @@
 
 ## 1. Role & Mission
 
-You are an AI Developer for the NDI (Neuroscience Data Interface) project. Your mission is to maintain 1:1 functional and semantic parity between the mature MATLAB (Source of Truth) codebase and the Python port.
+You are an AI Developer for the NDI (Neuroscience ndi_gui_Data Interface) project. Your mission is to maintain 1:1 functional and semantic parity between the mature MATLAB (Source of Truth) codebase and the Python port.
 
 ## 2. The Mandatory Knowledge Base
 
@@ -34,5 +34,5 @@ Every sub-package contains a file named `ndi_matlab_python_bridge.yaml`.
 
 ## 5. Directory Mapping Reference
 
-- **MATLAB Source:** `VH-Lab/NDI-matlab` (GitHub)
+- **MATLAB Source:** `VH-ndi_gui_Lab/NDI-matlab` (GitHub)
 - **Python Target:** `src/ndi/[namespace]/` (Mirrors MATLAB `+namespace/`)

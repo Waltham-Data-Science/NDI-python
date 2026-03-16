@@ -1,7 +1,7 @@
 """
 ndi.time.syncrule - Base class for synchronization rules.
 
-This module provides the SyncRule abstract base class for managing
+This module provides the ndi_time_syncrule abstract base class for managing
 synchronization between epochs and devices.
 """
 
@@ -10,19 +10,19 @@ from __future__ import annotations
 from abc import ABC
 from typing import TYPE_CHECKING, Any
 
-from ..ido import Ido
-from .clocktype import ClockType
-from .timemapping import TimeMapping
+from ..ido import ndi_ido
+from .clocktype import ndi_time_clocktype
+from .timemapping import ndi_time_timemapping
 
 if TYPE_CHECKING:
-    from ..document import Document
+    from ..document import ndi_document
 
 
-class SyncRule(Ido, ABC):
+class ndi_time_syncrule(ndi_ido, ABC):
     """
     Abstract base class for synchronization rules.
 
-    SyncRule objects define how to synchronize time between different
+    ndi_time_syncrule objects define how to synchronize time between different
     epochs and devices. Subclasses implement specific synchronization
     strategies.
 
@@ -36,7 +36,7 @@ class SyncRule(Ido, ABC):
         identifier: str | None = None,
     ):
         """
-        Create a new SyncRule.
+        Create a new ndi_time_syncrule.
 
         Args:
             parameters: Parameters for the sync rule (must be valid)
@@ -87,7 +87,7 @@ class SyncRule(Ido, ABC):
         """
         return True, ""
 
-    def eligible_clocks(self) -> list[ClockType]:
+    def eligible_clocks(self) -> list[ndi_time_clocktype]:
         """
         Return eligible clock types that can be used with this sync rule.
 
@@ -97,23 +97,23 @@ class SyncRule(Ido, ABC):
         Override in subclasses to restrict eligible clocks.
 
         Returns:
-            List of eligible ClockType values
+            List of eligible ndi_time_clocktype values
         """
         return []
 
-    def ineligible_clocks(self) -> list[ClockType]:
+    def ineligible_clocks(self) -> list[ndi_time_clocktype]:
         """
         Return ineligible clock types that cannot be used with this sync rule.
 
         If empty, no information is conveyed about which clock types
         are invalid (i.e., no specific limits).
 
-        The base class returns [ClockType.NO_TIME].
+        The base class returns [ndi_time_clocktype.NO_TIME].
 
         Returns:
-            List of ineligible ClockType values
+            List of ineligible ndi_time_clocktype values
         """
-        return [ClockType.NO_TIME]
+        return [ndi_time_clocktype.NO_TIME]
 
     def eligible_epochsets(self) -> list[str]:
         """
@@ -148,7 +148,7 @@ class SyncRule(Ido, ABC):
         epochnode_a: dict[str, Any],
         epochnode_b: dict[str, Any],
         daqsystem1: Any = None,
-    ) -> tuple[float | None, TimeMapping | None]:
+    ) -> tuple[float | None, ndi_time_timemapping | None]:
         """
         Apply the sync rule to obtain cost and mapping between two epoch nodes.
 
@@ -162,26 +162,26 @@ class SyncRule(Ido, ABC):
         Returns:
             Tuple of (cost, mapping) where:
             - cost is the synchronization cost (float or None if no sync possible)
-            - mapping is the TimeMapping object (or None if no sync possible)
+            - mapping is the ndi_time_timemapping object (or None if no sync possible)
         """
         return None, None
 
     def __eq__(self, other: object) -> bool:
         """Check equality of two sync rules."""
-        if not isinstance(other, SyncRule):
+        if not isinstance(other, ndi_time_syncrule):
             return NotImplemented
         return self._parameters == other._parameters
 
-    def new_document(self) -> Document:
+    def new_document(self) -> ndi_document:
         """
-        Create a new ndi.Document for this sync rule.
+        Create a new ndi.ndi_document for this sync rule.
 
         Returns:
-            Document representing this sync rule
+            ndi_document representing this sync rule
         """
-        from ..document import Document
+        from ..document import ndi_document
 
-        doc = Document(
+        doc = ndi_document(
             document_type="daq/syncrule",
             **{
                 "syncrule.ndi_syncrule_class": type(self).__name__,
@@ -196,11 +196,11 @@ class SyncRule(Ido, ABC):
         Create a search query for this sync rule object.
 
         Returns:
-            Query object to find this sync rule
+            ndi_query object to find this sync rule
         """
-        from ..query import Query
+        from ..query import ndi_query
 
-        return Query("base.id") == self.id
+        return ndi_query("base.id") == self.id
 
     def to_dict(self) -> dict[str, Any]:
         """
@@ -216,9 +216,9 @@ class SyncRule(Ido, ABC):
         }
 
     @classmethod
-    def from_document(cls, session: Any, doc: Document) -> SyncRule:
+    def from_document(cls, session: Any, doc: ndi_document) -> ndi_time_syncrule:
         """
-        Create a SyncRule from a document.
+        Create a ndi_time_syncrule from a document.
 
         This factory method creates the appropriate subclass based on
         the document's syncrule.ndi_syncrule_class field.
@@ -228,11 +228,11 @@ class SyncRule(Ido, ABC):
             doc: The document to load from
 
         Returns:
-            SyncRule instance of the appropriate subclass
+            ndi_time_syncrule instance of the appropriate subclass
         """
         # Get class name from document
         props = doc.document_properties
-        class_name = props.get("syncrule", {}).get("ndi_syncrule_class", "SyncRule")
+        class_name = props.get("syncrule", {}).get("ndi_syncrule_class", "ndi_time_syncrule")
         parameters = props.get("syncrule", {}).get("parameters", {})
         identifier = props.get("base", {}).get("id")
 
@@ -241,17 +241,17 @@ class SyncRule(Ido, ABC):
 
         # Map class names to classes
         class_map = {
-            "SyncRule": SyncRule,
-            "FileMatch": syncrule_module.FileMatch,
-            "FileFind": syncrule_module.FileFind,
-            "CommonTriggersOverlappingEpochs": syncrule_module.CommonTriggersOverlappingEpochs,
-            "RandomPulses": syncrule_module.RandomPulses,
+            "ndi_time_syncrule": ndi_time_syncrule,
+            "ndi_time_syncrule_filematch": syncrule_module.ndi_time_syncrule_filematch,
+            "ndi_time_syncrule_filefind": syncrule_module.ndi_time_syncrule_filefind,
+            "ndi_time_syncrule_commonTriggersOverlappingEpochs": syncrule_module.ndi_time_syncrule_commonTriggersOverlappingEpochs,
+            "ndi_time_syncrule_randomPulses": syncrule_module.ndi_time_syncrule_randomPulses,
         }
 
         rule_class = class_map.get(class_name, cls)
 
         # Abstract classes can't be instantiated directly
-        if rule_class is SyncRule:
-            raise ValueError("Cannot instantiate abstract SyncRule directly")
+        if rule_class is ndi_time_syncrule:
+            raise ValueError("Cannot instantiate abstract ndi_time_syncrule directly")
 
         return rule_class(parameters=parameters, identifier=identifier)

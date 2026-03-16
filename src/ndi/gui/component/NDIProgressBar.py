@@ -1,6 +1,6 @@
-"""NDIProgressBar — A styled progress bar widget.
+"""ndi_gui_component_NDIProgressBar — A styled progress bar widget.
 
-Mirrors MATLAB: ndi.gui.component.NDIProgressBar
+Mirrors MATLAB: ndi.gui.component.ndi_gui_component_NDIProgressBar
 
 Provides a single progress bar with NDI styling (blue colour scheme),
 a text label, and optional time-remaining display.  Uses PySide6.
@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from ndi.gui._qt_helpers import require_qt
-from ndi.gui.component.abstract.ProgressMonitor import ProgressMonitor
+from ndi.gui.component.abstract.ndi_gui_component_abstract_ProgressMonitor import ndi_gui_component_abstract_ProgressMonitor
 
 # Guard the Qt import so the module can still be *imported* without
 # PySide6 installed (the error fires only on construction).
@@ -20,18 +20,18 @@ try:
 except ImportError:
     pass
 
-# NDI colour constants (matching MATLAB NDIProgressBar)
+# NDI colour constants (matching MATLAB ndi_gui_component_NDIProgressBar)
 _BG_COLOR = "#4472C4"  # background blue
 _FG_COLOR = "#2F5597"  # foreground dark-blue
 
 
-class NDIProgressBar(ProgressMonitor):
+class ndi_gui_component_NDIProgressBar(ndi_gui_component_abstract_ProgressMonitor):
     """A single progress bar widget with NDI styling.
 
     Parameters
     ----------
     **kwargs
-        Property overrides accepted by :class:`ProgressMonitor` plus:
+        Property overrides accepted by :class:`ndi_gui_component_abstract_ProgressMonitor` plus:
 
         * ``Value`` (float, 0–1) — initial progress fraction.
         * ``Message`` (str) — initial status text.
@@ -83,7 +83,7 @@ class NDIProgressBar(ProgressMonitor):
         """The root QFrame containing the progress bar."""
         return self._frame
 
-    # -- ProgressMonitor overrides ----------------------------------------
+    # -- ndi_gui_component_abstract_ProgressMonitor overrides ----------------------------------------
 
     def updateProgressDisplay(self) -> None:
         """Update the visual bar to reflect current progress."""

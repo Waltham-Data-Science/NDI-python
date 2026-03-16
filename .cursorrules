@@ -1,7 +1,7 @@
 # NDI Cursor Rules
 
 ## 1. Project Context
-This is the NDI (Neuroscience Data Interface) Python port. It is a "Lead-Follow" project where the MATLAB codebase is the Source of Truth.
+This is the NDI (Neuroscience ndi_gui_Data Interface) Python port. It is a "Lead-Follow" project where the MATLAB codebase is the Source of Truth.
 
 ## 2. Core Instructions
 Before proposing or writing any code, you MUST read and adhere to the following project-specific files:

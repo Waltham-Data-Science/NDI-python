@@ -4,7 +4,7 @@ Mirrors MATLAB: ndi.gui.gui
 
 Opens a QMainWindow showing probes/things, DAQ readers, cache, database
 documents, and document-property details for a given
-:class:`ndi.session.Session`.
+:class:`ndi.session.ndi_session`.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ def gui(ndi_session_obj: Any) -> None:
 
     Parameters
     ----------
-    ndi_session_obj : ndi.session.Session
+    ndi_session_obj : ndi.session.ndi_session
         The session to display.
 
     Notes
@@ -91,27 +91,27 @@ def _build_window(session: Any) -> Any:
             left.addWidget(self._things_list)
             body.addLayout(left, 1)
 
-            # Middle column: DAQ Readers + Cache
+            # Middle column: DAQ Readers + ndi_cache
             mid = QtWidgets.QVBoxLayout()
             mid.addWidget(QtWidgets.QLabel("<b>DAQ-Readers</b>"))
             self._daq_list = QtWidgets.QListWidget()
             mid.addWidget(self._daq_list)
 
-            mid.addWidget(QtWidgets.QLabel("<b>Cache</b>"))
+            mid.addWidget(QtWidgets.QLabel("<b>ndi_cache</b>"))
             self._cache_list = QtWidgets.QListWidget()
             mid.addWidget(self._cache_list)
             body.addLayout(mid, 1)
 
-            # Right column: Database + Doc Properties
+            # Right column: ndi_database + Doc Properties
             right_layout = QtWidgets.QVBoxLayout()
-            right_layout.addWidget(QtWidgets.QLabel("<b>Database</b>"))
+            right_layout.addWidget(QtWidgets.QLabel("<b>ndi_database</b>"))
             self._db_list = QtWidgets.QListWidget()
             self._db_list.currentRowChanged.connect(self._on_db_select)
             right_layout.addWidget(self._db_list)
             body.addLayout(right_layout, 2)
 
             props = QtWidgets.QVBoxLayout()
-            props.addWidget(QtWidgets.QLabel("<b>Document Properties</b>"))
+            props.addWidget(QtWidgets.QLabel("<b>ndi_document Properties</b>"))
             self._doc_props = QtWidgets.QTextEdit()
             self._doc_props.setReadOnly(True)
             props.addWidget(self._doc_props)
@@ -137,10 +137,10 @@ def _build_window(session: Any) -> Any:
             self._doc_ids.clear()
             self._doc_cache.clear()
             try:
-                from ndi.query import Query
+                from ndi.query import ndi_query
 
                 doc_list = self._session.database_search(
-                    Query("document_class.class_name", "regex", "(.*)", "")
+                    ndi_query("document_class.class_name", "regex", "(.*)", "")
                 )
             except Exception:
                 doc_list = []

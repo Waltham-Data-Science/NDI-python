@@ -13,7 +13,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from ..document import Document
+    from ..document import ndi_document
 
 
 class DocExistsAction(str, Enum):
@@ -25,7 +25,7 @@ class DocExistsAction(str, Enum):
     REPLACE_IF_DIFFERENT = "ReplaceIfDifferent"
 
 
-class AppDoc:
+class ndi_app_appdoc:
     """
     Mixin for application document management.
 
@@ -36,7 +36,7 @@ class AppDoc:
     Attributes:
         doc_types: List of internal names for document types
         doc_document_types: List of NDI document schema types
-        doc_session: Session for database access
+        doc_session: ndi_session for database access
     """
 
     def __init__(
@@ -56,7 +56,7 @@ class AppDoc:
         doc_exists_action: DocExistsAction = DocExistsAction.ERROR,
         *args,
         **kwargs,
-    ) -> list[Document]:
+    ) -> list[ndi_document]:
         """
         Create and store an app document.
 
@@ -77,7 +77,7 @@ class AppDoc:
 
         if existing:
             if doc_exists_action == DocExistsAction.ERROR:
-                raise RuntimeError(f"Document of type '{appdoc_type}' already exists")
+                raise RuntimeError(f"ndi_document of type '{appdoc_type}' already exists")
             elif doc_exists_action == DocExistsAction.NO_ACTION:
                 return existing
             elif doc_exists_action == DocExistsAction.REPLACE_IF_DIFFERENT:
@@ -115,9 +115,9 @@ class AppDoc:
         appdoc_struct: dict,
         *args,
         **kwargs,
-    ) -> Document | None:
+    ) -> ndi_document | None:
         """
-        Convert a parameter dict to an ndi.Document.
+        Convert a parameter dict to an ndi.ndi_document.
 
         Base class returns None. Subclasses must override.
         """
@@ -126,10 +126,10 @@ class AppDoc:
     def doc2struct(
         self,
         appdoc_type: str,
-        doc: Document,
+        doc: ndi_document,
     ) -> dict:
         """
-        Extract parameter dict from a Document.
+        Extract parameter dict from a ndi_document.
 
         Base class reads the property_list_name from the document.
         """
@@ -147,7 +147,7 @@ class AppDoc:
         appdoc_type: str,
         *args,
         **kwargs,
-    ) -> list[Document]:
+    ) -> list[ndi_document]:
         """
         Find existing app documents in the database.
 

@@ -1,7 +1,7 @@
 """
 ndi.app - Base class for NDI applications.
 
-An App operates on a Session and can create/find/store documents
+An ndi_app operates on a ndi_session and can create/find/store documents
 that record the app's name, version, and execution environment.
 
 MATLAB equivalent: src/ndi/+ndi/app.m
@@ -16,40 +16,40 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Tuple
 
-from ..documentservice import DocumentService
+from ..documentservice import ndi_documentservice
 
 if TYPE_CHECKING:
-    from ..document import Document
-    from ..query import Query
-    from ..session.session_base import Session
+    from ..document import ndi_document
+    from ..query import ndi_query
+    from ..session.session_base import ndi_session
 
 
-class App(DocumentService):
+class ndi_app(ndi_documentservice):
     """
     Base class for NDI applications.
 
-    An App is attached to a Session and can create documents that
+    An ndi_app is attached to a ndi_session and can create documents that
     record metadata about the app (name, version, URL, OS info).
 
     Attributes:
-        session: The ndi.Session this app operates on
+        session: The ndi.ndi_session this app operates on
         name: The name of the application
 
     Example:
-        >>> app = App(session, 'my_analysis')
+        >>> app = ndi_app(session, 'my_analysis')
         >>> doc = app.newdocument()
     """
 
     def __init__(
         self,
-        session: Session | None = None,
+        session: ndi_session | None = None,
         name: str = "generic",
     ):
         self._session = session
         self._name = name
 
     @property
-    def session(self) -> Session | None:
+    def session(self) -> ndi_session | None:
         """Get the session."""
         return self._session
 
@@ -110,25 +110,25 @@ class App(DocumentService):
             if result_url.returncode == 0:
                 url = result_url.stdout.strip()
             else:
-                url = "https://github.com/Waltham-Data-Science/NDI-python"
+                url = "https://github.com/Waltham-ndi_gui_Data-Science/NDI-python"
         except Exception:
             version = "$Format:%H$"
-            url = "https://github.com/Waltham-Data-Science/NDI-python"
+            url = "https://github.com/Waltham-ndi_gui_Data-Science/NDI-python"
 
         return version, url
 
-    def newdocument(self) -> Document:
+    def newdocument(self) -> ndi_document:
         """
         Create a new 'app' document with environment metadata.
 
         Returns:
-            Document of type 'app'
+            ndi_document of type 'app'
         """
-        from ..document import Document
+        from ..document import ndi_document
 
         version, url = self.version_url()
 
-        doc = Document(
+        doc = ndi_document(
             "app",
             **{
                 "app.name": self._name,
@@ -146,19 +146,19 @@ class App(DocumentService):
 
         return doc
 
-    def searchquery(self) -> Query:
+    def searchquery(self) -> ndi_query:
         """
         Return a query to find this app's documents.
 
         Matches on app.name == varappname().
 
         Returns:
-            Compound Query object
+            Compound ndi_query object
         """
-        from ..query import Query
+        from ..query import ndi_query
 
-        q = Query("").isa("app") & (Query("app.name") == self.varappname())
+        q = ndi_query("").isa("app") & (ndi_query("app.name") == self.varappname())
         return q
 
     def __repr__(self) -> str:
-        return f"App('{self._name}')"
+        return f"ndi_app('{self._name}')"

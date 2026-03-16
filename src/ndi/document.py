@@ -1,7 +1,7 @@
 """
 ndi.document - NDI database storage item
 
-The ndi.Document class is the primary method for storing data in the NDI database.
+The ndi.ndi_document class is the primary method for storing data in the NDI database.
 Each document has a specific schema type (e.g., 'base', 'session', 'stimulus').
 
 Important Rules for Creating Documents:
@@ -29,14 +29,14 @@ try:
 except ImportError:
     DIDDocument = None
 
-from .common import PathConstants, timestamp
-from .ido import Ido
+from .common import ndi_common_PathConstants, timestamp
+from .ido import ndi_ido
 
 
-class Document:
+class ndi_document:
     """NDI document class for database storage.
 
-    The Document object is the primary method for storing data in the NDI database.
+    The ndi_document object is the primary method for storing data in the NDI database.
     Each document has a specific schema type and contains structured properties.
 
     Attributes:
@@ -44,7 +44,7 @@ class Document:
 
     Example:
         # Create a new document
-        doc = Document('base', **{'base.name': 'my_document'})
+        doc = ndi_document('base', **{'base.name': 'my_document'})
 
         # Access properties
         doc_id = doc.id
@@ -54,27 +54,27 @@ class Document:
         doc = doc.set_session_id('session_12345')
     """
 
-    def __init__(self, document_type: Union[str, dict, "Document"] = "base", **kwargs):
+    def __init__(self, document_type: Union[str, dict, "ndi_document"] = "base", **kwargs):
         """Create a new NDI document.
 
         Args:
             document_type: Either:
                 - A string document type name (e.g., 'base', 'stimulus')
                 - A dict containing document properties (for loading existing)
-                - Another Document object (for copying)
+                - Another ndi_document object (for copying)
                 - A DIDDocument object (for conversion, if DID-python is installed)
             **kwargs: Name/value pairs for setting document properties.
                       Property names should be fully qualified (e.g., 'base.name').
 
         Example:
-            doc = Document('base', **{'base.name': 'my_doc'})
-            doc = Document(existing_doc.document_properties)
+            doc = ndi_document('base', **{'base.name': 'my_doc'})
+            doc = ndi_document(existing_doc.document_properties)
         """
         if isinstance(document_type, dict):
             # Loading from existing properties
             self._document_properties = deepcopy(document_type)
-        elif isinstance(document_type, Document):
-            # Copy from another Document
+        elif isinstance(document_type, ndi_document):
+            # Copy from another ndi_document
             self._document_properties = deepcopy(document_type.document_properties)
         elif DIDDocument is not None and isinstance(document_type, DIDDocument):
             # Convert from DIDDocument
@@ -84,7 +84,7 @@ class Document:
             self._document_properties = self.read_blank_definition(document_type)
 
             # Generate new ID and timestamp
-            ido = Ido()
+            ido = ndi_ido()
             self._document_properties["base"]["id"] = ido.id
             self._document_properties["base"]["datestamp"] = timestamp()
 
@@ -107,7 +107,7 @@ class Document:
         """Return the document's session identifier."""
         return self._document_properties.get("base", {}).get("session_id", "")
 
-    def set_session_id(self, session_id: str) -> "Document":
+    def set_session_id(self, session_id: str) -> "ndi_document":
         """Set the session ID for this document.
 
         Args:
@@ -172,7 +172,7 @@ class Document:
         ingest: bool | None = None,
         delete_original: bool | None = None,
         location_type: str | None = None,
-    ) -> "Document":
+    ) -> "ndi_document":
         """Add a file to this document.
 
         Args:
@@ -215,7 +215,7 @@ class Document:
             location_type = detected_type
 
         # Generate unique ID for this file location
-        uid = Ido().id
+        uid = ndi_ido().id
 
         location_info = {
             "delete_original": delete_original,
@@ -241,7 +241,7 @@ class Document:
 
         return self
 
-    def remove_file(self, name: str, location: str | None = None) -> "Document":
+    def remove_file(self, name: str, location: str | None = None) -> "ndi_document":
         """Remove file information from this document.
 
         Args:
@@ -389,7 +389,7 @@ class Document:
 
     def set_dependency_value(
         self, dependency_name: str, value: str, error_if_not_found: bool = True
-    ) -> "Document":
+    ) -> "ndi_document":
         """Set the value of a dependency.
 
         Args:
@@ -403,7 +403,7 @@ class Document:
         """
         if "depends_on" not in self._document_properties:
             if error_if_not_found:
-                raise KeyError("Document has no dependencies")
+                raise KeyError("ndi_document has no dependencies")
             self._document_properties["depends_on"] = []
 
         depends_on = self._document_properties["depends_on"]
@@ -422,7 +422,7 @@ class Document:
         depends_on.append({"name": dependency_name, "value": value})
         return self
 
-    def add_dependency_value_n(self, dependency_name: str, value: str) -> "Document":
+    def add_dependency_value_n(self, dependency_name: str, value: str) -> "ndi_document":
         """Add a value to a numbered dependency list.
 
         Args:
@@ -436,7 +436,7 @@ class Document:
         new_name = f"{dependency_name}_{len(existing) + 1}"
         return self.set_dependency_value(new_name, value, error_if_not_found=False)
 
-    # === Document Class Information ===
+    # === ndi_document Class Information ===
 
     def doc_class(self) -> str:
         """Get the document class type.
@@ -466,7 +466,7 @@ class Document:
             definition = sc.get("definition", "")
             if definition:
                 try:
-                    sc_doc = Document(
+                    sc_doc = ndi_document(
                         definition.replace("$NDIDOCUMENTPATH/", "").replace(".json", "")
                     )
                     sc_names.append(sc_doc.doc_class())
@@ -503,7 +503,7 @@ class Document:
         self,
         dependency_name: str,
         index: int | None = None,
-    ) -> "Document":
+    ) -> "ndi_document":
         """Remove a numbered dependency value.
 
         If index is None, removes all dependencies matching the base name.
@@ -537,22 +537,22 @@ class Document:
 
     # === Comparison and Merging ===
 
-    def __eq__(self, other: "Document") -> bool:
+    def __eq__(self, other: "ndi_document") -> bool:
         """Check equality based on document ID."""
-        if not isinstance(other, Document):
+        if not isinstance(other, ndi_document):
             return False
         return self.id == other.id
 
-    def __add__(self, other: "Document") -> "Document":
+    def __add__(self, other: "ndi_document") -> "ndi_document":
         """Merge two documents.
 
         The result has fields from both documents. Fields in self take
         precedence over fields in other for conflicts.
 
         Returns:
-            New Document with merged properties.
+            New ndi_document with merged properties.
         """
-        result = Document(self._document_properties)
+        result = ndi_document(self._document_properties)
 
         # Merge superclasses
         my_sc = result._document_properties.get("document_class", {}).get("superclasses", [])
@@ -646,7 +646,7 @@ class Document:
         """
         return json.dumps(self._document_properties, indent=indent)
 
-    def setproperties(self, **kwargs) -> "Document":
+    def setproperties(self, **kwargs) -> "ndi_document":
         """Set multiple properties at once.
 
         Args:
@@ -686,12 +686,12 @@ class Document:
 
     @staticmethod
     def find_doc_by_id(
-        doc_array: list["Document"], doc_id: str
-    ) -> tuple[Optional["Document"], int | None]:
+        doc_array: list["ndi_document"], doc_id: str
+    ) -> tuple[Optional["ndi_document"], int | None]:
         """Find a document in a list by its ID.
 
         Args:
-            doc_array: List of Document objects.
+            doc_array: List of ndi_document objects.
             doc_id: The ID to search for.
 
         Returns:
@@ -703,17 +703,17 @@ class Document:
         return None, None
 
     @staticmethod
-    def find_newest(doc_array: list["Document"]) -> tuple["Document", int, datetime]:
+    def find_newest(doc_array: list["ndi_document"]) -> tuple["ndi_document", int, datetime]:
         """Find the newest document in a list.
 
         Args:
-            doc_array: List of Document objects.
+            doc_array: List of ndi_document objects.
 
         Returns:
             Tuple of (newest_document, index, datestamp).
         """
         if not doc_array:
-            raise ValueError("Document array is empty")
+            raise ValueError("ndi_document array is empty")
 
         timestamps = []
         for doc in doc_array:
@@ -742,12 +742,12 @@ class Document:
             Dictionary with blank document structure.
         """
         # Try to find the JSON definition
-        json_path = PathConstants.DOCUMENT_PATH / f"{document_type}.json"
+        json_path = ndi_common_PathConstants.DOCUMENT_PATH / f"{document_type}.json"
 
         if not json_path.exists():
             # Try without path constants (for testing)
             raise FileNotFoundError(
-                f"Document definition not found: {json_path}. "
+                f"ndi_document definition not found: {json_path}. "
                 f"Make sure NDI is properly installed."
             )
 
@@ -762,7 +762,7 @@ class Document:
                     # Extract document type from definition path
                     sc_type = sc_def.replace("$NDIDOCUMENTPATH/", "").replace(".json", "")
                     try:
-                        sc_props = Document.read_blank_definition(sc_type)
+                        sc_props = ndi_document.read_blank_definition(sc_type)
                         # Merge superclass properties
                         for key, value in sc_props.items():
                             if key != "document_class" and key not in definition:
@@ -773,4 +773,4 @@ class Document:
         return definition
 
     def __repr__(self) -> str:
-        return f"Document('{self.doc_class()}', id='{self.id}')"
+        return f"ndi_document('{self.doc_class()}', id='{self.id}')"

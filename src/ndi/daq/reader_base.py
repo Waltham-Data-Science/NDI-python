@@ -1,7 +1,7 @@
 """
 ndi.daq.reader_base - Abstract base class for DAQ readers.
 
-This module provides the DAQReader abstract base class that defines
+This module provides the ndi_daq_reader abstract base class that defines
 the interface for reading data from data acquisition systems.
 """
 
@@ -12,27 +12,27 @@ from typing import Any
 
 import numpy as np
 
-from ..ido import Ido
-from ..time import NO_TIME, ClockType
+from ..ido import ndi_ido
+from ..time import NO_TIME, ndi_time_clocktype
 
 
-class DAQReader(Ido, ABC):
+class ndi_daq_reader(ndi_ido, ABC):
     """
     Abstract base class for DAQ readers.
 
-    DAQReader defines the interface for objects that read samples from
+    ndi_daq_reader defines the interface for objects that read samples from
     data acquisition systems. Concrete implementations handle specific
     file formats (e.g., Intan, Blackrock, CED Spike2).
 
-    This class inherits from Ido to provide unique identification.
+    This class inherits from ndi_ido to provide unique identification.
 
     Attributes:
         identifier: Unique identifier for this reader instance
 
     Example:
-        >>> class MyReader(DAQReader):
+        >>> class MyReader(ndi_daq_reader):
         ...     def epochclock(self, epochfiles):
-        ...         return [ClockType.DEV_LOCAL_TIME]
+        ...         return [ndi_time_clocktype.DEV_LOCAL_TIME]
         ...     # ... implement other abstract methods
     """
 
@@ -43,7 +43,7 @@ class DAQReader(Ido, ABC):
         document: Any | None = None,
     ):
         """
-        Create a new DAQReader.
+        Create a new ndi_daq_reader.
 
         Args:
             identifier: Optional identifier (generated if not provided)
@@ -62,7 +62,7 @@ class DAQReader(Ido, ABC):
     def epochclock(
         self,
         epochfiles: list[str],
-    ) -> list[ClockType]:
+    ) -> list[ndi_time_clocktype]:
         """
         Return the clock types for an epoch.
 
@@ -70,10 +70,10 @@ class DAQReader(Ido, ABC):
             epochfiles: List of file paths for the epoch
 
         Returns:
-            List of ClockType objects available for this epoch.
+            List of ndi_time_clocktype objects available for this epoch.
             The base class returns [NO_TIME].
 
-        See also: ClockType
+        See also: ndi_time_clocktype
         """
         return [NO_TIME]
 
@@ -109,23 +109,23 @@ class DAQReader(Ido, ABC):
 
         Args:
             epochfiles: List of file paths (starting with epochid://)
-            session: Session object with database access
+            session: ndi_session object with database access
 
         Returns:
-            Document containing the ingested epoch data
+            ndi_document containing the ingested epoch data
 
         Raises:
             AssertionError: If not exactly one document found
         """
-        from ..file.navigator import FileNavigator
-        from ..query import Query
+        from ..file.navigator import ndi_file_navigator
+        from ..query import ndi_query
 
-        epochid = FileNavigator.ingestedfiles_epochid(epochfiles)
+        epochid = ndi_file_navigator.ingestedfiles_epochid(epochfiles)
 
         q = (
-            Query("").isa("daqreader_epochdata_ingested")
-            & Query("").depends_on("daqreader_id", self.id)
-            & (Query("epochid.epochid") == epochid)
+            ndi_query("").isa("daqreader_epochdata_ingested")
+            & ndi_query("").depends_on("daqreader_id", self.id)
+            & (ndi_query("epochid.epochid") == epochid)
         )
         docs = session.database_search(q)
 
@@ -141,15 +141,15 @@ class DAQReader(Ido, ABC):
         Create maps of all ingested epochs to t0t1 and epochclock.
 
         Args:
-            session: Session object with database access
+            session: ndi_session object with database access
 
         Returns:
             Dict with 't0t1' and 'epochclock' keys, each mapping
             epoch_id to the respective values
         """
-        from ..query import Query
+        from ..query import ndi_query
 
-        q = Query("").isa("daqreader_epochdata_ingested") & Query("").depends_on(
+        q = ndi_query("").isa("daqreader_epochdata_ingested") & ndi_query("").depends_on(
             "daqreader_id", self.id
         )
         d_ingested = session.database_search(q)
@@ -165,7 +165,7 @@ class DAQReader(Ido, ABC):
             # Extract epoch clock
             ec_list = []
             for ec_str in et.get("epochclock", []):
-                ec_list.append(ClockType(ec_str) if isinstance(ec_str, str) else ec_str)
+                ec_list.append(ndi_time_clocktype(ec_str) if isinstance(ec_str, str) else ec_str)
             epochclock_map[epochid] = ec_list
 
             # Extract t0_t1
@@ -186,18 +186,18 @@ class DAQReader(Ido, ABC):
         self,
         epochfiles: list[str],
         session: Any,
-    ) -> list[ClockType]:
+    ) -> list[ndi_time_clocktype]:
         """
         Return the clock types for an ingested epoch.
 
         Args:
             epochfiles: List of file paths (starting with epochid://)
-            session: Session object with database access
+            session: ndi_session object with database access
 
         Returns:
-            List of ClockType objects available for this epoch
+            List of ndi_time_clocktype objects available for this epoch
 
-        See also: epochclock, ClockType
+        See also: epochclock, ndi_time_clocktype
         """
         doc = self.getingesteddocument(epochfiles, session)
         et = doc.document_properties.daqreader_epochdata_ingested.epochtable
@@ -205,7 +205,7 @@ class DAQReader(Ido, ABC):
         ec_list = []
         for ec_str in et.get("epochclock", []):
             if isinstance(ec_str, str):
-                ec_list.append(ClockType(ec_str))
+                ec_list.append(ndi_time_clocktype(ec_str))
             else:
                 ec_list.append(ec_str)
 
@@ -221,7 +221,7 @@ class DAQReader(Ido, ABC):
 
         Args:
             epochfiles: List of file paths (starting with epochid://)
-            session: Session object with database access
+            session: ndi_session object with database access
 
         Returns:
             List of (t0, t1) tuples for each clock type
@@ -275,16 +275,16 @@ class DAQReader(Ido, ABC):
             epoch_id: Unique identifier for this epoch
 
         Returns:
-            Document object describing the ingested data
+            ndi_document object describing the ingested data
 
         Note:
             The returned document is not added to any database.
         """
-        from ..document import Document
+        from ..document import ndi_document
 
         # Get epoch clock and t0_t1
         ec = self.epochclock(epochfiles)
-        ec_strings = [c.value if isinstance(c, ClockType) else str(c) for c in ec]
+        ec_strings = [c.value if isinstance(c, ndi_time_clocktype) else str(c) for c in ec]
         t0t1 = self.t0_t1(epochfiles)
 
         epochtable = {
@@ -292,7 +292,7 @@ class DAQReader(Ido, ABC):
             "t0_t1": t0t1,
         }
 
-        doc = Document(
+        doc = ndi_document(
             "ingestion/daqreader_epochdata_ingested",
             daqreader_epochdata_ingested={"epochtable": epochtable},
             epochid={"epochid": epoch_id},
@@ -303,14 +303,14 @@ class DAQReader(Ido, ABC):
 
     def newdocument(self) -> Any:
         """
-        Create a new document for this DAQReader.
+        Create a new document for this ndi_daq_reader.
 
         Returns:
-            Document representing this reader
+            ndi_document representing this reader
         """
-        from ..document import Document
+        from ..document import ndi_document
 
-        doc = Document(
+        doc = ndi_document(
             "daq/daqreader",
             **{
                 "daqreader.ndi_daqreader_class": getattr(
@@ -323,18 +323,18 @@ class DAQReader(Ido, ABC):
 
     def searchquery(self) -> Any:
         """
-        Create a search query for this DAQReader.
+        Create a search query for this ndi_daq_reader.
 
         Returns:
-            Query object for finding this reader
+            ndi_query object for finding this reader
         """
-        from ..query import Query
+        from ..query import ndi_query
 
-        return Query("base.id") == self.id
+        return ndi_query("base.id") == self.id
 
     def __eq__(self, other: Any) -> bool:
         """Test equality by class and ID."""
-        if not isinstance(other, DAQReader):
+        if not isinstance(other, ndi_daq_reader):
             return False
         return self.__class__.__name__ == other.__class__.__name__ and self.id == other.id
 

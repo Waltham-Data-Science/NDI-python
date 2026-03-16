@@ -2,22 +2,22 @@
 
 import re
 
-from ndi import Ido
+from ndi import ndi_ido
 
 
 class TestIdo:
-    """Test cases for the Ido class."""
+    """Test cases for the ndi_ido class."""
 
     def test_create_new_id(self):
-        """Test that creating an Ido generates a unique ID."""
-        ido = Ido()
+        """Test that creating an ndi_ido generates a unique ID."""
+        ido = ndi_ido()
         assert ido.id is not None
         assert isinstance(ido.id, str)
         assert len(ido.id) > 0
 
     def test_id_format(self):
         """Test that ID follows expected format (hex_hex)."""
-        ido = Ido()
+        ido = ndi_ido()
         # ID should be in format: hexstring_hexstring
         assert "_" in ido.id
         parts = ido.id.split("_")
@@ -27,37 +27,37 @@ class TestIdo:
             assert re.match(r"^[0-9a-f]+$", part), f"Part '{part}' is not valid hex"
 
     def test_unique_ids(self):
-        """Test that multiple Ido instances have unique IDs."""
-        ids = [Ido().id for _ in range(100)]
+        """Test that multiple ndi_ido instances have unique IDs."""
+        ids = [ndi_ido().id for _ in range(100)]
         assert len(ids) == len(set(ids)), "Generated IDs should be unique"
 
     def test_create_with_existing_id(self):
-        """Test creating Ido with an existing ID."""
+        """Test creating ndi_ido with an existing ID."""
         existing_id = "abc123_def456"
-        ido = Ido(id=existing_id)
+        ido = ndi_ido(id=existing_id)
         assert ido.id == existing_id
 
     def test_str_representation(self):
         """Test string representation returns the ID."""
-        ido = Ido()
+        ido = ndi_ido()
         assert str(ido) == ido.id
 
     def test_repr(self):
         """Test repr shows class name and ID."""
-        ido = Ido()
+        ido = ndi_ido()
         repr_str = repr(ido)
-        assert "Ido(" in repr_str
+        assert "ndi_ido(" in repr_str
         assert ido.id in repr_str
 
     def test_id_sortable_by_time(self):
         """Test that IDs are sortable by creation time."""
         import time
 
-        id1 = Ido().id
+        id1 = ndi_ido().id
         time.sleep(0.01)  # Small delay
-        id2 = Ido().id
+        id2 = ndi_ido().id
         time.sleep(0.01)
-        id3 = Ido().id
+        id3 = ndi_ido().id
 
         # When sorted alphabetically, they should maintain creation order
         sorted_ids = sorted([id3, id1, id2])

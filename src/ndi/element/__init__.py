@@ -1,7 +1,7 @@
 """
 ndi.element - Base class for data elements.
 
-This module provides the Element class that represents logical
+This module provides the ndi_element class that represents logical
 data sources in neuroscience experiments (e.g., electrodes,
 stimulators, behavioral sensors).
 """
@@ -12,36 +12,36 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ..documentservice import DocumentService
-from ..epoch.epochprobemap import EpochProbeMap
-from ..epoch.epochset import EpochSet
-from ..ido import Ido
-from ..time import ClockType
+from ..documentservice import ndi_documentservice
+from ..epoch.epochprobemap import ndi_epoch_epochprobemap
+from ..epoch.epochset import ndi_epoch_epochset
+from ..ido import ndi_ido
+from ..time import ndi_time_clocktype
 
 
-class Element(Ido, EpochSet, DocumentService):
+class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
     """
     Base class for data elements.
 
-    Element represents a logical data source or sink in an experiment.
+    ndi_element represents a logical data source or sink in an experiment.
     Elements can be electrodes, stimulators, behavioral sensors, or
     any other entity that produces or consumes time series data.
 
-    Elements manage epochs through the EpochSet interface and can
-    be stored in the database through DocumentService.
+    Elements manage epochs through the ndi_epoch_epochset interface and can
+    be stored in the database through ndi_documentservice.
 
     Attributes:
         session: Associated session object
-        name: Element name (no whitespace)
+        name: ndi_element name (no whitespace)
         reference: Reference number (non-negative)
-        type: Element type identifier (no whitespace)
-        underlying_element: Element this depends on (for derived elements)
+        type: ndi_element type identifier (no whitespace)
+        underlying_element: ndi_element this depends on (for derived elements)
         direct: If True, epochs come directly from underlying_element
         subject_id: Associated subject document ID
         dependencies: Additional named dependencies
 
     Example:
-        >>> elem = Element(
+        >>> elem = ndi_element(
         ...     session=my_session,
         ...     name='electrode1',
         ...     reference=1,
@@ -56,7 +56,7 @@ class Element(Ido, EpochSet, DocumentService):
         name: str = "",
         reference: int = 0,
         type: str = "",
-        underlying_element: Element | None = None,
+        underlying_element: ndi_element | None = None,
         direct: bool = True,
         subject_id: str = "",
         dependencies: dict[str, str] | None = None,
@@ -64,25 +64,25 @@ class Element(Ido, EpochSet, DocumentService):
         document: Any | None = None,
     ):
         """
-        Create a new Element.
+        Create a new ndi_element.
 
         Can be created from scratch or loaded from a document.
 
         Args:
-            session: Session object with database access
-            name: Element name (no whitespace allowed)
+            session: ndi_session object with database access
+            name: ndi_element name (no whitespace allowed)
             reference: Reference number (non-negative integer)
-            type: Element type identifier (no whitespace)
-            underlying_element: Element this depends on
+            type: ndi_element type identifier (no whitespace)
+            underlying_element: ndi_element this depends on
             direct: If True, use underlying_element epochs directly
-            subject_id: Subject document ID
+            subject_id: ndi_subject document ID
             dependencies: Dict of named dependencies
             identifier: Optional unique identifier
             document: Optional document to load from
         """
         # Initialize base classes
-        Ido.__init__(self, identifier)
-        EpochSet.__init__(self)
+        ndi_ido.__init__(self, identifier)
+        ndi_epoch_epochset.__init__(self)
 
         # Load from document if provided
         if document is not None and session is not None:
@@ -136,12 +136,12 @@ class Element(Ido, EpochSet, DocumentService):
         # Load underlying element if dependency exists
         underlying_id = document.dependency_value("underlying_element_id", error_if_not_found=False)
         if underlying_id:
-            from ..query import Query
+            from ..query import ndi_query
 
-            q = Query("base.id") == underlying_id
+            q = ndi_query("base.id") == underlying_id
             docs = session.database_search(q)
             if len(docs) == 1:
-                self._underlying_element = Element(session=session, document=docs[0])
+                self._underlying_element = ndi_element(session=session, document=docs[0])
 
     @property
     def session(self) -> Any:
@@ -164,7 +164,7 @@ class Element(Ido, EpochSet, DocumentService):
         return self._type
 
     @property
-    def underlying_element(self) -> Element | None:
+    def underlying_element(self) -> ndi_element | None:
         """Get the underlying element."""
         return self._underlying_element
 
@@ -207,7 +207,7 @@ class Element(Ido, EpochSet, DocumentService):
         return f"{self._name} | {self._reference}"
 
     # =========================================================================
-    # EpochSet Implementation
+    # ndi_epoch_epochset Implementation
     # =========================================================================
 
     def buildepochtable(self) -> list[dict[str, Any]]:
@@ -262,10 +262,10 @@ class Element(Ido, EpochSet, DocumentService):
         if self._session is None:
             return []
 
-        from ..query import Query
+        from ..query import ndi_query
 
-        # Query for registered epochs
-        q = Query("").isa("element_epoch") & Query("").depends_on("element_id", self.id)
+        # ndi_query for registered epochs
+        q = ndi_query("").isa("element_epoch") & ndi_query("").depends_on("element_id", self.id)
         epoch_docs = self._session.database_search(q)
 
         et = []
@@ -277,8 +277,8 @@ class Element(Ido, EpochSet, DocumentService):
             epoch_clock = []
             for c in clock_raw:
                 if isinstance(c, str):
-                    epoch_clock.append(ClockType(c))
-                elif isinstance(c, ClockType):
+                    epoch_clock.append(ndi_time_clocktype(c))
+                elif isinstance(c, ndi_time_clocktype):
                     epoch_clock.append(c)
 
             # Parse t0_t1
@@ -319,15 +319,15 @@ class Element(Ido, EpochSet, DocumentService):
         return self._underlying_element is None
 
     # =========================================================================
-    # Epoch Management
+    # ndi_epoch_epoch Management
     # =========================================================================
 
     def addepoch(
         self,
         epoch_id: str,
-        epoch_clock: list[ClockType],
+        epoch_clock: list[ndi_time_clocktype],
         t0_t1: list[tuple[float, float]],
-    ) -> tuple[Element, Any]:
+    ) -> tuple[ndi_element, Any]:
         """
         Add a new epoch to this element.
 
@@ -348,12 +348,12 @@ class Element(Ido, EpochSet, DocumentService):
             raise ValueError("Cannot add epochs to direct elements")
 
         if self._session is None:
-            raise ValueError("Session required to add epochs")
+            raise ValueError("ndi_session required to add epochs")
 
-        from ..document import Document
+        from ..document import ndi_document
 
         # Create epoch document
-        doc = Document(
+        doc = ndi_document(
             "element_epoch",
             **{
                 "element_epoch.epoch_clock": [str(c) for c in epoch_clock],
@@ -382,9 +382,9 @@ class Element(Ido, EpochSet, DocumentService):
         if self._session is None:
             return [], []
 
-        from ..query import Query
+        from ..query import ndi_query
 
-        q = Query("").isa("element_epoch") & Query("").depends_on("element_id", self.id)
+        q = ndi_query("").isa("element_epoch") & ndi_query("").depends_on("element_id", self.id)
         epoch_docs = self._session.database_search(q)
 
         et = self._build_registered_epochtable()
@@ -392,7 +392,7 @@ class Element(Ido, EpochSet, DocumentService):
         return et, epoch_docs
 
     # =========================================================================
-    # DocumentService Implementation
+    # ndi_documentservice Implementation
     # =========================================================================
 
     def newdocument(self) -> Any:
@@ -400,11 +400,11 @@ class Element(Ido, EpochSet, DocumentService):
         Create a new document for this element.
 
         Returns:
-            Document representing this element
+            ndi_document representing this element
         """
-        from ..document import Document
+        from ..document import ndi_document
 
-        doc = Document(
+        doc = ndi_document(
             "element",
             **{
                 "element.ndi_element_class": self.ndi_element_class(),
@@ -443,19 +443,19 @@ class Element(Ido, EpochSet, DocumentService):
         by the MATLAB implementation.
 
         Returns:
-            Query matching this element's document
+            ndi_query matching this element's document
         """
-        from ..query import Query
+        from ..query import ndi_query
 
-        q = self._session.searchquery() if self._session is not None else Query("")
-        q = q & (Query("element.name") == self._name)
-        q = q & (Query("element.type") == self._type)
-        q = q & (Query("element.ndi_element_class") == self.ndi_element_class())
-        q = q & (Query("element.reference") == self._reference)
+        q = self._session.searchquery() if self._session is not None else ndi_query("")
+        q = q & (ndi_query("element.name") == self._name)
+        q = q & (ndi_query("element.type") == self._type)
+        q = q & (ndi_query("element.ndi_element_class") == self.ndi_element_class())
+        q = q & (ndi_query("element.reference") == self._reference)
         return q
 
     # =========================================================================
-    # Cache Management
+    # ndi_cache Management
     # =========================================================================
 
     def getcache(self) -> tuple[Any | None, str]:
@@ -479,7 +479,7 @@ class Element(Ido, EpochSet, DocumentService):
 
     def __eq__(self, other: Any) -> bool:
         """Test equality by name, reference, and type."""
-        if not isinstance(other, Element):
+        if not isinstance(other, ndi_element):
             return False
         return (
             self._name == other._name
@@ -493,4 +493,4 @@ class Element(Ido, EpochSet, DocumentService):
 
     def __repr__(self) -> str:
         """String representation."""
-        return f"Element({self._name}|{self._reference}|{self._type})"
+        return f"ndi_element({self._name}|{self._reference}|{self._type})"

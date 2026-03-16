@@ -19,7 +19,7 @@ classes:
     matlab_path: "+ndi/database.m"
     matlab_last_sync_hash: "ad81fd7a"
     python_path: "ndi/database.py"
-    python_class: "Database"
+    python_class: "ndi_database"
 
     properties:
       - name: path
@@ -53,10 +53,10 @@ classes:
             default: "''"
         output_arguments:
           - name: ndi_database_obj
-            type_python: "Database"
+            type_python: "ndi_database"
         decision_log: >
           MATLAB: database(PATH, REFERENCE).
-          Python: Database(session_path, db_name='.ndi', **backend_kwargs).
+          Python: ndi_database(session_path, db_name='.ndi', **backend_kwargs).
           Python adds db_name parameter for directory naming flexibility.
 
       - name: newdocument
@@ -67,23 +67,23 @@ classes:
             default: "'base'"
         output_arguments:
           - name: ndi_document_obj
-            type_python: "Document"
+            type_python: "ndi_document"
         decision_log: >
           Present in MATLAB database.m. In Python this is handled by
-          the session object (session.newdocument), not the Database class directly.
+          the session object (session.newdocument), not the ndi_database class directly.
 
       - name: add
         input_arguments:
           - name: ndi_document_obj
             type_matlab: "ndi.document"
-            type_python: "Document"
+            type_python: "ndi_document"
           - name: Update
             type_matlab: "logical (name-value)"
             type_python: "bool"
             default: "True"
         output_arguments:
           - name: ndi_database_obj
-            type_python: "Database"
+            type_python: "ndi_database"
         decision_log: >
           MATLAB add() supports an 'Update' name-value pair (default 1)
           that controls whether an existing document is updated or errors.
@@ -97,7 +97,7 @@ classes:
             type_python: "str"
         output_arguments:
           - name: ndi_document_obj
-            type_python: "Document | None"
+            type_python: "ndi_document | None"
         decision_log: >
           MATLAB returns empty [] when not found; Python returns None.
           Synchronized 2026-03-13.
@@ -106,7 +106,7 @@ classes:
         input_arguments:
           - name: ndi_document_id
             type_matlab: "ndi.document | char | cell"
-            type_python: "Document | str"
+            type_python: "ndi_document | str"
         output_arguments:
           - name: ndi_database_obj
             type_python: "bool"
@@ -119,10 +119,10 @@ classes:
         input_arguments:
           - name: searchparams
             type_matlab: "ndi.query"
-            type_python: "Query | None"
+            type_python: "ndi_query | None"
         output_arguments:
           - name: ndi_document_objs
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: >
           MATLAB returns cell array of ndi.document; Python returns list.
           Synchronized 2026-03-13.
@@ -144,14 +144,14 @@ classes:
             default: "'no'"
         output_arguments: []
         decision_log: >
-          Present in MATLAB. Not yet implemented in Python Database class.
+          Present in MATLAB. Not yet implemented in Python ndi_database class.
           Should be added for parity. Synchronized 2026-03-13.
 
       - name: openbinarydoc
         input_arguments:
           - name: ndi_document_or_id
             type_matlab: "ndi.document | char"
-            type_python: "Document | str"
+            type_python: "ndi_document | str"
           - name: filename
             type_matlab: "char"
             type_python: "str"
@@ -161,13 +161,13 @@ classes:
         decision_log: >
           Present in MATLAB database.m. In Python this is handled by
           the session object (session.database_openbinarydoc), not
-          the Database class directly. Synchronized 2026-03-13.
+          the ndi_database class directly. Synchronized 2026-03-13.
 
       - name: existbinarydoc
         input_arguments:
           - name: ndi_document_or_id
             type_matlab: "ndi.document | char"
-            type_python: "Document | str"
+            type_python: "ndi_document | str"
           - name: filename
             type_matlab: "char"
             type_python: "str"
@@ -198,10 +198,10 @@ classes:
       - name: update
         input_arguments:
           - name: ndi_document_obj
-            type_python: "Document"
+            type_python: "ndi_document"
         output_arguments:
           - name: ndi_document_obj
-            type_python: "Document"
+            type_python: "ndi_document"
         decision_log: >
           From didsqlite subclass. Updates an existing document.
           Raises ValueError if not found. Synchronized 2026-03-13.
@@ -209,10 +209,10 @@ classes:
       - name: add_or_replace
         input_arguments:
           - name: ndi_document_obj
-            type_python: "Document"
+            type_python: "ndi_document"
         output_arguments:
           - name: ndi_document_obj
-            type_python: "Document"
+            type_python: "ndi_document"
         decision_log: >
           Python convenience. Upsert: adds if new, replaces if exists.
           Corresponds to MATLAB add() with Update=1.
@@ -224,7 +224,7 @@ classes:
             type_python: "str"
         output_arguments:
           - name: ndi_document_obj
-            type_python: "Document | None"
+            type_python: "ndi_document | None"
         decision_log: >
           Alias for read(). Convenience for MATLAB compatibility.
           Synchronized 2026-03-13.
@@ -241,10 +241,10 @@ classes:
       - name: find_depends_on
         input_arguments:
           - name: document
-            type_python: "Document | str"
+            type_python: "ndi_document | str"
         output_arguments:
           - name: dependent_docs
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: >
           Python convenience. Finds all documents that depend on
           the given document. Synchronized 2026-03-13.
@@ -252,10 +252,10 @@ classes:
       - name: find_dependencies
         input_arguments:
           - name: document
-            type_python: "Document | str"
+            type_python: "ndi_document | str"
         output_arguments:
           - name: dependency_docs
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: >
           Python convenience. Finds all documents that the given
           document depends on. Synchronized 2026-03-13.
@@ -263,10 +263,10 @@ classes:
       - name: add_many
         input_arguments:
           - name: documents
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         output_arguments:
           - name: added_docs
-            type_python: "list[Document]"
+            type_python: "list[ndi_document]"
         decision_log: >
           Python convenience. Batch add. Stops on first error.
           Synchronized 2026-03-13.
@@ -274,10 +274,10 @@ classes:
       - name: remove_many
         input_arguments:
           - name: query
-            type_python: "Query | None"
+            type_python: "ndi_query | None"
             default: "None"
           - name: documents
-            type_python: "list[Document] | None"
+            type_python: "list[ndi_document] | None"
             default: "None"
         output_arguments:
           - name: count
@@ -290,7 +290,7 @@ classes:
       - name: get_binary_path
         input_arguments:
           - name: document
-            type_python: "Document"
+            type_python: "ndi_document"
           - name: file_name
             type_python: "str"
         output_arguments:
@@ -301,7 +301,7 @@ classes:
           document's binary file. Synchronized 2026-03-13.
 
     decision_log: >
-      Python Database class merges the abstract ndi.database base class
+      Python ndi_database class merges the abstract ndi.database base class
       with the concrete ndi.database.implementations.database.didsqlite
       subclass. Synchronized 2026-03-13.
 
@@ -324,10 +324,10 @@ functions:
         type_python: "**kwargs"
     output_arguments:
       - name: db
-        type_python: "Database"
+        type_python: "ndi_database"
     decision_log: >
       MATLAB: opendatabase(database_path, session_unique_reference).
       Python: open_database(session_path, **kwargs). The Python version
-      is a simpler factory that creates a Database instance directly,
+      is a simpler factory that creates a ndi_database instance directly,
       while MATLAB searches a hierarchy of database implementations.
       Synchronized 2026-03-13.

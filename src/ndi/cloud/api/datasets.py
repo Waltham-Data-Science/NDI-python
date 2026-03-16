@@ -1,5 +1,5 @@
 """
-ndi.cloud.api.datasets - Dataset CRUD, publish, and branch operations.
+ndi.cloud.api.datasets - ndi_dataset CRUD, publish, and branch operations.
 
 All functions accept an optional ``client`` keyword argument.  When omitted,
 a client is created automatically from environment variables

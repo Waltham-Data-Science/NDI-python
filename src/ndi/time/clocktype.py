@@ -1,7 +1,7 @@
 """
 ndi.time.clocktype - Clock type enumeration for NDI framework.
 
-This module provides the ClockType class for specifying clock types
+This module provides the ndi_time_clocktype class for specifying clock types
 used in time synchronization across epochs and devices.
 """
 
@@ -11,10 +11,10 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .timemapping import TimeMapping
+    from .timemapping import ndi_time_timemapping
 
 
-class ClockType(Enum):
+class ndi_time_clocktype(Enum):
     """
     Clock type enumeration for specifying timing precision and scope.
 
@@ -42,15 +42,15 @@ class ClockType(Enum):
     INHERITED = "inherited"
 
     @classmethod
-    def from_string(cls, type_str: str) -> ClockType:
+    def from_string(cls, type_str: str) -> ndi_time_clocktype:
         """
-        Create a ClockType from a string.
+        Create a ndi_time_clocktype from a string.
 
         Args:
             type_str: Clock type string (case-insensitive)
 
         Returns:
-            ClockType enum value
+            ndi_time_clocktype enum value
 
         Raises:
             ValueError: If the type string is not recognized
@@ -72,7 +72,7 @@ class ClockType(Enum):
         Returns:
             True if clock type is DEV_LOCAL_TIME, False otherwise
         """
-        return self == ClockType.DEV_LOCAL_TIME
+        return self == ndi_time_clocktype.DEV_LOCAL_TIME
 
     def is_global(self) -> bool:
         """
@@ -84,17 +84,17 @@ class ClockType(Enum):
             True if this is a global clock type
         """
         global_types = {
-            ClockType.UTC,
-            ClockType.APPROX_UTC,
-            ClockType.EXP_GLOBAL_TIME,
-            ClockType.APPROX_EXP_GLOBAL_TIME,
-            ClockType.DEV_GLOBAL_TIME,
-            ClockType.APPROX_DEV_GLOBAL_TIME,
+            ndi_time_clocktype.UTC,
+            ndi_time_clocktype.APPROX_UTC,
+            ndi_time_clocktype.EXP_GLOBAL_TIME,
+            ndi_time_clocktype.APPROX_EXP_GLOBAL_TIME,
+            ndi_time_clocktype.DEV_GLOBAL_TIME,
+            ndi_time_clocktype.APPROX_DEV_GLOBAL_TIME,
         }
         return self in global_types
 
     @staticmethod
-    def assert_global(clocktype: ClockType) -> None:
+    def assert_global(clocktype: ndi_time_clocktype) -> None:
         """
         Assert that a clock type is global, raising an error if not.
 
@@ -107,19 +107,19 @@ class ClockType(Enum):
         if not clocktype.is_global():
             valid_types = ", ".join(
                 [
-                    ClockType.UTC.value,
-                    ClockType.APPROX_UTC.value,
-                    ClockType.EXP_GLOBAL_TIME.value,
-                    ClockType.APPROX_EXP_GLOBAL_TIME.value,
-                    ClockType.DEV_GLOBAL_TIME.value,
-                    ClockType.APPROX_DEV_GLOBAL_TIME.value,
+                    ndi_time_clocktype.UTC.value,
+                    ndi_time_clocktype.APPROX_UTC.value,
+                    ndi_time_clocktype.EXP_GLOBAL_TIME.value,
+                    ndi_time_clocktype.APPROX_EXP_GLOBAL_TIME.value,
+                    ndi_time_clocktype.DEV_GLOBAL_TIME.value,
+                    ndi_time_clocktype.APPROX_DEV_GLOBAL_TIME.value,
                 ]
             )
             raise AssertionError(
                 f"Clock type must be one of: {valid_types}. Got: {clocktype.value}"
             )
 
-    def epochgraph_edge(self, other: ClockType) -> tuple[float, TimeMapping | None]:
+    def epochgraph_edge(self, other: ndi_time_clocktype) -> tuple[float, ndi_time_timemapping | None]:
         """
         Provide epochgraph edge based purely on clock type.
 
@@ -138,37 +138,37 @@ class ClockType(Enum):
 
         Returns:
             Tuple of (cost, mapping) where cost is float and mapping is
-            a TimeMapping object or None if no mapping exists.
+            a ndi_time_timemapping object or None if no mapping exists.
         """
-        from .timemapping import TimeMapping
+        from .timemapping import ndi_time_timemapping
 
         # No mapping possible with no_time
-        if self == ClockType.NO_TIME or other == ClockType.NO_TIME:
+        if self == ndi_time_clocktype.NO_TIME or other == ndi_time_clocktype.NO_TIME:
             return float("inf"), None
 
         # Define valid transitions
         valid_transitions = [
-            (ClockType.UTC, ClockType.UTC),
-            (ClockType.UTC, ClockType.APPROX_UTC),
-            (ClockType.EXP_GLOBAL_TIME, ClockType.EXP_GLOBAL_TIME),
-            (ClockType.EXP_GLOBAL_TIME, ClockType.APPROX_EXP_GLOBAL_TIME),
-            (ClockType.DEV_GLOBAL_TIME, ClockType.DEV_GLOBAL_TIME),
-            (ClockType.DEV_GLOBAL_TIME, ClockType.APPROX_DEV_GLOBAL_TIME),
+            (ndi_time_clocktype.UTC, ndi_time_clocktype.UTC),
+            (ndi_time_clocktype.UTC, ndi_time_clocktype.APPROX_UTC),
+            (ndi_time_clocktype.EXP_GLOBAL_TIME, ndi_time_clocktype.EXP_GLOBAL_TIME),
+            (ndi_time_clocktype.EXP_GLOBAL_TIME, ndi_time_clocktype.APPROX_EXP_GLOBAL_TIME),
+            (ndi_time_clocktype.DEV_GLOBAL_TIME, ndi_time_clocktype.DEV_GLOBAL_TIME),
+            (ndi_time_clocktype.DEV_GLOBAL_TIME, ndi_time_clocktype.APPROX_DEV_GLOBAL_TIME),
         ]
 
         if (self, other) in valid_transitions:
-            return 100.0, TimeMapping.identity()
+            return 100.0, ndi_time_timemapping.identity()
 
         return float("inf"), None
 
 
 # Convenience aliases for common clock types
-UTC = ClockType.UTC
-APPROX_UTC = ClockType.APPROX_UTC
-EXP_GLOBAL_TIME = ClockType.EXP_GLOBAL_TIME
-APPROX_EXP_GLOBAL_TIME = ClockType.APPROX_EXP_GLOBAL_TIME
-DEV_GLOBAL_TIME = ClockType.DEV_GLOBAL_TIME
-APPROX_DEV_GLOBAL_TIME = ClockType.APPROX_DEV_GLOBAL_TIME
-DEV_LOCAL_TIME = ClockType.DEV_LOCAL_TIME
-NO_TIME = ClockType.NO_TIME
-INHERITED = ClockType.INHERITED
+UTC = ndi_time_clocktype.UTC
+APPROX_UTC = ndi_time_clocktype.APPROX_UTC
+EXP_GLOBAL_TIME = ndi_time_clocktype.EXP_GLOBAL_TIME
+APPROX_EXP_GLOBAL_TIME = ndi_time_clocktype.APPROX_EXP_GLOBAL_TIME
+DEV_GLOBAL_TIME = ndi_time_clocktype.DEV_GLOBAL_TIME
+APPROX_DEV_GLOBAL_TIME = ndi_time_clocktype.APPROX_DEV_GLOBAL_TIME
+DEV_LOCAL_TIME = ndi_time_clocktype.DEV_LOCAL_TIME
+NO_TIME = ndi_time_clocktype.NO_TIME
+INHERITED = ndi_time_clocktype.INHERITED

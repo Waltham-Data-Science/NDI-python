@@ -342,7 +342,7 @@ def downloadFilesForDocument(
 
     Args:
         dataset_id: Cloud dataset ID.
-        document: Document dict (must include ``file_uid``).
+        document: ndi_document dict (must include ``file_uid``).
         target_dir: Directory to save downloaded files.
         client: Authenticated cloud client (auto-created if omitted).
 
@@ -416,16 +416,16 @@ def downloadDatasetFiles(
 def jsons2documents(
     doc_jsons: list[dict[str, Any]],
 ) -> list[Any]:
-    """Convert a list of raw JSON dicts into ndi.Document objects.
+    """Convert a list of raw JSON dicts into ndi.ndi_document objects.
 
     MATLAB equivalent: downloadDataset.m conversion step.
     """
-    from ndi.document import Document
+    from ndi.document import ndi_document
 
     documents = []
     for dj in doc_jsons:
         try:
-            documents.append(Document(dj))
+            documents.append(ndi_document(dj))
         except Exception:
             pass
     return documents
@@ -449,7 +449,7 @@ def datasetDocuments(
     saves each document as a JSON file in *json_dir*.
 
     Args:
-        dataset_info: Dataset dict as returned by ``getDataset``, must
+        dataset_info: ndi_dataset dict as returned by ``getDataset``, must
             include ``documents`` (list of document IDs) and ``_id``.
         mode: ``'local'`` — files are expected on disk, set ingest/delete
             flags.  ``'hybrid'`` — leave files in cloud, set ndic:// URIs.
@@ -485,7 +485,7 @@ def datasetDocuments(
             out_file = json_path / f"{document_id}.json"
             if out_file.exists():
                 if verbose:
-                    print(f"  Document {i + 1} already exists. Skipping...")
+                    print(f"  ndi_document {i + 1} already exists. Skipping...")
                 continue
 
         try:
@@ -559,14 +559,14 @@ def downloadGenericFiles(
         # Resolve cloud dataset ID
         cloud_dataset_id, _ = getCloudDatasetIdForLocalDataset(ndi_dataset, client=client)
         if not cloud_dataset_id:
-            return False, "Dataset is not linked to an NDI cloud dataset", report
+            return False, "ndi_dataset is not linked to an NDI cloud dataset", report
 
         # Get documents from the local database
-        from ndi.query import Query
+        from ndi.query import ndi_query
 
         all_docs = []
         for doc_id in ndi_document_ids:
-            q = Query("base.id", "exact_string", doc_id, "")
+            q = ndi_query("base.id", "exact_string", doc_id, "")
             results = (
                 ndi_dataset.database_search(q) if hasattr(ndi_dataset, "database_search") else []
             )
@@ -687,7 +687,7 @@ def setFileInfo(
     MATLAB equivalent: ``ndi.cloud.download.internal.setFileInfo``
 
     Args:
-        doc_struct: Document properties dict.
+        doc_struct: ndi_document properties dict.
         mode: ``'local'`` — set delete_original and ingest to 1 and
             update file locations to local paths.  ``'hybrid'`` — set
             delete_original and ingest to 0 (leave files in cloud).
@@ -761,7 +761,7 @@ def setFileInfo(
 def structsToNdiDocuments(
     ndi_document_structs: list[dict[str, Any]],
 ) -> list[Any]:
-    """Convert downloaded NDI document structures to ndi.Document objects.
+    """Convert downloaded NDI document structures to ndi.ndi_document objects.
 
     MATLAB equivalent: ``ndi.cloud.download.internal.structsToNdiDocuments``
 
@@ -772,7 +772,7 @@ def structsToNdiDocuments(
         ndi_document_structs: List of document property dicts.
 
     Returns:
-        List of :class:`ndi.Document` objects.
+        List of :class:`ndi.ndi_document` objects.
     """
     return jsons2documents(ndi_document_structs)
 

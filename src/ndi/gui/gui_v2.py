@@ -1,11 +1,11 @@
-"""gui_v2 — Enhanced NDI session GUI with Experiment and Database views.
+"""gui_v2 — Enhanced NDI session GUI with Experiment and ndi_database views.
 
 Mirrors MATLAB: ndi.gui.gui_v2
 
 Opens a QMainWindow with two tab views:
-- **Experiment View** (Lab): shows subjects, probes, and DAQs as
+- **Experiment View** (ndi_gui_Lab): shows subjects, probes, and DAQs as
   draggable icons with connection wires.
-- **Database View** (Data): shows a searchable/filterable document
+- **ndi_database View** (ndi_gui_Data): shows a searchable/filterable document
   table with dependency graph visualisation.
 """
 
@@ -21,7 +21,7 @@ def gui_v2(ndi_session_obj: Any) -> None:
 
     Parameters
     ----------
-    ndi_session_obj : ndi.session.Session
+    ndi_session_obj : ndi.session.ndi_session
         The session to display.
     """
     require_qt()
@@ -36,13 +36,13 @@ def _build_v2_window(session: Any) -> Any:
     from PySide6 import QtWidgets
 
     class _NDIV2Window(QtWidgets.QMainWindow):
-        """Enhanced GUI window with Lab + Data tabs."""
+        """Enhanced GUI window with ndi_gui_Lab + ndi_gui_Data tabs."""
 
         def __init__(self, session: Any) -> None:
             super().__init__()
             self._session = session
 
-            self.setWindowTitle("Neuroscience Data Interface")
+            self.setWindowTitle("Neuroscience ndi_gui_Data Interface")
             screen = QtWidgets.QApplication.primaryScreen()
             geom = screen.availableGeometry()
             self.resize(geom.width() // 2, geom.height() // 2)
@@ -51,15 +51,15 @@ def _build_v2_window(session: Any) -> Any:
             self._tabs = QtWidgets.QTabWidget()
             self.setCentralWidget(self._tabs)
 
-            # Experiment View (Lab)
+            # Experiment View (ndi_gui_Lab)
             self._lab_widget = QtWidgets.QWidget()
             self._init_lab_tab()
             self._tabs.addTab(self._lab_widget, "Experiment View")
 
-            # Database View (Data)
+            # ndi_database View (ndi_gui_Data)
             self._data_widget = QtWidgets.QWidget()
             self._init_data_tab()
-            self._tabs.addTab(self._data_widget, "Database View")
+            self._tabs.addTab(self._data_widget, "ndi_database View")
 
             # Load data from session
             self._load_session()
@@ -67,11 +67,11 @@ def _build_v2_window(session: Any) -> Any:
         # -- Tab initialisation -------------------------------------------
 
         def _init_lab_tab(self) -> None:
-            from ndi.gui.lab import Lab
+            from ndi.gui.lab import ndi_gui_Lab
 
             layout = QtWidgets.QHBoxLayout(self._lab_widget)
 
-            self._lab = Lab(self._lab_widget)
+            self._lab = ndi_gui_Lab(self._lab_widget)
 
             left = QtWidgets.QVBoxLayout()
             left.addWidget(self._lab._edit_btn)
@@ -86,11 +86,11 @@ def _build_v2_window(session: Any) -> Any:
             layout.addWidget(self._lab.panel, stretch=1)
 
         def _init_data_tab(self) -> None:
-            from ndi.gui.data import Data
+            from ndi.gui.data import ndi_gui_Data
 
             layout = QtWidgets.QHBoxLayout(self._data_widget)
 
-            self._data = Data(self._data_widget)
+            self._data = ndi_gui_Data(self._data_widget)
 
             left = QtWidgets.QVBoxLayout()
 
@@ -104,7 +104,7 @@ def _build_v2_window(session: Any) -> Any:
             layout.addLayout(left, stretch=3)
             layout.addWidget(self._data.panel, stretch=1)
 
-        # -- Session loading ----------------------------------------------
+        # -- ndi_session loading ----------------------------------------------
 
         def _load_session(self) -> None:
             s = self._session
@@ -115,9 +115,9 @@ def _build_v2_window(session: Any) -> Any:
                 elements = []
 
             try:
-                from ndi.query import Query
+                from ndi.query import ndi_query
 
-                docs = s.database_search(Query("base.id", "regex", "(.*)", ""))
+                docs = s.database_search(ndi_query("base.id", "regex", "(.*)", ""))
             except Exception:
                 docs = []
             if not isinstance(docs, list):
@@ -151,15 +151,15 @@ def _build_v2_window(session: Any) -> Any:
             subjects: list[Any] = []
             for sid in subject_ids:
                 try:
-                    from ndi.query import Query
+                    from ndi.query import ndi_query
 
-                    result = s.database_search(Query("base.id", "exact_string", sid, ""))
+                    result = s.database_search(ndi_query("base.id", "exact_string", sid, ""))
                     if result:
                         subjects.append(result)
                 except Exception:
                     pass
 
-            # Populate Lab view
+            # Populate ndi_gui_Lab view
             if subjects:
                 self._lab.addSubject(subjects)
             if probes:
@@ -167,7 +167,7 @@ def _build_v2_window(session: Any) -> Any:
             if daqs:
                 self._lab.addDAQ(daqs)
 
-            # Populate Data view
+            # Populate ndi_gui_Data view
             if docs:
                 self._data.addDoc(docs)
 

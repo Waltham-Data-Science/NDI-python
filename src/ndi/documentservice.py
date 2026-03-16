@@ -1,7 +1,7 @@
 """
 ndi.documentservice - Mixin for database document handling.
 
-This module provides the DocumentService mixin class that defines
+This module provides the ndi_documentservice mixin class that defines
 the interface for objects that can be stored in and loaded from
 the NDI database.
 """
@@ -12,15 +12,15 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .document import Document
-    from .query import Query
+    from .document import ndi_document
+    from .query import ndi_query
 
 
-class DocumentService(ABC):
+class ndi_documentservice(ABC):
     """
     Mixin for database document handling.
 
-    DocumentService defines the interface for objects that can be
+    ndi_documentservice defines the interface for objects that can be
     represented as documents in the NDI database. Classes that
     inherit from this mixin can create documents for storage and
     queries for retrieval.
@@ -30,42 +30,42 @@ class DocumentService(ABC):
         - searchquery(): Create a query to find this object
 
     Example:
-        >>> class MyObject(DocumentService):
+        >>> class MyObject(ndi_documentservice):
         ...     def newdocument(self):
-        ...         return Document('myobject', **{'myobject.name': self.name})
+        ...         return ndi_document('myobject', **{'myobject.name': self.name})
         ...     def searchquery(self):
-        ...         return Query('base.id') == self.id
+        ...         return ndi_query('base.id') == self.id
     """
 
     @abstractmethod
-    def newdocument(self) -> Document:
+    def newdocument(self) -> ndi_document:
         """
         Create a new document for this object.
 
         Returns:
-            Document representing this object
+            ndi_document representing this object
         """
         pass
 
     @abstractmethod
-    def searchquery(self) -> Query:
+    def searchquery(self) -> ndi_query:
         """
         Create a query to find this object in the database.
 
         Returns:
-            Query that matches this object's document
+            ndi_query that matches this object's document
         """
         pass
 
-    def load_element_doc(self, session: Any) -> Document | None:
+    def load_element_doc(self, session: Any) -> ndi_document | None:
         """
         Load this object's document from the database.
 
         Args:
-            session: Session with database access
+            session: ndi_session with database access
 
         Returns:
-            Document if found, None otherwise
+            ndi_document if found, None otherwise
         """
         q = self.searchquery()
         docs = session.database_search(q)
@@ -78,10 +78,10 @@ class DocumentService(ABC):
         Get the document ID for this object.
 
         Args:
-            session: Session with database access
+            session: ndi_session with database access
 
         Returns:
-            Document ID if found, None otherwise
+            ndi_document ID if found, None otherwise
         """
         doc = self.load_element_doc(session)
         if doc is not None:

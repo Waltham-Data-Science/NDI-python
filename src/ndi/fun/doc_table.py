@@ -1,5 +1,5 @@
 """
-ndi.fun.doc_table - Document-to-table conversion utilities.
+ndi.fun.doc_table - ndi_document-to-table conversion utilities.
 
 MATLAB equivalents: +ndi/+fun/+docTable/*.m
 
@@ -38,7 +38,7 @@ def ontologyTableRowDoc2Table(
     into DataFrame rows.
 
     Args:
-        documents: List of NDI Document objects with ontologyTableRow data.
+        documents: List of NDI ndi_document objects with ontologyTableRow data.
         StackAll: If True, stack all documents into a single table
             regardless of variable names.  Default groups by variable names.
 
@@ -137,7 +137,7 @@ def docCellArray2Table(
     the document's properties dict, flattened one level deep.
 
     Args:
-        documents: List of NDI Document objects.
+        documents: List of NDI ndi_document objects.
 
     Returns:
         DataFrame with one row per document.
@@ -177,9 +177,9 @@ def element(
         DataFrame with element properties.
     """
     _require_pandas()
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
-    docs = session.database_search(Query("").isa("element"))
+    docs = session.database_search(ndi_query("").isa("element"))
     rows: list[dict[str, Any]] = []
 
     for doc in docs:
@@ -211,9 +211,9 @@ def subjectBasic(
         DataFrame with subject properties.
     """
     _require_pandas()
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
-    docs = session.database_search(Query("").isa("subject"))
+    docs = session.database_search(ndi_query("").isa("subject"))
     rows: list[dict[str, Any]] = []
 
     for doc in docs:
@@ -249,16 +249,16 @@ def probe(
         DataFrame with probe properties.
     """
     _require_pandas()
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
     # 1. Get all element docs that are probes
-    docs = session.database_search(Query("").isa("probe"))
+    docs = session.database_search(ndi_query("").isa("probe"))
     if not docs:
         # Fallback: try all element docs
-        docs = session.database_search(Query("").isa("element"))
+        docs = session.database_search(ndi_query("").isa("element"))
 
     # 2. Build probe_location index: probe_id -> location info
-    probe_loc_docs = session.database_search(Query("").isa("probe_location"))
+    probe_loc_docs = session.database_search(ndi_query("").isa("probe_location"))
     loc_by_probe: dict[str, dict] = {}
     for pld in probe_loc_docs:
         props = pld.document_properties if hasattr(pld, "document_properties") else pld
@@ -268,7 +268,7 @@ def probe(
             loc_by_probe[probe_id] = pl
 
     # 3. Build openminds_element index: element_id -> cell type info
-    om_elem_docs = session.database_search(Query("").isa("openminds_element"))
+    om_elem_docs = session.database_search(ndi_query("").isa("openminds_element"))
     ct_by_element: dict[str, dict] = {}
     for omed in om_elem_docs:
         props = omed.document_properties if hasattr(omed, "document_properties") else omed
@@ -293,7 +293,7 @@ def probe(
             "ProbeReference": el.get("reference", 0),
         }
 
-        # Probe location
+        # ndi_probe location
         loc = loc_by_probe.get(probe_id, {})
         row["ProbeLocationName"] = loc.get("name", "")
         row["ProbeLocationOntology"] = loc.get("ontology_name", "")
@@ -334,10 +334,10 @@ def epoch(
     import csv
     import io
 
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
     # 1. Build element name → (id, subject_id) map
-    elem_docs = session.database_search(Query("").isa("element"))
+    elem_docs = session.database_search(ndi_query("").isa("element"))
     elem_by_key: dict[str, dict] = {}
     for doc in elem_docs:
         props = doc.document_properties if hasattr(doc, "document_properties") else doc
@@ -353,7 +353,7 @@ def epoch(
         }
 
     # 2. Build epoch → stimulus_bath mapping
-    sb_docs = session.database_search(Query("").isa("stimulus_bath"))
+    sb_docs = session.database_search(ndi_query("").isa("stimulus_bath"))
     sb_by_epoch: dict[str, list[dict]] = {}
     for doc in sb_docs:
         props = doc.document_properties if hasattr(doc, "document_properties") else doc
@@ -363,7 +363,7 @@ def epoch(
             sb_by_epoch.setdefault(eid, []).append(sb)
 
     # 3. Build epoch → openminds_stimulus (approach) mapping
-    approach_docs = session.database_search(Query("").isa("openminds_stimulus"))
+    approach_docs = session.database_search(ndi_query("").isa("openminds_stimulus"))
     approach_by_epoch: dict[str, list[dict]] = {}
     for doc in approach_docs:
         props = doc.document_properties if hasattr(doc, "document_properties") else doc
@@ -373,7 +373,7 @@ def epoch(
             approach_by_epoch.setdefault(eid, []).append(fields)
 
     # 4. Parse epochfiles_ingested docs to get epoch → probe mappings
-    efi_docs = session.database_search(Query("").isa("epochfiles_ingested"))
+    efi_docs = session.database_search(ndi_query("").isa("epochfiles_ingested"))
     epoch_counter: dict[str, int] = {}  # probe_id -> running count
     rows: list[dict[str, Any]] = []
 
@@ -427,7 +427,7 @@ def epoch(
             probe_id = elem_info.get("id", "")
             subject_id = elem_info.get("subject_id", "")
 
-            # Epoch counter per probe
+            # ndi_epoch_epoch counter per probe
             epoch_counter.setdefault(probe_id, 0)
             epoch_counter[probe_id] += 1
 
@@ -475,9 +475,9 @@ def openminds(
         dependency IDs.
     """
     _require_pandas()
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
-    docs = session.database_search(Query("").isa(doc_type))
+    docs = session.database_search(ndi_query("").isa(doc_type))
     rows: list[dict[str, Any]] = []
     doc_ids: list[str] = []
     dependency_ids: list[str] = []
@@ -535,9 +535,9 @@ def treatment(
         of document IDs, and *dependency_ids* is a list of dependency IDs.
     """
     _require_pandas()
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
-    docs = session.database_search(Query("").isa("treatment"))
+    docs = session.database_search(ndi_query("").isa("treatment"))
     rows: list[dict[str, Any]] = []
     doc_ids: list[str] = []
     dependency_ids: list[str] = []
@@ -617,10 +617,10 @@ def subject(
         Treatment_FoodRestrictionOnsetTime, Treatment_FoodRestrictionOffsetTime.
     """
     _require_pandas()
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
     # 1. Get all subject docs — build subject_id → base info
-    subject_docs = session.database_search(Query("").isa("subject"))
+    subject_docs = session.database_search(ndi_query("").isa("subject"))
     subject_info: dict[str, dict[str, str]] = {}
     for doc in subject_docs:
         props = doc.document_properties if hasattr(doc, "document_properties") else doc
@@ -640,7 +640,7 @@ def subject(
         return pd.DataFrame()
 
     # 2. Get all openminds_subject docs — index by subject_id and type
-    om_docs = session.database_search(Query("").isa("openminds_subject"))
+    om_docs = session.database_search(ndi_query("").isa("openminds_subject"))
 
     # Per-subject openminds data: {subject_id: {type: [doc_props, ...]}}
     om_by_subject: dict[str, dict[str, list[dict]]] = {sid: {} for sid in subject_info}
@@ -661,10 +661,10 @@ def subject(
 
     # 3. Get all treatment/measurement docs — index by subject_id
     # MATLAB queries: treatment | treatment_drug | virus_injection | measurement
-    treat_docs = session.database_search(Query("").isa("treatment"))
+    treat_docs = session.database_search(ndi_query("").isa("treatment"))
     for extra_type in ("treatment_drug", "virus_injection", "measurement"):
         try:
-            treat_docs.extend(session.database_search(Query("").isa(extra_type)))
+            treat_docs.extend(session.database_search(ndi_query("").isa(extra_type)))
         except Exception:
             pass
     treat_by_subject: dict[str, list[dict]] = {sid: [] for sid in subject_info}

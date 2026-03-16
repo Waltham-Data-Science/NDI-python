@@ -1,5 +1,5 @@
 """
-ndi.database.fun - Database utility functions for NDI.
+ndi.database.fun - ndi_database utility functions for NDI.
 
 MATLAB equivalents: +ndi/+database/+fun/*.m
 
@@ -28,13 +28,13 @@ def findallantecedents(
 
     Args:
         session_or_dataset: An ndi.session or ndi.dataset with database_search.
-        *documents: One or more ndi.Document objects.
+        *documents: One or more ndi.ndi_document objects.
         visited: Set of already-visited IDs (for recursion).
 
     Returns:
-        List of all antecedent Document objects.
+        List of all antecedent ndi_document objects.
     """
-    from .query import Query
+    from .query import ndi_query
 
     if visited is None:
         visited = set()
@@ -62,9 +62,9 @@ def findallantecedents(
         return antecedents
 
     # Batch query for all dependency IDs
-    q = Query("base.id") == dep_ids[0]
+    q = ndi_query("base.id") == dep_ids[0]
     for did in dep_ids[1:]:
-        q = q | (Query("base.id") == did)
+        q = q | (ndi_query("base.id") == did)
 
     try:
         found = session_or_dataset.database_search(q)
@@ -95,7 +95,7 @@ def findalldependencies(
 
     Recursively walks the dependency chain downwards.
     """
-    from .query import Query
+    from .query import ndi_query
 
     if visited is None:
         visited = set()
@@ -113,7 +113,7 @@ def findalldependencies(
         visited.add(doc_id)
 
         # Find documents whose depends_on references this doc
-        q = Query("").depends_on("*", doc_id)
+        q = ndi_query("").depends_on("*", doc_id)
 
         try:
             found = session_or_dataset.database_search(q)
@@ -149,22 +149,22 @@ def docs_from_ids(
     MATLAB equivalent: ndi.database.fun.docs_from_ids
 
     Args:
-        session_or_dataset: Database-containing object.
+        session_or_dataset: ndi_database-containing object.
         document_ids: List of document IDs.
 
     Returns:
         List aligned with document_ids, each element the matching
-        Document or None if not found.
+        ndi_document or None if not found.
     """
-    from .query import Query
+    from .query import ndi_query
 
     if not document_ids:
         return []
 
     # Build OR query for all IDs
-    q = Query("base.id") == document_ids[0]
+    q = ndi_query("base.id") == document_ids[0]
     for did in document_ids[1:]:
-        q = q | (Query("base.id") == did)
+        q = q | (ndi_query("base.id") == did)
 
     try:
         found = session_or_dataset.database_search(q)
@@ -194,7 +194,7 @@ def docs2graph(
     MATLAB equivalent: ndi.database.fun.docs2graph
 
     Args:
-        documents: List of ndi.Document objects.
+        documents: List of ndi.ndi_document objects.
 
     Returns:
         Tuple of (adjacency_dict, node_ids) where adjacency_dict maps
@@ -234,12 +234,12 @@ def find_ingested_docs(session_or_dataset: Any) -> list[Any]:
 
     MATLAB equivalent: ndi.database.fun.find_ingested_docs
     """
-    from .query import Query
+    from .query import ndi_query
 
     q = (
-        Query("").isa("daqreader_mfdaq_epochdata_ingested")
-        | Query("").isa("daqmetadatareader_epochdata_ingested")
-        | Query("").isa("epochfiles_ingested")
+        ndi_query("").isa("daqreader_mfdaq_epochdata_ingested")
+        | ndi_query("").isa("daqmetadatareader_epochdata_ingested")
+        | ndi_query("").isa("epochfiles_ingested")
     )
 
     try:
@@ -265,7 +265,7 @@ def finddocs_elementEpochType(
     element_id dependency, and epoch_id exact match.
 
     Args:
-        session_or_dataset: Database-containing object.
+        session_or_dataset: ndi_database-containing object.
         element_id: The element document ID.
         epoch_id: The epoch ID string.
         document_type: The document type name (e.g. ``'spectrogram'``).
@@ -273,11 +273,11 @@ def finddocs_elementEpochType(
     Returns:
         List of matching Documents.
     """
-    from .query import Query
+    from .query import ndi_query
 
-    q1 = Query("").isa(document_type)
-    q2 = Query("").depends_on("element_id", element_id)
-    q3 = Query("epochid.epochid") == epoch_id
+    q1 = ndi_query("").isa(document_type)
+    q2 = ndi_query("").depends_on("element_id", element_id)
+    q3 = ndi_query("epochid.epochid") == epoch_id
     q = q1 & q2 & q3
 
     try:
@@ -298,20 +298,20 @@ def ndi_document2ndi_object(
     MATLAB equivalent: ndi.database.fun.ndi_document2ndi_object
 
     Inspects the document's class hierarchy and instantiates the
-    appropriate Python object (e.g. Element, Probe, Subject).
+    appropriate Python object (e.g. ndi_element, ndi_probe, ndi_subject).
 
     Args:
-        ndi_document_obj: An ndi.Document or a document ID string.
+        ndi_document_obj: An ndi.ndi_document or a document ID string.
         ndi_session_obj: The session object for database lookups.
 
     Returns:
         The reconstructed NDI object, or None if reconstruction fails.
     """
-    from .query import Query
+    from .query import ndi_query
 
     # If given an ID string, look up the document
     if isinstance(ndi_document_obj, str):
-        results = ndi_session_obj.database_search(Query("base.id") == ndi_document_obj)
+        results = ndi_session_obj.database_search(ndi_query("base.id") == ndi_document_obj)
         if not results:
             return None
         ndi_document_obj = results[0]
@@ -341,11 +341,11 @@ def _get_class_map() -> dict[str, Any]:
     constructors: dict[str, Any] = {}
 
     def _make_element(doc: Any, session: Any) -> Any:
-        from .element import Element
+        from .element import ndi_element
 
         p = doc.document_properties
         el = p.get("element", {})
-        return Element(
+        return ndi_element(
             session=session,
             name=el.get("name", ""),
             reference=el.get("reference", 0),
@@ -353,11 +353,11 @@ def _get_class_map() -> dict[str, Any]:
         )
 
     def _make_subject(doc: Any, session: Any) -> Any:
-        from .subject import Subject
+        from .subject import ndi_subject
 
         p = doc.document_properties
         subj = p.get("subject", {})
-        return Subject(
+        return ndi_subject(
             session=session,
             local_identifier=subj.get("local_identifier", ""),
             description=subj.get("description", ""),
@@ -386,7 +386,7 @@ def copy_session_to_dataset(
     Returns:
         Tuple ``(success, errmsg)`` where success is True/False.
     """
-    from .query import Query
+    from .query import ndi_query
 
     # Check for already-copied sessions
     try:
@@ -395,14 +395,14 @@ def copy_session_to_dataset(
         if session_id in session_ids:
             return (
                 False,
-                f"Session with ID {session_id} is already part of " f"the dataset.",
+                f"ndi_session with ID {session_id} is already part of " f"the dataset.",
             )
     except Exception:
         pass
 
     # Get all documents from source session
     try:
-        all_docs = ndi_session_obj.database_search(Query("").isa("base"))
+        all_docs = ndi_session_obj.database_search(ndi_query("").isa("base"))
     except Exception:
         return False, "Failed to search source session database."
 
@@ -443,14 +443,14 @@ def finddocs_missing_dependencies(
 
     MATLAB equivalent: ndi.database.fun.finddocs_missing_dependencies
     """
-    from .query import Query
+    from .query import ndi_query
 
     # Find all docs with depends_on
     try:
-        all_docs = session_or_dataset.database_search(Query("").isa("base"))
+        all_docs = session_or_dataset.database_search(ndi_query("").isa("base"))
     except Exception:
         try:
-            all_docs = session_or_dataset.session.database_search(Query("").isa("base"))
+            all_docs = session_or_dataset.session.database_search(ndi_query("").isa("base"))
         except Exception:
             return []
 
@@ -637,7 +637,7 @@ def read_presentation_time_structure(
 
 
 # =========================================================================
-# Database export / extraction
+# ndi_database export / extraction
 # =========================================================================
 
 
@@ -661,12 +661,12 @@ def database2json(
     import json
     from pathlib import Path
 
-    from .query import Query
+    from .query import ndi_query
 
     out = Path(output_path)
     out.mkdir(parents=True, exist_ok=True)
 
-    docs = session.database_search(Query("").isa("base"))
+    docs = session.database_search(ndi_query("").isa("base"))
 
     count = 0
     for doc in docs:
@@ -746,7 +746,7 @@ def extract_doc_files(
     import tempfile
     from pathlib import Path
 
-    from .query import Query
+    from .query import ndi_query
 
     if target_path is None:
         target_path = tempfile.mkdtemp(prefix="ndi_extract_")
@@ -754,7 +754,7 @@ def extract_doc_files(
     out = Path(target_path)
     out.mkdir(parents=True, exist_ok=True)
 
-    docs = session.database_search(Query("").isa("base"))
+    docs = session.database_search(ndi_query("").isa("base"))
 
     for doc in docs:
         props = doc.document_properties if hasattr(doc, "document_properties") else doc

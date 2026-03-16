@@ -441,14 +441,14 @@ class TestNCImProvider:
         provider = NCImProvider()
         mock_data = {
             "code": "C0027947",
-            "name": "Neuron",
+            "name": "ndi_neuron",
             "definitions": [{"definition": "A nerve cell"}],
             "synonyms": [{"name": "Nerve Cell"}, {"name": "Neural Cell"}],
         }
         with patch.object(provider, "_http_get_json", return_value=mock_data):
             result = provider.lookup_term("C0027947")
         assert result.id == "NCIm:C0027947"
-        assert result.name == "Neuron"
+        assert result.name == "ndi_neuron"
         assert result.definition == "A nerve cell"
         assert "Nerve Cell" in result.synonyms
 
@@ -461,12 +461,12 @@ class TestNCImProvider:
         }
         detail_data = {
             "code": "C0027947",
-            "name": "Neuron",
+            "name": "ndi_neuron",
             "definitions": [],
             "synonyms": [],
         }
         with patch.object(provider, "_http_get_json", side_effect=[search_data, detail_data]):
-            result = provider.lookup_term("Neuron")
+            result = provider.lookup_term("ndi_neuron")
         assert result.id == "NCIm:C0027947"
 
     def test_api_error(self):

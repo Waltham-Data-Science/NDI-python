@@ -1,7 +1,7 @@
 """
 ndi.daq.reader.mfdaq.cedspike2 - CED Spike2 SMR reader.
 
-Thin wrapper around SpikeInterfaceReader for CED Spike2 data files.
+Thin wrapper around ndi_daq_reader_SpikeInterfaceReader for CED Spike2 data files.
 
 MATLAB equivalent: src/ndi/+ndi/+daq/+reader/+mfdaq/cedspike2.m
 """
@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import logging
 
-from ...mfdaq import ChannelInfo, MFDAQReader
+from ...mfdaq import ChannelInfo, ndi_daq_reader_mfdaq
 
 logger = logging.getLogger(__name__)
 
 
-class CEDSpike2Reader(MFDAQReader):
+class ndi_daq_reader_mfdaq_cedspike2(ndi_daq_reader_mfdaq):
     """
     Reader for CED Spike2 SMR files.
 
@@ -31,9 +31,9 @@ class CEDSpike2Reader(MFDAQReader):
 
     def _get_si_reader(self):
         try:
-            from ..spikeinterface_adapter import SpikeInterfaceReader
+            from ..spikeinterface_adapter import ndi_daq_reader_SpikeInterfaceReader
 
-            return SpikeInterfaceReader
+            return ndi_daq_reader_SpikeInterfaceReader
         except ImportError:
             return None
 
@@ -44,7 +44,7 @@ class CEDSpike2Reader(MFDAQReader):
         try:
             return SI().getchannelsepoch(epochfiles)
         except Exception as exc:
-            logger.warning("CEDSpike2Reader.getchannelsepoch failed: %s", exc)
+            logger.warning("ndi_daq_reader_mfdaq_cedspike2.getchannelsepoch failed: %s", exc)
             return []
 
     def readchannels_epochsamples(self, channeltype, channel, epochfiles, s0, s1):
@@ -60,4 +60,4 @@ class CEDSpike2Reader(MFDAQReader):
         return SI().samplerate(epochfiles, channeltype, channel)
 
     def __repr__(self):
-        return f"CEDSpike2Reader(id={self.id[:8]}...)"
+        return f"ndi_daq_reader_mfdaq_cedspike2(id={self.id[:8]}...)"

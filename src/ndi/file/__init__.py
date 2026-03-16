@@ -16,25 +16,25 @@ Example:
 """
 
 from . import type as filetype
-from .navigator import FileNavigator
-from .navigator.epochdir import EpochDirNavigator
+from .navigator import ndi_file_navigator
+from .navigator.epochdir import ndi_file_navigator_epochdir
 from .pfilemirror import pfilemirror as _pfilemirror_func
 
 # MATLAB compatibility: ``ndi.file.navigator(session, patterns)`` creates a
-# FileNavigator, mirroring the MATLAB constructor ``ndi.file.navigator``.
-navigator = FileNavigator
+# ndi_file_navigator, mirroring the MATLAB constructor ``ndi.file.navigator``.
+navigator = ndi_file_navigator
 
 # MATLAB compatibility: ``ndi.file.navigator_epochdir(session, patterns)``
-# creates an EpochDirNavigator, mirroring ``ndi.file.navigator_epochdir``.
-navigator_epochdir = EpochDirNavigator
+# creates an ndi_file_navigator_epochdir, mirroring ``ndi.file.navigator_epochdir``.
+navigator_epochdir = ndi_file_navigator_epochdir
 
 # MATLAB compatibility: ``ndi.file.pfilemirror(src, dest)`` calls the
 # directory-mirror utility, mirroring ``ndi.file.pfilemirror``.
 pfilemirror = _pfilemirror_func
 
 __all__ = [
-    "FileNavigator",
-    "EpochDirNavigator",
+    "ndi_file_navigator",
+    "ndi_file_navigator_epochdir",
     "filetype",
     "navigator",
     "navigator_epochdir",

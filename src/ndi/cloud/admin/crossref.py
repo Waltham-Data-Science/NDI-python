@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
-from xml.etree.ElementTree import Element, SubElement, tostring
+from xml.etree.ElementTree import ndi_element, SubElement, tostring
 
 
 @dataclass(frozen=True)
@@ -46,7 +46,7 @@ def createDoiBatchSubmission(
     Returns:
         XML string suitable for Crossref deposit.
     """
-    root = Element("doi_batch")
+    root = ndi_element("doi_batch")
     root.set("version", "5.3.1")
     root.set("xmlns", "http://www.crossref.org/schema/5.3.1")
 
@@ -74,7 +74,7 @@ def createDoiBatchSubmission(
     title = SubElement(titles, "title")
     title.text = CONSTANTS.DATABASE_TITLE
 
-    # Dataset entry
+    # ndi_dataset entry
     dataset = SubElement(database, "dataset")
     dataset.set("dataset_type", "record")
 
@@ -95,7 +95,7 @@ def createDoiBatchSubmission(
     # Titles
     ds_titles = SubElement(dataset, "titles")
     ds_title = SubElement(ds_titles, "title")
-    ds_title.text = dataset_metadata.get("name", "Untitled Dataset")
+    ds_title.text = dataset_metadata.get("name", "Untitled ndi_dataset")
 
     # Description
     desc = dataset_metadata.get("description", "")

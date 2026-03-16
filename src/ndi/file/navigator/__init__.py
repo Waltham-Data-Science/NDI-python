@@ -1,7 +1,7 @@
 """
 ndi.file.navigator - File navigator for organizing epoch files.
 
-This module provides the FileNavigator class that finds and organizes
+This module provides the ndi_file_navigator class that finds and organizes
 data files into epochs based on file patterns.
 """
 
@@ -15,8 +15,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from ...ido import Ido
-from ...time import NO_TIME, ClockType
+from ...ido import ndi_ido
+from ...time import NO_TIME, ndi_time_clocktype
 
 
 def _parse_fileparameters(fp_str: str) -> list[str] | None:
@@ -122,12 +122,12 @@ def find_file_groups(
     return groups
 
 
-class FileNavigator(Ido):
+class ndi_file_navigator(ndi_ido):
     """
     Navigator for finding and organizing epoch files.
 
-    FileNavigator finds data files on disk and organizes them into epochs
-    based on file patterns. It provides the file foundation for DAQSystem.
+    ndi_file_navigator finds data files on disk and organizes them into epochs
+    based on file patterns. It provides the file foundation for ndi_daq_system.
 
     Attributes:
         session: The NDI session
@@ -136,7 +136,7 @@ class FileNavigator(Ido):
         epochprobemap_class: Class to use for epoch probe maps
 
     Example:
-        >>> nav = FileNavigator(session, ['*.rhd', '*.dat'])
+        >>> nav = ndi_file_navigator(session, ['*.rhd', '*.dat'])
         >>> epochs = nav.selectfilegroups()
         >>> files = nav.getepochfiles(1)  # Get files for epoch 1
     """
@@ -147,13 +147,13 @@ class FileNavigator(Ido):
         self,
         session: Any | None = None,
         fileparameters: str | list[str] | dict[str, Any] | None = None,
-        epochprobemap_class: str = "ndi.epoch.EpochProbeMap",
+        epochprobemap_class: str = "ndi.epoch.ndi_epoch_epochprobemap",
         epochprobemap_fileparameters: str | list[str] | dict[str, Any] | None = None,
         identifier: str | None = None,
         document: Any | None = None,
     ):
         """
-        Create a new FileNavigator.
+        Create a new ndi_file_navigator.
 
         Args:
             session: NDI session object
@@ -205,7 +205,7 @@ class FileNavigator(Ido):
             self._raw_fileparameters_str = fp
             self._fileparameters = self._normalize_fileparameters(_parse_fileparameters(fp))
             self._epochprobemap_class = _prop(
-                filenavigator, "epochprobemap_class", "ndi.epoch.EpochProbeMap"
+                filenavigator, "epochprobemap_class", "ndi.epoch.ndi_epoch_epochprobemap"
             )
             epfp = _prop(filenavigator, "epochprobemap_fileparameters", "")
             self._epochprobemap_fileparameters = self._normalize_fileparameters(
@@ -265,7 +265,7 @@ class FileNavigator(Ido):
         Get the path for this navigator.
 
         Returns:
-            Session path
+            ndi_session path
 
         Raises:
             ValueError: If no valid session
@@ -274,7 +274,7 @@ class FileNavigator(Ido):
             raise ValueError("No valid session associated with this navigator")
         return self._session.getpath()
 
-    def setsession(self, session: Any) -> FileNavigator:
+    def setsession(self, session: Any) -> ndi_file_navigator:
         """
         Set the session for this navigator.
 
@@ -292,7 +292,7 @@ class FileNavigator(Ido):
     def setfileparameters(
         self,
         parameters: str | list[str] | dict[str, Any],
-    ) -> FileNavigator:
+    ) -> ndi_file_navigator:
         """
         Set the file parameters.
 
@@ -308,7 +308,7 @@ class FileNavigator(Ido):
     def setepochprobemapfileparameters(
         self,
         parameters: str | list[str] | dict[str, Any],
-    ) -> FileNavigator:
+    ) -> ndi_file_navigator:
         """
         Set the epoch probe map file parameters.
 
@@ -403,12 +403,12 @@ class FileNavigator(Ido):
             return []
 
         try:
-            from ...query import Query
+            from ...query import ndi_query
 
             q = (
-                Query("").isa("epochfiles_ingested")
-                & Query("").depends_on("filenavigator_id", self.id)
-                & (Query("base.session_id") == self._session.id)
+                ndi_query("").isa("epochfiles_ingested")
+                & ndi_query("").depends_on("filenavigator_id", self.id)
+                & (ndi_query("base.session_id") == self._session.id)
             )
             docs = self._session.database_search(q)
 
@@ -477,11 +477,11 @@ class FileNavigator(Ido):
         Get the epoch ID for an epoch.
 
         Args:
-            epoch_number: Epoch number (1-indexed)
+            epoch_number: ndi_epoch_epoch number (1-indexed)
             epochfiles: Optional file list (fetched if not provided)
 
         Returns:
-            Epoch identifier string
+            ndi_epoch_epoch identifier string
         """
         if epochfiles is None:
             epochfiles = self.getepochfiles_number(epoch_number)
@@ -497,9 +497,9 @@ class FileNavigator(Ido):
                 return f.read().strip()
 
         # Generate new ID
-        from ...ido import Ido
+        from ...ido import ndi_ido
 
-        new_id = f"epoch_{Ido().id}"
+        new_id = f"epoch_{ndi_ido().id}"
 
         # Save to file if possible
         if eidfname:
@@ -518,7 +518,7 @@ class FileNavigator(Ido):
         Get the filename for storing epoch ID.
 
         Args:
-            epoch_number: Epoch number
+            epoch_number: ndi_epoch_epoch number
             epochfiles: Optional file list
 
         Returns:
@@ -546,7 +546,7 @@ class FileNavigator(Ido):
         Get the filename for epoch probe map.
 
         Args:
-            epoch_number: Epoch number
+            epoch_number: ndi_epoch_epoch number
 
         Returns:
             Path for epoch probe map file, or None
@@ -578,7 +578,7 @@ class FileNavigator(Ido):
         Get the default epoch probe map filename.
 
         Args:
-            epoch_number: Epoch number
+            epoch_number: ndi_epoch_epoch number
 
         Returns:
             Path for epoch probe map file, or None
@@ -600,11 +600,11 @@ class FileNavigator(Ido):
         Get the epoch probe map for an epoch.
 
         Args:
-            epoch_number: Epoch number
+            epoch_number: ndi_epoch_epoch number
             epochfiles: Optional file list
 
         Returns:
-            Epoch probe map object or None
+            ndi_epoch_epoch probe map object or None
         """
         if epochfiles is None:
             epochfiles = self.getepochfiles_number(epoch_number)
@@ -638,13 +638,13 @@ class FileNavigator(Ido):
 
         epochid = self.ingestedfiles_epochid(epochfiles)
 
-        from ...query import Query
+        from ...query import ndi_query
 
         q = (
-            Query("").isa("epochfiles_ingested")
-            & Query("").depends_on("filenavigator_id", self.id)
-            & (Query("base.session_id") == self._session.id)
-            & (Query("epochfiles_ingested.epoch_id") == epochid)
+            ndi_query("").isa("epochfiles_ingested")
+            & ndi_query("").depends_on("filenavigator_id", self.id)
+            & (ndi_query("base.session_id") == self._session.id)
+            & (ndi_query("epochfiles_ingested.epoch_id") == epochid)
         )
         docs = self._session.database_search(q)
 
@@ -662,12 +662,12 @@ class FileNavigator(Ido):
         MATLAB equivalent: ndi.file.navigator/getepochfiles
 
         Args:
-            epoch_number_or_id: Epoch number(s) or ID(s)
+            epoch_number_or_id: ndi_epoch_epoch number(s) or ID(s)
 
         Returns:
             Tuple of (fullpathfilenames, epochid):
             - fullpathfilenames: List of file paths (or list of lists)
-            - epochid: Epoch ID string (or list of strings)
+            - epochid: ndi_epoch_epoch ID string (or list of strings)
         """
         et = self.epochtable()
 
@@ -697,7 +697,7 @@ class FileNavigator(Ido):
             else:
                 # Find by epoch number
                 if item < 1 or item > len(et):
-                    raise ValueError(f"Epoch number out of range: {item}")
+                    raise ValueError(f"ndi_epoch_epoch number out of range: {item}")
                 match = et[item - 1]
 
             underlying = match.get("underlying_epochs", {})
@@ -717,7 +717,7 @@ class FileNavigator(Ido):
         Get files for an epoch by number.
 
         Args:
-            epoch_number: Epoch number (1-indexed)
+            epoch_number: ndi_epoch_epoch number (1-indexed)
 
         Returns:
             List of file paths
@@ -727,7 +727,7 @@ class FileNavigator(Ido):
 
         all_epochs, _ = self.selectfilegroups()
         if epoch_number < 1 or epoch_number > len(all_epochs):
-            raise ValueError(f"Epoch number out of range: {epoch_number}")
+            raise ValueError(f"ndi_epoch_epoch number out of range: {epoch_number}")
 
         files = all_epochs[epoch_number - 1]
         self._cached_epoch_filenames[epoch_number] = files
@@ -763,7 +763,7 @@ class FileNavigator(Ido):
         Returns:
             List of created documents
         """
-        from ...document import Document
+        from ...document import ndi_document
 
         docs = []
         et = self.epochtable()
@@ -786,7 +786,7 @@ class FileNavigator(Ido):
             if entry.get("epochprobemap"):
                 epochfiles_struct["epochprobemap"] = entry["epochprobemap"]
 
-            doc = Document(
+            doc = ndi_document(
                 "ingestion/epochfiles_ingested",
                 epochfiles_ingested=epochfiles_struct,
             )
@@ -799,12 +799,12 @@ class FileNavigator(Ido):
 
     def newdocument(self) -> Any:
         """
-        Create a document for this FileNavigator.
+        Create a document for this ndi_file_navigator.
 
         Returns:
-            Document object
+            ndi_document object
         """
-        from ...document import Document
+        from ...document import ndi_document
 
         fp = self._fileparameters.get("filematch", [])
         fp_str = repr(fp) if fp else ""
@@ -819,7 +819,7 @@ class FileNavigator(Ido):
             "epochprobemap_fileparameters": epfp_str,
         }
 
-        doc = Document(
+        doc = ndi_document(
             "daq/filenavigator",
             filenavigator=filenavigator_struct,
             **{"base.id": self.id},
@@ -832,16 +832,16 @@ class FileNavigator(Ido):
 
     def searchquery(self) -> Any:
         """
-        Create a search query for this FileNavigator.
+        Create a search query for this ndi_file_navigator.
 
         Returns:
-            Query object
+            ndi_query object
         """
-        from ...query import Query
+        from ...query import ndi_query
 
-        q = Query("base.id") == self.id
+        q = ndi_query("base.id") == self.id
         if self._session:
-            q = q & (Query("base.session_id") == self._session.id)
+            q = q & (ndi_query("base.session_id") == self._session.id)
         return q
 
     @staticmethod
@@ -868,19 +868,19 @@ class FileNavigator(Ido):
             epochfiles: List of file paths
 
         Returns:
-            Epoch ID string
+            ndi_epoch_epoch ID string
 
         Raises:
             AssertionError: If epochfiles are not ingested
         """
-        assert FileNavigator.isingested(
+        assert ndi_file_navigator.isingested(
             epochfiles
         ), "This function is only applicable to ingested epochfiles"
         return epochfiles[0][len("epochid://") :]
 
     def __eq__(self, other: Any) -> bool:
         """Test equality."""
-        if not isinstance(other, FileNavigator):
+        if not isinstance(other, ndi_file_navigator):
             return False
         return (
             self._session == other._session

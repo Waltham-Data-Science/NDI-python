@@ -1,5 +1,5 @@
 """
-ndi.fun.dataset - Dataset comparison utilities.
+ndi.fun.dataset - ndi_dataset comparison utilities.
 
 MATLAB equivalent: +ndi/+fun/+dataset/diff.m
 """

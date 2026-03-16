@@ -1,7 +1,7 @@
 """
 ndi.daq.reader.mfdaq.intan - Intan RHD/RHS reader.
 
-Thin wrapper around SpikeInterfaceReader for Intan data files.
+Thin wrapper around ndi_daq_reader_SpikeInterfaceReader for Intan data files.
 Falls back gracefully if spikeinterface is not installed.
 
 MATLAB equivalent: src/ndi/+ndi/+daq/+reader/+mfdaq/intan.m
@@ -16,10 +16,10 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-from ...mfdaq import ChannelInfo, MFDAQReader
+from ...mfdaq import ChannelInfo, ndi_daq_reader_mfdaq
 
 
-class IntanReader(MFDAQReader):
+class ndi_daq_reader_mfdaq_intan(ndi_daq_reader_mfdaq):
     """
     Reader for Intan RHD/RHS data files.
 
@@ -30,7 +30,7 @@ class IntanReader(MFDAQReader):
     File extensions: .rhd, .rhs
 
     Example:
-        >>> reader = IntanReader()
+        >>> reader = ndi_daq_reader_mfdaq_intan()
         >>> channels = reader.getchannelsepoch(['data.rhd'])
     """
 
@@ -47,11 +47,11 @@ class IntanReader(MFDAQReader):
         self._ndi_daqreader_class = self.NDI_DAQREADER_CLASS
 
     def _get_si_reader(self):
-        """Get SpikeInterfaceReader lazily."""
+        """Get ndi_daq_reader_SpikeInterfaceReader lazily."""
         try:
-            from ..spikeinterface_adapter import SpikeInterfaceReader
+            from ..spikeinterface_adapter import ndi_daq_reader_SpikeInterfaceReader
 
-            return SpikeInterfaceReader
+            return ndi_daq_reader_SpikeInterfaceReader
         except ImportError:
             return None
 
@@ -63,7 +63,7 @@ class IntanReader(MFDAQReader):
             reader = SI()
             return reader.getchannelsepoch(epochfiles)
         except Exception as exc:
-            logger.warning("IntanReader.getchannelsepoch failed: %s", exc)
+            logger.warning("ndi_daq_reader_mfdaq_intan.getchannelsepoch failed: %s", exc)
             return []
 
     def readchannels_epochsamples(
@@ -88,4 +88,4 @@ class IntanReader(MFDAQReader):
         return reader.samplerate(epochfiles, channeltype, channel)
 
     def __repr__(self) -> str:
-        return f"IntanReader(id={self.id[:8]}...)"
+        return f"ndi_daq_reader_mfdaq_intan(id={self.id[:8]}...)"

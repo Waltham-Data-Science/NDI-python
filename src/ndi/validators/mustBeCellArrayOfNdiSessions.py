@@ -3,7 +3,7 @@ ndi.validators.mustBeCellArrayOfNdiSessions
 
 MATLAB equivalent: +ndi/+validators/mustBeCellArrayOfNdiSessions.m
 
-Validates that the input is a list of ``ndi.session.DirSession`` objects.
+Validates that the input is a list of ``ndi.session.ndi_session_dir`` objects.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 
 def mustBeCellArrayOfNdiSessions(value: Sequence) -> None:
-    """Validate that every element is an ``ndi.session.DirSession``.
+    """Validate that every element is an ``ndi.session.ndi_session_dir``.
 
     MATLAB equivalent: ``ndi.validators.mustBeCellArrayOfNdiSessions(value)``
 
@@ -28,17 +28,17 @@ def mustBeCellArrayOfNdiSessions(value: Sequence) -> None:
     ------
     TypeError
         If *value* is not a list/tuple, or any element is not a
-        ``DirSession``.
+        ``ndi_session_dir``.
     """
     # Import lazily to avoid circular imports.
-    from ndi.session import DirSession
+    from ndi.session import ndi_session_dir
 
     if not isinstance(value, (list, tuple)):
         raise TypeError("Input must be a list or tuple.")
 
     for i, item in enumerate(value):
-        if not isinstance(item, DirSession):
+        if not isinstance(item, ndi_session_dir):
             raise TypeError(
-                f"All elements must be ndi.session.DirSession objects. "
-                f"Element {i} is of class {type(item).__name__!r}."
+                f"All elements must be ndi.session.ndi_session_dir objects. "
+                f"ndi_element {i} is of class {type(item).__name__!r}."
             )

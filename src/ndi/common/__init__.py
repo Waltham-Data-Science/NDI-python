@@ -6,7 +6,7 @@ MATLAB equivalent: +ndi/+common
 Provides path constants, cache, logger, and other shared utilities.
 
 MATLAB functions:
-    ndi.common.PathConstants
+    ndi.common.ndi_common_PathConstants
     ndi.common.assertDIDInstalled
     ndi.common.getCache
     ndi.common.getDatabaseHierarchy
@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 
-class PathConstants:
+class ndi_common_PathConstants:
     """NDI path constants for document definitions and schemas.
 
     This class provides paths to NDI document definitions, schemas,
@@ -166,22 +166,22 @@ def getCache() -> Any:
 
     MATLAB equivalent: ndi.common.getCache
 
-    Returns a shared :class:`ndi.cache.Cache` instance, creating it on first
+    Returns a shared :class:`ndi.cache.ndi_cache` instance, creating it on first
     call. Subsequent calls return the same object.
 
     Returns:
-        The global :class:`~ndi.cache.Cache` instance.
+        The global :class:`~ndi.cache.ndi_cache` instance.
     """
     global _cache_singleton  # noqa: PLW0603
     if _cache_singleton is None:
-        from ..cache import Cache
+        from ..cache import ndi_cache
 
-        _cache_singleton = Cache()
+        _cache_singleton = ndi_cache()
     return _cache_singleton
 
 
 # ---------------------------------------------------------------------------
-# Database hierarchy — mirrors MATLAB ndi.common.getDatabaseHierarchy
+# ndi_database hierarchy — mirrors MATLAB ndi.common.getDatabaseHierarchy
 # ---------------------------------------------------------------------------
 
 _database_hierarchy_singleton: Any = None
@@ -206,7 +206,7 @@ def getDatabaseHierarchy() -> dict[str, Any]:
     import json
 
     hierarchy: dict[str, Any] = {}
-    doc_path = PathConstants.DOCUMENT_PATH
+    doc_path = ndi_common_PathConstants.DOCUMENT_PATH
     if doc_path.is_dir():
         for json_file in sorted(doc_path.rglob("*.json")):
             try:
@@ -237,7 +237,7 @@ def getDatabaseHierarchy() -> dict[str, Any]:
 
 
 def assertDIDInstalled() -> None:
-    """Assert that the DID (Document Interface Database) package is installed.
+    """Assert that the DID (ndi_document Interface ndi_database) package is installed.
 
     MATLAB equivalent: ndi.common.assertDIDInstalled
 
@@ -253,7 +253,7 @@ def assertDIDInstalled() -> None:
 
 
 __all__ = [
-    "PathConstants",
+    "ndi_common_PathConstants",
     "timestamp",
     "getLogger",
     "getCache",

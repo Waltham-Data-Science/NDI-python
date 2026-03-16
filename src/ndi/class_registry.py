@@ -4,10 +4,10 @@ Maps NDI class identifier strings (e.g. ``"ndi.probe.timeseries.mfdaq"``)
 to their Python implementation classes.  This registry is used in two
 directions:
 
-* **Object → Document**: each Python class exposes an ``NDI_*_CLASS``
+* **Object → ndi_document**: each Python class exposes an ``NDI_*_CLASS``
   constant or ``ndi_element_class()`` method that returns its
   identifier, which gets written into the document.
-* **Document → Object**: :func:`get_class` looks up the Python class
+* **ndi_document → Object**: :func:`get_class` looks up the Python class
   for a given identifier string so the object can be reconstructed.
 
 The identifiers intentionally mirror the MATLAB class hierarchy to
@@ -27,33 +27,33 @@ _REGISTRY: dict[str, type] | None = None
 
 def _build_registry() -> dict[str, type]:
     """Build the class registry by importing all known NDI classes."""
-    from .daq.reader.mfdaq.blackrock import BlackrockReader
-    from .daq.reader.mfdaq.cedspike2 import CEDSpike2Reader
-    from .daq.reader.mfdaq.intan import IntanReader
-    from .daq.reader.mfdaq.spikegadgets import SpikeGadgetsReader
-    from .daq.system import DAQSystem
-    from .element import Element
-    from .file.navigator import FileNavigator
-    from .probe import Probe
-    from .probe.timeseries import ProbeTimeseries
-    from .probe.timeseries_mfdaq import ProbeTimeseriesMFDAQ
-    from .probe.timeseries_stimulator import ProbeTimeseriesStimulator
+    from .daq.reader.mfdaq.blackrock import ndi_daq_reader_mfdaq_blackrock
+    from .daq.reader.mfdaq.cedspike2 import ndi_daq_reader_mfdaq_cedspike2
+    from .daq.reader.mfdaq.intan import ndi_daq_reader_mfdaq_intan
+    from .daq.reader.mfdaq.spikegadgets import ndi_daq_reader_mfdaq_spikegadgets
+    from .daq.system import ndi_daq_system
+    from .element import ndi_element
+    from .file.navigator import ndi_file_navigator
+    from .probe import ndi_probe
+    from .probe.timeseries import ndi_probe_timeseries
+    from .probe.timeseries_mfdaq import ndi_probe_timeseries_mfdaq
+    from .probe.timeseries_stimulator import ndi_probe_timeseries_stimulator
 
     registry: dict[str, type] = {}
 
     # Elements / probes (keyed by ndi_element_class() return value)
-    for cls in (Element, Probe, ProbeTimeseries, ProbeTimeseriesMFDAQ, ProbeTimeseriesStimulator):
+    for cls in (ndi_element, ndi_probe, ndi_probe_timeseries, ndi_probe_timeseries_mfdaq, ndi_probe_timeseries_stimulator):
         registry[cls().ndi_element_class()] = cls
 
     # DAQ readers (keyed by NDI_DAQREADER_CLASS constant)
-    for cls in (IntanReader, BlackrockReader, CEDSpike2Reader, SpikeGadgetsReader):
+    for cls in (ndi_daq_reader_mfdaq_intan, ndi_daq_reader_mfdaq_blackrock, ndi_daq_reader_mfdaq_cedspike2, ndi_daq_reader_mfdaq_spikegadgets):
         registry[cls.NDI_DAQREADER_CLASS] = cls
 
     # DAQ system
-    registry[DAQSystem.NDI_DAQSYSTEM_CLASS] = DAQSystem
+    registry[ndi_daq_system.NDI_DAQSYSTEM_CLASS] = ndi_daq_system
 
     # File navigator
-    registry[FileNavigator.NDI_FILENAVIGATOR_CLASS] = FileNavigator
+    registry[ndi_file_navigator.NDI_FILENAVIGATOR_CLASS] = ndi_file_navigator
 
     return registry
 

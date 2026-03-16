@@ -7,7 +7,7 @@ When identifiers are sorted in alphabetical order, they are also sorted
 in the order of time of creation.
 
 Example:
-    i = Ido()
+    i = ndi_ido()
     id_value = i.id  # view the id that was created
 """
 
@@ -16,7 +16,7 @@ import re
 import time
 
 
-class Ido:
+class ndi_ido:
     """NDI identifier object class.
 
     Creates and stores globally unique IDs based on current time and
@@ -30,7 +30,7 @@ class Ido:
         id (str): The unique identifier string.
 
     Example:
-        >>> ido = Ido()
+        >>> ido = ndi_ido()
         >>> print(ido.id)  # prints something like '1a2b3c4d5e6f_7a8b9c0d1e2f'
     """
 
@@ -100,13 +100,13 @@ class Ido:
         return False
 
     def __repr__(self) -> str:
-        return f"Ido({self.id})"
+        return f"ndi_ido({self.id})"
 
     def __str__(self) -> str:
         return self.id
 
     def __eq__(self, other) -> bool:
-        if isinstance(other, Ido):
+        if isinstance(other, ndi_ido):
             return self.id == other.id
         if isinstance(other, str):
             return self.id == other

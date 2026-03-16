@@ -11,10 +11,10 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from . import FileNavigator
+from . import ndi_file_navigator
 
 
-class EpochDirNavigator(FileNavigator):
+class ndi_file_navigator_epochdir(ndi_file_navigator):
     """
     Navigator where each subdirectory is one epoch.
 
@@ -26,7 +26,7 @@ class EpochDirNavigator(FileNavigator):
     recording session/trial is stored in its own directory.
 
     Example:
-        >>> nav = EpochDirNavigator(session, '*.rhd')
+        >>> nav = ndi_file_navigator_epochdir(session, '*.rhd')
         >>> # session_path/
         >>> #   trial_001/file.rhd  -> epoch 1
         >>> #   trial_002/file.rhd  -> epoch 2
@@ -46,11 +46,11 @@ class EpochDirNavigator(FileNavigator):
         epoch directory name rather than creating random IDs.
 
         Args:
-            epoch_number: Epoch number (1-indexed)
+            epoch_number: ndi_epoch_epoch number (1-indexed)
             epochfiles: Optional file list (fetched if not provided)
 
         Returns:
-            Epoch identifier string based on directory name
+            ndi_epoch_epoch identifier string based on directory name
         """
         if epochfiles is None:
             epochfiles = self.getepochfiles_number(epoch_number)
@@ -75,9 +75,9 @@ class EpochDirNavigator(FileNavigator):
             epoch_hash = hashlib.md5(hash_input.encode()).hexdigest()[:16]
             new_id = f"epoch_{epoch_hash}"
         else:
-            from ...ido import Ido
+            from ...ido import ndi_ido
 
-            new_id = f"epoch_{Ido().id}"
+            new_id = f"epoch_{ndi_ido().id}"
 
         # Save to file if possible
         if eidfname:
@@ -164,4 +164,4 @@ class EpochDirNavigator(FileNavigator):
 
     def __repr__(self) -> str:
         n_patterns = len(self._fileparameters.get("filematch", []))
-        return f"EpochDirNavigator(patterns={n_patterns})"
+        return f"ndi_file_navigator_epochdir(patterns={n_patterns})"

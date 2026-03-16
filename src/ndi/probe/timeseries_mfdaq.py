@@ -1,7 +1,7 @@
 """
 ndi.probe.timeseries_mfdaq - MFDAQ timeseries probe.
 
-Provides ProbeTimeseriesMFDAQ that reads data from multi-function
+Provides ndi_probe_timeseries_mfdaq that reads data from multi-function
 DAQ systems via the probe's underlying DAQ system and device info.
 
 MATLAB equivalent: src/ndi/+ndi/+probe/+timeseries/mfdaq.m
@@ -13,10 +13,10 @@ from typing import Any
 
 import numpy as np
 
-from .timeseries import ProbeTimeseries
+from .timeseries import ndi_probe_timeseries
 
 
-class ProbeTimeseriesMFDAQ(ProbeTimeseries):
+class ndi_probe_timeseries_mfdaq(ndi_probe_timeseries):
     """
     MFDAQ timeseries probe.
 
@@ -30,7 +30,7 @@ class ProbeTimeseriesMFDAQ(ProbeTimeseries):
     - samplerate(): Get sampling rate
 
     Example:
-        >>> probe = ProbeTimeseriesMFDAQ(session, 'electrode1', 1, 'n-trode')
+        >>> probe = ndi_probe_timeseries_mfdaq(session, 'electrode1', 1, 'n-trode')
         >>> data, t, tr = probe.read_epochsamples(1, 0, 30000)
         >>> sr = probe.samplerate(1)
     """
@@ -49,7 +49,7 @@ class ProbeTimeseriesMFDAQ(ProbeTimeseries):
         Read data from an epoch by sample indices.
 
         Args:
-            epoch: Epoch number (1-indexed) or epoch_id
+            epoch: ndi_epoch_epoch number (1-indexed) or epoch_id
             s0: Start sample (1-indexed)
             s1: End sample (1-indexed)
 
@@ -94,7 +94,7 @@ class ProbeTimeseriesMFDAQ(ProbeTimeseries):
         Converts t0/t1 to sample indices and delegates to read_epochsamples.
 
         Args:
-            epoch: Epoch number (1-indexed) or epoch_id
+            epoch: ndi_epoch_epoch number (1-indexed) or epoch_id
             t0: Start time
             t1: End time
 
@@ -125,7 +125,7 @@ class ProbeTimeseriesMFDAQ(ProbeTimeseries):
         Get sample rate for this probe in an epoch.
 
         Args:
-            epoch: Epoch number or epoch_id
+            epoch: ndi_epoch_epoch number or epoch_id
 
         Returns:
             Sample rate in Hz
@@ -158,7 +158,7 @@ class ProbeTimeseriesMFDAQ(ProbeTimeseries):
         channels are associated with this probe in the given epoch.
 
         Args:
-            epoch: Epoch number or epoch_id
+            epoch: ndi_epoch_epoch number or epoch_id
 
         Returns:
             Tuple of (device, device_epoch, channeltype, channellist)
@@ -208,8 +208,8 @@ class ProbeTimeseriesMFDAQ(ProbeTimeseries):
         Resolve device info from a probe map entry.
 
         Args:
-            probe_map: EpochProbeMap object
-            epoch_entry: Epoch table entry
+            probe_map: ndi_epoch_epochprobemap object
+            epoch_entry: ndi_epoch_epoch table entry
 
         Returns:
             Tuple of (device, device_epoch, channeltype, channellist)
@@ -218,9 +218,9 @@ class ProbeTimeseriesMFDAQ(ProbeTimeseries):
             return None
 
         # Parse device string to get device name and channels
-        from ..daq.daqsystemstring import DAQSystemString
+        from ..daq.daqsystemstring import ndi_daq_daqsystemstring
 
-        dss = DAQSystemString.parse(probe_map.devicestring)
+        dss = ndi_daq_daqsystemstring.parse(probe_map.devicestring)
 
         # Find the DAQ system by name
         if self._session is None:
@@ -255,6 +255,6 @@ class ProbeTimeseriesMFDAQ(ProbeTimeseries):
 
     def __repr__(self) -> str:
         return (
-            f"ProbeTimeseriesMFDAQ(name='{self._name}', "
+            f"ndi_probe_timeseries_mfdaq(name='{self._name}', "
             f"reference={self._reference}, type='{self._type}')"
         )

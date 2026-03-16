@@ -214,32 +214,32 @@ class TestClearMockDocs:
 
 
 # ===========================================================================
-# ndi.mock.CalculatorTest tests
+# ndi.mock.ndi_mock_ctest tests
 # ===========================================================================
 
 
 class TestCalculatorTest:
-    """Tests for CalculatorTest base class."""
+    """Tests for ndi_mock_ctest base class."""
 
     def test_default_generate(self):
-        from ndi.mock import CalculatorTest
+        from ndi.mock import ndi_mock_ctest
 
-        ct = CalculatorTest()
+        ct = ndi_mock_ctest()
         result = ct.generate_mock_docs()
         assert "input_docs" in result
         assert "expected_output" in result
 
     def test_mock_filenames(self):
-        from ndi.mock import CalculatorTest
+        from ndi.mock import ndi_mock_ctest
 
-        ct = CalculatorTest()
+        ct = ndi_mock_ctest()
         assert ct.mock_expected_filename(1) == "mock.1.json"
         assert ct.mock_comparison_filename(3) == "mock.3.compare.json"
 
     def test_write_and_load(self, tmp_path):
-        from ndi.mock import CalculatorTest
+        from ndi.mock import ndi_mock_ctest
 
-        ct = CalculatorTest()
+        ct = ndi_mock_ctest()
         # Override mock_path to use tmp
         ct.mock_path = lambda: tmp_path
 
@@ -254,16 +254,16 @@ class TestCalculatorTest:
         assert loaded == {"test": "data"}
 
     def test_load_nonexistent(self, tmp_path):
-        from ndi.mock import CalculatorTest
+        from ndi.mock import ndi_mock_ctest
 
-        ct = CalculatorTest()
+        ct = ndi_mock_ctest()
         ct.mock_path = lambda: tmp_path
         assert ct.load_mock_expected_output(99) is None
 
     def test_compare_equal_docs(self):
-        from ndi.mock import CalculatorTest
+        from ndi.mock import ndi_mock_ctest
 
-        ct = CalculatorTest()
+        ct = ndi_mock_ctest()
         d1 = MagicMock()
         d1.document_properties = {"a": 1, "b": 2}
         d2 = MagicMock()
@@ -272,9 +272,9 @@ class TestCalculatorTest:
         assert match is True
 
     def test_compare_different_docs(self):
-        from ndi.mock import CalculatorTest
+        from ndi.mock import ndi_mock_ctest
 
-        ct = CalculatorTest()
+        ct = ndi_mock_ctest()
         d1 = MagicMock()
         d1.document_properties = {"a": 1}
         d2 = MagicMock()
@@ -283,9 +283,9 @@ class TestCalculatorTest:
         assert match is False
 
     def test_test_no_calculator(self):
-        from ndi.mock import CalculatorTest
+        from ndi.mock import ndi_mock_ctest
 
-        ct = CalculatorTest()
+        ct = ndi_mock_ctest()
         result = ct.test()
         assert result["passed"] is False
 

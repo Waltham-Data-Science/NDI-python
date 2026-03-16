@@ -14,10 +14,10 @@ import re
 from pathlib import Path
 from typing import Any
 
-from ..metadatareader import MetadataReader
+from ..metadatareader import ndi_daq_metadatareader
 
 
-class NewStimStimsReader(MetadataReader):
+class ndi_daq_metadatareader_NewStimStims(ndi_daq_metadatareader):
     """
     Metadata reader for NewStim stimulus systems.
 
@@ -29,7 +29,7 @@ class NewStimStimsReader(MetadataReader):
     and extracts parameters for each stimulus condition.
 
     Example:
-        >>> reader = NewStimStimsReader()
+        >>> reader = ndi_daq_metadatareader_NewStimStims()
         >>> params = reader.readmetadata(['data.rhd', 'stims.mat'])
     """
 
@@ -165,4 +165,4 @@ class NewStimStimsReader(MetadataReader):
         return parameters
 
     def __repr__(self) -> str:
-        return f"NewStimStimsReader(id='{self.id[:8]}...')"
+        return f"ndi_daq_metadatareader_NewStimStims(id='{self.id[:8]}...')"

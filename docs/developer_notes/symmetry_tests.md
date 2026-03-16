@@ -119,7 +119,7 @@ Pick the NDI domain being tested (e.g., `session`, `document`, `probe`).
 import json, shutil
 from pathlib import Path
 from tests.symmetry.conftest import PYTHON_ARTIFACTS
-from ndi.session.dir import DirSession
+from ndi.session.dir import ndi_session_dir
 
 ARTIFACT_DIR = PYTHON_ARTIFACTS / "<namespace>" / "<className>" / "<testName>"
 
@@ -127,7 +127,7 @@ class TestMyFeature:
     @pytest.fixture(autouse=True)
     def _setup(self, tmp_path):
         # Build session in tmp_path ...
-        self.session = DirSession("exp1", tmp_path / "exp1")
+        self.session = ndi_session_dir("exp1", tmp_path / "exp1")
 
     def test_my_feature_artifacts(self):
         if ARTIFACT_DIR.exists():
@@ -147,7 +147,7 @@ Follow the INSTRUCTIONS.md in the MATLAB `+makeArtifacts` folder.
 ```python
 import json, pytest
 from tests.symmetry.conftest import SOURCE_TYPES, SYMMETRY_BASE
-from ndi.session.dir import DirSession
+from ndi.session.dir import ndi_session_dir
 
 @pytest.fixture(params=SOURCE_TYPES)
 def source_type(request):
@@ -158,7 +158,7 @@ class TestMyFeature:
         artifact_dir = SYMMETRY_BASE / source_type / "<namespace>" / ...
         if not artifact_dir.exists():
             pytest.skip(f"No artifacts from {source_type}")
-        session = DirSession("exp1", artifact_dir)
+        session = ndi_session_dir("exp1", artifact_dir)
         # Assertions ...
 ```
 

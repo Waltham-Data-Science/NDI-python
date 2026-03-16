@@ -19,7 +19,7 @@ classes:
     matlab_path: "+ndi/+time/+syncrule/filematch.m"
     matlab_last_sync_hash: "85b35859"
     python_path: "ndi/time/syncrule/filematch.py"
-    python_class: "FileMatch"
+    python_class: "ndi_time_syncrule_filematch"
     inherits: "ndi.time.syncrule"
 
     methods:
@@ -36,7 +36,7 @@ classes:
             default: "None"
         output_arguments:
           - name: fm_obj
-            type_python: "FileMatch"
+            type_python: "ndi_time_syncrule_filematch"
         decision_log: >
           Exact match. Default parameters:
           {'number_fullpath_matches': 2}.
@@ -61,7 +61,7 @@ classes:
           - name: classes
             type_python: "list[str]"
         decision_log: >
-          Exact match. Returns ['ndi.daq.system', 'DAQSystem'].
+          Exact match. Returns ['ndi.daq.system', 'ndi_daq_system'].
 
       - name: ineligible_epochsets
         input_arguments: []
@@ -85,7 +85,7 @@ classes:
           - name: cost
             type_python: "float | None"
           - name: mapping
-            type_python: "TimeMapping | None"
+            type_python: "ndi_time_timemapping | None"
         decision_log: >
           Exact match. Returns (1.0, identity_mapping) if epochs
           share >= number_fullpath_matches underlying files.
@@ -99,7 +99,7 @@ classes:
     matlab_path: "+ndi/+time/+syncrule/filefind.m"
     matlab_last_sync_hash: "85b35859"
     python_path: "ndi/time/syncrule/filefind.py"
-    python_class: "FileFind"
+    python_class: "ndi_time_syncrule_filefind"
     inherits: "ndi.time.syncrule"
 
     methods:
@@ -116,7 +116,7 @@ classes:
             default: "None"
         output_arguments:
           - name: ff_obj
-            type_python: "FileFind"
+            type_python: "ndi_time_syncrule_filefind"
         decision_log: >
           Exact match. Default parameters:
           {'file_patterns': [], 'match_type': 'exact'}.
@@ -141,7 +141,7 @@ classes:
           - name: classes
             type_python: "list[str]"
         decision_log: >
-          Exact match. Returns ['ndi.daq.system', 'DAQSystem'].
+          Exact match. Returns ['ndi.daq.system', 'ndi_daq_system'].
 
       - name: apply
         input_arguments:
@@ -155,7 +155,7 @@ classes:
           - name: cost
             type_python: "float | None"
           - name: mapping
-            type_python: "TimeMapping | None"
+            type_python: "ndi_time_timemapping | None"
         decision_log: >
           Exact match. Returns (1.0, identity_mapping) if all
           file patterns match in both epochs. Returns (None, None)
@@ -170,7 +170,7 @@ classes:
     matlab_path: "+ndi/+time/+syncrule/commonTriggersOverlappingEpochs.m"
     matlab_last_sync_hash: "ca27911b"
     python_path: "ndi/time/syncrule/common_triggers_overlapping_epochs.py"
-    python_class: "CommonTriggersOverlappingEpochs"
+    python_class: "ndi_time_syncrule_commonTriggersOverlappingEpochs"
     inherits: "ndi.time.syncrule"
 
     methods:
@@ -187,7 +187,7 @@ classes:
             default: "None"
         output_arguments:
           - name: ctoe_obj
-            type_python: "CommonTriggersOverlappingEpochs"
+            type_python: "ndi_time_syncrule_commonTriggersOverlappingEpochs"
         decision_log: >
           Exact match. Default parameters:
           daqsystem1_name='', daqsystem2_name='',
@@ -215,7 +215,7 @@ classes:
           - name: classes
             type_python: "list[str]"
         decision_log: >
-          Exact match. Returns ['ndi.daq.system', 'DAQSystem'].
+          Exact match. Returns ['ndi.daq.system', 'ndi_daq_system'].
 
       - name: ineligible_epochsets
         input_arguments: []
@@ -243,9 +243,9 @@ classes:
           - name: cost
             type_python: "float | None"
           - name: mapping
-            type_python: "TimeMapping | None"
+            type_python: "ndi_time_timemapping | None"
         decision_log: >
-          Exact match. Extended signature vs FileMatch/FileFind:
+          Exact match. Extended signature vs ndi_time_syncrule_filematch/ndi_time_syncrule_filefind:
           accepts daqsystem_a as third argument. Checks embedded
           file overlap (grandparent/parent matching), expands
           epoch group iteratively, reads triggers from all
@@ -264,7 +264,7 @@ classes:
     matlab_path: "+ndi/+time/+syncrule/randomPulses.m"
     matlab_last_sync_hash: "a009ea96"
     python_path: "ndi/time/syncrule/random_pulses.py"
-    python_class: "RandomPulses"
+    python_class: "ndi_time_syncrule_randomPulses"
     inherits: "ndi.time.syncrule"
 
     methods:
@@ -281,7 +281,7 @@ classes:
             default: "None"
         output_arguments:
           - name: rp_obj
-            type_python: "RandomPulses"
+            type_python: "ndi_time_syncrule_randomPulses"
         decision_log: >
           Exact match. Default parameters:
           daqsystem1_name='', daqsystem2_name='',
@@ -309,7 +309,7 @@ classes:
           - name: classes
             type_python: "list[str]"
         decision_log: >
-          Exact match. Returns ['ndi.daq.system.mfdaq', 'DAQSystem'].
+          Exact match. Returns ['ndi.daq.system.mfdaq', 'ndi_daq_system'].
           Note: MATLAB returns {'ndi.daq.system.mfdaq'} - more
           restrictive than other syncrules.
 
@@ -339,9 +339,9 @@ classes:
           - name: cost
             type_python: "float | None"
           - name: mapping
-            type_python: "TimeMapping | None"
+            type_python: "ndi_time_timemapping | None"
         decision_log: >
-          Exact match. Extended signature vs FileMatch/FileFind:
+          Exact match. Extended signature vs ndi_time_syncrule_filematch/ndi_time_syncrule_filefind:
           accepts daqsystem_a as third argument. Reads random
           pulse trigger events from each epoch, uses
           inter-pulse-interval cross-correlation to align

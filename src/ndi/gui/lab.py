@@ -1,6 +1,6 @@
-"""Lab — Experiment view with draggable icons and connection wires.
+"""ndi_gui_Lab — Experiment view with draggable icons and connection wires.
 
-Mirrors MATLAB: ndi.gui.Lab
+Mirrors MATLAB: ndi.gui.ndi_gui_Lab
 
 Provides a graphical canvas (QGraphicsScene) where subjects, probes,
 and DAQ devices are displayed as draggable icons.  Connections between
@@ -14,17 +14,17 @@ from typing import Any
 import numpy as np
 
 from ndi.gui._qt_helpers import require_qt
-from ndi.gui.icon import Icon
+from ndi.gui.icon import ndi_gui_Icon
 
 try:
     from PySide6 import QtCore, QtGui, QtWidgets
 except ImportError:
     pass
 
-_UNIT = Icon._UNIT
+_UNIT = ndi_gui_Icon._UNIT
 
 
-class Lab:
+class ndi_gui_Lab:
     """Experiment / lab view widget.
 
     Manages a :class:`QGraphicsScene` containing subject, probe, and DAQ
@@ -35,10 +35,10 @@ class Lab:
         require_qt()
 
         self.editable: bool = False
-        self.subjects: list[Icon] = []
-        self.probes: list[Icon] = []
-        self.DAQs: list[Icon] = []
-        self.drag: Icon | None = None
+        self.subjects: list[ndi_gui_Icon] = []
+        self.probes: list[ndi_gui_Icon] = []
+        self.DAQs: list[ndi_gui_Icon] = []
+        self.drag: ndi_gui_Icon | None = None
         self.dragPt: tuple[float, float] | None = None
         self.moved: bool = False
         self.connects: np.ndarray = np.zeros((0, 0), dtype=int)
@@ -88,21 +88,21 @@ class Lab:
     def addSubject(self, subj: list[Any]) -> None:
         """Add subject icons (blue) to the view."""
         for s in subj:
-            icon = Icon(self, len(self.subjects), s, 1, 1, 4, 3, (0.2, 0.4, 1.0))
+            icon = ndi_gui_Icon(self, len(self.subjects), s, 1, 1, 4, 3, (0.2, 0.4, 1.0))
             self.subjects.append(icon)
         self._rebuild_connects()
 
     def addProbe(self, prob: list[Any]) -> None:
         """Add probe icons (green) to the view."""
         for p in prob:
-            icon = Icon(self, len(self.probes), p, 6, 6, 2, 3, (0.0, 0.6, 0.0))
+            icon = ndi_gui_Icon(self, len(self.probes), p, 6, 6, 2, 3, (0.0, 0.6, 0.0))
             self.probes.append(icon)
         self._rebuild_connects()
 
     def addDAQ(self, daq: list[Any]) -> None:
         """Add DAQ icons (orange) to the view."""
         for d in daq:
-            icon = Icon(self, len(self.DAQs), d, 9, 12, 4, 2, (1.0, 0.6, 0.0))
+            icon = ndi_gui_Icon(self, len(self.DAQs), d, 9, 12, 4, 2, (1.0, 0.6, 0.0))
             self.DAQs.append(icon)
         self._rebuild_connects()
 
@@ -121,12 +121,12 @@ class Lab:
             for y in range(0, 17 * _UNIT, _UNIT):
                 self.scene.addLine(0, y, 24 * _UNIT, y, pen).setZValue(-1)
 
-    def details(self, src: Icon) -> None:
+    def details(self, src: ndi_gui_Icon) -> None:
         """Show detail panel for the given icon."""
         c = src.c
         elem = src.elem
         if c == (0.2, 0.4, 1.0):
-            # Subject
+            # ndi_subject
             if isinstance(elem, list) and len(elem) > 0:
                 elem = elem[0]
             dp = getattr(elem, "document_properties", {})
@@ -136,12 +136,12 @@ class Lab:
                 subj.get("local_identifier", "Not Found") if isinstance(subj, dict) else "Not Found"
             )
             desc = subj.get("description", "") if isinstance(subj, dict) else ""
-            kind = "Subject"
+            kind = "ndi_subject"
             ident = name
         elif c == (0.0, 0.6, 0.0):
-            # Probe
+            # ndi_probe
             name = getattr(elem, "name", "")
-            kind = getattr(elem, "type", "Probe")
+            kind = getattr(elem, "type", "ndi_probe")
             ident = getattr(elem, "identifier", "")
             desc = ""
         else:
@@ -188,7 +188,7 @@ class Lab:
                 self.dragPt = (new_x, new_y)
                 self.updateConnections()
 
-    def connect(self, src: Icon | None = None) -> None:
+    def connect(self, src: ndi_gui_Icon | None = None) -> None:
         """Create/complete a connection using a two-click pattern."""
         if src is None:
             return

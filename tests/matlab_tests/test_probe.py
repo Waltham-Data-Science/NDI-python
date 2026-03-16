@@ -7,10 +7,10 @@ MATLAB source files:
 
 Tests for:
 - ndi.probe.initProbeTypeMap() / getProbeTypeMap()
-- ndi.probe.Probe instantiation and basic interface
+- ndi.probe.ndi_probe instantiation and basic interface
 """
 
-from ndi.probe import Probe, getProbeTypeMap, initProbeTypeMap
+from ndi.probe import ndi_probe, getProbeTypeMap, initProbeTypeMap
 
 # ===========================================================================
 # TestProbeMap
@@ -32,7 +32,7 @@ class TestProbeMap:
         """
         probe_map = initProbeTypeMap()
         assert isinstance(probe_map, dict)
-        assert len(probe_map) > 0, "Probe type map should be non-empty"
+        assert len(probe_map) > 0, "ndi_probe type map should be non-empty"
 
     def test_getProbeTypeMap(self):
         """getProbeTypeMap() returns the cached version, same result.
@@ -87,17 +87,17 @@ class TestProbeMap:
 class TestProbe:
     """Port of ndi.unittest.probe.ProbeTest.
 
-    Tests Probe instantiation and basic interface without a session
+    Tests ndi_probe instantiation and basic interface without a session
     (since getprobes/samplerate/read_epochsamples require a full
     DAQ system setup that is not available in unit tests).
     """
 
     def test_probe_instantiation(self):
-        """Probe can be created without a session.
+        """ndi_probe can be created without a session.
 
         MATLAB equivalent: ProbeTest.testProbeCreate
         """
-        probe = Probe(
+        probe = ndi_probe(
             name="electrode1",
             reference=1,
             type="n-trode",
@@ -108,17 +108,17 @@ class TestProbe:
         assert probe._type == "n-trode"
 
     def test_probe_with_session(self, tmp_path):
-        """Probe can be created with a DirSession.
+        """ndi_probe can be created with a ndi_session_dir.
 
         MATLAB equivalent: ProbeTest.testGetprobes (setup phase)
         """
-        from ndi.session.dir import DirSession
+        from ndi.session.dir import ndi_session_dir
 
         session_dir = tmp_path / "probe_sess"
         session_dir.mkdir()
-        session = DirSession("probe_test", session_dir)
+        session = ndi_session_dir("probe_test", session_dir)
 
-        probe = Probe(
+        probe = ndi_probe(
             session=session,
             name="electrode1",
             reference=1,
@@ -133,7 +133,7 @@ class TestProbe:
 
         MATLAB equivalent: ProbeTest (implicit property)
         """
-        probe = Probe(name="test", reference=0, type="n-trode")
+        probe = ndi_probe(name="test", reference=0, type="n-trode")
         assert probe.issyncgraphroot() is False
 
     def test_probe_epochsetname(self):
@@ -141,7 +141,7 @@ class TestProbe:
 
         MATLAB equivalent: ProbeTest (implicit property)
         """
-        probe = Probe(name="electrode1", reference=1, type="n-trode")
+        probe = ndi_probe(name="electrode1", reference=1, type="n-trode")
         name = probe.epochsetname()
         assert "electrode1" in name
         assert "1" in name
@@ -151,18 +151,18 @@ class TestProbe:
 
         MATLAB equivalent: ProbeTest (edge case)
         """
-        probe = Probe(name="test", reference=0, type="n-trode")
+        probe = ndi_probe(name="test", reference=0, type="n-trode")
         et = probe.buildepochtable()
         assert et == []
 
     def test_probe_repr(self):
-        """Probe has a useful repr string.
+        """ndi_probe has a useful repr string.
 
         MATLAB equivalent: ProbeTest (implicit)
         """
-        probe = Probe(name="electrode1", reference=1, type="n-trode")
+        probe = ndi_probe(name="electrode1", reference=1, type="n-trode")
         r = repr(probe)
-        assert "Probe" in r
+        assert "ndi_probe" in r
         assert "electrode1" in r
 
     def test_probe_epochprobemapmatch(self):
@@ -170,7 +170,7 @@ class TestProbe:
 
         MATLAB equivalent: ProbeTest (functional)
         """
-        probe = Probe(name="electrode1", reference=1, type="n-trode")
+        probe = ndi_probe(name="electrode1", reference=1, type="n-trode")
 
         matching_map = {
             "name": "electrode1",

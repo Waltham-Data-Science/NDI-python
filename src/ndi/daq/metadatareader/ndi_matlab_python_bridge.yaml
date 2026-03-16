@@ -19,7 +19,7 @@ classes:
     matlab_path: "+ndi/+daq/metadatareader.m"
     matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/daq/metadatareader/__init__.py"
-    python_class: "MetadataReader"
+    python_class: "ndi_daq_metadatareader"
     inherits: "ndi.ido"
 
     properties:
@@ -48,7 +48,7 @@ classes:
             default: "None"
         output_arguments:
           - name: reader_obj
-            type_python: "MetadataReader"
+            type_python: "ndi_daq_metadatareader"
         decision_log: "Exact match."
 
       - name: readmetadata
@@ -143,7 +143,7 @@ classes:
     matlab_path: "+ndi/+daq/+metadatareader/NewStimStims.m"
     matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/daq/metadatareader/newstim_stims.py"
-    python_class: "NewStimStimsReader"
+    python_class: "ndi_daq_metadatareader_NewStimStims"
     inherits: "ndi.daq.metadatareader"
 
     properties:
@@ -170,7 +170,7 @@ classes:
             default: "None"
         output_arguments:
           - name: reader_obj
-            type_python: "NewStimStimsReader"
+            type_python: "ndi_daq_metadatareader_NewStimStims"
         decision_log: "Exact match."
 
       - name: readmetadata
@@ -223,7 +223,7 @@ classes:
     matlab_path: "+ndi/+daq/+metadatareader/NielsenLabStims.m"
     matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/daq/metadatareader/nielsenlab_stims.py"
-    python_class: "NielsenLabStimsReader"
+    python_class: "ndi_daq_metadatareader_NielsenLabStims"
     inherits: "ndi.daq.metadatareader"
 
     properties:
@@ -250,7 +250,7 @@ classes:
             default: "None"
         output_arguments:
           - name: reader_obj
-            type_python: "NielsenLabStimsReader"
+            type_python: "ndi_daq_metadatareader_NielsenLabStims"
         decision_log: "Exact match."
 
       - name: readmetadata

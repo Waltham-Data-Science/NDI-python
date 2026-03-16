@@ -21,47 +21,47 @@ import copy
 import numpy as np
 import pandas as pd
 
-from ndi.dataset import Dataset
-from ndi.document import Document
+from ndi.dataset import ndi_dataset
+from ndi.document import ndi_document
 from ndi.fun.dataset import diff as dataset_diff
 from ndi.fun.doc import allTypes, findFuid
 from ndi.fun.doc import diff as doc_diff
 from ndi.fun.session import diff as session_diff
 from ndi.fun.table import vstack
-from ndi.query import Query
-from ndi.session.dir import DirSession
+from ndi.query import ndi_query
+from ndi.session.dir import ndi_session_dir
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _make_demo_doc(name: str = "test", value: int = 42, session_id: str = "") -> Document:
+def _make_demo_doc(name: str = "test", value: int = 42, session_id: str = "") -> ndi_document:
     """Create a demoNDI document with given name and value."""
-    doc = Document("demoNDI")
+    doc = ndi_document("demoNDI")
     props = doc.document_properties
     props["base"]["name"] = name
     props["demoNDI"]["value"] = value
     if session_id:
         props["base"]["session_id"] = session_id
-    return Document(props)
+    return ndi_document(props)
 
 
 def _make_session_with_docs(tmp_path, ref, doc_specs):
-    """Create a DirSession and add documents from a list of (name, value) tuples.
+    """Create a ndi_session_dir and add documents from a list of (name, value) tuples.
 
     Returns (session, list_of_added_docs).
     """
     session_dir = tmp_path / ref
     session_dir.mkdir(parents=True, exist_ok=True)
-    session = DirSession(ref, session_dir)
+    session = ndi_session_dir(ref, session_dir)
 
     added = []
     for name, value in doc_specs:
         doc = _make_demo_doc(name, value, session.id())
         session.database_add(doc)
         # Re-fetch from DB so we have the stored version
-        results = session.database_search(Query("base.id") == doc.document_properties["base"]["id"])
+        results = session.database_search(ndi_query("base.id") == doc.document_properties["base"]["id"])
         added.append(results[0] if results else doc)
 
     return session, added
@@ -130,7 +130,7 @@ class TestFindFuid:
         """
         session_dir = tmp_path / "fuid_sess"
         session_dir.mkdir()
-        session = DirSession("fuid_test", session_dir)
+        session = ndi_session_dir("fuid_test", session_dir)
 
         # Create a document with a file attachment
         filepath = session_dir / "testfile.dat"
@@ -158,7 +158,7 @@ class TestFindFuid:
         """
         session_dir = tmp_path / "fuid_sess2"
         session_dir.mkdir()
-        session = DirSession("fuid_test2", session_dir)
+        session = ndi_session_dir("fuid_test2", session_dir)
 
         # Add a document (so the database is not empty)
         doc = _make_demo_doc("some_doc", 99, session.id())
@@ -176,7 +176,7 @@ class TestFindFuid:
         """
         session_dir = tmp_path / "fuid_sess3"
         session_dir.mkdir()
-        session = DirSession("fuid_test3", session_dir)
+        session = ndi_session_dir("fuid_test3", session_dir)
 
         # Create multiple docs with files
         target_fuid = None
@@ -220,7 +220,7 @@ class TestDocDiff:
         """
         doc1 = _make_demo_doc("same_doc", 42)
         # Create a copy with same properties (same id, same everything)
-        doc2 = Document(copy.deepcopy(doc1.document_properties))
+        doc2 = ndi_document(copy.deepcopy(doc1.document_properties))
 
         result = doc_diff(doc1, doc2)
 
@@ -233,7 +233,7 @@ class TestDocDiff:
         MATLAB equivalent: testDiff.testPropertyMismatch
         """
         doc1 = _make_demo_doc("doc_a", 10)
-        doc2 = Document(copy.deepcopy(doc1.document_properties))
+        doc2 = ndi_document(copy.deepcopy(doc1.document_properties))
         doc2.document_properties["demoNDI"]["value"] = 99
 
         result = doc_diff(doc1, doc2)
@@ -250,7 +250,7 @@ class TestDocDiff:
         MATLAB equivalent: testDiff.testIgnoreFields
         """
         doc1 = _make_demo_doc("doc_a", 10)
-        doc2 = Document(copy.deepcopy(doc1.document_properties))
+        doc2 = ndi_document(copy.deepcopy(doc1.document_properties))
         doc2.document_properties["demoNDI"]["value"] = 99
 
         result = doc_diff(doc1, doc2, exclude_fields=["demoNDI.value"])
@@ -295,7 +295,7 @@ class TestDocDiff:
         MATLAB equivalent: testDiff.testDependenciesOrderIndependence
         """
         doc1 = _make_demo_doc("doc_dep", 1)
-        doc2 = Document(copy.deepcopy(doc1.document_properties))
+        doc2 = ndi_document(copy.deepcopy(doc1.document_properties))
 
         # Add depends_on in different orders
         dep_a = {"name": "dep_a", "value": "id_aaa"}
@@ -316,7 +316,7 @@ class TestDocDiff:
         MATLAB equivalent: testDiff.testFileListsOrderIndependence
         """
         doc1 = _make_demo_doc("doc_files", 1)
-        doc2 = Document(copy.deepcopy(doc1.document_properties))
+        doc2 = ndi_document(copy.deepcopy(doc1.document_properties))
 
         fi_a = {"name": "file_a.dat", "locations": []}
         fi_b = {"name": "file_b.dat", "locations": []}
@@ -348,14 +348,14 @@ class TestSessionDiff:
         """
         session_dir = tmp_path / "identical_sess"
         session_dir.mkdir()
-        session = DirSession("identical", session_dir)
+        session = ndi_session_dir("identical", session_dir)
 
         for i in range(1, 4):
             doc = _make_demo_doc(f"doc_{i}", i, session.id())
             session.database_add(doc)
 
         # Reopen same session (same path -> same data)
-        session2 = DirSession("identical", session_dir)
+        session2 = ndi_session_dir("identical", session_dir)
 
         result = session_diff(session, session2)
 
@@ -367,17 +367,17 @@ class TestSessionDiff:
         assert len(result["mismatches"]) == 0
 
     def test_docs_only_in_s1(self, tmp_path):
-        """Session 1 has extra docs that Session 2 does not.
+        """ndi_session 1 has extra docs that ndi_session 2 does not.
 
         MATLAB equivalent: diffTest.testDocsInAOnly
         """
         s1_dir = tmp_path / "sess_a"
         s1_dir.mkdir()
-        session1 = DirSession("sess_a", s1_dir)
+        session1 = ndi_session_dir("sess_a", s1_dir)
 
         s2_dir = tmp_path / "sess_b"
         s2_dir.mkdir()
-        session2 = DirSession("sess_b", s2_dir)
+        session2 = ndi_session_dir("sess_b", s2_dir)
 
         # Add 3 docs to session1, 0 to session2
         for i in range(1, 4):
@@ -394,17 +394,17 @@ class TestSessionDiff:
         assert result["common_count"] == 0
 
     def test_docs_only_in_s2(self, tmp_path):
-        """Session 2 has extra docs that Session 1 does not.
+        """ndi_session 2 has extra docs that ndi_session 1 does not.
 
         MATLAB equivalent: diffTest.testDocsInBOnly
         """
         s1_dir = tmp_path / "sess_a"
         s1_dir.mkdir()
-        session1 = DirSession("sess_a", s1_dir)
+        session1 = ndi_session_dir("sess_a", s1_dir)
 
         s2_dir = tmp_path / "sess_b"
         s2_dir.mkdir()
-        session2 = DirSession("sess_b", s2_dir)
+        session2 = ndi_session_dir("sess_b", s2_dir)
 
         # Add 2 docs to session2, 0 to session1
         for i in range(1, 3):
@@ -427,11 +427,11 @@ class TestSessionDiff:
         """
         s1_dir = tmp_path / "sess_a"
         s1_dir.mkdir()
-        session1 = DirSession("sess_a", s1_dir)
+        session1 = ndi_session_dir("sess_a", s1_dir)
 
         s2_dir = tmp_path / "sess_b"
         s2_dir.mkdir()
-        session2 = DirSession("sess_b", s2_dir)
+        session2 = ndi_session_dir("sess_b", s2_dir)
 
         # Create a document with a known ID
         doc = _make_demo_doc("shared_doc", 10, session1.id())
@@ -442,7 +442,7 @@ class TestSessionDiff:
         doc2_props = copy.deepcopy(doc.document_properties)
         doc2_props["demoNDI"]["value"] = 99
         doc2_props["base"]["session_id"] = session2.id()
-        doc2 = Document(doc2_props)
+        doc2 = ndi_document(doc2_props)
         session2.database_add(doc2)
 
         result = session_diff(session1, session2)
@@ -470,7 +470,7 @@ class TestDatasetDiff:
         # Create source session
         sess_dir = tmp_path / "src_sess"
         sess_dir.mkdir()
-        session = DirSession("src", sess_dir)
+        session = ndi_session_dir("src", sess_dir)
         for i in range(1, 3):
             doc = _make_demo_doc(f"doc_{i}", i, session.id())
             session.database_add(doc)
@@ -478,11 +478,11 @@ class TestDatasetDiff:
         # Create dataset and ingest
         ds_dir = tmp_path / "ds1"
         ds_dir.mkdir()
-        dataset1 = Dataset(ds_dir, "ds1")
+        dataset1 = ndi_dataset(ds_dir, "ds1")
         dataset1.add_ingested_session(session)
 
         # Reopen the same dataset
-        dataset2 = Dataset(ds_dir, "ds1")
+        dataset2 = ndi_dataset(ds_dir, "ds1")
 
         result = dataset_diff(dataset1, dataset2)
 
@@ -490,56 +490,56 @@ class TestDatasetDiff:
         assert result["session_diff"]["equal"] is True
 
     def test_docs_only_in_dataset1(self, tmp_path):
-        """Dataset 1 has extra docs that Dataset 2 does not.
+        """ndi_dataset 1 has extra docs that ndi_dataset 2 does not.
 
         MATLAB equivalent: diffTest.testDocsInAOnly
         """
-        # Dataset 1 with docs
+        # ndi_dataset 1 with docs
         sess1_dir = tmp_path / "sess1"
         sess1_dir.mkdir()
-        session1 = DirSession("sess1", sess1_dir)
+        session1 = ndi_session_dir("sess1", sess1_dir)
         for i in range(1, 4):
             doc = _make_demo_doc(f"doc_{i}", i, session1.id())
             session1.database_add(doc)
 
         ds1_dir = tmp_path / "ds1"
         ds1_dir.mkdir()
-        dataset1 = Dataset(ds1_dir, "ds1")
+        dataset1 = ndi_dataset(ds1_dir, "ds1")
         dataset1.add_ingested_session(session1)
 
-        # Dataset 2 empty
+        # ndi_dataset 2 empty
         ds2_dir = tmp_path / "ds2"
         ds2_dir.mkdir()
-        dataset2 = Dataset(ds2_dir, "ds2")
+        dataset2 = ndi_dataset(ds2_dir, "ds2")
 
         result = dataset_diff(dataset1, dataset2)
 
         assert result["equal"] is False
         sd = result["session_diff"]
-        # Dataset 1 has documents that dataset 2 does not
+        # ndi_dataset 1 has documents that dataset 2 does not
         assert len(sd["only_in_s1"]) > 0 or len(sd["mismatches"]) > 0
 
     def test_docs_only_in_dataset2(self, tmp_path):
-        """Dataset 2 has extra docs that Dataset 1 does not.
+        """ndi_dataset 2 has extra docs that ndi_dataset 1 does not.
 
         MATLAB equivalent: diffTest.testDocsInBOnly
         """
-        # Dataset 1 empty
+        # ndi_dataset 1 empty
         ds1_dir = tmp_path / "ds1"
         ds1_dir.mkdir()
-        dataset1 = Dataset(ds1_dir, "ds1")
+        dataset1 = ndi_dataset(ds1_dir, "ds1")
 
-        # Dataset 2 with docs
+        # ndi_dataset 2 with docs
         sess2_dir = tmp_path / "sess2"
         sess2_dir.mkdir()
-        session2 = DirSession("sess2", sess2_dir)
+        session2 = ndi_session_dir("sess2", sess2_dir)
         for i in range(1, 4):
             doc = _make_demo_doc(f"doc_{i}", i, session2.id())
             session2.database_add(doc)
 
         ds2_dir = tmp_path / "ds2"
         ds2_dir.mkdir()
-        dataset2 = Dataset(ds2_dir, "ds2")
+        dataset2 = ndi_dataset(ds2_dir, "ds2")
         dataset2.add_ingested_session(session2)
 
         result = dataset_diff(dataset1, dataset2)
@@ -557,31 +557,31 @@ class TestDatasetDiff:
         doc = _make_demo_doc("shared", 10)
         doc.document_properties["base"]["id"]
 
-        # Dataset 1
+        # ndi_dataset 1
         sess1_dir = tmp_path / "sess1"
         sess1_dir.mkdir()
-        session1 = DirSession("sess1", sess1_dir)
+        session1 = ndi_session_dir("sess1", sess1_dir)
         doc1_props = copy.deepcopy(doc.document_properties)
         doc1_props["base"]["session_id"] = session1.id()
-        session1.database_add(Document(doc1_props))
+        session1.database_add(ndi_document(doc1_props))
 
         ds1_dir = tmp_path / "ds1"
         ds1_dir.mkdir()
-        dataset1 = Dataset(ds1_dir, "ds1")
+        dataset1 = ndi_dataset(ds1_dir, "ds1")
         dataset1.add_ingested_session(session1)
 
-        # Dataset 2 — same doc ID but different value
+        # ndi_dataset 2 — same doc ID but different value
         sess2_dir = tmp_path / "sess2"
         sess2_dir.mkdir()
-        session2 = DirSession("sess2", sess2_dir)
+        session2 = ndi_session_dir("sess2", sess2_dir)
         doc2_props = copy.deepcopy(doc.document_properties)
         doc2_props["demoNDI"]["value"] = 99
         doc2_props["base"]["session_id"] = session2.id()
-        session2.database_add(Document(doc2_props))
+        session2.database_add(ndi_document(doc2_props))
 
         ds2_dir = tmp_path / "ds2"
         ds2_dir.mkdir()
-        dataset2 = Dataset(ds2_dir, "ds2")
+        dataset2 = ndi_dataset(ds2_dir, "ds2")
         dataset2.add_ingested_session(session2)
 
         result = dataset_diff(dataset1, dataset2)

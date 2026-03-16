@@ -1,13 +1,13 @@
 """
 ndi.dataset - Multi-session dataset container.
 
-A Dataset manages multiple sessions, either linked (by reference) or
+A ndi_dataset manages multiple sessions, either linked (by reference) or
 ingested (copied into the dataset's own database). Datasets have their
 own session for storing dataset-level documents and metadata.
 
 MATLAB equivalents:
-    ndi.dataset      -> Dataset (base class)
-    ndi.dataset.dir  -> DatasetDir (directory-backed subclass)
+    ndi.dataset      -> ndi_dataset (base class)
+    ndi.dataset.dir  -> ndi_dataset_dir (directory-backed subclass)
 """
 
 from __future__ import annotations
@@ -16,29 +16,29 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from ..document import Document
-from ..query import Query
+from ..document import ndi_document
+from ..query import ndi_query
 
 logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# Dataset base class  (mirrors MATLAB ndi.dataset)
+# ndi_dataset base class  (mirrors MATLAB ndi.dataset)
 # ============================================================================
 
 
-class Dataset:
+class ndi_dataset:
     """
     Multi-session dataset container (base class).
 
     MATLAB equivalent: ndi.dataset
 
-    A Dataset aggregates multiple sessions for cross-session analysis.
+    A ndi_dataset aggregates multiple sessions for cross-session analysis.
     Sessions can be:
     - **Linked**: Referenced by path/id, data stays in original location
     - **Ingested**: Documents copied into the dataset's own database
 
-    The ``session`` attribute is set by the subclass (e.g. DatasetDir).
+    The ``session`` attribute is set by the subclass (e.g. ndi_dataset_dir).
 
     Attributes:
         reference: Human-readable dataset reference name (from session)
@@ -87,17 +87,17 @@ class Dataset:
         return self._session.getpath()
 
     # =========================================================================
-    # Session Management
+    # ndi_session Management
     # =========================================================================
 
-    def add_linked_session(self, session: Any) -> Dataset:
+    def add_linked_session(self, session: Any) -> ndi_dataset:
         """
         Link an ndi.session to this dataset without ingesting.
 
         MATLAB equivalent: ``ndi.dataset/add_linked_session``
 
         Args:
-            session: Session object to link
+            session: ndi_session object to link
 
         Returns:
             self for chaining
@@ -111,7 +111,7 @@ class Dataset:
         existing = self._find_session_in_info(session.id())
         if existing is not None:
             raise ValueError(
-                f"Session with id {session.id()} is already part of " f"dataset {self.id()}."
+                f"ndi_session with id {session.id()} is already part of " f"dataset {self.id()}."
             )
 
         session_info_here = self._make_session_info(session, is_linked=True)
@@ -123,14 +123,14 @@ class Dataset:
 
         return self
 
-    def add_ingested_session(self, session: Any) -> Dataset:
+    def add_ingested_session(self, session: Any) -> ndi_dataset:
         """
         Ingest a session into this dataset by copying documents.
 
         MATLAB equivalent: ``ndi.dataset/add_ingested_session``
 
         Args:
-            session: Session object to ingest
+            session: ndi_session object to ingest
 
         Returns:
             self for chaining
@@ -145,12 +145,12 @@ class Dataset:
         existing = self._find_session_in_info(session.id())
         if existing is not None:
             raise ValueError(
-                f"Session with id {session.id()} is already part of " f"dataset {self.id()}."
+                f"ndi_session with id {session.id()} is already part of " f"dataset {self.id()}."
             )
 
         if hasattr(session, "is_fully_ingested") and not session.is_fully_ingested():
             raise ValueError(
-                f"Session with id {session.id()} and reference "
+                f"ndi_session with id {session.id()} and reference "
                 f"{session.reference} is not yet fully ingested. "
                 f"It must be fully ingested before it can be added "
                 f"in ingested form to a dataset."
@@ -161,7 +161,7 @@ class Dataset:
         # enforces session_id == self._session.id(), but ingested docs retain
         # their *original* session_id so we can tell which session they came from.
         # Binary files are also copied from the source session.
-        all_docs = session.database_search(Query("").isa("base"))
+        all_docs = session.database_search(ndi_query("").isa("base"))
         for doc in all_docs:
             try:
                 self._session._database.add(doc)
@@ -185,7 +185,7 @@ class Dataset:
         self,
         session_id: str,
         are_you_sure: bool = False,
-    ) -> Dataset:
+    ) -> ndi_dataset:
         """
         Unlink a linked session from this dataset.
 
@@ -209,11 +209,11 @@ class Dataset:
 
         match = self._find_session_in_info(session_id)
         if match is None:
-            raise ValueError(f"Session with ID {session_id} not found in " f"dataset {self.id()}.")
+            raise ValueError(f"ndi_session with ID {session_id} not found in " f"dataset {self.id()}.")
 
         if not match.get("is_linked", False):
             raise ValueError(
-                f"Session with ID {session_id} is an INGESTED session, "
+                f"ndi_session with ID {session_id} is an INGESTED session, "
                 f"not a linked session. Cannot unlink. Use "
                 f"deleteIngestedSession() instead."
             )
@@ -230,10 +230,10 @@ class Dataset:
         MATLAB equivalent: ``ndi.dataset/open_session``
 
         Args:
-            session_id: Session identifier
+            session_id: ndi_session identifier
 
         Returns:
-            Session object, or None if not found
+            ndi_session object, or None if not found
         """
         if not self._session_array:
             self.build_session_info()
@@ -292,7 +292,7 @@ class Dataset:
                 - id_list: List of session ID strings
                 - session_doc_ids: List of document IDs for the
                   session_in_a_dataset documents
-                - dataset_session_doc_id: Document ID of the dataset's
+                - dataset_session_doc_id: ndi_document ID of the dataset's
                   own session document (empty string if not found)
         """
         if not self._session_info:
@@ -303,7 +303,7 @@ class Dataset:
         session_doc_ids = [si.get("session_doc_in_dataset_id", "") for si in self._session_info]
 
         dataset_session_doc_id = ""
-        q_ds = Query("").isa("session") & (Query("base.session_id") == self.id())
+        q_ds = ndi_query("").isa("session") & (ndi_query("base.session_id") == self.id())
         ds_docs = self._session.database_search(q_ds)
         if len(ds_docs) == 1:
             dataset_session_doc_id = ds_docs[0].id
@@ -313,10 +313,10 @@ class Dataset:
         return ref_list, id_list, session_doc_ids, dataset_session_doc_id
 
     # =========================================================================
-    # Database Operations (delegated to internal session)
+    # ndi_database Operations (delegated to internal session)
     # =========================================================================
 
-    def database_add(self, document: Document | list[Document]) -> Dataset:
+    def database_add(self, document: ndi_document | list[ndi_document]) -> ndi_dataset:
         """Add document(s) to the dataset database.
 
         MATLAB equivalent: ``ndi.dataset/database_add``
@@ -346,9 +346,9 @@ class Dataset:
 
     def database_rm(
         self,
-        doc_or_id: Document | str | list,
+        doc_or_id: ndi_document | str | list,
         error_if_not_found: bool = False,
-    ) -> Dataset:
+    ) -> ndi_dataset:
         """Remove document(s) from the dataset database.
 
         MATLAB equivalent: ``ndi.dataset/database_rm``
@@ -360,7 +360,7 @@ class Dataset:
             self._session.database_rm(doc_or_id, error_if_not_found)
         return self
 
-    def database_search(self, query: Query) -> list[Document]:
+    def database_search(self, query: ndi_query) -> list[ndi_document]:
         """Search the dataset database and all linked sessions.
 
         MATLAB equivalent: ``ndi.dataset/database_search``
@@ -369,7 +369,7 @@ class Dataset:
         session_id), then also searches linked sessions.
         """
         if self._session._database is None:
-            results: list[Document] = []
+            results: list[ndi_document] = []
         else:
             results = list(self._session._database.search(query))
 
@@ -406,7 +406,7 @@ class Dataset:
         MATLAB equivalent: ``ndi.dataset/database_existbinarydoc``
 
         Args:
-            doc_or_id: Document or document ID.
+            doc_or_id: ndi_document or document ID.
             filename: Name of the binary file.
 
         Returns:
@@ -419,14 +419,14 @@ class Dataset:
         self._session.database_closebinarydoc(fid)
 
     # =========================================================================
-    # Ingested Session Management
+    # Ingested ndi_session Management
     # =========================================================================
 
     def deleteIngestedSession(
         self,
         session_id: str,
         are_you_sure: bool = False,
-    ) -> Dataset:
+    ) -> ndi_dataset:
         """
         Delete an ingested session and all its documents.
 
@@ -440,16 +440,16 @@ class Dataset:
 
         match = self._find_session_in_info(session_id)
         if match is None:
-            raise ValueError(f"Session {session_id} not found in dataset.")
+            raise ValueError(f"ndi_session {session_id} not found in dataset.")
 
         if match.get("is_linked", False):
             raise ValueError(
-                f"Session {session_id} is a linked session, not an "
+                f"ndi_session {session_id} is a linked session, not an "
                 f"ingested one. Use unlink_session() instead."
             )
 
         # Remove all documents with base.session_id == session_id
-        q_docs = Query("base.session_id") == session_id
+        q_docs = ndi_query("base.session_id") == session_id
         docs_to_delete = self.database_search(q_docs)
 
         # Remove the session_in_a_dataset doc
@@ -468,7 +468,7 @@ class Dataset:
 
         return self
 
-    def document_session(self, document: Document) -> Any | None:
+    def document_session(self, document: ndi_document) -> Any | None:
         """Find which session a document belongs to.
 
         MATLAB equivalent: ``ndi.dataset/document_session``
@@ -479,7 +479,7 @@ class Dataset:
         return None
 
     # =========================================================================
-    # Session info management (mirrors MATLAB build_session_info)
+    # ndi_session info management (mirrors MATLAB build_session_info)
     # =========================================================================
 
     def build_session_info(self) -> None:
@@ -491,13 +491,13 @@ class Dataset:
         populates ``_session_info`` and ``_session_array``.
         """
         # Check for legacy dataset_session_info docs and repair
-        q_legacy = Query("").isa("dataset_session_info") & (Query("base.session_id") == self.id())
+        q_legacy = ndi_query("").isa("dataset_session_info") & (ndi_query("base.session_id") == self.id())
         legacy_docs = self._session.database_search(q_legacy)
         if legacy_docs:
             self.repairDatasetSessionInfo(self, legacy_docs)
 
         # Find session_in_a_dataset docs belonging to this dataset
-        q = Query("").isa("session_in_a_dataset") & (Query("base.session_id") == self.id())
+        q = ndi_query("").isa("session_in_a_dataset") & (ndi_query("base.session_id") == self.id())
         info_docs = self._session.database_search(q)
 
         self._session_info = []
@@ -523,14 +523,14 @@ class Dataset:
 
     @staticmethod
     def repairDatasetSessionInfo(
-        dataset_obj: Dataset,
-        docs: list[Document],
-    ) -> list[Document]:
+        dataset_obj: ndi_dataset,
+        docs: list[ndi_document],
+    ) -> list[ndi_document]:
         """Repair legacy dataset_session_info into session_in_a_dataset docs.
 
         MATLAB equivalent: ``ndi.dataset.repairDatasetSessionInfo``
         """
-        new_docs: list[Document] = []
+        new_docs: list[ndi_document] = []
         if not docs:
             return new_docs
 
@@ -568,7 +568,7 @@ class Dataset:
                     val = False
                 props[f"session_in_a_dataset.{f}"] = val
 
-            new_doc = Document("session_in_a_dataset", **props)
+            new_doc = ndi_document("session_in_a_dataset", **props)
             new_doc = new_doc.set_session_id(current_dataset_id)
             new_docs.append(new_doc)
 
@@ -582,9 +582,9 @@ class Dataset:
 
     @staticmethod
     def addSessionInfoToDataset(
-        dataset_obj: Dataset,
+        dataset_obj: ndi_dataset,
         session_info: dict[str, Any],
-    ) -> Document:
+    ) -> ndi_document:
         """Add a session_in_a_dataset document to the dataset.
 
         MATLAB equivalent: ``ndi.dataset.addSessionInfoToDataset``
@@ -594,22 +594,22 @@ class Dataset:
             if key != "session_doc_in_dataset_id":
                 props[f"session_in_a_dataset.{key}"] = val
 
-        new_doc = Document("session_in_a_dataset", **props)
+        new_doc = ndi_document("session_in_a_dataset", **props)
         new_doc = new_doc.set_session_id(dataset_obj.id())
         dataset_obj._session.database_add(new_doc)
         return new_doc
 
     @staticmethod
     def removeSessionInfoFromDataset(
-        dataset_obj: Dataset,
+        dataset_obj: ndi_dataset,
         session_id: str,
     ) -> None:
         """Remove session_in_a_dataset document(s) for a given session ID.
 
         MATLAB equivalent: ``ndi.dataset.removeSessionInfoFromDataset``
         """
-        q = (Query("session_in_a_dataset.session_id") == session_id) & (
-            Query("base.session_id") == dataset_obj.id()
+        q = (ndi_query("session_in_a_dataset.session_id") == session_id) & (
+            ndi_query("base.session_id") == dataset_obj.id()
         )
         docs = dataset_obj._session.database_search(q)
         for doc in docs:
@@ -650,24 +650,24 @@ class Dataset:
         """Recreate a session from stored creator args."""
         creator = info.get("session_creator", "")
 
-        if creator == "DirSession" or creator == "ndi.session.dir":
-            from ..session.dir import DirSession
+        if creator == "ndi_session_dir" or creator == "ndi.session.dir":
+            from ..session.dir import ndi_session_dir
 
             ref = info.get("session_creator_input1", "")
             if ref and path_arg:
                 try:
-                    return DirSession(ref, path_arg, session_id=session_id)
+                    return ndi_session_dir(ref, path_arg, session_id=session_id)
                 except Exception:
                     pass
             elif path_arg:
                 try:
-                    return DirSession(path_arg)
+                    return ndi_session_dir(path_arg)
                 except Exception:
                     pass
 
         return None
 
-    def _copy_binary_files(self, source_session: Any, doc: Document) -> None:
+    def _copy_binary_files(self, source_session: Any, doc: ndi_document) -> None:
         """Copy binary file attachments from a source session to this dataset."""
         import shutil
 
@@ -721,15 +721,15 @@ class Dataset:
     def __repr__(self) -> str:
         """String representation."""
         refs, _ids, _doc_ids, _ds_doc_id = self.session_list()
-        return f"Dataset('{self.reference}', sessions={len(refs)})"
+        return f"ndi_dataset('{self.reference}', sessions={len(refs)})"
 
 
 # ============================================================================
-# DatasetDir  (mirrors MATLAB ndi.dataset.dir)
+# ndi_dataset_dir  (mirrors MATLAB ndi.dataset.dir)
 # ============================================================================
 
 
-class DatasetDir(Dataset):
+class ndi_dataset_dir(ndi_dataset):
     """
     Directory-backed dataset.
 
@@ -740,14 +740,14 @@ class DatasetDir(Dataset):
 
     The constructor supports three calling conventions (mirroring MATLAB):
 
-    1. ``DatasetDir(path)``             — open existing dataset
-    2. ``DatasetDir(reference, path)``  — create / open with reference
-    3. ``DatasetDir(reference, path, documents=docs)`` — create from
+    1. ``ndi_dataset_dir(path)``             — open existing dataset
+    2. ``ndi_dataset_dir(reference, path)``  — create / open with reference
+    3. ``ndi_dataset_dir(reference, path, documents=docs)`` — create from
        pre-loaded documents (used by ``downloadDataset``)
 
     Example:
-        >>> dataset = DatasetDir('/path/to/dataset')
-        >>> dataset = DatasetDir('my_experiment', '/path/to/dataset')
+        >>> dataset = ndi_dataset_dir('/path/to/dataset')
+        >>> dataset = ndi_dataset_dir('my_experiment', '/path/to/dataset')
     """
 
     def __init__(
@@ -756,46 +756,46 @@ class DatasetDir(Dataset):
         path_or_ref: str | Path | None = None,
         *,
         reference: str | None = None,
-        documents: list[Document] | None = None,
+        documents: list[ndi_document] | None = None,
     ):
         """
-        Create or open a directory-based Dataset.
+        Create or open a directory-based ndi_dataset.
 
         Supports multiple calling conventions:
 
-        - ``DatasetDir(path)``                      — open existing
-        - ``DatasetDir(reference, path)``            — MATLAB style
-        - ``DatasetDir(path, reference='name')``     — keyword style
+        - ``ndi_dataset_dir(path)``                      — open existing
+        - ``ndi_dataset_dir(reference, path)``            — MATLAB style
+        - ``ndi_dataset_dir(path, reference='name')``     — keyword style
 
         Args:
             reference_or_path: Either the dataset reference or path
             path_or_ref: Optional second positional arg (path or reference)
             reference: Keyword-only reference override
-            documents: Optional list of pre-loaded Document objects.
+            documents: Optional list of pre-loaded ndi_document objects.
                 When provided, documents are bulk-inserted and the
                 session is configured from them (hidden argument,
                 used by downloadDataset).
         """
-        from ..session.dir import DirSession
+        from ..session.dir import ndi_session_dir
 
         super().__init__()
 
         # Determine reference and path from arguments.
         # MATLAB convention: dir(reference, path_name)
-        # Old Python convention: Dataset(path, reference)
+        # Old Python convention: ndi_dataset(path, reference)
         # We support both by detecting whether the second arg is a path.
         if path_or_ref is None:
-            # 1-arg form: DatasetDir(path)
+            # 1-arg form: ndi_dataset_dir(path)
             self._path = Path(reference_or_path)
             ref = reference or ""
         elif isinstance(path_or_ref, Path) or (
             isinstance(path_or_ref, str) and ("/" in path_or_ref or "\\" in path_or_ref)
         ):
-            # MATLAB-style: DatasetDir(reference, path)
+            # MATLAB-style: ndi_dataset_dir(reference, path)
             ref = str(reference_or_path) if reference_or_path else ""
             self._path = Path(path_or_ref)
         else:
-            # Old Python-style: DatasetDir(path, "reference_string")
+            # Old Python-style: ndi_dataset_dir(path, "reference_string")
             self._path = Path(reference_or_path)
             ref = str(path_or_ref)
 
@@ -810,7 +810,7 @@ class DatasetDir(Dataset):
             # Mirrors MATLAB ndi.dataset.dir(reference, path_name, docs).
             dataset_session_id = self._dataset_session_id_from_docs(documents)
             # Create session with forced ID so docs can be inserted
-            self._session = DirSession(
+            self._session = ndi_session_dir(
                 ref or "temp",
                 self._path,
                 session_id=dataset_session_id,
@@ -822,18 +822,18 @@ class DatasetDir(Dataset):
                 except Exception:
                     pass
             # Re-create session without forced ID (reads from database)
-            self._session = DirSession(ref or "temp", self._path)
+            self._session = ndi_session_dir(ref or "temp", self._path)
         elif path_or_ref is None and not ref:
             # 1-arg form: try opening existing, or create with dir name as reference
             try:
-                self._session = DirSession(self._path)
+                self._session = ndi_session_dir(self._path)
             except ValueError:
-                self._session = DirSession(self._path.name, self._path)
+                self._session = ndi_session_dir(self._path.name, self._path)
         else:
             # 2-arg form
-            self._session = DirSession(ref or self._path.name, self._path)
+            self._session = ndi_session_dir(ref or self._path.name, self._path)
 
-        # Session discovery: find the correct session ID and reference
+        # ndi_session discovery: find the correct session ID and reference
         # from documents in the database. Mirrors the MATLAB
         # ndi.dataset.dir constructor logic.
         self._discover_correct_session(ref)
@@ -850,26 +850,26 @@ class DatasetDir(Dataset):
         for dataset_session_info → session_in_a_dataset → session documents
         to determine the correct session ID and reference.
         """
-        from ..session.dir import DirSession
+        from ..session.dir import ndi_session_dir
 
         correct_session_id = ""
 
         # 1. Check for legacy dataset_session_info docs
-        dsi_docs = self.database_search(Query("").isa("dataset_session_info"))
+        dsi_docs = self.database_search(ndi_query("").isa("dataset_session_info"))
         if dsi_docs:
             correct_session_id = (
                 dsi_docs[0].document_properties.get("base", {}).get("session_id", "")
             )
         else:
             # 2. Check for session_in_a_dataset docs
-            sia_docs = self.database_search(Query("").isa("session_in_a_dataset"))
+            sia_docs = self.database_search(ndi_query("").isa("session_in_a_dataset"))
             if sia_docs:
                 correct_session_id = (
                     sia_docs[0].document_properties.get("base", {}).get("session_id", "")
                 )
             else:
                 # 3. Check for a single session doc
-                session_docs = self.database_search(Query("").isa("session"))
+                session_docs = self.database_search(ndi_query("").isa("session"))
                 if len(session_docs) == 1:
                     correct_session_id = (
                         session_docs[0].document_properties.get("base", {}).get("session_id", "")
@@ -877,17 +877,17 @@ class DatasetDir(Dataset):
 
         if correct_session_id:
             # Find the session document with this ID
-            q = Query("").isa("session") & (Query("base.session_id") == correct_session_id)
+            q = ndi_query("").isa("session") & (ndi_query("base.session_id") == correct_session_id)
             candidate_docs = self.database_search(q)
             if len(candidate_docs) == 1:
                 ref = candidate_docs[0].document_properties.get("session", {}).get("reference", "")
                 sid = candidate_docs[0].document_properties.get("base", {}).get("session_id", "")
                 # Re-create session with the correct reference and ID
-                self._session = DirSession(ref, self._path, session_id=sid)
+                self._session = ndi_session_dir(ref, self._path, session_id=sid)
 
         # Repair legacy dataset_session_info if found
         if dsi_docs:
-            dsi_docs2 = self.database_search(Query("").isa("dataset_session_info"))
+            dsi_docs2 = self.database_search(ndi_query("").isa("dataset_session_info"))
             if dsi_docs2:
                 self.repairDatasetSessionInfo(self, dsi_docs2)
 
@@ -903,7 +903,7 @@ class DatasetDir(Dataset):
             return
 
         # Find already-tracked session IDs
-        q_tracked = Query("").isa("session_in_a_dataset") & (Query("base.session_id") == self.id())
+        q_tracked = ndi_query("").isa("session_in_a_dataset") & (ndi_query("base.session_id") == self.id())
         tracked_docs = self._session.database_search(q_tracked)
         tracked_ids: set[str] = set()
         for doc in tracked_docs:
@@ -913,7 +913,7 @@ class DatasetDir(Dataset):
                 tracked_ids.add(sid)
 
         # Find session documents in the database
-        q_session = Query("").isa("session")
+        q_session = ndi_query("").isa("session")
         session_docs = list(self._session._database.search(q_session))
 
         ds_session_id = self._session.id()
@@ -924,13 +924,13 @@ class DatasetDir(Dataset):
             if not sid or sid == ds_session_id or sid in tracked_ids:
                 continue
             ref = props.get("session", {}).get("reference", "")
-            tracking_doc = Document(
+            tracking_doc = ndi_document(
                 "session_in_a_dataset",
                 **{
                     "session_in_a_dataset.session_id": sid,
                     "session_in_a_dataset.session_reference": ref,
                     "session_in_a_dataset.is_linked": False,
-                    "session_in_a_dataset.session_creator": "DirSession",
+                    "session_in_a_dataset.session_creator": "ndi_session_dir",
                 },
             )
             tracking_doc = tracking_doc.set_session_id(ds_session_id)
@@ -941,7 +941,7 @@ class DatasetDir(Dataset):
                 logger.debug("Could not register session %s: skipping", sid)
 
     @staticmethod
-    def dataset_erase(ndi_dataset_dir_obj: DatasetDir, areyousure: str = "no") -> None:
+    def dataset_erase(ndi_dataset_dir_obj: ndi_dataset_dir, areyousure: str = "no") -> None:
         """
         Delete the entire dataset database folder.
 
@@ -951,7 +951,7 @@ class DatasetDir(Dataset):
         directory inside the dataset path will be permanently removed.
 
         Args:
-            ndi_dataset_dir_obj: The DatasetDir instance to erase.
+            ndi_dataset_dir_obj: The ndi_dataset_dir instance to erase.
             areyousure: Must be ``'yes'`` to proceed.
         """
         import shutil
@@ -967,7 +967,7 @@ class DatasetDir(Dataset):
             )
 
     @staticmethod
-    def _dataset_session_id_from_docs(documents: list[Document]) -> str:
+    def _dataset_session_id_from_docs(documents: list[ndi_document]) -> str:
         """Extract the dataset session ID from a list of documents.
 
         MATLAB equivalent: ``ndi.cloud.sync.internal.datasetSessionIdFromDocs``
@@ -1011,4 +1011,4 @@ class DatasetDir(Dataset):
     def __repr__(self) -> str:
         """String representation."""
         refs, _ids, _doc_ids, _ds_doc_id = self.session_list()
-        return f"Dataset('{self.reference}', sessions={len(refs)})"
+        return f"ndi_dataset('{self.reference}', sessions={len(refs)})"

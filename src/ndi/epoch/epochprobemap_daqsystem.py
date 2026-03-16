@@ -1,7 +1,7 @@
 """
-ndi.epoch.epochprobemap_daqsystem - EpochProbeMap with DAQ system device strings.
+ndi.epoch.epochprobemap_daqsystem - ndi_epoch_epochprobemap with DAQ system device strings.
 
-Extends EpochProbeMap with structured device string parsing via DAQSystemString,
+Extends ndi_epoch_epochprobemap with structured device string parsing via ndi_daq_daqsystemstring,
 plus serialization and file I/O.
 
 MATLAB equivalent: src/ndi/+ndi/+epoch/epochprobemap_daqsystem.m
@@ -15,23 +15,23 @@ from typing import Any
 
 import pydantic
 
-from ..daq.daqsystemstring import DAQSystemString
-from .epochprobemap import EpochProbeMap
+from ..daq.daqsystemstring import ndi_daq_daqsystemstring
+from .epochprobemap import ndi_epoch_epochprobemap
 
 
 @dataclass
-class EpochProbeMapDAQSystem(EpochProbeMap):
+class ndi_epoch_epochprobemap__daqsystem(ndi_epoch_epochprobemap):
     """
-    Epoch probe map with DAQ system device string support.
+    ndi_epoch_epoch probe map with DAQ system device string support.
 
-    Extends EpochProbeMap with a structured DAQSystemString for the
+    Extends ndi_epoch_epochprobemap with a structured ndi_daq_daqsystemstring for the
     devicestring field, plus serialization and file I/O support.
 
-    The devicestring is parsed into a DAQSystemString that provides
+    The devicestring is parsed into a ndi_daq_daqsystemstring that provides
     access to device name, channel types, and channel lists.
 
     Example:
-        >>> epm = EpochProbeMapDAQSystem(
+        >>> epm = ndi_epoch_epochprobemap__daqsystem(
         ...     name='electrode1',
         ...     reference=1,
         ...     type='n-trode',
@@ -45,13 +45,13 @@ class EpochProbeMapDAQSystem(EpochProbeMap):
     def __post_init__(self):
         """Validate fields and parse device string."""
         super().__post_init__()
-        self._daqsystemstring: DAQSystemString | None = None
+        self._daqsystemstring: ndi_daq_daqsystemstring | None = None
 
     @property
-    def daqsystemstring(self) -> DAQSystemString:
-        """Get parsed DAQSystemString from devicestring."""
+    def daqsystemstring(self) -> ndi_daq_daqsystemstring:
+        """Get parsed ndi_daq_daqsystemstring from devicestring."""
         if self._daqsystemstring is None:
-            self._daqsystemstring = DAQSystemString.parse(self.devicestring)
+            self._daqsystemstring = ndi_daq_daqsystemstring.parse(self.devicestring)
         return self._daqsystemstring
 
     def serialization_struct(self) -> dict[str, Any]:
@@ -99,7 +99,7 @@ class EpochProbeMapDAQSystem(EpochProbeMap):
             f.write(self.serialize() + "\n")
 
     @classmethod
-    def decode(cls, s: str) -> EpochProbeMapDAQSystem:
+    def decode(cls, s: str) -> ndi_epoch_epochprobemap__daqsystem:
         """
         Decode from a serialized string.
 
@@ -107,7 +107,7 @@ class EpochProbeMapDAQSystem(EpochProbeMap):
             s: Tab-delimited string
 
         Returns:
-            EpochProbeMapDAQSystem object
+            ndi_epoch_epochprobemap__daqsystem object
 
         Raises:
             ValueError: If the string cannot be parsed
@@ -125,17 +125,17 @@ class EpochProbeMapDAQSystem(EpochProbeMap):
         )
 
     @classmethod
-    def loadfromfile(cls, filename: str) -> list[EpochProbeMapDAQSystem]:
+    def loadfromfile(cls, filename: str) -> list[ndi_epoch_epochprobemap__daqsystem]:
         """
         Load epoch probe maps from a file.
 
-        Each line is one serialized EpochProbeMapDAQSystem.
+        Each line is one serialized ndi_epoch_epochprobemap__daqsystem.
 
         Args:
             filename: Path to read from
 
         Returns:
-            List of EpochProbeMapDAQSystem objects
+            List of ndi_epoch_epochprobemap__daqsystem objects
         """
         results = []
         with open(filename) as f:
@@ -147,7 +147,7 @@ class EpochProbeMapDAQSystem(EpochProbeMap):
 
     def __repr__(self) -> str:
         return (
-            f"EpochProbeMapDAQSystem(name='{self.name}', "
+            f"ndi_epoch_epochprobemap__daqsystem(name='{self.name}', "
             f"reference={self.reference}, type='{self.type}', "
             f"devicestring='{self.devicestring}')"
         )

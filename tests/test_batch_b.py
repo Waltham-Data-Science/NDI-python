@@ -1,33 +1,33 @@
 """
-Tests for Batch B: DAQ readers, Document methods, MockSession.
+Tests for Batch B: DAQ readers, ndi_document methods, ndi_session_mock.
 
-Tests format-specific readers, Document.write() and
-remove_dependency_value_n(), and MockSession.
+Tests format-specific readers, ndi_document.write() and
+remove_dependency_value_n(), and ndi_session_mock.
 """
 
 import json
 import os
 
 # ============================================================================
-# Document.write() Tests
+# ndi_document.write() Tests
 # ============================================================================
 
 
 class TestDocumentWrite:
-    """Tests for Document.write() method."""
+    """Tests for ndi_document.write() method."""
 
     def test_write_creates_file(self, tmp_path):
-        from ndi.document import Document
+        from ndi.document import ndi_document
 
-        doc = Document("base", **{"base.name": "test_write"})
+        doc = ndi_document("base", **{"base.name": "test_write"})
         filepath = str(tmp_path / "doc.json")
         doc.write(filepath)
         assert os.path.exists(filepath)
 
     def test_write_valid_json(self, tmp_path):
-        from ndi.document import Document
+        from ndi.document import ndi_document
 
-        doc = Document("base", **{"base.name": "test_write"})
+        doc = ndi_document("base", **{"base.name": "test_write"})
         filepath = str(tmp_path / "doc.json")
         doc.write(filepath)
         with open(filepath) as f:
@@ -35,30 +35,30 @@ class TestDocumentWrite:
         assert data["base"]["name"] == "test_write"
 
     def test_write_creates_parent_dirs(self, tmp_path):
-        from ndi.document import Document
+        from ndi.document import ndi_document
 
-        doc = Document("base")
+        doc = ndi_document("base")
         filepath = str(tmp_path / "sub" / "dir" / "doc.json")
         doc.write(filepath)
         assert os.path.exists(filepath)
 
     def test_write_roundtrip(self, tmp_path):
-        from ndi.document import Document
+        from ndi.document import ndi_document
 
-        doc = Document("base", **{"base.name": "roundtrip"})
+        doc = ndi_document("base", **{"base.name": "roundtrip"})
         filepath = str(tmp_path / "doc.json")
         doc.write(filepath)
 
         with open(filepath) as f:
             data = json.load(f)
 
-        doc2 = Document(data)
+        doc2 = ndi_document(data)
         assert doc2._document_properties["base"]["name"] == "roundtrip"
 
     def test_write_with_indent(self, tmp_path):
-        from ndi.document import Document
+        from ndi.document import ndi_document
 
-        doc = Document("base")
+        doc = ndi_document("base")
         filepath = str(tmp_path / "doc.json")
         doc.write(filepath, indent=4)
         with open(filepath) as f:
@@ -68,17 +68,17 @@ class TestDocumentWrite:
 
 
 # ============================================================================
-# Document.remove_dependency_value_n() Tests
+# ndi_document.remove_dependency_value_n() Tests
 # ============================================================================
 
 
 class TestDocumentRemoveDependencyN:
-    """Tests for Document.remove_dependency_value_n()."""
+    """Tests for ndi_document.remove_dependency_value_n()."""
 
     def test_remove_specific_index(self):
-        from ndi.document import Document
+        from ndi.document import ndi_document
 
-        doc = Document("base")
+        doc = ndi_document("base")
         doc.set_dependency_value("dep_1", "val1", error_if_not_found=False)
         doc.set_dependency_value("dep_2", "val2", error_if_not_found=False)
         doc.set_dependency_value("dep_3", "val3", error_if_not_found=False)
@@ -92,9 +92,9 @@ class TestDocumentRemoveDependencyN:
         assert "dep_3" in dep_names
 
     def test_remove_all_matching(self):
-        from ndi.document import Document
+        from ndi.document import ndi_document
 
-        doc = Document("base")
+        doc = ndi_document("base")
         doc.set_dependency_value("dep_1", "val1", error_if_not_found=False)
         doc.set_dependency_value("dep_2", "val2", error_if_not_found=False)
         doc.set_dependency_value("other", "keep", error_if_not_found=False)
@@ -107,16 +107,16 @@ class TestDocumentRemoveDependencyN:
         assert doc.dependency_value("other") == "keep"
 
     def test_remove_no_dependencies(self):
-        from ndi.document import Document
+        from ndi.document import ndi_document
 
-        doc = Document("base")
+        doc = ndi_document("base")
         # Should not raise
         doc.remove_dependency_value_n("nonexistent")
 
     def test_remove_returns_self(self):
-        from ndi.document import Document
+        from ndi.document import ndi_document
 
-        doc = Document("base")
+        doc = ndi_document("base")
         result = doc.remove_dependency_value_n("dep")
         assert result is doc
 
@@ -127,113 +127,113 @@ class TestDocumentRemoveDependencyN:
 
 
 class TestIntanReader:
-    """Tests for IntanReader."""
+    """Tests for ndi_daq_reader_mfdaq_intan."""
 
     def test_import(self):
-        from ndi.daq.reader.mfdaq.intan import IntanReader
+        from ndi.daq.reader.mfdaq.intan import ndi_daq_reader_mfdaq_intan
 
-        assert IntanReader is not None
+        assert ndi_daq_reader_mfdaq_intan is not None
 
     def test_construction(self):
-        from ndi.daq.reader.mfdaq.intan import IntanReader
+        from ndi.daq.reader.mfdaq.intan import ndi_daq_reader_mfdaq_intan
 
-        reader = IntanReader()
+        reader = ndi_daq_reader_mfdaq_intan()
         assert reader.NDI_DAQREADER_CLASS == "ndi.daq.reader.mfdaq.intan"
 
     def test_inherits_mfdaq_reader(self):
-        from ndi.daq.mfdaq import MFDAQReader
-        from ndi.daq.reader.mfdaq.intan import IntanReader
+        from ndi.daq.mfdaq import ndi_daq_reader_mfdaq
+        from ndi.daq.reader.mfdaq.intan import ndi_daq_reader_mfdaq_intan
 
-        reader = IntanReader()
-        assert isinstance(reader, MFDAQReader)
+        reader = ndi_daq_reader_mfdaq_intan()
+        assert isinstance(reader, ndi_daq_reader_mfdaq)
 
     def test_file_extensions(self):
-        from ndi.daq.reader.mfdaq.intan import IntanReader
+        from ndi.daq.reader.mfdaq.intan import ndi_daq_reader_mfdaq_intan
 
-        assert ".rhd" in IntanReader.FILE_EXTENSIONS
-        assert ".rhs" in IntanReader.FILE_EXTENSIONS
+        assert ".rhd" in ndi_daq_reader_mfdaq_intan.FILE_EXTENSIONS
+        assert ".rhs" in ndi_daq_reader_mfdaq_intan.FILE_EXTENSIONS
 
     def test_repr(self):
-        from ndi.daq.reader.mfdaq.intan import IntanReader
+        from ndi.daq.reader.mfdaq.intan import ndi_daq_reader_mfdaq_intan
 
-        reader = IntanReader()
-        assert "IntanReader" in repr(reader)
+        reader = ndi_daq_reader_mfdaq_intan()
+        assert "ndi_daq_reader_mfdaq_intan" in repr(reader)
 
 
 class TestBlackrockReader:
-    """Tests for BlackrockReader."""
+    """Tests for ndi_daq_reader_mfdaq_blackrock."""
 
     def test_import(self):
-        from ndi.daq.reader.mfdaq.blackrock import BlackrockReader
+        from ndi.daq.reader.mfdaq.blackrock import ndi_daq_reader_mfdaq_blackrock
 
-        assert BlackrockReader is not None
+        assert ndi_daq_reader_mfdaq_blackrock is not None
 
     def test_construction(self):
-        from ndi.daq.reader.mfdaq.blackrock import BlackrockReader
+        from ndi.daq.reader.mfdaq.blackrock import ndi_daq_reader_mfdaq_blackrock
 
-        reader = BlackrockReader()
+        reader = ndi_daq_reader_mfdaq_blackrock()
         assert reader.NDI_DAQREADER_CLASS == "ndi.daq.reader.mfdaq.blackrock"
 
     def test_file_extensions(self):
-        from ndi.daq.reader.mfdaq.blackrock import BlackrockReader
+        from ndi.daq.reader.mfdaq.blackrock import ndi_daq_reader_mfdaq_blackrock
 
-        assert ".ns5" in BlackrockReader.FILE_EXTENSIONS
-        assert ".nev" in BlackrockReader.FILE_EXTENSIONS
+        assert ".ns5" in ndi_daq_reader_mfdaq_blackrock.FILE_EXTENSIONS
+        assert ".nev" in ndi_daq_reader_mfdaq_blackrock.FILE_EXTENSIONS
 
     def test_repr(self):
-        from ndi.daq.reader.mfdaq.blackrock import BlackrockReader
+        from ndi.daq.reader.mfdaq.blackrock import ndi_daq_reader_mfdaq_blackrock
 
-        assert "BlackrockReader" in repr(BlackrockReader())
+        assert "ndi_daq_reader_mfdaq_blackrock" in repr(ndi_daq_reader_mfdaq_blackrock())
 
 
 class TestCEDSpike2Reader:
-    """Tests for CEDSpike2Reader."""
+    """Tests for ndi_daq_reader_mfdaq_cedspike2."""
 
     def test_import(self):
-        from ndi.daq.reader.mfdaq.cedspike2 import CEDSpike2Reader
+        from ndi.daq.reader.mfdaq.cedspike2 import ndi_daq_reader_mfdaq_cedspike2
 
-        assert CEDSpike2Reader is not None
+        assert ndi_daq_reader_mfdaq_cedspike2 is not None
 
     def test_construction(self):
-        from ndi.daq.reader.mfdaq.cedspike2 import CEDSpike2Reader
+        from ndi.daq.reader.mfdaq.cedspike2 import ndi_daq_reader_mfdaq_cedspike2
 
-        reader = CEDSpike2Reader()
+        reader = ndi_daq_reader_mfdaq_cedspike2()
         assert reader.NDI_DAQREADER_CLASS == "ndi.daq.reader.mfdaq.cedspike2"
 
     def test_file_extensions(self):
-        from ndi.daq.reader.mfdaq.cedspike2 import CEDSpike2Reader
+        from ndi.daq.reader.mfdaq.cedspike2 import ndi_daq_reader_mfdaq_cedspike2
 
-        assert ".smr" in CEDSpike2Reader.FILE_EXTENSIONS
+        assert ".smr" in ndi_daq_reader_mfdaq_cedspike2.FILE_EXTENSIONS
 
     def test_repr(self):
-        from ndi.daq.reader.mfdaq.cedspike2 import CEDSpike2Reader
+        from ndi.daq.reader.mfdaq.cedspike2 import ndi_daq_reader_mfdaq_cedspike2
 
-        assert "CEDSpike2Reader" in repr(CEDSpike2Reader())
+        assert "ndi_daq_reader_mfdaq_cedspike2" in repr(ndi_daq_reader_mfdaq_cedspike2())
 
 
 class TestSpikeGadgetsReader:
-    """Tests for SpikeGadgetsReader."""
+    """Tests for ndi_daq_reader_mfdaq_spikegadgets."""
 
     def test_import(self):
-        from ndi.daq.reader.mfdaq.spikegadgets import SpikeGadgetsReader
+        from ndi.daq.reader.mfdaq.spikegadgets import ndi_daq_reader_mfdaq_spikegadgets
 
-        assert SpikeGadgetsReader is not None
+        assert ndi_daq_reader_mfdaq_spikegadgets is not None
 
     def test_construction(self):
-        from ndi.daq.reader.mfdaq.spikegadgets import SpikeGadgetsReader
+        from ndi.daq.reader.mfdaq.spikegadgets import ndi_daq_reader_mfdaq_spikegadgets
 
-        reader = SpikeGadgetsReader()
+        reader = ndi_daq_reader_mfdaq_spikegadgets()
         assert reader.NDI_DAQREADER_CLASS == "ndi.daq.reader.mfdaq.spikegadgets"
 
     def test_file_extensions(self):
-        from ndi.daq.reader.mfdaq.spikegadgets import SpikeGadgetsReader
+        from ndi.daq.reader.mfdaq.spikegadgets import ndi_daq_reader_mfdaq_spikegadgets
 
-        assert ".rec" in SpikeGadgetsReader.FILE_EXTENSIONS
+        assert ".rec" in ndi_daq_reader_mfdaq_spikegadgets.FILE_EXTENSIONS
 
     def test_repr(self):
-        from ndi.daq.reader.mfdaq.spikegadgets import SpikeGadgetsReader
+        from ndi.daq.reader.mfdaq.spikegadgets import ndi_daq_reader_mfdaq_spikegadgets
 
-        assert "SpikeGadgetsReader" in repr(SpikeGadgetsReader())
+        assert "ndi_daq_reader_mfdaq_spikegadgets" in repr(ndi_daq_reader_mfdaq_spikegadgets())
 
 
 class TestReaderPackageImports:
@@ -241,108 +241,108 @@ class TestReaderPackageImports:
 
     def test_from_reader_mfdaq(self):
         from ndi.daq.reader.mfdaq import (
-            BlackrockReader,
-            CEDSpike2Reader,
-            IntanReader,
-            SpikeGadgetsReader,
+            ndi_daq_reader_mfdaq_blackrock,
+            ndi_daq_reader_mfdaq_cedspike2,
+            ndi_daq_reader_mfdaq_intan,
+            ndi_daq_reader_mfdaq_spikegadgets,
         )
 
-        assert all([IntanReader, BlackrockReader, CEDSpike2Reader, SpikeGadgetsReader])
+        assert all([ndi_daq_reader_mfdaq_intan, ndi_daq_reader_mfdaq_blackrock, ndi_daq_reader_mfdaq_cedspike2, ndi_daq_reader_mfdaq_spikegadgets])
 
     def test_from_reader(self):
-        from ndi.daq.reader import BlackrockReader, CEDSpike2Reader, IntanReader, SpikeGadgetsReader
+        from ndi.daq.reader import ndi_daq_reader_mfdaq_blackrock, ndi_daq_reader_mfdaq_cedspike2, ndi_daq_reader_mfdaq_intan, ndi_daq_reader_mfdaq_spikegadgets
 
-        assert all([IntanReader, BlackrockReader, CEDSpike2Reader, SpikeGadgetsReader])
+        assert all([ndi_daq_reader_mfdaq_intan, ndi_daq_reader_mfdaq_blackrock, ndi_daq_reader_mfdaq_cedspike2, ndi_daq_reader_mfdaq_spikegadgets])
 
     def test_all_inherit_from_mfdaq_reader(self):
-        from ndi.daq.mfdaq import MFDAQReader
+        from ndi.daq.mfdaq import ndi_daq_reader_mfdaq
         from ndi.daq.reader.mfdaq import (
-            BlackrockReader,
-            CEDSpike2Reader,
-            IntanReader,
-            SpikeGadgetsReader,
+            ndi_daq_reader_mfdaq_blackrock,
+            ndi_daq_reader_mfdaq_cedspike2,
+            ndi_daq_reader_mfdaq_intan,
+            ndi_daq_reader_mfdaq_spikegadgets,
         )
 
-        for cls in [IntanReader, BlackrockReader, CEDSpike2Reader, SpikeGadgetsReader]:
+        for cls in [ndi_daq_reader_mfdaq_intan, ndi_daq_reader_mfdaq_blackrock, ndi_daq_reader_mfdaq_cedspike2, ndi_daq_reader_mfdaq_spikegadgets]:
             reader = cls()
-            assert isinstance(reader, MFDAQReader)
+            assert isinstance(reader, ndi_daq_reader_mfdaq)
 
     def test_each_has_unique_daqreader_class(self):
         from ndi.daq.reader.mfdaq import (
-            BlackrockReader,
-            CEDSpike2Reader,
-            IntanReader,
-            SpikeGadgetsReader,
+            ndi_daq_reader_mfdaq_blackrock,
+            ndi_daq_reader_mfdaq_cedspike2,
+            ndi_daq_reader_mfdaq_intan,
+            ndi_daq_reader_mfdaq_spikegadgets,
         )
 
         classes = set()
-        for cls in [IntanReader, BlackrockReader, CEDSpike2Reader, SpikeGadgetsReader]:
+        for cls in [ndi_daq_reader_mfdaq_intan, ndi_daq_reader_mfdaq_blackrock, ndi_daq_reader_mfdaq_cedspike2, ndi_daq_reader_mfdaq_spikegadgets]:
             reader = cls()
             classes.add(reader._ndi_daqreader_class)
         assert len(classes) == 4
 
 
 # ============================================================================
-# MockSession Tests
+# ndi_session_mock Tests
 # ============================================================================
 
 
 class TestMockSession:
-    """Tests for MockSession."""
+    """Tests for ndi_session_mock."""
 
     def test_import(self):
-        from ndi.session.mock import MockSession
+        from ndi.session.mock import ndi_session_mock
 
-        assert MockSession is not None
+        assert ndi_session_mock is not None
 
     def test_construction(self):
-        from ndi.session.mock import MockSession
+        from ndi.session.mock import ndi_session_mock
 
-        session = MockSession("test")
+        session = ndi_session_mock("test")
         assert session is not None
         assert os.path.isdir(session._tmpdir)
         session.close()
 
     def test_inherits_dirsession(self):
-        from ndi.session import DirSession
-        from ndi.session.mock import MockSession
+        from ndi.session import ndi_session_dir
+        from ndi.session.mock import ndi_session_mock
 
-        session = MockSession("test")
-        assert isinstance(session, DirSession)
+        session = ndi_session_mock("test")
+        assert isinstance(session, ndi_session_dir)
         session.close()
 
     def test_context_manager(self):
-        from ndi.session.mock import MockSession
+        from ndi.session.mock import ndi_session_mock
 
-        with MockSession("test") as session:
+        with ndi_session_mock("test") as session:
             tmpdir = session._tmpdir
             assert os.path.isdir(tmpdir)
         assert not os.path.exists(tmpdir)
 
     def test_database_operations(self):
-        from ndi.document import Document
-        from ndi.query import Query
-        from ndi.session.mock import MockSession
+        from ndi.document import ndi_document
+        from ndi.query import ndi_query
+        from ndi.session.mock import ndi_session_mock
 
-        with MockSession("test") as session:
-            doc = Document("base", **{"base.name": "mock_test"})
+        with ndi_session_mock("test") as session:
+            doc = ndi_document("base", **{"base.name": "mock_test"})
             session.database_add(doc)
-            results = session.database_search(Query("").isa("base"))
+            results = session.database_search(ndi_query("").isa("base"))
             assert len(results) >= 1
 
     def test_cleanup_on_close(self):
-        from ndi.session.mock import MockSession
+        from ndi.session.mock import ndi_session_mock
 
-        session = MockSession("test")
+        session = ndi_session_mock("test")
         tmpdir = session._tmpdir
         assert os.path.isdir(tmpdir)
         session.close()
         assert not os.path.exists(tmpdir)
 
     def test_no_cleanup_option(self):
-        from ndi.session.mock import MockSession
+        from ndi.session.mock import ndi_session_mock
 
-        session = MockSession("test", cleanup=False)
+        session = ndi_session_mock("test", cleanup=False)
         tmpdir = session._tmpdir
         session.close()
         assert os.path.isdir(tmpdir)  # Should still exist
@@ -352,20 +352,20 @@ class TestMockSession:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
     def test_id_is_method(self):
-        from ndi.session.mock import MockSession
+        from ndi.session.mock import ndi_session_mock
 
-        with MockSession("test") as session:
+        with ndi_session_mock("test") as session:
             sid = session.id()
             assert isinstance(sid, str)
             assert len(sid) > 0
 
     def test_repr(self):
-        from ndi.session.mock import MockSession
+        from ndi.session.mock import ndi_session_mock
 
-        with MockSession("test") as session:
-            assert "MockSession" in repr(session)
+        with ndi_session_mock("test") as session:
+            assert "ndi_session_mock" in repr(session)
 
     def test_from_session_module(self):
-        from ndi.session import MockSession
+        from ndi.session import ndi_session_mock
 
-        assert MockSession is not None
+        assert ndi_session_mock is not None

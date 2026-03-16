@@ -1,7 +1,7 @@
 """
 ndi.time.syncgraph - Synchronization graph for time conversion.
 
-This module provides the SyncGraph class that manages time synchronization
+This module provides the ndi_time_syncgraph class that manages time synchronization
 across epochs and devices using a graph-based approach.
 """
 
@@ -19,18 +19,18 @@ try:
 except ImportError:
     HAS_NETWORKX = False
 
-from ..ido import Ido
-from .clocktype import ClockType
-from .syncrule_base import SyncRule
-from .timemapping import TimeMapping
+from ..ido import ndi_ido
+from .clocktype import ndi_time_clocktype
+from .syncrule_base import ndi_time_syncrule
+from .timemapping import ndi_time_timemapping
 
 if TYPE_CHECKING:
-    from ..document import Document
-    from .timereference import TimeReference
+    from ..document import ndi_document
+    from .timereference import ndi_time_timereference
 
 
 @dataclass
-class EpochNode:
+class ndi_time_epochnode:
     """
     Represents a node in the epoch graph.
 
@@ -40,7 +40,7 @@ class EpochNode:
     epoch_id: str
     epoch_session_id: str
     epochprobemap: Any  # The probe map for this epoch
-    epoch_clock: ClockType
+    epoch_clock: ndi_time_clocktype
     t0_t1: tuple[float, float]  # Start and end times
     underlying_epochs: dict[str, Any] | None = None
     objectname: str = ""
@@ -54,7 +54,7 @@ class EpochNode:
             "epochprobemap": self.epochprobemap,
             "epoch_clock": (
                 self.epoch_clock.value
-                if isinstance(self.epoch_clock, ClockType)
+                if isinstance(self.epoch_clock, ndi_time_clocktype)
                 else str(self.epoch_clock)
             ),
             "t0_t1": list(self.t0_t1) if self.t0_t1 else None,
@@ -64,11 +64,11 @@ class EpochNode:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> EpochNode:
+    def from_dict(cls, data: dict[str, Any]) -> ndi_time_epochnode:
         """Create from dictionary."""
         epoch_clock = data.get("epoch_clock")
         if isinstance(epoch_clock, str):
-            epoch_clock = ClockType.from_string(epoch_clock)
+            epoch_clock = ndi_time_clocktype.from_string(epoch_clock)
 
         t0_t1 = data.get("t0_t1")
         if isinstance(t0_t1, list):
@@ -87,38 +87,38 @@ class EpochNode:
 
 
 @dataclass
-class GraphInfo:
+class ndi_time_graphinfo:
     """
     Container for sync graph information.
 
     Attributes:
-        nodes: List of EpochNode objects
+        nodes: List of ndi_time_epochnode objects
         G: Adjacency matrix (cost matrix) - G[i,j] is cost from node i to j
-        mapping: Matrix of TimeMapping objects - mapping[i,j] maps time from i to j
+        mapping: Matrix of ndi_time_timemapping objects - mapping[i,j] maps time from i to j
         diG: NetworkX DiGraph for path finding
         syncrule_ids: List of sync rule document IDs
         syncrule_G: Matrix indicating which sync rule created each edge
     """
 
-    nodes: list[EpochNode] = field(default_factory=list)
+    nodes: list[ndi_time_epochnode] = field(default_factory=list)
     G: np.ndarray | None = None  # Cost matrix
-    mapping: list[list[TimeMapping | None]] | None = None
+    mapping: list[list[ndi_time_timemapping | None]] | None = None
     diG: Any = None  # NetworkX DiGraph
     syncrule_ids: list[str] = field(default_factory=list)
     syncrule_G: np.ndarray | None = None  # Sync rule index matrix
 
 
-class SyncGraph(Ido):
+class ndi_time_syncgraph(ndi_ido):
     """
     Synchronization graph for managing time conversion across epochs.
 
-    SyncGraph builds a graph where nodes are epochs and edges represent
+    ndi_time_syncgraph builds a graph where nodes are epochs and edges represent
     time mappings between them. It uses NetworkX to find shortest paths
     for time conversion.
 
     Example:
-        >>> sg = SyncGraph(session)
-        >>> sg.add_rule(FileMatch())
+        >>> sg = ndi_time_syncgraph(session)
+        >>> sg.add_rule(ndi_time_syncrule_filematch())
         >>> t_out, ref_out, msg = sg.time_convert(
         ...     timeref_in, t_in, referent_out, clocktype_out
         ... )
@@ -127,11 +127,11 @@ class SyncGraph(Ido):
     def __init__(
         self,
         session: Any = None,
-        document: Document | None = None,
+        document: ndi_document | None = None,
         identifier: str | None = None,
     ):
         """
-        Create a new SyncGraph.
+        Create a new ndi_time_syncgraph.
 
         Args:
             session: The NDI session object
@@ -140,20 +140,20 @@ class SyncGraph(Ido):
         """
         if not HAS_NETWORKX:
             raise ImportError(
-                "networkx is required for SyncGraph. Install with: pip install networkx"
+                "networkx is required for ndi_time_syncgraph. Install with: pip install networkx"
             )
 
         super().__init__(identifier)
 
         self._session = session
-        self._rules: list[SyncRule] = []
-        self._cached_ginfo: GraphInfo | None = None
+        self._rules: list[ndi_time_syncrule] = []
+        self._cached_ginfo: ndi_time_graphinfo | None = None
 
         # Load from document if provided
         if document is not None and session is not None:
             self._load_from_document(session, document)
 
-    def _load_from_document(self, session: Any, document: Document) -> None:
+    def _load_from_document(self, session: Any, document: ndi_document) -> None:
         """Load syncgraph state from a document."""
         self._identifier = document.id
 
@@ -162,12 +162,12 @@ class SyncGraph(Ido):
         if syncrule_ids:
             for rule_id in syncrule_ids:
                 # Find and load the sync rule document
-                from ..query import Query
+                from ..query import ndi_query
 
-                q = Query("base.id") == rule_id
+                q = ndi_query("base.id") == rule_id
                 docs = session.database_search(q)
                 if docs:
-                    rule = SyncRule.from_document(session, docs[0])
+                    rule = ndi_time_syncrule.from_document(session, docs[0])
                     self._rules.append(rule)
 
     @property
@@ -176,22 +176,22 @@ class SyncGraph(Ido):
         return self._session
 
     @property
-    def rules(self) -> list[SyncRule]:
+    def rules(self) -> list[ndi_time_syncrule]:
         """Get the sync rules."""
         return self._rules.copy()
 
-    def add_rule(self, rule: SyncRule) -> SyncGraph:
+    def add_rule(self, rule: ndi_time_syncrule) -> ndi_time_syncgraph:
         """
         Add a sync rule to the graph.
 
         Args:
-            rule: SyncRule to add
+            rule: ndi_time_syncrule to add
 
         Returns:
             self for chaining
         """
-        if not isinstance(rule, SyncRule):
-            raise TypeError("rule must be a SyncRule instance")
+        if not isinstance(rule, ndi_time_syncrule):
+            raise TypeError("rule must be a ndi_time_syncrule instance")
 
         # Check for duplicates
         for existing in self._rules:
@@ -202,7 +202,7 @@ class SyncGraph(Ido):
         self._remove_cached_graphinfo()
         return self
 
-    def remove_rule(self, index: int) -> SyncGraph:
+    def remove_rule(self, index: int) -> ndi_time_syncgraph:
         """
         Remove a sync rule by index.
 
@@ -217,25 +217,25 @@ class SyncGraph(Ido):
             self._remove_cached_graphinfo()
         return self
 
-    def graphinfo(self) -> GraphInfo:
+    def graphinfo(self) -> ndi_time_graphinfo:
         """
         Get the graph information, building if necessary.
 
         Returns:
-            GraphInfo object with nodes, cost matrix, mappings, etc.
+            ndi_time_graphinfo object with nodes, cost matrix, mappings, etc.
         """
         if self._cached_ginfo is None:
             self._cached_ginfo = self._build_graphinfo()
         return self._cached_ginfo
 
-    def _build_graphinfo(self) -> GraphInfo:
+    def _build_graphinfo(self) -> ndi_time_graphinfo:
         """
         Build the sync graph from scratch.
 
         Returns:
-            GraphInfo with all epoch nodes and mappings
+            ndi_time_graphinfo with all epoch nodes and mappings
         """
-        ginfo = GraphInfo()
+        ginfo = ndi_time_graphinfo()
         ginfo.syncrule_ids = [rule.id for rule in self._rules]
 
         # Load all DAQ systems from session
@@ -255,7 +255,7 @@ class SyncGraph(Ido):
 
         return ginfo
 
-    def _add_epoch(self, daqsystem: Any, ginfo: GraphInfo) -> GraphInfo:
+    def _add_epoch(self, daqsystem: Any, ginfo: ndi_time_graphinfo) -> ndi_time_graphinfo:
         """
         Add a DAQ system's epochs to the graph.
 
@@ -264,12 +264,12 @@ class SyncGraph(Ido):
             ginfo: Current graph info
 
         Returns:
-            Updated GraphInfo
+            Updated ndi_time_graphinfo
         """
         # Get epoch nodes from the DAQ system
         if hasattr(daqsystem, "epochnodes"):
             newnodes_data = daqsystem.epochnodes()
-            newnodes = [EpochNode.from_dict(n) if isinstance(n, dict) else n for n in newnodes_data]
+            newnodes = [ndi_time_epochnode.from_dict(n) if isinstance(n, dict) else n for n in newnodes_data]
         else:
             newnodes = []
 
@@ -351,7 +351,7 @@ class SyncGraph(Ido):
 
         return ginfo
 
-    def _apply_rules_to_edge(self, ginfo: GraphInfo, i: int, j: int) -> None:
+    def _apply_rules_to_edge(self, ginfo: ndi_time_graphinfo, i: int, j: int) -> None:
         """Apply sync rules to find the best edge between nodes i and j."""
         best_cost = np.inf
         best_mapping = None
@@ -390,11 +390,11 @@ class SyncGraph(Ido):
 
     def time_convert(
         self,
-        timeref_in: TimeReference,
+        timeref_in: ndi_time_timereference,
         t_in: float,
         referent_out: Any,
-        clocktype_out: ClockType,
-    ) -> tuple[float | None, TimeReference | None, str]:
+        clocktype_out: ndi_time_clocktype,
+    ) -> tuple[float | None, ndi_time_timereference | None, str]:
         """
         Convert time from one reference to another.
 
@@ -407,10 +407,10 @@ class SyncGraph(Ido):
         Returns:
             Tuple of (t_out, timeref_out, message) where:
             - t_out is the converted time (or None if failed)
-            - timeref_out is the output TimeReference (or None if failed)
+            - timeref_out is the output ndi_time_timereference (or None if failed)
             - message describes any error
         """
-        from .timereference import TimeReference
+        from .timereference import ndi_time_timereference
 
         # Get graph info
         ginfo = self.graphinfo()
@@ -467,7 +467,7 @@ class SyncGraph(Ido):
 
         # Create output time reference
         dest_node = ginfo.nodes[best_path[-1]]
-        timeref_out = TimeReference(
+        timeref_out = ndi_time_timereference(
             referent=referent_out,
             clocktype=dest_node.epoch_clock,
             epoch=dest_node.epoch_id,
@@ -478,9 +478,9 @@ class SyncGraph(Ido):
 
     def _find_epoch_node(
         self,
-        nodes: list[EpochNode],
+        nodes: list[ndi_time_epochnode],
         referent: Any,
-        clocktype: ClockType,
+        clocktype: ndi_time_clocktype,
         epoch_id: str | None,
     ) -> int | None:
         """Find the index of a matching epoch node."""
@@ -509,9 +509,9 @@ class SyncGraph(Ido):
 
     def _find_destination_nodes(
         self,
-        nodes: list[EpochNode],
+        nodes: list[ndi_time_epochnode],
         referent: Any,
-        clocktype: ClockType,
+        clocktype: ndi_time_clocktype,
     ) -> list[int]:
         """Find indices of all nodes matching the destination criteria."""
         # Get referent name
@@ -538,7 +538,7 @@ class SyncGraph(Ido):
 
     def __eq__(self, other: object) -> bool:
         """Check equality of two sync graphs."""
-        if not isinstance(other, SyncGraph):
+        if not isinstance(other, ndi_time_syncgraph):
             return NotImplemented
 
         if self._session != other._session:
@@ -553,19 +553,19 @@ class SyncGraph(Ido):
 
         return True
 
-    def new_document(self) -> list[Document]:
+    def new_document(self) -> list[ndi_document]:
         """
         Create documents for this sync graph and its rules.
 
         Returns:
-            List of Document objects
+            List of ndi_document objects
         """
-        from ..document import Document
+        from ..document import ndi_document
 
         docs = []
 
         # Create syncgraph document
-        sg_doc = Document(
+        sg_doc = ndi_document(
             document_type="daq/syncgraph",
             **{
                 "syncgraph.ndi_syncgraph_class": type(self).__name__,
@@ -585,8 +585,8 @@ class SyncGraph(Ido):
 
     def search_query(self) -> Any:
         """Create a search query for this sync graph."""
-        from ..query import Query
+        from ..query import ndi_query
 
-        return (Query("base.id") == self.id) & (
-            Query("base.session_id") == (self._session.id() if self._session else "")
+        return (ndi_query("base.id") == self.id) & (
+            ndi_query("base.session_id") == (self._session.id() if self._session else "")
         )

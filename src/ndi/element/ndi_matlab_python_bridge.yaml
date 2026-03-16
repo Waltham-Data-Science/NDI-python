@@ -148,14 +148,14 @@ functions:
 classes:
 
   # =========================================================================
-  # ndi.element  (base class, extends Ido + EpochSet + DocumentService)
+  # ndi.element  (base class, extends ndi_ido + ndi_epoch_epochset + ndi_documentservice)
   # =========================================================================
   - name: element
     type: class
     matlab_path: "+ndi/element.m"
     matlab_last_sync_hash: "c0de73f0"
     python_path: "ndi/element/__init__.py"
-    python_class: "Element"
+    python_class: "ndi_element"
     inherits: "ndi.ido, ndi.epoch.epochset, ndi.documentservice"
 
     properties:
@@ -179,7 +179,7 @@ classes:
 
       - name: underlying_element
         type_matlab: "ndi.element"
-        type_python: "Element | None"
+        type_python: "ndi_element | None"
         access: "GetAccess=public, SetAccess=protected"
         decision_log: "Implemented as @property in Python."
 
@@ -226,7 +226,7 @@ classes:
             default: "''"
           - name: underlying_element
             type_matlab: "ndi.element"
-            type_python: "Element | None"
+            type_python: "ndi_element | None"
             default: "None"
           - name: direct
             type_matlab: "logical"
@@ -250,13 +250,13 @@ classes:
             default: "None"
         output_arguments:
           - name: element_obj
-            type_python: "Element"
+            type_python: "ndi_element"
         decision_log: >
           Exact match. Can be created from scratch or loaded from
           a document. If underlying_element is provided and
           subject_id is empty, inherits subject_id from underlying.
 
-      # --- EpochSet Implementation ---
+      # --- ndi_epoch_epochset Implementation ---
       - name: buildepochtable
         input_arguments: []
         output_arguments:
@@ -283,7 +283,7 @@ classes:
           Exact match. Returns True if no underlying_element
           (stop traversal), False otherwise (continue).
 
-      # --- Element-specific methods ---
+      # --- ndi_element-specific methods ---
       - name: elementstring
         input_arguments: []
         output_arguments:
@@ -298,13 +298,13 @@ classes:
             type_python: "str"
           - name: epoch_clock
             type_matlab: "ndi.time.clocktype array"
-            type_python: "list[ClockType]"
+            type_python: "list[ndi_time_clocktype]"
           - name: t0_t1
             type_matlab: "cell array of [t0 t1]"
             type_python: "list[tuple[float, float]]"
         output_arguments:
           - name: element_obj
-            type_python: "Element"
+            type_python: "ndi_element"
           - name: epoch_doc
             type_python: "Any"
         decision_log: >
@@ -322,7 +322,7 @@ classes:
           Exact match. Returns 2-tuple (epoch_table, epoch_documents)
           from the database.
 
-      # --- DocumentService Implementation ---
+      # --- ndi_documentservice Implementation ---
       - name: newdocument
         input_arguments: []
         output_arguments:
@@ -337,9 +337,9 @@ classes:
         output_arguments:
           - name: q
             type_python: "Any"
-        decision_log: "Exact match. Returns a Query matching base.id."
+        decision_log: "Exact match. Returns a ndi_query matching base.id."
 
-      # --- Cache ---
+      # --- ndi_cache ---
       - name: getcache
         input_arguments: []
         output_arguments:

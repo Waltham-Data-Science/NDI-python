@@ -48,7 +48,7 @@ def getCloudDatasetIdForLocalDataset(
     that links this dataset to a cloud dataset.
 
     Args:
-        dataset: A local :class:`~ndi.dataset.Dataset` instance.
+        dataset: A local :class:`~ndi.dataset.ndi_dataset` instance.
         client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
@@ -57,9 +57,9 @@ def getCloudDatasetIdForLocalDataset(
     """
     try:
         db = dataset.database
-        from ndi.query import Query
+        from ndi.query import ndi_query
 
-        q = Query("").isa("dataset_remote")
+        q = ndi_query("").isa("dataset_remote")
         results = db.search(q)
         if results:
             doc = results[0]
@@ -85,11 +85,11 @@ def createRemoteDatasetDoc(
         dataset: Local dataset to add the document to.
 
     Returns:
-        The created Document instance.
+        The created ndi_document instance.
     """
-    from ndi.document import Document
+    from ndi.document import ndi_document
 
-    doc = Document("dataset_remote")
+    doc = ndi_document("dataset_remote")
     doc._set_nested_property("dataset_remote.dataset_id", cloud_dataset_id)
     return doc
 
@@ -102,10 +102,10 @@ def listLocalDocuments(dataset: Any) -> tuple[list[Any], list[str]]:
     Returns:
         Tuple of (documents, document_ids).
     """
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
     try:
-        docs = dataset.session.database_search(Query("").isa("base"))
+        docs = dataset.session.database_search(ndi_query("").isa("base"))
     except Exception:
         docs = []
 

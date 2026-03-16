@@ -1,6 +1,6 @@
-"""ProgressTracker — Tracks progress of a multi-step task.
+"""ndi_gui_component_internal_ProgressTracker — Tracks progress of a multi-step task.
 
-Mirrors MATLAB: ndi.gui.component.internal.ProgressTracker
+Mirrors MATLAB: ndi.gui.component.internal.ndi_gui_component_internal_ProgressTracker
 
 Provides step counting, percentage calculation, template-based messages,
 and event callbacks for progress updates, message changes, and completion.
@@ -14,7 +14,7 @@ from collections.abc import Callable
 from typing import Any
 
 
-class ProgressTracker:
+class ndi_gui_component_internal_ProgressTracker:
     """Track progress of a task with *TotalSteps* discrete steps.
 
     Parameters
@@ -115,16 +115,16 @@ class ProgressTracker:
     # -- Event helpers ----------------------------------------------------
 
     def _fire_progress_updated(self) -> None:
-        from ndi.gui.component.internal.event import ProgressUpdatedEventData
+        from ndi.gui.component.internal.event import ndi_gui_component_internal_event_ProgressUpdatedEventData
 
-        evt = ProgressUpdatedEventData(self.PercentageComplete)
+        evt = ndi_gui_component_internal_event_ProgressUpdatedEventData(self.PercentageComplete)
         for cb in self.on_progress_updated:
             cb(self, evt)
 
     def _fire_message_updated(self) -> None:
-        from ndi.gui.component.internal.event import MessageUpdatedEventData
+        from ndi.gui.component.internal.event import ndi_gui_component_internal_event_MessageUpdatedEventData
 
-        evt = MessageUpdatedEventData(self.Message)
+        evt = ndi_gui_component_internal_event_MessageUpdatedEventData(self.Message)
         for cb in self.on_message_updated:
             cb(self, evt)
 

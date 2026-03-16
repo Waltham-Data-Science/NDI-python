@@ -39,7 +39,7 @@ def openminds_obj_to_dict(
     Returns:
         List of flat dicts, one per object in the graph.
     """
-    from .ido import Ido
+    from .ido import ndi_ido
 
     if visited is None:
         visited = {}
@@ -58,7 +58,7 @@ def openminds_obj_to_dict(
         openminds_type = _get_openminds_type(item)
         python_type = type(item).__module__ + "." + type(item).__qualname__
         openminds_id = _get_openminds_id(item)
-        ndi_id = Ido().id
+        ndi_id = ndi_ido().id
 
         entry = {
             "openminds_type": openminds_type,
@@ -138,12 +138,12 @@ def openminds_obj_to_ndi_document(
             dependency_type is set).
 
     Returns:
-        List of NDI Document objects.
+        List of NDI ndi_document objects.
 
     Raises:
         ValueError: If dependency_type is set but dependency_value is empty.
     """
-    from .document import Document
+    from .document import ndi_document
 
     if dependency_type and not dependency_value:
         raise ValueError("dependency_value must not be empty if dependency_type is given.")
@@ -170,7 +170,7 @@ def openminds_obj_to_ndi_document(
 
     documents = []
     for s in struct_list:
-        doc = Document(doc_schema)
+        doc = ndi_document(doc_schema)
         doc = doc.set_session_id(session_id)
 
         # Store the openMINDS data

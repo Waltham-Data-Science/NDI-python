@@ -18,7 +18,7 @@ classes:
     type: class
     matlab_path: "src/ndi/+ndi/+calc/tuning_fit.m"
     python_path: "ndi/calc/tuning_fit.py"
-    python_class: "TuningFit"
+    python_class: "ndi_calc_tuning__fit"
     inherits: "ndi.calculator"
 
     methods:
@@ -27,7 +27,7 @@ classes:
         input_arguments:
           - name: session
             type_matlab: "ndi.session"
-            type_python: "Session | None"
+            type_python: "ndi_session | None"
             default: "None"
           - name: name
             type_matlab: "char"
@@ -39,7 +39,7 @@ classes:
             default: "''"
         output_arguments:
           - name: obj
-            type_python: "TuningFit"
+            type_python: "ndi_calc_tuning__fit"
         decision_log: >
           MATLAB constructor takes (session, name, doc_type).
           Python takes (session, document_type, path_to_doc_type).

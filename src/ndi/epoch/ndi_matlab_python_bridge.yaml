@@ -22,7 +22,7 @@ functions:
         type_python: "Any"
       - name: clocktype
         type_matlab: "ndi.time.clocktype"
-        type_python: "ClockType"
+        type_python: "ndi_time_clocktype"
       - name: first_epoch
         type_matlab: "integer | char"
         type_python: "int | str"
@@ -38,7 +38,7 @@ functions:
         type_python: "list[tuple[float, float]]"
     decision_log: >
       Exact match. Returns a 3-tuple.
-      Epoch numbers are 1-indexed (user concept).
+      ndi_epoch_epoch numbers are 1-indexed (user concept).
 
   - name: findepochnode
     type: function
@@ -127,7 +127,7 @@ classes:
     matlab_path: "+ndi/+epoch/epochset.m"
     matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/epoch/epochset.py"
-    python_class: "EpochSet"
+    python_class: "ndi_epoch_epochset"
 
     methods:
       # --- Abstract methods ---
@@ -186,7 +186,7 @@ classes:
             type_python: "int"
         output_arguments:
           - name: ec
-            type_python: "list[ClockType]"
+            type_python: "list[ndi_time_clocktype]"
         decision_log: >
           Semantic Parity: epoch_number is 1-indexed (user concept).
           Internally maps to 0-based index.
@@ -273,7 +273,7 @@ classes:
     type: class
     matlab_path: "+ndi/+epoch/epoch.m"
     python_path: "ndi/epoch/epoch.py"
-    python_class: "Epoch"
+    python_class: "ndi_epoch_epoch"
 
     properties:
       - name: epoch_number
@@ -293,12 +293,12 @@ classes:
 
       - name: epochprobemap
         type_matlab: "ndi.epoch.epochprobemap array"
-        type_python: "tuple[EpochProbeMap, ...]"
+        type_python: "tuple[ndi_epoch_epochprobemap, ...]"
         decision_log: "Python uses immutable tuple. MATLAB uses cell array."
 
       - name: epoch_clock
         type_matlab: "ndi.time.clocktype array"
-        type_python: "tuple[ClockType, ...]"
+        type_python: "tuple[ndi_time_clocktype, ...]"
         decision_log: "Python uses immutable tuple. MATLAB uses cell array."
 
       - name: t0_t1
@@ -308,12 +308,12 @@ classes:
 
       - name: epochset_object
         type_matlab: "ndi.epoch.epochset"
-        type_python: "EpochSet | None"
+        type_python: "ndi_epoch_epochset | None"
         decision_log: "Exact match. None when not associated."
 
       - name: underlying_epochs
         type_matlab: "ndi.epoch.epoch array"
-        type_python: "tuple[Epoch, ...]"
+        type_python: "tuple[ndi_epoch_epoch, ...]"
         decision_log: "Python uses immutable tuple."
 
       - name: underlying_files
@@ -329,7 +329,7 @@ classes:
             type_python: "dict[str, Any]"
         output_arguments:
           - name: epoch_obj
-            type_python: "Epoch"
+            type_python: "ndi_epoch_epoch"
         decision_log: >
           Python-specific factory method for deserialization.
           No direct MATLAB equivalent.
@@ -346,7 +346,7 @@ classes:
       - name: has_clock
         input_arguments:
           - name: clock
-            type_python: "ClockType"
+            type_python: "ndi_time_clocktype"
         output_arguments:
           - name: b
             type_python: "bool"
@@ -355,7 +355,7 @@ classes:
       - name: time_range
         input_arguments:
           - name: clock
-            type_python: "ClockType"
+            type_python: "ndi_time_clocktype"
         output_arguments:
           - name: t0_t1
             type_python: "tuple[float, float] | None"
@@ -385,7 +385,7 @@ classes:
     matlab_path: "+ndi/+epoch/epochprobemap.m"
     matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/epoch/epochprobemap.py"
-    python_class: "EpochProbeMap"
+    python_class: "ndi_epoch_epochprobemap"
 
     properties:
       - name: name
@@ -436,7 +436,7 @@ classes:
             default: "''"
         output_arguments:
           - name: epm_obj
-            type_python: "EpochProbeMap"
+            type_python: "ndi_epoch_epochprobemap"
         decision_log: "Exact match."
 
       - name: devicename
@@ -482,7 +482,7 @@ classes:
             type_python: "dict[str, Any]"
         output_arguments:
           - name: epm_obj
-            type_python: "EpochProbeMap"
+            type_python: "ndi_epoch_epochprobemap"
         decision_log: "Python-specific factory method."
 
       - name: eq
@@ -502,13 +502,13 @@ classes:
     matlab_path: "+ndi/+epoch/epochprobemap_daqsystem.m"
     matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/epoch/epochprobemap_daqsystem.py"
-    python_class: "EpochProbeMapDAQSystem"
+    python_class: "ndi_epoch_epochprobemap__daqsystem"
     inherits: "ndi.epoch.epochprobemap"
 
     properties:
       - name: daqsystemstring
         type_matlab: "ndi.daq.daqsystemstring"
-        type_python: "DAQSystemString"
+        type_python: "ndi_daq_daqsystemstring"
         access: "computed property"
         decision_log: >
           Lazy-parsed from devicestring. MATLAB stores explicitly;
@@ -537,7 +537,7 @@ classes:
             default: "''"
         output_arguments:
           - name: epm_daq_obj
-            type_python: "EpochProbeMapDAQSystem"
+            type_python: "ndi_epoch_epochprobemap__daqsystem"
         decision_log: "Exact match."
 
       - name: serialization_struct
@@ -570,7 +570,7 @@ classes:
             type_python: "str"
         output_arguments:
           - name: epm_daq_obj
-            type_python: "EpochProbeMapDAQSystem"
+            type_python: "ndi_epoch_epochprobemap__daqsystem"
         decision_log: "MATLAB is a static method. Python uses classmethod."
 
       - name: loadfromfile
@@ -581,5 +581,5 @@ classes:
             type_python: "str"
         output_arguments:
           - name: epm_list
-            type_python: "list[EpochProbeMapDAQSystem]"
+            type_python: "list[ndi_epoch_epochprobemap__daqsystem]"
         decision_log: "MATLAB is a static method. Python uses classmethod."

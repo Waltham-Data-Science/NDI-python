@@ -1,5 +1,5 @@
 """
-Tests for Phase 11 Batch 11D: Database Utilities + Ingestion.
+Tests for Phase 11 Batch 11D: ndi_database Utilities + Ingestion.
 
 Tests dependency traversal, batch retrieval, graph construction,
 and file ingestion/expulsion system.

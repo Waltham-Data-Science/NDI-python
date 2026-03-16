@@ -1,5 +1,5 @@
 """
-ndi.fun.session - Session comparison utilities.
+ndi.fun.session - ndi_session comparison utilities.
 
 MATLAB equivalent: +ndi/+fun/+session/diff.m
 """
@@ -39,14 +39,14 @@ def diff(
     if exclude_fields is None:
         exclude_fields = ["base.session_id"]
 
-    from ndi.query import Query
+    from ndi.query import ndi_query
 
     if verbose:
         print("Searching session 1 for documents...")
-    docs1 = session1.database_search(Query("").isa("base"))
+    docs1 = session1.database_search(ndi_query("").isa("base"))
     if verbose:
         print("Searching session 2 for documents...")
-    docs2 = session2.database_search(Query("").isa("base"))
+    docs2 = session2.database_search(ndi_query("").isa("base"))
 
     def _doc_id(doc: Any) -> str:
         props = doc.document_properties if hasattr(doc, "document_properties") else doc

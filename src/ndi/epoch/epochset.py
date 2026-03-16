@@ -1,7 +1,7 @@
 """
 ndi.epoch.epochset - Abstract base class for epoch management.
 
-This module provides the EpochSet abstract base class that defines
+This module provides the ndi_epoch_epochset abstract base class that defines
 the interface for objects that manage epochs (recording periods).
 """
 
@@ -15,14 +15,14 @@ import numpy as np
 import pydantic
 from pydantic import Field
 
-from ..time import ClockType
+from ..time import ndi_time_clocktype
 
 
-class EpochSet(ABC):
+class ndi_epoch_epochset(ABC):
     """
     Abstract base class for epoch management.
 
-    EpochSet defines the interface for objects that manage epochs,
+    ndi_epoch_epochset defines the interface for objects that manage epochs,
     providing methods for accessing epoch tables, clock types, and
     time ranges.
 
@@ -38,7 +38,7 @@ class EpochSet(ABC):
         _epochtable_hash: Hash of cached epoch table
 
     Example:
-        >>> class MyEpochSet(EpochSet):
+        >>> class MyEpochSet(ndi_epoch_epochset):
         ...     def buildepochtable(self):
         ...         return [{'epoch_number': 1, 'epoch_id': 'ep1', ...}]
         ...     def epochsetname(self):
@@ -64,9 +64,9 @@ class EpochSet(ABC):
             List of epoch entries, each with fields:
             - epoch_number: Integer position (1-indexed)
             - epoch_id: Unique identifier string
-            - epoch_session_id: Session containing this epoch
-            - epochprobemap: List of EpochProbeMap objects
-            - epoch_clock: List of ClockType objects
+            - epoch_session_id: ndi_session containing this epoch
+            - epochprobemap: List of ndi_epoch_epochprobemap objects
+            - epoch_clock: List of ndi_time_clocktype objects
             - t0_t1: List of (t0, t1) tuples per clock
             - underlying_epochs: Dict with underlying epoch info
         """
@@ -151,22 +151,22 @@ class EpochSet(ABC):
         return len(et)
 
     @pydantic.validate_call
-    def epochclock(self, epoch_number: Annotated[int, Field(ge=1)]) -> list[ClockType]:
+    def epochclock(self, epoch_number: Annotated[int, Field(ge=1)]) -> list[ndi_time_clocktype]:
         """
         Get clock types for an epoch.
 
         Args:
-            epoch_number: Epoch number (1-indexed)
+            epoch_number: ndi_epoch_epoch number (1-indexed)
 
         Returns:
-            List of ClockType objects for this epoch
+            List of ndi_time_clocktype objects for this epoch
 
         Raises:
             IndexError: If epoch_number is out of range
         """
         et, _ = self.epochtable()
         if epoch_number > len(et):
-            raise IndexError(f"Epoch {epoch_number} out of range (1..{len(et)})")
+            raise IndexError(f"ndi_epoch_epoch {epoch_number} out of range (1..{len(et)})")
 
         entry = et[epoch_number - 1]
         return entry.get("epoch_clock", [])
@@ -177,7 +177,7 @@ class EpochSet(ABC):
         Get time range for an epoch.
 
         Args:
-            epoch_number: Epoch number (1-indexed)
+            epoch_number: ndi_epoch_epoch number (1-indexed)
 
         Returns:
             List of (t0, t1) tuples, one per clock type
@@ -187,7 +187,7 @@ class EpochSet(ABC):
         """
         et, _ = self.epochtable()
         if epoch_number > len(et):
-            raise IndexError(f"Epoch {epoch_number} out of range (1..{len(et)})")
+            raise IndexError(f"ndi_epoch_epoch {epoch_number} out of range (1..{len(et)})")
 
         entry = et[epoch_number - 1]
         return entry.get("t0_t1", [(np.nan, np.nan)])
@@ -198,17 +198,17 @@ class EpochSet(ABC):
         Get epoch ID for an epoch number.
 
         Args:
-            epoch_number: Epoch number (1-indexed)
+            epoch_number: ndi_epoch_epoch number (1-indexed)
 
         Returns:
-            Epoch identifier string
+            ndi_epoch_epoch identifier string
 
         Raises:
             IndexError: If epoch_number is out of range
         """
         et, _ = self.epochtable()
         if epoch_number > len(et):
-            raise IndexError(f"Epoch {epoch_number} out of range (1..{len(et)})")
+            raise IndexError(f"ndi_epoch_epoch {epoch_number} out of range (1..{len(et)})")
 
         return et[epoch_number - 1].get("epoch_id", "")
 
@@ -218,10 +218,10 @@ class EpochSet(ABC):
         Get epoch number for an epoch ID.
 
         Args:
-            epoch_id: Epoch identifier string
+            epoch_id: ndi_epoch_epoch identifier string
 
         Returns:
-            Epoch number (1-indexed)
+            ndi_epoch_epoch number (1-indexed)
 
         Raises:
             ValueError: If epoch_id not found
@@ -231,7 +231,7 @@ class EpochSet(ABC):
             if entry.get("epoch_id") == epoch_id:
                 return i + 1
 
-        raise ValueError(f"Epoch ID not found: {epoch_id}")
+        raise ValueError(f"ndi_epoch_epoch ID not found: {epoch_id}")
 
     def matchedepochtable(
         self,
@@ -266,17 +266,17 @@ class EpochSet(ABC):
         Get a single epoch table entry.
 
         Args:
-            epoch_number: Epoch number (1-indexed)
+            epoch_number: ndi_epoch_epoch number (1-indexed)
 
         Returns:
-            Epoch table entry dict
+            ndi_epoch_epoch table entry dict
 
         Raises:
             IndexError: If epoch_number is out of range
         """
         et, _ = self.epochtable()
         if epoch_number > len(et):
-            raise IndexError(f"Epoch {epoch_number} out of range (1..{len(et)})")
+            raise IndexError(f"ndi_epoch_epoch {epoch_number} out of range (1..{len(et)})")
 
         return et[epoch_number - 1]
 
@@ -285,13 +285,13 @@ class EpochSet(ABC):
         Build epoch graph nodes for time synchronization.
 
         Creates a list of graph nodes, one for each (epoch, clock) pair.
-        This is used by SyncGraph for time conversion.
+        This is used by ndi_time_syncgraph for time conversion.
 
         Returns:
             List of epoch graph nodes with fields:
-            - epoch_id: Epoch identifier
-            - epochset: Reference to this EpochSet
-            - clock: ClockType for this node
+            - epoch_id: ndi_epoch_epoch identifier
+            - epochset: Reference to this ndi_epoch_epochset
+            - clock: ndi_time_clocktype for this node
             - t0: Start time
             - t1: End time
         """
