@@ -27,9 +27,7 @@ from ndi.session.dir import DirSession
 from ndi.util import sessionSummary
 from tests.symmetry.conftest import PYTHON_ARTIFACTS
 
-ARTIFACT_DIR = (
-    PYTHON_ARTIFACTS / "dataset" / "buildDataset" / "testBuildDatasetArtifacts"
-)
+ARTIFACT_DIR = PYTHON_ARTIFACTS / "dataset" / "buildDataset" / "testBuildDatasetArtifacts"
 
 
 def _add_doc_with_file(session: DirSession, doc_number: int) -> None:
@@ -120,9 +118,7 @@ class TestBuildDataset:
         for doc in docs:
             props = doc.document_properties
             doc_path = json_docs_dir / f"{doc.id}.json"
-            doc_path.write_text(
-                json.dumps(props, indent=2, allow_nan=True), encoding="utf-8"
-            )
+            doc_path.write_text(json.dumps(props, indent=2, allow_nan=True), encoding="utf-8")
 
         # Write datasetSummary.json
         summary = _dataset_summary(self.dataset)

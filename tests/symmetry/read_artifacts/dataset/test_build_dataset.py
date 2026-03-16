@@ -39,11 +39,7 @@ class TestBuildDataset:
 
     def _artifact_dir(self, source_type: str):
         return (
-            SYMMETRY_BASE
-            / source_type
-            / "dataset"
-            / "buildDataset"
-            / "testBuildDatasetArtifacts"
+            SYMMETRY_BASE / source_type / "dataset" / "buildDataset" / "testBuildDatasetArtifacts"
         )
 
     def _open_dataset(self, source_type):
@@ -63,9 +59,7 @@ class TestBuildDataset:
 
         summary_path = artifact_dir / "datasetSummary.json"
         if not summary_path.exists():
-            pytest.skip(
-                f"datasetSummary.json not found in {source_type} artifact directory."
-            )
+            pytest.skip(f"datasetSummary.json not found in {source_type} artifact directory.")
 
         expected = json.loads(summary_path.read_text(encoding="utf-8"))
 
@@ -84,8 +78,7 @@ class TestBuildDataset:
 
         for exp_id in expected_ids:
             assert exp_id in session_ids, (
-                f"Expected session ID {exp_id!r} not found in dataset "
-                f"from {source_type}"
+                f"Expected session ID {exp_id!r} not found in dataset " f"from {source_type}"
             )
 
         for exp_ref in expected_refs:
@@ -100,9 +93,7 @@ class TestBuildDataset:
 
         summary_path = artifact_dir / "datasetSummary.json"
         if not summary_path.exists():
-            pytest.skip(
-                f"datasetSummary.json not found in {source_type} artifact directory."
-            )
+            pytest.skip(f"datasetSummary.json not found in {source_type} artifact directory.")
 
         expected = json.loads(summary_path.read_text(encoding="utf-8"))
         expected_summaries = expected.get("sessionSummaries", [])
@@ -162,11 +153,9 @@ class TestBuildDataset:
                     assert actual_props.get("document_class", {}).get(
                         "class_name"
                     ) == expected_doc.get("document_class", {}).get("class_name"), (
-                        f"Document class mismatch for id: {expected_id} "
-                        f"in {source_type}"
+                        f"Document class mismatch for id: {expected_id} " f"in {source_type}"
                     )
                     break
             assert found, (
-                f"Document from {source_type} artifact not found in dataset: "
-                f"{expected_id}"
+                f"Document from {source_type} artifact not found in dataset: " f"{expected_id}"
             )
