@@ -256,6 +256,14 @@ class SQLiteDriver:
 
         documents = [json_mod.loads(r["json_code"]) for r in rows]
 
+        # Normalize depends_on: the MATLAB-compatible storage may unwrap
+        # single-element lists (e.g. {"name":..,"value":..} instead of
+        # [{"name":..,"value":..}]).  Re-wrap so field_search works.
+        for doc in documents:
+            dep = doc.get("depends_on")
+            if isinstance(dep, dict):
+                doc["depends_on"] = [dep]
+
         # Filter by query if provided using DID-python's field_search
         if query is not None:
             # Convert to DID-python compatible format

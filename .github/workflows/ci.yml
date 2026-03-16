@@ -59,3 +59,24 @@ jobs:
           COVERAGE_CORE=$(python -c "import sys; print('sysmon' if sys.version_info >= (3,12) else 'ctrace')")
           export COVERAGE_CORE
           pytest tests/ -v --tb=short --cov=src/ndi --cov-report=term-missing
+
+  symmetry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install with ndi_install.py
+        run: |
+          python -m pip install --upgrade pip
+          python ndi_install.py --dev --no-validate --verbose
+
+      - name: Generate symmetry artifacts
+        run: pytest tests/symmetry/make_artifacts/ -v --tb=short
+
+      - name: Run symmetry read tests
+        run: pytest tests/symmetry/read_artifacts/ -v --tb=short

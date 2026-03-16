@@ -353,6 +353,8 @@ class Calculator(App, AppDoc):
         # Add dependency constraints
         depends_on = parameters.get("depends_on", [])
         for dep in depends_on:
+            if not isinstance(dep, dict):
+                continue
             dep_name = dep.get("name", "")
             dep_value = dep.get("value", "")
             if dep_value:
