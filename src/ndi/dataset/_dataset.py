@@ -21,6 +21,19 @@ from ..query import ndi_query
 
 logger = logging.getLogger(__name__)
 
+# Map Python class names to their MATLAB-compatible equivalents so that
+# artifacts written by Python can be opened by MATLAB (which uses ``feval``
+# on the stored ``session_creator`` string).
+_PYTHON_TO_MATLAB_CREATOR: dict[str, str] = {
+    "ndi_session_dir": "ndi.session.dir",
+}
+
+
+def _matlab_creator_name(session: Any) -> str:
+    """Return the MATLAB-compatible creator name for *session*."""
+    py_name = type(session).__name__
+    return _PYTHON_TO_MATLAB_CREATOR.get(py_name, py_name)
+
 
 # ============================================================================
 # ndi_dataset base class  (mirrors MATLAB ndi.dataset)
@@ -638,7 +651,7 @@ class ndi_dataset:
             "session_id": session.id(),
             "session_reference": session.reference,
             "is_linked": is_linked,
-            "session_creator": type(session).__name__,
+            "session_creator": _matlab_creator_name(session),
         }
         for i in range(1, 7):
             key = f"session_creator_input{i}"
