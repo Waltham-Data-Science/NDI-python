@@ -160,7 +160,7 @@ class ndi_time_syncrule_randomPulses(ndi_time_syncrule):
 
     def eligible_epochsets(self) -> list[str]:
         """Return eligible epochset class names."""
-        return ["ndi.daq.system.mfdaq", "ndi_daq_system"]
+        return ["ndi.daq.system.mfdaq"]
 
     def ineligible_epochsets(self) -> list[str]:
         """Return ineligible epochset class names."""

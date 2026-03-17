@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 from .app import ndi_app
 from .app.appdoc import DocExistsAction, ndi_app_appdoc
+from .util.classname import ndi_matlab_classname
 
 if TYPE_CHECKING:
     from .document import ndi_document
@@ -59,7 +60,7 @@ class ndi_calculator(ndi_app, ndi_app_appdoc):
             path_to_doc_type: Path to the document type schema
         """
         # Initialize ndi_app (session + name from class)
-        name = type(self).__name__
+        name = ndi_matlab_classname(self)
         ndi_app.__init__(self, session=session, name=name)
 
         # Initialize ndi_app_appdoc

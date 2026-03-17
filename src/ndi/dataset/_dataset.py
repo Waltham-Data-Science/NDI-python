@@ -18,21 +18,9 @@ from typing import Any
 
 from ..document import ndi_document
 from ..query import ndi_query
+from ..util.classname import ndi_matlab_classname, ndi_python_classname
 
 logger = logging.getLogger(__name__)
-
-# Map Python class names to their MATLAB-compatible equivalents so that
-# artifacts written by Python can be opened by MATLAB (which uses ``feval``
-# on the stored ``session_creator`` string).
-_PYTHON_TO_MATLAB_CREATOR: dict[str, str] = {
-    "ndi_session_dir": "ndi.session.dir",
-}
-
-
-def _matlab_creator_name(session: Any) -> str:
-    """Return the MATLAB-compatible creator name for *session*."""
-    py_name = type(session).__name__
-    return _PYTHON_TO_MATLAB_CREATOR.get(py_name, py_name)
 
 
 # ============================================================================
@@ -651,7 +639,7 @@ class ndi_dataset:
             "session_id": session.id(),
             "session_reference": session.reference,
             "is_linked": is_linked,
-            "session_creator": _matlab_creator_name(session),
+            "session_creator": ndi_matlab_classname(session),
         }
         for i in range(1, 7):
             key = f"session_creator_input{i}"
@@ -665,9 +653,9 @@ class ndi_dataset:
         session_id: str,
     ) -> Any | None:
         """Recreate a session from stored creator args."""
-        creator = info.get("session_creator", "")
+        creator = ndi_python_classname(info.get("session_creator", ""))
 
-        if creator == "ndi_session_dir" or creator == "ndi.session.dir":
+        if creator == "ndi_session_dir":
             from ..session.dir import ndi_session_dir
 
             ref = info.get("session_creator_input1", "")

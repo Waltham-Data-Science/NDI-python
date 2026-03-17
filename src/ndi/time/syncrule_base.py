@@ -11,6 +11,7 @@ from abc import ABC
 from typing import TYPE_CHECKING, Any
 
 from ..ido import ndi_ido
+from ..util.classname import ndi_matlab_classname
 from .clocktype import ndi_time_clocktype
 from .timemapping import ndi_time_timemapping
 
@@ -184,7 +185,7 @@ class ndi_time_syncrule(ndi_ido, ABC):
         doc = ndi_document(
             document_type="daq/syncrule",
             **{
-                "syncrule.ndi_syncrule_class": type(self).__name__,
+                "syncrule.ndi_syncrule_class": ndi_matlab_classname(self),
                 "syncrule.parameters": self._parameters,
                 "base.id": self.id,
             },
@@ -211,7 +212,7 @@ class ndi_time_syncrule(ndi_ido, ABC):
         """
         return {
             "id": self.id,
-            "class": type(self).__name__,
+            "class": ndi_matlab_classname(self),
             "parameters": self._parameters,
         }
 

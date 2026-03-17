@@ -14,6 +14,7 @@ import numpy as np
 
 from ..ido import ndi_ido
 from ..time import NO_TIME, ndi_time_clocktype
+from ..util.classname import ndi_matlab_classname
 
 
 class ndi_daq_reader(ndi_ido, ABC):
@@ -314,7 +315,7 @@ class ndi_daq_reader(ndi_ido, ABC):
             "daq/daqreader",
             **{
                 "daqreader.ndi_daqreader_class": getattr(
-                    self, "NDI_DAQREADER_CLASS", self.__class__.__name__
+                    self, "NDI_DAQREADER_CLASS", ndi_matlab_classname(self)
                 ),
                 "base.id": self.id,
             },

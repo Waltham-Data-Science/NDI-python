@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ...util.classname import ndi_matlab_classname
 from ..syncrule_base import ndi_time_syncrule
 from ..timemapping import ndi_time_timemapping
 
@@ -75,7 +76,7 @@ class ndi_time_syncrule_filematch(ndi_time_syncrule):
 
     def eligible_epochsets(self) -> list[str]:
         """Return eligible epochset class names."""
-        return ["ndi.daq.system", "ndi_daq_system"]
+        return ["ndi.daq.system"]
 
     def ineligible_epochsets(self) -> list[str]:
         """Return ineligible epochset class names."""
@@ -140,12 +141,7 @@ class ndi_time_syncrule_filematch(ndi_time_syncrule):
     @staticmethod
     def _is_daq_system(classname: str) -> bool:
         """Check if a classname represents a DAQ system."""
-        daq_classes = [
-            "ndi.daq.system",
-            "ndi_daq_system",
-            "daq.system",
-        ]
-        return any(c in classname for c in daq_classes)
+        return "ndi.daq.system" in ndi_matlab_classname(classname)
 
     @staticmethod
     def _get_underlying_files(underlying_epochs: Any) -> list[str]:

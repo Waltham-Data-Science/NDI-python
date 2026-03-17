@@ -19,6 +19,7 @@ from ..ido import ndi_ido
 from ..query import ndi_query
 from ..time.syncgraph import ndi_time_syncgraph
 from ..time.syncrule_base import ndi_time_syncrule
+from ..util.classname import ndi_matlab_classname
 
 logger = logging.getLogger(__name__)
 
@@ -981,7 +982,7 @@ class ndi_session(ABC):
                 if not isinstance(obj, list):
                     obj = [obj]
                 for o in obj:
-                    if type(o).__name__ == obj_classname:
+                    if ndi_matlab_classname(o) == ndi_matlab_classname(obj_classname):
                         return o
             return None
 
@@ -990,7 +991,10 @@ class ndi_session(ABC):
             probes = self.getprobes()
             for p in probes:
                 p_name = p.name if hasattr(p, "name") else ""
-                if type(p).__name__ == obj_classname and p_name == obj_name:
+                if (
+                    ndi_matlab_classname(p) == ndi_matlab_classname(obj_classname)
+                    and p_name == obj_name
+                ):
                     return p
             return None
 
@@ -998,7 +1002,10 @@ class ndi_session(ABC):
         probes = self.getprobes()
         for p in probes:
             p_name = p.name if hasattr(p, "name") else ""
-            if type(p).__name__ == obj_classname and p_name == obj_name:
+            if (
+                ndi_matlab_classname(p) == ndi_matlab_classname(obj_classname)
+                and p_name == obj_name
+            ):
                 return p
 
         obj = self.daqsystem_load(name=obj_name)
@@ -1006,7 +1013,7 @@ class ndi_session(ABC):
             if not isinstance(obj, list):
                 obj = [obj]
             for o in obj:
-                if type(o).__name__ == obj_classname:
+                if ndi_matlab_classname(o) == ndi_matlab_classname(obj_classname):
                     return o
 
         return None

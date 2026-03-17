@@ -12,6 +12,8 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from .classname import ndi_matlab_classname
+
 
 def sessionSummary(session_obj: Any) -> dict[str, Any]:
     """Create a summary structure of an ndi.session object.
@@ -79,7 +81,9 @@ def sessionSummary(session_obj: Any) -> dict[str, Any]:
         # Get daqreader class (use MATLAB-compatible name for symmetry)
         dr = getattr(sys, "daqreader", None)
         if dr is not None:
-            details["daqreader_class"] = getattr(dr, "NDI_DAQREADER_CLASS", type(dr).__qualname__)
+            details["daqreader_class"] = getattr(
+                dr, "NDI_DAQREADER_CLASS", ndi_matlab_classname(dr)
+            )
         else:
             details["daqreader_class"] = ""
 
