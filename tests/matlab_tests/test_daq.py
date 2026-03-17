@@ -292,12 +292,15 @@ class TestIntanReader:
         mock_blockinfo = ({"samples_per_block": 60}, 0, 0, 5000)
         # total_samples = 60 * 5000 = 300000
 
-        with patch(
-            "ndi.daq.reader.mfdaq.intan.read_Intan_RHD2000_header",
-            return_value=mock_header,
-        ), patch(
-            "ndi.daq.reader.mfdaq.intan.Intan_RHD2000_blockinfo",
-            return_value=mock_blockinfo,
+        with (
+            patch(
+                "ndi.daq.reader.mfdaq.intan.read_Intan_RHD2000_header",
+                return_value=mock_header,
+            ),
+            patch(
+                "ndi.daq.reader.mfdaq.intan.Intan_RHD2000_blockinfo",
+                return_value=mock_blockinfo,
+            ),
         ):
             reader._header_cache.clear()
             t0_t1 = reader.t0_t1(["fake.rhd"])
