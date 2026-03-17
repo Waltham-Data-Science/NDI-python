@@ -311,7 +311,7 @@ class TestCalculatorCreation:
 
     def test_name_is_class_name(self):
         calc = ndi_calculator()
-        assert calc.name == "ndi_calculator"
+        assert calc.name == "ndi.calculator"
 
     def test_repr(self):
         calc = ndi_calculator(document_type="my_calc")
@@ -504,7 +504,7 @@ class TestSimpleCalcCreation:
 
     def test_name_is_class_name(self):
         sc = ndi_calc_example_simple()
-        assert sc.name == "ndi_calc_example_simple"
+        assert sc.name == "ndi.calc.example.simple"
 
 
 class TestSimpleCalcDefaultParameters:
