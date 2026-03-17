@@ -120,8 +120,10 @@ class TestBuildDataset:
             doc_path = json_docs_dir / f"{doc.id}.json"
             doc_path.write_text(json.dumps(props, indent=2, allow_nan=True), encoding="utf-8")
 
-        # Write datasetSummary.json
-        summary = _dataset_summary(self.dataset)
+        # Write datasetSummary.json – open from artifact_dir so the session
+        # path lists files that are actually present (including jsonDocuments).
+        artifact_dataset = Dataset(artifact_dir)
+        summary = _dataset_summary(artifact_dataset)
         summary_json = json.dumps(summary, indent=2, allow_nan=True)
         summary_path = artifact_dir / "datasetSummary.json"
         summary_path.write_text(summary_json, encoding="utf-8")
