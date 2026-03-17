@@ -581,3 +581,7 @@ class ndi_query(did.query.Query):
         if self._resolved:
             return f"ndi_query('{self.field}' {self.operator} {self.value!r})"
         return f"ndi_query('{self.field}')"
+
+
+# Pythonic alias
+Query = ndi_query

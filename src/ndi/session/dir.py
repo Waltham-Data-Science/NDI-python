@@ -285,3 +285,7 @@ class ndi_session_dir(ndi_session):
     def __repr__(self) -> str:
         """String representation."""
         return f"ndi_session_dir(reference='{self._reference}', path='{self._path}')"
+
+
+# Pythonic alias
+DirSession = ndi_session_dir

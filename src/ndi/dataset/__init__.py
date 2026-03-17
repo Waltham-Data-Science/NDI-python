@@ -21,7 +21,11 @@ ndi_dataset = ndi_dataset_dir
 # dataset, mirroring the MATLAB constructor ``ndi.dataset.dir``.
 dir = ndi_dataset_dir
 
+# Pythonic alias
+Dataset = ndi_dataset_dir
+
 __all__ = [
+    "Dataset",
     "ndi_dataset",
     "ndi_dataset_dir",
     "dir",

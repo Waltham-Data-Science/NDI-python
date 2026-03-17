@@ -774,3 +774,7 @@ class ndi_document:
 
     def __repr__(self) -> str:
         return f"ndi_document('{self.doc_class()}', id='{self.id}')"
+
+
+# Pythonic alias
+Document = ndi_document
