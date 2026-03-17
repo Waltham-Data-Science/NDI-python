@@ -4,10 +4,10 @@ Port of MATLAB ndi.unittest.daq.reader.* tests.
 MATLAB source files:
   mfdaqIntanTest.m        -> TestIntanReader
   mfdaqNDRAxonTest.m      -> skipped (ABF reader not ported; uses NDR)
-  mfdaqNDRIntanTest.m     -> TestIntanReader (now uses vlt.hardware.intan)
+  mfdaqNDRIntanTest.m     -> TestIntanReader (now uses ndr.format.intan)
 
 Python replacement modules:
-  ndi.daq.reader.mfdaq.intan.ndi_daq_reader_mfdaq_intan  (uses vlt.hardware.intan)
+  ndi.daq.reader.mfdaq.intan.ndi_daq_reader_mfdaq_intan  (uses ndr.format.intan)
   ndi.daq.mfdaq.ndi_daq_reader_mfdaq (base with epochsamples2times / epochtimes2samples)
   ndi.fun.utils.channelname2prefixnumber
 """
@@ -72,7 +72,7 @@ class TestIntanReader:
 
     The MATLAB test creates an ndi_daq_reader_mfdaq_intan, points it at real .rhd files,
     and checks channel discovery, epochsamples2times, epochtimes2samples.
-    The Python reader uses vlt.hardware.intan for header parsing.
+    The Python reader uses ndr.format.intan for header parsing and data reading.
     """
 
     def test_intan_reader_instantiation(self):
@@ -124,9 +124,9 @@ class TestIntanReader:
         assert len(types) == len(abbrevs)
 
     def test_intan_reader_mocked_getchannels(self):
-        """ndi_daq_reader_mfdaq_intan.getchannelsepoch works via mocked vlt header.
+        """ndi_daq_reader_mfdaq_intan.getchannelsepoch works via mocked ndr header.
 
-        We mock vlt.hardware.intan.read_Intan_RHD2000_header to simulate a
+        We mock ndr.format.intan.read_Intan_RHD2000_header to simulate a
         successful channel discovery without needing real data files.
         """
         reader = ndi_daq_reader_mfdaq_intan()
@@ -271,8 +271,6 @@ class TestIntanReader:
         reader = ndi_daq_reader_mfdaq_intan()
 
         mock_header = {
-            "sample_rate": 30000.0,
-            "num_samples": 300000,
             "num_amplifier_channels": 1,
             "num_aux_input_channels": 0,
             "num_supply_voltage_channels": 0,
@@ -280,8 +278,7 @@ class TestIntanReader:
             "num_board_dig_in_channels": 0,
             "num_board_dig_out_channels": 0,
             "num_temp_sensor_channels": 0,
-            "num_samples_per_data_block": 128,
-            "header_size": 512,
+            "num_samples_per_data_block": 60,
             "amplifier_channels": [{"native_channel_name": "A-000", "signal_type": 0}],
             "aux_input_channels": [],
             "board_adc_channels": [],
@@ -291,9 +288,16 @@ class TestIntanReader:
             "frequency_parameters": {"amplifier_sample_rate": 30000.0},
         }
 
+        # Intan_RHD2000_blockinfo returns (blockinfo, bytes_per_block, bytes_present, num_data_blocks)
+        mock_blockinfo = ({"samples_per_block": 60}, 0, 0, 5000)
+        # total_samples = 60 * 5000 = 300000
+
         with patch(
             "ndi.daq.reader.mfdaq.intan.read_Intan_RHD2000_header",
             return_value=mock_header,
+        ), patch(
+            "ndi.daq.reader.mfdaq.intan.Intan_RHD2000_blockinfo",
+            return_value=mock_blockinfo,
         ):
             reader._header_cache.clear()
             t0_t1 = reader.t0_t1(["fake.rhd"])
