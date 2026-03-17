@@ -728,7 +728,7 @@ class ndi_file_navigator(ndi_ido):
         The file format is tab-separated with a header row:
         ``name  reference  type  devicestring  subjectstring``
         """
-        from ...epoch.epochprobemap import EpochProbeMap
+        from ...epoch.epochprobemap import ndi_epoch_epochprobemap as EpochProbeMap
 
         try:
             with open(filepath, encoding="utf-8") as f:
