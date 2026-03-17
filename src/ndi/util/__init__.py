@@ -13,6 +13,7 @@ The ``+openminds`` sub-package is ported separately in
 ``ndi.openminds_convert``.
 """
 
+from .classname import ndi_matlab_classname, ndi_python_classname
 from .compare_session_summary import compareSessionSummary
 from .datestamp2datetime import datestamp2datetime
 from .downsampleTimeseries import downsampleTimeseries
@@ -25,6 +26,8 @@ from .session_summary import sessionSummary
 from .unwrapTableCellContent import unwrapTableCellContent
 
 __all__ = [
+    "ndi_matlab_classname",
+    "ndi_python_classname",
     "compareSessionSummary",
     "datestamp2datetime",
     "downsampleTimeseries",

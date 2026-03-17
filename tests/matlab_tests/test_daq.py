@@ -4,18 +4,17 @@ Port of MATLAB ndi.unittest.daq.reader.* tests.
 MATLAB source files:
   mfdaqIntanTest.m        -> TestIntanReader
   mfdaqNDRAxonTest.m      -> skipped (ABF reader not ported; uses NDR)
-  mfdaqNDRIntanTest.m     -> skipped (NDR Intan reader not ported; uses SpikeInterface)
+  mfdaqNDRIntanTest.m     -> TestIntanReader (now uses ndr.format.intan)
 
 Python replacement modules:
-  ndi.daq.reader.mfdaq.intan.ndi_daq_reader_mfdaq_intan  (wraps SpikeInterface)
-  ndi.daq.reader.spikeinterface_adapter.ndi_daq_reader_SpikeInterfaceReader
+  ndi.daq.reader.mfdaq.intan.ndi_daq_reader_mfdaq_intan  (uses ndr.format.intan)
   ndi.daq.mfdaq.ndi_daq_reader_mfdaq (base with epochsamples2times / epochtimes2samples)
   ndi.fun.utils.channelname2prefixnumber
 """
 
 import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -73,7 +72,7 @@ class TestIntanReader:
 
     The MATLAB test creates an ndi_daq_reader_mfdaq_intan, points it at real .rhd files,
     and checks channel discovery, epochsamples2times, epochtimes2samples.
-    The Python reader delegates to SpikeInterface under the hood.
+    The Python reader uses ndr.format.intan for header parsing and data reading.
     """
 
     def test_intan_reader_instantiation(self):
@@ -125,67 +124,74 @@ class TestIntanReader:
         assert len(types) == len(abbrevs)
 
     def test_intan_reader_mocked_getchannels(self):
-        """ndi_daq_reader_mfdaq_intan.getchannelsepoch works via mocked SpikeInterface.
+        """ndi_daq_reader_mfdaq_intan.getchannelsepoch works via mocked ndr header.
 
-        The ndi_daq_reader_mfdaq_intan delegates to ndi_daq_reader_SpikeInterfaceReader internally.
-        We mock that to simulate a successful channel discovery without
-        needing real data files.
+        We mock ndr.format.intan.read_Intan_RHD2000_header to simulate a
+        successful channel discovery without needing real data files.
         """
         reader = ndi_daq_reader_mfdaq_intan()
 
-        mock_channels = [
-            ChannelInfo(
-                name="ai1", type="analog_in", time_channel=1, number=1, sample_rate=30000.0
-            ),
-            ChannelInfo(
-                name="ai2", type="analog_in", time_channel=1, number=2, sample_rate=30000.0
-            ),
-            ChannelInfo(name="t1", type="time", time_channel=None, number=1, sample_rate=30000.0),
-        ]
+        mock_header = {
+            "sample_rate": 30000.0,
+            "num_amplifier_channels": 2,
+            "num_aux_input_channels": 0,
+            "num_supply_voltage_channels": 0,
+            "num_board_adc_channels": 0,
+            "num_board_dig_in_channels": 0,
+            "num_board_dig_out_channels": 0,
+            "num_temp_sensor_channels": 0,
+            "num_samples_per_data_block": 128,
+            "num_samples": 128000,
+            "header_size": 512,
+            "amplifier_channels": [
+                {"native_channel_name": "A-000", "signal_type": 0},
+                {"native_channel_name": "A-001", "signal_type": 0},
+            ],
+            "aux_input_channels": [],
+            "board_adc_channels": [],
+            "board_dig_in_channels": [],
+            "board_dig_out_channels": [],
+            "supply_voltage_channels": [],
+            "frequency_parameters": {
+                "amplifier_sample_rate": 30000.0,
+                "aux_input_sample_rate": 7500.0,
+            },
+        }
 
-        # Mock the _get_si_reader method to return a mock reader class
-        mock_si_class = MagicMock()
-        mock_si_instance = MagicMock()
-        mock_si_instance.getchannelsepoch.return_value = mock_channels
-        mock_si_class.return_value = mock_si_instance
-
-        with patch.object(reader, "_get_si_reader", return_value=mock_si_class):
+        with patch(
+            "ndi.daq.reader.mfdaq.intan.read_Intan_RHD2000_header",
+            return_value=mock_header,
+        ):
+            # Clear any cached header
+            reader._header_cache.clear()
             channels = reader.getchannelsepoch(["fake_data.rhd"])
 
-        assert len(channels) == 3
+        assert len(channels) == 3  # 2 amplifier + 1 time
         assert channels[0].name == "ai1"
         assert channels[0].type == "analog_in"
         assert channels[0].sample_rate == 30000.0
+        assert channels[1].name == "ai2"
         assert channels[2].type == "time"
 
-    def test_intan_reader_no_spikeinterface(self):
-        """ndi_daq_reader_mfdaq_intan.getchannelsepoch returns [] when SI is unavailable.
-
-        MATLAB tests always had NDR; Python gracefully degrades.
-        """
+    def test_intan_reader_no_rhd_file(self):
+        """ndi_daq_reader_mfdaq_intan.getchannelsepoch returns [] with no .rhd file."""
         reader = ndi_daq_reader_mfdaq_intan()
-
-        # Mock _get_si_reader to return None (no spikeinterface)
-        with patch.object(reader, "_get_si_reader", return_value=None):
-            channels = reader.getchannelsepoch(["nonexistent.rhd"])
-
+        channels = reader.getchannelsepoch(["nonexistent.txt"])
         assert channels == []
 
-    def test_intan_reader_readchannels_no_si_raises(self):
-        """ndi_daq_reader_mfdaq_intan.readchannels_epochsamples raises ImportError without SI."""
+    def test_intan_reader_readchannels_no_file_raises(self):
+        """ndi_daq_reader_mfdaq_intan.readchannels_epochsamples raises with no .rhd file."""
         reader = ndi_daq_reader_mfdaq_intan()
 
-        with patch.object(reader, "_get_si_reader", return_value=None):
-            with pytest.raises(ImportError, match="spikeinterface"):
-                reader.readchannels_epochsamples("ai", [1], ["fake.rhd"], 1, 100)
+        with pytest.raises(FileNotFoundError):
+            reader.readchannels_epochsamples("ai", [1], ["fake.txt"], 1, 100)
 
-    def test_intan_reader_samplerate_no_si_raises(self):
-        """ndi_daq_reader_mfdaq_intan.samplerate raises ImportError without SI."""
+    def test_intan_reader_samplerate_no_file_raises(self):
+        """ndi_daq_reader_mfdaq_intan.samplerate raises with no .rhd file."""
         reader = ndi_daq_reader_mfdaq_intan()
 
-        with patch.object(reader, "_get_si_reader", return_value=None):
-            with pytest.raises(ImportError, match="spikeinterface"):
-                reader.samplerate(["fake.rhd"], "ai", [1])
+        with pytest.raises(FileNotFoundError):
+            reader.samplerate(["fake.txt"], "ai", [1])
 
     def test_intan_reader_repr(self):
         """ndi_daq_reader_mfdaq_intan has a useful repr."""
@@ -216,6 +222,92 @@ class TestIntanReader:
         for ch in analog_channels:
             assert ch.sample_rate is not None
             assert ch.sample_rate > 0
+
+    def test_intan_reader_samplerate_mocked(self):
+        """ndi_daq_reader_mfdaq_intan.samplerate returns correct rates via mocked header."""
+        reader = ndi_daq_reader_mfdaq_intan()
+
+        mock_header = {
+            "sample_rate": 30000.0,
+            "num_amplifier_channels": 2,
+            "num_aux_input_channels": 1,
+            "num_supply_voltage_channels": 0,
+            "num_board_adc_channels": 0,
+            "num_board_dig_in_channels": 0,
+            "num_board_dig_out_channels": 0,
+            "num_temp_sensor_channels": 0,
+            "num_samples_per_data_block": 128,
+            "num_samples": 128000,
+            "header_size": 512,
+            "amplifier_channels": [
+                {"native_channel_name": "A-000", "signal_type": 0},
+                {"native_channel_name": "A-001", "signal_type": 0},
+            ],
+            "aux_input_channels": [{"native_channel_name": "AUX1", "signal_type": 1}],
+            "board_adc_channels": [],
+            "board_dig_in_channels": [],
+            "board_dig_out_channels": [],
+            "supply_voltage_channels": [],
+            "frequency_parameters": {
+                "amplifier_sample_rate": 30000.0,
+                "aux_input_sample_rate": 7500.0,
+            },
+        }
+
+        with patch(
+            "ndi.daq.reader.mfdaq.intan.read_Intan_RHD2000_header",
+            return_value=mock_header,
+        ):
+            reader._header_cache.clear()
+            rates = reader.samplerate(["fake.rhd"], "ai", [1])
+            assert rates[0] == 30000.0
+
+            reader._header_cache.clear()
+            aux_rates = reader.samplerate(["fake.rhd"], "auxiliary_in", [1])
+            assert aux_rates[0] == 7500.0
+
+    def test_intan_reader_t0_t1_mocked(self):
+        """ndi_daq_reader_mfdaq_intan.t0_t1 returns correct time range."""
+        reader = ndi_daq_reader_mfdaq_intan()
+
+        mock_header = {
+            "num_amplifier_channels": 1,
+            "num_aux_input_channels": 0,
+            "num_supply_voltage_channels": 0,
+            "num_board_adc_channels": 0,
+            "num_board_dig_in_channels": 0,
+            "num_board_dig_out_channels": 0,
+            "num_temp_sensor_channels": 0,
+            "num_samples_per_data_block": 60,
+            "amplifier_channels": [{"native_channel_name": "A-000", "signal_type": 0}],
+            "aux_input_channels": [],
+            "board_adc_channels": [],
+            "board_dig_in_channels": [],
+            "board_dig_out_channels": [],
+            "supply_voltage_channels": [],
+            "frequency_parameters": {"amplifier_sample_rate": 30000.0},
+        }
+
+        # Intan_RHD2000_blockinfo returns (blockinfo, bytes_per_block, bytes_present, num_data_blocks)
+        mock_blockinfo = ({"samples_per_block": 60}, 0, 0, 5000)
+        # total_samples = 60 * 5000 = 300000
+
+        with (
+            patch(
+                "ndi.daq.reader.mfdaq.intan.read_Intan_RHD2000_header",
+                return_value=mock_header,
+            ),
+            patch(
+                "ndi.daq.reader.mfdaq.intan.Intan_RHD2000_blockinfo",
+                return_value=mock_blockinfo,
+            ),
+        ):
+            reader._header_cache.clear()
+            t0_t1 = reader.t0_t1(["fake.rhd"])
+
+        assert len(t0_t1) == 1
+        assert t0_t1[0][0] == 0.0
+        np.testing.assert_allclose(t0_t1[0][1], (300000 - 1) / 30000.0)
 
 
 # ===========================================================================

@@ -12,12 +12,12 @@ Architecture:
 This is the workflow the cofounder is building toward!
 """
 
-import numpy as np
 import os
 import tempfile
 
-# Our NDI core (Phase 2 implementation)
-from ndi import Document, Query, Ido
+import numpy as np
+
+from ndi import Document, Ido, Query
 from ndi.common import timestamp
 
 # Cofounder's compression library
@@ -52,7 +52,7 @@ def demo_full_workflow():
     sample_rate = 30000
 
     # Simulate neural data: noise + spikes
-    t = np.linspace(0, 1, num_samples)
+    _t = np.linspace(0, 1, num_samples)
     data = np.random.randn(num_samples, num_channels) * 50  # noise
 
     # Add some "spikes"
@@ -138,7 +138,7 @@ def demo_full_workflow():
             q3 = Query('base.name').contains('ephys')
 
             # Combined query
-            q_combined = q1 & q2 & q3
+            _q_combined = q1 & q2 & q3
 
             print(f"   Query 1: {q1.to_searchstructure()}")
             print(f"   Query 2: {q2.to_searchstructure()}")
@@ -225,7 +225,7 @@ def demo_document_features():
     doc = doc.setproperties(**{
         'base.name': 'neural_recording',
     })
-    print(f"3. Set name via setproperties")
+    print("3. Set name via setproperties")
 
     # Document equality (by ID)
     doc2 = Document(doc.document_properties)

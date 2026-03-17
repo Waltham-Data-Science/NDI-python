@@ -101,7 +101,7 @@ class ndi_time_syncrule_filefind(ndi_time_syncrule):
 
     def eligible_epochsets(self) -> list[str]:
         """Return eligible epochset class names."""
-        return ["ndi.daq.system", "ndi_daq_system"]
+        return ["ndi.daq.system"]
 
     def ineligible_epochsets(self) -> list[str]:
         """Return ineligible epochset class names."""

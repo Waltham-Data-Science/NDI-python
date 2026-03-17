@@ -198,10 +198,10 @@ class TestSessionList:
         # Check session_reference matches
         assert props.get("session_reference") == "exp_demo", "session_reference should match"
 
-        # Check session_creator
+        # Check session_creator (MATLAB-compatible name)
         assert (
-            props.get("session_creator") == "ndi_session_dir"
-        ), "session_creator should be ndi_session_dir"
+            props.get("session_creator") == "ndi.session.dir"
+        ), "session_creator should be ndi.session.dir"
 
 
 # ===========================================================================

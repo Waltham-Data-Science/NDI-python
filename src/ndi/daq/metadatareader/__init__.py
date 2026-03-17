@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from ...ido import ndi_ido
+from ...util.classname import ndi_matlab_classname
 
 
 class ndi_daq_metadatareader(ndi_ido):
@@ -270,7 +271,7 @@ class ndi_daq_metadatareader(ndi_ido):
         doc = ndi_document(
             "daq/daqmetadatareader",
             **{
-                "daqmetadatareader.ndi_daqmetadatareader_class": self.__class__.__name__,
+                "daqmetadatareader.ndi_daqmetadatareader_class": ndi_matlab_classname(self),
                 "daqmetadatareader.tab_separated_file_parameter": self._tab_separated_file_parameter,
                 "base.id": self.id,
             },

@@ -20,6 +20,7 @@ except ImportError:
     HAS_NETWORKX = False
 
 from ..ido import ndi_ido
+from ..util.classname import ndi_matlab_classname
 from .clocktype import ndi_time_clocktype
 from .syncrule_base import ndi_time_syncrule
 from .timemapping import ndi_time_timemapping
@@ -570,7 +571,7 @@ class ndi_time_syncgraph(ndi_ido):
         sg_doc = ndi_document(
             document_type="daq/syncgraph",
             **{
-                "syncgraph.ndi_syncgraph_class": type(self).__name__,
+                "syncgraph.ndi_syncgraph_class": ndi_matlab_classname(self),
                 "base.id": self.id,
                 "base.session_id": self._session.id() if self._session else "",
             },

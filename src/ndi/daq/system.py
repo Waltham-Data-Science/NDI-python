@@ -19,6 +19,63 @@ from .reader_base import ndi_daq_reader
 logger = logging.getLogger(__name__)
 
 
+def _serialize_clocktype(ct: Any) -> dict[str, str]:
+    """Convert a ClockType enum (or dict) to a MATLAB-compatible dict."""
+    if isinstance(ct, dict):
+        return ct
+    # ClockType enum — value is the type string
+    return {"type": str(ct.value) if hasattr(ct, "value") else str(ct)}
+
+
+def _serialize_t0_t1(t0_t1: Any) -> list:
+    """Convert t0_t1 to MATLAB-compatible format: [t0, t1] with null for NaN."""
+    import math
+
+    if isinstance(t0_t1, (list, tuple)) and len(t0_t1) == 1:
+        # Single-element list of tuples: [(t0, t1)] -> [t0, t1]
+        t0_t1 = t0_t1[0]
+    if isinstance(t0_t1, (list, tuple)) and len(t0_t1) == 2:
+        t0, t1 = t0_t1
+        t0 = None if (isinstance(t0, float) and math.isnan(t0)) else t0
+        t1 = None if (isinstance(t1, float) and math.isnan(t1)) else t1
+        return [t0, t1]
+    return t0_t1
+
+
+def _serialize_epochnode(node: dict[str, Any]) -> None:
+    """Normalize epoch node dict in-place to MATLAB-compatible JSON format."""
+    # epoch_clock: list of ClockType -> single dict (MATLAB unwraps single)
+    ec = node.get("epoch_clock")
+    if isinstance(ec, list):
+        node["epoch_clock"] = (
+            _serialize_clocktype(ec[0]) if len(ec) == 1 else [_serialize_clocktype(c) for c in ec]
+        )
+    elif ec is not None:
+        node["epoch_clock"] = _serialize_clocktype(ec)
+
+    # t0_t1
+    t = node.get("t0_t1")
+    if t is not None:
+        node["t0_t1"] = _serialize_t0_t1(t)
+
+    # underlying_epochs: recursively normalize
+    ue = node.get("underlying_epochs")
+    if isinstance(ue, dict):
+        ue_ec = ue.get("epoch_clock")
+        if isinstance(ue_ec, list):
+            ue["epoch_clock"] = [_serialize_clocktype(c) for c in ue_ec]
+        ue_t = ue.get("t0_t1")
+        if isinstance(ue_t, list):
+            ue["t0_t1"] = [_serialize_t0_t1(t) for t in ue_t]
+
+    # epochprobemap: if it's a list, handle; if it has a to_dict method, use it
+    epm = node.get("epochprobemap")
+    if epm is not None and hasattr(epm, "to_dict"):
+        node["epochprobemap"] = epm.to_dict()
+    elif epm is not None and hasattr(epm, "__dict__") and not isinstance(epm, dict):
+        node["epochprobemap"] = {k: v for k, v in epm.__dict__.items() if not k.startswith("_")}
+
+
 class ndi_daq_system(ndi_ido):
     """
     Complete data acquisition system.
@@ -50,7 +107,7 @@ class ndi_daq_system(ndi_ido):
         >>> et = sys.epochtable()
     """
 
-    NDI_DAQSYSTEM_CLASS = "ndi.daq.system.mfdaq"
+    NDI_DAQSYSTEM_CLASS = "ndi.daq.system"
 
     def __init__(
         self,
@@ -199,6 +256,14 @@ class ndi_daq_system(ndi_ido):
             return self._filenavigator.session
         return self._session
 
+    def _get_session_id(self) -> str | None:
+        """Return the session id, handling both method and property access."""
+        s = self.session
+        if s is None:
+            return None
+        sid = s.id
+        return sid() if callable(sid) else sid
+
     def set_daqmetadatareaders(
         self,
         readers: list[Any],
@@ -340,7 +405,7 @@ class ndi_daq_system(ndi_ido):
                 {
                     "epoch_number": epoch_number,
                     "epoch_id": epoch_id,
-                    "epoch_session_id": self.session.id if self.session else None,
+                    "epoch_session_id": self._get_session_id(),
                     "epochprobemap": epochprobemap,
                     "epoch_clock": epoch_clock,
                     "t0_t1": t0_t1,
@@ -349,6 +414,24 @@ class ndi_daq_system(ndi_ido):
             )
 
         return et
+
+    def epochnodes(self) -> list[dict[str, Any]]:
+        """Return epoch node structs for this DAQ system.
+
+        Each node mirrors the MATLAB ``epochnodes`` output: the same fields
+        as ``epochtable`` (minus ``epoch_number``) plus ``objectname`` and
+        ``objectclass``.  Values are JSON-serializable and match MATLAB's
+        format for cross-language comparison.
+        """
+        et = self.epochtable()
+        nodes = []
+        for entry in et:
+            node = {k: v for k, v in entry.items() if k != "epoch_number"}
+            node["objectname"] = self._name
+            node["objectclass"] = self.NDI_DAQSYSTEM_CLASS
+            _serialize_epochnode(node)
+            nodes.append(node)
+        return nodes
 
     def getprobes(self) -> list[dict[str, Any]]:
         """
