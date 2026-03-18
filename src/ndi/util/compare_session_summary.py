@@ -87,6 +87,21 @@ def compareSessionSummary(
                 )
                 continue
 
+            # For DAQ system lists, sort by name so order doesn't matter.
+            # daqSystemNames and daqSystemDetails are parallel arrays keyed
+            # by daqSystemNames; sort both sides consistently.
+            if field == "daqSystemNames":
+                val1 = sorted(val1)
+                val2 = sorted(val2)
+            elif field == "daqSystemDetails":
+                # Sort details by their paired name from the parent summary
+                names1 = summary1.get("daqSystemNames", [])
+                names2 = summary2.get("daqSystemNames", [])
+                if len(names1) == len(val1):
+                    val1 = [d for _, d in sorted(zip(names1, val1))]
+                if len(names2) == len(val2):
+                    val2 = [d for _, d in sorted(zip(names2, val2))]
+
             for j, (item1, item2) in enumerate(zip(val1, val2)):
                 if isinstance(item1, str) and isinstance(item2, str):
                     s1 = re.sub(r"[\r\n]+", "", item1)
