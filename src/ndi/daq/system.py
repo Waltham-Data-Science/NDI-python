@@ -209,26 +209,17 @@ class ndi_daq_system(ndi_ido):
             from ..class_registry import get_class
 
             ReaderCls = get_class(reader_class_name)
-            if ReaderCls is not None:
-                try:
-                    self._daqreader = ReaderCls(session=session, document=reader_doc)
-                except Exception as exc:
-                    logger.warning(
-                        "Could not reconstruct DAQ reader %s: %s", reader_class_name, exc
-                    )
-            else:
-                # Unknown reader class — create a generic reader that preserves
-                # the MATLAB-compatible class name for symmetry testing.
-                logger.debug("Unknown DAQ reader class: %s", reader_class_name)
-                if reader_class_name:
-                    from .reader_base import ndi_daq_reader
-
-                    try:
-                        reader = ndi_daq_reader(session=session, document=reader_doc)
-                        reader.NDI_DAQREADER_CLASS = reader_class_name
-                        self._daqreader = reader
-                    except Exception:
-                        pass
+            if ReaderCls is None:
+                raise ValueError(
+                    f"Unknown DAQ reader class: {reader_class_name!r}. "
+                    f"Register it in ndi.class_registry."
+                )
+            try:
+                self._daqreader = ReaderCls(session=session, document=reader_doc)
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Could not reconstruct DAQ reader {reader_class_name!r}: {exc}"
+                ) from exc
 
         # Reconstruct file navigator from its document
         self._filenavigator = None
@@ -245,14 +236,16 @@ class ndi_daq_system(ndi_ido):
 
             NavCls = get_nav_class(nav_class_name)
             if NavCls is None:
-                from ..file.navigator import ndi_file_navigator
-
-                NavCls = ndi_file_navigator
-
+                raise ValueError(
+                    f"Unknown file navigator class: {nav_class_name!r}. "
+                    f"Register it in ndi.class_registry."
+                )
             try:
                 self._filenavigator = NavCls(session=session, document=nav_doc)
             except Exception as exc:
-                logger.warning("Could not reconstruct file navigator: %s", exc)
+                raise RuntimeError(
+                    f"Could not reconstruct file navigator {nav_class_name!r}: {exc}"
+                ) from exc
 
     @property
     def name(self) -> str:
