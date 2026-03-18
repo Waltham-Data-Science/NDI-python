@@ -105,14 +105,31 @@ def lab(session, lab_name: str) -> None:
         )
         session.database_add(fn_doc)
 
-        # Create daqreader document
-        dr_doc = session.newdocument(
-            "daq/daqreader",
-            **{
-                "base.name": name,
-                "daqreader.ndi_daqreader_class": reader_class,
-            },
-        )
+        # Create daqreader document — use the specialised document type
+        # for readers that require extra properties (e.g. ndr needs
+        # daqreader_ndr.ndr_reader_string so MATLAB can reconstruct it).
+        reader_file_params = config.get("DaqReaderFileParameters", "")
+        if isinstance(reader_file_params, list):
+            reader_file_params = reader_file_params[0] if reader_file_params else ""
+
+        if reader_class == "ndi.daq.reader.mfdaq.ndr":
+            dr_doc = session.newdocument(
+                "daq/daqreader_ndr",
+                **{
+                    "base.name": name,
+                    "daqreader.ndi_daqreader_class": reader_class,
+                    "daqreader_ndr.ndr_reader_string": reader_file_params,
+                    "daqreader_ndr.ndi_daqreader_ndr_class": reader_class,
+                },
+            )
+        else:
+            dr_doc = session.newdocument(
+                "daq/daqreader",
+                **{
+                    "base.name": name,
+                    "daqreader.ndi_daqreader_class": reader_class,
+                },
+            )
         session.database_add(dr_doc)
 
         # Create daqsystem document
