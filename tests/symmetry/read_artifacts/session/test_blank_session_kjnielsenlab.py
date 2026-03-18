@@ -69,7 +69,8 @@ class TestBlankSessionKjnielsenlab:
             excludeFiles=["sessionSummary.json", "jsonDocuments"],
         )
 
-        assert len(report) == 0, (
-            f"Session summary mismatch against {source_type} generated artifacts:\n"
-            + "\n".join(report)
+        assert (
+            len(report) == 0
+        ), f"Session summary mismatch against {source_type} generated artifacts:\n" + "\n".join(
+            report
         )

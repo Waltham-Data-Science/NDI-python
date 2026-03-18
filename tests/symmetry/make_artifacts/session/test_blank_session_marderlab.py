@@ -20,18 +20,13 @@ import shutil
 
 import pytest
 
+import ndi.setup
 from ndi.query import ndi_query
 from ndi.session.dir import ndi_session_dir
 from ndi.util import sessionSummary
 from tests.symmetry.conftest import PYTHON_ARTIFACTS
-import ndi.setup
 
-ARTIFACT_DIR = (
-    PYTHON_ARTIFACTS
-    / "session"
-    / "blankSessionMarderlab"
-    / "testBlankSessionMarderlab"
-)
+ARTIFACT_DIR = PYTHON_ARTIFACTS / "session" / "blankSessionMarderlab" / "testBlankSessionMarderlab"
 
 
 class TestBlankSessionMarderlab:

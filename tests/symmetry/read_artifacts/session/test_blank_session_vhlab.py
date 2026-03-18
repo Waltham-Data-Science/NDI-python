@@ -31,11 +31,7 @@ class TestBlankSessionVhlab:
 
     def _artifact_dir(self, source_type: str):
         return (
-            SYMMETRY_BASE
-            / source_type
-            / "session"
-            / "blankSessionVhlab"
-            / "testBlankSessionVhlab"
+            SYMMETRY_BASE / source_type / "session" / "blankSessionVhlab" / "testBlankSessionVhlab"
         )
 
     def _open_session(self, source_type):
@@ -67,7 +63,8 @@ class TestBlankSessionVhlab:
             excludeFiles=["sessionSummary.json", "jsonDocuments"],
         )
 
-        assert len(report) == 0, (
-            f"Session summary mismatch against {source_type} generated artifacts:\n"
-            + "\n".join(report)
+        assert (
+            len(report) == 0
+        ), f"Session summary mismatch against {source_type} generated artifacts:\n" + "\n".join(
+            report
         )
