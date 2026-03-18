@@ -217,15 +217,40 @@ class ndi_daq_system(ndi_ido):
                         "Could not reconstruct DAQ reader %s: %s", reader_class_name, exc
                     )
             else:
+                # Unknown reader class — create a generic reader that preserves
+                # the MATLAB-compatible class name for symmetry testing.
                 logger.debug("Unknown DAQ reader class: %s", reader_class_name)
+                if reader_class_name:
+                    from .reader_base import ndi_daq_reader
+
+                    try:
+                        reader = ndi_daq_reader(session=session, document=reader_doc)
+                        reader.NDI_DAQREADER_CLASS = reader_class_name
+                        self._daqreader = reader
+                    except Exception:
+                        pass
 
         # Reconstruct file navigator from its document
         self._filenavigator = None
         if len(nav_docs) == 1:
-            from ..file.navigator import ndi_file_navigator
+            nav_doc = nav_docs[0]
+            nav_class_name = ""
+            nav_props = nav_doc.document_properties
+            if isinstance(nav_props, dict):
+                nav_class_name = nav_props.get("filenavigator", {}).get(
+                    "ndi_filenavigator_class", ""
+                )
+
+            from ..class_registry import get_class as get_nav_class
+
+            NavCls = get_nav_class(nav_class_name)
+            if NavCls is None:
+                from ..file.navigator import ndi_file_navigator
+
+                NavCls = ndi_file_navigator
 
             try:
-                self._filenavigator = ndi_file_navigator(session=session, document=nav_docs[0])
+                self._filenavigator = NavCls(session=session, document=nav_doc)
             except Exception as exc:
                 logger.warning("Could not reconstruct file navigator: %s", exc)
 

@@ -76,6 +76,12 @@ def lab(session, lab_name: str) -> None:
         reader_class = config.get("DaqReaderClass", "ndi.daq.reader.mfdaq")
         system_class = config.get("DaqSystemClass", "ndi.daq.system.mfdaq")
         metadata_reader_class = config.get("MetadataReaderClass", [])
+        has_epoch_dirs = config.get("HasEpochDirectories", False)
+
+        # Choose the correct filenavigator class
+        filenavigator_class = (
+            "ndi.file.navigator.epochdir" if has_epoch_dirs else "ndi.file.navigator"
+        )
 
         # Convert file parameters to MATLAB cell string format
         fp_str = _to_matlab_cell_str(file_params)
@@ -91,7 +97,7 @@ def lab(session, lab_name: str) -> None:
             "daq/filenavigator",
             **{
                 "base.name": name,
-                "filenavigator.ndi_filenavigator_class": "ndi.file.navigator",
+                "filenavigator.ndi_filenavigator_class": filenavigator_class,
                 "filenavigator.fileparameters": fp_str,
                 "filenavigator.epochprobemap_class": epm_class,
                 "filenavigator.epochprobemap_fileparameters": epm_fp_str,

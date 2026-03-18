@@ -34,6 +34,7 @@ def _build_registry() -> dict[str, type]:
     from .daq.system import ndi_daq_system
     from .element import ndi_element
     from .file.navigator import ndi_file_navigator
+    from .file.navigator.epochdir import ndi_file_navigator_epochdir
     from .probe import ndi_probe
     from .probe.timeseries import ndi_probe_timeseries
     from .probe.timeseries_mfdaq import ndi_probe_timeseries_mfdaq
@@ -63,8 +64,9 @@ def _build_registry() -> dict[str, type]:
     # DAQ system
     registry[ndi_daq_system.NDI_DAQSYSTEM_CLASS] = ndi_daq_system
 
-    # File navigator
+    # File navigators
     registry[ndi_file_navigator.NDI_FILENAVIGATOR_CLASS] = ndi_file_navigator
+    registry[ndi_file_navigator_epochdir.NDI_FILENAVIGATOR_CLASS] = ndi_file_navigator_epochdir
 
     return registry
 
