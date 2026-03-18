@@ -12,11 +12,13 @@ Each reader class:
 from .blackrock import ndi_daq_reader_mfdaq_blackrock
 from .cedspike2 import ndi_daq_reader_mfdaq_cedspike2
 from .intan import ndi_daq_reader_mfdaq_intan
+from .ndr import ndi_daq_reader_mfdaq_ndr
 from .spikegadgets import ndi_daq_reader_mfdaq_spikegadgets
 
 __all__ = [
     "ndi_daq_reader_mfdaq_intan",
     "ndi_daq_reader_mfdaq_blackrock",
     "ndi_daq_reader_mfdaq_cedspike2",
+    "ndi_daq_reader_mfdaq_ndr",
     "ndi_daq_reader_mfdaq_spikegadgets",
 ]

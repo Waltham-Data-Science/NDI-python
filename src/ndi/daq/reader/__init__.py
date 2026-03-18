@@ -18,6 +18,7 @@ from .mfdaq import (
     ndi_daq_reader_mfdaq_blackrock,
     ndi_daq_reader_mfdaq_cedspike2,
     ndi_daq_reader_mfdaq_intan,
+    ndi_daq_reader_mfdaq_ndr,
     ndi_daq_reader_mfdaq_spikegadgets,
 )
 from .spikeinterface_adapter import ndi_daq_reader_SpikeInterfaceReader
@@ -27,5 +28,6 @@ __all__ = [
     "ndi_daq_reader_mfdaq_intan",
     "ndi_daq_reader_mfdaq_blackrock",
     "ndi_daq_reader_mfdaq_cedspike2",
+    "ndi_daq_reader_mfdaq_ndr",
     "ndi_daq_reader_mfdaq_spikegadgets",
 ]
