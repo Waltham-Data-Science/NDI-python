@@ -32,7 +32,7 @@ Example:
 # Import epoch module (Phase 6)
 # Import Phase 10: Cloud API client
 # Import Phase 11: Schema validation
-from . import calc, cloud, common, daq, epoch, file, session, time, util, validate, validators
+from . import calc, cloud, common, daq, epoch, file, session, setup, time, util, validate, validators
 
 # Import Phase 9: ndi_app framework and calculators
 from .app import ndi_app
@@ -124,6 +124,7 @@ __all__ = [
     "ndi_calculator",
     "calc",
     "cloud",
+    "setup",
     "util",
     "validate",
     "validators",

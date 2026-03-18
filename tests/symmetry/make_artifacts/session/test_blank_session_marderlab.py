@@ -24,7 +24,7 @@ from ndi.query import ndi_query
 from ndi.session.dir import ndi_session_dir
 from ndi.util import sessionSummary
 from tests.symmetry.conftest import PYTHON_ARTIFACTS
-from tests.symmetry.make_artifacts.session._lab_setup import setup_lab_daq_systems
+import ndi.setup
 
 ARTIFACT_DIR = (
     PYTHON_ARTIFACTS
@@ -47,7 +47,7 @@ class TestBlankSessionMarderlab:
         session.database_clear("yes")
         session.cache.clear()
 
-        setup_lab_daq_systems(session, "marderlab")
+        ndi.setup.lab(session, "marderlab")
 
         self.session = session
 
