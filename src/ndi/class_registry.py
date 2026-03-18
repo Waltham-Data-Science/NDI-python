@@ -32,12 +32,6 @@ def _build_registry() -> dict[str, type]:
     from .daq.reader.mfdaq.intan import ndi_daq_reader_mfdaq_intan
     from .daq.reader.mfdaq.spikegadgets import ndi_daq_reader_mfdaq_spikegadgets
     from .daq.system import ndi_daq_system
-    from .setup.daq.reader.mfdaq.stimulus.nielsenvisintan import (
-        ndi_setup_daq_reader_mfdaq_stimulus_nielsenvisintan,
-    )
-    from .setup.daq.reader.mfdaq.stimulus.vhlabvisspike2 import (
-        ndi_setup_daq_reader_mfdaq_stimulus_vhlabvisspike2,
-    )
     from .element import ndi_element
     from .file.navigator import ndi_file_navigator
     from .file.navigator.epochdir import ndi_file_navigator_epochdir
@@ -45,6 +39,12 @@ def _build_registry() -> dict[str, type]:
     from .probe.timeseries import ndi_probe_timeseries
     from .probe.timeseries_mfdaq import ndi_probe_timeseries_mfdaq
     from .probe.timeseries_stimulator import ndi_probe_timeseries_stimulator
+    from .setup.daq.reader.mfdaq.stimulus.nielsenvisintan import (
+        ndi_setup_daq_reader_mfdaq_stimulus_nielsenvisintan,
+    )
+    from .setup.daq.reader.mfdaq.stimulus.vhlabvisspike2 import (
+        ndi_setup_daq_reader_mfdaq_stimulus_vhlabvisspike2,
+    )
 
     registry: dict[str, type] = {}
 

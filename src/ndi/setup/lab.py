@@ -126,9 +126,7 @@ def lab(session, lab_name: str) -> None:
         daq_doc = daq_doc.set_dependency_value(
             "filenavigator_id", fn_doc.id, error_if_not_found=False
         )
-        daq_doc = daq_doc.set_dependency_value(
-            "daqreader_id", dr_doc.id, error_if_not_found=False
-        )
+        daq_doc = daq_doc.set_dependency_value("daqreader_id", dr_doc.id, error_if_not_found=False)
 
         # Create daqmetadatareader document if configured
         if metadata_reader_class and metadata_reader_class != []:
@@ -145,8 +143,6 @@ def lab(session, lab_name: str) -> None:
                 },
             )
             session.database_add(mr_doc)
-            daq_doc = daq_doc.add_dependency_value_n(
-                "daqmetadatareader_id", mr_doc.id
-            )
+            daq_doc = daq_doc.add_dependency_value_n("daqmetadatareader_id", mr_doc.id)
 
         session.database_add(daq_doc)
