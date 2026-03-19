@@ -95,8 +95,11 @@ def sessionSummary(session_obj: Any) -> dict[str, Any]:
 
         daq_details.append(details)
 
-    summary["daqSystemNames"] = daq_names
-    summary["daqSystemDetails"] = daq_details
+    # Sort by name so the order is deterministic across languages
+    # (Python and MATLAB may load configs in different filesystem order).
+    paired = sorted(zip(daq_names, daq_details), key=lambda x: x[0])
+    summary["daqSystemNames"] = [p[0] for p in paired]
+    summary["daqSystemDetails"] = [p[1] for p in paired]
 
     # 5. Probes
     probes = session_obj.getprobes()

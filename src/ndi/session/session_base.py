@@ -1123,17 +1123,11 @@ class ndi_session(ABC):
             props = document.document_properties
             ndi_class = props.get("element", {}).get("ndi_element_class", "")
             cls = get_class(ndi_class)
-            if cls is not None:
-                return cls(session=self, document=document)
-            # Fallback: if ndi_element_class contains "probe" but
-            # isn't a known key (e.g. "ndi.probe.timage"), use ndi_probe.
-            from ..probe import ndi_probe
-
-            if "probe" in ndi_class:
-                return ndi_probe(session=self, document=document)
-            from ..element import ndi_element
-
-            return ndi_element(session=self, document=document)
+            if cls is None:
+                raise ValueError(
+                    f"Unknown element class: {ndi_class!r}. " f"Register it in ndi.class_registry."
+                )
+            return cls(session=self, document=document)
 
         if document.doc_isa("syncgraph"):
             return ndi_time_syncgraph(session=self, document=document)

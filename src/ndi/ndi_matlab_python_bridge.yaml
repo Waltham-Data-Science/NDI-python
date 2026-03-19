@@ -985,13 +985,13 @@ not_applicable:
   # =========================================================================
   - name: setup
     matlab_path: "+ndi/+setup/"
-    status: not_applicable
+    python_path: "ndi/setup/"
+    status: implemented
     decision_log: >
-      Entire MATLAB package containing lab-specific DAQ configurations
-      (angeluccilab, dbkatzlab, marderlab, vhlab, yangyangwang) and
-      sub-packages (+NDIMaker, +conv, +daq, +epoch, +stimulus,
-      @DaqSystemConfiguration). These are MATLAB-specific lab setup
-      wizards. Python labs configure via JSON/YAML files instead.
+      Python equivalent of MATLAB lab setup wizards. The ndi.setup.lab()
+      function reads DAQ system JSON configs from ndi_common/daq_systems/
+      and creates the corresponding documents in a session. Usage:
+      ndi.setup.lab(session, "vhlab").
 
   # =========================================================================
   # ndi.docs namespace — MATLAB documentation generation

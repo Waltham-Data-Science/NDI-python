@@ -110,19 +110,28 @@ class TestBuildDataset:
         # Copy the entire dataset directory to the persistent artifact dir.
         shutil.copytree(str(self.dataset.getpath()), str(artifact_dir))
 
-        # Write individual JSON documents.
+        # Write individual JSON documents, grouped by session ID.
+        # Mirrors MATLAB which iterates session_list() and queries each
+        # session's database (NOT the dataset's database).
         json_docs_dir = artifact_dir / "jsonDocuments"
         json_docs_dir.mkdir(exist_ok=True)
 
-        docs = self.dataset.database_search(Query("base.id").match("(.*)"))
-        for doc in docs:
-            props = doc.document_properties
-            doc_path = json_docs_dir / f"{doc.id}.json"
-            doc_path.write_text(json.dumps(props, indent=2, allow_nan=True), encoding="utf-8")
+        artifact_dataset = Dataset(artifact_dir)
+
+        # Export JSON documents for each session in the dataset
+        refs, session_ids, *_ = artifact_dataset.session_list()
+        for sid in session_ids:
+            sess = artifact_dataset.open_session(sid)
+            session_json_dir = json_docs_dir / sid
+            session_json_dir.mkdir(exist_ok=True)
+            docs = sess.database_search(Query("base.id").match("(.*)"))
+            for doc in docs:
+                props = doc.document_properties
+                doc_path = session_json_dir / f"{doc.id}.json"
+                doc_path.write_text(json.dumps(props, indent=2, allow_nan=True), encoding="utf-8")
 
         # Write datasetSummary.json – open from artifact_dir so the session
         # path lists files that are actually present (including jsonDocuments).
-        artifact_dataset = Dataset(artifact_dir)
         summary = _dataset_summary(artifact_dataset)
         summary_json = json.dumps(summary, indent=2, allow_nan=True)
         summary_path = artifact_dir / "datasetSummary.json"
@@ -132,4 +141,4 @@ class TestBuildDataset:
         assert artifact_dir.exists()
         assert summary_path.exists()
         assert json_docs_dir.exists()
-        assert len(list(json_docs_dir.glob("*.json"))) > 0
+        assert len(list(json_docs_dir.glob("**/*.json"))) > 0

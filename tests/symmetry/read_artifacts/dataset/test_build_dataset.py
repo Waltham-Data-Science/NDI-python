@@ -71,21 +71,19 @@ class TestBuildDataset:
         expected_ids = expected.get("sessionIds", [])
         expected_refs = expected.get("references", [])
 
-        assert num_sessions == expected_num, (
-            f"Session count mismatch in {source_type}: "
-            f"got {num_sessions}, expected {expected_num}"
-        )
+        assert (
+            num_sessions == expected_num
+        ), f"Session count mismatch in {source_type}: got {num_sessions}, expected {expected_num}"
 
         for exp_id in expected_ids:
-            assert exp_id in session_ids, (
-                f"Expected session ID {exp_id!r} not found in dataset " f"from {source_type}"
-            )
+            assert (
+                exp_id in session_ids
+            ), f"Expected session ID {exp_id!r} not found in dataset from {source_type}"
 
         for exp_ref in expected_refs:
-            assert exp_ref in refs, (
-                f"Expected session reference {exp_ref!r} not found in dataset "
-                f"from {source_type}"
-            )
+            assert (
+                exp_ref in refs
+            ), f"Expected session reference {exp_ref!r} not found in dataset from {source_type}"
 
     def test_build_dataset_session_summaries(self, source_type):
         """Compare per-session summaries against those stored in datasetSummary.json."""
@@ -125,19 +123,28 @@ class TestBuildDataset:
             )
 
     def test_build_dataset_documents(self, source_type):
-        """Verify that every exported JSON document can be loaded from the dataset DB."""
+        """Verify that every exported JSON document can be loaded from session DBs.
+
+        Mirrors MATLAB which queries each session's database individually
+        (not the dataset's database).
+        """
         artifact_dir, dataset = self._open_dataset(source_type)
 
         json_docs_dir = artifact_dir / "jsonDocuments"
         if not json_docs_dir.exists():
             pytest.skip(f"jsonDocuments directory not found in {source_type}.")
 
-        json_files = list(json_docs_dir.glob("*.json"))
+        json_files = list(json_docs_dir.glob("**/*.json"))
 
-        actual_docs = dataset.database_search(Query("base.id").match("(.*)"))
+        # Collect docs from each session's database, matching MATLAB's approach
+        actual_docs = []
+        _refs, session_ids, *_ = dataset.session_list()
+        for sid in session_ids:
+            sess = dataset.open_session(sid)
+            actual_docs.extend(sess.database_search(Query("base.id").match("(.*)")))
 
         assert len(actual_docs) == len(json_files), (
-            f"Number of documents in dataset ({len(actual_docs)}) does not match "
+            f"Number of documents across sessions ({len(actual_docs)}) does not match "
             f"{source_type} JSON artifacts ({len(json_files)})."
         )
 
@@ -152,10 +159,10 @@ class TestBuildDataset:
                     actual_props = actual.document_properties
                     assert actual_props.get("document_class", {}).get(
                         "class_name"
-                    ) == expected_doc.get("document_class", {}).get("class_name"), (
-                        f"Document class mismatch for id: {expected_id} " f"in {source_type}"
-                    )
+                    ) == expected_doc.get("document_class", {}).get(
+                        "class_name"
+                    ), f"Document class mismatch for id: {expected_id} in {source_type}"
                     break
-            assert found, (
-                f"Document from {source_type} artifact not found in dataset: " f"{expected_id}"
-            )
+            assert (
+                found
+            ), f"Document from {source_type} artifact not found in dataset: {expected_id}"

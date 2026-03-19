@@ -30,14 +30,25 @@ def _build_registry() -> dict[str, type]:
     from .daq.reader.mfdaq.blackrock import ndi_daq_reader_mfdaq_blackrock
     from .daq.reader.mfdaq.cedspike2 import ndi_daq_reader_mfdaq_cedspike2
     from .daq.reader.mfdaq.intan import ndi_daq_reader_mfdaq_intan
+    from .daq.reader.mfdaq.ndr import ndi_daq_reader_mfdaq_ndr
     from .daq.reader.mfdaq.spikegadgets import ndi_daq_reader_mfdaq_spikegadgets
     from .daq.system import ndi_daq_system
     from .element import ndi_element
     from .file.navigator import ndi_file_navigator
+    from .file.navigator.epochdir import ndi_file_navigator_epochdir
     from .probe import ndi_probe
     from .probe.timeseries import ndi_probe_timeseries
     from .probe.timeseries_mfdaq import ndi_probe_timeseries_mfdaq
     from .probe.timeseries_stimulator import ndi_probe_timeseries_stimulator
+    from .setup.daq.reader.mfdaq.stimulus.nielsenvisintan import (
+        ndi_setup_daq_reader_mfdaq_stimulus_nielsenvisintan,
+    )
+    from .setup.daq.reader.mfdaq.stimulus.vhaudreybpod import (
+        ndi_setup_daq_reader_mfdaq_stimulus_VHAudreyBPod,
+    )
+    from .setup.daq.reader.mfdaq.stimulus.vhlabvisspike2 import (
+        ndi_setup_daq_reader_mfdaq_stimulus_vhlabvisspike2,
+    )
 
     registry: dict[str, type] = {}
 
@@ -56,15 +67,20 @@ def _build_registry() -> dict[str, type]:
         ndi_daq_reader_mfdaq_intan,
         ndi_daq_reader_mfdaq_blackrock,
         ndi_daq_reader_mfdaq_cedspike2,
+        ndi_daq_reader_mfdaq_ndr,
         ndi_daq_reader_mfdaq_spikegadgets,
+        ndi_setup_daq_reader_mfdaq_stimulus_vhlabvisspike2,
+        ndi_setup_daq_reader_mfdaq_stimulus_nielsenvisintan,
+        ndi_setup_daq_reader_mfdaq_stimulus_VHAudreyBPod,
     ):
         registry[cls.NDI_DAQREADER_CLASS] = cls
 
     # DAQ system
     registry[ndi_daq_system.NDI_DAQSYSTEM_CLASS] = ndi_daq_system
 
-    # File navigator
+    # File navigators
     registry[ndi_file_navigator.NDI_FILENAVIGATOR_CLASS] = ndi_file_navigator
+    registry[ndi_file_navigator_epochdir.NDI_FILENAVIGATOR_CLASS] = ndi_file_navigator_epochdir
 
     return registry
 

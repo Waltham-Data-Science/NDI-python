@@ -32,6 +32,8 @@ class ndi_file_navigator_epochdir(ndi_file_navigator):
         >>> #   trial_002/file.rhd  -> epoch 2
     """
 
+    NDI_FILENAVIGATOR_CLASS = "ndi.file.navigator.epochdir"
+
     def epochid(
         self,
         epoch_number: int,

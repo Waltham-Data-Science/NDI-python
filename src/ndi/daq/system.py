@@ -209,25 +209,43 @@ class ndi_daq_system(ndi_ido):
             from ..class_registry import get_class
 
             ReaderCls = get_class(reader_class_name)
-            if ReaderCls is not None:
-                try:
-                    self._daqreader = ReaderCls(session=session, document=reader_doc)
-                except Exception as exc:
-                    logger.warning(
-                        "Could not reconstruct DAQ reader %s: %s", reader_class_name, exc
-                    )
-            else:
-                logger.debug("Unknown DAQ reader class: %s", reader_class_name)
+            if ReaderCls is None:
+                raise ValueError(
+                    f"Unknown DAQ reader class: {reader_class_name!r}. "
+                    f"Register it in ndi.class_registry."
+                )
+            try:
+                self._daqreader = ReaderCls(session=session, document=reader_doc)
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Could not reconstruct DAQ reader {reader_class_name!r}: {exc}"
+                ) from exc
 
         # Reconstruct file navigator from its document
         self._filenavigator = None
         if len(nav_docs) == 1:
-            from ..file.navigator import ndi_file_navigator
+            nav_doc = nav_docs[0]
+            nav_class_name = ""
+            nav_props = nav_doc.document_properties
+            if isinstance(nav_props, dict):
+                nav_class_name = nav_props.get("filenavigator", {}).get(
+                    "ndi_filenavigator_class", ""
+                )
 
+            from ..class_registry import get_class as get_nav_class
+
+            NavCls = get_nav_class(nav_class_name)
+            if NavCls is None:
+                raise ValueError(
+                    f"Unknown file navigator class: {nav_class_name!r}. "
+                    f"Register it in ndi.class_registry."
+                )
             try:
-                self._filenavigator = ndi_file_navigator(session=session, document=nav_docs[0])
+                self._filenavigator = NavCls(session=session, document=nav_doc)
             except Exception as exc:
-                logger.warning("Could not reconstruct file navigator: %s", exc)
+                raise RuntimeError(
+                    f"Could not reconstruct file navigator {nav_class_name!r}: {exc}"
+                ) from exc
 
     @property
     def name(self) -> str:
