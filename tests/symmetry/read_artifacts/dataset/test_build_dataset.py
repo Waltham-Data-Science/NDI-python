@@ -132,7 +132,7 @@ class TestBuildDataset:
         if not json_docs_dir.exists():
             pytest.skip(f"jsonDocuments directory not found in {source_type}.")
 
-        json_files = list(json_docs_dir.glob("*.json"))
+        json_files = list(json_docs_dir.glob("**/*.json"))
 
         actual_docs = dataset.database_search(Query("base.id").match("(.*)"))
 

@@ -110,19 +110,27 @@ class TestBuildDataset:
         # Copy the entire dataset directory to the persistent artifact dir.
         shutil.copytree(str(self.dataset.getpath()), str(artifact_dir))
 
-        # Write individual JSON documents.
+        # Write individual JSON documents, grouped by session ID.
+        # Mirrors MATLAB which creates jsonDocuments/<sessionId>/<docId>.json
         json_docs_dir = artifact_dir / "jsonDocuments"
         json_docs_dir.mkdir(exist_ok=True)
 
-        docs = self.dataset.database_search(Query("base.id").match("(.*)"))
-        for doc in docs:
+        artifact_dataset = Dataset(artifact_dir)
+
+        # Query all documents from the dataset and group by session_id.
+        all_docs = artifact_dataset.database_search(Query("base.id").match("(.*)"))
+        for doc in all_docs:
             props = doc.document_properties
-            doc_path = json_docs_dir / f"{doc.id}.json"
-            doc_path.write_text(json.dumps(props, indent=2, allow_nan=True), encoding="utf-8")
+            sid = props.get("base", {}).get("session_id", "unknown")
+            session_json_dir = json_docs_dir / sid
+            session_json_dir.mkdir(exist_ok=True)
+            doc_path = session_json_dir / f"{doc.id}.json"
+            doc_path.write_text(
+                json.dumps(props, indent=2, allow_nan=True), encoding="utf-8"
+            )
 
         # Write datasetSummary.json – open from artifact_dir so the session
         # path lists files that are actually present (including jsonDocuments).
-        artifact_dataset = Dataset(artifact_dir)
         summary = _dataset_summary(artifact_dataset)
         summary_json = json.dumps(summary, indent=2, allow_nan=True)
         summary_path = artifact_dir / "datasetSummary.json"
@@ -132,4 +140,4 @@ class TestBuildDataset:
         assert artifact_dir.exists()
         assert summary_path.exists()
         assert json_docs_dir.exists()
-        assert len(list(json_docs_dir.glob("*.json"))) > 0
+        assert len(list(json_docs_dir.glob("**/*.json"))) > 0
