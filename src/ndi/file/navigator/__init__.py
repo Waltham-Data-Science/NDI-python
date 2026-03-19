@@ -458,20 +458,25 @@ class ndi_file_navigator(ndi_ido):
             q = (
                 ndi_query("").isa("epochfiles_ingested")
                 & ndi_query("").depends_on("filenavigator_id", self.id)
-                & (ndi_query("base.session_id") == self._session.id)
+                & (ndi_query("base.session_id") == self._session.id())
             )
             docs = self._session.database_search(q)
 
             epochs = []
             for doc in docs:
                 props = doc.document_properties
+                efi = props["epochfiles_ingested"]
+                epm = efi.get("epochprobemap")
+                if isinstance(epm, str):
+                    epm = self._parse_epochprobemap_tsv(epm)
                 epochs.append(
                     {
-                        "epoch_id": props.epochfiles_ingested.epoch_id,
-                        "files": props.epochfiles_ingested.files,
-                        "epochprobemap": getattr(props.epochfiles_ingested, "epochprobemap", None),
+                        "epoch_id": efi["epoch_id"],
+                        "files": efi["files"],
+                        "epochprobemap": epm,
                     }
                 )
+            epochs.sort(key=lambda e: e["epoch_id"])
             return epochs
         except Exception:
             return []
@@ -698,7 +703,10 @@ class ndi_file_navigator(ndi_ido):
             doc = self.getepochingesteddoc(epochfiles)
             if doc:
                 props = doc.document_properties
-                return getattr(props.epochfiles_ingested, "epochprobemap", None)
+                epm = props["epochfiles_ingested"].get("epochprobemap")
+                if isinstance(epm, str):
+                    return self._parse_epochprobemap_tsv(epm)
+                return epm
 
         # Try to find a probe map file within the epoch files
         epm_patterns = self._epochprobemap_fileparameters.get("filematch", [])
@@ -755,6 +763,35 @@ class ndi_file_navigator(ndi_ido):
         except Exception:
             return None
 
+    @staticmethod
+    def _parse_epochprobemap_tsv(tsv_text: str) -> Any | None:
+        """Parse an epoch probe map from a TSV-formatted string.
+
+        Same format as ``_load_epochprobemap_file`` but from a string rather
+        than a file on disk.
+        """
+        from ...epoch.epochprobemap import ndi_epoch_epochprobemap as EpochProbeMap
+
+        lines = tsv_text.strip().splitlines()
+        if len(lines) < 2:
+            return None
+        maps = []
+        for line in lines[1:]:
+            parts = line.split("\t")
+            if len(parts) >= 3:
+                maps.append(
+                    EpochProbeMap(
+                        name=parts[0].strip(),
+                        reference=int(parts[1].strip()),
+                        type=parts[2].strip(),
+                        devicestring=parts[3].strip() if len(parts) > 3 else "",
+                        subjectstring=parts[4].strip() if len(parts) > 4 else "",
+                    )
+                )
+        if len(maps) == 1:
+            return maps[0]
+        return maps if maps else None
+
     def getepochingesteddoc(
         self,
         epochfiles: list[str],
@@ -773,7 +810,7 @@ class ndi_file_navigator(ndi_ido):
         q = (
             ndi_query("").isa("epochfiles_ingested")
             & ndi_query("").depends_on("filenavigator_id", self.id)
-            & (ndi_query("base.session_id") == self._session.id)
+            & (ndi_query("base.session_id") == self._session.id())
             & (ndi_query("epochfiles_ingested.epoch_id") == epochid)
         )
         docs = self._session.database_search(q)
@@ -920,7 +957,7 @@ class ndi_file_navigator(ndi_ido):
             )
             doc.set_dependency_value("filenavigator_id", self.id)
             if self._session:
-                doc.set_session_id(self._session.id)
+                doc.set_session_id(self._session.id())
             docs.append(doc)
 
         return docs
@@ -954,7 +991,7 @@ class ndi_file_navigator(ndi_ido):
         )
 
         if self._session:
-            doc.set_session_id(self._session.id)
+            doc.set_session_id(self._session.id())
 
         return doc
 
@@ -969,7 +1006,7 @@ class ndi_file_navigator(ndi_ido):
 
         q = ndi_query("base.id") == self.id
         if self._session:
-            q = q & (ndi_query("base.session_id") == self._session.id)
+            q = q & (ndi_query("base.session_id") == self._session.id())
         return q
 
     @staticmethod

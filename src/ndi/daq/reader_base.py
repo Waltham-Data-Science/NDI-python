@@ -56,9 +56,10 @@ class ndi_daq_reader(ndi_ido, ABC):
 
         # Load from document if provided
         if document is not None:
-            doc_props = getattr(document, "document_properties", document)
-            if hasattr(doc_props, "base") and hasattr(doc_props.base, "id"):
-                self._id = doc_props.base.id
+            doc_props = document.document_properties
+            base_id = doc_props.get("base", {}).get("id")
+            if base_id:
+                self._id = base_id
 
     def epochclock(
         self,
@@ -160,8 +161,8 @@ class ndi_daq_reader(ndi_ido, ABC):
 
         for doc in d_ingested:
             props = doc.document_properties
-            epochid = props.epochid.epochid
-            et = props.daqreader_epochdata_ingested.epochtable
+            epochid = props["epochid"]["epochid"]
+            et = props["daqreader_epochdata_ingested"]["epochtable"]
 
             # Extract epoch clock
             ec_list = []
@@ -201,7 +202,8 @@ class ndi_daq_reader(ndi_ido, ABC):
         See also: epochclock, ndi_time_clocktype
         """
         doc = self.getingesteddocument(epochfiles, session)
-        et = doc.document_properties.daqreader_epochdata_ingested.epochtable
+        props = doc.document_properties
+        et = props["daqreader_epochdata_ingested"]["epochtable"]
 
         ec_list = []
         for ec_str in et.get("epochclock", []):
@@ -230,7 +232,8 @@ class ndi_daq_reader(ndi_ido, ABC):
         See also: t0_t1, epochclock_ingested
         """
         doc = self.getingesteddocument(epochfiles, session)
-        et = doc.document_properties.daqreader_epochdata_ingested.epochtable
+        props = doc.document_properties
+        et = props["daqreader_epochdata_ingested"]["epochtable"]
 
         t0t1_raw = et.get("t0_t1", [])
         if not isinstance(t0t1_raw, list):

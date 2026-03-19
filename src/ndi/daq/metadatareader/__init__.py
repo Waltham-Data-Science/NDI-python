@@ -60,12 +60,14 @@ class ndi_daq_metadatareader(ndi_ido):
 
         # Load from document if provided
         if document is not None:
-            doc_props = getattr(document, "document_properties", document)
-            if hasattr(doc_props, "base") and hasattr(doc_props.base, "id"):
-                self._id = doc_props.base.id
-            if hasattr(doc_props, "daqmetadatareader"):
-                self._tab_separated_file_parameter = getattr(
-                    doc_props.daqmetadatareader, "tab_separated_file_parameter", ""
+            doc_props = document.document_properties
+            base_id = doc_props.get("base", {}).get("id")
+            if base_id:
+                self._id = base_id
+            dmr = doc_props.get("daqmetadatareader", {})
+            if dmr:
+                self._tab_separated_file_parameter = dmr.get(
+                    "tab_separated_file_parameter", ""
                 )
 
     @property
