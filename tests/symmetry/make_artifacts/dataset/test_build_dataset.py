@@ -128,9 +128,7 @@ class TestBuildDataset:
             for doc in docs:
                 props = doc.document_properties
                 doc_path = session_json_dir / f"{doc.id}.json"
-                doc_path.write_text(
-                    json.dumps(props, indent=2, allow_nan=True), encoding="utf-8"
-                )
+                doc_path.write_text(json.dumps(props, indent=2, allow_nan=True), encoding="utf-8")
 
         # Write datasetSummary.json – open from artifact_dir so the session
         # path lists files that are actually present (including jsonDocuments).

@@ -72,19 +72,17 @@ class TestBuildDataset:
         expected_refs = expected.get("references", [])
 
         assert num_sessions == expected_num, (
-            f"Session count mismatch in {source_type}: "
-            f"got {num_sessions}, expected {expected_num}"
+            f"Session count mismatch in {source_type}: got {num_sessions}, expected {expected_num}"
         )
 
         for exp_id in expected_ids:
             assert exp_id in session_ids, (
-                f"Expected session ID {exp_id!r} not found in dataset " f"from {source_type}"
+                f"Expected session ID {exp_id!r} not found in dataset from {source_type}"
             )
 
         for exp_ref in expected_refs:
             assert exp_ref in refs, (
-                f"Expected session reference {exp_ref!r} not found in dataset "
-                f"from {source_type}"
+                f"Expected session reference {exp_ref!r} not found in dataset from {source_type}"
             )
 
     def test_build_dataset_session_summaries(self, source_type):
@@ -162,9 +160,9 @@ class TestBuildDataset:
                     assert actual_props.get("document_class", {}).get(
                         "class_name"
                     ) == expected_doc.get("document_class", {}).get("class_name"), (
-                        f"Document class mismatch for id: {expected_id} " f"in {source_type}"
+                        f"Document class mismatch for id: {expected_id} in {source_type}"
                     )
                     break
             assert found, (
-                f"Document from {source_type} artifact not found in dataset: " f"{expected_id}"
+                f"Document from {source_type} artifact not found in dataset: {expected_id}"
             )
