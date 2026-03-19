@@ -125,7 +125,11 @@ class TestBuildDataset:
             )
 
     def test_build_dataset_documents(self, source_type):
-        """Verify that every exported JSON document can be loaded from the dataset DB."""
+        """Verify that every exported JSON document can be loaded from session DBs.
+
+        Mirrors MATLAB which queries each session's database individually
+        (not the dataset's database).
+        """
         artifact_dir, dataset = self._open_dataset(source_type)
 
         json_docs_dir = artifact_dir / "jsonDocuments"
@@ -134,10 +138,15 @@ class TestBuildDataset:
 
         json_files = list(json_docs_dir.glob("**/*.json"))
 
-        actual_docs = dataset.database_search(Query("base.id").match("(.*)"))
+        # Collect docs from each session's database, matching MATLAB's approach
+        actual_docs = []
+        _refs, session_ids, *_ = dataset.session_list()
+        for sid in session_ids:
+            sess = dataset.open_session(sid)
+            actual_docs.extend(sess.database_search(Query("base.id").match("(.*)")))
 
         assert len(actual_docs) == len(json_files), (
-            f"Number of documents in dataset ({len(actual_docs)}) does not match "
+            f"Number of documents across sessions ({len(actual_docs)}) does not match "
             f"{source_type} JSON artifacts ({len(json_files)})."
         )
 

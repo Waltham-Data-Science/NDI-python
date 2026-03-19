@@ -111,23 +111,26 @@ class TestBuildDataset:
         shutil.copytree(str(self.dataset.getpath()), str(artifact_dir))
 
         # Write individual JSON documents, grouped by session ID.
-        # Mirrors MATLAB which creates jsonDocuments/<sessionId>/<docId>.json
+        # Mirrors MATLAB which iterates session_list() and queries each
+        # session's database (NOT the dataset's database).
         json_docs_dir = artifact_dir / "jsonDocuments"
         json_docs_dir.mkdir(exist_ok=True)
 
         artifact_dataset = Dataset(artifact_dir)
 
-        # Query all documents from the dataset and group by session_id.
-        all_docs = artifact_dataset.database_search(Query("base.id").match("(.*)"))
-        for doc in all_docs:
-            props = doc.document_properties
-            sid = props.get("base", {}).get("session_id", "unknown")
+        # Export JSON documents for each session in the dataset
+        refs, session_ids, *_ = artifact_dataset.session_list()
+        for sid in session_ids:
+            sess = artifact_dataset.open_session(sid)
             session_json_dir = json_docs_dir / sid
             session_json_dir.mkdir(exist_ok=True)
-            doc_path = session_json_dir / f"{doc.id}.json"
-            doc_path.write_text(
-                json.dumps(props, indent=2, allow_nan=True), encoding="utf-8"
-            )
+            docs = sess.database_search(Query("base.id").match("(.*)"))
+            for doc in docs:
+                props = doc.document_properties
+                doc_path = session_json_dir / f"{doc.id}.json"
+                doc_path.write_text(
+                    json.dumps(props, indent=2, allow_nan=True), encoding="utf-8"
+                )
 
         # Write datasetSummary.json – open from artifact_dir so the session
         # path lists files that are actually present (including jsonDocuments).
