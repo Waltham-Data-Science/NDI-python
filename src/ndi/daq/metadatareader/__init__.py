@@ -62,7 +62,7 @@ class ndi_daq_metadatareader(ndi_ido):
         if document is not None:
             doc_props = getattr(document, "document_properties", document)
             if hasattr(doc_props, "base") and hasattr(doc_props.base, "id"):
-                self.identifier = doc_props.base.id
+                self._id = doc_props.base.id
             if hasattr(doc_props, "daqmetadatareader"):
                 self._tab_separated_file_parameter = getattr(
                     doc_props.daqmetadatareader, "tab_separated_file_parameter", ""

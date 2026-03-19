@@ -106,7 +106,7 @@ class ndi_subject(ndi_ido, ndi_documentservice):
         # Use document ID as our identifier
         base_id = props.get("base", {}).get("id", "")
         if base_id:
-            self.identifier = base_id
+            self._id = base_id
 
     @property
     def local_identifier(self) -> str:

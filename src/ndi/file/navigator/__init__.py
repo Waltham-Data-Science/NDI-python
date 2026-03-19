@@ -214,7 +214,7 @@ class ndi_file_navigator(ndi_ido):
         if base is not None:
             base_id = _prop(base, "id")
             if base_id is not None:
-                self.identifier = base_id
+                self._id = base_id
             self._name = _prop(base, "name", "") or "unknown"
 
         filenavigator = _prop(doc_props, "filenavigator")
