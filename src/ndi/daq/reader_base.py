@@ -58,7 +58,7 @@ class ndi_daq_reader(ndi_ido, ABC):
         if document is not None:
             doc_props = getattr(document, "document_properties", document)
             if hasattr(doc_props, "base") and hasattr(doc_props.base, "id"):
-                self.identifier = doc_props.base.id
+                self._id = doc_props.base.id
 
     def epochclock(
         self,

@@ -65,6 +65,12 @@ from .ido import ndi_ido
 from .neuron import ndi_neuron
 from .probe import ndi_probe
 from .query import ndi_query
+
+# Expose ndi_query as ``ndi.query`` so that MATLAB-style calling
+# conventions (``ndi.query('','isa','base')``) work directly.
+# The underlying ``ndi.query`` *module* remains importable via
+# ``from ndi.query import ...``.
+query = ndi_query
 from .session import empty_id, ndi_session, ndi_session_dir
 
 # Import Phase 8 classes
