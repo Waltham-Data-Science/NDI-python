@@ -11,7 +11,6 @@ import fnmatch
 import hashlib
 import os
 import re
-from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -71,7 +70,6 @@ def _parse_fileparameters(fp_str: str) -> list[str] | None:
     return None
 
 
-@lru_cache(maxsize=10)
 def find_file_groups(
     base_path: str,
     patterns: tuple[str, ...],
