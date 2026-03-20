@@ -131,13 +131,9 @@ class ndi_session_dir(ndi_session):
             # Create session document
             from ..document import ndi_document
 
-            try:
-                session_doc = ndi_document("session", **{"session.reference": self._reference})
-                session_doc = session_doc.set_session_id(self._identifier)
-                self.database_add(session_doc)
-            except Exception:
-                # May fail if schema not available
-                pass
+            session_doc = ndi_document("session", **{"session.reference": self._reference})
+            session_doc = session_doc.set_session_id(self._identifier)
+            self.database_add(session_doc)
 
         # Load or create syncgraph
         syncgraph_docs = self.database_search(
