@@ -71,9 +71,9 @@ def _find_axon_abf() -> Path | None:
 
     # Also try to find NDR's example_data via the installed ndr package
     try:
-        import ndr.fun
+        from ndr.fun.ndrpath import ndrpath
 
-        ndr_path = Path(ndr.fun.ndrpath()) / "example_data"
+        ndr_path = Path(ndrpath()) / "example_data"
         candidates.insert(0, ndr_path)
     except Exception:
         pass
