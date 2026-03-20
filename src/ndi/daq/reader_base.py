@@ -291,9 +291,24 @@ class ndi_daq_reader(ndi_ido, ABC):
         ec_strings = [c.value if isinstance(c, ndi_time_clocktype) else str(c) for c in ec]
         t0t1 = self.t0_t1(epochfiles)
 
+        # Convert NaN values to None so json.dumps produces null instead of
+        # non-standard NaN that MATLAB's jsondecode cannot parse.
+        import math
+
+        sanitized_t0t1 = []
+        for pair in t0t1:
+            if isinstance(pair, (list, tuple)):
+                sanitized_t0t1.append(
+                    [None if (isinstance(v, float) and math.isnan(v)) else v for v in pair]
+                )
+            else:
+                sanitized_t0t1.append(
+                    None if (isinstance(pair, float) and math.isnan(pair)) else pair
+                )
+
         epochtable = {
             "epochclock": ec_strings,
-            "t0_t1": t0t1,
+            "t0_t1": sanitized_t0t1,
         }
 
         doc = ndi_document(
