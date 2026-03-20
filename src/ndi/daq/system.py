@@ -471,8 +471,10 @@ class ndi_daq_system(ndi_ido):
             - name: ndi_probe name
             - reference: ndi_probe reference
             - type: ndi_probe type
-            - subject_id: ndi_subject identifier
+            - subject_id: ndi_subject document ID
         """
+        from ..subject import ndi_subject
+
         et = self.epochtable()
         probes = []
         seen = set()
@@ -492,12 +494,26 @@ class ndi_daq_system(ndi_ido):
                         key = (item.name, item.reference, item.type)
                         if key not in seen:
                             seen.add(key)
+                            # Look up the subject document ID from the
+                            # subjectstring (e.g. "anteater27@nosuchlab.org").
+                            # MATLAB does the same lookup and stores the
+                            # document ID, not the local_identifier string.
+                            subjectstring = getattr(item, "subjectstring", "")
+                            sid = ""
+                            if subjectstring and self.session is not None:
+                                _, doc_id = (
+                                    ndi_subject.does_subjectstring_match_session_document(
+                                        self.session, subjectstring
+                                    )
+                                )
+                                if doc_id is not None:
+                                    sid = doc_id
                             probes.append(
                                 {
                                     "name": item.name,
                                     "reference": item.reference,
                                     "type": item.type,
-                                    "subject_id": getattr(item, "subjectstring", ""),
+                                    "subject_id": sid,
                                 }
                             )
 
