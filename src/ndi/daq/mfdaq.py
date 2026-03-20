@@ -568,7 +568,7 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         See also: getchannelsepoch
         """
         doc = self.getingesteddocument(epochfiles, session)
-        et = doc.document_properties.daqreader_epochdata_ingested.epochtable
+        et = doc.document_properties["daqreader_epochdata_ingested"]["epochtable"]
 
         channels_raw = et.get("channels", [])
         channels = []
@@ -618,7 +618,7 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         See also: readchannels_epochsamples
         """
         doc = self.getingesteddocument(epochfiles, session)
-        et = doc.document_properties.daqreader_epochdata_ingested.epochtable
+        et = doc.document_properties["daqreader_epochdata_ingested"]["epochtable"]
 
         # Normalize inputs
         if isinstance(channel, int):
