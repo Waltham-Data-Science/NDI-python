@@ -113,6 +113,15 @@ class TestDownloadIngested:
 
             actual_summary = sessionSummary(sess)
 
+            # Filter macOS resource fork files (._*) from file lists;
+            # these may be present in archives but MATLAB does not list them.
+            def _filter_dot_underscore(files: list[str]) -> list[str]:
+                return [f for f in files if not f.split("/")[-1].startswith("._")]
+
+            for key in ("files", "filesInDotNDI"):
+                if key in actual_summary:
+                    actual_summary[key] = _filter_dot_underscore(actual_summary[key])
+
             # Find the expected summary with the matching sessionId
             match = None
             for es in expected_summaries:

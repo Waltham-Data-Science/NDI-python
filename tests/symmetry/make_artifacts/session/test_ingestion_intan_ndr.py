@@ -134,6 +134,10 @@ class TestIngestionIntanNDR:
         success, msg = self.session.ingest()
         assert success, f"Ingestion failed: {msg}"
 
+        # Call getprobes() again after ingestion — this creates an element
+        # document for each probe, matching MATLAB's behaviour.
+        self.session.getprobes()
+
         # Delete raw data files (keep only .ndi database)
         delete_raw_files(self.session.path)
 

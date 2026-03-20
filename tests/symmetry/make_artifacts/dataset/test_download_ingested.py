@@ -83,6 +83,11 @@ class TestDownloadIngested:
         # Extract the archive into the artifact directory
         shutil.unpack_archive(str(self.tgz_path), str(artifact_dir))
 
+        # Remove macOS resource fork files (._*) that may be in the archive;
+        # MATLAB does not see these, so they cause file-list mismatches.
+        for dot_underscore in artifact_dir.rglob("._*"):
+            dot_underscore.unlink()
+
         # The extracted directory is the dataset
         dataset_path = artifact_dir / DATASET_ID
         assert dataset_path.is_dir(), f"Expected extracted directory {DATASET_ID} not found."
