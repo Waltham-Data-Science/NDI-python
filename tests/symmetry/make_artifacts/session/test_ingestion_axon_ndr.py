@@ -9,11 +9,11 @@ deletes raw data files (keeping only the .ndi database), and exports the
 resulting artifacts to:
 
     <tempdir>/NDI/symmetryTest/pythonArtifacts/session/ingestionAxonNDR/
-             testIngestionAxonNDRArtefacts/
+             testIngestionAxonNDRArtifacts/
 
-Note: The MATLAB test uses British spelling ``Artefacts`` in the test
-method name; we match that exactly so both languages write to the same
-artifact directory path.
+Note: The MATLAB test uses ``Artifacts`` (American spelling) in the
+artifact directory name; we match that exactly so both languages write
+to the same artifact directory path.
 
 The artifacts are left on disk so that the MATLAB ``readArtifacts`` suite
 (and the Python ``read_artifacts`` suite) can load and verify them.
@@ -34,7 +34,7 @@ from tests.symmetry.make_artifacts.session._ingestion_helpers import (
     setup_axon_session,
 )
 
-ARTIFACT_DIR = PYTHON_ARTIFACTS / "session" / "ingestionAxonNDR" / "testIngestionAxonNDRArtefacts"
+ARTIFACT_DIR = PYTHON_ARTIFACTS / "session" / "ingestionAxonNDR" / "testIngestionAxonNDRArtifacts"
 
 
 def _have_axon_data() -> bool:
