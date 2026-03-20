@@ -66,9 +66,7 @@ class ndi_daq_metadatareader(ndi_ido):
                 self._id = base_id
             dmr = doc_props.get("daqmetadatareader", {})
             if dmr:
-                self._tab_separated_file_parameter = dmr.get(
-                    "tab_separated_file_parameter", ""
-                )
+                self._tab_separated_file_parameter = dmr.get("tab_separated_file_parameter", "")
 
     @property
     def tab_separated_file_parameter(self) -> str:
