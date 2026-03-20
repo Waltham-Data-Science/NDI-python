@@ -792,6 +792,32 @@ class ndi_file_navigator(ndi_ido):
             return maps[0]
         return maps if maps else None
 
+    @staticmethod
+    def _serialize_epochprobemap(epm: Any) -> str:
+        """Serialize epochprobemap object(s) to a TSV string for storage.
+
+        This is the inverse of ``_parse_epochprobemap_tsv``.
+        """
+        from ...epoch.epochprobemap import ndi_epoch_epochprobemap as EpochProbeMap
+
+        if isinstance(epm, str):
+            return epm
+        items = epm if isinstance(epm, list) else [epm]
+        lines = ["name\treference\ttype\tdevicestring\tsubjectstring"]
+        for item in items:
+            if isinstance(item, EpochProbeMap):
+                lines.append(
+                    f"{item.name}\t{item.reference}\t{item.type}\t"
+                    f"{item.devicestring}\t{item.subjectstring}"
+                )
+            elif isinstance(item, dict):
+                lines.append(
+                    f"{item.get('name', '')}\t{item.get('reference', '')}\t"
+                    f"{item.get('type', '')}\t{item.get('devicestring', '')}\t"
+                    f"{item.get('subjectstring', '')}"
+                )
+        return "\n".join(lines)
+
     def getepochingesteddoc(
         self,
         epochfiles: list[str],
@@ -949,7 +975,9 @@ class ndi_file_navigator(ndi_ido):
                 "files": [f"epochid://{entry['epoch_id']}"] + files,
             }
             if entry.get("epochprobemap"):
-                epochfiles_struct["epochprobemap"] = entry["epochprobemap"]
+                epochfiles_struct["epochprobemap"] = self._serialize_epochprobemap(
+                    entry["epochprobemap"]
+                )
 
             doc = ndi_document(
                 "ingestion/epochfiles_ingested",

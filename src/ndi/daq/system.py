@@ -611,7 +611,7 @@ class ndi_daq_system(ndi_ido):
 
         # Set session IDs and add to database
         if self.session is not None:
-            session_id = self.session.id
+            session_id = self.session.id()
             for doc in docs:
                 doc.set_session_id(session_id)
             self.session.database_add(docs)
