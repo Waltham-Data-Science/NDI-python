@@ -21,7 +21,7 @@ import pytest
 
 from ndi.dataset import Dataset
 from ndi.query import Query
-from ndi.util import compareSessionSummary, sessionSummary
+from ndi.util import compareDatasetSummary, datasetSummary
 from tests.symmetry.conftest import SOURCE_TYPES, SYMMETRY_BASE
 
 
@@ -71,84 +71,34 @@ class TestDownloadIngested:
     # -- tests ----------------------------------------------------------------
 
     def test_download_ingested_summary(self, source_type):
-        """Verify session counts, references, and IDs match datasetSummary.json."""
+        """Verify dataset summary matches datasetSummary.json."""
         _artifact_dir, dataset, expected = self._open_dataset(source_type)
 
-        # Get session list from the dataset
-        ref_list, id_list, *_ = dataset.session_list()
-        num_sessions = len(ref_list)
+        actual = datasetSummary(dataset)
 
-        # Verify number of sessions
-        expected_num = expected.get("numSessions", 0)
-        assert num_sessions == expected_num, (
-            f"Session count mismatch in {source_type}: "
-            f"got {num_sessions}, expected {expected_num}"
+        # Filter macOS resource fork files (._*) from file lists;
+        # these may be present in archives but MATLAB does not list them.
+        def _filter_dot_underscore(files: list[str]) -> list[str]:
+            return [f for f in files if not f.split("/")[-1].startswith("._")]
+
+        for ss in actual.get("sessionSummaries", []):
+            for key in ("files", "filesInDotNDI"):
+                if key in ss:
+                    ss[key] = _filter_dot_underscore(ss[key])
+
+        for ss in expected.get("sessionSummaries", []):
+            for key in ("files", "filesInDotNDI"):
+                if key in ss:
+                    ss[key] = _filter_dot_underscore(ss[key])
+
+        report = compareDatasetSummary(
+            actual,
+            expected,
+            excludeFiles=["datasetSummary.json", "jsonDocuments"],
+            excludeFields=["documentCounts"],
         )
 
-        # Verify references
-        expected_refs = expected.get("references", [])
-        assert sorted(ref_list) == sorted(
-            expected_refs
-        ), f"Session references mismatch against {source_type} generated artifacts."
-
-        # Verify session IDs
-        expected_ids = expected.get("sessionIds", [])
-        assert sorted(id_list) == sorted(
-            expected_ids
-        ), f"Session IDs mismatch against {source_type} generated artifacts."
-
-    def test_download_ingested_session_summaries(self, source_type):
-        """Compare per-session summaries against datasetSummary.json."""
-        _artifact_dir, dataset, expected = self._open_dataset(source_type)
-
-        expected_summaries = expected.get("sessionSummaries", [])
-        _ref_list, id_list, *_ = dataset.session_list()
-
-        if not expected_summaries:
-            pytest.skip(f"No sessionSummaries in {source_type} datasetSummary.json.")
-
-        for sid in id_list:
-            sess = dataset.open_session(sid)
-            if sess is None:
-                pytest.fail(f"Could not open session {sid} from {source_type} dataset.")
-
-            actual_summary = sessionSummary(sess)
-
-            # Filter macOS resource fork files (._*) from file lists;
-            # these may be present in archives but MATLAB does not list them.
-            def _filter_dot_underscore(files: list[str]) -> list[str]:
-                return [f for f in files if not f.split("/")[-1].startswith("._")]
-
-            for key in ("files", "filesInDotNDI"):
-                if key in actual_summary:
-                    actual_summary[key] = _filter_dot_underscore(actual_summary[key])
-
-            # Find the expected summary with the matching sessionId
-            match = None
-            for es in expected_summaries:
-                if es.get("sessionId") == sid:
-                    match = es
-                    break
-
-            assert match is not None, (
-                f"No expected session summary found for session ID " f"{sid} in {source_type}"
-            )
-
-            # Also filter macOS resource fork files from the expected summary
-            for key in ("files", "filesInDotNDI"):
-                if key in match:
-                    match[key] = _filter_dot_underscore(match[key])
-
-            report = compareSessionSummary(
-                actual_summary,
-                match,
-                excludeFiles=["datasetSummary.json", "jsonDocuments"],
-            )
-
-            assert len(report) == 0, (
-                f"Session summary mismatch for session {sid} "
-                f"in {source_type} dataset:\n" + "\n".join(report)
-            )
+        assert len(report) == 0, f"Dataset summary mismatch in {source_type}:\n" + "\n".join(report)
 
     def test_download_ingested_document_counts(self, source_type):
         """Verify document counts per session match expected values."""

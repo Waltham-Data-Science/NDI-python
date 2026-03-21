@@ -174,6 +174,89 @@ functions:
       Exact match. Replaces NDI sentinel strings for NaN, Infinity,
       and -Infinity in JSON text with Python-compatible representations.
 
+  - name: sessionSummary
+    type: function
+    matlab_path: "+ndi/+util/sessionSummary.m"
+    python_path: "ndi/util/session_summary.py"
+    input_arguments:
+      - name: session_obj
+        type_matlab: "ndi.session"
+        type_python: "Any"
+    output_arguments:
+      - name: summary
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Exact match. Creates a summary dict of an ndi.session object
+      for symmetry testing.
+
+  - name: compareSessionSummary
+    type: function
+    matlab_path: "+ndi/+util/compareSessionSummary.m"
+    python_path: "ndi/util/compare_session_summary.py"
+    input_arguments:
+      - name: summary1
+        type_matlab: "struct"
+        type_python: "dict[str, Any]"
+      - name: summary2
+        type_matlab: "struct"
+        type_python: "dict[str, Any]"
+      - name: excludeFiles
+        type_matlab: "cell array of char"
+        type_python: "list[str] | None"
+        default: "None"
+      - name: excludeFields
+        type_matlab: "cell array of char"
+        type_python: "list[str] | None"
+        default: "None"
+    output_arguments:
+      - name: report
+        type_python: "list[str]"
+    decision_log: >
+      Exact match. Compares two session summaries and returns a list
+      of difference strings. Empty list means summaries match.
+
+  - name: datasetSummary
+    type: function
+    matlab_path: "+ndi/+util/datasetSummary.m"
+    python_path: "ndi/util/dataset_summary.py"
+    input_arguments:
+      - name: dataset_obj
+        type_matlab: "ndi.dataset.Dataset"
+        type_python: "Any"
+    output_arguments:
+      - name: summary
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Exact match. Creates a summary dict of an ndi.dataset.Dataset
+      object for symmetry testing.
+
+  - name: compareDatasetSummary
+    type: function
+    matlab_path: "+ndi/+util/compareDatasetSummary.m"
+    python_path: "ndi/util/compare_dataset_summary.py"
+    input_arguments:
+      - name: summary1
+        type_matlab: "struct"
+        type_python: "dict[str, Any]"
+      - name: summary2
+        type_matlab: "struct"
+        type_python: "dict[str, Any]"
+      - name: excludeFiles
+        type_matlab: "cell array of char"
+        type_python: "list[str] | None"
+        default: "None"
+      - name: excludeFields
+        type_matlab: "cell array of char"
+        type_python: "list[str] | None"
+        default: "None"
+    output_arguments:
+      - name: report
+        type_python: "list[str]"
+    decision_log: >
+      Exact match. Compares two dataset summaries and returns a list
+      of difference strings. Delegates session-level comparison to
+      compareSessionSummary.
+
   - name: unwrapTableCellContent
     type: function
     matlab_path: "+ndi/+util/unwrapTableCellContent.m"

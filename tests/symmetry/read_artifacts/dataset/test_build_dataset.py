@@ -24,7 +24,7 @@ import pytest
 
 from ndi.dataset import Dataset
 from ndi.query import Query
-from ndi.util import compareSessionSummary, sessionSummary
+from ndi.util import compareDatasetSummary, datasetSummary
 from tests.symmetry.conftest import SOURCE_TYPES, SYMMETRY_BASE
 
 
@@ -54,7 +54,7 @@ class TestBuildDataset:
     # -- tests ----------------------------------------------------------------
 
     def test_build_dataset_summary(self, source_type):
-        """Verify session counts, references, and IDs match datasetSummary.json."""
+        """Verify dataset summary matches datasetSummary.json."""
         artifact_dir, dataset = self._open_dataset(source_type)
 
         summary_path = artifact_dir / "datasetSummary.json"
@@ -62,65 +62,15 @@ class TestBuildDataset:
             pytest.skip(f"datasetSummary.json not found in {source_type} artifact directory.")
 
         expected = json.loads(summary_path.read_text(encoding="utf-8"))
+        actual = datasetSummary(dataset)
 
-        # Verify session list
-        refs, session_ids, *_ = dataset.session_list()
-        num_sessions = len(refs)
+        report = compareDatasetSummary(
+            actual,
+            expected,
+            excludeFiles=["datasetSummary.json", "jsonDocuments"],
+        )
 
-        expected_num = expected.get("numSessions", 0)
-        expected_ids = expected.get("sessionIds", [])
-        expected_refs = expected.get("references", [])
-
-        assert (
-            num_sessions == expected_num
-        ), f"Session count mismatch in {source_type}: got {num_sessions}, expected {expected_num}"
-
-        for exp_id in expected_ids:
-            assert (
-                exp_id in session_ids
-            ), f"Expected session ID {exp_id!r} not found in dataset from {source_type}"
-
-        for exp_ref in expected_refs:
-            assert (
-                exp_ref in refs
-            ), f"Expected session reference {exp_ref!r} not found in dataset from {source_type}"
-
-    def test_build_dataset_session_summaries(self, source_type):
-        """Compare per-session summaries against those stored in datasetSummary.json."""
-        artifact_dir, dataset = self._open_dataset(source_type)
-
-        summary_path = artifact_dir / "datasetSummary.json"
-        if not summary_path.exists():
-            pytest.skip(f"datasetSummary.json not found in {source_type} artifact directory.")
-
-        expected = json.loads(summary_path.read_text(encoding="utf-8"))
-        expected_summaries = expected.get("sessionSummaries", [])
-        expected_ids = expected.get("sessionIds", [])
-
-        if not expected_summaries:
-            pytest.skip(f"No sessionSummaries in {source_type} datasetSummary.json.")
-
-        for i, sid in enumerate(expected_ids):
-            if i >= len(expected_summaries):
-                break
-
-            sess = dataset.open_session(sid)
-            if sess is None:
-                pytest.fail(f"Could not open session {sid} from {source_type} dataset.")
-
-            actual_summary = sessionSummary(sess)
-            expected_summary = expected_summaries[i]
-
-            report = compareSessionSummary(
-                actual_summary,
-                expected_summary,
-                excludeFiles=["datasetSummary.json", "jsonDocuments"],
-            )
-
-            assert len(report) == 0, (
-                f"Session summary mismatch for session {sid} "
-                f"in {source_type} dataset:\n" + "\n".join(report)
-            )
+        assert len(report) == 0, f"Dataset summary mismatch in {source_type}:\n" + "\n".join(report)
 
     def test_build_dataset_documents(self, source_type):
         """Verify that every exported JSON document can be loaded from session DBs.
