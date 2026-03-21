@@ -46,27 +46,21 @@ def compareDatasetSummary(
         n1 = summary1.get("numSessions", 0)
         n2 = summary2.get("numSessions", 0)
         if n1 != n2:
-            report.append(
-                f"numSessions differs: {n1} vs {n2}"
-            )
+            report.append(f"numSessions differs: {n1} vs {n2}")
 
     # 2. Compare references
     if "references" not in excludeFields:
         refs1 = sorted(summary1.get("references", []))
         refs2 = sorted(summary2.get("references", []))
         if refs1 != refs2:
-            report.append(
-                f"references differ: {refs1} vs {refs2}"
-            )
+            report.append(f"references differ: {refs1} vs {refs2}")
 
     # 3. Compare sessionIds
     if "sessionIds" not in excludeFields:
         ids1 = sorted(summary1.get("sessionIds", []))
         ids2 = sorted(summary2.get("sessionIds", []))
         if ids1 != ids2:
-            report.append(
-                f"sessionIds differ: {ids1} vs {ids2}"
-            )
+            report.append(f"sessionIds differ: {ids1} vs {ids2}")
 
     # 4. Compare sessionSummaries
     if "sessionSummaries" not in excludeFields:
@@ -74,9 +68,7 @@ def compareDatasetSummary(
         ss2 = summary2.get("sessionSummaries", [])
 
         if len(ss1) != len(ss2):
-            report.append(
-                f"sessionSummaries count differs: {len(ss1)} vs {len(ss2)}"
-            )
+            report.append(f"sessionSummaries count differs: {len(ss1)} vs {len(ss2)}")
         else:
             # Match session summaries by sessionId when available,
             # otherwise compare by index order.
@@ -92,9 +84,7 @@ def compareDatasetSummary(
                 for i, sid in enumerate(ids1):
                     match = lookup2.get(sid)
                     if match is None:
-                        report.append(
-                            f"sessionSummaries: session {sid} not found in summary2"
-                        )
+                        report.append(f"sessionSummaries: session {sid} not found in summary2")
                         continue
                     sub = compareSessionSummary(
                         ss1[i],

@@ -1,9 +1,8 @@
 """Unit tests for ndi.util.datasetSummary and ndi.util.compareDatasetSummary."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from ndi.util import compareDatasetSummary, datasetSummary
-
 
 # ---------------------------------------------------------------------------
 # Helpers
