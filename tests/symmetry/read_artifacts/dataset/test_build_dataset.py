@@ -70,9 +70,7 @@ class TestBuildDataset:
             excludeFiles=["datasetSummary.json", "jsonDocuments"],
         )
 
-        assert len(report) == 0, (
-            f"Dataset summary mismatch in {source_type}:\n" + "\n".join(report)
-        )
+        assert len(report) == 0, f"Dataset summary mismatch in {source_type}:\n" + "\n".join(report)
 
     def test_build_dataset_documents(self, source_type):
         """Verify that every exported JSON document can be loaded from session DBs.

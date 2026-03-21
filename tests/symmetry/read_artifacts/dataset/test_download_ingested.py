@@ -98,9 +98,7 @@ class TestDownloadIngested:
             excludeFields=["documentCounts"],
         )
 
-        assert len(report) == 0, (
-            f"Dataset summary mismatch in {source_type}:\n" + "\n".join(report)
-        )
+        assert len(report) == 0, f"Dataset summary mismatch in {source_type}:\n" + "\n".join(report)
 
     def test_download_ingested_document_counts(self, source_type):
         """Verify document counts per session match expected values."""
