@@ -24,7 +24,6 @@ from ndi.query import Query
 from ndi.util import compareSessionSummary, sessionSummary
 from tests.symmetry.conftest import SOURCE_TYPES, SYMMETRY_BASE
 
-DATASET_ID = "69a8705aa9ab25373cdc6563"
 
 
 @pytest.fixture(params=SOURCE_TYPES)
@@ -57,11 +56,17 @@ class TestDownloadIngested:
         if not summary_path.exists():
             pytest.skip(f"datasetSummary.json not found in {source_type} artifact directory.")
 
-        dataset_path = artifact_dir / DATASET_ID
-        if not dataset_path.exists():
+        # Find the single dataset subdirectory (name may differ from archive)
+        subdirs = [
+            p for p in artifact_dir.iterdir()
+            if p.is_dir() and p.name != "jsonDocuments"
+        ]
+        if len(subdirs) != 1:
             pytest.skip(
-                f"Expected dataset directory {DATASET_ID} not found in {source_type} artifacts."
+                f"Expected exactly one dataset directory in {source_type} artifacts, "
+                f"found {len(subdirs)}."
             )
+        dataset_path = subdirs[0]
 
         expected = json.loads(summary_path.read_text(encoding="utf-8"))
         dataset = Dataset(dataset_path)

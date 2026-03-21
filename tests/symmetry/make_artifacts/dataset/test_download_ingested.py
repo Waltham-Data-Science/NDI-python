@@ -88,9 +88,13 @@ class TestDownloadIngested:
         for dot_underscore in artifact_dir.rglob("._*"):
             dot_underscore.unlink()
 
-        # The extracted directory is the dataset
-        dataset_path = artifact_dir / DATASET_ID
-        assert dataset_path.is_dir(), f"Expected extracted directory {DATASET_ID} not found."
+        # The extracted directory is the dataset (name may differ from the archive)
+        subdirs = [p for p in artifact_dir.iterdir() if p.is_dir()]
+        assert len(subdirs) == 1, (
+            f"Expected exactly one directory inside the archive, found {len(subdirs)}: "
+            f"{[p.name for p in subdirs]}"
+        )
+        dataset_path = subdirs[0]
 
         # Open the dataset
         dataset = Dataset(dataset_path)
