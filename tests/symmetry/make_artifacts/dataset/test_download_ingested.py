@@ -24,7 +24,7 @@ import pytest
 
 from ndi.dataset import Dataset
 from ndi.query import Query
-from ndi.util import sessionSummary
+from ndi.util import datasetSummary
 from tests.symmetry.conftest import PYTHON_ARTIFACTS
 
 ARTIFACT_DIR = PYTHON_ARTIFACTS / "dataset" / "downloadIngested" / "testDownloadIngestedArtifacts"
@@ -99,31 +99,17 @@ class TestDownloadIngested:
         # Open the dataset
         dataset = Dataset(dataset_path)
 
-        # Get session list
-        ref_list, id_list, *_ = dataset.session_list()
-        num_sessions = len(ref_list)
+        # Build the dataset summary using the public utility
+        dataset_summary = datasetSummary(dataset)
 
-        # Build session summaries for each session
-        session_summaries = []
-        for sid in id_list:
-            sess = dataset.open_session(sid)
-            session_summaries.append(sessionSummary(sess))
-
-        # Record document counts per session
+        # Record document counts per session (extra field for this test)
+        _ref_list, id_list, *_ = dataset.session_list()
         document_counts = []
         for sid in id_list:
             sess = dataset.open_session(sid)
             docs = sess.database_search(Query("base.id").match("(.*)"))
             document_counts.append({"sessionId": sid, "count": len(docs)})
-
-        # Build the dataset summary
-        dataset_summary = {
-            "numSessions": num_sessions,
-            "references": ref_list,
-            "sessionIds": id_list,
-            "sessionSummaries": session_summaries,
-            "documentCounts": document_counts,
-        }
+        dataset_summary["documentCounts"] = document_counts
 
         # Write datasetSummary.json
         summary_json = json.dumps(dataset_summary, indent=2, allow_nan=True)

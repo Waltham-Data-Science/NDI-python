@@ -24,7 +24,7 @@ from ndi.dataset import Dataset
 from ndi.document import Document
 from ndi.query import Query
 from ndi.session.dir import DirSession
-from ndi.util import sessionSummary
+from ndi.util import datasetSummary
 from tests.symmetry.conftest import PYTHON_ARTIFACTS
 
 ARTIFACT_DIR = PYTHON_ARTIFACTS / "dataset" / "buildDataset" / "testBuildDatasetArtifacts"
@@ -44,29 +44,6 @@ def _add_doc_with_file(session: DirSession, doc_number: int) -> None:
     doc = Document(props)
     doc = doc.add_file("filename1.ext", str(filepath))
     session.database_add(doc)
-
-
-def _dataset_summary(dataset: Dataset) -> dict:
-    """Create a summary structure for a dataset.
-
-    Mirrors MATLAB's ``ndi.symmetry.makeArtifacts.dataset.buildDataset``
-    which writes: numSessions, references, sessionIds, sessionSummaries.
-    """
-    refs, session_ids, *_ = dataset.session_list()
-    num_sessions = len(refs)
-
-    # Build a session summary for each session in the dataset
-    session_summaries = []
-    for sid in session_ids:
-        sess = dataset.open_session(sid)
-        session_summaries.append(sessionSummary(sess))
-
-    return {
-        "numSessions": num_sessions,
-        "references": refs,
-        "sessionIds": session_ids,
-        "sessionSummaries": session_summaries,
-    }
 
 
 class TestBuildDataset:
@@ -132,7 +109,7 @@ class TestBuildDataset:
 
         # Write datasetSummary.json – open from artifact_dir so the session
         # path lists files that are actually present (including jsonDocuments).
-        summary = _dataset_summary(artifact_dataset)
+        summary = datasetSummary(artifact_dataset)
         summary_json = json.dumps(summary, indent=2, allow_nan=True)
         summary_path = artifact_dir / "datasetSummary.json"
         summary_path.write_text(summary_json, encoding="utf-8")

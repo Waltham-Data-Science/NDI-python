@@ -14,7 +14,9 @@ The ``+openminds`` sub-package is ported separately in
 """
 
 from .classname import ndi_matlab_classname, ndi_python_classname
+from .compare_dataset_summary import compareDatasetSummary
 from .compare_session_summary import compareSessionSummary
+from .dataset_summary import datasetSummary
 from .datestamp2datetime import datestamp2datetime
 from .downsampleTimeseries import downsampleTimeseries
 from .getHexDiffFromFileObj import getHexDiffFromFileObj
@@ -28,7 +30,9 @@ from .unwrapTableCellContent import unwrapTableCellContent
 __all__ = [
     "ndi_matlab_classname",
     "ndi_python_classname",
+    "compareDatasetSummary",
     "compareSessionSummary",
+    "datasetSummary",
     "datestamp2datetime",
     "downsampleTimeseries",
     "getHexDiffFromFileObj",
