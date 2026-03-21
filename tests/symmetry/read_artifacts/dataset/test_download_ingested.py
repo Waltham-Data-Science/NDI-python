@@ -25,7 +25,6 @@ from ndi.util import compareSessionSummary, sessionSummary
 from tests.symmetry.conftest import SOURCE_TYPES, SYMMETRY_BASE
 
 
-
 @pytest.fixture(params=SOURCE_TYPES)
 def source_type(request):
     """Parameterize over matlabArtifacts / pythonArtifacts."""
@@ -57,10 +56,7 @@ class TestDownloadIngested:
             pytest.skip(f"datasetSummary.json not found in {source_type} artifact directory.")
 
         # Find the single dataset subdirectory (name may differ from archive)
-        subdirs = [
-            p for p in artifact_dir.iterdir()
-            if p.is_dir() and p.name != "jsonDocuments"
-        ]
+        subdirs = [p for p in artifact_dir.iterdir() if p.is_dir() and p.name != "jsonDocuments"]
         if len(subdirs) != 1:
             pytest.skip(
                 f"Expected exactly one dataset directory in {source_type} artifacts, "
