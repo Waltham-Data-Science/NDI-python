@@ -63,7 +63,6 @@ class TestIngestionAxonNDR:
         session_dir.mkdir()
 
         session = ndi_session_dir("exp1", session_dir)
-        session.database_clear("yes")
         session.cache.clear()
 
         # Copy Axon data file and create epochprobemap

@@ -39,7 +39,6 @@ class TestBlankSessionMarderlab:
         session_dir.mkdir()
 
         session = ndi_session_dir("exp1", session_dir)
-        session.database_clear("yes")
         session.cache.clear()
 
         ndi.setup.lab(session, "marderlab")
