@@ -134,6 +134,11 @@ class TestDownloadIngested:
                 f"No expected session summary found for session ID " f"{sid} in {source_type}"
             )
 
+            # Also filter macOS resource fork files from the expected summary
+            for key in ("files", "filesInDotNDI"):
+                if key in match:
+                    match[key] = _filter_dot_underscore(match[key])
+
             report = compareSessionSummary(
                 actual_summary,
                 match,
