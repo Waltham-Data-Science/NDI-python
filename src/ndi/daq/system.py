@@ -501,10 +501,8 @@ class ndi_daq_system(ndi_ido):
                             subjectstring = getattr(item, "subjectstring", "")
                             sid = ""
                             if subjectstring and self.session is not None:
-                                _, doc_id = (
-                                    ndi_subject.does_subjectstring_match_session_document(
-                                        self.session, subjectstring
-                                    )
+                                _, doc_id = ndi_subject.does_subjectstring_match_session_document(
+                                    self.session, subjectstring
                                 )
                                 if doc_id is not None:
                                     sid = doc_id

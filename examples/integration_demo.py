@@ -23,6 +23,7 @@ from ndi.common import timestamp
 # Cofounder's compression library
 try:
     import ndicompress
+
     HAS_COMPRESS = True
 except ImportError:
     HAS_COMPRESS = False
@@ -60,7 +61,7 @@ def demo_full_workflow():
         spike_times = np.random.choice(num_samples, size=20, replace=False)
         for st in spike_times:
             if st + 30 < num_samples:
-                data[st:st+30, ch] += np.sin(np.linspace(0, np.pi, 30)) * 500
+                data[st : st + 30, ch] += np.sin(np.linspace(0, np.pi, 30)) * 500
 
     data = data.astype(np.int16)  # Convert to int16 for ephys
     print(f"   Data shape: {data.shape}")
@@ -90,28 +91,22 @@ def demo_full_workflow():
             # In real usage, we'd load from JSON schema
             # For demo, we create a simple document structure
             doc_props = {
-                'base': {
-                    'id': Ido().id,
-                    'datestamp': timestamp(),
-                    'name': 'ephys_recording_001',
-                    'session_id': ''
+                "base": {
+                    "id": Ido().id,
+                    "datestamp": timestamp(),
+                    "name": "ephys_recording_001",
+                    "session_id": "",
                 },
-                'document_class': {
-                    'class_name': 'ndi_document_ephys',
-                    'superclasses': []
+                "document_class": {"class_name": "ndi_document_ephys", "superclasses": []},
+                "ephys": {
+                    "num_channels": num_channels,
+                    "sample_rate": sample_rate,
+                    "num_samples": num_samples,
+                    "duration_seconds": num_samples / sample_rate,
+                    "data_type": "int16",
+                    "compression": "ndi_compress_ephys",
                 },
-                'ephys': {
-                    'num_channels': num_channels,
-                    'sample_rate': sample_rate,
-                    'num_samples': num_samples,
-                    'duration_seconds': num_samples / sample_rate,
-                    'data_type': 'int16',
-                    'compression': 'ndi_compress_ephys'
-                },
-                'files': {
-                    'file_list': ['ephys_data.nbf_#'],
-                    'file_info': []
-                }
+                "files": {"file_list": ["ephys_data.nbf_#"], "file_info": []},
             }
 
             doc = Document(doc_props)
@@ -119,11 +114,7 @@ def demo_full_workflow():
             # === Step 4: Link compressed file to document ===
             print("\n[4] Linking compressed file to document...")
 
-            doc = doc.add_file(
-                name='ephys_data.nbf_1',
-                location=compressed_file,
-                ingest=True
-            )
+            doc = doc.add_file(name="ephys_data.nbf_1", location=compressed_file, ingest=True)
 
             print(f"   Document ID: {doc.id}")
             print(f"   Document class: {doc.doc_class()}")
@@ -133,9 +124,9 @@ def demo_full_workflow():
             print("\n[5] Query demonstration...")
 
             # These queries would work with ndi.database
-            q1 = Query('ephys.num_channels') == 4
-            q2 = Query('ephys.sample_rate') > 20000
-            q3 = Query('base.name').contains('ephys')
+            q1 = Query("ephys.num_channels") == 4
+            q2 = Query("ephys.sample_rate") > 20000
+            q3 = Query("base.name").contains("ephys")
 
             # Combined query
             _q_combined = q1 & q2 & q3
@@ -166,9 +157,9 @@ def demo_full_workflow():
         # Still show document creation without compression
         print("\n[3] Creating ndi.Document (without compression)...")
 
-        doc = Document('base')
-        doc = doc.set_session_id('demo_session')
-        doc = doc.setproperties(**{'base.name': 'ephys_demo'})
+        doc = Document("base")
+        doc = doc.set_session_id("demo_session")
+        doc = doc.setproperties(**{"base.name": "ephys_demo"})
 
         print(f"   Document ID: {doc.id}")
         print(f"   Session ID: {doc.session_id}")
@@ -214,17 +205,19 @@ def demo_document_features():
     print("=" * 60)
 
     # Create a document
-    doc = Document('base')
+    doc = Document("base")
     print(f"\n1. Created document with ID: {doc.id}")
 
     # Set session
-    doc = doc.set_session_id('session_abc123')
+    doc = doc.set_session_id("session_abc123")
     print(f"2. Set session ID: {doc.session_id}")
 
     # Bulk property setting (useful for ephys metadata)
-    doc = doc.setproperties(**{
-        'base.name': 'neural_recording',
-    })
+    doc = doc.setproperties(
+        **{
+            "base.name": "neural_recording",
+        }
+    )
     print("3. Set name via setproperties")
 
     # Document equality (by ID)
@@ -233,9 +226,9 @@ def demo_document_features():
 
     # Static methods for working with document arrays
     docs = [
-        Document('base'),
-        Document('base'),
-        Document('base'),
+        Document("base"),
+        Document("base"),
+        Document("base"),
     ]
 
     newest, idx, ts = Document.find_newest(docs)
@@ -251,6 +244,6 @@ def demo_document_features():
     print("\nAll features work and are ready to integrate with ndicompress!")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     demo_full_workflow()
     demo_document_features()
