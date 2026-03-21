@@ -881,6 +881,9 @@ class ndi_session(ABC):
                     type=ps.get("type", ""),
                     subject_id=ps.get("subject_id", ""),
                 )
+                # Persist the element document to the database, matching
+                # MATLAB's getprobes behavior (ndi_session_dir.m).
+                self.database_add(probe.newdocument())
                 probes.append(probe)
 
         probes.extend(existing_probes)

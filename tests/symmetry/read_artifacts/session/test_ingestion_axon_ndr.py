@@ -10,9 +10,6 @@ This test loads artifacts produced by *either* the MATLAB or the Python
 2. Generate a live session summary that matches the stored ``sessionSummary.json``.
 3. Load every document whose JSON was exported to ``jsonDocuments/``.
 
-Note: The MATLAB test uses British spelling ``Artefacts`` in the test
-method / artifact directory name; we match that exactly.
-
 The test is parameterized over ``source_type`` so that a single test class
 covers both ``matlabArtifacts`` and ``pythonArtifacts``.
 """
@@ -42,7 +39,7 @@ class TestIngestionAxonNDR:
             / source_type
             / "session"
             / "ingestionAxonNDR"
-            / "testIngestionAxonNDRArtefacts"
+            / "testIngestionAxonNDRArtifacts"
         )
 
     def _open_session(self, source_type):

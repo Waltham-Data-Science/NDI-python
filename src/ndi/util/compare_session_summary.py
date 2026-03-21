@@ -101,6 +101,17 @@ def compareSessionSummary(
                     val1 = [d for _, d in sorted(zip(names1, val1))]
                 if len(names2) == len(val2):
                     val2 = [d for _, d in sorted(zip(names2, val2))]
+            elif field == "probes":
+                # Sort probes by name so order doesn't matter.
+                # The database may return probes in different order on
+                # re-open or across languages.
+                def _probe_sort_key(p: Any) -> str:
+                    if isinstance(p, dict):
+                        return p.get("name", "")
+                    return str(p)
+
+                val1 = sorted(val1, key=_probe_sort_key)
+                val2 = sorted(val2, key=_probe_sort_key)
 
             for j, (item1, item2) in enumerate(zip(val1, val2)):
                 if isinstance(item1, str) and isinstance(item2, str):

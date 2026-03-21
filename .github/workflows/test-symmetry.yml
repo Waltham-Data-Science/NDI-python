@@ -60,6 +60,12 @@ jobs:
           python -m pip install --upgrade pip
           python ndi_install.py --dev --no-validate --verbose
 
+      # ── Download test datasets ────────────────────────────────────────
+      - name: Download test datasets
+        run: |
+          curl -L -o /tmp/69a8705aa9ab25373cdc6563.tgz \
+            https://github.com/Waltham-Data-Science/file-passing/raw/refs/heads/main/69a8705aa9ab25373cdc6563.tgz
+
       # ── Stage 1: MATLAB makeArtifacts ──────────────────────────────────
       - name: "Stage 1: MATLAB makeArtifacts"
         uses: matlab-actions/run-command@v2

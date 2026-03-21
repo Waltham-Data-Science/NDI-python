@@ -489,9 +489,7 @@ filtered_subjects = subject_table[row_ind]
 print(f'filteredSubjects: {len(filtered_subjects)} rows x {len(filtered_subjects.columns)} columns')
 print(filtered_subjects)""")
 
-    row_ind = identifyMatchingRows(
-        subject_table, "StrainName", "AVP-Cre", string_match="contains"
-    )
+    row_ind = identifyMatchingRows(subject_table, "StrainName", "AVP-Cre", string_match="contains")
     filtered_subjects = subject_table[row_ind]
 
     html.add_output_text(
@@ -683,9 +681,7 @@ row_ind = identifyMatchingRows(
 opto_epochs = combined[row_ind]
 print(f'Epochs with optogenetic approach: {len(opto_epochs)} rows')""")
 
-    row_ind = identifyMatchingRows(
-        combined, "ApproachName", "optogenetic", string_match="contains"
-    )
+    row_ind = identifyMatchingRows(combined, "ApproachName", "optogenetic", string_match="contains")
     opto_epochs = combined[row_ind]
 
     html.add_output_text(f"Epochs with optogenetic approach: {len(opto_epochs)} rows")

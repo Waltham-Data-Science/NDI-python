@@ -56,9 +56,10 @@ class ndi_daq_reader(ndi_ido, ABC):
 
         # Load from document if provided
         if document is not None:
-            doc_props = getattr(document, "document_properties", document)
-            if hasattr(doc_props, "base") and hasattr(doc_props.base, "id"):
-                self._id = doc_props.base.id
+            doc_props = document.document_properties
+            base_id = doc_props.get("base", {}).get("id")
+            if base_id:
+                self._id = base_id
 
     def epochclock(
         self,
@@ -160,8 +161,8 @@ class ndi_daq_reader(ndi_ido, ABC):
 
         for doc in d_ingested:
             props = doc.document_properties
-            epochid = props.epochid.epochid
-            et = props.daqreader_epochdata_ingested.epochtable
+            epochid = props["epochid"]["epochid"]
+            et = props["daqreader_epochdata_ingested"]["epochtable"]
 
             # Extract epoch clock
             ec_list = []
@@ -201,7 +202,8 @@ class ndi_daq_reader(ndi_ido, ABC):
         See also: epochclock, ndi_time_clocktype
         """
         doc = self.getingesteddocument(epochfiles, session)
-        et = doc.document_properties.daqreader_epochdata_ingested.epochtable
+        props = doc.document_properties
+        et = props["daqreader_epochdata_ingested"]["epochtable"]
 
         ec_list = []
         for ec_str in et.get("epochclock", []):
@@ -230,7 +232,8 @@ class ndi_daq_reader(ndi_ido, ABC):
         See also: t0_t1, epochclock_ingested
         """
         doc = self.getingesteddocument(epochfiles, session)
-        et = doc.document_properties.daqreader_epochdata_ingested.epochtable
+        props = doc.document_properties
+        et = props["daqreader_epochdata_ingested"]["epochtable"]
 
         t0t1_raw = et.get("t0_t1", [])
         if not isinstance(t0t1_raw, list):
@@ -288,9 +291,24 @@ class ndi_daq_reader(ndi_ido, ABC):
         ec_strings = [c.value if isinstance(c, ndi_time_clocktype) else str(c) for c in ec]
         t0t1 = self.t0_t1(epochfiles)
 
+        # Convert NaN values to None so json.dumps produces null instead of
+        # non-standard NaN that MATLAB's jsondecode cannot parse.
+        import math
+
+        sanitized_t0t1 = []
+        for pair in t0t1:
+            if isinstance(pair, (list, tuple)):
+                sanitized_t0t1.append(
+                    [None if (isinstance(v, float) and math.isnan(v)) else v for v in pair]
+                )
+            else:
+                sanitized_t0t1.append(
+                    None if (isinstance(pair, float) and math.isnan(pair)) else pair
+                )
+
         epochtable = {
             "epochclock": ec_strings,
-            "t0_t1": t0t1,
+            "t0_t1": sanitized_t0t1,
         }
 
         doc = ndi_document(

@@ -647,11 +647,15 @@ class TestIngestedDataMethods:
 
         # Create mock session and document
         mock_doc = MagicMock()
-        mock_doc.document_properties.daqreader_epochdata_ingested.epochtable = {
-            "channels": [
-                {"name": "ai1", "type": "analog_in", "number": 1, "sample_rate": 30000},
-                {"name": "ai2", "type": "analog_in", "number": 2, "sample_rate": 30000},
-            ]
+        mock_doc.document_properties = {
+            "daqreader_epochdata_ingested": {
+                "epochtable": {
+                    "channels": [
+                        {"name": "ai1", "type": "analog_in", "number": 1, "sample_rate": 30000},
+                        {"name": "ai2", "type": "analog_in", "number": 2, "sample_rate": 30000},
+                    ]
+                }
+            }
         }
 
         mock_session = MagicMock()
@@ -670,11 +674,15 @@ class TestIngestedDataMethods:
 
         # Create mock document
         mock_doc = MagicMock()
-        mock_doc.document_properties.daqreader_epochdata_ingested.epochtable = {
-            "channels": [
-                {"name": "ai1", "type": "analog_in", "number": 1, "sample_rate": 30000},
-                {"name": "di1", "type": "digital_in", "number": 1, "sample_rate": 30000},
-            ]
+        mock_doc.document_properties = {
+            "daqreader_epochdata_ingested": {
+                "epochtable": {
+                    "channels": [
+                        {"name": "ai1", "type": "analog_in", "number": 1, "sample_rate": 30000},
+                        {"name": "di1", "type": "digital_in", "number": 1, "sample_rate": 30000},
+                    ]
+                }
+            }
         }
 
         mock_session = MagicMock()
@@ -692,11 +700,15 @@ class TestIngestedDataMethods:
 
         # Create mock document
         mock_doc = MagicMock()
-        mock_doc.document_properties.daqreader_epochdata_ingested.epochtable = {
-            "channels": [
-                {"name": "ai1", "type": "analog_in", "number": 1, "sample_rate": 30000},
-            ],
-            "t0_t1": [(0.0, 1.0)],
+        mock_doc.document_properties = {
+            "daqreader_epochdata_ingested": {
+                "epochtable": {
+                    "channels": [
+                        {"name": "ai1", "type": "analog_in", "number": 1, "sample_rate": 30000},
+                    ],
+                    "t0_t1": [(0.0, 1.0)],
+                }
+            }
         }
 
         mock_session = MagicMock()
@@ -716,11 +728,15 @@ class TestIngestedDataMethods:
 
         # Create mock document
         mock_doc = MagicMock()
-        mock_doc.document_properties.daqreader_epochdata_ingested.epochtable = {
-            "channels": [
-                {"name": "ai1", "type": "analog_in", "number": 1, "sample_rate": 30000},
-            ],
-            "t0_t1": [(0.0, 1.0)],
+        mock_doc.document_properties = {
+            "daqreader_epochdata_ingested": {
+                "epochtable": {
+                    "channels": [
+                        {"name": "ai1", "type": "analog_in", "number": 1, "sample_rate": 30000},
+                    ],
+                    "t0_t1": [(0.0, 1.0)],
+                }
+            }
         }
 
         mock_session = MagicMock()

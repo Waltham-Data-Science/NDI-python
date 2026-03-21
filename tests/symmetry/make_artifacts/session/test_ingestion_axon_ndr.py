@@ -9,11 +9,11 @@ deletes raw data files (keeping only the .ndi database), and exports the
 resulting artifacts to:
 
     <tempdir>/NDI/symmetryTest/pythonArtifacts/session/ingestionAxonNDR/
-             testIngestionAxonNDRArtefacts/
+             testIngestionAxonNDRArtifacts/
 
-Note: The MATLAB test uses British spelling ``Artefacts`` in the test
-method name; we match that exactly so both languages write to the same
-artifact directory path.
+Note: The MATLAB test uses ``Artifacts`` (American spelling) in the
+artifact directory name; we match that exactly so both languages write
+to the same artifact directory path.
 
 The artifacts are left on disk so that the MATLAB ``readArtifacts`` suite
 (and the Python ``read_artifacts`` suite) can load and verify them.
@@ -34,7 +34,7 @@ from tests.symmetry.make_artifacts.session._ingestion_helpers import (
     setup_axon_session,
 )
 
-ARTIFACT_DIR = PYTHON_ARTIFACTS / "session" / "ingestionAxonNDR" / "testIngestionAxonNDRArtefacts"
+ARTIFACT_DIR = PYTHON_ARTIFACTS / "session" / "ingestionAxonNDR" / "testIngestionAxonNDRArtifacts"
 
 
 def _have_axon_data() -> bool:
@@ -63,7 +63,6 @@ class TestIngestionAxonNDR:
         session_dir.mkdir()
 
         session = ndi_session_dir("exp1", session_dir)
-        session.database_clear("yes")
         session.cache.clear()
 
         # Copy Axon data file and create epochprobemap
@@ -137,33 +136,39 @@ class TestIngestionAxonNDR:
         success, msg = self.session.ingest()
         assert success, f"Ingestion failed: {msg}"
 
+        # Call getprobes() again after ingestion — this creates an element
+        # document for each probe, matching MATLAB's behaviour.
+        self.session.getprobes()
+
         # Delete raw data files (keep only .ndi database)
         delete_raw_files(self.session.path)
 
-        # Clear cache and re-open the session
-        self.session.cache.clear()
-        session_path = self.session.path
-        self.session = ndi_session_dir("exp1", session_path)
-
-        # Create session summary
-        summary = sessionSummary(self.session)
-        summary_json = json.dumps(summary, indent=2, allow_nan=True)
-
         # Copy session to persistent artifact directory
-        shutil.copytree(str(session_path), str(artifact_dir))
+        shutil.copytree(str(self.session.path), str(artifact_dir))
 
-        # Write individual JSON documents
+        # Write individual JSON documents into the artifact directory
         json_docs_dir = artifact_dir / "jsonDocuments"
         json_docs_dir.mkdir(exist_ok=True)
 
-        docs = self.session.database_search(ndi_query("base.id").match("(.*)"))
+        # Re-open session from the artifact directory so the summary
+        # reflects the final directory contents that MATLAB will see.
+        artifact_session = ndi_session_dir("exp1", artifact_dir)
+
+        docs = artifact_session.database_search(ndi_query("base.id").match("(.*)"))
         for doc in docs:
             props = doc.document_properties
             doc_path = json_docs_dir / f"{doc.id}.json"
             doc_path.write_text(json.dumps(props, indent=2, allow_nan=True), encoding="utf-8")
 
-        # Write sessionSummary.json
+        # Write a placeholder sessionSummary.json BEFORE computing the
+        # summary so that the file list includes it (matching what MATLAB
+        # will see when it opens the artifacts and computes its own summary).
         summary_path = artifact_dir / "sessionSummary.json"
+        summary_path.write_text("{}", encoding="utf-8")
+
+        # Generate session summary from the artifact session
+        summary = sessionSummary(artifact_session)
+        summary_json = json.dumps(summary, indent=2, allow_nan=True)
         summary_path.write_text(summary_json, encoding="utf-8")
 
         # Verify artifacts were created

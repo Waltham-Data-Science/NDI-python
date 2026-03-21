@@ -42,6 +42,17 @@ def _serialize_t0_t1(t0_t1: Any) -> list:
     return t0_t1
 
 
+def _serialize_single_epochprobemap(epm: Any) -> dict[str, Any]:
+    """Convert a single epochprobemap object to a JSON-compatible dict."""
+    if isinstance(epm, dict):
+        return epm
+    if hasattr(epm, "to_dict"):
+        return epm.to_dict()
+    if hasattr(epm, "__dict__"):
+        return {k: v for k, v in epm.__dict__.items() if not k.startswith("_")}
+    return epm
+
+
 def _serialize_epochnode(node: dict[str, Any]) -> None:
     """Normalize epoch node dict in-place to MATLAB-compatible JSON format."""
     # epoch_clock: list of ClockType -> single dict (MATLAB unwraps single)
@@ -68,12 +79,12 @@ def _serialize_epochnode(node: dict[str, Any]) -> None:
         if isinstance(ue_t, list):
             ue["t0_t1"] = [_serialize_t0_t1(t) for t in ue_t]
 
-    # epochprobemap: if it's a list, handle; if it has a to_dict method, use it
+    # epochprobemap: serialize to JSON-compatible format
     epm = node.get("epochprobemap")
-    if epm is not None and hasattr(epm, "to_dict"):
-        node["epochprobemap"] = epm.to_dict()
-    elif epm is not None and hasattr(epm, "__dict__") and not isinstance(epm, dict):
-        node["epochprobemap"] = {k: v for k, v in epm.__dict__.items() if not k.startswith("_")}
+    if isinstance(epm, list):
+        node["epochprobemap"] = [_serialize_single_epochprobemap(item) for item in epm]
+    elif epm is not None and not isinstance(epm, (dict, str)):
+        node["epochprobemap"] = _serialize_single_epochprobemap(epm)
 
 
 class ndi_daq_system(ndi_ido):
@@ -460,8 +471,10 @@ class ndi_daq_system(ndi_ido):
             - name: ndi_probe name
             - reference: ndi_probe reference
             - type: ndi_probe type
-            - subject_id: ndi_subject identifier
+            - subject_id: ndi_subject document ID
         """
+        from ..subject import ndi_subject
+
         et = self.epochtable()
         probes = []
         seen = set()
@@ -481,12 +494,24 @@ class ndi_daq_system(ndi_ido):
                         key = (item.name, item.reference, item.type)
                         if key not in seen:
                             seen.add(key)
+                            # Look up the subject document ID from the
+                            # subjectstring (e.g. "anteater27@nosuchlab.org").
+                            # MATLAB does the same lookup and stores the
+                            # document ID, not the local_identifier string.
+                            subjectstring = getattr(item, "subjectstring", "")
+                            sid = ""
+                            if subjectstring and self.session is not None:
+                                _, doc_id = ndi_subject.does_subjectstring_match_session_document(
+                                    self.session, subjectstring
+                                )
+                                if doc_id is not None:
+                                    sid = doc_id
                             probes.append(
                                 {
                                     "name": item.name,
                                     "reference": item.reference,
                                     "type": item.type,
-                                    "subject_id": getattr(item, "subjectstring", ""),
+                                    "subject_id": sid,
                                 }
                             )
 
@@ -600,7 +625,7 @@ class ndi_daq_system(ndi_ido):
 
         # Set session IDs and add to database
         if self.session is not None:
-            session_id = self.session.id
+            session_id = self.session.id()
             for doc in docs:
                 doc.set_session_id(session_id)
             self.session.database_add(docs)
@@ -746,7 +771,7 @@ class ndi_daq_system(ndi_ido):
         )
 
         if self.session is not None:
-            sys_doc.set_session_id(self.session.id)
+            sys_doc.set_session_id(self.session.id())
 
         if self._filenavigator is not None:
             sys_doc.set_dependency_value("filenavigator_id", self._filenavigator.id)
@@ -775,7 +800,7 @@ class ndi_daq_system(ndi_ido):
         if self._name:
             q = q & (ndi_query("base.name") == self._name)
         if self.session is not None:
-            q = q & (ndi_query("base.session_id") == self.session.id)
+            q = q & (ndi_query("base.session_id") == self.session.id())
 
         return q
 
