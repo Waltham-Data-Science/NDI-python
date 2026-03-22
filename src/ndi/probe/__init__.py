@@ -104,6 +104,7 @@ class ndi_probe(ndi_element):
 
         et = []
         epoch_number = 0
+        seen_epoch_ids: set[str] = set()
 
         for daqsys in daqsystems:
             # Get device epoch table
@@ -115,6 +116,13 @@ class ndi_probe(ndi_element):
                 matching_epm = self._find_matching_epochprobemap(epochprobemaps)
 
                 if matching_epm is not None:
+                    epoch_id = device_entry.get("epoch_id", "")
+                    epoch_session_id = device_entry.get("epoch_session_id", "")
+                    dedup_key = (epoch_id, epoch_session_id)
+                    if dedup_key in seen_epoch_ids:
+                        continue
+                    seen_epoch_ids.add(dedup_key)
+
                     epoch_number += 1
 
                     # Get clock and timing info from device entry
@@ -124,15 +132,15 @@ class ndi_probe(ndi_element):
                     et.append(
                         {
                             "epoch_number": epoch_number,
-                            "epoch_id": device_entry.get("epoch_id", ""),
-                            "epoch_session_id": device_entry.get("epoch_session_id", ""),
+                            "epoch_id": epoch_id,
+                            "epoch_session_id": epoch_session_id,
                             "epochprobemap": [matching_epm],
                             "epoch_clock": epoch_clock,
                             "t0_t1": t0_t1,
                             "underlying_epochs": {
                                 "underlying": daqsys,
-                                "epoch_id": device_entry.get("epoch_id", ""),
-                                "epoch_session_id": device_entry.get("epoch_session_id", ""),
+                                "epoch_id": epoch_id,
+                                "epoch_session_id": epoch_session_id,
                                 "epochprobemap": epochprobemaps,
                                 "epoch_clock": epoch_clock,
                                 "t0_t1": t0_t1,
@@ -377,6 +385,7 @@ class ndi_probe(ndi_element):
         for probe in probes:
             et = []
             epoch_number = 0
+            seen_epoch_ids: set[tuple[str, str]] = set()
 
             for _daqsys_id, device_info in device_tables.items():
                 daqsys = device_info["system"]
@@ -387,19 +396,26 @@ class ndi_probe(ndi_element):
                     matching_epm = probe._find_matching_epochprobemap(epochprobemaps)
 
                     if matching_epm is not None:
+                        epoch_id = device_entry.get("epoch_id", "")
+                        epoch_session_id = device_entry.get("epoch_session_id", "")
+                        dedup_key = (epoch_id, epoch_session_id)
+                        if dedup_key in seen_epoch_ids:
+                            continue
+                        seen_epoch_ids.add(dedup_key)
+
                         epoch_number += 1
                         et.append(
                             {
                                 "epoch_number": epoch_number,
-                                "epoch_id": device_entry.get("epoch_id", ""),
-                                "epoch_session_id": device_entry.get("epoch_session_id", ""),
+                                "epoch_id": epoch_id,
+                                "epoch_session_id": epoch_session_id,
                                 "epochprobemap": [matching_epm],
                                 "epoch_clock": device_entry.get("epoch_clock", []),
                                 "t0_t1": device_entry.get("t0_t1", []),
                                 "underlying_epochs": {
                                     "underlying": daqsys,
-                                    "epoch_id": device_entry.get("epoch_id", ""),
-                                    "epoch_session_id": device_entry.get("epoch_session_id", ""),
+                                    "epoch_id": epoch_id,
+                                    "epoch_session_id": epoch_session_id,
                                     "epochprobemap": epochprobemaps,
                                     "epoch_clock": device_entry.get("epoch_clock", []),
                                     "t0_t1": device_entry.get("t0_t1", []),
