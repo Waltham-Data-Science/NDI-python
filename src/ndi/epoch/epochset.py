@@ -121,17 +121,27 @@ class ndi_epoch_epochset(ABC):
     def _compute_hash(self, epochtable: list[dict[str, Any]]) -> str:
         """Compute hash of epoch table for cache validation."""
 
-        # Create a stable string representation
+        # Create a stable string representation; track seen object ids to
+        # avoid infinite recursion on circular references.
+        seen = set()
+
         def make_hashable(obj):
+            obj_id = id(obj)
+            if obj_id in seen:
+                return "<circular>"
             if isinstance(obj, dict):
+                seen.add(obj_id)
                 return tuple(sorted((k, make_hashable(v)) for k, v in obj.items()))
             elif isinstance(obj, list):
+                seen.add(obj_id)
                 return tuple(make_hashable(x) for x in obj)
             elif isinstance(obj, np.ndarray):
                 return tuple(obj.flatten().tolist())
             elif hasattr(obj, "to_dict"):
+                seen.add(obj_id)
                 return make_hashable(obj.to_dict())
             elif hasattr(obj, "__dict__"):
+                seen.add(obj_id)
                 return make_hashable(obj.__dict__)
             else:
                 return obj
