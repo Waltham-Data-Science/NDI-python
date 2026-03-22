@@ -559,6 +559,8 @@ class TestProbeBuildEpochtable:
         mock_session = MagicMock()
 
         mock_daqsys = MagicMock()
+        mock_daqsys.name = "dev1"
+        mock_daqsys._name = "dev1"
         mock_daqsys.epochtable.return_value = [
             {
                 "epoch_number": 1,
