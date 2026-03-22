@@ -108,6 +108,7 @@ class ndi_probe(ndi_element):
         for daqsys in daqsystems:
             # Get device epoch table
             device_et = daqsys.epochtable()
+            daqsys_name = getattr(daqsys, "name", getattr(daqsys, "_name", ""))
 
             for device_entry in device_et:
                 # Check if any epochprobemap matches this probe
@@ -115,6 +116,18 @@ class ndi_probe(ndi_element):
                 matching_epm = self._find_matching_epochprobemap(epochprobemaps)
 
                 if matching_epm is not None:
+                    # Only include if the matching epochprobemap's device
+                    # belongs to this DAQ system
+                    epm_devicename = ""
+                    if hasattr(matching_epm, "devicename"):
+                        epm_devicename = matching_epm.devicename
+                    elif hasattr(matching_epm, "devicestring"):
+                        parts = matching_epm.devicestring.split(":")
+                        epm_devicename = parts[0] if parts else ""
+
+                    if epm_devicename.lower() != daqsys_name.lower():
+                        continue
+
                     epoch_number += 1
 
                     # Get clock and timing info from device entry
@@ -381,12 +394,25 @@ class ndi_probe(ndi_element):
             for _daqsys_id, device_info in device_tables.items():
                 daqsys = device_info["system"]
                 device_et = device_info["epochtable"]
+                daqsys_name = getattr(daqsys, "name", getattr(daqsys, "_name", ""))
 
                 for device_entry in device_et:
                     epochprobemaps = device_entry.get("epochprobemap", [])
                     matching_epm = probe._find_matching_epochprobemap(epochprobemaps)
 
                     if matching_epm is not None:
+                        # Only include if the matching epochprobemap's device
+                        # belongs to this DAQ system
+                        epm_devicename = ""
+                        if hasattr(matching_epm, "devicename"):
+                            epm_devicename = matching_epm.devicename
+                        elif hasattr(matching_epm, "devicestring"):
+                            parts = matching_epm.devicestring.split(":")
+                            epm_devicename = parts[0] if parts else ""
+
+                        if epm_devicename.lower() != daqsys_name.lower():
+                            continue
+
                         epoch_number += 1
                         et.append(
                             {
