@@ -178,6 +178,37 @@ class TestDocumentDependencies:
         assert "element_id" in names
         assert len(deps) == 2
 
+    def test_depends_on_bare_dict_normalized_to_list(self):
+        """Test that a bare dict depends_on (MATLAB-style) is normalized to a list."""
+        props = {
+            "base": {"id": "id", "datestamp": "", "session_id": ""},
+            "document_class": {"class_name": "base", "superclasses": []},
+            "depends_on": {"name": "element_id", "value": "abc123"},
+        }
+        doc = ndi_document(props)
+        # Should be normalized to a list
+        assert isinstance(doc.document_properties["depends_on"], list)
+        assert len(doc.document_properties["depends_on"]) == 1
+        assert doc.dependency_value("element_id") == "abc123"
+
+    def test_file_info_bare_dict_normalized_to_list(self):
+        """Test that a bare dict file_info (MATLAB-style) is normalized to a list."""
+        props = {
+            "base": {"id": "id", "datestamp": "", "session_id": ""},
+            "document_class": {"class_name": "base", "superclasses": []},
+            "files": {
+                "file_info": {
+                    "name": "data.bin",
+                    "locations": {"location": "/tmp/data.bin"},
+                }
+            },
+        }
+        doc = ndi_document(props)
+        fi = doc.document_properties["files"]["file_info"]
+        assert isinstance(fi, list)
+        assert len(fi) == 1
+        assert fi[0]["name"] == "data.bin"
+
     def test_dependency_value(self):
         """Test dependency_value returns correct value."""
         props = {

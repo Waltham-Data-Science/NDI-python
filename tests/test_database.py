@@ -388,6 +388,51 @@ class TestDatabaseDependencies:
         assert deps[0].id == parent_ido.id
 
 
+class TestDatabaseDependsSQLite:
+    """Test that depends_on is correctly stored in SQLite doc_data table."""
+
+    def test_depends_on_bare_dict_stored_in_doc_data(self, temp_session):
+        """Test that a bare dict depends_on (MATLAB-style) is stored in doc_data."""
+        db = ndi_database(temp_session)
+
+        parent_ido = ndi_ido()
+        parent = ndi_document(
+            {
+                "base": {
+                    "id": parent_ido.id,
+                    "datestamp": timestamp(),
+                    "name": "parent",
+                    "session_id": "",
+                },
+                "document_class": {"class_name": "base", "superclasses": []},
+            }
+        )
+        db.add(parent)
+
+        child_ido = ndi_ido()
+        # Use bare dict (MATLAB-style) for depends_on
+        child = ndi_document(
+            {
+                "base": {
+                    "id": child_ido.id,
+                    "datestamp": timestamp(),
+                    "name": "child",
+                    "session_id": "",
+                },
+                "document_class": {"class_name": "base", "superclasses": []},
+                "depends_on": {"name": "parent_doc", "value": parent_ido.id},
+            }
+        )
+        db.add(child)
+
+        # Verify depends_on was stored in doc_data by querying with depends_on
+        from ndi.query import ndi_query
+
+        results = db.search(ndi_query("").depends_on("parent_doc", parent_ido.id))
+        assert len(results) == 1
+        assert results[0].id == child_ido.id
+
+
 class TestDatabasePaths:
     """Test ndi_database path properties."""
 

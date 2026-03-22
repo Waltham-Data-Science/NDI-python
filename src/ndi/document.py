@@ -73,12 +73,14 @@ class ndi_document:
         if isinstance(document_type, dict):
             # Loading from existing properties
             self._document_properties = deepcopy(document_type)
+            self._normalize_depends_on()
         elif isinstance(document_type, ndi_document):
             # Copy from another ndi_document
             self._document_properties = deepcopy(document_type.document_properties)
         elif DIDDocument is not None and isinstance(document_type, DIDDocument):
             # Convert from DIDDocument
             self._document_properties = deepcopy(document_type.document_properties)
+            self._normalize_depends_on()
         else:
             # Create new from schema
             self._document_properties = self.read_blank_definition(document_type)
@@ -91,6 +93,27 @@ class ndi_document:
             # Set additional properties from kwargs
             for key, value in kwargs.items():
                 self._set_nested_property(key, value)
+
+    def _normalize_depends_on(self):
+        """Ensure depends_on and files.file_info are always lists.
+
+        MATLAB's jsonencode converts single-element cell arrays to scalars,
+        so documents downloaded from the cloud (or created by MATLAB) may
+        have ``depends_on`` or ``files.file_info`` as a bare dict instead
+        of a list.  Normalizing here guarantees that downstream code
+        (including DID-python's ``doc_to_sql`` / ``_serialize_depends_on``
+        and all NDI code that iterates over ``file_info``) always sees
+        a list.
+        """
+        dep = self._document_properties.get("depends_on")
+        if isinstance(dep, dict):
+            self._document_properties["depends_on"] = [dep]
+
+        files = self._document_properties.get("files")
+        if isinstance(files, dict):
+            fi = files.get("file_info")
+            if isinstance(fi, dict):
+                files["file_info"] = [fi]
 
     @property
     def document_properties(self) -> dict:
