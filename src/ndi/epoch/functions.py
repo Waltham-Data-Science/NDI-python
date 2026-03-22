@@ -41,7 +41,8 @@ def epochrange(
     Raises:
         ValueError: If epochs are not found or range is invalid
     """
-    et, _ = epochset_obj.epochtable()
+    result = epochset_obj.epochtable()
+    et = result[0] if isinstance(result, tuple) else result
 
     if not et:
         return [], [], []
