@@ -95,7 +95,7 @@ class ndi_probe_timeseries(ndi_probe):
             return None, None, None
 
         # Get epoch table
-        et = self.epochtable()
+        et, _ = self.epochtable()
         if not et:
             return None, None, None
 

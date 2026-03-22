@@ -168,7 +168,7 @@ class ndi_probe_timeseries_mfdaq(ndi_probe_timeseries):
             return None
 
         # Get epoch probe map
-        et = self.epochtable()
+        et, _ = self.epochtable()
         if not et:
             return None
 
