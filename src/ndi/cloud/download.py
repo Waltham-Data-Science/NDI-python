@@ -12,6 +12,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ndi.util import rehydrateJSONNanNull
+
 if TYPE_CHECKING:
     from .client import CloudClient
 
@@ -226,7 +228,9 @@ def _download_chunk_zip(
                 all_docs: list[dict[str, Any]] = []
                 for name in zf.namelist():
                     if name.endswith(".json"):
-                        data = json.loads(zf.read(name))
+                        raw_text = zf.read(name).decode("utf-8")
+                        raw_text = rehydrateJSONNanNull(raw_text)
+                        data = json.loads(raw_text)
                         docs = data if isinstance(data, list) else [data]
                         all_docs.extend(docs)
                 return all_docs

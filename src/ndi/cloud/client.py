@@ -11,6 +11,7 @@ MATLAB equivalent: ndi.cloud.api.url(), +implementation classes.
 from __future__ import annotations
 
 import functools
+import json
 import re
 from typing import Any
 from urllib.parse import quote as _url_quote
@@ -294,11 +295,13 @@ class CloudClient:
                 response_body=body,
             )
 
-        # Success — parse JSON if possible
+        # Success — parse JSON if possible, rehydrating NaN placeholders
         if not resp.content:
             return None
         try:
-            return resp.json()
+            from ndi.util import rehydrateJSONNanNull
+
+            return json.loads(rehydrateJSONNanNull(resp.text))
         except Exception:
             return resp.text
 
