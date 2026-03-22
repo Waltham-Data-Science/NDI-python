@@ -7,6 +7,7 @@ MATLAB equivalents: +ndi/+fun/+doc/diff.m, findFuid.m, allTypes.m, getDocTypes.m
 from __future__ import annotations
 
 import json
+import math
 from typing import Any
 
 
@@ -385,7 +386,11 @@ def diff(
                 for i, (va, vb) in enumerate(zip(a, b)):
                     _compare(va, vb, f"{path}[{i}]")
         else:
-            if a != b:
+            # Treat NaN == NaN (matches MATLAB behaviour)
+            both_nan = (
+                isinstance(a, float) and isinstance(b, float) and math.isnan(a) and math.isnan(b)
+            )
+            if not both_nan and a != b:
                 details.append(f"{path}: {a!r} != {b!r}")
 
     # Skip file list comparison unless requested

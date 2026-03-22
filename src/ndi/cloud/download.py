@@ -12,178 +12,12 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ndi.util import rehydrateJSONNanNull
+
 if TYPE_CHECKING:
     from .client import CloudClient
 
 logger = logging.getLogger(__name__)
-
-
-def dataset(
-    dataset_id: str,
-    target_dir: str | Path,
-    *,
-    include_files: bool = True,
-    progress: Callable[[str], None] | None = None,
-    client: CloudClient | None = None,
-) -> dict[str, Any]:
-    """Download a complete dataset (full documents + binary files) to disk.
-
-    MATLAB equivalent: ``ndi.cloud.download.dataset``
-
-    This is the recommended way to download an entire dataset.  It fetches
-    the full JSON for every document (not just summaries) and optionally
-    downloads all associated binary files.  Already-downloaded items are
-    skipped, so the function is safe to resume after interruption.
-
-    Args:
-        dataset_id: Cloud dataset ID.
-        target_dir: Local directory to save everything into.  Structure::
-
-            target_dir/
-              documents/       # one JSON file per document
-              files/           # binary files keyed by uid
-
-        include_files: Whether to also download binary files (default True).
-        progress: Optional callback that receives status strings, e.g.
-            ``print`` or ``logger.info``.
-        client: Authenticated cloud client (auto-created if omitted).
-
-    Returns:
-        Report dict with keys ``documents_downloaded``, ``documents_failed``,
-        ``files_downloaded``, ``files_failed``.
-    """
-    from .api import documents as docs_api
-    from .api import files as files_api
-
-    def _log(msg: str) -> None:
-        logger.info(msg)
-        if progress:
-            progress(msg)
-
-    target = Path(target_dir)
-    docs_dir = target / "documents"
-    files_dir = target / "files"
-    docs_dir.mkdir(parents=True, exist_ok=True)
-    if include_files:
-        files_dir.mkdir(parents=True, exist_ok=True)
-
-    report: dict[str, Any] = {
-        "documents_downloaded": 0,
-        "documents_failed": 0,
-        "files_downloaded": 0,
-        "files_failed": 0,
-    }
-
-    # --- Phase 1: list all document IDs (paginated summaries) ---
-    # Build mapping from NDI ID (base.id) → MongoDB _id so we can
-    # match bulk-downloaded documents (which lack MongoDB _id) back
-    # to the identifiers used for filenames and resume checks.
-    _log("Listing all document IDs...")
-    all_doc_ids: list[str] = []
-    ndi_to_mongo: dict[str, str] = {}
-    page = 1
-    page_size = 1000
-    while page <= 1000:
-        result = docs_api.listDatasetDocuments(
-            dataset_id, page=page, page_size=page_size, client=client
-        )
-        docs = result.get("documents", [])
-        if not docs:
-            break
-        for d in docs:
-            doc_id = d.get("_id", d.get("id", ""))
-            ndi_id = d.get("ndiId", "")
-            if doc_id:
-                all_doc_ids.append(doc_id)
-                if ndi_id:
-                    ndi_to_mongo[ndi_id] = doc_id
-        if len(docs) < page_size:
-            break
-        page += 1
-    _log(f"Found {len(all_doc_ids)} documents")
-
-    # --- Phase 2: bulk download full documents in chunks (matches MATLAB) ---
-    # Filter out already-downloaded docs for resume support
-    remaining_ids = [did for did in all_doc_ids if not (docs_dir / f"{did}.json").exists()]
-    already = len(all_doc_ids) - len(remaining_ids)
-    if already:
-        _log(f"Skipping {already} already-downloaded documents")
-        report["documents_downloaded"] += already
-
-    if remaining_ids:
-        _log(f"Downloading {len(remaining_ids)} documents via bulk chunks...")
-        try:
-            full_docs = downloadDocumentCollection(
-                dataset_id,
-                doc_ids=remaining_ids,
-                progress=progress,
-                client=client,
-            )
-            for doc in full_docs:
-                # Bulk-downloaded docs may lack top-level _id/id.
-                # Try top-level first, then map NDI ID → MongoDB ID.
-                doc_id = doc.get("_id", doc.get("id", ""))
-                if not doc_id:
-                    ndi_id = doc.get("base", {}).get("id", "")
-                    doc_id = ndi_to_mongo.get(ndi_id, ndi_id)
-                if not doc_id:
-                    continue
-                out_path = docs_dir / f"{doc_id}.json"
-                with open(out_path, "w", encoding="utf-8") as fh:
-                    json.dump(doc, fh, indent=2)
-                report["documents_downloaded"] += 1
-        except Exception as exc:
-            report["documents_failed"] += len(remaining_ids)
-            logger.debug("Bulk document download failed: %s", exc)
-
-    # --- Phase 3: download binary files ---
-    if include_files:
-        _log("Listing dataset files...")
-        try:
-            file_list = files_api.listFiles(dataset_id, client=client).data
-        except Exception:
-            file_list = []
-        _log(f"Found {len(file_list)} files")
-
-        import requests as _requests
-
-        for i, f_info in enumerate(file_list):
-            uid = f_info.get("uid", "")
-            if not uid:
-                continue
-            out_path = files_dir / uid
-            if out_path.exists():
-                report["files_downloaded"] += 1
-                continue
-            try:
-                details = files_api.getFileDetails(dataset_id, uid, client=client)
-                url = details.get("downloadUrl", "") if hasattr(details, "get") else ""
-                if not url:
-                    report["files_failed"] += 1
-                    continue
-                resp = _requests.get(url, timeout=300, stream=True)
-                if resp.status_code == 200:
-                    with open(out_path, "wb") as fh:
-                        for chunk in resp.iter_content(chunk_size=65536):
-                            fh.write(chunk)
-                    report["files_downloaded"] += 1
-                else:
-                    report["files_failed"] += 1
-            except Exception as exc:
-                report["files_failed"] += 1
-                logger.debug("Failed to download file %s: %s", uid, exc)
-            if (i + 1) % 100 == 0 or (i + 1) == len(file_list):
-                _log(
-                    f"  Files: {i + 1}/{len(file_list)} "
-                    f"(ok: {report['files_downloaded']}, "
-                    f"fail: {report['files_failed']})"
-                )
-
-    _log(
-        f"Done — {report['documents_downloaded']} docs, "
-        f"{report['files_downloaded']} files downloaded"
-    )
-    return report
 
 
 def _download_chunk_zip(
@@ -226,7 +60,9 @@ def _download_chunk_zip(
                 all_docs: list[dict[str, Any]] = []
                 for name in zf.namelist():
                     if name.endswith(".json"):
-                        data = json.loads(zf.read(name))
+                        raw_text = zf.read(name).decode("utf-8")
+                        raw_text = rehydrateJSONNanNull(raw_text)
+                        data = json.loads(raw_text)
                         docs = data if isinstance(data, list) else [data]
                         all_docs.extend(docs)
                 return all_docs
@@ -431,84 +267,6 @@ def jsons2documents(
     return documents
 
 
-def datasetDocuments(
-    dataset_info: dict[str, Any],
-    mode: str = "local",
-    json_dir: str | Path | None = None,
-    files_dir: str | Path | None = None,
-    *,
-    verbose: bool = True,
-    client: CloudClient | None = None,
-) -> tuple[bool, str]:
-    """Download dataset documents one-by-one from the cloud.
-
-    MATLAB equivalent: ``ndi.cloud.download.datasetDocuments``
-
-    This fetches each document individually via ``getDocument``, sets
-    file info according to *mode* (``'local'`` or ``'hybrid'``), and
-    saves each document as a JSON file in *json_dir*.
-
-    Args:
-        dataset_info: ndi_dataset dict as returned by ``getDataset``, must
-            include ``documents`` (list of document IDs) and ``_id``.
-        mode: ``'local'`` — files are expected on disk, set ingest/delete
-            flags.  ``'hybrid'`` — leave files in cloud, set ndic:// URIs.
-        json_dir: Directory to save document JSON files.
-        files_dir: Directory containing locally-downloaded binary files
-            (used only when *mode* is ``'local'``).
-        verbose: Print progress messages.
-        client: Authenticated cloud client (auto-created if omitted).
-
-    Returns:
-        Tuple of ``(success, error_message)``.
-    """
-    from .api import documents as docs_api
-
-    dataset_id = dataset_info.get("_id", dataset_info.get("id", ""))
-    doc_ids = dataset_info.get("documents", [])
-
-    if verbose:
-        print(f"Will download {len(doc_ids)} documents...")
-
-    if json_dir is not None:
-        json_path = Path(json_dir)
-        json_path.mkdir(parents=True, exist_ok=True)
-    else:
-        json_path = None
-
-    for i, document_id in enumerate(doc_ids):
-        if verbose:
-            pct = 100 * (i + 1) / max(len(doc_ids), 1)
-            print(f"Downloading document {i + 1} of {len(doc_ids)} ({pct:.0f}%)...")
-
-        if json_path is not None:
-            out_file = json_path / f"{document_id}.json"
-            if out_file.exists():
-                if verbose:
-                    print(f"  ndi_document {i + 1} already exists. Skipping...")
-                continue
-
-        try:
-            doc_struct = docs_api.getDocument(dataset_id, document_id, client=client)
-            if hasattr(doc_struct, "data"):
-                doc_struct = doc_struct.data
-        except Exception as exc:
-            logger.warning("Failed to get document %s: %s", document_id, exc)
-            continue
-
-        # Remove cloud-only 'id' field (MATLAB: rmfield(docStruct, 'id'))
-        doc_struct.pop("id", None)
-
-        # Set file info according to mode
-        doc_struct = setFileInfo(doc_struct, mode, str(files_dir or ""))
-
-        if json_path is not None:
-            out_file = json_path / f"{document_id}.json"
-            out_file.write_text(json.dumps(doc_struct, indent=2), encoding="utf-8")
-
-    return True, ""
-
-
 def downloadGenericFiles(
     ndi_dataset: Any,
     ndi_document_ids: list[str],
@@ -677,87 +435,6 @@ def downloadGenericFiles(
     return True, "", report
 
 
-def setFileInfo(
-    doc_struct: dict[str, Any],
-    mode: str,
-    filepath: str,
-) -> dict[str, Any]:
-    """Set file_info parameters for different download modes.
-
-    MATLAB equivalent: ``ndi.cloud.download.internal.setFileInfo``
-
-    Args:
-        doc_struct: ndi_document properties dict.
-        mode: ``'local'`` — set delete_original and ingest to 1 and
-            update file locations to local paths.  ``'hybrid'`` — set
-            delete_original and ingest to 0 (leave files in cloud).
-        filepath: Directory containing locally-downloaded files.
-
-    Returns:
-        Updated document properties dict.
-    """
-    new_struct = dict(doc_struct)
-    files = new_struct.get("files")
-    if not files or not isinstance(files, dict):
-        return new_struct
-
-    file_info = files.get("file_info")
-    if file_info is None:
-        return new_struct
-
-    if isinstance(file_info, dict):
-        file_info = [file_info]
-
-    if mode == "local":
-        # Rewrite file info to point to local files
-        import os
-
-        new_file_info = []
-        for fi in file_info:
-            if not isinstance(fi, dict):
-                new_file_info.append(fi)
-                continue
-            locations = fi.get("locations", [])
-            if isinstance(locations, dict):
-                locations = [locations]
-            if locations:
-                uid = locations[0].get("uid", "")
-                file_location = os.path.join(filepath, uid) if uid else ""
-                new_fi = dict(fi)
-                new_fi["locations"] = [
-                    {
-                        "uid": uid,
-                        "location": file_location,
-                        "location_type": "file",
-                        "delete_original": 1,
-                        "ingest": 1,
-                        **{
-                            k: v
-                            for k, v in locations[0].items()
-                            if k not in ("location", "location_type", "delete_original", "ingest")
-                        },
-                    }
-                ]
-                new_file_info.append(new_fi)
-            else:
-                new_file_info.append(fi)
-        files["file_info"] = new_file_info if len(new_file_info) != 1 else new_file_info
-    else:
-        # hybrid: set flags to 0
-        for fi in file_info:
-            if not isinstance(fi, dict):
-                continue
-            locations = fi.get("locations", [])
-            if isinstance(locations, dict):
-                locations = [locations]
-            for loc in locations:
-                if isinstance(loc, dict):
-                    loc["delete_original"] = 0
-                    loc["ingest"] = 0
-
-    return new_struct
-
-
 def structsToNdiDocuments(
     ndi_document_structs: list[dict[str, Any]],
 ) -> list[Any]:
@@ -775,7 +452,3 @@ def structsToNdiDocuments(
         List of :class:`ndi.ndi_document` objects.
     """
     return jsons2documents(ndi_document_structs)
-
-
-# Backward-compatible alias
-downloadFullDataset = dataset
