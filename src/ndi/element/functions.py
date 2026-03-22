@@ -296,7 +296,10 @@ def _get_epoch_table(obj: Any) -> list[dict]:
     Handles ndi_element, ndi_probe, and dict-like objects.
     """
     if hasattr(obj, "epochtable"):
-        return obj.epochtable()
+        result = obj.epochtable()
+        if isinstance(result, tuple):
+            return result[0]
+        return result
     if isinstance(obj, dict):
         return obj.get("epochtable", [])
     if isinstance(obj, list):
