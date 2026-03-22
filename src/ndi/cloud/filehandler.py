@@ -3,7 +3,6 @@ ndi.cloud.filehandler - On-demand cloud file fetching via ndic:// protocol.
 
 MATLAB equivalents:
     +ndi/+cloud/+sync/+internal/updateFileInfoForRemoteFiles.m
-    +ndi/+cloud/+download/+internal/setFileInfo.m
     didsqlite.m:do_openbinarydoc (customFileHandler callback)
 
 The ndic:// URI scheme provides stable references to cloud-hosted binary
