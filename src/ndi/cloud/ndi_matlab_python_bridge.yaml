@@ -400,32 +400,8 @@ functions:
       Snake_case is acceptable for Python-only functions.
 
   # --- download.py functions ---
-  - name: dataset
-    matlab_path: "+ndi/+cloud/+download/dataset.m"
-    matlab_last_sync_hash: "211a705e"
-    python_path: "ndi/cloud/download.py"
-    python_qualified: "ndi.cloud.download.dataset"
-    input_arguments:
-      - name: dataset_id
-        type_matlab: "string"
-        type_python: "str"
-      - name: target_dir
-        type_matlab: "string"
-        type_python: "str | Path"
-      - name: include_files
-        type_matlab: "logical"
-        type_python: "bool"
-        default: "True"
-      - name: progress
-        type_python: "Callable | None"
-        default: "None"
-      - name: client
-        type_python: "CloudClient | None"
-        default: "None"
-    output_arguments:
-      - name: result
-        type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+  # NOTE: dataset (old one-by-one pipeline) removed from both MATLAB and
+  # Python.  Superseded by downloadDocumentCollection + orchestration.downloadDataset.
 
   - name: downloadDocumentCollection
     matlab_path: "+ndi/+cloud/+download/downloadDocumentCollection.m"
@@ -513,39 +489,13 @@ functions:
     output_arguments:
       - name: documents
         type_python: "list[Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      MATLAB file removed (old pipeline). Python function retained because
+      it is used by the modern orchestration layer (downloadDataset,
+      syncDataset).
 
-  - name: datasetDocuments
-    matlab_path: "+ndi/+cloud/+download/datasetDocuments.m"
-    matlab_last_sync_hash: "211a705e"
-    python_path: "ndi/cloud/download.py"
-    input_arguments:
-      - name: dataset_info
-        type_matlab: "struct"
-        type_python: "dict[str, Any]"
-      - name: mode
-        type_matlab: "char"
-        type_python: "str"
-        default: "'local'"
-      - name: json_dir
-        type_matlab: "char"
-        type_python: "str | Path | None"
-      - name: files_dir
-        type_matlab: "char"
-        type_python: "str | Path | None"
-      - name: verbose
-        type_matlab: "logical"
-        type_python: "bool"
-        default: "True"
-      - name: client
-        type_python: "CloudClient | None"
-        default: "None"
-    output_arguments:
-      - name: success
-        type_python: "bool"
-      - name: message
-        type_python: "str"
-    decision_log: "Exact match."
+  # NOTE: datasetDocuments (old one-by-one pipeline) removed from both
+  # MATLAB and Python.  Superseded by downloadDocumentCollection.
 
   - name: downloadGenericFiles
     matlab_path: "+ndi/+cloud/+download/downloadGenericFiles.m"
@@ -585,26 +535,10 @@ functions:
         type_python: "dict[str, Any]"
     decision_log: "Exact match."
 
-  - name: setFileInfo
-    matlab_path: "+ndi/+cloud/+download/+internal/setFileInfo.m"
-    matlab_last_sync_hash: "211a705e"
-    python_path: "ndi/cloud/download.py"
-    input_arguments:
-      - name: doc_struct
-        type_matlab: "struct"
-        type_python: "dict[str, Any]"
-      - name: mode
-        type_matlab: "char"
-        type_python: "str"
-      - name: filepath
-        type_matlab: "char"
-        type_python: "str"
-    output_arguments:
-      - name: doc_struct
-        type_python: "dict[str, Any]"
-    decision_log: >
-      MATLAB places this in +download/+internal; Python places it
-      in download.py. Exact name match.
+  # NOTE: setFileInfo (old pipeline) removed from both MATLAB and Python.
+  # File-info patching now lives in the sync layer:
+  #   updateFileInfoForLocalFiles  → ndi.cloud.sync.internal
+  #   updateFileInfoForRemoteFiles → ndi.cloud.sync.internal
 
   - name: structsToNdiDocuments
     matlab_path: "+ndi/+cloud/+download/+internal/structsToNdiDocuments.m"
@@ -621,10 +555,7 @@ functions:
       MATLAB places this in +download/+internal; Python places it
       in download.py. Exact name match.
 
-  - name: downloadFullDataset
-    matlab_path: "N/A"
-    python_path: "ndi/cloud/download.py"
-    decision_log: "Python backward-compatible alias for download.dataset."
+  # NOTE: downloadFullDataset alias removed along with download.dataset.
 
   # --- upload.py functions ---
   - name: uploadDocumentCollection
