@@ -388,10 +388,7 @@ def diff(
         else:
             # Treat NaN == NaN (matches MATLAB behaviour)
             both_nan = (
-                isinstance(a, float)
-                and isinstance(b, float)
-                and math.isnan(a)
-                and math.isnan(b)
+                isinstance(a, float) and isinstance(b, float) and math.isnan(a) and math.isnan(b)
             )
             if not both_nan and a != b:
                 details.append(f"{path}: {a!r} != {b!r}")
