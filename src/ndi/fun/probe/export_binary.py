@@ -45,9 +45,7 @@ def export_binary(
     outputfile = Path(outputfile)
     metafile = outputfile.with_suffix(outputfile.suffix + ".metadata")
 
-    et = probe.epochtable()
-    if isinstance(et, tuple):
-        et = et[0]
+    et, _ = probe.epochtable()
 
     dtype = np.dtype(precision)
     chunk_duration = 100  # seconds
