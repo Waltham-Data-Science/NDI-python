@@ -163,12 +163,30 @@ class ndi_dataset:
         # their *original* session_id so we can tell which session they came from.
         # Binary files are also copied from the source session.
         all_docs = session.database_search(ndi_query("").isa("base"))
+        ingestion_failures: list[tuple[str, str]] = []
         for doc in all_docs:
             try:
                 self._session._database.add(doc)
                 self._copy_binary_files(session, doc)
+            except FileExistsError:
+                pass  # Duplicates are expected and safe to skip
             except Exception as exc:
-                logger.debug("Skipping document %s during ingestion: %s", doc.id, exc)
+                doc_id = getattr(doc, "id", "<unknown>")
+                ingestion_failures.append((str(doc_id), str(exc)))
+                logger.debug("Skipping document %s during ingestion: %s", doc_id, exc)
+        if ingestion_failures:
+            failure_details = "\n".join(
+                f"  - {doc_id}: {err}" for doc_id, err in ingestion_failures[:20]
+            )
+            extra = (
+                f"\n  ... and {len(ingestion_failures) - 20} more"
+                if len(ingestion_failures) > 20
+                else ""
+            )
+            raise RuntimeError(
+                f"Failed to add {len(ingestion_failures)} of {len(all_docs)} "
+                f"documents during session ingestion:\n{failure_details}{extra}"
+            )
 
         session_info_here = self._make_session_info(session, is_linked=False)
         # For ingested sessions, clear the path arg (matches MATLAB kludge)
@@ -821,11 +839,26 @@ class ndi_dataset_dir(ndi_dataset):
                 session_id=dataset_session_id,
             )
             # Bulk-add all documents to the database
+            failures: list[tuple[str, str]] = []
             for doc in documents:
                 try:
                     self._session._database.add(doc)
-                except Exception:
-                    pass
+                except FileExistsError:
+                    pass  # Duplicates are expected and safe to skip
+                except Exception as exc:
+                    doc_id = (
+                        getattr(doc, "id", None) or doc.get("base", {}).get("id", "<unknown>")
+                        if isinstance(doc, dict)
+                        else "<unknown>"
+                    )
+                    failures.append((str(doc_id), str(exc)))
+            if failures:
+                failure_details = "\n".join(f"  - {doc_id}: {err}" for doc_id, err in failures[:20])
+                extra = f"\n  ... and {len(failures) - 20} more" if len(failures) > 20 else ""
+                raise RuntimeError(
+                    f"Failed to add {len(failures)} of {len(documents)} "
+                    f"documents to dataset database:\n{failure_details}{extra}"
+                )
             # Re-create session without forced ID (reads from database)
             self._session = ndi_session_dir(ref or "temp", self._path)
         elif path_or_ref is None and not ref:

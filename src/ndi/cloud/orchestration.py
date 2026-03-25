@@ -10,6 +10,7 @@ MATLAB equivalents: downloadDataset.m, uploadDataset.m, syncDataset.m,
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -83,6 +84,7 @@ def downloadDataset(
     from ndi.dataset import ndi_dataset_dir
 
     documents = jsons2documents(doc_jsons)
+    conversion_lost = len(doc_jsons) - len(documents)
     dataset = ndi_dataset_dir("", target, documents=documents)
 
     # Create remote link document if not already present
@@ -93,8 +95,13 @@ def downloadDataset(
         remote_doc = createRemoteDatasetDoc(cloud_dataset_id, dataset)
         try:
             dataset._session._database.add(remote_doc)
-        except Exception:
-            pass
+        except FileExistsError:
+            pass  # Already exists, safe to skip
+        except Exception as exc:
+            warnings.warn(
+                f"Failed to add remote dataset link document: {exc}",
+                stacklevel=2,
+            )
 
     # Store cloud client for on-demand file fetching
     dataset.cloud_client = client
@@ -106,8 +113,29 @@ def downloadDataset(
         if verbose:
             print(f'  Files downloaded: {report["downloaded"]}, failed: {report["failed"]}')
 
+    # Check how many documents actually made it into the dataset
+    from ndi.query import ndi_query as _ndi_query
+
+    db_docs = dataset.database_search(_ndi_query("").isa("base"))
+    db_count = len(db_docs)
+    db_lost = len(documents) - db_count
+    total_lost = conversion_lost + db_lost
+
     if verbose:
         print("Download complete.")
+
+    if total_lost > 0:
+        parts = []
+        if conversion_lost > 0:
+            parts.append(f"{conversion_lost} failed to convert from JSON to ndi_document")
+        if db_lost > 0:
+            parts.append(f"{db_lost} failed to add to the dataset database")
+        raise RuntimeError(
+            f"Downloaded {len(doc_jsons)} documents but only {db_count} "
+            f"were added to the dataset. {total_lost} documents lost: "
+            + "; ".join(parts)
+            + ". See preceding warnings for details on each failed document."
+        )
 
     return dataset
 
@@ -425,12 +453,28 @@ def _sync_download_new(
 
     documents = jsons2documents(new_docs)
     added = 0
+    failures: list[tuple[str, str]] = []
     for doc in documents:
         try:
             dataset.session.database_add(doc)
             added += 1
-        except Exception:
-            pass
+        except Exception as exc:
+            doc_id = getattr(doc, "id", None) or "<unknown>"
+            failures.append((str(doc_id), str(exc)))
+    conversion_lost = len(new_docs) - len(documents)
+    total_lost = conversion_lost + len(failures)
+    if total_lost > 0:
+        failure_details = "\n".join(f"  - {doc_id}: {err}" for doc_id, err in failures[:20])
+        extra = f"\n  ... and {len(failures) - 20} more" if len(failures) > 20 else ""
+        parts = []
+        if conversion_lost > 0:
+            parts.append(f"{conversion_lost} failed JSON-to-document conversion")
+        if failures:
+            parts.append(f"{len(failures)} failed to add to database:\n{failure_details}{extra}")
+        raise RuntimeError(
+            f"Sync downloaded {len(new_docs)} documents but only {added} "
+            f"were added. {total_lost} documents lost: " + "; ".join(parts)
+        )
 
     return {"downloaded": added}
 
