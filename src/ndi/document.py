@@ -95,15 +95,16 @@ class ndi_document:
                 self._set_nested_property(key, value)
 
     def _normalize_depends_on(self):
-        """Ensure depends_on and files.file_info are always lists.
+        """Ensure depends_on, files.file_info, and superclasses are always lists.
 
         MATLAB's jsonencode converts single-element cell arrays to scalars,
         so documents downloaded from the cloud (or created by MATLAB) may
-        have ``depends_on`` or ``files.file_info`` as a bare dict instead
-        of a list.  Normalizing here guarantees that downstream code
-        (including DID-python's ``doc_to_sql`` / ``_serialize_depends_on``
-        and all NDI code that iterates over ``file_info``) always sees
-        a list.
+        have ``depends_on``, ``files.file_info``, or
+        ``document_class.superclasses`` as a bare dict instead of a list.
+        Normalizing here guarantees that downstream code (including
+        DID-python's ``doc_to_sql`` / ``_serialize_depends_on`` /
+        ``_get_superclass_str`` and all NDI code that iterates over these
+        fields) always sees a list.
         """
         dep = self._document_properties.get("depends_on")
         if isinstance(dep, dict):
@@ -114,6 +115,12 @@ class ndi_document:
             fi = files.get("file_info")
             if isinstance(fi, dict):
                 files["file_info"] = [fi]
+
+        dc = self._document_properties.get("document_class")
+        if isinstance(dc, dict):
+            sc = dc.get("superclasses")
+            if isinstance(sc, dict):
+                dc["superclasses"] = [sc]
 
     @property
     def document_properties(self) -> dict:

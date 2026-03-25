@@ -169,11 +169,10 @@ class ndi_dataset:
                 self._session._database.add(doc)
                 self._copy_binary_files(session, doc)
             except FileExistsError:
-                pass  # Duplicates are expected and safe to skip
+                pass  # Re-ingestion duplicates are expected
             except Exception as exc:
-                doc_id = getattr(doc, "id", "<unknown>")
-                ingestion_failures.append((str(doc_id), str(exc)))
-                logger.debug("Skipping document %s during ingestion: %s", doc_id, exc)
+                doc_id = ndi_dataset_dir._get_doc_id(doc)
+                ingestion_failures.append((doc_id, str(exc)))
         if ingestion_failures:
             failure_details = "\n".join(
                 f"  - {doc_id}: {err}" for doc_id, err in ingestion_failures[:20]
@@ -828,6 +827,10 @@ class ndi_dataset_dir(ndi_dataset):
 
         self._path.mkdir(parents=True, exist_ok=True)
 
+        # Track documents that failed to add (list of (doc_id, reason) tuples).
+        # Callers (e.g. downloadDataset) can inspect this after construction.
+        self.add_doc_failures: list[tuple[str, str]] = []
+
         if documents is not None and documents:
             # Hidden 3rd argument: create from pre-loaded documents.
             # Mirrors MATLAB ndi.dataset.dir(reference, path_name, docs).
@@ -839,26 +842,12 @@ class ndi_dataset_dir(ndi_dataset):
                 session_id=dataset_session_id,
             )
             # Bulk-add all documents to the database
-            failures: list[tuple[str, str]] = []
             for doc in documents:
                 try:
                     self._session._database.add(doc)
-                except FileExistsError:
-                    pass  # Duplicates are expected and safe to skip
                 except Exception as exc:
-                    doc_id = (
-                        getattr(doc, "id", None) or doc.get("base", {}).get("id", "<unknown>")
-                        if isinstance(doc, dict)
-                        else "<unknown>"
-                    )
-                    failures.append((str(doc_id), str(exc)))
-            if failures:
-                failure_details = "\n".join(f"  - {doc_id}: {err}" for doc_id, err in failures[:20])
-                extra = f"\n  ... and {len(failures) - 20} more" if len(failures) > 20 else ""
-                raise RuntimeError(
-                    f"Failed to add {len(failures)} of {len(documents)} "
-                    f"documents to dataset database:\n{failure_details}{extra}"
-                )
+                    doc_id = self._get_doc_id(doc)
+                    self.add_doc_failures.append((doc_id, str(exc)))
             # Re-create session without forced ID (reads from database)
             self._session = ndi_session_dir(ref or "temp", self._path)
         elif path_or_ref is None and not ref:
@@ -1005,6 +994,17 @@ class ndi_dataset_dir(ndi_dataset):
                 "Not erasing dataset directory folder because "
                 "user did not indicate they are sure."
             )
+
+    @staticmethod
+    def _get_doc_id(doc: Any) -> str:
+        """Best-effort extraction of a document ID for error reporting."""
+        doc_id = getattr(doc, "id", None)
+        if doc_id:
+            return str(doc_id)
+        props = getattr(doc, "document_properties", doc)
+        if isinstance(props, dict):
+            return props.get("base", {}).get("id", "<unknown>")
+        return "<unknown>"
 
     @staticmethod
     def _dataset_session_id_from_docs(documents: list[ndi_document]) -> str:
