@@ -268,12 +268,12 @@ def jsons2documents(
         try:
             documents.append(ndi_document(dj))
         except Exception as exc:
-            doc_id = dj.get("base", {}).get("id", "<unknown>") if isinstance(dj, dict) else "<invalid>"
+            doc_id = (
+                dj.get("base", {}).get("id", "<unknown>") if isinstance(dj, dict) else "<invalid>"
+            )
             failures.append((doc_id, str(exc)))
     if failures:
-        failure_details = "\n".join(
-            f"  - {doc_id}: {err}" for doc_id, err in failures[:20]
-        )
+        failure_details = "\n".join(f"  - {doc_id}: {err}" for doc_id, err in failures[:20])
         extra = f"\n  ... and {len(failures) - 20} more" if len(failures) > 20 else ""
         warnings.warn(
             f"Failed to convert {len(failures)} of {len(doc_jsons)} "

@@ -178,7 +178,11 @@ class ndi_dataset:
             failure_details = "\n".join(
                 f"  - {doc_id}: {err}" for doc_id, err in ingestion_failures[:20]
             )
-            extra = f"\n  ... and {len(ingestion_failures) - 20} more" if len(ingestion_failures) > 20 else ""
+            extra = (
+                f"\n  ... and {len(ingestion_failures) - 20} more"
+                if len(ingestion_failures) > 20
+                else ""
+            )
             raise RuntimeError(
                 f"Failed to add {len(ingestion_failures)} of {len(all_docs)} "
                 f"documents during session ingestion:\n{failure_details}{extra}"
@@ -842,12 +846,14 @@ class ndi_dataset_dir(ndi_dataset):
                 except FileExistsError:
                     pass  # Duplicates are expected and safe to skip
                 except Exception as exc:
-                    doc_id = getattr(doc, "id", None) or doc.get("base", {}).get("id", "<unknown>") if isinstance(doc, dict) else "<unknown>"
+                    doc_id = (
+                        getattr(doc, "id", None) or doc.get("base", {}).get("id", "<unknown>")
+                        if isinstance(doc, dict)
+                        else "<unknown>"
+                    )
                     failures.append((str(doc_id), str(exc)))
             if failures:
-                failure_details = "\n".join(
-                    f"  - {doc_id}: {err}" for doc_id, err in failures[:20]
-                )
+                failure_details = "\n".join(f"  - {doc_id}: {err}" for doc_id, err in failures[:20])
                 extra = f"\n  ... and {len(failures) - 20} more" if len(failures) > 20 else ""
                 raise RuntimeError(
                     f"Failed to add {len(failures)} of {len(documents)} "

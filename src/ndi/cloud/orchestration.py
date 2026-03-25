@@ -127,13 +127,9 @@ def downloadDataset(
     if total_lost > 0:
         parts = []
         if conversion_lost > 0:
-            parts.append(
-                f"{conversion_lost} failed to convert from JSON to ndi_document"
-            )
+            parts.append(f"{conversion_lost} failed to convert from JSON to ndi_document")
         if db_lost > 0:
-            parts.append(
-                f"{db_lost} failed to add to the dataset database"
-            )
+            parts.append(f"{db_lost} failed to add to the dataset database")
         raise RuntimeError(
             f"Downloaded {len(doc_jsons)} documents but only {db_count} "
             f"were added to the dataset. {total_lost} documents lost: "
@@ -468,17 +464,13 @@ def _sync_download_new(
     conversion_lost = len(new_docs) - len(documents)
     total_lost = conversion_lost + len(failures)
     if total_lost > 0:
-        failure_details = "\n".join(
-            f"  - {doc_id}: {err}" for doc_id, err in failures[:20]
-        )
+        failure_details = "\n".join(f"  - {doc_id}: {err}" for doc_id, err in failures[:20])
         extra = f"\n  ... and {len(failures) - 20} more" if len(failures) > 20 else ""
         parts = []
         if conversion_lost > 0:
             parts.append(f"{conversion_lost} failed JSON-to-document conversion")
         if failures:
-            parts.append(
-                f"{len(failures)} failed to add to database:\n{failure_details}{extra}"
-            )
+            parts.append(f"{len(failures)} failed to add to database:\n{failure_details}{extra}")
         raise RuntimeError(
             f"Sync downloaded {len(new_docs)} documents but only {added} "
             f"were added. {total_lost} documents lost: " + "; ".join(parts)
