@@ -827,6 +827,10 @@ class ndi_dataset_dir(ndi_dataset):
 
         self._path.mkdir(parents=True, exist_ok=True)
 
+        # Track documents that failed to add (list of (doc_id, reason) tuples).
+        # Callers (e.g. downloadDataset) can inspect this after construction.
+        self.add_doc_failures: list[tuple[str, str]] = []
+
         if documents is not None and documents:
             # Hidden 3rd argument: create from pre-loaded documents.
             # Mirrors MATLAB ndi.dataset.dir(reference, path_name, docs).
@@ -838,20 +842,12 @@ class ndi_dataset_dir(ndi_dataset):
                 session_id=dataset_session_id,
             )
             # Bulk-add all documents to the database
-            failures: list[tuple[str, str]] = []
             for doc in documents:
                 try:
                     self._session._database.add(doc)
                 except Exception as exc:
                     doc_id = self._get_doc_id(doc)
-                    failures.append((doc_id, str(exc)))
-            if failures:
-                failure_details = "\n".join(f"  - {doc_id}: {err}" for doc_id, err in failures[:20])
-                extra = f"\n  ... and {len(failures) - 20} more" if len(failures) > 20 else ""
-                raise RuntimeError(
-                    f"Failed to add {len(failures)} of {len(documents)} "
-                    f"documents to dataset database:\n{failure_details}{extra}"
-                )
+                    self.add_doc_failures.append((doc_id, str(exc)))
             # Re-create session without forced ID (reads from database)
             self._session = ndi_session_dir(ref or "temp", self._path)
         elif path_or_ref is None and not ref:

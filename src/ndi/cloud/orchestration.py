@@ -113,27 +113,29 @@ def downloadDataset(
         if verbose:
             print(f'  Files downloaded: {report["downloaded"]}, failed: {report["failed"]}')
 
-    # Check how many documents actually made it into the dataset
-    from ndi.query import ndi_query as _ndi_query
-
-    db_docs = dataset.database_search(_ndi_query("").isa("base"))
-    db_count = len(db_docs)
-    db_lost = len(documents) - db_count
+    # Collect all failures: conversion failures + database add failures
+    all_failures: list[tuple[str, str]] = list(getattr(dataset, "add_doc_failures", []))
+    db_lost = len(all_failures)
     total_lost = conversion_lost + db_lost
 
     if verbose:
         print("Download complete.")
 
     if total_lost > 0:
-        parts = []
+        lines = [
+            f"Downloaded {len(doc_jsons)} documents but only "
+            f"{len(doc_jsons) - total_lost} were added to the dataset. "
+            f"{total_lost} document(s) lost:"
+        ]
         if conversion_lost > 0:
-            parts.append(f"{conversion_lost} failed to convert from JSON to ndi_document")
-        if db_lost > 0:
-            parts.append(f"{db_lost} failed to add to the dataset database")
-        raise RuntimeError(
-            f"Downloaded {len(doc_jsons)} documents but only {db_count} "
-            f"were added to the dataset. {total_lost} documents lost: " + "; ".join(parts)
-        )
+            lines.append(f"\n{conversion_lost} failed to convert from JSON to ndi_document")
+        if all_failures:
+            lines.append(f"\n{db_lost} failed to add to the dataset database:")
+            for doc_id, reason in all_failures[:50]:
+                lines.append(f"\n  - {doc_id}: {reason}")
+            if len(all_failures) > 50:
+                lines.append(f"\n  ... and {len(all_failures) - 50} more")
+        raise RuntimeError("".join(lines))
 
     return dataset
 
