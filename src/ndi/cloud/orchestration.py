@@ -113,28 +113,84 @@ def downloadDataset(
         if verbose:
             print(f'  Files downloaded: {report["downloaded"]}, failed: {report["failed"]}')
 
-    # Collect all failures: conversion failures + database add failures
-    all_failures: list[tuple[str, str]] = list(getattr(dataset, "add_doc_failures", []))
-    db_lost = len(all_failures)
-    total_lost = conversion_lost + db_lost
+    # Collect failures: conversion + exception-tracked + silent (DID-python)
+    add_failures: list[tuple[str, str]] = list(getattr(dataset, "add_doc_failures", []))
+
+    # Cross-check using raw DID-python doc IDs (not isa('base') query,
+    # which might miss documents whose type info wasn't stored correctly).
+    db_ids = set(
+        dataset._session._database._driver._db.get_doc_ids(
+            dataset._session._database._driver._branch_id
+        )
+    )
+
+    # Build a map from doc_id -> original JSON for missing-doc output
+    doc_json_by_id: dict[str, dict] = {}
+    for dj in doc_jsons:
+        did = dj.get("base", {}).get("id", "") if isinstance(dj, dict) else ""
+        if did:
+            doc_json_by_id[did] = dj
+
+    # Find documents that were "added" (no exception) but aren't in the DB
+    tracked_ids = {f[0] for f in add_failures}
+    silent_failures: list[str] = []
+    for doc in documents:
+        doc_id = (
+            doc.document_properties.get("base", {}).get("id", "")
+            if hasattr(doc, "document_properties")
+            else doc.get("base", {}).get("id", "")
+        )
+        if doc_id and doc_id not in db_ids and doc_id not in tracked_ids:
+            silent_failures.append(doc_id)
+
+    total_lost = conversion_lost + len(add_failures) + len(silent_failures)
 
     if verbose:
         print("Download complete.")
 
     if total_lost > 0:
+        # Write missing documents to a JSON file for inspection
+        missing_docs_path = target / "missingDocuments.json"
+        missing_docs = []
+        for doc_id in silent_failures:
+            if doc_id in doc_json_by_id:
+                missing_docs.append(doc_json_by_id[doc_id])
+            else:
+                missing_docs.append({"base": {"id": doc_id}})
+        for doc_id, reason in add_failures:
+            entry = dict(doc_json_by_id.get(doc_id, {"base": {"id": doc_id}}))
+            entry["_add_error"] = reason
+            missing_docs.append(entry)
+        if missing_docs:
+            import json
+
+            missing_docs_path.write_text(json.dumps(missing_docs, indent=2, default=str))
+
         lines = [
             f"Downloaded {len(doc_jsons)} documents but only "
-            f"{len(doc_jsons) - total_lost} were added to the dataset. "
+            f"{len(db_ids)} were added to the dataset. "
             f"{total_lost} document(s) lost:"
         ]
         if conversion_lost > 0:
-            lines.append(f"\n{conversion_lost} failed to convert from JSON to ndi_document")
-        if all_failures:
-            lines.append(f"\n{db_lost} failed to add to the dataset database:")
-            for doc_id, reason in all_failures[:50]:
+            lines.append(f"\n{conversion_lost} failed to convert from JSON" " to ndi_document")
+        if add_failures:
+            lines.append(f"\n{len(add_failures)} raised errors during" " database add:")
+            for doc_id, reason in add_failures[:50]:
                 lines.append(f"\n  - {doc_id}: {reason}")
-            if len(all_failures) > 50:
-                lines.append(f"\n  ... and {len(all_failures) - 50} more")
+            if len(add_failures) > 50:
+                lines.append(f"\n  ... and {len(add_failures) - 50} more")
+        if silent_failures:
+            lines.append(
+                f"\n{len(silent_failures)} were passed to"
+                " database.add() without error but are NOT in the"
+                " database (possible DID-python bug):"
+            )
+            for doc_id in silent_failures[:50]:
+                lines.append(f"\n  - {doc_id}")
+            if len(silent_failures) > 50:
+                lines.append(f"\n  ... and {len(silent_failures) - 50} more")
+        if missing_docs:
+            lines.append(f"\nFull JSON of missing documents written to:" f"\n  {missing_docs_path}")
         raise RuntimeError("".join(lines))
 
     return dataset
