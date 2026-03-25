@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -255,15 +256,30 @@ def jsons2documents(
     """Convert a list of raw JSON dicts into ndi.ndi_document objects.
 
     MATLAB equivalent: downloadDataset.m conversion step.
+
+    Raises a warning if any documents fail to convert, listing the
+    document IDs and error messages for each failure.
     """
     from ndi.document import ndi_document
 
     documents = []
+    failures: list[tuple[str, str]] = []
     for dj in doc_jsons:
         try:
             documents.append(ndi_document(dj))
-        except Exception:
-            pass
+        except Exception as exc:
+            doc_id = dj.get("base", {}).get("id", "<unknown>") if isinstance(dj, dict) else "<invalid>"
+            failures.append((doc_id, str(exc)))
+    if failures:
+        failure_details = "\n".join(
+            f"  - {doc_id}: {err}" for doc_id, err in failures[:20]
+        )
+        extra = f"\n  ... and {len(failures) - 20} more" if len(failures) > 20 else ""
+        warnings.warn(
+            f"Failed to convert {len(failures)} of {len(doc_jsons)} "
+            f"documents from JSON to ndi_document:\n{failure_details}{extra}",
+            stacklevel=2,
+        )
     return documents
 
 
