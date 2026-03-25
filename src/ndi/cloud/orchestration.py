@@ -132,9 +132,7 @@ def downloadDataset(
             parts.append(f"{db_lost} failed to add to the dataset database")
         raise RuntimeError(
             f"Downloaded {len(doc_jsons)} documents but only {db_count} "
-            f"were added to the dataset. {total_lost} documents lost: "
-            + "; ".join(parts)
-            + ". See preceding warnings for details on each failed document."
+            f"were added to the dataset. {total_lost} documents lost: " + "; ".join(parts)
         )
 
     return dataset
