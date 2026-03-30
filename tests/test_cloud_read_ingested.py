@@ -5,8 +5,9 @@ Downloads the Carbon fiber microelectrode dataset, opens its session,
 reads timeseries data from a carbon-fiber probe and a stimulator probe,
 and verifies the returned values match expected results.
 
-Requires:
-    NDI_CLOUD_USERNAME and NDI_CLOUD_PASSWORD environment variables.
+Requires environment variables:
+    NDI_CLOUD_USERNAME  -- mapped from GitHub secret TEST_USER_2_USERNAME
+    NDI_CLOUD_PASSWORD  -- mapped from GitHub secret TEST_USER_2_PASSWORD
 
 Skipped automatically if credentials are not set.
 """
@@ -30,12 +31,25 @@ CARBON_FIBER_ID = "668b0539f13096e04f1feccd"
 
 
 @pytest.fixture(scope="module")
-def dataset():
+def cloud_client():
+    """Authenticate with NDI Cloud and return a client."""
+    from ndi.cloud.auth import login
+    from ndi.cloud.client import CloudClient
+
+    username = os.environ["NDI_CLOUD_USERNAME"]
+    password = os.environ["NDI_CLOUD_PASSWORD"]
+    config = login(username, password)
+    assert config.is_authenticated, "Login failed -- no token received"
+    return CloudClient(config)
+
+
+@pytest.fixture(scope="module")
+def dataset(cloud_client):
     """Download the Carbon fiber dataset to a temp directory."""
     from ndi.cloud.orchestration import downloadDataset
 
     with tempfile.TemporaryDirectory() as target_dir:
-        D = downloadDataset(CARBON_FIBER_ID, target_dir)
+        D = downloadDataset(CARBON_FIBER_ID, target_dir, client=cloud_client)
         yield D
 
 
