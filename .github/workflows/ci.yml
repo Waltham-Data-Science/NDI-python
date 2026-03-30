@@ -52,6 +52,9 @@ jobs:
         run: python -m ndi check
 
       - name: Run tests with coverage
+        env:
+          NDI_CLOUD_USERNAME: ${{ secrets.TEST_USER_2_USERNAME }}
+          NDI_CLOUD_PASSWORD: ${{ secrets.TEST_USER_2_PASSWORD }}
         run: |
           # Use sys.monitoring (PEP 669) on Python 3.12+ for faster coverage.
           # CTracer (sys.settrace) is catastrophically slow on 3.12 when
