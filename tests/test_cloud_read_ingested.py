@@ -100,6 +100,38 @@ class TestReadIngested:
         except Exception as exc:
             pytest.fail(f"getchanneldevinfo(1) raised {type(exc).__name__}: {exc}")
 
+        if devinfo is None:
+            pytest.fail("getchanneldevinfo(1) returned None")
+
+        # Try the full readtimeseries path with explicit error propagation
+        if isinstance(devinfo, tuple):
+            dev, devepoch, channeltype, channellist = devinfo
+        elif isinstance(devinfo, dict):
+            dev = devinfo.get("daqsystem")
+            devepoch = devinfo.get("device_epoch_id")
+            print(f"  devinfo is dict, dev={type(dev).__name__}, devepoch={devepoch}")
+            pytest.fail(
+                f"getchanneldevinfo returned dict (base probe class), not tuple. "
+                f"Probe class {type(probe).__name__} may not override getchanneldevinfo."
+            )
+        else:
+            pytest.fail(f"getchanneldevinfo returned unexpected type: {type(devinfo).__name__}")
+
+        print(f"  dev={type(dev).__name__}, devepoch={devepoch}")
+        print(f"  channeltype={channeltype}, channellist={channellist}")
+
+        # Try epochtimes2samples explicitly to see any error
+        try:
+            samples = dev.epochtimes2samples(
+                channeltype, channellist, devepoch, np.array([10.0, 20.0])
+            )
+            print(f"  samples={samples}")
+        except Exception as exc:
+            pytest.fail(
+                f"dev.epochtimes2samples raised {type(exc).__name__}: {exc}\n"
+                f"  dev type: {type(dev).__name__}"
+            )
+
         d1, t1, _ = probe.readtimeseries(epoch=1, t0=10, t1=20)
 
         assert (
