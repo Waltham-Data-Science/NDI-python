@@ -75,7 +75,28 @@ class TestReadIngested:
         p_cf = session.getprobes(name="carbonfiber", reference=1)
         assert len(p_cf) == 1, f"Expected 1 carbonfiber probe, got {len(p_cf)}"
 
-        d1, t1, _ = p_cf[0].readtimeseries(epoch=1, t0=10, t1=20)
+        probe = p_cf[0]
+
+        # Diagnostic: check epoch table
+        et, _ = probe.epochtable()
+        print(f"  Probe epochtable has {len(et)} entries")
+        if et:
+            e = et[0]
+            print(f"  epoch_id: {e.get('epoch_id')}")
+            print(f"  epochprobemap: {e.get('epochprobemap')}")
+            underlying = e.get("underlying_epochs", {})
+            files = underlying.get("underlying", []) if underlying else []
+            print(f"  epochfiles: {files[:3]}")
+
+        # Diagnostic: check devinfo
+        devinfo = probe.getchanneldevinfo(1)
+        if devinfo is None:
+            pytest.fail("getchanneldevinfo(1) returned None — no device found for probe")
+        dev, devepoch, channeltype, channellist = devinfo
+        print(f"  device: {dev}, devepoch: {devepoch}")
+        print(f"  channeltype: {channeltype}, channellist: {channellist}")
+
+        d1, t1, _ = probe.readtimeseries(epoch=1, t0=10, t1=20)
 
         assert (
             d1 is not None
