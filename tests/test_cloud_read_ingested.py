@@ -120,6 +120,25 @@ class TestReadIngested:
         print(f"  dev={type(dev).__name__}, devepoch={devepoch}")
         print(f"  channeltype={channeltype}, channellist={channellist}")
 
+        # Diagnostic: check ingested document structure
+        if hasattr(dev, "_filenavigator") and dev._filenavigator is not None:
+            epochfiles = dev._getepochfiles(devepoch)
+            print(f"  epochfiles: {epochfiles[:2]}...")
+            is_ingested = epochfiles and epochfiles[0].startswith("epochid://")
+            print(f"  is_ingested: {is_ingested}")
+            if is_ingested and hasattr(dev, "_daqreader"):
+                try:
+                    doc = dev._daqreader.getingesteddocument(epochfiles, session)
+                    et = doc.document_properties["daqreader_epochdata_ingested"]["epochtable"]
+                    print(f"  epochtable keys: {list(et.keys())}")
+                    channels_raw = et.get("channels", [])
+                    print(f"  channels count: {len(channels_raw)}")
+                    if channels_raw:
+                        print(f"  channel[0] keys: {list(channels_raw[0].keys())}")
+                        print(f"  channel[0]: {channels_raw[0]}")
+                except Exception as exc:
+                    print(f"  Failed to read ingested doc: {exc}")
+
         # Try epochtimes2samples explicitly to see any error
         try:
             samples = dev.epochtimes2samples(
