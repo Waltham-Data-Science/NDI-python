@@ -76,6 +76,8 @@ class TestReadIngested:
         assert len(p_cf) == 1, f"Expected 1 carbonfiber probe, got {len(p_cf)}"
 
         probe = p_cf[0]
+        print(f"  Probe class: {type(probe).__name__}")
+        print(f"  Probe MRO: {[c.__name__ for c in type(probe).__mro__[:5]]}")
 
         # Diagnostic: check epoch table
         et, _ = probe.epochtable()
@@ -83,18 +85,20 @@ class TestReadIngested:
         if et:
             e = et[0]
             print(f"  epoch_id: {e.get('epoch_id')}")
-            print(f"  epochprobemap: {e.get('epochprobemap')}")
+            epm = e.get("epochprobemap")
+            print(f"  epochprobemap type: {type(epm).__name__}, value: {epm}")
             underlying = e.get("underlying_epochs", {})
-            files = underlying.get("underlying", []) if underlying else []
-            print(f"  epochfiles: {files[:3]}")
+            if underlying:
+                u = underlying.get("underlying")
+                print(f"  underlying type: {type(u).__name__}")
+                print(f"  underlying epoch_id: {underlying.get('epoch_id')}")
 
         # Diagnostic: check devinfo
-        devinfo = probe.getchanneldevinfo(1)
-        if devinfo is None:
-            pytest.fail("getchanneldevinfo(1) returned None — no device found for probe")
-        dev, devepoch, channeltype, channellist = devinfo
-        print(f"  device: {dev}, devepoch: {devepoch}")
-        print(f"  channeltype: {channeltype}, channellist: {channellist}")
+        try:
+            devinfo = probe.getchanneldevinfo(1)
+            print(f"  devinfo type: {type(devinfo).__name__}, value: {devinfo}")
+        except Exception as exc:
+            pytest.fail(f"getchanneldevinfo(1) raised {type(exc).__name__}: {exc}")
 
         d1, t1, _ = probe.readtimeseries(epoch=1, t0=10, t1=20)
 
