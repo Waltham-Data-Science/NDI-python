@@ -222,20 +222,9 @@ class ndi_probe_timeseries_mfdaq(ndi_probe_timeseries):
 
         dss = ndi_daq_daqsystemstring.parse(probe_map.devicestring)
 
-        # Find the DAQ system by name
-        if self._session is None:
-            return None
-
-        # Get all DAQ systems from the session
-        daq_systems = getattr(self._session, "daqsystem", [])
-        if callable(daq_systems):
-            daq_systems = daq_systems()
-
-        device = None
-        for ds in (daq_systems if isinstance(daq_systems, list) else []):
-            if hasattr(ds, "name") and ds.name == dss.devicename:
-                device = ds
-                break
+        # Get device from the underlying_epochs stored by buildepochtable
+        underlying = epoch_entry.get("underlying_epochs", {})
+        device = underlying.get("underlying") if isinstance(underlying, dict) else None
 
         if device is None:
             return None
