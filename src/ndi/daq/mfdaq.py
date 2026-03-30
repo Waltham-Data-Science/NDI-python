@@ -7,6 +7,7 @@ multi-function data acquisition systems that sample various data types.
 
 from __future__ import annotations
 
+import os
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -633,12 +634,22 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         if data_file is None:
             return np.full((s1 - s0 + 1, len(channel)), np.nan)
 
+        # Resolve binary file — may need on-demand cloud fetch
+        data_path = data_file
+        if not os.path.exists(data_file):
+            try:
+                fobj = session.database_openbinarydoc(doc, data_file)
+                data_path = fobj.name
+                fobj.close()
+            except Exception:
+                return np.full((s1 - s0 + 1, len(channel)), np.nan)
+
         # Read from VHSB format
         try:
             from vlt.file.custom_file_formats import vhsb_read
 
             data = vhsb_read(
-                data_file,
+                data_path,
                 channels=channel,
                 sample_start=s0,
                 sample_end=s1,

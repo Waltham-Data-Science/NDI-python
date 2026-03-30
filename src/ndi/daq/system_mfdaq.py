@@ -146,11 +146,14 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
             raise RuntimeError("No DAQ reader or file navigator configured")
 
         epochfiles = self._filenavigator.getepochfiles(epoch_number)
-        if isinstance(self._daqreader, ndi_daq_reader_mfdaq):
-            return self._daqreader.readchannels_epochsamples(
-                channeltype, channel, epochfiles, s0, s1
+        if not isinstance(self._daqreader, ndi_daq_reader_mfdaq):
+            raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
+
+        if self._is_ingested(epochfiles):
+            return self._daqreader.readchannels_epochsamples_ingested(
+                channeltype, channel, epochfiles, s0, s1, self.session
             )
-        raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
+        return self._daqreader.readchannels_epochsamples(channeltype, channel, epochfiles, s0, s1)
 
     def readevents_epochsamples(
         self,
@@ -177,9 +180,10 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
             raise RuntimeError("No DAQ reader or file navigator configured")
 
         epochfiles = self._filenavigator.getepochfiles(epoch_number)
-        if isinstance(self._daqreader, ndi_daq_reader_mfdaq):
-            return self._daqreader.readevents_epochsamples(channeltype, channel, epochfiles, t0, t1)
-        raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
+        if not isinstance(self._daqreader, ndi_daq_reader_mfdaq):
+            raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
+
+        return self._daqreader.readevents_epochsamples(channeltype, channel, epochfiles, t0, t1)
 
     def samplerate(
         self,
@@ -202,9 +206,14 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
             raise RuntimeError("No DAQ reader or file navigator configured")
 
         epochfiles = self._filenavigator.getepochfiles(epoch_number)
-        if isinstance(self._daqreader, ndi_daq_reader_mfdaq):
-            return self._daqreader.samplerate(epochfiles, channeltype, channel)
-        raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
+        if not isinstance(self._daqreader, ndi_daq_reader_mfdaq):
+            raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
+
+        if self._is_ingested(epochfiles):
+            return self._daqreader.samplerate_ingested(
+                epochfiles, channeltype, channel, self.session
+            )
+        return self._daqreader.samplerate(epochfiles, channeltype, channel)
 
     def epochsamples2times(
         self,
@@ -229,9 +238,14 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
             raise RuntimeError("No DAQ reader or file navigator configured")
 
         epochfiles = self._filenavigator.getepochfiles(epoch_number)
-        if isinstance(self._daqreader, ndi_daq_reader_mfdaq):
-            return self._daqreader.epochsamples2times(channeltype, channel, epochfiles, samples)
-        raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
+        if not isinstance(self._daqreader, ndi_daq_reader_mfdaq):
+            raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
+
+        if self._is_ingested(epochfiles):
+            return self._daqreader.epochsamples2times_ingested(
+                channeltype, channel, epochfiles, samples, self.session
+            )
+        return self._daqreader.epochsamples2times(channeltype, channel, epochfiles, samples)
 
     def epochtimes2samples(
         self,
@@ -256,9 +270,14 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
             raise RuntimeError("No DAQ reader or file navigator configured")
 
         epochfiles = self._filenavigator.getepochfiles(epoch_number)
-        if isinstance(self._daqreader, ndi_daq_reader_mfdaq):
-            return self._daqreader.epochtimes2samples(channeltype, channel, epochfiles, times)
-        raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
+        if not isinstance(self._daqreader, ndi_daq_reader_mfdaq):
+            raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
+
+        if self._is_ingested(epochfiles):
+            return self._daqreader.epochtimes2samples_ingested(
+                channeltype, channel, epochfiles, times, self.session
+            )
+        return self._daqreader.epochtimes2samples(channeltype, channel, epochfiles, times)
 
     @staticmethod
     def mfdaq_channeltypes() -> list[str]:
