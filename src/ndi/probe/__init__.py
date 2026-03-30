@@ -199,6 +199,13 @@ class ndi_probe(ndi_element):
         Returns:
             Matching ndi_epoch_epochprobemap or None
         """
+        # Normalize to list — some code paths return a single object
+        if isinstance(epochprobemaps, ndi_epoch_epochprobemap):
+            epochprobemaps = [epochprobemaps]
+        elif isinstance(epochprobemaps, dict):
+            epochprobemaps = [epochprobemaps]
+        elif not isinstance(epochprobemaps, (list, tuple)):
+            epochprobemaps = [epochprobemaps]
         for epm in epochprobemaps:
             # Handle both ndi_epoch_epochprobemap objects and dicts
             if isinstance(epm, ndi_epoch_epochprobemap):
