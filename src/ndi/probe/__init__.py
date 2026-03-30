@@ -173,14 +173,20 @@ class ndi_probe(ndi_element):
         q = ndi_query("").isa("daqsystem")
         docs = self._session.database_search(q)
 
-        # Load ndi_daq_system objects from documents
-        from ..daq.system import ndi_daq_system
-
+        # Load ndi_daq_system objects from documents using the session's
+        # _document_to_object which creates the correct subclass (e.g.
+        # ndi_daq_system_mfdaq for MFDAQ systems).
         systems = []
         for doc in docs:
             try:
-                sys = ndi_daq_system(session=self._session, document=doc)
-                systems.append(sys)
+                if hasattr(self._session, "_document_to_object"):
+                    obj = self._session._document_to_object(doc)
+                else:
+                    from ..daq.system import ndi_daq_system
+
+                    obj = ndi_daq_system(session=self._session, document=doc)
+                if obj is not None:
+                    systems.append(obj)
             except Exception:
                 pass
 
