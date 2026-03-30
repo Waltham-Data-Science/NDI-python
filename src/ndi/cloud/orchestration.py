@@ -134,21 +134,47 @@ def downloadDataset(
         print("Download complete.")
 
     if missing:
-        missing_docs_path = target / "missingDocuments.json"
-        import json
+        # Print the document_class of each missing doc for diagnostics.
+        # Session/dataset docs from older datasets are expected to be
+        # missing (superseded by docs created locally during dataset init).
+        session_dataset_types = {"ndi_session", "ndi_dataset", "session", "dataset"}
+        real_missing: list[tuple[str, str]] = []
+        for doc_id, dj in zip(missing, missing_jsons):
+            doc_class = (
+                dj.get("document_class", {}).get("class_name", "") if isinstance(dj, dict) else ""
+            )
+            superclasses = (
+                dj.get("document_class", {}).get("superclasses", []) if isinstance(dj, dict) else []
+            )
+            all_types = {doc_class} | {
+                sc.get("class_name", "") if isinstance(sc, dict) else str(sc)
+                for sc in (superclasses if isinstance(superclasses, list) else [])
+            }
+            if all_types & session_dataset_types:
+                print(
+                    f"  Note: remote doc {doc_id} (class: {doc_class}) "
+                    f"not in local DB — expected for session/dataset docs"
+                )
+            else:
+                print(f"  WARNING: remote doc {doc_id} (class: {doc_class}) missing from local DB")
+                real_missing.append((doc_id, doc_class))
 
-        missing_docs_path.write_text(json.dumps(missing_jsons, indent=2, default=str))
+        if real_missing:
+            missing_docs_path = target / "missingDocuments.json"
+            import json
 
-        lines = [
-            f"Downloaded {len(doc_jsons)} documents but "
-            f"{len(missing)} are missing from the local dataset:"
-        ]
-        for doc_id in missing[:50]:
-            lines.append(f"\n  - {doc_id}")
-        if len(missing) > 50:
-            lines.append(f"\n  ... and {len(missing) - 50} more")
-        lines.append(f"\nFull JSON of missing documents written to:\n  {missing_docs_path}")
-        raise RuntimeError("".join(lines))
+            missing_docs_path.write_text(json.dumps(missing_jsons, indent=2, default=str))
+
+            lines = [
+                f"Downloaded {len(doc_jsons)} documents but "
+                f"{len(real_missing)} are missing from the local dataset:"
+            ]
+            for doc_id, doc_class in real_missing[:50]:
+                lines.append(f"\n  - {doc_id} (class: {doc_class})")
+            if len(real_missing) > 50:
+                lines.append(f"\n  ... and {len(real_missing) - 50} more")
+            lines.append(f"\nFull JSON of missing documents written to:\n  {missing_docs_path}")
+            raise RuntimeError("".join(lines))
 
     return dataset
 
