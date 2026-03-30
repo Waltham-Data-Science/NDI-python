@@ -77,6 +77,11 @@ class TestReadIngested:
 
         d1, t1, _ = p_cf[0].readtimeseries(epoch=1, t0=10, t1=20)
 
+        assert (
+            d1 is not None
+        ), "readtimeseries returned None for data (binary files not accessible?)"
+        assert t1 is not None, "readtimeseries returned None for times"
+
         # Check first time sample
         assert abs(t1[0] - 10.0) < 0.001, f"Expected t1[0] ≈ 10.0, got {t1[0]}"
 
@@ -120,13 +125,22 @@ class TestReadIngested:
 
         ds, ts, _ = p_st[0].readtimeseries(epoch=1, t0=10, t1=20)
 
+        assert ds is not None, "readtimeseries returned None for data"
+        assert ts is not None, "readtimeseries returned None for times"
+
         # ds should be a dict with 'stimid'
-        assert ds["stimid"] == 31, f"Expected stimid == 31, got {ds['stimid']}"
+        stimid = ds["stimid"]
+        if hasattr(stimid, "size") and stimid.size == 0:
+            pytest.fail("ds['stimid'] is empty — binary files may not be accessible from cloud")
+        if hasattr(stimid, "__len__") and not isinstance(stimid, (int, float)):
+            stimid = int(stimid[0]) if len(stimid) > 0 else stimid
+        assert stimid == 31, f"Expected stimid == 31, got {stimid}"
 
         # ts.stimon should be 15.2590 (within 0.001)
         stimon = ts["stimon"]
+        if hasattr(stimon, "size") and stimon.size == 0:
+            pytest.fail("ts['stimon'] is empty — binary files may not be accessible from cloud")
         if hasattr(stimon, "__len__"):
-            # Could be an array; take scalar value
             stimon_val = float(stimon) if np.ndim(stimon) == 0 else float(stimon[0])
         else:
             stimon_val = float(stimon)

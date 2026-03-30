@@ -38,6 +38,7 @@ dependencies = [
     "did @ git+https://github.com/VH-Lab/DID-python.git@main",
     "ndr @ git+https://github.com/VH-lab/NDR-python.git@main",
     "vhlab-toolbox-python @ git+https://github.com/VH-Lab/vhlab-toolbox-python.git@main",
+    "ndi-compress @ git+https://github.com/Waltham-Data-Science/NDI-compress-python.git@main",
     "numpy>=1.20.0",
     "networkx>=2.6",
     "jsonschema>=4.0.0",
