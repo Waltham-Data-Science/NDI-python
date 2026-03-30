@@ -728,7 +728,13 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
             channeltype = [channeltype] * len(channel)
 
         sr = self.samplerate_ingested(epochfiles, channeltype, channel, session)
-        sr_unique = np.unique(sr[~np.isnan(sr)])
+        sr_valid = sr[~np.isnan(sr)]
+        if len(sr_valid) == 0:
+            # No matching channels found by number — try all available channels
+            all_channels = self.getchannelsepoch_ingested(epochfiles, session)
+            all_sr = [ch.sample_rate for ch in all_channels if ch.sample_rate is not None]
+            sr_valid = np.array(all_sr) if all_sr else np.array([])
+        sr_unique = np.unique(sr_valid)
         if len(sr_unique) != 1:
             raise ValueError("Cannot handle different sample rates across channels")
         sr = sr_unique[0]
@@ -774,7 +780,13 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
             channeltype = [channeltype] * len(channel)
 
         sr = self.samplerate_ingested(epochfiles, channeltype, channel, session)
-        sr_unique = np.unique(sr[~np.isnan(sr)])
+        sr_valid = sr[~np.isnan(sr)]
+        if len(sr_valid) == 0:
+            # No matching channels found by number — try all available channels
+            all_channels = self.getchannelsepoch_ingested(epochfiles, session)
+            all_sr = [ch.sample_rate for ch in all_channels if ch.sample_rate is not None]
+            sr_valid = np.array(all_sr) if all_sr else np.array([])
+        sr_unique = np.unique(sr_valid)
         if len(sr_unique) != 1:
             raise ValueError("Cannot handle different sample rates across channels")
         sr = sr_unique[0]
