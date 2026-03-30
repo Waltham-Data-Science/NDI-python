@@ -81,29 +81,31 @@ class TestReadIngested:
         assert abs(t1[0] - 10.0) < 0.001, f"Expected t1[0] ≈ 10.0, got {t1[0]}"
 
         # Expected values for d1[0, :]
-        expected_d1_row0 = np.array([
-            55.7700,
-            253.3050,
-            -43.2900,
-            -9.5550,
-            30.6150,
-            23.4000,
-            16.1850,
-            -51.6750,
-            -1.7550,
-            -14.6250,
-            -32.7600,
-            45.6300,
-            -7.2150,
-            0.9750,
-            -1.7550,
-            45.0450,
-        ])
+        expected_d1_row0 = np.array(
+            [
+                55.7700,
+                253.3050,
+                -43.2900,
+                -9.5550,
+                30.6150,
+                23.4000,
+                16.1850,
+                -51.6750,
+                -1.7550,
+                -14.6250,
+                -32.7600,
+                45.6300,
+                -7.2150,
+                0.9750,
+                -1.7550,
+                45.0450,
+            ]
+        )
 
         actual_d1_row0 = d1[0, :]
-        assert actual_d1_row0.shape == expected_d1_row0.shape, (
-            f"Expected {expected_d1_row0.shape} channels, got {actual_d1_row0.shape}"
-        )
+        assert (
+            actual_d1_row0.shape == expected_d1_row0.shape
+        ), f"Expected {expected_d1_row0.shape} channels, got {actual_d1_row0.shape}"
         np.testing.assert_allclose(
             actual_d1_row0,
             expected_d1_row0,
@@ -128,6 +130,4 @@ class TestReadIngested:
             stimon_val = float(stimon) if np.ndim(stimon) == 0 else float(stimon[0])
         else:
             stimon_val = float(stimon)
-        assert abs(stimon_val - 15.2590) < 0.001, (
-            f"Expected ts.stimon ≈ 15.2590, got {stimon_val}"
-        )
+        assert abs(stimon_val - 15.2590) < 0.001, f"Expected ts.stimon ≈ 15.2590, got {stimon_val}"
