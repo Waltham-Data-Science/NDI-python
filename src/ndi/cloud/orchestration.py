@@ -137,7 +137,14 @@ def downloadDataset(
         # Print the document_class of each missing doc for diagnostics.
         # Session/dataset docs from older datasets are expected to be
         # missing (superseded by docs created locally during dataset init).
-        session_dataset_types = {"ndi_session", "ndi_dataset", "session", "dataset"}
+        session_dataset_types = {
+            "ndi_session",
+            "ndi_dataset",
+            "session",
+            "dataset",
+            "session_in_a_dataset",
+            "dataset_session_info",
+        }
         real_missing: list[tuple[str, str]] = []
         for doc_id, dj in zip(missing, missing_jsons):
             doc_class = (
