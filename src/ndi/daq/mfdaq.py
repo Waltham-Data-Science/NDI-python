@@ -734,9 +734,28 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
             all_channels = self.getchannelsepoch_ingested(epochfiles, session)
             all_sr = [ch.sample_rate for ch in all_channels if ch.sample_rate is not None]
             sr_valid = np.array(all_sr) if all_sr else np.array([])
+        if len(sr_valid) == 0:
+            # Still no sample rates — read from epochtable directly
+            doc = self.getingesteddocument(epochfiles, session)
+            et = doc.document_properties.get("daqreader_epochdata_ingested", {}).get(
+                "epochtable", {}
+            )
+            sr_from_et = et.get("sample_rate") or et.get("samplerate")
+            if sr_from_et is not None:
+                sr_valid = np.array([float(sr_from_et)])
         sr_unique = np.unique(sr_valid)
         if len(sr_unique) != 1:
-            raise ValueError("Cannot handle different sample rates across channels")
+            # Diagnostic: dump what we have
+            doc = self.getingesteddocument(epochfiles, session)
+            et = doc.document_properties.get("daqreader_epochdata_ingested", {}).get(
+                "epochtable", {}
+            )
+            raise ValueError(
+                f"Cannot determine sample rate. "
+                f"Requested channels={channel}, sr={sr.tolist()}, "
+                f"sr_valid={sr_valid.tolist()}, "
+                f"epochtable keys={list(et.keys())}"
+            )
         sr = sr_unique[0]
 
         t0t1 = self.t0_t1_ingested(epochfiles, session)
@@ -786,9 +805,28 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
             all_channels = self.getchannelsepoch_ingested(epochfiles, session)
             all_sr = [ch.sample_rate for ch in all_channels if ch.sample_rate is not None]
             sr_valid = np.array(all_sr) if all_sr else np.array([])
+        if len(sr_valid) == 0:
+            # Still no sample rates — read from epochtable directly
+            doc = self.getingesteddocument(epochfiles, session)
+            et = doc.document_properties.get("daqreader_epochdata_ingested", {}).get(
+                "epochtable", {}
+            )
+            sr_from_et = et.get("sample_rate") or et.get("samplerate")
+            if sr_from_et is not None:
+                sr_valid = np.array([float(sr_from_et)])
         sr_unique = np.unique(sr_valid)
         if len(sr_unique) != 1:
-            raise ValueError("Cannot handle different sample rates across channels")
+            # Diagnostic: dump what we have
+            doc = self.getingesteddocument(epochfiles, session)
+            et = doc.document_properties.get("daqreader_epochdata_ingested", {}).get(
+                "epochtable", {}
+            )
+            raise ValueError(
+                f"Cannot determine sample rate. "
+                f"Requested channels={channel}, sr={sr.tolist()}, "
+                f"sr_valid={sr_valid.tolist()}, "
+                f"epochtable keys={list(et.keys())}"
+            )
         sr = sr_unique[0]
 
         t0t1 = self.t0_t1_ingested(epochfiles, session)
