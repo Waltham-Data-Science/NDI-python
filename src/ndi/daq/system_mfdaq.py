@@ -48,6 +48,11 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
         "marker": "mk",
     }
 
+    def _getepochfiles(self, epoch_number: int) -> list[str]:
+        """Get epoch files, unpacking the tuple from getepochfiles."""
+        result = self._filenavigator.getepochfiles(epoch_number)
+        return result[0] if isinstance(result, tuple) else result
+
     def epochclock(self, epoch_number: int) -> list[ndi_time_clocktype]:
         """
         Return clock types for an epoch.
@@ -75,8 +80,7 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
             List of (t0, t1) tuples per clock type
         """
         if self._daqreader is not None and self._filenavigator is not None:
-            result = self._filenavigator.getepochfiles(epoch_number)
-            epochfiles = result[0] if isinstance(result, tuple) else result
+            epochfiles = self._getepochfiles(epoch_number)
             return self._daqreader.t0_t1(epochfiles)
         return [(np.nan, np.nan)]
 
@@ -93,7 +97,7 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
         if self._daqreader is None or self._filenavigator is None:
             return []
 
-        epochfiles = self._filenavigator.getepochfiles(epoch_number)
+        epochfiles = self._getepochfiles(epoch_number)
 
         if isinstance(self._daqreader, ndi_daq_reader_mfdaq):
             return self._daqreader.getchannelsepoch(epochfiles)
@@ -145,7 +149,7 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
         if self._daqreader is None or self._filenavigator is None:
             raise RuntimeError("No DAQ reader or file navigator configured")
 
-        epochfiles = self._filenavigator.getepochfiles(epoch_number)
+        epochfiles = self._getepochfiles(epoch_number)
         if not isinstance(self._daqreader, ndi_daq_reader_mfdaq):
             raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
 
@@ -179,7 +183,7 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
         if self._daqreader is None or self._filenavigator is None:
             raise RuntimeError("No DAQ reader or file navigator configured")
 
-        epochfiles = self._filenavigator.getepochfiles(epoch_number)
+        epochfiles = self._getepochfiles(epoch_number)
         if not isinstance(self._daqreader, ndi_daq_reader_mfdaq):
             raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
 
@@ -205,7 +209,7 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
         if self._daqreader is None or self._filenavigator is None:
             raise RuntimeError("No DAQ reader or file navigator configured")
 
-        epochfiles = self._filenavigator.getepochfiles(epoch_number)
+        epochfiles = self._getepochfiles(epoch_number)
         if not isinstance(self._daqreader, ndi_daq_reader_mfdaq):
             raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
 
@@ -237,7 +241,7 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
         if self._daqreader is None or self._filenavigator is None:
             raise RuntimeError("No DAQ reader or file navigator configured")
 
-        epochfiles = self._filenavigator.getepochfiles(epoch_number)
+        epochfiles = self._getepochfiles(epoch_number)
         if not isinstance(self._daqreader, ndi_daq_reader_mfdaq):
             raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
 
@@ -269,7 +273,7 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
         if self._daqreader is None or self._filenavigator is None:
             raise RuntimeError("No DAQ reader or file navigator configured")
 
-        epochfiles = self._filenavigator.getepochfiles(epoch_number)
+        epochfiles = self._getepochfiles(epoch_number)
         if not isinstance(self._daqreader, ndi_daq_reader_mfdaq):
             raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
 
