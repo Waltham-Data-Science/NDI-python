@@ -656,9 +656,9 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
             channeltype, channel, epochfiles, np.array(t0_t1[0]), session
         )
         if np.isinf(s0):
-            s0 = int(abs_s[0])
+            s0 = int(abs_s[0]) - 1  # Convert 1-based to 0-based
         if np.isinf(s1):
-            s1 = int(abs_s[1])
+            s1 = int(abs_s[1]) - 1  # Convert 1-based to 0-based
 
         # Get channel info for group decoding
         full_channel_info = self.getchannelsepoch_ingested(epochfiles, session)
@@ -702,25 +702,24 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         }
         prefix = prefix_map.get(ch_unique[0], ch_unique[0])
 
-        # Read segments
-        import math
-
-        seg_start = math.ceil(s0 / samples_segment)
-        seg_stop = math.ceil(s1 / samples_segment)
+        # Read segments — s0/s1 are 0-based Python indices
+        seg_start = (s0 // samples_segment) + 1  # 1-based segment number
+        seg_stop = (s1 // samples_segment) + 1
 
         data = np.full((s1 - s0 + 1, len(channel)), np.nan)
         count = 0
 
         for seg in range(seg_start, seg_stop + 1):
-            # Compute sample range within this segment
+            # Compute 0-based sample range within this segment
+            seg_offset = (seg - 1) * samples_segment  # 0-based start of segment
             if seg == seg_start:
-                s0_ = ((s0 - 1) % samples_segment) + 1
+                s0_ = s0 - seg_offset  # 0-based within segment
             else:
-                s0_ = 1
+                s0_ = 0
             if seg == seg_stop:
-                s1_ = ((s1 - 1) % samples_segment) + 1
+                s1_ = s1 - seg_offset  # 0-based within segment
             else:
-                s1_ = samples_segment
+                s1_ = samples_segment - 1
 
             n_samples_here = s1_ - s0_ + 1
 
@@ -743,13 +742,13 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
                     data_here = result[0] if isinstance(result, tuple) else result
 
                     # Handle last segment possibly having fewer samples
-                    if data_here.shape[0] < s1_:
-                        s1_ = data_here.shape[0]
+                    if data_here.shape[0] <= s1_:
+                        s1_ = data_here.shape[0] - 1
                         n_samples_here = s1_ - s0_ + 1
 
                     rows = slice(count, count + n_samples_here)
                     data[rows, ch_idx_in_output[g_idx]] = data_here[
-                        s0_ - 1 : s1_, ch_idx_in_groups[g_idx]
+                        s0_ : s1_ + 1, ch_idx_in_groups[g_idx]
                     ]
                 except Exception as seg_exc:
                     import logging
