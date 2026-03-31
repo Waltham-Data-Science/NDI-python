@@ -188,6 +188,17 @@ class TestReadIngested:
                 f"Segment file reading likely failed — check warnings in log."
             )
 
+        # Debug: print raw values, shape, and scale/offset info
+        print(f"  d1.shape={d1.shape}, t1.shape={t1.shape}")
+        print(f"  d1[0,:5]={d1[0,:5]}")
+        print(f"  t1[0]={t1[0]}")
+        # Get scale/offset from channel info
+        epochfiles = dev._getepochfiles(devepoch)
+        sr_arr, off_arr, sc_arr = dev._daqreader.samplerate_ingested(
+            epochfiles, channeltype, channellist, session
+        )
+        print(f"  sr={sr_arr[0]}, offset={off_arr[:3]}, scale={sc_arr[:3]}")
+
         # Check first time sample
         assert abs(t1[0] - 10.0) < 0.001, f"Expected t1[0] ≈ 10.0, got {t1[0]}"
 
