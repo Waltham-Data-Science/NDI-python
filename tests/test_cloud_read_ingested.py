@@ -200,7 +200,16 @@ class TestReadIngested:
         print(f"  sr={sr_arr[0]}, offset={off_arr[:3]}, scale={sc_arr[:3]}")
         t0t1 = dev._daqreader.t0_t1_ingested(epochfiles, session)
         print(f"  t0_t1={t0t1}")
-        print(f"  d1[0,:5] after scaling={d1[0,:5]}")
+        # Debug: print raw data near expected position
+        print(f"  d1[0,:5]={d1[0,:5]}")
+        if d1.shape[0] > 1:
+            print(f"  d1[1,:5]={d1[1,:5]}")
+        # Read one sample earlier to check alignment
+        d_check, t_check, _ = probe.readtimeseries(epoch=1, t0=9.99995, t1=10.0001)
+        if d_check is not None:
+            print(f"  d_check.shape={d_check.shape}")
+            for i in range(min(5, d_check.shape[0])):
+                print(f"  d_check[{i},0]={d_check[i,0]:.3f} t={t_check[i]:.6f}")
 
         # Check first time sample
         assert abs(t1[0] - 10.0) < 0.001, f"Expected t1[0] ≈ 10.0, got {t1[0]}"
