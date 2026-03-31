@@ -181,6 +181,13 @@ class TestReadIngested:
         ), "readtimeseries returned None for data (binary files not accessible?)"
         assert t1 is not None, "readtimeseries returned None for times"
 
+        # Check data isn't all NaN
+        if np.all(np.isnan(d1)):
+            pytest.fail(
+                f"readtimeseries returned all NaN data. shape={d1.shape}. "
+                f"Segment file reading likely failed — check warnings in log."
+            )
+
         # Check first time sample
         assert abs(t1[0] - 10.0) < 0.001, f"Expected t1[0] ≈ 10.0, got {t1[0]}"
 

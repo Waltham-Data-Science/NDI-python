@@ -124,8 +124,8 @@ class ndi_file_type_mfdaq__epoch__channel:
 
         MATLAB equivalent: ndi.file.type.mfdaq_epoch_channel/readFromFile
 
-        Supports both the MATLAB tab-delimited format (read via
-        ``vlt.file.loadStructArray``) and JSON format.
+        Supports both JSON format (Python-generated) and the MATLAB
+        tab-delimited format (read via ``vlt.file.loadStructArray``).
 
         Args:
             filename: Path to the channel list file
@@ -133,37 +133,36 @@ class ndi_file_type_mfdaq__epoch__channel:
         Returns:
             Self for chaining
         """
-        # Try vlt.file.loadStructArray first (MATLAB binary/tab-delimited format)
+        # Try JSON first (Python-generated files)
         try:
-            from vlt.file import loadStructArray
-
-            records = loadStructArray(filename)
+            with open(filename) as f:
+                data = json.load(f)
             self.channel_information = []
-            for rec in records:
-                self.channel_information.append(
-                    ChannelInfo(
-                        name=str(rec.get("name", "")),
-                        type=str(rec.get("type", "")),
-                        time_channel=int(rec.get("time_channel", 1)),
-                        sample_rate=float(rec.get("sample_rate", 0.0)),
-                        offset=float(rec.get("offset", 0.0)),
-                        scale=float(rec.get("scale", 1.0)),
-                        number=int(rec.get("number", 0)),
-                        group=int(rec.get("group", 0)),
-                        dataclass=str(rec.get("dataclass", "")),
-                    )
-                )
+            for ch_data in data.get("channel_information", []):
+                self.channel_information.append(ChannelInfo.from_dict(ch_data))
             return self
-        except Exception:
+        except (json.JSONDecodeError, UnicodeDecodeError):
             pass
 
-        # Fallback: JSON format
-        with open(filename) as f:
-            data = json.load(f)
+        # Fallback: vlt.file.loadStructArray (MATLAB tab-delimited format)
+        from vlt.file import loadStructArray
 
+        records = loadStructArray(filename)
         self.channel_information = []
-        for ch_data in data.get("channel_information", []):
-            self.channel_information.append(ChannelInfo.from_dict(ch_data))
+        for rec in records:
+            self.channel_information.append(
+                ChannelInfo(
+                    name=str(rec.get("name", "")),
+                    type=str(rec.get("type", "")),
+                    time_channel=int(rec.get("time_channel", 1)),
+                    sample_rate=float(rec.get("sample_rate", 0.0)),
+                    offset=float(rec.get("offset", 0.0)),
+                    scale=float(rec.get("scale", 1.0)),
+                    number=int(rec.get("number", 0)),
+                    group=int(rec.get("group", 0)),
+                    dataclass=str(rec.get("dataclass", "")),
+                )
+            )
         return self
 
     def writeToFile(self, filename: str) -> tuple[bool, str]:

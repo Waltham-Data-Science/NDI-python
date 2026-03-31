@@ -749,8 +749,14 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
                     data[rows, ch_idx_in_output[g_idx]] = data_here[
                         s0_ - 1 : s1_, ch_idx_in_groups[g_idx]
                     ]
-                except Exception:
-                    pass  # Leave as NaN
+                except Exception as seg_exc:
+                    import logging
+
+                    logging.getLogger("ndi").warning(
+                        "readchannels_epochsamples_ingested: segment %s failed: %s",
+                        fname,
+                        seg_exc,
+                    )
 
             count += n_samples_here
 
