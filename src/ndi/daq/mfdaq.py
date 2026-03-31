@@ -766,7 +766,7 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         if count < data.shape[0]:
             data = data[:count, :]
 
-        # Apply offset and scale: underlying2scaled formula is (data - offset) * scale
+        # Apply underlying2scaled: (data - offset) * scale
         data = (data - np.array(offset)) * np.array(scale)
 
         return data
