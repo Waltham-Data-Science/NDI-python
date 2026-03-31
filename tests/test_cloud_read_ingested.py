@@ -198,6 +198,9 @@ class TestReadIngested:
             epochfiles, channeltype, channellist, session
         )
         print(f"  sr={sr_arr[0]}, offset={off_arr[:3]}, scale={sc_arr[:3]}")
+        t0t1 = dev._daqreader.t0_t1_ingested(epochfiles, session)
+        print(f"  t0_t1={t0t1}")
+        print(f"  d1[0,:5] after scaling={d1[0,:5]}")
 
         # Check first time sample
         assert abs(t1[0] - 10.0) < 0.001, f"Expected t1[0] ≈ 10.0, got {t1[0]}"
