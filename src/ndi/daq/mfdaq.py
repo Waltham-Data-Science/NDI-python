@@ -78,6 +78,19 @@ class ChannelInfo:
     scale: float = 1.0
     group: int = 1
 
+    @classmethod
+    def from_dict(cls, d: dict) -> ChannelInfo:
+        return cls(
+            name=d.get("name", ""),
+            type=d.get("type", ""),
+            time_channel=d.get("time_channel"),
+            number=d.get("number"),
+            sample_rate=d.get("sample_rate"),
+            offset=d.get("offset", 0.0),
+            scale=d.get("scale", 1.0),
+            group=d.get("group", 1),
+        )
+
 
 def standardize_channel_type(channel_type: str | ChannelType) -> str:
     """
@@ -779,9 +792,17 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         scale = np.ones(len(channel))
 
         for i, (ct, ch_num) in enumerate(zip(channeltype, channel)):
-            match = [ci for ci in full_channel_info if ci.type == ct and ci.number == ch_num]
+            ct_std = standardize_channel_type(ct)
+            match = [
+                ci
+                for ci in full_channel_info
+                if standardize_channel_type(ci.type) == ct_std and ci.number == ch_num
+            ]
             if not match:
-                raise ValueError(f"No such channel: {ct} : {ch_num}")
+                raise ValueError(
+                    f"No such channel: {ct} : {ch_num}. "
+                    f"Available: {[(ci.type, ci.number) for ci in full_channel_info[:5]]}"
+                )
             sr[i] = match[0].sample_rate
             offset[i] = match[0].offset
             scale[i] = match[0].scale
