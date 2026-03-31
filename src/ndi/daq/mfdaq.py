@@ -738,7 +738,9 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
                     if tname_base.endswith(".nbf"):
                         tname_base = tname_base[:-4]
 
-                    data_here = expand_fn(tname_base)
+                    result = expand_fn(tname_base)
+                    # expand_* functions return (data, error_signal) tuple
+                    data_here = result[0] if isinstance(result, tuple) else result
 
                     # Handle last segment possibly having fewer samples
                     if data_here.shape[0] < s1_:
