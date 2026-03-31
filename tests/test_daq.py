@@ -663,7 +663,11 @@ class TestIngestedDataMethods:
         # Mock getingesteddocument
         reader.getingesteddocument = MagicMock(return_value=mock_doc)
 
-        sr = reader.samplerate_ingested(["epochid://test123"], ["ai", "ai"], [1, 2], mock_session)
+        mock_session.database_openbinarydoc = MagicMock(side_effect=FileNotFoundError)
+
+        sr, offset, scale = reader.samplerate_ingested(
+            ["epochid://test123"], ["ai", "ai"], [1, 2], mock_session
+        )
         assert len(sr) == 2
         assert sr[0] == 30000
         assert sr[1] == 30000
@@ -686,6 +690,7 @@ class TestIngestedDataMethods:
         }
 
         mock_session = MagicMock()
+        mock_session.database_openbinarydoc = MagicMock(side_effect=FileNotFoundError)
         reader.getingesteddocument = MagicMock(return_value=mock_doc)
 
         channels = reader.getchannelsepoch_ingested(["epochid://test"], mock_session)
@@ -712,6 +717,7 @@ class TestIngestedDataMethods:
         }
 
         mock_session = MagicMock()
+        mock_session.database_openbinarydoc = MagicMock(side_effect=FileNotFoundError)
         reader.getingesteddocument = MagicMock(return_value=mock_doc)
 
         samples = np.array([1, 3001, 6001])
@@ -740,6 +746,7 @@ class TestIngestedDataMethods:
         }
 
         mock_session = MagicMock()
+        mock_session.database_openbinarydoc = MagicMock(side_effect=FileNotFoundError)
         reader.getingesteddocument = MagicMock(return_value=mock_doc)
 
         times = np.array([0.0, 0.1, 0.2])

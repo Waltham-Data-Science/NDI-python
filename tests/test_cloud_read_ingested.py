@@ -120,6 +120,42 @@ class TestReadIngested:
         print(f"  dev={type(dev).__name__}, devepoch={devepoch}")
         print(f"  channeltype={channeltype}, channellist={channellist}")
 
+        # Diagnostic: try reading channel_list.bin directly
+        if (
+            hasattr(dev, "_filenavigator")
+            and dev._filenavigator is not None
+            and hasattr(dev, "_getepochfiles")
+        ):
+            epochfiles = dev._getepochfiles(devepoch)
+            if epochfiles and epochfiles[0].startswith("epochid://"):
+                try:
+                    ingested_doc = dev._daqreader.getingesteddocument(epochfiles, session)
+                    print(f"  ingested doc class: {ingested_doc.doc_class()}")
+                    props = ingested_doc.document_properties
+                    for key in props:
+                        if "ingested" in key.lower() or "daqreader" in key.lower():
+                            print(
+                                f"  prop key: {key}, subkeys: {list(props[key].keys()) if isinstance(props[key], dict) else type(props[key]).__name__}"
+                            )
+                    # Try database_openbinarydoc
+                    try:
+                        fobj = session.database_openbinarydoc(ingested_doc, "channel_list.bin")
+                        print(f"  channel_list.bin opened OK: {fobj.name}")
+                        fobj.close()
+                    except Exception as exc2:
+                        print(f"  channel_list.bin FAILED: {type(exc2).__name__}: {exc2}")
+                        # Check file_info
+                        files = props.get("files", {})
+                        fi = files.get("file_info", files.get("file_list", []))
+                        print(f"  files keys: {list(files.keys())}")
+                        print(f"  file_info/file_list count: {len(fi)}")
+                        if fi:
+                            print(
+                                f"  first file entry: {fi[0] if isinstance(fi[0], str) else list(fi[0].keys())}"
+                            )
+                except Exception as exc:
+                    print(f"  getingesteddocument failed: {exc}")
+
         # Diagnostic: check ingested document structure
         if hasattr(dev, "_filenavigator") and dev._filenavigator is not None:
             epochfiles = dev._getepochfiles(devepoch)

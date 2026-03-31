@@ -588,7 +588,12 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
             mec = ndi_file_type_mfdaq__epoch__channel()
             mec.readFromFile(tname)
             return mec.channel_information
-        except Exception:
+        except Exception as _exc:
+            import logging
+
+            logging.getLogger("ndi").debug(
+                "getchannelsepoch_ingested: channel_list.bin failed: %s", _exc
+            )
             # Fallback: try reading from epochtable JSON (older format)
             et = doc.document_properties.get(
                 "daqreader_mfdaq_epochdata_ingested",
