@@ -757,6 +757,142 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
 
         return data
 
+    def readevents_epochsamples_ingested(
+        self,
+        channeltype: str | list[str],
+        channel: int | list[int],
+        epochfiles: list[str],
+        t0: float,
+        t1: float,
+        session: Any,
+    ) -> tuple[list[np.ndarray] | np.ndarray, list[np.ndarray] | np.ndarray]:
+        """
+        Read event/marker/text data from an ingested epoch.
+
+        Matches MATLAB ``readevents_epochsamples_ingested``. For derived
+        digital event types (dep/den/dimp/dimn), reads digital channels
+        and detects transitions. For native events/markers/text, reads
+        from compressed ``evmktx_group*_seg.nbf_*`` files.
+
+        Args:
+            channeltype: Event channel type(s)
+            channel: Channel number(s)
+            epochfiles: Files for this epoch (starting with epochid://)
+            t0: Start time
+            t1: End time
+            session: ndi_session object with database access
+
+        Returns:
+            Tuple of (timestamps, data)
+        """
+        import ndicompress
+
+        if isinstance(channel, int):
+            channel = [channel]
+        if isinstance(channeltype, str):
+            channeltype = [channeltype] * len(channel)
+        channeltype = standardize_channel_types(channeltype)
+
+        derived = {"dep", "den", "dimp", "dimn"}
+        if set(channeltype) & derived:
+            # Handle derived digital event types
+            timestamps_list = []
+            data_list = []
+            for i, ch_num in enumerate(zip(channel)):
+                sd = self.epochtimes2samples_ingested(
+                    ["digital_in"], [ch_num], epochfiles, np.array([t0, t1]), session
+                )
+                s0d, s1d = int(sd[0]), int(sd[1])
+                data_here = self.readchannels_epochsamples_ingested(
+                    ["digital_in"], [ch_num], epochfiles, s0d, s1d, session
+                )
+                time_here = self.readchannels_epochsamples_ingested(
+                    ["time"], [ch_num], epochfiles, s0d, s1d, session
+                )
+                data_here = data_here.ravel()
+                time_here = time_here.ravel()
+
+                ct = channeltype[i]
+                if ct in ("dep", "dimp"):
+                    on_samples = np.where((data_here[:-1] == 0) & (data_here[1:] == 1))[0] + 1
+                    off_samples = (
+                        np.where((data_here[:-1] == 1) & (data_here[1:] == 0))[0] + 1
+                        if ct == "dimp"
+                        else np.array([], dtype=int)
+                    )
+                else:  # den, dimn
+                    on_samples = np.where((data_here[:-1] == 1) & (data_here[1:] == 0))[0] + 1
+                    off_samples = (
+                        np.where((data_here[:-1] == 0) & (data_here[1:] == 1))[0] + 1
+                        if ct == "dimn"
+                        else np.array([], dtype=int)
+                    )
+
+                ts = np.concatenate([time_here[on_samples], time_here[off_samples]])
+                dd = np.concatenate(
+                    [
+                        np.ones(len(on_samples)),
+                        -np.ones(len(off_samples)),
+                    ]
+                )
+                if len(off_samples) > 0:
+                    order = np.argsort(ts)
+                    ts = ts[order]
+                    dd = dd[order]
+                timestamps_list.append(ts)
+                data_list.append(dd)
+
+            if len(channel) == 1:
+                return timestamps_list[0], data_list[0]
+            return timestamps_list, data_list
+
+        # Native events/markers/text
+        doc = self.getingesteddocument(epochfiles, session)
+        fname = "evmktx_group1_seg.nbf_1"
+        try:
+            fobj = session.database_openbinarydoc(doc, fname)
+            tname = fobj.name
+            fobj.close()
+            tname_base = tname
+            if tname_base.endswith(".tgz"):
+                tname_base = tname_base[:-4]
+            if tname_base.endswith(".nbf"):
+                tname_base = tname_base[:-4]
+            ct_out, ch_out, T, D = ndicompress.expand_eventmarktext(tname_base)
+        except Exception as exc:
+            raise ValueError(f"No event data found for this epoch: {exc}") from exc
+
+        # Standardize the output channel types for matching
+        if isinstance(ct_out, list):
+            ct_out_std = standardize_channel_types(ct_out)
+        else:
+            ct_out_std = standardize_channel_types(list(ct_out))
+
+        timestamps_list = []
+        data_list = []
+        for ct, ch_num in zip(channeltype, channel):
+            ct_std = standardize_channel_type(ct)
+            matches = [
+                j
+                for j, (cto, cho) in enumerate(zip(ct_out_std, ch_out))
+                if cto == ct_std and cho == ch_num
+            ]
+            if not matches:
+                raise ValueError(f"Channel type {ct} and channel {ch_num} not found in event data")
+            idx = matches[0]
+            ts = np.asarray(T[idx])
+            dd = np.asarray(D[idx])
+            # Filter by time range
+            included = (ts >= t0) & (ts <= t1)
+            if ts.ndim > 1:
+                included = included[:, 0] if included.ndim > 1 else included
+            timestamps_list.append(ts[included])
+            data_list.append(dd[included] if dd.ndim <= 1 else dd[included])
+
+        if len(channel) == 1:
+            return timestamps_list[0], data_list[0]
+        return timestamps_list, data_list
+
     def samplerate_ingested(
         self,
         epochfiles: list[str],

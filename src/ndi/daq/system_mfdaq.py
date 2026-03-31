@@ -187,6 +187,10 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
         if not isinstance(self._daqreader, ndi_daq_reader_mfdaq):
             raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
 
+        if self._is_ingested(epochfiles):
+            return self._daqreader.readevents_epochsamples_ingested(
+                channeltype, channel, epochfiles, t0, t1, self.session
+            )
         return self._daqreader.readevents_epochsamples(channeltype, channel, epochfiles, t0, t1)
 
     def samplerate(
