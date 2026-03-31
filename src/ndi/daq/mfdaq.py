@@ -7,7 +7,6 @@ multi-function data acquisition systems that sample various data types.
 
 from __future__ import annotations
 
-import os
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -556,8 +555,8 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         """
         List channels for an ingested epoch.
 
-        Retrieves channel information from the ingested document stored
-        in the database.
+        Reads channel information from the ``channel_list.bin`` binary file
+        attached to the ingested document, matching the MATLAB approach.
 
         Args:
             epochfiles: List of file paths (starting with epochid://)
@@ -565,30 +564,25 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
 
         Returns:
             List of ChannelInfo objects
-
-        See also: getchannelsepoch
         """
         doc = self.getingesteddocument(epochfiles, session)
-        et = doc.document_properties["daqreader_epochdata_ingested"]["epochtable"]
+        try:
+            fobj = session.database_openbinarydoc(doc, "channel_list.bin")
+            tname = fobj.name
+            fobj.close()
+            from ..file.type.mfdaq_epoch_channel import ndi_file_type_mfdaq__epoch__channel
 
-        channels_raw = et.get("channels", [])
-        channels = []
-
-        for ch_dict in channels_raw:
-            channels.append(
-                ChannelInfo(
-                    name=ch_dict.get("name", ""),
-                    type=ch_dict.get("type", "analog_in"),
-                    time_channel=ch_dict.get("time_channel"),
-                    number=ch_dict.get("number"),
-                    sample_rate=ch_dict.get("sample_rate"),
-                    offset=ch_dict.get("offset", 0.0),
-                    scale=ch_dict.get("scale", 1.0),
-                    group=ch_dict.get("group", 1),
-                )
-            )
-
-        return channels
+            mec = ndi_file_type_mfdaq__epoch__channel()
+            mec.readFromFile(tname)
+            return mec.channel_information
+        except Exception:
+            # Fallback: try reading from epochtable JSON (older format)
+            et = doc.document_properties.get(
+                "daqreader_mfdaq_epochdata_ingested",
+                doc.document_properties.get("daqreader_epochdata_ingested", {}),
+            ).get("epochtable", {})
+            channels_raw = et.get("channels", [])
+            return [ChannelInfo.from_dict(ch) for ch in channels_raw]
 
     def readchannels_epochsamples_ingested(
         self,
@@ -602,8 +596,8 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         """
         Read channel data from an ingested epoch.
 
-        Retrieves the data from the binary file referenced by the
-        ingested document in the database.
+        Reads compressed segment files (``ai_group*_seg.nbf_*``) from the
+        ingested document using ``ndicompress``, matching the MATLAB approach.
 
         Args:
             channeltype: Type(s) of channel to read
@@ -615,49 +609,140 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
 
         Returns:
             Array with shape (num_samples, num_channels)
-
-        See also: readchannels_epochsamples
         """
+        import ndicompress
+
         doc = self.getingesteddocument(epochfiles, session)
-        et = doc.document_properties["daqreader_epochdata_ingested"]["epochtable"]
 
         # Normalize inputs
         if isinstance(channel, int):
             channel = [channel]
         if isinstance(channeltype, str):
             channeltype = [channeltype] * len(channel)
-
         channeltype = standardize_channel_types(channeltype)
 
-        # Get data file reference from document
-        data_file = et.get("data_file", None)
-        if data_file is None:
-            return np.full((s1 - s0 + 1, len(channel)), np.nan)
+        ch_unique = list(set(channeltype))
+        if len(ch_unique) != 1:
+            raise ValueError("Only one type of channel may be read per function call")
 
-        # Resolve binary file — may need on-demand cloud fetch
-        data_path = data_file
-        if not os.path.exists(data_file):
-            try:
-                fobj = session.database_openbinarydoc(doc, data_file)
-                data_path = fobj.name
-                fobj.close()
-            except Exception:
-                return np.full((s1 - s0 + 1, len(channel)), np.nan)
+        # Get sample rate, offset, scale
+        sr, offset, scale = self.samplerate_ingested(epochfiles, channeltype, channel, session)
+        sr_unique = np.unique(sr)
+        if len(sr_unique) != 1:
+            raise ValueError("Cannot handle different sampling rates across channels")
 
-        # Read from VHSB format
-        try:
-            from vlt.file.custom_file_formats import vhsb_read
+        # Handle infinite bounds
+        t0_t1 = self.t0_t1_ingested(epochfiles, session)
+        abs_s = self.epochtimes2samples_ingested(
+            channeltype, channel, epochfiles, np.array(t0_t1[0]), session
+        )
+        if np.isinf(s0):
+            s0 = int(abs_s[0])
+        if np.isinf(s1):
+            s1 = int(abs_s[1])
 
-            data = vhsb_read(
-                data_path,
-                channels=channel,
-                sample_start=s0,
-                sample_end=s1,
+        # Get channel info for group decoding
+        full_channel_info = self.getchannelsepoch_ingested(epochfiles, session)
+
+        from ..file.type.mfdaq_epoch_channel import ndi_file_type_mfdaq__epoch__channel
+
+        groups, ch_idx_in_groups, ch_idx_in_output = (
+            ndi_file_type_mfdaq__epoch__channel.channelgroupdecoding(
+                full_channel_info, ch_unique[0], channel
             )
-            return data
-        except ImportError:
-            # Fallback: return NaN if vlt not available
-            return np.full((s1 - s0 + 1, len(channel)), np.nan)
+        )
+
+        # Determine segment parameters and file prefix
+        props = doc.document_properties
+        mfdaq_params = props.get("daqreader_mfdaq_epochdata_ingested", {}).get("parameters", {})
+
+        analog_types = {"analog_in", "analog_out", "auxiliary_in", "auxiliary_out"}
+        digital_types = {"digital_in", "digital_out"}
+
+        if ch_unique[0] in analog_types:
+            samples_segment = mfdaq_params.get("sample_analog_segment", 1_000_000)
+            expand_fn = ndicompress.expand_ephys
+        elif ch_unique[0] in digital_types:
+            samples_segment = mfdaq_params.get("sample_digital_segment", 1_000_000)
+            expand_fn = ndicompress.expand_digital
+        elif ch_unique[0] == "time":
+            samples_segment = mfdaq_params.get("sample_analog_segment", 1_000_000)
+            expand_fn = ndicompress.expand_time
+        else:
+            raise ValueError(f"Unknown channel type {ch_unique[0]}. Use readevents for events.")
+
+        # Map channel type to file prefix
+        prefix_map = {
+            "analog_in": "ai",
+            "analog_out": "ao",
+            "auxiliary_in": "ax",
+            "auxiliary_out": "ax",
+            "digital_in": "di",
+            "digital_out": "do",
+            "time": "ti",
+        }
+        prefix = prefix_map.get(ch_unique[0], ch_unique[0])
+
+        # Read segments
+        import math
+
+        seg_start = math.ceil(s0 / samples_segment)
+        seg_stop = math.ceil(s1 / samples_segment)
+
+        data = np.full((s1 - s0 + 1, len(channel)), np.nan)
+        count = 0
+
+        for seg in range(seg_start, seg_stop + 1):
+            # Compute sample range within this segment
+            if seg == seg_start:
+                s0_ = ((s0 - 1) % samples_segment) + 1
+            else:
+                s0_ = 1
+            if seg == seg_stop:
+                s1_ = ((s1 - 1) % samples_segment) + 1
+            else:
+                s1_ = samples_segment
+
+            n_samples_here = s1_ - s0_ + 1
+
+            for g_idx, grp in enumerate(groups):
+                fname = f"{prefix}_group{grp}_seg.nbf_{seg}"
+                try:
+                    fobj = session.database_openbinarydoc(doc, fname)
+                    tname = fobj.name
+                    fobj.close()
+
+                    # Remove .tgz extension for ndicompress (it adds it back)
+                    tname_base = tname
+                    if tname_base.endswith(".tgz"):
+                        tname_base = tname_base[:-4]
+                    if tname_base.endswith(".nbf"):
+                        tname_base = tname_base[:-4]
+
+                    data_here = expand_fn(tname_base)
+
+                    # Handle last segment possibly having fewer samples
+                    if data_here.shape[0] < s1_:
+                        s1_ = data_here.shape[0]
+                        n_samples_here = s1_ - s0_ + 1
+
+                    rows = slice(count, count + n_samples_here)
+                    data[rows, ch_idx_in_output[g_idx]] = data_here[
+                        s0_ - 1 : s1_, ch_idx_in_groups[g_idx]
+                    ]
+                except Exception:
+                    pass  # Leave as NaN
+
+            count += n_samples_here
+
+        # Trim if last segment was shorter
+        if count < data.shape[0]:
+            data = data[:count, :]
+
+        # Apply offset and scale
+        data = data * np.array(scale) + np.array(offset)
+
+        return data
 
     def samplerate_ingested(
         self,
@@ -665,9 +750,12 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         channeltype: str | list[str],
         channel: int | list[int],
         session: Any,
-    ) -> np.ndarray:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Get sample rate for channels from an ingested epoch.
+        Get sample rate, offset, and scale for channels from an ingested epoch.
+
+        Reads channel metadata from the ``channel_list.bin`` binary file,
+        matching the MATLAB approach which returns (sr, offset, scale).
 
         Args:
             epochfiles: Files for this epoch (starting with epochid://)
@@ -676,28 +764,29 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
             session: ndi_session object with database access
 
         Returns:
-            Array of sample rates
-
-        See also: samplerate
+            Tuple of (sample_rates, offsets, scales) arrays
         """
         if isinstance(channel, int):
             channel = [channel]
+        if isinstance(channeltype, str):
+            channeltype = [channeltype] * len(channel)
+        channeltype = standardize_channel_types(channeltype)
 
-        # Get channels from ingested document
-        channels = self.getchannelsepoch_ingested(epochfiles, session)
+        full_channel_info = self.getchannelsepoch_ingested(epochfiles, session)
 
-        # Build lookup by channel number
-        sr_lookup = {}
-        for ch in channels:
-            if ch.number is not None and ch.sample_rate is not None:
-                sr_lookup[ch.number] = ch.sample_rate
-
-        # Return sample rates for requested channels
         sr = np.zeros(len(channel))
-        for i, ch_num in enumerate(channel):
-            sr[i] = sr_lookup.get(ch_num, np.nan)
+        offset = np.zeros(len(channel))
+        scale = np.ones(len(channel))
 
-        return sr
+        for i, (ct, ch_num) in enumerate(zip(channeltype, channel)):
+            match = [ci for ci in full_channel_info if ci.type == ct and ci.number == ch_num]
+            if not match:
+                raise ValueError(f"No such channel: {ct} : {ch_num}")
+            sr[i] = match[0].sample_rate
+            offset[i] = match[0].offset
+            scale[i] = match[0].scale
+
+        return sr, offset, scale
 
     def epochsamples2times_ingested(
         self,
@@ -719,43 +808,16 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
 
         Returns:
             Time values
-
-        See also: epochsamples2times
         """
         if isinstance(channel, int):
             channel = [channel]
         if isinstance(channeltype, str):
             channeltype = [channeltype] * len(channel)
 
-        sr = self.samplerate_ingested(epochfiles, channeltype, channel, session)
-        sr_valid = sr[~np.isnan(sr)]
-        if len(sr_valid) == 0:
-            # No matching channels found by number — try all available channels
-            all_channels = self.getchannelsepoch_ingested(epochfiles, session)
-            all_sr = [ch.sample_rate for ch in all_channels if ch.sample_rate is not None]
-            sr_valid = np.array(all_sr) if all_sr else np.array([])
-        if len(sr_valid) == 0:
-            # Still no sample rates — read from epochtable directly
-            doc = self.getingesteddocument(epochfiles, session)
-            et = doc.document_properties.get("daqreader_epochdata_ingested", {}).get(
-                "epochtable", {}
-            )
-            sr_from_et = et.get("sample_rate") or et.get("samplerate")
-            if sr_from_et is not None:
-                sr_valid = np.array([float(sr_from_et)])
-        sr_unique = np.unique(sr_valid)
+        sr_arr, _, _ = self.samplerate_ingested(epochfiles, channeltype, channel, session)
+        sr_unique = np.unique(sr_arr)
         if len(sr_unique) != 1:
-            # Diagnostic: dump what we have
-            doc = self.getingesteddocument(epochfiles, session)
-            et = doc.document_properties.get("daqreader_epochdata_ingested", {}).get(
-                "epochtable", {}
-            )
-            raise ValueError(
-                f"Cannot determine sample rate. "
-                f"Requested channels={channel}, sr={sr.tolist()}, "
-                f"sr_valid={sr_valid.tolist()}, "
-                f"epochtable keys={list(et.keys())}"
-            )
+            raise ValueError("Cannot handle different sample rates across channels")
         sr = sr_unique[0]
 
         t0t1 = self.t0_t1_ingested(epochfiles, session)
@@ -764,7 +826,6 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         samples = np.asarray(samples)
         t = t0 + (samples - 1) / sr
 
-        # Handle infinite values
         if np.any(np.isinf(samples)):
             t[np.isinf(samples) & (samples < 0)] = t0
 
@@ -790,43 +851,16 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
 
         Returns:
             Sample indices (1-indexed)
-
-        See also: epochtimes2samples
         """
         if isinstance(channel, int):
             channel = [channel]
         if isinstance(channeltype, str):
             channeltype = [channeltype] * len(channel)
 
-        sr = self.samplerate_ingested(epochfiles, channeltype, channel, session)
-        sr_valid = sr[~np.isnan(sr)]
-        if len(sr_valid) == 0:
-            # No matching channels found by number — try all available channels
-            all_channels = self.getchannelsepoch_ingested(epochfiles, session)
-            all_sr = [ch.sample_rate for ch in all_channels if ch.sample_rate is not None]
-            sr_valid = np.array(all_sr) if all_sr else np.array([])
-        if len(sr_valid) == 0:
-            # Still no sample rates — read from epochtable directly
-            doc = self.getingesteddocument(epochfiles, session)
-            et = doc.document_properties.get("daqreader_epochdata_ingested", {}).get(
-                "epochtable", {}
-            )
-            sr_from_et = et.get("sample_rate") or et.get("samplerate")
-            if sr_from_et is not None:
-                sr_valid = np.array([float(sr_from_et)])
-        sr_unique = np.unique(sr_valid)
+        sr_arr, _, _ = self.samplerate_ingested(epochfiles, channeltype, channel, session)
+        sr_unique = np.unique(sr_arr)
         if len(sr_unique) != 1:
-            # Diagnostic: dump what we have
-            doc = self.getingesteddocument(epochfiles, session)
-            et = doc.document_properties.get("daqreader_epochdata_ingested", {}).get(
-                "epochtable", {}
-            )
-            raise ValueError(
-                f"Cannot determine sample rate. "
-                f"Requested channels={channel}, sr={sr.tolist()}, "
-                f"sr_valid={sr_valid.tolist()}, "
-                f"epochtable keys={list(et.keys())}"
-            )
+            raise ValueError("Cannot handle different sample rates across channels")
         sr = sr_unique[0]
 
         t0t1 = self.t0_t1_ingested(epochfiles, session)
@@ -835,7 +869,6 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         times = np.asarray(times)
         s = 1 + np.round((times - t0) * sr).astype(int)
 
-        # Handle infinite values
         if np.any(np.isinf(times)):
             s[np.isinf(times) & (times < 0)] = 1
 
