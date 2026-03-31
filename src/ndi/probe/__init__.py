@@ -153,6 +153,13 @@ class ndi_probe(ndi_element):
                         }
                     )
 
+        # Sort by epoch_id alphanumerically to match MATLAB behavior
+        et.sort(key=lambda e: e.get("epoch_id", ""))
+
+        # Renumber after sorting
+        for i, entry in enumerate(et):
+            entry["epoch_number"] = i + 1
+
         return et
 
     def _get_daqsystems(self) -> list[Any]:
