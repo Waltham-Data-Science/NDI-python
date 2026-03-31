@@ -295,8 +295,9 @@ classes:
           - name: samples
             type_python: "np.ndarray"
         decision_log: >
-          Exact match. Returns 1-indexed sample indices
-          (Semantic Parity: samples are user-facing counting).
+          INDEXING DIFFERENCE: MATLAB returns 1-indexed samples; Python returns
+          0-indexed. Sample 0 in Python corresponds to sample 1 in MATLAB.
+          Formula: s = round(t * sr) (Python) vs s = 1 + round(t * sr) (MATLAB).
 
       - name: samples2times
         input_arguments:
@@ -310,8 +311,9 @@ classes:
           - name: times
             type_python: "np.ndarray"
         decision_log: >
-          Exact match. Accepts 1-indexed sample indices
-          (Semantic Parity: samples are user-facing counting).
+          INDEXING DIFFERENCE: MATLAB accepts 1-indexed samples; Python accepts
+          0-indexed. Sample 0 in Python corresponds to sample 1 in MATLAB.
+          Formula: t = s / sr (Python) vs t = (s - 1) / sr (MATLAB).
 
   # =========================================================================
   # ndi.probe.timeseries.mfdaq  (MFDAQ timeseries probe)

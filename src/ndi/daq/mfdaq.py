@@ -416,13 +416,17 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         samples: np.ndarray,
     ) -> np.ndarray:
         """
-        Convert sample indices to time.
+        Convert 0-based sample indices to time.
+
+        Note:
+            Unlike MATLAB (1-based), Python sample indices are 0-based.
+            Sample 0 corresponds to time t0 of the epoch.
 
         Args:
             channeltype: Channel type(s)
             channel: Channel number(s)
             epochfiles: Files for this epoch
-            samples: Sample indices (1-indexed)
+            samples: Sample indices (0-based)
 
         Returns:
             Time values
@@ -442,7 +446,7 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         t0 = t0t1[0][0]
 
         samples = np.asarray(samples)
-        t = t0 + (samples - 1) / sr
+        t = t0 + samples / sr
 
         # Handle infinite values
         if np.any(np.isinf(samples)):
@@ -458,7 +462,11 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         times: np.ndarray,
     ) -> np.ndarray:
         """
-        Convert time to sample indices.
+        Convert time to 0-based sample indices.
+
+        Note:
+            Unlike MATLAB (1-based), Python sample indices are 0-based.
+            Sample 0 corresponds to time t0 of the epoch.
 
         Args:
             channeltype: Channel type(s)
@@ -467,7 +475,7 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
             times: Time values
 
         Returns:
-            Sample indices (1-indexed)
+            Sample indices (0-based)
         """
         if isinstance(channel, int):
             channel = [channel]
@@ -484,11 +492,11 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         t0 = t0t1[0][0]
 
         times = np.asarray(times)
-        s = 1 + np.round((times - t0) * sr).astype(int)
+        s = np.round((times - t0) * sr).astype(int)
 
         # Handle infinite values
         if np.any(np.isinf(times)):
-            s[np.isinf(times) & (times < 0)] = 1
+            s[np.isinf(times) & (times < 0)] = 0
 
         return s
 
@@ -656,9 +664,9 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
             channeltype, channel, epochfiles, np.array(t0_t1[0]), session
         )
         if np.isinf(s0):
-            s0 = int(abs_s[0]) - 1  # Convert 1-based to 0-based
+            s0 = int(abs_s[0])
         if np.isinf(s1):
-            s1 = int(abs_s[1]) - 1  # Convert 1-based to 0-based
+            s1 = int(abs_s[1])
 
         # Get channel info for group decoding
         full_channel_info = self.getchannelsepoch_ingested(epochfiles, session)
@@ -967,13 +975,17 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         session: Any,
     ) -> np.ndarray:
         """
-        Convert sample indices to time for an ingested epoch.
+        Convert 0-based sample indices to time for an ingested epoch.
+
+        Note:
+            Unlike MATLAB (1-based), Python sample indices are 0-based.
+            Sample 0 corresponds to time t0 of the epoch.
 
         Args:
             channeltype: Channel type(s)
             channel: Channel number(s)
             epochfiles: Files for this epoch (starting with epochid://)
-            samples: Sample indices (1-indexed)
+            samples: Sample indices (0-based)
             session: ndi_session object with database access
 
         Returns:
@@ -994,7 +1006,7 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         t0 = t0t1[0][0]
 
         samples = np.asarray(samples)
-        t = t0 + (samples - 1) / sr
+        t = t0 + samples / sr
 
         if np.any(np.isinf(samples)):
             t[np.isinf(samples) & (samples < 0)] = t0
@@ -1010,7 +1022,11 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         session: Any,
     ) -> np.ndarray:
         """
-        Convert time to sample indices for an ingested epoch.
+        Convert time to 0-based sample indices for an ingested epoch.
+
+        Note:
+            Unlike MATLAB (1-based), Python sample indices are 0-based.
+            Sample 0 corresponds to time t0 of the epoch.
 
         Args:
             channeltype: Channel type(s)
@@ -1020,7 +1036,7 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
             session: ndi_session object with database access
 
         Returns:
-            Sample indices (1-indexed)
+            Sample indices (0-based)
         """
         if isinstance(channel, int):
             channel = [channel]
@@ -1037,9 +1053,9 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         t0 = t0t1[0][0]
 
         times = np.asarray(times)
-        s = 1 + np.round((times - t0) * sr).astype(int)
+        s = np.round((times - t0) * sr).astype(int)
 
         if np.any(np.isinf(times)):
-            s[np.isinf(times) & (times < 0)] = 1
+            s[np.isinf(times) & (times < 0)] = 0
 
         return s

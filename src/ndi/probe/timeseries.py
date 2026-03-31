@@ -151,20 +151,24 @@ class ndi_probe_timeseries(ndi_probe):
         times: np.ndarray,
     ) -> np.ndarray:
         """
-        Convert times to sample indices.
+        Convert times to 0-based sample indices.
+
+        Note:
+            Unlike MATLAB (1-based), Python sample indices are 0-based.
+            Sample 0 corresponds to the start of the epoch.
 
         Args:
             epoch: ndi_epoch_epoch number or epoch_id
             times: Time values
 
         Returns:
-            Sample indices (1-indexed)
+            Sample indices (0-based)
         """
         sr = self.samplerate(epoch)
         if sr <= 0:
             return np.full_like(times, np.nan)
         times = np.asarray(times)
-        return 1 + np.round(times * sr).astype(int)
+        return np.round(times * sr).astype(int)
 
     def samples2times(
         self,
@@ -172,11 +176,15 @@ class ndi_probe_timeseries(ndi_probe):
         samples: np.ndarray,
     ) -> np.ndarray:
         """
-        Convert sample indices to times.
+        Convert 0-based sample indices to times.
+
+        Note:
+            Unlike MATLAB (1-based), Python sample indices are 0-based.
+            Sample 0 corresponds to the start of the epoch.
 
         Args:
             epoch: ndi_epoch_epoch number or epoch_id
-            samples: Sample indices (1-indexed)
+            samples: Sample indices (0-based)
 
         Returns:
             Time values
@@ -185,7 +193,7 @@ class ndi_probe_timeseries(ndi_probe):
         if sr <= 0:
             return np.full_like(samples, np.nan, dtype=float)
         samples = np.asarray(samples, dtype=float)
-        return (samples - 1) / sr
+        return samples / sr
 
     def __repr__(self) -> str:
         return (

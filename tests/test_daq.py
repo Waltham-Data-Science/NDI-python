@@ -235,12 +235,12 @@ class TestMFDAQReader:
         assert all(sr == 30000.0)
 
     def test_mfdaq_epochsamples2times(self):
-        """Test converting samples to times."""
+        """Test converting 0-based samples to times."""
         reader = ConcreteMFDAQReader()
-        samples = np.array([1, 1001, 2001])
+        samples = np.array([0, 1000, 2000])
         times = reader.epochsamples2times("ai", 1, ["test.dat"], samples)
-        # t = t0 + (s-1)/sr = 0 + (s-1)/30000
-        expected = (samples - 1) / 30000.0
+        # t = t0 + s/sr = 0 + s/30000 (0-based)
+        expected = samples / 30000.0
         np.testing.assert_array_almost_equal(times, expected)
 
     def test_mfdaq_epochtimes2samples(self):
@@ -248,8 +248,8 @@ class TestMFDAQReader:
         reader = ConcreteMFDAQReader()
         times = np.array([0.0, 0.1, 0.2])
         samples = reader.epochtimes2samples("ai", 1, ["test.dat"], times)
-        # s = 1 + round((t-t0)*sr) = 1 + round(t*30000)
-        expected = 1 + np.round(times * 30000).astype(int)
+        # s = round((t-t0)*sr) = round(t*30000) (0-based)
+        expected = np.round(times * 30000).astype(int)
         np.testing.assert_array_equal(samples, expected)
 
     def test_mfdaq_channel_types(self):
@@ -720,12 +720,12 @@ class TestIngestedDataMethods:
         mock_session.database_openbinarydoc = MagicMock(side_effect=FileNotFoundError)
         reader.getingesteddocument = MagicMock(return_value=mock_doc)
 
-        samples = np.array([1, 3001, 6001])
+        samples = np.array([0, 3000, 6000])  # 0-based sample indices
         times = reader.epochsamples2times_ingested(
             "ai", 1, ["epochid://test"], samples, mock_session
         )
-        # t = t0 + (s-1)/sr = 0 + (s-1)/30000
-        expected = (samples - 1) / 30000.0
+        # t = t0 + s/sr = 0 + s/30000 (0-based)
+        expected = samples / 30000.0
         np.testing.assert_array_almost_equal(times, expected)
 
     def test_epochtimes2samples_ingested(self):
@@ -753,8 +753,8 @@ class TestIngestedDataMethods:
         samples = reader.epochtimes2samples_ingested(
             "ai", 1, ["epochid://test"], times, mock_session
         )
-        # s = 1 + round((t-t0)*sr) = 1 + round(t*30000)
-        expected = 1 + np.round(times * 30000).astype(int)
+        # s = round((t-t0)*sr) = round(t*30000) (0-based)
+        expected = np.round(times * 30000).astype(int)
         np.testing.assert_array_equal(samples, expected)
 
 

@@ -658,10 +658,11 @@ class TestProbeTimeseries:
                 return 1000.0
 
         pt = MockTimeseries(name="test", reference=1, type="n-trode")
+        # 0-based: sample 0 = t=0, sample 1 = t=0.001, sample 10 = t=0.01
         samples = pt.times2samples(1, np.array([0.0, 0.001, 0.01]))
-        assert samples[0] == 1
-        assert samples[1] == 2
-        assert samples[2] == 11
+        assert samples[0] == 0
+        assert samples[1] == 1
+        assert samples[2] == 10
 
     def test_samples2times(self):
         from ndi.probe.timeseries import ndi_probe_timeseries
@@ -671,7 +672,8 @@ class TestProbeTimeseries:
                 return 1000.0
 
         pt = MockTimeseries(name="test", reference=1, type="n-trode")
-        times = pt.samples2times(1, np.array([1, 2, 11]))
+        # 0-based: sample 0 = t=0, sample 1 = t=0.001, sample 10 = t=0.01
+        times = pt.samples2times(1, np.array([0, 1, 10]))
         np.testing.assert_allclose(times, [0.0, 0.001, 0.01])
 
     def test_repr(self):

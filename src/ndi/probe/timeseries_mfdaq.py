@@ -74,11 +74,9 @@ class ndi_probe_timeseries_mfdaq(ndi_probe_timeseries):
         except (AttributeError, TypeError):
             return None, None, None
 
-        # Get time values (epochsamples2times expects 1-based MATLAB indices)
+        # Get time values for each 0-based sample index
         try:
-            t = dev.epochsamples2times(
-                channeltype, channellist, devepoch, np.arange(s0 + 1, s1 + 2)
-            )
+            t = dev.epochsamples2times(channeltype, channellist, devepoch, np.arange(s0, s1 + 1))
         except (AttributeError, TypeError):
             t = None
 
@@ -112,12 +110,11 @@ class ndi_probe_timeseries_mfdaq(ndi_probe_timeseries):
         if dev is None:
             return None, None, None
 
-        # Convert times to samples (returns 1-based MATLAB indices)
+        # Convert times to 0-based sample indices
         try:
             samples = dev.epochtimes2samples(channeltype, channellist, devepoch, np.array([t0, t1]))
-            # Convert from 1-based (MATLAB) to 0-based (Python)
-            s0 = int(samples[0]) - 1
-            s1 = int(samples[1]) - 1
+            s0 = int(samples[0])
+            s1 = int(samples[1])
         except (AttributeError, TypeError):
             return None, None, None
 

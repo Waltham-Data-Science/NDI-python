@@ -231,13 +231,17 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
         samples: np.ndarray,
     ) -> np.ndarray:
         """
-        Convert sample indices to time.
+        Convert 0-based sample indices to time.
+
+        Note:
+            Unlike MATLAB (1-based), Python sample indices are 0-based.
+            Sample 0 corresponds to time t0 of the epoch.
 
         Args:
             channeltype: Channel type(s)
             channel: Channel number(s)
             epoch_number: ndi_epoch_epoch number (1-indexed)
-            samples: Sample indices (1-indexed)
+            samples: Sample indices (0-based)
 
         Returns:
             Time values
@@ -263,7 +267,11 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
         times: np.ndarray,
     ) -> np.ndarray:
         """
-        Convert time to sample indices.
+        Convert time to 0-based sample indices.
+
+        Note:
+            Unlike MATLAB (1-based), Python sample indices are 0-based.
+            Sample 0 corresponds to time t0 of the epoch.
 
         Args:
             channeltype: Channel type(s)
@@ -272,7 +280,7 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
             times: Time values
 
         Returns:
-            Sample indices (1-indexed)
+            Sample indices (0-based)
         """
         if self._daqreader is None or self._filenavigator is None:
             raise RuntimeError("No DAQ reader or file navigator configured")

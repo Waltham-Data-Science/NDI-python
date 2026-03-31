@@ -365,17 +365,18 @@ class TestEpochSampleTimeConversion:
         reader = _MockMFDAQReader(sample_rate=sr, t0=0.0)
         files = ["dummy.rhd"]
 
-        samples = np.array([1, 2, 3])
+        # 0-based: sample 0 = t0, sample 1 = t0 + 1/sr, etc.
+        samples = np.array([0, 1, 2])
         times = reader.epochsamples2times("ai", 1, files, samples)
 
-        # t = t0 + (sample - 1) / sr  =>  t = (s-1)/30000
+        # t = t0 + sample / sr  =>  t = s/30000 (0-based)
         expected = np.array([0.0, 1.0 / sr, 2.0 / sr])
         np.testing.assert_allclose(times, expected, atol=1e-12)
 
     def test_epochtimes2samples_basic(self):
-        """Convert times to sample indices with known sample rate.
+        """Convert times to 0-based sample indices with known sample rate.
 
-        MATLAB equivalent: mfdaqIntanTest - epochtimes2samples basic
+        Note: Python uses 0-based indices (MATLAB uses 1-based).
         """
         sr = 30000.0
         reader = _MockMFDAQReader(sample_rate=sr, t0=0.0)
@@ -384,19 +385,20 @@ class TestEpochSampleTimeConversion:
         times = np.array([0.0, 1.0 / sr, 2.0 / sr])
         samples = reader.epochtimes2samples("ai", 1, files, times)
 
-        expected = np.array([1, 2, 3])
+        # 0-based: s = round((t - t0) * sr)
+        expected = np.array([0, 1, 2])
         np.testing.assert_array_equal(samples, expected)
 
     def test_roundtrip_samples_times(self):
         """samples -> times -> samples round-trip should be identity.
 
-        MATLAB equivalent: mfdaqIntanTest - round-trip test
+        Note: Python uses 0-based sample indices.
         """
         sr = 20000.0
         reader = _MockMFDAQReader(sample_rate=sr, t0=0.5)
         files = ["dummy.rhd"]
 
-        original_samples = np.array([1, 100, 1000, 10000])
+        original_samples = np.array([0, 99, 999, 9999])
         times = reader.epochsamples2times("ai", 1, files, original_samples)
         recovered_samples = reader.epochtimes2samples("ai", 1, files, times)
 
@@ -427,16 +429,16 @@ class TestEpochSampleTimeConversion:
         reader = _MockMFDAQReader(sample_rate=sr, t0=t0)
         files = ["dummy.rhd"]
 
-        samples = np.array([1])
+        # 0-based: sample 0 should correspond to t0
+        samples = np.array([0])
         times = reader.epochsamples2times("ai", 1, files, samples)
 
-        # sample 1 should correspond to t0
         np.testing.assert_allclose(times, np.array([t0]), atol=1e-12)
 
     def test_epochtimes2samples_with_nonzero_t0(self):
         """epochtimes2samples with nonzero t0.
 
-        MATLAB equivalent: mfdaqIntanTest - t0 offset check (reverse)
+        Note: Python uses 0-based sample indices.
         """
         sr = 10000.0
         t0 = 2.5
@@ -446,7 +448,8 @@ class TestEpochSampleTimeConversion:
         times = np.array([t0])
         samples = reader.epochtimes2samples("ai", 1, files, times)
 
-        np.testing.assert_array_equal(samples, np.array([1]))
+        # 0-based: t0 maps to sample 0
+        np.testing.assert_array_equal(samples, np.array([0]))
 
 
 # ===========================================================================
