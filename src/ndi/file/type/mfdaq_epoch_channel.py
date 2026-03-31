@@ -120,16 +120,44 @@ class ndi_file_type_mfdaq__epoch__channel:
 
     def readFromFile(self, filename: str) -> ndi_file_type_mfdaq__epoch__channel:
         """
-        Read channel information from a JSON file.
+        Read channel information from a file.
 
         MATLAB equivalent: ndi.file.type.mfdaq_epoch_channel/readFromFile
 
+        Supports both the MATLAB tab-delimited format (read via
+        ``vlt.file.loadStructArray``) and JSON format.
+
         Args:
-            filename: Path to the JSON file
+            filename: Path to the channel list file
 
         Returns:
             Self for chaining
         """
+        # Try vlt.file.loadStructArray first (MATLAB binary/tab-delimited format)
+        try:
+            from vlt.file import loadStructArray
+
+            records = loadStructArray(filename)
+            self.channel_information = []
+            for rec in records:
+                self.channel_information.append(
+                    ChannelInfo(
+                        name=str(rec.get("name", "")),
+                        type=str(rec.get("type", "")),
+                        time_channel=int(rec.get("time_channel", 1)),
+                        sample_rate=float(rec.get("sample_rate", 0.0)),
+                        offset=float(rec.get("offset", 0.0)),
+                        scale=float(rec.get("scale", 1.0)),
+                        number=int(rec.get("number", 0)),
+                        group=int(rec.get("group", 0)),
+                        dataclass=str(rec.get("dataclass", "")),
+                    )
+                )
+            return self
+        except Exception:
+            pass
+
+        # Fallback: JSON format
         with open(filename) as f:
             data = json.load(f)
 
