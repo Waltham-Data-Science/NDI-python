@@ -589,18 +589,19 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
             mec.readFromFile(tname)
             return mec.channel_information
         except Exception as _exc:
-            import logging
-
-            logging.getLogger("ndi").debug(
-                "getchannelsepoch_ingested: channel_list.bin failed: %s", _exc
-            )
             # Fallback: try reading from epochtable JSON (older format)
             et = doc.document_properties.get(
                 "daqreader_mfdaq_epochdata_ingested",
                 doc.document_properties.get("daqreader_epochdata_ingested", {}),
             ).get("epochtable", {})
             channels_raw = et.get("channels", [])
-            return [ChannelInfo.from_dict(ch) for ch in channels_raw]
+            if channels_raw:
+                return [ChannelInfo.from_dict(ch) for ch in channels_raw]
+            # Neither path worked — raise with context
+            raise ValueError(
+                f"Cannot read channel info: channel_list.bin failed ({_exc}), "
+                f"and no channels in epochtable JSON"
+            ) from _exc
 
     def readchannels_epochsamples_ingested(
         self,

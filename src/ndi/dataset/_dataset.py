@@ -294,6 +294,9 @@ class ndi_dataset:
 
         session = self._recreate_session(info, path_arg, session_id)
         if session is not None:
+            # Propagate cloud client from dataset to session
+            if hasattr(self, "cloud_client") and self.cloud_client is not None:
+                session.cloud_client = self.cloud_client
             self._session_array[match_idx]["session"] = session
 
         return session
