@@ -121,59 +121,45 @@ class TestReadIngested:
         print(f"  channeltype={channeltype}, channellist={channellist}")
 
         # Diagnostic: try reading channel_list.bin directly
+        diag = []
         if (
             hasattr(dev, "_filenavigator")
             and dev._filenavigator is not None
             and hasattr(dev, "_getepochfiles")
         ):
             epochfiles = dev._getepochfiles(devepoch)
-            if epochfiles and epochfiles[0].startswith("epochid://"):
-                try:
-                    ingested_doc = dev._daqreader.getingesteddocument(epochfiles, session)
-                    print(f"  ingested doc class: {ingested_doc.doc_class()}")
-                    props = ingested_doc.document_properties
-                    for key in props:
-                        if "ingested" in key.lower() or "daqreader" in key.lower():
-                            print(
-                                f"  prop key: {key}, subkeys: {list(props[key].keys()) if isinstance(props[key], dict) else type(props[key]).__name__}"
-                            )
-                    # Try database_openbinarydoc
-                    try:
-                        fobj = session.database_openbinarydoc(ingested_doc, "channel_list.bin")
-                        print(f"  channel_list.bin opened OK: {fobj.name}")
-                        fobj.close()
-                    except Exception as exc2:
-                        print(f"  channel_list.bin FAILED: {type(exc2).__name__}: {exc2}")
-                        # Check file_info
-                        files = props.get("files", {})
-                        fi = files.get("file_info", files.get("file_list", []))
-                        print(f"  files keys: {list(files.keys())}")
-                        print(f"  file_info/file_list count: {len(fi)}")
-                        if fi:
-                            print(
-                                f"  first file entry: {fi[0] if isinstance(fi[0], str) else list(fi[0].keys())}"
-                            )
-                except Exception as exc:
-                    print(f"  getingesteddocument failed: {exc}")
-
-        # Diagnostic: check ingested document structure
-        if hasattr(dev, "_filenavigator") and dev._filenavigator is not None:
-            epochfiles = dev._getepochfiles(devepoch)
-            print(f"  epochfiles: {epochfiles[:2]}...")
+            diag.append(f"epochfiles={epochfiles[:2]}")
             is_ingested = epochfiles and epochfiles[0].startswith("epochid://")
-            print(f"  is_ingested: {is_ingested}")
+            diag.append(f"is_ingested={is_ingested}")
             if is_ingested and hasattr(dev, "_daqreader"):
                 try:
-                    doc = dev._daqreader.getingesteddocument(epochfiles, session)
-                    et = doc.document_properties["daqreader_epochdata_ingested"]["epochtable"]
-                    print(f"  epochtable keys: {list(et.keys())}")
-                    channels_raw = et.get("channels", [])
-                    print(f"  channels count: {len(channels_raw)}")
-                    if channels_raw:
-                        print(f"  channel[0] keys: {list(channels_raw[0].keys())}")
-                        print(f"  channel[0]: {channels_raw[0]}")
+                    ingested_doc = dev._daqreader.getingesteddocument(epochfiles, session)
+                    diag.append(f"doc_class={ingested_doc.doc_class()}")
+                    props = ingested_doc.document_properties
+                    prop_keys = [
+                        k for k in props if "ingested" in k.lower() or "daqreader" in k.lower()
+                    ]
+                    diag.append(f"ingested_keys={prop_keys}")
+                    for pk in prop_keys:
+                        if isinstance(props[pk], dict):
+                            diag.append(f"{pk}.keys={list(props[pk].keys())}")
+                    files = props.get("files", {})
+                    diag.append(f"files.keys={list(files.keys())}")
+                    fi = files.get("file_info", [])
+                    diag.append(f"file_info_count={len(fi)}")
+                    if fi and isinstance(fi[0], dict):
+                        diag.append(f"fi[0].name={fi[0].get('name')}")
+                        locs = fi[0].get("locations", [])
+                        if locs:
+                            diag.append(f"fi[0].loc[0]={locs[0].get('location', '')[:60]}")
+                    try:
+                        fobj = session.database_openbinarydoc(ingested_doc, "channel_list.bin")
+                        diag.append(f"channel_list.bin=OK:{fobj.name}")
+                        fobj.close()
+                    except Exception as exc2:
+                        diag.append(f"channel_list.bin=FAILED:{type(exc2).__name__}:{exc2}")
                 except Exception as exc:
-                    print(f"  Failed to read ingested doc: {exc}")
+                    diag.append(f"getingesteddocument=FAILED:{exc}")
 
         # Try epochtimes2samples explicitly to see any error
         try:
@@ -184,7 +170,8 @@ class TestReadIngested:
         except Exception as exc:
             pytest.fail(
                 f"dev.epochtimes2samples raised {type(exc).__name__}: {exc}\n"
-                f"  dev type: {type(dev).__name__}"
+                f"  dev type: {type(dev).__name__}\n"
+                f"  diag: {'; '.join(diag)}"
             )
 
         d1, t1, _ = probe.readtimeseries(epoch=1, t0=10, t1=20)
