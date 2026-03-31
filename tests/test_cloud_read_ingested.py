@@ -82,6 +82,8 @@ class TestReadIngested:
         # Diagnostic: check epoch table
         et, _ = probe.epochtable()
         print(f"  Probe epochtable has {len(et)} entries")
+        for i, e in enumerate(et):
+            print(f"  epoch[{i}]: id={e.get('epoch_id')}")
         if et:
             e = et[0]
             print(f"  epoch_id: {e.get('epoch_id')}")
@@ -172,6 +174,20 @@ class TestReadIngested:
                 f"dev.epochtimes2samples raised {type(exc).__name__}: {exc}\n"
                 f"  dev type: {type(dev).__name__}\n"
                 f"  diag: {'; '.join(diag)}"
+            )
+
+        # Debug: read first 9 samples from t=0 to check alignment
+        d_first, t_first, _ = probe.readtimeseries(epoch=1, t0=0, t1=0.001)
+        if d_first is not None:
+            print("  ALIGNMENT CHECK: first 9 samples from t=0:")
+            print(f"  d_first.shape={d_first.shape}")
+            n = min(9, d_first.shape[0])
+            vals = [f"{d_first[i,0]:.4f}" for i in range(n)]
+            times = [f"{t_first[i]:.6f}" for i in range(n)]
+            print(f"  values: {vals}")
+            print(f"  times:  {times}")
+            print(
+                "  EXPECTED: [2.0475, 0.4760, -0.1080, -0.1020, -0.0528, 0.0006, 0.0242, 0.1517, 0.0909]"
             )
 
         d1, t1, _ = probe.readtimeseries(epoch=1, t0=10, t1=20)
