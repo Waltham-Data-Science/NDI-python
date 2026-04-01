@@ -200,6 +200,11 @@ class ndi_file_type_mfdaq__epoch__channel:
         Given a list of requested channels, returns the corresponding
         group assignments and index mappings.
 
+        Note:
+            ``channel_indexes_in_groups`` contains 0-based indices into the
+            segment data columns (within the subset of channels belonging to
+            that group and type). In MATLAB these are 1-based.
+
         Args:
             channel_info: List of ChannelInfo
             channel_type: Type of channels to look up
@@ -209,41 +214,50 @@ class ndi_file_type_mfdaq__epoch__channel:
             Tuple of (groups, channel_indexes_in_groups,
             channel_indexes_in_output):
             - groups: Unique group numbers for requested channels
-            - channel_indexes_in_groups: For each group, the channel
-              numbers that belong to it
-            - channel_indexes_in_output: For each group, the indexes
-              into the output data corresponding to those channels
+            - channel_indexes_in_groups: For each group, 0-based column
+              indices into the segment data for the requested channels
+            - channel_indexes_in_output: For each group, 0-based indices
+              into the output data array
         """
-        # Build lookup by (type, number) -> (group, index in channel_info)
-        lookup: dict[tuple[str, int], int] = {}
-        for ch in channel_info:
-            lookup[(ch.type, ch.number)] = ch.group
+        from ..daq.mfdaq import standardize_channel_type
 
-        # Get group assignment for each requested channel
-        channel_groups = []
-        for ch_num in channels:
-            group = lookup.get((channel_type, ch_num), 0)
-            channel_groups.append(group)
+        ct_std = standardize_channel_type(channel_type)
 
-        # Find unique groups (preserving order)
-        seen: set[int] = set()
+        # Filter to channels matching the requested type
+        ci_typed = [ch for ch in channel_info if standardize_channel_type(ch.type) == ct_std]
+
         groups: list[int] = []
-        for g in channel_groups:
-            if g not in seen:
-                seen.add(g)
-                groups.append(g)
-
-        # Build index mappings for each group
         channel_indexes_in_groups: list[list[int]] = []
         channel_indexes_in_output: list[list[int]] = []
 
-        for g in groups:
-            # Channel numbers belonging to this group
-            ch_in_group = [channels[i] for i in range(len(channels)) if channel_groups[i] == g]
-            # Indexes into the output array for this group
-            idx_in_output = [i for i in range(len(channels)) if channel_groups[i] == g]
-            channel_indexes_in_groups.append(ch_in_group)
-            channel_indexes_in_output.append(idx_in_output)
+        for c_idx, ch_num in enumerate(channels):
+            # Find this channel in the type-filtered list
+            matches = [i for i, ci in enumerate(ci_typed) if ci.number == ch_num]
+            if not matches:
+                raise ValueError(f"Channel number {ch_num} not found in record.")
+            if len(matches) > 1:
+                raise ValueError(f"Channel number {ch_num} found multiple times in record.")
+
+            ch_info = ci_typed[matches[0]]
+            grp = ch_info.group
+
+            # Find or create group entry
+            if grp in groups:
+                g_idx = groups.index(grp)
+            else:
+                groups.append(grp)
+                g_idx = len(groups) - 1
+                channel_indexes_in_groups.append([])
+                channel_indexes_in_output.append([])
+
+            # Find the 0-based index of this channel within its group
+            subset_group = [ci for ci in ci_typed if ci.group == grp]
+            chan_index_in_group = next(
+                i for i, ci in enumerate(subset_group) if ci.number == ch_num
+            )
+
+            channel_indexes_in_groups[g_idx].append(chan_index_in_group)
+            channel_indexes_in_output[g_idx].append(c_idx)
 
         return groups, channel_indexes_in_groups, channel_indexes_in_output
 
