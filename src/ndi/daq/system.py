@@ -442,6 +442,11 @@ class ndi_daq_system(ndi_ido):
                 }
             )
 
+        # Sort by epoch_id alphanumerically to match MATLAB behavior
+        et.sort(key=lambda e: e.get("epoch_id", ""))
+        for i, entry in enumerate(et):
+            entry["epoch_number"] = i + 1
+
         return et
 
     def epochnodes(self) -> list[dict[str, Any]]:

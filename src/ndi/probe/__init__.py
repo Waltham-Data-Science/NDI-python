@@ -153,6 +153,13 @@ class ndi_probe(ndi_element):
                         }
                     )
 
+        # Sort by epoch_id alphanumerically to match MATLAB behavior
+        et.sort(key=lambda e: e.get("epoch_id", ""))
+
+        # Renumber after sorting
+        for i, entry in enumerate(et):
+            entry["epoch_number"] = i + 1
+
         return et
 
     def _get_daqsystems(self) -> list[Any]:
@@ -173,14 +180,20 @@ class ndi_probe(ndi_element):
         q = ndi_query("").isa("daqsystem")
         docs = self._session.database_search(q)
 
-        # Load ndi_daq_system objects from documents
-        from ..daq.system import ndi_daq_system
-
+        # Load ndi_daq_system objects from documents using the session's
+        # _document_to_object which creates the correct subclass (e.g.
+        # ndi_daq_system_mfdaq for MFDAQ systems).
         systems = []
         for doc in docs:
             try:
-                sys = ndi_daq_system(session=self._session, document=doc)
-                systems.append(sys)
+                if hasattr(self._session, "_document_to_object"):
+                    obj = self._session._document_to_object(doc)
+                else:
+                    from ..daq.system import ndi_daq_system
+
+                    obj = ndi_daq_system(session=self._session, document=doc)
+                if obj is not None:
+                    systems.append(obj)
             except Exception:
                 pass
 
@@ -199,6 +212,13 @@ class ndi_probe(ndi_element):
         Returns:
             Matching ndi_epoch_epochprobemap or None
         """
+        # Normalize to list — some code paths return a single object
+        if isinstance(epochprobemaps, ndi_epoch_epochprobemap):
+            epochprobemaps = [epochprobemaps]
+        elif isinstance(epochprobemaps, dict):
+            epochprobemaps = [epochprobemaps]
+        elif not isinstance(epochprobemaps, (list, tuple)):
+            epochprobemaps = [epochprobemaps]
         for epm in epochprobemaps:
             # Handle both ndi_epoch_epochprobemap objects and dicts
             if isinstance(epm, ndi_epoch_epochprobemap):
@@ -314,6 +334,7 @@ class ndi_probe(ndi_element):
         return {
             "daqsystem": underlying.get("underlying"),
             "device_epoch_id": underlying.get("epoch_id"),
+            "device_epoch_number": entry.get("epoch_number", epoch_number),
             "epochprobemap": entry.get("epochprobemap", []),
         }
 

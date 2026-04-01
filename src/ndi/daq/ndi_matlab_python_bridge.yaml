@@ -493,7 +493,9 @@ classes:
           - name: times
             type_python: "np.ndarray"
         decision_log: >
-          Exact match. Semantic Parity: samples are 1-indexed (user concept).
+          INDEXING DIFFERENCE: MATLAB samples are 1-indexed; Python samples
+          are 0-indexed. Sample 0 in Python corresponds to sample 1 in MATLAB.
+          The formula is t = t0 + sample/sr (Python) vs t = t0 + (sample-1)/sr (MATLAB).
 
       - name: epochtimes2samples
         input_arguments:
@@ -513,7 +515,9 @@ classes:
           - name: samples
             type_python: "np.ndarray"
         decision_log: >
-          Exact match. Semantic Parity: returned samples are 1-indexed.
+          INDEXING DIFFERENCE: MATLAB returns 1-indexed samples; Python returns
+          0-indexed. Sample 0 in Python corresponds to sample 1 in MATLAB.
+          The formula is s = round((t-t0)*sr) (Python) vs s = 1+round((t-t0)*sr) (MATLAB).
 
       - name: underlying_datatype
         input_arguments:
@@ -623,7 +627,9 @@ classes:
         output_arguments:
           - name: times
             type_python: "np.ndarray"
-        decision_log: "Exact match."
+        decision_log: >
+          INDEXING DIFFERENCE: MATLAB samples are 1-indexed; Python samples
+          are 0-indexed. Sample 0 in Python corresponds to sample 1 in MATLAB.
 
       - name: epochtimes2samples_ingested
         input_arguments:
@@ -645,7 +651,9 @@ classes:
         output_arguments:
           - name: samples
             type_python: "np.ndarray"
-        decision_log: "Exact match."
+        decision_log: >
+          INDEXING DIFFERENCE: MATLAB returns 1-indexed samples; Python returns
+          0-indexed. Sample 0 in Python corresponds to sample 1 in MATLAB.
 
   # =========================================================================
   # ndi.daq.system
@@ -1027,7 +1035,9 @@ classes:
           - name: times
             type_python: "np.ndarray"
         decision_log: >
-          Semantic Parity: epoch_number and samples are 1-indexed.
+          INDEXING DIFFERENCE: epoch_number is 1-indexed (same as MATLAB).
+          Samples are 0-indexed in Python (1-indexed in MATLAB).
+          Sample 0 in Python corresponds to sample 1 in MATLAB.
 
       - name: epochtimes2samples
         input_arguments:
@@ -1047,8 +1057,9 @@ classes:
           - name: samples
             type_python: "np.ndarray"
         decision_log: >
-          Semantic Parity: epoch_number is 1-indexed.
-          Returned samples are 1-indexed.
+          INDEXING DIFFERENCE: epoch_number is 1-indexed (same as MATLAB).
+          Returned samples are 0-indexed in Python (1-indexed in MATLAB).
+          Sample 0 in Python corresponds to sample 1 in MATLAB.
 
     static_methods:
       - name: mfdaq_channeltypes

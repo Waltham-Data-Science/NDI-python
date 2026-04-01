@@ -9,11 +9,14 @@ MATLAB equivalent: src/ndi/+ndi/+probe/+timeseries/stimulator.m
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import numpy as np
 
 from .timeseries import ndi_probe_timeseries
+
+logger = logging.getLogger("ndi")
 
 
 class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
@@ -118,7 +121,7 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
             return empty_data, empty_t, self._get_epoch_timeref(epoch)
 
         dev = devinfo.get("daqsystem")
-        devepoch = devinfo.get("device_epoch_id")
+        devepoch = devinfo.get("device_epoch_number", devinfo.get("device_epoch_id"))
         channeltype = devinfo.get("channeltype", [])
         channel = devinfo.get("channel", [])
 
@@ -158,8 +161,9 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
                 else:
                     sr_val = float(sr)
 
-                s0 = 1 + round(sr_val * t0)
-                s1 = 1 + round(sr_val * t1)
+                # 0-based sample indices (Python convention)
+                s0 = round(sr_val * t0)
+                s1 = round(sr_val * t1)
 
                 analog_channeltype = [channeltype_nonmd[i] for i in analog_indices]
                 analog_channel = [channel_nonmd[i] for i in analog_indices]
@@ -171,9 +175,11 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
                 try:
                     t_analog = dev.readchannels_epochsamples(["time"], [1], devepoch, s0, s1)
                     t["analog"] = np.asarray(t_analog).ravel()
-                except Exception:
+                except Exception as exc:
+                    logger.warning("stimulator: failed to read time channel: %s", exc)
                     t["analog"] = np.nan
-            except Exception:
+            except Exception as exc:
+                logger.warning("stimulator: failed to read analog channels: %s", exc)
                 data["analog"] = np.array([])
                 t["analog"] = np.nan
         else:
@@ -204,7 +210,8 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
                 else:
                     timestamps_list = []
                     edata_list = []
-            except Exception:
+            except Exception as exc:
+                logger.warning("stimulator: readevents_epochsamples failed: %s", exc, exc_info=True)
                 timestamps_list = []
                 edata_list = []
 
@@ -295,7 +302,8 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
                     try:
                         md_ch_idx = all_channel[i]
                         data["parameters"] = dev.getmetadata(devepoch, md_ch_idx)
-                    except Exception:
+                    except Exception as exc:
+                        logger.warning("stimulator: failed to read metadata: %s", exc)
                         data["parameters"] = []
 
             t["stimevents"] = event_data_list
@@ -337,7 +345,8 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
                     try:
                         md_ch_idx = all_channel[i]
                         data["parameters"] = dev.getmetadata(devepoch, md_ch_idx)
-                    except Exception:
+                    except Exception as exc:
+                        logger.warning("stimulator: failed to read metadata: %s", exc)
                         data["parameters"] = []
 
                 elif ct in ("e", "event"):
@@ -385,7 +394,8 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
             from ..time.timereference import ndi_time_timereference
 
             timeref = ndi_time_timereference(self, ndi_time_clocktype.DEV_LOCAL_TIME, eid, 0)
-        except Exception:
+        except Exception as exc:
+            logger.warning("stimulator: failed to create timeref: %s", exc)
             timeref = ndi_time_clocktype.DEV_LOCAL_TIME
 
         return data, t, timeref
@@ -416,32 +426,56 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
             return None
 
         dev = base_info.get("daqsystem")
-        devepoch = base_info.get("device_epoch_id")
+        devepoch = base_info.get("device_epoch_number", base_info.get("device_epoch_id"))
 
         if dev is None:
             return None
 
-        # Get channel info from the epochprobemap's devicestring
-        epms = base_info.get("epochprobemap", [])
+        # Get channel info from ALL epochprobemaps in the underlying epoch
+        # that match this probe. MATLAB iterates all maps in the underlying
+        # epoch and extracts channels from every matching one.
+        et, _ = self.epochtable()
+        entry = et[epoch - 1] if isinstance(epoch, int) and epoch <= len(et) else None
+        underlying = entry.get("underlying_epochs", {}) if entry else {}
+        all_epms = underlying.get("epochprobemap", base_info.get("epochprobemap", []))
+        if not isinstance(all_epms, list):
+            all_epms = [all_epms]
+
         channeltype = []
         channel = []
 
-        for epm in epms:
+        for epm in all_epms:
+            if not self.epochprobemapmatch(epm):
+                continue
             if hasattr(epm, "devicestring") and epm.devicestring:
+                logger.debug(
+                    "stimulator: matched epm devicestring='%s'",
+                    epm.devicestring,
+                )
                 try:
                     from ..daq.daqsystemstring import ndi_daq_daqsystemstring
 
                     dss = ndi_daq_daqsystemstring.parse(epm.devicestring)
+                    logger.debug(
+                        "stimulator devicestring '%s' parsed: channels=%s",
+                        epm.devicestring,
+                        dss.channels,
+                    )
                     for ct, ch_list in dss.channels:
                         for ch in ch_list:
                             channeltype.append(ct)
                             channel.append(ch)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning(
+                        "stimulator: failed to parse devicestring '%s': %s",
+                        epm.devicestring if hasattr(epm, "devicestring") else "?",
+                        exc,
+                    )
 
         return {
             "daqsystem": dev,
-            "device_epoch_id": devepoch,
+            "device_epoch_id": base_info.get("device_epoch_id"),
+            "device_epoch_number": devepoch,
             "channeltype": channeltype,
             "channel": channel,
         }

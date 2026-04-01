@@ -239,9 +239,18 @@ class ndi_daq_reader(ndi_ido, ABC):
         if not isinstance(t0t1_raw, list):
             return [tuple(t0t1_raw)]
 
+        # Detect flat pair [t0, t1] vs list of pairs [[t0, t1], ...]
+        # A flat pair has exactly 2 scalar elements.
+        if (
+            len(t0t1_raw) == 2
+            and not isinstance(t0t1_raw[0], (list, tuple))
+            and not isinstance(t0t1_raw[1], (list, tuple))
+        ):
+            return [(t0t1_raw[0], t0t1_raw[1])]
+
         t0t1_list = []
         for t in t0t1_raw:
-            if isinstance(t, (list, tuple)):
+            if isinstance(t, (list, tuple)) and len(t) == 2:
                 t0t1_list.append(tuple(t))
             else:
                 t0t1_list.append((t, t))

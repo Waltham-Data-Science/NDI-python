@@ -1113,7 +1113,9 @@ class ndi_session(ABC):
             if isinstance(props, dict):
                 daq_class_name = props.get("daqsystem", {}).get("ndi_daqsystem_class", "")
 
-            if "mfdaq" in daq_class_name:
+            # Check for mfdaq in the class name, or default to mfdaq
+            # if class name is missing (most DAQ systems are MFDAQ)
+            if "mfdaq" in daq_class_name or not daq_class_name:
                 from ..daq.system_mfdaq import ndi_daq_system_mfdaq
 
                 return ndi_daq_system_mfdaq(session=self, document=document)

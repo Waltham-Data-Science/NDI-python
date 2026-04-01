@@ -48,6 +48,11 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
         "marker": "mk",
     }
 
+    def _getepochfiles(self, epoch_number: int) -> list[str]:
+        """Get epoch files, unpacking the tuple from getepochfiles."""
+        result = self._filenavigator.getepochfiles(epoch_number)
+        return result[0] if isinstance(result, tuple) else result
+
     def epochclock(self, epoch_number: int) -> list[ndi_time_clocktype]:
         """
         Return clock types for an epoch.
@@ -75,8 +80,7 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
             List of (t0, t1) tuples per clock type
         """
         if self._daqreader is not None and self._filenavigator is not None:
-            result = self._filenavigator.getepochfiles(epoch_number)
-            epochfiles = result[0] if isinstance(result, tuple) else result
+            epochfiles = self._getepochfiles(epoch_number)
             return self._daqreader.t0_t1(epochfiles)
         return [(np.nan, np.nan)]
 
@@ -93,7 +97,7 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
         if self._daqreader is None or self._filenavigator is None:
             return []
 
-        epochfiles = self._filenavigator.getepochfiles(epoch_number)
+        epochfiles = self._getepochfiles(epoch_number)
 
         if isinstance(self._daqreader, ndi_daq_reader_mfdaq):
             return self._daqreader.getchannelsepoch(epochfiles)
@@ -145,12 +149,15 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
         if self._daqreader is None or self._filenavigator is None:
             raise RuntimeError("No DAQ reader or file navigator configured")
 
-        epochfiles = self._filenavigator.getepochfiles(epoch_number)
-        if isinstance(self._daqreader, ndi_daq_reader_mfdaq):
-            return self._daqreader.readchannels_epochsamples(
-                channeltype, channel, epochfiles, s0, s1
+        epochfiles = self._getepochfiles(epoch_number)
+        if not isinstance(self._daqreader, ndi_daq_reader_mfdaq):
+            raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
+
+        if self._is_ingested(epochfiles):
+            return self._daqreader.readchannels_epochsamples_ingested(
+                channeltype, channel, epochfiles, s0, s1, self.session
             )
-        raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
+        return self._daqreader.readchannels_epochsamples(channeltype, channel, epochfiles, s0, s1)
 
     def readevents_epochsamples(
         self,
@@ -176,10 +183,15 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
         if self._daqreader is None or self._filenavigator is None:
             raise RuntimeError("No DAQ reader or file navigator configured")
 
-        epochfiles = self._filenavigator.getepochfiles(epoch_number)
-        if isinstance(self._daqreader, ndi_daq_reader_mfdaq):
-            return self._daqreader.readevents_epochsamples(channeltype, channel, epochfiles, t0, t1)
-        raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
+        epochfiles = self._getepochfiles(epoch_number)
+        if not isinstance(self._daqreader, ndi_daq_reader_mfdaq):
+            raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
+
+        if self._is_ingested(epochfiles):
+            return self._daqreader.readevents_epochsamples_ingested(
+                channeltype, channel, epochfiles, t0, t1, self.session
+            )
+        return self._daqreader.readevents_epochsamples(channeltype, channel, epochfiles, t0, t1)
 
     def samplerate(
         self,
@@ -201,10 +213,15 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
         if self._daqreader is None or self._filenavigator is None:
             raise RuntimeError("No DAQ reader or file navigator configured")
 
-        epochfiles = self._filenavigator.getepochfiles(epoch_number)
-        if isinstance(self._daqreader, ndi_daq_reader_mfdaq):
-            return self._daqreader.samplerate(epochfiles, channeltype, channel)
-        raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
+        epochfiles = self._getepochfiles(epoch_number)
+        if not isinstance(self._daqreader, ndi_daq_reader_mfdaq):
+            raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
+
+        if self._is_ingested(epochfiles):
+            return self._daqreader.samplerate_ingested(
+                epochfiles, channeltype, channel, self.session
+            )
+        return self._daqreader.samplerate(epochfiles, channeltype, channel)
 
     def epochsamples2times(
         self,
@@ -214,13 +231,17 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
         samples: np.ndarray,
     ) -> np.ndarray:
         """
-        Convert sample indices to time.
+        Convert 0-based sample indices to time.
+
+        Note:
+            Unlike MATLAB (1-based), Python sample indices are 0-based.
+            Sample 0 corresponds to time t0 of the epoch.
 
         Args:
             channeltype: Channel type(s)
             channel: Channel number(s)
             epoch_number: ndi_epoch_epoch number (1-indexed)
-            samples: Sample indices (1-indexed)
+            samples: Sample indices (0-based)
 
         Returns:
             Time values
@@ -228,10 +249,15 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
         if self._daqreader is None or self._filenavigator is None:
             raise RuntimeError("No DAQ reader or file navigator configured")
 
-        epochfiles = self._filenavigator.getepochfiles(epoch_number)
-        if isinstance(self._daqreader, ndi_daq_reader_mfdaq):
-            return self._daqreader.epochsamples2times(channeltype, channel, epochfiles, samples)
-        raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
+        epochfiles = self._getepochfiles(epoch_number)
+        if not isinstance(self._daqreader, ndi_daq_reader_mfdaq):
+            raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
+
+        if self._is_ingested(epochfiles):
+            return self._daqreader.epochsamples2times_ingested(
+                channeltype, channel, epochfiles, samples, self.session
+            )
+        return self._daqreader.epochsamples2times(channeltype, channel, epochfiles, samples)
 
     def epochtimes2samples(
         self,
@@ -241,7 +267,11 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
         times: np.ndarray,
     ) -> np.ndarray:
         """
-        Convert time to sample indices.
+        Convert time to 0-based sample indices.
+
+        Note:
+            Unlike MATLAB (1-based), Python sample indices are 0-based.
+            Sample 0 corresponds to time t0 of the epoch.
 
         Args:
             channeltype: Channel type(s)
@@ -250,15 +280,20 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
             times: Time values
 
         Returns:
-            Sample indices (1-indexed)
+            Sample indices (0-based)
         """
         if self._daqreader is None or self._filenavigator is None:
             raise RuntimeError("No DAQ reader or file navigator configured")
 
-        epochfiles = self._filenavigator.getepochfiles(epoch_number)
-        if isinstance(self._daqreader, ndi_daq_reader_mfdaq):
-            return self._daqreader.epochtimes2samples(channeltype, channel, epochfiles, times)
-        raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
+        epochfiles = self._getepochfiles(epoch_number)
+        if not isinstance(self._daqreader, ndi_daq_reader_mfdaq):
+            raise TypeError("DAQ reader is not an ndi_daq_reader_mfdaq")
+
+        if self._is_ingested(epochfiles):
+            return self._daqreader.epochtimes2samples_ingested(
+                channeltype, channel, epochfiles, times, self.session
+            )
+        return self._daqreader.epochtimes2samples(channeltype, channel, epochfiles, times)
 
     @staticmethod
     def mfdaq_channeltypes() -> list[str]:
