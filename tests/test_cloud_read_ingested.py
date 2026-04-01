@@ -268,7 +268,40 @@ class TestReadIngested:
         p_st = session.getprobes(type="stimulator")
         assert len(p_st) >= 1, "Expected at least 1 stimulator probe"
 
-        ds, ts, _ = p_st[0].readtimeseries(epoch=1, t0=10, t1=20)
+        stim = p_st[0]
+        print(f"  Stimulator probe: {stim}")
+        print(f"  Stimulator class: {type(stim).__name__}")
+
+        # Diagnostic: check what getchanneldevinfo returns
+        devinfo = stim.getchanneldevinfo(1)
+        if devinfo is None:
+            pytest.fail("stimulator getchanneldevinfo(1) returned None")
+        print(f"  devinfo keys: {list(devinfo.keys())}")
+        dev = devinfo.get("daqsystem")
+        devepoch = devinfo.get("device_epoch_number", devinfo.get("device_epoch_id"))
+        ct = devinfo.get("channeltype", [])
+        ch = devinfo.get("channel", [])
+        print(f"  dev={type(dev).__name__}, devepoch={devepoch}")
+        print(f"  channeltype={ct}, channel={ch}")
+
+        # Try readevents directly to see the error
+        if dev is not None and ct:
+            try:
+                evt_result = dev.readevents_epochsamples(ct, ch, devepoch, 10, 20)
+                print(f"  readevents result type: {type(evt_result)}")
+                if isinstance(evt_result, tuple):
+                    print(f"  timestamps type: {type(evt_result[0])}")
+                    if isinstance(evt_result[0], list):
+                        print(f"  timestamps count: {len(evt_result[0])}")
+                    elif hasattr(evt_result[0], "shape"):
+                        print(f"  timestamps shape: {evt_result[0].shape}")
+            except Exception as exc:
+                pytest.fail(
+                    f"readevents_epochsamples raised {type(exc).__name__}: {exc}\n"
+                    f"  channeltype={ct}, channel={ch}, devepoch={devepoch}"
+                )
+
+        ds, ts, _ = stim.readtimeseries(epoch=1, t0=10, t1=20)
 
         assert ds is not None, "readtimeseries returned None for data"
         assert ts is not None, "readtimeseries returned None for times"
@@ -276,7 +309,12 @@ class TestReadIngested:
         # ds should be a dict with 'stimid'
         stimid = ds["stimid"]
         if hasattr(stimid, "size") and stimid.size == 0:
-            pytest.fail("ds['stimid'] is empty — binary files may not be accessible from cloud")
+            pytest.fail(
+                f"ds['stimid'] is empty. ds keys={list(ds.keys())}, "
+                f"ds values sizes={{ k: (v.size if hasattr(v, 'size') else len(v) if hasattr(v, '__len__') else v) for k, v in ds.items() }}, "
+                f"ts keys={list(ts.keys())}, "
+                f"ts values sizes={{ k: (v.size if hasattr(v, 'size') else len(v) if hasattr(v, '__len__') else v) for k, v in ts.items() }}"
+            )
         if hasattr(stimid, "__len__") and not isinstance(stimid, (int, float)):
             stimid = int(stimid[0]) if len(stimid) > 0 else stimid
         assert stimid == 31, f"Expected stimid == 31, got {stimid}"
