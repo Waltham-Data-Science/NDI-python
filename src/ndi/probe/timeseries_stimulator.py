@@ -9,11 +9,14 @@ MATLAB equivalent: src/ndi/+ndi/+probe/+timeseries/stimulator.m
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import numpy as np
 
 from .timeseries import ndi_probe_timeseries
+
+logger = logging.getLogger("ndi")
 
 
 class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
@@ -172,9 +175,11 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
                 try:
                     t_analog = dev.readchannels_epochsamples(["time"], [1], devepoch, s0, s1)
                     t["analog"] = np.asarray(t_analog).ravel()
-                except Exception:
+                except Exception as exc:
+                    logger.warning("stimulator: failed to read time channel: %s", exc)
                     t["analog"] = np.nan
-            except Exception:
+            except Exception as exc:
+                logger.warning("stimulator: failed to read analog channels: %s", exc)
                 data["analog"] = np.array([])
                 t["analog"] = np.nan
         else:
@@ -205,12 +210,8 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
                 else:
                     timestamps_list = []
                     edata_list = []
-            except Exception as _evt_exc:
-                import logging
-
-                logging.getLogger("ndi").warning(
-                    "stimulator readevents_epochsamples failed: %s", _evt_exc
-                )
+            except Exception as exc:
+                logger.warning("stimulator: readevents_epochsamples failed: %s", exc, exc_info=True)
                 timestamps_list = []
                 edata_list = []
 
@@ -301,7 +302,8 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
                     try:
                         md_ch_idx = all_channel[i]
                         data["parameters"] = dev.getmetadata(devepoch, md_ch_idx)
-                    except Exception:
+                    except Exception as exc:
+                        logger.warning("stimulator: failed to read metadata: %s", exc)
                         data["parameters"] = []
 
             t["stimevents"] = event_data_list
@@ -343,7 +345,8 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
                     try:
                         md_ch_idx = all_channel[i]
                         data["parameters"] = dev.getmetadata(devepoch, md_ch_idx)
-                    except Exception:
+                    except Exception as exc:
+                        logger.warning("stimulator: failed to read metadata: %s", exc)
                         data["parameters"] = []
 
                 elif ct in ("e", "event"):
@@ -391,7 +394,8 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
             from ..time.timereference import ndi_time_timereference
 
             timeref = ndi_time_timereference(self, ndi_time_clocktype.DEV_LOCAL_TIME, eid, 0)
-        except Exception:
+        except Exception as exc:
+            logger.warning("stimulator: failed to create timeref: %s", exc)
             timeref = ndi_time_clocktype.DEV_LOCAL_TIME
 
         return data, t, timeref
@@ -442,8 +446,12 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
                         for ch in ch_list:
                             channeltype.append(ct)
                             channel.append(ch)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning(
+                        "stimulator: failed to parse devicestring '%s': %s",
+                        epm.devicestring if hasattr(epm, "devicestring") else "?",
+                        exc,
+                    )
 
         return {
             "daqsystem": dev,
