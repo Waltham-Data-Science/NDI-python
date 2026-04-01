@@ -334,6 +334,7 @@ class ndi_probe(ndi_element):
         return {
             "daqsystem": underlying.get("underlying"),
             "device_epoch_id": underlying.get("epoch_id"),
+            "device_epoch_number": entry.get("epoch_number", epoch_number),
             "epochprobemap": entry.get("epochprobemap", []),
         }
 

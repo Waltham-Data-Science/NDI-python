@@ -118,7 +118,7 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
             return empty_data, empty_t, self._get_epoch_timeref(epoch)
 
         dev = devinfo.get("daqsystem")
-        devepoch = devinfo.get("device_epoch_id")
+        devepoch = devinfo.get("device_epoch_number", devinfo.get("device_epoch_id"))
         channeltype = devinfo.get("channeltype", [])
         channel = devinfo.get("channel", [])
 
@@ -158,8 +158,9 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
                 else:
                     sr_val = float(sr)
 
-                s0 = 1 + round(sr_val * t0)
-                s1 = 1 + round(sr_val * t1)
+                # 0-based sample indices (Python convention)
+                s0 = round(sr_val * t0)
+                s1 = round(sr_val * t1)
 
                 analog_channeltype = [channeltype_nonmd[i] for i in analog_indices]
                 analog_channel = [channel_nonmd[i] for i in analog_indices]
@@ -204,7 +205,12 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
                 else:
                     timestamps_list = []
                     edata_list = []
-            except Exception:
+            except Exception as _evt_exc:
+                import logging
+
+                logging.getLogger("ndi").warning(
+                    "stimulator readevents_epochsamples failed: %s", _evt_exc
+                )
                 timestamps_list = []
                 edata_list = []
 
