@@ -344,9 +344,13 @@ class TestReadIngested:
                 f"ts keys={list(ts.keys())}, "
                 f"ts values sizes={{ k: (v.size if hasattr(v, 'size') else len(v) if hasattr(v, '__len__') else v) for k, v in ts.items() }}"
             )
-        if hasattr(stimid, "__len__") and not isinstance(stimid, (int, float)):
-            stimid = int(stimid[0]) if len(stimid) > 0 else stimid
-        assert stimid == 31, f"Expected stimid == 31, got {stimid}"
+        # Extract scalar stimid from potentially nested array
+        stimid_val = np.asarray(stimid).ravel()
+        if stimid_val.size > 0:
+            stimid_val = int(stimid_val[0])
+        else:
+            pytest.fail(f"stimid is empty after ravel: {stimid}")
+        assert stimid_val == 31, f"Expected stimid == 31, got {stimid_val} (raw: {stimid})"
 
         # ts.stimon should be 15.2590 (within 0.001)
         stimon = ts["stimon"]
