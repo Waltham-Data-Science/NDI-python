@@ -297,11 +297,25 @@ class TestReadIngested:
                 evt_result = dev.readevents_epochsamples(ct, ch, devepoch, 10, 20)
                 print(f"  readevents result type: {type(evt_result)}")
                 if isinstance(evt_result, tuple):
-                    print(f"  timestamps type: {type(evt_result[0])}")
-                    if isinstance(evt_result[0], list):
-                        print(f"  timestamps count: {len(evt_result[0])}")
-                    elif hasattr(evt_result[0], "shape"):
-                        print(f"  timestamps shape: {evt_result[0].shape}")
+                    ts_r, data_r = evt_result
+                    print(f"  timestamps type: {type(ts_r)}, data type: {type(data_r)}")
+                    if isinstance(ts_r, list):
+                        for i, (t_i, d_i) in enumerate(zip(ts_r, data_r)):
+                            print(
+                                f"  ch[{i}]: ts shape={getattr(t_i, 'shape', len(t_i))}, data shape={getattr(d_i, 'shape', len(d_i))}"
+                            )
+                    elif hasattr(ts_r, "shape"):
+                        print(
+                            f"  timestamps shape: {ts_r.shape}, data shape: {getattr(data_r, 'shape', type(data_r))}"
+                        )
+                        if ts_r.size > 0:
+                            print(
+                                f"  ts[0:3]={ts_r[:3]}, data[0:3]={data_r[:3] if hasattr(data_r, '__getitem__') else data_r}"
+                            )
+                    elif isinstance(ts_r, dict):
+                        print(f"  timestamps is dict with keys: {list(ts_r.keys())}")
+                    else:
+                        print(f"  timestamps: {ts_r}")
             except Exception as exc:
                 pytest.fail(
                     f"readevents_epochsamples raised {type(exc).__name__}: {exc}\n"
