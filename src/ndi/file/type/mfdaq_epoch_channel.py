@@ -219,7 +219,7 @@ class ndi_file_type_mfdaq__epoch__channel:
             - channel_indexes_in_output: For each group, 0-based indices
               into the output data array
         """
-        from ..daq.mfdaq import standardize_channel_type
+        from ndi.daq.mfdaq import standardize_channel_type
 
         ct_std = standardize_channel_type(channel_type)
 
