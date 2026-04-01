@@ -298,35 +298,36 @@ class TestReadIngested:
                 match = stim.epochprobemapmatch(m) if hasattr(stim, "epochprobemapmatch") else "?"
                 print(f"    matches this probe: {match}")
 
-        # Try readevents directly to see the error
-        if dev is not None and ct:
+        # Try readevents directly (without md channels, matching stimulator)
+        non_md_ct = [c for c in ct if c != "md"]
+        non_md_ch = [ch[i] for i, c in enumerate(ct) if c != "md"]
+        print(f"  non-md channeltype={non_md_ct}, channel={non_md_ch}")
+        if dev is not None and non_md_ct:
             try:
-                evt_result = dev.readevents_epochsamples(ct, ch, devepoch, 10, 20)
+                evt_result = dev.readevents_epochsamples(non_md_ct, non_md_ch, devepoch, 10, 20)
                 print(f"  readevents result type: {type(evt_result)}")
                 if isinstance(evt_result, tuple):
                     ts_r, data_r = evt_result
                     print(f"  timestamps type: {type(ts_r)}, data type: {type(data_r)}")
                     if isinstance(ts_r, list):
-                        for i, (t_i, d_i) in enumerate(zip(ts_r, data_r)):
-                            print(
-                                f"  ch[{i}]: ts shape={getattr(t_i, 'shape', len(t_i))}, data shape={getattr(d_i, 'shape', len(d_i))}"
+                        for i in range(len(ts_r)):
+                            t_i, d_i = ts_r[i], data_r[i]
+                            t_s = getattr(
+                                t_i, "shape", len(t_i) if hasattr(t_i, "__len__") else "?"
                             )
+                            d_s = getattr(
+                                d_i, "shape", len(d_i) if hasattr(d_i, "__len__") else "?"
+                            )
+                            label = (
+                                f"{non_md_ct[i]}{non_md_ch[i]}" if i < len(non_md_ct) else f"[{i}]"
+                            )
+                            print(f"  ch[{i}] ({label}): ts={t_s}, data={d_s}")
                     elif hasattr(ts_r, "shape"):
-                        print(
-                            f"  timestamps shape: {ts_r.shape}, data shape: {getattr(data_r, 'shape', type(data_r))}"
-                        )
-                        if ts_r.size > 0:
-                            print(
-                                f"  ts[0:3]={ts_r[:3]}, data[0:3]={data_r[:3] if hasattr(data_r, '__getitem__') else data_r}"
-                            )
-                    elif isinstance(ts_r, dict):
-                        print(f"  timestamps is dict with keys: {list(ts_r.keys())}")
-                    else:
-                        print(f"  timestamps: {ts_r}")
+                        print(f"  timestamps shape: {ts_r.shape}")
             except Exception as exc:
                 pytest.fail(
                     f"readevents_epochsamples raised {type(exc).__name__}: {exc}\n"
-                    f"  channeltype={ct}, channel={ch}, devepoch={devepoch}"
+                    f"  channeltype={non_md_ct}, channel={non_md_ch}, devepoch={devepoch}"
                 )
 
         ds, ts, _ = stim.readtimeseries(epoch=1, t0=10, t1=20)
