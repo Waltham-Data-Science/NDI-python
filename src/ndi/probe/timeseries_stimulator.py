@@ -426,7 +426,7 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
             return None
 
         dev = base_info.get("daqsystem")
-        devepoch = base_info.get("device_epoch_id")
+        devepoch = base_info.get("device_epoch_number", base_info.get("device_epoch_id"))
 
         if dev is None:
             return None
@@ -442,6 +442,11 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
                     from ..daq.daqsystemstring import ndi_daq_daqsystemstring
 
                     dss = ndi_daq_daqsystemstring.parse(epm.devicestring)
+                    logger.debug(
+                        "stimulator devicestring '%s' parsed: channels=%s",
+                        epm.devicestring,
+                        dss.channels,
+                    )
                     for ct, ch_list in dss.channels:
                         for ch in ch_list:
                             channeltype.append(ct)
@@ -455,7 +460,8 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
 
         return {
             "daqsystem": dev,
-            "device_epoch_id": devepoch,
+            "device_epoch_id": base_info.get("device_epoch_id"),
+            "device_epoch_number": devepoch,
             "channeltype": channeltype,
             "channel": channel,
         }

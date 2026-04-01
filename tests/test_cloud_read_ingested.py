@@ -283,6 +283,13 @@ class TestReadIngested:
         ch = devinfo.get("channel", [])
         print(f"  dev={type(dev).__name__}, devepoch={devepoch}")
         print(f"  channeltype={ct}, channel={ch}")
+        # Print the epochprobemap devicestring
+        et, _ = stim.epochtable()
+        if et:
+            entry_epm = et[0].get("epochprobemap", [])
+            for m in (entry_epm if isinstance(entry_epm, list) else [entry_epm]):
+                if hasattr(m, "devicestring"):
+                    print(f"  devicestring: {m.devicestring}")
 
         # Try readevents directly to see the error
         if dev is not None and ct:
