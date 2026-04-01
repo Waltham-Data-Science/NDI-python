@@ -454,7 +454,10 @@ class TestMFDAQEpochChannel:
             ndi_file_type_mfdaq__epoch__channel.channelgroupdecoding(channels, "analog_in", [1, 3])
         )
         assert groups == [1, 2]
-        assert ch_in_groups == [[1], [3]]
+        # ch_in_groups contains 0-based indices within each group's channels
+        # Channel 1 is index 0 in group 1 (which has channels 1, 2)
+        # Channel 3 is index 0 in group 2 (which has only channel 3)
+        assert ch_in_groups == [[0], [0]]
         assert ch_in_output == [[0], [1]]
 
     def test_repr(self):
