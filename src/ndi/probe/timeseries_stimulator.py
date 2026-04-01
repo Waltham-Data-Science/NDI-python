@@ -431,13 +431,27 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
         if dev is None:
             return None
 
-        # Get channel info from the epochprobemap's devicestring
-        epms = base_info.get("epochprobemap", [])
+        # Get channel info from ALL epochprobemaps in the underlying epoch
+        # that match this probe. MATLAB iterates all maps in the underlying
+        # epoch and extracts channels from every matching one.
+        et, _ = self.epochtable()
+        entry = et[epoch - 1] if isinstance(epoch, int) and epoch <= len(et) else None
+        underlying = entry.get("underlying_epochs", {}) if entry else {}
+        all_epms = underlying.get("epochprobemap", base_info.get("epochprobemap", []))
+        if not isinstance(all_epms, list):
+            all_epms = [all_epms]
+
         channeltype = []
         channel = []
 
-        for epm in epms:
+        for epm in all_epms:
+            if not self.epochprobemapmatch(epm):
+                continue
             if hasattr(epm, "devicestring") and epm.devicestring:
+                logger.debug(
+                    "stimulator: matched epm devicestring='%s'",
+                    epm.devicestring,
+                )
                 try:
                     from ..daq.daqsystemstring import ndi_daq_daqsystemstring
 

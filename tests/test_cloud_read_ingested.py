@@ -283,13 +283,20 @@ class TestReadIngested:
         ch = devinfo.get("channel", [])
         print(f"  dev={type(dev).__name__}, devepoch={devepoch}")
         print(f"  channeltype={ct}, channel={ch}")
-        # Print the epochprobemap devicestring
-        et, _ = stim.epochtable()
-        if et:
-            entry_epm = et[0].get("epochprobemap", [])
-            for m in (entry_epm if isinstance(entry_epm, list) else [entry_epm]):
-                if hasattr(m, "devicestring"):
-                    print(f"  devicestring: {m.devicestring}")
+        # Print ALL epochprobemaps from underlying epoch
+        et_stim, _ = stim.epochtable()
+        if et_stim:
+            underlying = et_stim[0].get("underlying_epochs", {})
+            all_epms = underlying.get("epochprobemap", [])
+            if not isinstance(all_epms, list):
+                all_epms = [all_epms]
+            print(f"  underlying epochprobemaps count: {len(all_epms)}")
+            for i, m in enumerate(all_epms):
+                ds = getattr(m, "devicestring", "?")
+                nm = getattr(m, "name", "?")
+                print(f"  epm[{i}]: name={nm} devicestring={ds}")
+                match = stim.epochprobemapmatch(m) if hasattr(stim, "epochprobemapmatch") else "?"
+                print(f"    matches this probe: {match}")
 
         # Try readevents directly to see the error
         if dev is not None and ct:
