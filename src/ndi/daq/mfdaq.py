@@ -15,6 +15,7 @@ from typing import Any
 import numpy as np
 
 from ..time import DEV_LOCAL_TIME, ndi_time_clocktype
+from .daqsystemstring import ndi_daq_daqsystemstring
 from .reader_base import ndi_daq_reader
 
 
@@ -317,6 +318,11 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         if set(channeltype) & derived:
             return self._read_derived_events(channeltype, channel, epochfiles, t0, t1)
 
+        # Handle analog event channels (aep, aen, aimp, aimn)
+        is_analog, _, _ = ndi_daq_reader_mfdaq.is_analog_event_type(channeltype)
+        if is_analog:
+            return self._read_analog_events(channeltype, channel, epochfiles, t0, t1)
+
         # Otherwise read native events
         return self.readevents_epochsamples_native(channeltype, channel, epochfiles, t0, t1)
 
@@ -370,6 +376,78 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
                 [
                     np.ones(len(on_samples)),
                     -np.ones(len(off_samples)) if len(off_samples) else np.array([]),
+                ]
+            )
+
+            if len(off_samples) > 0:
+                order = np.argsort(ts)
+                ts = ts[order]
+                d = d[order]
+
+            timestamps.append(ts)
+            data.append(d)
+
+        if len(channel) == 1:
+            return timestamps[0], data[0]
+        return timestamps, data
+
+    def _read_analog_events(
+        self,
+        channeltype: list[str],
+        channel: list[int],
+        epochfiles: list[str],
+        t0: float,
+        t1: float,
+    ) -> tuple[list[np.ndarray] | np.ndarray, list[np.ndarray] | np.ndarray]:
+        """Read events derived from analog channels via threshold crossing."""
+        _, base_types, thresholds = ndi_daq_reader_mfdaq.is_analog_event_type(channeltype)
+
+        timestamps = []
+        data = []
+
+        for i, ch in enumerate(channel):
+            bt = base_types[i]
+            thresh = thresholds[i]
+
+            # Get sample range for time window from analog input
+            sd = self.epochtimes2samples(["ai"], [ch], epochfiles, np.array([t0, t1]))
+            s0, s1 = int(sd[0]), int(sd[1])
+
+            # Read analog and time data
+            ai_data = self.readchannels_epochsamples("ai", [ch], epochfiles, s0, s1)
+            time_data = self.readchannels_epochsamples("time", [ch], epochfiles, s0, s1)
+
+            ai_data = ai_data.flatten()
+            time_data = time_data.flatten()
+
+            below = ai_data[:-1] < thresh
+            above = ai_data[1:] >= thresh
+
+            if bt in ("aep", "aimp"):
+                # Below-to-above threshold crossings
+                on_samples = 1 + np.where(below & above)[0]
+                off_samples = (
+                    1 + np.where(~below & ~above)[0] if bt == "aimp" else np.array([], dtype=int)
+                )
+                on_sign, off_sign = 1, -1
+            else:  # aen, aimn
+                # Above-to-below threshold crossings
+                on_samples = 1 + np.where(~below & ~above)[0]
+                off_samples = (
+                    1 + np.where(below & above)[0] if bt == "aimn" else np.array([], dtype=int)
+                )
+                on_sign, off_sign = -1, 1
+
+            ts = np.concatenate(
+                [
+                    time_data[on_samples],
+                    time_data[off_samples] if len(off_samples) else np.array([]),
+                ]
+            )
+            d = np.concatenate(
+                [
+                    on_sign * np.ones(len(on_samples)),
+                    off_sign * np.ones(len(off_samples)) if len(off_samples) else np.array([]),
                 ]
             )
 
@@ -497,6 +575,11 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         # Handle infinite values
         if np.any(np.isinf(times)):
             s[np.isinf(times) & (times < 0)] = 0
+            pos_inf = np.isinf(times) & (times > 0)
+            if np.any(pos_inf):
+                t1 = t0t1[0][1]
+                s_end = round((t1 - t0) * sr)
+                s[pos_inf] = s_end
 
         return s
 
@@ -563,6 +646,44 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         ]
         abbrevs = ["ai", "ao", "ax", "di", "do", "e", "mk", "tx", "t"]
         return types, abbrevs
+
+    @staticmethod
+    def is_analog_event_type(
+        channeltype: str | list[str],
+    ) -> tuple[bool, list[str], list[float]]:
+        """
+        Check if channel type(s) are analog event types.
+
+        Analog event types derive events from analog input channels by
+        detecting threshold crossings:
+
+        - ``aep`` / ``aep_tX``: positive (upward) threshold crossings
+        - ``aen`` / ``aen_tX``: negative (downward) threshold crossings
+        - ``aimp`` / ``aimp_tX``: analog input mark positive (pulse above then below)
+        - ``aimn`` / ``aimn_tX``: analog input mark negative (pulse below then above)
+
+        Args:
+            channeltype: Channel type string or list of strings
+
+        Returns:
+            Tuple of (is_analog_event, base_types, thresholds):
+            - is_analog_event: True if any channel type is an analog event type
+            - base_types: List of base type strings with threshold stripped
+            - thresholds: List of threshold values (0.0 if not specified)
+        """
+        analog_event_prefixes = {"aep", "aen", "aimp", "aimn"}
+        if isinstance(channeltype, str):
+            channeltype = [channeltype]
+
+        base_types = []
+        thresholds = []
+        for ct in channeltype:
+            bt, th = ndi_daq_daqsystemstring.parse_analog_event_channeltype(ct)
+            base_types.append(bt)
+            thresholds.append(th)
+
+        tf = bool(set(base_types) & analog_event_prefixes)
+        return tf, base_types, thresholds
 
     # =========================================================================
     # Ingested data methods - for reading from database-stored epochs
@@ -814,6 +935,13 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
             channeltype = [channeltype] * len(channel)
         channeltype = standardize_channel_types(channeltype)
 
+        # Handle analog event types (aep, aen, aimp, aimn)
+        is_analog, _, _ = ndi_daq_reader_mfdaq.is_analog_event_type(channeltype)
+        if is_analog:
+            return self._read_analog_events_ingested(
+                channeltype, channel, epochfiles, t0, t1, session
+            )
+
         derived = {"dep", "den", "dimp", "dimn"}
         if set(channeltype) & derived:
             # Handle derived digital event types
@@ -913,6 +1041,81 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         if len(channel) == 1:
             return timestamps_list[0], data_list[0]
         return timestamps_list, data_list
+
+    def _read_analog_events_ingested(
+        self,
+        channeltype: list[str],
+        channel: list[int],
+        epochfiles: list[str],
+        t0: float,
+        t1: float,
+        session: Any,
+    ) -> tuple[list[np.ndarray] | np.ndarray, list[np.ndarray] | np.ndarray]:
+        """Read events derived from analog channels via threshold crossing (ingested)."""
+        _, base_types, thresholds = ndi_daq_reader_mfdaq.is_analog_event_type(channeltype)
+
+        timestamps = []
+        data = []
+
+        for i, ch in enumerate(channel):
+            bt = base_types[i]
+            thresh = thresholds[i]
+
+            sd = self.epochtimes2samples_ingested(
+                ["ai"], [ch], epochfiles, np.array([t0, t1]), session
+            )
+            s0, s1 = int(sd[0]), int(sd[1])
+
+            ai_data = self.readchannels_epochsamples_ingested(
+                ["ai"], [ch], epochfiles, s0, s1, session
+            )
+            time_data = self.readchannels_epochsamples_ingested(
+                ["time"], [ch], epochfiles, s0, s1, session
+            )
+
+            ai_data = ai_data.flatten()
+            time_data = time_data.flatten()
+
+            below = ai_data[:-1] < thresh
+            above = ai_data[1:] >= thresh
+
+            if bt in ("aep", "aimp"):
+                on_samples = 1 + np.where(below & above)[0]
+                off_samples = (
+                    1 + np.where(~below & ~above)[0] if bt == "aimp" else np.array([], dtype=int)
+                )
+                on_sign, off_sign = 1, -1
+            else:  # aen, aimn
+                on_samples = 1 + np.where(~below & ~above)[0]
+                off_samples = (
+                    1 + np.where(below & above)[0] if bt == "aimn" else np.array([], dtype=int)
+                )
+                on_sign, off_sign = -1, 1
+
+            ts = np.concatenate(
+                [
+                    time_data[on_samples],
+                    time_data[off_samples] if len(off_samples) else np.array([]),
+                ]
+            )
+            d = np.concatenate(
+                [
+                    on_sign * np.ones(len(on_samples)),
+                    off_sign * np.ones(len(off_samples)) if len(off_samples) else np.array([]),
+                ]
+            )
+
+            if len(off_samples) > 0:
+                order = np.argsort(ts)
+                ts = ts[order]
+                d = d[order]
+
+            timestamps.append(ts)
+            data.append(d)
+
+        if len(channel) == 1:
+            return timestamps[0], data[0]
+        return timestamps, data
 
     def samplerate_ingested(
         self,
@@ -1057,5 +1260,10 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
 
         if np.any(np.isinf(times)):
             s[np.isinf(times) & (times < 0)] = 0
+            pos_inf = np.isinf(times) & (times > 0)
+            if np.any(pos_inf):
+                t1 = t0t1[0][1]
+                s_end = round((t1 - t0) * sr)
+                s[pos_inf] = s_end
 
         return s

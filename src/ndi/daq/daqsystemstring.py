@@ -76,7 +76,16 @@ class ndi_daq_daqsystemstring:
             channeltype = match.group(1)
             numspec = match.group(2)
 
+            # Check for threshold suffix (e.g., '_t2.5' in 'aep1-3_t2.5')
+            threshold_str = ""
+            t_idx = numspec.find("_t")
+            if t_idx != -1:
+                threshold_str = numspec[t_idx:]
+                numspec = numspec[:t_idx]
+
             channellist = _parse_channel_numbers(numspec)
+            if threshold_str:
+                channeltype = channeltype + threshold_str
             channels.append((channeltype, channellist))
 
         return cls(devicename=devicename, channels=channels)
@@ -96,8 +105,7 @@ class ndi_daq_daqsystemstring:
             if not channellist:
                 parts.append(channeltype)
             else:
-                numstr = _format_channel_numbers(channellist)
-                parts.append(f"{channeltype}{numstr}")
+                parts.append(ndi_daq_daqsystemstring.channeltype2str(channeltype, channellist))
 
         return f"{self.devicename}:{';'.join(parts)}"
 
@@ -131,6 +139,51 @@ class ndi_daq_daqsystemstring:
 
     def __repr__(self) -> str:
         return f"ndi_daq_daqsystemstring('{self.devicestring()}')"
+
+    @staticmethod
+    def channeltype2str(ct: str, channellist: list[int]) -> str:
+        """
+        Build a device string segment from a channeltype and channel list.
+
+        Handles threshold suffixes (e.g., ``_t2.5``) by placing the channel
+        numbers between the base type and the suffix.
+
+        Args:
+            ct: Channel type string, optionally with threshold suffix
+                (e.g., ``'aep'`` or ``'aep_t2.5'``)
+            channellist: List of channel numbers
+
+        Returns:
+            Device string segment (e.g., ``'aep1-3_t2.5'``)
+        """
+        t_idx = ct.find("_t")
+        if t_idx != -1:
+            base = ct[:t_idx]
+            threshold_str = ct[t_idx:]
+            return f"{base}{_format_channel_numbers(channellist)}{threshold_str}"
+        return f"{ct}{_format_channel_numbers(channellist)}"
+
+    @staticmethod
+    def parse_analog_event_channeltype(ct: str) -> tuple[str, float]:
+        """
+        Extract base type and threshold from a channel type string.
+
+        Given a channel type string like ``'aep_t2.5'``, returns the base
+        type (``'aep'``) and threshold (``2.5``). If no threshold suffix
+        is present, threshold is ``0.0``.
+
+        Args:
+            ct: Channel type string (e.g., ``'aep_t2.5'``, ``'aimp'``)
+
+        Returns:
+            Tuple of (base_type, threshold)
+        """
+        t_idx = ct.find("_t")
+        if t_idx != -1:
+            base_type = ct[:t_idx]
+            threshold = float(ct[t_idx + 2 :])
+            return base_type, threshold
+        return ct, 0.0
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, ndi_daq_daqsystemstring):

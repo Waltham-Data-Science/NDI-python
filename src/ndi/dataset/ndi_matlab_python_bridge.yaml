@@ -14,7 +14,7 @@ classes:
   - name: dataset
     type: class
     matlab_path: "+ndi/dataset.m"
-    matlab_last_sync_hash: "7512bcb0"
+    matlab_last_sync_hash: "f485088"
     python_path: "ndi/dataset/_dataset.py"
     python_class: "ndi_dataset"
 
@@ -89,7 +89,10 @@ classes:
         output_arguments:
           - name: ndi_dataset_obj
             type_python: "ndi_dataset"
-        decision_log: "MATLAB name uses underscores. Exact match."
+        decision_log: >
+          MATLAB name uses underscores. Exact match. Updated in sync
+          f485088: now delegates to copySessionToDataset static method
+          instead of ndi.database.fun.copy_session_to_dataset.
 
       - name: deleteIngestedSession
         input_arguments:
@@ -120,6 +123,23 @@ classes:
           - name: ndi_dataset_obj
             type_python: "ndi_dataset"
         decision_log: "MATLAB name uses underscores. Exact match."
+
+      - name: convertLinkedSessionToIngested
+        input_arguments:
+          - name: session_id
+            type_matlab: "char"
+            type_python: "str"
+          - name: are_you_sure
+            type_matlab: "logical (name-value)"
+            type_python: "bool"
+            default: "False"
+        output_arguments: []
+        decision_log: >
+          New in sync f485088. Converts a linked session to ingested by
+          copying its documents into the dataset. MATLAB uses name-value
+          args (areYouSure, askUserToConfirm); Python omits the GUI
+          confirmation dialog (askUserToConfirm not applicable).
+          Not yet implemented in Python — stub only.
 
       - name: open_session
         input_arguments:
@@ -271,6 +291,30 @@ classes:
             type_python: "str"
         output_arguments: []
         decision_log: "MATLAB camelCase preserved exactly."
+
+      - name: copySessionToDataset
+        kind: static
+        input_arguments:
+          - name: ndi_session_obj
+            type_matlab: "ndi.session"
+            type_python: "Any"
+          - name: ndi_dataset_obj
+            type_matlab: "ndi.dataset"
+            type_python: "ndi_dataset"
+          - name: skip_duplicate_check
+            type_matlab: "logical (name-value)"
+            type_python: "bool"
+            default: "False"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+          - name: errmsg
+            type_python: "str"
+        decision_log: >
+          New in sync f485088. Moved from ndi.database.fun.copy_session_to_dataset
+          to ndi.dataset as a static method. Copies an ingested session's
+          documents and binary files into a dataset. Returns (success, errmsg).
+          Not yet implemented in Python — stub only.
 
   # =========================================================================
   # ndi.dataset.dir  (directory-backed subclass)

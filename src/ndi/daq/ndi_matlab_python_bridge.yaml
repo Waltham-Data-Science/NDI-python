@@ -118,7 +118,7 @@ classes:
   - name: daqsystemstring
     type: class
     matlab_path: "+ndi/+daq/daqsystemstring.m"
-    matlab_last_sync_hash: "fe64a9f5"
+    matlab_last_sync_hash: "2157c70"
     python_path: "ndi/daq/daqsystemstring.py"
     python_class: "ndi_daq_daqsystemstring"
 
@@ -172,6 +172,37 @@ classes:
           - name: channels
             type_python: "list[int]"
         decision_log: "Exact match. Optionally filters by channel type."
+
+      - name: channeltype2str
+        kind: static
+        input_arguments:
+          - name: ct
+            type_matlab: "char"
+            type_python: "str"
+          - name: channellist
+            type_matlab: "array"
+            type_python: "list[int]"
+        output_arguments:
+          - name: s
+            type_python: "str"
+        decision_log: >
+          New in sync 2157c70. Builds device string segment from channeltype
+          and channel list. Handles threshold suffix (e.g., '_t2.5').
+
+      - name: parse_analog_event_channeltype
+        kind: static
+        input_arguments:
+          - name: ct
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: base_type
+            type_python: "str"
+          - name: threshold
+            type_python: "float"
+        decision_log: >
+          New in sync 2157c70. Extracts base type and threshold from
+          channel type strings like 'aep_t2.5'. Returns (base_type, threshold).
 
       - name: eq
         input_arguments:
@@ -342,7 +373,7 @@ classes:
   - name: mfdaq_reader
     type: class
     matlab_path: "+ndi/+daq/+reader/mfdaq.m"
-    matlab_last_sync_hash: "41e84fed"
+    matlab_last_sync_hash: "9e11fbb"
     python_path: "ndi/daq/mfdaq.py"
     python_class: "ndi_daq_reader_mfdaq"
     inherits: "ndi.daq.reader"
@@ -447,7 +478,9 @@ classes:
             type_python: "np.ndarray | list[np.ndarray]"
         decision_log: >
           Exact match. Supports derived digital event types
-          (dep, den, dimp, dimn). Returns 2-tuple.
+          (dep, den, dimp, dimn) and analog event types
+          (aep, aen, aimp, aimn) with optional threshold suffix.
+          Returns 2-tuple. Updated in sync 9e11fbb.
 
       - name: readevents_epochsamples_native
         input_arguments:
@@ -518,6 +551,8 @@ classes:
           INDEXING DIFFERENCE: MATLAB returns 1-indexed samples; Python returns
           0-indexed. Sample 0 in Python corresponds to sample 1 in MATLAB.
           The formula is s = round((t-t0)*sr) (Python) vs s = 1+round((t-t0)*sr) (MATLAB).
+          Updated in sync 9e11fbb: -Inf clamped to 0 (first sample),
+          +Inf clamped to last sample of epoch.
 
       - name: underlying_datatype
         input_arguments:
@@ -548,6 +583,24 @@ classes:
           - name: abbreviations
             type_python: "list[str]"
         decision_log: "Exact match. Returns 2-tuple of type names and abbreviations."
+
+      - name: is_analog_event_type
+        kind: static
+        input_arguments:
+          - name: channeltype
+            type_matlab: "cell array of char"
+            type_python: "str | list[str]"
+        output_arguments:
+          - name: tf
+            type_python: "bool"
+          - name: base_types
+            type_python: "list[str]"
+          - name: thresholds
+            type_python: "list[float]"
+        decision_log: >
+          New in sync 9e11fbb. Checks if channel types are analog event
+          types (aep, aen, aimp, aimn). Returns 3-tuple. Delegates
+          threshold parsing to daqsystemstring.parse_analog_event_channeltype.
 
       # --- Ingested data methods ---
       - name: getchannelsepoch_ingested
@@ -654,6 +707,8 @@ classes:
         decision_log: >
           INDEXING DIFFERENCE: MATLAB returns 1-indexed samples; Python returns
           0-indexed. Sample 0 in Python corresponds to sample 1 in MATLAB.
+          Updated in sync 9e11fbb: -Inf clamped to 0 (first sample),
+          +Inf clamped to last sample of epoch.
 
   # =========================================================================
   # ndi.daq.system

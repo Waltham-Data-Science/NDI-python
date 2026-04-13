@@ -253,6 +253,11 @@ class ndi_daq_system(ndi_ido):
                 )
             try:
                 self._filenavigator = NavCls(session=session, document=nav_doc)
+                # Preserve the document's class name for symmetry reporting,
+                # even when a generic Python class is used as a stand-in
+                # (e.g. vhlab_np_epochdir mapped to epochdir).
+                if nav_class_name != NavCls.NDI_FILENAVIGATOR_CLASS:
+                    self._filenavigator.NDI_FILENAVIGATOR_CLASS = nav_class_name
             except Exception as exc:
                 raise RuntimeError(
                     f"Could not reconstruct file navigator {nav_class_name!r}: {exc}"

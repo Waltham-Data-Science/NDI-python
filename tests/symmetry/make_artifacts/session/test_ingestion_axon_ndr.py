@@ -86,6 +86,7 @@ class TestIngestionAxonNDR:
             **{
                 "base.name": "axon_ndr_reader",
                 "daqreader.ndi_daqreader_class": "ndi.daq.reader.mfdaq.ndr",
+                "daqreader_ndr.ndr_reader_string": "axon_abf",
             },
         )
         session.database_add(dr_doc)

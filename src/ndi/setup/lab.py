@@ -79,9 +79,13 @@ def lab(session, lab_name: str) -> None:
         has_epoch_dirs = config.get("HasEpochDirectories", False)
 
         # Choose the correct filenavigator class
-        filenavigator_class = (
-            "ndi.file.navigator.epochdir" if has_epoch_dirs else "ndi.file.navigator"
-        )
+        custom_nav_class = config.get("FileNavigatorClass", "")
+        if custom_nav_class:
+            filenavigator_class = custom_nav_class
+        elif has_epoch_dirs:
+            filenavigator_class = "ndi.file.navigator.epochdir"
+        else:
+            filenavigator_class = "ndi.file.navigator"
 
         # Convert file parameters to MATLAB cell string format
         fp_str = _to_matlab_cell_str(file_params)

@@ -43,6 +43,9 @@ def _build_registry() -> dict[str, type]:
     from .setup.daq.reader.mfdaq.stimulus.nielsenvisintan import (
         ndi_setup_daq_reader_mfdaq_stimulus_nielsenvisintan,
     )
+    from .setup.daq.reader.mfdaq.stimulus.nielsenvisneuropixelsglx import (
+        ndi_setup_daq_reader_mfdaq_stimulus_nielsenvisneuropixelsglx,
+    )
     from .setup.daq.reader.mfdaq.stimulus.vhaudreybpod import (
         ndi_setup_daq_reader_mfdaq_stimulus_VHAudreyBPod,
     )
@@ -71,6 +74,7 @@ def _build_registry() -> dict[str, type]:
         ndi_daq_reader_mfdaq_spikegadgets,
         ndi_setup_daq_reader_mfdaq_stimulus_vhlabvisspike2,
         ndi_setup_daq_reader_mfdaq_stimulus_nielsenvisintan,
+        ndi_setup_daq_reader_mfdaq_stimulus_nielsenvisneuropixelsglx,
         ndi_setup_daq_reader_mfdaq_stimulus_VHAudreyBPod,
     ):
         registry[cls.NDI_DAQREADER_CLASS] = cls
@@ -81,6 +85,8 @@ def _build_registry() -> dict[str, type]:
     # File navigators
     registry[ndi_file_navigator.NDI_FILENAVIGATOR_CLASS] = ndi_file_navigator
     registry[ndi_file_navigator_epochdir.NDI_FILENAVIGATOR_CLASS] = ndi_file_navigator_epochdir
+    # Custom lab-specific navigators mapped to epochdir until dedicated classes exist
+    registry["ndi.setup.file.navigator.vhlab_np_epochdir"] = ndi_file_navigator_epochdir
 
     return registry
 
