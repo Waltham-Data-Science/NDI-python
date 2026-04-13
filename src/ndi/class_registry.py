@@ -85,6 +85,8 @@ def _build_registry() -> dict[str, type]:
     # File navigators
     registry[ndi_file_navigator.NDI_FILENAVIGATOR_CLASS] = ndi_file_navigator
     registry[ndi_file_navigator_epochdir.NDI_FILENAVIGATOR_CLASS] = ndi_file_navigator_epochdir
+    # Custom lab-specific navigators mapped to epochdir until dedicated classes exist
+    registry["ndi.setup.file.navigator.vhlab_np_epochdir"] = ndi_file_navigator_epochdir
 
     return registry
 
