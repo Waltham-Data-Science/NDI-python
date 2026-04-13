@@ -32,7 +32,58 @@ Every sub-package contains a file named `ndi_matlab_python_bridge.yaml`.
 - **Internal Access:** Use 0-based indexing for internal Python data structures (lists, NumPy arrays).
 - **Formatting:** Code must pass `black` and `ruff check --fix` before completion.
 
-## 5. Directory Mapping Reference
+## 5. CI Lint & Test Commands
+
+Before pushing any changes, you **must** run these commands and ensure they all pass. These are the same checks CI runs.
+
+### Formatting (Black)
+
+```bash
+black --check src/ tests/
+```
+
+To auto-fix formatting issues:
+
+```bash
+black src/ tests/
+```
+
+Configuration is in `pyproject.toml`: line-length = 100, target-version = py310/py311/py312.
+
+### Linting (Ruff)
+
+```bash
+ruff check src/ tests/
+```
+
+To auto-fix what ruff can:
+
+```bash
+ruff check --fix src/ tests/
+```
+
+Configuration is in `pyproject.toml` under `[tool.ruff]` and `[tool.ruff.lint]`.
+
+### Tests
+
+```bash
+pytest tests/ -v --tb=short
+```
+
+Symmetry tests (cross-language MATLAB/Python parity) are excluded from the default run and are invoked separately in CI:
+
+```bash
+pytest tests/symmetry/make_artifacts/ -v --tb=short
+pytest tests/symmetry/read_artifacts/ -v --tb=short
+```
+
+### Quick pre-push checklist
+
+```bash
+black src/ tests/ && ruff check src/ tests/ && pytest tests/ -x -q
+```
+
+## 6. Directory Mapping Reference
 
 - **MATLAB Source:** `VH-ndi_gui_Lab/NDI-matlab` (GitHub)
 - **Python Target:** `src/ndi/[namespace]/` (Mirrors MATLAB `+namespace/`)

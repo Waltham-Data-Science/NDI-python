@@ -49,9 +49,7 @@ class ndi_daq_reader_mfdaq_ndr(ndi_daq_reader_mfdaq):
         if document is not None:
             props = getattr(document, "document_properties", {})
             if isinstance(props, dict):
-                self.ndr_reader_string = (
-                    props.get("daqreader_ndr", {}).get("ndr_reader_string", "")
-                )
+                self.ndr_reader_string = props.get("daqreader_ndr", {}).get("ndr_reader_string", "")
 
     def _get_ndr_reader(self):
         """Get the NDR reader for this format."""
