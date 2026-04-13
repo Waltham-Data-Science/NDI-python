@@ -51,11 +51,41 @@ class ndi_daq_reader_mfdaq_ndr(ndi_daq_reader_mfdaq):
             if isinstance(props, dict):
                 self.ndr_reader_string = props.get("daqreader_ndr", {}).get("ndr_reader_string", "")
 
-    def _get_ndr_reader(self):
-        """Get the NDR reader for this format."""
+    # Map file extensions to NDR reader type strings
+    _EXT_TO_READER: dict[str, str] = {
+        ".abf": "axon_abf",
+        ".rhd": "intan_rhd",
+        ".smr": "ced_smr",
+        ".smrx": "ced_smr",
+        ".rec": "spikegadgets_rec",
+        ".sev": "tdt_sev",
+    }
+
+    def _get_ndr_reader(self, epochfiles: list[str] | None = None):
+        """Get the NDR reader for this format.
+
+        If the stored ``ndr_reader_string`` fails and *epochfiles* are
+        provided, attempts to infer the correct reader from file extensions.
+        """
         import ndr
 
-        return ndr.reader(self.ndr_reader_string)
+        try:
+            return ndr.reader(self.ndr_reader_string)
+        except Exception:
+            if not epochfiles:
+                raise
+        # Try to infer the reader from epoch file extensions
+        for f in epochfiles:
+            fl = f.lower()
+            for ext, reader_str in self._EXT_TO_READER.items():
+                if fl.endswith(ext):
+                    self.ndr_reader_string = reader_str
+                    return ndr.reader(reader_str)
+            # Neuropixels meta/bin files
+            if fl.endswith(".ap.meta") or fl.endswith(".nidq.meta"):
+                self.ndr_reader_string = "neuropixelsGLX"
+                return ndr.reader("neuropixelsGLX")
+        raise ValueError(f"Cannot infer NDR reader from epoch files: {epochfiles}")
 
     def _get_si_reader(self):
         """Get SpikeInterface reader as fallback."""
@@ -73,121 +103,81 @@ class ndi_daq_reader_mfdaq_ndr(ndi_daq_reader_mfdaq):
         to :class:`ChannelInfo` objects. Falls back to SpikeInterface
         if the NDR reader cannot handle the epoch files.
         """
-        try:
-            r = self._get_ndr_reader()
-            ndr_channels = r.getchannelsepoch(epochfiles, 1)
-            return [
-                ChannelInfo(
-                    name=ch["name"],
-                    type=ch["type"],
-                    time_channel=ch.get("time_channel"),
-                )
-                for ch in ndr_channels
-            ]
-        except Exception:
-            SI = self._get_si_reader()
-            if SI is None:
-                raise
-            return SI().getchannelsepoch(epochfiles)
+        r = self._get_ndr_reader(epochfiles)
+        ndr_channels = r.getchannelsepoch(epochfiles, 1)
+        return [
+            ChannelInfo(
+                name=ch["name"],
+                type=ch["type"],
+                time_channel=ch.get("time_channel"),
+            )
+            for ch in ndr_channels
+        ]
 
     def readchannels_epochsamples(self, channeltype, channel, epochfiles, s0, s1):
         """Read channel data as samples.
 
         Delegates to the NDR reader with ``epoch_select=1``.
-        Falls back to SpikeInterface on failure.
         """
-        try:
-            r = self._get_ndr_reader()
-            if isinstance(channeltype, list):
-                channeltype = channeltype[0]
-            if isinstance(channel, int):
-                channel = [channel]
-            return r.readchannels_epochsamples(channeltype, channel, epochfiles, 1, s0, s1)
-        except Exception:
-            SI = self._get_si_reader()
-            if SI is None:
-                raise
-            return SI().readchannels_epochsamples(channeltype, channel, epochfiles, s0, s1)
+        r = self._get_ndr_reader(epochfiles)
+        if isinstance(channeltype, list):
+            channeltype = channeltype[0]
+        if isinstance(channel, int):
+            channel = [channel]
+        return r.readchannels_epochsamples(channeltype, channel, epochfiles, 1, s0, s1)
 
     def samplerate(self, epochfiles, channeltype, channel):
         """Get sample rate for specified channels.
 
         Delegates to the NDR reader with ``epoch_select=1``.
-        Falls back to SpikeInterface on failure.
         """
-        try:
-            r = self._get_ndr_reader()
-            if isinstance(channeltype, list):
-                channeltype = channeltype[0]
-            sr = r.samplerate(epochfiles, 1, channeltype, channel)
-            return np.atleast_1d(sr)
-        except Exception:
-            SI = self._get_si_reader()
-            if SI is None:
-                raise
-            return SI().samplerate(epochfiles, channeltype, channel)
+        r = self._get_ndr_reader(epochfiles)
+        if isinstance(channeltype, list):
+            channeltype = channeltype[0]
+        sr = r.samplerate(epochfiles, 1, channeltype, channel)
+        return np.atleast_1d(sr)
 
     def epochclock(self, epochfiles):
         """Return the clock types for an epoch.
 
         Converts NDR ``ClockType`` objects to NDI ``ndi_time_clocktype``.
-        Falls back to SpikeInterface on failure.
         """
-        try:
-            r = self._get_ndr_reader()
-            from ndi.time import ndi_time_clocktype
+        r = self._get_ndr_reader(epochfiles)
+        from ndi.time import ndi_time_clocktype
 
-            ndr_clocks = r.epochclock(epochfiles, 1)
-            return [ndi_time_clocktype(ec.type) for ec in ndr_clocks]
-        except Exception:
-            from ndi.time import DEV_LOCAL_TIME
-
-            return [DEV_LOCAL_TIME]
+        ndr_clocks = r.epochclock(epochfiles, 1)
+        return [ndi_time_clocktype(ec.type) for ec in ndr_clocks]
 
     def t0_t1(self, epochfiles):
         """Return the start and end times for an epoch.
 
         Returns list of ``(t0, t1)`` tuples.
-        Falls back to SpikeInterface on failure.
         """
-        try:
-            r = self._get_ndr_reader()
-            result = r.t0_t1(epochfiles, 1)
-            return [(row[0], row[1]) for row in result]
-        except Exception:
-            SI = self._get_si_reader()
-            if SI is None:
-                raise
-            return SI().t0_t1(epochfiles)
+        r = self._get_ndr_reader(epochfiles)
+        result = r.t0_t1(epochfiles, 1)
+        return [(row[0], row[1]) for row in result]
 
     def underlying_datatype(self, epochfiles, channeltype, channel):
         """Get the underlying data type for channels.
 
         Delegates to the NDR reader.
         """
-        try:
-            r = self._get_ndr_reader()
-            if isinstance(channeltype, list):
-                channeltype = channeltype[0]
-            return r.ndr_reader_base.underlying_datatype(epochfiles, 1, channeltype, channel)
-        except Exception:
-            return super().underlying_datatype(epochfiles, channeltype, channel)
+        r = self._get_ndr_reader(epochfiles)
+        if isinstance(channeltype, list):
+            channeltype = channeltype[0]
+        return r.ndr_reader_base.underlying_datatype(epochfiles, 1, channeltype, channel)
 
     def readevents_epochsamples_native(self, channeltype, channel, epochfiles, t0, t1):
         """Read native event data.
 
         Delegates to the NDR reader.
-        Falls back to SpikeInterface on failure.
         """
-        try:
-            r = self._get_ndr_reader()
-            if isinstance(channeltype, list):
-                channeltype = channeltype[0]
-            if isinstance(channel, int):
-                channel = [channel]
-            return r.readevents_epochsamples_native(channeltype, channel, epochfiles, 1, t0, t1)
-        except Exception:
-            return [], []
+        r = self._get_ndr_reader(epochfiles)
+        if isinstance(channeltype, list):
+            channeltype = channeltype[0]
+        if isinstance(channel, int):
+            channel = [channel]
+        return r.readevents_epochsamples_native(channeltype, channel, epochfiles, 1, t0, t1)
 
     def epochsamples2times(self, channeltype, channel, epochfiles, samples):
         """Convert sample indices to time.
@@ -195,7 +185,7 @@ class ndi_daq_reader_mfdaq_ndr(ndi_daq_reader_mfdaq):
         For readers with time gaps, interpolates from the time channel.
         Otherwise delegates to the base class formula.
         """
-        r = self._get_ndr_reader()
+        r = self._get_ndr_reader(epochfiles)
         if r.MightHaveTimeGaps:
             t_all = self.readchannels_epochsamples("time", [1], epochfiles, 1, int(1e12))
             t_all = t_all.flatten()
@@ -209,7 +199,7 @@ class ndi_daq_reader_mfdaq_ndr(ndi_daq_reader_mfdaq):
         For readers with time gaps, interpolates from the time channel.
         Otherwise delegates to the base class formula.
         """
-        r = self._get_ndr_reader()
+        r = self._get_ndr_reader(epochfiles)
         if r.MightHaveTimeGaps:
             t_all = self.readchannels_epochsamples("time", [1], epochfiles, 1, int(1e12))
             t_all = t_all.flatten()
