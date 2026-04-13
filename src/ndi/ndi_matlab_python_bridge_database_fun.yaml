@@ -192,8 +192,10 @@ functions:
         type_matlab: "char"
         type_python: "str"
     decision_log: >
-      MATLAB uses extract_doc_files then creates a surrogate session.
-      Python simplified approach adds docs directly. Both return (bool, str).
+      DEPRECATED in MATLAB: function moved to ndi.dataset.copySessionToDataset
+      as a static method (sync f485088). The standalone function file was
+      deleted in MATLAB. Python retains this for backward compatibility;
+      new code should use ndi.dataset.copySessionToDataset.
       Synchronized 2026-03-13.
 
   - name: finddocs_missing_dependencies
