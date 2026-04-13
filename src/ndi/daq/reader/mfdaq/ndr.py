@@ -64,28 +64,29 @@ class ndi_daq_reader_mfdaq_ndr(ndi_daq_reader_mfdaq):
     def _get_ndr_reader(self, epochfiles: list[str] | None = None):
         """Get the NDR reader for this format.
 
-        If the stored ``ndr_reader_string`` fails and *epochfiles* are
-        provided, attempts to infer the correct reader from file extensions.
+        When *epochfiles* are provided, infers the reader from file
+        extensions to guard against a mismatched ``ndr_reader_string``
+        (e.g. the document template defaulting to ``"RHD"`` for non-RHD
+        data).  Falls back to the stored ``ndr_reader_string`` when no
+        epoch files are given or when inference doesn't match.
         """
         import ndr
 
-        try:
-            return ndr.reader(self.ndr_reader_string)
-        except Exception:
-            if not epochfiles:
-                raise
-        # Try to infer the reader from epoch file extensions
-        for f in epochfiles:
-            fl = f.lower()
-            for ext, reader_str in self._EXT_TO_READER.items():
-                if fl.endswith(ext):
-                    self.ndr_reader_string = reader_str
-                    return ndr.reader(reader_str)
-            # Neuropixels meta/bin files
-            if fl.endswith(".ap.meta") or fl.endswith(".nidq.meta"):
-                self.ndr_reader_string = "neuropixelsGLX"
-                return ndr.reader("neuropixelsGLX")
-        raise ValueError(f"Cannot infer NDR reader from epoch files: {epochfiles}")
+        # When epoch files are available, detect the reader from extensions
+        if epochfiles:
+            for f in epochfiles:
+                fl = f.lower()
+                for ext, reader_str in self._EXT_TO_READER.items():
+                    if fl.endswith(ext):
+                        self.ndr_reader_string = reader_str
+                        return ndr.reader(reader_str)
+                # Neuropixels meta/bin files
+                if fl.endswith(".ap.meta") or fl.endswith(".nidq.meta"):
+                    self.ndr_reader_string = "neuropixelsGLX"
+                    return ndr.reader("neuropixelsGLX")
+
+        # No epoch files or no extension match — use stored string
+        return ndr.reader(self.ndr_reader_string)
 
     def _get_si_reader(self):
         """Get SpikeInterface reader as fallback."""
