@@ -57,88 +57,137 @@ class ndi_daq_reader_mfdaq_ndr(ndi_daq_reader_mfdaq):
 
         return ndr.reader(self.ndr_reader_string)
 
+    def _get_si_reader(self):
+        """Get SpikeInterface reader as fallback."""
+        try:
+            from ..spikeinterface_adapter import ndi_daq_reader_SpikeInterfaceReader
+
+            return ndi_daq_reader_SpikeInterfaceReader
+        except ImportError:
+            return None
+
     def getchannelsepoch(self, epochfiles: list[str]) -> list[ChannelInfo]:
         """List channels available for an epoch.
 
         Delegates to the NDR reader and converts the returned dicts
-        to :class:`ChannelInfo` objects.
+        to :class:`ChannelInfo` objects. Falls back to SpikeInterface
+        if the NDR reader cannot handle the epoch files.
         """
-        r = self._get_ndr_reader()
-        ndr_channels = r.getchannelsepoch(epochfiles, 1)
-        return [
-            ChannelInfo(
-                name=ch["name"],
-                type=ch["type"],
-                time_channel=ch.get("time_channel"),
-            )
-            for ch in ndr_channels
-        ]
+        try:
+            r = self._get_ndr_reader()
+            ndr_channels = r.getchannelsepoch(epochfiles, 1)
+            return [
+                ChannelInfo(
+                    name=ch["name"],
+                    type=ch["type"],
+                    time_channel=ch.get("time_channel"),
+                )
+                for ch in ndr_channels
+            ]
+        except Exception:
+            SI = self._get_si_reader()
+            if SI is None:
+                raise
+            return SI().getchannelsepoch(epochfiles)
 
     def readchannels_epochsamples(self, channeltype, channel, epochfiles, s0, s1):
         """Read channel data as samples.
 
         Delegates to the NDR reader with ``epoch_select=1``.
+        Falls back to SpikeInterface on failure.
         """
-        r = self._get_ndr_reader()
-        # NDR expects a single channeltype string
-        if isinstance(channeltype, list):
-            channeltype = channeltype[0]
-        if isinstance(channel, int):
-            channel = [channel]
-        return r.readchannels_epochsamples(channeltype, channel, epochfiles, 1, s0, s1)
+        try:
+            r = self._get_ndr_reader()
+            if isinstance(channeltype, list):
+                channeltype = channeltype[0]
+            if isinstance(channel, int):
+                channel = [channel]
+            return r.readchannels_epochsamples(channeltype, channel, epochfiles, 1, s0, s1)
+        except Exception:
+            SI = self._get_si_reader()
+            if SI is None:
+                raise
+            return SI().readchannels_epochsamples(channeltype, channel, epochfiles, s0, s1)
 
     def samplerate(self, epochfiles, channeltype, channel):
         """Get sample rate for specified channels.
 
         Delegates to the NDR reader with ``epoch_select=1``.
+        Falls back to SpikeInterface on failure.
         """
-        r = self._get_ndr_reader()
-        if isinstance(channeltype, list):
-            channeltype = channeltype[0]
-        sr = r.samplerate(epochfiles, 1, channeltype, channel)
-        return np.atleast_1d(sr)
+        try:
+            r = self._get_ndr_reader()
+            if isinstance(channeltype, list):
+                channeltype = channeltype[0]
+            sr = r.samplerate(epochfiles, 1, channeltype, channel)
+            return np.atleast_1d(sr)
+        except Exception:
+            SI = self._get_si_reader()
+            if SI is None:
+                raise
+            return SI().samplerate(epochfiles, channeltype, channel)
 
     def epochclock(self, epochfiles):
         """Return the clock types for an epoch.
 
         Converts NDR ``ClockType`` objects to NDI ``ndi_time_clocktype``.
+        Falls back to SpikeInterface on failure.
         """
-        r = self._get_ndr_reader()
-        from ...time import ndi_time_clocktype
+        try:
+            r = self._get_ndr_reader()
+            from ndi.time import ndi_time_clocktype
 
-        ndr_clocks = r.epochclock(epochfiles, 1)
-        return [ndi_time_clocktype(ec.type) for ec in ndr_clocks]
+            ndr_clocks = r.epochclock(epochfiles, 1)
+            return [ndi_time_clocktype(ec.type) for ec in ndr_clocks]
+        except Exception:
+            from ndi.time import DEV_LOCAL_TIME
+
+            return [DEV_LOCAL_TIME]
 
     def t0_t1(self, epochfiles):
         """Return the start and end times for an epoch.
 
         Returns list of ``(t0, t1)`` tuples.
+        Falls back to SpikeInterface on failure.
         """
-        r = self._get_ndr_reader()
-        result = r.t0_t1(epochfiles, 1)
-        return [(row[0], row[1]) for row in result]
+        try:
+            r = self._get_ndr_reader()
+            result = r.t0_t1(epochfiles, 1)
+            return [(row[0], row[1]) for row in result]
+        except Exception:
+            SI = self._get_si_reader()
+            if SI is None:
+                raise
+            return SI().t0_t1(epochfiles)
 
     def underlying_datatype(self, epochfiles, channeltype, channel):
         """Get the underlying data type for channels.
 
         Delegates to the NDR reader.
         """
-        r = self._get_ndr_reader()
-        if isinstance(channeltype, list):
-            channeltype = channeltype[0]
-        return r.ndr_reader_base.underlying_datatype(epochfiles, 1, channeltype, channel)
+        try:
+            r = self._get_ndr_reader()
+            if isinstance(channeltype, list):
+                channeltype = channeltype[0]
+            return r.ndr_reader_base.underlying_datatype(epochfiles, 1, channeltype, channel)
+        except Exception:
+            return super().underlying_datatype(epochfiles, channeltype, channel)
 
     def readevents_epochsamples_native(self, channeltype, channel, epochfiles, t0, t1):
         """Read native event data.
 
         Delegates to the NDR reader.
+        Falls back to SpikeInterface on failure.
         """
-        r = self._get_ndr_reader()
-        if isinstance(channeltype, list):
-            channeltype = channeltype[0]
-        if isinstance(channel, int):
-            channel = [channel]
-        return r.readevents_epochsamples_native(channeltype, channel, epochfiles, 1, t0, t1)
+        try:
+            r = self._get_ndr_reader()
+            if isinstance(channeltype, list):
+                channeltype = channeltype[0]
+            if isinstance(channel, int):
+                channel = [channel]
+            return r.readevents_epochsamples_native(channeltype, channel, epochfiles, 1, t0, t1)
+        except Exception:
+            return [], []
 
     def epochsamples2times(self, channeltype, channel, epochfiles, samples):
         """Convert sample indices to time.
