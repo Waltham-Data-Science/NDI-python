@@ -794,13 +794,9 @@ class TestNDIQuery:
         """ndiquery should return documents matching a search."""
         from ndi.cloud.api.documents import ndiquery
 
-        search = [
-            {
-                "field": "document_class.class_name",
-                "operation": "exact_string",
-                "param1": "session",
-            }
-        ]
+        # Class filtering on the cloud must go through the 'isa' operator;
+        # the document_class.class_name field path is no longer searchable.
+        search = [{"field": "", "operation": "isa", "param1": "session"}]
         result = _retry_on_server_error(
             lambda: ndiquery("public", search, page=1, page_size=5, client=client)
         )
@@ -828,13 +824,9 @@ class TestNDIQuery:
         """ndiqueryAll should auto-paginate results."""
         from ndi.cloud.api.documents import ndiqueryAll
 
-        search = [
-            {
-                "field": "document_class.class_name",
-                "operation": "exact_string",
-                "param1": "session",
-            }
-        ]
+        # Class filtering on the cloud must go through the 'isa' operator;
+        # the document_class.class_name field path is no longer searchable.
+        search = [{"field": "", "operation": "isa", "param1": "session"}]
         result = _retry_on_server_error(
             lambda: ndiqueryAll("public", search, page_size=3, client=client)
         )
