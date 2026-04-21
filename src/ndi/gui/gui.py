@@ -139,9 +139,7 @@ def _build_window(session: Any) -> Any:
             try:
                 from ndi.query import ndi_query
 
-                doc_list = self._session.database_search(
-                    ndi_query("document_class.class_name", "regex", "(.*)", "")
-                )
+                doc_list = self._session.database_search(ndi_query.all())
             except Exception:
                 doc_list = []
 
