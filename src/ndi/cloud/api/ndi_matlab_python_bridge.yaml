@@ -473,6 +473,53 @@ functions:
       Python convenience that combines getBulkUploadURL + putFiles.
       MATLAB does these as separate steps.
 
+  - name: bulkFetch
+    matlab_path: "+ndi/+cloud/+api/+documents/bulkFetch.m"
+    matlab_last_sync_hash: "bacdd0c3"
+    python_path: "ndi/cloud/api/documents.py"
+    input_arguments:
+      - name: dataset_id
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: doc_ids
+        type_matlab: "string array"
+        type_python: "list[str]"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: documents
+        type_python: "list[dict[str, Any]]"
+    decision_log: >
+      Synchronized with MATLAB main as of 2026-04-20. Synchronous bulk
+      fetch of up to 500 documents by ID via POST /datasets/{datasetId}
+      /documents/bulk-fetch. Mirrors MATLAB input validation: non-empty,
+      <= 500 entries, each a 24-character hex string. MATLAB returns
+      (b, answer, apiResponse, apiURL); Python returns only the documents
+      list (the 'answer'), consistent with other api.* wrappers that
+      delegate HTTP metadata to CloudClient.
+
+  - name: documentClassCounts
+    matlab_path: "+ndi/+cloud/+api/+documents/documentClassCounts.m"
+    matlab_last_sync_hash: "12bfe81"
+    python_path: "ndi/cloud/api/documents.py"
+    input_arguments:
+      - name: dataset_id
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Synchronized with MATLAB main as of 2026-04-20. GET /datasets/
+      {datasetId}/document-class-counts. Returns a flat histogram of
+      leaf data.document_class.class_name with fields datasetId,
+      totalDocuments, and classCounts (a mapping of class name to int).
+      No inheritance roll-up is performed.
+
   - name: getBulkUploadURL
     matlab_path: "+ndi/+cloud/+api/+documents/getBulkUploadURL.m"
     matlab_last_sync_hash: "9b75c0fe"

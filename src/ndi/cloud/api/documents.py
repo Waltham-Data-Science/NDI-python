@@ -10,12 +10,16 @@ MATLAB equivalents: +ndi/+cloud/+api/+documents/*.m,
 
 from __future__ import annotations
 
+import re
 from typing import Annotated, Any
 
 from pydantic import SkipValidation, validate_call
 
 from ..client import APIResponse, CloudClient, _auto_client
 from ._validators import VALIDATE_CONFIG, CloudId, FilePath, PageNumber, PageSize, Scope
+
+_HEX24 = re.compile(r"^[0-9a-fA-F]{24}$")
+_BULK_FETCH_MAX = 500
 
 _Client = Annotated[CloudClient | None, SkipValidation()]
 
@@ -176,6 +180,86 @@ def countDocuments(dataset_id: CloudId, *, client: _Client = None) -> int:
 
     ds = getDataset(dataset_id, client=client)
     return ds.get("documentCount", 0)
+
+
+@_auto_client
+@validate_call(config=VALIDATE_CONFIG)
+def bulkFetch(
+    dataset_id: CloudId,
+    doc_ids: list[str],
+    *,
+    client: _Client = None,
+) -> list[dict[str, Any]]:
+    """POST /datasets/{datasetId}/documents/bulk-fetch
+
+    Synchronously fetch up to 500 documents (with full data) from a
+    dataset in a single call.  This is the fast synchronous companion
+    to the asynchronous :func:`getBulkDownloadURL` pipeline and is
+    intended for small sets (e.g. a subset of IDs returned by
+    :func:`ndiquery`).
+
+    Documents that do not exist, are soft-deleted, or do not belong to
+    the specified dataset are silently omitted from the response.  The
+    order of the returned documents is not guaranteed to match the
+    request order.
+
+    MATLAB equivalent: +cloud/+api/+documents/bulkFetch.m
+
+    Args:
+        dataset_id: The ID of the dataset containing the documents.
+        doc_ids: Document IDs to fetch.  Must be non-empty, at most 500
+            entries, and each entry must be a 24-character hex string.
+        client: Authenticated cloud client (auto-created if omitted).
+
+    Returns:
+        A list of document dicts, each with fields ``id``, ``ndiId``,
+        ``name``, ``className``, ``datasetId``, and ``data``.
+    """
+    if not doc_ids:
+        raise ValueError("doc_ids must be non-empty")
+    if len(doc_ids) > _BULK_FETCH_MAX:
+        raise ValueError(f"doc_ids must have at most {_BULK_FETCH_MAX} entries")
+    for did in doc_ids:
+        if not _HEX24.match(did):
+            raise ValueError(f"doc_ids entries must be 24-character hex strings: {did!r}")
+    result = client.post(
+        "/datasets/{datasetId}/documents/bulk-fetch",
+        json={"documentIds": list(doc_ids)},
+        datasetId=dataset_id,
+    )
+    return result.get("documents", []) if isinstance(result, dict) else list(result or [])
+
+
+@_auto_client
+@validate_call(config=VALIDATE_CONFIG)
+def documentClassCounts(
+    dataset_id: CloudId,
+    *,
+    client: _Client = None,
+) -> dict[str, Any]:
+    """GET /datasets/{datasetId}/document-class-counts
+
+    Retrieve a flat histogram of documents in a dataset grouped by leaf
+    ``data.document_class.class_name``.  No inheritance roll-up is
+    performed; for class-aware drill-downs use :func:`ndiquery` with
+    the ``isa`` operator.
+
+    MATLAB equivalent: +cloud/+api/+documents/documentClassCounts.m
+
+    Args:
+        dataset_id: The ID of the dataset to query.
+        client: Authenticated cloud client (auto-created if omitted).
+
+    Returns:
+        Dict with fields ``datasetId``, ``totalDocuments``, and
+        ``classCounts`` (a mapping of class name to integer count).
+        Documents with missing/empty ``class_name`` are bucketed under
+        ``'unknown'``.
+    """
+    return client.get(
+        "/datasets/{datasetId}/document-class-counts",
+        datasetId=dataset_id,
+    )
 
 
 @_auto_client
