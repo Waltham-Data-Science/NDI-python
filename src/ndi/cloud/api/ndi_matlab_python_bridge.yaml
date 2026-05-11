@@ -29,6 +29,13 @@ infrastructure:
     python_path: "ndi/cloud/api/documents.py"
     decision_log: "Python-only helper to normalize search structures."
 
+  - name: _wait_for_published_state
+    type: internal_helper
+    python_path: "ndi/cloud/api/datasets.py"
+    decision_log: >
+      Python-only shared body for waitForPublished / waitForUnpublished.
+      MATLAB has separate implementation classes for each.
+
 # =============================================================================
 # Functions — datasets.py
 # Maps to: +cloud/+api/+datasets/
@@ -309,6 +316,78 @@ functions:
       - name: result
         type_python: "dict[str, Any]"
     decision_log: "Exact match."
+
+  - name: waitForPublished
+    matlab_path: "+ndi/+cloud/+api/+datasets/waitForPublished.m"
+    matlab_last_sync_hash: "2566fe4d"
+    python_path: "ndi/cloud/api/datasets.py"
+    input_arguments:
+      - name: dataset_id
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: timeout
+        type_matlab: "double"
+        type_python: "float"
+        default: "180.0"
+      - name: initial_interval
+        type_matlab: "double"
+        type_python: "float"
+        default: "2.0"
+      - name: max_interval
+        type_matlab: "double"
+        type_python: "float"
+        default: "30.0"
+      - name: backoff_factor
+        type_matlab: "double"
+        type_python: "float"
+        default: "2.0"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Ported from MATLAB main as of 2026-05-11 (matlab HEAD 2566fe4d).
+      Polls getDataset with exponential backoff until isPublished=True or
+      the timeout elapses. On timeout the returned dict has
+      state='timeout' and elapsed=<seconds>, matching MATLAB. Python
+      returns only the dataset payload; MATLAB returns
+      (b, answer, apiResponse, apiURL).
+
+  - name: waitForUnpublished
+    matlab_path: "+ndi/+cloud/+api/+datasets/waitForUnpublished.m"
+    matlab_last_sync_hash: "2566fe4d"
+    python_path: "ndi/cloud/api/datasets.py"
+    input_arguments:
+      - name: dataset_id
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: timeout
+        type_matlab: "double"
+        type_python: "float"
+        default: "180.0"
+      - name: initial_interval
+        type_matlab: "double"
+        type_python: "float"
+        default: "2.0"
+      - name: max_interval
+        type_matlab: "double"
+        type_python: "float"
+        default: "30.0"
+      - name: backoff_factor
+        type_matlab: "double"
+        type_python: "float"
+        default: "2.0"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Ported from MATLAB main as of 2026-05-11 (matlab HEAD 2566fe4d).
+      Mirror of waitForPublished but waits for isPublished=False.
 
   # --- documents.py ---
   - name: getDocument
@@ -708,7 +787,7 @@ functions:
 
   - name: putFiles
     matlab_path: "+ndi/+cloud/+api/+files/putFiles.m"
-    matlab_last_sync_hash: "eefb3a4a"
+    matlab_last_sync_hash: "2566fe4d"
     python_path: "ndi/cloud/api/files.py"
     input_arguments:
       - name: url
@@ -720,10 +799,30 @@ functions:
       - name: timeout
         type_python: "int"
         default: "120"
+      - name: job_id
+        type_matlab: "string"
+        type_python: "str"
+        default: "''"
+      - name: wait_for_completion
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "False"
+      - name: completion_timeout
+        type_matlab: "double"
+        type_python: "float"
+        default: "60.0"
     output_arguments:
       - name: success
         type_python: "bool"
-    decision_log: "Exact match."
+    decision_log: >
+      Synchronized with MATLAB main as of 2026-05-11 (matlab HEAD
+      2566fe4d). Added job_id and wait_for_completion options to mirror
+      the new MATLAB bulk-upload "fire-and-wait" pattern: after a
+      successful PUT, when wait_for_completion=True and job_id is set,
+      the function polls waitForBulkUpload until the server-side
+      extraction job reaches state 'complete'. The MATLAB
+      'useCurl' option is omitted from the Python port; requests does
+      the right thing on all supported platforms.
 
   - name: putFileBytes
     matlab_path: "N/A"
@@ -797,7 +896,7 @@ functions:
 
   - name: getFileCollectionUploadURL
     matlab_path: "+ndi/+cloud/+api/+files/getFileCollectionUploadURL.m"
-    matlab_last_sync_hash: "9b75c0fe"
+    matlab_last_sync_hash: "2566fe4d"
     python_path: "ndi/cloud/api/files.py"
     input_arguments:
       - name: org_id
@@ -808,9 +907,142 @@ functions:
         type_python: "_Client"
         default: "None"
     output_arguments:
-      - name: url
-        type_python: "str"
-    decision_log: "Exact match."
+      - name: info
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Updated to return a dict {url, jobId} instead of just the url so
+      that callers can pass jobId to waitForBulkUpload / putFiles
+      (matches MATLAB main as of 2026-05-11). Older callers that only
+      need the url should use result['url'].
+
+  - name: getBulkUploadStatus
+    matlab_path: "+ndi/+cloud/+api/+files/getBulkUploadStatus.m"
+    matlab_last_sync_hash: "2566fe4d"
+    python_path: "ndi/cloud/api/files.py"
+    input_arguments:
+      - name: job_id
+        type_matlab: "string"
+        type_python: "NonEmptyStr"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: status
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Ported from MATLAB main as of 2026-05-11 (matlab HEAD 2566fe4d).
+      GET /bulk-uploads/{jobId}. Returns the server-side extraction job
+      state. Python module also exposes the alias bulkUploadsJobInfo
+      (matches MATLAB's secondary helper name).
+
+  - name: bulkUploadsJobInfo
+    matlab_path: "+ndi/+cloud/+api/+files/getBulkUploadStatus.m"
+    matlab_last_sync_hash: "2566fe4d"
+    python_path: "ndi/cloud/api/files.py"
+    python_qualified: "ndi.cloud.api.files.bulkUploadsJobInfo"
+    input_arguments:
+      - name: job_id
+        type_python: "NonEmptyStr"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: status
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Alias for getBulkUploadStatus, matching the MATLAB helper name
+      introduced in commit a6056d1500.
+
+  - name: listActiveBulkUploads
+    matlab_path: "+ndi/+cloud/+api/+files/listActiveBulkUploads.m"
+    matlab_last_sync_hash: "2566fe4d"
+    python_path: "ndi/cloud/api/files.py"
+    input_arguments:
+      - name: dataset_id
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: state
+        type_matlab: "string"
+        type_python: "Literal['active','all','queued','extracting','complete','failed']"
+        default: "'active'"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Ported from MATLAB main as of 2026-05-11 (matlab HEAD 2566fe4d).
+      GET /datasets/{datasetId}/bulk-uploads[?state=...].
+
+  - name: waitForBulkUpload
+    matlab_path: "+ndi/+cloud/+api/+files/waitForBulkUpload.m"
+    matlab_last_sync_hash: "2566fe4d"
+    python_path: "ndi/cloud/api/files.py"
+    input_arguments:
+      - name: job_id
+        type_matlab: "string"
+        type_python: "NonEmptyStr"
+      - name: timeout
+        type_python: "float"
+        default: "60.0"
+      - name: initial_interval
+        type_python: "float"
+        default: "1.0"
+      - name: max_interval
+        type_python: "float"
+        default: "30.0"
+      - name: backoff_factor
+        type_python: "float"
+        default: "2.0"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: status
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Ported from MATLAB main as of 2026-05-11 (matlab HEAD 2566fe4d).
+      Polls getBulkUploadStatus with exponential backoff until the job
+      reaches a terminal state (complete | failed) or the timeout
+      elapses. On timeout the returned dict has state='timeout' and
+      elapsed=<seconds>.
+
+  - name: waitForAllBulkUploads
+    matlab_path: "+ndi/+cloud/+api/+files/waitForAllBulkUploads.m"
+    matlab_last_sync_hash: "2566fe4d"
+    python_path: "ndi/cloud/api/files.py"
+    input_arguments:
+      - name: dataset_id
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: timeout
+        type_python: "float"
+        default: "300.0"
+      - name: initial_interval
+        type_python: "float"
+        default: "1.0"
+      - name: max_interval
+        type_python: "float"
+        default: "30.0"
+      - name: backoff_factor
+        type_python: "float"
+        default: "2.0"
+      - name: require_all_complete
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "True"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Ported from MATLAB main as of 2026-05-11 (matlab HEAD 2566fe4d).
+      Polls listActiveBulkUploads until the active set drains.
+      Sync-pipeline callers use this to ensure remote inventories are
+      stable before reading them.
 
   # --- users.py ---
   - name: createUser
@@ -865,6 +1097,90 @@ functions:
     decision_log: >
       MATLAB uses PascalCase 'GetUser'. Python preserves this exactly
       per strict naming policy.
+
+  - name: getMatlabLicense
+    matlab_path: "+ndi/+cloud/+api/+users/getMatlabLicense.m"
+    matlab_last_sync_hash: "2566fe4d"
+    python_path: "ndi/cloud/api/users.py"
+    input_arguments:
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: status
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Ported from MATLAB main as of 2026-05-11 (matlab HEAD 2566fe4d).
+      GET /users/me/matlab-license. Part of the MATLAB BYOL license
+      API. Python keeps the MATLAB camelCase name verbatim
+      (per strict naming policy) even though it refers to MATLAB
+      specifically.
+
+  - name: allocateMatlabLicenseMac
+    matlab_path: "+ndi/+cloud/+api/+users/allocateMatlabLicenseMac.m"
+    matlab_last_sync_hash: "2566fe4d"
+    python_path: "ndi/cloud/api/users.py"
+    input_arguments:
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: status
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Ported from MATLAB main as of 2026-05-11 (matlab HEAD 2566fe4d).
+      POST /users/me/matlab-license. Idempotent allocation of an AWS
+      ENI/MAC for dedicated MATLAB BYOL.
+
+  - name: setMatlabLicense
+    matlab_path: "+ndi/+cloud/+api/+users/setMatlabLicense.m"
+    matlab_last_sync_hash: "2566fe4d"
+    python_path: "ndi/cloud/api/users.py"
+    input_arguments:
+      - name: license_file
+        type_matlab: "string"
+        type_python: "NonEmptyStr"
+      - name: mode
+        type_matlab: "string"
+        type_python: "Literal['dedicated','network']"
+        default: "'dedicated'"
+      - name: release
+        type_matlab: "string"
+        type_python: "str"
+        default: "''"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: status
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Ported from MATLAB main as of 2026-05-11 (matlab HEAD 2566fe4d).
+      PUT /users/me/matlab-license. Accepts either the contents of the
+      .lic file as a string, or a path to a .lic file on disk
+      (auto-detected: a single-line argument that exists as a file is
+      read in).
+
+  - name: clearMatlabLicense
+    matlab_path: "+ndi/+cloud/+api/+users/clearMatlabLicense.m"
+    matlab_last_sync_hash: "2566fe4d"
+    python_path: "ndi/cloud/api/users.py"
+    input_arguments:
+      - name: release
+        type_matlab: "string"
+        type_python: "str"
+        default: "''"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: status
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Ported from MATLAB main as of 2026-05-11 (matlab HEAD 2566fe4d).
+      DELETE /users/me/matlab-license. Without release, fully clears
+      the user's registration; with release, only that release entry
+      is removed from a dedicated registration.
 
   # --- compute.py ---
   - name: startSession
