@@ -11,6 +11,7 @@ MATLAB equivalents: +ndi/+cloud/+api/+datasets/*.m,
 
 from __future__ import annotations
 
+import time
 from typing import Annotated, Any
 
 from pydantic import SkipValidation, validate_call
@@ -251,4 +252,127 @@ def listDeletedDatasets(
     return client.get(
         "/datasets/deleted",
         params={"page": page, "pageSize": page_size},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Wait helpers
+# ---------------------------------------------------------------------------
+
+
+def _wait_for_published_state(
+    dataset_id: str,
+    *,
+    desired: bool,
+    timeout: float,
+    initial_interval: float,
+    max_interval: float,
+    backoff_factor: float,
+    client: CloudClient | None,
+) -> dict[str, Any]:
+    """Shared body for :func:`waitForPublished` / :func:`waitForUnpublished`.
+
+    Polls ``getDataset`` at exponentially growing intervals until the
+    dataset's ``isPublished`` field equals *desired* or the overall
+    timeout elapses.
+    """
+    start = time.monotonic()
+    interval = initial_interval
+    last: Any = None
+    while True:
+        elapsed = time.monotonic() - start
+        try:
+            ds = getDataset(dataset_id, client=client)
+            last = ds
+            is_published = bool(ds.get("isPublished", False)) if hasattr(ds, "get") else False
+            if is_published == desired:
+                return ds
+        except Exception:
+            # Treat transient errors as not-yet-reached; let timeout govern.
+            pass
+        if elapsed + interval > timeout:
+            payload: dict[str, Any]
+            if last is not None and hasattr(last, "data") and isinstance(last.data, dict):
+                payload = dict(last.data)
+            elif isinstance(last, dict):
+                payload = dict(last)
+            else:
+                payload = {}
+            payload["state"] = "timeout"
+            payload["elapsed"] = time.monotonic() - start
+            return payload
+        time.sleep(interval)
+        interval = min(interval * backoff_factor, max_interval)
+
+
+@_auto_client
+@validate_call(config=VALIDATE_CONFIG)
+def waitForPublished(
+    dataset_id: CloudId,
+    *,
+    timeout: float = 180.0,
+    initial_interval: float = 2.0,
+    max_interval: float = 30.0,
+    backoff_factor: float = 2.0,
+    client: _Client = None,
+) -> dict[str, Any]:
+    """Poll a dataset until its ``isPublished`` flag is true.
+
+    Repeatedly calls :func:`getDataset` at exponentially growing
+    intervals until the dataset's ``isPublished`` field becomes ``True``
+    or the overall timeout elapses.  The backend flips ``isPublished``
+    from ``False`` to ``True`` only when publishing has completed, so
+    this is the canonical signal that a publish workflow is finished.
+
+    Args:
+        dataset_id: The cloud dataset ID.
+        timeout: Overall deadline in seconds.  Default 180.
+        initial_interval: First sleep between polls (s).  Default 2.
+        max_interval: Cap on the per-poll sleep (s).  Default 30.
+        backoff_factor: Multiplier applied after each poll.  Default 2.
+
+    Returns:
+        The last dataset payload from the server.  On timeout, the
+        returned dict has ``state='timeout'`` and ``elapsed`` set to
+        the wall-clock seconds spent polling.
+
+    MATLAB equivalent: +cloud/+api/+datasets/waitForPublished.m
+    """
+    return _wait_for_published_state(
+        dataset_id,
+        desired=True,
+        timeout=timeout,
+        initial_interval=initial_interval,
+        max_interval=max_interval,
+        backoff_factor=backoff_factor,
+        client=client,
+    )
+
+
+@_auto_client
+@validate_call(config=VALIDATE_CONFIG)
+def waitForUnpublished(
+    dataset_id: CloudId,
+    *,
+    timeout: float = 180.0,
+    initial_interval: float = 2.0,
+    max_interval: float = 30.0,
+    backoff_factor: float = 2.0,
+    client: _Client = None,
+) -> dict[str, Any]:
+    """Poll a dataset until its ``isPublished`` flag is false.
+
+    See :func:`waitForPublished` for the polling semantics; this
+    function waits for the opposite transition.
+
+    MATLAB equivalent: +cloud/+api/+datasets/waitForUnpublished.m
+    """
+    return _wait_for_published_state(
+        dataset_id,
+        desired=False,
+        timeout=timeout,
+        initial_interval=initial_interval,
+        max_interval=max_interval,
+        backoff_factor=backoff_factor,
+        client=client,
     )
