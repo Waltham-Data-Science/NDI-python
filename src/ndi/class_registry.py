@@ -36,6 +36,10 @@ def _build_registry() -> dict[str, type]:
     from .element import ndi_element
     from .file.navigator import ndi_file_navigator
     from .file.navigator.epochdir import ndi_file_navigator_epochdir
+    from .file.navigator.rhd_series import ndi_file_navigator_rhd_series
+    from .file.navigator.rhd_series_epochdir import (
+        ndi_file_navigator_rhd_series_epochdir,
+    )
     from .probe import ndi_probe
     from .probe.timeseries import ndi_probe_timeseries
     from .probe.timeseries_mfdaq import ndi_probe_timeseries_mfdaq
@@ -85,6 +89,12 @@ def _build_registry() -> dict[str, type]:
     # File navigators
     registry[ndi_file_navigator.NDI_FILENAVIGATOR_CLASS] = ndi_file_navigator
     registry[ndi_file_navigator_epochdir.NDI_FILENAVIGATOR_CLASS] = ndi_file_navigator_epochdir
+    registry[ndi_file_navigator_rhd_series.NDI_FILENAVIGATOR_CLASS] = (
+        ndi_file_navigator_rhd_series
+    )
+    registry[ndi_file_navigator_rhd_series_epochdir.NDI_FILENAVIGATOR_CLASS] = (
+        ndi_file_navigator_rhd_series_epochdir
+    )
     # Custom lab-specific navigators mapped to epochdir until dedicated classes exist
     registry["ndi.setup.file.navigator.vhlab_np_epochdir"] = ndi_file_navigator_epochdir
 

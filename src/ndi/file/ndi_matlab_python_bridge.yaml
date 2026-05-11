@@ -428,3 +428,186 @@ classes:
           generate IDs from directory names. Python ad-hoc port was
           missing this override. Added to match MATLAB.
           Synchronized 2026-03-13.
+
+  # =========================================================================
+  # ndi.file.navigator.rhd_series (subclass of navigator)
+  # =========================================================================
+  - name: navigator_rhd_series
+    type: class
+    matlab_path: "+ndi/+file/+navigator/rhd_series.m"
+    matlab_last_sync_hash: "2566fe4d"
+    python_path: "ndi/file/navigator/rhd_series.py"
+    python_class: "ndi_file_navigator_rhd_series"
+    inherits: "ndi.file.navigator"
+
+    properties: []
+
+    methods:
+      - name: rhd_series
+        kind: constructor
+        matlab_last_sync_hash: "2566fe4d"
+        input_arguments:
+          - name: varargin
+            type_matlab: "varargin"
+            type_python: "*args, **kwargs"
+        output_arguments:
+          - name: obj
+            type_python: "ndi_file_navigator_rhd_series"
+        decision_log: >
+          Exact match. Passes all arguments to parent ndi.file.navigator
+          constructor. Synchronized 2026-05-11.
+
+      - name: epochid
+        matlab_last_sync_hash: "2566fe4d"
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str] | None"
+            default: "None"
+        output_arguments:
+          - name: id
+            type_python: "str"
+        decision_log: >
+          Exact match. Returns the prefix captured by the '#' in the
+          series pattern (patterns[0]). Falls back to the file stem
+          when no match. Honors ingested-file short-circuit.
+          Synchronized 2026-05-11.
+
+      - name: selectfilegroups_disk
+        matlab_last_sync_hash: "2566fe4d"
+        input_arguments: []
+        output_arguments:
+          - name: epochfiles_disk
+            type_python: "list[list[str]]"
+        decision_log: >
+          Exact match. Groups .rhd files in the session directory by
+          the prefix captured from patterns[0], keeps the
+          lexicographically earliest member of each group, and appends
+          one lexicographically earliest ancillary match per pattern
+          in patterns[1:] (with '#' replaced by the regex-escaped
+          prefix). Dotfile basenames are skipped. Synchronized
+          2026-05-11.
+
+      - name: normalizePatterns
+        kind: static
+        matlab_last_sync_hash: "2566fe4d"
+        python_name: "_normalize_patterns"
+        input_arguments:
+          - name: filematch
+            type_matlab: "char | cell"
+            type_python: "str | list[str]"
+        output_arguments:
+          - name: patterns
+            type_python: "list[str]"
+        decision_log: >
+          Static helper. Coerces a single string into a one-element
+          list. Mapped to a private Python static method since it is
+          an implementation detail. Synchronized 2026-05-11.
+
+      - name: extractPrefix
+        kind: static
+        matlab_last_sync_hash: "2566fe4d"
+        python_name: "_extract_prefix"
+        input_arguments:
+          - name: filename
+            type_matlab: "char"
+            type_python: "str"
+          - name: seriesPattern
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: prefix
+            type_python: "str"
+        decision_log: >
+          Static helper. Replaces '#' with a non-greedy capture group,
+          anchors the regex, and returns the captured prefix or '' on
+          no match. Mapped to a private Python static method since it
+          is an implementation detail. Synchronized 2026-05-11.
+
+      - name: groupDirectory
+        kind: static
+        matlab_last_sync_hash: "2566fe4d"
+        python_name: "_group_directory"
+        input_arguments:
+          - name: directory
+            type_matlab: "char"
+            type_python: "str"
+          - name: patterns
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+        output_arguments:
+          - name: groups
+            type_python: "list[list[str]]"
+        decision_log: >
+          Static helper. Applies the rhd_series matching rules to a
+          single directory: groups series matches by prefix (stable
+          first-seen order, mirroring MATLAB's unique(..., 'stable')),
+          keeps the lexicographically earliest series file per group,
+          and appends one lexicographically earliest ancillary match
+          per pattern in patterns[1:]. Skips dotfile basenames. Mapped
+          to a private Python static method since it is an
+          implementation detail. Synchronized 2026-05-11.
+
+  # =========================================================================
+  # ndi.file.navigator.rhd_series_epochdir (subclass of navigator.epochdir)
+  # =========================================================================
+  - name: navigator_rhd_series_epochdir
+    type: class
+    matlab_path: "+ndi/+file/+navigator/rhd_series_epochdir.m"
+    matlab_last_sync_hash: "2566fe4d"
+    python_path: "ndi/file/navigator/rhd_series_epochdir.py"
+    python_class: "ndi_file_navigator_rhd_series_epochdir"
+    inherits: "ndi.file.navigator.epochdir"
+
+    properties: []
+
+    methods:
+      - name: rhd_series_epochdir
+        kind: constructor
+        matlab_last_sync_hash: "2566fe4d"
+        input_arguments:
+          - name: varargin
+            type_matlab: "varargin"
+            type_python: "*args, **kwargs"
+        output_arguments:
+          - name: obj
+            type_python: "ndi_file_navigator_rhd_series_epochdir"
+        decision_log: >
+          Exact match. Passes all arguments to parent
+          ndi.file.navigator.epochdir constructor. Synchronized
+          2026-05-11.
+
+      - name: epochid
+        matlab_last_sync_hash: "2566fe4d"
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str] | None"
+            default: "None"
+        output_arguments:
+          - name: id
+            type_python: "str"
+        decision_log: >
+          Exact match. Returns the name of the subdirectory that
+          contains the epoch's first file (matching
+          ndi.file.navigator.epochdir semantics). Honors
+          ingested-file short-circuit. Synchronized 2026-05-11.
+
+      - name: selectfilegroups_disk
+        matlab_last_sync_hash: "2566fe4d"
+        input_arguments: []
+        output_arguments:
+          - name: epochfiles_disk
+            type_python: "list[list[str]]"
+        decision_log: >
+          Exact match. Walks first-level subdirectories of the session
+          (skipping dotfile basenames) and applies the rhd_series
+          grouping rules to each, concatenating all groups. Reuses
+          ndi_file_navigator_rhd_series._group_directory for parity
+          with the flat-session navigator. Synchronized 2026-05-11.
