@@ -11,7 +11,6 @@ project_metadata:
   bridge_version: "1.1"
   naming_policy: "Strict MATLAB Mirror"
   indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
-  matlab_last_sync_hash: "2566fe4d"
 
 # =========================================================================
 # Standalone functions
@@ -34,6 +33,57 @@ functions:
       Exact match. Returns 2-tuple (version_string, url).
       MATLAB uses git describe; Python does the same with subprocess
       fallback to __version__. Synchronized 2026-03-13.
+
+  - name: setup.lab
+    type: function
+    matlab_path: "+ndi/+setup/lab.m"
+    matlab_last_sync_hash: "2566fe4d"
+    python_path: "ndi/setup/lab.py"
+    input_arguments:
+      - name: labName
+        type_matlab: "char"
+        type_python: "str"
+      - name: ref
+        type_matlab: "char"
+        type_python: "N/A (Python takes session directly)"
+      - name: dirname
+        type_matlab: "char"
+        type_python: "N/A (Python takes session directly)"
+    output_arguments:
+      - name: S
+        type_matlab: "ndi.session.dir"
+        type_python: "None (mutates session in-place)"
+    decision_log: >
+      Reads DAQ system JSON configs from ndi_common/daq_systems/<labName>/
+      and adds corresponding documents to the session. MATLAB creates
+      the session.dir from (ref, dirname); Python takes a session that
+      the caller has already created and adds documents to it.
+      Python signature: ndi.setup.lab(session, lab_name).
+
+  - name: setup.rayolab
+    type: function
+    matlab_path: "+ndi/+setup/rayolab.m"
+    matlab_last_sync_hash: "2566fe4d"
+    python_path: "ndi/setup/rayolab.py"
+    input_arguments:
+      - name: ref
+        type_matlab: "char"
+        type_python: "N/A (Python takes session directly)"
+      - name: dirname
+        type_matlab: "char"
+        type_python: "N/A (Python takes session directly)"
+    output_arguments:
+      - name: S
+        type_matlab: "ndi.session.dir"
+        type_python: "None (mutates session in-place)"
+    decision_log: >
+      Thin wrapper that calls setup.lab(session, "rayolab"). Loads the
+      rayo_intanSeries and rayo_stim DAQ system configs from
+      ndi_common/daq_systems/rayolab/. The rayo_stim system pairs with
+      the RayoLabStims metadata reader. MATLAB rayolab.m calls
+      ndi.setup.lab('rayolab', ref, dirname); Python rayolab(session)
+      calls lab(session, "rayolab"). Python signature:
+      ndi.setup.rayolab(session).
 
 # =========================================================================
 # Classes
@@ -588,239 +638,6 @@ classes:
       document definitions. Synchronized 2026-03-13.
 
   # =========================================================================
-  # ndi.preferences - Singleton user preferences store
-  # =========================================================================
-  - name: preferences
-    type: class
-    matlab_path: "+ndi/preferences.m"
-    python_path: "ndi/preferences.py"
-    python_class: "ndi_preferences"
-    inherits: ""
-    matlab_last_sync_hash: "2566fe4d"
-
-    properties:
-      - name: Items
-        type_matlab: "struct array"
-        type_python: "list[PreferenceItem]"
-        access: "GetAccess=public, SetAccess=private"
-        decision_log: >
-          Struct array in MATLAB; list of PreferenceItem dataclass
-          instances in Python. Each item has fields category,
-          subcategory, name, value, default_value, description, type.
-          MATLAB field names use CamelCase (Category, Subcategory, ...);
-          Python uses snake_case per PEP 8.
-      - name: Filename
-        type_matlab: "char (Constant, private)"
-        type_python: "str (read-only @property)"
-        access: "private in MATLAB; exposed via .filename property and module-level filename() in Python"
-        decision_log: >
-          MATLAB: fullfile(prefdir, 'NDI_Preferences.json').
-          Python: ~/.ndi/NDI_Preferences.json (Python has no equivalent
-          of MATLAB's per-installation prefdir). Directory is created
-          lazily on first save. Documented as a deviation; both files
-          use the same JSON schema (double-underscore-joined keys) so
-          values could be copied manually if a user wants to share
-          settings between language stacks.
-
-    methods:
-      - name: preferences
-        kind: constructor
-        input_arguments:
-          - name: filename
-            type_matlab: "N/A (constructor is private)"
-            type_python: "str | os.PathLike | None"
-            default: "None"
-        output_arguments:
-          - name: obj
-            type_python: "ndi_preferences"
-        decision_log: >
-          MATLAB constructor is private; instantiation goes via
-          getSingleton. Python constructor is public to make testing
-          easy (callers can pass a temp filename) but production code
-          should call get_singleton()/preferences() instead.
-
-      - name: getSingleton
-        kind: static
-        input_arguments: []
-        output_arguments:
-          - name: obj
-            type_python: "ndi_preferences"
-        decision_log: >
-          Returns the process-wide shared instance. Mapped to the
-          module-level function ndi.preferences.get_singleton().
-          The Pythonic alias ndi.preferences.preferences() is also
-          provided.
-
-      - name: get
-        kind: static
-        input_arguments:
-          - name: pathStr
-            type_matlab: "string"
-            type_python: "str"
-        output_arguments:
-          - name: value
-            type_python: "Any"
-        decision_log: >
-          Mapped to ndi.preferences.get(path_str). Raises ValueError
-          for malformed paths (MATLAB NDI:preferences:invalidPath) and
-          KeyError for unknown preferences (MATLAB
-          NDI:preferences:unknownPreference).
-
-      - name: set
-        kind: static
-        input_arguments:
-          - name: pathStr
-            type_matlab: "string"
-            type_python: "str"
-          - name: value
-            type_matlab: "any"
-            type_python: "Any"
-        output_arguments: []
-        decision_log: >
-          Mapped to ndi.preferences.set(path_str, value). Updates the
-          singleton and persists to disk immediately. Errors match get.
-
-      - name: reset
-        kind: static
-        input_arguments:
-          - name: pathStr
-            type_matlab: "string (optional)"
-            type_python: "str | None"
-            default: "None"
-        output_arguments: []
-        decision_log: >
-          Mapped to ndi.preferences.reset(path_str=None). With no
-          argument resets every item to its default; with a path
-          resets just that one. Persists after the change.
-
-      - name: list
-        kind: static
-        input_arguments: []
-        output_arguments:
-          - name: info
-            type_matlab: "struct array"
-            type_python: "list[dict]"
-        decision_log: >
-          Renamed to ndi.preferences.list_items() in Python to avoid
-          shadowing the built-in list. Returns a list of dicts (one
-          per item) with the same fields as the MATLAB struct.
-
-      - name: has
-        kind: static
-        input_arguments:
-          - name: pathStr
-            type_matlab: "string"
-            type_python: "str"
-        output_arguments:
-          - name: tf
-            type_matlab: "logical"
-            type_python: "bool"
-        decision_log: >
-          Mapped to ndi.preferences.has(path_str). Never raises;
-          malformed paths return False.
-
-      - name: filename
-        kind: static
-        input_arguments: []
-        output_arguments:
-          - name: path
-            type_matlab: "char"
-            type_python: "str"
-        decision_log: >
-          Mapped to ndi.preferences.filename(). Returns the absolute
-          path of the on-disk JSON file (which may not yet exist).
-
-      - name: itemKey
-        kind: "static, private"
-        input_arguments:
-          - name: item
-            type_matlab: "struct"
-            type_python: "PreferenceItem"
-        output_arguments:
-          - name: key
-            type_python: "str"
-        decision_log: >
-          Implemented as PreferenceItem.key() in Python. Same encoding
-          ("Category__Name" or "Category__Subcategory__Name") so JSON
-          files round-trip between languages.
-
-      - name: parsePath
-        kind: "static, private"
-        input_arguments:
-          - name: pathStr
-            type_matlab: "string"
-            type_python: "str"
-        output_arguments:
-          - name: category
-            type_python: "str"
-          - name: subcategory
-            type_python: "str"
-          - name: name
-            type_python: "str"
-        decision_log: >
-          Implemented as ndi_preferences._parse_path. Raises
-          ValueError for malformed paths.
-
-      - name: coerceType
-        kind: "static, private"
-        input_arguments:
-          - name: rawValue
-            type_python: "Any"
-          - name: typeName
-            type_matlab: "char"
-            type_python: "str"
-        output_arguments:
-          - name: value
-            type_python: "Any"
-        decision_log: >
-          Implemented as ndi_preferences._coerce_type. MATLAB type
-          names (double, single, logical, string, char) are mapped to
-          Python equivalents (float, float, bool, str, str). Any
-          conversion failure returns the raw value unchanged, matching
-          MATLAB behaviour.
-
-      - name: getHeader
-        kind: "protected (MATLAB CustomDisplay)"
-        status: not_applicable
-        decision_log: >
-          MATLAB matlab.mixin.CustomDisplay header for the command
-          window. Not applicable to Python; the equivalent is
-          ndi_preferences.__repr__ which groups items by category.
-
-      - name: getPropertyGroups
-        kind: "protected (MATLAB CustomDisplay)"
-        status: not_applicable
-        decision_log: >
-          MATLAB matlab.mixin.CustomDisplay property grouping for the
-          command window. Folded into the Python __repr__ above; no
-          separate method.
-
-    decision_log: >
-      Singleton preference store. Python uses a module-level cached
-      instance accessed via ndi.preferences.get_singleton() (or the
-      Pythonic alias ndi.preferences.preferences()); the same
-      module-level convenience functions (get/set/reset/has/filename/
-      list_items) mirror the MATLAB static methods.
-
-      Deviations from MATLAB:
-        - Persistence path: ~/.ndi/NDI_Preferences.json instead of
-          fullfile(prefdir, 'NDI_Preferences.json'); Python has no
-          equivalent of MATLAB prefdir.
-        - Type names: MATLAB 'double'/'single'/'logical'/'string'/
-          'char' map to Python 'float'/'float'/'bool'/'str'/'str';
-          'any' passes values through unchanged in both.
-        - list() renamed to list_items() in Python to avoid shadowing
-          the built-in.
-        - MATLAB CustomDisplay overrides (getHeader, getPropertyGroups)
-          are replaced by a single __repr__ that groups items by
-          category.
-        - MATLAB AES vault is not used; the JSON file is stored in
-          plaintext. No secret-grade values are currently registered.
-        - The Python constructor is public (to ease testing); MATLAB
-          keeps it private and forces use of getSingleton.
-      Ported from NDI-matlab @ 2566fe4d on 2026-05-11.
-
-  # =========================================================================
   # ndi.query - ndi_database ndi_query
   # =========================================================================
   - name: query
@@ -1203,16 +1020,6 @@ not_applicable:
       MATLAB calculation pipeline registry with GUI editing.
       Not ported to Python.
 
-  - name: gui.preferencesEditor
-    matlab_path: "+ndi/+gui/preferencesEditor.m"
-    status: deferred
-    decision_log: >
-      MATLAB uifigure-based editor for ndi.preferences. Not ported
-      in this commit; tracked as a separate workstream. A Python
-      equivalent (likely PyQt/Tk or web UI) will live under ndi.gui
-      when designed. The data model is available via
-      ndi.preferences.list_items()/get()/set() in the meantime.
-
   # =========================================================================
   # ndi.data namespace — MATLAB-only
   # =========================================================================
@@ -1225,7 +1032,7 @@ not_applicable:
       scipy.optimize curve fitting directly; no wrapper needed.
 
   # =========================================================================
-  # ndi.setup namespace — MATLAB-only lab configurations
+  # ndi.setup namespace — MATLAB lab configurations
   # =========================================================================
   - name: setup
     matlab_path: "+ndi/+setup/"
@@ -1234,8 +1041,9 @@ not_applicable:
     decision_log: >
       Python equivalent of MATLAB lab setup wizards. The ndi.setup.lab()
       function reads DAQ system JSON configs from ndi_common/daq_systems/
-      and creates the corresponding documents in a session. Usage:
-      ndi.setup.lab(session, "vhlab").
+      and creates the corresponding documents in a session. Per-lab
+      wrappers (e.g. ndi.setup.rayolab) call lab() with a fixed name.
+      Usage: ndi.setup.lab(session, "vhlab"); ndi.setup.rayolab(session).
 
   # =========================================================================
   # ndi.docs namespace — MATLAB documentation generation
