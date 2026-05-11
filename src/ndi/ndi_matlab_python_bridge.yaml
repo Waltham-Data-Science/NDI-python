@@ -985,6 +985,21 @@ classes:
       none(), from_search() for MATLAB parity.
       Synchronized 2026-03-13.
 
+  # =========================================================================
+  # ndi.preferences - Singleton user-preferences store
+  # =========================================================================
+  - name: preferences
+    type: class
+    matlab_path: "+ndi/preferences.m"
+    matlab_last_sync_hash: "9061865d"
+    python_path: "ndi/preferences.py"
+    python_class: "Preferences"
+    inherits: ""
+
+    decision_log: >
+      matlab and python both persist to ~/.ndi/NDI_Preferences.json on
+      all platforms (synchronized 2026-05-11).
+
 # =========================================================================
 # Not ported / Not applicable
 # =========================================================================
