@@ -1115,6 +1115,10 @@ functions:
       API. Python keeps the MATLAB camelCase name verbatim
       (per strict naming policy) even though it refers to MATLAB
       specifically.
+      Test port (2026-05-11): MATLAB MatlabLicenseTest.testGetMatlabLicense
+      ported to tests/test_cloud_matlab_license.py::TestMatlabLicense::
+      test_getMatlabLicense. Read-only branch runs under both modes of
+      the NDI_CLOUD_TEST_USER_HAS_MATLAB_LICENSE guard.
 
   - name: allocateMatlabLicenseMac
     matlab_path: "+ndi/+cloud/+api/+users/allocateMatlabLicenseMac.m"
@@ -1131,6 +1135,11 @@ functions:
       Ported from MATLAB main as of 2026-05-11 (matlab HEAD 2566fe4d).
       POST /users/me/matlab-license. Idempotent allocation of an AWS
       ENI/MAC for dedicated MATLAB BYOL.
+      Test port (2026-05-11): exercised by
+      tests/test_cloud_matlab_license.py::TestMatlabLicense::
+      test_allocate_and_clear_lifecycle (skipped when
+      NDI_CLOUD_TEST_USER_HAS_MATLAB_LICENSE=true to preserve any
+      existing registration).
 
   - name: setMatlabLicense
     matlab_path: "+ndi/+cloud/+api/+users/setMatlabLicense.m"
@@ -1160,6 +1169,10 @@ functions:
       .lic file as a string, or a path to a .lic file on disk
       (auto-detected: a single-line argument that exists as a file is
       read in).
+      Test port (2026-05-11): negative-path covered by
+      tests/test_cloud_matlab_license.py::TestMatlabLicense::
+      test_setMatlabLicense_rejects_invalid_file (HTTP 400 on bogus
+      lic; skipped under HAS_LICENSE=true).
 
   - name: clearMatlabLicense
     matlab_path: "+ndi/+cloud/+api/+users/clearMatlabLicense.m"
@@ -1181,6 +1194,16 @@ functions:
       DELETE /users/me/matlab-license. Without release, fully clears
       the user's registration; with release, only that release entry
       is removed from a dedicated registration.
+      Test port (2026-05-11): exercised by
+      tests/test_cloud_matlab_license.py::TestMatlabLicense::
+      test_allocate_and_clear_lifecycle plus the per-test
+      destructive_teardown finalizer (mirror of MATLAB
+      TestMethodTeardown.maybeClear). The teardown never runs when
+      NDI_CLOUD_TEST_USER_HAS_MATLAB_LICENSE=true; see
+      tests/_matlab_license_guard.py for the rationale (refusing to
+      proceed without an explicit env-var declaration prevents a
+      misconfigured CI from silently deleting a real registered
+      license).
 
   # --- compute.py ---
   - name: startSession
