@@ -109,14 +109,25 @@ def lab(session, lab_name: str) -> None:
         )
         session.database_add(fn_doc)
 
-        # Create daqreader document — use the specialised document type
-        # for readers that require extra properties (e.g. ndr needs
-        # daqreader_ndr.ndr_reader_string so MATLAB can reconstruct it).
+        # Create daqreader document. NDR-family readers (the base
+        # ndi.daq.reader.mfdaq.ndr and any subclass thereof, e.g.
+        # ndi.setup.daq.reader.mfdaq.stimulus.rayolab_intanseries) need
+        # the daqreader_ndr doc shape with ndr_reader_string so MATLAB
+        # can reconstruct them; the matlab base ndr constructor reads
+        # document_properties.daqreader_ndr.ndr_reader_string and errors
+        # out on the generic daqreader shape.
+        #
+        # Signal: an NDR-family entry in the lab JSON sets
+        # DaqReaderFileParameters (the ndr "reader string" -- typically
+        # the format tag like "intan"). Use that as the trigger so we
+        # catch subclasses without hard-coding their class names.
         reader_file_params = config.get("DaqReaderFileParameters", "")
         if isinstance(reader_file_params, list):
             reader_file_params = reader_file_params[0] if reader_file_params else ""
 
-        if reader_class == "ndi.daq.reader.mfdaq.ndr":
+        is_ndr_family = reader_class == "ndi.daq.reader.mfdaq.ndr" or bool(reader_file_params)
+
+        if is_ndr_family:
             dr_doc = session.newdocument(
                 "daq/daqreader_ndr",
                 **{
