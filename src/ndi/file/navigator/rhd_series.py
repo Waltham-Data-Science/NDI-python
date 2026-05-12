@@ -23,6 +23,7 @@ import os
 import re
 from pathlib import Path
 
+from ...util.matlab_regex import matlab_to_python_regex
 from . import ndi_file_navigator
 
 
@@ -88,9 +89,7 @@ class ndi_file_navigator_rhd_series(ndi_file_navigator):
         if self.isingested(epochfiles):
             return self.ingestedfiles_epochid(epochfiles)
 
-        patterns = self._normalize_patterns(
-            self._fileparameters.get("filematch", [])
-        )
+        patterns = self._normalize_patterns(self._fileparameters.get("filematch", []))
         basename = os.path.basename(epochfiles[0])
         eid = self._extract_prefix(basename, patterns[0]) if patterns else ""
         if not eid:
@@ -121,9 +120,7 @@ class ndi_file_navigator_rhd_series(ndi_file_navigator):
         if not os.path.isdir(base_path):
             return []
 
-        patterns = self._normalize_patterns(
-            self._fileparameters.get("filematch", [])
-        )
+        patterns = self._normalize_patterns(self._fileparameters.get("filematch", []))
         if not patterns:
             return []
 
@@ -153,7 +150,7 @@ class ndi_file_navigator_rhd_series(ndi_file_navigator):
         group, anchors the result, and returns the captured substring
         or '' if the filename does not match.
         """
-        rx = "^" + series_pattern.replace("#", "(.+?)") + "$"
+        rx = "^" + matlab_to_python_regex(series_pattern).replace("#", "(.+?)") + "$"
         m = re.match(rx, filename)
         if not m:
             return ""
@@ -190,7 +187,7 @@ class ndi_file_navigator_rhd_series(ndi_file_navigator):
         if not names:
             return groups
 
-        series_regex = "^" + patterns[0].replace("#", "(.+?)") + "$"
+        series_regex = "^" + matlab_to_python_regex(patterns[0]).replace("#", "(.+?)") + "$"
         series_re = re.compile(series_regex)
 
         # Tokenize: keep names that match and capture their prefix; preserve
@@ -217,18 +214,12 @@ class ndi_file_navigator_rhd_series(ndi_file_navigator):
             return groups
 
         for p in unique_prefixes:
-            sorted_series = sorted(
-                series_names[i] for i in prefix_to_indices[p]
-            )
+            sorted_series = sorted(series_names[i] for i in prefix_to_indices[p])
             epoch = [os.path.join(directory, sorted_series[0])]
 
             ok = True
             for ancillary in patterns[1:]:
-                rx = (
-                    "^"
-                    + ancillary.replace("#", re.escape(p))
-                    + "$"
-                )
+                rx = "^" + matlab_to_python_regex(ancillary).replace("#", re.escape(p)) + "$"
                 try:
                     anc_re = re.compile(rx)
                 except re.error:

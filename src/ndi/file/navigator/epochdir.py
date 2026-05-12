@@ -142,6 +142,8 @@ class ndi_file_navigator_epochdir(ndi_file_navigator):
         import fnmatch
         import re
 
+        from ...util.matlab_regex import matlab_to_python_regex
+
         matched = []
         try:
             files = [f for f in directory.iterdir() if f.is_file()]
@@ -156,7 +158,7 @@ class ndi_file_navigator_epochdir(ndi_file_navigator):
                     matched.append(str(f))
                     break
                 try:
-                    if re.search(pattern, f.name):
+                    if re.search(matlab_to_python_regex(pattern), f.name):
                         matched.append(str(f))
                         break
                 except re.error:
