@@ -20,11 +20,22 @@ Environment variables consumed:
         "true"  -> only the read-only getMatlabLicense test runs.
         "false" -> destructive allocate/clear lifecycle runs end-to-end.
         unset   -> module fails to import (collection error).
+
+WHY THE DESTRUCTIVE TESTS ARE PINNED TO ONE PYTHON VERSION:
+The CI test matrix runs python 3.10, 3.11, and 3.12 in parallel against
+the SAME shared cloud account. allocate_and_clear_lifecycle and
+setMatlabLicense_rejects_invalid_file both POST a new ENI/MAC, then
+DELETE it; running 3 of them concurrently races their own state
+(observed: MAC-mismatch failures and HTTP 500s from DELETE on
+already-cleared registrations). We pin the destructive tests to
+python 3.12 only; the read-only getMatlabLicense test stays on every
+matrix entry so we still cross-check the GET path on each interpreter.
 """
 
 from __future__ import annotations
 
 import os
+import sys
 
 import pytest
 
@@ -53,6 +64,12 @@ pytestmark = pytest.mark.skipif(not _has_creds, reason="NDI cloud credentials no
 
 
 USER_HAS_EXISTING_LICENSE = user_has_existing_license()
+
+# The destructive tests share a single cloud account across the python
+# matrix; pin them to one interpreter to avoid the 3.10/3.11/3.12 jobs
+# racing each other's allocate/clear cycles. The read-only test still
+# runs on every matrix entry.
+_DESTRUCTIVE_PINNED_VERSION = (3, 12)
 
 
 # ---------------------------------------------------------------------------
@@ -88,7 +105,7 @@ def destructive_teardown(cloud_client):
 
     NEVER runs effectively when NDI_CLOUD_TEST_USER_HAS_MATLAB_LICENSE=true:
     in that mode the destructive tests are skipped entirely (see
-    _require_no_existing_license) BEFORE the holder is ever flipped, so
+    _require_destructive_safe) BEFORE the holder is ever flipped, so
     clear_on_teardown stays False and the teardown is a no-op. This
     guarantees we never call DELETE on an existing license we were
     supposed to preserve.
@@ -105,8 +122,16 @@ def destructive_teardown(cloud_client):
             pass
 
 
-def _require_no_existing_license():
-    """Skip a destructive test when the account has a real license to preserve."""
+def _require_destructive_safe():
+    """Skip when a destructive test would race or destroy a real license."""
+    if sys.version_info[:2] != _DESTRUCTIVE_PINNED_VERSION:
+        pytest.skip(
+            "Destructive BYOL tests pinned to Python "
+            f"{_DESTRUCTIVE_PINNED_VERSION[0]}.{_DESTRUCTIVE_PINNED_VERSION[1]} "
+            "to avoid parallel-matrix interference on the shared cloud account "
+            "(allocate/clear races between python versions produce flaky "
+            "MAC-mismatch and HTTP 500 failures)."
+        )
     if USER_HAS_EXISTING_LICENSE:
         pytest.skip(
             "Skipped: NDI_CLOUD_TEST_USER_HAS_MATLAB_LICENSE=true. "
@@ -124,7 +149,7 @@ class TestMatlabLicense:
     """Mirror of MATLAB MatlabLicenseTest."""
 
     def test_getMatlabLicense(self, cloud_client):
-        """Read-only check that runs in BOTH modes.
+        """Read-only check that runs in BOTH modes and on every python version.
 
         Asserts that the server returns a sane MatlabLicenseStatus dict
         and that its ``files`` array agrees with the env-var declaration:
@@ -157,11 +182,12 @@ class TestMatlabLicense:
     def test_allocate_and_clear_lifecycle(self, cloud_client, destructive_teardown):
         """POST -> GET -> DELETE -> GET round-trip.
 
-        Skipped when HAS_LICENSE=true (DELETE would destroy a real
+        Pinned to a single python version (see module docstring); also
+        skipped when HAS_LICENSE=true (DELETE would destroy a real
         registration). The teardown finalizer releases the ENI we
         ourselves allocated if any of the intermediate asserts fail.
         """
-        _require_no_existing_license()
+        _require_destructive_safe()
 
         from ndi.cloud.api.users import (
             allocateMatlabLicenseMac,
@@ -206,12 +232,13 @@ class TestMatlabLicense:
     def test_setMatlabLicense_rejects_invalid_file(self, cloud_client, destructive_teardown):
         """Negative test: PUT with a bogus lic body should return HTTP 400.
 
-        Skipped when HAS_LICENSE=true (even a 400-rejected PUT could
+        Pinned to a single python version (see module docstring); also
+        skipped when HAS_LICENSE=true (even a 400-rejected PUT could
         disturb an existing registration if server semantics change).
         Requires a prior allocate so the server actually reaches file
         validation rather than rejecting on 'no MAC allocated'.
         """
-        _require_no_existing_license()
+        _require_destructive_safe()
 
         from ndi.cloud.api.users import (
             allocateMatlabLicenseMac,
