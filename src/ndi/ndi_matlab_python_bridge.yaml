@@ -12,6 +12,16 @@ project_metadata:
   naming_policy: "Strict MATLAB Mirror"
   indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
 
+conventions:
+  regex_dialect: >
+    All user-facing regex patterns in NDI (e.g. ndi.file.navigator
+    filematch, ndi.file.navigator.rhd_series series/ancillary patterns)
+    are written in MATLAB regex syntax. The Python port translates them
+    to Python re syntax internally via
+    ndi.util.matlab_regex.matlab_to_python_regex at the point of
+    compile. New python code that consumes user-provided regex must
+    route through this converter.
+
 # =========================================================================
 # Standalone functions
 # =========================================================================
