@@ -309,9 +309,7 @@ bulkUploadsJobInfo = getBulkUploadStatus
 def listActiveBulkUploads(
     dataset_id: CloudId,
     *,
-    state: Literal[
-        "active", "all", "queued", "extracting", "complete", "failed"
-    ] = "active",
+    state: Literal["active", "all", "queued", "extracting", "complete", "failed"] = "active",
     client: _Client = None,
 ) -> dict[str, Any]:
     """GET /datasets/{datasetId}/bulk-uploads[?state=...]
@@ -441,11 +439,13 @@ def waitForAllBulkUploads(
             last_jobs = list(jobs) if jobs else []
 
             active_jobs = [
-                j for j in last_jobs
+                j
+                for j in last_jobs
                 if (j.get("state", "") if isinstance(j, dict) else "") in _ACTIVE_BULK_STATES
             ]
             failed_jobs = [
-                j for j in last_jobs
+                j
+                for j in last_jobs
                 if (j.get("state", "") if isinstance(j, dict) else "") == "failed"
             ]
 
