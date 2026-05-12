@@ -81,6 +81,9 @@ jobs:
             https://github.com/Waltham-Data-Science/file-passing/raw/refs/heads/main/69a8705aa9ab25373cdc6563.tgz
 
       # ── Stage 1: MATLAB makeArtifacts ──────────────────────────────────
+      # Scope by directory: matbox.installRequirements points at the
+      # +ndi/+symmetry folder (which has its own narrow requirements.txt),
+      # and TestSuite.fromFolder discovers tests in that directory tree.
       - name: "Stage 1: MATLAB makeArtifacts"
         uses: matlab-actions/run-command@v2
         with:
@@ -89,12 +92,15 @@ jobs:
             addpath(genpath("src"));
             addpath(genpath("tests"));
             addpath(genpath("tools"));
-            matbox.installRequirements(fullfile(pwd, "tests"));
+
+            symDir = fullfile(pwd, "tests", "+ndi", "+symmetry");
+            matbox.installRequirements(symDir);
 
             import matlab.unittest.TestSuite
             import matlab.unittest.TestRunner
 
-            suite = TestSuite.fromPackage("ndi.symmetry.makeArtifacts", "IncludingSubpackages", true);
+            suite = TestSuite.fromFolder( ...
+                fullfile(symDir, "+makeArtifacts"), "IncludingSubfolders", true);
             fprintf("\n=== MATLAB makeArtifacts: %d test(s) ===\n", numel(suite));
             assert(~isempty(suite), "No MATLAB makeArtifacts tests found.")
 
@@ -125,12 +131,15 @@ jobs:
             addpath(genpath("src"));
             addpath(genpath("tests"));
             addpath(genpath("tools"));
-            matbox.installRequirements(fullfile(pwd, "tests"));
+
+            symDir = fullfile(pwd, "tests", "+ndi", "+symmetry");
+            matbox.installRequirements(symDir);
 
             import matlab.unittest.TestSuite
             import matlab.unittest.TestRunner
 
-            suite = TestSuite.fromPackage("ndi.symmetry.readArtifacts", "IncludingSubpackages", true);
+            suite = TestSuite.fromFolder( ...
+                fullfile(symDir, "+readArtifacts"), "IncludingSubfolders", true);
             fprintf("\n=== MATLAB readArtifacts: %d test(s) ===\n", numel(suite));
             assert(~isempty(suite), "No MATLAB readArtifacts tests found.")
 
