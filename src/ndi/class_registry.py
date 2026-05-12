@@ -50,6 +50,9 @@ def _build_registry() -> dict[str, type]:
     from .setup.daq.reader.mfdaq.stimulus.nielsenvisneuropixelsglx import (
         ndi_setup_daq_reader_mfdaq_stimulus_nielsenvisneuropixelsglx,
     )
+    from .setup.daq.reader.mfdaq.stimulus.rayolab_intanseries import (
+        ndi_setup_daq_reader_mfdaq_stimulus_rayolab_intanseries,
+    )
     from .setup.daq.reader.mfdaq.stimulus.vhaudreybpod import (
         ndi_setup_daq_reader_mfdaq_stimulus_VHAudreyBPod,
     )
@@ -79,6 +82,7 @@ def _build_registry() -> dict[str, type]:
         ndi_setup_daq_reader_mfdaq_stimulus_vhlabvisspike2,
         ndi_setup_daq_reader_mfdaq_stimulus_nielsenvisintan,
         ndi_setup_daq_reader_mfdaq_stimulus_nielsenvisneuropixelsglx,
+        ndi_setup_daq_reader_mfdaq_stimulus_rayolab_intanseries,
         ndi_setup_daq_reader_mfdaq_stimulus_VHAudreyBPod,
     ):
         registry[cls.NDI_DAQREADER_CLASS] = cls
