@@ -23,10 +23,24 @@ jobs:
         with:
           path: NDI-python
 
-      - name: Check out NDI-matlab
+      - name: Check out NDI-matlab (matching branch, fall back to main)
         uses: actions/checkout@v4
         with:
           repository: VH-Lab/NDI-matlab
+          # Use the same branch name as NDI-python so paired feature
+          # branches stay in sync; fall back to main when the matlab
+          # branch does not exist.
+          ref: ${{ github.head_ref || github.ref_name }}
+          path: NDI-matlab
+        continue-on-error: true
+        id: matlab_checkout_branch
+
+      - name: Check out NDI-matlab (main fallback)
+        if: steps.matlab_checkout_branch.outcome == 'failure'
+        uses: actions/checkout@v4
+        with:
+          repository: VH-Lab/NDI-matlab
+          ref: main
           path: NDI-matlab
 
       # ── Runtime setup ──────────────────────────────────────────────────
