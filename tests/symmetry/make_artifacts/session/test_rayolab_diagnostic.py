@@ -35,9 +35,7 @@ def _count(result) -> int:
 
 def _looks_like_daqsystem(props: dict) -> bool:
     # The doc has a top-level "daqsystem" struct iff it is a daqsystem doc.
-    return "daqsystem" in props and "ndi_daqsystem_class" in (
-        props.get("daqsystem") or {}
-    )
+    return "daqsystem" in props and "ndi_daqsystem_class" in (props.get("daqsystem") or {})
 
 
 class TestRayolabDaqDiagnostic:

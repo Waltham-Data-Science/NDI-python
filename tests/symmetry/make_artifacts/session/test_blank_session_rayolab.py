@@ -26,9 +26,7 @@ from ndi.session.dir import ndi_session_dir
 from ndi.util import sessionSummary
 from tests.symmetry.conftest import PYTHON_ARTIFACTS
 
-ARTIFACT_DIR = (
-    PYTHON_ARTIFACTS / "session" / "blankSessionRayolab" / "testBlankSessionRayolab"
-)
+ARTIFACT_DIR = PYTHON_ARTIFACTS / "session" / "blankSessionRayolab" / "testBlankSessionRayolab"
 
 
 class TestBlankSessionRayolab:

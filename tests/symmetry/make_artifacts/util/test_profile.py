@@ -44,9 +44,7 @@ class TestProfileMakeArtifacts:
         ndi_profile.use_backend("memory")
         ndi_profile.reset()
 
-        uid = ndi_profile.add(
-            "SymmetryTest", "test@example.org", "not-a-real-secret"
-        )
+        uid = ndi_profile.add("SymmetryTest", "test@example.org", "not-a-real-secret")
         ndi_profile.set_stage(uid, "dev")
         ndi_profile.set_stage(uid, "prod")
 

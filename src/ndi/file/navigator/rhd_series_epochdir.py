@@ -127,9 +127,7 @@ class ndi_file_navigator_rhd_series_epochdir(ndi_file_navigator_epochdir):
             epoch_path = os.path.join(base_path, name)
             if not os.path.isdir(epoch_path):
                 continue
-            groups = ndi_file_navigator_rhd_series._group_directory(
-                epoch_path, patterns
-            )
+            groups = ndi_file_navigator_rhd_series._group_directory(epoch_path, patterns)
             for g in groups:
                 epochfiles_disk.append(g)
 

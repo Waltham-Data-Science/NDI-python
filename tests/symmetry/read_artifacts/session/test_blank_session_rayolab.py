@@ -69,8 +69,7 @@ class TestBlankSessionRayolab:
             daqs = [daqs]
 
         assert len(daqs) == 2, (
-            f"Expected 2 DAQ systems in {source_type} rayolab session, "
-            f"got {len(daqs)}."
+            f"Expected 2 DAQ systems in {source_type} rayolab session, " f"got {len(daqs)}."
         )
 
         names = {getattr(d, "name", "") for d in daqs}
@@ -86,9 +85,7 @@ class TestBlankSessionRayolab:
         # python-written session both pass this check.
         for d in daqs:
             nav = getattr(d, "filenavigator", None)
-            assert nav is not None, (
-                f"DAQ system {d.name!r} has no filenavigator in {source_type}."
-            )
+            assert nav is not None, f"DAQ system {d.name!r} has no filenavigator in {source_type}."
             nav_class = getattr(nav, "NDI_FILENAVIGATOR_CLASS", "")
             assert nav_class == RHD_SERIES_CLASS, (
                 f"DAQ system {d.name!r} should use {RHD_SERIES_CLASS} in "

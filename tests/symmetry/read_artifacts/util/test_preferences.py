@@ -34,13 +34,7 @@ class TestPreferencesReadArtifacts:
     """Mirror of ndi.symmetry.readArtifacts.util.preferences."""
 
     def _artifact_dir(self, source_type: str):
-        return (
-            SYMMETRY_BASE
-            / source_type
-            / "util"
-            / "preferences"
-            / "testPreferences"
-        )
+        return SYMMETRY_BASE / source_type / "util" / "preferences" / "testPreferences"
 
     def test_preferences(self, source_type):
         artifact_dir = self._artifact_dir(source_type)
@@ -51,14 +45,12 @@ class TestPreferencesReadArtifacts:
             )
 
         prefs_path = artifact_dir / "NDI_Preferences.json"
-        assert prefs_path.is_file(), (
-            f"NDI_Preferences.json missing in {source_type}."
-        )
+        assert prefs_path.is_file(), f"NDI_Preferences.json missing in {source_type}."
 
         payload = json.loads(prefs_path.read_text(encoding="utf-8"))
-        assert isinstance(payload, dict), (
-            f"NDI_Preferences.json in {source_type} did not decode to a dict."
-        )
+        assert isinstance(
+            payload, dict
+        ), f"NDI_Preferences.json in {source_type} did not decode to a dict."
         assert payload, f"No preference keys in {source_type}."
 
         # Every key must use the Category__[Subcategory__]Name encoding
@@ -76,9 +68,7 @@ class TestPreferencesReadArtifacts:
             overrides = json.loads(overrides_path.read_text(encoding="utf-8"))
             assert isinstance(overrides, dict)
             for okey, oval in overrides.items():
-                assert okey in payload, (
-                    f"Override key {okey} missing from prefs in {source_type}."
-                )
+                assert okey in payload, f"Override key {okey} missing from prefs in {source_type}."
                 assert payload[okey] == oval, (
                     f"Override value mismatch for {okey} in {source_type}: "
                     f"expected {oval!r}, got {payload[okey]!r}."
@@ -98,6 +88,5 @@ class TestPreferencesReadArtifacts:
             else:
                 key = f"{item['category']}__{item['name']}"
             assert key in payload, (
-                f"Python-registered preference {key!r} missing from "
-                f"{source_type} payload."
+                f"Python-registered preference {key!r} missing from " f"{source_type} payload."
             )

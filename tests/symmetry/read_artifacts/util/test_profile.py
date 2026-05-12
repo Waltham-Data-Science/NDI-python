@@ -26,13 +26,7 @@ class TestProfileReadArtifacts:
     """Mirror of ndi.symmetry.readArtifacts.util.profile."""
 
     def _artifact_dir(self, source_type: str):
-        return (
-            SYMMETRY_BASE
-            / source_type
-            / "util"
-            / "profile"
-            / "testProfile"
-        )
+        return SYMMETRY_BASE / source_type / "util" / "profile" / "testProfile"
 
     def test_profile(self, source_type):
         artifact_dir = self._artifact_dir(source_type)
@@ -43,20 +37,14 @@ class TestProfileReadArtifacts:
             )
 
         profiles_file = artifact_dir / "NDI_Cloud_Profiles.json"
-        assert profiles_file.is_file(), (
-            f"NDI_Cloud_Profiles.json missing in {source_type}."
-        )
+        assert profiles_file.is_file(), f"NDI_Cloud_Profiles.json missing in {source_type}."
 
         payload = json.loads(profiles_file.read_text(encoding="utf-8"))
-        assert isinstance(payload, dict), (
-            f"Top-level payload should be a JSON object in {source_type}."
-        )
-        assert "Profiles" in payload, (
-            f"Profiles field missing in {source_type}."
-        )
-        assert "DefaultUID" in payload, (
-            f"DefaultUID field missing in {source_type}."
-        )
+        assert isinstance(
+            payload, dict
+        ), f"Top-level payload should be a JSON object in {source_type}."
+        assert "Profiles" in payload, f"Profiles field missing in {source_type}."
+        assert "DefaultUID" in payload, f"DefaultUID field missing in {source_type}."
 
         profiles = payload["Profiles"]
         if isinstance(profiles, dict):
@@ -64,31 +52,17 @@ class TestProfileReadArtifacts:
         elif isinstance(profiles, list):
             arr = profiles
         else:
-            pytest.fail(
-                f"Unexpected Profiles type {type(profiles).__name__} in "
-                f"{source_type}."
-            )
+            pytest.fail(f"Unexpected Profiles type {type(profiles).__name__} in " f"{source_type}.")
 
         assert len(arr) == 1, (
-            f"Expected exactly one profile entry in {source_type}, "
-            f"got {len(arr)}."
+            f"Expected exactly one profile entry in {source_type}, " f"got {len(arr)}."
         )
         p = arr[0]
-        assert isinstance(p, dict), (
-            f"Profile entry should be an object in {source_type}."
-        )
-        assert p.get("UID"), (
-            f"UID missing in {source_type} profile."
-        )
-        assert p.get("Nickname") == "SymmetryTest", (
-            f"Nickname mismatch in {source_type}."
-        )
-        assert p.get("Email") == "test@example.org", (
-            f"Email mismatch in {source_type}."
-        )
-        assert p.get("Stage") == "test", (
-            f"Stage should be 'test' in {source_type}."
-        )
-        assert "PasswordSecret" not in p, (
-            f"PasswordSecret must not be persisted on disk in {source_type}."
-        )
+        assert isinstance(p, dict), f"Profile entry should be an object in {source_type}."
+        assert p.get("UID"), f"UID missing in {source_type} profile."
+        assert p.get("Nickname") == "SymmetryTest", f"Nickname mismatch in {source_type}."
+        assert p.get("Email") == "test@example.org", f"Email mismatch in {source_type}."
+        assert p.get("Stage") == "test", f"Stage should be 'test' in {source_type}."
+        assert (
+            "PasswordSecret" not in p
+        ), f"PasswordSecret must not be persisted on disk in {source_type}."

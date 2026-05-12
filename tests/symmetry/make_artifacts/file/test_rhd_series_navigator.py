@@ -28,12 +28,7 @@ from ndi.file.navigator.rhd_series import ndi_file_navigator_rhd_series
 from ndi.session.dir import ndi_session_dir
 from tests.symmetry.conftest import PYTHON_ARTIFACTS
 
-ARTIFACT_DIR = (
-    PYTHON_ARTIFACTS
-    / "file"
-    / "rhdSeriesNavigator"
-    / "testRhdSeriesNavigator"
-)
+ARTIFACT_DIR = PYTHON_ARTIFACTS / "file" / "rhdSeriesNavigator" / "testRhdSeriesNavigator"
 
 # These patterns are identical to the matlab makeArtifacts pair so a
 # matlab-written rhd_series_navigator.json round-trips cleanly. The first
@@ -80,9 +75,9 @@ class TestRhdSeriesNavigatorMakeArtifacts:
         nav = ndi_file_navigator_rhd_series(self.session, FILEPARAMETERS)
 
         groups = nav.selectfilegroups_disk()
-        assert len(groups) == 2, (
-            f"Expected 2 epoch groups from rhd_series navigator, got {len(groups)}."
-        )
+        assert (
+            len(groups) == 2
+        ), f"Expected 2 epoch groups from rhd_series navigator, got {len(groups)}."
 
         epoch_info = []
         for i, files in enumerate(groups):

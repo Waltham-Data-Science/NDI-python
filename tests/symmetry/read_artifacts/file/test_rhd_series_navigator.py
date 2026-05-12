@@ -34,11 +34,7 @@ class TestRhdSeriesNavigatorReadArtifacts:
 
     def _artifact_dir(self, source_type: str):
         return (
-            SYMMETRY_BASE
-            / source_type
-            / "file"
-            / "rhdSeriesNavigator"
-            / "testRhdSeriesNavigator"
+            SYMMETRY_BASE / source_type / "file" / "rhdSeriesNavigator" / "testRhdSeriesNavigator"
         )
 
     def test_rhd_series_navigator(self, tmp_path, source_type):
@@ -50,9 +46,9 @@ class TestRhdSeriesNavigatorReadArtifacts:
             )
 
         nav_json = artifact_dir / "rhd_series_navigator.json"
-        assert nav_json.is_file(), (
-            f"rhd_series_navigator.json missing in {source_type} artifact dir."
-        )
+        assert (
+            nav_json.is_file()
+        ), f"rhd_series_navigator.json missing in {source_type} artifact dir."
 
         expected = json.loads(nav_json.read_text(encoding="utf-8"))
         assert expected.get("navigator_class") == "ndi.file.navigator.rhd_series", (
@@ -61,9 +57,7 @@ class TestRhdSeriesNavigatorReadArtifacts:
         )
 
         fixture_dir = artifact_dir / "fixture"
-        assert fixture_dir.is_dir(), (
-            f"fixture directory missing in {source_type}."
-        )
+        assert fixture_dir.is_dir(), f"fixture directory missing in {source_type}."
 
         # Copy the fixture into a clean per-test session dir and re-walk
         # with a fresh navigator. This mirrors the matlab pair which
@@ -96,9 +90,7 @@ class TestRhdSeriesNavigatorReadArtifacts:
             f"actual={len(groups)} expected={len(expected_epochs)}."
         )
 
-        actual_ids = sorted(
-            nav.epochid(i + 1, files) for i, files in enumerate(groups)
-        )
+        actual_ids = sorted(nav.epochid(i + 1, files) for i, files in enumerate(groups))
         expected_ids = sorted(str(e["epochid"]) for e in expected_epochs)
         assert actual_ids == expected_ids, (
             f"Epoch ids mismatch in {source_type}: "
