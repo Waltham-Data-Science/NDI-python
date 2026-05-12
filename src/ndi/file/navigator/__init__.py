@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ...ido import ndi_ido
 from ...time import NO_TIME, ndi_time_clocktype
+from ...util.matlab_regex import matlab_to_python_regex
 
 
 def _to_matlab_cell_str(items: list[str]) -> str:
@@ -121,7 +122,7 @@ def find_file_groups(
                     break
                 # Try regex pattern
                 try:
-                    if re.search(pattern, filename):
+                    if re.search(matlab_to_python_regex(pattern), filename):
                         matched_files.append((pat_idx, f))
                         break
                 except re.error:
@@ -649,7 +650,7 @@ class ndi_file_navigator(ndi_ido):
                     if fnmatch.fnmatch(filename, pattern):
                         return f
                     try:
-                        if re.search(pattern, filename):
+                        if re.search(matlab_to_python_regex(pattern), filename):
                             return f
                     except re.error:
                         pass
@@ -715,7 +716,7 @@ class ndi_file_navigator(ndi_ido):
                 if fnmatch.fnmatch(fname, glob_pat):
                     return self._load_epochprobemap_file(f)
                 try:
-                    if re.search(pat, fname):
+                    if re.search(matlab_to_python_regex(pat), fname):
                         return self._load_epochprobemap_file(f)
                 except re.error:
                     pass
