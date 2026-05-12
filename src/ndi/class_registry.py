@@ -89,9 +89,7 @@ def _build_registry() -> dict[str, type]:
     # File navigators
     registry[ndi_file_navigator.NDI_FILENAVIGATOR_CLASS] = ndi_file_navigator
     registry[ndi_file_navigator_epochdir.NDI_FILENAVIGATOR_CLASS] = ndi_file_navigator_epochdir
-    registry[ndi_file_navigator_rhd_series.NDI_FILENAVIGATOR_CLASS] = (
-        ndi_file_navigator_rhd_series
-    )
+    registry[ndi_file_navigator_rhd_series.NDI_FILENAVIGATOR_CLASS] = ndi_file_navigator_rhd_series
     registry[ndi_file_navigator_rhd_series_epochdir.NDI_FILENAVIGATOR_CLASS] = (
         ndi_file_navigator_rhd_series_epochdir
     )
