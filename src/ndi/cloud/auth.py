@@ -212,8 +212,7 @@ def login(
         import requests
     except ImportError as exc:
         raise CloudAuthError(
-            "The requests package is required for login. "
-            "Install it with: pip install ndi[cloud]"
+            "The requests package is required for login. " "Install it with: pip install ndi[cloud]"
         ) from exc
 
     if config is None:
