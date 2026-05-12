@@ -170,9 +170,7 @@ def _extract_first_organization_id(user: dict) -> str:
             n_orgs = len(orgs)
 
     if not org_id:
-        raise CloudAuthError(
-            "Could not extract an organization id from the login response."
-        )
+        raise CloudAuthError("Could not extract an organization id from the login response.")
 
     if n_orgs > 1:
         logger.warning(
@@ -214,7 +212,8 @@ def login(
         import requests
     except ImportError as exc:
         raise CloudAuthError(
-            "The requests package is required for login. " "Install it with: pip install ndi[cloud]"
+            "The requests package is required for login. "
+            "Install it with: pip install ndi[cloud]"
         ) from exc
 
     if config is None:
@@ -380,6 +379,7 @@ def testLogin(
 
     MATLAB equivalent: +cloud/testLogin.m
     """
+
     def _log(msg: str) -> None:
         if verbose:
             print(f"[testLogin] {msg}")
@@ -428,10 +428,7 @@ def testLogin(
 
     # Attempt 3: env credentials are empty.  Python has no GUI login,
     # so when use_ui_login is True we still return False here.
-    _log(
-        "No env credentials available; Python has no UI login. "
-        "Returning False."
-    )
+    _log("No env credentials available; Python has no UI login. " "Returning False.")
     return False
 
 
@@ -445,6 +442,7 @@ def _probe(user_name: str | None, verbose: bool) -> bool:
     good.  Instead we read the raw token from the environment, do
     local JWT validity checks, and send the request ourselves.
     """
+
     def _log(msg: str) -> None:
         if verbose:
             print(f"[testLogin]   probe: {msg}")

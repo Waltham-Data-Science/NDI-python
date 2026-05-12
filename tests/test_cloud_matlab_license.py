@@ -48,9 +48,7 @@ fatal_check_license_env()
 # the fatal check above runs first so that an unset HAS_LICENSE env var is
 # reported even when credentials are also missing.
 # ---------------------------------------------------------------------------
-_has_creds = bool(
-    os.environ.get("NDI_CLOUD_USERNAME") and os.environ.get("NDI_CLOUD_PASSWORD")
-)
+_has_creds = bool(os.environ.get("NDI_CLOUD_USERNAME") and os.environ.get("NDI_CLOUD_PASSWORD"))
 pytestmark = pytest.mark.skipif(not _has_creds, reason="NDI cloud credentials not set")
 
 
@@ -178,21 +176,19 @@ class TestMatlabLicense:
         destructive_teardown["clear_on_teardown"] = True
 
         assert isinstance(alloc, dict), f"allocate returned {type(alloc)}: {alloc}"
-        assert alloc.get("macAddress"), (
-            f"Allocate response did not include a macAddress: {alloc}"
-        )
+        assert alloc.get("macAddress"), f"Allocate response did not include a macAddress: {alloc}"
 
         # --- get reflects the allocation -----------------------------------
         after_alloc = getMatlabLicense(client=cloud_client)
         assert isinstance(after_alloc, dict)
         if "mode" in after_alloc and after_alloc["mode"] is not None:
-            assert str(after_alloc["mode"]) == "dedicated", (
-                f"Expected mode=dedicated after allocate, got {after_alloc}"
-            )
+            assert (
+                str(after_alloc["mode"]) == "dedicated"
+            ), f"Expected mode=dedicated after allocate, got {after_alloc}"
         if "macAddress" in after_alloc and after_alloc["macAddress"]:
-            assert str(after_alloc["macAddress"]) == str(alloc["macAddress"]), (
-                f"MAC mismatch: allocate={alloc} get={after_alloc}"
-            )
+            assert str(after_alloc["macAddress"]) == str(
+                alloc["macAddress"]
+            ), f"MAC mismatch: allocate={alloc} get={after_alloc}"
 
         # --- clear (releases the ENI) --------------------------------------
         clearMatlabLicense(client=cloud_client)
@@ -204,13 +200,10 @@ class TestMatlabLicense:
         assert isinstance(after_clear, dict)
         files_after = after_clear.get("files") or []
         assert not files_after, (
-            "Files array should be empty after clearMatlabLicense. "
-            f"Response: {after_clear}"
+            "Files array should be empty after clearMatlabLicense. " f"Response: {after_clear}"
         )
 
-    def test_setMatlabLicense_rejects_invalid_file(
-        self, cloud_client, destructive_teardown
-    ):
+    def test_setMatlabLicense_rejects_invalid_file(self, cloud_client, destructive_teardown):
         """Negative test: PUT with a bogus lic body should return HTTP 400.
 
         Skipped when HAS_LICENSE=true (even a 400-rejected PUT could
@@ -233,9 +226,7 @@ class TestMatlabLicense:
 
         bogus_file = "this is not a real MATLAB license file"
         with pytest.raises(CloudAPIError) as excinfo:
-            setMatlabLicense(
-                bogus_file, mode="dedicated", release="R2024b", client=cloud_client
-            )
+            setMatlabLicense(bogus_file, mode="dedicated", release="R2024b", client=cloud_client)
         # Verify the server actually rejected the FILE (HTTP 400), not the
         # request shape or auth.
         assert excinfo.value.status_code == 400, (

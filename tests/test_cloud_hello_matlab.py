@@ -36,9 +36,7 @@ from tests._matlab_license_guard import (
 # configuration across all MATLAB BYOL tests.
 fatal_check_license_env()
 
-_has_creds = bool(
-    os.environ.get("NDI_CLOUD_USERNAME") and os.environ.get("NDI_CLOUD_PASSWORD")
-)
+_has_creds = bool(os.environ.get("NDI_CLOUD_USERNAME") and os.environ.get("NDI_CLOUD_PASSWORD"))
 pytestmark = pytest.mark.skipif(not _has_creds, reason="NDI cloud credentials not set")
 
 
@@ -86,9 +84,9 @@ class TestHelloMatlab:
         from ndi.cloud.api.users import getMatlabLicense
 
         license_status = getMatlabLicense(client=cloud_client)
-        assert isinstance(license_status, dict), (
-            f"Expected dict from getMatlabLicense, got {type(license_status)}"
-        )
+        assert isinstance(
+            license_status, dict
+        ), f"Expected dict from getMatlabLicense, got {type(license_status)}"
         files = license_status.get("files") or []
         if not files:
             pytest.skip(
