@@ -105,7 +105,7 @@ def _aes_key_bytes() -> bytes:
         user = getpass.getuser()
     except Exception:  # pragma: no cover - extreme defensive
         user = "unknown"
-    seed = f"{host} {user} NDI Cloud".encode("utf-8")
+    seed = f"{host} {user} NDI Cloud".encode()
     return hashlib.sha256(seed).digest()[:16]
 
 
