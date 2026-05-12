@@ -1,19 +1,18 @@
 """One-off diagnostic for the rayolab 1-vs-2 DAQ symmetry failure.
 
-DELETE ME after the symmetry CI run reports the numbers back into the chat.
+DELETE ME after the symmetry CI run reports the answers back into the chat.
 
-Runs the rayolab setup, then probes:
-  (a) how many daqs ``daqsystem_load(name="(.*)")`` finds before reload,
-  (b) how many it finds after re-opening the session from disk,
-  (c) a per-document dump of every doc returned by ``database_search``
-      (document_class.class_name + base.name + base.id + which top-level
-      sections are present).
-
-The test always fails so the message lands in the symmetry workflow's
-captured pytest output.
+v3: directly calls session._document_to_object(doc) on each daqsystem
+doc to capture the swallowed exception inside daqsystem_load's
+`except Exception: pass`. Hypothesis: rayo_stim fails because its
+daqreader class (ndi.setup.daq.reader.mfdaq.stimulus.rayolab_intanseries)
+or metadatareader class (ndi.daq.metadatareader.RayoLabStims) isn't
+registered in class_registry.
 """
 
 from __future__ import annotations
+
+import traceback
 
 import pytest
 
@@ -22,30 +21,8 @@ from ndi.query import ndi_query
 from ndi.session.dir import ndi_session_dir
 
 
-def _count(result) -> int:
-    if result is None:
-        return 0
-    if isinstance(result, list):
-        return len(result)
-    return 1
-
-
-def _doc_summary(doc) -> str:
-    props = getattr(doc, "document_properties", None) or {}
-    base = props.get("base") or {}
-    doc_cls = (props.get("document_class") or {}).get("class_name", "?")
-    # Which top-level sections are populated tells us the doc's shape.
-    sections = sorted(k for k in props.keys() if k not in ("base", "document_class"))
-    return (
-        f"id={base.get('id', '?')[:18]}  "
-        f"class={doc_cls}  "
-        f"name={base.get('name', '?')!r}  "
-        f"sections={sections}"
-    )
-
-
 class TestRayolabDaqDiagnostic:
-    """Probe-only: dump counts + every doc, then fail."""
+    """Probe-only: try to reconstruct each daqsystem doc, capture failures."""
 
     def test_rayolab_daq_diagnostic(self, tmp_path):
         session_dir = tmp_path / "exp1"
@@ -56,41 +33,58 @@ class TestRayolabDaqDiagnostic:
 
         ndi.setup.rayolab(session)
 
-        in_memory = _count(session.daqsystem_load(name="(.*)"))
-
-        # Reload from disk
+        # Re-open from disk so we exercise the load path the test failure
+        # comes from.
         session2 = ndi_session_dir("exp1", session_dir)
-        after_reload = _count(session2.daqsystem_load(name="(.*)"))
 
-        # Pull every document via database_search (same path the
-        # make_artifacts test uses to dump per-doc JSON).
-        all_docs = list(session2.database_search(ndi_query("base.id").match("(.*)")))
+        # Pull every daqsystem doc directly from the database (bypassing
+        # daqsystem_load's swallow).
+        q = ndi_query("").isa("daqsystem") & (ndi_query("base.session_id") == session2.id())
+        daq_docs = list(session2.database_search(q))
 
-        # Group by class_name so we can see at a glance how many of each
-        # shape exist.
-        by_class: dict[str, list[str]] = {}
-        for d in all_docs:
-            props = getattr(d, "document_properties", None) or {}
-            doc_cls = (props.get("document_class") or {}).get("class_name", "?")
+        msg = ["RAYOLAB DAQ DIAGNOSTIC v3"]
+        msg.append(f"  daqsystem docs via direct query: {len(daq_docs)}")
+        msg.append("")
+        for i, doc in enumerate(daq_docs):
+            props = getattr(doc, "document_properties", None) or {}
             base = props.get("base") or {}
-            by_class.setdefault(doc_cls, []).append(str(base.get("name", "?")))
+            name = base.get("name", "?")
+            msg.append(f"  [{i}] daqsystem name={name!r}")
+            msg.append(f"      depends_on: {props.get('depends_on')}")
+            try:
+                obj = session2._document_to_object(doc)
+                msg.append(f"      _document_to_object: OK ({type(obj).__name__})")
+                # If reconstruction succeeded, inspect what we got
+                nav = getattr(obj, "filenavigator", None)
+                rdr = getattr(obj, "daqreader", None)
+                mr = getattr(obj, "daqmetadatareader", None)
+                msg.append(f"      filenavigator: {type(nav).__name__ if nav else None}")
+                msg.append(f"      daqreader:     {type(rdr).__name__ if rdr else None}")
+                msg.append(f"      mdreader:      {type(mr).__name__ if mr else None}")
+            except Exception as exc:  # noqa: BLE001
+                tb = traceback.format_exc()
+                msg.append(f"      _document_to_object: RAISED {type(exc).__name__}: {exc}")
+                # Print the last ~6 frames of the traceback so we see the
+                # exact code location that fails.
+                tb_lines = tb.splitlines()
+                tail = tb_lines[-20:] if len(tb_lines) > 20 else tb_lines
+                for line in tail:
+                    msg.append(f"      | {line}")
+            msg.append("")
 
-        # Try daqsystem_load WITHOUT name filter, in case the regex match
-        # is what's narrowing the result.
-        no_name_filter = _count(session2.daqsystem_load())
+        # Also report the registry state for the suspect class names.
+        from ndi.class_registry import get_class
 
-        msg = ["RAYOLAB DAQ DIAGNOSTIC v2"]
-        msg.append(f"  daqsystem_load(name='(.*)') in-memory:  {in_memory}")
-        msg.append(f"  daqsystem_load(name='(.*)') after-rld:  {after_reload}")
-        msg.append(f"  daqsystem_load() (no name filter):       {no_name_filter}")
-        msg.append(f"  database_search '(.*)' count:           {len(all_docs)}")
-        msg.append("")
-        msg.append("  docs grouped by class_name:")
-        for cls, names in sorted(by_class.items()):
-            msg.append(f"    {cls}  count={len(names)}  names={names}")
-        msg.append("")
-        msg.append("  per-doc detail (database_search order):")
-        for i, d in enumerate(all_docs):
-            msg.append(f"    [{i}] {_doc_summary(d)}")
+        suspects = [
+            "ndi.daq.system.mfdaq",
+            "ndi.daq.reader.mfdaq.ndr",
+            "ndi.setup.daq.reader.mfdaq.stimulus.rayolab_intanseries",
+            "ndi.daq.metadatareader.RayoLabStims",
+            "ndi.file.navigator.rhd_series",
+        ]
+        msg.append("  class_registry.get_class() probes:")
+        for cls in suspects:
+            resolved = get_class(cls)
+            msg.append(f"    {cls!r} -> {resolved}")
 
         pytest.fail("\n".join(msg))
