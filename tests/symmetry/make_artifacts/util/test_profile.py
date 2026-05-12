@@ -22,8 +22,6 @@ import json
 import shutil
 from dataclasses import asdict
 
-import pytest
-
 import ndi.cloud.profile as ndi_profile
 from tests.symmetry.conftest import PYTHON_ARTIFACTS
 
