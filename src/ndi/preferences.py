@@ -176,18 +176,27 @@ class ndi_preferences:
         preferences editor.
         """
         self._add_item(
-            "Cloud", "Download", "Max_Document_Batch_Count",
-            10000, "int",
+            "Cloud",
+            "Download",
+            "Max_Document_Batch_Count",
+            10000,
+            "int",
             "Maximum number of documents downloaded per batch.",
         )
         self._add_item(
-            "Cloud", "Upload", "Max_Document_Batch_Count",
-            100000, "int",
+            "Cloud",
+            "Upload",
+            "Max_Document_Batch_Count",
+            100000,
+            "int",
             "Maximum number of documents uploaded per batch.",
         )
         self._add_item(
-            "Cloud", "Upload", "Max_File_Batch_Size",
-            500_000_000, "float",
+            "Cloud",
+            "Upload",
+            "Max_File_Batch_Size",
+            500_000_000,
+            "float",
             "Maximum size of file batch upload in bytes (default 500 MB).",
         )
 
@@ -290,11 +299,7 @@ class ndi_preferences:
                 ``NDI:preferences:unknownPreference`` error.
         """
         for idx, item in enumerate(self._items):
-            if (
-                item.category == category
-                and item.subcategory == subcategory
-                and item.name == name
-            ):
+            if item.category == category and item.subcategory == subcategory and item.name == name:
                 return idx
         if not subcategory:
             path_str = f"{category}.{name}"
@@ -320,7 +325,7 @@ class ndi_preferences:
         if len(parts) == 3:
             return parts[0], parts[1], parts[2]
         raise ValueError(
-            f'Preference path must be Category.Name or '
+            f"Preference path must be Category.Name or "
             f'Category.Subcategory.Name (got "{path_str}").'
         )
 
@@ -407,11 +412,7 @@ class ndi_preferences:
         except ValueError:
             return False
         for item in self._items:
-            if (
-                item.category == category
-                and item.subcategory == subcategory
-                and item.name == name
-            ):
+            if item.category == category and item.subcategory == subcategory and item.name == name:
                 return True
         return False
 
@@ -427,9 +428,7 @@ class ndi_preferences:
     def __repr__(self) -> str:  # pragma: no cover - cosmetic
         groups: dict[str, dict[str, Any]] = {}
         for item in self._items:
-            label = (
-                f"{item.subcategory}_{item.name}" if item.subcategory else item.name
-            )
+            label = f"{item.subcategory}_{item.name}" if item.subcategory else item.name
             groups.setdefault(item.category, {})[label] = item.value
         lines = [f"ndi_preferences(filename={self._filename!s})"]
         for cat, entries in groups.items():
