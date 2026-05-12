@@ -306,11 +306,13 @@ class ndi_daq_metadatareader(ndi_ido):
 # Import subclass readers
 from .newstim_stims import ndi_daq_metadatareader_NewStimStims
 from .nielsenlab_stims import ndi_daq_metadatareader_NielsenLabStims
+from .rayolab_stims import ndi_daq_metadatareader_RayoLabStims
 from .vhaudreybpod_stims import ndi_daq_metadatareader_VHAudreyBPod
 
 __all__ = [
     "ndi_daq_metadatareader",
     "ndi_daq_metadatareader_NewStimStims",
     "ndi_daq_metadatareader_NielsenLabStims",
+    "ndi_daq_metadatareader_RayoLabStims",
     "ndi_daq_metadatareader_VHAudreyBPod",
 ]

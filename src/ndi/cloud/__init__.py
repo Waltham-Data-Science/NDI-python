@@ -29,10 +29,12 @@ Requires the ``requests`` package.  Install with::
 from .auth import (
     authenticate,
     changePassword,
+    isTokenExpired,
     login,
     logout,
     resendConfirmation,
     resetPassword,
+    testLogin,
     verifyUser,
 )
 from .config import CloudConfig
@@ -54,8 +56,10 @@ __all__ = [
     "CloudSyncError",
     "CloudUploadError",
     "authenticate",
+    "isTokenExpired",
     "login",
     "logout",
+    "testLogin",
     "changePassword",
     "resetPassword",
     "verifyUser",
@@ -66,6 +70,7 @@ __all__ = [
     "syncDataset",
     "uploadSingleFile",
     "fetch_cloud_file",
+    "profile",
 ]
 
 # Lazy imports for symbols that depend on requests.
@@ -81,6 +86,7 @@ _LAZY_IMPORTS = {
     "syncDataset": ("orchestration", "syncDataset"),
     "uploadSingleFile": ("upload", "uploadSingleFile"),
     "fetch_cloud_file": ("filehandler", "fetch_cloud_file"),
+    "profile": ("profile", None),
 }
 
 
@@ -90,5 +96,7 @@ def __getattr__(name: str):
         import importlib
 
         mod = importlib.import_module(f".{module_name}", __name__)
+        if attr is None:
+            return mod
         return getattr(mod, attr)
     raise AttributeError(f"module 'ndi.cloud' has no attribute {name!r}")

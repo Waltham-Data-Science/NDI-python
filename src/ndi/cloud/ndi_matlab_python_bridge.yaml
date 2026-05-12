@@ -2,7 +2,7 @@
 # The Primary Contract for the ndi.cloud root namespace.
 #
 # Covers: auth.py, config.py, client.py, exceptions.py, orchestration.py,
-#         download.py, upload.py, filehandler.py, internal.py
+#         download.py, upload.py, filehandler.py, internal.py, profile.py
 
 project_metadata:
   bridge_version: "1.1"
@@ -80,7 +80,7 @@ functions:
   # --- auth.py functions ---
   - name: authenticate
     matlab_path: "+ndi/+cloud/authenticate.m"
-    matlab_last_sync_hash: "80092b7c"
+    matlab_last_sync_hash: "2566fe4d"
     python_path: "ndi/cloud/auth.py"
     input_arguments:
       - name: config
@@ -93,8 +93,47 @@ functions:
       - name: organizationID
         type_python: "str"
     decision_log: >
-      MATLAB authenticate returns [token, organizationID].
-      Python now returns (token, org_id) tuple to match.
+      Synchronized with MATLAB main as of 2026-05-11 (matlab HEAD
+      2566fe4d). Now requires both token AND organization_id to be
+      populated before treating a cached login as valid (mirrors
+      commit 5c4352eeac). The local JWT exp pre-check is delegated to
+      isTokenExpired (extracted in commit 9562eb28e7). Organization-id
+      extraction (auth._extract_first_organization_id) accepts dict,
+      list-of-dicts, or single dict, and warns when multiple
+      organizations are present.
+
+  - name: testLogin
+    matlab_path: "+ndi/+cloud/testLogin.m"
+    matlab_last_sync_hash: "2566fe4d"
+    python_path: "ndi/cloud/auth.py"
+    input_arguments:
+      - name: user_name
+        type_matlab: "string"
+        type_python: "str | None"
+        default: "None"
+      - name: use_ui_login
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "False"
+      - name: verbose
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "False"
+    output_arguments:
+      - name: is_good
+        type_python: "bool"
+    decision_log: >
+      Ported from MATLAB main as of 2026-05-11 (matlab HEAD 2566fe4d).
+      Three-attempt cascade: (1) probe NDI_CLOUD_TOKEN via direct GET
+      /users/me bypassing wrappers (to avoid silent re-auth swapping
+      the token mid-call); (2) if NDI_CLOUD_USERNAME / NDI_CLOUD_PASSWORD
+      are set, do a silent login and re-probe; (3) if env credentials
+      are absent, return False (Python has no GUI login -- use_ui_login
+      is accepted for parity but never escalates to UI). Local JWT
+      validity check is performed before any HTTP call. Verbose mode
+      prints step-by-step diagnostics. UI step (MATLAB ndi.cloud.uilogin)
+      is intentionally omitted from the Python port; that is part of the
+      profileEditor GUI workstream.
 
   - name: login
     matlab_path: "+ndi/+cloud/+api/+auth/login.m"
@@ -226,6 +265,25 @@ functions:
       MATLAB places this in +internal; Python places it in auth.py.
       Name exact match.
 
+  - name: isTokenExpired
+    matlab_path: "+ndi/+cloud/+internal/isTokenExpired.m"
+    matlab_last_sync_hash: "2566fe4d"
+    python_path: "ndi/cloud/auth.py"
+    input_arguments:
+      - name: token
+        type_matlab: "char"
+        type_python: "str"
+    output_arguments:
+      - name: expired
+        type_python: "bool"
+    decision_log: >
+      Ported from MATLAB main as of 2026-05-11 (matlab HEAD 2566fe4d,
+      original commit 716442b940). Local-only JWT exp check; True for
+      empty / malformed / expired tokens. MATLAB places this in
+      +internal; Python places it in auth.py alongside the other JWT
+      helpers. The pre-existing Python verifyToken is now defined in
+      terms of `not isTokenExpired`.
+
   - name: verifyToken
     matlab_path: "N/A"
     python_path: "ndi/cloud/auth.py"
@@ -239,7 +297,7 @@ functions:
 
   - name: getActiveToken
     matlab_path: "+ndi/+cloud/+internal/getActiveToken.m"
-    matlab_last_sync_hash: "7ab96514"
+    matlab_last_sync_hash: "2566fe4d"
     python_path: "ndi/cloud/auth.py"
     input_arguments:
       - name: config
@@ -251,8 +309,10 @@ functions:
       - name: org_id
         type_python: "str"
     decision_log: >
-      MATLAB places this in +internal; Python places it in auth.py.
-      Name exact match.
+      Updated 2026-05-11 to require a non-empty organization id
+      (matches MATLAB commit 5c4352eeac which made org id required for
+      cached auth). MATLAB places this in +internal; Python places it
+      in auth.py. Name exact match.
 
   # --- orchestration.py functions ---
   - name: downloadDataset
@@ -400,9 +460,6 @@ functions:
       Snake_case is acceptable for Python-only functions.
 
   # --- download.py functions ---
-  # NOTE: dataset (old one-by-one pipeline) removed from both MATLAB and
-  # Python.  Superseded by downloadDocumentCollection + orchestration.downloadDataset.
-
   - name: downloadDocumentCollection
     matlab_path: "+ndi/+cloud/+download/downloadDocumentCollection.m"
     matlab_last_sync_hash: "fbf6d337"
@@ -494,9 +551,6 @@ functions:
       it is used by the modern orchestration layer (downloadDataset,
       syncDataset).
 
-  # NOTE: datasetDocuments (old one-by-one pipeline) removed from both
-  # MATLAB and Python.  Superseded by downloadDocumentCollection.
-
   - name: downloadGenericFiles
     matlab_path: "+ndi/+cloud/+download/downloadGenericFiles.m"
     matlab_last_sync_hash: "cafbfe74"
@@ -535,11 +589,6 @@ functions:
         type_python: "dict[str, Any]"
     decision_log: "Exact match."
 
-  # NOTE: setFileInfo (old pipeline) removed from both MATLAB and Python.
-  # File-info patching now lives in the sync layer:
-  #   updateFileInfoForLocalFiles  → ndi.cloud.sync.internal
-  #   updateFileInfoForRemoteFiles → ndi.cloud.sync.internal
-
   - name: structsToNdiDocuments
     matlab_path: "+ndi/+cloud/+download/+internal/structsToNdiDocuments.m"
     matlab_last_sync_hash: "211a705e"
@@ -554,8 +603,6 @@ functions:
     decision_log: >
       MATLAB places this in +download/+internal; Python places it
       in download.py. Exact name match.
-
-  # NOTE: downloadFullDataset alias removed along with download.dataset.
 
   # --- upload.py functions ---
   - name: uploadDocumentCollection
@@ -943,6 +990,33 @@ functions:
         type_python: "list[dict[str, Any]]"
     decision_log: "Exact match."
 
+  # --- profile.py (singleton manager for cloud login profiles) ---
+  - name: profile
+    matlab_path: "+ndi/+cloud/profile.m"
+    matlab_last_sync_hash: "2566fe4d"
+    python_path: "ndi/cloud/profile.py"
+    input_arguments: []
+    output_arguments: []
+    decision_log: >
+      Ported from MATLAB main as of 2026-05-11 (matlab HEAD 2566fe4d,
+      commit 970b6854b1). MATLAB exposes ndi.cloud.profile as a singleton
+      classdef with static methods (add, remove, getCurrent, setCurrent,
+      getDefault, setDefault, getPassword, setPassword, getStage,
+      setStage, switchProfile, etc.).  Python ports the same surface as
+      module-level functions in ndi.cloud.profile, backed by a
+      _ProfileSingleton dataclass.  Backends: keyring (preferred,
+      mirrors MATLAB's "vault"), aes (mirrors MATLAB's AES file
+      backend), or memory (test-only).  Profile metadata persists to
+      ~/.ndi/NDI_Cloud_Profiles.json; AES ciphertext (when used) goes
+      to NDI_Cloud_Secrets.json in the same directory.  Python uses
+      Python-idiomatic snake_case for the public functions
+      (list_profiles, get_current, set_current, set_default,
+      switch_profile, use_backend) since these are convenience helpers,
+      not strict API mirrors; ProfileEntry field names (UID, Nickname,
+      Email, Stage, PasswordSecret) match MATLAB exactly so the on-disk
+      JSON is interchangeable.  GUI editor (MATLAB ndi.gui.profileEditor)
+      is intentionally NOT ported -- separate workstream.
+
 # =============================================================================
 # Not-yet-ported MATLAB functions
 # =============================================================================
@@ -998,7 +1072,11 @@ not_yet_ported:
     matlab_path: "+ndi/+cloud/uilogin.m"
     matlab_last_sync_hash: "80092b7c"
     status: not_applicable
-    decision_log: "MATLAB GUI login. No Python equivalent needed."
+    decision_log: >
+      MATLAB GUI login. No Python equivalent; testLogin() in Python
+      simply returns False when env credentials are absent (since a
+      Python CLI session has no UI). The MATLAB profileEditor GUI is a
+      separate workstream.
 
   - name: zip_documents_for_upload
     matlab_path: "+ndi/+cloud/+upload/+internal/zip_documents_for_upload.m"

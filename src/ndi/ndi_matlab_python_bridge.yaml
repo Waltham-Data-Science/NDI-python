@@ -12,6 +12,16 @@ project_metadata:
   naming_policy: "Strict MATLAB Mirror"
   indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
 
+conventions:
+  regex_dialect: >
+    All user-facing regex patterns in NDI (e.g. ndi.file.navigator
+    filematch, ndi.file.navigator.rhd_series series/ancillary patterns)
+    are written in MATLAB regex syntax. The Python port translates them
+    to Python re syntax internally via
+    ndi.util.matlab_regex.matlab_to_python_regex at the point of
+    compile. New python code that consumes user-provided regex must
+    route through this converter.
+
 # =========================================================================
 # Standalone functions
 # =========================================================================
@@ -33,6 +43,57 @@ functions:
       Exact match. Returns 2-tuple (version_string, url).
       MATLAB uses git describe; Python does the same with subprocess
       fallback to __version__. Synchronized 2026-03-13.
+
+  - name: setup.lab
+    type: function
+    matlab_path: "+ndi/+setup/lab.m"
+    matlab_last_sync_hash: "2566fe4d"
+    python_path: "ndi/setup/lab.py"
+    input_arguments:
+      - name: labName
+        type_matlab: "char"
+        type_python: "str"
+      - name: ref
+        type_matlab: "char"
+        type_python: "N/A (Python takes session directly)"
+      - name: dirname
+        type_matlab: "char"
+        type_python: "N/A (Python takes session directly)"
+    output_arguments:
+      - name: S
+        type_matlab: "ndi.session.dir"
+        type_python: "None (mutates session in-place)"
+    decision_log: >
+      Reads DAQ system JSON configs from ndi_common/daq_systems/<labName>/
+      and adds corresponding documents to the session. MATLAB creates
+      the session.dir from (ref, dirname); Python takes a session that
+      the caller has already created and adds documents to it.
+      Python signature: ndi.setup.lab(session, lab_name).
+
+  - name: setup.rayolab
+    type: function
+    matlab_path: "+ndi/+setup/rayolab.m"
+    matlab_last_sync_hash: "2566fe4d"
+    python_path: "ndi/setup/rayolab.py"
+    input_arguments:
+      - name: ref
+        type_matlab: "char"
+        type_python: "N/A (Python takes session directly)"
+      - name: dirname
+        type_matlab: "char"
+        type_python: "N/A (Python takes session directly)"
+    output_arguments:
+      - name: S
+        type_matlab: "ndi.session.dir"
+        type_python: "None (mutates session in-place)"
+    decision_log: >
+      Thin wrapper that calls setup.lab(session, "rayolab"). Loads the
+      rayo_intanSeries and rayo_stim DAQ system configs from
+      ndi_common/daq_systems/rayolab/. The rayo_stim system pairs with
+      the RayoLabStims metadata reader. MATLAB rayolab.m calls
+      ndi.setup.lab('rayolab', ref, dirname); Python rayolab(session)
+      calls lab(session, "rayolab"). Python signature:
+      ndi.setup.rayolab(session).
 
 # =========================================================================
 # Classes
@@ -934,6 +995,21 @@ classes:
       none(), from_search() for MATLAB parity.
       Synchronized 2026-03-13.
 
+  # =========================================================================
+  # ndi.preferences - Singleton user-preferences store
+  # =========================================================================
+  - name: preferences
+    type: class
+    matlab_path: "+ndi/preferences.m"
+    matlab_last_sync_hash: "9061865d"
+    python_path: "ndi/preferences.py"
+    python_class: "Preferences"
+    inherits: ""
+
+    decision_log: >
+      matlab and python both persist to ~/.ndi/NDI_Preferences.json on
+      all platforms (synchronized 2026-05-11).
+
 # =========================================================================
 # Not ported / Not applicable
 # =========================================================================
@@ -981,7 +1057,7 @@ not_applicable:
       scipy.optimize curve fitting directly; no wrapper needed.
 
   # =========================================================================
-  # ndi.setup namespace — MATLAB-only lab configurations
+  # ndi.setup namespace — MATLAB lab configurations
   # =========================================================================
   - name: setup
     matlab_path: "+ndi/+setup/"
@@ -990,8 +1066,9 @@ not_applicable:
     decision_log: >
       Python equivalent of MATLAB lab setup wizards. The ndi.setup.lab()
       function reads DAQ system JSON configs from ndi_common/daq_systems/
-      and creates the corresponding documents in a session. Usage:
-      ndi.setup.lab(session, "vhlab").
+      and creates the corresponding documents in a session. Per-lab
+      wrappers (e.g. ndi.setup.rayolab) call lab() with a fixed name.
+      Usage: ndi.setup.lab(session, "vhlab"); ndi.setup.rayolab(session).
 
   # =========================================================================
   # ndi.docs namespace — MATLAB documentation generation

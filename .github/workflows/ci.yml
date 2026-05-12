@@ -55,6 +55,13 @@ jobs:
         env:
           NDI_CLOUD_USERNAME: ${{ secrets.TEST_USER_2_USERNAME }}
           NDI_CLOUD_PASSWORD: ${{ secrets.TEST_USER_2_PASSWORD }}
+          # The CI test account does not have a registered MATLAB
+          # license, so the destructive BYOL tests (DELETE
+          # /users/me/matlab-license) are allowed to run; they will
+          # clean up after themselves. The license guard in
+          # tests/_matlab_license_guard.py enforces this at module-import
+          # time and refuses to run if this variable is unset.
+          NDI_CLOUD_TEST_USER_HAS_MATLAB_LICENSE: "false"
         run: |
           # Use sys.monitoring (PEP 669) on Python 3.12+ for faster coverage.
           # CTracer (sys.settrace) is catastrophically slow on 3.12 when

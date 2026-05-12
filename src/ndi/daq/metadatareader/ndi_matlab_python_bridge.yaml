@@ -308,3 +308,63 @@ classes:
           - name: parameters
             type_python: "list[dict[str, Any]]"
         decision_log: "Python-specific. Reads Analyzer from .mat file."
+
+  # =========================================================================
+  # ndi.daq.metadatareader.RayoLabStims
+  # =========================================================================
+  - name: RayoLabStims
+    type: class
+    matlab_path: "+ndi/+daq/+metadatareader/RayoLabStims.m"
+    matlab_last_sync_hash: "2566fe4d"
+    python_path: "ndi/daq/metadatareader/rayolab_stims.py"
+    python_class: "ndi_daq_metadatareader_RayoLabStims"
+    inherits: "ndi.daq.metadatareader"
+
+    methods:
+      - name: RayoLabStims
+        kind: constructor
+        input_arguments:
+          - name: tsv_pattern
+            type_python: "str"
+            default: "''"
+          - name: identifier
+            type_python: "str | None"
+            default: "None"
+          - name: session
+            type_python: "Any | None"
+            default: "None"
+          - name: document
+            type_python: "Any | None"
+            default: "None"
+        output_arguments:
+          - name: reader_obj
+            type_python: "ndi_daq_metadatareader_RayoLabStims"
+        decision_log: >
+          Exact match. Forwards all arguments to base class. The
+          tsv_pattern is stored but not consulted; parameters are
+          constant.
+
+      - name: readmetadata
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+        output_arguments:
+          - name: parameters
+            type_python: "list[dict[str, Any]]"
+        decision_log: >
+          Trivial constant reader. Ignores epochfiles and always
+          returns [{"stimid": 1}], matching the mk2 marker channel
+          stimulus id emitted by the RayoLab intan-series stimulator.
+
+      - name: readmetadatafromfile
+        input_arguments:
+          - name: filepath
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: parameters
+            type_python: "list[dict[str, Any]]"
+        decision_log: >
+          Trivial constant reader. Ignores filepath and always
+          returns [{"stimid": 1}], matching the MATLAB class.

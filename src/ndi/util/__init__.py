@@ -23,6 +23,7 @@ from .getHexDiffFromFileObj import getHexDiffFromFileObj
 from .hexDiff import hexDiff
 from .hexDiffBytes import hexDiffBytes
 from .hexDump import hexDump
+from .matlab_regex import matlab_to_python_regex
 from .rehydrateJSONNanNull import rehydrateJSONNanNull
 from .session_summary import sessionSummary
 from .unwrapTableCellContent import unwrapTableCellContent
@@ -39,6 +40,7 @@ __all__ = [
     "hexDiff",
     "hexDiffBytes",
     "hexDump",
+    "matlab_to_python_regex",
     "rehydrateJSONNanNull",
     "sessionSummary",
     "unwrapTableCellContent",
