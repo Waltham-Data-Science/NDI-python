@@ -64,6 +64,18 @@ def GetUser(user_id: NonEmptyStr, *, client: _Client = None) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _unwrap(result: Any) -> dict[str, Any]:
+    # CloudClient verbs return APIResponse, whose .data is the parsed JSON
+    # body. The BYOL wrappers advertise dict[str, Any] in their signature
+    # and tests assert isinstance(result, dict), so unwrap once here.
+    if isinstance(result, dict):
+        return result
+    data = getattr(result, "data", None)
+    if isinstance(data, dict):
+        return data
+    return {}
+
+
 @_auto_client
 def getMatlabLicense(*, client: _Client = None) -> dict[str, Any]:
     """GET /users/me/matlab-license -- Retrieve the current MATLAB BYOL status.
@@ -76,7 +88,7 @@ def getMatlabLicense(*, client: _Client = None) -> dict[str, Any]:
 
     MATLAB equivalent: +cloud/+api/+users/getMatlabLicense.m
     """
-    return client.get("/users/me/matlab-license")
+    return _unwrap(client.get("/users/me/matlab-license"))
 
 
 @_auto_client
@@ -96,7 +108,7 @@ def allocateMatlabLicenseMac(*, client: _Client = None) -> dict[str, Any]:
 
     MATLAB equivalent: +cloud/+api/+users/allocateMatlabLicenseMac.m
     """
-    return client.post("/users/me/matlab-license")
+    return _unwrap(client.post("/users/me/matlab-license"))
 
 
 @_auto_client
@@ -136,7 +148,7 @@ def setMatlabLicense(
     body: dict[str, Any] = {"licenseFile": license_text, "mode": mode}
     if release:
         body["release"] = release
-    return client.put("/users/me/matlab-license", json=body)
+    return _unwrap(client.put("/users/me/matlab-license", json=body))
 
 
 @_auto_client
@@ -159,4 +171,4 @@ def clearMatlabLicense(
     MATLAB equivalent: +cloud/+api/+users/clearMatlabLicense.m
     """
     params: dict[str, str] | None = {"release": release} if release else None
-    return client.delete("/users/me/matlab-license", params=params)
+    return _unwrap(client.delete("/users/me/matlab-license", params=params))
