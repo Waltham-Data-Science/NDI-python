@@ -15,7 +15,7 @@
 | NDI-compress-matlabp / -python | `84c4bdd` / `0c05d9d` | 2026-03-03 / 2026-02-05 |
 | ndi-ontology-matlab | `dbb6396` | 2026-04-28 |
 | vhlab-thirdparty-matlab, vhlab_vhtools | 2022 vintage (frozen upstream) | — |
-| **ndi-cloud-node** | **not accessible from this session** (private; repo scope denied at git proxy and GitHub integration). Backend findings in §7 are reconstructed from both clients. | — |
+| **ndi-cloud-node** | `fcce1ab` (audited in a separate session) | 2026-06-03 |
 
 **Method.** Nine parallel deep-analysis passes: one architecture mapping of NDI-matlab + dependencies; five namespace-scoped parity analyses verifying every bridge entry against the *actual code on both sides* and using NDI-matlab's full git history to detect post-sync drift; three audits (NDI-python with linters/tests executed; NDI-matlab static; dependency ecosystem). Lint state at baseline: `black --check` and `ruff check` both pass; test suite (excluding symmetry/cloud-live) **1,568 passed, 2 failed (live-network ontology lookups), 212 skipped**.
 
@@ -172,23 +172,61 @@ Tag releases in lockstep across each MATLAB/Python pair at known-good symmetry p
 
 ---
 
-## 7. ndi-cloud-node (backend) — recommendations *(inferred from both clients; repo not accessible from this session)*
+## 7. ndi-cloud-node (backend) — verified findings
 
-1. **[High] Make long bulk operations asynchronous.** Lambda's ~30 s cap has already produced a real incident: a 504 on `bulk-delete` whose deletions hadn't applied (MATLAB hotfix 2032649a removed "treat 504 as success"). Return `202 + jobId` for bulk-delete/publish/unpublish, reusing the existing bulk-upload job-status pattern.
-2. **[High] Provide a real paginated `GET /datasets/{id}/files`** with a stable schema that always includes `uploaded` (+`size`, `sourceDatasetId`). Both clients scrape `getDataset().files[]`, which lags after bulk extraction and returns heterogeneous entries — the direct cause of MATLAB workarounds #805/#807.
-3. **[Medium] Publish an OpenAPI spec.** Your own two clients already disagree on: compute-abort verb (`DELETE /compute/{id}` vs `POST /compute/{id}/abort`), `/files/bulk` verb (GET vs POST), `searchstructure` scalar-vs-array, and the pagination total field (Python probes `number_matches` → `totalItems` → `totalNumber`).
-4. **[Medium] Enforce a unique index on `(datasetId, ndiId)`** — both clients ship duplicate-cleanup tooling that exists only because the backend accepts duplicate `ndiId`s.
-5. **[Medium] Document pagination/bulk limits server-side** (clients enforce ≤500 IDs/24-hex client-side only; pageSize used 20–1000 arbitrarily).
-6. **[Low] Job-status endpoint for bulk-download readiness** (clients poll a presigned S3 URL until it stops 403/404-ing); disable gateway gzip on ZIP/binary routes (corrupted archives forced MATLAB's `Accept-Encoding: identity` workaround); confirm or drop the unused `/datasets/search` and `/auth/password/confirm` mappings.
+**Source audit completed** in a separate session at HEAD `fcce1ab` (2026-06-03). Stack: Express 4 on Lambda via serverless-http, routes under `/v1`, Mongoose 7 → DocumentDB, Cognito auth, S3 + SNS/SQS async pipeline; API Lambda 30 s / API Gateway 29 s cap (the 504 source). The audit confirmed every client-inferred item below and surfaced higher-severity issues only the source revealed.
 
-> A direct source audit (auth middleware, S3 handling, dependency CVEs, secrets) still requires repo access; these items are contract-level and verifiable from the client code cited in §3.4/§4.
+### 7.1 Security (source-verified)
+1. **[Critical] Any authenticated user can modify any *published* dataset, incl. Mongo-operator injection.** `POST /datasets/:datasetId` is gated only by `userHasAccessToDataset` (visibility, not membership — published datasets are visible to everyone), then passes `req.body` straight to `findByIdAndUpdate`. The field stripper is a top-level deny-list that misses `organizationId`/`branchOf`/`writeLock`/`doi`… and is fully bypassed by an operator body like `{"$set":{"isPublished":false}}`. Any logged-in user can deface, re-own, or un-publish anyone's dataset. (`dataset.controller.ts:368-387`, `:830-843`). **Fix:** require org membership + explicit field allowlist + reject keys starting `$` or containing `.`.
+2. **[High] Same visibility-as-write gap on `POST /datasets/:id/submit`** (`dataset.controller.ts:446`) and write-lock acquire — any authed user flips `isSubmitted` on any published dataset. **Fix:** membership check (build a shared `userCanWriteToDataset` middleware and apply to all mutating dataset/document routes).
+3. **[High] `POST /compute/start` does not validate org membership** — `organizationId` is taken from the body with a live `// TODO: Validate…` (`compute.controller.ts:109`) and interpolated into a bucket name the API will create if absent → cross-tenant compute I/O. **Fix:** verify membership + ObjectId-validate before interpolation.
+4. **[High] Vulnerable dep + no committed lockfile.** `npm audit` = 10 vulns (2 high): `js-cookie ≤3.0.5` via runtime `amazon-cognito-identity-js`. CI gates only `--audit-level=critical` and regenerates the lockfile each run (unreproducible). **Fix:** commit lockfile, bump cognito, gate at `high`.
+5. **[Medium] Bookmark IDOR** (`GET /datasets/user/:userId/bookmarks` — any user reads any user's bookmarks), **PII logged** (`updateDataset` dumps full `req.user` incl. matlabLicense ciphertext to CloudWatch, `dataset.controller.ts:370`), **presigned URLs 7-day expiry & `:uid` unvalidated on the single-file path** (`%2F` in uid escapes the dataset key prefix — the bulk path regex-validates, the API path doesn't), **raw `error.message` returned** to clients, **open CORS + no auth rate-limiting**, **static IAM keys in Lambda env**, **403-instead-of-401**. (E5–E12.)
+6. **[Info] Solid pieces to keep:** the ndiquery/search translators are properly hardened (field-name regex blocking `$`/dots, depth + regex-length caps, ReDoS heuristic); document reads are dataset-scoped and fail-closed; runner JWTs are KMS-signed ES256 with session-bound revocation; Stripe webhook verifies signatures; zip extraction is zip-slip-safe. The injection surface I worried about from the client side (searchstructure → DB query) is the *best*-defended part of the backend.
+
+### 7.2 Async / 504 (source-verified)
+7. **[High] `POST /datasets/:id/submit` 504s by construction** — handler ends `return res.status(204);` with no `.send()`, so the response never finishes; the gateway times out at 29 s *after* the `isSubmitted` write committed. Every submit looks like a 504 while succeeding. **One-line fix:** `res.status(204).send()`.
+8. **[High] bulk-delete is a synchronous per-document 2-query loop, uncapped, non-transactional** (`document.controller.ts:296-320`) — a 30 s kill leaves a partial delete (the documented incident). A batched `updateMany` already exists unused (`document.repository.ts:485-490`). Retry-after-504 is safe (soft-delete is idempotent). **Fix:** validate + cap ids, single batched delete, return deleted ids; consider 202+job.
+9. **[Confirmed] Publish/unpublish already fall back to 202+SQS** (over 50 / 500 files respectively — the asymmetric thresholds look unintentional), but with **no jobId** — clients poll `isPublishing/publishProgress`. **Bulk-document download has no job status by design** — the API returns a 7-day presigned GET for an object built later, so clients polling S3 until it stops 404-ing is the only mechanism. **Fix:** add a `BulkDownloadJob` status row mirroring the existing `BulkUploadJob`.
+10. **[Confirmed] Gateway gzip** is `minimumCompressionSize: 1024` stack-wide (the MATLAB `Accept-Encoding: identity` workaround cause); the bulk-download ZIP is uploaded with no `ContentType` — set `application/zip`.
+
+### 7.3 Data integrity (source-verified)
+11. **[High] No unique index on `(dataset, ndiId)`** — the index is non-unique/sparse; create and bulk paths never check for an existing ndiId (which even defaults to `""`). Re-POST or retry-after-504 creates a duplicate row every time — this is the entire reason both clients ship dedup tooling. **Fix:** unique partial index after a dedup backfill, or upsert-by-ndiId.
+12. **[High] File-record race confirmed, two windows.** Single-file path `$push`es `{uploaded:false}` with no `size` until the S3 trigger fires; **bulk path is worse** — Stage 1 registers `uploaded:true` + zip-header `size` *before* Stage 2 extracts the bytes, so `uploaded:true` does not mean downloadable and a URL minted in that window 404s. This is the direct cause of the clients' poll-until-stable logic (#805/#807). **Fix:** set `uploaded:true` only after bytes land; expose a stable paginated files endpoint.
+13. **[Contract] Timestamp format is undecidable server-side** — document payload is `Mixed`, stored verbatim; the backend has no opinion, so MATLAB datenums and Python epoch-seconds coexist and silently break cross-client `lessthan/greaterthan` ndiquery. **The clients must converge on one format** (ties to DID §6.1-2); a backend normalizer is the alternative.
+
+### 7.4 Contract ambiguities — resolved (updates client findings in §3.4-15)
+- **Compute abort = `DELETE /compute/{sessionId}` only.** Python's `POST .../abort` **will 404** — confirmed must change (raises §3.4-15 abort item from drift to a hard bug). Swagger also wrongly advertises `/finalize`; the real route is `/advance`.
+- **`/files/bulk` = GET** (Python's POST 404s); it already returns a pollable `jobId` neither client uses.
+- **`searchstructure`** = single object *or* array, both accepted (a single dict gets wrapped) — so Python's scalar-dict passthrough actually works; **downgrade** that part of §3.4-15 to stylistic. But **`scope` accepts a CSV of 24-hex dataset IDs** in addition to the enum — Python's `Literal` genuinely loses that capability (keep).
+- **Pagination** is inconsistent per endpoint with **no server-side max** on dataset/search/ndiquery (a client `pageSize=100000` is honored); `GET .../documents` is **unpaginated by default**. The **total field varies** (`totalNumber` dataset lists / `totalItems` search / `number_matches` ndiquery / none on `.../documents`). Clients must treat these per-endpoint; backend should standardize + cap.
+- **`addDocumentAsFile`** = neither multipart nor strict JSON; the endpoint reads the raw body as **JSON5** (Content-Type ignored). Python's JSON body works; a true multipart envelope would 500. So §3.4-15's "send multipart" is wrong — **keep JSON, drop the multipart recommendation**.
+- **`/datasets/search` and `/auth/password/confirm` both exist** — do not drop (confirm-password returns 200 even on failure; clients must read the body).
+
+### 7.5 Performance (source-verified)
+- **[High] Auth work is done ~twice per request** — `userHasAccessToDataset` re-parses/re-verifies the same JWT and a fresh `CognitoJwtVerifier` is built per call (defeats JWKS cache); controllers re-build user context. ~2 verifications + 2 user fetches + 2-3 org queries per request. **Fix:** hoist the verifier to module scope, reuse `request.user`, stash `userContext`.
+- **[High] `GET .../documents` unpaginated by default** → full-collection scan + serialize inside 30 s. **[Medium]** N+1 S3 on download hydration (new `S3Client` per file, up to 3 HeadObjects each); `documentCount` recomputed via `countDocuments` after every create/delete (use `$inc`). Indexing is otherwise strong.
+
+### 7.6 Top backend fixes (prioritized)
+1. Lock down `POST /datasets/:id` (membership + allowlist + reject `$`/dotted) — **Critical**.
+2. Shared `userCanWriteToDataset` on `/submit` + all mutating routes.
+3. One-line `submitDataset` `res.status(204).send()` (kills a guaranteed-504 core flow).
+4. Implement the compute org-membership TODO + ObjectId-validate.
+5. Batch + cap (+ optional 202) bulk-delete.
+6. Commit lockfile, bump cognito, raise CI audit gate.
+7. Unique partial index on `(dataset, ndiId)` after dedup backfill.
+8. Hoist Cognito verifier + collapse duplicate auth (biggest latency/cost win).
+9. Default + max pagination on documents/search/ndiquery; standardize the total field.
+10. Presigned-URL hygiene: validate `:uid`, cut expiry to ≤24 h, set ZIP ContentType, add `BulkDownloadJob` status.
+
+> Two notes to propagate back to the clients: the bulk-file endpoint already returns a `jobId` neither client polls, and the timestamp split (item 13) is the clients' to resolve.
 
 ---
 
 ## 8. Prioritized roadmap (smallest correct fixes, no overengineering)
 
 **P0 — stop the bleeding (days):**
-`ndi_gui_` cleanup (C9) · sync-index camelCase compat (C2) · disable-or-fix `sync/operations.py` deletion path (C1) · binary-upload manifest fix (C3) · `SyncMode.nvpairs()` MATLAB bug (§4-6) · copy the 9 missing/divergent `ndi_common` JSONs (§3.4-3) · chmod 0600 secrets files both languages.
+`ndi_gui_` cleanup (C9) · sync-index camelCase compat (C2) · disable-or-fix `sync/operations.py` deletion path (C1) · binary-upload manifest fix (C3) · `SyncMode.nvpairs()` MATLAB bug (§4-6) · copy the 9 missing/divergent `ndi_common` JSONs (§3.4-3) · chmod 0600 secrets files both languages · **backend: lock down `POST /datasets/:id` published-dataset write (§7.1-1, Critical) + one-line `submit` 504 fix (§7.2-7) + Python `abortSession`→`DELETE` (§7.4, 404 today).**
 
 **P1 — restore parity where science is wrong (1–2 weeks):**
 syncgraph branches + underlying epochs + rule daqsystem (C5–C7) · `readtimeseries`/VHSB (C8) · `epochprobemap_daqsystem` format (C10) · DID `isa` (§6.1-1) · `dependency_value_n` · `system_mfdaq` analog-event types · stimulator `pairOnOff` · `syncTriggerTrains` + `randomPulses` algorithms · ontology providers (UBERON/NCIT + registry sync) · cloud contract drift items (§3.4-15/16) + 5xx retry.
