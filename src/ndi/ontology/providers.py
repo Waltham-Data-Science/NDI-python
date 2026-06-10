@@ -176,6 +176,59 @@ class PATOProvider(OLSProvider):
     ols_prefix = "PATO"
 
 
+class UBERONProvider(OLSProvider):
+    """Uberon multi-species anatomy ontology (via OLS)."""
+
+    name = "Uberon"
+    ols_ontology = "uberon"
+    ols_prefix = "UBERON"
+
+
+class NCITProvider(OLSProvider):
+    """NCI Thesaurus (via OLS)."""
+
+    name = "NCIT"
+    ols_ontology = "ncit"
+    ols_prefix = "NCIT"
+
+
+class EDAMProvider(OLSProvider):
+    """EDAM bioinformatics operations/data/formats ontology (via OLS).
+
+    EDAM identifiers are sub-typed (e.g. ``data_1234``) rather than a flat
+    numeric series, so id lookups should use the full term; label lookups work
+    as usual.
+    """
+
+    name = "EDAM"
+    ols_ontology = "edam"
+    ols_prefix = "EDAM"
+
+
+class IAOProvider(OLSProvider):
+    """Information Artifact Ontology (via OLS)."""
+
+    name = "IAO"
+    ols_ontology = "iao"
+    ols_prefix = "IAO"
+
+
+class STATOProvider(OLSProvider):
+    """STATO statistical methods ontology (via OLS)."""
+
+    name = "STATO"
+    ols_ontology = "stato"
+    ols_prefix = "STATO"
+
+
+class SchemaOrgProvider(OLSProvider):
+    """schema.org vocabulary (via OLS; identifiers are named, so use labels)."""
+
+    name = "SchemaOrg"
+    ols_ontology = "schemaorg"
+    ols_prefix = "schemaorg"
+
+
 class NDICProvider(OntologyProvider):
     """NDI Controlled Vocabulary — local TSV file."""
 
@@ -637,5 +690,11 @@ PROVIDER_REGISTRY.update(
         "PATO": PATOProvider,
         "PubChem": PubChemProvider,
         "EMPTY": EMPTYProvider,
+        "Uberon": UBERONProvider,
+        "NCIT": NCITProvider,
+        "EDAM": EDAMProvider,
+        "IAO": IAOProvider,
+        "STATO": STATOProvider,
+        "SchemaOrg": SchemaOrgProvider,
     }
 )
