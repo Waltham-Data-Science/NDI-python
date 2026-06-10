@@ -37,6 +37,50 @@ def listRemoteDocumentIds(
     return mapping
 
 
+def formatApiError(api_response: Any) -> str:
+    """Format a human-readable message from a cloud API response.
+
+    MATLAB equivalent: ``+ndi/+cloud/+internal/formatApiError.m``.
+
+    Combines the HTTP status line with the server's error body (``message`` or
+    ``error`` field, or a string body). Accepts an :class:`APIResponse`, a
+    ``requests.Response``, a raw dict body, or ``None``.
+    """
+    if api_response is None:
+        return "no response from server"
+
+    status_part = ""
+    try:
+        status_code = getattr(api_response, "status_code", None)
+        if status_code is not None:
+            status_part = f"HTTP {int(status_code)}"
+            reason = getattr(api_response, "reason", "") or ""
+            if reason:
+                status_part = f"{status_part} {reason}"
+    except Exception:
+        pass
+
+    body_part = ""
+    try:
+        data = getattr(api_response, "data", api_response)
+        if isinstance(data, dict):
+            msg = data.get("message") or data.get("error")
+            if msg:
+                body_part = str(msg)
+        elif isinstance(data, str):
+            body_part = data
+    except Exception:
+        pass
+
+    if status_part and body_part:
+        return f"{status_part} - {body_part}"
+    if status_part:
+        return status_part
+    if body_part:
+        return body_part
+    return "unknown error"
+
+
 def getCloudDatasetIdForLocalDataset(
     dataset: Any,
     *,

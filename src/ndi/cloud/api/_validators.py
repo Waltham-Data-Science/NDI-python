@@ -7,7 +7,8 @@ maps to a specific MATLAB argument constraint:
     NonEmptyStr -> (1,1) string   (non-empty general string)
     PageNumber  -> (1,1) double   (integer >= 1)
     PageSize    -> (1,1) double   (integer >= 1)
-    Scope       -> {mustBeMember} (Literal enum)
+    Scope       -> visibility keyword ('public'/'private'/'all') OR a
+                   comma-separated list of 24-hex dataset ids (MATLAB parity)
     FilePath    -> {mustBeFile}   (file must exist on disk)
 
 Usage::
@@ -23,8 +24,9 @@ Usage::
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated
 
 from pydantic import AfterValidator, ConfigDict, Field
 
@@ -36,8 +38,33 @@ NonEmptyStr = Annotated[str, Field(min_length=1)]
 PageNumber = Annotated[int, Field(ge=1)]
 PageSize = Annotated[int, Field(ge=1)]
 
-# -- {mustBeMember(scope, ["public", "private", "all"])} ---------------------
-Scope = Literal["public", "private", "all"]
+
+# -- scope: visibility keyword OR dataset-id(s) ------------------------------
+# MATLAB's +cloud/+api/+documents iMustBeValidScope accepts 'public'/'private'/
+# 'all' OR a comma-separated list of 24-hex dataset ObjectIds — the cloud
+# /ndiquery endpoint is scope-first and treats a dataset id (or list) as a
+# single-/multi-dataset query. The original Literal['public','private','all']
+# was a too-narrow port that rejected dataset-scoped queries with a
+# ValidationError before any HTTP call.
+_SCOPE_KEYWORDS = ("public", "private", "all")
+_OBJECTID_RE = re.compile(r"^[a-fA-F0-9]{24}$")
+
+
+def _check_scope(v: str) -> str:
+    if v in _SCOPE_KEYWORDS:
+        return v
+    parts = [p.strip() for p in v.split(",") if p.strip()]
+    if parts and all(_OBJECTID_RE.match(p) for p in parts):
+        # Return the NORMALIZED list (stripped, empty segments dropped) so a
+        # stray space or trailing comma isn't forwarded verbatim to the cloud.
+        return ",".join(parts)
+    raise ValueError(
+        f"scope must be one of {_SCOPE_KEYWORDS} or a comma-separated list of "
+        f"24-character hex dataset ids; got {v!r}"
+    )
+
+
+Scope = Annotated[str, AfterValidator(_check_scope)]
 
 
 # -- {mustBeFile}: file must exist on disk ------------------------------------

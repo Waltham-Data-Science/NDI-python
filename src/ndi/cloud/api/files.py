@@ -56,16 +56,15 @@ def getBulkUploadURL(
     *,
     client: _Client = None,
 ) -> str:
-    """POST /datasets/{organizationId}/{datasetId}/files/bulk
+    """GET /datasets/{organizationId}/{datasetId}/files/bulk
 
-    Returns a presigned S3 URL for bulk file upload.
+    Returns just the presigned S3 URL for bulk file upload. This is the same
+    backend route (the ``getBulkUploadFileUrl`` GET controller) that
+    :func:`getFileCollectionUploadURL` calls — it delegates there so there is a
+    single source of truth — and drops the ``jobId``. The previous ``POST``
+    404'd.
     """
-    result = client.post(
-        "/datasets/{organizationId}/{datasetId}/files/bulk",
-        organizationId=org_id,
-        datasetId=dataset_id,
-    )
-    return result.get("url", "")
+    return getFileCollectionUploadURL(org_id, dataset_id, client=client).get("url", "")
 
 
 @validate_call

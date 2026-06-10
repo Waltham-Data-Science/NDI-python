@@ -60,9 +60,14 @@ def triggerStage(
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
 def finalizeSession(session_id: NonEmptyStr, *, client: _Client = None) -> dict[str, Any]:
-    """POST /compute/{sessionId}/finalize"""
+    """POST /compute/{sessionId}/advance
+
+    The backend route is ``/advance`` (the ``advance`` controller); there is no
+    ``/finalize`` route — the swagger that advertised one was wrong, so the
+    previous ``POST .../finalize`` 404'd.
+    """
     return client.post(
-        "/compute/{sessionId}/finalize",
+        "/compute/{sessionId}/advance",
         sessionId=session_id,
     )
 
@@ -70,8 +75,13 @@ def finalizeSession(session_id: NonEmptyStr, *, client: _Client = None) -> dict[
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
 def abortSession(session_id: NonEmptyStr, *, client: _Client = None) -> bool:
-    """POST /compute/{sessionId}/abort"""
-    client.post("/compute/{sessionId}/abort", sessionId=session_id)
+    """DELETE /compute/{sessionId}
+
+    The backend aborts a session via ``DELETE /compute/{sessionId}`` (the
+    ``quit`` controller); there is no ``/abort`` route, so the previous
+    ``POST .../abort`` 404'd (matches MATLAB AbortSession, which uses DELETE).
+    """
+    client.delete("/compute/{sessionId}", sessionId=session_id)
     return True
 
 

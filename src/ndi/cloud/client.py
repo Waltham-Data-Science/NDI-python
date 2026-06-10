@@ -142,6 +142,16 @@ class CloudClient:
 
     DEFAULT_TIMEOUT = 120  # seconds
 
+    # Transient gateway/server statuses worth retrying. The API Gateway returns
+    # 504 when a Lambda exceeds the 29 s cap; a brief retry of an idempotent
+    # request often succeeds once the backend catches up.
+    RETRY_STATUSES = frozenset({502, 503, 504})
+    # Only retry methods that are safe to repeat. POST is excluded because most
+    # POST routes create resources (a retry could duplicate them).
+    RETRY_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "PUT", "DELETE"})
+    MAX_RETRIES = 3  # total attempts = 1 + retries on a retryable response
+    RETRY_BACKOFF = 0.5  # seconds; grows linearly per attempt
+
     def __init__(self, config: CloudConfig):
         self.config = config
         try:
@@ -234,6 +244,8 @@ class CloudClient:
             method still raises the appropriate exception; the
             ``APIResponse`` is only returned for successful (2xx) requests.
         """
+        import time
+
         import requests as _requests
 
         url = self._build_url(endpoint, **path_params)
@@ -241,18 +253,28 @@ class CloudClient:
         if self.config.token:
             headers["Authorization"] = f"Bearer {self.config.token}"
 
-        try:
-            resp = self._session.request(
-                method,
-                url,
-                params=params,
-                json=json,
-                data=data,
-                headers=headers,
-                timeout=timeout or self.DEFAULT_TIMEOUT,
-            )
-        except _requests.RequestException as exc:
-            raise CloudAPIError(f"Request failed: {exc}") from exc
+        retryable = method.upper() in self.RETRY_METHODS
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                resp = self._session.request(
+                    method,
+                    url,
+                    params=params,
+                    json=json,
+                    data=data,
+                    headers=headers,
+                    timeout=timeout or self.DEFAULT_TIMEOUT,
+                )
+            except _requests.RequestException as exc:
+                raise CloudAPIError(f"Request failed: {exc}") from exc
+
+            # Retry transient gateway/server errors on idempotent requests.
+            if retryable and resp.status_code in self.RETRY_STATUSES and attempt < self.MAX_RETRIES:
+                time.sleep(self.RETRY_BACKOFF * attempt)
+                continue
+            break
 
         parsed = self._handle_response(resp)
         return APIResponse(
