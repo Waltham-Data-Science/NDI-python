@@ -312,25 +312,74 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
     @staticmethod
     def mfdaq_prefix(channeltype: str) -> str:
         """
-        Get the standard prefix for a channel type.
+        Get the standard channel-name prefix for a channel type.
+
+        Mirrors MATLAB ``mfdaq_prefix`` (2157c70f): the optional analog-event
+        ``_t<threshold>`` suffix is stripped before matching and re-attached to
+        analog-event prefixes (aep/aen/aimp/aimn).
 
         Args:
-            channeltype: Full channel type name
+            channeltype: Channel type name or abbreviation (optionally with a
+                ``_t<threshold>`` suffix).
 
         Returns:
-            Abbreviated prefix (e.g., 'ai' for 'analog_in')
+            Abbreviated prefix (e.g., 'ai' for 'analog_in').
         """
+        from .mfdaq import strip_threshold_suffix
+
+        idx = channeltype.find("_t")
+        threshold_suffix = channeltype[idx:] if idx != -1 else ""
+        base = strip_threshold_suffix(channeltype)
+
         prefixes = {
             "analog_in": "ai",
+            "ai": "ai",
             "analog_out": "ao",
+            "ao": "ao",
             "digital_in": "di",
+            "di": "di",
             "digital_out": "do",
-            "auxiliary_in": "ax",
+            "do": "do",
+            "digital_in_event": "dep",
+            "digital_in_event_pos": "dep",
+            "de": "dep",
+            "dep": "dep",
+            "digital_in_event_neg": "den",
+            "den": "den",
+            "digital_in_mark": "dimp",
+            "digital_in_mark_pos": "dimp",
+            "dim": "dimp",
+            "dimp": "dimp",
+            "digital_in_mark_neg": "dimn",
+            "dimn": "dimn",
+            "analog_in_event": "aep",
+            "analog_in_event_pos": "aep",
+            "ae": "aep",
+            "aep": "aep",
+            "analog_in_event_neg": "aen",
+            "aen": "aen",
+            "analog_in_mark": "aimp",
+            "analog_in_mark_pos": "aimp",
+            "aim": "aimp",
+            "aimp": "aimp",
+            "analog_in_mark_neg": "aimn",
+            "aimn": "aimn",
             "time": "t",
-            "event": "e",
+            "timestamp": "t",
+            "auxiliary": "ax",
+            "auxiliary_in": "ax",
+            "aux": "ax",
             "marker": "mk",
+            "mark": "mk",
+            "event": "e",
+            "metadata": "md",
+            "text": "tx",
         }
-        return prefixes.get(standardize_channel_type(channeltype), channeltype)
+        prefix = prefixes.get(base.lower(), base)
+        # Re-attach the threshold only to analog-event prefixes (MATLAB).
+        if threshold_suffix and prefix in ("aep", "aen", "aimp", "aimn"):
+            prefix = prefix + threshold_suffix
+        return prefix
 
     @staticmethod
     def mfdaq_type(channeltype: str) -> str:
