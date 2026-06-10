@@ -88,3 +88,74 @@ functions:
       for an NDI element. Traverses underlying_element dependency
       tree until ndi_probe object is found. element can be an
       ndi.element.ndi_element object or string identifier.
+
+  - name: extracellularInfo
+    type: function
+    matlab_path: "+ndi/+fun/+probe/extracellularInfo.m"
+    python_path: "ndi/fun/probe/extracellularInfo.py"
+    matlab_last_sync_hash: "0324ad04f"
+    input_arguments:
+      - name: session
+        type_matlab: "ndi.session"
+        type_python: "Any"
+        note_python: "MATLAB arg name is S; renamed `session` in Python."
+      - name: probe
+        type_matlab: "ndi.probe or ndi.element"
+        type_python: "Any"
+      - name: quality_labels
+        type_matlab: "string"
+        type_python: "Sequence[str] | None"
+        default: "None"
+    output_arguments:
+      - name: info
+        type_matlab: "struct array"
+        type_python: "list[dict[str, Any]]"
+      - name: summary
+        type_matlab: "char"
+        type_python: "str"
+    decision_log: >
+      Exact match. Database-side counterpart to
+      ndi.fun.probe.import.kilosort.getInfo: finds neuron ndi.elements whose
+      underlying element is the probe (depends_on underlying_element_id) and their
+      neuron_extracellular documents (depends_on element_id), assembles one entry
+      per neuron sorted by cluster_index, optionally filtered by quality_labels
+      (case-insensitive), and returns a parallel multiline summary. MATLAB
+      containers.Map -> Python dict; MATLAB struct array -> list of dicts.
+
+  - name: plotProbeGeometry
+    type: function
+    matlab_path: "+ndi/+fun/+probe/plotProbeGeometry.m"
+    python_path: "ndi/fun/probe/plotProbeGeometry.py"
+    matlab_last_sync_hash: "4f7c78c82"
+    input_arguments:
+      - name: pg
+        type_matlab: "struct or ndi.document (probe_geometry)"
+        type_python: "dict | ndi_document"
+      - name: axes
+        type_matlab: "axes handle"
+        type_python: "matplotlib Axes | None"
+        default: "None"
+      - name: marker_size
+        type_matlab: "double"
+        type_python: "float"
+        default: "60"
+      - name: contour_color
+        type_matlab: "double[3]"
+        type_python: "tuple[float, float, float]"
+        default: "(0.6, 0.6, 0.6)"
+      - name: contour_linewidth
+        type_matlab: "double"
+        type_python: "float"
+        default: "1.5"
+    output_arguments:
+      - name: h
+        type_matlab: "struct (graphics handles)"
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Faithful match. Scatters electrode sites (colored by shank_id when present),
+      plots the optional planar body contour, sets axis labels/title/equal aspect,
+      and adds a Shank ID colorbar when multiple shanks exist. matplotlib is a
+      DEFERRED import inside the function (raising a clear ImportError if absent) so
+      the module imports cleanly in the standard env. MATLAB vlt.data.assign
+      name-value parsing is replaced by native Python keyword arguments (no vlt
+      dependency). pyplot.gca() stands in for MATLAB gca.
