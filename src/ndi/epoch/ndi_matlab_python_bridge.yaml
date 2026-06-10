@@ -229,18 +229,19 @@ classes:
 
       - name: matchedepochtable
         input_arguments:
-          - name: epoch_number
-            type_matlab: "integer (optional)"
-            type_python: "int | None"
-            default: "None"
-          - name: epoch_id
-            type_matlab: "char (optional)"
-            type_python: "str | None"
-            default: "None"
+          - name: hashvalue
+            type_matlab: "char"
+            type_python: "str"
         output_arguments:
-          - name: et
-            type_python: "list[dict[str, Any]]"
-        decision_log: "Exact match."
+          - name: b
+            type_python: "bool"
+        decision_log: >
+          MATLAB ndi.epoch.epochset/matchedepochtable returns 1 iff the cached
+          epoch table's hash equals HASHVALUE. Python now mirrors this boolean-hash
+          semantics. The prior Python signature (epoch_number/epoch_id entry-lookup
+          filter returning a list) diverged from MATLAB and had no callers; PR5
+          realigns it (audit §3.4-6).
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
       - name: epochtableentry
         input_arguments:
@@ -254,12 +255,79 @@ classes:
           Semantic Parity: epoch_number is 1-indexed (user concept).
           Internally maps to 0-based index.
 
-      - name: epochgraph
+      - name: epochnodes
         input_arguments: []
         output_arguments:
           - name: nodes
             type_python: "list[dict[str, Any]]"
-        decision_log: "Exact match."
+        decision_log: >
+          Port of MATLAB ndi.epoch.epochset/epochnodes. Returns one node per
+          (epoch, clock) pair; each node carries a single ndi_time_clocktype plus
+          the objectname/objectclass identifiers the sync graph needs. MATLAB's
+          second output (underlyingnodes) is provided separately via
+          underlyingepochnodes in Python rather than as a second return value
+          (audit C6). Added in PR4.
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
+
+      - name: underlyingepochnodes
+        input_arguments:
+          - name: epochnode
+            type_matlab: "struct"
+            type_python: "dict[str, Any]"
+        output_arguments:
+          - name: unodes
+            type_python: "list[dict[str, Any]]"
+          - name: cost
+            type_python: "numpy.ndarray"
+          - name: mapping
+            type_python: "list[list[ndi_time_timemapping | None]]"
+        decision_log: >
+          Port of MATLAB ndi.epoch.epochset/underlyingepochnodes. Traverses the
+          underlying epochs of EPOCHNODE down to sync-graph roots, returning the
+          chain of nodes plus the NxN cost (inf = no edge) and time-mapping
+          matrices among them; EPOCHNODE itself is unodes[0] (audit C6). MATLAB
+          returns [unodes, cost, mapping] as a 3-tuple; Python matches. Added in PR4.
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
+
+      - name: _epochgraph_nodes
+        input_arguments: []
+        output_arguments:
+          - name: nodes
+            type_python: "list[dict[str, Any]]"
+        decision_log: >
+          Python-only private helper for buildepochgraph: enumerates one node per
+          (epoch, clock) pair carrying epoch_id, epoch_session_id, epoch_clock and
+          t0_t1. MATLAB inlines this enumeration inside buildepochgraph; Python
+          factors it out. No standalone MATLAB equivalent. Added in PR5.
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
+
+      - name: buildepochgraph
+        input_arguments: []
+        output_arguments:
+          - name: cost
+            type_python: "numpy.ndarray"
+          - name: mapping
+            type_python: "list[list[ndi_time_timemapping | None]]"
+        decision_log: >
+          Port of MATLAB ndi.epoch.epochset/buildepochgraph. For M epoch nodes
+          (one per epoch/clock pair) returns the MxM cost matrix (1 = direct
+          mapping, inf = none) and the MxM time-mapping matrix. MATLAB returns
+          [cost, mapping]; Python matches. Added in PR5.
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
+
+      - name: epochgraph
+        input_arguments: []
+        output_arguments:
+          - name: cost
+            type_python: "numpy.ndarray"
+          - name: mapping
+            type_python: "list[list[ndi_time_timemapping | None]]"
+        decision_log: >
+          MATLAB ndi.epoch.epochset/epochgraph returns the (cost, mapping) matrices
+          (delegating to buildepochgraph). Python now returns the same 2-tuple. The
+          prior Python implementation returned a list of node dicts, which did not
+          match the contract ndi.time.syncgraph expects; PR5 realigns it (audit §3.4-6).
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
       - name: resetepochtable
         input_arguments: []
@@ -552,7 +620,29 @@ classes:
         output_arguments:
           - name: s
             type_python: "str"
-        decision_log: "Exact match. Tab-delimited string."
+        decision_log: >
+          MATLAB ndi.epoch.epochprobemap_daqsystem/serialize emits a tab-delimited
+          header row of field names followed by one data row per object. Python now
+          matches: a header row plus this object's data row. The prior Python output
+          was a single header-less line, which crashed MATLAB's decode and could not
+          represent an array; PR5 fixes it (audit C10).
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
+
+      - name: serialize_array
+        kind: classmethod
+        input_arguments:
+          - name: objs
+            type_python: "list[ndi_epoch_epochprobemap__daqsystem]"
+        output_arguments:
+          - name: s
+            type_python: "str"
+        decision_log: >
+          Serializes a list of probe maps as one header row + one data row per
+          object. MATLAB has no separate array method because its serialize is
+          array-native (loops over the struct array); Python factors the array
+          case into its own classmethod for idiomatic call sites (audit C10).
+          Added in PR5.
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
       - name: savetofile
         input_arguments:
@@ -560,7 +650,23 @@ classes:
             type_matlab: "char"
             type_python: "str"
         output_arguments: []
-        decision_log: "Exact match."
+        decision_log: "Exact match. Writes a header row + data row."
+
+      - name: save_array_to_file
+        kind: classmethod
+        input_arguments:
+          - name: objs
+            type_python: "list[ndi_epoch_epochprobemap__daqsystem]"
+          - name: filename
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments: []
+        decision_log: >
+          Writes a list of probe maps to a file (one header row + N data rows).
+          MATLAB's savetofile is array-native (writes the whole struct array);
+          Python adds this classmethod as the explicit array counterpart to the
+          instance savetofile (audit C10). Added in PR5.
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
       - name: decode
         kind: classmethod
@@ -571,7 +677,27 @@ classes:
         output_arguments:
           - name: epm_daq_obj
             type_python: "ndi_epoch_epochprobemap__daqsystem"
-        decision_log: "MATLAB is a static method. Python uses classmethod."
+        decision_log: >
+          MATLAB is a static method; Python uses classmethod. Python's decode now
+          skips the header row and returns the first data row's object, matching
+          MATLAB's header-aware decode (audit C10).
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
+
+      - name: decode_array
+        kind: classmethod
+        input_arguments:
+          - name: s
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: epm_list
+            type_python: "list[ndi_epoch_epochprobemap__daqsystem]"
+        decision_log: >
+          Decodes all probe maps from a serialized string (header skipped). MATLAB's
+          decode is array-native (returns a struct array for all data rows); Python
+          splits the single-object case (decode) from the array case (decode_array)
+          for idiomatic typing (audit C10). Added in PR5.
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
       - name: loadfromfile
         kind: classmethod

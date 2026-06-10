@@ -25,7 +25,12 @@ infrastructure:
     python_path: "ndi/cloud/client.py"
     decision_log: >
       Python-only HTTP client. MATLAB uses webread/webwrite/call.m;
-      Python wraps requests.ndi_session for all REST calls.
+      Python wraps requests.ndi_session for all REST calls. Now retries
+      transient gateway/server statuses (502/503/504) up to MAX_RETRIES
+      with linear backoff, but only on idempotent verbs
+      (GET/HEAD/OPTIONS/PUT/DELETE) — POST is excluded so resource-creating
+      calls are never duplicated.
+      Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
   - name: APIResponse
     type: class
@@ -629,7 +634,11 @@ functions:
     output_arguments:
       - name: result
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      Signature unchanged; body rebuilt to dedupe local documents against
+      the remote by their NDI id at base.id (was reading a top-level id
+      only, so local docs never deduplicated — audit C1/C3). Exact name
+      match. Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
   - name: zipForUpload
     matlab_path: "+ndi/+cloud/+upload/zipForUpload.m"
@@ -657,15 +666,22 @@ functions:
     matlab_last_sync_hash: "7026d493"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
-      - name: org_id
-        type_matlab: "char"
-        type_python: "str"
+      - name: dataset
+        type_matlab: "ndi.dataset"
+        type_python: "Any"
       - name: dataset_id
         type_matlab: "char"
         type_python: "str"
       - name: documents
         type_matlab: "cell"
         type_python: "list[dict[str, Any]]"
+      - name: file_upload_strategy
+        type_python: "str"
+        default: "'batch'"
+      - name: only_missing
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "True"
       - name: client
         type_python: "CloudClient | None"
         default: "None"
@@ -674,7 +690,13 @@ functions:
         type_python: "dict[str, Any]"
     decision_log: >
       MATLAB places this in +sync/+internal. Python places it in upload.py.
-      Exact name match.
+      First argument is now the dataset OBJECT (was org_id); the org id is
+      taken from the client config and binary file paths are resolved from
+      the dataset's binary store. Binary UIDs are read from
+      files.file_info[].locations[].uid rather than a nonexistent
+      top-level file_uid (audit C3). Added file_upload_strategy
+      ('batch'|'serial') and only_missing options. Exact name match.
+      Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
   - name: uploadSingleFile
     matlab_path: "+ndi/+cloud/uploadSingleFile.m"
@@ -727,7 +749,11 @@ functions:
         type_python: "bool"
       - name: message
         type_python: "str"
-    decision_log: "Exact match."
+    decision_log: >
+      Signature unchanged; body rebuilt to upload full document bodies
+      (not id stubs) and then call uploadFilesForDatasetDocuments with the
+      dataset object so binaries upload too. Exact name match.
+      Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
   - name: scanForUpload
     matlab_path: "+ndi/+cloud/+upload/scanForUpload.m"
@@ -840,6 +866,26 @@ functions:
     decision_log: >
       MATLAB places this in +sync/+internal. Python places it in
       internal.py. Exact name match.
+
+  - name: formatApiError
+    matlab_path: "+ndi/+cloud/+internal/formatApiError.m"
+    matlab_last_sync_hash: "9a0465b3"
+    python_path: "ndi/cloud/internal.py"
+    input_arguments:
+      - name: api_response
+        type_matlab: "matlab.net.http.ResponseMessage"
+        type_python: "Any"
+    output_arguments:
+      - name: msg
+        type_python: "str"
+    decision_log: >
+      Ported from MATLAB main as of 2026-06 (commit 2d76370). Builds a
+      human-readable message by combining the HTTP status line with the
+      server's error body (message/error field or a string body).
+      Tolerates None, a body without a 'message' field, and accepts an
+      APIResponse, a requests.Response, or a raw dict (the MATLAB version
+      tolerates the same empty/missing-body conditions from issue #624).
+      Exact name match.
 
   - name: getCloudDatasetIdForLocalDataset
     matlab_path: "+ndi/+cloud/+internal/getCloudDatasetIdForLocalDataset.m"
