@@ -26,11 +26,21 @@ To port or update a function, agents must follow these steps:
 4. **Implement:** Write the Python code to satisfy the `input_arguments` and `output_arguments` defined in the YAML.
 5. **Log & Notify:** Record the sync date in the YAML's `decision_log` (e.g., `"Synchronized with MATLAB main as of 2026-03-12."`). ndi_document any intentional divergences. Explicitly tell the user what changes were made to the bridge file so they can review the contract.
 
-## 4. Input Validation: Pydantic is Mandatory
+## 4. Input Validation: Pydantic at Trust Boundaries
 
-To replicate the robustness of the MATLAB `arguments` block, use Pydantic for all public-facing API functions.
+To replicate the robustness of the MATLAB `arguments` block, use Pydantic
+validation where untrusted input crosses into the library.
 
-- **Decorator:** Use the `@pydantic.validate_call` decorator on all functions.
+- **Where to apply:** Decorate public entry points at **trust boundaries** —
+  functions that receive user-supplied, file-derived, or cloud-derived input
+  (the cloud layer, document/query construction from external JSON, CLI/API
+  surfaces). Do **not** blanket-apply `@pydantic.validate_call` to every
+  internal method: the hot core paths (document/query/session/element/daq/
+  syncgraph/navigator) call each other with already-validated, often
+  numpy-heavy arguments, where per-call validation adds overhead and friction
+  for no safety gain. Validate once at the edge, then trust internally.
+- **Decorator:** Use the `@pydantic.validate_call` decorator on the
+  boundary-facing functions identified above.
 - **Type Mirroring:**
   - MATLAB `double`/`numeric` → Python `float | int`
   - MATLAB `char`/`string` → Python `str`
@@ -47,8 +57,11 @@ MATLAB allows multiple return values natively. In Python, these must be returned
 
 All Python code must pass formatting and linting before being committed.
 
-- **Black:** The sole code formatter. Use default line length (88).
-- **Ruff:** The primary linter. Run `ruff check --fix` before committing.
+- **Black:** The sole code formatter. Line length is **100** (matching
+  `pyproject.toml`'s `[tool.black] line-length` and `AGENTS.md`). Run
+  `black src/ tests/` before committing.
+- **Ruff:** The primary linter, also configured at line length 100. Run
+  `ruff check --fix` before committing.
 
 ## 7. Error Handling & Documentation
 

@@ -23,7 +23,11 @@ functions:
         type_python: "str"
     decision_log: >
       Python-specific utility. Normalizes abbreviations (e.g., 'ai' -> 'analog_in')
-      and ChannelType enum values to canonical string form.
+      and ChannelType enum values to canonical string form. Updated to mirror
+      MATLAB mfdaq_type (2157c70f): strips the optional analog-event
+      _t<threshold> suffix before matching and resolves analog-event/mark
+      abbreviations aep/aen/aimp/aimn (and ae/aim) to their full names.
+      Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
   - name: standardize_channel_types
     type: function
@@ -37,6 +41,40 @@ functions:
         type_python: "list[str]"
     decision_log: >
       Python-specific utility. Batch version of standardize_channel_type.
+
+  - name: strip_threshold_suffix
+    type: function
+    matlab_path: null
+    python_path: "ndi/daq/mfdaq.py"
+    input_arguments:
+      - name: channel_type
+        type_python: "str"
+    output_arguments:
+      - name: base_type
+        type_python: "str"
+    decision_log: >
+      Python-only helper. Strips a trailing numeric _t<threshold> suffix
+      (e.g. 'aep_t2.5' -> 'aep'), leaving ordinary names like 'custom_type'
+      unchanged. MATLAB inlines this in mfdaq_type/mfdaq_prefix (2157c70f);
+      Python factors it out as a shared helper.
+      Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
+
+  - name: threshold_suffix
+    type: function
+    matlab_path: null
+    python_path: "ndi/daq/mfdaq.py"
+    input_arguments:
+      - name: channel_type
+        type_python: "str"
+    output_arguments:
+      - name: suffix
+        type_python: "str"
+    decision_log: >
+      Python-only helper. Returns the numeric _t<threshold> suffix of a channel
+      type (e.g. 'aep_t2.5' -> '_t2.5'), or '' when absent. Companion to
+      strip_threshold_suffix; used by mfdaq_prefix to re-attach the threshold to
+      analog-event prefixes.
+      Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
 # =========================================================================
 # Enums / Dataclasses
@@ -959,7 +997,7 @@ classes:
   - name: system_mfdaq
     type: class
     matlab_path: "+ndi/+daq/+system/mfdaq.m"
-    matlab_last_sync_hash: "9f584d8a"
+    matlab_last_sync_hash: "2157c70f"
     python_path: "ndi/daq/system_mfdaq.py"
     python_class: "ndi_daq_system_mfdaq"
     inherits: "ndi.daq.system"
@@ -1132,7 +1170,13 @@ classes:
         output_arguments:
           - name: prefix
             type_python: "str"
-        decision_log: "Exact match."
+        decision_log: >
+          Exact match. Updated to mirror MATLAB mfdaq_prefix (2157c70f): the
+          optional analog-event _t<threshold> suffix is stripped before
+          matching and re-attached only to the analog-event prefixes
+          (aep/aen/aimp/aimn). Delegates suffix handling to
+          mfdaq.strip_threshold_suffix / threshold_suffix.
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
       - name: mfdaq_type
         input_arguments:

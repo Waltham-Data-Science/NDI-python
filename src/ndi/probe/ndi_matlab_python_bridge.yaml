@@ -404,7 +404,7 @@ classes:
   - name: stimulator
     type: class
     matlab_path: "+ndi/+probe/+timeseries/stimulator.m"
-    matlab_last_sync_hash: "209d46b3"
+    matlab_last_sync_hash: "f1e2ff8c"
     python_path: "ndi/probe/timeseries_stimulator.py"
     python_class: "ndi_probe_timeseries_stimulator"
     inherits: "ndi.probe.timeseries"
@@ -477,3 +477,26 @@ classes:
           Exact match. Utility method to parse raw marker channel
           data into structured stimulus events. Returns dict with
           stimid, stimon, stimoff, stimopenclose arrays.
+
+    static_methods:
+      - name: pairOnOff
+        input_arguments:
+          - name: times
+            type_matlab: "double array"
+            type_python: "np.ndarray"
+          - name: signs
+            type_matlab: "double array"
+            type_python: "np.ndarray"
+        output_arguments:
+          - name: "on"
+            type_python: "np.ndarray"
+          - name: "off"
+            type_python: "np.ndarray"
+        decision_log: >
+          Exact match (MATLAB f1e2ff8c, issue #248). Walks events in time
+          order: pairs each stim-on (sign > 0) with the next stim-off
+          (sign < 0); orphan on gets off=NaN, orphan off gets on=NaN, so
+          callers can read partial windows without mismatched on/off
+          counts. Returns equal-length (on, off) arrays. Wired into the
+          mk1 marker path of readtimeseriesepoch.
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
