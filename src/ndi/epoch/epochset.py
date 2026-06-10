@@ -235,32 +235,25 @@ class ndi_epoch_epochset(ABC):
 
         raise ValueError(f"ndi_epoch_epoch ID not found: {epoch_id}")
 
-    def matchedepochtable(
-        self,
-        epoch_number: int | None = None,
-        epoch_id: str | None = None,
-    ) -> list[dict[str, Any]]:
+    def matchedepochtable(self, hashvalue: str) -> bool:
         """
-        Get epoch table entries matching criteria.
+        Check whether *hashvalue* matches the current cached epoch-table hash.
+
+        MATLAB equivalent: ``ndi.epoch.epochset/matchedepochtable`` — returns True
+        only if a cached epoch table exists and its hash equals *hashvalue*.
+        (The previous Python method of this name was an entry-lookup filter with a
+        different signature and no callers; audit §3.4-6 realigns it to the
+        MATLAB boolean-hash semantics.)
 
         Args:
-            epoch_number: Match by epoch number (None = any)
-            epoch_id: Match by epoch ID (None = any)
+            hashvalue: A hash value previously obtained from ``epochtable()``.
 
         Returns:
-            List of matching epoch table entries
+            True if the cached epoch table's hash equals *hashvalue*.
         """
-        et, _ = self.epochtable()
-        matches = []
-
-        for entry in et:
-            if epoch_number is not None and entry.get("epoch_number") != epoch_number:
-                continue
-            if epoch_id is not None and entry.get("epoch_id") != epoch_id:
-                continue
-            matches.append(entry)
-
-        return matches
+        if self._epochtable_cache is None:
+            return False
+        return hashvalue == self._epochtable_hash
 
     @pydantic.validate_call
     def epochtableentry(self, epoch_number: Annotated[int, Field(ge=1)]) -> dict[str, Any]:
@@ -282,43 +275,83 @@ class ndi_epoch_epochset(ABC):
 
         return et[epoch_number - 1]
 
-    def epochgraph(self) -> list[dict[str, Any]]:
-        """
-        Build epoch graph nodes for time synchronization.
+    def _epochgraph_nodes(self) -> list[dict[str, Any]]:
+        """Enumerate one node per (epoch, clock) pair from the epoch table.
 
-        Creates a list of graph nodes, one for each (epoch, clock) pair.
-        This is used by ndi_time_syncgraph for time conversion.
-
-        Returns:
-            List of epoch graph nodes with fields:
-            - epoch_id: ndi_epoch_epoch identifier
-            - epochset: Reference to this ndi_epoch_epochset
-            - clock: ndi_time_clocktype for this node
-            - t0: Start time
-            - t1: End time
+        Each node carries ``epoch_id``, ``epoch_session_id``, ``epoch_clock`` and
+        ``t0_t1`` — the fields ``buildepochgraph`` needs to compute the cost and
+        time-mapping matrices.
         """
         et, _ = self.epochtable()
-        nodes = []
-
+        nodes: list[dict[str, Any]] = []
         for entry in et:
-            epoch_id = entry.get("epoch_id", "")
-            clocks = entry.get("epoch_clock", [])
-            t0t1_list = entry.get("t0_t1", [])
-
-            # Create one node per clock type
+            clocks = entry.get("epoch_clock", []) or []
+            t0t1_list = entry.get("t0_t1", []) or []
             for i, clock in enumerate(clocks):
-                t0, t1 = t0t1_list[i] if i < len(t0t1_list) else (np.nan, np.nan)
+                t = t0t1_list[i] if i < len(t0t1_list) else (np.nan, np.nan)
                 nodes.append(
                     {
-                        "epoch_id": epoch_id,
-                        "epochset": self,
-                        "clock": clock,
-                        "t0": t0,
-                        "t1": t1,
+                        "epoch_id": entry.get("epoch_id", ""),
+                        "epoch_session_id": entry.get("epoch_session_id", ""),
+                        "epoch_clock": clock,
+                        "t0_t1": tuple(t),
                     }
                 )
-
         return nodes
+
+    def buildepochgraph(self) -> tuple[np.ndarray, list[list[Any]]]:
+        """Compute the cost and time-mapping matrices among this set's epochs.
+
+        Port of MATLAB ``ndi.epoch.epochset/buildepochgraph`` (epochset.m:538-597).
+        For M epoch nodes (one per epoch/clock pair) returns:
+
+        - ``cost``: an MxM ``np.ndarray`` where ``cost[i, j]`` is the cost of
+          converting node i -> j (1 for a direct mapping, ``inf`` if none).
+        - ``mapping``: an MxM list-of-lists of ``ndi_time_timemapping`` / ``None``.
+
+        Same epoch + same session across clocks rescales ``t0_t1``; otherwise the
+        clock types' ``epochgraph_edge`` determines the link.
+        """
+        from ..time.timemapping import ndi_time_timemapping
+
+        trivial = ndi_time_timemapping([1, 0])
+        nodes = self._epochgraph_nodes()
+        m = len(nodes)
+
+        cost = np.full((m, m), np.inf)
+        mapping: list[list[Any]] = [[None] * m for _ in range(m)]
+
+        for i in range(m):
+            for j in range(m):
+                if i == j:
+                    cost[i, j] = 1
+                    mapping[i][j] = trivial
+                elif (
+                    nodes[i]["epoch_id"] == nodes[j]["epoch_id"]
+                    and nodes[i]["epoch_session_id"] == nodes[j]["epoch_session_id"]
+                ):
+                    ti0, ti1 = nodes[i]["t0_t1"]
+                    tj0, tj1 = nodes[j]["t0_t1"]
+                    di = ti1 - ti0
+                    scale = (tj1 - tj0) / di if di != 0 else 0.0
+                    shift = tj0 - scale * ti0
+                    cost[i, j] = 1
+                    mapping[i][j] = ndi_time_timemapping([scale, shift])
+                else:
+                    c, mp = nodes[i]["epoch_clock"].epochgraph_edge(nodes[j]["epoch_clock"])
+                    cost[i, j] = c
+                    mapping[i][j] = mp
+        return cost, mapping
+
+    def epochgraph(self) -> tuple[np.ndarray, list[list[Any]]]:
+        """Return the (cost, mapping) epoch graph for this epoch set.
+
+        MATLAB equivalent: ``ndi.epoch.epochset/epochgraph`` — returns the
+        ``(cost, mapping)`` matrices (see :meth:`buildepochgraph`). The previous
+        Python implementation returned a list of node dicts, which did not match
+        the MATLAB contract that ``ndi.time.syncgraph`` expects (audit §3.4-6).
+        """
+        return self.buildepochgraph()
 
     def resetepochtable(self) -> None:
         """Reset (clear) the epoch table cache.

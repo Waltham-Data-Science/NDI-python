@@ -325,10 +325,9 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
         Returns:
             Abbreviated prefix (e.g., 'ai' for 'analog_in').
         """
-        from .mfdaq import strip_threshold_suffix
+        from .mfdaq import strip_threshold_suffix, threshold_suffix
 
-        idx = channeltype.find("_t")
-        threshold_suffix = channeltype[idx:] if idx != -1 else ""
+        suffix = threshold_suffix(channeltype)
         base = strip_threshold_suffix(channeltype)
 
         prefixes = {
@@ -377,8 +376,8 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
         }
         prefix = prefixes.get(base.lower(), base)
         # Re-attach the threshold only to analog-event prefixes (MATLAB).
-        if threshold_suffix and prefix in ("aep", "aen", "aimp", "aimn"):
-            prefix = prefix + threshold_suffix
+        if suffix and prefix in ("aep", "aen", "aimp", "aimn"):
+            prefix = prefix + suffix
         return prefix
 
     @staticmethod
