@@ -155,25 +155,29 @@ class TestSpikeExtractor:
         assert "apps/spikeextractor/spikewaves" in app.doc_document_types
 
     def test_default_extraction_parameters(self):
+        # MATLAB uses FLAT extraction-parameter fields (spikeextractor.m:339-342);
+        # the parameters dict is not nested under filter/threshold/timing.
         params = ndi_app_spikeextractor.default_extraction_parameters()
-        assert "filter" in params
-        assert "threshold" in params
-        assert "timing" in params
-        assert params["filter"]["type"] == "cheby1"
-        assert params["threshold"]["method"] == "std"
-        assert params["threshold"]["parameter"] == -4.0
-        assert params["timing"]["pre_samples"] == 10
+        assert params["filter_type"] == "cheby1high"
+        assert params["threshold_method"] == "standard_deviation"
+        assert params["threshold_parameter"] == -4
+        assert params["threshold_sign"] == -1
+        assert params["filter_high"] == 300
 
     def test_extract_raises(self):
+        # MATLAB ndi.app.spikeextractor/extract is fully implemented and errors
+        # when no spike_extraction_parameters document is found
+        # (spikeextractor.m:92-93). The Python port mirrors this with ValueError.
         app = ndi_app_spikeextractor()
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(ValueError, match="No spike_extraction_parameters document"):
             app.extract(SimpleNamespace())
 
     def test_isvalid_struct_valid(self):
+        # MATLAB requires the full FLAT field set (spikeextractor.m:339-342).
         app = ndi_app_spikeextractor()
         b, errormsg = app.isvalid_appdoc_struct(
             "extraction_parameters",
-            {"filter": {}, "threshold": {}},
+            ndi_app_spikeextractor.default_extraction_parameters(),
         )
         assert b is True
         assert errormsg == ""
@@ -182,10 +186,10 @@ class TestSpikeExtractor:
         app = ndi_app_spikeextractor()
         b, errormsg = app.isvalid_appdoc_struct(
             "extraction_parameters",
-            {"filter": {}},  # missing threshold
+            {"filter_type": "cheby1high"},  # missing the other flat fields
         )
         assert b is False
-        assert "filter" in errormsg or "threshold" in errormsg
+        assert "threshold_method" in errormsg or "center_range_time" in errormsg
 
     def test_isvalid_struct_other_type(self):
         app = ndi_app_spikeextractor()
@@ -236,12 +240,17 @@ class TestSpikeSorter:
         assert "apps/spikesorter/spike_clusters" in app.doc_document_types
 
     def test_default_sorting_parameters(self):
+        # MATLAB defaults from the sorting_parameters document definition
+        # (ndi_common/.../apps/spikesorter/sorting_parameters.json) and
+        # spikesorter.m appdoc_description (graphical_mode 1, num_pca_features 10,
+        # interpolation 3, min_clusters 3, max_clusters 10, num_start 5).
         params = ndi_app_spikesorter.default_sorting_parameters()
-        assert params["graphical_mode"] is False
-        assert params["num_pca_features"] == 4
-        assert params["interpolation"] == 2
-        assert params["min_clusters"] == 1
-        assert params["max_clusters"] == 5
+        assert params["graphical_mode"] == 1
+        assert params["num_pca_features"] == 10
+        assert params["interpolation"] == 3
+        assert params["min_clusters"] == 3
+        assert params["max_clusters"] == 10
+        assert params["num_start"] == 5
 
     def test_spike_sort_raises(self):
         app = ndi_app_spikesorter()
@@ -254,33 +263,51 @@ class TestSpikeSorter:
             app.clusters2neurons(SimpleNamespace())
 
     def test_isvalid_struct_valid(self):
+        # MATLAB requires ALL six sorting-parameter fields (spikesorter.m:348).
         app = ndi_app_spikesorter()
         b, errormsg = app.isvalid_appdoc_struct(
             "sorting_parameters",
-            {"num_pca_features": 4},
+            ndi_app_spikesorter.default_sorting_parameters(),
         )
         assert b is True
         assert errormsg == ""
 
     def test_isvalid_struct_invalid(self):
+        # MATLAB checks the field set in order; the first missing one is
+        # graphical_mode (spikesorter.m:348 + vlt.data.hasAllFields message).
         app = ndi_app_spikesorter()
         b, errormsg = app.isvalid_appdoc_struct(
             "sorting_parameters",
-            {"interpolation": 2},  # missing num_pca_features
+            {"interpolation": 2},  # missing graphical_mode (first required field)
         )
         assert b is False
-        assert "num_pca_features" in errormsg
+        assert "graphical_mode" in errormsg
 
     def test_find_appdoc_no_session(self):
         app = ndi_app_spikesorter()
         assert app.find_appdoc("sorting_parameters") == []
 
     def test_struct2doc(self):
+        # MATLAB struct2doc('sorting_parameters', ...) REQUIRES a name argument
+        # (spikesorter.m:313); the name becomes base.name on the document.
         from ndi.document import ndi_document
 
         app = ndi_app_spikesorter()
-        doc = app.struct2doc("sorting_parameters", {"num_pca_features": 4})
+        doc = app.struct2doc(
+            "sorting_parameters",
+            ndi_app_spikesorter.default_sorting_parameters(),
+            "default",
+        )
         assert isinstance(doc, ndi_document)
+
+    def test_struct2doc_requires_name(self):
+        # Omitting the name must raise, matching MATLAB spikesorter.m:313.
+        app = ndi_app_spikesorter()
+        with pytest.raises(ValueError, match="name"):
+            app.struct2doc(
+                "sorting_parameters",
+                ndi_app_spikesorter.default_sorting_parameters(),
+            )
 
     def test_repr(self):
         assert "ndi_app_spikesorter" in repr(ndi_app_spikesorter())
@@ -430,19 +457,26 @@ class TestOriDirTuning:
         assert len(app.doc_types) == 2
 
     def test_doc_document_types(self):
+        # The document types are the real ndi_common definition paths the port
+        # creates (orientation_direction_tuning lives under
+        # stimulus/vision/oridir; the tuning curve is the shared
+        # stimulus/stimulus_tuningcurve), matching MATLAB ndi.document() classes.
         app = ndi_app_oridirtuning()
-        assert "apps/oridirtuning/orientation_direction_tuning" in app.doc_document_types
-        assert "apps/oridirtuning/tuning_curve" in app.doc_document_types
+        assert "stimulus/vision/oridir/orientation_direction_tuning" in app.doc_document_types
+        assert "stimulus/stimulus_tuningcurve" in app.doc_document_types
 
-    def test_calculate_tuning_curves_raises(self):
+    def test_calculate_tuning_curves_returns_empty_without_session(self):
+        # calculate_all_tuning_curves is now a real port of
+        # oridirtuning.m:30-50; with no session there are no response docs to
+        # search, so it returns an empty list (not NotImplementedError).
         app = ndi_app_oridirtuning()
-        with pytest.raises(NotImplementedError):
-            app.calculate_all_tuning_curves(SimpleNamespace())
+        assert app.calculate_all_tuning_curves(SimpleNamespace()) == []
 
-    def test_calculate_oridir_indexes_raises(self):
+    def test_calculate_oridir_indexes_returns_empty_without_session(self):
+        # Likewise calculate_all_oridir_indexes (oridirtuning.m) returns [] when
+        # there is no session/database to search.
         app = ndi_app_oridirtuning()
-        with pytest.raises(NotImplementedError):
-            app.calculate_all_oridir_indexes(SimpleNamespace())
+        assert app.calculate_all_oridir_indexes(SimpleNamespace()) == []
 
     def test_is_oridir_stimulus_angle(self):
         doc = SimpleNamespace(
@@ -489,12 +523,12 @@ class TestOriDirTuning:
         assert ndi_app_oridirtuning.is_oridir_stimulus_response(doc) is False
 
     def test_struct2doc_maps_type_correctly(self):
-        """struct2doc maps appdoc_type to correct schema path."""
+        """doc_types map to their real ndi_common document-definition paths."""
         app = ndi_app_oridirtuning()
         idx = app.doc_types.index("tuning_curve")
-        assert app.doc_document_types[idx] == "apps/oridirtuning/tuning_curve"
+        assert app.doc_document_types[idx] == "stimulus/stimulus_tuningcurve"
         idx2 = app.doc_types.index("orientation_direction_tuning")
-        assert app.doc_document_types[idx2] == "apps/oridirtuning/orientation_direction_tuning"
+        assert app.doc_document_types[idx2] == "stimulus/vision/oridir/orientation_direction_tuning"
 
     def test_find_appdoc_no_session(self):
         app = ndi_app_oridirtuning()
