@@ -19,12 +19,12 @@ jobs:
     steps:
       # ── Checkout both repos ────────────────────────────────────────────
       - name: Check out NDI-python
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           path: NDI-python
 
       - name: Check out NDI-matlab (matching branch, fall back to main)
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           repository: VH-Lab/NDI-matlab
           # Use the same branch name as NDI-python so paired feature
@@ -37,7 +37,7 @@ jobs:
 
       - name: Check out NDI-matlab (main fallback)
         if: steps.matlab_checkout_branch.outcome == 'failure'
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           repository: VH-Lab/NDI-matlab
           ref: main
@@ -51,7 +51,7 @@ jobs:
           echo "DISPLAY=:99" >> $GITHUB_ENV
 
       - name: Set up MATLAB
-        uses: matlab-actions/setup-matlab@v2
+        uses: matlab-actions/setup-matlab@aa8bbc7b76daa63c5d456d1430cbd6cb5b626ab4  # v2
         with:
           release: latest
           cache: true
@@ -61,10 +61,10 @@ jobs:
             Signal_Processing_Toolbox
 
       - name: Install MatBox
-        uses: ehennestad/matbox-actions/install-matbox@v1
+        uses: ehennestad/matbox-actions/install-matbox@8fe220fbaec9e119ec5081eb917c8e016e275f1e  # v1
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
           python-version: "3.12"
 
@@ -85,7 +85,7 @@ jobs:
       # +ndi/+symmetry folder (which has its own narrow requirements.txt),
       # and TestSuite.fromFolder discovers tests in that directory tree.
       - name: "Stage 1: MATLAB makeArtifacts"
-        uses: matlab-actions/run-command@v2
+        uses: matlab-actions/run-command@37b454c384483087929a3d652be474ba585a9659  # v2
         with:
           command: |
             cd("NDI-matlab");
@@ -124,7 +124,7 @@ jobs:
 
       # ── Stage 3: MATLAB readArtifacts ──────────────────────────────────
       - name: "Stage 3: MATLAB readArtifacts (reads Python artifacts)"
-        uses: matlab-actions/run-command@v2
+        uses: matlab-actions/run-command@37b454c384483087929a3d652be474ba585a9659  # v2
         with:
           command: |
             cd("NDI-matlab");

@@ -236,7 +236,12 @@ def login(
         raise CloudAuthError(f"Login request failed: {exc}") from exc
 
     if resp.status_code != 200:
-        raise CloudAuthError(f"Login failed (HTTP {resp.status_code}): {resp.text}")
+        # Don't embed the full server response body in the error (it can
+        # carry internal detail); surface a bounded snippet for debugging.
+        snippet = (resp.text or "").strip().replace("\n", " ")
+        if len(snippet) > 200:
+            snippet = snippet[:200] + "..."
+        raise CloudAuthError(f"Login failed (HTTP {resp.status_code}): {snippet}")
 
     data = resp.json()
     token = data.get("token", "")

@@ -24,7 +24,10 @@ keywords = [
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
-    "License :: Other/Proprietary License",
+    # NOTE: the project is licensed CC-BY-NC-SA-4.0 (see the `license` field).
+    # There is no Trove classifier for that license, so we omit a license
+    # classifier rather than mislabel the project as proprietary.
+    # (CC-BY-NC-SA is an awkward choice for software — flagged to maintainers.)
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -35,10 +38,14 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "did @ git+https://github.com/VH-Lab/DID-python.git@main",
-    "ndr[formats] @ git+https://github.com/VH-lab/NDR-python.git@main",
-    "vhlab-toolbox-python @ git+https://github.com/VH-Lab/vhlab-toolbox-python.git@main",
-    "ndi-compress @ git+https://github.com/Waltham-Data-Science/NDI-compress-python.git@main",
+    # Git dependencies are pinned to commit SHAs (these repos publish no
+    # release tags yet) so installs are reproducible and can't silently pull
+    # an unvetted upstream change. Bump deliberately; tag a lockstep release
+    # upstream and switch these to tags when one exists.
+    "did @ git+https://github.com/VH-Lab/DID-python.git@1b1491fb98f37a61a74b86cccdfabae8b6bbce9e",
+    "ndr[formats] @ git+https://github.com/VH-lab/NDR-python.git@896ed637c35cd8ba118e1512a8c65bdd634a7622",
+    "vhlab-toolbox-python @ git+https://github.com/VH-Lab/vhlab-toolbox-python.git@b073185565ea5b47bb0307cddeae923fa9b86268",
+    "ndi-compress @ git+https://github.com/Waltham-Data-Science/NDI-compress-python.git@0c05d9dbd63ed5d15866eb1bf0a096568ef0c192",
     "numpy>=1.20.0",
     "networkx>=2.6",
     "jsonschema>=4.0.0",
@@ -46,12 +53,14 @@ dependencies = [
     "pydantic>=2.0",
     "openMINDS>=0.2.0",
     "scipy>=1.9.0",
+    "defusedxml>=0.7.1",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
+    "pytest-xdist>=3.0.0",
     "black>=23.0.0",
     "ruff>=0.1.0",
     "mypy>=1.0.0",
@@ -97,7 +106,7 @@ allow-direct-references = true
 packages = ["src/ndi"]
 
 [tool.hatch.build.targets.sdist]
-include = ["/src", "/tests", "/examples", "LICENSE", "README.md", "CHANGELOG.md", "MATLAB_MAPPING.md"]
+include = ["/src", "/tests", "/examples", "LICENSE", "README.md", "CHANGELOG.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

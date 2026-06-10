@@ -86,9 +86,32 @@ def _prefdir() -> Path:
     try:
         d = Path.home() / ".ndi"
         d.mkdir(parents=True, exist_ok=True)
+        _chmod_quiet(d, 0o700)
         return d
     except OSError:
         return Path(tempfile.gettempdir())
+
+
+def _chmod_quiet(path: Path, mode: int) -> None:
+    """Best-effort ``chmod``; never raises (e.g. on filesystems that don't
+    support POSIX permissions). Secrets must stay private to the OS user."""
+    try:
+        os.chmod(path, mode)
+    except OSError as exc:  # pragma: no cover - platform dependent
+        logger.debug("Could not chmod %s to %o: %s", path, mode, exc)
+
+
+def _write_text_private(path: Path, text: str) -> None:
+    """Write *text* to *path* as an owner-only (0600) file.
+
+    Uses ``os.open`` with mode 0o600 so a NEW file is created private from the
+    first byte — no world-readable window between ``write`` and ``chmod`` — and
+    follows with ``chmod`` to also narrow any pre-existing (legacy 0644) file.
+    """
+    fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(text)
+    _chmod_quiet(path, 0o600)
 
 
 # ---------------------------------------------------------------------------
@@ -150,7 +173,10 @@ def _read_secrets_file(filename: Path) -> dict:
 
 
 def _write_secrets_file(filename: Path, payload: dict) -> None:
-    filename.write_text(json.dumps(payload, indent=2))
+    # Encrypted-at-rest, but the AES key is derived deterministically from
+    # host+user (obfuscation, not strong protection); keep the ciphertext
+    # readable only by the owning user, with no world-readable creation window.
+    _write_text_private(filename, json.dumps(payload, indent=2))
 
 
 def _safe_field(name: str) -> str:
@@ -236,7 +262,7 @@ class _ProfileSingleton:
             "DefaultUID": self.default_uid,
         }
         try:
-            self.filename.write_text(json.dumps(payload, indent=2))
+            _write_text_private(self.filename, json.dumps(payload, indent=2))
         except OSError as exc:
             logger.warning("Could not save cloud profiles to %s: %s", self.filename, exc)
 
