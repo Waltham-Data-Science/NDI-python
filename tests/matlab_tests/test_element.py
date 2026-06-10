@@ -125,7 +125,7 @@ class TestElementInstantiation:
 
 
 # ===========================================================================
-# TestElementEpochTable — ndi_epoch_epoch table operations
+# TestElementEpochTable — Epoch table operations
 # ===========================================================================
 
 

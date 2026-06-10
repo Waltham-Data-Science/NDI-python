@@ -2,11 +2,11 @@
 
 This page summarizes key differences when migrating from MATLAB NDI to Python NDI.
 
-For the complete function-by-function mapping, see [MATLAB_MAPPING.md](https://github.com/Waltham-ndi_gui_Data-Science/NDI-python/blob/main/MATLAB_MAPPING.md).
+For the complete function-by-function mapping, see [MATLAB_MAPPING.md](https://github.com/Waltham-Data-Science/NDI-python/blob/main/MATLAB_MAPPING.md).
 
 ## Key API Differences
 
-### ndi_query Syntax
+### Query Syntax
 
 **MATLAB:**
 ```matlab

@@ -1,5 +1,5 @@
 """
-ndi.cloud.api.documents - ndi_document CRUD and bulk operations.
+ndi.cloud.api.documents - Document CRUD and bulk operations.
 
 All functions accept an optional ``client`` keyword argument.  When omitted,
 a client is created automatically from environment variables.
@@ -347,7 +347,7 @@ def ndiquery(
     *,
     client: _Client = None,
 ) -> dict[str, Any]:
-    """ndi_query documents across datasets via the NDI query API.
+    """Query documents across datasets via the NDI query API.
 
     MATLAB equivalent: +cloud/+api/+documents/ndiquery.m
 

@@ -1,5 +1,5 @@
 """
-ndi.session - ndi_session management for NDI.
+ndi.session - Session management for NDI.
 
 This module provides session classes for managing NDI experiments:
 - ndi_session: Abstract base class for session management

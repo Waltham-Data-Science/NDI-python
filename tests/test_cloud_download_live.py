@@ -101,7 +101,7 @@ def run_test(username: str, password: str) -> dict:
     # =================================================================
     # Step 2: Download dataset (docs only, ndic:// rewrite)
     # =================================================================
-    section("Step 2: Download ndi_dataset (docs only, ndic:// URIs)")
+    section("Step 2: Download Dataset (docs only, ndic:// URIs)")
 
     from ndi.cloud.orchestration import downloadDataset
 
@@ -158,11 +158,11 @@ def run_test(username: str, password: str) -> dict:
         # =================================================================
         # Step 4: NDI-python Analysis — Queries
         # =================================================================
-        section("Step 4: NDI-python Analysis — ndi_document Queries")
+        section("Step 4: NDI-python Analysis — Document Queries")
 
         doc_count = len(all_docs)
         check(
-            "ndi_document count",
+            "Document count",
             doc_count >= EXPECTED_DOCS,
             f"{doc_count} docs (expected >= {EXPECTED_DOCS})",
         )
@@ -173,7 +173,7 @@ def run_test(username: str, password: str) -> dict:
             cname = doc.document_properties.get("document_class", {}).get("class_name", "unknown")
             type_counts[cname] += 1
 
-        check("ndi_document types", len(type_counts) >= 27, f"{len(type_counts)} types found")
+        check("Document types", len(type_counts) >= 27, f"{len(type_counts)} types found")
 
         # Test isa queries for each major type
         for doc_type, expected in [
@@ -200,7 +200,7 @@ def run_test(username: str, password: str) -> dict:
         elements = dataset.database_search(ndi_query("").isa("element"))
         element_types = {d.document_properties.get("element", {}).get("type", "") for d in elements}
         check(
-            "ndi_element types",
+            "Element types",
             element_types == {"n-trode", "spikes", "stimulator"},
             f"{element_types}",
         )
@@ -229,7 +229,7 @@ def run_test(username: str, password: str) -> dict:
             if not subj_deps or subj_deps[0].get("value") != subject_id:
                 deps_ok = False
                 break
-        check("ndi_element -> ndi_subject deps", deps_ok)
+        check("Element -> Subject deps", deps_ok)
         results["analysis_elements"] = deps_ok
 
         # =================================================================
@@ -238,7 +238,7 @@ def run_test(username: str, password: str) -> dict:
         section("Step 6: NDI-python Analysis — Neurons")
 
         neurons = dataset.database_search(ndi_query("").isa("neuron_extracellular"))
-        check("ndi_neuron count", len(neurons) == EXPECTED_NEURONS)
+        check("Neuron count", len(neurons) == EXPECTED_NEURONS)
 
         waveform_ok = True
         for n in neurons:
@@ -249,7 +249,7 @@ def run_test(username: str, password: str) -> dict:
                 waveform_ok = False
             if not ne.get("mean_waveform"):
                 waveform_ok = False
-        check("ndi_neuron waveform shape (21x16)", waveform_ok)
+        check("Neuron waveform shape (21x16)", waveform_ok)
 
         # Check neuron -> element chain
         element_ids = {d.document_properties.get("base", {}).get("id", "") for d in elements}
@@ -262,7 +262,7 @@ def run_test(username: str, password: str) -> dict:
             if not elem_dep or elem_dep[0].get("value") not in element_ids:
                 chain_ok = False
                 break
-        check("ndi_neuron -> ndi_element chain", chain_ok)
+        check("Neuron -> Element chain", chain_ok)
 
         app_ok = all(n.document_properties.get("app", {}).get("name") == "JRCLUST" for n in neurons)
         check("All neurons sorted by JRCLUST", app_ok)
@@ -313,7 +313,7 @@ def run_test(username: str, password: str) -> dict:
         # =================================================================
         # Step 8: Cross-document referential integrity
         # =================================================================
-        section("Step 8: Cross-ndi_document Referential Integrity")
+        section("Step 8: Cross-Document Referential Integrity")
 
         all_ids = {d.document_properties.get("base", {}).get("id", "") for d in all_docs}
         missing_refs = 0

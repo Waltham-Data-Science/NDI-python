@@ -60,7 +60,7 @@ class TestBuildSession:
         expected_summary = json.loads(summary_path.read_text(encoding="utf-8"))
         actual_summary = sessionSummary(session)
 
-        # ndi_epoch_epoch node details contain machine-specific paths and runtime-generated
+        # Epoch node details contain machine-specific paths and runtime-generated
         # IDs that will differ when artifacts are read on a different machine or
         # across language implementations.  Exclude them from comparison.
         exclude_fields = ["epochNodes_filenavigator", "epochNodes_daqsystem"]

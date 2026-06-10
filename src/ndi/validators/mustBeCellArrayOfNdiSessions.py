@@ -40,5 +40,5 @@ def mustBeCellArrayOfNdiSessions(value: Sequence) -> None:
         if not isinstance(item, ndi_session_dir):
             raise TypeError(
                 f"All elements must be ndi.session.ndi_session_dir objects. "
-                f"ndi_element {i} is of class {type(item).__name__!r}."
+                f"Element {i} is of class {type(item).__name__!r}."
             )

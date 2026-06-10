@@ -118,7 +118,7 @@ class ndi_session_sessiontable:
         If *session_id* already exists it is replaced with the new *path*.
 
         Args:
-            session_id: ndi_session identifier (must be a non-empty string).
+            session_id: Session identifier (must be a non-empty string).
             path: Filesystem path to the session directory.
 
         Raises:

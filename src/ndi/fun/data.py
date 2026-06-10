@@ -44,7 +44,7 @@ def readngrid(
     Args:
         file_path: Path to the binary file.
         data_size: Shape tuple, e.g. ``(100, 3)``.
-        data_type: ndi_element type name (``'double'``, ``'int16'``, etc.).
+        data_type: Element type name (``'double'``, ``'int16'``, etc.).
 
     Returns:
         numpy array with the given shape.
@@ -67,7 +67,7 @@ def readngrid(
 
     raw = np.fromfile(str(p), dtype=dtype)
     if raw.size != expected:
-        raise ValueError(f"ndi_gui_Data count mismatch: expected {expected}, got {raw.size}")
+        raise ValueError(f"Data count mismatch: expected {expected}, got {raw.size}")
     return raw.reshape(data_size)
 
 
@@ -83,7 +83,7 @@ def writengrid(
     Args:
         data: numpy array to write.
         file_path: Output file path.
-        data_type: ndi_element type name.
+        data_type: Element type name.
 
     Raises:
         ValueError: If data type is unknown.

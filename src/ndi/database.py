@@ -12,7 +12,7 @@ Example:
     # Add documents
     db.add(doc)
 
-    # ndi_query documents
+    # Query documents
     results = db.search(ndi_query('element.name') == 'electrode1')
 
     # Find by ID
@@ -61,14 +61,14 @@ class SQLiteDriver:
         """Add a document to the database."""
         doc_id = document.get("base", {}).get("id", "")
         if not doc_id:
-            raise ValueError("ndi_document must have a base.id")
+            raise ValueError("Document must have a base.id")
 
         # Check if document already exists
         existing_ids = self._db.get_doc_ids(self._branch_id)
         if doc_id in existing_ids:
-            raise FileExistsError(f"ndi_document {doc_id} already exists")
+            raise FileExistsError(f"Document {doc_id} already exists")
 
-        # Create DID ndi_document and add (DID-python now populates doc_data)
+        # Create DID Document and add (DID-python now populates doc_data)
         did_doc = self._DIDDocument(document)
         self._db.add_docs([did_doc], self._branch_id)
 
@@ -104,7 +104,7 @@ class SQLiteDriver:
         # Check if document exists
         existing_ids = self._db.get_doc_ids(self._branch_id)
         if doc_id not in existing_ids:
-            raise FileNotFoundError(f"ndi_document {doc_id} not found")
+            raise FileNotFoundError(f"Document {doc_id} not found")
 
         # Remove old and add new (DID handles doc_data cleanup and repopulation)
         self._db.remove_docs([doc_id], self._branch_id)
@@ -318,7 +318,7 @@ class ndi_database:
 
         return document
 
-    # === ndi_query Operations ===
+    # === Query Operations ===
 
     def search(
         self, query: ndi_query | None = None, isa_class: str | None = None
@@ -326,7 +326,7 @@ class ndi_database:
         """Search for documents matching a query.
 
         Args:
-            query: The ndi_query to match. If None, returns all documents.
+            query: The Query to match. If None, returns all documents.
             isa_class: Optional class filter. If provided, only returns
                       documents that are instances of that class.
 
@@ -464,7 +464,7 @@ class ndi_database:
         """Remove multiple documents.
 
         Args:
-            query: ndi_query to select documents to remove.
+            query: Query to select documents to remove.
             documents: Explicit list of documents to remove.
 
         Returns:

@@ -463,7 +463,7 @@ class TestElement:
             assert hasattr(doc, "document_properties")
         except FileNotFoundError:
             # Schema not available in test environment
-            pytest.skip("ndi_element JSON schema not available")
+            pytest.skip("Element JSON schema not available")
 
     def test_searchquery(self):
         """Test searchquery method."""
@@ -535,7 +535,7 @@ class TestProbe:
             assert doc is not None
         except FileNotFoundError:
             # Schema not available in test environment
-            pytest.skip("ndi_probe JSON schema not available")
+            pytest.skip("Probe JSON schema not available")
 
     def test_repr(self):
         """Test string representation."""

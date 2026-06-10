@@ -9,7 +9,7 @@ from ndi.common import timestamp
 
 
 class TestDocumentCreation:
-    """Test ndi_document creation."""
+    """Test Document creation."""
 
     def test_create_document_with_dict(self):
         """Test creating document from a dictionary."""
@@ -76,7 +76,7 @@ class TestDocumentCreation:
 
 
 class TestDocumentProperties:
-    """Test ndi_document property access."""
+    """Test Document property access."""
 
     def test_id_property(self):
         """Test id property."""

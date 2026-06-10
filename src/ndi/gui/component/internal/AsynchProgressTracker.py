@@ -1,6 +1,6 @@
 """ndi_gui_component_internal_AsynchProgressTracker — File-backed asynchronous progress tracker.
 
-Mirrors MATLAB: ndi.gui.component.internal.ndi_gui_component_internal_AsynchProgressTracker
+Mirrors MATLAB: ndi.gui.component.internal.AsynchProgressTracker
 
 Extends :class:`ndi_gui_component_internal_ProgressTracker` with the ability to serialise progress
 state to a JSON file, enabling cross-process monitoring.
@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import time
 
-from ndi.gui.component.internal.ndi_gui_component_internal_ProgressTracker import (
+from ndi.gui.component.internal.ProgressTracker import (
     ndi_gui_component_internal_ProgressTracker,
 )
 

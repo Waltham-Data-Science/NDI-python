@@ -91,27 +91,27 @@ def _build_window(session: Any) -> Any:
             left.addWidget(self._things_list)
             body.addLayout(left, 1)
 
-            # Middle column: DAQ Readers + ndi_cache
+            # Middle column: DAQ Readers + Cache
             mid = QtWidgets.QVBoxLayout()
             mid.addWidget(QtWidgets.QLabel("<b>DAQ-Readers</b>"))
             self._daq_list = QtWidgets.QListWidget()
             mid.addWidget(self._daq_list)
 
-            mid.addWidget(QtWidgets.QLabel("<b>ndi_cache</b>"))
+            mid.addWidget(QtWidgets.QLabel("<b>Cache</b>"))
             self._cache_list = QtWidgets.QListWidget()
             mid.addWidget(self._cache_list)
             body.addLayout(mid, 1)
 
-            # Right column: ndi_database + Doc Properties
+            # Right column: Database + Doc Properties
             right_layout = QtWidgets.QVBoxLayout()
-            right_layout.addWidget(QtWidgets.QLabel("<b>ndi_database</b>"))
+            right_layout.addWidget(QtWidgets.QLabel("<b>Database</b>"))
             self._db_list = QtWidgets.QListWidget()
             self._db_list.currentRowChanged.connect(self._on_db_select)
             right_layout.addWidget(self._db_list)
             body.addLayout(right_layout, 2)
 
             props = QtWidgets.QVBoxLayout()
-            props.addWidget(QtWidgets.QLabel("<b>ndi_document Properties</b>"))
+            props.addWidget(QtWidgets.QLabel("<b>Document Properties</b>"))
             self._doc_props = QtWidgets.QTextEdit()
             self._doc_props.setReadOnly(True)
             props.addWidget(self._doc_props)

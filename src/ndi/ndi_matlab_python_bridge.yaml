@@ -169,7 +169,7 @@ classes:
       unique ID generation. Synchronized 2026-03-13.
 
   # =========================================================================
-  # ndi.documentservice - ndi_document Interface Mixin
+  # ndi.documentservice - Document Interface Mixin
   # =========================================================================
   - name: documentservice
     type: class
@@ -238,7 +238,7 @@ classes:
       Synchronized 2026-03-13.
 
   # =========================================================================
-  # ndi.document - ndi_document Model
+  # ndi.document - Document Model
   # =========================================================================
   - name: document
     type: class
@@ -292,7 +292,7 @@ classes:
             type_python: "str"
         decision_log: "Exact match. Alias for id()."
 
-      # --- ndi_session ---
+      # --- Session ---
       - name: set_session_id
         input_arguments:
           - name: session_id
@@ -461,7 +461,7 @@ classes:
           Exact match. Returns list of file names currently
           associated with this document. Synchronized 2026-03-13.
 
-      # --- ndi_document Class Information ---
+      # --- Document Class Information ---
       - name: doc_class
         input_arguments: []
         output_arguments:
@@ -648,7 +648,7 @@ classes:
       document definitions. Synchronized 2026-03-13.
 
   # =========================================================================
-  # ndi.query - ndi_database ndi_query
+  # ndi.query - Database Query
   # =========================================================================
   - name: query
     type: class
@@ -987,7 +987,7 @@ classes:
           Unwraps single-element lists. Synchronized 2026-03-13.
 
     decision_log: >
-      ndi_database query class supporting operators: regexp,
+      Database query class supporting operators: regexp,
       exact_string, contains_string, exact_number, lessthan,
       lessthaneq, greaterthan, greaterthaneq, hasfield, isa,
       depends_on, hasmember, and negated versions.
@@ -1036,7 +1036,7 @@ not_applicable:
     status: not_applicable
     decision_log: >
       MATLAB-specific path resolution. Python uses
-      ndi.common.ndi_common_PathConstants.
+      ndi.common.PathConstants.
 
   - name: cpipeline
     matlab_path: "+ndi/cpipeline.m"

@@ -9,14 +9,14 @@ Top-level functions
 gui
     Simple session viewer (v1).
 gui_v2
-    Enhanced viewer with ndi_gui_Lab and ndi_database tabs.
+    Enhanced viewer with Lab and Database tabs.
 
 Classes
 -------
 ndi_gui_Data
-    ndi_document table view with search/filter and graph visualisation.
+    Document table view with search/filter and graph visualisation.
 ndi_gui_Icon
-    Draggable icon for the ndi_gui_Lab view.
+    Draggable icon for the Lab view.
 ndi_gui_Lab
     Experiment view with connection wires.
 ndi_gui_docViewer
@@ -54,7 +54,7 @@ def __getattr__(name: str):  # noqa: ANN204
         "ndi_gui_Data": ("ndi.gui.data", "ndi_gui_Data"),
         "ndi_gui_Icon": ("ndi.gui.icon", "ndi_gui_Icon"),
         "ndi_gui_Lab": ("ndi.gui.lab", "ndi_gui_Lab"),
-        "ndi_gui_docViewer": ("ndi.gui.ndi_gui_docViewer", "ndi_gui_docViewer"),
+        "ndi_gui_docViewer": ("ndi.gui.docViewer", "ndi_gui_docViewer"),
     }
     if name in _lazy:
         import importlib

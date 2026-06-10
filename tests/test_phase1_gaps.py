@@ -10,7 +10,7 @@ Covers:
 - table utilities (Batch 6)
 - copy_session_to_dataset (Batch 7)
 - Presentation time read/write (Batch 8)
-- ndi_subject/ndi_probe doc helpers (Batch 9)
+- Subject/Probe doc helpers (Batch 9)
 - pfilemirror (Batch 10)
 - readImageStack (Batch 11)
 - docComparison (Batch 13)
@@ -321,7 +321,7 @@ class TestNdiDocument2NdiObject:
 
 
 # =========================================================================
-# Batch 5: ndi_document-to-Table conversions
+# Batch 5: Document-to-Table conversions
 # =========================================================================
 
 
@@ -614,7 +614,7 @@ class TestPresentationTime:
 
 
 # =========================================================================
-# Batch 9: ndi_subject/ndi_probe doc helpers
+# Batch 9: Subject/Probe doc helpers
 # =========================================================================
 
 

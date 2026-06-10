@@ -369,7 +369,7 @@ class TestSessionDiff:
         assert len(result["mismatches"]) == 0
 
     def test_docs_only_in_s1(self, tmp_path):
-        """ndi_session 1 has extra docs that ndi_session 2 does not.
+        """Session 1 has extra docs that Session 2 does not.
 
         MATLAB equivalent: diffTest.testDocsInAOnly
         """
@@ -396,7 +396,7 @@ class TestSessionDiff:
         assert result["common_count"] == 0
 
     def test_docs_only_in_s2(self, tmp_path):
-        """ndi_session 2 has extra docs that ndi_session 1 does not.
+        """Session 2 has extra docs that Session 1 does not.
 
         MATLAB equivalent: diffTest.testDocsInBOnly
         """
@@ -492,11 +492,11 @@ class TestDatasetDiff:
         assert result["session_diff"]["equal"] is True
 
     def test_docs_only_in_dataset1(self, tmp_path):
-        """ndi_dataset 1 has extra docs that ndi_dataset 2 does not.
+        """Dataset 1 has extra docs that Dataset 2 does not.
 
         MATLAB equivalent: diffTest.testDocsInAOnly
         """
-        # ndi_dataset 1 with docs
+        # Dataset 1 with docs
         sess1_dir = tmp_path / "sess1"
         sess1_dir.mkdir()
         session1 = ndi_session_dir("sess1", sess1_dir)
@@ -509,7 +509,7 @@ class TestDatasetDiff:
         dataset1 = ndi_dataset(ds1_dir, "ds1")
         dataset1.add_ingested_session(session1)
 
-        # ndi_dataset 2 empty
+        # Dataset 2 empty
         ds2_dir = tmp_path / "ds2"
         ds2_dir.mkdir()
         dataset2 = ndi_dataset(ds2_dir, "ds2")
@@ -518,20 +518,20 @@ class TestDatasetDiff:
 
         assert result["equal"] is False
         sd = result["session_diff"]
-        # ndi_dataset 1 has documents that dataset 2 does not
+        # Dataset 1 has documents that dataset 2 does not
         assert len(sd["only_in_s1"]) > 0 or len(sd["mismatches"]) > 0
 
     def test_docs_only_in_dataset2(self, tmp_path):
-        """ndi_dataset 2 has extra docs that ndi_dataset 1 does not.
+        """Dataset 2 has extra docs that Dataset 1 does not.
 
         MATLAB equivalent: diffTest.testDocsInBOnly
         """
-        # ndi_dataset 1 empty
+        # Dataset 1 empty
         ds1_dir = tmp_path / "ds1"
         ds1_dir.mkdir()
         dataset1 = ndi_dataset(ds1_dir, "ds1")
 
-        # ndi_dataset 2 with docs
+        # Dataset 2 with docs
         sess2_dir = tmp_path / "sess2"
         sess2_dir.mkdir()
         session2 = ndi_session_dir("sess2", sess2_dir)
@@ -559,7 +559,7 @@ class TestDatasetDiff:
         doc = _make_demo_doc("shared", 10)
         doc.document_properties["base"]["id"]
 
-        # ndi_dataset 1
+        # Dataset 1
         sess1_dir = tmp_path / "sess1"
         sess1_dir.mkdir()
         session1 = ndi_session_dir("sess1", sess1_dir)
@@ -572,7 +572,7 @@ class TestDatasetDiff:
         dataset1 = ndi_dataset(ds1_dir, "ds1")
         dataset1.add_ingested_session(session1)
 
-        # ndi_dataset 2 — same doc ID but different value
+        # Dataset 2 — same doc ID but different value
         sess2_dir = tmp_path / "sess2"
         sess2_dir.mkdir()
         session2 = ndi_session_dir("sess2", sess2_dir)

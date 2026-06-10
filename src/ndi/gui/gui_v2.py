@@ -1,11 +1,11 @@
-"""gui_v2 — Enhanced NDI session GUI with Experiment and ndi_database views.
+"""gui_v2 — Enhanced NDI session GUI with Experiment and Database views.
 
 Mirrors MATLAB: ndi.gui.gui_v2
 
 Opens a QMainWindow with two tab views:
 - **Experiment View** (ndi_gui_Lab): shows subjects, probes, and DAQs as
   draggable icons with connection wires.
-- **ndi_database View** (ndi_gui_Data): shows a searchable/filterable document
+- **Database View** (ndi_gui_Data): shows a searchable/filterable document
   table with dependency graph visualisation.
 """
 
@@ -42,7 +42,7 @@ def _build_v2_window(session: Any) -> Any:
             super().__init__()
             self._session = session
 
-            self.setWindowTitle("Neuroscience ndi_gui_Data Interface")
+            self.setWindowTitle("Neuroscience Data Interface")
             screen = QtWidgets.QApplication.primaryScreen()
             geom = screen.availableGeometry()
             self.resize(geom.width() // 2, geom.height() // 2)
@@ -56,10 +56,10 @@ def _build_v2_window(session: Any) -> Any:
             self._init_lab_tab()
             self._tabs.addTab(self._lab_widget, "Experiment View")
 
-            # ndi_database View (ndi_gui_Data)
+            # Database View (ndi_gui_Data)
             self._data_widget = QtWidgets.QWidget()
             self._init_data_tab()
-            self._tabs.addTab(self._data_widget, "ndi_database View")
+            self._tabs.addTab(self._data_widget, "Database View")
 
             # Load data from session
             self._load_session()
@@ -104,7 +104,7 @@ def _build_v2_window(session: Any) -> Any:
             layout.addLayout(left, stretch=3)
             layout.addWidget(self._data.panel, stretch=1)
 
-        # -- ndi_session loading ----------------------------------------------
+        # -- Session loading ----------------------------------------------
 
         def _load_session(self) -> None:
             s = self._session

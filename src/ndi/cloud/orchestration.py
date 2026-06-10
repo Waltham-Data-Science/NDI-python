@@ -230,7 +230,7 @@ def load_dataset_from_json_dir(
             doc_jsons.append(json_mod.load(fh))
 
     if verbose:
-        print(f"  Read {len(doc_jsons)} documents, bulk-inserting into ndi_dataset...")
+        print(f"  Read {len(doc_jsons)} documents, bulk-inserting into Dataset...")
 
     # Auto-detect cloud dataset ID from dataset_remote document
     if cloud_dataset_id is None:
@@ -269,7 +269,7 @@ def load_dataset_from_json_dir(
         dataset.cloud_client = client
 
     if verbose:
-        print(f"  ndi_dataset created at {target} with {added} documents ({skipped} skipped).")
+        print(f"  Dataset created at {target} with {added} documents ({skipped} skipped).")
 
     return dataset
 
@@ -310,7 +310,7 @@ def uploadDataset(
 
     if not cloud_id:
         # Create new remote dataset
-        name = remote_name or getattr(dataset, "name", "Unnamed ndi_dataset")
+        name = remote_name or getattr(dataset, "name", "Unnamed Dataset")
         org_id = client.config.org_id
         try:
             result = ds_api.createDataset(org_id, name, client=client)

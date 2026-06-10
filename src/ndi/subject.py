@@ -196,7 +196,7 @@ class ndi_subject(ndi_ido, ndi_documentservice):
 
         Args:
             session: ndi_session to search
-            subjectstring: ndi_subject local_identifier to search for
+            subjectstring: Subject local_identifier to search for
             make_if_missing: If True, create the subject if not found
 
         Returns:

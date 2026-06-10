@@ -1,5 +1,5 @@
 """
-ndi.fun.epoch - ndi_epoch_epoch utility functions.
+ndi.fun.epoch - Epoch utility functions.
 
 MATLAB equivalents: +ndi/+fun/+epoch/epochid2element.m, filename2epochid.m
 """

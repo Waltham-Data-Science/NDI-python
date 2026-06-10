@@ -121,8 +121,7 @@ class ndi_cache:
 
         if data_bytes > self._max_memory:
             raise MemoryError(
-                f"ndi_gui_Data ({data_bytes} bytes) exceeds cache max_memory "
-                f"({self._max_memory} bytes)"
+                f"Data ({data_bytes} bytes) exceeds cache max_memory " f"({self._max_memory} bytes)"
             )
 
         # Create new entry
@@ -139,7 +138,7 @@ class ndi_cache:
         total_memory = self.bytes() + data_bytes
         if total_memory > self._max_memory:
             if self._replacement_rule == "error":
-                raise MemoryError("ndi_cache is full and replacement_rule is 'error'")
+                raise MemoryError("Cache is full and replacement_rule is 'error'")
 
             free_needed = total_memory - self._max_memory
             indices_to_remove, safe_to_add = self._evaluate_items_for_removal(

@@ -82,7 +82,7 @@ class TestSubjectCreation:
 
     def test_subject_repr(self):
         """Test string representation."""
-        s = ndi_subject("mouse23@vhlab.org", "ndi_gui_Lab mouse")
+        s = ndi_subject("mouse23@vhlab.org", "Lab mouse")
         assert "mouse23@vhlab.org" in repr(s)
 
     def test_subject_equality(self):
@@ -132,27 +132,27 @@ class TestSubjectDocument:
 
     def test_newdocument(self):
         """Test creating a subject document."""
-        s = ndi_subject("mouse23@vhlab.org", "ndi_gui_Lab mouse")
+        s = ndi_subject("mouse23@vhlab.org", "Lab mouse")
         try:
             doc = s.newdocument()
             assert doc is not None
             assert doc.doc_class() == "subject"
             props = doc.document_properties
             assert props["subject"]["local_identifier"] == "mouse23@vhlab.org"
-            assert props["subject"]["description"] == "ndi_gui_Lab mouse"
+            assert props["subject"]["description"] == "Lab mouse"
         except FileNotFoundError:
-            pytest.skip("ndi_subject schema not available")
+            pytest.skip("Subject schema not available")
 
     def test_searchquery(self):
         """Test creating a search query for subject."""
-        s = ndi_subject("mouse23@vhlab.org", "ndi_gui_Lab mouse")
+        s = ndi_subject("mouse23@vhlab.org", "Lab mouse")
         q = s.searchquery()
         assert q is not None
 
     def test_load_from_session(self, session):
         """Test loading subject from session."""
         try:
-            s1 = ndi_subject("mouse23@vhlab.org", "ndi_gui_Lab mouse")
+            s1 = ndi_subject("mouse23@vhlab.org", "Lab mouse")
             doc = s1.newdocument()
             doc.set_session_id(session.id())
             session.database_add(doc)
@@ -160,14 +160,14 @@ class TestSubjectDocument:
             # Load from session + document
             s2 = ndi_subject(session, doc)
             assert s2.local_identifier == "mouse23@vhlab.org"
-            assert s2.description == "ndi_gui_Lab mouse"
+            assert s2.description == "Lab mouse"
         except FileNotFoundError:
             pytest.skip("ndi_subject schema not available")
 
     def test_load_from_session_by_id(self, session):
         """Test loading subject from session by document ID."""
         try:
-            s1 = ndi_subject("mouse23@vhlab.org", "ndi_gui_Lab mouse")
+            s1 = ndi_subject("mouse23@vhlab.org", "Lab mouse")
             doc = s1.newdocument()
             doc.set_session_id(session.id())
             session.database_add(doc)
@@ -181,7 +181,7 @@ class TestSubjectDocument:
     def test_does_subjectstring_match(self, session):
         """Test does_subjectstring_match_session_document."""
         try:
-            s = ndi_subject("mouse23@vhlab.org", "ndi_gui_Lab mouse")
+            s = ndi_subject("mouse23@vhlab.org", "Lab mouse")
             doc = s.newdocument()
             doc.set_session_id(session.id())
             session.database_add(doc)
@@ -278,7 +278,7 @@ class TestElementTimeseries:
             reference=1,
             type="voltage",
         )
-        with pytest.raises(ValueError, match="ndi_session required"):
+        with pytest.raises(ValueError, match="Session required"):
             ts.readtimeseries(1)
 
 
@@ -570,7 +570,7 @@ class TestPhase8Integration:
     def test_neuron_with_subject(self, session):
         """Test creating a neuron element associated with a subject."""
         try:
-            s = ndi_subject("mouse23@vhlab.org", "ndi_gui_Lab mouse")
+            s = ndi_subject("mouse23@vhlab.org", "Lab mouse")
             sdoc = s.newdocument()
             sdoc.set_session_id(session.id())
             session.database_add(sdoc)

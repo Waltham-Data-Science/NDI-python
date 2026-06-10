@@ -1,6 +1,6 @@
 """ndi_gui_component_NDIProgressBar — A styled progress bar widget.
 
-Mirrors MATLAB: ndi.gui.component.ndi_gui_component_NDIProgressBar
+Mirrors MATLAB: ndi.gui.component.NDIProgressBar
 
 Provides a single progress bar with NDI styling (blue colour scheme),
 a text label, and optional time-remaining display.  Uses PySide6.
@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from ndi.gui._qt_helpers import require_qt
-from ndi.gui.component.abstract.ndi_gui_component_abstract_ProgressMonitor import (
+from ndi.gui.component.abstract.ProgressMonitor import (
     ndi_gui_component_abstract_ProgressMonitor,
 )
 
@@ -22,7 +22,7 @@ try:
 except ImportError:
     pass
 
-# NDI colour constants (matching MATLAB ndi_gui_component_NDIProgressBar)
+# NDI colour constants (matching MATLAB NDIProgressBar)
 _BG_COLOR = "#4472C4"  # background blue
 _FG_COLOR = "#2F5597"  # foreground dark-blue
 

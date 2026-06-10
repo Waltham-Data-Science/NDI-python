@@ -113,7 +113,7 @@ class ndi_time_timereference:
             referent: Object with session property
 
         Returns:
-            ndi_session ID string
+            Session ID string
 
         Raises:
             ValueError: If session ID cannot be extracted
@@ -213,7 +213,7 @@ class ndi_time_timereference:
         if hasattr(session, "findexpobj"):
             referent = session.findexpobj(struct.referent_epochsetname, struct.referent_classname)
         else:
-            raise ValueError("ndi_session does not support finding experiment objects")
+            raise ValueError("Session does not support finding experiment objects")
 
         clocktype = ndi_time_clocktype.from_string(struct.clocktypestring)
 

@@ -39,7 +39,7 @@ functions:
     decision_log: >
       Ported from MATLAB. Opens an enhanced GUI with two views:
       "Experiment View" (ndi_gui_Lab) showing subjects, probes, and DAQs as
-      draggable icons with connections, and "ndi_database View" (ndi_gui_Data) showing
+      draggable icons with connections, and "Database View" (ndi_gui_Data) showing
       a searchable/filterable document table with dependency graph
       visualization. MATLAB uses axes-based rendering; Python uses
       PySide6 with QGraphicsScene for the lab view.
@@ -50,9 +50,9 @@ functions:
 # =========================================================================
 classes:
 
-  - name: ndi_gui_Data
+  - name: Data
     type: class
-    matlab_path: "+ndi/+gui/ndi_gui_Data.m"
+    matlab_path: "+ndi/+gui/Data.m"
     python_path: "ndi/gui/data.py"
     python_class: "ndi_gui_Data"
     inherits: "handle"
@@ -76,7 +76,7 @@ classes:
         decision_log: "Exact match. Filtered table rows."
 
     methods:
-      - name: ndi_gui_Data
+      - name: Data
         kind: constructor
         input_arguments: []
         output_arguments:
@@ -140,9 +140,9 @@ classes:
           Ported. Builds and displays a subgraph showing only direct
           dependencies of the selected document.
 
-  - name: ndi_gui_Icon
+  - name: Icon
     type: class
-    matlab_path: "+ndi/+gui/ndi_gui_Icon.m"
+    matlab_path: "+ndi/+gui/Icon.m"
     python_path: "ndi/gui/icon.py"
     python_class: "ndi_gui_Icon"
     inherits: "handle"
@@ -182,11 +182,11 @@ classes:
         decision_log: "Exact match. Unique tag identifier."
 
     methods:
-      - name: ndi_gui_Icon
+      - name: Icon
         kind: constructor
         input_arguments:
           - name: src
-            type_matlab: "ndi.gui.ndi_gui_Lab"
+            type_matlab: "ndi.gui.Lab"
             type_python: "ndi_gui_Lab"
           - name: length
             type_matlab: "numeric"
@@ -224,9 +224,9 @@ classes:
           Ported. Opens a file dialog to select an image for the icon.
           MATLAB uses uigetfile; Python uses QFileDialog.getOpenFileName.
 
-  - name: ndi_gui_Lab
+  - name: Lab
     type: class
-    matlab_path: "+ndi/+gui/ndi_gui_Lab.m"
+    matlab_path: "+ndi/+gui/Lab.m"
     python_path: "ndi/gui/lab.py"
     python_class: "ndi_gui_Lab"
     inherits: "handle"
@@ -237,19 +237,19 @@ classes:
         type_python: "bool"
         decision_log: "Exact match."
       - name: subjects
-        type_matlab: "ndi.gui.ndi_gui_Icon[]"
+        type_matlab: "ndi.gui.Icon[]"
         type_python: "list[ndi_gui_Icon]"
         decision_log: "Exact match."
       - name: probes
-        type_matlab: "ndi.gui.ndi_gui_Icon[]"
+        type_matlab: "ndi.gui.Icon[]"
         type_python: "list[ndi_gui_Icon]"
         decision_log: "Exact match."
       - name: DAQs
-        type_matlab: "ndi.gui.ndi_gui_Icon[]"
+        type_matlab: "ndi.gui.Icon[]"
         type_python: "list[ndi_gui_Icon]"
         decision_log: "Exact match."
       - name: drag
-        type_matlab: "ndi.gui.ndi_gui_Icon | []"
+        type_matlab: "ndi.gui.Icon | []"
         type_python: "ndi_gui_Icon | None"
         decision_log: "Exact match. Currently dragged icon or None."
       - name: moved
@@ -266,7 +266,7 @@ classes:
         decision_log: "Exact match. Connection state toggle."
 
     methods:
-      - name: ndi_gui_Lab
+      - name: Lab
         kind: constructor
         input_arguments: []
         output_arguments:
@@ -313,7 +313,7 @@ classes:
       - name: details
         input_arguments:
           - name: src
-            type_matlab: "ndi.gui.ndi_gui_Icon"
+            type_matlab: "ndi.gui.Icon"
             type_python: "ndi_gui_Icon"
         output_arguments: []
         decision_log: "Exact match. Shows details panel for an icon."
@@ -337,7 +337,7 @@ classes:
       - name: connect
         input_arguments:
           - name: src
-            type_matlab: "ndi.gui.ndi_gui_Icon"
+            type_matlab: "ndi.gui.Icon"
             type_python: "ndi_gui_Icon"
         output_arguments: []
         decision_log: >
@@ -359,10 +359,10 @@ classes:
         output_arguments: []
         decision_log: "Exact match. Removes a connection wire."
 
-  - name: ndi_gui_docViewer
+  - name: docViewer
     type: class
-    matlab_path: "+ndi/+gui/ndi_gui_docViewer.m"
-    python_path: "ndi/gui/ndi_gui_docViewer.py"
+    matlab_path: "+ndi/+gui/docViewer.m"
+    python_path: "ndi/gui/docViewer.py"
     python_class: "ndi_gui_docViewer"
     inherits: "handle"
 
@@ -389,7 +389,7 @@ classes:
         decision_log: "Exact match. Original docs reference."
 
     methods:
-      - name: ndi_gui_docViewer
+      - name: docViewer
         kind: constructor
         input_arguments: []
         output_arguments:

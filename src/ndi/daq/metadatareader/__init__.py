@@ -234,7 +234,7 @@ class ndi_daq_metadatareader(ndi_ido):
 
         Args:
             epochfiles: List of file paths
-            epoch_id: ndi_epoch_epoch identifier
+            epoch_id: Epoch identifier
 
         Returns:
             ndi_document object

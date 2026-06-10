@@ -99,7 +99,7 @@ classes:
           - name: epochprobemap_class
             type_matlab: "char"
             type_python: "str"
-            default: "'ndi.epoch.ndi_epoch_epochprobemap'"
+            default: "'ndi.epoch.epochprobemap_daqsystem'"
           - name: epochprobemap_fileparameters
             type_matlab: "struct | char | cell"
             type_python: "str | list[str] | dict[str, Any] | None"
@@ -146,7 +146,7 @@ classes:
             type_python: "list[list[str]]"
         decision_log: "Exact match. Scans disk for matching file groups."
 
-      # --- ndi_epoch_epoch File Access ---
+      # --- Epoch File Access ---
       - name: getepochfiles
         input_arguments:
           - name: epoch_number_or_id
@@ -172,7 +172,7 @@ classes:
             type_python: "list[str]"
         decision_log: "Exact match. Returns file paths for an epoch by number."
 
-      # --- ndi_epoch_epoch ID ---
+      # --- Epoch ID ---
       - name: epochid
         input_arguments:
           - name: epoch_number
@@ -201,7 +201,7 @@ classes:
             type_python: "str | None"
         decision_log: "Exact match."
 
-      # --- ndi_epoch_epoch ndi_probe Map ---
+      # --- Epoch Probe Map ---
       - name: getepochprobemap
         input_arguments:
           - name: N

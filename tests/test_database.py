@@ -57,7 +57,7 @@ def element_doc():
 
 
 class TestDatabaseCreation:
-    """Test ndi_database creation."""
+    """Test Database creation."""
 
     def test_create_database(self, temp_session):
         """Test creating a database (uses DID-python SQLite)."""
@@ -85,7 +85,7 @@ class TestDatabaseCreation:
 
 
 class TestDatabaseAdd:
-    """Test ndi_database add operations."""
+    """Test Database add operations."""
 
     def test_add_document(self, temp_session, sample_doc):
         """Test adding a document."""
@@ -125,7 +125,7 @@ class TestDatabaseAdd:
 
 
 class TestDatabaseRead:
-    """Test ndi_database read operations."""
+    """Test Database read operations."""
 
     def test_read_existing(self, temp_session, sample_doc):
         """Test reading an existing document."""
@@ -153,7 +153,7 @@ class TestDatabaseRead:
 
 
 class TestDatabaseUpdate:
-    """Test ndi_database update operations."""
+    """Test Database update operations."""
 
     def test_update_existing(self, temp_session, sample_doc):
         """Test updating an existing document."""
@@ -177,7 +177,7 @@ class TestDatabaseUpdate:
 
 
 class TestDatabaseRemove:
-    """Test ndi_database remove operations."""
+    """Test Database remove operations."""
 
     def test_remove_existing(self, temp_session, sample_doc):
         """Test removing an existing document."""
@@ -204,7 +204,7 @@ class TestDatabaseRemove:
 
 
 class TestDatabaseAddOrReplace:
-    """Test ndi_database add_or_replace operations."""
+    """Test Database add_or_replace operations."""
 
     def test_add_or_replace_new(self, temp_session, sample_doc):
         """Test add_or_replace adds new document."""
@@ -227,7 +227,7 @@ class TestDatabaseAddOrReplace:
 
 
 class TestDatabaseSearch:
-    """Test ndi_database search operations."""
+    """Test Database search operations."""
 
     def test_search_all(self, temp_session):
         """Test searching for all documents."""
@@ -289,7 +289,7 @@ class TestDatabaseSearch:
 
 
 class TestDatabaseCounts:
-    """Test ndi_database counting operations."""
+    """Test Database counting operations."""
 
     def test_numdocs_empty(self, temp_session):
         """Test numdocs on empty database."""
@@ -345,7 +345,7 @@ class TestDatabaseCounts:
 
 
 class TestDatabaseDependencies:
-    """Test ndi_database dependency operations."""
+    """Test Database dependency operations."""
 
     def test_find_dependencies(self, temp_session):
         """Test finding dependencies of a document."""
@@ -434,7 +434,7 @@ class TestDatabaseDependsSQLite:
 
 
 class TestDatabasePaths:
-    """Test ndi_database path properties."""
+    """Test Database path properties."""
 
     def test_database_path(self, temp_session):
         """Test database_path property points to SQLite file."""
@@ -455,7 +455,7 @@ class TestDatabasePaths:
 
 
 class TestDatabaseRemoveMany:
-    """Test ndi_database remove_many operation."""
+    """Test Database remove_many operation."""
 
     def test_remove_many_by_query(self, temp_session):
         """Test removing multiple documents by query."""

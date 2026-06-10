@@ -1,5 +1,5 @@
 """
-ndi.database.fun - ndi_database utility functions for NDI.
+ndi.database.fun - Database utility functions for NDI.
 
 MATLAB equivalents: +ndi/+database/+fun/*.m
 
@@ -149,7 +149,7 @@ def docs_from_ids(
     MATLAB equivalent: ndi.database.fun.docs_from_ids
 
     Args:
-        session_or_dataset: ndi_database-containing object.
+        session_or_dataset: Database-containing object.
         document_ids: List of document IDs.
 
     Returns:
@@ -637,7 +637,7 @@ def read_presentation_time_structure(
 
 
 # =========================================================================
-# ndi_database export / extraction
+# Database export / extraction
 # =========================================================================
 
 

@@ -481,8 +481,8 @@ class ndi_query(did.query.Query):
                 - 'greaterthaneq': Field >= param1
                 - 'hasfield': Field exists (param1 ignored)
                 - 'hasmember': Field array contains param1
-                - 'isa': ndi_document is or inherits from class param1
-                - 'depends_on': ndi_document depends on doc with ID param1
+                - 'isa': Document is or inherits from class param1
+                - 'depends_on': Document depends on doc with ID param1
                 - Prefix with '~' to negate (e.g., '~exact_string')
             param1: First parameter (meaning depends on operation).
             param2: Second parameter (used by some operations).

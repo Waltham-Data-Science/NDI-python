@@ -1,6 +1,6 @@
 """ndi_gui_Icon — Draggable visual icon for the ndi_gui_Lab view.
 
-Mirrors MATLAB: ndi.gui.ndi_gui_Icon
+Mirrors MATLAB: ndi.gui.Icon
 
 Represents a subject, probe, or DAQ device as a coloured rectangle with
 an image and a connection terminal in the QGraphicsScene.

@@ -1,6 +1,6 @@
 """ndi_gui_component_internal_event_ProgressUpdatedEventData — Event data for progress update notifications.
 
-Mirrors MATLAB: ndi.gui.component.internal.event.ndi_gui_component_internal_event_ProgressUpdatedEventData
+Mirrors MATLAB: ndi.gui.component.internal.event.ProgressUpdatedEventData
 """
 
 from __future__ import annotations

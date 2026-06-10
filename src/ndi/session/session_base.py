@@ -46,10 +46,10 @@ class ndi_session(ABC):
 
     ndi_session represents a neuroscience experiment/recording session and
     provides access to:
-    - ndi_database for document storage
+    - Database for document storage
     - DAQ systems for data acquisition
-    - ndi_time_syncgraph for time synchronization
-    - ndi_cache for performance optimization
+    - SyncGraph for time synchronization
+    - Cache for performance optimization
 
     Subclasses must implement:
     - getpath(): Return the storage path
@@ -300,7 +300,7 @@ class ndi_session(ABC):
         return self
 
     # =========================================================================
-    # ndi_database Methods
+    # Database Methods
     # =========================================================================
 
     def database_add(self, document: ndi_document | list[ndi_document]) -> ndi_session:
@@ -317,7 +317,7 @@ class ndi_session(ABC):
             ValueError: If document session_id doesn't match
         """
         if self._database is None:
-            raise RuntimeError("ndi_session has no database")
+            raise RuntimeError("Session has no database")
 
         if not isinstance(document, list):
             document = [document]
@@ -464,14 +464,14 @@ class ndi_session(ABC):
             session_id = doc.session_id
             if session_id != self.id() and session_id != empty_id():
                 return False, (
-                    f"ndi_document {doc.id} has session_id '{session_id}' "
+                    f"Document {doc.id} has session_id '{session_id}' "
                     f"which doesn't match session id '{self.id()}'"
                 )
 
         return True, ""
 
     # =========================================================================
-    # Binary ndi_document Methods
+    # Binary Document Methods
     # =========================================================================
 
     def database_openbinarydoc(
@@ -498,7 +498,7 @@ class ndi_session(ABC):
         doc_id = doc_or_id.id if isinstance(doc_or_id, ndi_document) else doc_or_id
         doc = self._database.read(doc_id)
         if doc is None:
-            raise FileNotFoundError(f"ndi_document {doc_id} not found")
+            raise FileNotFoundError(f"Document {doc_id} not found")
 
         file_path = self._database.get_binary_path(doc, filename)
         if not file_path.exists():
@@ -628,7 +628,7 @@ class ndi_session(ABC):
         return False
 
     # =========================================================================
-    # ndi_time_syncgraph Methods
+    # SyncGraph Methods
     # =========================================================================
 
     def syncgraph_addrule(self, rule: ndi_time_syncrule) -> ndi_session:
@@ -808,7 +808,7 @@ class ndi_session(ABC):
         return False
 
     # =========================================================================
-    # ndi_probe and ndi_element Methods
+    # Probe and Element Methods
     # =========================================================================
 
     def getprobes(self, classmatch: str | None = None, **kwargs) -> list[Any]:
@@ -1022,7 +1022,7 @@ class ndi_session(ABC):
         return None
 
     # =========================================================================
-    # ndi_document Service Methods
+    # Document Service Methods
     # =========================================================================
 
     def newdocument(self, document_type: str = "base", **properties) -> ndi_document:
@@ -1031,7 +1031,7 @@ class ndi_session(ABC):
 
         Args:
             document_type: Type of document to create
-            **properties: ndi_document properties
+            **properties: Document properties
 
         Returns:
             New ndi_document with session_id set

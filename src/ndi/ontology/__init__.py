@@ -166,7 +166,7 @@ def lookup(lookup_string: str) -> OntologyResult:
     except Exception:
         result = OntologyResult()
 
-    # ndi_cache (with eviction)
+    # Cache (with eviction)
     if len(_lookup_cache) >= _CACHE_MAX:
         # Remove oldest entry
         oldest = next(iter(_lookup_cache))

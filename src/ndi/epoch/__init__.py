@@ -1,5 +1,5 @@
 """
-ndi.epoch - ndi_epoch_epoch management classes.
+ndi.epoch - Epoch management classes.
 
 This module provides classes for managing epochs (recording periods)
 in neuroscience experiments.

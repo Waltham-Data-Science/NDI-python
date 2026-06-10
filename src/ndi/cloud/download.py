@@ -333,7 +333,7 @@ def downloadGenericFiles(
         # Resolve cloud dataset ID
         cloud_dataset_id, _ = getCloudDatasetIdForLocalDataset(ndi_dataset, client=client)
         if not cloud_dataset_id:
-            return False, "ndi_dataset is not linked to an NDI cloud dataset", report
+            return False, "Dataset is not linked to an NDI cloud dataset", report
 
         # Get documents from the local database
         from ndi.query import ndi_query

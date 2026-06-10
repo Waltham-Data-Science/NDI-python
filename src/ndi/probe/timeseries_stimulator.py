@@ -21,7 +21,7 @@ logger = logging.getLogger("ndi")
 
 class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
     """
-    ndi_probe for stimulus delivery devices.
+    Probe for stimulus delivery devices.
 
     Reads stimulus presentation data from probes that deliver stimuli,
     extracting stimulus identity, timing, and parameters from marker,
@@ -88,7 +88,7 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
         parameters, and optional analog data.
 
         Args:
-            epoch: ndi_epoch_epoch number (1-indexed) or epoch_id
+            epoch: Epoch number (1-indexed) or epoch_id
             t0: Start time
             t1: End time
 

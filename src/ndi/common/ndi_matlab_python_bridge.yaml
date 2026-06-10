@@ -79,11 +79,11 @@ functions:
 classes:
 
   # =========================================================================
-  # ndi.common.ndi_common_PathConstants
+  # ndi.common.PathConstants
   # =========================================================================
   - name: ndi_common_PathConstants
     type: class
-    matlab_path: "+ndi/+common/ndi_common_PathConstants.m"
+    matlab_path: "+ndi/+common/PathConstants.m"
     matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/common/__init__.py"
     python_class: "ndi_common_PathConstants"

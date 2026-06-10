@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 
 # =========================================================================
-# Batch 1: ndi_calculator & Doc Utilities
+# Batch 1: Calculator & Doc Utilities
 # =========================================================================
 
 
@@ -174,7 +174,7 @@ class TestOntologyTableRowVars:
 
 
 # =========================================================================
-# Batch 2: ndi_database Export/Extract
+# Batch 2: Database Export/Extract
 # =========================================================================
 
 
@@ -300,7 +300,7 @@ class TestExtractDocsFiles:
 
 
 # =========================================================================
-# Batch 3: ndi_probe Type Map
+# Batch 3: Probe Type Map
 # =========================================================================
 
 

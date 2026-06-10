@@ -227,12 +227,12 @@ class TestQuery:
         session.database_add(doc1)
         session.database_add(doc2)
 
-        # ndi_query by name
+        # Query by name
         results = session.database_search(ndi_query("base.name") == "alpha")
         assert len(results) == 1
         assert results[0].document_properties["base"]["name"] == "alpha"
 
-        # ndi_query by isa
+        # Query by isa
         results = session.database_search(ndi_query("").isa("demoNDI"))
         assert len(results) == 2
 

@@ -5,12 +5,12 @@
 ### Prerequisites
 
 - Python 3.10 or later
-- Git (for installing VH-ndi_gui_Lab dependencies)
+- Git (for installing VH-Lab dependencies)
 
 ### Install from source
 
 ```bash
-git clone https://github.com/Waltham-ndi_gui_Data-Science/NDI-python.git
+git clone https://github.com/Waltham-Data-Science/NDI-python.git
 cd NDI-python
 python -m venv venv
 source venv/bin/activate  # Linux/macOS (venv\Scripts\activate on Windows)

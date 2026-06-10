@@ -1,6 +1,6 @@
 """ndi_gui_component_internal_ProgressTracker — Tracks progress of a multi-step task.
 
-Mirrors MATLAB: ndi.gui.component.internal.ndi_gui_component_internal_ProgressTracker
+Mirrors MATLAB: ndi.gui.component.internal.ProgressTracker
 
 Provides step counting, percentage calculation, template-based messages,
 and event callbacks for progress updates, message changes, and completion.

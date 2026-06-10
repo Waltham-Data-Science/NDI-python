@@ -163,7 +163,7 @@ class ndi_file_navigator(ndi_ido):
         self,
         session: Any | None = None,
         fileparameters: str | list[str] | dict[str, Any] | None = None,
-        epochprobemap_class: str = "ndi.epoch.ndi_epoch_epochprobemap",
+        epochprobemap_class: str = "ndi.epoch.epochprobemap_daqsystem",
         epochprobemap_fileparameters: str | list[str] | dict[str, Any] | None = None,
         identifier: str | None = None,
         document: Any | None = None,
@@ -222,7 +222,7 @@ class ndi_file_navigator(ndi_ido):
             self._raw_fileparameters_str = fp
             self._fileparameters = self._normalize_fileparameters(_parse_fileparameters(fp))
             self._epochprobemap_class = _prop(
-                filenavigator, "epochprobemap_class", "ndi.epoch.ndi_epoch_epochprobemap"
+                filenavigator, "epochprobemap_class", "ndi.epoch.epochprobemap_daqsystem"
             )
             epfp = _prop(filenavigator, "epochprobemap_fileparameters", "")
             self._epochprobemap_fileparameters = self._normalize_fileparameters(
@@ -314,7 +314,7 @@ class ndi_file_navigator(ndi_ido):
         Get the path for this navigator.
 
         Returns:
-            ndi_session path
+            Session path
 
         Raises:
             ValueError: If no valid session
@@ -552,11 +552,11 @@ class ndi_file_navigator(ndi_ido):
         Get the epoch ID for an epoch.
 
         Args:
-            epoch_number: ndi_epoch_epoch number (1-indexed)
+            epoch_number: Epoch number (1-indexed)
             epochfiles: Optional file list (fetched if not provided)
 
         Returns:
-            ndi_epoch_epoch identifier string
+            Epoch identifier string
         """
         if epochfiles is None:
             epochfiles = self.getepochfiles_number(epoch_number)
@@ -593,7 +593,7 @@ class ndi_file_navigator(ndi_ido):
         Get the filename for storing epoch ID.
 
         Args:
-            epoch_number: ndi_epoch_epoch number
+            epoch_number: Epoch number
             epochfiles: Optional file list
 
         Returns:
@@ -692,7 +692,7 @@ class ndi_file_navigator(ndi_ido):
             epochfiles: Optional file list
 
         Returns:
-            ndi_epoch_epoch probe map object or None
+            Epoch probe map object or None
         """
         if epochfiles is None:
             epochfiles = self.getepochfiles_number(epoch_number)
@@ -854,12 +854,12 @@ class ndi_file_navigator(ndi_ido):
         MATLAB equivalent: ndi.file.navigator/getepochfiles
 
         Args:
-            epoch_number_or_id: ndi_epoch_epoch number(s) or ID(s)
+            epoch_number_or_id: Epoch number(s) or ID(s)
 
         Returns:
             Tuple of (fullpathfilenames, epochid):
             - fullpathfilenames: List of file paths (or list of lists)
-            - epochid: ndi_epoch_epoch ID string (or list of strings)
+            - epochid: Epoch ID string (or list of strings)
         """
         et = self.epochtable()
 
@@ -1060,7 +1060,7 @@ class ndi_file_navigator(ndi_ido):
             epochfiles: List of file paths
 
         Returns:
-            ndi_epoch_epoch ID string
+            Epoch ID string
 
         Raises:
             AssertionError: If epochfiles are not ingested

@@ -1,5 +1,5 @@
 """
-ndi.fun.doc - ndi_document utility functions.
+ndi.fun.doc - Document utility functions.
 
 MATLAB equivalents: +ndi/+fun/+doc/diff.m, findFuid.m, allTypes.m, getDocTypes.m
 """
@@ -98,7 +98,7 @@ def makeSpeciesStrainSex(
 
     Args:
         session: NDI session instance.
-        subjectID: ndi_subject document identifier string.
+        subjectID: Subject document identifier string.
         Species: Species ontology identifier (e.g. ``'NCBITaxon:10116'``).
         Strain: Strain ontology identifier (e.g. ``'RRID:RGD_70508'``).
             Requires ``Species`` to also be provided.
@@ -331,9 +331,9 @@ def diff(
         checkFiles: Whether to compare file contents.
         checkFileList: Whether to compare the file_info lists
             (default True).
-        session1: ndi_session for doc1 (used for cross-session file
+        session1: Session for doc1 (used for cross-session file
             comparison when *checkFiles* is True).
-        session2: ndi_session for doc2 (used for cross-session file
+        session2: Session for doc2 (used for cross-session file
             comparison when *checkFiles* is True).
 
     Returns:

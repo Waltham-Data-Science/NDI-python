@@ -433,7 +433,7 @@ class ndi_document:
         """
         if "depends_on" not in self._document_properties:
             if error_if_not_found:
-                raise KeyError("ndi_document has no dependencies")
+                raise KeyError("Document has no dependencies")
             self._document_properties["depends_on"] = []
 
         depends_on = self._document_properties["depends_on"]
@@ -743,7 +743,7 @@ class ndi_document:
             Tuple of (newest_document, index, datestamp).
         """
         if not doc_array:
-            raise ValueError("ndi_document array is empty")
+            raise ValueError("Document array is empty")
 
         timestamps = []
         for doc in doc_array:

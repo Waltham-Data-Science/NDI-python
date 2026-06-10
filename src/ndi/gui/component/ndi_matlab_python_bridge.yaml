@@ -12,12 +12,12 @@ project_metadata:
 classes:
 
   # -----------------------------------------------------------------------
-  # ndi.gui.component.abstract.ndi_gui_component_abstract_ProgressMonitor
+  # ndi.gui.component.abstract.ProgressMonitor
   # -----------------------------------------------------------------------
-  - name: ndi_gui_component_abstract_ProgressMonitor
+  - name: ProgressMonitor
     type: class
-    matlab_path: "+ndi/+gui/+component/+abstract/ndi_gui_component_abstract_ProgressMonitor.m"
-    python_path: "ndi/gui/component/abstract/ndi_gui_component_abstract_ProgressMonitor.py"
+    matlab_path: "+ndi/+gui/+component/+abstract/ProgressMonitor.m"
+    python_path: "ndi/gui/component/abstract/ProgressMonitor.py"
     python_class: "ndi_gui_component_abstract_ProgressMonitor"
     inherits: "handle (abstract)"
 
@@ -31,8 +31,8 @@ classes:
         type_matlab: "double"
         type_python: "float"
         decision_log: "Exact match. Seconds between display refreshes."
-      - name: ndi_gui_component_internal_ProgressTracker
-        type_matlab: "ndi.gui.component.internal.ndi_gui_component_internal_ProgressTracker"
+      - name: ProgressTracker
+        type_matlab: "ndi.gui.component.internal.ProgressTracker"
         type_python: "ndi_gui_component_internal_ProgressTracker"
         decision_log: "Exact match."
       - name: DisplayElapsedTime
@@ -45,7 +45,7 @@ classes:
         decision_log: "Exact match."
 
     methods:
-      - name: ndi_gui_component_abstract_ProgressMonitor
+      - name: ProgressMonitor
         kind: constructor
         input_arguments:
           - name: kwargs
@@ -88,7 +88,7 @@ classes:
       - name: setProgressTracker
         input_arguments:
           - name: tracker
-            type_matlab: "ndi.gui.component.internal.ndi_gui_component_internal_ProgressTracker"
+            type_matlab: "ndi.gui.component.internal.ProgressTracker"
             type_python: "ndi_gui_component_internal_ProgressTracker"
         output_arguments: []
         decision_log: >
@@ -102,7 +102,7 @@ classes:
             type_python: "float"
         decision_log: >
           Exact match. Returns current progress as a fraction 0-1
-          from the attached ndi_gui_component_internal_ProgressTracker. Synchronized 2026-03-13.
+          from the attached ProgressTracker. Synchronized 2026-03-13.
 
       - name: getProgressTitle
         input_arguments: []
@@ -127,12 +127,12 @@ classes:
           Synchronized 2026-03-13.
 
   # -----------------------------------------------------------------------
-  # ndi.gui.component.internal.ndi_gui_component_internal_ProgressTracker
+  # ndi.gui.component.internal.ProgressTracker
   # -----------------------------------------------------------------------
-  - name: ndi_gui_component_internal_ProgressTracker
+  - name: ProgressTracker
     type: class
-    matlab_path: "+ndi/+gui/+component/+internal/ndi_gui_component_internal_ProgressTracker.m"
-    python_path: "ndi/gui/component/internal/ndi_gui_component_internal_ProgressTracker.py"
+    matlab_path: "+ndi/+gui/+component/+internal/ProgressTracker.m"
+    python_path: "ndi/gui/component/internal/ProgressTracker.py"
     python_class: "ndi_gui_component_internal_ProgressTracker"
     inherits: "handle"
 
@@ -178,7 +178,7 @@ classes:
           Used by ndi_gui_component_internal_AsynchProgressTracker subclass. Synchronized 2026-03-13.
 
     methods:
-      - name: ndi_gui_component_internal_ProgressTracker
+      - name: ProgressTracker
         kind: constructor
         input_arguments:
           - name: totalSteps
@@ -212,14 +212,14 @@ classes:
         decision_log: "Exact match. Reinitializes the tracker."
 
   # -----------------------------------------------------------------------
-  # ndi.gui.component.internal.ndi_gui_component_internal_AsynchProgressTracker
+  # ndi.gui.component.internal.AsynchProgressTracker
   # -----------------------------------------------------------------------
-  - name: ndi_gui_component_internal_AsynchProgressTracker
+  - name: AsynchProgressTracker
     type: class
-    matlab_path: "+ndi/+gui/+component/+internal/ndi_gui_component_internal_AsynchProgressTracker.m"
-    python_path: "ndi/gui/component/internal/ndi_gui_component_internal_AsynchProgressTracker.py"
+    matlab_path: "+ndi/+gui/+component/+internal/AsynchProgressTracker.m"
+    python_path: "ndi/gui/component/internal/AsynchProgressTracker.py"
     python_class: "ndi_gui_component_internal_AsynchProgressTracker"
-    inherits: "ndi.gui.component.internal.ndi_gui_component_internal_ProgressTracker"
+    inherits: "ndi.gui.component.internal.ProgressTracker"
 
     methods:
       - name: updateProgress
@@ -248,12 +248,12 @@ classes:
           TotalSteps, TemplateMessage keys. Synchronized 2026-03-13.
 
   # -----------------------------------------------------------------------
-  # ndi.gui.component.internal.event.ndi_gui_component_internal_event_ProgressUpdatedEventData
+  # ndi.gui.component.internal.event.ProgressUpdatedEventData
   # -----------------------------------------------------------------------
-  - name: ndi_gui_component_internal_event_ProgressUpdatedEventData
+  - name: ProgressUpdatedEventData
     type: class
-    matlab_path: "+ndi/+gui/+component/+internal/+event/ndi_gui_component_internal_event_ProgressUpdatedEventData.m"
-    python_path: "ndi/gui/component/internal/event/ndi_gui_component_internal_event_ProgressUpdatedEventData.py"
+    matlab_path: "+ndi/+gui/+component/+internal/+event/ProgressUpdatedEventData.m"
+    python_path: "ndi/gui/component/internal/event/ProgressUpdatedEventData.py"
     python_class: "ndi_gui_component_internal_event_ProgressUpdatedEventData"
     inherits: "event.EventData"
 
@@ -264,7 +264,7 @@ classes:
         decision_log: "Exact match."
 
     methods:
-      - name: ndi_gui_component_internal_event_ProgressUpdatedEventData
+      - name: ProgressUpdatedEventData
         kind: constructor
         input_arguments:
           - name: percentageComplete
@@ -276,12 +276,12 @@ classes:
         decision_log: "Exact match."
 
   # -----------------------------------------------------------------------
-  # ndi.gui.component.internal.event.ndi_gui_component_internal_event_MessageUpdatedEventData
+  # ndi.gui.component.internal.event.MessageUpdatedEventData
   # -----------------------------------------------------------------------
-  - name: ndi_gui_component_internal_event_MessageUpdatedEventData
+  - name: MessageUpdatedEventData
     type: class
-    matlab_path: "+ndi/+gui/+component/+internal/+event/ndi_gui_component_internal_event_MessageUpdatedEventData.m"
-    python_path: "ndi/gui/component/internal/event/ndi_gui_component_internal_event_MessageUpdatedEventData.py"
+    matlab_path: "+ndi/+gui/+component/+internal/+event/MessageUpdatedEventData.m"
+    python_path: "ndi/gui/component/internal/event/MessageUpdatedEventData.py"
     python_class: "ndi_gui_component_internal_event_MessageUpdatedEventData"
     inherits: "event.EventData"
 
@@ -292,7 +292,7 @@ classes:
         decision_log: "Exact match."
 
     methods:
-      - name: ndi_gui_component_internal_event_MessageUpdatedEventData
+      - name: MessageUpdatedEventData
         kind: constructor
         input_arguments:
           - name: message
@@ -304,14 +304,14 @@ classes:
         decision_log: "Exact match."
 
   # -----------------------------------------------------------------------
-  # ndi.gui.component.ndi_gui_component_CommandWindowProgressMonitor
+  # ndi.gui.component.CommandWindowProgressMonitor
   # -----------------------------------------------------------------------
-  - name: ndi_gui_component_CommandWindowProgressMonitor
+  - name: CommandWindowProgressMonitor
     type: class
-    matlab_path: "+ndi/+gui/+component/ndi_gui_component_CommandWindowProgressMonitor.m"
-    python_path: "ndi/gui/component/ndi_gui_component_CommandWindowProgressMonitor.py"
+    matlab_path: "+ndi/+gui/+component/CommandWindowProgressMonitor.m"
+    python_path: "ndi/gui/component/CommandWindowProgressMonitor.py"
     python_class: "ndi_gui_component_CommandWindowProgressMonitor"
-    inherits: "ndi.gui.component.abstract.ndi_gui_component_abstract_ProgressMonitor"
+    inherits: "ndi.gui.component.abstract.ProgressMonitor"
 
     properties:
       - name: IndentSize
@@ -334,7 +334,7 @@ classes:
           in-place on the same line.
 
     methods:
-      - name: ndi_gui_component_CommandWindowProgressMonitor
+      - name: CommandWindowProgressMonitor
         kind: constructor
         input_arguments:
           - name: kwargs
@@ -346,14 +346,14 @@ classes:
         decision_log: "Exact match."
 
   # -----------------------------------------------------------------------
-  # ndi.gui.component.ndi_gui_component_NDIProgressBar
+  # ndi.gui.component.NDIProgressBar
   # -----------------------------------------------------------------------
-  - name: ndi_gui_component_NDIProgressBar
+  - name: NDIProgressBar
     type: class
-    matlab_path: "+ndi/+gui/+component/ndi_gui_component_NDIProgressBar.m"
-    python_path: "ndi/gui/component/ndi_gui_component_NDIProgressBar.py"
+    matlab_path: "+ndi/+gui/+component/NDIProgressBar.m"
+    python_path: "ndi/gui/component/NDIProgressBar.py"
     python_class: "ndi_gui_component_NDIProgressBar"
-    inherits: "ndi.gui.component.abstract.ndi_gui_component_abstract_ProgressMonitor"
+    inherits: "ndi.gui.component.abstract.ProgressMonitor"
 
     properties:
       - name: Value
@@ -374,7 +374,7 @@ classes:
         decision_log: "Exact match. x, y position."
 
     methods:
-      - name: ndi_gui_component_NDIProgressBar
+      - name: NDIProgressBar
         kind: constructor
         input_arguments:
           - name: kwargs
@@ -396,12 +396,12 @@ classes:
         decision_log: "Exact match. Shows completion message."
 
   # -----------------------------------------------------------------------
-  # ndi.gui.component.ndi_gui_component_ProgressBarWindow
+  # ndi.gui.component.ProgressBarWindow
   # -----------------------------------------------------------------------
-  - name: ndi_gui_component_ProgressBarWindow
+  - name: ProgressBarWindow
     type: class
-    matlab_path: "+ndi/+gui/+component/ndi_gui_component_ProgressBarWindow.m"
-    python_path: "ndi/gui/component/ndi_gui_component_ProgressBarWindow.py"
+    matlab_path: "+ndi/+gui/+component/ProgressBarWindow.m"
+    python_path: "ndi/gui/component/ProgressBarWindow.py"
     python_class: "ndi_gui_component_ProgressBarWindow"
     inherits: "matlab.apps.AppBase"
 
@@ -431,7 +431,7 @@ classes:
           Timer. Python uses list of dicts with equivalent keys.
 
     methods:
-      - name: ndi_gui_component_ProgressBarWindow
+      - name: ProgressBarWindow
         kind: constructor
         input_arguments:
           - name: title

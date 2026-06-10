@@ -6,7 +6,7 @@ MATLAB equivalent: +ndi/+common
 Provides path constants, cache, logger, and other shared utilities.
 
 MATLAB functions:
-    ndi.common.ndi_common_PathConstants
+    ndi.common.PathConstants
     ndi.common.assertDIDInstalled
     ndi.common.getCache
     ndi.common.getDatabaseHierarchy
@@ -181,7 +181,7 @@ def getCache() -> Any:
 
 
 # ---------------------------------------------------------------------------
-# ndi_database hierarchy — mirrors MATLAB ndi.common.getDatabaseHierarchy
+# Database hierarchy — mirrors MATLAB ndi.common.getDatabaseHierarchy
 # ---------------------------------------------------------------------------
 
 _database_hierarchy_singleton: Any = None
@@ -237,7 +237,7 @@ def getDatabaseHierarchy() -> dict[str, Any]:
 
 
 def assertDIDInstalled() -> None:
-    """Assert that the DID (ndi_document Interface ndi_database) package is installed.
+    """Assert that the DID (Document Interface Database) package is installed.
 
     MATLAB equivalent: ndi.common.assertDIDInstalled
 

@@ -32,9 +32,9 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
 
     Attributes:
         session: Associated session object
-        name: ndi_element name (no whitespace)
+        name: Element name (no whitespace)
         reference: Reference number (non-negative)
-        type: ndi_element type identifier (no whitespace)
+        type: Element type identifier (no whitespace)
         underlying_element: ndi_element this depends on (for derived elements)
         direct: If True, epochs come directly from underlying_element
         subject_id: Associated subject document ID
@@ -70,12 +70,12 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
 
         Args:
             session: ndi_session object with database access
-            name: ndi_element name (no whitespace allowed)
+            name: Element name (no whitespace allowed)
             reference: Reference number (non-negative integer)
-            type: ndi_element type identifier (no whitespace)
+            type: Element type identifier (no whitespace)
             underlying_element: ndi_element this depends on
             direct: If True, use underlying_element epochs directly
-            subject_id: ndi_subject document ID
+            subject_id: Subject document ID
             dependencies: Dict of named dependencies
             identifier: Optional unique identifier
             document: Optional document to load from
@@ -264,7 +264,7 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
 
         from ..query import ndi_query
 
-        # ndi_query for registered epochs
+        # Query for registered epochs
         q = ndi_query("").isa("element_epoch") & ndi_query("").depends_on("element_id", self.id)
         epoch_docs = self._session.database_search(q)
 
@@ -319,7 +319,7 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
         return self._underlying_element is None
 
     # =========================================================================
-    # ndi_epoch_epoch Management
+    # Epoch Management
     # =========================================================================
 
     def addepoch(
@@ -348,7 +348,7 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
             raise ValueError("Cannot add epochs to direct elements")
 
         if self._session is None:
-            raise ValueError("ndi_session required to add epochs")
+            raise ValueError("Session required to add epochs")
 
         from ..document import ndi_document
 
@@ -455,7 +455,7 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
         return q
 
     # =========================================================================
-    # ndi_cache Management
+    # Cache Management
     # =========================================================================
 
     def getcache(self) -> tuple[Any | None, str]:

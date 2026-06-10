@@ -60,7 +60,7 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
         MFDAQ systems return DEV_LOCAL_TIME by default.
 
         Args:
-            epoch_number: ndi_epoch_epoch number (1-indexed)
+            epoch_number: Epoch number (1-indexed)
 
         Returns:
             List containing DEV_LOCAL_TIME

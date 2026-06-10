@@ -1,6 +1,6 @@
 """ndi_gui_component_CommandWindowProgressMonitor — Console-based progress display.
 
-Mirrors MATLAB: ndi.gui.component.ndi_gui_component_CommandWindowProgressMonitor
+Mirrors MATLAB: ndi.gui.component.CommandWindowProgressMonitor
 
 Displays progress updates in the terminal/console with optional
 timestamps and in-place updating.
@@ -12,7 +12,7 @@ import sys
 from datetime import datetime
 from typing import Any
 
-from ndi.gui.component.abstract.ndi_gui_component_abstract_ProgressMonitor import (
+from ndi.gui.component.abstract.ProgressMonitor import (
     ndi_gui_component_abstract_ProgressMonitor,
 )
 
