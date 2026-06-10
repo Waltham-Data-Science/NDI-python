@@ -44,6 +44,16 @@ class ndi_element_timeseries(ndi_element):
         """
         super().__init__(**kwargs)
 
+    def ndi_element_class(self) -> str:
+        """Return the NDI element class name for document storage.
+
+        MATLAB equivalent: ``class(obj)`` == ``'ndi.element.timeseries'``.
+        Without this override the class inherited ``'ndi.element'`` from
+        :class:`ndi_element`, mislabelling stored timeseries elements (the same
+        registry/round-trip gap that hid neurons — see :meth:`ndi_neuron`).
+        """
+        return "ndi.element.timeseries"
+
     def readtimeseries(
         self,
         timeref_or_epoch: Any,
