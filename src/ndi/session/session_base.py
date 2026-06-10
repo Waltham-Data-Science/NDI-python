@@ -951,10 +951,24 @@ class ndi_session(ABC):
         for doc in docs:
             try:
                 obj = self._document_to_object(doc)
-                if obj is not None:
-                    elements.append(obj)
-            except Exception:
-                pass
+            except Exception as exc:
+                # A document that isa('element') but won't construct is a
+                # registry/parity gap that must be loud — silently dropping it
+                # is what hid the unconstructable ndi.neuron (audit C8b), making
+                # getelements() return zero neurons with no error.
+                doc_id = ""
+                try:
+                    doc_id = doc.document_properties.get("base", {}).get("id", "")
+                except Exception:
+                    pass
+                logger.error(
+                    "getelements: failed to construct element from document %s: %s",
+                    doc_id,
+                    exc,
+                )
+                raise
+            if obj is not None:
+                elements.append(obj)
 
         return elements
 
