@@ -88,14 +88,54 @@ class TestSyncIndex:
         assert idx.last_sync_timestamp != ""
         assert "T" in idx.last_sync_timestamp  # ISO format
 
-    def test_json_roundtrip(self, tmp_path):
+    def test_json_roundtrip_writes_camelcase(self, tmp_path):
+        """On-disk keys must be MATLAB's camelCase so the shared index.json is
+        readable by both clients (audit C2)."""
         idx = SyncIndex()
         idx.update(["d1", "d2"], ["r1", "r2", "r3"])
         idx.write(tmp_path)
 
         raw = json.loads((tmp_path / ".ndi" / "sync" / "index.json").read_text())
-        assert len(raw["local_doc_ids_last_sync"]) == 2
-        assert len(raw["remote_doc_ids_last_sync"]) == 3
+        assert len(raw["localDocumentIdsLastSync"]) == 2
+        assert len(raw["remoteDocumentIdsLastSync"]) == 3
+        assert "lastSyncTimestamp" in raw
+        # The legacy snake_case keys must NOT be written.
+        assert "local_doc_ids_last_sync" not in raw
+
+    def test_reads_matlab_camelcase(self, tmp_path):
+        """A MATLAB-written camelCase index must be understood."""
+        index_dir = tmp_path / ".ndi" / "sync"
+        index_dir.mkdir(parents=True)
+        (index_dir / "index.json").write_text(
+            json.dumps(
+                {
+                    "localDocumentIdsLastSync": ["a", "b"],
+                    "remoteDocumentIdsLastSync": ["c"],
+                    "lastSyncTimestamp": "2026-06-01T00:00:00Z",
+                }
+            )
+        )
+        loaded = SyncIndex.read(tmp_path)
+        assert loaded.local_doc_ids_last_sync == ["a", "b"]
+        assert loaded.remote_doc_ids_last_sync == ["c"]
+        assert loaded.last_sync_timestamp == "2026-06-01T00:00:00Z"
+
+    def test_reads_legacy_snakecase(self, tmp_path):
+        """A legacy snake_case index (older Python builds) must still load."""
+        index_dir = tmp_path / ".ndi" / "sync"
+        index_dir.mkdir(parents=True)
+        (index_dir / "index.json").write_text(
+            json.dumps(
+                {
+                    "local_doc_ids_last_sync": ["x"],
+                    "remote_doc_ids_last_sync": ["y", "z"],
+                    "last_sync_timestamp": "2026-05-01T00:00:00Z",
+                }
+            )
+        )
+        loaded = SyncIndex.read(tmp_path)
+        assert loaded.local_doc_ids_last_sync == ["x"]
+        assert loaded.remote_doc_ids_last_sync == ["y", "z"]
 
 
 # ===========================================================================
