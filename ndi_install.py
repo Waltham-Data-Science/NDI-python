@@ -33,18 +33,21 @@ from pathlib import Path
 # Configuration
 # ---------------------------------------------------------------------------
 
+# Each dependency is pinned to an immutable ref (a tag or a commit SHA) so a
+# fresh install can never silently pull an unvetted upstream change. Bump these
+# deliberately; prefer a release tag once upstream publishes one.
 DEPENDENCIES = [
     {
         "name": "vhlab-toolbox-python",
         "repo": "https://github.com/VH-Lab/vhlab-toolbox-python.git",
-        "branch": "main",
+        "ref": "b073185565ea5b47bb0307cddeae923fa9b86268",  # main @ 2026-06, no tags yet
         "python_path": ".",
         "description": "VH-Lab data utilities and file formats (not on PyPI)",
     },
     {
         "name": "NDIcalc-vis-matlab",
         "repo": "https://github.com/VH-Lab/NDIcalc-vis-matlab.git",
-        "branch": "main",
+        "ref": "v0.9.0",
         "python_path": "",
         "ndi_common": True,
         "description": "NDI calculator and visualization document definitions",
@@ -68,6 +71,7 @@ PIP_DEPS = [
 PIP_DEV_DEPS = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
+    "pytest-xdist>=3.0.0",
     "black>=23.0.0",
     "ruff>=0.1.0",
 ]
@@ -160,19 +164,44 @@ def get_site_packages() -> Path | None:
 # ---------------------------------------------------------------------------
 
 
-def git_clone(repo_url: str, target_dir: Path, branch: str) -> bool:
-    """Clone a repository. Returns True on success."""
-    detail(f"git clone --branch {branch} --single-branch {repo_url}")
+def _git_checkout_ref(repo_dir: Path, ref: str) -> bool:
+    """Check out an exact ref (tag or commit SHA) in an existing clone."""
+    detail(f"git checkout {ref}")
     result = subprocess.run(
-        [
-            "git",
-            "clone",
-            "--branch",
-            branch,
-            "--single-branch",
-            repo_url,
-            str(target_dir),
-        ],
+        ["git", "-C", str(repo_dir), "checkout", "--quiet", ref],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if result.returncode != 0:
+        # The ref may not be present yet (e.g. a new tag); fetch and retry.
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "fetch", "--tags", "--quiet", "origin"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        result = subprocess.run(
+            ["git", "-C", str(repo_dir), "checkout", "--quiet", ref],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    if result.returncode != 0:
+        fail(f"git checkout {ref} failed: {result.stderr.strip()}")
+        return False
+    return True
+
+
+def git_clone(repo_url: str, target_dir: Path, ref: str) -> bool:
+    """Clone a repository and check out a pinned ref. Returns True on success.
+
+    A plain clone (not ``--single-branch``) is used so both tags and the
+    pinned commit are reachable, then ``ref`` is checked out exactly.
+    """
+    detail(f"git clone {repo_url} (pinned to {ref})")
+    result = subprocess.run(
+        ["git", "clone", "--quiet", repo_url, str(target_dir)],
         capture_output=True,
         text=True,
         timeout=120,
@@ -180,89 +209,28 @@ def git_clone(repo_url: str, target_dir: Path, branch: str) -> bool:
     if result.returncode != 0:
         fail(f"git clone failed: {result.stderr.strip()}")
         return False
-    return True
+    return _git_checkout_ref(target_dir, ref)
 
 
-def git_has_changes(repo_dir: Path) -> bool:
-    """Check if a repo has uncommitted changes."""
-    result = subprocess.run(
-        ["git", "-C", str(repo_dir), "status", "--porcelain"],
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-    return bool(result.stdout.strip())
+def clone_or_update(name: str, repo_url: str, target_dir: Path, ref: str, update: bool) -> bool:
+    """Clone a repo if not present, or re-pin to ``ref`` if --update is set.
 
-
-def git_update(repo_dir: Path) -> bool:
-    """Update a repository with stash/pull/pop. Returns True on success."""
-    stashed = False
-
-    # Stash if there are local changes
-    if git_has_changes(repo_dir):
-        detail("Stashing local changes...")
-        result = subprocess.run(
-            ["git", "-C", str(repo_dir), "stash"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if result.returncode == 0:
-            stashed = True
-        else:
-            warn(f"git stash failed: {result.stderr.strip()}")
-
-    # Pull
-    detail("git pull --ff-only")
-    result = subprocess.run(
-        ["git", "-C", str(repo_dir), "pull", "--ff-only"],
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
-    if result.returncode != 0:
-        warn(f"git pull failed: {result.stderr.strip()}")
-        # Still try to pop stash
-        if stashed:
-            subprocess.run(
-                ["git", "-C", str(repo_dir), "stash", "pop"],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-        return False
-
-    detail(result.stdout.strip())
-
-    # Pop stash
-    if stashed:
-        detail("Restoring stashed changes...")
-        pop_result = subprocess.run(
-            ["git", "-C", str(repo_dir), "stash", "pop"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if pop_result.returncode != 0:
-            warn("Could not restore stashed changes (may need manual merge)")
-
-    return True
-
-
-def clone_or_update(name: str, repo_url: str, target_dir: Path, branch: str, update: bool) -> bool:
-    """Clone a repo if not present, or update if --update flag is set."""
+    "Update" means: fetch and check out the pinned ref again. To move to a
+    newer upstream commit, change the ``ref`` in DEPENDENCIES and re-run with
+    ``--update`` — there is no floating-branch pull, by design.
+    """
     if target_dir.exists():
         if update:
-            info(f"Updating {name}...")
-            return git_update(target_dir)
+            info(f"Updating {name} (re-pinning to {ref})...")
+            return _git_checkout_ref(target_dir, ref)
         else:
             info(f"{name} already cloned at {target_dir}")
-            detail("Use --update to pull latest changes")
+            detail("Use --update to re-pin to the configured ref")
             return True
     else:
         info(f"Cloning {name}...")
         target_dir.parent.mkdir(parents=True, exist_ok=True)
-        return git_clone(repo_url, target_dir, branch)
+        return git_clone(repo_url, target_dir, ref)
 
 
 # ---------------------------------------------------------------------------
@@ -525,7 +493,7 @@ def main() -> int:
     parser.add_argument(
         "--update",
         action="store_true",
-        help="Update existing dependency clones (git pull)",
+        help="Re-pin existing dependency clones to the configured ref (git checkout)",
     )
     parser.add_argument(
         "--dev",
@@ -573,7 +541,7 @@ def main() -> int:
 
     for dep in DEPENDENCIES:
         target = tools_dir / dep["name"]
-        ok = clone_or_update(dep["name"], dep["repo"], target, dep["branch"], args.update)
+        ok = clone_or_update(dep["name"], dep["repo"], target, dep["ref"], args.update)
         if not ok:
             all_cloned = False
 

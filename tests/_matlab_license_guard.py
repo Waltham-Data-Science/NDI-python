@@ -29,6 +29,8 @@ from __future__ import annotations
 
 import os
 
+import pytest
+
 ENV_VAR = "NDI_CLOUD_TEST_USER_HAS_MATLAB_LICENSE"
 
 _TRUE_VALUES = {"true", "1"}
@@ -51,20 +53,21 @@ def _raw_value() -> str:
 
 
 def fatal_check_license_env() -> None:
-    """Raise RuntimeError if NDI_CLOUD_TEST_USER_HAS_MATLAB_LICENSE is unset.
+    """Skip the whole module if NDI_CLOUD_TEST_USER_HAS_MATLAB_LICENSE is unset.
 
-    Call at module import time so the failure surfaces as a collection
-    error, mirroring MATLAB's fatalAssertNotEmpty in TestClassSetup.
+    Call at module import time. When the variable is unset we ``pytest.skip``
+    at module level so the destructive BYOL test modules never load and never
+    touch DELETE /users/me/matlab-license -- the same refusal MATLAB's
+    fatalAssertNotEmpty in TestClassSetup provides.
 
-    We intentionally raise RuntimeError instead of calling pytest.skip:
-    an unset env var is a misconfiguration, not a 'no credentials
-    available' no-op. Pytest treats an exception during collection as
-    an ERROR rather than a SKIP, which is exactly what we want -- a
-    green CI run that destroyed someone's license would be the
-    nightmare scenario this guard prevents.
+    This used to raise RuntimeError (a collection ERROR), but that made the
+    documented bare ``pytest tests/`` command error out on every machine that
+    hadn't set the variable. A module-level skip keeps the destructive-path
+    refusal (the module body, hence the destructive calls, never runs) while
+    letting the rest of the suite collect and pass cleanly.
     """
     if not _raw_value().strip():
-        raise RuntimeError(_FATAL_MESSAGE)
+        pytest.skip(_FATAL_MESSAGE, allow_module_level=True)
 
 
 def user_has_existing_license() -> bool:

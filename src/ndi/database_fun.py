@@ -9,10 +9,13 @@ and document analysis utilities.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     pass
+
+logger = logging.getLogger(__name__)
 
 
 def findallantecedents(
@@ -68,10 +71,14 @@ def findallantecedents(
 
     try:
         found = session_or_dataset.database_search(q)
-    except Exception:
+    except Exception as exc:
+        logger.debug(
+            "database_search failed on %r, retrying via .session: %s", session_or_dataset, exc
+        )
         try:
             found = session_or_dataset.session.database_search(q)
-        except Exception:
+        except Exception as exc2:
+            logger.debug("antecedent search returned nothing for %r: %s", q, exc2)
             found = []
 
     antecedents.extend(found)
@@ -117,10 +124,14 @@ def findalldependencies(
 
         try:
             found = session_or_dataset.database_search(q)
-        except Exception:
+        except Exception as exc:
+            logger.debug(
+                "database_search failed on %r, retrying via .session: %s", session_or_dataset, exc
+            )
             try:
                 found = session_or_dataset.session.database_search(q)
-            except Exception:
+            except Exception as exc2:
+                logger.debug("dependent search returned nothing for %r: %s", q, exc2)
                 found = []
 
         new_found = []
@@ -168,10 +179,14 @@ def docs_from_ids(
 
     try:
         found = session_or_dataset.database_search(q)
-    except Exception:
+    except Exception as exc:
+        logger.debug(
+            "database_search failed on %r, retrying via .session: %s", session_or_dataset, exc
+        )
         try:
             found = session_or_dataset.session.database_search(q)
-        except Exception:
+        except Exception as exc2:
+            logger.debug("batch id search returned nothing for %r: %s", q, exc2)
             found = []
 
     # Build lookup
