@@ -120,8 +120,11 @@ class TestMarkGarbage:
         assert len(saved) == 1
         assert saved[0]["t0"] == 0.5
         assert saved[0]["t1"] == 10.0
-        assert saved[0]["timeref_t0"] == "ref_utc"
-        assert saved[0]["timeref_t1"] == "ref_utc"
+        # MATLAB markvalidinterval serializes each timeref to a reconstructable
+        # struct (schema field timeref_structt0); an opaque string tag is kept
+        # under referent_epochsetname.
+        assert saved[0]["timeref_structt0"]["referent_epochsetname"] == "ref_utc"
+        assert saved[0]["timeref_structt1"]["referent_epochsetname"] == "ref_utc"
 
 
 # ===========================================================================
