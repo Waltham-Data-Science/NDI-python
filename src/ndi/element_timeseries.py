@@ -81,7 +81,7 @@ class ndi_element_timeseries(ndi_element):
         # Try to read from ingested data first
         data, times = self._read_from_ingested(epoch_number, t0, t1)
         if data is not None:
-            return data, times, None
+            return data, times, self._epoch_timeref(epoch_number)
 
         # Fall back to underlying element
         if self._underlying_element is not None and hasattr(
@@ -91,6 +91,37 @@ class ndi_element_timeseries(ndi_element):
 
         # No data source available
         return np.array([]), np.array([]), None
+
+    def _epoch_timeref(self, epoch_number: int) -> Any:
+        """Build a concrete time reference for an ingested epoch's data.
+
+        MATLAB readtimeseries always returns a real timeref (referent=self,
+        the epoch's local clock, the epoch id, time 0); the previous Python
+        implementation returned None, losing the time basis of the data
+        (audit C8).
+        """
+        from .time.clocktype import ndi_time_clocktype
+        from .time.timereference import ndi_time_timereference
+
+        epoch_id = None
+        clock = ndi_time_clocktype.DEV_LOCAL_TIME
+        try:
+            et, _ = self.epochtable()
+            if 0 < epoch_number <= len(et):
+                entry = et[epoch_number - 1]
+                epoch_id = entry.get("epoch_id")
+                clocks = entry.get("epoch_clock")
+                if isinstance(clocks, list) and clocks:
+                    clock = clocks[0]
+                elif clocks is not None:
+                    clock = clocks
+        except Exception:
+            pass
+
+        try:
+            return ndi_time_timereference(self, clock, epoch_id, 0)
+        except Exception:
+            return None
 
     def _resolve_epoch(self, timeref_or_epoch: Any) -> int | None:
         """Resolve a timeref/epoch to an epoch number."""
@@ -142,32 +173,23 @@ class ndi_element_timeseries(ndi_element):
 
         doc = epoch_docs[epoch_number - 1]
 
-        # Check for binary data
+        # Read the VHSB binary (X time axis + Y data), windowed to [t0, t1].
         try:
-            exists, binary_path = self._session.database_existbinarydoc(doc, "timeseries.vhsb")
-            if not exists:
+            from .util.vhsb import vhsb_read
+
+            exists, binary_path = self._session.database_existbinarydoc(
+                doc, "epoch_binary_data.vhsb"
+            )
+            if not exists or not binary_path:
                 return None, None
 
-            # Read VHSB file
-            fid = self._session.database_openbinarydoc(doc, "timeseries.vhsb")
-            if fid is None:
+            lo = t0 if t0 is not None else -np.inf
+            hi = t1 if (t1 is not None and t1 >= 0) else np.inf
+            y, x = vhsb_read(str(binary_path), lo, hi)
+            if y.size == 0:
                 return None, None
-
-            try:
-                raw_data = fid.read()
-                if not raw_data:
-                    return None, None
-                # Parse VHSB format
-                data = np.frombuffer(raw_data, dtype=np.float64)
-                # Reconstruct time array
-                sr = self._get_samplerate_from_doc(doc)
-                if sr > 0 and len(data) > 0:
-                    times = np.arange(len(data)) / sr
-                    return data.reshape(-1, 1), times
-                return data.reshape(-1, 1), np.arange(len(data), dtype=np.float64)
-            finally:
-                self._session.database_closebinarydoc(fid)
-
+            data = y.reshape(len(x), -1) if y.ndim == 1 else y
+            return data, x
         except Exception:
             return None, None
 
@@ -201,12 +223,17 @@ class ndi_element_timeseries(ndi_element):
         Returns:
             Tuple of (self, epoch_document)
         """
-        # Create the epoch document via parent
-        elem, doc = super().addepoch(epoch_id, epoch_clock, t0_t1)
+        has_data = timepoints is not None and datapoints is not None and self._session is not None
 
-        # Store binary data if provided
-        if timepoints is not None and datapoints is not None and self._session is not None:
+        # Build the epoch document. When there is binary data, defer the
+        # database_add so the VHSB file can be attached first and ingested
+        # together with the document (MATLAB element/timeseries.m:109-119).
+        elem, doc = super().addepoch(epoch_id, epoch_clock, t0_t1, add_to_database=not has_data)
+
+        if has_data:
             self._store_timeseries_data(doc, timepoints, datapoints)
+            self._session.database_add(doc)
+            self.resetepochtable()
 
         return self, doc
 
@@ -216,21 +243,29 @@ class ndi_element_timeseries(ndi_element):
         timepoints: np.ndarray,
         datapoints: np.ndarray,
     ) -> None:
-        """Store time series data as binary file attached to document."""
+        """Store time series data as a VHSB binary file attached to *doc*.
+
+        Writes the X (time) axis alongside the Y (data) in VHSB format (the
+        MATLAB filename ``epoch_binary_data.vhsb``) to a temp file and attaches
+        it via ``add_file``; the document's ``database_add`` then ingests the
+        file. The previous implementation wrote only ``datapoints.tobytes()``
+        with no header — dropping the time axis and producing a file MATLAB
+        could not read (audit C8).
+        """
         if self._session is None:
             return
+
+        import tempfile
+        from pathlib import Path
+
+        from .util.vhsb import vhsb_write
 
         timepoints = np.asarray(timepoints, dtype=np.float64)
         datapoints = np.asarray(datapoints, dtype=np.float64)
 
-        try:
-            fid = self._session.database_openbinarydoc(doc, "timeseries.vhsb")
-            if fid is not None:
-                # Write data in simple format: timepoints then datapoints
-                fid.write(datapoints.tobytes())
-                self._session.database_closebinarydoc(fid)
-        except Exception:
-            pass  # Binary storage is best-effort
+        tmp = Path(tempfile.mkdtemp()) / "epoch_binary_data.vhsb"
+        vhsb_write(tmp, timepoints, datapoints)
+        doc.add_file("epoch_binary_data.vhsb", str(tmp))
 
     def samplerate(self, epoch: Any = None) -> float:
         """

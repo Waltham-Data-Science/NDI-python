@@ -343,19 +343,27 @@ class ndi_time_syncgraph(ndi_ido):
                     ginfo.G[j, i] = cost_ji
                     ginfo.mapping[j][i] = map_ji
 
-        # Apply sync rules
+        # Apply sync rules (the daqsystem is required by trigger-based rules to
+        # read their trigger trains; without it they early-return — audit C7)
         for i in range(oldn):
             for j in range(oldn, oldn + newn):
-                self._apply_rules_to_edge(ginfo, i, j)
-                self._apply_rules_to_edge(ginfo, j, i)
+                self._apply_rules_to_edge(ginfo, i, j, daqsystem)
+                self._apply_rules_to_edge(ginfo, j, i, daqsystem)
 
         # Build NetworkX graph
         ginfo.diG = self._build_digraph(ginfo.G)
 
         return ginfo
 
-    def _apply_rules_to_edge(self, ginfo: ndi_time_graphinfo, i: int, j: int) -> None:
-        """Apply sync rules to find the best edge between nodes i and j."""
+    def _apply_rules_to_edge(
+        self, ginfo: ndi_time_graphinfo, i: int, j: int, daqsystem: Any = None
+    ) -> None:
+        """Apply sync rules to find the best edge between nodes i and j.
+
+        *daqsystem* is threaded through to ``rule.apply`` so that trigger-based
+        rules (commonTriggersOverlappingEpochs, randomPulses) can read their
+        trigger trains; MATLAB passes it as the 4th argument to apply (audit C7).
+        """
         best_cost = np.inf
         best_mapping = None
         best_rule_idx = 0
@@ -364,7 +372,7 @@ class ndi_time_syncgraph(ndi_ido):
         node_j = ginfo.nodes[j].to_dict()
 
         for k, rule in enumerate(self._rules):
-            cost, mapping = rule.apply(node_i, node_j)
+            cost, mapping = rule.apply(node_i, node_j, daqsystem)
             if cost is not None and cost < best_cost:
                 best_cost = cost
                 best_mapping = mapping
@@ -415,6 +423,18 @@ class ndi_time_syncgraph(ndi_ido):
         """
         from .timereference import ndi_time_timereference
 
+        # --- C5 branch 1: resolve the input epoch id (empty -> global lookup) --
+        try:
+            in_epochid = self._resolve_in_epochid(timeref_in, t_in)
+        except ValueError as exc:
+            return None, None, str(exc)
+
+        # --- C5 branch 2: same-referent shortcut (bypass the syncgraph) -------
+        if self._same_referent(timeref_in.referent, referent_out):
+            return self._same_referent_convert(
+                timeref_in, t_in, referent_out, clocktype_out, in_epochid
+            )
+
         # Get graph info
         ginfo = self.graphinfo()
 
@@ -426,10 +446,14 @@ class ndi_time_syncgraph(ndi_ido):
             ginfo.nodes,
             timeref_in.referent,
             timeref_in.clocktype,
-            timeref_in.epoch,
+            in_epochid,
         )
 
         if source_idx is None:
+            # NOTE (audit C6): MATLAB lazily injects element/probe epochs here
+            # via addunderlyingepochs and retries. That graph-injection path is
+            # not yet ported (see _add_underlying_epochs stub) — element/probe
+            # source/dest nodes that aren't DAQ-system epochs won't be found.
             return None, None, "Could not find source node"
 
         # Find destination node(s)
@@ -446,20 +470,34 @@ class ndi_time_syncgraph(ndi_ido):
         if ginfo.diG is None:
             return None, None, "Graph not built"
 
-        best_path = None
-        best_dist = np.inf
-
+        # Distances from source to every reachable destination candidate.
+        reachable: list[tuple[int, float, list[int]]] = []
         for dest_idx in dest_indices:
             try:
                 dist = nx.shortest_path_length(ginfo.diG, source_idx, dest_idx, weight="weight")
-                if dist < best_dist:
-                    best_dist = dist
-                    best_path = nx.shortest_path(ginfo.diG, source_idx, dest_idx, weight="weight")
+                path = nx.shortest_path(ginfo.diG, source_idx, dest_idx, weight="weight")
+                reachable.append((dest_idx, dist, path))
             except nx.NetworkXNoPath:
                 continue
 
-        if best_path is None:
+        if not reachable:
             return None, None, "No path found between nodes"
+
+        # --- C5 branch 4: equal-cost tie-breaking ----------------------------
+        min_dist = min(r[1] for r in reachable)
+        min_cands = [r for r in reachable if r[1] == min_dist]
+        if len(min_cands) == 1:
+            best_path = min_cands[0][2]
+        else:
+            # Multiple equal-cost destinations: sort by epoch_id and break the
+            # tie on t_in (+Inf->last, -Inf/0->first), else it is ambiguous.
+            ordered = sorted(min_cands, key=lambda r: ginfo.nodes[r[0]].epoch_id)
+            if t_in == np.inf:
+                best_path = ordered[-1][2]
+            elif t_in == -np.inf or t_in == 0:
+                best_path = ordered[0][2]
+            else:
+                return None, None, "Too many paths; ambiguous destination epoch for the given time"
 
         # Apply mappings along path
         t_out = t_in - (timeref_in.time or 0)
@@ -478,6 +516,125 @@ class ndi_time_syncgraph(ndi_ido):
         )
 
         return t_out, timeref_out, ""
+
+    @staticmethod
+    def _referent_epochtable(referent: Any) -> list[dict[str, Any]]:
+        """Return a referent's epoch table as a list of entry dicts."""
+        if not hasattr(referent, "epochtable"):
+            return []
+        et = referent.epochtable()
+        if isinstance(et, tuple):
+            et = et[0]
+        return list(et) if et else []
+
+    @staticmethod
+    def _same_referent(ref_a: Any, ref_b: Any) -> bool:
+        """True if two referents are the same object (by identity or id())."""
+        if ref_a is ref_b:
+            return True
+        try:
+            ida = ref_a.id() if callable(getattr(ref_a, "id", None)) else getattr(ref_a, "id", None)
+            idb = ref_b.id() if callable(getattr(ref_b, "id", None)) else getattr(ref_b, "id", None)
+            if ida is not None and ida == idb:
+                # Same object id AND same epochsetname (a referent is identified
+                # by both — distinct elements can share an underlying id).
+                na = ref_a.epochsetname() if hasattr(ref_a, "epochsetname") else None
+                nb = ref_b.epochsetname() if hasattr(ref_b, "epochsetname") else None
+                return na == nb
+        except Exception:
+            pass
+        return False
+
+    @staticmethod
+    def _rescale(t: float, from_range: tuple[float, float], to_range: tuple[float, float]) -> float:
+        """Linearly remap *t* from *from_range* onto *to_range* (no clipping)."""
+        f0, f1 = from_range
+        d0, d1 = to_range
+        if f1 == f0:
+            return d0
+        return d0 + (t - f0) * (d1 - d0) / (f1 - f0)
+
+    def _resolve_in_epochid(self, timeref_in: Any, t_in: float) -> str:
+        """Resolve the input epoch id (audit C5 branch 1).
+
+        If ``timeref_in.epoch`` is set, use it (resolving a numeric epoch index
+        against the referent's epoch table). If empty, the clock must be global;
+        scan the referent's epoch table for the epoch whose ``t0_t1`` window
+        (for that clock) contains ``timeref_in.time + t_in``.
+        """
+        epoch = timeref_in.epoch
+        if epoch not in (None, ""):
+            if isinstance(epoch, int):
+                et = self._referent_epochtable(timeref_in.referent)
+                if 0 < epoch <= len(et):
+                    return et[epoch - 1].get("epoch_id", "")
+                return ""
+            return epoch
+
+        if not timeref_in.clocktype.is_global():
+            raise ValueError("A timeref with an empty epoch requires a global clock type")
+
+        target = (timeref_in.time or 0) + t_in
+        for entry in self._referent_epochtable(timeref_in.referent):
+            clocks = entry.get("epoch_clock", [])
+            t0_t1 = entry.get("t0_t1", [])
+            for idx, clk in enumerate(clocks):
+                if clk == timeref_in.clocktype and idx < len(t0_t1):
+                    lo, hi = t0_t1[idx][0], t0_t1[idx][1]
+                    if lo <= target <= hi:
+                        return entry.get("epoch_id", "")
+        raise ValueError("Did not find parent epoch for timeref.")
+
+    def _same_referent_convert(
+        self,
+        timeref_in: Any,
+        t_in: float,
+        referent_out: Any,
+        clocktype_out: ndi_time_clocktype,
+        in_epochid: str,
+    ) -> tuple[float | None, Any, str]:
+        """Convert time when source and destination referents are the same
+        object, without consulting the syncgraph (audit C5 branch 2)."""
+        from .timereference import ndi_time_timereference
+
+        if timeref_in.clocktype == clocktype_out:
+            return (
+                t_in,
+                ndi_time_timereference(referent_out, clocktype_out, in_epochid, timeref_in.time),
+                "",
+            )
+
+        # Different clock on the same referent: rescale t_in from the source
+        # clock's window (shifted by -timeref_in.time) onto the dest window.
+        et = self._referent_epochtable(referent_out)
+        match = next((e for e in et if e.get("epoch_id") == in_epochid), None)
+        if match is None:
+            return None, None, "No matching epoch on the requested referent"
+        clocks = match.get("epoch_clock", [])
+        t0_t1 = match.get("t0_t1", [])
+        j1 = next((i for i, c in enumerate(clocks) if c == timeref_in.clocktype), None)
+        j2 = next((i for i, c in enumerate(clocks) if c == clocktype_out), None)
+        if j2 is None or j1 is None or j1 >= len(t0_t1) or j2 >= len(t0_t1):
+            return None, None, "No clock type match for the requested referent"
+        shift = timeref_in.time or 0
+        corrected = (t0_t1[j1][0] - shift, t0_t1[j1][1] - shift)
+        t_out = self._rescale(t_in, corrected, (t0_t1[j2][0], t0_t1[j2][1]))
+        return t_out, ndi_time_timereference(referent_out, clocktype_out, in_epochid, 0), ""
+
+    def _add_underlying_epochs(
+        self, epochset: Any, ginfo: ndi_time_graphinfo
+    ) -> ndi_time_graphinfo:
+        """Inject an element/probe epochset's epochs into the graph (audit C6).
+
+        NOT YET IMPLEMENTED. MATLAB syncgraph.addunderlyingepochs walks the
+        epochset's epochnodes()/underlyingepochnodes(), merges their sub-graphs
+        (vlt.graph.mergegraph) and adds cost-77 utc/exp_global equivalence
+        edges. Porting it requires element/probe epochnode-graph injection
+        infrastructure that does not exist on the Python side yet; until then
+        time_convert can only resolve DAQ-system epochs. Tracked in
+        MISSION_HANDOFF.md.
+        """
+        return ginfo
 
     def _find_epoch_node(
         self,
