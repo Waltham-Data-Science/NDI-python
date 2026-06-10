@@ -213,11 +213,25 @@ class ndi_time_syncrule_commonTriggersOverlappingEpochs(ndi_time_syncrule):
         # Check epoch clock type
         clock_a = epochnode_a.get("epoch_clock", {})
         clock_b = epochnode_b.get("epoch_clock", {})
+        # epochnode.to_dict serializes the clock to a plain string; also accept
+        # a dict or clocktype object so direct rule.apply() calls keep working.
         clock_type_a = (
-            clock_a.get("type", "") if isinstance(clock_a, dict) else getattr(clock_a, "type", "")
+            clock_a
+            if isinstance(clock_a, str)
+            else (
+                clock_a.get("type", "")
+                if isinstance(clock_a, dict)
+                else getattr(clock_a, "type", "")
+            )
         )
         clock_type_b = (
-            clock_b.get("type", "") if isinstance(clock_b, dict) else getattr(clock_b, "type", "")
+            clock_b
+            if isinstance(clock_b, str)
+            else (
+                clock_b.get("type", "")
+                if isinstance(clock_b, dict)
+                else getattr(clock_b, "type", "")
+            )
         )
 
         if clock_type_a != p["epochclocktype"] or clock_type_b != p["epochclocktype"]:
