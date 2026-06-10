@@ -435,11 +435,9 @@ class ndi_time_syncgraph(ndi_ido):
                 timeref_in, t_in, referent_out, clocktype_out, in_epochid
             )
 
-        # Get graph info
+        # Get graph info. An empty graph is not fatal here: the source/dest may
+        # be an element/probe whose epochs are injected lazily below (audit C6).
         ginfo = self.graphinfo()
-
-        if not ginfo.nodes:
-            return None, None, "Graph has no nodes"
 
         # Find source node
         source_idx = self._find_epoch_node(
@@ -450,21 +448,47 @@ class ndi_time_syncgraph(ndi_ido):
         )
 
         if source_idx is None:
-            # NOTE (audit C6): MATLAB lazily injects element/probe epochs here
-            # via addunderlyingepochs and retries. That graph-injection path is
-            # not yet ported (see _add_underlying_epochs stub) — element/probe
-            # source/dest nodes that aren't DAQ-system epochs won't be found.
-            return None, None, "Could not find source node"
+            # audit C6: the source epoch isn't a DAQ-system node yet. Inject the
+            # referent's underlying epochs (element/probe -> ... -> DAQ) into the
+            # graph and try once more (MATLAB syncgraph.m:716-735).
+            ginfo = self._add_underlying_epochs(timeref_in.referent, ginfo)
+            source_idx = self._find_epoch_node(
+                ginfo.nodes,
+                timeref_in.referent,
+                timeref_in.clocktype,
+                in_epochid,
+            )
+            if source_idx is None:
+                return None, None, "Could not find source node"
+
+        # --- C5 branch 3: when both clocks are global, narrow the destination
+        # candidates to the epoch whose t0_t1 window contains the absolute time
+        # (syncgraph.m:744-746) ------------------------------------------------
+        dest_time = None
+        if clocktype_out.is_global() and timeref_in.clocktype.is_global():
+            dest_time = (timeref_in.time or 0) + t_in
 
         # Find destination node(s)
         dest_indices = self._find_destination_nodes(
             ginfo.nodes,
             referent_out,
             clocktype_out,
+            dest_time,
         )
 
         if not dest_indices:
-            return None, None, "Could not find destination node"
+            # audit C6: if no node from referent_out exists at all, inject its
+            # underlying epochs and retry once (MATLAB syncgraph.m:751-762).
+            any_referent = self._find_destination_nodes(ginfo.nodes, referent_out, None, None)
+            if not any_referent:
+                before = len(ginfo.nodes)
+                ginfo = self._add_underlying_epochs(referent_out, ginfo)
+                if len(ginfo.nodes) != before:
+                    dest_indices = self._find_destination_nodes(
+                        ginfo.nodes, referent_out, clocktype_out, dest_time
+                    )
+            if not dest_indices:
+                return None, None, "Could not find destination node"
 
         # Find shortest path
         if ginfo.diG is None:
@@ -626,15 +650,163 @@ class ndi_time_syncgraph(ndi_ido):
     ) -> ndi_time_graphinfo:
         """Inject an element/probe epochset's epochs into the graph (audit C6).
 
-        NOT YET IMPLEMENTED. MATLAB syncgraph.addunderlyingepochs walks the
-        epochset's epochnodes()/underlyingepochnodes(), merges their sub-graphs
-        (vlt.graph.mergegraph) and adds cost-77 utc/exp_global equivalence
-        edges. Porting it requires element/probe epochnode-graph injection
-        infrastructure that does not exist on the Python side yet; until then
-        time_convert can only resolve DAQ-system epochs. Tracked in
-        MISSION_HANDOFF.md.
+        Port of MATLAB ``ndi.time.syncgraph/addunderlyingepochs``
+        (syncgraph.m:461-550). For every epoch node of *epochset* not already in
+        the graph, fetch its underlying-epoch sub-graph
+        (``underlyingepochnodes``) and overlay it onto the main graph, reusing
+        any underlying node (e.g. the DAQ-system epoch) that is already present.
+        Finally connect all nodes that share an equivalence global clock with a
+        fallback identity edge, and rebuild the directed graph + cache.
+
+        *epochset* must expose ``epochnodes()`` and ``underlyingepochnodes()``
+        (every ``ndi.epoch.epochset`` does). Anything else is a no-op so callers
+        with bare/fake referents degrade gracefully.
         """
+        if not (hasattr(epochset, "epochnodes") and hasattr(epochset, "underlyingepochnodes")):
+            return ginfo
+        try:
+            enodes = epochset.epochnodes()
+        except Exception:
+            return ginfo
+
+        if ginfo.G is None:
+            ginfo.G = np.zeros((0, 0))
+        if ginfo.mapping is None:
+            ginfo.mapping = []
+        if ginfo.syncrule_G is None:
+            ginfo.syncrule_G = np.zeros((0, 0), dtype=int)
+
+        for enode in enodes:
+            if self._find_node_index(ginfo.nodes, enode) is not None:
+                continue  # already in the graph
+            try:
+                u_nodes, u_cost, u_mapping = epochset.underlyingepochnodes(enode)
+            except Exception:
+                continue
+
+            # Map each underlying node to a main-graph index: reuse the index of
+            # any node already present, allocate a fresh index for the rest.
+            n_existing = len(ginfo.nodes)
+            main_index: list[int] = []
+            new_nodes: list[Any] = []
+            for un in u_nodes:
+                idx = self._find_node_index(ginfo.nodes, un)
+                if idx is not None:
+                    main_index.append(idx)
+                else:
+                    main_index.append(n_existing + len(new_nodes))
+                    new_nodes.append(un)
+
+            if new_nodes:
+                self._grow_ginfo(ginfo, len(new_nodes))
+                for un in new_nodes:
+                    ginfo.nodes.append(
+                        ndi_time_epochnode.from_dict(un) if isinstance(un, dict) else un
+                    )
+
+            # Overlay the sub-graph onto the new-node blocks. Existing<->existing
+            # edges are left untouched (this is exactly the result of MATLAB's
+            # vlt.graph.mergegraph, which only fills the upper-right / lower-left
+            # / lower-right panels), expressed directly via node indices.
+            k = len(u_nodes)
+            for a in range(k):
+                ia = main_index[a]
+                for b in range(k):
+                    ib = main_index[b]
+                    if ia < n_existing and ib < n_existing:
+                        continue
+                    c = u_cost[a][b]
+                    if not np.isinf(c):
+                        ginfo.G[ia, ib] = c
+                        ginfo.mapping[ia][ib] = u_mapping[a][b]
+
+        self._add_equivalence_edges(ginfo)
+        ginfo.diG = self._build_digraph(ginfo.G)
+        self._cached_ginfo = ginfo
         return ginfo
+
+    @staticmethod
+    def _grow_ginfo(ginfo: ndi_time_graphinfo, n_add: int) -> None:
+        """Grow ginfo's cost/mapping/syncrule matrices by *n_add* nodes (inf/None/0)."""
+        old = ginfo.G.shape[0] if ginfo.G is not None and ginfo.G.size else len(ginfo.nodes)
+        new_n = old + n_add
+
+        new_G = np.full((new_n, new_n), np.inf)
+        if ginfo.G is not None and ginfo.G.size:
+            new_G[:old, :old] = ginfo.G
+        ginfo.G = new_G
+
+        new_map: list[list[Any]] = [[None] * new_n for _ in range(new_n)]
+        if ginfo.mapping:
+            for i in range(min(old, len(ginfo.mapping))):
+                for j in range(min(old, len(ginfo.mapping[i]))):
+                    new_map[i][j] = ginfo.mapping[i][j]
+        ginfo.mapping = new_map
+
+        new_sr = np.zeros((new_n, new_n), dtype=int)
+        if ginfo.syncrule_G is not None and ginfo.syncrule_G.size:
+            new_sr[:old, :old] = ginfo.syncrule_G
+        ginfo.syncrule_G = new_sr
+
+    @staticmethod
+    def _add_equivalence_edges(ginfo: ndi_time_graphinfo) -> None:
+        """Connect nodes that share an equivalence global clock (audit C6).
+
+        MATLAB (syncgraph.m:526-543) gives every pair of nodes whose clock is
+        ``utc`` (or every pair whose clock is ``exp_global_time``) a cost-77
+        identity edge so global clocks remain mutually reachable. NOTE: the
+        MATLAB ``strcmp(ginfo.nodes(matches(i))...)`` guard at syncgraph.m:534
+        indexes ``matches`` with the outer clock-loop counter ``i`` (1 or 2)
+        rather than the node-pair counters ``j``/``k`` — a latent bug that makes
+        the guard depend on node ordering. We port the documented intent ("make
+        sure all utc and exp_global_time clocks map onto one another") and only
+        fill a pair that has no cheaper edge, so genuine cost-1 self/direct edges
+        are preserved ("self is still 1, and across-object maps are still 1").
+        """
+        if ginfo.G is None or ginfo.G.size == 0:
+            return
+        identity = ndi_time_timemapping([1, 0])
+        for clock in (ndi_time_clocktype.UTC, ndi_time_clocktype.EXP_GLOBAL_TIME):
+            matches = [i for i, node in enumerate(ginfo.nodes) if node.epoch_clock == clock]
+            for a in matches:
+                for b in matches:
+                    if a != b and ginfo.G[a, b] > 77:
+                        ginfo.G[a, b] = 77
+                        ginfo.mapping[a][b] = identity
+
+    @staticmethod
+    def _find_node_index(nodes: list[ndi_time_epochnode], node: Any) -> int | None:
+        """Return the index of the graph node identical to *node* (or None).
+
+        Identity is the MATLAB ``ndi.epoch.findepochnode`` exact-match key:
+        objectname, objectclass, epoch_id, epoch_session_id and epoch_clock.
+        *node* may be a dict (from ``epochnodes()``) or an ``ndi_time_epochnode``.
+        """
+
+        def get(obj: Any, key: str) -> Any:
+            if isinstance(obj, dict):
+                return obj.get(key)
+            return getattr(obj, key, None)
+
+        objectname = get(node, "objectname")
+        objectclass = get(node, "objectclass")
+        epoch_id = get(node, "epoch_id")
+        epoch_session_id = get(node, "epoch_session_id")
+        epoch_clock = get(node, "epoch_clock")
+
+        for i, existing in enumerate(nodes):
+            if existing.objectname != objectname:
+                continue
+            if existing.objectclass != objectclass:
+                continue
+            if existing.epoch_id != epoch_id:
+                continue
+            if existing.epoch_session_id != epoch_session_id:
+                continue
+            if existing.epoch_clock != epoch_clock:
+                continue
+            return i
+        return None
 
     def _find_epoch_node(
         self,
@@ -671,9 +843,15 @@ class ndi_time_syncgraph(ndi_ido):
         self,
         nodes: list[ndi_time_epochnode],
         referent: Any,
-        clocktype: ndi_time_clocktype,
+        clocktype: ndi_time_clocktype | None,
+        time_value: float | None = None,
     ) -> list[int]:
-        """Find indices of all nodes matching the destination criteria."""
+        """Find indices of all nodes matching the destination criteria.
+
+        Matches on ``objectname``; when *clocktype* is given, also on the clock;
+        when *time_value* is given (audit C5 branch 3, both clocks global), keeps
+        only candidates whose ``t0_t1`` window contains the value.
+        """
         # Get referent name
         if hasattr(referent, "epochsetname"):
             ref_name = (
@@ -690,8 +868,15 @@ class ndi_time_syncgraph(ndi_ido):
         for i, node in enumerate(nodes):
             if node.objectname != ref_name:
                 continue
-            if node.epoch_clock != clocktype:
+            if clocktype is not None and node.epoch_clock != clocktype:
                 continue
+            if time_value is not None:
+                t0_t1 = node.t0_t1
+                if not t0_t1 or len(t0_t1) < 2:
+                    continue
+                t0, t1 = t0_t1[0], t0_t1[1]
+                if not (t0 <= time_value <= t1):
+                    continue
             indices.append(i)
 
         return indices
