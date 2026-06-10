@@ -755,9 +755,13 @@ class ndi_session(ABC):
 
         return self.database_search(q_i1 | q_i2 | q_i3 | q_i4)
 
-    def is_fully_ingested(self) -> bool:
+    def isIngested(self) -> bool:
         """
         Check if the session is fully ingested.
+
+        MATLAB equivalent: ``ndi.session/isIngested`` (renamed from
+        ``is_fully_ingested`` in MATLAB 3cde88c8). As a proxy, checks whether any
+        DAQ system's file navigator still has files left to ingest.
 
         Returns:
             True if all data has been ingested
@@ -774,6 +778,13 @@ class ndi_session(ABC):
                 if docs:
                     return False
         return True
+
+    def is_fully_ingested(self) -> bool:
+        """Deprecated alias for :meth:`isIngested` (renamed in MATLAB 3cde88c8).
+
+        Kept for back-compatibility with existing Python callers.
+        """
+        return self.isIngested()
 
     def isIngestedInDataset(self) -> bool:
         """
