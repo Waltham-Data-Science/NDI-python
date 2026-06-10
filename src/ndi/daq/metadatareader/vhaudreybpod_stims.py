@@ -81,9 +81,69 @@ class ndi_daq_metadatareader_VHAudreyBPod(ndi_daq_metadatareader):
         return None
 
     @staticmethod
-    def _read_summary_json(filepath: str) -> list[dict[str, Any]]:
+    def read_audrey_bpod_json(s: dict[str, Any]) -> list[dict[str, Any]]:
+        """Convert a VHAudreyBPod config dict to a 7-stimulus parameter list.
+
+        Port of MATLAB ``ndi.daq.metadatareader.VHAudreyBPod.readAudreyBPodJson``:
+        entries 1-6 describe Solenoids 1-6, entry 7 the Wash/Water stimulus. Each
+        entry carries ``stimid``, ``isUsed``, ``solenoidValve``, ``tastant``,
+        ``solenoidOpenDuration``, ``DelayBeforeNextStim``, ``WashDuration``,
+        ``InterStimulusTime`` and ``isblank`` (1 when the tastant is water).
+
+        Args:
+            s: the parsed BPod config dict (fields ``DelayB4NextStim``,
+                ``WashDuration``, ``InterStimTime``, ``WaterSolenoidNum``,
+                ``Sol{k}``, ``Sol{k}Valve``, ``Sol{k}_Tastant``,
+                ``Stim{k}OpenDuration``).
+
+        Returns:
+            A list of 7 stimulus parameter dicts.
+        """
+        delay = s["DelayB4NextStim"]
+        wash = s["WashDuration"]
+        inter = s["InterStimTime"]
+
+        parameters: list[dict[str, Any]] = []
+        for k in range(1, 7):
+            tastant = s[f"Sol{k}_Tastant"]
+            parameters.append(
+                {
+                    "stimid": k,
+                    "isUsed": s[f"Sol{k}"],
+                    "solenoidValve": s[f"Sol{k}Valve"],
+                    "tastant": tastant,
+                    "solenoidOpenDuration": s[f"Stim{k}OpenDuration"],
+                    "DelayBeforeNextStim": delay,
+                    "WashDuration": wash,
+                    "InterStimulusTime": inter,
+                    "isblank": 1 if str(tastant).lower() == "water" else 0,
+                }
+            )
+
+        parameters.append(
+            {
+                "stimid": 7,
+                "isUsed": 1,
+                "solenoidValve": s["WaterSolenoidNum"],
+                "tastant": "Water",
+                "solenoidOpenDuration": wash,
+                "DelayBeforeNextStim": delay,
+                "WashDuration": wash,
+                "InterStimulusTime": inter,
+                "isblank": 0,
+            }
+        )
+        return parameters
+
+    @classmethod
+    def _read_summary_json(cls, filepath: str) -> list[dict[str, Any]]:
         """
         Read stimulus parameters from a BPod summary log JSON file.
+
+        If the JSON is a VHAudreyBPod config (has the BPod parameter fields), it
+        is transformed into the 7-stimulus parameter list via
+        :meth:`read_audrey_bpod_json`; otherwise the raw content is returned (a
+        list as-is, a dict wrapped in a list) for backward compatibility.
 
         Args:
             filepath: Path to the summary_log.json file
@@ -97,10 +157,12 @@ class ndi_daq_metadatareader_VHAudreyBPod(ndi_daq_metadatareader):
         with open(filepath, encoding="utf-8") as f:
             data = json.load(f)
 
+        if isinstance(data, dict):
+            if "DelayB4NextStim" in data and "WashDuration" in data:
+                return cls.read_audrey_bpod_json(data)
+            return [data]
         if isinstance(data, list):
             return data
-        if isinstance(data, dict):
-            return [data]
         return []
 
     def __repr__(self) -> str:

@@ -93,6 +93,17 @@ class ChannelInfo:
         )
 
 
+def strip_threshold_suffix(channel_type: str) -> str:
+    """Strip a ``_t<threshold>`` suffix (e.g. ``aep_t2.5`` -> ``aep``).
+
+    Analog-event/mark channel types carry an optional threshold suffix that is
+    not part of the type itself; MATLAB ``mfdaq_type``/``mfdaq_prefix`` strip it
+    before matching (2157c70f).
+    """
+    idx = channel_type.find("_t")
+    return channel_type[:idx] if idx != -1 else channel_type
+
+
 def standardize_channel_type(channel_type: str | ChannelType) -> str:
     """
     Standardize a channel type to its full name.
@@ -106,6 +117,9 @@ def standardize_channel_type(channel_type: str | ChannelType) -> str:
     if isinstance(channel_type, ChannelType):
         return channel_type.value
 
+    # Strip the optional analog-event threshold suffix before matching.
+    base = strip_threshold_suffix(channel_type)
+
     abbrev_map = {
         "ai": "analog_in",
         "ao": "analog_out",
@@ -117,8 +131,15 @@ def standardize_channel_type(channel_type: str | ChannelType) -> str:
         "e": "event",
         "mk": "marker",
         "tx": "text",
+        # analog-event / analog-mark channels (MATLAB mfdaq_type, 2157c70f)
+        "ae": "analog_in_event_pos",
+        "aep": "analog_in_event_pos",
+        "aen": "analog_in_event_neg",
+        "aim": "analog_in_mark_pos",
+        "aimp": "analog_in_mark_pos",
+        "aimn": "analog_in_mark_neg",
     }
-    return abbrev_map.get(channel_type.lower(), channel_type)
+    return abbrev_map.get(base.lower(), base)
 
 
 def standardize_channel_types(channel_types: list[str]) -> list[str]:
