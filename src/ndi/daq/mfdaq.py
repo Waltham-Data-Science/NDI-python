@@ -7,6 +7,7 @@ multi-function data acquisition systems that sample various data types.
 
 from __future__ import annotations
 
+import re
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -93,15 +94,27 @@ class ChannelInfo:
         )
 
 
+#: A ``_t<threshold>`` suffix is ``_t`` followed by a (optionally signed/decimal)
+#: number at the end of the string, e.g. ``aep_t2.5`` or ``aimn_t-3``. It must NOT
+#: match an ordinary ``_t...`` substring such as the ``_type`` in ``custom_type``.
+_THRESHOLD_SUFFIX_RE = re.compile(r"_t[-+]?\d*\.?\d+$")
+
+
 def strip_threshold_suffix(channel_type: str) -> str:
-    """Strip a ``_t<threshold>`` suffix (e.g. ``aep_t2.5`` -> ``aep``).
+    """Strip a numeric ``_t<threshold>`` suffix (e.g. ``aep_t2.5`` -> ``aep``).
 
     Analog-event/mark channel types carry an optional threshold suffix that is
     not part of the type itself; MATLAB ``mfdaq_type``/``mfdaq_prefix`` strip it
-    before matching (2157c70f).
+    before matching (2157c70f). Only a trailing numeric threshold is stripped, so
+    ordinary names like ``custom_type`` are left unchanged.
     """
-    idx = channel_type.find("_t")
-    return channel_type[:idx] if idx != -1 else channel_type
+    return _THRESHOLD_SUFFIX_RE.sub("", channel_type)
+
+
+def threshold_suffix(channel_type: str) -> str:
+    """Return the numeric ``_t<threshold>`` suffix of *channel_type*, or ``''``."""
+    m = _THRESHOLD_SUFFIX_RE.search(channel_type)
+    return m.group(0) if m else ""
 
 
 def standardize_channel_type(channel_type: str | ChannelType) -> str:

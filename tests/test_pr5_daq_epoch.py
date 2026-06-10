@@ -7,8 +7,40 @@ MATLAB mfdaq_prefix/mfdaq_type (2157c70f).
 
 from __future__ import annotations
 
+import numpy as np
+
 from ndi.daq.mfdaq import standardize_channel_type, strip_threshold_suffix
 from ndi.daq.system_mfdaq import ndi_daq_system_mfdaq as MFDAQ
+from ndi.epoch.epochset import ndi_epoch_epochset
+from ndi.time.clocktype import ndi_time_clocktype as CT
+
+
+class _TwoEpochSet(ndi_epoch_epochset):
+    """A minimal epoch set: two epochs, each with dev_local + exp_global clocks."""
+
+    def buildepochtable(self):
+        return [
+            {
+                "epoch_number": 1,
+                "epoch_id": "ep1",
+                "epoch_session_id": "s1",
+                "epoch_clock": [CT.DEV_LOCAL_TIME, CT.EXP_GLOBAL_TIME],
+                "t0_t1": [(0.0, 10.0), (100.0, 110.0)],
+            },
+            {
+                "epoch_number": 2,
+                "epoch_id": "ep2",
+                "epoch_session_id": "s1",
+                "epoch_clock": [CT.DEV_LOCAL_TIME],
+                "t0_t1": [(0.0, 5.0)],
+            },
+        ]
+
+    def epochsetname(self):
+        return "two"
+
+    def issyncgraphroot(self):
+        return True
 
 
 class TestStripThreshold:
@@ -17,6 +49,11 @@ class TestStripThreshold:
         assert strip_threshold_suffix("aimn_t-3") == "aimn"
         assert strip_threshold_suffix("analog_in") == "analog_in"  # no suffix
         assert strip_threshold_suffix("ai") == "ai"
+
+    def test_only_numeric_threshold_stripped(self):
+        # a non-numeric '_t...' substring (e.g. '_type') must NOT be stripped
+        assert strip_threshold_suffix("custom_type") == "custom_type"
+        assert standardize_channel_type("custom_type") == "custom_type"
 
 
 class TestAnalogEventType:
@@ -121,3 +158,41 @@ class TestVHAudreyBPodTransform:
         assert water["tastant"] == "Water"
         assert water["solenoidOpenDuration"] == 3.0
         assert water["isblank"] == 0
+
+
+class TestEpochGraph:
+    """§3.4-6: epochgraph returns (cost, mapping); matchedepochtable is a hash check."""
+
+    def test_epochgraph_returns_cost_mapping_matrices(self):
+        es = _TwoEpochSet()
+        cost, mapping = es.epochgraph()
+        # 3 nodes: ep1/dev_local, ep1/exp_global, ep2/dev_local
+        assert isinstance(cost, np.ndarray)
+        assert cost.shape == (3, 3)
+        assert len(mapping) == 3 and len(mapping[0]) == 3
+        # self edges cost 1 with identity mapping
+        for i in range(3):
+            assert cost[i, i] == 1
+            assert mapping[i][i] is not None
+
+    def test_same_epoch_cross_clock_rescale(self):
+        es = _TwoEpochSet()
+        cost, mapping = es.epochgraph()
+        # nodes 0 and 1 are the same epoch (ep1), different clocks -> cost 1, affine map
+        assert cost[0, 1] == 1
+        m01 = mapping[0][1]
+        # dev_local [0,10] -> exp_global [100,110]: scale 1, shift 100
+        assert abs(m01.map(5.0) - 105.0) < 1e-9
+
+    def test_different_epoch_no_local_link(self):
+        es = _TwoEpochSet()
+        cost, _mapping = es.epochgraph()
+        # node 0 (ep1/dev_local) and node 2 (ep2/dev_local): different epochs,
+        # dev_local has no cross-epoch global link -> inf cost
+        assert np.isinf(cost[0, 2])
+
+    def test_matchedepochtable_hash(self):
+        es = _TwoEpochSet()
+        _et, h = es.epochtable()
+        assert es.matchedepochtable(h) is True
+        assert es.matchedepochtable("not-the-hash") is False
