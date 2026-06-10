@@ -307,6 +307,132 @@ class ndi_element_timeseries(ndi_element):
 
         return 0.0
 
+    @staticmethod
+    def addMultiple(
+        session: Any,
+        underlying_element: Any,
+        specs: list[dict[str, Any]],
+        element_class: str = "ndi.neuron",
+        chunksize: int = 100,
+        build_objects: bool = True,
+        verbose: bool = False,
+    ) -> list[Any] | None:
+        """Create many timeseries elements with epochs in batched database writes.
+
+        Port of MATLAB ``ndi.element.timeseries.addMultiple`` (cbbb099b). Builds
+        all element, element_epoch (with their ``epoch_binary_data.vhsb`` data),
+        and caller-supplied "extra" documents in memory and commits them in
+        chunked ``database_add`` calls — elements first, then their dependents —
+        without the per-epoch database search that ``addepoch`` performs. This is
+        the bulk path used by the Kilosort importer to create hundreds of neurons.
+
+        Args:
+            session: the ndi.session to add to.
+            underlying_element: the ndi.element (e.g. a probe) the new elements
+                are built on; supplies the subject_id and underlying_element_id.
+            specs: one dict per element to create, with keys ``name`` (str),
+                ``reference`` (int), ``type`` (str, default ``'spikes'``),
+                ``epochs`` (a list of dicts with ``epoch_id``, ``epoch_clock``
+                (str or ``ndi_time_clocktype``), ``t0_t1`` (``[t0, t1]``),
+                ``timepoints`` and ``datapoints`` arrays) and optional
+                ``extra_documents`` (a list of ``ndi_document`` objects committed
+                in the same batch, each stamped with the new element's id as its
+                ``element_id`` dependency — e.g. a ``neuron_extracellular`` doc).
+            element_class: MATLAB-style class name to create (default
+                ``"ndi.neuron"``); must be constructable from (session, document).
+            chunksize: elements built and committed per batch (bounds peak memory
+                and the number of temporary ``.vhsb`` files).
+            build_objects: if True (default) return the created element objects;
+                pass False to skip construction (the importer's fast path).
+            verbose: log each element as it is built.
+
+        Returns:
+            The list of created element objects if *build_objects*, else None.
+        """
+        import logging
+        import tempfile
+        from pathlib import Path
+
+        from .class_registry import get_class
+        from .document import ndi_document
+        from .util.vhsb import vhsb_write
+
+        n = len(specs)
+        if n == 0:
+            return [] if build_objects else None
+
+        subject_id = getattr(underlying_element, "subject_id", "") or ""
+        underlying_id = underlying_element.id
+        session_id = session.id()
+        tmpdir = Path(tempfile.mkdtemp())
+        klass = get_class(element_class) if build_objects else None
+        objects: list[Any] = [None] * n
+
+        idx = 0
+        while idx < n:
+            end = min(idx + chunksize, n)
+            elemdocs: list[Any] = []
+            depdocs: list[Any] = []  # epoch + extra docs (depend on the elements)
+            for i in range(idx, end):
+                sp = specs[i]
+                etype = sp.get("type") or "spikes"
+                edoc = ndi_document(
+                    "element",
+                    **{
+                        "element.ndi_element_class": element_class,
+                        "element.name": sp["name"],
+                        "element.reference": sp["reference"],
+                        "element.type": etype,
+                        "element.direct": 0,
+                    },
+                )
+                edoc.set_session_id(session_id)
+                edoc.set_dependency_value("underlying_element_id", underlying_id)
+                if subject_id:
+                    edoc.set_dependency_value("subject_id", subject_id)
+                elem_id = edoc.id
+                elemdocs.append(edoc)
+
+                # Epoch documents, mirroring addepoch but without its per-epoch
+                # database search (we already know the element id).
+                for ep in sp.get("epochs") or []:
+                    clk = ep["epoch_clock"]
+                    clkstr = clk.value if isinstance(clk, ndi_time_clocktype) else str(clk)
+                    epdoc = ndi_document(
+                        "element_epoch",
+                        **{
+                            "element_epoch.epoch_clock": [clkstr],
+                            "element_epoch.t0_t1": [list(ep["t0_t1"])],
+                            "epochid.epochid": ep["epoch_id"],
+                        },
+                    )
+                    epdoc.set_dependency_value("element_id", elem_id)
+                    epdoc.set_session_id(session_id)
+                    tp = np.asarray(ep["timepoints"], dtype=np.float64).ravel()
+                    dp = np.asarray(ep["datapoints"], dtype=np.float64)
+                    fname = tmpdir / f"{epdoc.id}.vhsb"
+                    vhsb_write(fname, tp, dp)
+                    epdoc.add_file("epoch_binary_data.vhsb", str(fname))
+                    depdocs.append(epdoc)
+
+                # Extra documents (e.g. neuron_extracellular); stamp element_id.
+                for ex in sp.get("extra_documents") or []:
+                    ex.set_dependency_value("element_id", elem_id)
+                    depdocs.append(ex)
+
+                if build_objects and klass is not None:
+                    objects[i] = klass(session=session, document=edoc)
+                if verbose:
+                    logging.getLogger(__name__).info("addMultiple: built %s", sp["name"])
+
+            # Commit: the elements first, then everything that depends on them.
+            session.database_add(elemdocs)
+            if depdocs:
+                session.database_add(depdocs)
+            idx = end
+
+        return objects if build_objects else None
+
     def __repr__(self) -> str:
         """String representation."""
         return f"ndi_element_timeseries({self._name}|{self._reference}|{self._type})"
