@@ -1,5 +1,5 @@
 """
-ndi.epoch.functions - ndi_epoch_epoch utility functions.
+ndi.epoch.functions - Epoch utility functions.
 
 MATLAB equivalents:
 - src/ndi/+ndi/+epoch/epochrange.m
@@ -101,7 +101,7 @@ def _resolve_epoch_index(
 
     Args:
         epoch_table: The epoch table
-        epoch: ndi_epoch_epoch number (1-indexed) or epoch_id string
+        epoch: Epoch number (1-indexed) or epoch_id string
 
     Returns:
         0-based index into epoch_table

@@ -1,5 +1,5 @@
 """
-Tests for Batch D: ndi_gui_Lab-specific + advanced.
+Tests for Batch D: Lab-specific + advanced.
 
 Tests ndi_daq_metadatareader_NewStimStims, ndi_daq_metadatareader_NielsenLabStims,
 ndi_probe_timeseries_stimulator, downsample, downsample_timeseries.
@@ -129,7 +129,7 @@ class TestNewStimStimsReader:
 
 
 class TestNielsenLabStimsReader:
-    """Tests for the Nielsen ndi_gui_Lab metadata reader."""
+    """Tests for the Nielsen Lab metadata reader."""
 
     def test_init(self):
         reader = ndi_daq_metadatareader_NielsenLabStims()

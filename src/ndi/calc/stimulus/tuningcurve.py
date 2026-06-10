@@ -2,7 +2,7 @@
 ndi.calc.stimulus.tuningcurve - Tuning curve calculator.
 
 Computes tuning curves from stimulus_response_scalar documents
-using the ndi_calculator pipeline.
+using the Calculator pipeline.
 
 MATLAB equivalent: src/ndi/+ndi/+calc/+stimulus/tuningcurve.m
 """
@@ -448,7 +448,7 @@ class ndi_calc_stimulus_tuningcurve(ndi_calculator):
         from ...query import ndi_query
 
         if self._session is None:
-            raise RuntimeError("ndi_session is required for stimulus lookup")
+            raise RuntimeError("Session is required for stimulus lookup")
 
         dep_id = stim_response_doc.dependency_value("stimulus_presentation_id")
         results = self._session.database_search(ndi_query("base.id") == dep_id)

@@ -32,7 +32,7 @@ class TestProbeMap:
         """
         probe_map = initProbeTypeMap()
         assert isinstance(probe_map, dict)
-        assert len(probe_map) > 0, "ndi_probe type map should be non-empty"
+        assert len(probe_map) > 0, "Probe type map should be non-empty"
 
     def test_getProbeTypeMap(self):
         """getProbeTypeMap() returns the cached version, same result.

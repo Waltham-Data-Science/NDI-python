@@ -71,7 +71,7 @@ class ndi_element_timeseries(ndi_element):
             ValueError: If no underlying element or data source available
         """
         if self._session is None:
-            raise ValueError("ndi_session required to read time series")
+            raise ValueError("Session required to read time series")
 
         # Resolve epoch
         epoch_number = self._resolve_epoch(timeref_or_epoch)

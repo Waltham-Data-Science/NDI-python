@@ -4,7 +4,7 @@ Tests for NDI-python against the Dabrowska electrophysiology dataset.
 Mirrors the MATLAB tutorial workflow from:
   ndi.setup.conv.dabrowska.tutorial_67f723d574f5f79c6062389d.mlx
 
-ndi_dataset: 14,646 documents (SQLite), 215 subjects, 606 probes, ~4800 epochs
+Dataset: 14,646 documents (SQLite), 215 subjects, 606 probes, ~4800 epochs
 Source: NDI Cloud dataset 67f723d574f5f79c6062389d
 
 Dabrowska dataset contains:
@@ -17,10 +17,10 @@ Dabrowska dataset contains:
 
 MATLAB tutorial steps tested:
   1. Load dataset + document types
-  2. ndi_subject summary (docTable.subject) — 215 subjects, dynamic treatments
+  2. Subject summary (docTable.subject) — 215 subjects, dynamic treatments
   3. Filter subjects by strain (identifyMatchingRows)
-  4. ndi_probe summary (docTable.probe) — 606 probes, 9 columns
-  5. ndi_epoch_epoch summary (docTable.epoch) — ~4800 epochs, 8 columns
+  4. Probe summary (docTable.probe) — 606 probes, 9 columns
+  5. Epoch summary (docTable.epoch) — ~4800 epochs, 8 columns
   6. Combined table + filtering
   7. Electrophysiology data exploration
   8. Elevated Plus Maze analysis
@@ -35,7 +35,7 @@ from pathlib import Path
 import pytest
 
 # ---------------------------------------------------------------------------
-# ndi_dataset paths — skip entire file if not downloaded locally
+# Dataset paths — skip entire file if not downloaded locally
 # ---------------------------------------------------------------------------
 
 DABROWSKA_PATH = Path(os.path.expanduser("~/Documents/ndi-projects/datasets/dabrowska"))
@@ -63,7 +63,7 @@ EXPECTED_TYPE_COUNTS = {
 
 
 # ---------------------------------------------------------------------------
-# ndi_session-scoped fixtures — loaded once for all tests
+# Session-scoped fixtures — loaded once for all tests
 # ---------------------------------------------------------------------------
 
 
@@ -101,7 +101,7 @@ def epoch_summary(dabrowska_dataset):
 
 @pytest.fixture(scope="session")
 def epm_table(dabrowska_dataset):
-    """ndi_query and convert EPM OTR docs to table."""
+    """Query and convert EPM OTR docs to table."""
     from ndi.fun.doc_table import ontologyTableRowDoc2Table
     from ndi.query import ndi_query
 
@@ -113,7 +113,7 @@ def epm_table(dabrowska_dataset):
 
 @pytest.fixture(scope="session")
 def fps_table(dabrowska_dataset):
-    """ndi_query and convert FPS OTR docs to table."""
+    """Query and convert FPS OTR docs to table."""
     from ndi.fun.doc_table import ontologyTableRowDoc2Table
     from ndi.query import ndi_query
 

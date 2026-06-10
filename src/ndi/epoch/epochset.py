@@ -158,7 +158,7 @@ class ndi_epoch_epochset(ABC):
         Get clock types for an epoch.
 
         Args:
-            epoch_number: ndi_epoch_epoch number (1-indexed)
+            epoch_number: Epoch number (1-indexed)
 
         Returns:
             List of ndi_time_clocktype objects for this epoch
@@ -203,7 +203,7 @@ class ndi_epoch_epochset(ABC):
             epoch_number: ndi_epoch_epoch number (1-indexed)
 
         Returns:
-            ndi_epoch_epoch identifier string
+            Epoch identifier string
 
         Raises:
             IndexError: If epoch_number is out of range
@@ -220,10 +220,10 @@ class ndi_epoch_epochset(ABC):
         Get epoch number for an epoch ID.
 
         Args:
-            epoch_id: ndi_epoch_epoch identifier string
+            epoch_id: Epoch identifier string
 
         Returns:
-            ndi_epoch_epoch number (1-indexed)
+            Epoch number (1-indexed)
 
         Raises:
             ValueError: If epoch_id not found
@@ -271,7 +271,7 @@ class ndi_epoch_epochset(ABC):
             epoch_number: ndi_epoch_epoch number (1-indexed)
 
         Returns:
-            ndi_epoch_epoch table entry dict
+            Epoch table entry dict
 
         Raises:
             IndexError: If epoch_number is out of range
@@ -291,7 +291,7 @@ class ndi_epoch_epochset(ABC):
 
         Returns:
             List of epoch graph nodes with fields:
-            - epoch_id: ndi_epoch_epoch identifier
+            - epoch_id: Epoch identifier
             - epochset: Reference to this ndi_epoch_epochset
             - clock: ndi_time_clocktype for this node
             - t0: Start time

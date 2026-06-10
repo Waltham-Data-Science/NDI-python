@@ -1,5 +1,5 @@
 """
-ndi.validate - ndi_document schema validation for NDI.
+ndi.validate - Document schema validation for NDI.
 
 MATLAB equivalent: +ndi/validate.m
 

@@ -339,7 +339,7 @@ classes:
             type_python: "Any"
         decision_log: "Exact match. Returns a ndi_query matching base.id."
 
-      # --- ndi_cache ---
+      # --- Cache ---
       - name: getcache
         input_arguments: []
         output_arguments:

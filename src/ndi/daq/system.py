@@ -318,7 +318,7 @@ class ndi_daq_system(ndi_ido):
 
         for i, r in enumerate(readers):
             if not isinstance(r, ndi_daq_metadatareader):
-                raise TypeError(f"ndi_element {i} is not a ndi_daq_metadatareader instance")
+                raise TypeError(f"Element {i} is not a ndi_daq_metadatareader instance")
         self._daqmetadatareaders = readers
         return self
 
@@ -381,7 +381,7 @@ class ndi_daq_system(ndi_ido):
             epoch_number: The epoch number (1-indexed)
 
         Returns:
-            ndi_epoch_epoch identifier string
+            Epoch identifier string
         """
         if self._filenavigator is not None:
             return self._filenavigator.epochid(epoch_number)
@@ -395,7 +395,7 @@ class ndi_daq_system(ndi_ido):
             List of epoch entries with fields:
             - epoch_number: The epoch number
             - epoch_id: Unique epoch identifier
-            - epochprobemap: ndi_probe mapping for the epoch
+            - epochprobemap: Probe mapping for the epoch
             - epoch_clock: List of clock types
             - t0_t1: List of (t0, t1) tuples
             - underlying_epochs: Underlying file information
@@ -478,9 +478,9 @@ class ndi_daq_system(ndi_ido):
 
         Returns:
             List of probe dicts with:
-            - name: ndi_probe name
-            - reference: ndi_probe reference
-            - type: ndi_probe type
+            - name: Probe name
+            - reference: Probe reference
+            - type: Probe type
             - subject_id: ndi_subject document ID
         """
         from ..subject import ndi_subject
@@ -542,11 +542,11 @@ class ndi_daq_system(ndi_ido):
         Get the epoch probe map for an epoch.
 
         Args:
-            epoch: ndi_epoch_epoch number
+            epoch: Epoch number
             filenavepochprobemap: Optional probe map from navigator
 
         Returns:
-            ndi_epoch_epoch probe map object
+            Epoch probe map object
         """
         # Check if reader has getepochprobemap method
         if self._daqreader is not None and hasattr(self._daqreader, "getepochprobemap"):

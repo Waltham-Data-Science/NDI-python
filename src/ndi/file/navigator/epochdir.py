@@ -48,11 +48,11 @@ class ndi_file_navigator_epochdir(ndi_file_navigator):
         epoch directory name rather than creating random IDs.
 
         Args:
-            epoch_number: ndi_epoch_epoch number (1-indexed)
+            epoch_number: Epoch number (1-indexed)
             epochfiles: Optional file list (fetched if not provided)
 
         Returns:
-            ndi_epoch_epoch identifier string based on directory name
+            Epoch identifier string based on directory name
         """
         if epochfiles is None:
             epochfiles = self.getepochfiles_number(epoch_number)

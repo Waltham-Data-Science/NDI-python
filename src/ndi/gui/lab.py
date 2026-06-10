@@ -1,6 +1,6 @@
 """ndi_gui_Lab — Experiment view with draggable icons and connection wires.
 
-Mirrors MATLAB: ndi.gui.ndi_gui_Lab
+Mirrors MATLAB: ndi.gui.Lab
 
 Provides a graphical canvas (QGraphicsScene) where subjects, probes,
 and DAQ devices are displayed as draggable icons.  Connections between
@@ -126,7 +126,7 @@ class ndi_gui_Lab:
         c = src.c
         elem = src.elem
         if c == (0.2, 0.4, 1.0):
-            # ndi_subject
+            # Subject
             if isinstance(elem, list) and len(elem) > 0:
                 elem = elem[0]
             dp = getattr(elem, "document_properties", {})
@@ -136,12 +136,12 @@ class ndi_gui_Lab:
                 subj.get("local_identifier", "Not Found") if isinstance(subj, dict) else "Not Found"
             )
             desc = subj.get("description", "") if isinstance(subj, dict) else ""
-            kind = "ndi_subject"
+            kind = "Subject"
             ident = name
         elif c == (0.0, 0.6, 0.0):
-            # ndi_probe
+            # Probe
             name = getattr(elem, "name", "")
-            kind = getattr(elem, "type", "ndi_probe")
+            kind = getattr(elem, "type", "Probe")
             ident = getattr(elem, "identifier", "")
             desc = ""
         else:

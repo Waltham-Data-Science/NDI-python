@@ -49,7 +49,7 @@ class TestNDIDocument:
 
         # Write a binary file
         binary_file = tmp_path / "test_binary.dat"
-        binary_file.write_bytes(b"Hello NDI Binary ndi_gui_Data")
+        binary_file.write_bytes(b"Hello NDI Binary Data")
 
         # Attach file to document
         doc = doc.add_file("filename1.ext", str(binary_file))
@@ -72,16 +72,14 @@ class TestNDIDocument:
         fid = session.database_openbinarydoc(doc, "filename1.ext")
         content = fid.read()
         session.database_closebinarydoc(fid)
-        assert (
-            content == b"Hello NDI Binary ndi_gui_Data"
-        ), "Binary content should match what was written"
+        assert content == b"Hello NDI Binary Data", "Binary content should match what was written"
 
         # Remove document
         session.database_rm(doc)
 
         # Verify removal
         results_after = session.database_search(q_name)
-        assert len(results_after) == 0, "ndi_document should be removed"
+        assert len(results_after) == 0, "Document should be removed"
 
 
 # ===========================================================================

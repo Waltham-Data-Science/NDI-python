@@ -400,11 +400,11 @@ classes:
 
       - name: epoch
         type_python: "str | None"
-        decision_log: "ndi_epoch_epoch identifier."
+        decision_log: "Epoch identifier."
 
       - name: session_id
         type_python: "str"
-        decision_log: "ndi_session identifier."
+        decision_log: "Session identifier."
 
       - name: time
         type_python: "float | None"
@@ -726,7 +726,7 @@ classes:
 
       - name: epochprobemap
         type_python: "Any"
-        decision_log: "ndi_probe map for this epoch."
+        decision_log: "Probe map for this epoch."
 
       - name: epoch_clock
         type_python: "ndi_time_clocktype"

@@ -59,10 +59,10 @@ class ndi_probe(ndi_element):
 
         Args:
             session: ndi_session object with database access
-            name: ndi_probe name (no whitespace allowed)
+            name: Probe name (no whitespace allowed)
             reference: Reference number (non-negative integer)
-            type: ndi_probe type identifier (no whitespace)
-            subject_id: ndi_subject document ID
+            type: Probe type identifier (no whitespace)
+            subject_id: Subject document ID
             identifier: Optional unique identifier
             document: Optional document to load from
         """
@@ -315,12 +315,12 @@ class ndi_probe(ndi_element):
         Get device and channel information for an epoch.
 
         Args:
-            epoch_number: ndi_epoch_epoch number (1-indexed)
+            epoch_number: Epoch number (1-indexed)
 
         Returns:
             Dict with:
             - daqsystem: The DAQ system object
-            - device_epochnumber: ndi_epoch_epoch number in device
+            - device_epochnumber: Epoch number in device
             - channels: Channel mappings
         """
         et, _ = self.epochtable()
@@ -464,7 +464,7 @@ class ndi_probe(ndi_element):
 
 
 # =========================================================================
-# ndi_probe Type Map utilities
+# Probe Type Map utilities
 # =========================================================================
 
 _PROBE_TYPE_MAP: dict[str, str] | None = None

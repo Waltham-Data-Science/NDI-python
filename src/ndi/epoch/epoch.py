@@ -200,9 +200,9 @@ class ndi_epoch_epoch:
         Check if any epochprobemap matches the probe criteria.
 
         Args:
-            name: ndi_probe name
+            name: Probe name
             reference: Reference number
-            type: ndi_probe type
+            type: Probe type
 
         Returns:
             True if any epochprobemap matches

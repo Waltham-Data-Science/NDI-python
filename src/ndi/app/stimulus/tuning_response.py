@@ -158,7 +158,7 @@ class ndi_app_stimulus_tuning__response(ndi_app):
 
         Args:
             ndi_element_obj: Neural element
-            epochid: ndi_epoch_epoch ID
+            epochid: Epoch ID
             response_type: Response type (mean, f1, etc.)
 
         Returns:

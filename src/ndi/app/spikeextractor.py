@@ -103,7 +103,7 @@ class ndi_app_spikeextractor(ndi_app, ndi_app_appdoc):
 
         Args:
             ndi_timeseries_obj: Timeseries element or probe
-            epoch: ndi_epoch_epoch number/id or None for all epochs
+            epoch: Epoch number/id or None for all epochs
             extraction_name: Name of extraction parameters to use
             redo: If True, re-extract even if results exist
             t0_t1: Optional time bounds [t0, t1]

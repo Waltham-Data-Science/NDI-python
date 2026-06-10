@@ -1,4 +1,4 @@
-"""ndi_session summary utility for symmetry testing.
+"""Session summary utility for symmetry testing.
 
 MATLAB equivalent: ``ndi.util.sessionSummary``
 
@@ -29,7 +29,7 @@ def sessionSummary(session_obj: Any) -> dict[str, Any]:
     """
     summary: dict[str, Any] = {}
 
-    # 1. ndi_session basics
+    # 1. Session basics
     summary["reference"] = session_obj.reference
     summary["sessionId"] = session_obj.id()
 

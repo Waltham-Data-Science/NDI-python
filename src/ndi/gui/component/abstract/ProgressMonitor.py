@@ -1,6 +1,6 @@
 """ndi_gui_component_abstract_ProgressMonitor — Abstract base class for progress display.
 
-Mirrors MATLAB: ndi.gui.component.abstract.ndi_gui_component_abstract_ProgressMonitor
+Mirrors MATLAB: ndi.gui.component.abstract.ProgressMonitor
 
 Provides timing, event-listener wiring, and time-remaining estimation.
 Subclasses must implement :meth:`updateProgressDisplay`,
@@ -13,7 +13,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import Any
 
-from ndi.gui.component.internal.ndi_gui_component_internal_ProgressTracker import (
+from ndi.gui.component.internal.ProgressTracker import (
     ndi_gui_component_internal_ProgressTracker,
 )
 
@@ -26,7 +26,7 @@ class ndi_gui_component_abstract_ProgressMonitor(ABC):
     **kwargs
         Arbitrary property overrides (``Title``, ``UpdateInterval``,
         ``DisplayElapsedTime``, ``DisplayRemainingTime``,
-        ``ndi_gui_component_internal_ProgressTracker``).
+        ``ProgressTracker``).
     """
 
     def __init__(self, **kwargs: Any) -> None:
@@ -35,17 +35,17 @@ class ndi_gui_component_abstract_ProgressMonitor(ABC):
         self.DisplayElapsedTime: bool = kwargs.get("DisplayElapsedTime", False)
         self.DisplayRemainingTime: bool = kwargs.get("DisplayRemainingTime", True)
 
-        self.ndi_gui_component_internal_ProgressTracker: (
-            ndi_gui_component_internal_ProgressTracker | None
-        ) = kwargs.get("ndi_gui_component_internal_ProgressTracker", None)
+        self.ProgressTracker: ndi_gui_component_internal_ProgressTracker | None = kwargs.get(
+            "ProgressTracker", None
+        )
 
         self._start_time: float | None = None
         self._last_update_time: float = 0.0
         self._is_initialized: bool = False
         self._listener_handles: list[Any] = []
 
-        if self.ndi_gui_component_internal_ProgressTracker is not None:
-            self._attach_listeners(self.ndi_gui_component_internal_ProgressTracker)
+        if self.ProgressTracker is not None:
+            self._attach_listeners(self.ProgressTracker)
 
     # -- Public API -------------------------------------------------------
 
@@ -57,14 +57,14 @@ class ndi_gui_component_abstract_ProgressMonitor(ABC):
 
     def markComplete(self) -> None:
         """Signal that the task is complete."""
-        if self.ndi_gui_component_internal_ProgressTracker is not None:
-            self.ndi_gui_component_internal_ProgressTracker.setCompleted()
+        if self.ProgressTracker is not None:
+            self.ProgressTracker.setCompleted()
         self.finish()
 
     def setProgressTracker(self, tracker: ndi_gui_component_internal_ProgressTracker) -> None:
         """Attach a new :class:`ndi_gui_component_internal_ProgressTracker` and wire up listeners."""
         self._detach_listeners()
-        self.ndi_gui_component_internal_ProgressTracker = tracker
+        self.ProgressTracker = tracker
         self._attach_listeners(tracker)
 
     # -- Abstract methods (subclasses MUST implement) ---------------------
@@ -85,17 +85,14 @@ class ndi_gui_component_abstract_ProgressMonitor(ABC):
 
     def getProgressValue(self) -> float:
         """Return current progress as a fraction 0–1."""
-        if self.ndi_gui_component_internal_ProgressTracker is None:
+        if self.ProgressTracker is None:
             return 0.0
-        return self.ndi_gui_component_internal_ProgressTracker.PercentageComplete / 100.0
+        return self.ProgressTracker.PercentageComplete / 100.0
 
     def getProgressTitle(self) -> str:
         """Return the tracker's rendered message, or *Title*."""
-        if (
-            self.ndi_gui_component_internal_ProgressTracker is not None
-            and self.ndi_gui_component_internal_ProgressTracker.Message
-        ):
-            return self.ndi_gui_component_internal_ProgressTracker.Message
+        if self.ProgressTracker is not None and self.ProgressTracker.Message:
+            return self.ProgressTracker.Message
         return self.Title
 
     def formatMessage(self, message: str) -> str:
@@ -134,9 +131,9 @@ class ndi_gui_component_abstract_ProgressMonitor(ABC):
         tracker.on_task_completed.append(self._on_complete)
 
     def _detach_listeners(self) -> None:
-        if self.ndi_gui_component_internal_ProgressTracker is None:
+        if self.ProgressTracker is None:
             return
-        t = self.ndi_gui_component_internal_ProgressTracker
+        t = self.ProgressTracker
         for lst, cb in [
             (t.on_progress_updated, self._on_progress),
             (t.on_message_updated, self._on_message),

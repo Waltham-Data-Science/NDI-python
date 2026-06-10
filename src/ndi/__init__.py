@@ -1,13 +1,13 @@
 """
-NDI - Neuroscience ndi_gui_Data Interface
+NDI - Neuroscience Data Interface
 
 Python implementation of NDI for managing neuroscience experimental data.
 
 This package provides:
-- ndi_document management with JSON schemas
-- ndi_database operations for storing and querying documents
+- Document management with JSON schemas
+- Database operations for storing and querying documents
 - Time synchronization across data sources
-- ndi_gui_Data acquisition system abstraction
+- Data acquisition system abstraction
 
 Example:
     from ndi import ndi_document, ndi_query, ndi_ido, ndi_database
@@ -47,7 +47,7 @@ from . import (
     validators,
 )
 
-# Import Phase 9: ndi_app framework and calculators
+# Import Phase 9: App framework and calculators
 from .app import ndi_app
 from .app.appdoc import DocExistsAction, ndi_app_appdoc
 
@@ -77,7 +77,7 @@ from .session import empty_id, ndi_session, ndi_session_dir
 from .subject import ndi_subject
 
 __version__ = "0.1.0"
-__author__ = "VH-ndi_gui_Lab"
+__author__ = "VH-Lab"
 
 
 def version() -> tuple:
@@ -93,7 +93,7 @@ def version() -> tuple:
     import subprocess
     from pathlib import Path as _Path
 
-    url = "https://github.com/Waltham-ndi_gui_Data-Science/NDI-python"
+    url = "https://github.com/Waltham-Data-Science/NDI-python"
     # Try git describe from the repo root
     repo = _Path(__file__).resolve().parent.parent.parent
     try:

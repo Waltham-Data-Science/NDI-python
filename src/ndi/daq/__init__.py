@@ -1,5 +1,5 @@
 """
-ndi.daq - ndi_gui_Data acquisition module for NDI framework.
+ndi.daq - Data acquisition module for NDI framework.
 
 This module provides classes for reading data from various data acquisition
 systems used in neuroscience experiments.

@@ -50,7 +50,7 @@ class ndi_probe_timeseries(ndi_probe):
         timeref is provided, converts time using the session's syncgraph.
 
         Args:
-            epoch: ndi_epoch_epoch number (1-indexed) or epoch_id string
+            epoch: Epoch number (1-indexed) or epoch_id string
             t0: Start time
             t1: End time
             timeref: Optional time reference for cross-epoch reading
@@ -123,7 +123,7 @@ class ndi_probe_timeseries(ndi_probe):
         Subclasses must override this method with format-specific reading.
 
         Args:
-            epoch: ndi_epoch_epoch number (1-indexed) or epoch_id
+            epoch: Epoch number (1-indexed) or epoch_id
             t0: Start time
             t1: End time
 
@@ -138,7 +138,7 @@ class ndi_probe_timeseries(ndi_probe):
         Get sample rate for this probe in an epoch.
 
         Args:
-            epoch: ndi_epoch_epoch number or epoch_id
+            epoch: Epoch number or epoch_id
 
         Returns:
             Sample rate in Hz, or -1 if not applicable

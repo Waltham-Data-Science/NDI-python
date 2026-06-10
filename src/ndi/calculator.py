@@ -169,7 +169,7 @@ class ndi_calculator(ndi_app, ndi_app_appdoc):
             try:
                 self._session.database_add(app_doc)
             except Exception:
-                pass  # ndi_app doc may already exist
+                pass  # App doc may already exist
 
             for doc in docs_to_add:
                 try:
@@ -412,7 +412,7 @@ class ndi_calculator(ndi_app, ndi_app_appdoc):
 
         Args:
             name: Dependency name
-            value: ndi_document ID
+            value: Document ID
 
         Returns:
             True if valid

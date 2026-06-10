@@ -58,11 +58,11 @@ class ndi_neuron(ndi_element_timeseries):
 
         Args:
             session: ndi_session with database access
-            name: ndi_neuron name
+            name: Neuron name
             reference: Reference number
-            underlying_element: ndi_probe/electrode this neuron was sorted from
+            underlying_element: Probe/electrode this neuron was sorted from
             direct: If True, use underlying element epochs
-            subject_id: ndi_subject document ID
+            subject_id: Subject document ID
             dependencies: Additional named dependencies
             identifier: Optional unique identifier
             document: Optional document to load from

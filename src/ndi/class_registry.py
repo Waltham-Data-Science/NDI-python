@@ -4,10 +4,10 @@ Maps NDI class identifier strings (e.g. ``"ndi.probe.timeseries.mfdaq"``)
 to their Python implementation classes.  This registry is used in two
 directions:
 
-* **Object → ndi_document**: each Python class exposes an ``NDI_*_CLASS``
+* **Object → Document**: each Python class exposes an ``NDI_*_CLASS``
   constant or ``ndi_element_class()`` method that returns its
   identifier, which gets written into the document.
-* **ndi_document → Object**: :func:`get_class` looks up the Python class
+* **Document → Object**: :func:`get_class` looks up the Python class
   for a given identifier string so the object can be reconstructed.
 
 The identifiers intentionally mirror the MATLAB class hierarchy to

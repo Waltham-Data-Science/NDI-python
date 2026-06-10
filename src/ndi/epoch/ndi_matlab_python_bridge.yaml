@@ -38,7 +38,7 @@ functions:
         type_python: "list[tuple[float, float]]"
     decision_log: >
       Exact match. Returns a 3-tuple.
-      ndi_epoch_epoch numbers are 1-indexed (user concept).
+      Epoch numbers are 1-indexed (user concept).
 
   - name: findepochnode
     type: function

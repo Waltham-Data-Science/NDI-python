@@ -29,7 +29,7 @@ classes:
         type_python: "N/A (handled by ndi_common_PathConstants)"
         decision_log: >
           MATLAB stores ontology file path as class constant.
-          Python resolves paths via ndi.common.ndi_common_PathConstants.
+          Python resolves paths via ndi.common.PathConstants.
 
       - name: ONTOLOGY_SUBFOLDER_JSON
         type_matlab: "Constant Hidden char"

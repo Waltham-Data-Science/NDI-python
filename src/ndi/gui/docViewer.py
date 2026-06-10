@@ -1,6 +1,6 @@
 """ndi_gui_docViewer — Standalone NDI document viewer window.
 
-Mirrors MATLAB: ndi.gui.ndi_gui_docViewer
+Mirrors MATLAB: ndi.gui.docViewer
 
 A self-contained window with a document table, detail panel, search/filter
 controls, and dependency-graph visualisation.
@@ -36,7 +36,7 @@ class ndi_gui_docViewer:
         self.docs: list[Any] = []
 
         self.fig = QtWidgets.QMainWindow()
-        self.fig.setWindowTitle("ndi_document Viewer")
+        self.fig.setWindowTitle("Document Viewer")
         self.fig.resize(900, 600)
 
         central = QtWidgets.QWidget()

@@ -84,7 +84,7 @@ def stimulus_presentation(
         reps: Number of repetitions of each stimulus.
         stim_duration: Duration of each stimulus in seconds.
         interstimulus_interval: Gap between stimuli in seconds.
-        epoch_id: ndi_epoch_epoch identifier.
+        epoch_id: Epoch identifier.
 
     Returns:
         Dict with ``'presentations'`` (list of dicts with timing info),
@@ -171,7 +171,7 @@ def stimulus_response(
         reps: Number of repetitions per stimulus.
         stim_duration: Duration of each stimulus in seconds.
         interstimulus_interval: Gap between stimuli in seconds.
-        epochid: ndi_epoch_epoch identifier.
+        epochid: Epoch identifier.
 
     Returns:
         Dict with keys: ``'subject'``, ``'stimulator'``, ``'spikes'``,

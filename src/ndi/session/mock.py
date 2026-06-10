@@ -47,7 +47,7 @@ class ndi_session_mock(ndi_session_dir):
         Create a mock session with a temporary directory.
 
         Args:
-            reference: ndi_session reference string
+            reference: Session reference string
             prefix: Prefix for temp directory name
             cleanup: If True, remove temp dir on close/del
         """

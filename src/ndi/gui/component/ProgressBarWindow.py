@@ -1,6 +1,6 @@
 """ndi_gui_component_ProgressBarWindow — Multi-bar progress window.
 
-Mirrors MATLAB: ndi.gui.component.ndi_gui_component_ProgressBarWindow
+Mirrors MATLAB: ndi.gui.component.ProgressBarWindow
 
 Creates and manages a PySide6 window that can display one or more
 progress bars.  Bars can be added, updated, and removed dynamically.
@@ -315,14 +315,14 @@ class ndi_gui_component_ProgressBarWindow:
         """
         status: dict[str, str] = {"identifier": "", "message": ""}
         if not self._bars:
-            status["identifier"] = "ndi_gui_component_ProgressBarWindow:NoBarsExist"
+            status["identifier"] = "ProgressBarWindow:NoBarsExist"
             status["message"] = "No progress bars have been added yet."
             return None, status
 
         if isinstance(barID, int):
             if 0 <= barID < len(self._bars):
                 return barID, status
-            status["identifier"] = "ndi_gui_component_ProgressBarWindow:InvalidBarIndex"
+            status["identifier"] = "ProgressBarWindow:InvalidBarIndex"
             status["message"] = f"Numeric BarID {barID} is out of bounds (0-{len(self._bars) - 1})."
             return None, status
 
@@ -330,7 +330,7 @@ class ndi_gui_component_ProgressBarWindow:
         for i, rec in enumerate(self._bars):
             if rec.Tag.lower() == str(barID).lower():
                 return i, status
-        status["identifier"] = "ndi_gui_component_ProgressBarWindow:InvalidBarTag"
+        status["identifier"] = "ProgressBarWindow:InvalidBarTag"
         status["message"] = f'BarID Tag "{barID}" not found.'
         return None, status
 

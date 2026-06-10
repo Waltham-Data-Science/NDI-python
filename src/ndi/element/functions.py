@@ -1,5 +1,5 @@
 """
-ndi.element.functions - ndi_element utility functions.
+ndi.element.functions - Element utility functions.
 
 Standalone functions that operate on elements for common operations
 like finding missing epochs, creating single-epoch versions,
@@ -115,10 +115,10 @@ def spikesForProbe(
     Args:
         session: NDI session
         probe: Source probe object
-        name: ndi_neuron name
+        name: Neuron name
         reference: Reference number (used as unit_id)
         spikedata: List of dicts with:
-            - 'epochid': ndi_epoch_epoch ID string
+            - 'epochid': Epoch ID string
             - 'spiketimes': Array of spike times
 
     Returns:
@@ -221,7 +221,7 @@ def downsample_timeseries(
 
     Args:
         t_in: Time vector of shape (N,)
-        d_in: ndi_gui_Data matrix of shape (N, C) where C is number of channels
+        d_in: Data matrix of shape (N, C) where C is number of channels
         lp_freq: Low-pass cutoff frequency in Hz
 
     Returns:

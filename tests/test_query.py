@@ -335,7 +335,7 @@ class TestQueryDIDInheritance:
         assert isinstance(q, did.query.Query)
 
     def test_search_structure_attribute(self):
-        """ndi_query should have search_structure attribute from did.ndi_query."""
+        """ndi_query should have search_structure attribute from did.Query."""
         q = ndi_query("base.name", "exact_string", "test")
         assert hasattr(q, "search_structure")
         assert isinstance(q.search_structure, list)

@@ -38,7 +38,7 @@ functions:
     decision_log: >
       Exact match. Exports data from a probe to a binary file.
       Creates metadata file alongside outputfile with .metadata
-      extension. ndi_probe must be an ndi.element.ndi_element or
+      extension. Probe must be an ndi.element.ndi_element or
       ndi.probe.ndi_probe of type 'n-trode'.
 
   - name: export_all_binary

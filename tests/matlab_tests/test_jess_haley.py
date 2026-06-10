@@ -4,7 +4,7 @@ Comprehensive tests for NDI-python against the Jess Haley C. elegans dataset.
 Mirrors the MATLAB tutorial workflow from:
   ndi.setup.conv.haley.tutorial_682e7772cdf3f24938176fac.mlx
 
-ndi_dataset: 78,687 JSON documents + 11,163 binary files (15 GB)
+Dataset: 78,687 JSON documents + 11,163 binary files (15 GB)
 Source: NDI Cloud dataset 682e7772cdf3f24938176fac
 
 MATLAB tutorial steps tested:
@@ -13,10 +13,10 @@ MATLAB tutorial steps tested:
   3. View document types (getDocTypes)
   4. View ontology variables (ontologyTableRowVars)
   5. Extract metadata tables (ontologyTableRowDoc2Table)
-  6. ndi_subject summary (docTable.subject)
+  6. Subject summary (docTable.subject)
   7. Table join (table.join)
   8. Filter subjects (identifyMatchingRows)
-  9. ndi_query elements (position/distance)
+  9. Query elements (position/distance)
   10. Read images (readImageStack)
   11. Plot image + position overlay
 """
@@ -30,7 +30,7 @@ from pathlib import Path
 import pytest
 
 # ---------------------------------------------------------------------------
-# ndi_dataset paths — skip entire file if not downloaded locally
+# Dataset paths — skip entire file if not downloaded locally
 # ---------------------------------------------------------------------------
 
 JESS_HALEY_DOCS = Path(os.path.expanduser("~/Documents/ndi-projects/datasets/jess-haley/documents"))
@@ -71,7 +71,7 @@ EXPECTED_OTR_GROUP_SIZES_SORTED = sorted(
 
 
 # ---------------------------------------------------------------------------
-# ndi_session-scoped fixture — loads dataset once for all tests
+# Session-scoped fixture — loads dataset once for all tests
 # ---------------------------------------------------------------------------
 
 
@@ -101,7 +101,7 @@ def all_docs_raw():
 
 @pytest.fixture(scope="session")
 def ontology_table_row_docs(jess_haley_dataset):
-    """ndi_query all ontologyTableRow documents from the dataset."""
+    """Query all ontologyTableRow documents from the dataset."""
     from ndi.query import ndi_query
 
     return jess_haley_dataset.database_search(ndi_query("").isa("ontologyTableRow"))
@@ -173,7 +173,7 @@ class TestSessionDiscovery:
     """MATLAB: dataset.session_list(), dataset.open_session()."""
 
     def test_session_docs_exist(self, jess_haley_dataset):
-        """ndi_session documents exist in the dataset."""
+        """Session documents exist in the dataset."""
         from ndi.query import ndi_query
 
         docs = jess_haley_dataset.database_search(ndi_query("").isa("session"))
@@ -188,7 +188,7 @@ class TestSessionDiscovery:
         assert len(docs) >= 3
 
     def test_session_refs_contain_celegans_and_ecoli(self, jess_haley_dataset):
-        """ndi_session documents have reference fields."""
+        """Session documents have reference fields."""
         from ndi.query import ndi_query
 
         docs = jess_haley_dataset.database_search(ndi_query("").isa("session"))
@@ -485,7 +485,7 @@ class TestImageStack:
         assert "imageStack_parameters" in sample.document_properties
 
     def test_image_stack_types(self, jess_haley_dataset):
-        """ndi_dataset has uint8 videos, logical masks, and uint16 fluorescence."""
+        """Dataset has uint8 videos, logical masks, and uint16 fluorescence."""
         from ndi.query import ndi_query
 
         docs = jess_haley_dataset.database_search(ndi_query("").isa("imageStack"))
@@ -534,7 +534,7 @@ class TestImageStack:
 
 
 class TestEpochAndMetadata:
-    """ndi_epoch_epoch/position/distance document relationships."""
+    """Epoch/position/distance document relationships."""
 
     def test_element_epoch_count(self, jess_haley_dataset):
         from ndi.query import ndi_query
@@ -664,7 +664,7 @@ class TestDatasetVisualization:
         fig, ax = plt.subplots(figsize=(12, 6))
         ax.barh(doc_types, doc_counts, color="steelblue")
         ax.set_xlabel("Count")
-        ax.set_title("Jess Haley ndi_dataset: ndi_document Type Distribution")
+        ax.set_title("Jess Haley Dataset: Document Type Distribution")
         for i, (_t, c) in enumerate(zip(doc_types, doc_counts)):
             ax.text(c + 100, i, str(c), va="center", fontsize=8)
         plt.tight_layout()
@@ -703,8 +703,8 @@ class TestDatasetVisualization:
         fig, ax = plt.subplots(figsize=(10, 5))
         ax.bar(types, counts, color="coral")
         ax.set_xlabel("Experiment Type")
-        ax.set_ylabel("ndi_subject Count")
-        ax.set_title("Jess Haley: ndi_subject Experiment Types")
+        ax.set_ylabel("Subject Count")
+        ax.set_title("Jess Haley: Subject Experiment Types")
         plt.xticks(rotation=30, ha="right")
         plt.tight_layout()
         plt.savefig(out / "subject_experiment_types.png", dpi=150)
@@ -982,14 +982,14 @@ class TestDatasetVisualization:
         out = self._ensure_output_dir()
         fig, axes = plt.subplots(2, 3, figsize=(20, 12))
 
-        # (1) ndi_document type distribution
+        # (1) Document type distribution
         ax = axes[0, 0]
         doc_types, doc_counts = getDocTypes(jess_haley_dataset)
         ax.barh(doc_types, doc_counts, color="steelblue")
         ax.set_xlabel("Count")
-        ax.set_title("ndi_document Types")
+        ax.set_title("Document Types")
 
-        # (2) ndi_subject experiment types
+        # (2) Subject experiment types
         ax = axes[0, 1]
         from collections import Counter
 
@@ -1001,7 +1001,7 @@ class TestDatasetVisualization:
                 type_counter[parts[2]] += 1
         types_sorted = sorted(type_counter.keys())
         ax.bar(types_sorted, [type_counter[t] for t in types_sorted], color="coral")
-        ax.set_title("ndi_subject Experiment Types")
+        ax.set_title("Subject Experiment Types")
         ax.tick_params(axis="x", rotation=20)
 
         # (3) OTR group sizes
@@ -1083,7 +1083,7 @@ class TestDatasetVisualization:
                     ha="center",
                 )
 
-        plt.suptitle("Jess Haley ndi_dataset: Summary Dashboard", fontsize=16)
+        plt.suptitle("Jess Haley Dataset: Summary Dashboard", fontsize=16)
         plt.tight_layout()
         plt.savefig(out / "summary_dashboard.png", dpi=150)
         plt.close()

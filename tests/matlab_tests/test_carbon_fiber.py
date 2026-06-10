@@ -1,7 +1,7 @@
 """
 Tests for NDI-python against the Carbon fiber microelectrode dataset.
 
-ndi_dataset: 743 JSON documents + 66 element_epoch binary files (9.7 GB)
+Dataset: 743 JSON documents + 66 element_epoch binary files (9.7 GB)
 Source: NDI Cloud dataset 668b0539f13096e04f1feccd
 
 This is an extracellular electrophysiology dataset with:
@@ -17,7 +17,7 @@ is called.  All tests here operate on the document metadata only.
 Mirrors MATLAB analysis workflow:
   1. Load dataset
   2. Inspect sessions and elements
-  3. ndi_query neurons and waveforms
+  3. Query neurons and waveforms
   4. Examine stimulus response scalars
   5. Verify tuning curves (orientation, spatial freq, temporal freq)
   6. Check cross-document referential integrity
@@ -33,7 +33,7 @@ from pathlib import Path
 import pytest
 
 # ---------------------------------------------------------------------------
-# ndi_dataset paths — skip entire file if not downloaded locally
+# Dataset paths — skip entire file if not downloaded locally
 # ---------------------------------------------------------------------------
 
 CARBON_FIBER_DOCS = Path(
@@ -81,7 +81,7 @@ TOTAL_JSON_DOCS = 743
 
 
 # ---------------------------------------------------------------------------
-# ndi_session-scoped fixtures
+# Session-scoped fixtures
 # ---------------------------------------------------------------------------
 
 
@@ -176,7 +176,7 @@ class TestSessionDiscovery:
         assert len(docs) >= 2
 
     def test_session_references(self, carbon_fiber_dataset):
-        """ndi_session references include the recording date."""
+        """Session references include the recording date."""
         from ndi.query import ndi_query
 
         docs = carbon_fiber_dataset.database_search(ndi_query("").isa("session"))
@@ -191,7 +191,7 @@ class TestSessionDiscovery:
         assert len(docs) == 1
 
     def test_subject_local_identifier(self, carbon_fiber_dataset):
-        """ndi_subject has a local identifier from vhlab.org."""
+        """Subject has a local identifier from vhlab.org."""
         from ndi.query import ndi_query
 
         docs = carbon_fiber_dataset.database_search(ndi_query("").isa("subject"))
@@ -205,7 +205,7 @@ class TestSessionDiscovery:
 
 
 class TestElements:
-    """ndi_element document structure and types."""
+    """Element document structure and types."""
 
     def test_element_count(self, carbon_fiber_dataset):
         """20 element documents."""
@@ -274,7 +274,7 @@ class TestElements:
             if isinstance(deps, dict):
                 deps = [deps]
             subject_deps = [d for d in deps if d.get("name") == "subject_id"]
-            assert len(subject_deps) == 1, "ndi_element missing subject_id dependency"
+            assert len(subject_deps) == 1, "Element missing subject_id dependency"
             assert subject_deps[0]["value"] == subject_id
 
 
@@ -284,7 +284,7 @@ class TestElements:
 
 
 class TestNeurons:
-    """ndi_neuron extracellular document structure."""
+    """Neuron extracellular document structure."""
 
     def test_neuron_count(self, carbon_fiber_dataset):
         """17 neuron_extracellular documents."""
@@ -311,7 +311,7 @@ class TestNeurons:
         for doc in docs:
             ne = doc.document_properties.get("neuron_extracellular", {})
             waveform = ne.get("mean_waveform", [])
-            assert len(waveform) > 0, "ndi_neuron missing mean_waveform"
+            assert len(waveform) > 0, "Neuron missing mean_waveform"
 
     def test_neuron_depends_on_element_and_clusters(self, carbon_fiber_dataset):
         """Every neuron depends on element_id and spike_clusters_id."""
@@ -506,7 +506,7 @@ class TestTuningCurves:
 
 
 class TestEpochStructure:
-    """ndi_epoch_epoch and DAQ infrastructure documents."""
+    """Epoch and DAQ infrastructure documents."""
 
     def test_element_epoch_count(self, carbon_fiber_dataset):
         """46 element_epoch documents."""
@@ -636,8 +636,8 @@ class TestCrossDocumentRelationships:
             if isinstance(deps, dict):
                 deps = [deps]
             elem_dep = [d for d in deps if d.get("name") == "element_id"]
-            assert len(elem_dep) == 1, "ndi_neuron missing element_id dependency"
-            assert elem_dep[0]["value"] in element_ids, "ndi_neuron points to non-existent element"
+            assert len(elem_dep) == 1, "Neuron missing element_id dependency"
+            assert elem_dep[0]["value"] in element_ids, "Neuron points to non-existent element"
 
     def test_tuningcurve_depends_on_stimulus_response(self, carbon_fiber_dataset):
         """Each tuning curve depends on a stimulus_response_scalar document."""

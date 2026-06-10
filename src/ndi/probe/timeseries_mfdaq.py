@@ -49,7 +49,7 @@ class ndi_probe_timeseries_mfdaq(ndi_probe_timeseries):
         Read data from an epoch by sample indices.
 
         Args:
-            epoch: ndi_epoch_epoch number (1-indexed) or epoch_id
+            epoch: Epoch number (1-indexed) or epoch_id
             s0: Start sample (1-indexed)
             s1: End sample (1-indexed)
 
@@ -125,7 +125,7 @@ class ndi_probe_timeseries_mfdaq(ndi_probe_timeseries):
         Get sample rate for this probe in an epoch.
 
         Args:
-            epoch: ndi_epoch_epoch number or epoch_id
+            epoch: Epoch number or epoch_id
 
         Returns:
             Sample rate in Hz
@@ -209,7 +209,7 @@ class ndi_probe_timeseries_mfdaq(ndi_probe_timeseries):
 
         Args:
             probe_map: ndi_epoch_epochprobemap object
-            epoch_entry: ndi_epoch_epoch table entry
+            epoch_entry: Epoch table entry
 
         Returns:
             Tuple of (device, device_epoch, channeltype, channellist)

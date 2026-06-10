@@ -22,7 +22,7 @@ from .epochprobemap import ndi_epoch_epochprobemap
 @dataclass
 class ndi_epoch_epochprobemap__daqsystem(ndi_epoch_epochprobemap):
     """
-    ndi_epoch_epoch probe map with DAQ system device string support.
+    Epoch probe map with DAQ system device string support.
 
     Extends ndi_epoch_epochprobemap with a structured ndi_daq_daqsystemstring for the
     devicestring field, plus serialization and file I/O support.

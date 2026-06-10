@@ -1,5 +1,5 @@
 """
-ndi.epoch.epochprobemap - ndi_probe-device mapping for epochs.
+ndi.epoch.epochprobemap - Probe-device mapping for epochs.
 
 This module provides the ndi_epoch_epochprobemap class that describes how
 probes (logical measurement devices) map to physical DAQ channels
@@ -24,18 +24,18 @@ class ndi_epoch_epochprobemap:
     a specific epoch.
 
     Attributes:
-        name: ndi_probe name (no whitespace allowed)
+        name: Probe name (no whitespace allowed)
         reference: Reference number (non-negative integer)
-        type: ndi_probe type identifier (no whitespace)
+        type: Probe type identifier (no whitespace)
         devicestring: Device identifier string (format: "devicename:class:details")
-        subjectstring: ndi_subject identifier string
+        subjectstring: Subject identifier string
 
     Example:
         >>> epm = ndi_epoch_epochprobemap(
         ...     name='electrode1',
         ...     reference=1,
         ...     type='n-trode',
-        ...     devicestring='intan1:ndi_daq_reader_SpikeInterfaceReader:',
+        ...     devicestring='intan1:SpikeInterfaceReader:',
         ...     subjectstring='mouse001',
         ... )
     """
@@ -86,9 +86,9 @@ class ndi_epoch_epochprobemap:
         Check if this probe map matches the given criteria.
 
         Args:
-            name: ndi_probe name to match (None = any)
+            name: Probe name to match (None = any)
             reference: Reference number to match (None = any)
-            type: ndi_probe type to match (None = any)
+            type: Probe type to match (None = any)
 
         Returns:
             True if all specified criteria match

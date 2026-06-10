@@ -88,7 +88,7 @@ class ndi_dataset:
         return self._session.getpath()
 
     # =========================================================================
-    # ndi_session Management
+    # Session Management
     # =========================================================================
 
     def add_linked_session(self, session: Any) -> ndi_dataset:
@@ -250,7 +250,7 @@ class ndi_dataset:
         MATLAB equivalent: ``ndi.dataset/open_session``
 
         Args:
-            session_id: ndi_session identifier
+            session_id: Session identifier
 
         Returns:
             ndi_session object, or None if not found
@@ -315,7 +315,7 @@ class ndi_dataset:
                 - id_list: List of session ID strings
                 - session_doc_ids: List of document IDs for the
                   session_in_a_dataset documents
-                - dataset_session_doc_id: ndi_document ID of the dataset's
+                - dataset_session_doc_id: Document ID of the dataset's
                   own session document (empty string if not found)
         """
         if not self._session_info:
@@ -336,7 +336,7 @@ class ndi_dataset:
         return ref_list, id_list, session_doc_ids, dataset_session_doc_id
 
     # =========================================================================
-    # ndi_database Operations (delegated to internal session)
+    # Database Operations (delegated to internal session)
     # =========================================================================
 
     def database_add(self, document: ndi_document | list[ndi_document]) -> ndi_dataset:
@@ -429,7 +429,7 @@ class ndi_dataset:
         MATLAB equivalent: ``ndi.dataset/database_existbinarydoc``
 
         Args:
-            doc_or_id: ndi_document or document ID.
+            doc_or_id: Document or document ID.
             filename: Name of the binary file.
 
         Returns:
@@ -442,7 +442,7 @@ class ndi_dataset:
         self._session.database_closebinarydoc(fid)
 
     # =========================================================================
-    # Ingested ndi_session Management
+    # Ingested Session Management
     # =========================================================================
 
     def deleteIngestedSession(
@@ -463,11 +463,11 @@ class ndi_dataset:
 
         match = self._find_session_in_info(session_id)
         if match is None:
-            raise ValueError(f"ndi_session {session_id} not found in dataset.")
+            raise ValueError(f"Session {session_id} not found in dataset.")
 
         if match.get("is_linked", False):
             raise ValueError(
-                f"ndi_session {session_id} is a linked session, not an "
+                f"Session {session_id} is a linked session, not an "
                 f"ingested one. Use unlink_session() instead."
             )
 
@@ -502,7 +502,7 @@ class ndi_dataset:
         return None
 
     # =========================================================================
-    # ndi_session info management (mirrors MATLAB build_session_info)
+    # Session info management (mirrors MATLAB build_session_info)
     # =========================================================================
 
     def build_session_info(self) -> None:
@@ -784,7 +784,7 @@ class ndi_dataset_dir(ndi_dataset):
         documents: list[ndi_document] | None = None,
     ):
         """
-        Create or open a directory-based ndi_dataset.
+        Create or open a directory-based Dataset.
 
         Supports multiple calling conventions:
 
@@ -863,7 +863,7 @@ class ndi_dataset_dir(ndi_dataset):
             # 2-arg form
             self._session = ndi_session_dir(ref or self._path.name, self._path)
 
-        # ndi_session discovery: find the correct session ID and reference
+        # Session discovery: find the correct session ID and reference
         # from documents in the database. Mirrors the MATLAB
         # ndi.dataset.dir constructor logic.
         self._discover_correct_session(ref)

@@ -1,5 +1,5 @@
 """
-ndi.fun.session - ndi_session comparison utilities.
+ndi.fun.session - Session comparison utilities.
 
 MATLAB equivalent: +ndi/+fun/+session/diff.m
 """

@@ -124,7 +124,7 @@ class TestDatasetBuild:
 
         # ndi_session should be in dataset's session list
         refs, session_ids, *_ = dataset.session_list()
-        assert session.id() in session_ids, "ndi_session ID should be in dataset session list"
+        assert session.id() in session_ids, "Session ID should be in dataset session list"
 
         # Should find exactly 5 demoNDI documents
         q = ndi_query("").isa("demoNDI")
@@ -148,7 +148,7 @@ class TestDatasetBuild:
                         content = content.decode("utf-8")
                     assert content == docname, f"Content of {docname} should match"
                     break
-            assert found, f"ndi_document {docname} should be found"
+            assert found, f"Document {docname} should be found"
 
 
 # ===========================================================================
@@ -177,10 +177,10 @@ class TestSessionList:
         assert len(refs) == 1
 
         # 1. Verify session_reference
-        assert refs[0] == "exp_demo", "ndi_session reference should match expected value"
+        assert refs[0] == "exp_demo", "Session reference should match expected value"
 
         # 2. Verify session_id
-        assert session_ids[0] == session.id(), "ndi_session ID should match the ingested session ID"
+        assert session_ids[0] == session.id(), "Session ID should match the ingested session ID"
 
         # 3. Verify the session_in_a_dataset document exists and is correct
         q = ndi_query("").isa("session_in_a_dataset")
@@ -229,23 +229,23 @@ class TestDeleteIngestedSession:
 
         # Verify session exists initially
         refs, session_ids, *_ = dataset.session_list()
-        assert session_id in session_ids, "ndi_session ID should be in dataset"
+        assert session_id in session_ids, "Session ID should be in dataset"
 
         # Verify documents exist
         q = ndi_query("base.session_id") == session_id
         docs = dataset.database_search(q)
-        assert len(docs) > 0, "ndi_session documents should exist"
+        assert len(docs) > 0, "Session documents should exist"
 
         # Delete the session
         dataset.deleteIngestedSession(session_id, are_you_sure=True)
 
         # Verify session is removed from list
         refs_after, ids_after, *_ = dataset.session_list()
-        assert session_id not in ids_after, "ndi_session ID should NOT be in dataset after deletion"
+        assert session_id not in ids_after, "Session ID should NOT be in dataset after deletion"
 
         # Verify documents are removed
         docs_after = dataset.database_search(q)
-        assert len(docs_after) == 0, "ndi_session documents should be gone after deletion"
+        assert len(docs_after) == 0, "Session documents should be gone after deletion"
 
     def test_delete_not_confirmed(self, build_dataset):
         """Deleting without are_you_sure=True raises ValueError.
@@ -263,7 +263,7 @@ class TestDeleteIngestedSession:
         refs, session_ids, *_ = dataset.session_list()
         assert (
             session_id in session_ids
-        ), "ndi_session ID should still be in dataset after failed delete"
+        ), "Session ID should still be in dataset after failed delete"
 
     def test_delete_linked_session_error(self, build_dataset, tmp_path):
         """Deleting a linked session raises ValueError.
@@ -339,12 +339,12 @@ class TestUnlinkSession:
 
         # Verify session is gone from dataset
         refs_after, ids_after, *_ = dataset.session_list()
-        assert len(ids_after) == 0, "ndi_session list should be empty after unlink"
+        assert len(ids_after) == 0, "Session list should be empty after unlink"
 
-        # ndi_session files should still exist
+        # Session files should still exist
         assert (
             session.path / ".ndi"
-        ).exists(), "ndi_session .ndi directory should still exist after unlink"
+        ).exists(), "Session .ndi directory should still exist after unlink"
 
     def test_unlink_ingested_session_error(self, tmp_path):
         """Unlinking an ingested session raises ValueError.

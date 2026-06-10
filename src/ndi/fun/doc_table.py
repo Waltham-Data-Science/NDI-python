@@ -1,5 +1,5 @@
 """
-ndi.fun.doc_table - ndi_document-to-table conversion utilities.
+ndi.fun.doc_table - Document-to-table conversion utilities.
 
 MATLAB equivalents: +ndi/+fun/+docTable/*.m
 
@@ -293,7 +293,7 @@ def probe(
             "ProbeReference": el.get("reference", 0),
         }
 
-        # ndi_probe location
+        # Probe location
         loc = loc_by_probe.get(probe_id, {})
         row["ProbeLocationName"] = loc.get("name", "")
         row["ProbeLocationOntology"] = loc.get("ontology_name", "")
@@ -427,7 +427,7 @@ def epoch(
             probe_id = elem_info.get("id", "")
             subject_id = elem_info.get("subject_id", "")
 
-            # ndi_epoch_epoch counter per probe
+            # Epoch counter per probe
             epoch_counter.setdefault(probe_id, 0)
             epoch_counter[probe_id] += 1
 
