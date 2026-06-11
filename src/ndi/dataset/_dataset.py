@@ -864,6 +864,21 @@ class ndi_dataset_dir(ndi_dataset):
         >>> dataset = ndi_dataset_dir('my_experiment', '/path/to/dataset')
     """
 
+    def _dataset_session_path(self) -> Path:
+        """Directory whose ``.ndi`` holds this dataset's database.
+
+        A MATLAB-written dataset stores its database under
+        ``<path>/.ndi_dataset/.ndi`` (the dataset's own session lives in the
+        ``.ndi_dataset`` subdirectory), whereas a Python-created dataset stores
+        it directly under ``<path>/.ndi``. When opening an existing dataset,
+        prefer the MATLAB location if it is present so MATLAB datasets open
+        their real documents instead of an empty Python database.
+        """
+        matlab_dir = self._path / ".ndi_dataset"
+        if (matlab_dir / ".ndi").is_dir():
+            return matlab_dir
+        return self._path
+
     def __init__(
         self,
         reference_or_path: str | Path,
@@ -942,13 +957,14 @@ class ndi_dataset_dir(ndi_dataset):
             self._session = ndi_session_dir(ref or "temp", self._path)
         elif path_or_ref is None and not ref:
             # 1-arg form: try opening existing, or create with dir name as reference
+            session_path = self._dataset_session_path()
             try:
-                self._session = ndi_session_dir(self._path)
+                self._session = ndi_session_dir(session_path)
             except ValueError:
-                self._session = ndi_session_dir(self._path.name, self._path)
+                self._session = ndi_session_dir(self._path.name, session_path)
         else:
             # 2-arg form
-            self._session = ndi_session_dir(ref or self._path.name, self._path)
+            self._session = ndi_session_dir(ref or self._path.name, self._dataset_session_path())
 
         # Session discovery: find the correct session ID and reference
         # from documents in the database. Mirrors the MATLAB
@@ -999,8 +1015,10 @@ class ndi_dataset_dir(ndi_dataset):
             if len(candidate_docs) == 1:
                 ref = candidate_docs[0].document_properties.get("session", {}).get("reference", "")
                 sid = candidate_docs[0].document_properties.get("base", {}).get("session_id", "")
-                # Re-create session with the correct reference and ID
-                self._session = ndi_session_dir(ref, self._path, session_id=sid)
+                # Re-create session with the correct reference and ID, keeping
+                # the MATLAB .ndi_dataset location so the existing database is
+                # preserved rather than replaced by an empty one at self._path.
+                self._session = ndi_session_dir(ref, self._dataset_session_path(), session_id=sid)
 
         # Repair legacy dataset_session_info if found
         if dsi_docs:
