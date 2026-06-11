@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import functools
 import json
+import logging
 import re
 from typing import Any
 from urllib.parse import quote as _url_quote
@@ -22,6 +23,8 @@ from .exceptions import (
     CloudAuthError,
     CloudNotFoundError,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class APIResponse:
@@ -309,8 +312,8 @@ class CloudClient:
             body = resp.text
             try:
                 body = resp.json()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Error response body was not JSON: %s", exc)
             raise CloudAPIError(
                 f"API error (HTTP {status})",
                 status_code=status,

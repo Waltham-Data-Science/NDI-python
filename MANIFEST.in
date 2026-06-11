@@ -1,7 +1,6 @@
 include LICENSE
 include README.md
 include CHANGELOG.md
-include MATLAB_MAPPING.md
 
 recursive-include src/ndi/ndi_common *.json *.txt *.tsv *.tsv.gz *.obo *.md
 recursive-include src/ndi/ndi_common/example_binaries *

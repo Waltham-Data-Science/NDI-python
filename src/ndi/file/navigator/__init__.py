@@ -7,6 +7,7 @@ data files into epochs based on file patterns.
 
 from __future__ import annotations
 
+import ast
 import fnmatch
 import hashlib
 import os
@@ -57,16 +58,20 @@ def _parse_fileparameters(fp_str: str) -> list[str] | None:
         items = re.findall(r"'([^']*)'", inner)
         if items:
             return items
-    # Fallback: try Python eval (handles repr() output from Python-created docs)
+    # Fallback: parse repr() output from Python-created docs.  Use
+    # ast.literal_eval, NOT eval: fileparameters can arrive on a document
+    # downloaded from the cloud, so evaluating it as arbitrary Python would
+    # be a remote-code-execution vector.  literal_eval only accepts Python
+    # literals (lists, tuples, sets, strings), which is all we ever expect.
     try:
-        result = eval(fp_str)  # noqa: S307
+        result = ast.literal_eval(fp_str)
         if isinstance(result, (list, tuple)):
             return list(result)
         if isinstance(result, (set, frozenset)):
             return sorted(result)
         if isinstance(result, str):
             return [result]
-    except Exception:
+    except (ValueError, SyntaxError):
         pass
     return None
 
@@ -246,10 +251,12 @@ class ndi_file_navigator(ndi_ido):
             items = re.findall(r"'([^']*)'", stripped)
             if items:
                 return items
-        # Fall back to eval for Python-native formats (list, dict)
+        # Fall back to literal parsing for Python-native formats (list, dict).
+        # ast.literal_eval (not eval) so a malicious document property can't
+        # execute arbitrary code when its fileparameters are parsed.
         try:
-            return eval(stripped)  # noqa: S307
-        except Exception:
+            return ast.literal_eval(stripped)
+        except (ValueError, SyntaxError):
             return stripped
 
     @staticmethod

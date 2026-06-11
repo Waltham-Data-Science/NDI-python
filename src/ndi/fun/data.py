@@ -7,11 +7,70 @@ MATLAB equivalents: +ndi/+fun/+data/readngrid.m, writengrid.m, mat2ngrid.m,
 
 from __future__ import annotations
 
+import ast
+import operator
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+# Arithmetic-only operators permitted inside a fitcurve ``fit_equation``.
+_SAFE_BINOPS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.Pow: operator.pow,
+    ast.Mod: operator.mod,
+    ast.FloorDiv: operator.floordiv,
+}
+_SAFE_UNARYOPS = {ast.UAdd: operator.pos, ast.USub: operator.neg}
+
+
+def _safe_arithmetic_eval(expr: str, namespace: dict[str, Any]) -> Any:
+    """Evaluate a MATLAB-style arithmetic expression without ``eval``.
+
+    A ``fit_equation`` arrives inside a fitcurve document, and documents can
+    be synced from the cloud, so evaluating one with ``eval()`` is a remote
+    code-execution vector — ``{"__builtins__": {}}`` is NOT a sandbox (the
+    ``().__class__.__mro__[...]__subclasses__()`` trick reaches ``os.system``
+    with only an injected ``abs`` in scope). This walker permits ONLY numeric
+    constants, names already bound in *namespace*, ``+ - * / ** % //``, unary
+    ``+/-``, and calls to whitelisted functions in *namespace*. Attribute
+    access, subscripting, comprehensions and lambdas are rejected, which closes
+    the escape entirely.
+    """
+    tree = ast.parse(expr, mode="eval")
+
+    def _ev(node: ast.AST) -> Any:
+        if isinstance(node, ast.Expression):
+            return _ev(node.body)
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, (int, float, complex)):
+                return node.value
+            raise ValueError(f"disallowed constant in fit_equation: {node.value!r}")
+        if isinstance(node, ast.Name):
+            if node.id in namespace:
+                return namespace[node.id]
+            raise ValueError(f"unknown name in fit_equation: {node.id!r}")
+        if isinstance(node, ast.BinOp) and type(node.op) in _SAFE_BINOPS:
+            return _SAFE_BINOPS[type(node.op)](_ev(node.left), _ev(node.right))
+        if isinstance(node, ast.UnaryOp) and type(node.op) in _SAFE_UNARYOPS:
+            return _SAFE_UNARYOPS[type(node.op)](_ev(node.operand))
+        if isinstance(node, ast.Call):
+            if not isinstance(node.func, ast.Name):
+                raise ValueError("only direct function calls are allowed in fit_equation")
+            fn = namespace.get(node.func.id)
+            if not callable(fn):
+                raise ValueError(f"unknown function in fit_equation: {node.func.id!r}")
+            if node.keywords:
+                raise ValueError("keyword arguments are not allowed in fit_equation")
+            return fn(*[_ev(a) for a in node.args])
+        raise ValueError(f"disallowed expression element in fit_equation: {type(node).__name__}")
+
+    return _ev(tree)
+
 
 # Map type names to numpy dtypes
 _TYPE_MAP: dict[str, np.dtype] = {
@@ -199,8 +258,9 @@ def evaluate_fitcurve(
     # The equation may use ^ for power (MATLAB style) - convert to **
     expr = equation.replace("^", "**")
 
-    # Evaluate
-    result = eval(expr, {"__builtins__": {}}, namespace)  # noqa: S307
+    # Evaluate via a restricted arithmetic walker — never eval() (the equation
+    # is document-derived and documents can arrive from the cloud).
+    result = _safe_arithmetic_eval(expr, namespace)
 
     return np.asarray(result, dtype=float)
 

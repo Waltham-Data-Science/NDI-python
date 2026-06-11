@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import warnings
 from collections.abc import Callable
 from pathlib import Path
@@ -211,7 +212,15 @@ def downloadFilesForDocument(
     # Download with streaming
     resp = requests.get(url, timeout=120, stream=True)
     if resp.status_code == 200:
-        out_path = target_dir / file_uid
+        # file_uid comes from a remote document; strip path components and
+        # confirm containment so it can't be written outside target_dir
+        # (absolute paths or "../" sequences).
+        target_root = target_dir.resolve()
+        safe_name = os.path.basename(file_uid) or "downloaded_file"
+        out_path = (target_root / safe_name).resolve()
+        if os.path.commonpath([target_root, out_path]) != str(target_root):
+            logger.warning("Refusing unsafe download path for file_uid %r", file_uid)
+            return downloaded
         with open(out_path, "wb") as fh:
             for chunk in resp.iter_content(chunk_size=8192):
                 fh.write(chunk)
@@ -385,11 +394,14 @@ def downloadGenericFiles(
                     if not uid:
                         continue
 
-                    import os
-
-                    name_part, ext_part = os.path.splitext(original_filename)
+                    # Filenames come from remote documents; strip any path
+                    # components so a crafted name (e.g. "../../etc/cron.d/x")
+                    # cannot be used to write outside the target directory.
+                    safe_original = os.path.basename(original_filename or "")
+                    name_part, ext_part = os.path.splitext(safe_original)
                     if not name_part:
-                        name_part, ext_part = os.path.splitext(fi.get("name", ""))
+                        safe_fi_name = os.path.basename(fi.get("name", "") or "")
+                        name_part, ext_part = os.path.splitext(safe_fi_name)
 
                     if naming_strategy == "id":
                         filename = f"{doc_id}{ext_part}"
@@ -409,10 +421,15 @@ def downloadGenericFiles(
         if verbose:
             print(f"Downloading {len(download_list)} files to {target}...")
 
+        target_root = Path(target).resolve()
         for i, item in enumerate(download_list):
             uid = item["uid"]
-            filename = item["filename"]
-            target_path = target / filename
+            filename = os.path.basename(item["filename"] or "") or uid
+            target_path = (target_root / filename).resolve()
+            # Defense in depth: never write outside the requested target dir.
+            if os.path.commonpath([target_root, target_path]) != str(target_root):
+                logger.warning("Refusing unsafe download path for file %s (UID: %s)", filename, uid)
+                continue
 
             if verbose:
                 print(f"  [{i + 1}/{len(download_list)}] Downloading {filename} (UID: {uid})...")
