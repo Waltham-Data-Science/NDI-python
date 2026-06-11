@@ -361,3 +361,245 @@ classes:
         decision_log: >
           Mapped to Python __eq__ dunder method. Compares by
           name, reference, and type.
+
+  # =========================================================================
+  # ndi.element.timeseries  (extends ndi.element + ndi.time.timeseries)
+  # =========================================================================
+  - name: timeseries
+    type: class
+    matlab_path: "+ndi/+element/timeseries.m"
+    matlab_last_sync_hash: "cbbb099b"
+    python_path: "ndi/element_timeseries.py"
+    python_class: "ndi_element_timeseries"
+    inherits: "ndi.element, ndi.time.timeseries"
+
+    methods:
+      # --- Constructor ---
+      - name: timeseries
+        kind: constructor
+        input_arguments:
+          - name: kwargs
+            type_matlab: "varargin"
+            type_python: "**kwargs"
+        output_arguments:
+          - name: ndi_element_timeseries_obj
+            type_python: "ndi_element_timeseries"
+        decision_log: >
+          Exact match. Forwards all arguments to the ndi.element constructor
+          (same signature as ndi_element).
+
+      - name: ndi_element_class
+        input_arguments: []
+        output_arguments:
+          - name: cls
+            type_python: "str"
+        decision_log: >
+          Returns 'ndi.element.timeseries'. MATLAB equivalent is class(obj).
+          Without this override the class inherited 'ndi.element' from
+          ndi_element, mislabelling stored timeseries elements and breaking
+          the document round-trip (audit C8b). Registered in class_registry.
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
+
+      - name: readtimeseries
+        input_arguments:
+          - name: timeref_or_epoch
+            type_matlab: "ndi.time.timereference | epoch"
+            type_python: "Any"
+          - name: t0
+            type_matlab: "double"
+            type_python: "float"
+            default: "0.0"
+          - name: t1
+            type_matlab: "double"
+            type_python: "float"
+            default: "-1.0"
+        output_arguments:
+          - name: data
+            type_python: "np.ndarray"
+          - name: t
+            type_python: "np.ndarray"
+          - name: timeref
+            type_python: "Any | None"
+        decision_log: >
+          Exact match. Returns 3-tuple (data, times, timeref). t1=-1 means
+          end of epoch. Base class delegates to the underlying probe.
+
+      - name: addepoch
+        input_arguments:
+          - name: epoch_id
+            type_matlab: "char"
+            type_python: "str"
+          - name: epoch_clock
+            type_matlab: "ndi.time.clocktype"
+            type_python: "ndi_time_clocktype"
+          - name: t0_t1
+            type_matlab: "[t0 t1]"
+            type_python: "tuple[float, float]"
+          - name: timepoints
+            type_matlab: "double array"
+            type_python: "np.ndarray"
+          - name: datapoints
+            type_matlab: "double array"
+            type_python: "np.ndarray"
+        output_arguments:
+          - name: ndi_element_timeseries_obj
+            type_python: "ndi_element_timeseries"
+          - name: epoch_doc
+            type_python: "Any"
+        decision_log: >
+          Exact match. Overrides ndi.element.addepoch to also store the
+          timeseries data (VHSB format). Returns 2-tuple (self, epoch_document).
+
+      - name: samplerate
+        input_arguments:
+          - name: epoch
+            type_matlab: "epoch (optional)"
+            type_python: "Any | None"
+            default: "None"
+        output_arguments:
+          - name: sr
+            type_python: "float"
+        decision_log: "Exact match. Returns the sampling rate for the given epoch."
+
+    static_methods:
+      - name: addMultiple
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+          - name: underlying_element
+            type_matlab: "ndi.element"
+            type_python: "Any"
+          - name: specs
+            type_matlab: "struct array"
+            type_python: "list[dict[str, Any]]"
+          - name: element_class
+            type_matlab: "char (name-value)"
+            type_python: "str"
+            default: "'ndi.neuron'"
+          - name: chunksize
+            type_matlab: "double (name-value)"
+            type_python: "int"
+            default: "100"
+          - name: build_objects
+            type_matlab: "(no MATLAB equivalent)"
+            type_python: "bool"
+            default: "True"
+          - name: verbose
+            type_matlab: "logical (name-value)"
+            type_python: "bool"
+            default: "False"
+        output_arguments:
+          - name: neurons
+            type_python: "list[Any] | None"
+        decision_log: >
+          New in sync cbbb099b. Static method. Creates many timeseries
+          elements (default ndi.neuron) sharing a common underlying_element,
+          committing element / element_epoch / extra documents in chunked
+          database_add calls (no per-epoch search). Bulk path for the Kilosort
+          importer. MATLAB uses name-value options
+          (element_class, chunksize, progressbar, verbose); Python omits
+          progressbar and adds build_objects (MATLAB instead constructs objects
+          only when an output is requested). Returns the created objects when
+          build_objects is True, else None.
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
+
+  # =========================================================================
+  # ndi.neuron  (extends ndi.element.timeseries; type='neuron')
+  # =========================================================================
+  - name: neuron
+    type: class
+    matlab_path: "+ndi/neuron.m"
+    matlab_last_sync_hash: "fe64a9f5"
+    python_path: "ndi/neuron.py"
+    python_class: "ndi_neuron"
+    inherits: "ndi.element.timeseries"
+
+    methods:
+      # --- Constructor ---
+      - name: neuron
+        kind: constructor
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any | None"
+            default: "None"
+          - name: name
+            type_matlab: "char"
+            type_python: "str"
+            default: "''"
+          - name: reference
+            type_matlab: "integer"
+            type_python: "int"
+            default: "0"
+          - name: underlying_element
+            type_matlab: "ndi.element"
+            type_python: "Any | None"
+            default: "None"
+          - name: direct
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "True"
+          - name: subject_id
+            type_matlab: "char"
+            type_python: "str"
+            default: "''"
+          - name: dependencies
+            type_matlab: "struct"
+            type_python: "dict[str, str] | None"
+            default: "None"
+          - name: identifier
+            type_matlab: "char"
+            type_python: "str | None"
+            default: "None"
+          - name: document
+            type_matlab: "ndi.document"
+            type_python: "Any | None"
+            default: "None"
+        output_arguments:
+          - name: ndi_neuron_obj
+            type_python: "ndi_neuron"
+        decision_log: >
+          Exact match. A neuron is an ndi.element.timeseries with type='neuron'
+          (type is fixed by the constructor, not user-supplied).
+
+      - name: ndi_element_class
+        input_arguments: []
+        output_arguments:
+          - name: cls
+            type_python: "str"
+        decision_log: >
+          Returns 'ndi.neuron'. MATLAB equivalent is class(obj) (element.m:524).
+          Without this override ndi_neuron inherited 'ndi.element', so
+          Python-written neurons were stored mislabelled and MATLAB-written
+          neurons could not be reconstructed — getelements then silently
+          returned zero neurons (audit C8b). Registered in class_registry.
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
+
+      - name: newdocument
+        input_arguments: []
+        output_arguments:
+          - name: doc
+            type_python: "ndi_document"
+        decision_log: "Exact match. Delegates to the parent; type is already 'neuron'."
+
+      - name: searchquery
+        input_arguments: []
+        output_arguments:
+          - name: q
+            type_python: "ndi_query"
+        decision_log: "Exact match. Returns a ndi_query matching base.id."
+
+      - name: epochsetname
+        input_arguments: []
+        output_arguments:
+          - name: name
+            type_python: "str"
+        decision_log: "Exact match. Returns 'neuron: name | reference'."
+
+      - name: issyncgraphroot
+        input_arguments: []
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: "Exact match. Neurons are never sync graph roots (returns False)."

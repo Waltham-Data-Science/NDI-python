@@ -85,6 +85,12 @@ classes:
         decision_log: >
           MATLAB has readSyncIndex as standalone function.
           Python wraps it as a classmethod on SyncIndex dataclass.
+          Now reads BOTH the MATLAB camelCase keys
+          (localDocumentIdsLastSync, remoteDocumentIdsLastSync,
+          lastSyncTimestamp) and the legacy Python snake_case keys from
+          the shared .ndi/sync/index.json, so a dataset touched by either
+          client is understood (audit C2).
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
       - name: write
         matlab_equivalent: "writeSyncIndex"
@@ -94,7 +100,11 @@ classes:
         output_arguments: []
         decision_log: >
           MATLAB has writeSyncIndex as standalone function.
-          Python wraps it as an instance method.
+          Python wraps it as an instance method. Now always writes the
+          MATLAB-compatible camelCase keys (was snake_case), so
+          alternating Python/MATLAB syncs see a consistent index instead
+          of forcing a full re-transfer (audit C2).
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
       - name: update
         matlab_equivalent: "updateSyncIndex"
@@ -119,9 +129,9 @@ functions:
     matlab_last_sync_hash: "c372693a"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
-      - name: dataset_path
-        type_matlab: "char"
-        type_python: "str"
+      - name: dataset
+        type_matlab: "ndi.dataset"
+        type_python: "Any"
       - name: cloud_dataset_id
         type_matlab: "char"
         type_python: "str"
@@ -135,16 +145,20 @@ functions:
     output_arguments:
       - name: result
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      First argument is now the dataset OBJECT (was a path string); the
+      on-disk root is resolved internally via dataset.getpath(). Local
+      documents are enumerated from the dataset database, matching MATLAB.
+      Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
   - name: downloadNew
     matlab_path: "+ndi/+cloud/+sync/downloadNew.m"
     matlab_last_sync_hash: "c372693a"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
-      - name: dataset_path
-        type_matlab: "char"
-        type_python: "str"
+      - name: dataset
+        type_matlab: "ndi.dataset"
+        type_python: "Any"
       - name: cloud_dataset_id
         type_matlab: "char"
         type_python: "str"
@@ -158,16 +172,19 @@ functions:
     output_arguments:
       - name: result
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      First argument is now the dataset OBJECT (was a path string).
+      Downloaded documents are ingested through dataset.database_add.
+      Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
   - name: mirrorToRemote
     matlab_path: "+ndi/+cloud/+sync/mirrorToRemote.m"
     matlab_last_sync_hash: "c372693a"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
-      - name: dataset_path
-        type_matlab: "char"
-        type_python: "str"
+      - name: dataset
+        type_matlab: "ndi.dataset"
+        type_python: "Any"
       - name: cloud_dataset_id
         type_matlab: "char"
         type_python: "str"
@@ -181,16 +198,18 @@ functions:
     output_arguments:
       - name: result
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      First argument is now the dataset OBJECT (was a path string).
+      Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
   - name: mirrorFromRemote
     matlab_path: "+ndi/+cloud/+sync/mirrorFromRemote.m"
     matlab_last_sync_hash: "c372693a"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
-      - name: dataset_path
-        type_matlab: "char"
-        type_python: "str"
+      - name: dataset
+        type_matlab: "ndi.dataset"
+        type_python: "Any"
       - name: cloud_dataset_id
         type_matlab: "char"
         type_python: "str"
@@ -204,16 +223,19 @@ functions:
     output_arguments:
       - name: result
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      First argument is now the dataset OBJECT (was a path string).
+      Local-only documents are removed via dataset.database_rm.
+      Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
   - name: twoWaySync
     matlab_path: "+ndi/+cloud/+sync/twoWaySync.m"
     matlab_last_sync_hash: "c372693a"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
-      - name: dataset_path
-        type_matlab: "char"
-        type_python: "str"
+      - name: dataset
+        type_matlab: "ndi.dataset"
+        type_python: "Any"
       - name: cloud_dataset_id
         type_matlab: "char"
         type_python: "str"
@@ -227,7 +249,10 @@ functions:
     output_arguments:
       - name: result
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      First argument is now the dataset OBJECT (was a path string).
+      Strictly additive: never deletes on either side.
+      Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
   - name: validate
     matlab_path: "+ndi/+cloud/+sync/validate.m"
@@ -252,8 +277,8 @@ functions:
     matlab_path: "N/A"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
-      - name: dataset_path
-        type_python: "str"
+      - name: dataset
+        type_python: "Any"
       - name: cloud_dataset_id
         type_python: "str"
       - name: mode
@@ -269,25 +294,31 @@ functions:
         type_python: "dict[str, Any]"
     decision_log: >
       Python-only dispatcher that routes to the specific sync operation
-      based on SyncMode. MATLAB uses syncDataset at the top level.
+      based on SyncMode. First argument is now the dataset OBJECT (was a
+      path string), matching the per-mode operations it delegates to.
+      MATLAB uses syncDataset at the top level.
+      Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
   - name: deleteLocalDocuments
     matlab_path: "+ndi/+cloud/+sync/+internal/deleteLocalDocuments.m"
     matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
-      - name: ds_path
-        type_matlab: "char"
-        type_python: "Path"
+      - name: dataset
+        type_matlab: "ndi.dataset"
+        type_python: "Any"
       - name: doc_ids
         type_matlab: "string array"
-        type_python: "set[str]"
+        type_python: "set[str] | list[str]"
     output_arguments:
       - name: deleted_ids
         type_python: "list[str]"
     decision_log: >
       MATLAB places this in +sync/+internal. Python places it in
-      operations.py. Exact name match.
+      operations.py. First argument is now the dataset OBJECT (was a
+      path string); documents are removed via dataset.database_rm
+      rather than a side JSON cache. Exact name match.
+      Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
   - name: downloadNdiDocuments
     matlab_path: "+ndi/+cloud/+sync/+internal/downloadNdiDocuments.m"
@@ -300,7 +331,7 @@ functions:
       - name: ndi_to_api
         type_python: "dict[str, str]"
       - name: ids_to_download
-        type_python: "set[str]"
+        type_python: "set[str] | list[str]"
       - name: client
         type_python: "CloudClient | None"
         default: "None"
@@ -312,6 +343,7 @@ functions:
     decision_log: >
       MATLAB places this in +sync/+internal. Python places it in
       operations.py. Exact name match.
+      Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
 # =============================================================================
 # Not-yet-ported MATLAB functions

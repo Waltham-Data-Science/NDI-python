@@ -368,3 +368,98 @@ classes:
         decision_log: >
           Trivial constant reader. Ignores filepath and always
           returns [{"stimid": 1}], matching the MATLAB class.
+
+  # =========================================================================
+  # ndi.daq.metadatareader.VHAudreyBPod
+  # =========================================================================
+  - name: VHAudreyBPod
+    type: class
+    matlab_path: "+ndi/+daq/+metadatareader/VHAudreyBPod.m"
+    matlab_last_sync_hash: "665bbb0d"
+    python_path: "ndi/daq/metadatareader/vhaudreybpod_stims.py"
+    python_class: "ndi_daq_metadatareader_VHAudreyBPod"
+    inherits: "ndi.daq.metadatareader"
+
+    properties:
+      - name: SUMMARY_FILE_PATTERN
+        type_python: "str"
+        access: "class variable"
+        decision_log: "Value: r'_summary_log\\.json$'. Pattern for finding BPod summary log files."
+
+    methods:
+      - name: VHAudreyBPod
+        kind: constructor
+        input_arguments:
+          - name: tsv_pattern
+            type_python: "str"
+            default: "''"
+          - name: identifier
+            type_python: "str | None"
+            default: "None"
+          - name: session
+            type_python: "Any | None"
+            default: "None"
+          - name: document
+            type_python: "Any | None"
+            default: "None"
+        output_arguments:
+          - name: reader_obj
+            type_python: "ndi_daq_metadatareader_VHAudreyBPod"
+        decision_log: >
+          Exact match. MATLAB forwards varargin to the superclass constructor.
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
+
+      - name: readmetadata
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+        output_arguments:
+          - name: parameters
+            type_python: "list[dict[str, Any]]"
+        decision_log: >
+          Python-specific entry point. Tries TSV reading from the base class,
+          then locates the *_summary_log.json file and delegates to
+          _read_summary_json. MATLAB exposes readmetadatafromfile instead.
+
+      - name: read_audrey_bpod_json
+        kind: static
+        input_arguments:
+          - name: s
+            type_matlab: "struct"
+            type_python: "dict[str, Any]"
+        output_arguments:
+          - name: parameters
+            type_python: "list[dict[str, Any]]"
+        decision_log: >
+          Exact match. Port of MATLAB static readAudreyBPodJson: builds a
+          7-stimulus parameter list (entries 1-6 are Solenoids 1-6, entry 7 is
+          the Wash/Water stimulus). Each entry carries stimid, isUsed,
+          solenoidValve, tastant, solenoidOpenDuration, DelayBeforeNextStim,
+          WashDuration, InterStimulusTime, isblank (1 when tastant is water).
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
+
+    protected_methods:
+      - name: _find_summary_file
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+        output_arguments:
+          - name: filepath
+            type_python: "str | None"
+        decision_log: "Python-specific. Finds the *_summary_log.json file in epoch files."
+
+    static_methods:
+      - name: _read_summary_json
+        kind: classmethod
+        input_arguments:
+          - name: filepath
+            type_python: "str"
+        output_arguments:
+          - name: parameters
+            type_python: "list[dict[str, Any]]"
+        decision_log: >
+          Python-specific. Loads the JSON file; if it is a VHAudreyBPod config
+          (has DelayB4NextStim + WashDuration) it transforms via
+          read_audrey_bpod_json, otherwise returns the raw content for backward
+          compatibility.

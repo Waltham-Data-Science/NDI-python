@@ -286,12 +286,27 @@ classes:
             type_python: "list[ndi_document]"
         decision_log: "Exact match."
 
+      - name: isIngested
+        input_arguments: []
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: >
+          Exact match. Renamed from is_fully_ingested to isIngested to match
+          MATLAB (renamed in MATLAB 3cde88c8). Checks whether any DAQ system's
+          file navigator still has files left to ingest.
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
+
       - name: is_fully_ingested
         input_arguments: []
         output_arguments:
           - name: b
             type_python: "bool"
-        decision_log: "Exact match."
+        decision_log: >
+          Python-only back-compat alias for isIngested (the old name before
+          MATLAB renamed it in 3cde88c8). Delegates to isIngested(); kept for
+          existing Python callers. No MATLAB equivalent under this name.
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
       - name: isIngestedInDataset
         input_arguments: []
@@ -323,7 +338,13 @@ classes:
         output_arguments:
           - name: elements
             type_python: "list[Any]"
-        decision_log: "Exact match."
+        decision_log: >
+          Exact match. A document that isa('element') but fails to construct
+          now re-raises (after logging the document id) instead of being
+          silently dropped — previously an except:pass hid the unconstructable
+          ndi.neuron, so getelements returned zero neurons with no error
+          (audit C8b).
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
       - name: getpath
         kind: abstract
