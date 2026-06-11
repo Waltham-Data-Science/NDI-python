@@ -97,6 +97,42 @@ class SQLiteDriver:
 
         return added, skipped
 
+    def bulk_add_documents(self, documents: list[dict]) -> list[tuple[str, str]]:
+        """Add many documents in a single O(N) pass.
+
+        Fetches the existing-id set ONCE (not per document, as :meth:`add`
+        does) and inserts all new documents with one ``add_docs`` call.
+        Loading N documents is therefore O(N) instead of the O(N^2) of a
+        per-document ``add`` loop, where each ``add`` re-scans every existing
+        id (the cause of multi-minute loads of large datasets).
+
+        Per-document problems (missing ``base.id``, duplicate id, or a
+        malformed document that will not construct) are collected and
+        returned rather than raised, preserving the resilience of the
+        per-document add loop. Returns a list of ``(doc_id, reason)`` for
+        each document that was not added.
+        """
+        existing_ids = set(self._db.get_doc_ids(self._branch_id))
+        failures: list[tuple[str, str]] = []
+        new_docs = []
+        for document in documents:
+            doc_id = document.get("base", {}).get("id", "")
+            if not doc_id:
+                failures.append(("", "ndi_document must have a base.id"))
+                continue
+            if doc_id in existing_ids:
+                failures.append((doc_id, f"ndi_document {doc_id} already exists"))
+                continue
+            try:
+                new_docs.append(self._DIDDocument(document))
+            except Exception as exc:  # noqa: BLE001 - mirror per-doc add resilience
+                failures.append((doc_id, str(exc)))
+                continue
+            existing_ids.add(doc_id)
+        if new_docs:
+            self._db.add_docs(new_docs, self._branch_id)
+        return failures
+
     def update(self, document: dict) -> None:
         """Update an existing document."""
         doc_id = document.get("base", {}).get("id", "")
@@ -229,6 +265,18 @@ class ndi_database:
                 f"Use update() or add_or_replace()."
             ) from exc
         return document
+
+    def add_documents(self, documents: list[ndi_document]) -> list[tuple[str, str]]:
+        """Add many documents in one O(N) pass (single existing-id fetch).
+
+        Use this instead of a per-document :meth:`add` loop when ingesting
+        many documents at once (e.g. loading a dataset): repeated ``add``
+        re-scans every existing id on each call and is O(N^2), which makes
+        large datasets take many minutes to load. Returns a list of
+        ``(doc_id, reason)`` for documents that could not be added, instead
+        of raising, so one bad document does not abort the whole load.
+        """
+        return self._driver.bulk_add_documents([d.document_properties for d in documents])
 
     def read(self, doc_id: str, isa_class: str | None = None) -> ndi_document | None:
         """Read a document by ID.
