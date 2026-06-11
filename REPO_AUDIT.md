@@ -1,5 +1,13 @@
 # NDI Cloud: MATLAB vs Python Structure Audit
 
+> [!NOTE]
+> **SUPERSEDED.** This is a narrow, cloud-module-only structural audit. It has
+> been superseded by the ecosystem-wide parity & audit report
+> (`ECOSYSTEM_AUDIT_2026-06.md`), which covers the full NDI-python codebase
+> (time system, epoch/DAQ, documents, ontology, security, packaging) and the
+> rest of the NDI ecosystem. Retained for historical context; consult the
+> ecosystem report for the current source of truth.
+
 This document analyzes every structural difference between the MATLAB and Python
 implementations of the NDI Cloud module, explains why each difference exists,
 and recommends whether to change or keep it.

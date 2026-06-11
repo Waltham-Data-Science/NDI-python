@@ -201,19 +201,38 @@ classes:
 # lookup logic. MATLAB uses scattered standalone functions instead.
 #
 # Python providers with MATLAB equivalents:
-#   NDICProvider   -> ndi.database.fun.ndicloud_ontology_lookup (deprecated)
-#   NCImProvider   -> ndi.database.fun.queryNCIm
-#   OLSProvider    -> ndi.database.fun.lookup_uberon_term (UBERON-specific)
+#   NDICProvider     -> ndi.database.fun.ndicloud_ontology_lookup (deprecated)
+#   NCImProvider     -> ndi.database.fun.queryNCIm
+#   OLSProvider      -> ndi.database.fun.lookup_uberon_term (UBERON-specific)
+#   UBERONProvider   -> ndi.database.fun.lookup_uberon_term /
+#                       ndi.database.fun.uberon_ontology_lookup
+#                       (OLSProvider subclass pinned to the 'uberon' OLS slug;
+#                       MATLAB's headline lookup('UBERON:heart') example).
+#                       matlab_last_sync_hash: fe64a9f5
 #
 # Python providers WITHOUT MATLAB equivalents (Python-ahead):
 #   CLProvider, OMProvider, CHEBIProvider, SNOMEDProvider, EFOProvider,
 #   PATOProvider, NCBITaxonProvider, WBStrainProvider, RRIDProvider,
-#   PubChemProvider, EMPTYProvider
+#   PubChemProvider, EMPTYProvider,
+#   NCITProvider, EDAMProvider, IAOProvider, STATOProvider, SchemaOrgProvider
 #
-# These extend Python's ontology coverage beyond MATLAB's current 3
+# The five new OLS-backed providers (NCIT, EDAM, IAO, STATO, SchemaOrg) are
+# thin OLSProvider subclasses that differ only by ols_ontology/ols_prefix and
+# resolve via the EBI OLS4 API (https://www.ebi.ac.uk/ols4/api). They have no
+# MATLAB counterpart function: MATLAB only ships lookup_uberon_term /
+# queryNCIm. NCIT is the NCI *Thesaurus* (OLS slug 'ncit'); it is distinct
+# from NCImProvider, which mirrors queryNCIm's NCI *Metathesaurus* (NCIm) REST
+# lookup. EDAM and SchemaOrg use named / sub-typed identifiers rather than a
+# flat numeric series, so id lookups pass the full term; label lookups work as
+# usual. All six are registered in PROVIDER_REGISTRY, and EDAM/IAO/STATO/
+# SchemaOrg also gained ontology_list.json prefix + Ontologies entries
+# (UBERON/NCIT were already listed).
+#
+# These extend Python's ontology coverage beyond MATLAB's current
 # ontologies (NDIC, UBERON, NCIm). The MATLAB codebase has a planned
 # ndi.ontology.lookup() that does not yet exist but will likely adopt
 # a similar dispatcher pattern.
+# Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
 # =========================================================================
 # Standalone functions (module-level)
@@ -261,18 +280,24 @@ not_applicable:
 
   - name: uberon_ontology_lookup
     matlab_path: "+ndi/+database/+fun/uberon_ontology_lookup.m"
+    matlab_last_sync_hash: fe64a9f5
     status: not_applicable
     decision_log: >
       MATLAB standalone function for UBERON lookups with local
       fallback. Python handles UBERON via the OLS-backed provider
-      system. No direct port needed.
+      system (UBERONProvider, an OLSProvider subclass pinned to the
+      'uberon' slug). No direct port needed.
+      Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
   - name: lookup_uberon_term
     matlab_path: "+ndi/+database/+fun/lookup_uberon_term.m"
+    matlab_last_sync_hash: fe64a9f5
     status: not_applicable
     decision_log: >
       Low-level MATLAB function wrapping EBI OLS API search.
-      Python OLSProvider._search_ols() provides equivalent logic.
+      Python OLSProvider._search_ols() provides equivalent logic;
+      UBERONProvider is the UBERON-pinned subclass.
+      Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
   - name: queryNCIm
     matlab_path: "+ndi/+database/+fun/queryNCIm.m"

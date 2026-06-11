@@ -18,6 +18,12 @@ infrastructure:
     decision_log: >
       Python-only Pydantic validators (CloudId, NonEmptyStr, PageNumber,
       PageSize, Scope, FilePath). MATLAB uses arguments blocks for validation.
+      Scope now mirrors MATLAB's +documents iMustBeValidScope: it accepts a
+      visibility keyword ('public'/'private'/'all') OR a comma-separated list
+      of 24-character hex dataset ids (returned normalized), instead of the
+      too-narrow Literal['public','private','all'] that rejected
+      dataset-scoped ndiquery calls before any HTTP call.
+      Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
   - name: _resolve_org_id
     type: internal_helper
@@ -783,7 +789,13 @@ functions:
         type_python: "str"
     decision_log: >
       Disambiguated from documents.getBulkUploadURL by full module path.
-      Exact name match.
+      Signature unchanged; method corrected from POST to GET — it now
+      delegates to getFileCollectionUploadURL (the getBulkUploadFileUrl
+      GET controller) and returns just the presigned url (dropping jobId)
+      so there is a single source of truth. The previous POST 404'd. No
+      standalone MATLAB +files/getBulkUploadURL.m exists; the GET route is
+      the one MATLAB's getFileCollectionUploadURL uses.
+      Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
   - name: putFiles
     matlab_path: "+ndi/+cloud/+api/+files/putFiles.m"
@@ -1275,7 +1287,13 @@ functions:
     output_arguments:
       - name: result
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      Signature unchanged; route corrected to POST
+      /compute/{sessionId}/advance (the 'advance' controller, matching
+      MATLAB FinalizeSession's finalize_compute_session URL alias). There
+      is no /finalize route — the swagger that advertised one was wrong,
+      so the previous POST .../finalize 404'd. Name exact match.
+      Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
   - name: abortSession
     matlab_path: "+ndi/+cloud/+api/+compute/abortSession.m"
@@ -1291,7 +1309,12 @@ functions:
     output_arguments:
       - name: success
         type_python: "bool"
-    decision_log: "Exact match."
+    decision_log: >
+      Signature unchanged; route corrected to DELETE /compute/{sessionId}
+      (the 'quit' controller), matching MATLAB AbortSession which issues
+      an HTTP DELETE. There is no /abort route, so the previous
+      POST .../abort 404'd. Name exact match.
+      Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
   - name: listSessions
     matlab_path: "+ndi/+cloud/+api/+compute/listSessions.m"

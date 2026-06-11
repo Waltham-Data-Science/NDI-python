@@ -350,6 +350,7 @@ classes:
           Synchronized 2026-03-13.
 
       - name: dependency_value_n
+        matlab_last_sync_hash: "948182e6"
         input_arguments:
           - name: dependency_name
             type_matlab: "char"
@@ -363,7 +364,12 @@ classes:
             type_python: "list[str]"
         decision_log: >
           Exact match. Returns values from numbered dependency list
-          (e.g., element_1, element_2). Synchronized 2026-03-13.
+          (e.g., element_1, element_2). Same signature. When no
+          numbered match exists at i==1, falls back to the un-numbered
+          dependency name and skips an empty value (template placeholder),
+          mirroring MATLAB document.dependency_value_n (document.m:365-388,
+          incl. the empty-placeholder skip). Internal behavior only.
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
       - name: add_dependency_value_n
         input_arguments:
@@ -569,6 +575,7 @@ classes:
 
       # --- Merging ---
       - name: plus
+        matlab_last_sync_hash: "948182e6"
         input_arguments:
           - name: other
             type_matlab: "ndi.document"
@@ -579,7 +586,11 @@ classes:
         decision_log: >
           Exact match. Merges two documents. Fields in self take
           precedence. Mapped to Python __add__. Merges superclasses,
-          dependencies, and file_lists. Synchronized 2026-03-13.
+          dependencies, and file_lists. A duplicate file name now raises
+          ValueError (was a silent set() de-dup), matching MATLAB plus
+          which errors 'Documents have files of the same name. Cannot be
+          combined.' (document.m:631; audit §3.4-2).
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
       # --- Equality ---
       - name: eq
@@ -631,6 +642,7 @@ classes:
 
       - name: read_blank_definition
         kind: static
+        matlab_last_sync_hash: "948182e6"
         input_arguments:
           - name: document_type
             type_matlab: "char"
@@ -641,7 +653,10 @@ classes:
         decision_log: >
           Exact match. Reads a blank document definition from
           JSON schema. Recursively merges superclass properties.
-          Synchronized 2026-03-13.
+          Same signature; now memoized in a class-level cache and
+          serves a deep copy on each call so callers can mutate the
+          result without corrupting the cache (performance, §3.6).
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
     decision_log: >
       Core document class. Both languages use JSON schema-based

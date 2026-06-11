@@ -585,6 +585,7 @@ classes:
     python_path: "ndi/time/syncgraph.py"
     python_class: "ndi_time_syncgraph"
     inherits: "ndi.ido"
+    # Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
     properties:
       - name: session
@@ -678,7 +679,47 @@ classes:
             type_python: "str"
         decision_log: >
           Exact match. Returns 3-tuple (t_out, timeref_out, msg).
-          Uses NetworkX shortest path for graph traversal.
+          Uses NetworkX shortest path for graph traversal. If the
+          source or destination epoch is not yet a DAQ-system node,
+          calls _add_underlying_epochs() to inject the referent's
+          underlying epochs and retries the lookup once
+          (MATLAB syncgraph.m source/dest retry). Equal-cost
+          destinations are tie-broken by epoch_id then by t_in
+          (+Inf->last, -Inf/0->first).
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
+
+      - name: _add_underlying_epochs
+        kind: private
+        input_arguments:
+          - name: referent
+            type_matlab: "ndi.epoch.epochset"
+            type_python: "Any"
+          - name: ginfo
+            type_python: "ndi_time_graphinfo"
+        output_arguments:
+          - name: ginfo
+            type_python: "ndi_time_graphinfo"
+        decision_log: >
+          MATLAB: ndi.time.syncgraph/addunderlyingepochs. Injects an
+          element/probe epochset's epochs (element/probe -> ... -> DAQ)
+          into the graph so non-DAQ-system referents become reachable,
+          then connects nodes that share an equivalence global clock via
+          _add_equivalence_edges(). Called lazily on demand by
+          time_convert() when the source/destination node is missing.
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
+
+      - name: _add_equivalence_edges
+        kind: static-private
+        input_arguments:
+          - name: ginfo
+            type_python: "ndi_time_graphinfo"
+        output_arguments: []
+        decision_log: >
+          Adds a cost-77 identity edge between every pair of nodes that
+          share an equivalence global clock (e.g. utc<->utc,
+          exp_global_time<->exp_global_time) so global clocks remain
+          mutually reachable through the graph.
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
       - name: eq
         input_arguments:
@@ -807,3 +848,96 @@ classes:
     decision_log: >
       Python dataclass. Container for sync graph information.
       Mirrors the MATLAB struct used to hold graph state.
+
+# =========================================================================
+# Functions — ndi.time.fun  (module: ndi/time/fun.py)
+# Trigger-train clock-synchronization helpers (added 2026-06).
+# =========================================================================
+functions:
+
+  - name: sync_trigger_trains
+    type: function
+    matlab_path: "+ndi/+time/+fun/syncTriggerTrains.m"
+    matlab_last_sync_hash: "dacd5474"
+    python_path: "ndi/time/fun.py"
+    python_function: "sync_trigger_trains"
+    input_arguments:
+      - name: t1
+        type_matlab: "double (:,1)"
+        type_python: "np.ndarray"
+      - name: t2
+        type_matlab: "double (:,1)"
+        type_python: "np.ndarray"
+      - name: alignment_tolerance
+        type_matlab: "double"
+        type_python: "float"
+        default: "0.005"
+      - name: min_match_rate
+        type_matlab: "double"
+        type_python: "float"
+        default: "0.8"
+      - name: fingerprint_size
+        type_matlab: "double"
+        type_python: "int"
+        default: "5"
+    output_arguments:
+      - name: shift
+        type_python: "float"
+      - name: scale
+        type_python: "float"
+    decision_log: >
+      Exact match. Returns (shift, scale) such that
+      t2 = shift + scale * t1, or (nan, nan) if no confident alignment.
+      MATLAB name-value options (alignmentTolerance, minMatchRate,
+      fingerprintSize) map to snake_case keyword args. Uses quantized
+      inter-pulse-interval fingerprints to seed candidate offsets, then
+      drift-aware global validation permitting one dropped pulse. Raises
+      ValueError 'ndi:time:sync:ambiguous' when multiple distinct
+      high-certainty alignments are found.
+      Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
+
+  - name: sync_random_triggers
+    type: function
+    matlab_path: "+ndi/+time/+fun/syncRandomTriggers.m"
+    matlab_last_sync_hash: "a009ea96"
+    python_path: "ndi/time/fun.py"
+    python_function: "sync_random_triggers"
+    input_arguments:
+      - name: t1
+        type_matlab: "double (:,1)"
+        type_python: "np.ndarray"
+      - name: t2
+        type_matlab: "double (:,1)"
+        type_python: "np.ndarray"
+      - name: alignment_tolerance
+        type_matlab: "double"
+        type_python: "float"
+        default: "0.002"
+      - name: fingerprint_size
+        type_matlab: "double"
+        type_python: "int"
+        default: "4"
+    output_arguments:
+      - name: shift
+        type_python: "float"
+      - name: scale
+        type_python: "float"
+    decision_log: >
+      Exact match. Returns (shift, scale) such that
+      t1 = shift + scale * t2, or (nan, nan) if no match is found.
+      MATLAB name-value options (alignmentTolerance, fingerprintSize)
+      map to snake_case keyword args. Hashes the longer-duration
+      recording's quantized interval fingerprints and probes with the
+      shorter one; first candidate is verified with a further pulse and
+      a linear regression. MATLAB randomizes probe order for speed; the
+      Python port iterates deterministically with an identical validated
+      result for unambiguous data.
+      Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
+
+  # -------------------------------------------------------------------------
+  # MATLAB-only in this package (no Python equivalent yet)
+  # -------------------------------------------------------------------------
+  # ndi.time.fun.samples2times / times2samples (+ndi/+time/+fun/*.m,
+  # hash fe64a9f5) have NOT been ported into ndi/time/fun.py; the Python
+  # sample<->time conversions live on the timeseries reader classes
+  # instead. Intentionally not listed as functions here.

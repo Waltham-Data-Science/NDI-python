@@ -168,10 +168,11 @@ classes:
   - name: commonTriggersOverlappingEpochs
     type: class
     matlab_path: "+ndi/+time/+syncrule/commonTriggersOverlappingEpochs.m"
-    matlab_last_sync_hash: "ca27911b"
+    matlab_last_sync_hash: "8736980c"
     python_path: "ndi/time/syncrule/common_triggers_overlapping_epochs.py"
     python_class: "ndi_time_syncrule_commonTriggersOverlappingEpochs"
     inherits: "ndi.time.syncrule"
+    # Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
     methods:
       - name: commonTriggersOverlappingEpochs
@@ -250,11 +251,15 @@ classes:
           file overlap (grandparent/parent matching), expands
           epoch group iteratively, reads triggers from all
           overlapping epochs, and computes linear mapping via
-          least-squares (vlt.time.syncTriggers equivalent).
+          least-squares (vlt.time.syncTriggers equivalent). When the
+          two trigger trains have unequal counts the helper
+          _sync_triggers falls back to ndi.time.fun.sync_trigger_trains,
+          which aligns the trains robustly to drift and a dropped pulse.
           Checks for cached syncrule_mapping documents in the
           database before computing. Returns (None, None) if
           no embedded overlap or names/clocks do not match.
           Raises RuntimeError on failure if errorOnFailure=True.
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
   # =========================================================================
   # ndi.time.syncrule.randomPulses
@@ -266,6 +271,7 @@ classes:
     python_path: "ndi/time/syncrule/random_pulses.py"
     python_class: "ndi_time_syncrule_randomPulses"
     inherits: "ndi.time.syncrule"
+    # Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
     methods:
       - name: randomPulses
@@ -343,11 +349,14 @@ classes:
         decision_log: >
           Exact match. Extended signature vs ndi_time_syncrule_filematch/ndi_time_syncrule_filefind:
           accepts daqsystem_a as third argument. Reads random
-          pulse trigger events from each epoch, uses
-          inter-pulse-interval cross-correlation to align
-          sequences (ndi.time.fun.syncRandomTriggers equivalent),
-          then computes a linear time mapping. Checks for cached
-          syncrule_mapping documents in the database before
-          computing. Returns (None, None) if names/clocks do
-          not match. Raises RuntimeError on failure if
-          errorOnFailure=True.
+          pulse trigger events from each epoch; the helper
+          _sync_random_triggers now delegates to
+          ndi.time.fun.sync_random_triggers (quantized inter-pulse
+          interval fingerprint + secondary-pulse validation),
+          replacing the previous interval cross-correlation that
+          assumed near-complete overlap, then computes a linear time
+          mapping. Checks for cached syncrule_mapping documents in
+          the database before computing. Returns (None, None) if
+          names/clocks do not match. Raises RuntimeError on failure
+          if errorOnFailure=True.
+          Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
