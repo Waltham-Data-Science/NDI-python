@@ -31,55 +31,24 @@ def _sync_random_triggers(t1: np.ndarray, t2: np.ndarray) -> tuple[float, float]
     """
     Find a linear mapping T1 = scale * T2 + shift by matching random pulses.
 
-    Uses inter-pulse interval cross-correlation to find the best alignment,
-    then performs a least-squares fit.
+    Aligns two devices that recorded the same stochastic trigger sequence on
+    independent clocks via ``ndi.time.fun.sync_random_triggers``: quantized
+    inter-pulse-interval fingerprints locate the overlap, a further pulse
+    verifies it, and a linear regression solves for scale/shift. This replaces
+    the previous interval cross-correlation, which assumed near-complete overlap
+    and diverged on partial-overlap / drifting data (audit §3.4-7).
 
     Returns:
         Tuple of (shift, scale) where T1 ~ scale * T2 + shift.
     """
-    if len(t1) < 2 or len(t2) < 2:
-        raise ValueError("Need at least 2 triggers in each sequence to synchronize.")
+    from ..fun import sync_random_triggers
 
-    # Compute inter-pulse intervals
-    ipi1 = np.diff(t1)
-    ipi2 = np.diff(t2)
-
-    # Normalize for cross-correlation
-    ipi1_norm = (ipi1 - np.mean(ipi1)) / (np.std(ipi1) + 1e-15)
-    ipi2_norm = (ipi2 - np.mean(ipi2)) / (np.std(ipi2) + 1e-15)
-
-    # Cross-correlate to find best offset
-    corr = np.correlate(ipi1_norm, ipi2_norm, mode="full")
-    best_lag = int(np.argmax(corr)) - (len(ipi2_norm) - 1)
-
-    # Determine overlapping region
-    if best_lag >= 0:
-        n_overlap = min(len(t1) - best_lag, len(t2))
-        t1_matched = t1[best_lag : best_lag + n_overlap]
-        t2_matched = t2[:n_overlap]
-    else:
-        n_overlap = min(len(t1), len(t2) + best_lag)
-        t1_matched = t1[:n_overlap]
-        t2_matched = t2[-best_lag : -best_lag + n_overlap]
-
-    if n_overlap < 2:
-        raise ValueError("Not enough overlapping triggers to compute mapping.")
-
-    # Least-squares fit: T1 = scale * T2 + shift
-    coeffs = np.polyfit(t2_matched, t1_matched, 1)
-    scale = float(coeffs[0])
-    shift = float(coeffs[1])
-
-    # Validate fit quality
-    residuals = t1_matched - (scale * t2_matched + shift)
-    rms_error = float(np.sqrt(np.mean(residuals**2)))
-    median_ipi = float(np.median(np.concatenate([ipi1, ipi2])))
-    if median_ipi > 0 and rms_error > 0.1 * median_ipi:
+    shift, scale = sync_random_triggers(t1, t2)
+    if np.isnan(shift) or np.isnan(scale):
         raise ValueError(
-            f"Poor fit quality (RMS={rms_error:.4f}, "
-            f"median IPI={median_ipi:.4f}). Sequences may not match."
+            "Could not align random trigger sequences "
+            f"({len(t1)} vs {len(t2)} pulses); no matching fingerprint found."
         )
-
     return shift, scale
 
 

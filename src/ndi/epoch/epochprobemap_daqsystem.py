@@ -69,27 +69,39 @@ class ndi_epoch_epochprobemap__daqsystem(ndi_epoch_epochprobemap):
             "subjectstring": self.subjectstring,
         }
 
+    #: Serialized column order (MATLAB serialization_struct field order).
+    _FIELDS = ("name", "reference", "type", "devicestring", "subjectstring")
+
+    def _data_row(self) -> str:
+        """This object's tab-joined data row (reference as an integer)."""
+        return "\t".join(
+            [self.name, str(self.reference), self.type, self.devicestring, self.subjectstring]
+        )
+
     def serialize(self) -> str:
         """
-        Serialize to a tab-delimited string.
+        Serialize to a tab-delimited string with a header row.
+
+        Matches MATLAB ``ndi.epoch.epochprobemap_daqsystem/serialize``: a header
+        row of field names followed by one data row per object. (The previous
+        Python output was a single header-less line, which crashed MATLAB's
+        decode and could not represent an array — audit C10.)
 
         Returns:
-            Tab-delimited string: name\\treference\\ttype\\tdevicestring\\tsubjectstring
+            ``"name\\treference\\ttype\\tdevicestring\\tsubjectstring\\n<row>"``
         """
-        return "\t".join(
-            [
-                self.name,
-                str(self.reference),
-                self.type,
-                self.devicestring,
-                self.subjectstring,
-            ]
-        )
+        return "\t".join(self._FIELDS) + "\n" + self._data_row()
+
+    @classmethod
+    def serialize_array(cls, objs: list[ndi_epoch_epochprobemap__daqsystem]) -> str:
+        """Serialize a list of probe maps as one header row + one row per object."""
+        rows = [o._data_row() for o in objs]
+        return "\n".join(["\t".join(cls._FIELDS), *rows])
 
     @pydantic.validate_call
     def savetofile(self, filename: str) -> None:
         """
-        Write this epoch probe map to a file.
+        Write this epoch probe map to a file (header row + one data row).
 
         Args:
             filename: Path to write to
@@ -99,37 +111,85 @@ class ndi_epoch_epochprobemap__daqsystem(ndi_epoch_epochprobemap):
             f.write(self.serialize() + "\n")
 
     @classmethod
+    def save_array_to_file(
+        cls, objs: list[ndi_epoch_epochprobemap__daqsystem], filename: str
+    ) -> None:
+        """Write a list of probe maps to a file (one header row + N data rows)."""
+        Path(filename).parent.mkdir(parents=True, exist_ok=True)
+        with open(filename, "w") as f:
+            f.write(cls.serialize_array(objs) + "\n")
+
+    @staticmethod
+    def _is_header_row(parts: list[str]) -> bool:
+        """A header row's ``reference`` column is the literal field name, not an int."""
+        if len(parts) < 2:
+            return False
+        try:
+            int(parts[1])
+            return False
+        except ValueError:
+            return True
+
+    @classmethod
+    def _parse_rows(cls, s: str) -> list[ndi_epoch_epochprobemap__daqsystem]:
+        """Parse a serialized string (with or without a header) into objects."""
+        lines = [ln for ln in s.replace("\r\n", "\n").split("\n") if ln.strip()]
+        if not lines:
+            return []
+
+        header = list(cls._FIELDS)
+        first = lines[0].split("\t")
+        if cls._is_header_row(first):
+            header = first
+            lines = lines[1:]
+
+        results: list[ndi_epoch_epochprobemap__daqsystem] = []
+        for line in lines:
+            if line.startswith("#"):
+                continue
+            parts = line.split("\t")
+            if len(parts) < len(header):
+                continue
+            row = dict(zip(header, parts))
+            results.append(
+                cls(
+                    name=row.get("name", ""),
+                    reference=int(row["reference"]),
+                    type=row.get("type", ""),
+                    devicestring=row.get("devicestring", ""),
+                    subjectstring=row.get("subjectstring", ""),
+                )
+            )
+        return results
+
+    @classmethod
     def decode(cls, s: str) -> ndi_epoch_epochprobemap__daqsystem:
         """
-        Decode from a serialized string.
+        Decode a single probe map from a serialized string (header skipped).
 
         Args:
-            s: Tab-delimited string
+            s: Serialized string (header row + data row, or a bare data row).
 
         Returns:
-            ndi_epoch_epochprobemap__daqsystem object
+            The first ndi_epoch_epochprobemap__daqsystem in the string.
 
         Raises:
-            ValueError: If the string cannot be parsed
+            ValueError: If no data row can be parsed.
         """
-        parts = s.strip().split("\t")
-        if len(parts) < 5:
-            raise ValueError(f"Expected 5 tab-separated fields, got {len(parts)}: '{s}'")
+        objs = cls._parse_rows(s)
+        if not objs:
+            raise ValueError(f"No epochprobemap data row found in serialized string: '{s}'")
+        return objs[0]
 
-        return cls(
-            name=parts[0],
-            reference=int(parts[1]),
-            type=parts[2],
-            devicestring=parts[3],
-            subjectstring=parts[4],
-        )
+    @classmethod
+    def decode_array(cls, s: str) -> list[ndi_epoch_epochprobemap__daqsystem]:
+        """Decode all probe maps from a serialized string (header skipped)."""
+        return cls._parse_rows(s)
 
     @classmethod
     def loadfromfile(cls, filename: str) -> list[ndi_epoch_epochprobemap__daqsystem]:
         """
-        Load epoch probe maps from a file.
-
-        Each line is one serialized ndi_epoch_epochprobemap__daqsystem.
+        Load epoch probe maps from a file (header row skipped if present).
 
         Args:
             filename: Path to read from
@@ -137,13 +197,8 @@ class ndi_epoch_epochprobemap__daqsystem(ndi_epoch_epochprobemap):
         Returns:
             List of ndi_epoch_epochprobemap__daqsystem objects
         """
-        results = []
         with open(filename) as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#"):
-                    results.append(cls.decode(line))
-        return results
+            return cls._parse_rows(f.read())
 
     def __repr__(self) -> str:
         return (
