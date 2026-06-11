@@ -409,12 +409,22 @@ class ndi_document:
                     values.append(dep["value"])
                     found = True
                     break
+            if not found and i == 1:
+                # Fall back to the un-numbered dependency name, skipping an empty
+                # value (a template placeholder) — MATLAB document.dependency_value_n
+                # (document.m:367-378, incl. the 2026-03-25 empty-placeholder skip).
+                for dep in depends_on:
+                    if dep["name"].lower() == dependency_name.lower():
+                        if dep["value"]:
+                            values.append(dep["value"])
+                            found = True
+                        break
             if not found:
                 break
             i += 1
 
         if not values and error_if_not_found:
-            raise KeyError(f"No dependencies matching '{dependency_name}_*' found")
+            raise KeyError(f"No dependencies matching '{dependency_name}' found")
         return values
 
     def set_dependency_value(
@@ -602,16 +612,22 @@ class ndi_document:
                 else:
                     result._document_properties["depends_on"].append(dep)
 
-        # Merge file_list
+        # Merge file_list. MATLAB's document '+' errors on a duplicate file name
+        # rather than silently de-duplicating; the previous set() merge both lost
+        # order and hid the collision (audit §3.4-2).
         if "files" in other._document_properties:
             if "files" not in result._document_properties:
                 result._document_properties["files"] = other._document_properties["files"]
             else:
                 my_files = result._document_properties["files"].get("file_list", [])
                 other_files = other._document_properties["files"].get("file_list", [])
-                result._document_properties["files"]["file_list"] = list(
-                    set(my_files + other_files)
-                )
+                duplicates = [f for f in other_files if f in set(my_files)]
+                if duplicates:
+                    raise ValueError(
+                        "Cannot add documents: duplicate file name(s) "
+                        f"{sorted(set(duplicates))} appear in both documents."
+                    )
+                result._document_properties["files"]["file_list"] = my_files + other_files
 
         # Merge other fields (other's fields added if not in self)
         for key, value in other._document_properties.items():
@@ -761,16 +777,27 @@ class ndi_document:
         newest_idx = max(range(len(timestamps)), key=lambda i: timestamps[i])
         return doc_array[newest_idx], newest_idx, timestamps[newest_idx]
 
+    #: Memoized fully-resolved definitions keyed by document_type. The JSON
+    #: definitions (and their superclass chains) are static files, so parsing
+    #: them once and serving deep copies avoids re-reading + re-parsing every
+    #: definition (and every superclass) on each document construction (§3.6).
+    _DEFINITION_CACHE: dict[str, dict] = {}
+
     @staticmethod
     def read_blank_definition(document_type: str) -> dict:
-        """Read a blank document definition from JSON schema.
+        """Read a blank document definition from JSON schema (memoized).
 
         Args:
             document_type: The document type name (without .json extension).
 
         Returns:
-            Dictionary with blank document structure.
+            Dictionary with blank document structure (a fresh copy each call, so
+            callers may mutate it without corrupting the cache).
         """
+        cached = ndi_document._DEFINITION_CACHE.get(document_type)
+        if cached is not None:
+            return deepcopy(cached)
+
         # Try to find the JSON definition
         json_path = ndi_common_PathConstants.DOCUMENT_PATH / f"{document_type}.json"
 
@@ -800,6 +827,7 @@ class ndi_document:
                     except FileNotFoundError:
                         pass  # Skip missing superclass definitions
 
+        ndi_document._DEFINITION_CACHE[document_type] = deepcopy(definition)
         return definition
 
     def __repr__(self) -> str:
