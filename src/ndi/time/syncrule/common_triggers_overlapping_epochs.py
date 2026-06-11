@@ -52,20 +52,32 @@ def _count_embedded_matches(files_deep: list[str], files_shallow: list[str]) -> 
 
 def _sync_triggers(t1: np.ndarray, t2: np.ndarray) -> tuple[float, float]:
     """
-    Find a linear mapping T2 = scale * T1 + shift via least-squares fit.
+    Find a linear mapping T2 = scale * T1 + shift.
+
+    When both trains have the same number of triggers, they are assumed to be in
+    1:1 correspondence and a direct least-squares fit is used. When the counts
+    differ (e.g. a dropped/extra pulse or a partial-overlap read window), this
+    falls back to ``ndi.time.fun.sync_trigger_trains``, which aligns the trains
+    by quantized interval fingerprints — matching MATLAB
+    ``commonTriggersOverlappingEpochs`` instead of hard-failing (audit §3.4-7).
 
     Returns:
         Tuple of (shift, scale) where T2 ~ scale * T1 + shift.
     """
     if len(t1) == 0 or len(t2) == 0:
         raise ValueError("Empty trigger arrays cannot be synchronized.")
-    if len(t1) != len(t2):
+
+    if len(t1) == len(t2):
+        coeffs = np.polyfit(t1, t2, 1)
+        return float(coeffs[1]), float(coeffs[0])
+
+    from ..fun import sync_trigger_trains
+
+    shift, scale = sync_trigger_trains(t1, t2)
+    if np.isnan(shift) or np.isnan(scale):
         raise ValueError(
-            f"Trigger count mismatch: {len(t1)} vs {len(t2)}. " "Cannot compute linear mapping."
+            f"Could not align trigger trains of unequal length ({len(t1)} vs {len(t2)})."
         )
-    coeffs = np.polyfit(t1, t2, 1)
-    scale = float(coeffs[0])
-    shift = float(coeffs[1])
     return shift, scale
 
 

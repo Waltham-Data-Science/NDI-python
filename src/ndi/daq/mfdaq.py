@@ -7,6 +7,7 @@ multi-function data acquisition systems that sample various data types.
 
 from __future__ import annotations
 
+import re
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -93,6 +94,29 @@ class ChannelInfo:
         )
 
 
+#: A ``_t<threshold>`` suffix is ``_t`` followed by a (optionally signed/decimal)
+#: number at the end of the string, e.g. ``aep_t2.5`` or ``aimn_t-3``. It must NOT
+#: match an ordinary ``_t...`` substring such as the ``_type`` in ``custom_type``.
+_THRESHOLD_SUFFIX_RE = re.compile(r"_t[-+]?\d*\.?\d+$")
+
+
+def strip_threshold_suffix(channel_type: str) -> str:
+    """Strip a numeric ``_t<threshold>`` suffix (e.g. ``aep_t2.5`` -> ``aep``).
+
+    Analog-event/mark channel types carry an optional threshold suffix that is
+    not part of the type itself; MATLAB ``mfdaq_type``/``mfdaq_prefix`` strip it
+    before matching (2157c70f). Only a trailing numeric threshold is stripped, so
+    ordinary names like ``custom_type`` are left unchanged.
+    """
+    return _THRESHOLD_SUFFIX_RE.sub("", channel_type)
+
+
+def threshold_suffix(channel_type: str) -> str:
+    """Return the numeric ``_t<threshold>`` suffix of *channel_type*, or ``''``."""
+    m = _THRESHOLD_SUFFIX_RE.search(channel_type)
+    return m.group(0) if m else ""
+
+
 def standardize_channel_type(channel_type: str | ChannelType) -> str:
     """
     Standardize a channel type to its full name.
@@ -106,6 +130,9 @@ def standardize_channel_type(channel_type: str | ChannelType) -> str:
     if isinstance(channel_type, ChannelType):
         return channel_type.value
 
+    # Strip the optional analog-event threshold suffix before matching.
+    base = strip_threshold_suffix(channel_type)
+
     abbrev_map = {
         "ai": "analog_in",
         "ao": "analog_out",
@@ -117,8 +144,15 @@ def standardize_channel_type(channel_type: str | ChannelType) -> str:
         "e": "event",
         "mk": "marker",
         "tx": "text",
+        # analog-event / analog-mark channels (MATLAB mfdaq_type, 2157c70f)
+        "ae": "analog_in_event_pos",
+        "aep": "analog_in_event_pos",
+        "aen": "analog_in_event_neg",
+        "aim": "analog_in_mark_pos",
+        "aimp": "analog_in_mark_pos",
+        "aimn": "analog_in_mark_neg",
     }
-    return abbrev_map.get(channel_type.lower(), channel_type)
+    return abbrev_map.get(base.lower(), base)
 
 
 def standardize_channel_types(channel_types: list[str]) -> list[str]:

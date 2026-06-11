@@ -178,10 +178,36 @@ class TestEpochProbeMapDAQSystem:
             subjectstring="mouse001",
         )
         s = epm.serialize()
-        assert "\t" in s
-        parts = s.split("\t")
-        assert len(parts) == 5
-        assert parts[0] == "probe1"
+        # MATLAB parity (C10): a header row of field names + one data row.
+        lines = s.strip().split("\n")
+        assert len(lines) == 2
+        assert lines[0].split("\t") == [
+            "name",
+            "reference",
+            "type",
+            "devicestring",
+            "subjectstring",
+        ]
+        data = lines[1].split("\t")
+        assert len(data) == 5
+        assert data[0] == "probe1"
+
+    def test_serialize_array_roundtrip(self, tmp_path):
+        from ndi.epoch.epochprobemap_daqsystem import ndi_epoch_epochprobemap__daqsystem
+
+        a = ndi_epoch_epochprobemap__daqsystem(
+            name="p1", reference=1, type="n-trode", devicestring="intan1:ai1-4", subjectstring="m1"
+        )
+        b = ndi_epoch_epochprobemap__daqsystem(
+            name="p2", reference=2, type="single", devicestring="intan1:ai5", subjectstring="m1"
+        )
+        filepath = str(tmp_path / "arr_epm.txt")
+        ndi_epoch_epochprobemap__daqsystem.save_array_to_file([a, b], filepath)
+        # one header line + two data rows
+        assert len(open(filepath).read().strip().split("\n")) == 3
+        loaded = ndi_epoch_epochprobemap__daqsystem.loadfromfile(filepath)
+        assert [x.name for x in loaded] == ["p1", "p2"]
+        assert [x.reference for x in loaded] == [1, 2]
 
     def test_decode_roundtrip(self):
         from ndi.epoch.epochprobemap_daqsystem import ndi_epoch_epochprobemap__daqsystem
