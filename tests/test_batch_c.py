@@ -395,15 +395,27 @@ class TestTuningResponse:
     def test_inherits_app(self):
         assert issubclass(ndi_app_stimulus_tuning__response, ndi_app)
 
-    def test_stimulus_responses_raises(self):
+    def test_stimulus_responses_no_session_returns_empty(self):
+        # stimulus_responses is now a real port (tuning_response.m:26-138); with
+        # no session there are no stimulus_presentation docs to iterate, so it
+        # returns [] rather than NotImplementedError.
         app = ndi_app_stimulus_tuning__response()
-        with pytest.raises(NotImplementedError):
-            app.stimulus_responses(SimpleNamespace(), SimpleNamespace())
+        assert app.stimulus_responses(SimpleNamespace(id="s"), SimpleNamespace(id="t")) == []
 
-    def test_tuning_curve_raises(self):
+    def test_tuning_curve_requires_session(self):
+        # tuning_curve is now a real port (tuning_response.m:334-504); without a
+        # session it raises RuntimeError before any analysis.
         app = ndi_app_stimulus_tuning__response()
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(RuntimeError, match="requires a session"):
             app.tuning_curve(SimpleNamespace())
+
+    def test_tuning_curve_requires_independent_parameter(self):
+        # With a session but no independent_parameter the faithful port raises
+        # ValueError (tuning_response.m:369-371).
+        session = SimpleNamespace(id=lambda: "s1", database_search=lambda q: [])
+        app = ndi_app_stimulus_tuning__response(session=session)
+        with pytest.raises(ValueError, match="independent_parameter is empty"):
+            app.tuning_curve(SimpleNamespace(), independent_parameter=[])
 
     def test_label_control_stimuli(self):
         app = ndi_app_stimulus_tuning__response()

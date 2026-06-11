@@ -64,21 +64,42 @@ class ndi_app_stimulus_decoder(ndi_app):
     def load_presentation_time(
         self,
         stimulus_presentation_doc: ndi_document,
-    ) -> dict[str, Any] | None:
+    ) -> list[dict[str, Any]] | None:
         """
         Load presentation timing from a stimulus_presentation document.
 
         MATLAB equivalent: ndi.app.stimulus.decoder/load_presentation_time
 
+        MATLAB has two storage forms. The deprecated/inline form keeps the
+        ``presentation_time`` list directly on the document
+        (``stimulus_presentation.presentation_time``); this is supported here.
+        The current form stores it in the binary portion
+        (``presentation_time.bin``), read by MATLAB via
+        ``ndi.database.fun.read_presentation_time_structure`` +
+        ``database_openbinarydoc`` -- that binary reader is not yet ported, so a
+        binary-only document yields ``None`` (callers treat that as a blocker).
+
         Args:
             stimulus_presentation_doc: stimulus_presentation document
 
         Returns:
-            Dict with 'stimon', 'stimoff' timing arrays, or None
+            List of per-stimulus timing dicts (each with ``onset``, ``offset``,
+            ``clocktype``), or ``None`` if the timing is only in the unported
+            binary portion.
         """
-        if self._session is None:
-            return None
-        # Framework method
+        props = getattr(stimulus_presentation_doc, "document_properties", None)
+        if isinstance(props, dict):
+            sp = props.get("stimulus_presentation", {})
+        else:
+            sp = getattr(props, "stimulus_presentation", {})
+        if isinstance(sp, dict):
+            pt = sp.get("presentation_time")
+        else:
+            pt = getattr(sp, "presentation_time", None)
+        if pt:
+            # Deprecated/inline form (MATLAB load_presentation_time first branch).
+            return [dict(p) if isinstance(p, dict) else p for p in pt]
+        # Binary form: requires the unported read_presentation_time_structure.
         return None
 
     def _clear_presentations(self, ndi_element_stim: Any) -> None:
