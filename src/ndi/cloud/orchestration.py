@@ -350,7 +350,7 @@ def uploadDataset(
     # Upload files
     if sync_files:
         file_report = uploadFilesForDatasetDocuments(
-            client.config.org_id,
+            dataset,
             cloud_id,
             doc_jsons,
             client=client,

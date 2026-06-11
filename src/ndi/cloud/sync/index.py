@@ -11,6 +11,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 
 @dataclass
@@ -27,31 +28,49 @@ class SyncIndex:
 
     @classmethod
     def read(cls, dataset_path: Path) -> SyncIndex:
-        """Read the sync index from ``<dataset_path>/.ndi/sync/index.json``."""
+        """Read the sync index from ``<dataset_path>/.ndi/sync/index.json``.
+
+        The same ``.ndi/sync/index.json`` file is shared with MATLAB, which
+        writes camelCase keys (``localDocumentIdsLastSync`` etc.). Earlier
+        Python builds wrote snake_case keys to the same file. Both dialects
+        are read here so a dataset touched by either client is understood;
+        :meth:`write` always emits the camelCase form MATLAB expects.
+        """
         index_file = Path(dataset_path) / ".ndi" / "sync" / "index.json"
         if not index_file.exists():
             return cls()
         data = json.loads(index_file.read_text())
+
+        def _pick(camel: str, snake: str) -> Any:
+            if camel in data:
+                return data[camel]
+            return data.get(snake, [])
+
         return cls(
-            local_doc_ids_last_sync=data.get("local_doc_ids_last_sync", []),
-            remote_doc_ids_last_sync=data.get("remote_doc_ids_last_sync", []),
-            last_sync_timestamp=data.get("last_sync_timestamp", ""),
+            local_doc_ids_last_sync=_pick("localDocumentIdsLastSync", "local_doc_ids_last_sync"),
+            remote_doc_ids_last_sync=_pick("remoteDocumentIdsLastSync", "remote_doc_ids_last_sync"),
+            last_sync_timestamp=(
+                data.get("lastSyncTimestamp") or data.get("last_sync_timestamp") or ""
+            ),
         )
 
     def write(self, dataset_path: Path) -> None:
         """Write the sync index to ``<dataset_path>/.ndi/sync/index.json``.
 
-        Uses file locking to prevent concurrent writes from corrupting
-        the index.
+        Writes the MATLAB-compatible camelCase keys so a dataset synced by
+        alternating Python and MATLAB clients sees a consistent index;
+        mismatched dialects previously caused a full re-transfer (audit C2).
+        Uses file locking to prevent concurrent writes from corrupting the
+        index.
         """
         index_dir = Path(dataset_path) / ".ndi" / "sync"
         index_dir.mkdir(parents=True, exist_ok=True)
         index_file = index_dir / "index.json"
         content = json.dumps(
             {
-                "local_doc_ids_last_sync": self.local_doc_ids_last_sync,
-                "remote_doc_ids_last_sync": self.remote_doc_ids_last_sync,
-                "last_sync_timestamp": self.last_sync_timestamp,
+                "localDocumentIdsLastSync": self.local_doc_ids_last_sync,
+                "remoteDocumentIdsLastSync": self.remote_doc_ids_last_sync,
+                "lastSyncTimestamp": self.last_sync_timestamp,
             },
             indent=2,
         )
