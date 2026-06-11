@@ -46,16 +46,27 @@ class SQLiteDriver:
         from did.implementations.sqlitedb import SQLiteDB
 
         self._db_path = db_path
-        self._branch_id = branch_id
         self._DIDDocument = DIDDocument
 
         # Initialize SQLiteDB
         self._db = SQLiteDB(str(db_path))
 
-        # Create branch if it doesn't exist
+        # Resolve the branch to read. New Python datasets use "a", but a
+        # MATLAB-written database stores its documents on the "main" branch
+        # (and opening it with the default "a" would create an empty branch
+        # and silently read zero documents). So: if the requested branch holds
+        # no documents but another branch does, adopt the populated one.
         existing_branches = self._db.all_branch_ids()
-        if branch_id not in existing_branches:
-            self._db.add_branch(branch_id, "")  # Empty string for root branch
+        requested_empty = (branch_id not in existing_branches) or not self._db.get_doc_ids(
+            branch_id
+        )
+        if requested_empty:
+            populated = [b for b in existing_branches if b != branch_id and self._db.get_doc_ids(b)]
+            if populated:
+                branch_id = populated[0]
+            elif branch_id not in existing_branches:
+                self._db.add_branch(branch_id, "")  # Empty string for root branch
+        self._branch_id = branch_id
 
     def add(self, document: dict) -> None:
         """Add a document to the database."""
@@ -135,18 +146,59 @@ class SQLiteDriver:
 
         Uses DID-python's SQL-based search against the doc_data table
         for query evaluation, falling back to brute-force for unsupported
-        operations.  Retrieval and MATLAB normalization are handled by
-        DID-python's :meth:`get_docs` / :meth:`get_docs_by_branch`.
+        operations.  Retrieval is via DID-python's :meth:`get_doc_ids` +
+        :meth:`get_docs` (not ``get_docs_by_branch``, which is absent from
+        the released DID-python and was the source of the AttributeError that
+        made every "fetch all documents" path fail).
         """
         if query is not None:
-            doc_ids = self._db.search(query, self._branch_id)
-            if not doc_ids:
-                return []
-            docs = self._db.get_docs(doc_ids, self._branch_id, OnMissing="ignore")
+            try:
+                doc_ids = self._db.search(query, self._branch_id)
+            except (AttributeError, TypeError):
+                # DID's field_search iterates depends_on/superclasses assuming
+                # they are lists of dicts, but a MATLAB-written database stores
+                # a single-element depends_on/superclasses as a bare dict, which
+                # crashes the native search. Fall back to a normalized
+                # brute-force pass over every document.
+                return self._brute_force_find(query)
         else:
-            docs = self._db.get_docs_by_branch(self._branch_id)
-
+            doc_ids = self._db.get_doc_ids(self._branch_id)
+        if not doc_ids:
+            return []
+        docs = self._db.get_docs(doc_ids, self._branch_id, OnMissing="ignore")
+        # get_docs returns a single object when given one id; normalize to a list.
+        if not isinstance(docs, (list, tuple)):
+            docs = [docs]
         return [d.document_properties for d in docs if d is not None]
+
+    def _brute_force_find(self, query) -> list[dict]:
+        """Evaluate *query* in Python over normalized documents.
+
+        Used when the native DID search cannot handle a MATLAB-written
+        database (bare-dict ``depends_on``/``superclasses``). Each document is
+        passed through ``ndi_document`` — which normalizes those single-element
+        fields into lists — before applying DID's ``field_search`` predicate,
+        so the same query semantics apply without the crash.
+        """
+        from did.datastructures import field_search
+
+        doc_ids = self._db.get_doc_ids(self._branch_id)
+        if not doc_ids:
+            return []
+        docs = self._db.get_docs(doc_ids, self._branch_id, OnMissing="ignore")
+        if not isinstance(docs, (list, tuple)):
+            docs = [docs]
+        results: list[dict] = []
+        for d in docs:
+            if d is None:
+                continue
+            props = ndi_document(d.document_properties).document_properties
+            try:
+                if field_search(props, query):
+                    results.append(props)
+            except Exception:  # noqa: BLE001 - skip any doc the predicate can't evaluate
+                continue
+        return results
 
 
 class ndi_database:
@@ -184,14 +236,51 @@ class ndi_database:
         db_dir = self.session_path / db_name
         db_dir.mkdir(parents=True, exist_ok=True)
 
-        # Initialize SQLite driver (wraps DID-python's SQLiteDB)
-        db_path = db_dir / "did-sqlite.sqlite"
+        # Initialize SQLite driver (wraps DID-python's SQLiteDB). Python writes
+        # "did-sqlite.sqlite"; MATLAB writes "ndi.db" (same DID schema). When
+        # opening an existing directory, use whichever file actually holds
+        # documents so MATLAB-written datasets open correctly instead of
+        # silently reading an empty Python database.
+        db_path = self._resolve_db_file(db_dir)
         self._driver = SQLiteDriver(db_path, **backend_kwargs)
 
         # Binary/files directory for file attachments
         # Named "files" for compatibility with NDI-MATLAB
         self._binary_dir = self.session_path / db_name / "files"
         self._binary_dir.mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    def _resolve_db_file(db_dir: Path) -> Path:
+        """Pick the DID SQLite file to open from *db_dir*.
+
+        Python writes ``did-sqlite.sqlite``; MATLAB writes ``ndi.db`` (identical
+        DID schema). When both (or a stale empty one) are present, choose the
+        file whose ``branch_docs`` table holds the most rows, so a MATLAB-written
+        dataset opens its real documents instead of an empty Python placeholder.
+        Defaults to ``did-sqlite.sqlite`` for a brand-new (empty) directory.
+        """
+        import sqlite3
+
+        default = db_dir / "did-sqlite.sqlite"
+        candidates = [default, db_dir / "ndi.db"]
+        best: Path | None = None
+        best_count = -1
+        for cand in candidates:
+            if not cand.exists():
+                continue
+            count = 0
+            try:
+                con = sqlite3.connect(f"file:{cand}?mode=ro", uri=True)
+                try:
+                    count = con.execute("SELECT count(*) FROM branch_docs").fetchone()[0]
+                finally:
+                    con.close()
+            except Exception:  # noqa: BLE001 - unreadable/foreign file -> treat as empty
+                count = 0
+            if count > best_count:
+                best_count = count
+                best = cand
+        return best if best is not None else default
 
     @property
     def database_path(self) -> Path:
