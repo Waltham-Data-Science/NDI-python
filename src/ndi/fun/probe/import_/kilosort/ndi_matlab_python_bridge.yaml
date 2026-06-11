@@ -1,0 +1,208 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/fun/probe/import_/kilosort/
+# The Primary Contract for the ndi.fun.probe.import.kilosort namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror, with ONE unavoidable divergence (below)"
+  indexing_policy: "Semantic Parity (1-based MATLAB cluster ids/channel numbers and
+    1-based MATLAB times2samples/samples2times vs 0-based Python/numpy). Kilosort
+    spike_clusters/spike_templates and spike_times.npy are 0-based on disk in BOTH
+    languages."
+  naming_divergence: >
+    The MATLAB package is +ndi/+fun/+probe/+import/+kilosort. `import` is a reserved
+    word in Python, so the parent subpackage directory is `import_` (with __init__.py).
+    The importable path is therefore ndi.fun.probe.import_.kilosort and callers reach
+    the entry points as ndi.fun.probe.import_.kilosort.session(...) and
+    ndi.fun.probe.import_.kilosort.probe(...), mirroring the MATLAB call form
+    ndi.fun.probe.import.kilosort.session(...). This is the SINGLE naming divergence
+    in this namespace and is also documented in each module docstring.
+
+# =========================================================================
+# Functions (one MATLAB file per function, mirrored one-to-one)
+# =========================================================================
+functions:
+
+  - name: session
+    type: function
+    matlab_path: "+ndi/+fun/+probe/+import/+kilosort/session.m"
+    python_path: "ndi/fun/probe/import_/kilosort/session.py"
+    matlab_last_sync_hash: "0a14cf2dc"
+    input_arguments:
+      - name: session
+        type_matlab: "ndi.session"
+        type_python: "Any"
+        note_python: "MATLAB arg name is S; renamed `session` in Python."
+      - { name: kilosort_dir, type_matlab: "char", type_python: "str", default: "'kilosort'" }
+      - { name: subdir, type_matlab: "char", type_python: "str", default: "'kilosort_output'" }
+      - { name: noSubFolder, type_matlab: "logical", type_python: "bool", default: "False" }
+      - { name: quality_labels, type_matlab: "string", type_python: "Sequence[str]", default: "('good','mua')" }
+      - { name: quality_values, type_matlab: "double", type_python: "Sequence[float]", default: "(1,4)" }
+      - { name: waveform_source, type_matlab: "char", type_python: "str", default: "'templates'" }
+      - { name: force, type_matlab: "double", type_python: "bool", default: "False" }
+      - { name: dryRun, type_matlab: "logical", type_python: "bool", default: "False" }
+      - { name: verbose, type_matlab: "double", type_python: "bool", default: "True" }
+    output_arguments: []
+    decision_log: >
+      Exact behavioral match. Iterates S.getprobes(type='n-trode'), builds the
+      per-probe kilosort directory, skips (with a warning) any probe lacking the
+      directory or spike_times.npy, and delegates to kilosort.probe. Spaces in the
+      element string are replaced by underscores, matching the export layout.
+
+  - name: probe
+    type: function
+    matlab_path: "+ndi/+fun/+probe/+import/+kilosort/probe.m"
+    python_path: "ndi/fun/probe/import_/kilosort/probe.py"
+    matlab_last_sync_hash: "cbbb099bb"
+    input_arguments:
+      - { name: session, type_matlab: "ndi.session", type_python: "Any", note_python: "MATLAB arg name is S." }
+      - { name: probe, type_matlab: "ndi.probe/ndi.element", type_python: "Any" }
+      - { name: kilosort_dir, type_matlab: "char", type_python: "str", default: "'kilosort'" }
+      - { name: subdir, type_matlab: "char", type_python: "str", default: "'kilosort_output'" }
+      - { name: noSubFolder, type_matlab: "logical", type_python: "bool", default: "False" }
+      - { name: quality_labels, type_matlab: "string", type_python: "Sequence[str]", default: "('good','mua')" }
+      - { name: quality_values, type_matlab: "double", type_python: "Sequence[float]", default: "(1,4)" }
+      - { name: kilosort_version, type_matlab: "char", type_python: "str", default: "'2.5'" }
+      - { name: waveform_source, type_matlab: "char", type_python: "str", default: "'templates'" }
+      - { name: force, type_matlab: "double", type_python: "bool", default: "False" }
+      - { name: dryRun, type_matlab: "logical", type_python: "bool", default: "False" }
+      - { name: verbose, type_matlab: "double", type_python: "bool", default: "True" }
+    output_arguments: []
+    omitted_options:
+      - name: progressbar
+        reason: >
+          The MATLAB 'progressbar' option opens an ndi.gui.component.ProgressBarWindow.
+          There is no GUI subsystem in NDI-python; the option is intentionally omitted
+          rather than faked. addMultiple's own `verbose` logging is used instead. This
+          is a GUI-only cosmetic, not scientifically load-bearing.
+    decision_log: >
+      Faithful port of the 384-line core. Reads spike_times.npy / spike_clusters.npy /
+      templates.npy / spike_templates.npy / amplitudes.npy / whitening_mat_inv.npy via
+      numpy.load (MATLAB readNPY) and the cluster label .tsv via stdlib csv (MATLAB
+      readtable). Groups spikes by curated cluster id, applies the
+      quality_labels/quality_values curation filter (case-insensitive label match),
+      builds an ndi.neuron + a neuron_extracellular document per kept cluster, and
+      commits them via ndi.element.timeseries.addMultiple (the same bulk path MATLAB
+      uses). A kilosort_clusters document records the spike_clusters.npy MD5 for
+      idempotency (force / changed-checksum re-import via removeold). honors
+      force/dryRun/verbose.
+      INDEXING PARITY: spike_times.npy/spike_clusters/spike_templates are 0-based on
+      disk in both languages. Per-epoch sample COUNTS (ss[1]-ss[0]+1) and the
+      cumulative half-open boundaries bounds0 are offset-invariant. The MATLAB
+      global->local conversion `local1 = (g0 - bounds0[e]) + 1` is for MATLAB's
+      1-based samples2times; Python's probe.samples2times is 0-based
+      (ndi.probe.timeseries), so Python uses `local0 = g0 - bounds0[e]` (no +1).
+      meanwaveform template lookup: MATLAB templates(ut+1,:,:) (0-based id -> 1-based
+      row) becomes templates[ut,:,:] in numpy. waveform_sample_times trough offset:
+      MATLAB ((0:n-1)'-(troughsamp-1))/sr with 1-based troughsamp == numpy
+      (arange(n)-troughsamp0)/sr with 0-based troughsamp0.
+      PROVENANCE: app.interpreter/interpreter_version record Python (not MATLAB) and
+      app.url points at NDI-python; app.name/version still encode the Kilosort->phy
+      pipeline string.
+
+  - name: getInfo
+    type: function
+    matlab_path: "+ndi/+fun/+probe/+import/+kilosort/getInfo.m"
+    python_path: "ndi/fun/probe/import_/kilosort/getInfo.py"
+    matlab_last_sync_hash: "0c1ae7454"
+    input_arguments:
+      - { name: session, type_matlab: "ndi.session", type_python: "Any", note_python: "MATLAB arg name is S." }
+      - { name: probe, type_matlab: "ndi.probe/ndi.element", type_python: "Any" }
+      - { name: kilosort_dir, type_matlab: "char", type_python: "str", default: "'kilosort'" }
+      - { name: subdir, type_matlab: "char", type_python: "str", default: "'kilosort_output'" }
+      - { name: noSubFolder, type_matlab: "logical", type_python: "bool", default: "False" }
+      - { name: quality_labels, type_matlab: "string", type_python: "Sequence[str]", default: "('good','mua')" }
+    output_arguments:
+      - { name: info, type_matlab: "struct", type_python: "dict[str, Any]" }
+      - { name: summary, type_matlab: "char", type_python: "str" }
+    decision_log: >
+      Exact match. Reads the on-disk sort (no database writes) and returns the same
+      summary fields. MATLAB NaN for absent template dimensions becomes Python None.
+      unique_tags are sorted (MATLAB `unique` sorts) and tag_counts parallel them.
+
+  - name: labels
+    type: function
+    matlab_path: "+ndi/+fun/+probe/+import/+kilosort/labels.m"
+    python_path: "ndi/fun/probe/import_/kilosort/labels.py"
+    matlab_last_sync_hash: "4c84a1ac4"
+    input_arguments:
+      - { name: kdir, type_matlab: "char", type_python: "str | Path" }
+    output_arguments:
+      - { name: cluster_ids, type_matlab: "double", type_python: "list[int]" }
+      - { name: cluster_labels, type_matlab: "string", type_python: "list[str]" }
+    decision_log: >
+      Exact match. Tries cluster_group.tsv, then cluster_KSLabel.tsv, then
+      cluster_info.tsv (same order/columns as MATLAB). Reads via stdlib csv
+      (tab-delimited) instead of MATLAB readtable to avoid a hard pandas dependency;
+      id column is 'cluster_id' or 'id', label column is group/KSLabel/group with a
+      fall back to any 'group' column. Raises FileNotFoundError if none are present.
+
+  - name: waveformdata
+    type: function
+    matlab_path: "+ndi/+fun/+probe/+import/+kilosort/waveformdata.m"
+    python_path: "ndi/fun/probe/import_/kilosort/waveformdata.py"
+    matlab_last_sync_hash: "4c84a1ac4"
+    input_arguments:
+      - { name: kdir, type_matlab: "char", type_python: "str | Path" }
+    output_arguments:
+      - { name: templates, type_matlab: "double", type_python: "np.ndarray" }
+      - { name: spike_templates, type_matlab: "double", type_python: "np.ndarray" }
+      - { name: amplitudes, type_matlab: "double", type_python: "np.ndarray" }
+      - { name: winv, type_matlab: "double | []", type_python: "np.ndarray | None" }
+    decision_log: >
+      Exact match. numpy.load for templates.npy/spike_templates.npy/amplitudes.npy and
+      the optional whitening_mat_inv.npy (None when absent, MATLAB []). Raises
+      FileNotFoundError if the three required files are missing.
+
+  - name: meanwaveform
+    type: function
+    matlab_path: "+ndi/+fun/+probe/+import/+kilosort/meanwaveform.m"
+    python_path: "ndi/fun/probe/import_/kilosort/meanwaveform.py"
+    matlab_last_sync_hash: "4c84a1ac4"
+    input_arguments:
+      - { name: cid, type_matlab: "double", type_python: "int" }
+      - { name: spike_clusters, type_matlab: "double", type_python: "np.ndarray" }
+      - { name: spike_templates, type_matlab: "double", type_python: "np.ndarray" }
+      - { name: amplitudes, type_matlab: "double", type_python: "np.ndarray" }
+      - { name: templates, type_matlab: "double", type_python: "np.ndarray" }
+      - { name: winv, type_matlab: "double | []", type_python: "np.ndarray | None" }
+    output_arguments:
+      - { name: meanWf, type_matlab: "double", type_python: "np.ndarray" }
+    decision_log: >
+      Exact match. Amplitude-weighted average of every template contributing spikes to
+      the cluster, scaled by the cluster's mean spike amplitude, then un-whitened by
+      WINV (matrix product) when conformable. INDEXING: 0-based template ids index
+      templates[t,:,:] directly (MATLAB used templates(t+1,:,:) for its 1-based rows).
+      Un-whitening uses meanWf @ winv (MATLAB meanWf * winv).
+
+  - name: removeold
+    type: function
+    matlab_path: "+ndi/+fun/+probe/+import/+kilosort/removeold.m"
+    python_path: "ndi/fun/probe/import_/kilosort/removeold.py"
+    matlab_last_sync_hash: "4c84a1ac4"
+    input_arguments:
+      - { name: session, type_matlab: "ndi.session", type_python: "Any", note_python: "MATLAB arg name is S." }
+      - { name: kc_doc, type_matlab: "ndi.document (kilosort_clusters)", type_python: "Any" }
+    output_arguments: []
+    decision_log: >
+      Exact match. Finds neuron_extracellular docs depending on kc_doc via
+      spike_clusters_id, removes each neuron element document and its dependents
+      (epoch docs) via (base.id==element_id OR depends_on element_id), removes the
+      neuron docs, then removes kc_doc.
+
+# =========================================================================
+# Ported NDI document type (was MATLAB-only; ported for this pipeline)
+# =========================================================================
+document_types:
+  - name: kilosort_clusters
+    matlab_db_path: "src/ndi/ndi_common/database_documents/apps/kilosort/kilosort_clusters.json"
+    matlab_schema_path: "src/ndi/ndi_common/schema_documents/apps/kilosort/kilosort_clusters_schema.json"
+    python_db_path: "src/ndi/ndi_common/database_documents/apps/kilosort/kilosort_clusters.json"
+    python_schema_path: "src/ndi/ndi_common/schema_documents/apps/kilosort/kilosort_clusters_schema.json"
+    matlab_last_sync_hash: "ad17114d0"
+    decision_log: >
+      Verbatim port of the MATLAB kilosort_clusters document/schema (superclasses
+      base+app; depends_on element_id; fields kilosort_directory and
+      curated_output_MD5_checksum). It did NOT previously exist in NDI-python's
+      ndi_common and is required by kilosort.probe. Referenced from Python by its
+      relative path 'apps/kilosort/kilosort_clusters' (NDI-python doc-type
+      convention), unlike MATLAB's bare class name.

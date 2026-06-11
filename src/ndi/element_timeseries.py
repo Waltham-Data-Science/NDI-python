@@ -44,6 +44,16 @@ class ndi_element_timeseries(ndi_element):
         """
         super().__init__(**kwargs)
 
+    def ndi_element_class(self) -> str:
+        """Return the NDI element class name for document storage.
+
+        MATLAB equivalent: ``class(obj)`` == ``'ndi.element.timeseries'``.
+        Without this override the class inherited ``'ndi.element'`` from
+        :class:`ndi_element`, mislabelling stored timeseries elements (the same
+        registry/round-trip gap that hid neurons — see :meth:`ndi_neuron`).
+        """
+        return "ndi.element.timeseries"
+
     def readtimeseries(
         self,
         timeref_or_epoch: Any,
@@ -81,7 +91,7 @@ class ndi_element_timeseries(ndi_element):
         # Try to read from ingested data first
         data, times = self._read_from_ingested(epoch_number, t0, t1)
         if data is not None:
-            return data, times, None
+            return data, times, self._epoch_timeref(epoch_number)
 
         # Fall back to underlying element
         if self._underlying_element is not None and hasattr(
@@ -91,6 +101,37 @@ class ndi_element_timeseries(ndi_element):
 
         # No data source available
         return np.array([]), np.array([]), None
+
+    def _epoch_timeref(self, epoch_number: int) -> Any:
+        """Build a concrete time reference for an ingested epoch's data.
+
+        MATLAB readtimeseries always returns a real timeref (referent=self,
+        the epoch's local clock, the epoch id, time 0); the previous Python
+        implementation returned None, losing the time basis of the data
+        (audit C8).
+        """
+        from .time.clocktype import ndi_time_clocktype
+        from .time.timereference import ndi_time_timereference
+
+        epoch_id = None
+        clock = ndi_time_clocktype.DEV_LOCAL_TIME
+        try:
+            et, _ = self.epochtable()
+            if 0 < epoch_number <= len(et):
+                entry = et[epoch_number - 1]
+                epoch_id = entry.get("epoch_id")
+                clocks = entry.get("epoch_clock")
+                if isinstance(clocks, list) and clocks:
+                    clock = clocks[0]
+                elif clocks is not None:
+                    clock = clocks
+        except Exception:
+            pass
+
+        try:
+            return ndi_time_timereference(self, clock, epoch_id, 0)
+        except Exception:
+            return None
 
     def _resolve_epoch(self, timeref_or_epoch: Any) -> int | None:
         """Resolve a timeref/epoch to an epoch number."""
@@ -142,32 +183,23 @@ class ndi_element_timeseries(ndi_element):
 
         doc = epoch_docs[epoch_number - 1]
 
-        # Check for binary data
+        # Read the VHSB binary (X time axis + Y data), windowed to [t0, t1].
         try:
-            exists, binary_path = self._session.database_existbinarydoc(doc, "timeseries.vhsb")
-            if not exists:
+            from .util.vhsb import vhsb_read
+
+            exists, binary_path = self._session.database_existbinarydoc(
+                doc, "epoch_binary_data.vhsb"
+            )
+            if not exists or not binary_path:
                 return None, None
 
-            # Read VHSB file
-            fid = self._session.database_openbinarydoc(doc, "timeseries.vhsb")
-            if fid is None:
+            lo = t0 if t0 is not None else -np.inf
+            hi = t1 if (t1 is not None and t1 >= 0) else np.inf
+            y, x = vhsb_read(str(binary_path), lo, hi)
+            if y.size == 0:
                 return None, None
-
-            try:
-                raw_data = fid.read()
-                if not raw_data:
-                    return None, None
-                # Parse VHSB format
-                data = np.frombuffer(raw_data, dtype=np.float64)
-                # Reconstruct time array
-                sr = self._get_samplerate_from_doc(doc)
-                if sr > 0 and len(data) > 0:
-                    times = np.arange(len(data)) / sr
-                    return data.reshape(-1, 1), times
-                return data.reshape(-1, 1), np.arange(len(data), dtype=np.float64)
-            finally:
-                self._session.database_closebinarydoc(fid)
-
+            data = y.reshape(len(x), -1) if y.ndim == 1 else y
+            return data, x
         except Exception:
             return None, None
 
@@ -201,12 +233,17 @@ class ndi_element_timeseries(ndi_element):
         Returns:
             Tuple of (self, epoch_document)
         """
-        # Create the epoch document via parent
-        elem, doc = super().addepoch(epoch_id, epoch_clock, t0_t1)
+        has_data = timepoints is not None and datapoints is not None and self._session is not None
 
-        # Store binary data if provided
-        if timepoints is not None and datapoints is not None and self._session is not None:
+        # Build the epoch document. When there is binary data, defer the
+        # database_add so the VHSB file can be attached first and ingested
+        # together with the document (MATLAB element/timeseries.m:109-119).
+        elem, doc = super().addepoch(epoch_id, epoch_clock, t0_t1, add_to_database=not has_data)
+
+        if has_data:
             self._store_timeseries_data(doc, timepoints, datapoints)
+            self._session.database_add(doc)
+            self.resetepochtable()
 
         return self, doc
 
@@ -216,21 +253,29 @@ class ndi_element_timeseries(ndi_element):
         timepoints: np.ndarray,
         datapoints: np.ndarray,
     ) -> None:
-        """Store time series data as binary file attached to document."""
+        """Store time series data as a VHSB binary file attached to *doc*.
+
+        Writes the X (time) axis alongside the Y (data) in VHSB format (the
+        MATLAB filename ``epoch_binary_data.vhsb``) to a temp file and attaches
+        it via ``add_file``; the document's ``database_add`` then ingests the
+        file. The previous implementation wrote only ``datapoints.tobytes()``
+        with no header — dropping the time axis and producing a file MATLAB
+        could not read (audit C8).
+        """
         if self._session is None:
             return
+
+        import tempfile
+        from pathlib import Path
+
+        from .util.vhsb import vhsb_write
 
         timepoints = np.asarray(timepoints, dtype=np.float64)
         datapoints = np.asarray(datapoints, dtype=np.float64)
 
-        try:
-            fid = self._session.database_openbinarydoc(doc, "timeseries.vhsb")
-            if fid is not None:
-                # Write data in simple format: timepoints then datapoints
-                fid.write(datapoints.tobytes())
-                self._session.database_closebinarydoc(fid)
-        except Exception:
-            pass  # Binary storage is best-effort
+        tmp = Path(tempfile.mkdtemp()) / "epoch_binary_data.vhsb"
+        vhsb_write(tmp, timepoints, datapoints)
+        doc.add_file("epoch_binary_data.vhsb", str(tmp))
 
     def samplerate(self, epoch: Any = None) -> float:
         """
@@ -261,6 +306,132 @@ class ndi_element_timeseries(ndi_element):
                     return self._get_samplerate_from_doc(epoch_docs[epoch_number - 1])
 
         return 0.0
+
+    @staticmethod
+    def addMultiple(
+        session: Any,
+        underlying_element: Any,
+        specs: list[dict[str, Any]],
+        element_class: str = "ndi.neuron",
+        chunksize: int = 100,
+        build_objects: bool = True,
+        verbose: bool = False,
+    ) -> list[Any] | None:
+        """Create many timeseries elements with epochs in batched database writes.
+
+        Port of MATLAB ``ndi.element.timeseries.addMultiple`` (cbbb099b). Builds
+        all element, element_epoch (with their ``epoch_binary_data.vhsb`` data),
+        and caller-supplied "extra" documents in memory and commits them in
+        chunked ``database_add`` calls — elements first, then their dependents —
+        without the per-epoch database search that ``addepoch`` performs. This is
+        the bulk path used by the Kilosort importer to create hundreds of neurons.
+
+        Args:
+            session: the ndi.session to add to.
+            underlying_element: the ndi.element (e.g. a probe) the new elements
+                are built on; supplies the subject_id and underlying_element_id.
+            specs: one dict per element to create, with keys ``name`` (str),
+                ``reference`` (int), ``type`` (str, default ``'spikes'``),
+                ``epochs`` (a list of dicts with ``epoch_id``, ``epoch_clock``
+                (str or ``ndi_time_clocktype``), ``t0_t1`` (``[t0, t1]``),
+                ``timepoints`` and ``datapoints`` arrays) and optional
+                ``extra_documents`` (a list of ``ndi_document`` objects committed
+                in the same batch, each stamped with the new element's id as its
+                ``element_id`` dependency — e.g. a ``neuron_extracellular`` doc).
+            element_class: MATLAB-style class name to create (default
+                ``"ndi.neuron"``); must be constructable from (session, document).
+            chunksize: elements built and committed per batch (bounds peak memory
+                and the number of temporary ``.vhsb`` files).
+            build_objects: if True (default) return the created element objects;
+                pass False to skip construction (the importer's fast path).
+            verbose: log each element as it is built.
+
+        Returns:
+            The list of created element objects if *build_objects*, else None.
+        """
+        import logging
+        import tempfile
+        from pathlib import Path
+
+        from .class_registry import get_class
+        from .document import ndi_document
+        from .util.vhsb import vhsb_write
+
+        n = len(specs)
+        if n == 0:
+            return [] if build_objects else None
+
+        subject_id = getattr(underlying_element, "subject_id", "") or ""
+        underlying_id = underlying_element.id
+        session_id = session.id()
+        tmpdir = Path(tempfile.mkdtemp())
+        klass = get_class(element_class) if build_objects else None
+        objects: list[Any] = [None] * n
+
+        idx = 0
+        while idx < n:
+            end = min(idx + chunksize, n)
+            elemdocs: list[Any] = []
+            depdocs: list[Any] = []  # epoch + extra docs (depend on the elements)
+            for i in range(idx, end):
+                sp = specs[i]
+                etype = sp.get("type") or "spikes"
+                edoc = ndi_document(
+                    "element",
+                    **{
+                        "element.ndi_element_class": element_class,
+                        "element.name": sp["name"],
+                        "element.reference": sp["reference"],
+                        "element.type": etype,
+                        "element.direct": 0,
+                    },
+                )
+                edoc.set_session_id(session_id)
+                edoc.set_dependency_value("underlying_element_id", underlying_id)
+                if subject_id:
+                    edoc.set_dependency_value("subject_id", subject_id)
+                elem_id = edoc.id
+                elemdocs.append(edoc)
+
+                # Epoch documents, mirroring addepoch but without its per-epoch
+                # database search (we already know the element id).
+                for ep in sp.get("epochs") or []:
+                    clk = ep["epoch_clock"]
+                    clkstr = clk.value if isinstance(clk, ndi_time_clocktype) else str(clk)
+                    epdoc = ndi_document(
+                        "element_epoch",
+                        **{
+                            "element_epoch.epoch_clock": [clkstr],
+                            "element_epoch.t0_t1": [list(ep["t0_t1"])],
+                            "epochid.epochid": ep["epoch_id"],
+                        },
+                    )
+                    epdoc.set_dependency_value("element_id", elem_id)
+                    epdoc.set_session_id(session_id)
+                    tp = np.asarray(ep["timepoints"], dtype=np.float64).ravel()
+                    dp = np.asarray(ep["datapoints"], dtype=np.float64)
+                    fname = tmpdir / f"{epdoc.id}.vhsb"
+                    vhsb_write(fname, tp, dp)
+                    epdoc.add_file("epoch_binary_data.vhsb", str(fname))
+                    depdocs.append(epdoc)
+
+                # Extra documents (e.g. neuron_extracellular); stamp element_id.
+                for ex in sp.get("extra_documents") or []:
+                    ex.set_dependency_value("element_id", elem_id)
+                    depdocs.append(ex)
+
+                if build_objects and klass is not None:
+                    objects[i] = klass(session=session, document=edoc)
+                if verbose:
+                    logging.getLogger(__name__).info("addMultiple: built %s", sp["name"])
+
+            # Commit: the elements first, then everything that depends on them.
+            session.database_add(elemdocs)
+            if depdocs:
+                session.database_add(depdocs)
+            idx = end
+
+        return objects if build_objects else None
 
     def __repr__(self) -> str:
         """String representation."""

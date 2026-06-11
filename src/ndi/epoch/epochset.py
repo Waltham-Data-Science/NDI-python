@@ -320,6 +320,183 @@ class ndi_epoch_epochset(ABC):
 
         return nodes
 
+    def epochnodes(self) -> list[dict[str, Any]]:
+        """Return all epoch nodes for this epoch set (one per epoch/clock pair).
+
+        Port of MATLAB ``ndi.epoch.epochset/epochnodes`` (epochset.m:321-374).
+        Epoch nodes are like epoch-table entries except a node carries a SINGLE
+        ``ndi_time_clocktype`` (an entry with N clocks yields N nodes) plus the
+        identifying ``objectname``/``objectclass`` fields used by the sync graph
+        (audit C6 — needed so the syncgraph can inject element/probe epochs).
+
+        Returns:
+            List of node dicts with fields: ``epoch_id``, ``epoch_session_id``,
+            ``epochprobemap``, ``epoch_clock`` (single clocktype), ``t0_t1``
+            (single ``(t0, t1)`` tuple), ``underlying_epochs``, ``objectname``,
+            ``objectclass``.
+        """
+        from ..util.classname import ndi_matlab_classname
+
+        et, _ = self.epochtable()
+        objectname = self.epochsetname()
+        objectclass = ndi_matlab_classname(self)
+
+        nodes: list[dict[str, Any]] = []
+        for entry in et:
+            clocks = entry.get("epoch_clock", []) or []
+            t0t1 = entry.get("t0_t1", []) or []
+            for j, clock in enumerate(clocks):
+                t = t0t1[j] if j < len(t0t1) else (np.nan, np.nan)
+                nodes.append(
+                    {
+                        "epoch_id": entry.get("epoch_id", ""),
+                        "epoch_session_id": entry.get("epoch_session_id", ""),
+                        "epochprobemap": entry.get("epochprobemap"),
+                        "epoch_clock": clock,
+                        "t0_t1": tuple(t) if not isinstance(t, tuple) else t,
+                        "underlying_epochs": entry.get("underlying_epochs"),
+                        "objectname": objectname,
+                        "objectclass": objectclass,
+                    }
+                )
+        return nodes
+
+    def underlyingepochnodes(
+        self, epochnode: dict[str, Any]
+    ) -> tuple[list[dict[str, Any]], np.ndarray, list[list[Any]]]:
+        """Traverse the underlying nodes of EPOCHNODE down to the roots.
+
+        Port of MATLAB ``ndi.epoch.epochset/underlyingepochnodes``
+        (epochset.m:393-505). Walks ``epochnode``'s ``underlying_epochs`` until
+        reaching epoch sets for which ``issyncgraphroot()`` is True, building the
+        chain of nodes plus the cost/time-mapping matrices among them. EPOCHNODE
+        itself is returned as ``unodes[0]`` (audit C6).
+
+        Returns:
+            Tuple ``(unodes, cost, mapping)`` where ``unodes`` is the list of
+            node dicts, ``cost`` is an NxN ``np.ndarray`` (``inf`` = no edge), and
+            ``mapping`` is the NxN list-of-lists of ``ndi_time_timemapping`` /
+            ``None``.
+        """
+        from ..time.clocktype import ndi_time_clocktype
+        from ..time.timemapping import ndi_time_timemapping
+        from ..util.classname import ndi_matlab_classname
+
+        trivial = ndi_time_timemapping([1, 0])
+        unodes: list[dict[str, Any]] = [dict(epochnode)]
+        cost = np.array([[1.0]])
+        mapping: list[list[Any]] = [[trivial]]
+
+        def grow(n_add: int) -> None:
+            nonlocal cost, mapping
+            if n_add <= 0:
+                return
+            old = cost.shape[0]
+            new = np.full((old + n_add, old + n_add), np.inf)
+            new[:old, :old] = cost
+            cost = new
+            for row in mapping:
+                row.extend([None] * n_add)
+            for _ in range(n_add):
+                mapping.append([None] * (old + n_add))
+
+        def epochsetname_of(obj: Any) -> str:
+            if obj is None:
+                return ""
+            name = getattr(obj, "epochsetname", None)
+            if callable(name):
+                return name()
+            return getattr(obj, "name", getattr(obj, "_name", "")) or ""
+
+        # UTC node also exposes a dev_local_time view (epochset.m:411-425).
+        if epochnode.get("epoch_clock") == ndi_time_clocktype.UTC:
+            t0, t1 = epochnode["t0_t1"]
+            companion = dict(epochnode)
+            companion["t0_t1"] = (0.0, t1 - t0)
+            companion["epoch_clock"] = ndi_time_clocktype.DEV_LOCAL_TIME
+            unodes.append(companion)
+            grow(1)
+            cost[0, 1] = 1
+            cost[1, 0] = 1
+            cost[1, 1] = 1
+            mapping[0][1] = ndi_time_timemapping([1, -t0])
+            mapping[1][0] = ndi_time_timemapping([1, t0])
+            mapping[1][1] = trivial
+
+        if not self.issyncgraphroot():
+            ue = epochnode.get("underlying_epochs")
+            # Python stores underlying_epochs as a single dict (MATLAB: struct
+            # array); normalize to a list so the loop matches MATLAB's.
+            ue_list = (
+                [ue] if isinstance(ue, dict) and ue else (list(ue) if isinstance(ue, list) else [])
+            )
+            for u in ue_list:
+                u_clocks = u.get("epoch_clock", []) or []
+                u_t0t1 = u.get("t0_t1", []) or []
+                for j, clock in enumerate(u_clocks):
+                    if clock != epochnode.get("epoch_clock"):
+                        continue
+                    underlying = u.get("underlying")
+                    leaf: dict[str, Any] = {
+                        "epoch_id": u.get("epoch_id", ""),
+                        "epoch_session_id": u.get("epoch_session_id", ""),
+                        "epochprobemap": u.get("epochprobemap"),
+                        "epoch_clock": clock,
+                        "t0_t1": (tuple(u_t0t1[j]) if j < len(u_t0t1) else (np.nan, np.nan)),
+                        "underlying_epochs": None,
+                        "objectclass": (
+                            ndi_matlab_classname(underlying) if underlying is not None else ""
+                        ),
+                        "objectname": epochsetname_of(underlying),
+                    }
+                    # Carry the underlying's own underlying_epochs so deeper
+                    # recursion can continue (epochset.m:438-445).
+                    if isinstance(underlying, ndi_epoch_epochset):
+                        etd, _ = underlying.epochtable()
+                        for e in etd:
+                            if e.get("epoch_id") == leaf["epoch_id"]:
+                                leaf["underlying_epochs"] = e.get("underlying_epochs")
+                                break
+
+                    unodes.append(leaf)
+                    m = len(unodes) - 1
+                    grow(1)
+                    cost[0, m] = 1
+                    cost[m, 0] = 1
+                    cost[m, m] = 1
+                    mapping[0][m] = trivial
+                    mapping[m][0] = trivial
+                    mapping[m][m] = trivial
+
+                    # Descend into non-root underlying epoch sets (epochset.m:469-499).
+                    if (
+                        isinstance(underlying, ndi_epoch_epochset)
+                        and not underlying.issyncgraphroot()
+                    ):
+                        sub_nodes = underlying.epochnodes()
+                        match = None
+                        for sn in sub_nodes:
+                            if sn.get("epoch_id") == u.get("epoch_id") and sn.get(
+                                "epoch_clock"
+                            ) == epochnode.get("epoch_clock"):
+                                match = sn
+                                break
+                        if match is not None:
+                            unodes_d, cost_d, mapping_d = underlying.underlyingepochnodes(match)
+                            kd = len(unodes_d)
+                            base = cost[m, m]
+                            grow(kd - 1)
+                            # unodes_d[0] is the node already at position m; the
+                            # rest get fresh sequential indices.
+                            pos = [m] + list(range(len(unodes), len(unodes) + kd - 1))
+                            for a in range(kd):
+                                for b in range(kd):
+                                    cost[pos[a], pos[b]] = cost_d[a][b] + base
+                                    mapping[pos[a]][pos[b]] = mapping_d[a][b]
+                            unodes.extend(unodes_d[1:])
+
+        return unodes, cost, mapping
+
     def resetepochtable(self) -> None:
         """Reset (clear) the epoch table cache.
 
