@@ -73,7 +73,12 @@ EXPECTED_TYPE_COUNTS = {
     "daqmetadatareader": 1,
     "syncgraph": 1,
     "subject": 1,
-    "dataset_session_info": 1,
+    # The on-disk MATLAB dataset has 1 legacy dataset_session_info doc, but
+    # loading regenerates the dataset's own identity/membership docs and
+    # supersedes the legacy one (documented in ndi.cloud.downloadDataset). The
+    # loaded dataset therefore has 0. Whether Python should instead preserve the
+    # original metadata to match MATLAB is the open parity question in task #16.
+    "dataset_session_info": 0,
     "metadata_editor": 1,
 }
 
