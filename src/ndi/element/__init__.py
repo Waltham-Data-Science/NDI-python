@@ -271,9 +271,11 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
         et = []
         for i, doc in enumerate(epoch_docs):
             props = doc.document_properties
+            element_epoch = props.get("element_epoch", {}) if isinstance(props, dict) else {}
+            epochid_prop = props.get("epochid", {}) if isinstance(props, dict) else {}
 
             # Parse epoch_clock
-            clock_raw = getattr(props.element_epoch, "epoch_clock", [])
+            clock_raw = element_epoch.get("epoch_clock", [])
             epoch_clock = []
             for c in clock_raw:
                 if isinstance(c, str):
@@ -282,7 +284,7 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
                     epoch_clock.append(c)
 
             # Parse t0_t1
-            t0t1_raw = getattr(props.element_epoch, "t0_t1", [])
+            t0t1_raw = element_epoch.get("t0_t1", [])
             t0_t1 = []
             for t in t0t1_raw:
                 if isinstance(t, (list, tuple)) and len(t) >= 2:
@@ -291,7 +293,7 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
             et.append(
                 {
                     "epoch_number": i + 1,
-                    "epoch_id": getattr(props.epochid, "epochid", ""),
+                    "epoch_id": epochid_prop.get("epochid", ""),
                     "epoch_session_id": self._session.id() if self._session else "",
                     "epochprobemap": [],  # Registered epochs don't have probepmaps
                     "epoch_clock": epoch_clock,
@@ -327,6 +329,7 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
         epoch_id: str,
         epoch_clock: list[ndi_time_clocktype],
         t0_t1: list[tuple[float, float]],
+        add_to_database: bool = True,
     ) -> tuple[ndi_element, Any]:
         """
         Add a new epoch to this element.
@@ -337,6 +340,12 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
             epoch_id: Unique identifier for the epoch
             epoch_clock: List of clock types
             t0_t1: List of (t0, t1) time ranges
+            add_to_database: If True (default) the epoch document is added to
+                the database immediately. Subclasses that must attach a binary
+                file first (e.g. ndi_element_timeseries, which writes VHSB
+                data) pass False, attach the file, then add the document —
+                mirroring MATLAB element.addepoch's ``nargout<2`` deferral so
+                the binary is ingested with the document.
 
         Returns:
             Tuple of (self, epoch_document)
@@ -364,8 +373,9 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
         doc.set_dependency_value("element_id", self.id)
         doc.set_session_id(self._session.id())
 
-        # Add to database
-        self._session.database_add(doc)
+        # Add to database (unless a subclass will attach a file and add later)
+        if add_to_database:
+            self._session.database_add(doc)
 
         # Clear cache
         self.resetepochtable()

@@ -34,12 +34,14 @@ def _build_registry() -> dict[str, type]:
     from .daq.reader.mfdaq.spikegadgets import ndi_daq_reader_mfdaq_spikegadgets
     from .daq.system import ndi_daq_system
     from .element import ndi_element
+    from .element_timeseries import ndi_element_timeseries
     from .file.navigator import ndi_file_navigator
     from .file.navigator.epochdir import ndi_file_navigator_epochdir
     from .file.navigator.rhd_series import ndi_file_navigator_rhd_series
     from .file.navigator.rhd_series_epochdir import (
         ndi_file_navigator_rhd_series_epochdir,
     )
+    from .neuron import ndi_neuron
     from .probe import ndi_probe
     from .probe.timeseries import ndi_probe_timeseries
     from .probe.timeseries_mfdaq import ndi_probe_timeseries_mfdaq
@@ -62,9 +64,15 @@ def _build_registry() -> dict[str, type]:
 
     registry: dict[str, type] = {}
 
-    # Elements / probes (keyed by ndi_element_class() return value)
+    # Elements / probes (keyed by ndi_element_class() return value).
+    # ndi_element_timeseries and ndi_neuron MUST be present or a document whose
+    # element.ndi_element_class is "ndi.element.timeseries"/"ndi.neuron" cannot
+    # be reconstructed — getelements would silently drop every sorted unit
+    # (audit C8b).
     for cls in (
         ndi_element,
+        ndi_element_timeseries,
+        ndi_neuron,
         ndi_probe,
         ndi_probe_timeseries,
         ndi_probe_timeseries_mfdaq,

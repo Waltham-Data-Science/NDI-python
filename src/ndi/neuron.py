@@ -80,6 +80,20 @@ class ndi_neuron(ndi_element_timeseries):
             document=document,
         )
 
+    def ndi_element_class(self) -> str:
+        """Return the NDI element class name for document storage.
+
+        MATLAB equivalent: ``class(obj)`` == ``'ndi.neuron'`` (element.m:524).
+
+        Without this override ``ndi_neuron`` inherited ``'ndi.element'`` from
+        :class:`ndi_element`, so Python-written neurons were stored mislabelled
+        as plain elements and round-tripped as elements; MATLAB-written neurons
+        (labelled ``'ndi.neuron'``) could not be reconstructed because the name
+        was not in the class registry — ``getelements`` then silently returned
+        zero neurons.
+        """
+        return "ndi.neuron"
+
     def newdocument(self) -> ndi_document:
         """
         Create a new document for this neuron.

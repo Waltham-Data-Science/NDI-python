@@ -132,11 +132,12 @@ class TestMarkGarbageMocked:
         doc_class = props.get("document_class", {})
         assert doc_class.get("class_name") == "valid_interval"
 
-        # Verify interval values stored
+        # Verify interval values stored. valid_interval is an ARRAY of interval
+        # structs (the ndi_common schema), so index the first entry.
         vi = props.get("valid_interval")
         assert vi is not None
-        assert vi["t0"] == 1.0
-        assert vi["t1"] == 3.0
+        assert vi[0]["t0"] == 1.0
+        assert vi[0]["t1"] == 3.0
 
     def test_markvalidinterval_sets_session_id(self):
         """markvalidinterval sets the session ID on the ndi_document."""

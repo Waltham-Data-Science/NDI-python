@@ -242,14 +242,14 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
                         ed_i = np.array([])
 
                     if mk_count == 1:
-                        # First marker: stim on/off times
+                        # First marker: stim on/off times. Pair them in time
+                        # order, NaN-filling orphans, so a window that clips an
+                        # on without its off (or vice versa) stays aligned
+                        # instead of producing mismatched-length arrays (#248).
                         if ed_i.size > 0:
                             vals = ed_i.ravel() if ed_i.ndim == 1 else ed_i[:, 0]
                             t_vals = ts_i.ravel() if ts_i.ndim == 1 else ts_i[:, 0]
-                            on_mask = vals > 0
-                            off_mask = vals == -1
-                            t["stimon"] = t_vals[on_mask]
-                            t["stimoff"] = t_vals[off_mask]
+                            t["stimon"], t["stimoff"] = self.pairOnOff(t_vals, vals)
                         else:
                             t["stimon"] = np.array([])
                             t["stimoff"] = np.array([])
@@ -564,6 +564,53 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
                 else np.array([]).reshape(0, 2)
             ),
         }
+
+    @staticmethod
+    def pairOnOff(
+        times: np.ndarray,
+        signs: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Pair stimulus on/off events, NaN-filling orphans (MATLAB f1e2ff8c, issue #248).
+
+        Port of ``ndi.probe.timeseries.stimulator.pairOnOff``. Walks the events
+        in time order: a stim-on (``sign > 0``) is paired with the immediately
+        following stim-off (``sign < 0``); a stim-on with no following off (e.g.
+        clipped by the read window) gets ``off = NaN``, and a stim-off with no
+        preceding on gets ``on = NaN``. This lets callers read partial intervals
+        without erroring on mismatched on/off counts.
+
+        Args:
+            times: event times (any shape; flattened).
+            signs: marker values; ``> 0`` = stim-on, ``<= 0`` = stim-off.
+
+        Returns:
+            Equal-length arrays ``(on, off)`` of paired times (NaN for orphans).
+        """
+        times = np.asarray(times, dtype=float).ravel()
+        signs = np.sign(np.asarray(signs, dtype=float).ravel())
+
+        order = np.argsort(times, kind="stable")
+        times = times[order]
+        signs = signs[order]
+
+        n = signs.size
+        on = np.full(n, np.nan)
+        off = np.full(n, np.nan)
+        p = 0
+        k = 0
+        while k < n:
+            if signs[k] > 0:
+                on[p] = times[k]
+                if k + 1 < n and signs[k + 1] < 0:
+                    off[p] = times[k + 1]
+                    k += 2
+                else:
+                    k += 1
+            else:
+                off[p] = times[k]
+                k += 1
+            p += 1
+        return on[:p], off[:p]
 
     def __repr__(self) -> str:
         return (
