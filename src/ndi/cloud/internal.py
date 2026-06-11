@@ -7,7 +7,10 @@ MATLAB equivalents: +ndi/+cloud/+internal/*.m,
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .client import CloudClient
@@ -99,14 +102,21 @@ def listLocalDocuments(dataset: Any) -> tuple[list[Any], list[str]]:
 
     MATLAB equivalent: +sync/+internal/listLocalDocuments.m
 
+    Enumerates from ``dataset.database_search`` (matching MATLAB's
+    ``ndiDataset.database_search``). For an ``ndi.dataset`` this traverses the
+    dataset's own database and every linked session — using the private
+    ``.session`` attribute here would both raise (a dataset has no public
+    ``.session``) and miss linked-session documents.
+
     Returns:
         Tuple of (documents, document_ids).
     """
     from ndi.query import ndi_query
 
     try:
-        docs = dataset.session.database_search(ndi_query("").isa("base"))
-    except Exception:
+        docs = dataset.database_search(ndi_query("").isa("base"))
+    except Exception as exc:
+        logger.warning("listLocalDocuments: database_search failed: %s", exc)
         docs = []
 
     ids = []
