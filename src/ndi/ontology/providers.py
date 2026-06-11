@@ -498,7 +498,7 @@ class EMPTYProvider(OntologyProvider):
 
     MATLAB equivalent: +ndi/+ontology/EMPTY.m
 
-    Fetches the EMPTY ontology as JSON from the Waltham-ndi_gui_Data-Science
+    Fetches the EMPTY ontology as JSON from the Waltham-Data-Science
     GitHub repository and caches it in memory. Supports lookup by
     numeric ID (e.g. ``"0000074"``), full OBO-style ID
     (e.g. ``"EMPTY_0000074"``), or label substring
@@ -508,7 +508,7 @@ class EMPTYProvider(OntologyProvider):
     name = "EMPTY"
 
     _JSON_URL = (
-        "https://raw.githubusercontent.com/Waltham-ndi_gui_Data-Science/empty-ontology"
+        "https://raw.githubusercontent.com/Waltham-Data-Science/empty-ontology"
         "/main/empty-base.json"
     )
 

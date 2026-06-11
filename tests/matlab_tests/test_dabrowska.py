@@ -107,7 +107,7 @@ def epm_table(dabrowska_dataset):
 
     query = ndi_query("ontologyTableRow.variableNames").contains("ElevatedPlusMaze")
     docs = dabrowska_dataset.database_search(query)
-    tables, _ = ontologyTableRowDoc2Table(docs)
+    tables, *_ = ontologyTableRowDoc2Table(docs)
     return tables[0]
 
 
@@ -119,7 +119,7 @@ def fps_table(dabrowska_dataset):
 
     query = ndi_query("ontologyTableRow.variableNames").contains("Fear_potentiatedStartle")
     docs = dabrowska_dataset.database_search(query)
-    tables, _ = ontologyTableRowDoc2Table(docs)
+    tables, *_ = ontologyTableRowDoc2Table(docs)
     return tables[0]
 
 
@@ -217,7 +217,7 @@ class TestSubjectSummary:
         from ndi.fun.table import identifyMatchingRows
 
         row_ind = identifyMatchingRows(
-            subject_table, "StrainName", "AVP-Cre", string_match="contains"
+            subject_table, "StrainName", "AVP-Cre", stringMatch="contains"
         )
         filtered = subject_table[row_ind]
         assert len(filtered) == 49, f"Expected 49 AVP-Cre, got {len(filtered)}"
@@ -227,7 +227,7 @@ class TestSubjectSummary:
         from ndi.fun.table import identifyMatchingRows
 
         row_ind = identifyMatchingRows(
-            subject_table, "StrainName", "OTR-IRES-Cre", string_match="contains"
+            subject_table, "StrainName", "OTR-IRES-Cre", stringMatch="contains"
         )
         filtered = subject_table[row_ind]
         assert len(filtered) > 0, "No OTR-IRES-Cre subjects found"
@@ -376,7 +376,7 @@ class TestCombinedTable:
 
         combined = join([subject_table, probe_summary, epoch_summary])
         row_ind = identifyMatchingRows(
-            combined, "ApproachName", "optogenetic", string_match="contains"
+            combined, "ApproachName", "optogenetic", stringMatch="contains"
         )
         opto = combined[row_ind]
         assert len(opto) > 0, "No optogenetic approach epochs found"
