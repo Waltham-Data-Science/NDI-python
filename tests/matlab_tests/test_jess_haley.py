@@ -244,7 +244,7 @@ class TestOntologyTableRowDoc2Table:
     def test_stack_all_mode(self, ontology_table_row_docs):
         from ndi.fun.doc_table import ontologyTableRowDoc2Table
 
-        data_tables, doc_ids = ontologyTableRowDoc2Table(ontology_table_row_docs, stack_all=True)
+        data_tables, doc_ids, *_ = ontologyTableRowDoc2Table(ontology_table_row_docs, StackAll=True)
         assert len(data_tables) == 1
         assert len(data_tables[0]) == sum(EXPECTED_OTR_GROUP_SIZES_SORTED)
 
@@ -351,7 +351,7 @@ class TestSubjectQueries:
         from ndi.fun.table import identifyMatchingRows
 
         df = subject_table(jess_haley_dataset)
-        mask = identifyMatchingRows(df, "local_identifier", "PR811", string_match="contains")
+        mask = identifyMatchingRows(df, "local_identifier", "PR811", stringMatch="contains")
         filtered = df[mask]
         # MATLAB tutorial shows 76 PR811 subjects
         assert len(filtered) == 76, f"Expected 76 PR811 subjects, got {len(filtered)}"
@@ -392,7 +392,7 @@ class TestTableJoinAndFilter:
         from ndi.fun.table import identifyMatchingRows
 
         df = pd.DataFrame({"name": ["apple", "banana", "cherry", "APPLE pie"]})
-        mask = identifyMatchingRows(df, "name", "apple", string_match="contains")
+        mask = identifyMatchingRows(df, "name", "apple", stringMatch="contains")
         assert mask.sum() == 1  # case-sensitive: only 'apple'
 
     def test_identifyMatchingRows_numeric(self):

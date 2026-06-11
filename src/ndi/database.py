@@ -25,6 +25,35 @@ from .document import ndi_document
 from .query import ndi_query
 
 
+def _normalize_doc_props(props: dict) -> dict:
+    """Normalize the list-valued fields a MATLAB database stores as a single
+    bare dict into lists, so DID's ``field_search`` can iterate them.
+
+    Covers ``depends_on``, ``document_class.superclasses`` and
+    ``files.file_info`` — the same fields ``ndi_document`` normalizes, but as a
+    cheap dict rewrite with NO full document construction (which would re-read
+    each document's blank definition from disk, catastrophically slow across a
+    whole database).
+    """
+    if not isinstance(props, dict):
+        return props
+    p = dict(props)
+    dep = p.get("depends_on")
+    if isinstance(dep, dict):
+        p["depends_on"] = [dep]
+    dc = p.get("document_class")
+    if isinstance(dc, dict) and isinstance(dc.get("superclasses"), dict):
+        dc = dict(dc)
+        dc["superclasses"] = [dc["superclasses"]]
+        p["document_class"] = dc
+    files = p.get("files")
+    if isinstance(files, dict) and isinstance(files.get("file_info"), dict):
+        files = dict(files)
+        files["file_info"] = [files["file_info"]]
+        p["files"] = files
+    return p
+
+
 class SQLiteDriver:
     """SQLite database driver using DID-python's SQLiteDB.
 
@@ -108,6 +137,36 @@ class SQLiteDriver:
 
         return added, skipped
 
+    def bulk_add_documents(self, documents: list[dict]) -> list[tuple[str, str]]:
+        """Add many documents in a single batched ``add_docs`` (one transaction).
+
+        Fetches the existing-id set once and inserts all new documents at once,
+        so importing N documents is O(N) rather than the O(N) separate
+        transactions of :meth:`bulk_add`. Per-document problems (missing
+        ``base.id``, duplicate, or a document that will not construct) are
+        collected and returned as ``(doc_id, reason)`` rather than raised.
+        """
+        existing_ids = set(self._db.get_doc_ids(self._branch_id))
+        failures: list[tuple[str, str]] = []
+        new_docs = []
+        for document in documents:
+            doc_id = document.get("base", {}).get("id", "")
+            if not doc_id:
+                failures.append(("", "ndi_document must have a base.id"))
+                continue
+            if doc_id in existing_ids:
+                failures.append((doc_id, f"ndi_document {doc_id} already exists"))
+                continue
+            try:
+                new_docs.append(self._DIDDocument(document))
+            except Exception as exc:  # noqa: BLE001 - mirror per-doc add resilience
+                failures.append((doc_id, str(exc)))
+                continue
+            existing_ids.add(doc_id)
+        if new_docs:
+            self._db.add_docs(new_docs, self._branch_id)
+        return failures
+
     def update(self, document: dict) -> None:
         """Update an existing document."""
         doc_id = document.get("base", {}).get("id", "")
@@ -176,9 +235,9 @@ class SQLiteDriver:
 
         Used when the native DID search cannot handle a MATLAB-written
         database (bare-dict ``depends_on``/``superclasses``). Each document is
-        passed through ``ndi_document`` — which normalizes those single-element
-        fields into lists — before applying DID's ``field_search`` predicate,
-        so the same query semantics apply without the crash.
+        passed through ``_normalize_doc_props`` — which normalizes those
+        single-element fields into lists — before applying DID's
+        ``field_search`` predicate, so the same query semantics apply.
         """
         from did.datastructures import field_search
 
@@ -192,7 +251,7 @@ class SQLiteDriver:
         for d in docs:
             if d is None:
                 continue
-            props = ndi_document(d.document_properties).document_properties
+            props = _normalize_doc_props(d.document_properties)
             try:
                 if field_search(props, query):
                     results.append(props)
@@ -242,6 +301,12 @@ class ndi_database:
         # documents so MATLAB-written datasets open correctly instead of
         # silently reading an empty Python database.
         db_path = self._resolve_db_file(db_dir)
+        # A MATLAB-written ndi.db stores single-element depends_on/superclasses
+        # as bare dicts, which the native DID search cannot handle (find() falls
+        # back to a slow per-query brute-force pass). Import it once into a
+        # normalized Python did-sqlite.sqlite so subsequent queries use DID's
+        # fast native search.
+        db_path = self._maybe_import_matlab_db(db_path, db_dir)
         self._driver = SQLiteDriver(db_path, **backend_kwargs)
 
         # Binary/files directory for file attachments
@@ -281,6 +346,63 @@ class ndi_database:
                 best_count = count
                 best = cand
         return best if best is not None else default
+
+    @staticmethod
+    def _maybe_import_matlab_db(db_path: Path, db_dir: Path) -> Path:
+        """Import a MATLAB ``ndi.db`` into a normalized Python database, once.
+
+        MATLAB stores single-element ``depends_on``/``superclasses`` as bare
+        dicts that DID's native ``field_search`` cannot iterate, so queries on a
+        MATLAB database fall back to a slow per-query brute-force scan. This
+        reads each document, normalizes its bare-dict fields to lists, and writes a
+        sibling ``did-sqlite.sqlite`` that supports DID's
+        fast native search. Idempotent: if the Python file already holds at
+        least as many documents as ``ndi.db``, it is reused. Returns the path to
+        open (the Python database when imported, else *db_path* unchanged).
+        """
+        if db_path.name != "ndi.db":
+            return db_path
+
+        python_db = db_dir / "did-sqlite.sqlite"
+        src = SQLiteDriver(db_path)  # branch auto-detected ("main")
+        src_ids = src._db.get_doc_ids(src._branch_id)
+        if not src_ids:
+            return db_path
+
+        # Reuse an already-imported Python database.
+        if python_db.exists():
+            try:
+                existing = SQLiteDriver(python_db)
+                if len(existing._db.get_doc_ids(existing._branch_id)) >= len(src_ids):
+                    return python_db
+            except Exception:  # noqa: BLE001 - stale/corrupt -> re-import below
+                pass
+
+        # Import in chunks. DID's add_docs is O(N^2) within a single call, so a
+        # one-shot insert of tens of thousands of documents takes minutes; a
+        # fixed chunk size keeps each insert bounded (constant per chunk) and the
+        # whole import linear. Read + normalize each chunk lazily so peak memory
+        # stays bounded too.
+        dst = SQLiteDriver(python_db, branch_id="a")
+        existing = set(dst._db.get_doc_ids(dst._branch_id))
+        CHUNK = 4000
+        for start in range(0, len(src_ids), CHUNK):
+            chunk_ids = src_ids[start : start + CHUNK]
+            raw = src._db.get_docs(chunk_ids, src._branch_id, OnMissing="ignore")
+            if not isinstance(raw, (list, tuple)):
+                raw = [raw]
+            new_docs = []
+            for d in raw:
+                if d is None:
+                    continue
+                doc_id = d.document_properties.get("base", {}).get("id", "")
+                if not doc_id or doc_id in existing:
+                    continue
+                new_docs.append(dst._DIDDocument(_normalize_doc_props(d.document_properties)))
+                existing.add(doc_id)
+            if new_docs:
+                dst._db.add_docs(new_docs, dst._branch_id)
+        return python_db
 
     @property
     def database_path(self) -> Path:
