@@ -45,7 +45,15 @@ pytestmark = pytest.mark.skipif(
 # Expected document type counts from JSON files
 EXPECTED_TYPE_COUNTS = {
     "dataset_remote": 1,
-    "dataset_session_info": 1,
+    # The source has 1 legacy dataset_session_info doc; opening the dataset
+    # converts it into session_in_a_dataset docs and removes the original, so
+    # the loaded dataset has 0. This MATCHES MATLAB exactly: ndi.dataset.dir's
+    # constructor calls repairDatasetSessionInfo, which (DryRun=false default)
+    # database_add's the broken-out session_in_a_dataset docs and database_rm's
+    # the dataset_session_info doc (NDI-matlab src/ndi/+ndi/dataset.m:793-849).
+    # So 0 is correct parity -- the identity moves to session_in_a_dataset, it
+    # is not lost.
+    "dataset_session_info": 0,
     "distance_metadata": 2078,
     "element": 4156,
     "element_epoch": 4156,
@@ -218,11 +226,11 @@ class TestOntologyTableRowDoc2Table:
     """MATLAB: ndi.fun.doc.ontologyTableRowDoc2Table(docs)."""
 
     def test_groups_by_variable_names(self, otr_tables):
-        data_tables, doc_ids = otr_tables
+        data_tables, doc_ids, *_ = otr_tables
         assert len(data_tables) == 9, f"Expected 9 groups, got {len(data_tables)}"
 
     def test_group_row_counts(self, otr_tables):
-        data_tables, _ = otr_tables
+        data_tables, *_ = otr_tables
         actual_sizes = sorted([len(dt) for dt in data_tables], reverse=True)
         assert (
             actual_sizes == EXPECTED_OTR_GROUP_SIZES_SORTED
@@ -230,14 +238,14 @@ class TestOntologyTableRowDoc2Table:
 
     def test_data_dict_extraction(self, otr_tables):
         """At least one group has bacterial plate columns."""
-        data_tables, _ = otr_tables
+        data_tables, *_ = otr_tables
         expected_cols = {"BacterialPlateIdentifier", "BacterialPatchIdentifier"}
         found = any(expected_cols.issubset(set(dt.columns)) for dt in data_tables)
         assert found, "No group has BacterialPlateIdentifier + BacterialPatchIdentifier"
 
     def test_doc_ids_match(self, otr_tables):
         """Doc IDs count matches row count in each group."""
-        data_tables, doc_ids = otr_tables
+        data_tables, doc_ids, *_ = otr_tables
         for dt, ids in zip(data_tables, doc_ids):
             assert len(dt) == len(ids)
 
@@ -402,7 +410,7 @@ class TestTableJoinAndFilter:
         from ndi.fun.table import identifyMatchingRows
 
         df = pd.DataFrame({"value": [10, 20, 30, 40]})
-        mask = identifyMatchingRows(df, "value", 25, numeric_match="gt")
+        mask = identifyMatchingRows(df, "value", 25, numericMatch="gt")
         assert mask.sum() == 2  # 30 and 40
 
 
