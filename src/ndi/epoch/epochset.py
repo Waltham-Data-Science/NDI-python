@@ -530,7 +530,6 @@ class ndi_epoch_epochset(ABC):
 
         return unodes, cost, mapping
 
-
     def resetepochtable(self) -> None:
         """Reset (clear) the epoch table cache.
 
