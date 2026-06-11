@@ -169,8 +169,13 @@ class SQLiteDriver:
                 failures.append((doc_id, str(exc)))
                 continue
             existing_ids.add(doc_id)
-        if new_docs:
-            self._db.add_docs(new_docs, self._branch_id)
+        # DID's add_docs is O(N^2) *within a single call*, so a one-shot insert of
+        # tens of thousands of documents takes minutes (a 78k-doc one-shot load is
+        # ~9 min). Insert in fixed-size chunks so each call stays bounded and the
+        # whole load is linear (the same reason _maybe_import_matlab_db chunks).
+        CHUNK = 4000
+        for start in range(0, len(new_docs), CHUNK):
+            self._db.add_docs(new_docs[start : start + CHUNK], self._branch_id)
         return failures
 
     def update(self, document: dict) -> None:

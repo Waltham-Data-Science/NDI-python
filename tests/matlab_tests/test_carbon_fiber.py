@@ -73,11 +73,14 @@ EXPECTED_TYPE_COUNTS = {
     "daqmetadatareader": 1,
     "syncgraph": 1,
     "subject": 1,
-    # The on-disk MATLAB dataset has 1 legacy dataset_session_info doc, but
-    # loading regenerates the dataset's own identity/membership docs and
-    # supersedes the legacy one (documented in ndi.cloud.downloadDataset). The
-    # loaded dataset therefore has 0. Whether Python should instead preserve the
-    # original metadata to match MATLAB is the open parity question in task #16.
+    # The source has 1 legacy dataset_session_info doc; opening the dataset
+    # converts it into session_in_a_dataset docs and removes the original, so
+    # the loaded dataset has 0. This MATCHES MATLAB exactly: ndi.dataset.dir's
+    # constructor calls repairDatasetSessionInfo, which (DryRun=false default)
+    # database_add's the broken-out session_in_a_dataset docs and database_rm's
+    # the dataset_session_info doc (NDI-matlab src/ndi/+ndi/dataset.m:793-849).
+    # So 0 is correct parity -- the identity moves to session_in_a_dataset, it
+    # is not lost.
     "dataset_session_info": 0,
     "metadata_editor": 1,
 }
