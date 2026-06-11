@@ -108,15 +108,31 @@ class TestCompute:
         assert len(sessions) == 1
 
     def test_abortSession_mocked(self):
-        """abortSession returns True (mocked)."""
+        """abortSession aborts via DELETE /compute/{sessionId} (mocked)."""
         from ndi.cloud.api.compute import abortSession
 
         client = MagicMock()
-        client.post.return_value = {}
+        client.delete.return_value = {}
 
         result = abortSession("session-abc-123", client=client)
         assert result is True
-        client.post.assert_called_once()
+        # Backend aborts via DELETE /compute/{sessionId} (the quit controller),
+        # not POST /compute/{id}/abort (which 404s).
+        client.delete.assert_called_once()
+        endpoint = client.delete.call_args[0][0]
+        assert endpoint == "/compute/{sessionId}"
+        client.post.assert_not_called()
+
+    def test_finalizeSession_uses_advance_route(self):
+        """finalizeSession hits POST /compute/{sessionId}/advance, not /finalize."""
+        from ndi.cloud.api.compute import finalizeSession
+
+        client = MagicMock()
+        client.post.return_value = {"status": "ok"}
+
+        finalizeSession("session-abc-123", client=client)
+        endpoint = client.post.call_args[0][0]
+        assert endpoint == "/compute/{sessionId}/advance"
 
     def test_triggerStage_mocked(self):
         """triggerStage calls the correct endpoint (mocked)."""
