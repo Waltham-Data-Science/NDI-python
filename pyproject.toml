@@ -33,6 +33,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
@@ -60,6 +61,11 @@ dependencies = [
     "openMINDS>=0.2.0",
     "scipy>=1.9.0",
     "defusedxml>=0.7.1",
+    # cryptography backs the AES-encrypted, 0600-permission credential store in
+    # ndi.cloud.profile. Without it that backend silently falls back to a
+    # non-persistent in-memory store (secrets never reach disk), so it is a hard
+    # dependency, not optional. Ships wheels for all supported Pythons incl. 3.13.
+    "cryptography>=42.0",
 ]
 
 [project.optional-dependencies]

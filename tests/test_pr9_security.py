@@ -210,8 +210,28 @@ class TestLicenseGuardSkips:
 
 class TestPackagingHygiene:
     def test_git_deps_are_pinned_not_floating(self):
+        # Every `<pkg> @ git+...@<ref>` dependency must be pinned to a commit SHA
+        # or release tag (not a floating branch), EXCEPT vhlab-toolbox-python,
+        # which must track @main to match ndr's own pin — pip refuses two
+        # different direct-URL references for the same package, so ndi cannot
+        # SHA-pin it while ndr uses @main (see the note in pyproject.toml).
+        import re
+
         text = (ROOT / "pyproject.toml").read_text()
-        assert "@main" not in text, "git dependencies must be pinned to a tag/SHA, not @main"
+        pinned_exceptions = {"vhlab-toolbox-python"}
+        git_dep = re.compile(r'"([A-Za-z0-9_.\-]+)(?:\[[^\]]*\])?\s*@\s*git\+[^@"]+@([^"\s]+)"')
+        found = git_dep.findall(text)
+        assert found, "expected git dependencies in pyproject.toml"
+        for pkg, ref in found:
+            if pkg in pinned_exceptions:
+                continue
+            assert ref not in (
+                "main",
+                "master",
+            ), f"{pkg} git dependency is floating (@{ref}); pin it to a SHA/tag"
+            is_sha = re.fullmatch(r"[0-9a-f]{7,40}", ref) is not None
+            is_tag = re.match(r"v?\d", ref) is not None
+            assert is_sha or is_tag, f"{pkg} git ref @{ref} is neither a SHA nor a tag"
 
     def test_defusedxml_is_a_dependency(self):
         text = (ROOT / "pyproject.toml").read_text()
