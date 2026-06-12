@@ -280,9 +280,12 @@ def _make_window_base() -> Any:
             self.cancel_btn.clicked.connect(self.on_cancel)
             self.cluster_all_btn = QtWidgets.QPushButton("Cluster all")
             self.cluster_all_btn.clicked.connect(self.on_cluster_all)
+            self.reset_zoom_btn = QtWidgets.QPushButton("Reset zoom")
+            self.reset_zoom_btn.clicked.connect(self.on_autorange)
             grid.addWidget(self.done_btn, row, 0)
             grid.addWidget(self.cancel_btn, row, 1)
             grid.addWidget(self.cluster_all_btn, row, 2)
+            grid.addWidget(self.reset_zoom_btn, row, 3)
             row += 1
 
             # feature selection
@@ -497,6 +500,7 @@ def _make_window_base() -> Any:
             self._sync_feature_edit()
             self._update_dim_spin_ranges()
             self.redraw()
+            self.feature_plot.autoRange()  # the projection changed -> re-fit
 
         def on_feature_param_changed(self) -> None:
             text = self.feature_edit.text().strip()
@@ -516,6 +520,7 @@ def _make_window_base() -> Any:
             self.model.compute_features(self._feature_kind)
             self._update_dim_spin_ranges()
             self.redraw()
+            self.feature_plot.autoRange()  # feature params changed -> re-fit
 
         def on_dim_changed(self, _value: int = 0) -> None:
             if self._suspend_signals:
@@ -523,6 +528,7 @@ def _make_window_base() -> Any:
             self._dim_x = max(0, self.dim_x_spin.value() - 1)
             self._dim_y = max(0, self.dim_y_spin.value() - 1)
             self.redraw()
+            self.feature_plot.autoRange()  # different scatter dims -> re-fit
 
         def on_algorithm_changed(self, name: str) -> None:
             if name == "KlustaKwik":
@@ -731,6 +737,15 @@ def _make_window_base() -> Any:
 
         # -- drawing ----------------------------------------------------
 
+        def on_autorange(self) -> None:
+            """Reset every view to fit its data (the 'Reset zoom' button)."""
+            self.feature_plot.autoRange()
+            if getattr(self, "_spike_plots", None):
+                # waveform panels share one X axis (link), so ranging the first
+                # ranges them all; Y auto-fits per panel.
+                self._spike_plots[0].enableAutoRange(axis="x")
+                self._spike_plots[0].autoRange()
+
         def redraw(self) -> None:
             self._draw_features()
             self._draw_spikes()
@@ -769,55 +784,91 @@ def _make_window_base() -> Any:
             self.feature_plot.setLabel("bottom", f"feature dim {dx + 1}")
             self.feature_plot.setLabel("left", f"feature dim {dy + 1}")
 
-        def _draw_spikes(self) -> None:
+        def _build_spike_panels(self, n: int) -> None:
+            """(Re)create the n waveform panels. Called only when the panel count
+            changes, so user zoom/pan persists across ordinary content redraws.
+
+            All panels share ONE X axis (setXLink) so horizontal zoom/pan is
+            consistent across every cluster (mirroring MATLAB's shared spike
+            axis); the mouse is constrained to X and Y auto-fits the visible
+            data, so the only zoom gesture acts on the shared time axis and can
+            never desynchronise the panels.
+            """
             self.wave_layout.clear()
-            numbers = self._cluster_numbers()
-            if not numbers:
-                return
-            waves = self.model.waves
-            s, c, _ = waves.shape
-            x = np.arange(s * c)
-            rng = np.random.default_rng(0)
-            ncols = 2
             self._spike_plots = []
-            for pos, number in enumerate(numbers, start=1):
-                is_nan = number == "NaN"
-                color = self.model.color_for_position(pos, is_nan=is_nan)
-                inds = self._visible_present(number)
+            ncols = 2
+            for pos in range(1, n + 1):
                 r, col = divmod(pos - 1, ncols)
                 plt = self.wave_layout.addPlot(row=r, col=col)
                 plt.setMenuEnabled(False)
                 plt.showAxis("bottom", False)
                 plt.showAxis("left", False)
+                plt.setMouseEnabled(x=True, y=False)  # zoom only the (shared) time axis
+                plt.enableAutoRange(axis="y")
+                plt.setAutoVisible(y=True)  # Y re-fits to the visible X window
+                vb = plt.getViewBox()
+                vb.setDefaultPadding(0.02)
+                if self._spike_plots:
+                    plt.setXLink(self._spike_plots[0])  # all panels pan/zoom together in X
+                self._spike_plots.append(plt)
+            self._n_panels = n
+
+        def _draw_spikes(self) -> None:
+            numbers = self._cluster_numbers()
+            if not numbers:
+                self.wave_layout.clear()
+                self._spike_plots = []
+                self._n_panels = 0
+                return
+            n = len(numbers)
+            if getattr(self, "_n_panels", None) != n or not getattr(self, "_spike_plots", None):
+                self._build_spike_panels(n)
+            waves = self.model.waves
+            s, c, _ = waves.shape
+            x = np.arange(s * c)
+            xb = np.append(x.astype(float), np.nan)  # one spike + a NaN break
+            sep_pen = pg.mkPen((225, 225, 225), width=1)
+            rng = np.random.default_rng(0)
+            for pos, number in enumerate(numbers, start=1):
+                plt = self._spike_plots[pos - 1]
+                plt.clear()  # remove data items but KEEP the ViewBox range (zoom persists)
+                is_nan = number == "NaN"
+                color = self.model.color_for_position(pos, is_nan=is_nan)
+                inds = self._visible_present(number)
                 label = (
                     self.model.clusterinfo[pos - 1].get("qualitylabel", "Unselected")
                     if pos - 1 < len(self.model.clusterinfo)
                     else ""
                 )
-                plt.setTitle(f"{number}: N={inds.size}, Q={label}")
-                self._spike_plots.append(plt)
+                plt.setTitle(f"{number}: N={inds.size}, Q={label}", size="8pt")
+                # faint separators between the concatenated channels
+                for ch in range(1, c):
+                    plt.addLine(x=ch * s, pen=sep_pen)
                 if inds.size == 0:
                     continue
                 draw_inds = inds
                 if self._random_subset and inds.size > self._random_subset_size:
                     draw_inds = inds[rng.permutation(inds.size)[: self._random_subset_size]]
-                pen = _pen_for_color(pg, color, width=1)
-                # channel-concatenated traces (MATLAB plotspikewaves layout).
                 flat = waves[:, :, draw_inds].reshape(s * c, draw_inds.size, order="F")
-                for k in range(flat.shape[1]):
-                    plt.plot(x, flat[:, k], pen=pen)
-                # feature sample markers (npoint = grey, pca range = blue) per channel block.
-                for ch in range(c):
-                    for sample in self.model.npoint_samplelist:
-                        plt.addLine(
-                            x=ch * s + (sample - 1),
-                            pen=pg.mkPen((128, 128, 128), style=QtCore.Qt.PenStyle.DashLine),
-                        )
-                    for sample in self.model.pca_range:
-                        plt.addLine(
-                            x=ch * s + (sample - 1),
-                            pen=pg.mkPen((0, 0, 128), style=QtCore.Qt.PenStyle.DashLine),
-                        )
+                # ONE NaN-separated polyline for the whole panel (connect='finite')
+                # so the scene holds ~1 item per panel instead of hundreds -- this
+                # keeps zoom/pan smooth even with a couple hundred overlaid spikes.
+                m = flat.shape[1]
+                xs = np.tile(xb, m)
+                ys = np.empty((s * c + 1) * m, dtype=float)
+                for k in range(m):
+                    ys[k * (s * c + 1) : (k + 1) * (s * c + 1) - 1] = flat[:, k]
+                    ys[(k + 1) * (s * c + 1) - 1] = np.nan
+                plt.plot(
+                    xs,
+                    ys,
+                    pen=_pen_for_color(pg, color, width=1),
+                    connect="finite",
+                    antialias=False,
+                )
+                # bold mean waveform (the cluster template) on top
+                mean_flat = np.nanmean(waves[:, :, inds], axis=2).reshape(s * c, order="F")
+                plt.plot(x, mean_flat, pen=pg.mkPen((0, 0, 0), width=2))
 
         def _redraw_labels_only(self) -> None:
             # cheap update of the per-cluster titles (quality changed).
