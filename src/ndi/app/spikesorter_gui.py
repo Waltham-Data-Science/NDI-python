@@ -637,6 +637,15 @@ def _make_window_base() -> Any:
                 self._lasso_curve = None
             self.status_label.setText("selection cancelled")
 
+        def keyPressEvent(self, event: Any) -> None:  # noqa: N802 (Qt override)
+            # Escape aborts an in-progress lasso (not the whole dialog); otherwise
+            # fall through to QDialog's default (reject == Cancel).
+            if event.key() == QtCore.Qt.Key.Key_Escape and self._pending_action is not None:
+                self._cancel_lasso()
+                event.accept()
+                return
+            super().keyPressEvent(event)
+
         def _on_scene_clicked(self, event: Any) -> None:
             if self._pending_action is None:
                 return
