@@ -44,7 +44,13 @@ dependencies = [
     # upstream and switch these to tags when one exists.
     "did @ git+https://github.com/VH-Lab/DID-python.git@1b1491fb98f37a61a74b86cccdfabae8b6bbce9e",
     "ndr[formats] @ git+https://github.com/VH-lab/NDR-python.git@896ed637c35cd8ba118e1512a8c65bdd634a7622",
-    "vhlab-toolbox-python @ git+https://github.com/VH-Lab/vhlab-toolbox-python.git@b073185565ea5b47bb0307cddeae923fa9b86268",
+    # NOTE: vhlab-toolbox-python is intentionally tracked at @main, NOT a pinned
+    # SHA. ndr (above) hard-declares `vhlab-toolbox-python @ ...@main`, and pip
+    # refuses to install two DIFFERENT direct-URL references for the same
+    # package, so ndi must use the identical ref or installation fails with
+    # ResolutionImpossible. Pinning this to a SHA requires the lockstep
+    # NDR-python change to pin the same SHA first (tracked as a follow-up).
+    "vhlab-toolbox-python @ git+https://github.com/VH-Lab/vhlab-toolbox-python.git@main",
     "ndi-compress @ git+https://github.com/Waltham-Data-Science/NDI-compress-python.git@0c05d9dbd63ed5d15866eb1bf0a096568ef0c192",
     "numpy>=1.20.0",
     "networkx>=2.6",
