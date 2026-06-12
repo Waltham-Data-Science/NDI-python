@@ -275,6 +275,38 @@ def test_single_spike_window_builds_and_draws(qtbot):
     assert len(w._spike_plots) == 1
 
 
+def test_waveform_panels_persist_and_share_zoom(win):
+    panels = list(win._spike_plots)
+    assert len(panels) == 3
+    # every panel shares panel[0]'s X axis -> horizontal zoom stays consistent.
+    vb0 = panels[0].getViewBox()
+    for p in panels[1:]:
+        assert p.getViewBox().linkedView(0) is vb0
+    # mouse is constrained to X (Y auto-fits), so zoom can't desync the panels.
+    assert panels[0].getViewBox().state["mouseEnabled"] == [True, False]
+    # set a custom X zoom, then a content redraw with the SAME cluster count.
+    panels[0].setXRange(50, 150, padding=0)
+    x_before = list(panels[0].getViewBox().viewRange()[0])
+    win.on_subset_changed()  # redraws spikes; must NOT recreate the panels
+    assert win._spike_plots[0] is panels[0]  # same objects -> zoom preserved
+    x_after = win._spike_plots[0].getViewBox().viewRange()[0]
+    assert abs(x_after[0] - x_before[0]) < 1e-6 and abs(x_after[1] - x_before[1]) < 1e-6
+    # changing the cluster COUNT rebuilds the grid (zoom reset is acceptable then).
+    win.merge1_menu.setCurrentText("1")
+    win.merge2_menu.setCurrentText("2")
+    win.on_merge()
+    assert len(win._spike_plots) == 2
+
+
+def test_reset_zoom_button(win):
+    win._spike_plots[0].setXRange(10, 20, padding=0)
+    win.on_autorange()  # the Reset zoom button
+    # after auto-range the X window spans (roughly) the full concatenated trace
+    # (fixture is 2 channels x 21 samples = 42 wide), not the 10-wide zoom.
+    lo, hi = win._spike_plots[0].getViewBox().viewRange()[0]
+    assert hi - lo > 35
+
+
 def test_qapplication_reference_survives_gc(tmp_path):
     """Regression: _ensure_qapp must keep a live reference to the QApplication.
 
