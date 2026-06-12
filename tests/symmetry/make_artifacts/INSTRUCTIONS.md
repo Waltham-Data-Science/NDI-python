@@ -29,6 +29,18 @@ For a test class `TestBuildSession` in `tests/symmetry/make_artifacts/session/te
 <tempdir>/NDI/symmetryTest/pythonArtifacts/session/buildSession/testBuildSessionArtifacts/
 ```
 
+## Computation-style artifacts (time / syncgraph)
+
+Some subsystems are pure computations, not persisted document sets. For those the
+artifact is a self-describing JSON of inputs + computed outputs rather than a
+session-dir copy. See `time/test_time_convert.py`: it runs the shared
+`tests/symmetry/_time_scenario` battery through the real
+`ndi.time.syncgraph.time_convert` and writes `timeConvertCases.json` (the scenario
+spec + each case's `out_time` / `out_epoch` / `msg`). The MATLAB side builds the
+same `SCENARIO` referents, runs `CASES`, and writes a matching file;
+`read_artifacts/time/` compares the two and skips until the MATLAB artifact exists
+— full cross-language closure needs the MATLAB runtime.
+
 ## Adding a new symmetry test:
 
 1. Create a sub-package under `make_artifacts/` named after the NDI domain (e.g., `session/`, `document/`, `probe/`).
