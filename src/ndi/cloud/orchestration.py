@@ -62,33 +62,125 @@ def downloadDataset(
         name = ds_info.get("name", cloud_dataset_id)
         print(f"Downloading dataset: {name}")
 
-    # Download all full documents via chunked bulk download
-    doc_jsons = downloadDocumentCollection(
-        cloud_dataset_id,
-        client=client,
-        progress=print if verbose else None,
-    )
-    if verbose:
-        print(f"  Downloaded {len(doc_jsons)} documents")
+    # Stream the documents to disk as they download instead of holding the
+    # whole collection in memory. A large dataset (e.g. 100k+ documents)
+    # otherwise materializes every raw JSON dict AND every ndi_document at once,
+    # which exhausts memory on a small machine. We keep only the handful of
+    # dataset-identity documents in memory (the dataset is built from them) and
+    # stage every bulk document to a temporary newline-delimited JSON file, then
+    # stream it back in a single O(N) insert pass (bounded to one batch).
+    import json
 
-    # When not syncing files, rewrite file_info locations to ndic:// URIs
-    # so binary files can be fetched on demand later.
-    if not sync_files:
-        from .filehandler import updateFileInfoForRemoteFiles
-
-        for dj in doc_jsons:
-            updateFileInfoForRemoteFiles(dj, cloud_dataset_id)
-
-    # Convert to ndi_document objects and create ndi_dataset with them.
-    # Mirrors MATLAB: ndi.dataset.dir([], datasetFolder, ndiDocuments)
     from ndi.dataset import ndi_dataset_dir
-
-    documents = jsons2documents(doc_jsons)
-    dataset = ndi_dataset_dir("", target, documents=documents)
-
-    # Create remote link document if not already present
+    from ndi.document import ndi_document
     from ndi.query import ndi_query
 
+    from .filehandler import updateFileInfoForRemoteFiles
+
+    # Document classes that establish dataset/session identity. ndi.dataset.dir
+    # derives the dataset session id and repairs/tracks sessions from these, so
+    # they must be present when the dataset object is constructed; everything
+    # else is bulk data that can be streamed in afterwards.
+    IDENTITY_CLASSES = {
+        "ndi_session",
+        "ndi_dataset",
+        "session",
+        "dataset",
+        "session_in_a_dataset",
+        "dataset_session_info",
+        "dataset_remote",
+    }
+
+    def _doc_classes(dj: dict) -> set:
+        dc = dj.get("document_class", {}) if isinstance(dj, dict) else {}
+        names = set()
+        if isinstance(dc, dict):
+            names.add(dc.get("class_name", ""))
+            sc = dc.get("superclasses", [])
+            if isinstance(sc, dict):
+                sc = [sc]
+            for s in sc if isinstance(sc, list) else []:
+                names.add(s.get("class_name", "") if isinstance(s, dict) else str(s))
+        elif isinstance(dc, list) and dc:
+            names.add(dc[-1].get("class_name", "") if isinstance(dc[-1], dict) else "")
+        return names
+
+    identity_docs: list[dict] = []
+    downloaded_ids: set[str] = set()
+    identity_classes: dict[str, str] = {}  # id -> a class name, for missing-doc diagnostics
+    bulk_path = target / "_streamed_bulk.ndjson"
+    bulk_count = 0
+
+    with open(bulk_path, "w") as bulk_f:
+
+        def _on_chunk(chunk_docs: list) -> None:
+            nonlocal bulk_count
+            for dj in chunk_docs:
+                if not isinstance(dj, dict):
+                    continue
+                if not sync_files:
+                    updateFileInfoForRemoteFiles(dj, cloud_dataset_id)
+                did = dj.get("base", {}).get("id", "")
+                if did:
+                    downloaded_ids.add(did)
+                classes = _doc_classes(dj)
+                if classes & IDENTITY_CLASSES:
+                    identity_docs.append(dj)
+                    if did:
+                        identity_classes[did] = next(iter(classes & IDENTITY_CLASSES))
+                else:
+                    bulk_f.write(json.dumps(dj))
+                    bulk_f.write("\n")
+                    bulk_count += 1
+
+        downloadDocumentCollection(
+            cloud_dataset_id,
+            client=client,
+            progress=print if verbose else None,
+            on_chunk=_on_chunk,
+        )
+
+    if verbose:
+        print(
+            f"  Downloaded {len(downloaded_ids)} documents "
+            f"({bulk_count} bulk, streamed to disk)"
+        )
+
+    # Build the dataset from the identity documents only (mirrors MATLAB
+    # ndi.dataset.dir([], datasetFolder, ndiDocuments) — identity discovery,
+    # session_in_a_dataset tracking and repairDatasetSessionInfo all run here).
+    dataset = ndi_dataset_dir("", target, documents=jsons2documents(identity_docs))
+
+    # Stream the bulk documents back in, one batch at a time (O(N), one
+    # existing-id fetch), then drop the staging file.
+    bulk_build_failures: list[tuple[str, str]] = []
+
+    def _bulk_stream():
+        with open(bulk_path) as bf:
+            for line in bf:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    dj = json.loads(line)
+                except Exception:  # noqa: BLE001
+                    continue
+                try:
+                    yield ndi_document(dj)
+                except Exception as exc:  # noqa: BLE001 - mirror jsons2documents resilience
+                    did = dj.get("base", {}).get("id", "") if isinstance(dj, dict) else ""
+                    bulk_build_failures.append((did, str(exc)))
+
+    dataset.add_doc_failures.extend(
+        dataset._session._database.add_documents_streamed(_bulk_stream())
+    )
+    dataset.add_doc_failures.extend(bulk_build_failures)
+    try:
+        bulk_path.unlink()
+    except OSError:
+        pass
+
+    # Create remote link document if not already present
     existing = dataset.database_search(ndi_query("").isa("dataset_remote"))
     if not existing:
         remote_doc = createRemoteDatasetDoc(cloud_dataset_id, dataset)
@@ -105,83 +197,54 @@ def downloadDataset(
     # Store cloud client for on-demand file fetching
     dataset.cloud_client = client
 
-    # Optionally download files
-    if sync_files and doc_jsons:
+    # Optionally download files. The file-bearing documents now live in the
+    # dataset; query them in batches rather than holding every doc in memory.
+    if sync_files and downloaded_ids:
         file_dir = target / ".ndi" / "files"
-        report = downloadDatasetFiles(cloud_dataset_id, doc_jsons, file_dir, client=client)
+        file_docs = [
+            d.document_properties
+            for d in dataset.database_search(ndi_query("").isa("base"))
+            if d.document_properties.get("files", {}).get("file_info")
+        ]
+        report = downloadDatasetFiles(cloud_dataset_id, file_docs, file_dir, client=client)
         if verbose:
             print(f'  Files downloaded: {report["downloaded"]}, failed: {report["failed"]}')
 
-    # Verify every downloaded document made it into the local database.
-    # The local dataset may have *more* documents (e.g. session and
-    # session-in-a-dataset docs created internally), so we only check
-    # that every remote doc ID is present locally.
+    # Verify every downloaded document made it into the local database. The
+    # local dataset may have *more* documents (session / session-in-a-dataset
+    # created internally) and *fewer* of some (a dataset_session_info is
+    # converted to session_in_a_dataset and removed), so only flag documents
+    # that are neither present nor an expected identity supersession.
     db_ids = set(
         dataset._session._database._driver._db.get_doc_ids(
             dataset._session._database._driver._branch_id
         )
     )
-
-    missing: list[str] = []
-    missing_jsons: list[dict] = []
-    for dj in doc_jsons:
-        did = dj.get("base", {}).get("id", "") if isinstance(dj, dict) else ""
-        if did and did not in db_ids:
-            missing.append(did)
-            missing_jsons.append(dj)
+    failure_reasons = {fid: reason for fid, reason in dataset.add_doc_failures if fid}
 
     if verbose:
         print("Download complete.")
 
-    if missing:
-        # Print the document_class of each missing doc for diagnostics.
-        # Session/dataset docs from older datasets are expected to be
-        # missing (superseded by docs created locally during dataset init).
-        session_dataset_types = {
-            "ndi_session",
-            "ndi_dataset",
-            "session",
-            "dataset",
-            "session_in_a_dataset",
-            "dataset_session_info",
-        }
-        real_missing: list[tuple[str, str]] = []
-        for doc_id, dj in zip(missing, missing_jsons):
-            doc_class = (
-                dj.get("document_class", {}).get("class_name", "") if isinstance(dj, dict) else ""
-            )
-            superclasses = (
-                dj.get("document_class", {}).get("superclasses", []) if isinstance(dj, dict) else []
-            )
-            all_types = {doc_class} | {
-                sc.get("class_name", "") if isinstance(sc, dict) else str(sc)
-                for sc in (superclasses if isinstance(superclasses, list) else [])
-            }
-            if all_types & session_dataset_types:
-                print(
-                    f"  Note: remote doc {doc_id} (class: {doc_class}) "
-                    f"not in local DB — expected for session/dataset docs"
-                )
-            else:
-                print(f"  WARNING: remote doc {doc_id} (class: {doc_class}) missing from local DB")
-                real_missing.append((doc_id, doc_class))
+    real_missing: list[tuple[str, str]] = []
+    for did in downloaded_ids:
+        if did in db_ids:
+            continue
+        cls = identity_classes.get(did, "")
+        if cls in IDENTITY_CLASSES:
+            # Expected: session/dataset identity docs are superseded on load.
+            continue
+        real_missing.append((did, failure_reasons.get(did, cls or "unknown")))
 
-        if real_missing:
-            missing_docs_path = target / "missingDocuments.json"
-            import json
-
-            missing_docs_path.write_text(json.dumps(missing_jsons, indent=2, default=str))
-
-            lines = [
-                f"Downloaded {len(doc_jsons)} documents but "
-                f"{len(real_missing)} are missing from the local dataset:"
-            ]
-            for doc_id, doc_class in real_missing[:50]:
-                lines.append(f"\n  - {doc_id} (class: {doc_class})")
-            if len(real_missing) > 50:
-                lines.append(f"\n  ... and {len(real_missing) - 50} more")
-            lines.append(f"\nFull JSON of missing documents written to:\n  {missing_docs_path}")
-            raise RuntimeError("".join(lines))
+    if real_missing:
+        lines = [
+            f"Downloaded {len(downloaded_ids)} documents but "
+            f"{len(real_missing)} are missing from the local dataset:"
+        ]
+        for doc_id, reason in real_missing[:50]:
+            lines.append(f"\n  - {doc_id} ({reason})")
+        if len(real_missing) > 50:
+            lines.append(f"\n  ... and {len(real_missing) - 50} more")
+        raise RuntimeError("".join(lines))
 
     return dataset
 

@@ -86,6 +86,7 @@ def downloadDocumentCollection(
     timeout: float = 20.0,
     retry_interval: float = 1.0,
     progress: Callable[[str], None] | None = None,
+    on_chunk: Callable[[list[dict[str, Any]]], None] | None = None,
     *,
     client: CloudClient | None = None,
 ) -> list[dict[str, Any]]:
@@ -107,10 +108,16 @@ def downloadDocumentCollection(
         retry_interval: Seconds between polling attempts for each
             chunk. Default 1 matches MATLAB.
         progress: Optional callback for status messages.
+        on_chunk: Optional callback invoked with each chunk's documents as
+            they download. When given, documents are handed off chunk-by-chunk
+            and NOT accumulated — so a very large dataset is never held in
+            memory all at once — and the return value is an empty list. When
+            omitted, behaviour is unchanged (all documents accumulated and
+            returned).
         client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
-        List of full document dicts.
+        List of full document dicts (empty when *on_chunk* is given).
     """
     import math
 
@@ -136,6 +143,7 @@ def downloadDocumentCollection(
     # Split into chunks
     num_chunks = math.ceil(len(doc_ids) / chunk_size)
     all_documents: list[dict[str, Any]] = []
+    count = 0  # streaming (on_chunk) doc count, since all_documents stays empty then
 
     for i in range(num_chunks):
         start = i * chunk_size
@@ -158,14 +166,19 @@ def downloadDocumentCollection(
         # Download and extract the ZIP
         try:
             chunk_docs = _download_chunk_zip(url, timeout, retry_interval)
-            all_documents.extend(chunk_docs)
+            if on_chunk is not None:
+                # Streaming: hand off this chunk and drop it (bounded memory).
+                on_chunk(chunk_docs)
+                count += len(chunk_docs)
+            else:
+                all_documents.extend(chunk_docs)
             _log(f"  Chunk {i + 1}: extracted {len(chunk_docs)} documents")
         except TimeoutError as exc:
             _log(f"  Chunk {i + 1}: {exc}")
         except Exception as exc:
             _log(f"  Chunk {i + 1}: extraction failed: {exc}")
 
-    _log(f"Downloaded {len(all_documents)} documents total")
+    _log(f"Downloaded {len(all_documents) if on_chunk is None else count} documents total")
     return all_documents
 
 

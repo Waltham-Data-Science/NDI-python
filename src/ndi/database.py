@@ -178,6 +178,45 @@ class SQLiteDriver:
             self._db.add_docs(new_docs[start : start + CHUNK], self._branch_id)
         return failures
 
+    def add_documents_streamed(self, documents, batch_size: int = 4000) -> list[tuple[str, str]]:
+        """Insert an *iterable* of documents, fetching the existing-id set ONCE.
+
+        For streaming a large download/ingest into a dataset: calling
+        :meth:`bulk_add_documents` once per network chunk would re-scan every
+        existing id on each call (O(N^2) again), and materializing every
+        document up front is what makes a 100k-doc download exhaust memory on a
+        small machine. This consumes *documents* lazily — each item may be an
+        ``ndi_document`` (``.document_properties``) or a raw props ``dict`` —
+        normalizes bare-dict fields, and inserts in ``batch_size`` add_docs
+        batches (DID's add_docs is O(N^2) *within one call*, so each batch stays
+        bounded). Peak memory is one batch, not the whole dataset. Returns the
+        ``(doc_id, reason)`` failures, like :meth:`bulk_add_documents`.
+        """
+        existing_ids = set(self._db.get_doc_ids(self._branch_id))
+        failures: list[tuple[str, str]] = []
+        batch: list = []
+        for document in documents:
+            props = getattr(document, "document_properties", document)
+            doc_id = props.get("base", {}).get("id", "") if isinstance(props, dict) else ""
+            if not doc_id:
+                failures.append(("", "ndi_document must have a base.id"))
+                continue
+            if doc_id in existing_ids:
+                failures.append((doc_id, f"ndi_document {doc_id} already exists"))
+                continue
+            try:
+                batch.append(self._DIDDocument(_normalize_doc_props(props)))
+            except Exception as exc:  # noqa: BLE001 - mirror per-doc add resilience
+                failures.append((doc_id, str(exc)))
+                continue
+            existing_ids.add(doc_id)
+            if len(batch) >= batch_size:
+                self._db.add_docs(batch, self._branch_id)
+                batch = []
+        if batch:
+            self._db.add_docs(batch, self._branch_id)
+        return failures
+
     def update(self, document: dict) -> None:
         """Update an existing document."""
         doc_id = document.get("base", {}).get("id", "")
@@ -463,6 +502,16 @@ class ndi_database:
         of raising, so one bad document does not abort the whole load.
         """
         return self._driver.bulk_add_documents([d.document_properties for d in documents])
+
+    def add_documents_streamed(self, documents) -> list[tuple[str, str]]:
+        """Stream-insert an *iterable* of documents in O(N), one batch at a time.
+
+        Like :meth:`add_documents` but never materializes the whole collection:
+        used by the streaming cloud download so a 100k-document dataset can be
+        ingested with bounded (one-batch) memory instead of holding every
+        document at once. Returns the ``(doc_id, reason)`` failures.
+        """
+        return self._driver.add_documents_streamed(documents)
 
     def read(self, doc_id: str, isa_class: str | None = None) -> ndi_document | None:
         """Read a document by ID.
