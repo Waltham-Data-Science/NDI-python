@@ -555,9 +555,14 @@ def write_presentation_time_structure(
                 )
             num_events = stimevents.shape[0]
             f.write(struct.pack("<I", num_events))
-            # Write column-major (transposed), matching MATLAB's reshape
+            # MATLAB writes stimevents EVENT-major: reshape(stimevents',[],1)
+            # column-major flattens 2xN to [t0,c0,t1,c1,...]. For a C-contiguous
+            # Nx2 array that is exactly its row-major byte order, so write it
+            # directly. (A `.T` here would produce channel-major bytes
+            # [t0,t1,...,c0,c1,...], which round-trips with Python's own reader
+            # but cannot be read by MATLAB — and cannot read a real MATLAB file.)
             if num_events > 0:
-                f.write(stimevents.T.astype("<f8").tobytes())
+                f.write(np.ascontiguousarray(stimevents, dtype="<f8").tobytes())
 
 
 def read_presentation_time_structure(
@@ -630,7 +635,11 @@ def read_presentation_time_structure(
             num_events = struct.unpack("<I", f.read(4))[0]
             if num_events > 0:
                 raw = np.frombuffer(f.read(num_events * 2 * 8), dtype="<f8")
-                stimevents = raw.reshape(2, num_events).T.copy()
+                # MATLAB fread(fid,[2,N]) then transpose yields event-major rows
+                # [t,c]; the on-disk stream is [t0,c0,t1,c1,...], so an Nx2
+                # row-major reshape recovers each event's pair directly.
+                # (reshape(2,N).T would mis-interleave a real MATLAB file.)
+                stimevents = raw.reshape(num_events, 2).copy()
             else:
                 stimevents = np.empty((0, 2), dtype="float64")
 

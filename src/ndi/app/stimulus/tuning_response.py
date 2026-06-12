@@ -567,18 +567,20 @@ class ndi_app_stimulus_tuning__response(ndi_app):
             tf, _ = stimulustemporalfrequency(stim.get("parameters", {}))
             freq_mult[j] = tf if tf is not None else 0.0
 
-        # ---- stimulus on/off timing (BLOCKER) ------------------------------
+        # ---- stimulus on/off timing ----------------------------------------
+        # Both forms are supported: the deprecated inline 'presentation_time'
+        # field and the current binary 'presentation_time.bin' (read via
+        # database_openbinarydoc + read_presentation_time_structure, fetched on
+        # demand for cloud datasets). Only error if neither yields timing.
         presentation_time = decoder.load_presentation_time(stim_doc)
         if not presentation_time:
-            raise NotImplementedError(
+            raise ValueError(
                 "compute_stimulus_response_scalar requires per-stimulus on/off "
-                "timing from ndi.app.stimulus.decoder.load_presentation_time(). "
-                "The deprecated inline 'presentation_time' form is supported, but "
-                "this document stores its timing only in the binary "
-                "'presentation_time.bin' portion, whose reader "
-                "(ndi.database.fun.read_presentation_time_structure + "
-                "database_openbinarydoc) is not yet ported. Without it the F0/F1 "
-                "integration windows cannot be established. BLOCKER."
+                "timing, but this stimulus_presentation document has neither an "
+                "inline 'presentation_time' nor a readable 'presentation_time.bin' "
+                "(for a cloud dataset, ensure NDI_CLOUD credentials / a cloud "
+                "client are available). Without it the F0/F1 integration windows "
+                "cannot be established."
             )
 
         onsets = np.asarray([p["onset"] for p in presentation_time], dtype=float)
