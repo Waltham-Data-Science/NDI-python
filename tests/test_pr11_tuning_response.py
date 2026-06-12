@@ -466,13 +466,13 @@ class TestTuningCurve:
 
 
 class TestComputeBlocker:
-    """When timing lives only in the unported binary presentation_time.bin
-    (no inline presentation_time), compute raises NotImplementedError."""
+    """When no timing is available (no inline presentation_time and no readable
+    presentation_time.bin), compute raises a clear ValueError."""
 
     def test_compute_raises_blocker_on_missing_timing(self):
         stimuli = [{"parameters": {"angle": 0}}]
         stim_doc = _make_stim_presentation_doc(stimuli, [1])
-        # binary-only document: no inline timing -> load_presentation_time None
+        # no inline timing and the mock session has no readable binary -> None
         stim_doc.document_properties["stimulus_presentation"]["presentation_time"] = []
         session = _make_session()
         app = ndi_app_stimulus_tuning__response(session=session)
@@ -480,7 +480,7 @@ class TestComputeBlocker:
         stim_obj = SimpleNamespace(id="stim-elem")
         ts_obj = SimpleNamespace(id="ts-elem")
 
-        with pytest.raises(NotImplementedError, match="load_presentation_time"):
+        with pytest.raises(ValueError, match="presentation_time"):
             app.compute_stimulus_response_scalar(stim_obj, ts_obj, stim_doc, None, freq_response=0)
 
     def test_compute_no_session_returns_empty(self):
@@ -521,7 +521,7 @@ class TestComputeBlocker:
         session.database_search = MagicMock(side_effect=search)
         app = ndi_app_stimulus_tuning__response(session=session)
 
-        with pytest.raises(NotImplementedError, match="load_presentation_time"):
+        with pytest.raises(ValueError, match="presentation_time"):
             app.stimulus_responses(SimpleNamespace(id="stim"), SimpleNamespace(id="ts"))
 
 
@@ -557,8 +557,9 @@ class TestApiParity:
 
 
 class TestLoadPresentationTimeInline:
-    """The deprecated/inline presentation_time form unblocks the F0/F1 pipeline;
-    the binary 'presentation_time.bin' form still yields None (flagged blocker)."""
+    """Both presentation_time forms are supported: the deprecated/inline field
+    and the current binary 'presentation_time.bin' (read via database_openbinarydoc
+    + read_presentation_time_structure)."""
 
     def test_inline_presentation_time_is_returned(self):
         from ndi.app.stimulus.decoder import ndi_app_stimulus_decoder
@@ -576,12 +577,45 @@ class TestLoadPresentationTimeInline:
         # a copy of each entry, not the same dict objects
         assert out is not pt
 
-    def test_binary_only_document_returns_none(self):
+    def test_binary_presentation_time_is_read(self, tmp_path):
+        # no inline 'presentation_time' -> timing is read from presentation_time.bin
+        # via database_openbinarydoc (here a mock session opens a real temp file).
+        import numpy as np
+
+        from ndi.app.stimulus.decoder import ndi_app_stimulus_decoder
+        from ndi.database_fun import write_presentation_time_structure
+
+        fn = tmp_path / "presentation_time.bin"
+        entries = [
+            {
+                "clocktype": "dev_local_time",
+                "stimopen": 0.0,
+                "onset": 1.0,
+                "offset": 2.0,
+                "stimclose": 3.0,
+                "stimevents": np.array([[1.1, 1.0], [1.5, 2.0]]),
+            }
+        ]
+        write_presentation_time_structure(str(fn), entries)
+
+        doc = SimpleNamespace(document_properties={"stimulus_presentation": {}})
+        sess = MagicMock()
+        sess.database_openbinarydoc.return_value = open(str(fn), "rb")  # noqa: SIM115
+        dec = ndi_app_stimulus_decoder(sess)
+
+        out = dec.load_presentation_time(doc)
+        assert out is not None and len(out) == 1
+        assert out[0]["onset"] == 1.0 and out[0]["clocktype"] == "dev_local_time"
+        np.testing.assert_array_almost_equal(out[0]["stimevents"], [[1.1, 1.0], [1.5, 2.0]])
+
+    def test_binary_unavailable_returns_none(self):
         from ndi.app.stimulus.decoder import ndi_app_stimulus_decoder
 
-        # no inline 'presentation_time' -> timing lives in the unported binary
+        # no inline form and no readable binary file -> None (blocker)
         doc = SimpleNamespace(
             document_properties={"stimulus_presentation": {"presentation_order": [1, 2]}}
         )
-        dec = ndi_app_stimulus_decoder(MagicMock())
+        sess = MagicMock()
+        sess.database_openbinarydoc.side_effect = FileNotFoundError("no presentation_time.bin")
+        dec = ndi_app_stimulus_decoder(sess)
         assert dec.load_presentation_time(doc) is None

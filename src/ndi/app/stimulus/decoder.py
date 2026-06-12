@@ -9,6 +9,7 @@ MATLAB equivalent: src/ndi/+ndi/+app/+stimulus/decoder.m
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, Any
 
 from .. import ndi_app
@@ -74,18 +75,18 @@ class ndi_app_stimulus_decoder(ndi_app):
         ``presentation_time`` list directly on the document
         (``stimulus_presentation.presentation_time``); this is supported here.
         The current form stores it in the binary portion
-        (``presentation_time.bin``), read by MATLAB via
-        ``ndi.database.fun.read_presentation_time_structure`` +
-        ``database_openbinarydoc`` -- that binary reader is not yet ported, so a
-        binary-only document yields ``None`` (callers treat that as a blocker).
+        (``presentation_time.bin``), read via
+        ``database_openbinarydoc`` + ``ndi.database.fun.read_presentation_time_structure``
+        (mirrors MATLAB). For an ndic:// (cloud) dataset the file is fetched on
+        demand. ``None`` is returned only when neither form is available.
 
         Args:
             stimulus_presentation_doc: stimulus_presentation document
 
         Returns:
             List of per-stimulus timing dicts (each with ``onset``, ``offset``,
-            ``clocktype``), or ``None`` if the timing is only in the unported
-            binary portion.
+            ``clocktype``, ``stimevents``), or ``None`` if no timing is
+            available (no inline form and no readable ``presentation_time.bin``).
         """
         props = getattr(stimulus_presentation_doc, "document_properties", None)
         if isinstance(props, dict):
@@ -99,8 +100,42 @@ class ndi_app_stimulus_decoder(ndi_app):
         if pt:
             # Deprecated/inline form (MATLAB load_presentation_time first branch).
             return [dict(p) if isinstance(p, dict) else p for p in pt]
-        # Binary form: requires the unported read_presentation_time_structure.
-        return None
+        # Current form: timing lives in the binary file presentation_time.bin.
+        # Mirrors MATLAB load_presentation_time's else branch:
+        #   fobj = session.database_openbinarydoc(doc, 'presentation_time.bin');
+        #   [~, presentation_time] = ndi.database.fun.read_presentation_time_structure(...)
+        # database_openbinarydoc fetches the file on demand for ndic:// (cloud)
+        # datasets and returns an open handle whose .name is the local path.
+        if self._session is None:
+            return None
+        try:
+            fobj = self._session.database_openbinarydoc(
+                stimulus_presentation_doc, "presentation_time.bin"
+            )
+        except Exception:  # noqa: BLE001 - no binary available -> blocker (None), as before
+            return None
+        try:
+            from ...database_fun import read_presentation_time_structure
+
+            path = getattr(fobj, "name", None)
+            if not isinstance(path, (str, bytes)) and not hasattr(path, "__fspath__"):
+                return None
+            _header, presentation_time = read_presentation_time_structure(path)
+            return presentation_time
+        except Exception as exc:  # noqa: BLE001 - unreadable/corrupt binary -> blocker (None)
+            warnings.warn(
+                f"Could not read presentation_time.bin: {exc}",
+                stacklevel=2,
+            )
+            return None
+        finally:
+            try:
+                self._session.database_closebinarydoc(fobj)
+            except Exception:  # noqa: BLE001
+                try:
+                    fobj.close()
+                except Exception:  # noqa: BLE001
+                    pass
 
     def _clear_presentations(self, ndi_element_stim: Any) -> None:
         """Clear existing stimulus presentation documents."""

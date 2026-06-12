@@ -612,6 +612,35 @@ class TestPresentationTime:
         finally:
             os.unlink(fname)
 
+    def test_reads_matlab_event_major_layout(self):
+        # Cross-language guard: MATLAB writes stimevents EVENT-major
+        # (reshape(stimevents',[],1) column-major => bytes [t0,c0,t1,c1,...]).
+        # A channel-major reader/writer round-trips with itself but cannot read a
+        # real MATLAB presentation_time.bin; assert we parse the MATLAB layout.
+        import struct
+
+        from ndi.database_fun import read_presentation_time_structure
+
+        with tempfile.NamedTemporaryFile(suffix=".bin", delete=False) as f:
+            fname = f.name
+        try:
+            with open(fname, "wb") as f:
+                f.write(b"presentation_time structure\n")
+                f.write(struct.pack("<Q", 1))
+                f.write(b"\x00" * (512 - f.tell()))
+                f.write(b"dev_local_time\n")
+                f.write(struct.pack("<4d", 0.1, 0.2, 0.5, 0.6))
+                f.write(struct.pack("<I", 3))
+                # event-major: (t0,c0),(t1,c1),(t2,c2)
+                f.write(struct.pack("<6d", 0.2, 1.0, 0.3, 2.0, 0.45, -1.0))
+            _, result = read_presentation_time_structure(fname)
+            assert result[0]["clocktype"] == "dev_local_time"
+            np.testing.assert_array_almost_equal(
+                result[0]["stimevents"], [[0.2, 1.0], [0.3, 2.0], [0.45, -1.0]]
+            )
+        finally:
+            os.unlink(fname)
+
 
 # =========================================================================
 # Batch 9: Subject/Probe doc helpers
