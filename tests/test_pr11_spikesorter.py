@@ -2,13 +2,16 @@
 PR11 tests for ndi.app.spikesorter.
 
 These tests exercise the faithfully-ported, vlt-grounded pieces of
-ndi.app.spikesorter and assert that the non-portable methods remain explicit
-BLOCKERS (raising NotImplementedError that names the missing dependency).
+ndi.app.spikesorter. ``spike_sort`` (automatic path) and ``clusters2neurons`` are
+now implemented; the end-to-end clustering behaviour is covered in
+tests/test_spikesorter_clustering.py. Here we check that they bail out cleanly
+when called without a session, and that the graphical path is still directed to
+the separate PyQt editor.
 
-The module must import even when vlt is absent (all vlt imports are deferred),
-so the import-and-blocker tests run unconditionally. The math tests
-``importorskip("vlt")`` so they SKIP cleanly in the standard sandbox/CI env and
-run the real vlt-backed code when vlt is present.
+The module must import even when vlt is absent (all vlt imports are deferred), so
+the import + parameter tests run unconditionally. The math tests
+``importorskip("vlt")`` so they SKIP cleanly when vlt is absent and run the real
+vlt-backed code when vlt is present.
 
 MATLAB equivalent: src/ndi/+ndi/+app/spikesorter.m
 """
@@ -34,23 +37,17 @@ def test_construct_and_repr():
     assert "ndi_app_spikesorter" in repr(app)
 
 
-def test_spike_sort_is_blocker_naming_gui_and_klustakwik():
-    """The interactive GUI sorter + KlustaKwik path is fundamentally not portable."""
+def test_spike_sort_requires_session():
+    """Without a session, the automatic sorter bails out with a clear error."""
     app = ndi_app_spikesorter()
-    with pytest.raises(NotImplementedError) as exc:
+    with pytest.raises(RuntimeError, match="session"):
         app.spike_sort(None, "default", "default")
-    msg = str(exc.value)
-    assert "cluster_spikewaves_gui" in msg
-    assert "klustakwik" in msg.lower()
 
 
-def test_clusters2neurons_is_blocker_downstream_of_spike_sort():
+def test_clusters2neurons_requires_session():
     app = ndi_app_spikesorter()
-    with pytest.raises(NotImplementedError) as exc:
+    with pytest.raises(RuntimeError, match="session"):
         app.clusters2neurons(None, "default", "default")
-    msg = str(exc.value)
-    assert "clusters2neurons" in msg
-    assert "spike_sort" in msg
 
 
 def test_check_sorting_parameters_clamps_and_rounds():

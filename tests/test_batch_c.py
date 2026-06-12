@@ -255,14 +255,17 @@ class TestSpikeSorter:
         assert params["max_clusters"] == 10
         assert params["num_start"] == 5
 
-    def test_spike_sort_raises(self):
+    def test_spike_sort_requires_session(self):
+        # spike_sort now runs the automatic KlustaKwik path; with no session it
+        # bails out early with a clear RuntimeError (full behaviour is covered in
+        # tests/test_spikesorter_clustering.py).
         app = ndi_app_spikesorter()
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(RuntimeError, match="session"):
             app.spike_sort(SimpleNamespace())
 
-    def test_clusters2neurons_raises(self):
+    def test_clusters2neurons_requires_session(self):
         app = ndi_app_spikesorter()
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(RuntimeError, match="session"):
             app.clusters2neurons(SimpleNamespace())
 
     def test_isvalid_struct_valid(self):
