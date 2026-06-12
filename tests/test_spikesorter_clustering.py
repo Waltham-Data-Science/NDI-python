@@ -263,6 +263,7 @@ def test_spike_sort_creates_spike_clusters_document(tmp_path):
     sorter = ndi_app_spikesorter(session)
     _make_sorting_params(session, sorter)
 
+    np.random.seed(0)  # keep the (stochastic) clustering deterministic
     docs = sorter.spike_sort(elem, "test", "test_sort")
     assert len(docs) == 1
     doc = docs[0]
@@ -300,6 +301,7 @@ def test_spike_sort_idempotent_and_redo(tmp_path):
     sorter = ndi_app_spikesorter(session)
     _make_sorting_params(session, sorter)
 
+    np.random.seed(0)  # keep the (stochastic) clustering deterministic
     first = sorter.spike_sort(elem, "test", "test_sort")[0]
     # Second call without redo returns the same document, makes no new ones.
     again = sorter.spike_sort(elem, "test", "test_sort")[0]
@@ -335,6 +337,7 @@ def test_clusters2neurons_unselected_yields_no_neurons(tmp_path):
     _make_extraction_and_spikewaves(session, elem)
     sorter = ndi_app_spikesorter(session)
     _make_sorting_params(session, sorter)
+    np.random.seed(0)  # keep the (stochastic) clustering deterministic
     sorter.spike_sort(elem, "test", "test_sort")
 
     # A freshly auto-sorted document labels everything 'Unselected' -> no neurons.
