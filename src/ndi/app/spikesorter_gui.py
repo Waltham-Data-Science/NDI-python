@@ -70,12 +70,27 @@ def _require_gui() -> Any:
         ) from exc
 
 
+# Module-level strong reference to the QApplication. PyQt will garbage-collect a
+# QApplication that has no live Python reference and delete the underlying C++
+# object -- after which creating any QWidget aborts the process with "Must
+# construct a QApplication before a QWidget". Holding the instance here keeps it
+# alive for the lifetime of the process.
+_QAPP: Any = None
+
+
 def _ensure_qapp() -> Any:
-    """Return the singleton QApplication, creating one if necessary."""
+    """Return the singleton QApplication, creating one if necessary.
+
+    The instance is cached in a module global so it is never garbage-collected
+    out from under live widgets (a long sorting session can trigger a GC that
+    would otherwise destroy an unreferenced QApplication and crash).
+    """
+    global _QAPP
     _pg, QtWidgets, _QtCore, _QtGui = _require_gui()
     app = QtWidgets.QApplication.instance()
     if app is None:
         app = QtWidgets.QApplication([])
+    _QAPP = app
     return app
 
 
