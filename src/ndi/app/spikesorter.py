@@ -159,8 +159,9 @@ class ndi_app_spikesorter(ndi_app, ndi_app_appdoc):
             method instead reads the ``spikewaves`` documents directly from the
             database (matching on element_id + extraction_parameters_id +
             epoch_id) and decodes the attached ``spikewaves.vsw`` /
-            ``spiketimes.bin`` binaries with the available
-            ``vlt.file.custom_file_formats`` readers. The returned values are
+            ``spiketimes.bin`` binaries with
+            :mod:`ndi.util.vhlspikewaveformfile` (a MATLAB-byte-compatible port
+            of ``vlt.file.custom_file_formats``). The returned values are
             equivalent.
 
         Raises:
@@ -170,10 +171,13 @@ class ndi_app_spikesorter(ndi_app, ndi_app_appdoc):
         if self._session is None:
             raise RuntimeError("ndi_app_spikesorter.loadwaveforms requires a session.")
 
-        # Deferred vlt import so the module stays importable when vlt absent.
-        from vlt.file.custom_file_formats import readvhlspikewaveformfile
-
+        # Read spikewaves.vsw with NDI's vhlspikewaveformfile reader (a port of
+        # vlt.file.custom_file_formats.readvhlspikewaveformfile; byte-compatible
+        # with MATLAB, no vlt dependency).
         from ..query import ndi_query
+        from ..util.vhlspikewaveformfile import (
+            read_vhlspikewaveformfile as readvhlspikewaveformfile,
+        )
 
         waveforms = None
         spiketimes_list: list[np.ndarray] = []
@@ -299,7 +303,9 @@ class ndi_app_spikesorter(ndi_app, ndi_app_appdoc):
             raw = fobj.read()
         finally:
             self._session.database_closebinarydoc(fobj)
-        return np.frombuffer(raw, dtype="<f8").astype(float)
+        # spiketimes.bin is float32 (MATLAB fwrite(...,'float32'); spikeextractor
+        # writes "<f4"). Reading it as float64 would mis-decode every value.
+        return np.frombuffer(raw, dtype="<f4").astype(float)
 
     @staticmethod
     def _prepare_waveforms_for_sorting(
