@@ -69,41 +69,43 @@ class OntologyResult:
 # ---------------------------------------------------------------------------
 
 
-# Map prefixes to provider class names (case-insensitive)
-_PREFIX_MAP: dict[str, str] = {
-    "CL": "CL",
-    "OM": "OM",
-    "NDIC": "NDIC",
-    "NCIm": "NCIm",
-    "CHEBI": "CHEBI",
-    "NCBITaxon": "NCBITaxon",
-    "taxonomy": "NCBITaxon",
-    "WBStrain": "WBStrain",
-    "SNOMED": "SNOMED",
-    "RRID": "RRID",
-    "EFO": "EFO",
-    "PATO": "PATO",
-    "PubChem": "PubChem",
-    "EMPTY": "EMPTY",
-}
+# Prefix -> ontology-name map (case-insensitive at lookup time). This is the
+# in-memory cache; it is the SINGLE SOURCE'd entirely from
+# ndi_common/ontology/ontology_list.json, which is itself vendored verbatim from
+# the canonical ndi-ontology-matlab package (Waltham-Data-Science/ndi-ontology-matlab)
+# and is the single source of truth shared by both the MATLAB and Python
+# consumers. There is intentionally no hardcoded prefix table here: a hardcoded
+# copy previously duplicated (and drifted from) the JSON. To add or change a
+# prefix mapping, edit it in ndi-ontology-matlab and re-vendor ontology_list.json.
+_PREFIX_MAP: dict[str, str] = {}
 
 
 def _load_prefix_map() -> dict[str, str]:
-    """Load prefix mappings from ontology_list.json if available."""
+    """Return the prefix -> ontology-name map, loading it once from the JSON.
+
+    The mappings come solely from ``ndi_common/ontology/ontology_list.json`` (the
+    single source vendored from ndi-ontology-matlab); the in-memory ``_PREFIX_MAP``
+    is populated on first use and reused thereafter.
+    """
+    if _PREFIX_MAP:
+        return _PREFIX_MAP
     try:
         from ndi.common import ndi_common_PathConstants
 
         json_path = ndi_common_PathConstants.COMMON_FOLDER / "ontology" / "ontology_list.json"
-        if json_path.exists():
-            with open(json_path) as f:
-                data = json.load(f)
-            for mapping in data.get("prefix_ontology_mappings", []):
-                prefix = mapping.get("prefix", "")
-                name = mapping.get("ontology_name", "")
-                if prefix and name:
-                    _PREFIX_MAP[prefix] = name
-    except Exception:
-        pass
+        with open(json_path) as f:
+            data = json.load(f)
+        for mapping in data.get("prefix_ontology_mappings", []):
+            prefix = mapping.get("prefix", "")
+            name = mapping.get("ontology_name", "")
+            if prefix and name:
+                _PREFIX_MAP[prefix] = name
+    except Exception as exc:  # pragma: no cover - packaged resource should exist
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "Could not load ontology prefix mappings from ontology_list.json: %s", exc
+        )
     return _PREFIX_MAP
 
 

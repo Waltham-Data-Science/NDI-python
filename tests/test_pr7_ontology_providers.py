@@ -36,11 +36,18 @@ class TestRegistry:
             / "ontology_list.json"
         )
         d = json.load(open(path))
-        prefixes = {m["prefix"] for m in d["prefix_ontology_mappings"]}
+        prefix_to_name = {m["prefix"]: m["ontology_name"] for m in d["prefix_ontology_mappings"]}
         names = {o["name"] for o in d["Ontologies"]}
+        # All four providers exist as Ontologies entries.
         for n in ["EDAM", "IAO", "STATO", "SchemaOrg"]:
-            assert n in prefixes, f"{n} missing from prefix_ontology_mappings"
             assert n in names, f"{n} missing from Ontologies"
+        # Each is reachable via its canonical prefix. The single source
+        # (ndi-ontology-matlab) uses 'schema' for SchemaOrg and 'format' as an
+        # EDAM alias (not 'SchemaOrg:'), so lookups dispatch through those.
+        for p in ["EDAM", "IAO", "STATO"]:
+            assert p in prefix_to_name, f"{p} missing from prefix_ontology_mappings"
+        assert prefix_to_name.get("schema") == "SchemaOrg"
+        assert prefix_to_name.get("format") == "EDAM"
 
 
 class TestUberonLookupDispatch:

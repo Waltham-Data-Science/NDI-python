@@ -41,49 +41,20 @@
       "ontology_name": "CL"
     },
     {
-      "prefix": "RRID",
-      "ontology_name": "RRID"
+       "prefix": "RRID",
+       "ontology_name": "RRID"
     },
-    {
-      "prefix": "PATO",
-      "ontology_name": "PATO"
-    },
-    {
-      "prefix": "EMPTY",
-      "ontology_name": "EMPTY"
-    },
-    {
-      "prefix": "NCIT",
-      "ontology_name": "NCIT"
-    },
-    {
-      "prefix": "SNOMED",
-      "ontology_name": "SNOMED"
-    },
-    {
-      "prefix": "WBStrain",
-      "ontology_name": "WBStrain"
-    },
-    {
-      "prefix": "EFO",
-      "ontology_name": "EFO"
-    },
-    {
-      "prefix": "EDAM",
-      "ontology_name": "EDAM"
-    },
-    {
-      "prefix": "IAO",
-      "ontology_name": "IAO"
-    },
-    {
-      "prefix": "STATO",
-      "ontology_name": "STATO"
-    },
-    {
-      "prefix": "SchemaOrg",
-      "ontology_name": "SchemaOrg"
-    }
+    {"prefix": "PATO", "ontology_name": "PATO"},
+    {"prefix": "EMPTY", "ontology_name": "EMPTY"},
+    {"prefix": "NCIT", "ontology_name": "NCIT"},
+    {"prefix": "SNOMED", "ontology_name": "SNOMED"},
+    {"prefix": "WBStrain", "ontology_name": "WBStrain"},
+    {"prefix": "EFO", "ontology_name": "EFO"},
+    {"prefix": "EDAM", "ontology_name": "EDAM"},
+    {"prefix": "format", "ontology_name": "EDAM"},
+    {"prefix": "IAO", "ontology_name": "IAO"},
+    {"prefix": "schema", "ontology_name": "SchemaOrg"},
+    {"prefix": "STATO", "ontology_name": "STATO"}
   ],
   "Ontologies": [
     {
@@ -127,9 +98,9 @@
       "api_url": "https://www.ebi.ac.uk/ols/api/ontologies/cl"
     },
     {
-      "name": "RRID",
-      "homepage": "https://scicrunch.org/resources",
-      "api_url": "https://scicrunch.org/api/1/resolver/"
+     "name": "RRID",
+     "homepage": "https://scicrunch.org/resources",
+     "api_url": "https://scicrunch.org/api/1/resolver/"
     },
     {
       "name": "PATO",
@@ -138,8 +109,8 @@
     },
     {
       "name": "EMPTY",
-      "homepage": null,
-      "api_url": null,
+      "homepage": null, 
+      "api_url": null, 
       "description": "Experimental Measurements, Purposes, and Treatments ontologY (local OBO file)"
     },
     {
@@ -164,23 +135,23 @@
     },
     {
       "name": "EDAM",
-      "homepage": "https://edamontology.org/",
+      "homepage": "http://edamontology.org",
       "api_url": "https://www.ebi.ac.uk/ols4/api/ontologies/edam"
     },
     {
       "name": "IAO",
-      "homepage": "http://obofoundry.org/ontology/iao.html",
+      "homepage": "https://github.com/information-artifact-ontology/IAO",
       "api_url": "https://www.ebi.ac.uk/ols4/api/ontologies/iao"
     },
     {
-      "name": "STATO",
-      "homepage": "http://obofoundry.org/ontology/stato.html",
-      "api_url": "https://www.ebi.ac.uk/ols4/api/ontologies/stato"
+      "name": "SchemaOrg",
+      "homepage": "https://schema.org",
+      "api_url": "https://schema.org/"
     },
     {
-      "name": "SchemaOrg",
-      "homepage": "https://schema.org/",
-      "api_url": "https://www.ebi.ac.uk/ols4/api/ontologies/schemaorg"
+      "name": "STATO",
+      "homepage": "http://stato-ontology.org/",
+      "api_url": "https://www.ebi.ac.uk/ols4/api/ontologies/stato"
     }
   ]
 }

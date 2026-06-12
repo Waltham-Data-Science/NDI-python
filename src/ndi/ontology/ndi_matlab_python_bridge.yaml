@@ -225,13 +225,23 @@ classes:
 # lookup. EDAM and SchemaOrg use named / sub-typed identifiers rather than a
 # flat numeric series, so id lookups pass the full term; label lookups work as
 # usual. All six are registered in PROVIDER_REGISTRY, and EDAM/IAO/STATO/
-# SchemaOrg also gained ontology_list.json prefix + Ontologies entries
+# SchemaOrg also have ontology_list.json prefix + Ontologies entries
 # (UBERON/NCIT were already listed).
 #
 # These extend Python's ontology coverage beyond MATLAB's current
 # ontologies (NDIC, UBERON, NCIm). The MATLAB codebase has a planned
 # ndi.ontology.lookup() that does not yet exist but will likely adopt
 # a similar dispatcher pattern.
+#
+# SINGLE SOURCE (2026-06-12): ndi_common/ontology/ontology_list.json is now
+# vendored VERBATIM from the canonical ndi-ontology-matlab package
+# (Waltham-Data-Science/ndi-ontology-matlab) — the single source of truth shared
+# by both the MATLAB and Python consumers. The previously-hardcoded prefix table
+# in ndi/ontology/__init__.py (which had drifted from the JSON) was removed; all
+# prefix->ontology mappings are now loaded from that JSON alone. Re-vendor the
+# file after any change to ndi-ontology-matlab; do not hand-edit the Python copy.
+# The canonical uses 'schema:' (SchemaOrg) and 'format:' (EDAM) as prefixes
+# rather than 'SchemaOrg:'; both dispatch to the same providers.
 # Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
 # =========================================================================
