@@ -6,17 +6,14 @@ waveforms from continuous electrophysiology recordings.
 
 MATLAB equivalent: src/ndi/+ndi/+app/spikeextractor.m
 
-Storage divergence from MATLAB (documented):
-    MATLAB persists extracted waveforms in the VH-Lab custom binary format
-    ``vhlspikewaveformfile`` (``vlt.file.custom_file_formats.*``). That binary
-    format is MISSING from the Python ``vlt`` port and is NOT reimplemented
-    here. Instead, when a session/database is available, this port stores the
-    extracted waveforms and spike times via the NDI binary-document mechanism
-    used by the rest of the Python codebase (``ndi.util.vhsb``), attached to a
-    ``spikewaves`` document. The waveforms ``spikewaves.vsw`` file holds the
-    SxDxN waveform tensor (flattened to channels-per-sample columns) and the
-    ``spiketimes.bin`` file holds the float32 spike times, mirroring the two
-    files MATLAB writes. See :meth:`extract` and :meth:`loaddata_appdoc`.
+Storage (byte-compatible with MATLAB):
+    Extracted waveforms are written to ``spikewaves.vsw`` in the real VH-Lab
+    custom binary format ``vhlspikewaveformfile`` (big-endian 512-byte header +
+    float32 data) via :mod:`ndi.util.vhlspikewaveformfile` — a port of
+    ``vlt.file.custom_file_formats`` that the Python ``vlt`` port lacks — so a
+    MATLAB-extracted file reads here and vice versa. Spike times are written to
+    ``spiketimes.bin`` as float32 (matching MATLAB ``fwrite(...,'float32')``).
+    Both are attached to a ``spikewaves`` document. See :meth:`extract`.
 """
 
 from __future__ import annotations
@@ -499,33 +496,38 @@ class ndi_app_spikeextractor(ndi_app, ndi_app_appdoc):
         spiketimes: np.ndarray,
         waveparameters: dict[str, Any],
     ) -> ndi_document | None:
-        """Create + store a ``spikewaves`` document with vhsb-backed files.
+        """Create + store a ``spikewaves`` document with its two binary files.
 
-        Divergence from MATLAB: instead of ``vhlspikewaveformfile``, the SxDxN
-        waveform tensor is written to ``spikewaves.vsw`` via
-        :func:`ndi.util.vhsb.vhsb_write` (rows = spikes, columns =
-        samples*channels) and the spike times to ``spiketimes.bin`` as float32,
-        mirroring the two files MATLAB attaches.
+        Writes ``spikewaves.vsw`` in the real ``vhlspikewaveformfile`` format
+        (:func:`ndi.util.vhlspikewaveformfile.write_vhlspikewaveformfile`) and
+        the spike times to ``spiketimes.bin`` as float32 — the same two files,
+        byte-compatible, that MATLAB ``ndi.app.spikeextractor`` attaches.
         """
         import tempfile
         from pathlib import Path
 
-        from ..util.vhsb import vhsb_write
+        from ..util.vhlspikewaveformfile import write_vhlspikewaveformfile
 
         s, d, n = waveforms.shape
 
-        # spikewaves.vsw: store one row per spike, with the (S*D) flattened
-        # waveform as the Y columns and the spike index as X. The waveparameters
-        # (S0, S1, numchannels, samplerate) needed to reshape on load are saved
-        # in the document's ``spikewaves`` field.
+        # spikewaves.vsw: the real vlt vhlspikewaveformfile binary format
+        # (big-endian 512-byte header + float32 data), byte-compatible with
+        # MATLAB's ndi.app.spikeextractor (newvhlspikewaveformfile +
+        # addvhlspikewaveformfile), so a MATLAB-extracted file reads here and
+        # vice versa. waveforms is (num_samples, numchannels, num_spikes).
         tmpdir = Path(tempfile.mkdtemp(prefix="ndi_spikewaves_"))
         vsw_path = tmpdir / "spikewaves.vsw"
-        if n > 0:
-            y = np.transpose(waveforms, (2, 0, 1)).reshape(n, s * d)
-        else:
-            y = np.zeros((0, max(1, s * d)), dtype=np.float64)
-        x = np.arange(n, dtype=np.float64)
-        vhsb_write(vsw_path, x, y, x_units="spike_index", y_units="waveform")
+        write_vhlspikewaveformfile(
+            str(vsw_path),
+            waveforms,
+            {
+                "numchannels": int(waveparameters["numchannels"]),
+                "S0": int(waveparameters["S0"]),
+                "S1": int(waveparameters["S1"]),
+                "samplingrate": float(waveparameters["samplerate"]),
+                "name": str(extraction_name)[:80],
+            },
+        )
 
         # spiketimes.bin: float32 little-endian, matching MATLAB fwrite float32.
         st_path = tmpdir / "spiketimes.bin"
