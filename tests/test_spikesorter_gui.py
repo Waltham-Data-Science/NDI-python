@@ -205,6 +205,115 @@ def test_cancel_returns_no_result(win):
     assert win.success is False
 
 
+def test_scene_click_lasso_path(win):
+    # drive the REAL mouse handler (_on_scene_clicked) with synthetic click
+    # events: build a polygon around cluster 1's points, double-click to apply a
+    # split. Exercises the scenePos/mapping/double-click path end to end.
+    from pyqtgraph.Qt import QtCore
+
+    win.merge1_menu.setCurrentText("1")
+    win._start_lasso("split")
+    feats = win.model.features
+    c1 = np.flatnonzero(win.model.clusterids == 1.0)
+    cx = float(np.median(feats[c1, win._dim_x]))
+    cy = float(np.median(feats[c1, win._dim_y]))
+    vb = win.feature_plot.getPlotItem().vb
+    before = len(win.model.clusterinfo)
+
+    def click(x, y, double=False):
+        sp = vb.mapViewToScene(QtCore.QPointF(x, y))
+
+        class _Evt:
+            def scenePos(self):
+                return sp
+
+            def double(self):
+                return double
+
+        win._on_scene_clicked(_Evt())
+
+    # left half-plane through cluster 1's median x -> selects ~half of cluster 1
+    # (scale-independent), a genuine split rather than swallowing the cluster.
+    big = 1e6
+    pts = [(cx - big, cy - big), (cx, cy - big), (cx, cy + big), (cx - big, cy + big)]
+    for i, (x, y) in enumerate(pts):
+        click(x, y, double=(i == len(pts) - 1))
+    # the lasso resolved (pending action cleared); a split added a cluster.
+    assert win._pending_action is None
+    assert len(win.model.clusterinfo) == before + 1
+
+
+def test_merge_all_the_way_down_to_one(win):
+    # repeatedly merge the two lowest clusters until one remains -- must not
+    # crash and must stay contiguous (this path hung/crashed before the
+    # QApplication-reference fix surfaced it).
+    guard = 0
+    while len([c for c in win.model.unique_clusters() if not np.isnan(c)]) > 1 and guard < 40:
+        nums = [n for n in win._cluster_numbers() if n != "NaN"]
+        win.merge1_menu.setCurrentText(nums[0])
+        win.merge2_menu.setCurrentText(nums[1])
+        win.on_merge()
+        guard += 1
+    assert sorted(set(win.model.clusterids)) == [1.0]
+    # merging with a single cluster left is a no-op, not a crash.
+    win.on_merge()
+    assert sorted(set(win.model.clusterids)) == [1.0]
+
+
+def test_single_spike_window_builds_and_draws(qtbot):
+    m, _ = _model()
+    one = ClusterModel(
+        m.waves[:, :, :1],
+        clusterids=np.array([1.0]),
+        epoch_names=["e1"],
+        epoch_start_samples=[1],
+    )
+    w = build_window(one, ask_before_done=False)
+    qtbot.addWidget(w)
+    w.on_feature_changed("pca3")
+    w.redraw()  # must not raise
+    assert len(w._spike_plots) == 1
+
+
+def test_qapplication_reference_survives_gc(tmp_path):
+    """Regression: _ensure_qapp must keep a live reference to the QApplication.
+
+    PyQt garbage-collects a QApplication with no live Python reference and deletes
+    the C++ object, after which constructing any QWidget aborts the process
+    ("Must construct a QApplication before a QWidget"). pytest-qt holds the app
+    itself, which masks the bug -- so this runs a standalone subprocess (no
+    pytest-qt) that drops the _ensure_qapp() return, forces GC, and then builds
+    widgets. Exit 0 proves the module keeps the app alive; a regression SIGABRTs.
+    """
+    import subprocess
+    import sys
+
+    script = (
+        "import gc\n"
+        "from ndi.app.spikesorter_clustermodel import ClusterModel\n"
+        "from ndi.app.spikesorter_gui import _ensure_qapp, build_window\n"
+        "import numpy as np\n"
+        "_ensure_qapp()\n"  # return intentionally discarded
+        "del_ = None\n"
+        "gc.collect(); gc.collect()\n"  # would destroy an unreferenced QApplication
+        "w = build_window(ClusterModel(np.zeros((5,1,4)), clusterids=np.array([1.,1.,2.,2.])))\n"
+        "gc.collect(); gc.collect()\n"
+        "w2 = build_window(ClusterModel(np.zeros((5,1,3)), clusterids=np.array([1.,2.,3.])))\n"
+        "print('OK')\n"
+    )
+    env = dict(os.environ)
+    env["QT_QPA_PLATFORM"] = "offscreen"
+    env["PYTHONPATH"] = os.pathsep.join(p for p in sys.path if p)
+    proc = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, env=env, timeout=120
+    )
+    assert proc.returncode == 0, (
+        f"QApplication GC regression: subprocess exited {proc.returncode}\n"
+        f"stdout={proc.stdout!r}\nstderr={proc.stderr[-800:]!r}"
+    )
+    assert "OK" in proc.stdout
+
+
 def test_escape_cancels_lasso_not_dialog(win):
     from pyqtgraph.Qt import QtCore, QtGui
 
