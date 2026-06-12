@@ -82,19 +82,20 @@ def downloadNdiDocuments(
         logger.warning("Bulk download failed: %s", exc)
         return [], list(ids_to_download)
 
+    # Match downloaded docs back to the requested ids by NDI id. The bulk
+    # download returns document bodies keyed by NDI id (base.id / ndiId), not
+    # necessarily the cloud api id, so comparing api ids marked every
+    # successfully-downloaded doc as "failed" (confirmed against the live cloud).
     api_to_ndi = {v: k for k, v in ndi_to_api.items()}
-    downloaded_api_ids: set[str] = set()
+    downloaded_ndi_ids: set[str] = set()
     for doc in docs:
         api_id = doc.get("_id", doc.get("id", ""))
-        downloaded_api_ids.add(api_id)
-        ndi_id = api_to_ndi.get(api_id, api_id)
-        doc.setdefault("ndiId", ndi_id)
+        ndi_id = doc.get("ndiId") or api_to_ndi.get(api_id) or doc.get("base", {}).get("id", "")
+        if ndi_id:
+            downloaded_ndi_ids.add(ndi_id)
+            doc.setdefault("ndiId", ndi_id)
 
-    failed = [
-        ndi_id
-        for ndi_id in ids_to_download
-        if ndi_to_api.get(ndi_id, ndi_id) not in downloaded_api_ids
-    ]
+    failed = [ndi_id for ndi_id in ids_to_download if ndi_id not in downloaded_ndi_ids]
     return docs, failed
 
 
@@ -211,6 +212,52 @@ def _upload_files(
         return {"uploaded": 0, "failed": 1, "errors": [str(exc)]}
 
 
+def _download_files(
+    dataset: Any,
+    documents: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Materialise the binary files of downloaded *documents* into the local store.
+
+    For each downloaded document body, every file named in
+    ``files.file_info[]`` is realised locally by opening it through the dataset's
+    binary API, which performs the on-demand ``ndic://`` cloud fetch when the
+    file is not already present. This is the download-side counterpart of
+    :func:`_upload_files`. Documents must already be ingested (the binary fetch
+    reads them from the dataset database).
+
+    Returns a report dict ``{"downloaded", "skipped", "failed", "errors"}``.
+    """
+    report = {"downloaded": 0, "skipped": 0, "failed": 0, "errors": []}
+    for props in documents:
+        if not isinstance(props, dict):
+            continue
+        doc_id = props.get("base", {}).get("id", "")
+        files = props.get("files", {})
+        if not doc_id or not isinstance(files, dict):
+            continue
+        for fi in files.get("file_info", []):
+            if not isinstance(fi, dict):
+                continue
+            name = fi.get("name", "")
+            if not name:
+                continue
+            try:
+                exists, _ = dataset.database_existbinarydoc(doc_id, name)
+                if exists:
+                    report["skipped"] += 1
+                    continue
+                fobj = dataset.database_openbinarydoc(doc_id, name)
+                dataset.database_closebinarydoc(fobj)
+                report["downloaded"] += 1
+            except FileNotFoundError:
+                # No remote (ndic://) or local copy for this file; nothing to fetch.
+                report["skipped"] += 1
+            except Exception as exc:  # pragma: no cover - network/IO failure path
+                report["failed"] += 1
+                report["errors"].append(f"{doc_id}/{name}: {exc}")
+    return report
+
+
 def _upload_ok(upload_report: dict[str, Any], file_report: dict[str, Any] | None) -> bool:
     """Return True iff every document (and any requested file) uploaded.
 
@@ -320,6 +367,9 @@ def downloadNew(
     added = _ingest_documents(dataset, docs)
     report["downloaded_document_ids"] = added
     report["failed"] = failed
+
+    if options.sync_files:
+        report["file_report"] = _download_files(dataset, docs)
 
     _, local_now = _local_documents(dataset)
     index.update(local_now, list(remote_now.keys()))
@@ -445,6 +495,8 @@ def mirrorFromRemote(
     docs, failed = downloadNdiDocuments(cloud_dataset_id, remote_now, to_download, client=client)
     report["downloaded_document_ids"] = _ingest_documents(dataset, docs)
     report["failed"] = failed
+    if options.sync_files:
+        report["file_report"] = _download_files(dataset, docs)
     report["deleted_local_document_ids"] = deleteLocalDocuments(dataset, to_delete_local)
 
     _, local_after = _local_documents(dataset)
@@ -517,6 +569,8 @@ def twoWaySync(
     )
     report["downloaded_document_ids"] = _ingest_documents(dataset, docs)
     report["failed"] = failed
+    if options.sync_files:
+        report["download_file_report"] = _download_files(dataset, docs)
 
     # Phase 3: record the final state of both sides — but only if the upload
     # phase fully succeeded, so failed documents are retried next sync.
@@ -534,21 +588,26 @@ def validate(
     dataset: Any,
     cloud_dataset_id: str,
     *,
+    compare_content: bool = True,
     client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """Compare local and remote datasets to identify sync discrepancies.
 
     MATLAB equivalent: ``ndi.cloud.sync.validate``.
 
+    Args:
+        compare_content: If True (default), also download the common documents
+            and deep-compare their contents (MATLAB validate.m's mismatch
+            detection); if False, only id sets are compared.
+
     Returns:
         Report dict with ``local_only_ids``, ``remote_only_ids``,
-        ``common_ids``, ``local_count`` and ``remote_count``. (Content-hash
-        comparison of the common ids — MATLAB validate.m's mismatch detection
-        — is not yet implemented; this compares id sets only.)
+        ``common_ids``, ``mismatched_ids``, ``mismatch_details``,
+        ``local_count`` and ``remote_count``.
     """
     from ..internal import validateSync as _validate
 
-    return _validate(dataset, cloud_dataset_id, client=client)
+    return _validate(dataset, cloud_dataset_id, compare_content=compare_content, client=client)
 
 
 def sync(

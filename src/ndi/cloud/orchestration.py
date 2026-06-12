@@ -380,47 +380,61 @@ def syncDataset(
         sync_mode: One of ``'download_new'``, ``'upload_new'``,
             ``'mirror_from_remote'``, ``'mirror_to_remote'``,
             ``'two_way_sync'``.
-        sync_files: Also sync binary files.
+        sync_files: Also sync binary files (upload side zips, download side
+            materialises binaries via the on-demand ``ndic://`` fetch).
         verbose: Print progress.
         dry_run: Simulate without making changes.
         client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
-        Report dict with counts of changes.
+        Report dict with the legacy keys ``sync_mode``, ``cloud_dataset_id``,
+        ``downloaded``, ``uploaded`` and ``deleted`` (counts), plus ``failed``
+        (any ids that did not transfer) and the full engine ``report``.
+
+    Routing: this delegates to the canonical sync engine
+    (:func:`ndi.cloud.sync.operations.sync`), which tracks last-synced state in
+    the dataset's sync index, supports all five modes (the two mirror modes now
+    actually run rather than returning a placeholder note), guards against
+    advancing the index past failed uploads (issue 805), and enumerates local
+    documents from ``dataset.database_search`` (so linked-session documents are
+    included — the previous ad-hoc path used ``dataset.session`` and silently
+    saw no local documents). The return *shape* is preserved; the full engine
+    report is attached under ``report``.
     """
     from .internal import getCloudDatasetIdForLocalDataset
+    from .sync.mode import SyncMode, SyncOptions
+    from .sync.operations import sync as _sync_engine
 
     cloud_id, _ = getCloudDatasetIdForLocalDataset(dataset, client=client)
     if not cloud_id:
         return {"error": "No cloud dataset linked to this dataset"}
 
-    report: dict[str, Any] = {
+    mode_map = {
+        "download_new": SyncMode.DOWNLOAD_NEW,
+        "upload_new": SyncMode.UPLOAD_NEW,
+        "mirror_from_remote": SyncMode.MIRROR_FROM_REMOTE,
+        "mirror_to_remote": SyncMode.MIRROR_TO_REMOTE,
+        "two_way_sync": SyncMode.TWO_WAY_SYNC,
+    }
+    mode = mode_map.get(sync_mode)
+    if mode is None:
+        return {"error": f"Unknown sync mode: {sync_mode}"}
+
+    options = SyncOptions(sync_files=sync_files, verbose=verbose, dry_run=dry_run)
+    engine_report = _sync_engine(dataset, cloud_id, mode, options, client=client)
+
+    deleted = len(engine_report.get("deleted_local_document_ids", [])) + len(
+        engine_report.get("deleted_remote_document_ids", [])
+    )
+    return {
         "sync_mode": sync_mode,
         "cloud_dataset_id": cloud_id,
-        "downloaded": 0,
-        "uploaded": 0,
-        "deleted": 0,
+        "downloaded": len(engine_report.get("downloaded_document_ids", [])),
+        "uploaded": len(engine_report.get("uploaded_document_ids", [])),
+        "deleted": deleted,
+        "failed": engine_report.get("failed", []),
+        "report": engine_report,
     }
-
-    if sync_mode == "download_new":
-        report.update(
-            _sync_download_new(dataset, cloud_id, sync_files, verbose, dry_run, client=client)
-        )
-    elif sync_mode == "upload_new":
-        report.update(
-            _sync_upload_new(dataset, cloud_id, sync_files, verbose, dry_run, client=client)
-        )
-    elif sync_mode == "two_way_sync":
-        report.update(
-            _sync_download_new(dataset, cloud_id, sync_files, verbose, dry_run, client=client)
-        )
-        report.update(
-            _sync_upload_new(dataset, cloud_id, sync_files, verbose, dry_run, client=client)
-        )
-    elif sync_mode in ("mirror_from_remote", "mirror_to_remote"):
-        report["note"] = f"{sync_mode} delegates to full download/upload"
-
-    return report
 
 
 @_auto_client
@@ -453,113 +467,3 @@ def newDataset(
 
 # Re-export from upload module (MATLAB: ndi.cloud.upload.scanForUpload)
 from .upload import scanForUpload  # noqa: F401
-
-# ---------------------------------------------------------------------------
-# Private sync helpers
-# ---------------------------------------------------------------------------
-
-
-def _sync_download_new(
-    dataset: Any,
-    cloud_id: str,
-    sync_files: bool,
-    verbose: bool,
-    dry_run: bool,
-    *,
-    client: CloudClient | None = None,
-) -> dict[str, int]:
-    """Download documents that exist remotely but not locally."""
-    from .api import documents as docs_api
-    from .download import jsons2documents
-
-    remote_docs = docs_api.listDatasetDocumentsAll(cloud_id, client=client).data
-
-    # Find local IDs
-    from ndi.query import ndi_query
-
-    try:
-        local_docs = dataset.session.database_search(ndi_query(""))
-    except Exception:
-        local_docs = []
-
-    local_ids = set()
-    for ld in local_docs:
-        p = ld.document_properties if hasattr(ld, "document_properties") else ld
-        if isinstance(p, dict):
-            local_ids.add(p.get("base", {}).get("id", ""))
-
-    # Filter to new docs
-    new_docs = [rd for rd in remote_docs if rd.get("ndiId", rd.get("id", "")) not in local_ids]
-
-    if verbose:
-        print(f"  New remote docs to download: {len(new_docs)}")
-
-    if dry_run:
-        return {"downloaded": len(new_docs)}
-
-    documents = jsons2documents(new_docs)
-    added = 0
-    failures: list[tuple[str, str]] = []
-    for doc in documents:
-        try:
-            dataset.session.database_add(doc)
-            added += 1
-        except Exception as exc:
-            doc_id = getattr(doc, "id", None) or "<unknown>"
-            failures.append((str(doc_id), str(exc)))
-    conversion_lost = len(new_docs) - len(documents)
-    total_lost = conversion_lost + len(failures)
-    if total_lost > 0:
-        failure_details = "\n".join(f"  - {doc_id}: {err}" for doc_id, err in failures[:20])
-        extra = f"\n  ... and {len(failures) - 20} more" if len(failures) > 20 else ""
-        parts = []
-        if conversion_lost > 0:
-            parts.append(f"{conversion_lost} failed JSON-to-document conversion")
-        if failures:
-            parts.append(f"{len(failures)} failed to add to database:\n{failure_details}{extra}")
-        raise RuntimeError(
-            f"Sync downloaded {len(new_docs)} documents but only {added} "
-            f"were added. {total_lost} documents lost: " + "; ".join(parts)
-        )
-
-    return {"downloaded": added}
-
-
-def _sync_upload_new(
-    dataset: Any,
-    cloud_id: str,
-    sync_files: bool,
-    verbose: bool,
-    dry_run: bool,
-    *,
-    client: CloudClient | None = None,
-) -> dict[str, int]:
-    """Upload documents that exist locally but not remotely."""
-    from .internal import listRemoteDocumentIds
-    from .upload import uploadDocumentCollection
-
-    remote_ids = listRemoteDocumentIds(cloud_id, client=client)
-
-    from ndi.query import ndi_query
-
-    try:
-        local_docs = dataset.session.database_search(ndi_query(""))
-    except Exception:
-        local_docs = []
-
-    new_jsons = []
-    for ld in local_docs:
-        p = ld.document_properties if hasattr(ld, "document_properties") else ld
-        if isinstance(p, dict):
-            doc_id = p.get("base", {}).get("id", "")
-            if doc_id not in remote_ids:
-                new_jsons.append(p)
-
-    if verbose:
-        print(f"  New local docs to upload: {len(new_jsons)}")
-
-    if dry_run:
-        return {"uploaded": len(new_jsons)}
-
-    report = uploadDocumentCollection(cloud_id, new_jsons, only_missing=False, client=client)
-    return {"uploaded": report.get("uploaded", 0)}
