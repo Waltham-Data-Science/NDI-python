@@ -6,28 +6,30 @@ into putative single-neuron units.
 
 MATLAB equivalent: src/ndi/+ndi/+app/spikesorter.m
 
-Porting status (see module-level notes in spike_sort/clusters2neurons):
+Porting status:
 
   * ``check_sorting_parameters`` and ``loadwaveforms`` are fully ported and
     grounded in available ``vlt`` code.
-  * ``spike_sort`` is a BLOCKER. Its two MATLAB code paths are both
-    non-portable: the graphical path calls
-    ``vlt.neuro.spikesorting.cluster_spikewaves_gui`` (an interactive GUI,
-    fundamentally not portable to a headless library) and the automatic path
-    calls ``klustakwik_cluster`` (a wrapper around the external KlustaKwik
-    binary that is absent from the Python ``vlt`` port). The non-interactive
-    feature-preparation scaffolding whose dependencies ARE present
-    (oversamplespikes / centerspikes_neg / spikewaves2pca) is exposed as the
-    private helper :func:`_prepare_waveforms_for_sorting` so the available math
-    is exercised, but no automatic clustering algorithm is invented as a
-    "faithful" replacement for the GUI/KlustaKwik sorter.
-  * ``clusters2neurons`` is BLOCKED downstream of ``spike_sort``: it consumes a
-    ``clusterinfo`` array (with per-cluster ``meanshape`` / ``qualitylabel``)
-    that only the GUI/KlustaKwik sorter produces. The Python port's
-    ``vlt.neuro.spikesorting.cluster_initializeclusterinfo`` takes no arguments
-    and returns an empty template, so it cannot reproduce the MATLAB
-    ``cluster_initializeclusterinfo(clusterids, waveforms, epochinfo)`` mean
-    waveform computation. Faking that computation is not permitted.
+  * ``spike_sort`` implements the AUTOMATIC (non-graphical) sorting path. It runs
+    the available pre-clustering scaffolding (oversamplespikes / centerspikes_neg
+    / spikewaves2pca, via :func:`_prepare_waveforms_for_sorting`) and then
+    clusters the PCA features with :mod:`ndi.util.klustakwik`, a wrapper around
+    the optional ``klustakwik2`` package. The MATLAB automatic path calls
+    ``klustakwik_cluster`` (a wrapper around the *external* classic KlustaKwik
+    binary); ``klustakwik2`` is a maintained Python port of the masked KlustaKwik
+    algorithm. On the dense PCA features used here it behaves as a classic-style
+    CEM, but it is NOT bit-identical to the MATLAB binary and clustering is
+    stochastic -- see :mod:`ndi.util.klustakwik`. The GRAPHICAL path
+    (``graphical_mode=1``) is the interactive ``cluster_spikewaves_gui`` editor,
+    delivered separately as a PyQt application; ``spike_sort`` raises a clear
+    error directing graphical callers there.
+  * ``clusters2neurons`` is fully ported: it reads the ``spike_clusters``
+    document, keeps clusters whose ``qualitylabel`` marks them as usable, and
+    creates an :class:`ndi.neuron` element plus a ``neuron_extracellular``
+    document (with the cluster mean waveform) and per-epoch spike trains for
+    each. A pure automatic sort labels every cluster ``'Unselected'`` (as in
+    MATLAB), so neurons are produced only after the clusters are curated (by the
+    graphical editor) to mark units ``Good`` / ``Excellent`` / ``Multi-unit``.
 """
 
 from __future__ import annotations
@@ -196,6 +198,8 @@ class ndi_app_spikesorter(ndi_app, ndi_app_appdoc):
         extraction_id = extraction_params_doc.id
 
         et = ndi_timeseries_obj.epochtable()
+        if isinstance(et, tuple):  # epochtable() returns (table, hash)
+            et = et[0]
 
         sample_counter = 0
         for entry in et:
@@ -251,10 +255,18 @@ class ndi_app_spikesorter(ndi_app, ndi_app_appdoc):
         )
 
     def _find_extraction_parameters_doc(self, extraction_name: str) -> Any:
-        """Find the extraction parameters document with the given name."""
+        """Find the extraction parameters document with the given name.
+
+        The extractor stores these as ``spike_extraction_parameters`` documents
+        (class name from apps/spikeextractor/spike_extraction_parameters.json);
+        ``isa('extraction_parameters')`` would never match, so we query the real
+        class name -- matching ndi.app.spikeextractor.find_appdoc.
+        """
         from ..query import ndi_query
 
-        q = ndi_query("").isa("extraction_parameters") & (ndi_query("base.name") == extraction_name)
+        q = ndi_query("").isa("spike_extraction_parameters") & (
+            ndi_query("base.name") == extraction_name
+        )
         docs = self._session.database_search(q)
         if not docs:
             return None
@@ -370,6 +382,63 @@ class ndi_app_spikesorter(ndi_app, ndi_app_appdoc):
         features = spikewaves2pca(prepared, int(sorting_parameters_struct["num_pca_features"]))
         return prepared, np.asarray(wavesamples), np.asarray(features)
 
+    @staticmethod
+    def cluster_initializeclusterinfo(
+        clusterids: np.ndarray,
+        waveforms: np.ndarray,
+        epochinfo: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Build the per-cluster ``clusterinfo`` array for a clustering.
+
+        Port of MATLAB ``vlt.neuro.spikesorting.cluster_initializeclusterinfo``
+        (the ``InitClusterInfo`` computation in ``cluster_spikewaves_gui.m``); the
+        Python ``vlt`` port ships only a no-argument stub. For each distinct
+        cluster id it records the cluster number, an initial ``'Unselected'``
+        quality label, the spike count, and the mean waveform across that
+        cluster's spikes.
+
+        Args:
+            clusterids: length-NumSpikes array of (1-based) cluster numbers.
+            waveforms: ``NumSamples x NumChannels x NumSpikes`` waveform array
+                (the prepared/oversampled waveforms the clustering ran on).
+            epochinfo: dict with ``EpochNames`` (used for ``EpochStart`` /
+                ``EpochStop``, the first and last epoch ids).
+
+        Returns:
+            A list of dicts, one per cluster, with keys ``number`` (str),
+            ``qualitylabel`` (``'Unselected'``), ``number_of_spikes`` (int),
+            ``meanshape`` (``NumSamples x NumChannels`` nested list),
+            ``EpochStart`` and ``EpochStop`` (epoch ids).
+        """
+        clusterids = np.asarray(clusterids).ravel()
+        epoch_names = []
+        if isinstance(epochinfo, dict):
+            epoch_names = list(epochinfo.get("EpochNames", []) or [])
+        epoch_start = epoch_names[0] if epoch_names else ""
+        epoch_stop = epoch_names[-1] if epoch_names else ""
+
+        n_samples = int(waveforms.shape[0]) if waveforms.ndim == 3 else 0
+        n_channels = int(waveforms.shape[1]) if waveforms.ndim == 3 else 0
+
+        clusterinfo: list[dict[str, Any]] = []
+        for c in np.unique(clusterids):
+            idx = np.flatnonzero(clusterids == c)
+            if idx.size and waveforms.ndim == 3 and waveforms.shape[2] >= idx.max() + 1:
+                meanshape = np.nanmean(waveforms[:, :, idx], axis=2)
+            else:
+                meanshape = np.zeros((n_samples, n_channels))
+            clusterinfo.append(
+                {
+                    "number": str(int(c)),
+                    "qualitylabel": "Unselected",
+                    "number_of_spikes": int(idx.size),
+                    "meanshape": np.asarray(meanshape, dtype=float).tolist(),
+                    "EpochStart": epoch_start,
+                    "EpochStop": epoch_stop,
+                }
+            )
+        return clusterinfo
+
     def spike_sort(
         self,
         ndi_timeseries_obj: Any,
@@ -378,7 +447,13 @@ class ndi_app_spikesorter(ndi_app, ndi_app_appdoc):
         redo: bool = False,
     ) -> list[ndi_document]:
         """
-        Sort spikes from a timeseries element into clusters.
+        Sort spikes from a timeseries element into clusters (automatic path).
+
+        Runs the automatic (non-graphical) KlustaKwik-style sorter: load the
+        extracted waveforms, prepare PCA features, cluster them with
+        :mod:`ndi.util.klustakwik`, and store a ``spike_clusters`` document with
+        the per-spike cluster assignment (``spike_cluster.bin``, ``uint16``) and a
+        ``clusterinfo`` array of per-cluster mean waveforms.
 
         MATLAB equivalent: ndi.app.spikesorter/spike_sort
 
@@ -386,28 +461,130 @@ class ndi_app_spikesorter(ndi_app, ndi_app_appdoc):
             ndi_timeseries_obj: Source timeseries element.
             extraction_name: Name of the extraction parameters document.
             sorting_parameters_name: Name of the sorting parameters document.
-            redo: Re-sort even if results exist.
+            redo: Re-sort even if results exist (removes the old document first).
 
         Returns:
-            List of spike_clusters documents.
+            A one-element list with the ``spike_clusters`` document.
 
         Raises:
-            NotImplementedError: Always. Both MATLAB sorting paths are
-                non-portable -- see the module docstring. Use
-                :func:`loadwaveforms` to read extracted waveforms and
-                :func:`_prepare_waveforms_for_sorting` to run the available
-                oversample/center/PCA feature scaffolding.
+            RuntimeError: If the session is unset.
+            ValueError: If the sorting parameters document is missing.
+            NotImplementedError: If ``graphical_mode`` is set -- the interactive
+                editor ships as a separate PyQt application; set
+                ``graphical_mode=0`` to use this automatic path.
+            ImportError: If ``graphical_mode=0`` but the optional ``klustakwik2``
+                dependency is not installed (see :mod:`ndi.util.klustakwik`).
         """
-        raise NotImplementedError(
-            "ndi.app.spikesorter.spike_sort is not portable to a headless library. "
-            "The graphical path requires vlt.neuro.spikesorting.cluster_spikewaves_gui, "
-            "an INTERACTIVE GUI that cannot run headless; the automatic path requires "
-            "klustakwik_cluster (a wrapper around the external KlustaKwik binary) which "
-            "is absent from the Python vlt port. No automatic clustering algorithm is "
-            "substituted, as that would not be a faithful port. Available, grounded "
-            "scaffolding is exposed via loadwaveforms() and "
-            "_prepare_waveforms_for_sorting()."
+        if self._session is None:
+            raise RuntimeError("ndi_app_spikesorter.spike_sort requires a session.")
+
+        from ..document import ndi_document
+
+        # Step 1a: get the sorting_parameters document.
+        sorting_parameters_doc = self.find_appdoc("sorting_parameters", sorting_parameters_name)
+        if len(sorting_parameters_doc) == 0:
+            raise ValueError(
+                "No spike sorting parameters document with name "
+                f"'{sorting_parameters_name}' was found."
+            )
+        if len(sorting_parameters_doc) > 1:
+            raise RuntimeError(
+                "Too many spike sorting parameters documents with name "
+                f"'{sorting_parameters_name}' were found."
+            )
+        sorting_parameters_doc = sorting_parameters_doc[0]
+        sorting_parameters_struct = self.check_sorting_parameters(
+            dict(sorting_parameters_doc.document_properties.get("sorting_parameters", {}))
         )
+
+        # Step 1b: if a cluster document already exists, return it (or redo).
+        existing = self.find_appdoc(
+            "spike_clusters", ndi_timeseries_obj, extraction_name, sorting_parameters_name
+        )
+        if len(existing) == 1 and not redo:
+            return [existing[0]]
+        if redo and existing:
+            self._session.database_rm(existing)
+
+        # Step 1c: gather the extracted waveforms across epochs.
+        (
+            waveforms,
+            waveformparameters,
+            spiketimes,
+            epochinfo,
+            extract_doc,
+            waveform_docs,
+        ) = self.loadwaveforms(ndi_timeseries_obj, extraction_name)
+
+        # Step 2: prepare features and cluster.
+        if int(sorting_parameters_struct.get("graphical_mode", 0)):
+            raise NotImplementedError(
+                "Graphical spike sorting (graphical_mode=1) is the interactive "
+                "cluster_spikewaves_gui editor, delivered as a separate PyQt "
+                "application. Set graphical_mode=0 to use the automatic sorter here."
+            )
+
+        ext_params = extract_doc.document_properties.get("spike_extraction_parameters", {})
+        threshold_sign = int(ext_params.get("threshold_sign", -1))
+        prepared, wavesamples, features = self._prepare_waveforms_for_sorting(
+            waveforms, waveformparameters, sorting_parameters_struct, threshold_sign=threshold_sign
+        )
+
+        from ..util.klustakwik import cluster_spikewaves
+
+        # _prepare_waveforms_for_sorting returns features as NumFeatures x NumSpikes
+        # (spikewaves2pca's orientation); KlustaKwik wants one row per spike.
+        clusterids, _numclusters = cluster_spikewaves(
+            np.asarray(features).T,
+            min_clusters=int(sorting_parameters_struct.get("min_clusters", 3)),
+            max_clusters=int(sorting_parameters_struct.get("max_clusters", 10)),
+            num_start=int(sorting_parameters_struct.get("num_start", 5)),
+        )
+        clusterinfo = self.cluster_initializeclusterinfo(clusterids, prepared, epochinfo)
+
+        # Step 3: build and store the spike_clusters document.
+        spike_clusters = {
+            "epoch_info": epochinfo,
+            "clusterinfo": clusterinfo,
+            "waveform_sample_times": np.asarray(wavesamples, dtype=float).ravel().tolist(),
+        }
+        doc = ndi_document("apps/spikesorter/spike_clusters", **{"spike_clusters": spike_clusters})
+        doc = doc.set_session_id(self._session.id())
+        doc = doc.set_dependency_value(
+            "element_id", ndi_timeseries_obj.id, error_if_not_found=False
+        )
+        doc = doc.set_dependency_value(
+            "sorting_parameters_id", sorting_parameters_doc.id, error_if_not_found=False
+        )
+        doc = doc.set_dependency_value(
+            "extraction_parameters_id", extract_doc.id, error_if_not_found=False
+        )
+        for wd in waveform_docs:
+            doc = doc.add_dependency_value_n("spikewaves_doc_id", wd.id)
+
+        # spike_cluster.bin: per-spike cluster id as uint16 (MATLAB fwrite uint16).
+        import tempfile
+        from pathlib import Path
+
+        tmpdir = Path(tempfile.mkdtemp(prefix="ndi_spikeclusters_"))
+        bin_path = tmpdir / "spike_cluster.bin"
+        with open(bin_path, "wb") as fh:
+            fh.write(np.asarray(clusterids, dtype="<u2").tobytes())
+        doc = doc.add_file("spike_cluster.bin", str(bin_path))
+
+        self._session.database_add(doc)
+        return [doc]
+
+    # Mapping from cluster quality label to the MATLAB quality_number, and the
+    # set of labels that yield a neuron (quality_number in 1..4). Mirrors the
+    # switch in ndi.app.spikesorter/clusters2neurons.
+    _QUALITY_NUMBER = {
+        "unselected": -1,
+        "not useable": 5,
+        "multi-unit": 3,
+        "good": 2,
+        "excellent": 1,
+    }
 
     def clusters2neurons(
         self,
@@ -415,12 +592,18 @@ class ndi_app_spikesorter(ndi_app, ndi_app_appdoc):
         sorting_parameters_name: str = "default",
         extraction_parameters_name: str = "default",
         redo: bool = False,
-    ) -> None:
+    ) -> list[Any]:
         """
         Create ndi.neuron objects from spike clusterings.
 
-        Generates ndi.neuron objects for each spike cluster represented in the
-        spike_clusters document.
+        Generates an :class:`ndi.neuron` element for each usable spike cluster in
+        the ``spike_clusters`` document -- those whose ``qualitylabel`` maps to a
+        quality number in 1..4 (``Excellent`` / ``Good`` / ``Multi-unit``). Each
+        neuron gets a ``neuron_extracellular`` document (cluster mean waveform and
+        quality) and per-epoch spike trains. Clusters labelled ``Unselected`` or
+        ``Not useable`` are skipped, so a freshly (automatically) sorted document
+        -- whose clusters are all ``Unselected`` -- yields no neurons until the
+        clusters are curated.
 
         MATLAB equivalent: ndi.app.spikesorter/clusters2neurons
 
@@ -428,27 +611,178 @@ class ndi_app_spikesorter(ndi_app, ndi_app_appdoc):
             ndi_timeseries_obj: Source timeseries element.
             sorting_parameters_name: Name of the sorting parameters document.
             extraction_parameters_name: Name of the extraction parameters document.
-            redo: Re-create even if neurons exist.
+            redo: Re-create even if neurons exist (removes the old neuron
+                elements first).
 
-        Raises:
-            NotImplementedError: Always. This method consumes the per-cluster
-                ``clusterinfo`` (mean waveforms + quality labels) that only the
-                blocked :func:`spike_sort` produces. The Python port's
-                ``vlt.neuro.spikesorting.cluster_initializeclusterinfo`` takes no
-                arguments and returns an empty template, so the MATLAB
-                ``cluster_initializeclusterinfo(clusterids, waveforms, epochinfo)``
-                mean-waveform computation cannot be reproduced. It is therefore
-                blocked downstream of spike_sort.
+        Returns:
+            The list of created ``neuron_extracellular`` documents (empty if no
+            cluster is usable). The neuron elements, their epoch documents, and
+            these documents are all committed to the database.
         """
-        raise NotImplementedError(
-            "ndi.app.spikesorter.clusters2neurons is blocked downstream of spike_sort: "
-            "it requires a spike_clusters document whose clusterinfo (per-cluster "
-            "meanshape + qualitylabel) is produced only by the non-portable GUI / "
-            "KlustaKwik sorter. The Python vlt port's cluster_initializeclusterinfo() "
-            "takes no arguments and returns an empty template, so MATLAB's "
-            "cluster_initializeclusterinfo(clusterids, waveforms, epochinfo) mean-"
-            "waveform computation cannot be reproduced. See spike_sort()."
+        if self._session is None:
+            raise RuntimeError("ndi_app_spikesorter.clusters2neurons requires a session.")
+
+        from ..element_timeseries import ndi_element_timeseries
+        from ..query import ndi_query
+        from ..time.clocktype import ndi_time_clocktype
+
+        # find_appdoc('spike_clusters', ...) order is (obj, extraction, sorting).
+        clusterids, spike_clusters_doc = self.loaddata_appdoc(
+            "spike_clusters",
+            ndi_timeseries_obj,
+            extraction_parameters_name,
+            sorting_parameters_name,
         )
+        if spike_clusters_doc is None:
+            return []
+        clusterids = np.asarray(clusterids).ravel()
+
+        # Existing neurons for this clustering?
+        q_n = ndi_query("").isa("neuron_extracellular") & ndi_query("").depends_on(
+            "spike_clusters_id", spike_clusters_doc.id
+        )
+        anyneurons = self._session.database_search(q_n)
+        if anyneurons and not redo:
+            return []
+        if anyneurons and redo:
+            # Remove the neuron elements those neuron_extracellular docs point at
+            # (and their epoch documents), then the neuron docs themselves. Mirror
+            # ndi.fun.probe.import.kilosort.removeold: ndi_query does not compose an
+            # OR of a base.id match with a depends_on clause, so run the two halves
+            # separately and union them.
+            for ndoc in anyneurons:
+                element_id = ndoc.dependency_value("element_id", error_if_not_found=False)
+                if not element_id:
+                    continue
+                elem_docs = self._session.database_search(ndi_query("base.id") == element_id)
+                dep_docs = self._session.database_search(
+                    ndi_query("").depends_on("element_id", element_id)
+                )
+                seen = {d.id for d in elem_docs}
+                elem_docs = elem_docs + [d for d in dep_docs if d.id not in seen]
+                if elem_docs:
+                    self._session.database_rm(elem_docs)
+            self._session.database_rm(anyneurons)
+
+        # Re-load the waveforms to recover spike times and the epoch partition.
+        (
+            _waveforms,
+            _waveformparams,
+            spiketimes,
+            epochinfo,
+            _extract_doc,
+            _waveform_docs,
+        ) = self.loadwaveforms(ndi_timeseries_obj, extraction_parameters_name)
+        spiketimes = np.asarray(spiketimes, dtype=float).ravel()
+
+        et = ndi_timeseries_obj.epochtable()
+        if isinstance(et, tuple):  # epochtable() returns (table, hash)
+            et = et[0]
+        epoch_ids = [(e.get("epoch_id", "") if isinstance(e, dict) else e.epoch_id) for e in et]
+
+        sc = spike_clusters_doc.document_properties.get("spike_clusters", {})
+        clusterinfo = sc.get("clusterinfo", []) or []
+        waveform_sample_times = sc.get("waveform_sample_times", []) or []
+
+        # Concatenated-spike-index boundaries per epoch (1-based start of each
+        # epoch from loadwaveforms; the final boundary is one past the last
+        # spike). NOTE: MATLAB used numel(spiketimes)-1 as the final boundary,
+        # which drops the last spikes of the last epoch; we use the inclusive
+        # total so every spike is assigned to its epoch.
+        epoch_starts = list(epochinfo.get("EpochStartSamples", []) or [])
+        boundaries = [int(s) for s in epoch_starts] + [int(spiketimes.size) + 1]
+
+        # App provenance for the neuron documents (MATLAB passes 'app', appstruct).
+        app_struct = self.newdocument().document_properties.get("app", {})
+
+        specs: list[dict[str, Any]] = []
+        neuron_docs: list[Any] = []
+        clock = ndi_time_clocktype("dev_local_time")
+        for n, ci in enumerate(clusterinfo):
+            label = str(ci.get("qualitylabel", "Unselected"))
+            if label.lower() in ("unselected", "not useable"):
+                continue
+            value = self._QUALITY_NUMBER.get(label.lower(), -1)
+            if not (0 < value <= 4):  # only reasonable neurons
+                continue
+
+            clusternum = n + 1  # 1-based, matching the contiguous cluster ids
+            meanshape = np.asarray(ci.get("meanshape", []), dtype=float)
+            n_samp = int(meanshape.shape[0]) if meanshape.ndim == 2 else 0
+            n_chan = int(meanshape.shape[1]) if meanshape.ndim == 2 else 0
+
+            ne = {
+                "number_of_samples_per_channel": n_samp,
+                "number_of_channels": n_chan,
+                "mean_waveform": meanshape.tolist(),
+                "waveform_sample_times": list(waveform_sample_times),
+                "cluster_index": clusternum,
+                "quality_number": int(value),
+                "quality_label": label,
+            }
+            from ..document import ndi_document
+
+            neuron_fields: dict[str, Any] = {"neuron_extracellular": ne}
+            for k, v in app_struct.items():
+                neuron_fields[f"app.{k}"] = v
+            neuron_doc = ndi_document("neuron/neuron_extracellular", **neuron_fields)
+            neuron_doc.set_session_id(self._session.id())
+            neuron_doc.set_dependency_value("spike_clusters_id", spike_clusters_doc.id)
+            neuron_docs.append(neuron_doc)
+
+            # Spike trains for this cluster, one entry per epoch in the cluster's
+            # EpochStart..EpochStop range (all epochs after an automatic sort).
+            spike_indexes = np.flatnonzero(clusterids == clusternum)
+            start_id = ci.get("EpochStart", epoch_ids[0] if epoch_ids else "")
+            stop_id = ci.get("EpochStop", epoch_ids[-1] if epoch_ids else "")
+            j0 = epoch_ids.index(start_id) if start_id in epoch_ids else 0
+            j1 = epoch_ids.index(stop_id) if stop_id in epoch_ids else len(epoch_ids) - 1
+
+            epochs: list[dict[str, Any]] = []
+            for j in range(j0, j1 + 1):
+                entry = et[j]
+                t0_t1 = entry.get("t0_t1") if isinstance(entry, dict) else entry.t0_t1
+                first_pair = t0_t1[0] if isinstance(t0_t1, list) and t0_t1 else t0_t1
+                lo = boundaries[j]
+                hi = boundaries[j + 1] if j + 1 < len(boundaries) else int(spiketimes.size) + 1
+                # 1-based inclusive concatenated spike indices within this epoch.
+                here = spike_indexes[(spike_indexes >= lo - 1) & (spike_indexes < hi - 1)]
+                times = spiketimes[here] if here.size else np.zeros((0,))
+                epochs.append(
+                    {
+                        "epoch_id": epoch_ids[j],
+                        "epoch_clock": clock,
+                        "t0_t1": list(first_pair),
+                        "timepoints": np.asarray(times, dtype=float),
+                        "datapoints": np.ones(times.shape[0], dtype=float),
+                    }
+                )
+
+            specs.append(
+                {
+                    "name": f"{ndi_timeseries_obj.name}_{clusternum}",
+                    "reference": int(getattr(ndi_timeseries_obj, "reference", 0) or 0),
+                    "type": "spikes",
+                    "epochs": epochs,
+                    "extra_documents": [neuron_doc],
+                }
+            )
+
+        if not specs:
+            return []
+        # build_objects=False: commit the element / epoch / neuron_extracellular
+        # documents without constructing the ndi.neuron wrapper objects. Building
+        # those would import the entire element class registry (every DAQ reader),
+        # which spike sorting does not need; the created documents are returned
+        # instead.
+        ndi_element_timeseries.addMultiple(
+            self._session,
+            ndi_timeseries_obj,
+            specs,
+            element_class="ndi.neuron",
+            build_objects=False,
+        )
+        return neuron_docs
 
     # ------------------------------------------------------------------
     # FUNCTIONS THAT OVERRIDE NDI.APP.APPDOC

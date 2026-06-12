@@ -86,8 +86,16 @@ tutorials = [
     "matplotlib>=3.5.0",
     "opencv-python-headless>=4.5.0",
 ]
+sorting = [
+    # Automatic spike sorting (ndi.app.spikesorter.spike_sort / ndi.util.klustakwik).
+    # NOTE: klustakwik2 needs numpy present at build time, so a plain
+    # `pip install klustakwik2` may fail with "No module named numpy"; install
+    # with `pip install klustakwik2 --no-build-isolation` (or ensure numpy is
+    # already installed in the build environment).
+    "klustakwik2>=0.2.6",
+]
 all = [
-    "ndi[dev,docs,pandas,scipy,openminds,tutorials]",
+    "ndi[dev,docs,pandas,scipy,openminds,tutorials,sorting]",
 ]
 
 [project.scripts]
