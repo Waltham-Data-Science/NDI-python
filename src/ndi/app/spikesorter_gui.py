@@ -104,6 +104,61 @@ def _brush_for_color(pg: Any, color: tuple[float, float, float]) -> Any:
     return pg.mkBrush((r, g, b))
 
 
+# NDI brand: deep navy header (#0b2545), accent blue (#17a7ff, from the logo),
+# light body. A single stylesheet keeps the look consistent and polished.
+_NDI_NAVY = "#0b2545"
+_NDI_ACCENT = "#17a7ff"
+_LIGHT_THEME_QSS = """
+QDialog { background: #f4f6f9; }
+QFrame#Header { background: #0b2545; border-bottom: 2px solid #17a7ff; }
+QLabel#HeaderTitle { color: #ffffff; font-size: 15px; font-weight: 600; }
+QLabel#HeaderSubtitle { color: #9fb3c8; font-size: 12px; }
+QLabel { color: #2a3340; font-size: 12px; }
+QPushButton {
+    background: #ffffff; border: 1px solid #cdd5df; border-radius: 5px;
+    padding: 5px 12px; color: #1f2a37;
+}
+QPushButton:hover { background: #eef2f7; }
+QPushButton:disabled { color: #aab2bd; background: #f0f2f5; }
+QPushButton#DoneButton {
+    background: #17a7ff; border: none; color: #ffffff; font-weight: bold;
+}
+QPushButton#DoneButton:hover { background: #0e8fe0; }
+QComboBox, QLineEdit, QSpinBox {
+    background: #ffffff; border: 1px solid #cdd5df; border-radius: 4px; padding: 3px 6px;
+}
+QComboBox:focus, QLineEdit:focus, QSpinBox:focus { border: 1px solid #17a7ff; }
+QCheckBox { color: #2a3340; }
+QScrollArea { border: none; }
+"""
+
+
+def _render_svg_pixmap(QtGui: Any, QtCore: Any, path: str, height: int) -> Any:
+    """Render an SVG file to a transparent QPixmap of the given height.
+
+    Returns None if the SVG backend or file is unavailable (the header then
+    simply omits the logo).
+    """
+    try:
+        from PyQt6.QtSvg import QSvgRenderer
+    except Exception:
+        try:
+            from PySide6.QtSvg import QSvgRenderer  # type: ignore
+        except Exception:
+            return None
+    renderer = QSvgRenderer(str(path))
+    if not renderer.isValid():
+        return None
+    size = renderer.defaultSize()
+    width = int(height * size.width() / size.height()) if size.height() else height
+    pixmap = QtGui.QPixmap(max(1, width), height)
+    pixmap.fill(QtCore.Qt.GlobalColor.transparent)
+    painter = QtGui.QPainter(pixmap)
+    renderer.render(painter)
+    painter.end()
+    return pixmap
+
+
 def build_window(model: ClusterModel, **kwargs: Any) -> Any:
     """Construct (but do not run) the spike-sorter window for ``model``.
 
@@ -129,6 +184,8 @@ def cluster_spikewaves_gui(
     enable_cluster_editing: bool = True,
     ask_before_done: bool = True,
     figure_name: str = "Cluster spikewaves",
+    logo_path: str | None = None,
+    subtitle: str = "",
     cluster_right_away: bool = False,
 ) -> tuple[np.ndarray | None, list[dict[str, Any]] | None]:
     """Open the interactive spike sorter and return the curated clustering.
@@ -185,6 +242,8 @@ def cluster_spikewaves_gui(
         enable_cluster_editing=enable_cluster_editing,
         ask_before_done=ask_before_done,
         figure_name=figure_name,
+        logo_path=logo_path,
+        subtitle=subtitle,
     )
     if cluster_right_away:
         window.on_cluster_all()
@@ -213,12 +272,17 @@ def _make_window_base() -> Any:
             enable_cluster_editing: bool = True,
             ask_before_done: bool = True,
             figure_name: str = "Cluster spikewaves",
+            logo_path: str | None = None,
+            subtitle: str = "",
         ):
             super().__init__()
             self.model = model
             self.force_quality_assessment = force_quality_assessment
             self.enable_cluster_editing = enable_cluster_editing
             self.ask_before_done = ask_before_done
+            self._figure_name = figure_name
+            self._logo_path = logo_path
+            self._subtitle = subtitle
             self.success = False
             self.result_clusterids: np.ndarray | None = None
             self.result_clusterinfo: list[dict[str, Any]] | None = None
@@ -244,9 +308,17 @@ def _make_window_base() -> Any:
         # -- construction ------------------------------------------------
 
         def _build_ui(self) -> None:
+            self.setStyleSheet(_LIGHT_THEME_QSS)
             outer = QtWidgets.QVBoxLayout(self)
+            outer.setContentsMargins(0, 0, 0, 0)
+            outer.setSpacing(0)
+            outer.addWidget(self._build_header())
+
+            body = QtWidgets.QWidget()
+            body_layout = QtWidgets.QVBoxLayout(body)
+            body_layout.setContentsMargins(10, 8, 10, 8)
             controls = self._build_controls()
-            outer.addLayout(controls)
+            body_layout.addLayout(controls)
 
             splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
             # feature scatter (left)
@@ -268,13 +340,39 @@ def _make_window_base() -> Any:
             scroll.setWidget(self.wave_layout)
             splitter.addWidget(scroll)
             splitter.setSizes([520, 580])
-            outer.addWidget(splitter, stretch=1)
+            body_layout.addWidget(splitter, stretch=1)
+            outer.addWidget(body, stretch=1)
+
+        def _build_header(self) -> Any:
+            """A slim branded header bar: NDI logo + title + dataset subtitle."""
+            header = QtWidgets.QFrame()
+            header.setObjectName("Header")
+            header.setFixedHeight(46)
+            hl = QtWidgets.QHBoxLayout(header)
+            hl.setContentsMargins(14, 6, 16, 6)
+            hl.setSpacing(12)
+            if self._logo_path:
+                pm = _render_svg_pixmap(QtGui, QtCore, self._logo_path, height=24)
+                if pm is not None:
+                    logo = QtWidgets.QLabel()
+                    logo.setPixmap(pm)
+                    hl.addWidget(logo)
+            title = QtWidgets.QLabel(self._figure_name)
+            title.setObjectName("HeaderTitle")
+            hl.addWidget(title)
+            hl.addStretch(1)
+            if self._subtitle:
+                sub = QtWidgets.QLabel(self._subtitle)
+                sub.setObjectName("HeaderSubtitle")
+                hl.addWidget(sub)
+            return header
 
         def _build_controls(self) -> Any:
             grid = QtWidgets.QGridLayout()
             row = 0
 
             self.done_btn = QtWidgets.QPushButton("DONE")
+            self.done_btn.setObjectName("DoneButton")
             self.done_btn.clicked.connect(self.on_done)
             self.cancel_btn = QtWidgets.QPushButton("Cancel")
             self.cancel_btn.clicked.connect(self.on_cancel)
@@ -868,7 +966,7 @@ def _make_window_base() -> Any:
                 )
                 # bold mean waveform (the cluster template) on top
                 mean_flat = np.nanmean(waves[:, :, inds], axis=2).reshape(s * c, order="F")
-                plt.plot(x, mean_flat, pen=pg.mkPen((0, 0, 0), width=2))
+                plt.plot(x, mean_flat, pen=pg.mkPen((0, 0, 0), width=2), antialias=True)
 
         def _redraw_labels_only(self) -> None:
             # cheap update of the per-cluster titles (quality changed).
