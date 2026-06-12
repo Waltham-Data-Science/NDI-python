@@ -205,5 +205,20 @@ def test_cancel_returns_no_result(win):
     assert win.success is False
 
 
+def test_escape_cancels_lasso_not_dialog(win):
+    from pyqtgraph.Qt import QtCore, QtGui
+
+    win._start_lasso("split")
+    assert win._pending_action == "split"
+    esc = QtGui.QKeyEvent(
+        QtCore.QEvent.Type.KeyPress, QtCore.Qt.Key.Key_Escape, QtCore.Qt.KeyboardModifier.NoModifier
+    )
+    win.keyPressEvent(esc)
+    # the lasso is cancelled, but the dialog is NOT rejected.
+    assert win._pending_action is None
+    assert win.success is False
+    assert win.result_clusterids is None
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
