@@ -94,8 +94,17 @@ sorting = [
     # already installed in the build environment).
     "klustakwik2>=0.2.6",
 ]
+gui = [
+    # Interactive spike-sorter GUI (ndi.app.spikesorter_gui /
+    # ndi.app.spikesorter.spike_sort with graphical_mode=1). Qt bindings +
+    # pyqtgraph for the waveform/feature plots; pytest-qt for the offscreen
+    # GUI tests. pyqtgraph also works with PyQt5/PySide6 if PyQt6 is unwanted.
+    "PyQt6>=6.5",
+    "pyqtgraph>=0.13",
+    "pytest-qt>=4.2",
+]
 all = [
-    "ndi[dev,docs,pandas,scipy,openminds,tutorials,sorting]",
+    "ndi[dev,docs,pandas,scipy,openminds,tutorials,sorting,gui]",
 ]
 
 [project.scripts]

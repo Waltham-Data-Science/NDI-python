@@ -23,6 +23,17 @@ Porting status:
     (``graphical_mode=1``) is the interactive ``cluster_spikewaves_gui`` editor,
     delivered separately as a PyQt application; ``spike_sort`` raises a clear
     error directing graphical callers there.
+  * The GRAPHICAL path (``graphical_mode=1``) launches the interactive
+    :func:`ndi.app.spikesorter_gui.cluster_spikewaves_gui` editor -- a PyQt /
+    pyqtgraph reimplementation of MATLAB ``cluster_spikewaves_gui`` -- so the
+    user can run an automatic clustering, merge/split/relabel clusters, set
+    quality + epoch presence, and finish; the curated ``clusterids`` /
+    ``clusterinfo`` are written into the same ``spike_clusters`` document the
+    automatic path produces. The GUI dependencies are optional (``[gui]``
+    extra); without them (or without a display) the graphical branch raises a
+    clear error pointing at the automatic path. The curation *logic* lives in
+    the headless :class:`ndi.app.spikesorter_clustermodel.ClusterModel`, so it
+    is unit-tested without a display.
   * ``clusters2neurons`` is fully ported: it reads the ``spike_clusters``
     document, keeps clusters whose ``qualitylabel`` marks them as usable, and
     creates an :class:`ndi.neuron` element plus a ``neuron_extracellular``
@@ -469,11 +480,10 @@ class ndi_app_spikesorter(ndi_app, ndi_app_appdoc):
         Raises:
             RuntimeError: If the session is unset.
             ValueError: If the sorting parameters document is missing.
-            NotImplementedError: If ``graphical_mode`` is set -- the interactive
-                editor ships as a separate PyQt application; set
-                ``graphical_mode=0`` to use this automatic path.
-            ImportError: If ``graphical_mode=0`` but the optional ``klustakwik2``
-                dependency is not installed (see :mod:`ndi.util.klustakwik`).
+            ImportError: If the required optional dependency for the chosen path
+                is not installed -- ``klustakwik2`` for ``graphical_mode=0`` (see
+                :mod:`ndi.util.klustakwik`), or the GUI extra (PyQt + pyqtgraph)
+                for ``graphical_mode=1`` (see :mod:`ndi.app.spikesorter_gui`).
         """
         if self._session is None:
             raise RuntimeError("ndi_app_spikesorter.spike_sort requires a session.")
@@ -516,31 +526,50 @@ class ndi_app_spikesorter(ndi_app, ndi_app_appdoc):
             waveform_docs,
         ) = self.loadwaveforms(ndi_timeseries_obj, extraction_name)
 
-        # Step 2: prepare features and cluster.
-        if int(sorting_parameters_struct.get("graphical_mode", 0)):
-            raise NotImplementedError(
-                "Graphical spike sorting (graphical_mode=1) is the interactive "
-                "cluster_spikewaves_gui editor, delivered as a separate PyQt "
-                "application. Set graphical_mode=0 to use the automatic sorter here."
-            )
-
+        # Step 2: prepare the waveforms (oversample / re-centre) -- shared by both
+        # the graphical and automatic paths, mirroring MATLAB spike_sort.
         ext_params = extract_doc.document_properties.get("spike_extraction_parameters", {})
         threshold_sign = int(ext_params.get("threshold_sign", -1))
         prepared, wavesamples, features = self._prepare_waveforms_for_sorting(
             waveforms, waveformparameters, sorting_parameters_struct, threshold_sign=threshold_sign
         )
 
-        from ..util.klustakwik import cluster_spikewaves
+        if int(sorting_parameters_struct.get("graphical_mode", 0)):
+            # Graphical path: launch the interactive editor (MATLAB
+            # cluster_spikewaves_gui). It returns the curated per-spike clusterids
+            # (NaN for unclassified) and clusterinfo, or (None, None) on cancel.
+            from .spikesorter_gui import cluster_spikewaves_gui
 
-        # _prepare_waveforms_for_sorting returns features as NumFeatures x NumSpikes
-        # (spikewaves2pca's orientation); KlustaKwik wants one row per spike.
-        clusterids, _numclusters = cluster_spikewaves(
-            np.asarray(features).T,
-            min_clusters=int(sorting_parameters_struct.get("min_clusters", 3)),
-            max_clusters=int(sorting_parameters_struct.get("max_clusters", 10)),
-            num_start=int(sorting_parameters_struct.get("num_start", 5)),
-        )
-        clusterinfo = self.cluster_initializeclusterinfo(clusterids, prepared, epochinfo)
+            npoint = [
+                int(np.floor(len(wavesamples) / 2)) or 1,
+                int(round((5 / 6) * len(wavesamples))),
+            ]
+            clusterids, clusterinfo = cluster_spikewaves_gui(
+                prepared,
+                waveformparameters,
+                clusterids=None,
+                wavetimes=np.asarray(spiketimes, dtype=float).ravel(),
+                epoch_start_samples=list(epochinfo.get("EpochStartSamples", [])),
+                epoch_names=list(epochinfo.get("EpochNames", [])),
+                wavesamples=np.asarray(wavesamples, dtype=float).ravel(),
+                spikewaves2NpointfeatureSampleList=npoint,
+            )
+            if clusterids is None:
+                # User cancelled -- do not write a spike_clusters document.
+                return []
+            clusterids = np.asarray(clusterids, dtype=float)
+        else:
+            from ..util.klustakwik import cluster_spikewaves
+
+            # _prepare_waveforms_for_sorting returns features as NumFeatures x NumSpikes
+            # (spikewaves2pca's orientation); KlustaKwik wants one row per spike.
+            clusterids, _numclusters = cluster_spikewaves(
+                np.asarray(features).T,
+                min_clusters=int(sorting_parameters_struct.get("min_clusters", 3)),
+                max_clusters=int(sorting_parameters_struct.get("max_clusters", 10)),
+                num_start=int(sorting_parameters_struct.get("num_start", 5)),
+            )
+            clusterinfo = self.cluster_initializeclusterinfo(clusterids, prepared, epochinfo)
 
         # Step 3: build and store the spike_clusters document.
         spike_clusters = {
@@ -568,8 +597,12 @@ class ndi_app_spikesorter(ndi_app, ndi_app_appdoc):
 
         tmpdir = Path(tempfile.mkdtemp(prefix="ndi_spikeclusters_"))
         bin_path = tmpdir / "spike_cluster.bin"
+        # Unclassified (NaN) spikes from the graphical path map to 0, matching
+        # MATLAB's uint16(NaN); the automatic path has no NaN ids.
+        export_ids = np.asarray(clusterids, dtype=float)
+        export_ids = np.where(np.isnan(export_ids), 0, export_ids).astype("<u2")
         with open(bin_path, "wb") as fh:
-            fh.write(np.asarray(clusterids, dtype="<u2").tobytes())
+            fh.write(export_ids.tobytes())
         doc = doc.add_file("spike_cluster.bin", str(bin_path))
 
         self._session.database_add(doc)

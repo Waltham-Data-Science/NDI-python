@@ -313,18 +313,127 @@ def test_spike_sort_idempotent_and_redo(tmp_path):
     assert len(session.database_search(ndi_query("").isa("spike_clusters"))) == 1
 
 
-def test_spike_sort_graphical_mode_raises(tmp_path):
+def test_spike_sort_graphical_mode_routes_to_gui(tmp_path, monkeypatch):
+    """graphical_mode=1 launches the GUI and persists its curated result.
+
+    The interactive editor is replaced with a stub that returns a canned
+    (clusterids, clusterinfo); we assert spike_sort writes those into the
+    spike_clusters document with the same layout as the automatic path. (The GUI
+    itself is exercised offscreen in tests/test_spikesorter_gui.py.)
+    """
     pytest.importorskip("vlt")
-    pytest.importorskip("klustakwik2")
+    from ndi.query import ndi_query
+
+    session = _real_session(tmp_path)
+    elem = _FakeElement(session)
+    _ext_doc, labels, _times = _make_extraction_and_spikewaves(session, elem)
+    sorter = ndi_app_spikesorter(session)
+    _make_sorting_params(session, sorter, name="gui_sort", graphical_mode=1, interpolation=1)
+
+    captured = {}
+
+    def _fake_gui(waves, waveparameters, **kwargs):
+        captured["waves_shape"] = np.asarray(waves).shape
+        captured["epoch_names"] = kwargs.get("epoch_names")
+        n = np.asarray(waves).shape[2]
+        # canned 2-cluster curation; one spike left unclassified (NaN).
+        ids = np.array([1.0, 2.0] * (n // 2) + [1.0] * (n % 2))
+        ids[0] = np.nan
+        ci = ndi_app_spikesorter.cluster_initializeclusterinfo(
+            np.where(np.isnan(ids), 0, ids),
+            np.asarray(waves),
+            {"EpochNames": kwargs["epoch_names"]},
+        )
+        return ids, ci
+
+    import ndi.app.spikesorter_gui as gui_mod
+
+    monkeypatch.setattr(gui_mod, "cluster_spikewaves_gui", _fake_gui)
+
+    docs = sorter.spike_sort(elem, "test", "gui_sort")
+    assert len(docs) == 1
+    # the GUI received the prepared waveforms + epoch names.
+    assert captured["waves_shape"][2] == labels.size
+    assert captured["epoch_names"] == list(elem.EPOCHS)
+    # exactly one spike_clusters doc; bin decodes with NaN -> 0.
+    found = session.database_search(ndi_query("").isa("spike_clusters"))
+    assert len(found) == 1
+    clusterids, _doc2 = sorter.loaddata_appdoc("spike_clusters", elem, "test", "gui_sort")
+    assert clusterids.shape == (labels.size,)
+    assert clusterids[0] == 0  # the unclassified spike
+
+
+def test_graphical_curated_path_creates_neurons(tmp_path, monkeypatch):
+    """End-to-end: the GUI's curation logic (ClusterModel) -> neurons.
+
+    Drives the real headless ClusterModel (the same object the PyQt window edits)
+    as the editor: it auto-clusters the prepared waveforms with KMeans, labels
+    every cluster 'Good', and finalises. spike_sort(graphical_mode=1) writes the
+    curated spike_clusters document, and clusters2neurons turns the Good clusters
+    into neuron_extracellular documents -- proving the graphical output is
+    consumable by the downstream pipeline on a real session/database.
+    """
+    pytest.importorskip("vlt")
+    pytest.importorskip("sklearn")
+    from ndi.app.spikesorter_clustermodel import ClusterModel
+    from ndi.query import ndi_query
+
+    session = _real_session(tmp_path)
+    elem = _FakeElement(session)
+    _ext_doc, labels, _times = _make_extraction_and_spikewaves(session, elem)
+    sorter = ndi_app_spikesorter(session)
+    _make_sorting_params(session, sorter, name="gui_sort", graphical_mode=1, interpolation=1)
+
+    def _curating_gui(waves, waveparameters, **kwargs):
+        m = ClusterModel(
+            waves,
+            epoch_start_samples=kwargs.get("epoch_start_samples"),
+            epoch_names=kwargs.get("epoch_names"),
+        )
+        m.compute_features("pca3")
+        m.cluster_all("KMeans", 3, seed=0)  # deterministic 3-way split
+        for ci in m.clusterinfo:
+            m.set_quality(ci["number"], "Good")
+        m.finalize()
+        return m.clusterids, m.clusterinfo
+
+    import ndi.app.spikesorter_gui as gui_mod
+
+    monkeypatch.setattr(gui_mod, "cluster_spikewaves_gui", _curating_gui)
+
+    docs = sorter.spike_sort(elem, "test", "gui_sort")
+    assert len(docs) == 1
+    sc = docs[0].document_properties["spike_clusters"]
+    assert len(sc["clusterinfo"]) == 3
+    assert all(c["qualitylabel"] == "Good" for c in sc["clusterinfo"])
+
+    created = sorter.clusters2neurons(elem, "gui_sort", "test")
+    assert len(created) == 3  # three Good clusters -> three neurons
+    ne = session.database_search(ndi_query("").isa("neuron_extracellular"))
+    assert len(ne) == 3
+    for d in ne:
+        props = d.document_properties["neuron_extracellular"]
+        assert props["quality_label"] == "Good"
+        assert np.asarray(props["mean_waveform"]).shape == (S1 - S0 + 1, NCHAN)
+
+
+def test_spike_sort_graphical_mode_cancel_writes_nothing(tmp_path, monkeypatch):
+    pytest.importorskip("vlt")
+    from ndi.query import ndi_query
 
     session = _real_session(tmp_path)
     elem = _FakeElement(session)
     _make_extraction_and_spikewaves(session, elem)
     sorter = ndi_app_spikesorter(session)
-    _make_sorting_params(session, sorter, name="gui_sort", graphical_mode=1)
+    _make_sorting_params(session, sorter, name="gui_sort", graphical_mode=1, interpolation=1)
 
-    with pytest.raises(NotImplementedError, match="[Gg]raphical"):
-        sorter.spike_sort(elem, "test", "gui_sort")
+    import ndi.app.spikesorter_gui as gui_mod
+
+    monkeypatch.setattr(gui_mod, "cluster_spikewaves_gui", lambda *a, **k: (None, None))
+
+    docs = sorter.spike_sort(elem, "test", "gui_sort")
+    assert docs == []
+    assert session.database_search(ndi_query("").isa("spike_clusters")) == []
 
 
 def test_clusters2neurons_unselected_yields_no_neurons(tmp_path):
