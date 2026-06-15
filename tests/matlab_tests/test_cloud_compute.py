@@ -128,15 +128,18 @@ class TestCompute:
         result = triggerStage("session-abc-123", "stage-1", client=client)
         assert result["status"] == "triggered"
 
-    def test_finalizeSession_mocked(self):
-        """finalizeSession calls the correct endpoint (mocked)."""
-        from ndi.cloud.api.compute import finalizeSession
+    def test_advanceSession_mocked(self):
+        """advanceSession calls the correct endpoint (mocked)."""
+        from ndi.cloud.api.compute import advanceSession
 
         client = MagicMock()
-        client.post.return_value = {"status": "finalized"}
+        client.post.return_value = {"status": "advanced"}
 
-        result = finalizeSession("session-abc-123", client=client)
-        assert result["status"] == "finalized"
+        result = advanceSession("session-abc-123", client=client)
+        assert result["status"] == "advanced"
+        client.post.assert_called_once_with(
+            "/compute/{sessionId}/advance", sessionId="session-abc-123"
+        )
 
     # ---- Live tests ----
 
@@ -149,11 +152,11 @@ class TestCompute:
         3. List sessions (verify new session in list)
         4. Abort session (cleanup)
         5. triggerStage (expect possible error, just verify no crash)
-        6. finalizeSession (expect possible error, just verify no crash)
+        6. advanceSession (expect possible error, just verify no crash)
         """
         from ndi.cloud.api.compute import (
             abortSession,
-            finalizeSession,
+            advanceSession,
             getSessionStatus,
             listSessions,
             startSession,
@@ -198,9 +201,9 @@ class TestCompute:
             except Exception:
                 pass  # Expected: session may be gone
 
-            # 6. finalizeSession — just verify no crash
+            # 6. advanceSession — just verify no crash
             try:
-                finalizeSession(session_id, client=client)
+                advanceSession(session_id, client=client)
             except Exception:
                 pass  # Expected: session may be gone
 

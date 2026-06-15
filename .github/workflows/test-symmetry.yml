@@ -96,6 +96,17 @@ jobs:
             symDir = fullfile(pwd, "tests", "+ndi", "+symmetry");
             matbox.installRequirements(symDir);
 
+            % Persist the fully-resolved search path (NDI dirs + the matbox
+            % dependencies just installed) so Stage 3 can reuse this one
+            % installation instead of running installRequirements a second
+            % time. A second install re-validates the already-installed repos
+            % and would fail any dependency that lacks a LICENSE/README.
+            savedPathFile = fullfile(getenv("GITHUB_WORKSPACE"), "ndi_symmetry_matlabpath.txt");
+            fid = fopen(savedPathFile, "w");
+            assert(fid > 0, "Could not write saved MATLAB path file.");
+            fprintf(fid, "%s", path());
+            fclose(fid);
+
             import matlab.unittest.TestSuite
             import matlab.unittest.TestRunner
 
@@ -123,17 +134,23 @@ jobs:
           pytest tests/symmetry/read_artifacts/ -v --tb=short
 
       # ── Stage 3: MATLAB readArtifacts ──────────────────────────────────
+      # Reuse the installation from Stage 1: restore the saved search path
+      # instead of re-running installRequirements. The dependency files
+      # persist on the runner between steps; only the path is lost when the
+      # fresh MATLAB session starts. This avoids a redundant install and the
+      # re-validation that install would perform on the existing repos.
       - name: "Stage 3: MATLAB readArtifacts (reads Python artifacts)"
         uses: matlab-actions/run-command@v2
         with:
           command: |
             cd("NDI-matlab");
-            addpath(genpath("src"));
-            addpath(genpath("tests"));
-            addpath(genpath("tools"));
+
+            savedPathFile = fullfile(getenv("GITHUB_WORKSPACE"), "ndi_symmetry_matlabpath.txt");
+            assert(isfile(savedPathFile), ...
+                "Saved MATLAB path from Stage 1 is missing; cannot reuse install.");
+            path(fileread(savedPathFile));
 
             symDir = fullfile(pwd, "tests", "+ndi", "+symmetry");
-            matbox.installRequirements(symDir);
 
             import matlab.unittest.TestSuite
             import matlab.unittest.TestRunner

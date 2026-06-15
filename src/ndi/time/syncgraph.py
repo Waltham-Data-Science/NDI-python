@@ -415,6 +415,16 @@ class ndi_time_syncgraph(ndi_ido):
         """
         from .timereference import ndi_time_timereference
 
+        # Same-referent fast path: when the input and output referents are the
+        # same object, the conversion can be resolved from the referent's own
+        # epochtable without consulting the syncgraph (no DAQ readers, no graph
+        # construction). This mirrors ndi.time.syncgraph/time_convert in
+        # NDI-matlab, which is the symmetry reference.
+        if self._is_same_referent(timeref_in.referent, referent_out) and hasattr(
+            timeref_in.referent, "epochtable"
+        ):
+            return self._same_referent_convert(timeref_in, t_in, referent_out, clocktype_out)
+
         # Get graph info
         ginfo = self.graphinfo()
 
@@ -477,6 +487,129 @@ class ndi_time_syncgraph(ndi_ido):
             time=0,
         )
 
+        return t_out, timeref_out, ""
+
+    @staticmethod
+    def _is_same_referent(referent_a: Any, referent_b: Any) -> bool:
+        """Return True if two referents denote the same object.
+
+        Uses identity first, then falls back to the referent's own equality
+        (``==``) so that two live objects describing the same element compare
+        equal, mirroring the MATLAB ``timeref_in.referent == referent_out``
+        check.
+        """
+        if referent_a is referent_b:
+            return True
+        try:
+            return bool(referent_a == referent_b)
+        except Exception:
+            return False
+
+    @staticmethod
+    def _normalize_epochtable(referent: Any) -> list[dict[str, Any]]:
+        """Return a referent's epoch table as a list of entries.
+
+        ``ndi.epoch.epochset.epochtable`` returns a ``(table, hash)`` tuple,
+        while lightweight referents may return the list directly; accept both.
+        """
+        et = referent.epochtable()
+        if isinstance(et, tuple):
+            et = et[0]
+        return list(et) if et is not None else []
+
+    @staticmethod
+    def _clock_index(entry: dict[str, Any], clocktype: ndi_time_clocktype) -> int | None:
+        """Find the index of CLOCKTYPE within an epoch table entry's clocks."""
+        clocks = entry.get("epoch_clock", [])
+        for k, clk in enumerate(clocks):
+            if clk == clocktype:
+                return k
+        return None
+
+    def _same_referent_convert(
+        self,
+        timeref_in: ndi_time_timereference,
+        t_in: float,
+        referent_out: Any,
+        clocktype_out: ndi_time_clocktype,
+    ) -> tuple[float | None, ndi_time_timereference | None, str]:
+        """Resolve a time conversion from a single referent's epoch table.
+
+        Counterpart of the same-referent branch in MATLAB
+        ``ndi.time.syncgraph/time_convert``. All inputs share one referent, so
+        the epoch (and hence the linear rescaling between two clocks) is read
+        straight from the referent's epoch table.
+        """
+        from .timereference import ndi_time_timereference
+
+        t0 = timeref_in.time or 0.0
+        et = self._normalize_epochtable(timeref_in.referent)
+
+        # Step 0: resolve the input epoch id.
+        in_epochid = timeref_in.epoch
+        if isinstance(in_epochid, (int, np.integer)):
+            # Numeric epoch -> id (1-indexed, matching MATLAB epochid()).
+            if 1 <= int(in_epochid) <= len(et):
+                in_epochid = et[int(in_epochid) - 1].get("epoch_id")
+            else:
+                return None, None, "ERROR:epochOutOfRange"
+
+        if in_epochid is None or in_epochid == "":
+            # Only resolvable for a global clock: find the epoch whose range for
+            # this clock contains the requested time.
+            if not clocktype_out.is_global() or not timeref_in.clocktype.is_global():
+                return None, None, "ERROR:noEpochForLocalClock"
+            target = t0 + t_in
+            in_epochid = None
+            for entry in et:
+                k = self._clock_index(entry, timeref_in.clocktype)
+                if k is None:
+                    continue
+                lo, hi = entry["t0_t1"][k]
+                if lo <= target <= hi:
+                    in_epochid = entry.get("epoch_id")
+                    break
+            if in_epochid is None:
+                return None, None, "ERROR:noParentEpoch"
+
+        # Locate the matching epoch entry.
+        match = next((e for e in et if e.get("epoch_id") == in_epochid), None)
+        if match is None:
+            return None, None, "ERROR:missingEpoch"
+
+        # Same clock: identity conversion.
+        if timeref_in.clocktype == clocktype_out:
+            timeref_out = ndi_time_timereference(
+                referent=referent_out,
+                clocktype=clocktype_out,
+                epoch=in_epochid,
+                time=t0,
+            )
+            return t_in, timeref_out, ""
+
+        # Different clocks within the epoch: linear rescale between ranges.
+        j1 = self._clock_index(match, timeref_in.clocktype)
+        j2 = self._clock_index(match, clocktype_out)
+        if j1 is None:
+            return None, None, "ERROR:noInputClock"
+        if j2 is None:
+            return None, None, "ERROR:noOutputClock"
+
+        in_lo, in_hi = match["t0_t1"][j1]
+        out_lo, out_hi = match["t0_t1"][j2]
+        # Correct the input range for the reference time, then rescale (noclip).
+        corrected_lo, corrected_hi = in_lo - t0, in_hi - t0
+        span = corrected_hi - corrected_lo
+        if span == 0:
+            return None, None, "ERROR:degenerateRange"
+        t_out = out_lo + (t_in - corrected_lo) * (out_hi - out_lo) / span
+
+        timeref_out = ndi_time_timereference(
+            referent=referent_out,
+            clocktype=clocktype_out,
+            epoch=in_epochid,
+            time=0,
+        )
         return t_out, timeref_out, ""
 
     def _find_epoch_node(
