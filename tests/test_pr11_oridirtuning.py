@@ -17,12 +17,18 @@ skips cleanly when vlt is absent (the standard CI/sandbox env); when vlt IS
 present it additionally cross-checks the grounded helpers against vlt's own
 ``compute_*`` functions to prove numerical equivalence.
 
-BLOCKERS (not exercised here, raise NotImplementedError):
-- ``_oridir_fitindexes`` (double-gaussian fit) -- vlt fit helpers not in the
-  audited Python surface; ``ndi.calc.tuning_fit`` does not provide the fit.
-- ``calculate_tuning_curve`` / ``calculate_all_tuning_curves`` -- depend on
-  the unported ``ndi.app.stimulus.tuning_response.tuning_curve`` stub.
-- ``plot_oridir_response`` -- matplotlib + the fit line.
+Now exercised (previously blockers):
+- ``_oridir_fitindexes`` (double-gaussian fit) -- delegates to vlt's
+  ``otfit_carandini`` + ``fit2fit*`` helpers (present in the Python vlt
+  surface; the leaf functions are imported directly to dodge a vlt package
+  ``__init__`` name-shadowing bug).
+- ``calculate_tuning_curve`` / ``calculate_all_tuning_curves`` -- delegate to
+  the now-ported ``ndi.app.stimulus.tuning_response.tuning_curve``.
+
+Still a documented stub:
+- ``plot_oridir_response`` -- matplotlib plotting is intentionally left to the
+  viewer; it raises NotImplementedError pointing callers at the document's
+  tuning_curve / fit fields.
 """
 
 from __future__ import annotations
@@ -196,7 +202,7 @@ class TestCalculateOridirIndexes:
         app = ndi_app_oridirtuning()  # no session
 
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore")  # fit-is-a-blocker warning
+            warnings.simplefilter("ignore")  # fit falls back to sentinels if vlt absent
             odt = app.calculate_oridir_indexes(td, do_add=False)
 
         props = odt.document_properties["orientation_direction_tuning"]
@@ -217,18 +223,33 @@ class TestCalculateOridirIndexes:
         assert props["vector"]["direction_preference"] == pytest.approx(90.0, abs=1e-6)
         assert props["properties"]["response_units"] == "spikes/s"
 
-        # fit sub-structure is the documented NaN/empty sentinel (BLOCKER).
-        assert np.isnan(props["fit"]["hwhh"])
-        assert props["fit"]["double_gaussian_parameters"] == []
+        # fit sub-structure is now populated by the vlt-backed double-gaussian
+        # fit (vlt is present -- the module is importorskip-gated on it).
+        assert not np.isnan(props["fit"]["hwhh"])
+        assert props["fit"]["hwhh"] > 0
+        assert len(props["fit"]["double_gaussian_parameters"]) == 5
+        assert len(props["fit"]["double_gaussian_fit_angles"]) == 360
+        assert len(props["fit"]["double_gaussian_fit_values"]) == 360
+        # direction-selective cosine peaks at 90 deg -> fit direction preference near 90.
+        assert abs(((props["fit"]["direction_angle_preference"] - 90 + 180) % 360) - 180) < 12
+        assert 0.0 <= props["fit"]["direction_preferred_null_ratio_rectified"] <= 1.0
 
-    def test_fit_indexes_is_blocker(self):
-        with pytest.raises(NotImplementedError, match="oridir_fitindexes"):
-            _oridir_fitindexes(_curve(np.ones(8)), _reps(np.ones(8)))
+    def test_fit_indexes_returns_fit(self):
+        # vlt is present (module-gated): the double-gaussian fit computes.
+        mean = np.clip(1.0 + np.cos(np.deg2rad(ANGLES - 90.0)), 0.0, None)
+        fi = _oridir_fitindexes(_curve(mean), _reps(mean))
+        assert len(fi["fit_parameters"]) == 5
+        assert len(fi["fit"][0]) == 360 and len(fi["fit"][1]) == 360
+        assert 0.0 <= fi["ot_index_rectified"] <= 1.0
+        assert 0.0 <= fi["dir_index_rectified"] <= 1.0
+        assert fi["tuning_width"] > 0
+        # direction-selective curve -> direction preference near the 90 deg peak.
+        assert abs(((fi["dirpref"] - 90 + 180) % 360) - 180) < 12
 
-    def test_calculate_tuning_curve_is_blocker(self):
+    def test_calculate_tuning_curve_without_session_returns_none(self):
+        # No session -> returns None (no longer raises NotImplementedError).
         app = ndi_app_oridirtuning()
-        with pytest.raises(NotImplementedError, match="tuning_response"):
-            app.calculate_tuning_curve(object(), ndi_document("base"), do_add=False)
+        assert app.calculate_tuning_curve(object(), ndi_document("base"), do_add=False) is None
 
     def test_plot_is_blocker(self):
         app = ndi_app_oridirtuning()

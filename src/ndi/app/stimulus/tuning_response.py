@@ -526,10 +526,9 @@ class ndi_app_stimulus_tuning__response(ndi_app):
             database when a session is present).
 
         Raises:
-            NotImplementedError: only for documents whose stimulus on/off timing
-                lives solely in the binary ``presentation_time.bin`` portion
-                (the reader is not yet ported). The deprecated inline
-                ``presentation_time`` form is fully supported.
+            ValueError: if no stimulus on/off timing is available -- neither
+                the inline ``presentation_time`` form nor a readable binary
+                ``presentation_time.bin`` (both forms are otherwise supported).
         """
         if self._session is None:
             return []
@@ -972,10 +971,11 @@ class ndi_app_stimulus_tuning__response(ndi_app):
         Raises:
             ValueError: If ``control_stim_method`` is unknown or more than
                 one control stimulus type is found.
-            NotImplementedError: BLOCKER -- the irregular-sequence branch
-                needs per-stimulus onset times from
-                ``ndi.app.stimulus.decoder.load_presentation_time``, which is
-                an unported stub returning ``None``.
+            NotImplementedError: only when the presentation order is irregular
+                AND no per-stimulus timing is available. The onsets come from
+                ``ndi.app.stimulus.decoder.load_presentation_time`` (ported:
+                reads the inline form or ``presentation_time.bin``); this
+                branch raises solely when neither form yields timing.
         """
         from ...document import ndi_document
 

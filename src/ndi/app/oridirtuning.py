@@ -20,16 +20,18 @@ Implementation notes (PR11 port):
       ``neural_response_significance``) is implemented via
       ``scipy.stats.f_oneway``. MEDIUM confidence; flagged for review.
     - The FIT-based indices (double-gaussian fit, mirroring
-      ``vlt.neuro.vision.oridir.index.oridir_fitindexes``) are a BLOCKER:
-      neither a grounded fitter nor ``ndi.calc.tuning_fit`` provides the
-      double-gaussian fit, so ``_oridir_fitindexes`` raises
-      ``NotImplementedError``. ``calculate_oridir_indexes`` therefore
-      stores the ``fit`` sub-structure with NaN/empty sentinels (a
-      documented divergence from MATLAB, which always fits).
-    - ``calculate_tuning_curve`` / ``calculate_all_tuning_curves`` depend
-      on ``ndi.app.stimulus.tuning_response.tuning_curve``, which is
-      itself an unported ``NotImplementedError`` stub; those remain
-      BLOCKERS gated on that upstream app.
+      ``vlt.neuro.vision.oridir.index.oridir_fitindexes``) are computed by
+      ``_oridir_fitindexes``, which delegates the Carandini/Ferster
+      double-gaussian fit to vlt's ``otfit_carandini`` + ``fit2fit*``
+      helpers -- importing the leaf functions directly to dodge a
+      name-shadowing bug in the vlt package ``__init__``. When vlt's fit
+      surface is unavailable (e.g. a no-vlt install) or the fit fails, the
+      ``fit`` sub-structure degrades to NaN/empty sentinels (a documented
+      divergence from MATLAB, which always fits). MEDIUM confidence on
+      exact MATLAB numerical parity (scipy Nelder-Mead vs MATLAB
+      fminsearch); flagged for MATLAB cross-validation.
+    - ``calculate_tuning_curve`` / ``calculate_all_tuning_curves`` delegate
+      to ``ndi.app.stimulus.tuning_response.tuning_curve`` (now ported).
 """
 
 from __future__ import annotations
@@ -367,22 +369,104 @@ def _neural_response_significance(resp_ind, blank_ind=None):
     return sigp, sigpb
 
 
-def _oridir_fitindexes(curve, ind):
-    """Double-gaussian fit indices -- BLOCKER, not ported.
+def _oridir_fitindexes(curve, ind=None):
+    """Double-gaussian orientation/direction fit indices.
 
-    Mirrors ``vlt.neuro.vision.oridir.index.oridir_fitindexes``. The
-    faithful port requires the vlt/vhlab double-gaussian fitting machinery
-    (``fit2fitoi``/``fit2fitdi`` + nonlinear fit seeds), which is not part
-    of the audited Python vlt surface and is not safely reimplementable
-    from first principles without inventing fit-seed/optimization
-    behaviour. Left as a BLOCKER.
+    Faithful port of ``vlt.neuro.vision.oridir.index.oridir_fitindexes``
+    (the Carandini/Ferster 2000 two-peaked Gaussian). The nonlinear fit and
+    the index math are delegated to vlt's ``otfit_carandini`` + ``fit2fit*``
+    helpers, which DO exist in the Python vlt surface and compute correctly.
+
+    The vlt package's own ``oridir_fitindexes`` wrapper is unusable because
+    every ``import vlt.x.y as z`` it uses resolves ``z`` to the *function*
+    re-exported by the package ``__init__`` (a name-shadowing bug), so
+    ``z.y(...)`` raises ``AttributeError``. We therefore import the leaf
+    functions directly (``from vlt.fit.otfit_carandini import
+    otfit_carandini``) and replicate the small driver loop here.
+
+    Args:
+        curve: 4xN array ``[directions; mean; stddev; stderr]``.
+        ind: unused (kept for signature parity with ``_oridir_vectorindexes``).
+
+    Returns:
+        dict mirroring the vlt ``fi`` struct (fit_parameters, the 0..359 fit
+        curve, the orientation/direction indices + rectified + diffsum
+        variants, dirpref, tuning_width).
+
+    Raises:
+        ImportError: if vlt's fit surface is unavailable (the caller falls
+            back to NaN/empty sentinels, matching the no-vlt sandbox).
     """
-    raise NotImplementedError(
-        "oridir_fitindexes (double-gaussian fit) is not available: requires "
-        "vlt.neuro.vision.oridir.index.oridir_fitindexes and its fit helpers "
-        "(fit2fitoi/fit2fitdi), which are not part of the audited Python vlt "
-        "surface. BLOCKER."
-    )
+    import numpy as np
+
+    # Import the leaf functions directly to dodge the vlt package __init__
+    # name-shadowing bug (see the docstring above).
+    from vlt.fit.otfit_carandini import otfit_carandini
+    from vlt.math.rectify import rectify
+    from vlt.neuro.vision.oridir.index.fit2fitdi import fit2fitdi
+    from vlt.neuro.vision.oridir.index.fit2fitdidiffsum import fit2fitdidiffsum
+    from vlt.neuro.vision.oridir.index.fit2fitoi import fit2fitoi
+    from vlt.neuro.vision.oridir.index.fit2fitoidiffsum import fit2fitoidiffsum
+
+    resp = np.asarray(curve, dtype=float)
+    angles = resp[0, :]
+    mean_resp = resp[1, :]
+
+    maxresp = float(np.max(mean_resp))
+    otpref = float(angles[int(np.argmax(mean_resp))])
+
+    # If the curve only spans [0,180], mirror it to a full 360 deg direction
+    # curve (mirrors the MATLAB hasdirection branch).
+    if float(np.max(angles)) <= 180:
+        tuneangles = np.concatenate([angles, angles + 180])
+        tuneresps = np.concatenate([mean_resp, mean_resp])
+    else:
+        tuneangles = angles
+        tuneresps = mean_resp
+
+    da = float(np.diff(np.sort(angles))[0])  # smallest angular step
+    width_seeds = [da / 2, da, 40, 60, 90]
+
+    # Try each width seed; keep the lowest-SSE fit (er is the 7th return).
+    best = None
+    for ws in width_seeds:
+        out = otfit_carandini(
+            tuneangles,
+            0,
+            maxresp,
+            otpref,
+            ws,
+            widthint=[da / 2, 180],
+            Rpint=[0, 3 * maxresp],
+            Rnint=[0, 3 * maxresp],
+            spontint=[float(np.min(tuneresps)), float(np.max(tuneresps))],
+            data=tuneresps,
+        )
+        if best is None or out[6] < best[6]:
+            best = out
+
+    Rsp, Rp, Ot, sigm, Rn, fitcurve, _er, _r2 = best
+    fit = np.vstack([np.arange(360, dtype=float), np.asarray(fitcurve, dtype=float).ravel()])
+
+    ot_index = fit2fitoi(fit)
+    ot_index_diffsum = fit2fitoidiffsum(fit)
+    dir_index = fit2fitdi(fit)
+    dir_index_diffsum = fit2fitdidiffsum(fit)
+
+    return {
+        "fit_parameters": [float(Rsp), float(Rp), float(Ot), float(sigm), float(Rn)],
+        "fit": fit,
+        "ot_index": float(ot_index),
+        "ot_index_rectified": float(min(rectify(ot_index), 1)),
+        "ot_index_diffsum": float(ot_index_diffsum),
+        "ot_index_diffsum_rectified": float(min(rectify(ot_index_diffsum), 1)),
+        "dir_index": float(dir_index),
+        "dir_index_rectified": float(min(rectify(dir_index), 1)),
+        "dir_index_diffsum": float(dir_index_diffsum),
+        "dir_index_diffsum_rectified": float(min(rectify(dir_index_diffsum), 1)),
+        "dirpref": float(Ot),
+        "tuning_width": float(sigm * np.sqrt(np.log(4))),
+    }
 
 
 def _nan_fit_struct():
@@ -400,6 +484,42 @@ def _nan_fit_struct():
         "orientation_angle_preference": np.nan,
         "direction_angle_preference": np.nan,
         "hwhh": np.nan,
+    }
+
+
+def _fit_struct(curve, ind=None):
+    """Build the ``orientation_direction_tuning`` ``fit`` sub-structure.
+
+    Runs the vlt-backed double-gaussian fit via :func:`_oridir_fitindexes`
+    and maps its ``fi`` struct onto the document's ``fit`` fields (the
+    MATLAB ``oridirtuning`` field map). Falls back to NaN/empty sentinels (a
+    documented divergence from MATLAB, which always fits) when vlt's fit
+    surface is unavailable -- e.g. the no-vlt sandbox -- or the fit fails.
+    """
+    import numpy as np
+
+    try:
+        fi = _oridir_fitindexes(curve, ind)
+    except Exception as exc:  # noqa: BLE001 - vlt missing or fit failed -> sentinels
+        warnings.warn(
+            f"oridir double-gaussian fit unavailable ({exc}); the 'fit' "
+            "sub-structure is stored with NaN/empty sentinels.",
+            UserWarning,
+            stacklevel=2,
+        )
+        return _nan_fit_struct()
+
+    return {
+        "double_gaussian_parameters": list(fi["fit_parameters"]),
+        "double_gaussian_fit_angles": np.asarray(fi["fit"][0]).tolist(),
+        "double_gaussian_fit_values": np.asarray(fi["fit"][1]).tolist(),
+        "orientation_preferred_orthogonal_ratio": fi["ot_index"],
+        "direction_preferred_null_ratio": fi["dir_index"],
+        "orientation_preferred_orthogonal_ratio_rectified": fi["ot_index_rectified"],
+        "direction_preferred_null_ratio_rectified": fi["dir_index_rectified"],
+        "orientation_angle_preference": float(np.mod(fi["dirpref"], 180)),
+        "direction_angle_preference": fi["dirpref"],
+        "hwhh": fi["tuning_width"],
     }
 
 
@@ -437,7 +557,7 @@ class ndi_app_oridirtuning(ndi_app, ndi_app_appdoc):
         )
 
     # ------------------------------------------------------------------
-    # Tuning-curve creation (BLOCKED on ndi.app.stimulus.tuning_response)
+    # Tuning-curve creation (delegates to ndi.app.stimulus.tuning_response)
     # ------------------------------------------------------------------
 
     def calculate_all_tuning_curves(
@@ -456,10 +576,6 @@ class ndi_app_oridirtuning(ndi_app, ndi_app_appdoc):
 
         Returns:
             List of tuning curve documents
-
-        Note:
-            BLOCKER -- delegates to ``calculate_tuning_curve``, which
-            depends on the unported ``ndi.app.stimulus.tuning_response``.
         """
         if self._session is None:
             return []
@@ -504,18 +620,43 @@ class ndi_app_oridirtuning(ndi_app, ndi_app_appdoc):
             do_add: If True, add to database
 
         Returns:
-            Tuning curve document, or None
-
-        Note:
-            BLOCKER -- the faithful port calls
-            ``ndi.app.stimulus.tuning_response.tuning_curve``, which is an
-            unported NotImplementedError stub in the Python tree.
+            Tuning curve document, or None when the response does not vary in
+            angle only (not an oridir stimulus).
         """
-        raise NotImplementedError(
-            "calculate_tuning_curve depends on "
-            "ndi.app.stimulus.tuning_response.tuning_curve(), which is not yet "
-            "ported (NotImplementedError stub). BLOCKER."
+        from .stimulus.tuning_response import ndi_app_stimulus_tuning__response
+
+        if self._session is None:
+            return None
+
+        rapp = ndi_app_stimulus_tuning__response(self._session)
+
+        if not self.is_oridir_stimulus_response(ndi_response_doc):
+            return None
+
+        # Mirrors MATLAB oridirtuning/calculate_tuning_curve: tune over 'angle'
+        # (labelled 'direction'), restricted to stimuli that carry sFrequency.
+        constraint = [
+            {"field": "sFrequency", "operation": "hasfield", "param1": "", "param2": ""}
+        ]
+        tuning_doc = rapp.tuning_curve(
+            ndi_response_doc,
+            independent_label=["direction"],
+            independent_parameter=["angle"],
+            constraint=constraint,
+            do_add=False,
         )
+        if tuning_doc is None:
+            return None
+
+        tuning_doc = tuning_doc.set_dependency_value("element_id", ndi_element_obj.id)
+        tuning_doc = tuning_doc.set_dependency_value(
+            "stimulus_response_scalar_id", ndi_response_doc.id
+        )
+
+        if do_add and self._session is not None:
+            self._session.database_add(tuning_doc)
+
+        return tuning_doc
 
     # ------------------------------------------------------------------
     # Orientation/direction index calculation
@@ -589,10 +730,11 @@ class ndi_app_oridirtuning(ndi_app, ndi_app_appdoc):
         Returns:
             orientation_direction_tuning document, or None
 
-        Divergence from MATLAB:
-            The ``fit`` sub-structure (double-gaussian fit indices) is a
-            BLOCKER (see ``_oridir_fitindexes``); it is stored with
-            NaN/empty sentinels and a UserWarning is emitted.
+        Notes:
+            The ``fit`` sub-structure (double-gaussian fit indices) is
+            computed via :func:`_oridir_fitindexes` (vlt-backed). If vlt's
+            fit surface is unavailable it falls back to NaN/empty sentinels
+            with a UserWarning (a documented divergence from MATLAB).
         """
         import numpy as np
 
@@ -651,14 +793,9 @@ class ndi_app_oridirtuning(ndi_app, ndi_app_appdoc):
             ind_real_list, blank_ind
         )
 
-        # fit indices -- BLOCKER; store sentinels
-        warnings.warn(
-            "oridir double-gaussian fit indices are not ported (BLOCKER); "
-            "the 'fit' sub-structure is stored with NaN/empty sentinels.",
-            UserWarning,
-            stacklevel=2,
-        )
-        fit = _nan_fit_struct()
+        # fit indices: vlt-backed double-gaussian fit (NaN/empty sentinels if
+        # vlt's fit surface is unavailable or the fit fails -- _fit_struct warns).
+        fit = _fit_struct(curve, response_ind)
 
         # response_type / response_units come from the response + tuning docs
         response_units = stc.get("response_units", "")
@@ -860,13 +997,16 @@ class ndi_app_oridirtuning(ndi_app, ndi_app_appdoc):
         MATLAB equivalent: ndi.app.oridirtuning/plot_oridir_response
 
         Note:
-            BLOCKER -- the MATLAB version uses vlt.plot.myerrorbar and the
-            double-gaussian fit line. Plotting + the fit are not ported.
+            Plotting is intentionally left to the viewer layer, not the SDK:
+            the ``orientation_direction_tuning`` document already carries the
+            tuning curve (direction/mean/stderr) and the double-gaussian
+            ``fit`` (angles/values) needed to draw it with matplotlib.
         """
         raise NotImplementedError(
-            "plot_oridir_response is not ported: requires matplotlib plotting and "
-            "the double-gaussian fit line (oridir_fitindexes, a BLOCKER). Use "
-            "matplotlib directly on the document's tuning_curve fields."
+            "plot_oridir_response is not ported: matplotlib plotting is left to "
+            "the viewer. Draw it directly with matplotlib from the document's "
+            "tuning_curve (direction/mean/stderr) and fit (double_gaussian_fit_"
+            "angles/values) fields."
         )
 
     # ------------------------------------------------------------------
