@@ -501,8 +501,24 @@ class ndi_document:
 
         sc_names = []
         for sc in superclasses:
-            # Each superclass has a 'definition' pointing to its JSON
-            # We need to read that to get the class_name
+            # Defensive: a bare-string entry (e.g. index.json-style data) is
+            # itself the superclass class name.
+            if isinstance(sc, str):
+                if sc:
+                    sc_names.append(sc)
+                continue
+            if not isinstance(sc, dict):
+                continue
+            # Schema-v2 (V_delta/V_epsilon) names its superclasses directly via
+            # 'class_name'; legacy did_v1 carries only a 'definition' path that
+            # must be read to recover the name. Read 'class_name' first but
+            # UNION in the definition-derived name rather than short-circuiting,
+            # so a mixed-shape entry never silently narrows the lineage. This
+            # mirrors the reference contract in ndi-cloud-node
+            # api/src/dal/class_lineage.ts (computeClassLineage).
+            class_name = sc.get("class_name", "")
+            if class_name:
+                sc_names.append(class_name)
             definition = sc.get("definition", "")
             if definition:
                 try:
@@ -811,16 +827,36 @@ class ndi_document:
         with open(json_path) as f:
             definition = json.load(f)
 
-        # Process superclasses recursively
+        # Process superclasses recursively to inherit their fields. Resolve each
+        # superclass to a document_type (the on-disk {type}.json basename):
+        # schema-v2 (V_delta/V_epsilon) names it directly via 'class_name';
+        # legacy did_v1 carries a 'definition' path. Prefer 'class_name', but
+        # also follow a differing 'definition' path (UNION) so inherited fields
+        # are never silently dropped for a mixed-shape entry. The recursion
+        # supplies transitive inheritance. Mirrors ndi-cloud-node's
+        # class_name-first superclass contract (api/src/dal/class_lineage.ts).
         if "document_class" in definition and "superclasses" in definition["document_class"]:
             for sc in definition["document_class"]["superclasses"]:
-                sc_def = sc.get("definition", "")
-                if sc_def:
-                    # Extract document type from definition path
-                    sc_type = sc_def.replace("$NDIDOCUMENTPATH/", "").replace(".json", "")
+                sc_types: list[str] = []
+                if isinstance(sc, str):
+                    if sc:
+                        sc_types.append(sc)
+                elif isinstance(sc, dict):
+                    class_name = sc.get("class_name", "")
+                    if class_name:
+                        sc_types.append(class_name)
+                    sc_def = sc.get("definition", "")
+                    if sc_def:
+                        # Extract document type from the definition path
+                        def_type = sc_def.replace("$NDIDOCUMENTPATH/", "").replace(
+                            ".json", ""
+                        )
+                        if def_type and def_type not in sc_types:
+                            sc_types.append(def_type)
+                for sc_type in sc_types:
                     try:
                         sc_props = ndi_document.read_blank_definition(sc_type)
-                        # Merge superclass properties
+                        # Merge superclass properties (don't overwrite own keys)
                         for key, value in sc_props.items():
                             if key != "document_class" and key not in definition:
                                 definition[key] = value
