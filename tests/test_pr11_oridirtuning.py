@@ -234,6 +234,46 @@ class TestCalculateOridirIndexes:
         assert abs(((props["fit"]["direction_angle_preference"] - 90 + 180) % 360) - 180) < 12
         assert 0.0 <= props["fit"]["direction_preferred_null_ratio_rectified"] <= 1.0
 
+    def test_matlab_reps_first_individual_responses(self):
+        """Regression: MATLAB serialises the individual-response matrices as
+        ``[repetition, stimulus]`` (real Carbon Fiber docs are e.g. 5x12 =
+        reps x directions), the transpose of this module's directions-first
+        synthetic fixture. The per-direction reduction must orient the
+        direction axis first; before the fix it looped over the repetition
+        count and raised ``vstack ... size 12 vs 5`` (n_directions vs n_reps).
+        """
+        mean = np.clip(1.0 + np.cos(np.deg2rad(ANGLES - 90.0)), 0.0, None)
+        n = len(mean)
+        reps = 5
+        td = ndi_document("stimulus/stimulus_tuningcurve")
+        stc = td.document_properties["stimulus_tuningcurve"]
+        stc["independent_variable_value"] = list(ANGLES)
+        # reps-first shape (reps, n_directions) — MATLAB's serialisation order.
+        stc["individual_responses_real"] = [
+            [float(mean[i]) for i in range(n)] for _ in range(reps)
+        ]
+        stc["individual_responses_imaginary"] = [[0.0] * n for _ in range(reps)]
+        stc["control_individual_responses_real"] = [[0.0] * n for _ in range(reps)]
+        stc["control_individual_responses_imaginary"] = [[0.0] * n for _ in range(reps)]
+        stc["response_units"] = "spikes/s"
+
+        app = ndi_app_oridirtuning()  # no session
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # fit falls back to sentinels if vlt absent
+            odt = app.calculate_oridir_indexes(td, do_add=False)
+
+        tc = odt.document_properties["orientation_direction_tuning"]["tuning_curve"]
+        # One value per DIRECTION (the bug produced n_reps values and crashed).
+        assert len(tc["direction"]) == n
+        assert len(tc["mean"]) == n
+        assert tc["direction"] == list(ANGLES)
+        # blank=0 subtracted, noiseless across reps -> mean == input mean, stderr 0.
+        np.testing.assert_allclose(tc["mean"], mean, atol=1e-9)
+        np.testing.assert_allclose(tc["stderr"], 0.0, atol=1e-12)
+        # direction-selective cosine still peaks at 90 deg after re-orientation.
+        odt_props = odt.document_properties["orientation_direction_tuning"]
+        assert odt_props["vector"]["direction_preference"] == pytest.approx(90.0, abs=1e-6)
+
     def test_fit_indexes_returns_fit(self):
         # vlt is present (module-gated): the double-gaussian fit computes.
         mean = np.clip(1.0 + np.cos(np.deg2rad(ANGLES - 90.0)), 0.0, None)

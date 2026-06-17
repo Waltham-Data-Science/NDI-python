@@ -743,14 +743,35 @@ class ndi_app_oridirtuning(ndi_app, ndi_app_appdoc):
         props = tuning_doc.document_properties
         stc = props["stimulus_tuningcurve"]
 
+        # Directions (independent variable) — the per-direction reduction below
+        # must produce one value per direction, so the number of directions is
+        # the authoritative outer length.
+        directions = np.asarray(stc["independent_variable_value"], dtype=float).ravel()
+        ndir = int(directions.size)
+
         # Build complex per-direction individual responses:
         #   ind = real + i*imag ;  response = ind - control
-        ind_r = stc["individual_responses_real"]
-        ind_i = stc["individual_responses_imaginary"]
-        ctl_r = stc["control_individual_responses_real"]
-        ctl_i = stc["control_individual_responses_imaginary"]
+        # MATLAB serialises the individual-response matrices as
+        # ``[repetition, stimulus]`` (real Carbon Fiber docs are e.g. 5x12 =
+        # 5 reps x 12 directions). The reduction loop indexes by DIRECTION, so
+        # orient each matrix to put the direction axis (length ``ndir``) first.
+        # (Bug fix: the previous code used ``n = len(individual_responses_real)``
+        # = number of repetitions, which mismatched ``independent_variable_value``
+        # and raised "vstack ... size 12 vs 5" on real MATLAB tuning curves.)
+        def _dir_first(raw: Any) -> np.ndarray:
+            a = np.asarray(raw, dtype=float)
+            if a.ndim == 1:
+                return a.reshape(ndir, -1) if a.size == ndir else a.reshape(1, -1)
+            if a.ndim >= 2 and a.shape[0] != ndir and a.shape[-1] == ndir:
+                return a.T
+            return a
 
-        n = len(ind_r)
+        ind_r = _dir_first(stc["individual_responses_real"])
+        ind_i = _dir_first(stc["individual_responses_imaginary"])
+        ctl_r = _dir_first(stc["control_individual_responses_real"])
+        ctl_i = _dir_first(stc["control_individual_responses_imaginary"])
+
+        n = ind_r.shape[0]
         ind_real_list: list[Any] = []
         control_real_list: list[Any] = []
         response_ind: list[Any] = []
@@ -779,9 +800,7 @@ class ndi_app_oridirtuning(ndi_app, ndi_app_appdoc):
             control_real_list.append(np.real(control_real))
             response_ind.append(np.real(resp))
 
-        directions = np.asarray(stc["independent_variable_value"], dtype=float).ravel()
-
-        # curve = [directions ; mean ; stddev ; stderr]
+        # curve = [directions ; mean ; stddev ; stderr] (directions computed above)
         curve = np.vstack([directions, response_mean, response_stddev, response_stderr])
 
         # vector indices (grounded helper)
