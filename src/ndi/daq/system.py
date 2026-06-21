@@ -417,7 +417,14 @@ class ndi_daq_system(ndi_ido):
         et = []
         for i, entry in enumerate(nav_et):
             epoch_number = entry.get("epoch_number", i + 1)
-            epoch_id = entry.get("epoch_id", self.epochid(epoch_number))
+            # NB: do NOT write ``entry.get("epoch_id", self.epochid(...))`` —
+            # dict.get evaluates its default eagerly, so self.epochid() (which
+            # hashes the epoch's files, ~0.4s) would run for every epoch even
+            # though epoch_id is already present, making this loop O(N) file
+            # hashes (~670s for a 1604-epoch dataset). Only fall back lazily.
+            epoch_id = entry.get("epoch_id")
+            if not epoch_id:
+                epoch_id = self.epochid(epoch_number)
 
             # Get epoch probe map
             nav_epochprobemap = entry.get("epochprobemap")

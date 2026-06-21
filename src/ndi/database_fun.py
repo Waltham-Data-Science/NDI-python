@@ -360,6 +360,24 @@ def _get_class_map() -> dict[str, Any]:
 
         p = doc.document_properties
         el = p.get("element", {})
+
+        # Reconstruct the CONCRETE element subclass declared by the document
+        # (e.g. ndi.probe.timeseries.mfdaq → ndi_probe_timeseries_mfdaq) so the
+        # object keeps its real capabilities — notably readtimeseries — and its
+        # document linkage (id, depends_on). Mirrors MATLAB
+        # ndi.database.fun.ndi_document2ndi_object + session._document_to_object.
+        ndi_class = el.get("ndi_element_class", "")
+        if ndi_class:
+            from .class_registry import get_class
+
+            cls = get_class(ndi_class)
+            if cls is not None:
+                try:
+                    return cls(session=session, document=doc)
+                except Exception:
+                    pass
+
+        # Fallback: a bare generic element (no concrete class registered).
         return ndi_element(
             session=session,
             name=el.get("name", ""),
