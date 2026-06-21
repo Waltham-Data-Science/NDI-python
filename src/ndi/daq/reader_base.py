@@ -236,6 +236,7 @@ class ndi_daq_reader(ndi_ido, ABC):
         et = props["daqreader_epochdata_ingested"]["epochtable"]
 
         t0t1_raw = et.get("t0_t1", [])
+        epochclock = et.get("epochclock", []) or []
         if not isinstance(t0t1_raw, list):
             return [tuple(t0t1_raw)]
 
@@ -248,14 +249,58 @@ class ndi_daq_reader(ndi_ido, ABC):
         ):
             return [(t0t1_raw[0], t0t1_raw[1])]
 
+        rows = [t for t in t0t1_raw if isinstance(t, (list, tuple))]
+        if len(rows) == len(t0t1_raw) and rows:
+            return self._t0_t1_to_per_clock(rows, len(epochclock))
+
+        # Fallback: best-effort per-element pairing.
         t0t1_list = []
         for t in t0t1_raw:
             if isinstance(t, (list, tuple)) and len(t) == 2:
                 t0t1_list.append(tuple(t))
             else:
                 t0t1_list.append((t, t))
-
         return t0t1_list
+
+    @staticmethod
+    def _t0_t1_to_per_clock(rows: list, nclocks: int) -> list[tuple[float, float]]:
+        """Normalise a stored ``t0_t1`` matrix to per-clock ``(t0, t1)`` tuples.
+
+        Two writers disagree on the layout of the ingested ``t0_t1`` matrix:
+
+        * NDI-python stores **per-clock pairs** — ``Nclocks`` rows of
+          ``[t0, t1]`` (see ``ingest_epochfiles``).
+        * MATLAB ingestion stores **[t0-row, t1-row]** — 2 rows (start times,
+          then end times) of ``Nclocks`` columns.
+
+        For ``Nclocks != 2`` the shape is unambiguous. For the 2×2 case both
+        layouts have the same shape, so disambiguate with the global clock:
+        its values are datenums (``> 1e5``; a per-epoch local time never is).
+        If the large values fill a *column* the matrix is [t0-row, t1-row]
+        (transpose); if they fill a *row* it is already per-clock.
+        """
+        def _num(x: object) -> float:
+            try:
+                return abs(float(x))
+            except (TypeError, ValueError):
+                return 0.0
+
+        nrows = len(rows)
+        ncols = len(rows[0]) if rows else 0
+        transpose = False
+        if nrows == 2 and ncols == nclocks and nrows != ncols:
+            transpose = True  # 2 rows × Nclocks cols → [t0-row, t1-row]
+        elif nrows == nclocks and ncols == 2 and nrows != ncols:
+            transpose = False  # Nclocks rows × [t0, t1] → per-clock pairs
+        elif nrows == 2 and ncols == 2:
+            DATENUM = 1e5
+            col_big = any(all(_num(rows[r][c]) > DATENUM for r in range(2)) for c in range(2))
+            row_big = any(all(_num(rows[r][c]) > DATENUM for c in range(2)) for r in range(2))
+            transpose = col_big and not row_big
+
+        if transpose:
+            return [(rows[0][j], rows[1][j]) for j in range(ncols)]
+        return [tuple(r) for r in rows]
 
     def verifyepochprobemap(
         self,
