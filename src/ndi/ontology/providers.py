@@ -57,13 +57,20 @@ class OLSProvider(OntologyProvider):
 
         prefix = prefix or self.ols_prefix
 
-        is_numeric = bool(re.match(r"^\d+$", term))
-
-        if is_numeric:
-            full_id = f"{prefix}:{term.zfill(7)}"
-            return self._search_ols(full_id, "obo_id", prefix)
-        else:
-            return self._search_ols(term, "label", prefix)
+        # Pure-numeric ids are zero-padded (e.g. CL:0000540). Alphanumeric
+        # codes such as NCIT "C190180" are also ids, but the old "is it all
+        # digits?" test mis-routed them to a *label* search (querying for a
+        # term literally named "C190180", which matches nothing). Route any
+        # ``<letters><digits>`` code to an exact obo_id search; fall back to a
+        # label search only if that finds nothing (so real text labels still
+        # work).
+        if re.match(r"^\d+$", term):
+            return self._search_ols(f"{prefix}:{term.zfill(7)}", "obo_id", prefix)
+        if re.match(r"^[A-Za-z]+[\d_]+$", term):
+            res = self._search_ols(f"{prefix}:{term}", "obo_id", prefix)
+            if res:
+                return res
+        return self._search_ols(term, "label", prefix)
 
     def _search_ols(self, query: str, field: str, prefix: str) -> Any:
         from . import OntologyResult
@@ -73,6 +80,11 @@ class OLSProvider(OntologyProvider):
                 "q": query,
                 "ontology": self.ols_ontology,
                 "queryFields": field,
+                # Ask for synonym/description explicitly — the OLS4 search
+                # endpoint omits them otherwise, so _doc_to_result would always
+                # see an empty synonym list (callers rely on synonyms, e.g. the
+                # imageStack format = lower(synonyms[0])).
+                "fieldList": "iri,label,obo_id,short_form,description,synonym",
             }
             if field == "obo_id":
                 params["exact"] = "true"
