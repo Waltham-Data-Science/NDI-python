@@ -510,3 +510,12 @@ probe_locations_for_probes = probeLocations4probes
 probe_locations4probes_legacy = probeLocations4probes
 ontology_table_row_vars = ontologyTableRowVars
 get_doc_types = getDocTypes
+
+# MATLAB parity: ndi.fun.doc.ontologyTableRowDoc2Table lives under +ndi/+fun/+doc/
+# in NDI-matlab (the tutorials call it as `ndi.fun.doc.ontologyTableRowDoc2Table`),
+# but the Python implementation lives in ndi.fun.doc_table. Re-export it here so
+# the MATLAB-namespaced path resolves identically. (No import cycle: doc_table
+# does not import doc.)
+from .doc_table import ontologyTableRowDoc2Table  # noqa: E402,F401
+
+ontology_table_row_doc2table = ontologyTableRowDoc2Table
