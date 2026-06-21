@@ -19,6 +19,32 @@ from ..ido import ndi_ido
 from ..time import ndi_time_clocktype
 
 
+def _t0_t1_per_clock(t0t1_raw: Any, nclocks: int) -> List[Tuple[float, float]]:
+    """Normalise an element_epoch ``t0_t1`` to per-clock ``(t0, t1)`` tuples.
+
+    Shares the daq reader's layout detection: MATLAB ingestion writes a
+    ``[t0-row, t1-row]`` matrix, NDI-python writes per-clock ``[t0, t1]`` pairs
+    (see ndi.daq.reader_base._t0_t1_to_per_clock). Input is already parsed from
+    its possible string form by the caller.
+    """
+    if not isinstance(t0t1_raw, (list, tuple)) or not t0t1_raw:
+        return []
+    rows = [r for r in t0t1_raw if isinstance(r, (list, tuple)) and len(r) >= 1]
+    if len(rows) != len(t0t1_raw):
+        # Not a clean matrix — best-effort per-element pairing.
+        return [
+            (float(t[0]), float(t[1]))
+            for t in t0t1_raw
+            if isinstance(t, (list, tuple)) and len(t) >= 2
+        ]
+    from ..daq.reader_base import ndi_daq_reader
+
+    return [
+        (float(a), float(b))
+        for a, b in ndi_daq_reader._t0_t1_to_per_clock(rows, nclocks)
+    ]
+
+
 class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
     """
     Base class for data elements.
@@ -274,8 +300,14 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
             element_epoch = props.get("element_epoch", {}) if isinstance(props, dict) else {}
             epochid_prop = props.get("epochid", {}) if isinstance(props, dict) else {}
 
-            # Parse epoch_clock
+            # Parse epoch_clock. MATLAB ingestion writes it as a single
+            # comma-joined string ("dev_local_time,exp_global_time"); Python
+            # writes a list. Handle both (iterating the raw string would feed
+            # one character at a time to ndi_time_clocktype -> "'d' is not a
+            # valid ndi_time_clocktype").
             clock_raw = element_epoch.get("epoch_clock", [])
+            if isinstance(clock_raw, str):
+                clock_raw = [c.strip() for c in clock_raw.split(",") if c.strip()]
             epoch_clock = []
             for c in clock_raw:
                 if isinstance(c, str):
@@ -283,12 +315,19 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
                 elif isinstance(c, ndi_time_clocktype):
                     epoch_clock.append(c)
 
-            # Parse t0_t1
+            # Parse t0_t1. MATLAB writes a JSON-ish string of a [t0-row, t1-row]
+            # matrix ("[[t0_local, t0_global],[t1_local, t1_global]]"); Python
+            # writes a list of per-clock [t0, t1] pairs. Normalise both to
+            # per-clock (t0, t1) tuples.
             t0t1_raw = element_epoch.get("t0_t1", [])
-            t0_t1 = []
-            for t in t0t1_raw:
-                if isinstance(t, (list, tuple)) and len(t) >= 2:
-                    t0_t1.append((float(t[0]), float(t[1])))
+            if isinstance(t0t1_raw, str):
+                import ast
+
+                try:
+                    t0t1_raw = ast.literal_eval(t0t1_raw)
+                except (ValueError, SyntaxError):
+                    t0t1_raw = []
+            t0_t1 = _t0_t1_per_clock(t0t1_raw, len(epoch_clock))
 
             et.append(
                 {

@@ -190,6 +190,22 @@ class ndi_element_timeseries(ndi_element):
             exists, binary_path = self._session.database_existbinarydoc(
                 doc, "epoch_binary_data.vhsb"
             )
+            if not exists:
+                # database_existbinarydoc is a LOCAL-only check; for a
+                # cloud-referenced (ndic://) binary it returns False. Open via
+                # database_openbinarydoc, which fetches the binary on demand
+                # (the dabrowska/mfdaq path already does this) — open+close
+                # materialises it locally, then re-check for the path.
+                try:
+                    fobj = self._session.database_openbinarydoc(
+                        doc, "epoch_binary_data.vhsb"
+                    )
+                    self._session.database_closebinarydoc(fobj)
+                    exists, binary_path = self._session.database_existbinarydoc(
+                        doc, "epoch_binary_data.vhsb"
+                    )
+                except Exception:
+                    return None, None
             if not exists or not binary_path:
                 return None, None
 
