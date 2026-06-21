@@ -311,18 +311,32 @@ def probe(
 def epoch(
     session: Any,
 ) -> pd.DataFrame:
-    """Create a summary table of epoch-related documents.
+    """Create a summary table of epochs and their associated metadata.
 
     MATLAB equivalent: ndi.fun.docTable.epoch
 
-    Builds one row per (epoch, probe) combination by parsing the
-    ``epochfiles_ingested`` documents and cross-referencing with
-    ``stimulus_bath`` and ``openminds_stimulus`` documents.
+    Builds one row per (probe, epoch) combination — grouped by probe, with a
+    per-probe ``EpochNumber`` counter — and, for each epoch, extracts the
+    local/global timing from the ingested DAQ-reader epoch table and the
+    associated stimulus-bath mixture and openMINDS stimulus-approach metadata.
+
+    The MATLAB implementation iterates ``session.getprobes`` and reads each
+    probe's ``epochtable`` for timing.  For an ingested (downloaded) dataset
+    the probe objects are not persisted (their identifiers are minted at
+    construction time), so this port reconstructs the same table directly from
+    the documents: the ``epochprobemap`` of each ``epochfiles_ingested`` doc
+    tells us which probes appear in which epoch, and the per-epoch timing lives
+    in the ``daqreader_mfdaq_epochdata_ingested`` doc keyed by the shared
+    ``epochid`` (the same key that joins ``stimulus_bath`` and
+    ``openminds_stimulus``).  ``ProbeDocumentIdentifier`` is therefore the
+    probe's *element* document id (stable within a load and consistent with
+    :func:`probe`), which is what the downstream ``combinedSummary`` join uses.
 
     Returns a DataFrame with columns:
         EpochNumber, EpochDocumentIdentifier, ProbeDocumentIdentifier,
-        SubjectDocumentIdentifier, MixtureName, MixtureOntology,
-        ApproachName, ApproachOntology
+        SubjectDocumentIdentifier, local_t0, local_t1, global_t0, global_t1,
+        MixtureName, MixtureOntology, ApproachName, ApproachOntology
+    (columns that are empty across every row are dropped, matching MATLAB).
 
     Args:
         session: NDI session or dataset instance.
@@ -332,119 +346,207 @@ def epoch(
     """
     _require_pandas()
     import csv
+    import datetime as _dt
     import io
 
     from ndi.query import ndi_query
 
-    # 1. Build element name → (id, subject_id) map
-    elem_docs = session.database_search(ndi_query("").isa("element"))
+    # Clock types considered "global" — mirrors ndi.time.clocktype.isGlobal.
+    _GLOBAL_CLOCKS = {
+        "exp_global_time",
+        "approx_exp_global_time",
+        "dev_global_time",
+        "approx_dev_global_time",
+    }
+
+    def _datenum_to_str(d: Any) -> str:
+        """MATLAB ``datetime(d,'convertFrom','datenum')`` → display string.
+
+        datenum 719529 == 1970-01-01; the default datetime display is
+        ``dd-MMM-yyyy HH:mm:ss`` and MATLAB *truncates* (not rounds) the
+        fractional second in that format.
+        """
+        try:
+            val = float(d)
+        except (TypeError, ValueError):
+            return ""
+        try:
+            ts = _dt.datetime(1970, 1, 1) + _dt.timedelta(days=val - 719529)
+        except (OverflowError, OSError, ValueError):
+            return ""
+        return ts.replace(microsecond=0).strftime("%d-%b-%Y %H:%M:%S")
+
+    def _props(doc: Any) -> dict:
+        return doc.document_properties if hasattr(doc, "document_properties") else doc
+
+    # 1. element (probe) lookup: (name|reference|type) -> {id, subject_id}
     elem_by_key: dict[str, dict] = {}
-    for doc in elem_docs:
-        props = doc.document_properties if hasattr(doc, "document_properties") else doc
+    for doc in session.database_search(ndi_query("").isa("element")):
+        props = _props(doc)
         el = props.get("element", {})
-        base = props.get("base", {})
-        name = el.get("name", "")
-        ref = el.get("reference", 0)
-        etype = el.get("type", "")
-        key = f"{name}|{ref}|{etype}"
+        key = f"{el.get('name', '')}|{el.get('reference', 0)}|{el.get('type', '')}"
         elem_by_key[key] = {
-            "id": base.get("id", ""),
+            "id": props.get("base", {}).get("id", ""),
             "subject_id": _get_depends_on(props, "subject_id"),
         }
 
-    # 2. Build epoch → stimulus_bath mapping
-    sb_docs = session.database_search(ndi_query("").isa("stimulus_bath"))
-    sb_by_epoch: dict[str, list[dict]] = {}
-    for doc in sb_docs:
-        props = doc.document_properties if hasattr(doc, "document_properties") else doc
+    # 2. epoch_id -> timing from daqreader_mfdaq_epochdata_ingested.
+    #    epochtable.t0_t1 is [[t0 per clock], [t1 per clock]] with clock order
+    #    given by epochtable.epochclock.
+    timing_by_epoch: dict[str, dict] = {}
+    for doc in session.database_search(
+        ndi_query("").isa("daqreader_mfdaq_epochdata_ingested")
+    ):
+        props = _props(doc)
         eid = props.get("epochid", {}).get("epochid", "")
-        if eid:
-            sb = props.get("stimulus_bath", {})
-            sb_by_epoch.setdefault(eid, []).append(sb)
+        if not eid:
+            continue
+        et = props.get("daqreader_epochdata_ingested", {}).get("epochtable", {})
+        clocks = et.get("epochclock", []) or []
+        t0_t1 = et.get("t0_t1", []) or []
+        t0row = t0_t1[0] if len(t0_t1) > 0 else []
+        t1row = t0_t1[1] if len(t0_t1) > 1 else []
+        rec = {"local_t0": "", "local_t1": "", "global_t0": "", "global_t1": ""}
+        local_idx = next(
+            (i for i, c in enumerate(clocks) if "dev_local_time" in str(c)), None
+        )
+        global_idx = next(
+            (i for i, c in enumerate(clocks) if str(c) in _GLOBAL_CLOCKS), None
+        )
+        if local_idx is not None and local_idx < len(t0row) and local_idx < len(t1row):
+            rec["local_t0"] = t0row[local_idx]
+            rec["local_t1"] = t1row[local_idx]
+        if (
+            global_idx is not None
+            and global_idx < len(t0row)
+            and global_idx < len(t1row)
+        ):
+            rec["global_t0"] = _datenum_to_str(t0row[global_idx])
+            rec["global_t1"] = _datenum_to_str(t1row[global_idx])
+        timing_by_epoch[eid] = rec
 
-    # 3. Build epoch → openminds_stimulus (approach) mapping
-    approach_docs = session.database_search(ndi_query("").isa("openminds_stimulus"))
-    approach_by_epoch: dict[str, list[dict]] = {}
-    for doc in approach_docs:
-        props = doc.document_properties if hasattr(doc, "document_properties") else doc
+    # 3. epoch_id -> mixture from stimulus_bath.mixture_table (CSV with a
+    #    header row of ontologyName,name,value,...); unique whole-rows, stable.
+    mixture_by_epoch: dict[str, dict] = {}
+    for doc in session.database_search(ndi_query("").isa("stimulus_bath")):
+        props = _props(doc)
         eid = props.get("epochid", {}).get("epochid", "")
-        if eid:
-            fields = props.get("openminds", {}).get("fields", {})
-            approach_by_epoch.setdefault(eid, []).append(fields)
+        if not eid:
+            continue
+        mt = props.get("stimulus_bath", {}).get("mixture_table", "")
+        st = mixture_by_epoch.setdefault(
+            eid, {"names": [], "onts": [], "seen": set()}
+        )
+        if not mt:
+            continue
+        try:
+            for r in csv.DictReader(io.StringIO(mt)):
+                rowkey = frozenset(r.items())
+                if rowkey in st["seen"]:
+                    continue
+                st["seen"].add(rowkey)
+                st["names"].append((r.get("name") or "").strip())
+                st["onts"].append((r.get("ontologyName") or "").strip())
+        except Exception:
+            pass
 
-    # 4. Parse epochfiles_ingested docs to get epoch → probe mappings
-    efi_docs = session.database_search(ndi_query("").isa("epochfiles_ingested"))
-    epoch_counter: dict[str, int] = {}  # probe_id -> running count
-    rows: list[dict[str, Any]] = []
+    # 4. epoch_id -> approach from openminds_stimulus.fields; unique, stable.
+    approach_by_epoch: dict[str, dict] = {}
+    for doc in session.database_search(ndi_query("").isa("openminds_stimulus")):
+        props = _props(doc)
+        eid = props.get("epochid", {}).get("epochid", "")
+        if not eid:
+            continue
+        fields = props.get("openminds", {}).get("fields", {})
+        nm = fields.get("name", "") or ""
+        on = fields.get("preferredOntologyIdentifier", "") or ""
+        st = approach_by_epoch.setdefault(
+            eid, {"names": [], "onts": [], "seen": set()}
+        )
+        if (nm, on) in st["seen"]:
+            continue
+        st["seen"].add((nm, on))
+        st["names"].append(nm)
+        st["onts"].append(on)
 
-    for doc in efi_docs:
-        props = doc.document_properties if hasattr(doc, "document_properties") else doc
+    # 5. probe -> ordered, de-duplicated list of epoch_ids it appears in.
+    #    Sort epochfiles_ingested by epoch_id so each probe's epochs (and thus
+    #    its per-probe EpochNumber) are assigned deterministically.
+    def _efi_eid(doc: Any) -> str:
+        return _props(doc).get("epochfiles_ingested", {}).get("epoch_id", "")
+
+    probe_epochs: dict[str, dict] = {}  # probe_id -> {subject_id, epochs:[...], seen:set}
+    for doc in sorted(
+        session.database_search(ndi_query("").isa("epochfiles_ingested")),
+        key=_efi_eid,
+    ):
+        props = _props(doc)
         ef = props.get("epochfiles_ingested", {})
         epoch_id = ef.get("epoch_id", "")
         epm_str = ef.get("epochprobemap", "")
-
-        if not epm_str or not epoch_id:
+        if not epoch_id or not epm_str:
             continue
-
-        # Parse TSV epochprobemap
         try:
-            reader = csv.DictReader(io.StringIO(epm_str), delimiter="\t")
-            probes_in_epoch = list(reader)
+            probes_in_epoch = list(csv.DictReader(io.StringIO(epm_str), delimiter="\t"))
         except Exception:
             continue
-
-        # Mixture info for this epoch
-        sbs = sb_by_epoch.get(epoch_id, [])
-        mixture_name = ""
-        mixture_ont = ""
-        if sbs:
-            loc = sbs[0].get("location", {})
-            if isinstance(loc, dict):
-                mixture_name = loc.get("name", "")
-                mixture_ont = loc.get("ontologyNode", "")
-
-        # Approach info for this epoch
-        approaches = approach_by_epoch.get(epoch_id, [])
-        approach_name = ""
-        approach_ont = ""
-        if approaches:
-            approach_name = approaches[0].get("name", "")
-            approach_ont = approaches[0].get("preferredOntologyIdentifier", "")
-
-        for probe_entry in probes_in_epoch:
-            pname = probe_entry.get("name", "")
-            pref = probe_entry.get("reference", "0")
-            ptype = probe_entry.get("type", "")
-
-            # Convert reference to int for matching
+        for pe in probes_in_epoch:
+            pname = pe.get("name", "")
+            ptype = pe.get("type", "")
             try:
-                pref_int = int(pref)
+                pref = int(pe.get("reference", "0"))
             except (ValueError, TypeError):
-                pref_int = 0
+                pref = 0
+            info = elem_by_key.get(f"{pname}|{pref}|{ptype}")
+            if not info or not info["id"]:
+                continue
+            pid = info["id"]
+            rec = probe_epochs.setdefault(
+                pid, {"subject_id": info["subject_id"], "epochs": [], "seen": set()}
+            )
+            if epoch_id in rec["seen"]:
+                continue
+            rec["seen"].add(epoch_id)
+            rec["epochs"].append(epoch_id)
 
-            key = f"{pname}|{pref_int}|{ptype}"
-            elem_info = elem_by_key.get(key, {})
-            probe_id = elem_info.get("id", "")
-            subject_id = elem_info.get("subject_id", "")
-
-            # Epoch counter per probe
-            epoch_counter.setdefault(probe_id, 0)
-            epoch_counter[probe_id] += 1
-
+    # 6. Emit rows, probe-major, with a per-probe EpochNumber (1..N).
+    rows: list[dict[str, Any]] = []
+    for pid, rec in probe_epochs.items():
+        for n, epoch_id in enumerate(rec["epochs"], start=1):
+            t = timing_by_epoch.get(epoch_id, {})
+            mx = mixture_by_epoch.get(epoch_id)
+            ap = approach_by_epoch.get(epoch_id)
             rows.append(
                 {
-                    "EpochNumber": epoch_counter[probe_id],
+                    "EpochNumber": n,
                     "EpochDocumentIdentifier": epoch_id,
-                    "ProbeDocumentIdentifier": probe_id,
-                    "SubjectDocumentIdentifier": subject_id,
-                    "MixtureName": mixture_name,
-                    "MixtureOntology": mixture_ont,
-                    "ApproachName": approach_name,
-                    "ApproachOntology": approach_ont,
+                    "ProbeDocumentIdentifier": pid,
+                    "SubjectDocumentIdentifier": rec["subject_id"],
+                    "local_t0": t.get("local_t0", ""),
+                    "local_t1": t.get("local_t1", ""),
+                    "global_t0": t.get("global_t0", ""),
+                    "global_t1": t.get("global_t1", ""),
+                    "MixtureName": ",".join(mx["names"]) if mx else "",
+                    "MixtureOntology": ",".join(mx["onts"]) if mx else "",
+                    "ApproachName": ",".join(ap["names"]) if ap else "",
+                    "ApproachOntology": ",".join(ap["onts"]) if ap else "",
                 }
             )
 
-    return pd.DataFrame(rows) if rows else pd.DataFrame()
+    if not rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(rows)
+
+    # 7. Drop columns that are empty across every row (MATLAB removes empty cols).
+    def _all_empty(col: str) -> bool:
+        return all((v == "" or v is None) for v in df[col])
+
+    drop = [c for c in df.columns if _all_empty(c)]
+    if drop:
+        df = df.drop(columns=drop)
+
+    return df
 
 
 def openminds(
