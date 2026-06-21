@@ -18,6 +18,60 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def readtablechar(c: str, ext: str = ".txt", *args: Any, **kwargs: Any) -> Any:
+    """Read a table from a character array.
+
+    MATLAB equivalent: ``ndi.database.fun.readtablechar`` — which writes the
+    char array to a temp file with extension *ext* and calls
+    ``readtable(fname, varargin{:})``. NDI stores small tables (mixture/odor/
+    treatment tables) as delimited-text char arrays inside documents and reads
+    them back with ``readtablechar(c,'.txt','Delimiter',',')``; here we parse
+    the text straight into a ``pandas.DataFrame``.
+
+    The readtable name-value options NDI uses are mapped onto
+    ``pandas.read_csv``: ``Delimiter`` -> ``sep`` and ``ReadVariableNames`` ->
+    ``header``. Options may be given MATLAB-style as positional name-value
+    pairs (``..., 'Delimiter', ','``) or as keyword args (``Delimiter=','``).
+
+    Args:
+        c: The table content as a character array / string.
+        ext: The file extension the content would have (e.g. ``'.txt'``);
+            accepted for signature parity, used only to pick the parser.
+        *args: MATLAB-style name-value option pairs.
+        **kwargs: The same options as keywords.
+
+    Returns:
+        A pandas DataFrame.
+    """
+    import io
+
+    import pandas as pd
+
+    opts: dict[str, Any] = {}
+    for i in range(0, len(args) - 1, 2):
+        opts[str(args[i])] = args[i + 1]
+    opts.update(kwargs)
+
+    def _opt(*names: str, default: Any = None) -> Any:
+        for n in names:
+            if n in opts:
+                return opts[n]
+        return default
+
+    delim = _opt("Delimiter", "delimiter", "sep", default=",")
+    if delim in ("\\t", "tab", "\t"):
+        delim = "\t"
+    read_var_names = _opt("ReadVariableNames", "read_variable_names", default=True)
+    header: Any = 0 if read_var_names not in (False, "false", "False") else None
+
+    text = c or ""
+    if not text.endswith("\n"):
+        text += "\n"
+    return pd.read_csv(
+        io.StringIO(text), sep=delim, header=header, skip_blank_lines=True
+    )
+
+
 def findallantecedents(
     session_or_dataset: Any,
     *documents: Any,
