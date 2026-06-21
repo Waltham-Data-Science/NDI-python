@@ -88,6 +88,7 @@ def downloadDocumentCollection(
     progress: Callable[[str], None] | None = None,
     *,
     client: CloudClient | None = None,
+    max_workers: int = 8,
 ) -> list[dict[str, Any]]:
     """Download full documents from the cloud using chunked bulk download.
 
@@ -95,6 +96,13 @@ def downloadDocumentCollection(
     splits document IDs into chunks of *chunk_size* (default 2000),
     requests a bulk-download ZIP for each chunk, and concatenates
     the results.
+
+    Chunks are fetched concurrently with a bounded thread pool
+    (*max_workers*). Each chunk is fully independent (its own presigned
+    URL and ZIP), so the only shared state is result aggregation, which
+    is keyed by chunk index and assembled in order after all chunks
+    complete. The returned list is therefore byte-identical in order to
+    a strictly sequential download.
 
     Args:
         dataset_id: Cloud dataset ID.
@@ -108,11 +116,14 @@ def downloadDocumentCollection(
             chunk. Default 1 matches MATLAB.
         progress: Optional callback for status messages.
         client: Authenticated cloud client (auto-created if omitted).
+        max_workers: Maximum number of chunks to download concurrently.
+            Default 8. Set to 1 to force fully sequential behaviour.
 
     Returns:
         List of full document dicts.
     """
     import math
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
     from .api import documents as docs_api
 
@@ -135,9 +146,15 @@ def downloadDocumentCollection(
 
     # Split into chunks
     num_chunks = math.ceil(len(doc_ids) / chunk_size)
-    all_documents: list[dict[str, Any]] = []
 
-    for i in range(num_chunks):
+    def _fetch_chunk(i: int) -> list[dict[str, Any]]:
+        """Fetch and extract a single chunk's documents.
+
+        Runs in a worker thread. Mirrors the original sequential
+        per-chunk logic exactly, including the same warning messages
+        and skip-on-error semantics: any failure logs and returns an
+        empty list so neither the batch nor sibling chunks are affected.
+        """
         start = i * chunk_size
         end = min(start + chunk_size, len(doc_ids))
         chunk_ids = doc_ids[start:end]
@@ -149,21 +166,43 @@ def downloadDocumentCollection(
             url = docs_api.getBulkDownloadURL(dataset_id, chunk_ids, client=client)
         except Exception as exc:
             _log(f"  Chunk {i + 1}: failed to get download URL: {exc}")
-            continue
+            return []
 
         if not url:
             _log(f"  Chunk {i + 1}: no download URL returned")
-            continue
+            return []
 
         # Download and extract the ZIP
         try:
             chunk_docs = _download_chunk_zip(url, timeout, retry_interval)
-            all_documents.extend(chunk_docs)
-            _log(f"  Chunk {i + 1}: extracted {len(chunk_docs)} documents")
         except TimeoutError as exc:
             _log(f"  Chunk {i + 1}: {exc}")
+            return []
         except Exception as exc:
             _log(f"  Chunk {i + 1}: extraction failed: {exc}")
+            return []
+
+        _log(f"  Chunk {i + 1}: extracted {len(chunk_docs)} documents")
+        return chunk_docs
+
+    # Fetch chunks concurrently; aggregate by index so the final order is
+    # identical to a sequential download.
+    chunk_results: dict[int, list[dict[str, Any]]] = {}
+    workers = max(1, min(max_workers, num_chunks))
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        future_to_index = {executor.submit(_fetch_chunk, i): i for i in range(num_chunks)}
+        for future in as_completed(future_to_index):
+            i = future_to_index[future]
+            try:
+                chunk_results[i] = future.result()
+            except Exception as exc:  # pragma: no cover - _fetch_chunk handles its own errors
+                _log(f"  Chunk {i + 1}: extraction failed: {exc}")
+                chunk_results[i] = []
+
+    # Concatenate chunks 0..N-1 in order.
+    all_documents: list[dict[str, Any]] = []
+    for i in range(num_chunks):
+        all_documents.extend(chunk_results.get(i, []))
 
     _log(f"Downloaded {len(all_documents)} documents total")
     return all_documents
