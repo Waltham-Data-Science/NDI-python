@@ -133,6 +133,22 @@ class ndi_epoch_epochset(ABC):
                 return tuple(make_hashable(x) for x in obj)
             elif isinstance(obj, np.ndarray):
                 return tuple(obj.flatten().tolist())
+            elif hasattr(obj, "buildepochtable") or hasattr(obj, "getprobes"):
+                # Heavy epochset/session back-reference embedded in the epoch
+                # table (e.g. the DAQ system stored in
+                # ``underlying_epochs['underlying']``). Deep-serializing its
+                # to_dict is O(N^2)+ — it pulls in the whole session/epoch
+                # table per entry — and adds nothing to cache validation, so
+                # collapse it to a cheap, stable identity token.
+                tok = getattr(obj, "id", None)
+                if callable(tok):
+                    try:
+                        tok = tok()
+                    except Exception:
+                        tok = None
+                if tok is None:
+                    tok = getattr(obj, "_name", None) or type(obj).__name__
+                return ("__epochset_ref__", str(tok))
             elif hasattr(obj, "to_dict"):
                 return make_hashable(obj.to_dict())
             else:
