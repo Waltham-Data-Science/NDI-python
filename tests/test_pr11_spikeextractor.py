@@ -307,6 +307,72 @@ def test_refractory_merges_close_detections():
 
 
 # ---------------------------------------------------------------------------
+# MATLAB-parity spike-center index (round-half-away-from-zero, not banker's)
+# ---------------------------------------------------------------------------
+
+
+def test_spike_center_index_matlab_parity_odd_window():
+    """The reported spike time uses MATLAB ``round(numel/2)`` for the window
+    centre, which rounds half AWAY from zero. Python's built-in ``round`` uses
+    banker's rounding (round-half-to-even), so for the DEFAULT extraction
+    parameters -- which yield an ODD window of N=45 samples -- the two diverge
+    by exactly one sample: MATLAB round(22.5)=23 (centre sample +8), Python
+    round(22.5)=22 (centre sample +7). This regression pins the +1-sample
+    correction so a single, sample-aligned negative spike is reported at its
+    true peak sample rather than one sample early.
+    """
+    sample_rate = 30000.0
+    app = ndi_app_spikeextractor(session=None)
+    params = dict(app.default_extraction_parameters())
+
+    # Confirm the default window is the odd N=45 that exposes the divergence.
+    spike_sample_start = int(math.floor(params["spike_start_time"] * sample_rate))
+    spike_sample_end = int(math.ceil(params["spike_end_time"] * sample_rate))
+    n_spike_samples = spike_sample_end - spike_sample_start + 1
+    assert n_spike_samples == 45  # odd: banker's vs away-from-zero differ
+    selection = np.arange(spike_sample_start, spike_sample_end + 1)
+
+    # MATLAB-parity centre (away-from-zero) vs the old Python banker's centre.
+    matlab_center_pos = math.floor(n_spike_samples / 2.0 + 0.5) - 1
+    banker_center_pos = int(round(n_spike_samples / 2.0)) - 1
+    assert matlab_center_pos == banker_center_pos + 1  # the off-by-one
+    matlab_center_in_samples = int(selection[matlab_center_pos])
+    banker_center_in_samples = int(selection[banker_center_pos])
+    assert matlab_center_in_samples - banker_center_in_samples == 1
+
+    # A single, sharp, symmetric negative spike whose minimum sits exactly at a
+    # known sample. centerspikes_neg finds zero net shift on a symmetric peak,
+    # so the reported sample index is loc - 0 + centre_in_samples offset; with
+    # the MATLAB centre it lands exactly on the true peak sample.
+    n = 3000
+    trace = np.zeros(n)
+    shape = np.array([-1, -3, -8, -15, -8, -3, -1], dtype=float) * 2.0
+    loc = 1500  # index of the (symmetric) minimum
+    trace[loc - 3 : loc - 3 + len(shape)] += shape
+    ts = _FakeTimeseries(trace, sample_rate)
+
+    params["filter_type"] = "none"
+    params["threshold_method"] = "absolute"
+    params["threshold_parameter"] = -20.0
+    params["threshold_sign"] = -1
+
+    _, spiketimes, _ = app.extract_epoch_inmemory(
+        ts, epoch=1, extraction_doc=params, t0=-np.inf, t1=np.inf
+    )
+    assert spiketimes.shape == (1,)
+
+    # times = arange(N)/sr, so time*sr is the reported (fractional) sample index.
+    reported_sample = spiketimes[0] * sample_rate
+    # MATLAB-parity: the spike is reported at its true peak sample (1500).
+    assert reported_sample == pytest.approx(float(loc), abs=1e-6)
+    # The pre-fix banker's centre would report exactly one sample EARLIER.
+    banker_reported = reported_sample - (
+        matlab_center_in_samples - banker_center_in_samples
+    )
+    assert banker_reported == pytest.approx(float(loc) - 1.0, abs=1e-6)
+
+
+# ---------------------------------------------------------------------------
 # Derived sample rate -- robustness to a missing per-epoch samplerate accessor
 # (cloud-materialized elements return None even though readtimeseries is intact)
 # ---------------------------------------------------------------------------

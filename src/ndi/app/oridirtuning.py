@@ -751,18 +751,42 @@ class ndi_app_oridirtuning(ndi_app, ndi_app_appdoc):
 
         # Build complex per-direction individual responses:
         #   ind = real + i*imag ;  response = ind - control
-        # MATLAB serialises the individual-response matrices as
-        # ``[repetition, stimulus]`` (real Carbon Fiber docs are e.g. 5x12 =
-        # 5 reps x 12 directions). The reduction loop indexes by DIRECTION, so
-        # orient each matrix to put the direction axis (length ``ndir``) first.
-        # (Bug fix: the previous code used ``n = len(individual_responses_real)``
-        # = number of repetitions, which mismatched ``independent_variable_value``
-        # and raised "vstack ... size 12 vs 5" on real MATLAB tuning curves.)
+        # The reduction loop below indexes by DIRECTION and must produce one
+        # value per direction, so every matrix is oriented to put the
+        # direction axis (length ``ndir``) first.
+        #
+        # Payloads reach this method in BOTH orientations: native MATLAB docs
+        # serialise the individual-response matrices as ``[repetition,
+        # stimulus]`` (real Carbon Fiber docs are e.g. 5x12 = 5 reps x 12
+        # directions), while this module's own directions-first fixtures arrive
+        # as ``[direction, repetition]``. The orientation is therefore chosen
+        # explicitly from the KNOWN directions length ``ndir``, not from a bare
+        # shape comparison:
+        #   * trailing axis == ndir and leading axis != ndir  -> reps-first   -> transpose
+        #   * leading  axis == ndir and trailing axis != ndir -> dirs-first   -> as-is
+        #   * SQUARE (leading == trailing == ndir, i.e. reps == directions)    -> ambiguous:
+        #       resolve to the MATLAB serialisation ``[reps, directions]`` and
+        #       transpose so the directions axis ends up first.
+        # (Bug fix 1: earlier code used ``n = len(individual_responses_real)`` =
+        # number of repetitions, mismatching ``independent_variable_value`` and
+        # raising "vstack ... size 12 vs 5" on real MATLAB tuning curves.)
+        # (Bug fix 2: the prior heuristic ``shape[0] != ndir and shape[-1] ==
+        # ndir`` left the SQUARE case un-transposed, silently mis-orienting the
+        # response when reps == directions. The square branch below makes that
+        # axis selection explicit instead of shape-ambiguous.)
         def _dir_first(raw: Any) -> np.ndarray:
             a = np.asarray(raw, dtype=float)
             if a.ndim == 1:
                 return a.reshape(ndir, -1) if a.size == ndir else a.reshape(1, -1)
-            if a.ndim >= 2 and a.shape[0] != ndir and a.shape[-1] == ndir:
+            if a.ndim < 2:
+                return a
+            leading_is_dir = a.shape[0] == ndir
+            trailing_is_dir = a.shape[-1] == ndir
+            if leading_is_dir and trailing_is_dir:
+                # Square reps==directions: pick the MATLAB [reps, directions]
+                # layout and transpose to directions-first.
+                return a.T
+            if trailing_is_dir and not leading_is_dir:
                 return a.T
             return a
 
