@@ -304,3 +304,67 @@ def test_refractory_merges_close_detections():
     )
     # The two close events merge into a single detection.
     assert waveforms.shape[2] == 1
+
+
+# ---------------------------------------------------------------------------
+# Derived sample rate -- robustness to a missing per-epoch samplerate accessor
+# (cloud-materialized elements return None even though readtimeseries is intact)
+# ---------------------------------------------------------------------------
+
+
+class _FakeTimeseriesNoRate(_FakeTimeseries):
+    """Like _FakeTimeseries but with NO per-epoch samplerate metadata.
+
+    Mirrors a cloud-materialized element whose ``samplerate(epoch)`` returns
+    ``None`` (the per-epoch rate isn't populated in the materialized store)
+    while ``readtimeseries`` and its time vector still read fine.
+    """
+
+    def samplerate(self, epoch=None):
+        return None
+
+
+def test_extract_epoch_inmemory_derives_rate_when_samplerate_missing():
+    # When samplerate(epoch) is None, the extractor must recover the rate from
+    # the readtimeseries time vector (fs = (N-1)/(t_last-t_first)) and detect
+    # the same spikes as the accessor path.
+    sample_rate = 30000.0
+    trace, spike_locs = _make_synthetic_trace(sample_rate=sample_rate)
+    ts = _FakeTimeseriesNoRate(trace, sample_rate)
+
+    app = ndi_app_spikeextractor(session=None)
+    params = dict(app.default_extraction_parameters())
+    params["filter_type"] = "none"
+    params["threshold_method"] = "standard_deviation"
+    params["threshold_parameter"] = -4
+    params["threshold_sign"] = -1
+
+    waveforms, spiketimes, waveparams = app.extract_epoch_inmemory(
+        ts, epoch=1, extraction_doc=params, t0=-np.inf, t1=np.inf
+    )
+
+    # times = arange(N)/sr is uniformly sampled, so the derived rate equals the
+    # true rate exactly; detection then matches the accessor path.
+    assert waveparams["samplerate"] == pytest.approx(sample_rate)
+    assert waveforms.shape[2] == len(spike_locs)
+    assert spiketimes.shape == (len(spike_locs),)
+    injected_times = np.array(spike_locs) / sample_rate
+    for st in spiketimes:
+        assert np.min(np.abs(injected_times - st)) < (15 / sample_rate)
+
+
+def test_extract_epoch_inmemory_raises_when_rate_unresolvable():
+    # No accessor rate AND a degenerate single-sample time vector -> the rate
+    # cannot be derived, so the original ValueError is preserved.
+    class _NoRateSingleSample(_FakeTimeseriesNoRate):
+        def readtimeseries(self, epoch, t0, t1):
+            return np.zeros((1, 1)), np.array([0.0]), None
+
+    ts = _NoRateSingleSample(np.zeros(10), 30000.0)
+    app = ndi_app_spikeextractor(session=None)
+    params = dict(app.default_extraction_parameters())
+    params["filter_type"] = "none"
+    with pytest.raises(ValueError, match="positive sample rate"):
+        app.extract_epoch_inmemory(
+            ts, epoch=1, extraction_doc=params, t0=-np.inf, t1=np.inf
+        )
