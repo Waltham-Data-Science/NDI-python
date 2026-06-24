@@ -142,6 +142,33 @@ class TestDocSuperclassDualAccessor:
         assert doc.doc_isa("base")  # its own class
         assert not doc.doc_isa("element")
 
+    def test_v_epsilon_flattened_diamond_lineage(self):
+        """V_epsilon's observation tier is the first MULTIPLE-INHERITANCE
+        (diamond) hierarchy: ``body_weight_observation`` <- ``scalar_observation``
+        AND ``scalar_mass``, both reaching ``base``. A produced V_epsilon document
+        carries its FLATTENED ancestor list — exactly as the v1 corpus already
+        does (e.g. ``stimulus_response_scalar`` carries ``[base,
+        stimulus_response]``). The reader must resolve ``isa()`` for every
+        ancestor, reached via either parent path, with the shared ancestor
+        de-duplicated."""
+        doc = ndi_document(
+            _props(
+                "body_weight_observation",
+                [
+                    {"class_name": "scalar_observation"},
+                    {"class_name": "scalar_mass"},
+                    {"class_name": "base"},
+                ],
+            )
+        )
+        sc = doc.doc_superclass()
+        assert set(sc) == {"scalar_observation", "scalar_mass", "base"}
+        assert len(sc) == len(set(sc))  # shared ancestor 'base' appears once
+        for ancestor in ("scalar_observation", "scalar_mass", "base"):
+            assert doc.doc_isa(ancestor)
+        assert doc.doc_isa("body_weight_observation")  # its own leaf class
+        assert not doc.doc_isa("subject")  # unrelated branch
+
 
 @pytest.fixture
 def isolated_schema_dir(tmp_path):
@@ -198,6 +225,55 @@ def isolated_schema_dir(tmp_path):
         )
     )
 
+    # V_epsilon observation-tier DIAMOND: body_weight_observation inherits from
+    # TWO parents (scalar_observation, scalar_mass) that share a common ancestor
+    # (obs_base). read_blank_definition must inherit fields from BOTH branches and
+    # visit the shared ancestor exactly once (memoized) — no loop, no duplication.
+    (tmp_path / "obs_base.json").write_text(
+        json.dumps(
+            {
+                "document_class": {"class_name": "obs_base", "superclasses": []},
+                "obs_base_block": {"shared": True},
+            }
+        )
+    )
+    (tmp_path / "scalar_observation.json").write_text(
+        json.dumps(
+            {
+                "document_class": {
+                    "class_name": "scalar_observation",
+                    "superclasses": [{"class_name": "obs_base"}],
+                },
+                "observation_block": {"value": None},
+            }
+        )
+    )
+    (tmp_path / "scalar_mass.json").write_text(
+        json.dumps(
+            {
+                "document_class": {
+                    "class_name": "scalar_mass",
+                    "superclasses": [{"class_name": "obs_base"}],
+                },
+                "mass_block": {"unit": "kg"},
+            }
+        )
+    )
+    (tmp_path / "body_weight_observation.json").write_text(
+        json.dumps(
+            {
+                "document_class": {
+                    "class_name": "body_weight_observation",
+                    "superclasses": [
+                        {"class_name": "scalar_observation"},
+                        {"class_name": "scalar_mass"},
+                    ],
+                },
+                "leaf_block": {"y": 2},
+            }
+        )
+    )
+
     original_path = ndi_common_PathConstants._document_path
     original_cache = dict(ndi_document._DEFINITION_CACHE)
     ndi_common_PathConstants.set_paths(document_path=tmp_path)
@@ -231,3 +307,21 @@ class TestReadBlankDefinitionDualAccessor:
         definition = ndi_document.read_blank_definition("child_orphan")
         assert "parent_block" not in definition
         assert definition["child_block"] == {"x": 1}
+
+    def test_v_epsilon_diamond_multiple_inheritance_flatten(self, isolated_schema_dir):
+        """V_epsilon observation-tier DIAMOND: ``body_weight_observation``
+        inherits from ``scalar_observation`` AND ``scalar_mass``, which share the
+        common ancestor ``obs_base``. The recursive flatten must pull fields from
+        BOTH parents and from the shared ancestor — reached via two paths but
+        merged exactly once (the ``_DEFINITION_CACHE`` memoization makes the
+        diamond loop-free). v1 already exercised multi-ancestor inheritance
+        (e.g. ``hartley_calc`` has 6 ancestors); this pins it for the new
+        observation tier."""
+        definition = ndi_document.read_blank_definition("body_weight_observation")
+        # fields inherited from BOTH parent branches...
+        assert definition["observation_block"] == {"value": None}
+        assert definition["mass_block"] == {"unit": "kg"}
+        # ...and from the shared ancestor, present once (no loop / no clobber)...
+        assert definition["obs_base_block"] == {"shared": True}
+        # ...with the leaf's own field preserved.
+        assert definition["leaf_block"] == {"y": 2}
