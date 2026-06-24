@@ -379,9 +379,21 @@ class ndi_app_spikeextractor(ndi_app, ndi_app_appdoc):
                 ``S1``, ``samplerate``.
         """
         params = self._extraction_params(extraction_doc)
-        sample_rate = float(ndi_timeseries_obj.samplerate(epoch))
-        if not sample_rate or sample_rate <= 0:
-            raise ValueError("Could not determine a positive sample rate for the epoch.")
+
+        # Read the requested window first. The Python readtimeseries returns
+        # (data, times, timeref); data is (n_samples, n_channels). Reading
+        # before the sample-rate conversions lets us recover the rate from the
+        # returned time vector when the element's per-epoch samplerate accessor
+        # is unavailable (cloud-materialized elements can return None).
+        result = ndi_timeseries_obj.readtimeseries(epoch, t0, t1)
+        data, times = result[0], result[1]
+        data = np.asarray(data, dtype=float)
+        if data.ndim == 1:
+            data = data.reshape(-1, 1)
+        times = np.asarray(times, dtype=float).reshape(-1)
+        n_data, n_channels = data.shape
+
+        sample_rate = self._resolve_sample_rate(ndi_timeseries_obj, epoch, times)
 
         # Convert parameter times -> samples (mirrors MATLAB conversions).
         center_range_samples = int(math.ceil(params["center_range_time"] * sample_rate))
@@ -393,16 +405,6 @@ class ndi_app_spikeextractor(ndi_app, ndi_app_appdoc):
         n_spike_samples = spike_sample_selection.size
 
         threshold_sign = params["threshold_sign"]
-
-        # Read the requested window. The Python readtimeseries returns
-        # (data, times, timeref); data is (n_samples, n_channels).
-        result = ndi_timeseries_obj.readtimeseries(epoch, t0, t1)
-        data, times = result[0], result[1]
-        data = np.asarray(data, dtype=float)
-        if data.ndim == 1:
-            data = data.reshape(-1, 1)
-        times = np.asarray(times, dtype=float).reshape(-1)
-        n_data, n_channels = data.shape
 
         waveparameters = {
             "numchannels": n_channels,
@@ -481,6 +483,48 @@ class ndi_app_spikeextractor(ndi_app, ndi_app_appdoc):
         spiketimes = self._times_from_index(times, time_sample_idx, sample_rate)
 
         return waveforms_sdn, spiketimes, waveparameters
+
+    @staticmethod
+    def _resolve_sample_rate(
+        ndi_timeseries_obj: Any, epoch: Any, times: np.ndarray
+    ) -> float:
+        """Return the epoch's sampling rate in Hz.
+
+        Prefer the element's per-epoch ``samplerate(epoch)`` accessor (the
+        MATLAB-parity path). When that is unavailable -- cloud-materialized
+        elements can return ``None`` (or raise) because the per-epoch rate
+        metadata is not populated in the materialized DID/sqlite store, even
+        though the continuous data and its time vector read fine -- fall back to
+        deriving the rate from the ``times`` vector that ``readtimeseries``
+        returned: ``fs = (N - 1) / (t_last - t_first)`` for a uniformly sampled
+        epoch.
+
+        Raises:
+            ValueError: if neither the accessor nor the time vector yields a
+                positive rate.
+        """
+        rate: Any = None
+        try:
+            rate = ndi_timeseries_obj.samplerate(epoch)
+        except Exception:  # noqa: BLE001 - accessor may fail many ways; fall back
+            rate = None
+        try:
+            rate = float(rate) if rate is not None else None
+        except (TypeError, ValueError):
+            rate = None
+        if rate is not None and rate > 0:
+            return rate
+
+        # Derive from the returned time vector (uniformly sampled epoch).
+        t = np.asarray(times, dtype=float).reshape(-1)
+        if t.size >= 2:
+            span = float(t[-1] - t[0])
+            if math.isfinite(span) and span > 0:
+                derived = (t.size - 1) / span
+                if derived > 0:
+                    return float(derived)
+
+        raise ValueError("Could not determine a positive sample rate for the epoch.")
 
     # ------------------------------------------------------------------
     # Persistence (NDI binary-document mechanism; divergence from MATLAB)
