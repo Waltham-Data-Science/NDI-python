@@ -473,7 +473,12 @@ class ndi_app_spikeextractor(ndi_app, ndi_app_appdoc):
         # MATLAB: samples2times(read_start_sample-1 + locs - sampleshifts +
         #   center_time_in_samples). center_time_in_samples is the middle entry
         #   of spike_sample_selection (MATLAB round(numel/2), 1-based).
-        center_pos = int(round(n_spike_samples / 2.0)) - 1  # 0-based
+        # MATLAB ``round`` rounds half away from zero; Python ``round`` uses
+        # banker's rounding (round-half-to-even), which diverges for odd N
+        # (e.g. the default N=45 -> MATLAB round(22.5)=23 vs Python round=22).
+        # Use the half-away-from-zero form to match MATLAB exactly. No-op for
+        # even N, +1-sample correction for odd N.
+        center_pos = math.floor(n_spike_samples / 2.0 + 0.5) - 1  # 0-based
         center_pos = int(np.clip(center_pos, 0, n_spike_samples - 1))
         center_time_in_samples = int(spike_sample_selection[center_pos])
         # Index into the returned ``times`` vector for each spike. The window's

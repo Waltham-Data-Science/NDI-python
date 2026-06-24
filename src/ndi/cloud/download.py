@@ -21,6 +21,46 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Zip-bomb guards for bulk-download extraction. A presigned URL is trusted, but
+# the ZIP payload it serves is opaque: cap the total uncompressed size and the
+# number of entries before extracting anything so a malicious or corrupt archive
+# cannot exhaust memory. Both are overridable via env vars for large datasets.
+_DEFAULT_MAX_UNCOMPRESSED_BYTES = 2 * 1024**3  # 2 GiB
+_DEFAULT_MAX_ENTRIES = 100_000
+
+
+class ZipBombError(ValueError):
+    """Raised when a download ZIP exceeds the extraction safety caps.
+
+    Subclasses :class:`ValueError` for backward compatibility. The retry loop
+    re-raises this immediately rather than swallowing it: an oversized archive
+    will not become safe on a subsequent poll.
+    """
+
+
+def _zip_extraction_limits() -> tuple[int, int]:
+    """Return ``(max_uncompressed_bytes, max_entries)`` for ZIP extraction.
+
+    Reads the optional ``NDI_DOWNLOAD_MAX_UNCOMPRESSED_BYTES`` and
+    ``NDI_DOWNLOAD_MAX_ZIP_ENTRIES`` env vars, falling back to generous
+    defaults. Non-positive or unparseable values fall back to the defaults.
+    """
+
+    def _read(name: str, default: int) -> int:
+        raw = os.environ.get(name)
+        if raw is None:
+            return default
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            return default
+        return value if value > 0 else default
+
+    return (
+        _read("NDI_DOWNLOAD_MAX_UNCOMPRESSED_BYTES", _DEFAULT_MAX_UNCOMPRESSED_BYTES),
+        _read("NDI_DOWNLOAD_MAX_ZIP_ENTRIES", _DEFAULT_MAX_ENTRIES),
+    )
+
 
 def _download_chunk_zip(
     url: str,
@@ -57,8 +97,24 @@ def _download_chunk_zip(
         try:
             resp = requests.get(url, timeout=timeout)
             if resp.status_code == 200:
-                # ZIP is ready — extract documents
+                # ZIP is ready — extract documents. Guard against zip bombs:
+                # cap entry count and total uncompressed size BEFORE extracting
+                # any entry, using the declared sizes in the central directory.
                 zf = zipfile.ZipFile(io.BytesIO(resp.content))
+                max_bytes, max_entries = _zip_extraction_limits()
+                infos = zf.infolist()
+                if len(infos) > max_entries:
+                    raise ZipBombError(
+                        f"Refusing to extract ZIP with {len(infos)} entries "
+                        f"(limit {max_entries}); possible zip bomb"
+                    )
+                total_uncompressed = sum(zi.file_size for zi in infos)
+                if total_uncompressed > max_bytes:
+                    raise ZipBombError(
+                        f"Refusing to extract ZIP: declared uncompressed size "
+                        f"{total_uncompressed} bytes exceeds limit {max_bytes} "
+                        "bytes; possible zip bomb"
+                    )
                 all_docs: list[dict[str, Any]] = []
                 for name in zf.namelist():
                     if name.endswith(".json"):
@@ -68,6 +124,9 @@ def _download_chunk_zip(
                         docs = data if isinstance(data, list) else [data]
                         all_docs.extend(docs)
                 return all_docs
+        except ZipBombError:
+            # A safety-cap violation will not resolve on retry; fail loudly.
+            raise
         except Exception as exc:
             last_exc = exc
 

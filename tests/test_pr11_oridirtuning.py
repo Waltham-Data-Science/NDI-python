@@ -274,6 +274,49 @@ class TestCalculateOridirIndexes:
         odt_props = odt.document_properties["orientation_direction_tuning"]
         assert odt_props["vector"]["direction_preference"] == pytest.approx(90.0, abs=1e-6)
 
+    def test_square_reps_equals_directions_orientation(self):
+        """Regression: when the individual-response matrix is SQUARE
+        (n_reps == n_directions) the directions axis is ambiguous by shape
+        alone. MATLAB serialises as ``[repetition, stimulus]``, so a 4x4 matrix
+        is 4 reps x 4 directions and MUST be oriented directions-first. The old
+        shape heuristic (``shape[0] != ndir``) left the square matrix
+        un-transposed, silently transposing reps and directions and mislabeling
+        the per-direction response. This builds a 4-direction x 4-rep case with
+        a DISTINCT mean per direction so a wrong orientation is detectable.
+        """
+        # Four directions, four reps, distinct per-direction means.
+        angles4 = np.array([0.0, 90.0, 180.0, 270.0])
+        dir_means = np.array([10.0, 2.0, 7.0, 4.0])  # one value per direction
+        ndir = len(angles4)
+        reps = 4  # SQUARE: reps == directions
+
+        td = ndi_document("stimulus/stimulus_tuningcurve")
+        stc = td.document_properties["stimulus_tuningcurve"]
+        stc["independent_variable_value"] = list(angles4)
+        # MATLAB [reps, directions]: row = repetition, column = direction.
+        # Every rep sees the same noiseless per-direction means.
+        stc["individual_responses_real"] = [
+            [float(dir_means[d]) for d in range(ndir)] for _ in range(reps)
+        ]
+        stc["individual_responses_imaginary"] = [[0.0] * ndir for _ in range(reps)]
+        stc["control_individual_responses_real"] = [[0.0] * ndir for _ in range(reps)]
+        stc["control_individual_responses_imaginary"] = [[0.0] * ndir for _ in range(reps)]
+        stc["response_units"] = "spikes/s"
+
+        app = ndi_app_oridirtuning()  # no session
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # fit falls back if vlt fit absent
+            odt = app.calculate_oridir_indexes(td, do_add=False)
+
+        tc = odt.document_properties["orientation_direction_tuning"]["tuning_curve"]
+        # One value per DIRECTION, in direction order.
+        assert tc["direction"] == list(angles4)
+        # Correct orientation -> per-direction mean equals dir_means. The old
+        # square-ambiguous path would have produced the transpose (per-rep
+        # reduction), which for these distinct means does NOT equal dir_means.
+        np.testing.assert_allclose(tc["mean"], dir_means, atol=1e-9)
+        np.testing.assert_allclose(tc["stderr"], 0.0, atol=1e-12)
+
     def test_fit_indexes_returns_fit(self):
         # vlt is present (module-gated): the double-gaussian fit computes.
         mean = np.clip(1.0 + np.cos(np.deg2rad(ANGLES - 90.0)), 0.0, None)
