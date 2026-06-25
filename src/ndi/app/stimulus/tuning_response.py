@@ -969,13 +969,14 @@ class ndi_app_stimulus_tuning__response(ndi_app):
             ``cs_doc`` is the control_stimulus_ids document (or None).
 
         Raises:
-            ValueError: If ``control_stim_method`` is unknown or more than
-                one control stimulus type is found.
-            NotImplementedError: only when the presentation order is irregular
-                AND no per-stimulus timing is available. The onsets come from
-                ``ndi.app.stimulus.decoder.load_presentation_time`` (ported:
-                reads the inline form or ``presentation_time.bin``); this
-                branch raises solely when neither form yields timing.
+            ValueError: If ``control_stim_method`` is unknown, more than one
+                control stimulus type is found, OR the presentation order is
+                irregular AND the document carries no per-stimulus timing. The
+                onsets come from
+                ``ndi.app.stimulus.decoder.load_presentation_time`` (fully
+                ported: reads the inline form or ``presentation_time.bin``); the
+                irregular branch computes closest-control matching whenever
+                timing is available and raises only when neither form yields it.
         """
         from ...document import ndi_document
 
@@ -1030,7 +1031,10 @@ class ndi_app_stimulus_tuning__response(ndi_app):
                     csi.append(csi[-1])  # incomplete rep reuses previous control
                 cs_ids = np.asarray([csi[r - 1] for r in reps], dtype=float)
             else:
-                # Irregular sequence needs presentation onsets (timing). BLOCKER.
+                # Irregular sequence: match each presentation to the control
+                # with the nearest ONSET. Needs per-stimulus timing from
+                # load_presentation_time (fully ported); raises below only if
+                # this particular document carries no timing at all.
                 from .decoder import ndi_app_stimulus_decoder
 
                 presentation_time = None
@@ -1039,13 +1043,15 @@ class ndi_app_stimulus_tuning__response(ndi_app):
                         self._session
                     ).load_presentation_time(stim_doc)
                 if not presentation_time:
-                    raise NotImplementedError(
+                    raise ValueError(
                         "control_stimulus with an irregular presentation order "
-                        "needs per-stimulus onset times from "
-                        "ndi.app.stimulus.decoder.load_presentation_time(), which "
-                        "is an unported stub returning None. The regular "
-                        "(pseudorandom) path is fully supported; this irregular "
-                        "branch is a BLOCKER."
+                        "requires per-stimulus onset times, but this "
+                        "stimulus_presentation document carries no timing "
+                        "(neither an inline presentation_time list nor a readable "
+                        "presentation_time.bin). load_presentation_time() is fully "
+                        "ported; this is a data limitation of the document, not an "
+                        "unimplemented code path -- the closest-control matching "
+                        "below runs whenever timing is available."
                     )
                 onsets = np.asarray([p["onset"] for p in presentation_time], dtype=float)
                 control_onsets = onsets[control_stim_indexes - 1]
