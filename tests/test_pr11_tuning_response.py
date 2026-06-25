@@ -8,10 +8,12 @@ hand-computed expected values. The higher-level methods are exercised with a
 mocked session that produces REAL ``ndi_document`` objects, mirroring
 tests/matlab_tests/test_app.py.
 
-Methods that depend on the unported
-``ndi.app.stimulus.decoder.load_presentation_time`` stub (which returns
-``None``) are verified to raise ``NotImplementedError`` with the documented
-BLOCKER message.
+``ndi.app.stimulus.decoder.load_presentation_time`` is fully ported (reads the
+inline form or the ``presentation_time.bin`` binary). Methods that need timing
+compute their result whenever it is available and raise a clear ``ValueError``
+only when a document genuinely carries no timing (a data limitation, not an
+unimplemented path) — verified here for both the irregular ``control_stimulus``
+branch and the compute path.
 
 Run single-process (memory-safety):
     PYTHONPATH=src:../NDR-python/src python3 -m pytest \
@@ -19,7 +21,7 @@ Run single-process (memory-safety):
 """
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -307,6 +309,54 @@ class TestControlStimulus:
         app = ndi_app_stimulus_tuning__response(session=_make_session())
         cs_ids, _ = app.control_stimulus(stim_doc, control_stim_method="hasfield")
         assert cs_ids == [3.0, 3.0, 3.0, 6.0, 6.0, 6.0]
+
+    def test_irregular_with_timing_matches_closest_control(self):
+        # Irregular presentation order ([1,1,2,3,2,3] is irregular per
+        # _stimids2reps) drives control_stimulus's onset-based branch — the one
+        # the stale comment called an unported "BLOCKER". With per-stimulus
+        # timing present (load_presentation_time IS ported), each presentation
+        # takes the control with the nearest ONSET. Faithful to MATLAB
+        # tuning_response.m:636-643.
+        stimuli = [
+            {"parameters": {"angle": 0, "isblank": 0}},
+            {"parameters": {"angle": 90, "isblank": 0}},
+            {"parameters": {"isblank": 1}},
+        ]
+        order = [1, 1, 2, 3, 2, 3]  # irregular; control (stim 3) at positions 4 & 6
+        stim_doc = _make_stim_presentation_doc(stimuli, order)
+        app = ndi_app_stimulus_tuning__response(session=_make_session())
+
+        onsets = [0.0, 1.0, 2.0, 10.0, 11.0, 20.0]
+        timing = [
+            {"onset": o, "offset": o + 0.5, "clocktype": "dev_local_time", "stimevents": []}
+            for o in onsets
+        ]
+        # control onsets are at positions 4 & 6 (1-based) -> 10.0 & 20.0; the
+        # nearest-onset control index (1-based) wins per presentation.
+        with patch("ndi.app.stimulus.decoder.ndi_app_stimulus_decoder") as mock_dec:
+            mock_dec.return_value.load_presentation_time.return_value = timing
+            cs_ids, cs_doc = app.control_stimulus(stim_doc)
+
+        assert cs_ids == [4.0, 4.0, 4.0, 4.0, 4.0, 6.0]
+        assert cs_doc.doc_class() == "control_stimulus_ids"
+
+    def test_irregular_without_timing_raises_valueerror(self):
+        # Same irregular order, but the document yields no timing -> a DATA
+        # limitation, surfaced as a clear ValueError (was a mislabeled
+        # NotImplementedError "unported stub").
+        stimuli = [
+            {"parameters": {"angle": 0, "isblank": 0}},
+            {"parameters": {"angle": 90, "isblank": 0}},
+            {"parameters": {"isblank": 1}},
+        ]
+        order = [1, 1, 2, 3, 2, 3]
+        stim_doc = _make_stim_presentation_doc(stimuli, order)
+        app = ndi_app_stimulus_tuning__response(session=_make_session())
+
+        with patch("ndi.app.stimulus.decoder.ndi_app_stimulus_decoder") as mock_dec:
+            mock_dec.return_value.load_presentation_time.return_value = None
+            with pytest.raises(ValueError, match="irregular presentation order requires"):
+                app.control_stimulus(stim_doc)
 
 
 class TestLabelControlStimuli:
