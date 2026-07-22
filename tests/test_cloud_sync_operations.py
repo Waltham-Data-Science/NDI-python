@@ -285,3 +285,56 @@ class TestSyncDispatch:
         raw = json.loads((dataset._path / ".ndi" / "sync" / "index.json").read_text())
         assert "localDocumentIdsLastSync" in raw
         assert raw["localDocumentIdsLastSync"] == ["x"]
+
+
+class TestDownloadFailuresDoNotAdvanceIndex:
+    """A partial download must set status='partial' and leave the sync index
+    unadvanced, so the un-downloaded documents are re-fetched next sync instead
+    of being permanently treated as already-synced (silent local loss)."""
+
+    @staticmethod
+    def _partial_download(*_args, **_kwargs):
+        # One doc arrives, one id is reported failed.
+        return [{"base": {"id": "remote-1"}, "_id": "api_remote-1"}], ["remote-2"]
+
+    def _index_path(self, dataset):
+        return dataset._path / ".ndi" / "sync" / "index.json"
+
+    def test_downloadNew_partial_does_not_advance_index(self, wired, monkeypatch):
+        dataset, remote = wired
+        remote.docs["remote-1"] = {"base": {"id": "remote-1"}}
+        remote.docs["remote-2"] = {"base": {"id": "remote-2"}}
+
+        monkeypatch.setattr(ops, "downloadNdiDocuments", self._partial_download)
+        report = ops.downloadNew(dataset, "cloud-ds", SyncOptions(verbose=False))
+
+        assert report["status"] == "partial"
+        assert report["failed"] == ["remote-2"]
+        assert not self._index_path(dataset).exists()
+
+    def test_mirrorFromRemote_partial_does_not_advance_index(self, wired, monkeypatch):
+        dataset, remote = wired
+        remote.docs["remote-1"] = {"base": {"id": "remote-1"}}
+        remote.docs["remote-2"] = {"base": {"id": "remote-2"}}
+
+        monkeypatch.setattr(ops, "downloadNdiDocuments", self._partial_download)
+        report = ops.mirrorFromRemote(dataset, "cloud-ds", SyncOptions(verbose=False))
+
+        assert report["status"] == "partial"
+        assert report["failed"] == ["remote-2"]
+        assert not self._index_path(dataset).exists()
+
+    def test_twoWaySync_partial_download_does_not_advance_index(self, wired, monkeypatch):
+        dataset, remote = wired
+        # A local doc to upload cleanly, and remote docs to download.
+        dataset._docs["local-1"] = _doc("local-1")
+        remote.docs["remote-1"] = {"base": {"id": "remote-1"}}
+        remote.docs["remote-2"] = {"base": {"id": "remote-2"}}
+
+        # Upload phase succeeds (default fake remote); only the download fails.
+        monkeypatch.setattr(ops, "downloadNdiDocuments", self._partial_download)
+        report = ops.twoWaySync(dataset, "cloud-ds", SyncOptions(verbose=False))
+
+        assert report["status"] == "partial"
+        assert report["failed"] == ["remote-2"]
+        assert not self._index_path(dataset).exists()

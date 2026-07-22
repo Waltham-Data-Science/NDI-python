@@ -272,6 +272,24 @@ def _upload_ok(upload_report: dict[str, Any], file_report: dict[str, Any] | None
     return True
 
 
+def _download_ok(failed: list[str], file_report: dict[str, Any] | None = None) -> bool:
+    """Return True iff every requested document (and any requested file) downloaded.
+
+    Download-side counterpart of :func:`_upload_ok`. If any document failed to
+    download, the sync index must NOT be advanced past it: recording the full
+    remote id list as "last synced" while some documents never arrived would make
+    ``new_ids = remote_now - remote_last_sync`` empty on the next sync, so the
+    missing documents would be treated as already-synced and never retried
+    (silent LOCAL loss — two-thirds of a dataset can go missing with every later
+    sync reporting "download_count: 0" success).
+    """
+    if failed:
+        return False
+    if file_report is not None and file_report.get("failed", 0) > 0:
+        return False
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Public sync operations
 # ---------------------------------------------------------------------------
@@ -370,6 +388,13 @@ def downloadNew(
 
     if options.sync_files:
         report["file_report"] = _download_files(dataset, docs)
+
+    if not _download_ok(failed, report.get("file_report")):
+        # Some documents failed to download: leave the index unchanged so the
+        # missing documents are re-fetched on the next sync instead of being
+        # silently treated as already-synced.
+        report["status"] = "partial"
+        return report
 
     _, local_now = _local_documents(dataset)
     index.update(local_now, list(remote_now.keys()))
@@ -499,6 +524,13 @@ def mirrorFromRemote(
         report["file_report"] = _download_files(dataset, docs)
     report["deleted_local_document_ids"] = deleteLocalDocuments(dataset, to_delete_local)
 
+    if not _download_ok(failed, report.get("file_report")):
+        # A download failed: do not advance the index (the local delete above has
+        # already happened, but recording the full remote set as synced would
+        # permanently orphan the un-downloaded documents).
+        report["status"] = "partial"
+        return report
+
     _, local_after = _local_documents(dataset)
     index.update(local_after, list(remote_id_set))
     index.write(ds_path)
@@ -572,9 +604,10 @@ def twoWaySync(
     if options.sync_files:
         report["download_file_report"] = _download_files(dataset, docs)
 
-    # Phase 3: record the final state of both sides — but only if the upload
-    # phase fully succeeded, so failed documents are retried next sync.
-    if not upload_clean:
+    # Phase 3: record the final state of both sides — but only if BOTH the
+    # upload phase and the phase-2 download fully succeeded, so failed documents
+    # (in either direction) are retried next sync rather than silently lost.
+    if not upload_clean or not _download_ok(failed, report.get("download_file_report")):
         report["status"] = "partial"
         return report
     _, local_after = _local_documents(dataset)
