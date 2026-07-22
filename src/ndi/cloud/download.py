@@ -38,6 +38,45 @@ class ZipBombError(ValueError):
     """
 
 
+class IncompleteDownloadError(RuntimeError):
+    """Raised when a bulk download returns fewer documents than were requested.
+
+    Previously ``downloadDocumentCollection`` swallowed every per-chunk failure
+    (a 503 on the presigned URL, a ZIP that never became ready inside the
+    timeout, an extraction error) and returned the surviving chunks with no
+    error signal, so ``downloadDataset`` reported "Download complete." on a
+    dataset silently missing whole 2,000-document chunks. This turns that silent
+    truncation into a loud failure.
+
+    Attributes:
+        documents: The documents that *were* downloaded (the partial result).
+        failed_ids: Best-effort ids of the documents that did not download (the
+            ids of every chunk that came back short — the exact missing subset
+            inside a short chunk is not identifiable because the bulk payload is
+            keyed by NDI id, not the requested api id).
+        expected: Number of documents requested.
+        received: Number of documents actually returned.
+    """
+
+    def __init__(
+        self,
+        documents: list[dict[str, Any]],
+        failed_ids: list[str],
+        expected: int,
+        received: int,
+    ) -> None:
+        self.documents = documents
+        self.failed_ids = failed_ids
+        self.expected = expected
+        self.received = received
+        super().__init__(
+            f"Bulk download incomplete: requested {expected} documents but only "
+            f"{received} were downloaded ({expected - received} missing across "
+            f"{len(failed_ids)} unresolved id(s)). Refusing to report success on a "
+            f"truncated collection."
+        )
+
+
 def _zip_extraction_limits() -> tuple[int, int]:
     """Return ``(max_uncompressed_bytes, max_entries)`` for ZIP extraction.
 
@@ -206,13 +245,16 @@ def downloadDocumentCollection(
     # Split into chunks
     num_chunks = math.ceil(len(doc_ids) / chunk_size)
 
-    def _fetch_chunk(i: int) -> list[dict[str, Any]]:
+    def _fetch_chunk(i: int) -> tuple[list[str], list[dict[str, Any]]]:
         """Fetch and extract a single chunk's documents.
 
         Runs in a worker thread. Mirrors the original sequential
         per-chunk logic exactly, including the same warning messages
         and skip-on-error semantics: any failure logs and returns an
-        empty list so neither the batch nor sibling chunks are affected.
+        empty document list so sibling chunks are unaffected. Returns
+        ``(chunk_ids, chunk_docs)`` so the caller can detect a chunk that
+        came back short (dropped) rather than silently concatenating the
+        survivors.
         """
         start = i * chunk_size
         end = min(start + chunk_size, len(doc_ids))
@@ -225,45 +267,65 @@ def downloadDocumentCollection(
             url = docs_api.getBulkDownloadURL(dataset_id, chunk_ids, client=client)
         except Exception as exc:
             _log(f"  Chunk {i + 1}: failed to get download URL: {exc}")
-            return []
+            return chunk_ids, []
 
         if not url:
             _log(f"  Chunk {i + 1}: no download URL returned")
-            return []
+            return chunk_ids, []
 
         # Download and extract the ZIP
         try:
             chunk_docs = _download_chunk_zip(url, timeout, retry_interval)
         except TimeoutError as exc:
             _log(f"  Chunk {i + 1}: {exc}")
-            return []
+            return chunk_ids, []
         except Exception as exc:
             _log(f"  Chunk {i + 1}: extraction failed: {exc}")
-            return []
+            return chunk_ids, []
 
         _log(f"  Chunk {i + 1}: extracted {len(chunk_docs)} documents")
-        return chunk_docs
+        return chunk_ids, chunk_docs
 
     # Fetch chunks concurrently; aggregate by index so the final order is
     # identical to a sequential download.
-    chunk_results: dict[int, list[dict[str, Any]]] = {}
+    chunk_results: dict[int, tuple[list[str], list[dict[str, Any]]]] = {}
     workers = max(1, min(max_workers, num_chunks))
     with ThreadPoolExecutor(max_workers=workers) as executor:
         future_to_index = {executor.submit(_fetch_chunk, i): i for i in range(num_chunks)}
         for future in as_completed(future_to_index):
             i = future_to_index[future]
+            start = i * chunk_size
+            end = min(start + chunk_size, len(doc_ids))
             try:
                 chunk_results[i] = future.result()
             except Exception as exc:  # pragma: no cover - _fetch_chunk handles its own errors
                 _log(f"  Chunk {i + 1}: extraction failed: {exc}")
-                chunk_results[i] = []
+                chunk_results[i] = (doc_ids[start:end], [])
 
-    # Concatenate chunks 0..N-1 in order.
+    # Concatenate chunks 0..N-1 in order, tracking any chunk that came back
+    # short so a dropped chunk becomes a loud failure instead of a silently
+    # truncated collection.
     all_documents: list[dict[str, Any]] = []
+    failed_ids: list[str] = []
     for i in range(num_chunks):
-        all_documents.extend(chunk_results.get(i, []))
+        chunk_ids, chunk_docs = chunk_results.get(i, ([], []))
+        all_documents.extend(chunk_docs)
+        if len(chunk_docs) < len(chunk_ids):
+            # This chunk dropped documents. The exact missing subset is not
+            # identifiable (the bulk payload is keyed by NDI id, not the api id
+            # we requested), so flag the whole chunk's ids as unresolved.
+            failed_ids.extend(chunk_ids)
 
     _log(f"Downloaded {len(all_documents)} documents total")
+
+    if failed_ids or len(all_documents) < len(doc_ids):
+        raise IncompleteDownloadError(
+            documents=all_documents,
+            failed_ids=failed_ids,
+            expected=len(doc_ids),
+            received=len(all_documents),
+        )
+
     return all_documents
 
 
