@@ -17,7 +17,7 @@ from typing import Annotated, Any
 from pydantic import SkipValidation, validate_call
 
 from ..client import APIResponse, CloudClient, _auto_client
-from ._validators import VALIDATE_CONFIG, CloudId, PageNumber, PageSize
+from ._validators import VALIDATE_CONFIG, CloudId, NonEmptyStr, PageNumber, PageSize
 
 _Client = Annotated[CloudClient | None, SkipValidation()]
 
@@ -195,16 +195,35 @@ def submitDataset(dataset_id: CloudId, *, client: _Client = None) -> dict[str, A
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def createDatasetBranch(dataset_id: CloudId, *, client: _Client = None) -> dict[str, Any]:
-    """POST /datasets/{datasetId}/branch"""
-    return client.post("/datasets/{datasetId}/branch", datasetId=dataset_id)
+def createDatasetBranch(
+    dataset_id: CloudId, branch_name: NonEmptyStr, *, client: _Client = None
+) -> dict[str, Any]:
+    """POST /datasets/{datasetId}/branch
+
+    The endpoint requires a ``branchName`` body field (it 400s with
+    "Branch name is required" otherwise); the previous call sent no body, so it
+    always failed. Matches the MATLAB twin, which sends branchName.
+    """
+    return client.post(
+        "/datasets/{datasetId}/branch",
+        json={"branchName": branch_name},
+        datasetId=dataset_id,
+    )
 
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
 def getBranches(dataset_id: CloudId, *, client: _Client = None) -> list[dict[str, Any]]:
-    """GET /datasets/{datasetId}/branches"""
-    return client.get("/datasets/{datasetId}/branches", datasetId=dataset_id)
+    """GET /datasets/{datasetId}/branches
+
+    The endpoint responds with a ``{"branches": [...]}`` envelope; unwrap it so
+    the return matches the declared list[dict] (defensive under both a bare list
+    and the envelope shape, mirroring documents.bulkFetch).
+    """
+    result = client.get("/datasets/{datasetId}/branches", datasetId=dataset_id)
+    if isinstance(result, dict):
+        return result.get("branches", result)
+    return result
 
 
 @_auto_client

@@ -245,13 +245,17 @@ functions:
       - name: dataset_id
         type_matlab: "string"
         type_python: "CloudId"
+      - name: branch_name
+        type_matlab: "string"
+        type_python: "NonEmptyStr"
       - name: client
         type_python: "_Client"
         default: "None"
     output_arguments:
       - name: result
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: "Fixed: Python now sends the required branchName body (was
+      omitted, so the call always 400'd); matches the MATLAB twin."
 
   - name: getBranches
     matlab_path: "+ndi/+cloud/+api/+datasets/getBranches.m"
@@ -267,7 +271,8 @@ functions:
     output_arguments:
       - name: branches
         type_python: "list[dict[str, Any]]"
-    decision_log: "Exact match."
+    decision_log: "Fixed: Python now unwraps the {branches: [...]} envelope so the
+      return matches the declared list[dict] (was returning the raw dict)."
 
   - name: getUnpublished
     matlab_path: "+ndi/+cloud/+api/+datasets/getUnpublished.m"

@@ -84,3 +84,42 @@ class TestCreateDataset:
         client = _make_client(org_id="")
         with pytest.raises(ValueError, match="org_id is required"):
             createDataset(name="NewDS", client=client)
+
+
+class TestCreateDatasetBranch:
+    def test_sends_branch_name(self):
+        from ndi.cloud.api.datasets import createDatasetBranch
+
+        client = MagicMock()
+        client.post.return_value = {"ok": True}
+        createDatasetBranch("66aabbccddeeff0011223344", "my-branch", client=client)
+
+        client.post.assert_called_once()
+        assert client.post.call_args.kwargs["json"] == {"branchName": "my-branch"}
+        assert client.post.call_args.kwargs["datasetId"] == "66aabbccddeeff0011223344"
+
+    def test_empty_branch_name_rejected(self):
+        from ndi.cloud.api.datasets import createDatasetBranch
+
+        client = MagicMock()
+        with pytest.raises(Exception):
+            createDatasetBranch("66aabbccddeeff0011223344", "", client=client)
+
+
+class TestGetBranches:
+    def test_unwraps_envelope(self):
+        from ndi.cloud.api.datasets import getBranches
+
+        client = MagicMock()
+        client.get.return_value = {"branches": [{"datasetId": "d1"}, {"datasetId": "d2"}]}
+        out = getBranches("66aabbccddeeff0011223344", client=client)
+        assert isinstance(out, list)
+        assert [b["datasetId"] for b in out] == ["d1", "d2"]
+
+    def test_bare_list_passthrough(self):
+        from ndi.cloud.api.datasets import getBranches
+
+        client = MagicMock()
+        client.get.return_value = [{"datasetId": "d1"}]
+        out = getBranches("66aabbccddeeff0011223344", client=client)
+        assert out == [{"datasetId": "d1"}]
