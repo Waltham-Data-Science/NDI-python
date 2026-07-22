@@ -485,3 +485,33 @@ class TestDatabaseRemoveMany:
         count = db.remove_many(query=query)
         assert count == 2
         assert db.numdocs() == 1
+
+
+class TestGetBinaryPathTraversal:
+    """get_binary_path must neutralize path components in a (possibly remote,
+    untrusted) file name so a document cannot read or write outside the
+    session's binary directory."""
+
+    def test_traversal_name_is_contained(self, temp_session, sample_doc):
+        db = ndi_database(temp_session)
+        binary_dir = db.binary_path.resolve()
+
+        out = db.get_binary_path(sample_doc, "../../../../.ssh/authorized_keys")
+
+        # The directory components are stripped; the result stays inside the
+        # session binary dir (no escape, no mkdir four levels up).
+        assert out.resolve().is_relative_to(binary_dir)
+        assert out.name == f"{sample_doc.id}_authorized_keys"
+
+    def test_plain_name_still_works(self, temp_session, sample_doc):
+        db = ndi_database(temp_session)
+        binary_dir = db.binary_path.resolve()
+        out = db.get_binary_path(sample_doc, "trace.bin")
+        assert out.resolve().is_relative_to(binary_dir)
+        assert out.name == f"{sample_doc.id}_trace.bin"
+
+    def test_dot_names_rejected(self, temp_session, sample_doc):
+        db = ndi_database(temp_session)
+        for bad in ("", "..", ".", "foo/.."):
+            with pytest.raises(ValueError):
+                db.get_binary_path(sample_doc, bad)

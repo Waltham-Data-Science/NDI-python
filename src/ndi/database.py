@@ -734,9 +734,31 @@ class ndi_database:
             file_name: Name of the file.
 
         Returns:
-            Path to store the binary file.
+            Path to store the binary file, always contained inside the session's
+            binary directory.
+
+        Raises:
+            ValueError: If *file_name* is empty, a bare dot name, or would escape
+                the binary directory.
+
+        ``file_name`` originates from (possibly remote / untrusted) document
+        content — ``files.file_info[].name`` — and this path is fed straight to
+        ``open()`` and to ``mkdir(parents=True)`` + write on the cloud-fetch
+        side. Without sanitisation a name like ``../../../../.ssh/authorized_keys``
+        would read or write four levels above the dataset. Strip any directory
+        components and assert containment, mirroring the file_uid guard in
+        ``ndi.cloud.download.downloadFilesForDocument``.
         """
-        return self._binary_dir / f"{document.id}_{file_name}"
+        safe_name = Path(str(file_name)).name
+        if not safe_name or safe_name in (".", ".."):
+            raise ValueError(f"Unsafe binary file name: {file_name!r}")
+        binary_dir = self._binary_dir.resolve()
+        out_path = (binary_dir / f"{document.id}_{safe_name}").resolve()
+        if not out_path.is_relative_to(binary_dir):
+            raise ValueError(
+                f"Refusing binary path outside the session file directory: {file_name!r}"
+            )
+        return out_path
 
     def __repr__(self) -> str:
         return f"ndi_database('{self.session_path}')"
