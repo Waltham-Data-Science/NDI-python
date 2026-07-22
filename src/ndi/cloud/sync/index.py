@@ -6,12 +6,16 @@ Persists to ``<dataset_path>/.ndi/sync/index.json``.
 
 from __future__ import annotations
 
-import fcntl
 import json
+import logging
+import os
+import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -39,7 +43,15 @@ class SyncIndex:
         index_file = Path(dataset_path) / ".ndi" / "sync" / "index.json"
         if not index_file.exists():
             return cls()
-        data = json.loads(index_file.read_text())
+        try:
+            data = json.loads(index_file.read_text())
+        except (json.JSONDecodeError, OSError) as exc:
+            # A truncated/corrupt index (e.g. a crash mid-write, or a reader that
+            # caught the old zero-byte window) must not propagate as an unhandled
+            # traceback out of every sync entry point. Treat it as empty; the next
+            # write rewrites it atomically.
+            logger.warning("Corrupt sync index at %s (%s); treating as empty", index_file, exc)
+            return cls()
 
         def _pick(camel: str, snake: str) -> Any:
             if camel in data:
@@ -60,8 +72,14 @@ class SyncIndex:
         Writes the MATLAB-compatible camelCase keys so a dataset synced by
         alternating Python and MATLAB clients sees a consistent index;
         mismatched dialects previously caused a full re-transfer (audit C2).
-        Uses file locking to prevent concurrent writes from corrupting the
-        index.
+
+        Writes atomically: a sibling temp file is written + fsync'd and then
+        os.replace()'d onto index.json. os.replace is atomic on POSIX and
+        Windows, so a concurrent reader (or a second writer) never sees a
+        zero-byte or half-written index. The previous ``open(..., "w")``
+        truncated the file to zero bytes BEFORE taking the flock, so the lock
+        could not actually protect against that window — and importing fcntl at
+        module scope broke Windows despite the "OS Independent" classifier.
         """
         index_dir = Path(dataset_path) / ".ndi" / "sync"
         index_dir.mkdir(parents=True, exist_ok=True)
@@ -74,12 +92,20 @@ class SyncIndex:
             },
             indent=2,
         )
-        with open(index_file, "w") as f:
-            fcntl.flock(f, fcntl.LOCK_EX)
-            try:
+        fd, tmp_name = tempfile.mkstemp(dir=index_dir, prefix=".index.", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w") as f:
                 f.write(content)
-            finally:
-                fcntl.flock(f, fcntl.LOCK_UN)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_name, index_file)
+        except BaseException:
+            # Never leave a stray temp file behind on failure.
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+            raise
 
     # ------------------------------------------------------------------
     # Update

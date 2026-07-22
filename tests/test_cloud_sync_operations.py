@@ -338,3 +338,54 @@ class TestDownloadFailuresDoNotAdvanceIndex:
         assert report["status"] == "partial"
         assert report["failed"] == ["remote-2"]
         assert not self._index_path(dataset).exists()
+
+
+class TestSyncIndexPersistence:
+    """SyncIndex.write must be atomic (no zero-byte window) and not depend on
+    module-level fcntl; SyncIndex.read must tolerate a corrupt index."""
+
+    def test_write_is_atomic_no_zero_byte_window(self, tmp_path):
+        from ndi.cloud.sync.index import SyncIndex
+
+        idx = SyncIndex()
+        idx.update(["l1", "l2"], ["r1", "r2"])
+        idx.write(tmp_path)
+        index_file = tmp_path / ".ndi" / "sync" / "index.json"
+        assert index_file.exists()
+        assert index_file.stat().st_size > 0
+        # Overwrite in place: still non-empty and valid, and no leftover temp files.
+        idx.update(["l3"], ["r3"])
+        idx.write(tmp_path)
+        back = SyncIndex.read(tmp_path)
+        assert back.remote_doc_ids_last_sync == ["r3"]
+        leftovers = list((tmp_path / ".ndi" / "sync").glob(".index.*.tmp"))
+        assert leftovers == []
+
+    def test_read_tolerates_corrupt_json(self, tmp_path):
+        from ndi.cloud.sync.index import SyncIndex
+
+        d = tmp_path / ".ndi" / "sync"
+        d.mkdir(parents=True)
+        (d / "index.json").write_text("")  # zero-byte / corrupt
+        idx = SyncIndex.read(tmp_path)
+        assert idx.remote_doc_ids_last_sync == []
+        (d / "index.json").write_text("{ not json")
+        assert SyncIndex.read(tmp_path).local_doc_ids_last_sync == []
+
+    def test_index_module_imports_without_fcntl(self, monkeypatch):
+        import builtins
+        import importlib
+
+        real_import = builtins.__import__
+
+        def _no_fcntl(name, *args, **kwargs):
+            if name == "fcntl":
+                raise ImportError("no fcntl on this platform")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", _no_fcntl)
+        import ndi.cloud.sync.index as index_mod
+
+        importlib.reload(index_mod)
+        # Round-trips fine with fcntl unavailable.
+        assert index_mod.SyncIndex().remote_doc_ids_last_sync == []
