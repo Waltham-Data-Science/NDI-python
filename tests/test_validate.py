@@ -524,10 +524,11 @@ class TestValidateDependsOn:
 
 class TestValidate:
     def test_validate_no_schema(self):
-        """ndi_document with no matching schema passes (can't validate)."""
+        """ndi_document with no matching schema now fails CLOSED — a missing or
+        unparseable schema must not be reported valid (was a fail-open bug)."""
         doc = _make_doc({"document_class": {"definition": "", "class_name": ""}})
         result = validate(doc)
-        assert result.is_valid is True
+        assert result.is_valid is False
 
     def test_validate_valid_base_document(self, base_schema):
         _schema_cache["base"] = base_schema
@@ -740,3 +741,38 @@ class TestModuleImport:
         from ndi.validate import ValidationResult
 
         assert ValidationResult is not None
+
+
+# ===========================================================================
+# Fail-closed on missing/unparseable schema + bundled-JSON integrity
+# ===========================================================================
+
+
+class TestSchemaFailClosed:
+    def test_missing_schema_fails_closed(self, monkeypatch):
+        """When no schema can be loaded, validate() must fail CLOSED (is_valid
+        False), not report the document valid by default."""
+        monkeypatch.setattr("ndi.validate._get_schema_for_document", lambda doc: None)
+        doc = _make_doc({"base": {"id": "x"}})
+        result = validate(doc)
+        assert result.is_valid is False
+        assert result.errors_this  # carries an explicit reason
+
+    def test_all_bundled_json_parses(self):
+        """Every shipped schema/definition JSON must be parseable — a shipped
+        *_schema.json with an illegal token (bare Inf, trailing comma) silently
+        disabled validation for that class."""
+        import json
+        from pathlib import Path
+
+        import ndi
+
+        root = Path(ndi.__file__).parent / "ndi_common"
+        assert root.is_dir(), f"ndi_common not found at {root}"
+        bad = []
+        for p in sorted(root.rglob("*.json")):
+            try:
+                json.loads(p.read_text())
+            except Exception as exc:  # noqa: BLE001
+                bad.append(f"{p.relative_to(root)}: {exc}")
+        assert not bad, "Unparseable bundled JSON:\n" + "\n".join(bad)

@@ -359,7 +359,13 @@ def validate(
     # Load schema for this document
     schema = _get_schema_for_document(doc)
     if schema is None:
-        # No schema found — can't validate
+        # No schema found or the schema file was unparseable — fail CLOSED, the
+        # same way the superclass branch below does. Returning is_valid=True here
+        # meant a malformed document whose schema is missing/corrupt (e.g. a
+        # shipped *_schema.json with an illegal Inf token) was reported valid and
+        # written to the database, while MATLAB's validator errors out.
+        result.is_valid = False
+        result.errors_this = ["schema not found or unparseable"]
         return result
 
     class_name = schema.get("classname", "")
