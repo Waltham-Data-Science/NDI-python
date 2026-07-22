@@ -515,3 +515,70 @@ class TestGetBinaryPathTraversal:
         for bad in ("", "..", ".", "foo/.."):
             with pytest.raises(ValueError):
                 db.get_binary_path(sample_doc, bad)
+
+
+class TestMatlabDbReimport:
+    """A MATLAB ndi.db that changes on disk (in-place edit or deletion, with the
+    row count unchanged or decreased) must be re-imported, not served stale."""
+
+    _ID1 = "D0000000000000000000000000000001"
+    _ID2 = "D0000000000000000000000000000002"
+
+    def _build_ndi_db(self, db_dir, docs):
+        from ndi.database import SQLiteDriver
+
+        for suffix in ("", "-wal", "-shm"):
+            p = db_dir / ("ndi.db" + suffix)
+            if p.exists():
+                p.unlink()
+        drv = SQLiteDriver(db_dir / "ndi.db", branch_id="a")
+        for doc_id, name in docs:
+            drv.add(
+                {
+                    "base": {"id": doc_id, "name": name, "session_id": "s"},
+                    "document_class": {"class_name": "base", "superclasses": []},
+                }
+            )
+
+    def _bump_mtime(self, path):
+        import os
+        import time
+
+        future = time.time_ns() + 10**9
+        os.utime(path, ns=(future, future))
+
+    def _name_of(self, db, doc_id):
+        from ndi import ndi_query
+
+        res = db.search(ndi_query("base.id") == doc_id)
+        return res[0].document_properties["base"]["name"] if res else None
+
+    def test_matlab_edit_reimports(self, temp_session):
+        db_dir = temp_session / ".ndi"
+        db_dir.mkdir(parents=True, exist_ok=True)
+
+        self._build_ndi_db(db_dir, [(self._ID1, "v1")])
+        db = ndi_database(temp_session)
+        assert self._name_of(db, self._ID1) == "v1"
+
+        # In-place edit: same id, same row count, new content.
+        self._build_ndi_db(db_dir, [(self._ID1, "v2")])
+        self._bump_mtime(db_dir / "ndi.db")
+        db2 = ndi_database(temp_session)
+        assert self._name_of(db2, self._ID1) == "v2"
+
+    def test_matlab_delete_reimports(self, temp_session):
+        db_dir = temp_session / ".ndi"
+        db_dir.mkdir(parents=True, exist_ok=True)
+
+        self._build_ndi_db(db_dir, [(self._ID1, "v1"), (self._ID2, "w1")])
+        db = ndi_database(temp_session)
+        assert self._name_of(db, self._ID2) == "w1"
+
+        # Deletion: one doc removed (row count decreases). The stale import must
+        # not keep serving the deleted document.
+        self._build_ndi_db(db_dir, [(self._ID1, "v1")])
+        self._bump_mtime(db_dir / "ndi.db")
+        db2 = ndi_database(temp_session)
+        assert self._name_of(db2, self._ID1) == "v1"
+        assert self._name_of(db2, self._ID2) is None

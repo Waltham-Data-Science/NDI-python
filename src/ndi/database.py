@@ -334,29 +334,34 @@ class ndi_database:
         file whose ``branch_docs`` table holds the most rows, so a MATLAB-written
         dataset opens its real documents instead of an empty Python placeholder.
         Defaults to ``did-sqlite.sqlite`` for a brand-new (empty) directory.
+
+        A MATLAB-written ``ndi.db`` is treated as the source of truth: when it
+        holds documents it is returned so :meth:`_maybe_import_matlab_db` runs
+        its content-stamp check, instead of tie-breaking on row count. The old
+        ``count > best_count`` picked the stale imported ``did-sqlite.sqlite`` on
+        a tie, so an in-place MATLAB edit (row count unchanged) or a deletion
+        (fewer rows) kept serving stale documents.
         """
         import sqlite3
 
         default = db_dir / "did-sqlite.sqlite"
-        candidates = [default, db_dir / "ndi.db"]
-        best: Path | None = None
-        best_count = -1
-        for cand in candidates:
+
+        def _count(cand: Path) -> int:
             if not cand.exists():
-                continue
-            count = 0
+                return 0
             try:
                 con = sqlite3.connect(f"file:{cand}?mode=ro", uri=True)
                 try:
-                    count = con.execute("SELECT count(*) FROM branch_docs").fetchone()[0]
+                    return con.execute("SELECT count(*) FROM branch_docs").fetchone()[0]
                 finally:
                     con.close()
             except Exception:  # noqa: BLE001 - unreadable/foreign file -> treat as empty
-                count = 0
-            if count > best_count:
-                best_count = count
-                best = cand
-        return best if best is not None else default
+                return 0
+
+        ndi_db = db_dir / "ndi.db"
+        if _count(ndi_db) > 0:
+            return ndi_db
+        return default
 
     @staticmethod
     def _maybe_import_matlab_db(db_path: Path, db_dir: Path) -> Path:
@@ -366,28 +371,55 @@ class ndi_database:
         dicts that DID's native ``field_search`` cannot iterate, so queries on a
         MATLAB database fall back to a slow per-query brute-force scan. This
         reads each document, normalizes its bare-dict fields to lists, and writes a
-        sibling ``did-sqlite.sqlite`` that supports DID's
-        fast native search. Idempotent: if the Python file already holds at
-        least as many documents as ``ndi.db``, it is reused. Returns the path to
-        open (the Python database when imported, else *db_path* unchanged).
+        sibling ``did-sqlite.sqlite`` that supports DID's fast native search.
+
+        Re-import is keyed on the SOURCE CONTENT, not row count: a stamp sidecar
+        (``did-sqlite.sqlite.import_source``) records ndi.db's mtime + size, and
+        the import is reused only while that stamp still matches. The previous
+        ``len(existing) >= len(src_ids)`` reuse test meant an in-place MATLAB edit
+        (count unchanged) or a deletion (count decreased) was never re-imported,
+        so Python served stale — or already-deleted — documents. Returns the path
+        to open (the Python database when imported, else *db_path* unchanged).
         """
         if db_path.name != "ndi.db":
             return db_path
 
+        import json
+
         python_db = db_dir / "did-sqlite.sqlite"
+        stamp_path = python_db.with_name(python_db.name + ".import_source")
+
+        src_stat = db_path.stat()
+        current_stamp = {
+            "source": "ndi.db",
+            "mtime_ns": src_stat.st_mtime_ns,
+            "size": src_stat.st_size,
+        }
+
+        # Fast path: a prior import whose stamp still matches the current ndi.db.
+        if python_db.exists() and stamp_path.exists():
+            try:
+                if json.loads(stamp_path.read_text()) == current_stamp:
+                    return python_db
+            except Exception:  # noqa: BLE001 - unreadable stamp -> re-import below
+                pass
+
         src = SQLiteDriver(db_path)  # branch auto-detected ("main")
         src_ids = src._db.get_doc_ids(src._branch_id)
         if not src_ids:
             return db_path
 
-        # Reuse an already-imported Python database.
+        # ndi.db changed (or first import): rebuild the Python copy from scratch so
+        # in-place edits AND deletions are reflected — the additive import below
+        # alone would keep stale/deleted documents. Remove the prior file (and its
+        # sqlite -wal/-shm sidecars) before re-importing.
         if python_db.exists():
-            try:
-                existing = SQLiteDriver(python_db)
-                if len(existing._db.get_doc_ids(existing._branch_id)) >= len(src_ids):
-                    return python_db
-            except Exception:  # noqa: BLE001 - stale/corrupt -> re-import below
-                pass
+            for suffix in ("", "-wal", "-shm"):
+                stale = python_db.with_name(python_db.name + suffix)
+                try:
+                    stale.unlink()
+                except OSError:
+                    pass
 
         # Import in chunks. DID's add_docs is O(N^2) within a single call, so a
         # one-shot insert of tens of thousands of documents takes minutes; a
@@ -413,6 +445,13 @@ class ndi_database:
                 existing.add(doc_id)
             if new_docs:
                 dst._db.add_docs(new_docs, dst._branch_id)
+
+        # Record the source stamp so the next open can skip re-import while ndi.db
+        # is unchanged.
+        try:
+            stamp_path.write_text(json.dumps(current_stamp))
+        except OSError:
+            pass
         return python_db
 
     @property
