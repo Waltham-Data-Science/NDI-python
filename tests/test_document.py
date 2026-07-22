@@ -572,3 +572,35 @@ class TestPortedImageIngestionType:
             .read_text()
         )
         assert attrs["daqreader_image_epochdata_ingested"]["attributes"] == ["Raw imageseries"]
+
+
+class TestReadBlankDefinitionLineageMerge:
+    """read_blank_definition must union superclass lineage and concatenate the
+    parent's depends_on, matching NDI-matlab / DID-matlab. Previously the parent's
+    depends_on was dropped and superclasses were never flattened, so the SAME
+    class produced different documents in Python vs MATLAB."""
+
+    def test_merges_superclass_and_depends_on(self):
+        ndi_document._DEFINITION_CACHE.clear()
+        doc = ndi_document("stimulus/stimulus_response_scalar")
+        dep_names = {e.get("name") for e in doc.document_properties.get("depends_on", [])}
+        # child's own slot plus the four inherited from stimulus_response
+        assert {
+            "element_id",
+            "stimulator_id",
+            "stimulus_control_id",
+            "stimulus_presentation_id",
+        }.issubset(dep_names)
+
+    def test_superclass_lineage_flattened(self):
+        ndi_document._DEFINITION_CACHE.clear()
+        doc = ndi_document("oneepoch")
+        assert doc.doc_isa("base") is True
+        assert doc.doc_isa("element_epoch") is True
+
+    def test_child_depends_on_not_duplicated(self):
+        """A depends_on name declared by both child and parent appears once."""
+        ndi_document._DEFINITION_CACHE.clear()
+        doc = ndi_document("stimulus/stimulus_response_scalar")
+        names = [e.get("name") for e in doc.document_properties.get("depends_on", [])]
+        assert len(names) == len(set(names))

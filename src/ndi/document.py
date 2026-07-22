@@ -800,6 +800,53 @@ class ndi_document:
     _DEFINITION_CACHE: dict[str, dict] = {}
 
     @staticmethod
+    def _superclass_key(sc: Any) -> str:
+        """Canonical dedup key for a superclass entry (dict or bare string)."""
+        if isinstance(sc, str):
+            return sc
+        if isinstance(sc, dict):
+            name = sc.get("class_name", "")
+            if name:
+                return name
+            definition = sc.get("definition", "")
+            if definition:
+                return definition.replace("$NDIDOCUMENTPATH/", "").replace(".json", "")
+        return ""
+
+    @staticmethod
+    def _merge_depends_on(child: Any, parent: Any) -> list:
+        """Concatenate + dedup depends_on entries by name (child wins)."""
+        if not isinstance(child, list):
+            child = [child] if child else []
+        if not isinstance(parent, list):
+            parent = [parent] if parent else []
+        merged = [deepcopy(e) for e in child]
+        seen = {e.get("name") for e in merged if isinstance(e, dict)}
+        for e in parent:
+            name = e.get("name") if isinstance(e, dict) else None
+            if name is not None and name in seen:
+                continue
+            merged.append(deepcopy(e))
+            if name is not None:
+                seen.add(name)
+        return merged
+
+    @staticmethod
+    def _merge_files(child: Any, parent: Any) -> dict:
+        """Union file_list from a parent files block into the child's."""
+        if not isinstance(child, dict) or not isinstance(parent, dict):
+            return child
+        merged = deepcopy(child)
+        child_fl = merged.get("file_list", [])
+        if not isinstance(child_fl, list):
+            child_fl = [child_fl] if child_fl else []
+        for f in parent.get("file_list", []):
+            if f not in child_fl:
+                child_fl.append(f)
+        merged["file_list"] = child_fl
+        return merged
+
+    @staticmethod
     def read_blank_definition(document_type: str) -> dict:
         """Read a blank document definition from JSON schema (memoized).
 
@@ -836,7 +883,8 @@ class ndi_document:
         # supplies transitive inheritance. Mirrors ndi-cloud-node's
         # class_name-first superclass contract (api/src/dal/class_lineage.ts).
         if "document_class" in definition and "superclasses" in definition["document_class"]:
-            for sc in definition["document_class"]["superclasses"]:
+            inherited_superclasses: list = []
+            for sc in list(definition["document_class"]["superclasses"]):
                 sc_types: list[str] = []
                 if isinstance(sc, str):
                     if sc:
@@ -856,12 +904,48 @@ class ndi_document:
                 for sc_type in sc_types:
                     try:
                         sc_props = ndi_document.read_blank_definition(sc_type)
-                        # Merge superclass properties (don't overwrite own keys)
-                        for key, value in sc_props.items():
-                            if key != "document_class" and key not in definition:
-                                definition[key] = value
                     except FileNotFoundError:
-                        pass  # Skip missing superclass definitions
+                        continue  # Skip missing superclass definitions
+                    # (a) The parent's superclasses are already fully flattened by
+                    #     its own recursive read; collect them so this document's
+                    #     lineage includes its whole ancestry (doc_isa('base') etc.).
+                    parent_dc = sc_props.get("document_class", {})
+                    inherited_superclasses.extend(parent_dc.get("superclasses", []))
+                    # (b) Merge property blocks. A child-declared scalar block still
+                    #     wins, but depends_on and files.file_list are concatenated +
+                    #     deduped with the parent's rather than dropped wholesale —
+                    #     mirroring NDI-matlab / DID-matlab. Previously the guard
+                    #     `key not in definition` discarded the parent's depends_on
+                    #     entirely, so a Python-authored stimulus_response_scalar had
+                    #     only 1 of its 5 depends_on slots and was orphaned from its
+                    #     probe.
+                    for key, value in sc_props.items():
+                        if key == "document_class":
+                            continue
+                        if key not in definition:
+                            definition[key] = deepcopy(value)
+                        elif key == "depends_on":
+                            definition[key] = ndi_document._merge_depends_on(
+                                definition[key], value
+                            )
+                        elif key == "files":
+                            definition[key] = ndi_document._merge_files(definition[key], value)
+                        # else: keep the child's own value (child overrides).
+
+            # Fold the inherited (already-flattened) superclass lineage into this
+            # document's own superclasses list, deduped, so doc_isa/doc_superclass
+            # see the full ancestry rather than only the direct parents.
+            own_superclasses = definition["document_class"]["superclasses"]
+            seen_keys = {
+                ndi_document._superclass_key(s)
+                for s in own_superclasses
+                if ndi_document._superclass_key(s)
+            }
+            for parent_sc in inherited_superclasses:
+                key = ndi_document._superclass_key(parent_sc)
+                if key and key not in seen_keys:
+                    own_superclasses.append(deepcopy(parent_sc))
+                    seen_keys.add(key)
 
         ndi_document._DEFINITION_CACHE[document_type] = deepcopy(definition)
         return definition
