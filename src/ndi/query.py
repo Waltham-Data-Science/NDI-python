@@ -313,6 +313,16 @@ class ndi_query(did.query.Query):
         """Negate a query."""
         if not self._resolved:
             raise ValueError("Cannot negate an unresolved query")
+        # De Morgan: ~(A & B) == (~A) | (~B). An AND composite stores its parts
+        # as a flat conjunction (a list DID evaluates with all(...)), so negating
+        # each entry in place would wrongly yield (~A) & (~B) — e.g. "not the
+        # probe named e1" would drop every OTHER probe too. Distribute the
+        # negation over the OR of the negated sub-queries instead.
+        if self._composite and self._composite_op == "and" and self._queries:
+            result = ~self._queries[0]
+            for sub in self._queries[1:]:
+                result = result | (~sub)
+            return result
         q = ndi_query()
         q._pending_field = self._pending_field
         q._resolved = True

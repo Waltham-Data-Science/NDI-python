@@ -382,3 +382,43 @@ class TestQueryDIDInheritance:
         assert ss["operation"] == "exact_number"
         # But Python-style operator property still shows '=='
         assert q.operator == "=="
+
+
+class TestInvertDeMorgan:
+    """~(A & B) must be (~A) | (~B), not (~A) & (~B)."""
+
+    def test_invert_and_structure_is_or(self):
+        q = ~((ndi_query("element.type") == "probe") & (ndi_query("element.name") == "e1"))
+        assert q._composite_op == "or"
+
+    def test_invert_and_matches_a_but_not_b(self, tmp_path):
+        from ndi import ndi_database, ndi_document, ndi_ido
+        from ndi.common import timestamp
+
+        def mkdoc(name, ptype, pname):
+            ido = ndi_ido()
+            return ndi_document(
+                {
+                    "base": {
+                        "id": ido.id,
+                        "datestamp": timestamp(),
+                        "name": name,
+                        "session_id": "s1",
+                    },
+                    "document_class": {"class_name": "element", "superclasses": []},
+                    "element": {"type": ptype, "name": pname},
+                }
+            )
+
+        db = ndi_database(tmp_path)
+        a = mkdoc("A", "probe", "e1")  # matches BOTH -> excluded
+        b = mkdoc("B", "probe", "e2")  # probe but not e1 -> included
+        c = mkdoc("C", "stimulator", "e1")  # not a probe -> included
+        for d in (a, b, c):
+            db.add(d)
+
+        q = ~((ndi_query("element.type") == "probe") & (ndi_query("element.name") == "e1"))
+        ids = {r.id for r in db.search(q)}
+        assert a.id not in ids
+        assert b.id in ids  # would be wrongly excluded by (~A)&(~B)
+        assert c.id in ids
