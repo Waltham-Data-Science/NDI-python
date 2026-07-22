@@ -59,12 +59,13 @@ def triggerStage(
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
-def finalizeSession(session_id: NonEmptyStr, *, client: _Client = None) -> dict[str, Any]:
-    """POST /compute/{sessionId}/advance
+def advanceSession(session_id: NonEmptyStr, *, client: _Client = None) -> dict[str, Any]:
+    """POST /compute/{sessionId}/advance -- Advance a session to the next stage.
 
     The backend route is ``/advance`` (the ``advance`` controller); there is no
     ``/finalize`` route — the swagger that advertised one was wrong, so the
-    previous ``POST .../finalize`` 404'd.
+    previous ``POST .../finalize`` 404'd. Advancing past the last stage finalizes
+    the session; the cloud API exposes no separate ``/finalize`` endpoint.
     """
     return client.post(
         "/compute/{sessionId}/advance",

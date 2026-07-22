@@ -1273,8 +1273,8 @@ functions:
         type_python: "dict[str, Any]"
     decision_log: "Exact match."
 
-  - name: finalizeSession
-    matlab_path: "+ndi/+cloud/+api/+compute/finalizeSession.m"
+  - name: advanceSession
+    matlab_path: "+ndi/+cloud/+api/+compute/advanceSession.m"
     matlab_last_sync_hash: "c5718fde"
     python_path: "ndi/cloud/api/compute.py"
     input_arguments:

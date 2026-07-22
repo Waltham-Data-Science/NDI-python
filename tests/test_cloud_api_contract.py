@@ -61,7 +61,7 @@ class TestComputeRoutes:
         import ndi.cloud.api.compute as compute
 
         client, sess = _client_recording(monkeypatch)
-        compute.finalizeSession("sess-1", client=client)
+        compute.advanceSession("sess-1", client=client)
 
         method, url = sess.request.call_args[0]
         assert method == "POST"
