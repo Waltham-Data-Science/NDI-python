@@ -873,18 +873,17 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         count = 0
 
         for seg in range(seg_start, seg_stop + 1):
-            # Compute 0-based sample range within this segment
+            # Compute 0-based sample range within this segment.
             seg_offset = (seg - 1) * samples_segment  # 0-based start of segment
-            if seg == seg_start:
-                s0_ = s0 - seg_offset  # 0-based within segment
-            else:
-                s0_ = 0
-            if seg == seg_stop:
-                s1_ = s1 - seg_offset  # 0-based within segment
-            else:
-                s1_ = samples_segment - 1
+            s0_seg = s0 - seg_offset if seg == seg_start else 0
+            s1_seg = s1 - seg_offset if seg == seg_stop else samples_segment - 1
+            n_expected = s1_seg - s0_seg + 1
 
-            n_samples_here = s1_ - s0_ + 1
+            # Number of rows this segment actually contributes. All groups within
+            # a segment must agree; kept in a segment-local so one group's short
+            # read cannot leak into the next group or the next segment (the old
+            # code mutated the shared s1_/n_samples_here in the group loop).
+            seg_rows: int | None = None
 
             for g_idx, grp in enumerate(groups):
                 fname = f"{prefix}_group{grp}_seg.nbf_{seg}"
@@ -903,28 +902,50 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
                     result = expand_fn(tname_base)
                     # expand_* functions return (data, error_signal) tuple
                     data_here = result[0] if isinstance(result, tuple) else result
-
-                    # Handle last segment possibly having fewer samples
-                    if data_here.shape[0] <= s1_:
-                        s1_ = data_here.shape[0] - 1
-                        n_samples_here = s1_ - s0_ + 1
-
-                    rows = slice(count, count + n_samples_here)
-                    data[rows, ch_idx_in_output[g_idx]] = data_here[
-                        s0_ : s1_ + 1, ch_idx_in_groups[g_idx]
-                    ]
                 except Exception as seg_exc:
-                    import logging
+                    # Fail LOUD. Swallowing the failure (the old behaviour) left
+                    # this (segment, group)'s rows as the NaN fill and still
+                    # reported success, so a caller got a full-length trace with a
+                    # silent hole. Short honest data beats long wrong data.
+                    raise RuntimeError(
+                        f"readchannels_epochsamples_ingested: segment {fname} could "
+                        f"not be read/decoded: {seg_exc}"
+                    ) from seg_exc
 
-                    logging.getLogger("ndi").warning(
-                        "readchannels_epochsamples_ingested: segment %s failed: %s",
-                        fname,
-                        seg_exc,
+                # Per-(segment, group) usable end, in LOCAL variables.
+                s1_g = s1_seg
+                n_here = n_expected
+                if data_here.shape[0] <= s1_seg:
+                    # Segment shorter than requested. MATLAB (mfdaq.m:288-297)
+                    # allows this only on the FINAL segment and only by the
+                    # 1-sample rounding tolerance; anywhere else it would splice
+                    # later samples earlier and silently shift the whole trace.
+                    shortfall = (s1_seg + 1) - data_here.shape[0]
+                    if seg != seg_stop or shortfall > 1:
+                        raise RuntimeError(
+                            f"readchannels_epochsamples_ingested: segment {fname} is "
+                            f"short by {shortfall} sample(s) (have {data_here.shape[0]}, "
+                            f"need {s1_seg + 1}); refusing to shift later samples."
+                        )
+                    s1_g = data_here.shape[0] - 1
+                    n_here = s1_g - s0_seg + 1
+
+                if seg_rows is None:
+                    seg_rows = n_here
+                elif n_here != seg_rows:
+                    raise RuntimeError(
+                        f"readchannels_epochsamples_ingested: groups in segment {seg} "
+                        f"disagree on length ({n_here} vs {seg_rows})."
                     )
 
-            count += n_samples_here
+                rows = slice(count, count + n_here)
+                data[rows, ch_idx_in_output[g_idx]] = data_here[
+                    s0_seg : s1_g + 1, ch_idx_in_groups[g_idx]
+                ]
 
-        # Trim if last segment was shorter
+            count += seg_rows if seg_rows is not None else n_expected
+
+        # Trim if the final segment was legitimately 1 sample short.
         if count < data.shape[0]:
             data = data[:count, :]
 
