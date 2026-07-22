@@ -268,14 +268,14 @@ class TestSchemaLoading:
         """Load real base_schema.json from the repo."""
         schema = _load_schema("base")
         if schema is None:
-            pytest.skip("NDI schema files not available")
+            pytest.fail("NDI schema files not available")
         assert schema["classname"] == "base"
         assert "base" in schema
 
     def test_load_element_schema(self):
         schema = _load_schema("element")
         if schema is None:
-            pytest.skip("NDI schema files not available")
+            pytest.fail("NDI schema files not available")
         assert schema["classname"] == "element"
         assert "base" in schema["superclasses"]
 

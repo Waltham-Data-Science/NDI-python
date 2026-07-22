@@ -143,6 +143,7 @@ def can_write(client, cloud_config):
     Regular users get HTTP 400 from createDataset — skip CRUD tests.
     """
     from ndi.cloud.api.datasets import createDataset, deleteDataset
+    from ndi.cloud.exceptions import CloudAPIError
 
     try:
         result = _retry_on_server_error(
@@ -156,8 +157,14 @@ def can_write(client, cloud_config):
                 pass
             return True
         return False
-    except Exception:
-        return False
+    except CloudAPIError as exc:
+        # A regular user legitimately lacks dataset-creation privilege (400/403):
+        # that is a real skip. Any OTHER status — notably a 5xx outage that
+        # survived the retry budget — must propagate as a failure, not be turned
+        # into a skip, or a total cloud-write outage would report green.
+        if getattr(exc, "status_code", 0) in (400, 403):
+            return False
+        raise
 
 
 @pytest.fixture()

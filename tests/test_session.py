@@ -420,7 +420,7 @@ class TestDirSession:
             doc = session.newdocument("base", **{"base.name": "test"})
             assert doc.session_id == session.id()
         except FileNotFoundError:
-            pytest.skip("Schema not available")
+            raise
 
     def test_searchquery(self, temp_dir):
         """Test creating a search query."""
@@ -439,7 +439,7 @@ class TestDirSession:
             assert b is True
             assert errmsg == ""
         except FileNotFoundError:
-            pytest.skip("Schema not available")
+            raise
 
     def test_database_add_search(self, temp_dir):
         """Test adding and searching documents."""
@@ -452,7 +452,7 @@ class TestDirSession:
             results = session.database_search(ndi_query("base.name") == "testdoc")
             assert len(results) >= 1
         except FileNotFoundError:
-            pytest.skip("Schema not available")
+            raise
 
     def test_reopen_session(self, temp_dir):
         """Test reopening an existing session."""
@@ -543,7 +543,7 @@ class TestSessionMethods:
             results = session.database_search(ndi_query("base.name") == "test")
             assert len(results) == 0
         except FileNotFoundError:
-            pytest.skip("Schema not available")
+            raise
 
 
 class TestSessionSyncGraph:
@@ -570,7 +570,7 @@ class TestSessionSyncGraph:
             session.syncgraph_addrule(rule)
             assert len(session.syncgraph.rules) == 1
         except FileNotFoundError:
-            pytest.skip("Schema not available")
+            raise
 
     def test_syncgraph_rmrule(self, session):
         """Test removing a sync rule."""
@@ -582,7 +582,7 @@ class TestSessionSyncGraph:
             session.syncgraph_rmrule(0)
             assert len(session.syncgraph.rules) == 0
         except FileNotFoundError:
-            pytest.skip("Schema not available")
+            raise
 
 
 # ==============================================================================
@@ -625,7 +625,7 @@ class TestSessionIntegration:
             results = session.database_search(ndi_query("base.name") == "doc2")
             assert len(results) == 1
         except FileNotFoundError:
-            pytest.skip("Schema not available")
+            raise
 
     def test_session_persistence(self):
         """Test that session data persists across reopens."""
@@ -640,7 +640,7 @@ class TestSessionIntegration:
                 doc = session1.newdocument("base", **{"base.name": "persistent"})
                 session1.database_add(doc)
             except FileNotFoundError:
-                pytest.skip("Schema not available")
+                raise
 
             # Reopen and check data
             session2 = ndi_session_dir("Persist", tmpdir, session_id=session_id)
