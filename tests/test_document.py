@@ -544,3 +544,31 @@ class TestDocumentRepr:
         assert "ndi_document" in r
         assert "ndi_element" in r
         assert "my_id" in r
+
+
+class TestPortedImageIngestionType:
+    """daqreader_image_epochdata_ingested was shipped by NDI-matlab but missing
+    from NDI-python's vendored corpus, so MATLAB-produced ingested image epochs
+    were invisible to every Python surface (allTypes / ndi_document)."""
+
+    def test_definition_loads(self):
+        d = ndi_document("ingestion/daqreader_image_epochdata_ingested")
+        cls = d.document_properties["document_class"]
+        assert cls["class_name"] == "daqreader_image_epochdata_ingested"
+
+    def test_registered_in_all_types(self):
+        from ndi.fun import doc as docfun
+
+        assert "daqreader_image_epochdata_ingested" in docfun.allTypes()
+
+    def test_attributes_present(self):
+        import json
+        from pathlib import Path
+
+        import ndi
+
+        attrs = json.loads(
+            (Path(ndi.__file__).parent / "ndi_common" / "resources" / "ndiDocumentAttributes.json")
+            .read_text()
+        )
+        assert attrs["daqreader_image_epochdata_ingested"]["attributes"] == ["Raw imageseries"]
