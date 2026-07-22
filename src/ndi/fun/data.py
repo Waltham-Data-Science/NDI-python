@@ -127,7 +127,11 @@ def readngrid(
     raw = np.fromfile(str(p), dtype=dtype)
     if raw.size != expected:
         raise ValueError(f"Data count mismatch: expected {expected}, got {raw.size}")
-    return raw.reshape(data_size)
+    # MATLAB's fread fills the array column-major (Fortran order); reshape the
+    # flat buffer the same way so an ngrid written by MATLAB (or by writengrid
+    # below) is not silently transposed across the language boundary. The
+    # element count matches either way, so the guard above never catches this.
+    return raw.reshape(data_size, order="F")
 
 
 def writengrid(
@@ -151,7 +155,10 @@ def writengrid(
     if dtype is None:
         raise ValueError(f"Unknown data type: '{data_type}'")
     arr = np.asarray(data, dtype=dtype)
-    arr.tofile(str(file_path))
+    # MATLAB's fwrite serialises column-major (Fortran order). ndarray.tofile
+    # always writes C order, so ravel column-major first to stay byte-compatible
+    # with MATLAB fwrite / readngrid above.
+    arr.ravel(order="F").tofile(str(file_path))
 
 
 def mat2ngrid(

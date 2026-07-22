@@ -185,6 +185,37 @@ class TestReadWriteNgrid:
         result = readngrid(f, (2, 2), "double")
         np.testing.assert_array_equal(result, data)
 
+    def test_readngrid_fortran_order(self, tmp_path):
+        """A non-square grid written column-major (as MATLAB fwrite does) must
+        read back channel-major, not interleaved/transposed. This fails under
+        the old C-order reshape even though the element count matches."""
+        from ndi.fun.data import readngrid
+
+        n_ch, n_samp = 4, 1000
+        arr = np.arange(n_ch * n_samp, dtype="<f8").reshape(n_ch, n_samp)
+        # MATLAB fwrite(fid, arr) serialises column-major: ch1s1,ch2s1,...
+        f = tmp_path / "col_major.bin"
+        arr.ravel(order="F").tofile(f)
+
+        result = readngrid(f, (n_ch, n_samp), "double")
+        np.testing.assert_array_equal(result, arr)
+        # Row 0 is channel 1's 1000 contiguous samples (not the first 1000
+        # interleaved values a C-order reshape would have produced).
+        np.testing.assert_array_equal(result[0], arr[0])
+        # A C-order reshape of the same bytes gives the wrong (interleaved) result.
+        wrong = np.fromfile(f, dtype="<f8").reshape(n_ch, n_samp, order="C")
+        assert not np.array_equal(wrong, arr)
+
+    def test_roundtrip_nonsquare_double(self, tmp_path):
+        """Python write -> Python read round-trips for a non-square grid too."""
+        from ndi.fun.data import readngrid, writengrid
+
+        arr = np.arange(4 * 7, dtype="<f8").reshape(4, 7)
+        f = tmp_path / "ns.bin"
+        writengrid(arr, f, "double")
+        result = readngrid(f, (4, 7), "double")
+        np.testing.assert_array_equal(result, arr)
+
     def test_roundtrip_int16(self, tmp_path):
         from ndi.fun.data import readngrid, writengrid
 
