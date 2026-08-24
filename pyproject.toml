@@ -144,6 +144,11 @@ addopts = "-v --tb=short --ignore=tests/symmetry"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "symmetry: marks cross-language symmetry tests (run with 'pytest tests/symmetry/')",
+    # Tests that MUTATE a live NDI Cloud tenancy (create/submit/publish/delete).
+    # Run them only against a throwaway environment: 'pytest -m destructive'.
+    # Read-only jobs must pass -m "not destructive" AND set NDI_CLOUD_READONLY=1,
+    # which makes tests/conftest.py error out if any of these were selected.
+    "destructive: mutates live cloud state (deselect with '-m \"not destructive\"')",
 ]
 
 [tool.black]

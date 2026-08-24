@@ -169,11 +169,11 @@ def can_write(client, cloud_config):
 
 @pytest.fixture()
 def fresh_dataset(client, cloud_config, can_write):
-    """Create a temporary dataset, yield its ID, delete on teardown."""
+    """Create a temporary dataset, yield its ID, purge it on teardown."""
     if not can_write:
         pytest.skip("User does not have dataset creation privileges")
 
-    from ndi.cloud.api.datasets import createDataset, deleteDataset
+    from ndi.cloud.api.datasets import createDataset, getDataset
     from ndi.cloud.exceptions import CloudAPIError
 
     org_id = cloud_config.org_id
@@ -188,52 +188,105 @@ def fresh_dataset(client, cloud_config, can_write):
 
     yield dataset_id
 
-    # Teardown: delete the dataset
+    # Teardown. The previous version was `deleteDataset(...)` wrapped in
+    # `except Exception: pass`, with no retry and no un-submit step. The
+    # publish tests leave the dataset with isSubmitted=True, the server then
+    # refuses the hard delete, and the exception was thrown away -- which is
+    # how one dataset per admin run per environment became a permanent orphan
+    # (75 in prod, 223 in dev by 2026-08-24) with nothing in any log.
+    #
+    # Re-read the current state so the purge knows whether to un-submit or
+    # unpublish first, then report loudly instead of swallowing. The teardown
+    # still does not raise: a leaked dataset is a fleet-level problem, and the
+    # workflow's `--fail-on-residual` janitor step is what turns it red, once
+    # per job, rather than contaminating an otherwise-valid test result.
+    _report_purge(_purge_dataset_by_id(dataset_id, client=client, getDataset=getDataset))
+
+
+def _purge_dataset_by_id(dataset_id, *, client, getDataset):
+    """Fetch current dataset state and run the shared janitor purge on it."""
+    from tests.tools.cloud_janitor import purge_dataset
+
     try:
-        deleteDataset(dataset_id, when="now", client=client)
-    except Exception:
-        pass
+        dataset = dict(getDataset(dataset_id, client=client))
+    except Exception as exc:  # noqa: BLE001 - state read is best effort
+        # Fall back to a bare record: purge_dataset still attempts the delete,
+        # it just cannot know to un-submit first.
+        dataset = {"_id": dataset_id, "name": "NDI_PYTEST_TEMP_DATASET"}
+        dataset["_state_read_error"] = repr(exc)
+    dataset.setdefault("_id", dataset_id)
+    return purge_dataset(dataset, client=client)
+
+
+def _report_purge(outcome):
+    """Warn loudly when a purge did not end in a deletion."""
+    import warnings
+
+    if outcome.status == "deleted":
+        return
+    warnings.warn(
+        f"NDI Cloud test dataset {outcome.dataset_id} ({outcome.name!r}) was NOT "
+        f"deleted: status={outcome.status} steps={','.join(outcome.steps)}. "
+        f"{outcome.detail} "
+        f"It is now an orphan in the live tenancy; the cloud-janitor workflow "
+        f"will report it as residual.",
+        ResourceWarning,
+        stacklevel=2,
+    )
 
 
 @pytest.fixture(scope="module", autouse=True)
 def _cleanup_stale_pytest_datasets(client, cloud_config):
-    """Safety-net: delete any leftover NDI_PYTEST_* datasets after all tests.
+    """Safety-net sweep for leftover NDI_PYTEST_* datasets after all tests.
 
-    Individual tests and fixtures do their own cleanup, but if the test
-    runner crashes or a teardown is skipped, datasets can be left behind.
-    This module-scoped autouse fixture runs at the very end and sweeps up
-    any remaining NDI_PYTEST_* datasets so they don't accumulate.
+    This used to list a single page, call ``deleteDataset`` inside
+    ``except Exception: pass``, and emit a remediation-shaped warning. Measured
+    over four nightly runs it deleted 0 of 294 datasets while the job stayed
+    green: the warning said "Cleaning up N leftover dataset(s)" and nothing was
+    cleaned up. It now delegates to ``tests.tools.cloud_janitor``, which
+    auto-paginates, un-submits before deleting, retries the gateway's 502/504s,
+    and -- crucially -- re-lists afterwards so the report describes the actual
+    post-state rather than the absence of an exception.
+
+    Under ``NDI_CLOUD_READONLY`` the sweep runs as a dry run. This fixture is
+    autouse and module-scoped, so it fires even in the read-only prod smoke job
+    where no test created anything; deleting there -- however benign the target
+    -- would make the job's read-only promise false.
     """
     yield  # Let all tests run first
 
     import warnings
 
-    from ndi.cloud.api.datasets import deleteDataset, listDatasets
+    from tests.conftest import readonly_mode_enabled
+    from tests.tools.cloud_janitor import sweep
 
+    dry_run = readonly_mode_enabled()
     try:
-        result = listDatasets(cloud_config.org_id, client=client)
-        datasets = result.get("datasets", [])
-        stale = [
-            ds
-            for ds in datasets
-            if ds.get("name", "").startswith("NDI_PYTEST") and ds.get("_id", ds.get("id", ""))
-        ]
-        if stale:
-            names = [f"{ds.get('name')} (id={ds.get('_id', ds.get('id', '?'))})" for ds in stale]
-            warnings.warn(
-                f"Cleaning up {len(stale)} leftover NDI_PYTEST_* dataset(s) — "
-                f"this indicates a test or teardown failed silently:\n"
-                + "\n".join(f"  - {n}" for n in names),
-                stacklevel=1,
-            )
-            for ds in stale:
-                ds_id = ds.get("_id", ds.get("id", ""))
-                try:
-                    deleteDataset(ds_id, when="now", client=client)
-                except Exception:
-                    pass  # Best-effort cleanup
-    except Exception:
-        pass  # Don't fail the test run over cleanup
+        report = sweep(
+            client=client,
+            org_id=cloud_config.org_id,
+            prefix="NDI_PYTEST",
+            dry_run=dry_run,
+        )
+    except Exception as exc:  # noqa: BLE001 - never fail the run over cleanup
+        warnings.warn(
+            f"Leftover-dataset sweep could not run: {exc!r}. Leftover "
+            f"NDI_PYTEST_* datasets may remain in this tenancy.",
+            ResourceWarning,
+            stacklevel=1,
+        )
+        return
+
+    if report.targeted == 0:
+        return
+
+    verb = "Found (read-only, not deleted)" if dry_run else "Swept"
+    warnings.warn(
+        f"{verb} {report.targeted} leftover NDI_PYTEST_* dataset(s) — this "
+        f"means a test or teardown did not clean up after itself.\n" + report.render(),
+        ResourceWarning,
+        stacklevel=1,
+    )
 
 
 # ===========================================================================
@@ -384,6 +437,7 @@ class TestUser:
 # ===========================================================================
 
 
+@pytest.mark.destructive
 class TestDatasetLifecycle:
     def test_create_and_deleteDataset(self, client, cloud_config, can_write):
         """Create a dataset, verify it exists, then delete it."""
@@ -476,6 +530,7 @@ class TestDatasetLifecycle:
 # ===========================================================================
 
 
+@pytest.mark.destructive
 class TestDocumentLifecycle:
     def test_empty_dataset_has_zero_documents(self, client, fresh_dataset):
         """A newly created dataset should have 0 documents."""
@@ -687,6 +742,7 @@ class TestDocumentLifecycle:
 # ===========================================================================
 
 
+@pytest.mark.destructive
 class TestFileLifecycle:
     def test_getFileUploadURL(self, client, cloud_config, fresh_dataset):
         """getFileUploadURL should return a presigned URL."""
@@ -847,6 +903,7 @@ class TestNDIQuery:
 # ===========================================================================
 
 
+@pytest.mark.destructive
 class TestPublishWorkflow:
     @pytest.fixture(autouse=True)
     def _skip_if_not_admin(self, is_admin):
@@ -922,6 +979,7 @@ class TestPublishWorkflow:
 # ===========================================================================
 
 
+@pytest.mark.destructive
 class TestSoftDelete:
     """Soft-delete API: deferred delete, undelete, and list-deleted."""
 
