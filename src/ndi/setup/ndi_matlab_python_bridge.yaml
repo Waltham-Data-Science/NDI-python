@@ -1,0 +1,119 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/setup/
+# The Primary Contract for the ndi.setup namespace.
+#
+# NOTE: this namespace had no bridge contract before 2026-08. It is declared
+# here for the entry points that were re-synced against MATLAB origin/main in
+# the 2026-08 catchup (M4). Entries with no matlab_last_sync_hash are NOT
+# claimed as synced.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Standalone functions
+# =========================================================================
+functions:
+
+  - name: lab
+    type: function
+    matlab_path: "+ndi/+setup/lab.m"
+    matlab_last_sync_hash: "68431eb38"
+    python_path: "ndi/setup/lab.py"
+    python_function: "lab"
+    input_arguments:
+      - name: session
+        type_matlab: "n/a — see decision_log"
+        type_python: "Any"
+      - name: labName
+        type_matlab: "char | string"
+        type_python: "str"
+      - name: forceUpdate
+        type_matlab: "logical (name-value)"
+        type_python: "bool"
+        default: "False"
+    output_arguments:
+      - name: S
+        type_matlab: "ndi.session.dir"
+        type_python: "Any"
+    decision_log: >
+      DIVERGENT SIGNATURE, deliberately preserved. MATLAB is
+      lab(labName, ref, dirname, options) and CONSTRUCTS the
+      ndi.session.dir itself; Python is lab(session, lab_name,
+      force_update) and takes an already-constructed session. The split
+      predates this contract; unifying the two signatures is a separate
+      design decision and is explicitly OUT of scope for the 2026-08
+      catchup (see docs-catchup-2026-08 M4). Everything inside the
+      function body is now a faithful mirror of MATLAB origin/main
+      68431eb38:
+        (1) addDaqSystems(S, labName, forceUpdate) — a DAQ system already
+            present is skipped unless forceUpdate, in which case it is
+            removed and re-created from the current definition;
+        (2) the default ndi.time.syncrule.filematch rule with
+            number_fullpath_matches = 2;
+        (3) ndi.setup.sync.addSyncRules(S, labName).
+      Steps (2) and (3) were both absent from Python before this sync.
+      Python builds the DAQ system documents directly rather than through
+      ndi.daq.system objects (several lab reader classes have no Python
+      implementation, so session.daqsystem_load cannot reconstruct them);
+      force_update therefore performs the same teardown as MATLAB's
+      S.daqsystem_rm at the document level — the daqsystem document plus
+      its filenavigator / daqreader / daqmetadatareader dependencies.
+
+  - name: rayolab
+    type: function
+    matlab_path: "+ndi/+setup/rayolab.m"
+    matlab_last_sync_hash: "ffe310085"
+    python_path: "ndi/setup/rayolab.py"
+    python_function: "rayolab"
+    input_arguments:
+      - name: session
+        type_matlab: "n/a — see lab, above"
+        type_python: "Any"
+      - name: forceUpdate
+        type_matlab: "logical (name-value)"
+        type_python: "bool"
+        default: "False"
+    output_arguments:
+      - name: S
+        type_matlab: "ndi.session.dir"
+        type_python: "Any"
+    decision_log: >
+      Thin wrapper around lab(), as in MATLAB. Carries the same divergent
+      signature as lab() and now forwards force_update.
+
+# =========================================================================
+# Behavior mirrored from a MATLAB class that has no Python counterpart
+# =========================================================================
+classes:
+
+  - name: DaqSystemConfiguration
+    type: class
+    matlab_path: "+ndi/+setup/@DaqSystemConfiguration/DaqSystemConfiguration.m"
+    matlab_last_sync_hash: "1161e0e9c"
+    python_path: "ndi/setup/lab.py"
+    python_class: null
+    decision_log: >
+      NOT PORTED AS A CLASS. MATLAB's DaqSystemConfiguration reads a lab
+      DAQ-system JSON and instantiates live objects (file navigator, DAQ
+      reader, metadata readers) which are then handed to daqsystem_add.
+      Python's ndi.setup.lab writes the equivalent documents directly, so
+      the class's *decision logic* is mirrored inside lab.py rather than
+      the class itself. Specifically mirrored:
+        - createFileNavigator: FileNavigatorClass, else epochdir when
+          HasEpochDirectories, else ndi.file.navigator.
+        - createMetadataReader: one reader per MetadataReaderFileParameters
+          entry when there is a single MetadataReaderClass; element-wise
+          pairing when the counts match; an error when they do not; and a
+          single reader constructed with '' when the field is empty. Each
+          reader's file parameter is written to
+          daqmetadatareader.tab_separated_file_parameter.
+          THIS WAS THE DEFECT FIXED IN THE 2026-08 CATCHUP: Python
+          previously wrote every daqmetadatareader with an empty
+          tab_separated_file_parameter, so readmetadata() found no
+          stimulus-parameter file and returned nothing for every
+          Python-configured lab.
+      Not mirrored: export() (no Python writer for lab JSON configs) and
+      the DaqReaderFileParameters -> daqReader constructor argument, which
+      Python instead routes into the daqreader_ndr document shape.

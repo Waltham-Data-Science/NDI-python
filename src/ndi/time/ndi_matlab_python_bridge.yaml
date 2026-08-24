@@ -574,6 +574,33 @@ classes:
         decision_log: >
           Factory method. Creates the appropriate subclass based
           on the document's syncrule.ndi_syncrule_class field.
+          Class-name resolution is delegated to the module-level helper
+          syncrule_class_from_name (see below); behavior is unchanged.
+
+    module_functions:
+      - name: syncrule_class_from_name
+        type: function
+        python_path: "ndi/time/syncrule_base.py"
+        python_function: "syncrule_class_from_name"
+        input_arguments:
+          - name: class_name
+            type_python: "str"
+          - name: default
+            type_python: "type[ndi_time_syncrule] | None"
+            default: "None"
+        output_arguments:
+          - name: rule_class
+            type_python: "type[ndi_time_syncrule]"
+        decision_log: >
+          PYTHON-ONLY. No MATLAB counterpart: MATLAB resolves a syncrule
+          class name with feval(). Python needs an explicit table, and
+          before this helper existed that table was inlined in
+          from_document. It was extracted so that document loading and
+          ndi.setup.sync.sync_rule_from_config_file (which reads
+          syncrule_class out of ndi_common/sync_rules/<lab>/*.json) cannot
+          disagree about what a stored class name means. Accepts both the
+          MATLAB dotted form and the Python underscore form. With no
+          default, an unknown name raises ValueError.
 
   # =========================================================================
   # ndi.time.syncgraph  (graph-based time conversion)

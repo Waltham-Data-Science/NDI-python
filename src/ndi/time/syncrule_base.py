@@ -231,31 +231,60 @@ class ndi_time_syncrule(ndi_ido, ABC):
         Returns:
             ndi_time_syncrule instance of the appropriate subclass
         """
-        # Get class name from document and normalize to Python-style
-        from ..util.classname import ndi_python_classname
-
         props = doc.document_properties
         class_name_raw = props.get("syncrule", {}).get("ndi_syncrule_class", "ndi_time_syncrule")
-        class_name = ndi_python_classname(class_name_raw)
         parameters = props.get("syncrule", {}).get("parameters", {})
         identifier = props.get("base", {}).get("id")
 
-        # Import subclasses dynamically
-        from . import syncrule as syncrule_module
-
-        # Map class names to classes
-        class_map = {
-            "ndi_time_syncrule": ndi_time_syncrule,
-            "ndi_time_syncrule_filematch": syncrule_module.ndi_time_syncrule_filematch,
-            "ndi_time_syncrule_filefind": syncrule_module.ndi_time_syncrule_filefind,
-            "ndi_time_syncrule_commonTriggersOverlappingEpochs": syncrule_module.ndi_time_syncrule_commonTriggersOverlappingEpochs,
-            "ndi_time_syncrule_randomPulses": syncrule_module.ndi_time_syncrule_randomPulses,
-        }
-
-        rule_class = class_map.get(class_name, cls)
+        rule_class = syncrule_class_from_name(class_name_raw, default=cls)
 
         # Abstract classes can't be instantiated directly
         if rule_class is ndi_time_syncrule:
             raise ValueError("Cannot instantiate abstract ndi_time_syncrule directly")
 
         return rule_class(parameters=parameters, identifier=identifier)
+
+
+def syncrule_class_from_name(
+    class_name: str, default: type[ndi_time_syncrule] | None = None
+) -> type[ndi_time_syncrule]:
+    """Resolve a sync-rule class name to its Python class.
+
+    Accepts either the MATLAB dotted form (``ndi.time.syncrule.filefind``) or
+    the Python underscore form (``ndi_time_syncrule_filefind``).  This is the
+    single resolution point shared by document loading
+    (:meth:`ndi_time_syncrule.from_document`) and JSON config loading
+    (:func:`ndi.setup.sync.sync_rule_from_config_file`), so the two can never
+    disagree about which class a stored name means.
+
+    Args:
+        class_name: MATLAB- or Python-style sync-rule class name.
+        default: Class to return when ``class_name`` is unknown. If ``None``,
+            an unknown name raises ``ValueError``.
+
+    Returns:
+        The sync-rule class.
+
+    Raises:
+        ValueError: If the name is unknown and no ``default`` was given.
+    """
+    from ..util.classname import ndi_python_classname
+    from . import syncrule as syncrule_module
+
+    key = ndi_python_classname(class_name)
+
+    class_map: dict[str, type[ndi_time_syncrule]] = {
+        "ndi_time_syncrule": ndi_time_syncrule,
+        "ndi_time_syncrule_filematch": syncrule_module.ndi_time_syncrule_filematch,
+        "ndi_time_syncrule_filefind": syncrule_module.ndi_time_syncrule_filefind,
+        "ndi_time_syncrule_commonTriggersOverlappingEpochs": (
+            syncrule_module.ndi_time_syncrule_commonTriggersOverlappingEpochs
+        ),
+        "ndi_time_syncrule_randomPulses": syncrule_module.ndi_time_syncrule_randomPulses,
+    }
+
+    if key in class_map:
+        return class_map[key]
+    if default is not None:
+        return default
+    raise ValueError(f"Unknown ndi.time.syncrule class: {class_name!r}")
