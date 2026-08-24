@@ -164,7 +164,12 @@ class ndi_session_dir(ndi_session):
         return ndi_dir
 
     def _write_reference_files(self) -> None:
-        """Write reference and unique_reference files."""
+        """Write reference and unique_reference files, then refresh the type marker.
+
+        MATLAB equivalent: the tail of the ``ndi.session.dir`` constructor, which
+        writes ``reference.txt`` and ``unique_reference.txt`` and then calls
+        ``updateObjectTypeMarker()``.
+        """
         ndi_dir = self._ndi_pathname()
 
         ref_file = ndi_dir / "reference.txt"
@@ -172,6 +177,81 @@ class ndi_session_dir(ndi_session):
 
         unique_ref_file = ndi_dir / "unique_reference.txt"
         unique_ref_file.write_text(self._identifier)
+
+        self.updateObjectTypeMarker()
+
+    def updateObjectTypeMarker(self) -> None:
+        """Write/refresh the ``.ndi`` object-type marker file.
+
+        MATLAB equivalent: ``ndi.session.dir/updateObjectTypeMarker``
+
+        Writes a small marker file in the session's ``.ndi`` directory that
+        records whether this directory holds a plain session or a dataset. The
+        marker lets a directory's type be determined quickly (for example, by a
+        file open dialog) without fully instantiating the object; see
+        :meth:`directorytype`.
+
+        A directory that already contains dataset bookkeeping documents
+        (``session_in_a_dataset`` or the legacy ``dataset_session_info``), or
+        that has already been marked as a dataset, is (kept) marked as a
+        dataset.  This prevents a session object from mislabeling a dataset
+        directory as a plain session -- important because an ``ndi_dataset_dir``
+        keeps an underlying ``ndi_session_dir`` at the same path, and ingesting
+        a session into a dataset builds a temporary ``ndi_session_dir`` at the
+        dataset's path.
+
+        See also: :meth:`setObjectTypeMarker`, :meth:`directorytype`
+        """
+        markerfile = self._ndi_pathname() / self.objecttypemarkerfilename()
+
+        existing_type = ""
+        if markerfile.is_file():
+            existing_type = markerfile.read_text().strip().lower()
+        if existing_type == "dataset":
+            return  # never downgrade a directory already known to be a dataset
+
+        # Does this directory actually host a dataset?  Datasets store
+        # 'session_in_a_dataset' (current) or 'dataset_session_info' (legacy)
+        # bookkeeping documents; standalone sessions never do.  An empty dataset
+        # has neither yet, so it will be marked 'session' here and corrected to
+        # 'dataset' by the ndi_dataset_dir constructor.
+        try:
+            docs = self.database_search(ndi_query("").isa("session_in_a_dataset"))
+            if not docs:
+                docs = self.database_search(ndi_query("").isa("dataset_session_info"))
+            is_dataset = bool(docs)
+        except Exception:
+            is_dataset = False
+
+        if is_dataset:
+            self.setObjectTypeMarker("dataset")
+        else:
+            self.setObjectTypeMarker("session")
+
+    def setObjectTypeMarker(self, typestr: str) -> None:
+        """Write the ``.ndi`` object-type marker file directly.
+
+        MATLAB equivalent: ``ndi.session.dir/setObjectTypeMarker``
+
+        Writes *typestr* (``'session'`` or ``'dataset'``) to the object-type
+        marker file in the session's ``.ndi`` directory, unconditionally.  Use
+        this to force a directory's recorded type; ``ndi_dataset_dir`` uses it
+        to mark its directory as a dataset.  Most callers should use
+        :meth:`updateObjectTypeMarker` instead, which chooses the type safely.
+
+        Args:
+            typestr: Either ``'session'`` or ``'dataset'``.
+
+        Raises:
+            ValueError: If *typestr* is anything else (MATLAB enforces this
+                with ``mustBeMember``).
+
+        See also: :meth:`updateObjectTypeMarker`, :meth:`directorytype`
+        """
+        if typestr not in ("session", "dataset"):
+            raise ValueError(f"typestr must be 'session' or 'dataset', not {typestr!r}.")
+        markerfile = self._ndi_pathname() / self.objecttypemarkerfilename()
+        markerfile.write_text(typestr)
 
     def getpath(self) -> Path:
         """
@@ -250,6 +330,57 @@ class ndi_session_dir(ndi_session):
 
         ref_file = ndi_dir / "reference.txt"
         return ref_file.exists()
+
+    @staticmethod
+    def objecttypemarkerfilename() -> str:
+        """Filename of the ``.ndi`` object-type marker.
+
+        MATLAB equivalent: ``ndi.session.dir.objecttypemarkerfilename``
+
+        Returns:
+            The name of the marker file (within a directory's ``.ndi`` folder)
+            that records whether the directory holds a session or a dataset.
+        """
+        return "ndi_object_type.txt"
+
+    @staticmethod
+    def directorytype(path: str | Path) -> str:
+        """Quickly determine the NDI object type stored in a directory.
+
+        MATLAB equivalent: ``ndi.session.dir.directorytype``
+
+        Inspects the ``.ndi`` folder of *path* and returns what kind of NDI
+        object is stored there, WITHOUT fully opening (instantiating) the
+        object.  This is useful, for example, for a file-open dialog that must
+        distinguish datasets from sessions cheaply.
+
+        Args:
+            path: Directory to inspect.
+
+        Returns:
+            One of:
+
+            - ``'session'`` - *path* holds a standalone session
+            - ``'dataset'`` - *path* holds a dataset
+            - ``'unknown'`` - *path* is an NDI directory created before
+              object-type markers existed; open it once with ``ndi_session_dir``
+              or ``ndi_dataset_dir`` to record its type.  (An empty dataset that
+              has never been opened since markers were introduced cannot be
+              distinguished from a session without opening it.)
+            - ``'none'`` - *path* is not an NDI session or dataset directory
+
+        See also: :meth:`exists`, :meth:`updateObjectTypeMarker`
+        """
+        t = "none"
+        if not ndi_session_dir.exists(path):
+            return t
+        markerfile = Path(path) / ".ndi" / ndi_session_dir.objecttypemarkerfilename()
+        if markerfile.is_file():
+            t = markerfile.read_text().strip().lower()
+            if t not in ("session", "dataset"):
+                t = "unknown"
+            return t
+        return "unknown"
 
     @staticmethod
     def database_erase(session: ndi_session_dir, areyousure: str) -> None:

@@ -494,7 +494,54 @@ classes:
           MATLAB name is deleteSessionDataStructures (camelCase).
           Python was previously delete_session_data_structures; renamed to match MATLAB.
 
+      - name: updateObjectTypeMarker
+        input_arguments: []
+        output_arguments: []
+        decision_log: >
+          Exact match. Writes/refreshes .ndi/ndi_object_type.txt. Never
+          downgrades a directory already marked 'dataset'; otherwise marks
+          'dataset' when the database holds session_in_a_dataset (or legacy
+          dataset_session_info) documents, else 'session'. A failing database
+          search is swallowed (MATLAB try/catch) and treated as not-a-dataset.
+          Called at the end of the constructor, from _write_reference_files(),
+          matching MATLAB's call ordering after reference.txt and
+          unique_reference.txt are written.
+
+      - name: setObjectTypeMarker
+        input_arguments:
+          - name: typestr
+            type_matlab: "char {mustBeMember(typestr,{'session','dataset'})}"
+            type_python: "str"
+        output_arguments: []
+        decision_log: >
+          Exact match. Writes typestr unconditionally, with no trailing
+          newline (as MATLAB vlt.file.str2text does, matching the sibling
+          reference.txt files). MATLAB's mustBeMember validator is mirrored by
+          raising ValueError for any value other than 'session'/'dataset'.
+
     static_methods:
+      - name: objecttypemarkerfilename
+        input_arguments: []
+        output_arguments:
+          - name: fname
+            type_python: "str"
+        decision_log: "Exact match. Returns 'ndi_object_type.txt'."
+
+      - name: directorytype
+        input_arguments:
+          - name: path
+            type_matlab: "char"
+            type_python: "str | Path"
+        output_arguments:
+          - name: t
+            type_python: "str"
+        decision_log: >
+          Exact match. Returns 'session', 'dataset', 'unknown' (an NDI
+          directory created before markers existed), or 'none' (not an NDI
+          directory at all -- 'none', not '', per MATLAB 97444ee46). Marker
+          contents are lowercased and stripped before comparison; anything
+          unrecognized reads as 'unknown'.
+
       - name: exists
         input_arguments:
           - name: path

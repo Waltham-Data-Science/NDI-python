@@ -385,8 +385,31 @@ classes:
         decision_log: >
           Python constructor supports MATLAB calling conventions:
           dir(path), dir(reference, path), dir(reference, path, docs).
+          Like MATLAB, the constructor ends by calling
+          session.setObjectTypeMarker('dataset') so the directory is recorded
+          on disk as a dataset (unconditionally, so even an empty dataset --
+          which has no session_in_a_dataset documents -- is marked correctly
+          and legacy datasets are migrated when re-opened).
+          NOT PORTED: the MATLAB static guard mustNotBeSession(path), which
+          rejects opening a plain session directory as a dataset. Python's
+          constructor has extra calling conventions and a legacy
+          '.ndi_dataset' layout that MATLAB main does not have, so the guard
+          needs its own design pass.
 
     static_methods:
+      - name: exists
+        input_arguments:
+          - name: path
+            type_matlab: "text scalar"
+            type_python: "str | Path"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: >
+          Exact match: returns ndi.session.dir.directorytype(path)=='dataset'.
+          False for a plain session, a non-NDI directory, and a legacy NDI
+          directory whose type has not yet been recorded ('unknown').
+
       - name: dataset_erase
         input_arguments:
           - name: ndi_dataset_dir_obj
