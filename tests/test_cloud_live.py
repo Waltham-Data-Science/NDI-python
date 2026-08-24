@@ -365,6 +365,32 @@ class TestUser:
         assert orgs[0].get("id")
         assert orgs[0].get("name")
 
+    def test_user_organization_convenience_fields(self, user_info):
+        """me() should derive parallel organization ID/name/upload arrays.
+
+        Live counterpart of tests/test_cloud_users_me.py (mocked). Mirrors
+        the assertions MATLAB added to UserTest in NDI-matlab f2b91923f
+        (PR #858) -- a mocked-only test would not catch the real
+        ``/users/me`` payload changing shape.
+        """
+        org_ids = user_info.get("organizationID")
+        org_names = user_info.get("organizationName")
+        org_can_upload = user_info.get("organizationCanUploadDataset")
+
+        assert isinstance(org_ids, list)
+        assert isinstance(org_names, list)
+        assert isinstance(org_can_upload, list)
+
+        raw_orgs = user_info.get("organizations", [])
+        assert len(org_ids) == len(raw_orgs)
+        assert len(org_names) == len(org_ids)
+        assert len(org_can_upload) == len(org_ids)
+
+        assert all(isinstance(i, str) and i for i in org_ids)
+        assert all(isinstance(n, str) for n in org_names)
+        assert all(isinstance(c, bool) for c in org_can_upload)
+        assert org_ids == [o.get("id") for o in raw_orgs]
+
     def test_get_user_by_id(self, client, user_info):
         """GET /users/{userId} should return the same user."""
         from ndi.cloud.api.users import GetUser
