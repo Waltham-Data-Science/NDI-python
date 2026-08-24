@@ -67,6 +67,14 @@ def probe(
     stores the MD5 checksum of ``spike_clusters.npy``, used to detect whether the
     curation changed since a previous import (idempotency).
 
+    The curated output is read from
+    ``[session.path]/[kilosort_dir]/[probe_directory]/[subdir]/``. The
+    ``[probe_directory]`` name comes from
+    :func:`ndi.fun.file.elementDirectoryName`; for a probe named ``'ctx'`` with
+    reference 1 it is ``'ctx_-_1'``. Folders written by older versions of NDI,
+    which used a ``'|'`` separator (``'ctx_|_1'``), are still found and used if
+    they are present.
+
     Args:
         session: The ndi.session.
         probe: The ndi.probe / ndi.element whose sort is being imported.
@@ -98,7 +106,7 @@ def probe(
 
     from ndi.document import ndi_document
     from ndi.element_timeseries import ndi_element_timeseries
-    from ndi.fun.file import MD5
+    from ndi.fun.file import MD5, elementDirectory
     from ndi.query import ndi_query
 
     # In a dry run we always report the plan, regardless of the verbose setting.
@@ -106,9 +114,9 @@ def probe(
     pfx = "[dry run] " if dryRun else ""
 
     # Step 1: locate the kilosort output directory (mirror of the export layout)
-    elestr = probe.elementstring().replace(" ", "_")
+    probedir, elestr, _is_legacy = elementDirectory(Path(session.path) / kilosort_dir, probe)
     eff_subdir = "" if noSubFolder else subdir
-    kdir = Path(session.path) / kilosort_dir / elestr / eff_subdir
+    kdir = probedir / eff_subdir
 
     if not kdir.is_dir():
         raise FileNotFoundError(

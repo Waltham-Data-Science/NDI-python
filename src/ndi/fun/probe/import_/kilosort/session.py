@@ -14,6 +14,8 @@ import warnings
 from pathlib import Path
 from typing import Any
 
+from ndi.fun.file import elementDirectory
+
 from .probe import probe as import_probe
 
 
@@ -39,9 +41,15 @@ def session(
     is the import-side analog of ``ndi.fun.probe.export.all_binary``.
 
     The Kilosort output for each probe is expected in
-    ``[session.path]/[kilosort_dir]/[probe_elementstring]/[subdir]/`` (the same
+    ``[session.path]/[kilosort_dir]/[probe_directory]/[subdir]/`` (the same
     layout produced by the binary export). Probes whose kilosort directory or
     curated files are missing are skipped with a warning.
+
+    The ``[probe_directory]`` name comes from
+    :func:`ndi.fun.file.elementDirectoryName`; for a probe named ``'ctx'`` with
+    reference 1 it is ``'ctx_-_1'``. Folders written by older versions of NDI,
+    which used a ``'|'`` separator (``'ctx_|_1'``), are still found and used if
+    they are present.
 
     Takes the same keyword arguments as
     :func:`ndi.fun.probe.import_.kilosort.probe`.
@@ -70,8 +78,8 @@ def session(
     eff_subdir = "" if noSubFolder else subdir
 
     for p in probe_list:
-        elestr = p.elementstring().replace(" ", "_")
-        kdir = Path(sess.path) / kilosort_dir / elestr / eff_subdir
+        probedir, elestr, _is_legacy = elementDirectory(Path(sess.path) / kilosort_dir, p)
+        kdir = probedir / eff_subdir
         if not kdir.is_dir() or not (kdir / "spike_times.npy").is_file():
             warnings.warn(
                 f"Skipping probe {elestr}: no kilosort output found in {kdir}.",

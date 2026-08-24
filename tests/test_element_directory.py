@@ -10,7 +10,8 @@ MATLAB source files:
 with ``' | '``.  ``'|'`` is not a legal filename character on Windows, so the
 element string must not be turned directly into a folder name.  These tests pin
 the MATLAB contract of the sanitizer, of the two folder names (current and
-legacy), and of the legacy-folder fallback.
+legacy), and of the legacy-folder fallback, plus the four Python call sites that
+build per-element working directories.
 """
 
 from __future__ import annotations
@@ -251,3 +252,103 @@ class TestElementDirectory:
     def test_accepts_element_string_directly(self, tmp_path):
         _dir_path, dir_name, _is_legacy = elementDirectory(tmp_path, "ctx | 1")
         assert dir_name == "ctx_-_1"
+
+
+# ===========================================================================
+# Call sites: the folders these helpers are supposed to be building
+# ===========================================================================
+
+
+class _ExportProbe(_FakeElement):
+    """Probe with just enough surface for export_all_binary (no epochs)."""
+
+    def epochtable(self, force_rebuild: bool = False):
+        return [], []
+
+
+class _ExportSession:
+    def __init__(self, path: Path, probes: list):
+        self.path = str(path)
+        self.reference = "testsession"
+        self._probes = probes
+
+    def getprobes(self, **kwargs):
+        return self._probes
+
+
+class TestExportAllBinaryDirectory:
+    """ndi.fun.probe.export_all_binary must not write a '|' folder."""
+
+    def test_creates_pathsafe_directory(self, tmp_path):
+        from ndi.fun.probe import export_all_binary
+
+        probe = _ExportProbe("ctx | 1")
+        sess = _ExportSession(tmp_path, [probe])
+        export_all_binary(sess, verbose=False)
+
+        assert (tmp_path / "kilosort" / "ctx_-_1").is_dir()
+        assert not (tmp_path / "kilosort" / "ctx_|_1").exists()
+        names = [p.name for p in (tmp_path / "kilosort").iterdir()]
+        assert all("|" not in n for n in names), names
+
+    @pytest.mark.skipif(
+        sys.platform.startswith("win"), reason="'|' folders cannot be created on Windows"
+    )
+    def test_reuses_existing_legacy_directory(self, tmp_path):
+        from ndi.fun.probe import export_all_binary
+
+        legacy = tmp_path / "kilosort" / "ctx_|_1"
+        legacy.mkdir(parents=True)
+
+        probe = _ExportProbe("ctx | 1")
+        sess = _ExportSession(tmp_path, [probe])
+        export_all_binary(sess, verbose=False)
+
+        assert (legacy / "kilosort.bin").is_file()
+        assert not (tmp_path / "kilosort" / "ctx_-_1").exists()
+
+
+class _InfoProbe(_FakeElement):
+    """Probe with only elementstring(), which is all getInfo() needs."""
+
+
+class _InfoSession:
+    def __init__(self, path: Path):
+        self.path = str(path)
+
+
+def _write_min_kilosort_fixture(kdir: Path) -> None:
+    import numpy as np
+
+    kdir.mkdir(parents=True, exist_ok=True)
+    np.save(kdir / "spike_times.npy", np.array([10, 20, 30], dtype=np.int64))
+    np.save(kdir / "spike_clusters.npy", np.array([0, 0, 1], dtype=np.int64))
+    (kdir / "cluster_group.tsv").write_text("cluster_id\tgroup\n0\tgood\n1\tmua\n")
+
+
+class TestKilosortImportDirectory:
+    """The importer must find the folder the exporter writes, and must still
+    find folders written by older versions of NDI."""
+
+    def test_getinfo_reads_pathsafe_directory(self, tmp_path):
+        from ndi.fun.probe.import_ import kilosort
+
+        kdir = tmp_path / "kilosort" / "ctx_-_1" / "kilosort_output"
+        _write_min_kilosort_fixture(kdir)
+
+        info, _summary = kilosort.getInfo(_InfoSession(tmp_path), _InfoProbe("ctx | 1"))
+        assert Path(info["directory"]) == kdir
+        assert info["num_clusters"] == 2
+
+    @pytest.mark.skipif(
+        sys.platform.startswith("win"), reason="'|' folders cannot be created on Windows"
+    )
+    def test_getinfo_falls_back_to_legacy_directory(self, tmp_path):
+        from ndi.fun.probe.import_ import kilosort
+
+        kdir = tmp_path / "kilosort" / "ctx_|_1" / "kilosort_output"
+        _write_min_kilosort_fixture(kdir)
+
+        info, _summary = kilosort.getInfo(_InfoSession(tmp_path), _InfoProbe("ctx | 1"))
+        assert Path(info["directory"]) == kdir
+        assert info["num_clusters"] == 2

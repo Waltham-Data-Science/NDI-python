@@ -14,6 +14,8 @@ from typing import Any
 
 import numpy as np
 
+from ndi.fun.file import elementDirectory
+
 from .labels import labels
 
 
@@ -33,7 +35,13 @@ def getInfo(
     Reads the curated Kilosort/Phy output directory for *probe* in the session
     *session* and returns a summary of what is there (without importing anything
     or touching the database). The directory is located the same way as the
-    importer: ``[session.path]/[kilosort_dir]/[probe_elementstring]/[subdir]/``.
+    importer: ``[session.path]/[kilosort_dir]/[probe_directory]/[subdir]/``.
+
+    The ``[probe_directory]`` name comes from
+    :func:`ndi.fun.file.elementDirectoryName`; for a probe named ``'ctx'`` with
+    reference 1 it is ``'ctx_-_1'``. Folders written by older versions of NDI,
+    which used a ``'|'`` separator (``'ctx_|_1'``), are still found and used if
+    they are present.
 
     Args:
         session: The ndi.session.
@@ -57,9 +65,9 @@ def getInfo(
             files (``spike_times.npy`` and ``spike_clusters.npy``) are missing.
     """
     # Step 1: locate the kilosort output directory (same logic as the importer)
-    elestr = probe.elementstring().replace(" ", "_")
+    probedir, _elestr, _is_legacy = elementDirectory(Path(session.path) / kilosort_dir, probe)
     eff_subdir = "" if noSubFolder else subdir
-    kdir = Path(session.path) / kilosort_dir / elestr / eff_subdir
+    kdir = probedir / eff_subdir
 
     if not kdir.is_dir():
         raise FileNotFoundError(f"Kilosort directory not found: {kdir}.")
