@@ -5,6 +5,15 @@ on:
     branches: [main]
   pull_request:
 
+# Superseding a push cancels the in-flight run. This is safe ONLY because this
+# workflow no longer receives NDI_CLOUD_* credentials (see the note on the test
+# job): with no cloud writes in flight there is no teardown to interrupt.
+# Do not copy this block into test-cloud-api.yml or cloud-janitor.yml -- there,
+# a cancellation kills the lifecycle mid-flight and orphans a dataset.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     runs-on: ubuntu-latest

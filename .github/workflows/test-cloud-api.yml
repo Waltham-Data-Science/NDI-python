@@ -1,5 +1,17 @@
 name: Test Cloud API
 
+# Split into two jobs with very different blast radii:
+#
+#   prod-smoke            read-only, prod + dev, both test users.
+#   destructive-lifecycle create/submit/publish/delete, dev ONLY, one at a time.
+#
+# Before this split there was a single matrix that ran the full destructive
+# lifecycle against BOTH prod and dev on every scheduled run, and `ci.yml`
+# injected the same production credentials into every pull request. Every
+# admin run leaked exactly one NDI_PYTEST_TEMP_DATASET per environment,
+# because a submitted dataset cannot be hard-deleted and the fixture threw the
+# error away: 75 orphans in prod and 223 in dev by 2026-08-24.
+
 on:
   # Run once a day
   schedule:
@@ -7,15 +19,33 @@ on:
 
   # Allow manual runs from the Actions tab
   workflow_dispatch:
+    inputs:
+      run_destructive:
+        description: 'Run the destructive lifecycle job (dev tenancy only)'
+        type: boolean
+        default: true
 
+# A CONSTANT group, and cancellation OFF.
+#
+# The old value was `${{ github.workflow }}-${{ github.ref }}` with
+# cancel-in-progress: true. Scheduled runs always carry github.ref =
+# refs/heads/main, so any manual dispatch shared a group with the nightly run
+# and killed all four matrix legs mid-lifecycle -- after the datasets were
+# created and before the module-scoped teardown could delete them. A constant
+# group makes a second run QUEUE instead. cloud-janitor.yml deliberately uses
+# this same group so a sweep can never race a live lifecycle test.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ndi-cloud-destructive
+  cancel-in-progress: false
 
 jobs:
-  cloud-tests:
-    name: Cloud API (User ${{ matrix.user }}, ${{ matrix.environment }})
+  # =====================================================================
+  # Read-only smoke: safe against the production catalog.
+  # =====================================================================
+  prod-smoke:
+    name: Read-only smoke (User ${{ matrix.user }}, ${{ matrix.environment }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -36,15 +66,104 @@ jobs:
           python -m pip install --upgrade pip
           python ndi_install.py --dev --no-validate --verbose
 
-      - name: Run cloud API tests
+      # Belt AND braces. `-m "not destructive"` is one sentence on one command
+      # line; NDI_CLOUD_READONLY is enforced in tests/conftest.py, which errors
+      # the session if a destructive-marked test survived selection. A future
+      # test that forgets the marker, or a job that forgets the flag, is caught
+      # by the other half.
+      - name: Run read-only cloud API tests
         env:
           NDI_CLOUD_USERNAME: ${{ matrix.user == 1 && secrets.TEST_USER_1_USERNAME || secrets.TEST_USER_2_USERNAME }}
           NDI_CLOUD_PASSWORD: ${{ matrix.user == 1 && secrets.TEST_USER_1_PASSWORD || secrets.TEST_USER_2_PASSWORD }}
           CLOUD_API_ENVIRONMENT: ${{ matrix.environment }}
-          # The destructive MATLAB BYOL lifecycle tests run here (the scheduled,
-          # non-PR workflow) rather than per-PR CI. "false" => the test account
-          # has no registered license, so they run end-to-end and clean up.
+          NDI_CLOUD_READONLY: "1"
+        run: |
+          pytest tests/test_cloud_live.py -m "not destructive" -v --tb=short -rs
+
+  # =====================================================================
+  # Destructive lifecycle: dev tenancy only.
+  # =====================================================================
+  #
+  # NOT ISOLATED YET. This is the dev environment of the same NDI Cloud
+  # deployment, using the same TEST_USER_1 identity -- not a throwaway stage
+  # tenancy. Two org-level things are still missing and are tracked as
+  # Steve-side asks in the catch-up PR body:
+  #
+  #   1. a STAGE_USER_* identity in a disposable organization;
+  #   2. a GitHub Environment (`cloud-stage`) to scope those secrets and add
+  #      required reviewers -- `gh api .../environments` currently returns
+  #      empty, so `environment:` cannot be set here without breaking the job.
+  #
+  # Until both exist, dropping prod from this matrix is the whole of the
+  # isolation we actually have. Do not describe it as isolated.
+  destructive-lifecycle:
+    name: Destructive lifecycle (dev)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: github.event_name == 'schedule' || inputs.run_destructive
+    # environment: cloud-stage   # blocked: no GitHub Environments defined yet
+    strategy:
+      fail-fast: false
+      max-parallel: 1            # serialize; two runs share one cloud identity
+      matrix:
+        environment: [dev]       # deliberately NOT prod
+
+    env:
+      NDI_CLOUD_USERNAME: ${{ secrets.TEST_USER_1_USERNAME }}
+      NDI_CLOUD_PASSWORD: ${{ secrets.TEST_USER_1_PASSWORD }}
+      CLOUD_API_ENVIRONMENT: ${{ matrix.environment }}
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install with ndi_install.py
+        run: |
+          python -m pip install --upgrade pip
+          python ndi_install.py --dev --no-validate --verbose
+
+      - name: Run destructive cloud lifecycle tests
+        env:
+          # "false" => this account has no registered MATLAB licence, so the
+          # BYOL tests run end-to-end. Setting it wrongly ARMS
+          # DELETE /users/me/matlab-license against a real licence, which is
+          # why tests/_matlab_license_guard.py makes an unset value a
+          # collection error rather than a skip.
           NDI_CLOUD_TEST_USER_HAS_MATLAB_LICENSE: "false"
         run: |
           pytest tests/test_cloud_live.py tests/test_cloud_matlab_license.py \
-            tests/test_cloud_hello_matlab.py -v --tb=short
+            -m destructive -v --tb=short -rs
+
+      # Teardown that survives a failed test AND a cancelled job. pytest
+      # fixtures cannot: a cancellation kills the process between the create
+      # and the delete, which is precisely how datasets were orphaned.
+      # --fail-on-residual makes a sweep that removed nothing RED. The previous
+      # in-test janitor warned that it was cleaning up and deleted 0 of 294.
+      - name: Janitor sweep (guaranteed)
+        if: always()
+        shell: bash
+        run: |
+          # Capture the exit code rather than piping: the step must publish the
+          # residual list to the run summary AND still fail.
+          rc=0
+          python -m tests.tools.cloud_janitor \
+            --prefix NDI_PYTEST \
+            --max-age 0 \
+            --fail-on-residual > janitor.log 2>&1 || rc=$?
+          cat janitor.log
+          {
+            echo "### Cloud janitor (${{ matrix.environment }})"
+            echo ''
+            echo '```'
+            cat janitor.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::Cloud janitor exited $rc — leftover test datasets remain in ${{ matrix.environment }}"
+          fi
+          exit "$rc"
