@@ -28,6 +28,7 @@ import pytest
 
 from ndi.dataset._dataset import ndi_dataset_dir
 from ndi.document import ndi_document
+from ndi.query import ndi_query
 from ndi.session.dir import ndi_session_dir
 
 
@@ -217,11 +218,8 @@ class TestNoOrphanedConnections:
 
         monkeypatch.setattr(session_dir_module, "ndi_session_dir", recording_ndi_session_dir)
 
-        dataset = ndi_dataset_dir(
-            "orphan_ref",
-            tmp_path / "ds",
-            documents=[ndi_document("base", **{"base.name": "seed"})],
-        )
+        seeded = [ndi_document("base", **{"base.name": f"seed-{i}"}) for i in range(25)]
+        dataset = ndi_dataset_dir("orphan_ref", tmp_path / "ds", documents=seeded)
 
         assert len(created) > 1, (
             "expected the dataset constructor to re-create its session; if it "
@@ -237,6 +235,31 @@ class TestNoOrphanedConnections:
                     "a discarded session still holds an open SQLite handle on "
                     "the dataset's did-sqlite.sqlite"
                 )
+
+    def test_closing_the_discarded_session_does_not_lose_its_writes(self, tmp_path):
+        """sqlite3.Connection.close() rolls back an uncommitted transaction.
+
+        The constructor bulk-inserts every document through the session it then
+        discards, so closing that session would destroy the whole insert if DID
+        had left the transaction open. Read the documents back through the
+        surviving session to prove the writes were committed first.
+        """
+        seeded = [ndi_document("base", **{"base.name": f"seed-{i}"}) for i in range(25)]
+        names = {d.document_properties["base"]["name"] for d in seeded}
+
+        dataset = ndi_dataset_dir("orphan_ref", tmp_path / "ds", documents=seeded)
+
+        found = dataset._session._database.search(ndi_query("").isa("base"))
+        found_names = {d.document_properties.get("base", {}).get("name", "") for d in found}
+        assert names <= found_names, f"documents lost on rebind: {sorted(names - found_names)}"
+
+        # And they survive a reopen from disk, not just the in-memory handle.
+        reopened = ndi_dataset_dir("orphan_ref", tmp_path / "ds")
+        reopened_names = {
+            d.document_properties.get("base", {}).get("name", "")
+            for d in reopened._session._database.search(ndi_query("").isa("base"))
+        }
+        assert names <= reopened_names
 
 
 class TestMatlabImportLeavesNoOrphanHandles:
