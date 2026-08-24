@@ -16,6 +16,20 @@ The constructor accepts the same arguments as
 identifying the metadata file inside an epoch's file list); the pattern
 is stored but not consulted, since the parameters are constant.
 
+``readmetadata`` is overridden (not just ``readmetadatafromfile``) on
+purpose: the base class insists that its ``tab_separated_file_parameter``
+regular expression match exactly one epoch file before it will return
+anything, so a reader whose parameters do not come from disk would still
+abort ingest on a non-matching pattern. Keeping the override means
+sessions already built with the old ``'#'``-wildcard pattern stored in
+their ``daqmetadatareader`` document keep working without
+reconfiguration. See NDI-matlab ``a05a0a80a`` (PR #876), which also
+corrected ``MetadataReaderFileParameters`` in
+``ndi_common/daq_systems/rayolab/rayo_stim.json`` from the
+file-navigator-only ``'#'`` wildcard to a plain ``.*`` regexp;
+``FileParameters``/``EpochProbeMapFileParameters`` keep ``'#'``, which
+``ndi.file.navigator`` resolves.
+
 MATLAB equivalent: ``src/ndi/+ndi/+daq/+metadatareader/RayoLabStims.m``
 """
 
