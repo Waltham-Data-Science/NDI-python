@@ -141,6 +141,48 @@ class TestUpdateObjectTypeMarker:
         assert ndi_session_dir.directorytype(p) == "dataset"
         assert ndi_dataset_dir.exists(p) is True
 
+    def test_populated_dataset_stays_dataset_across_reopen(self, temp_dir):
+        """A dataset with a linked session keeps its marker when re-opened."""
+        dspath = temp_dir / "populated_dataset"
+        dspath.mkdir()
+        spath = temp_dir / "a_linked_session"
+        spath.mkdir()
+
+        ds = ndi_dataset_dir("ds_ref", str(dspath))
+        ds.add_linked_session(ndi_session_dir("linked_ref", spath))
+        assert ndi_session_dir.directorytype(dspath) == "dataset"
+
+        # Re-opening as a dataset, then as a plain session, must both preserve
+        # the marker (ndi_dataset_dir keeps an ndi_session_dir at the same path).
+        ndi_dataset_dir(str(dspath))
+        assert ndi_session_dir.directorytype(dspath) == "dataset"
+        ndi_session_dir(dspath)
+        assert ndi_session_dir.directorytype(dspath) == "dataset"
+
+        # The linked session's own directory is still a plain session.
+        assert ndi_session_dir.directorytype(spath) == "session"
+
+    def test_populated_dataset_marker_is_rebuilt_by_session_open(self, temp_dir):
+        """Deleting the marker of a real populated dataset: a session open restores it.
+
+        This is MATLAB's updateObjectTypeMarker dataset-detection branch reached
+        through the real dataset API rather than a hand-built document.
+        """
+        dspath = temp_dir / "unmarked_populated_dataset"
+        dspath.mkdir()
+        spath = temp_dir / "another_linked_session"
+        spath.mkdir()
+
+        ds = ndi_dataset_dir("ds_ref", str(dspath))
+        ds.add_linked_session(ndi_session_dir("linked_ref", spath))
+
+        _markerfile(dspath).unlink()
+        assert ndi_session_dir.directorytype(dspath) == "unknown"
+
+        ndi_session_dir(dspath)
+        assert ndi_session_dir.directorytype(dspath) == "dataset"
+        assert ndi_dataset_dir.exists(dspath) is True
+
     def test_legacy_dataset_backfills_dataset_marker(self, temp_dir):
         """A marker-less directory holding dataset bookkeeping docs is a dataset.
 
