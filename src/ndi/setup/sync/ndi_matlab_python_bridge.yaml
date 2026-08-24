@@ -1,0 +1,80 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/setup/sync/
+# The Primary Contract for the ndi.setup.sync namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Standalone functions
+# =========================================================================
+functions:
+
+  - name: addSyncRules
+    type: function
+    matlab_path: "+ndi/+setup/+sync/addSyncRules.m"
+    matlab_last_sync_hash: "881919d39"
+    python_path: "ndi/setup/sync/add_sync_rules.py"
+    python_function: "add_sync_rules"
+    input_arguments:
+      - name: S
+        type_matlab: "ndi.session"
+        type_python: "Any"
+      - name: labName
+        type_matlab: "char | string"
+        type_python: "str"
+    output_arguments:
+      - name: S
+        type_matlab: "ndi.session"
+        type_python: "Any"
+    decision_log: >
+      Exact match. Reads every ndi_common/sync_rules/<labName>/*.json,
+      builds the described ndi.time.syncrule, and calls
+      session.syncgraph_addrule on it. A lab with no sync_rules folder is
+      a no-op, as in MATLAB. Rule de-duplication is delegated to
+      ndi.time.syncgraph.add_rule, which compares parameters only — the
+      same test MATLAB's ndi.time.syncrule/eq performs. MATLAB returns S
+      by value; Python mutates the session in place and also returns it so
+      that call sites can be written either way.
+
+  - name: syncRuleFromConfigFile
+    type: function
+    matlab_path: "+ndi/+setup/+sync/syncRuleFromConfigFile.m"
+    matlab_last_sync_hash: "881919d39"
+    python_path: "ndi/setup/sync/add_sync_rules.py"
+    python_function: "sync_rule_from_config_file"
+    input_arguments:
+      - name: configFilePath
+        type_matlab: "char (mustBeFile)"
+        type_python: "str | Path"
+    output_arguments:
+      - name: syncRule
+        type_matlab: "ndi.time.syncrule"
+        type_python: "ndi_time_syncrule"
+    decision_log: >
+      Exact match. Requires both 'syncrule_class' and 'parameters' fields.
+      MATLAB errors with identifier NDI:Setup:InvalidSyncRuleConfig; Python
+      raises ValueError naming the same two fields (NDI-python has no
+      MException identifier equivalent). MATLAB's feval(char(class), params)
+      is replaced by ndi.time.syncrule_base.syncrule_class_from_name, a
+      table lookup shared with ndi_time_syncrule.from_document so that
+      document loading and config loading resolve a class name identically;
+      it accepts either the MATLAB dotted name stored in the JSON or the
+      Python underscore name. A class name not in the table raises
+      ValueError rather than silently constructing the base class.
+
+# =========================================================================
+# Vendored data
+# =========================================================================
+data_files:
+
+  - matlab_path: "ndi_common/sync_rules/vhlab/vhintan_intan2spike2.json"
+    matlab_last_sync_hash: "881919d39"
+    python_path: "ndi/ndi_common/sync_rules/vhlab/vhintan_intan2spike2.json"
+    decision_log: "Byte-for-byte vendored copy of MATLAB origin/main."
+
+  - matlab_path: "ndi_common/sync_rules/vhlab/vhtaste_sync2bpod.json"
+    matlab_last_sync_hash: "881919d39"
+    python_path: "ndi/ndi_common/sync_rules/vhlab/vhtaste_sync2bpod.json"
+    decision_log: "Byte-for-byte vendored copy of MATLAB origin/main."
