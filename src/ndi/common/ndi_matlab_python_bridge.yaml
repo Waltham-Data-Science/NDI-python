@@ -133,3 +133,118 @@ classes:
         decision_log: >
           Python-specific method for programmatic path overrides.
           MATLAB uses environment variables or property assignment.
+
+# =========================================================================
+# Vendored data tree (ndi_common/)
+#
+# ndi.common.PathConstants owns COMMON_FOLDER / DOCUMENT_PATH / SCHEMA_PATH,
+# so the sync state of the vendored src/ndi/ndi_common/ tree is recorded here.
+# These are DATA files copied from NDI-matlab, not ports of .m source: a
+# matlab_last_sync_hash below means "byte-identical to NDI-matlab at that
+# commit", and is only present where that is literally true.
+#
+# Drift guard: tests/test_ndi_common_matlab_sync.py
+# =========================================================================
+vendored_data:
+
+  - name: probe_geometry_library
+    matlab_path: "src/ndi/ndi_common/probe/geometry/"
+    python_path: "src/ndi/ndi_common/probe/geometry/"
+    matlab_last_sync_hash: "7509dc96c"
+    matlab_source_commits: ["db7aee405", "5762f371c", "3bac2f35a", "1be6aac75"]
+    decision_log: >
+      Byte-for-byte vendoring of the electrode-layout library added by PR #849
+      (README.md + 7 layouts under generic/, neuronexus/, neuropixels/, ucla/).
+      Pure library data with no NDI-python consumer yet — the
+      ndi.fun.probe.geometry module (listLibrary/readLibrary/fromLibrary/
+      fromProbeInterface) is deferred as drift item S5. Vendoring the data now
+      keeps the two trees converged and makes S5 a code-only port later.
+      Not V_eta/schema-coupled: layouts are inputs to a probe_geometry document,
+      not a document or schema definition themselves.
+
+  - name: empty_ontology_example_ids
+    matlab_path: "src/ndi/ndi_common/schema_documents/{data/{generic_file,imageStack,ontologyImage,ontologyLabel},element/distance_metadata}_schema.json"
+    python_path: "src/ndi/ndi_common/schema_documents/"
+    matlab_last_sync_hash: "7509dc96c"
+    matlab_source_commits: ["95112ae03", "64aef69fe"]
+    decision_log: >
+      Corrects five 'documentation' strings that still quoted the pre-2026-01
+      8-digit EMPTY ontology ids (EMPTY:00000090, EMPTY:0000146). MATLAB
+      renumbered to the current 7-digit scheme in 95112ae03 (2026-01-30) and
+      64aef69fe (2026-02-01); NDI-python vendored the pre-renumber values at
+      first release and never picked the change up, so this is pre-existing
+      divergence rather than 2026-06→08 drift. 7 digits also matches what the
+      live resolver expects — ndi.ontology.providers.EMPTYProvider keys its
+      lookup with term.zfill(7) — so the old examples named ids that provider
+      could never resolve. Prose only; no validation behaviour changes.
+
+  - name: database_document_markdown_companions
+    matlab_path: "src/ndi/ndi_common/database_documents/data/{filter,pyraview}.md"
+    python_path: "src/ndi/ndi_common/database_documents/data/"
+    matlab_last_sync_hash: "7509dc96c"
+    decision_log: >
+      The .json document definitions for filter and pyraview already shipped;
+      their human-readable .md companions did not. NDI-python already vendors
+      apps/jrclust/jrclust_clusters.md, so .md companions are in scope for the
+      package. Documentation only.
+
+  - name: vhtaste_bpod_daq_system
+    matlab_path: "src/ndi/ndi_common/daq_systems/vhlab/vhtaste_bpod.json"
+    python_path: "src/ndi/ndi_common/daq_systems/vhlab/vhtaste_bpod.json"
+    matlab_last_sync_hash: "7509dc96c"
+    decision_log: >
+      Trailing-newline-only divergence introduced when NDI-python re-authored
+      this file in 725a3b4. Normalised to the MATLAB bytes so future drift
+      detection over this tree can rely on a plain diff/hash; no content change.
+
+  # -----------------------------------------------------------------------
+  # Deliberate Python adaptations — DO NOT "re-sync" these to MATLAB.
+  # -----------------------------------------------------------------------
+  - name: infinite_range_schemas
+    matlab_path: "src/ndi/ndi_common/schema_documents/apps/{calculations/simple_calc,markgarbage/valid_interval}_schema.json"
+    python_path: "src/ndi/ndi_common/schema_documents/apps/"
+    matlab_last_sync_hash: null
+    decision_log: >
+      INTENTIONALLY DIVERGENT. MATLAB ships [-Inf,Inf,0] parameter ranges —
+      jsonencode output that jsondecode accepts but that is not legal JSON.
+      Python's json.load raises on the bare Inf token, _load_schema returns
+      None, and validation for these classes goes dark. NDI-python commit
+      8e4660c replaced them with [-1e309,1e309,0]: legal JSON literals that
+      overflow to the identical +/-inf bounds. Reverting these to the MATLAB
+      bytes reintroduces the fail-open bug. Reconvergence belongs on the
+      MATLAB side. Guarded by
+      tests/test_ndi_common_matlab_sync.py::TestPythonJsonAdaptationsPreserved.
+
+  # -----------------------------------------------------------------------
+  # Known-divergent, deliberately NOT synced in this pass.
+  # -----------------------------------------------------------------------
+  - name: schema_coupled_block
+    matlab_path: "src/ndi/ndi_common/{database_documents,schema_documents}/{ensemble,apps/kiasort,ingestion/daqreader_image_epochdata_ingested*}, probe/probetype2object.json (imaging rows), daq_systems/vhlab/vhprairieview.json"
+    python_path: "src/ndi/ndi_common/"
+    matlab_last_sync_hash: null
+    decision_log: >
+      DEFERRED — schema-coupled (V_eta-entangled) block. New/changed document
+      types (ensemble, kiasort_clusters, the 'metadata' epoch-header field on
+      daqreader_image_epochdata_ingested), the ndi.probe.timage ->
+      ndi.probe.image class rename with its letter-initial probe-type renames,
+      and the vhprairieview DAQ system all land together with the imaging
+      rework and must be ported as one unit, not file by file.
+
+  - name: sync_rules
+    matlab_path: "src/ndi/ndi_common/sync_rules/"
+    python_path: null
+    matlab_last_sync_hash: null
+    decision_log: >
+      Absent in NDI-python. Owned by the ndi.setup.lab / addSyncRules work
+      (drift item M4), not by this vendored-data pass.
+
+  - name: matlab_only_assets
+    matlab_path: "src/ndi/ndi_common/{example_app_sessions/,example_datasets/oldDataset/,.matlab2markdown-ignore}"
+    python_path: null
+    matlab_last_sync_hash: null
+    decision_log: >
+      NOT VENDORED. example_app_sessions/ is ~20 MB of binary acquisition
+      fixtures (.rhd/.rec) with no NDI-python consumer; example_datasets/
+      oldDataset/ is an opaque legacy .ndi sqlite fixture for MATLAB's
+      upgrade-path tests; .matlab2markdown-ignore configures MATLAB's doc
+      generator. All three are payload/tooling, not schema or config.
