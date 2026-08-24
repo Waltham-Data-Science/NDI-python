@@ -976,6 +976,14 @@ class ndi_dataset_dir(ndi_dataset):
         # datasets that don't yet have session_in_a_dataset tracking).
         self._ensure_session_tracking()
 
+        # Record on disk that this directory holds a dataset, so it can be
+        # quickly distinguished from a plain session (for example, by an open
+        # dialog) without opening it. Written unconditionally so that even an
+        # empty dataset -- which has no session_in_a_dataset documents yet -- is
+        # correctly marked, and so that older datasets are migrated the next time
+        # they are opened. See ndi_session_dir.directorytype.
+        self._session.setObjectTypeMarker("dataset")
+
     def _discover_correct_session(self, initial_reference: str) -> None:
         """Find the correct session ID and reference from database documents.
 
@@ -1076,6 +1084,25 @@ class ndi_dataset_dir(ndi_dataset):
                 tracked_ids.add(sid)
             except Exception:
                 logger.debug("Could not register session %s: skipping", sid)
+
+    @staticmethod
+    def exists(path: str | Path) -> bool:
+        """Does an ndi_dataset exist at a given path?
+
+        MATLAB equivalent: ``ndi.dataset.dir.exists``
+
+        Returns True if *path* holds a dataset directory, as determined by
+        ``ndi_session_dir.directorytype`` (which inspects the ``.ndi`` folder
+        without fully opening the object).  Returns False for a plain session,
+        for a non-NDI directory, and for a legacy NDI directory whose type has
+        not yet been recorded (``directorytype`` returns ``'unknown'``); open
+        such a directory once to record its type.
+
+        See also: ``ndi_session_dir.exists``, ``ndi_session_dir.directorytype``
+        """
+        from ..session.dir import ndi_session_dir
+
+        return ndi_session_dir.directorytype(path) == "dataset"
 
     @staticmethod
     def dataset_erase(ndi_dataset_dir_obj: ndi_dataset_dir, areyousure: str = "no") -> None:
