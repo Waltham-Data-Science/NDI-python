@@ -108,7 +108,14 @@ class TestIsInCloudIsLocalAndCheap:
         assert dataset.isInCloud() == (True, "cloud-local")
 
     def test_makes_no_network_call(self, tmp_path, monkeypatch):
-        """A purely local check must not build a cloud client."""
+        """A purely local check must not talk to the network.
+
+        Blocks the transport itself (``requests.Session.request``), not just
+        the cloud-client factory -- otherwise the test would still pass if
+        isInCloud reached for requests directly.
+        """
+        import requests
+
         import ndi.cloud.client as cloud_client
 
         dataset = _dataset(tmp_path)
@@ -117,6 +124,8 @@ class TestIsInCloudIsLocalAndCheap:
         def explode(*args, **kwargs):
             raise AssertionError("isInCloud must not touch the network")
 
+        monkeypatch.setattr(requests.Session, "request", explode)
+        monkeypatch.setattr(requests, "request", explode)
         monkeypatch.setattr(cloud_client.CloudClient, "from_env", staticmethod(explode))
 
         assert dataset.isInCloud() == (True, "cloud-local")
