@@ -266,6 +266,69 @@ class ndi_dataset:
                 return False
         return True
 
+    def isInCloud(self) -> tuple[bool, str]:
+        """Return whether this dataset is linked to a dataset on NDI Cloud.
+
+        A dataset is considered to be "in the cloud" if its database contains
+        a ``dataset_remote`` document. That document is created and stored
+        locally the first time the dataset is uploaded (see
+        ``ndi.cloud.uploadDataset``).
+
+        This is a purely local check: it inspects only the dataset's own
+        database and performs NO network communication, so it does not verify
+        that the remote dataset still exists or is up to date. It also does
+        not open the dataset's linked sessions — the ``dataset_remote``
+        document lives in the dataset's own database, since its
+        ``base.session_id`` is the dataset id — so the check is cheap enough
+        to call while listing datasets. That is why it reads the session
+        database directly rather than going through
+        :meth:`database_search`, which fans out to every linked session.
+
+        Returns:
+            ``(in_cloud, cloud_dataset_id)``. *cloud_dataset_id* is the remote
+            NDI Cloud dataset id when *in_cloud* is True, or ``""`` when it is
+            False. If more than one ``dataset_remote`` document is present —
+            which indicates a misconfiguration — the id of the first is
+            returned rather than raising, so this status check never throws.
+
+        MATLAB equivalent: ``ndi.dataset/isInCloud``
+        (NDI-matlab ``41ef50f54``, PR #859).
+
+        See also: :meth:`isIngested`,
+        ``ndi.cloud.internal.getCloudDatasetIdForLocalDataset``
+        """
+        try:
+            database = getattr(self._session, "_database", None)
+            if database is None:
+                return False, ""
+            docs = list(database.search(ndi_query("").isa("dataset_remote")))
+        except Exception:  # noqa: BLE001 - a status check must never throw
+            logger.debug("isInCloud: dataset_remote lookup failed", exc_info=True)
+            return False, ""
+
+        if not docs:
+            return False, ""
+
+        return True, self._cloud_dataset_id_from_doc(docs[0])
+
+    @staticmethod
+    def _cloud_dataset_id_from_doc(doc: Any) -> str:
+        """Best-effort ``dataset_remote.dataset_id`` extraction, never raising.
+
+        Mirrors MATLAB's ``char(string(...))`` coercion; a document of an
+        unexpected shape yields ``""`` rather than an error.
+        """
+        props = getattr(doc, "document_properties", doc)
+        if not isinstance(props, dict):
+            return ""
+        remote = props.get("dataset_remote")
+        if not isinstance(remote, dict):
+            return ""
+        dataset_id = remote.get("dataset_id")
+        if dataset_id is None:
+            return ""
+        return str(dataset_id)
+
     def convertLinkedSessionToIngested(
         self,
         session_id: str,
