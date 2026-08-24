@@ -770,6 +770,83 @@ functions:
       Exact match. Gets the last modification date of a file.
       Returns UTC datetime or None if file doesn't exist.
 
+  - name: pathSafeName
+    type: function
+    matlab_path: "+ndi/+fun/+file/pathSafeName.m"
+    python_path: "ndi/fun/file.py"
+    input_arguments:
+      - name: name
+        type_matlab: "char | string (mustBeTextScalar)"
+        type_python: "str"
+    output_arguments:
+      - name: safeName
+        type_matlab: "char"
+        type_python: "str"
+    decision_log: >
+      Exact match. Reduces a string to the portable [A-Za-z0-9._-] set so
+      it is legal as a single file or folder name on Windows, macOS and
+      Linux: whitespace and control characters (char < 32, char 127, ' ')
+      become '_', every other non-portable character becomes '-', trailing
+      '.' are stripped, an empty result becomes 'x', and a Windows reserved
+      device name (CON PRN AUX NUL COM1-9 LPT1-9, compared case-insensitively
+      against the text before the FIRST '.') is prefixed with '_'.
+      UTF-16 PARITY: MATLAB char() counts UTF-16 code units, so a non-BMP
+      character is a surrogate pair and maps to TWO '-'. Python iterates
+      code points, so the port emits two '-' for code points above U+FFFF
+      to keep both languages producing the same folder name for the same
+      element. MATLAB's mustBeTextScalar is enforced as TypeError.
+
+  - name: elementDirectoryName
+    type: function
+    matlab_path: "+ndi/+fun/+file/elementDirectoryName.m"
+    python_path: "ndi/fun/file.py"
+    input_arguments:
+      - name: element
+        type_matlab: "ndi.element | ndi.probe | char | string"
+        type_python: "Any (object with elementstring(), or str)"
+    output_arguments:
+      - name: dirName
+        type_python: "str"
+      - name: legacyDirName
+        type_python: "str"
+    decision_log: >
+      Exact match. Returns the per-element working folder name used by the
+      probe export and spike-sorter import functions. dirName is the element
+      string sanitized by pathSafeName ('ctx | 1' -> 'ctx_-_1');
+      legacyDirName is the pre-existing form that only replaced spaces
+      ('ctx_|_1'), returned so callers can still find data written by older
+      versions of NDI. MATLAB returns [dirName, legacyDirName] as two
+      outputs; Python returns them as a tuple in the same order.
+
+  - name: elementDirectory
+    type: function
+    matlab_path: "+ndi/+fun/+file/elementDirectory.m"
+    python_path: "ndi/fun/file.py"
+    input_arguments:
+      - name: parent_dir
+        type_matlab: "char (mustBeTextScalar)"
+        type_python: "str | Path"
+      - name: element
+        type_matlab: "ndi.element | ndi.probe | char | string"
+        type_python: "Any (object with elementstring(), or str)"
+    output_arguments:
+      - name: dirPath
+        type_matlab: "char"
+        type_python: "Path"
+      - name: dirName
+        type_python: "str"
+      - name: isLegacy
+        type_matlab: "logical"
+        type_python: "bool"
+    decision_log: >
+      Exact match in resolution semantics. Prefers the pathSafeName folder;
+      falls back to an existing legacy ('|'-separated) folder only when the
+      new-name folder does not exist and the legacy one does, so data written
+      by earlier versions of NDI is still found. Creates nothing on disk.
+      TYPE DIVERGENCE: MATLAB returns dirPath as a char path built with
+      fullfile; Python returns a pathlib.Path (repo-wide convention). MATLAB
+      returns three outputs; Python returns them as a tuple in the same order.
+
   # =========================================================================
   # Functions — plot.py
   # MATLAB: +ndi/+fun/+plot/*.m
