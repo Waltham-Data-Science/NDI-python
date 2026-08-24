@@ -302,3 +302,19 @@ def test_lab_sync_rules_persist_to_database(session):
         "ndi_time_syncrule_filefind",
         "ndi_time_syncrule_filematch",
     ]
+
+
+def test_multiple_classes_with_single_file_parameter_errors():
+    """MATLAB's fallback branch fevals a non-scalar class list, which errors.
+
+    Mirror that as a ValueError instead of silently dropping classes[1:].
+    """
+    from ndi.setup.lab import _metadata_reader_pairs
+
+    config = {
+        "Name": "bad_lab_config",
+        "MetadataReaderClass": ["ndi.daq.metadatareader.A", "ndi.daq.metadatareader.B"],
+        "MetadataReaderFileParameters": ["one.txt"],
+    }
+    with pytest.raises(ValueError, match="bad_lab_config"):
+        _metadata_reader_pairs(config)

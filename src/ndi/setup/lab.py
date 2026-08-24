@@ -113,7 +113,14 @@ def _metadata_reader_pairs(config: dict) -> list[tuple[str, str]]:
         return list(zip(classes, file_params))
 
     # Single (or absent) file parameter: MATLAB passes char('') through, which
-    # yields a reader with an empty tab_separated_file_parameter.
+    # yields a reader with an empty tab_separated_file_parameter. MATLAB's
+    # feval errors on a non-scalar class list in this branch; mirror that
+    # rather than silently dropping classes beyond the first.
+    if len(classes) > 1:
+        raise ValueError(
+            f"DAQ system '{config.get('Name')}': {len(classes)} MetadataReaderClass "
+            f"entries but at most one MetadataReaderFileParameters entry."
+        )
     fp = file_params[0] if file_params else ""
     return [(classes[0], fp)]
 
