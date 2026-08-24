@@ -15,7 +15,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import SkipValidation, validate_call
 
-from ..client import CloudClient, _auto_client
+from ..client import APIResponse, CloudClient, _auto_client
 from ._validators import VALIDATE_CONFIG, NonEmptyStr
 
 _Client = Annotated[CloudClient | None, SkipValidation()]
@@ -90,8 +90,14 @@ def _add_organization_fields(payload: Any) -> Any:
 
 
 @_auto_client
-def me(*, client: _Client = None) -> dict[str, Any]:
+def me(*, client: _Client = None) -> APIResponse | dict[str, Any]:
     """GET /users/me -- Get the authenticated user's profile.
+
+    Returns the :class:`~ndi.cloud.client.APIResponse` wrapper that
+    ``CloudClient.get`` produces (its ``.data`` carries the parsed body, and
+    the wrapper proxies ``dict`` access, so ``result.get("email")`` works),
+    or the bare payload when *client* is a stand-in whose ``get`` returns a
+    plain ``dict`` rather than an ``APIResponse``.
 
     On success the response carries the fields the NDI Cloud API returns for
     the current user (``id``, ``name``, ``email``, ``isValidated``,
