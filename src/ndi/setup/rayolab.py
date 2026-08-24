@@ -27,12 +27,22 @@ from __future__ import annotations
 from .lab import lab
 
 
-def rayolab(session) -> None:
+def rayolab(session, force_update: bool = False):
     """Add the RayoLab DAQ systems to an NDI session.
 
     Parameters
     ----------
     session : ndi.session.session_base
         The NDI session to add DAQ systems to.
+    force_update : bool, optional
+        If true, existing RayoLab DAQ systems are removed from the session and
+        re-created from the current definitions in
+        ``ndi_common/daq_systems/rayolab``. MATLAB equivalent:
+        ``ndi.setup.rayolab(..., 'forceUpdate', tf)``.
+
+    Returns
+    -------
+    ndi.session.session_base
+        The same session, for chaining.
     """
-    lab(session, "rayolab")
+    return lab(session, "rayolab", force_update=force_update)
