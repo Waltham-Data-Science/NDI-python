@@ -159,3 +159,34 @@ functions:
       the module imports cleanly in the standard env. MATLAB vlt.data.assign
       name-value parsing is replaced by native Python keyword arguments (no vlt
       dependency). pyplot.gca() stands in for MATLAB gca.
+
+# =========================================================================
+# Not yet ported
+# =========================================================================
+not_yet_ported:
+
+  - name: geometry.fromStruct
+    matlab_path: "+ndi/+fun/+probe/+geometry/fromStruct.m"
+    matlab_last_sync_hash: "bf85e24b7"
+    status: not_yet_ported
+    decision_log: >
+      Drift item S6. MATLAB bf85e24b7 makes fromStruct coerce every
+      matrix-valued probe_geometry field to a column vector, spelling an unused
+      optional field (contact_shape_radius on a square-contact probe, an absent
+      contour) as a 0x1 empty rather than 0x0, because MATLAB document
+      validation rejects a 0x0 [] against a schema shape of [N x 1].
+      Python has no ndi.fun.probe.geometry package at all (that whole library is
+      drift item S5, sized L) and emits no probe_geometry documents anywhere --
+      the only Python probe_geometry surface is the read-only consumer
+      plotProbeGeometry. So the emit-side coercion has nothing to attach to.
+      The half of the invariant that survives JSON serialization was ported
+      instead, into ndi.validate: a matrix-typed field's empty must be [] and
+      never null (a JSON null decodes MATLAB-side to exactly the unshaped 0x0
+      this commit exists to prevent), and a matrix must be rectangular. See
+      tests/test_validate.py::TestMatrixEmptyIsList and TestMatrixRagged.
+      The declared [rows, cols] dimensions are deliberately NOT enforced: a flat
+      JSON list is orientation-free, so [N,1] and [1,N] are indistinguishable on
+      the wire, and Python and MATLAB do not presently agree on the nested case
+      (element_epoch/epochclocktimes t0_t1 is declared [2, NaN] but emitted
+      N-by-2 by Python). Settling that convention is a cross-language decision,
+      not a validation tweak.

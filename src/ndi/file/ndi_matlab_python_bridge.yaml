@@ -408,8 +408,26 @@ classes:
           - name: epochfiles_disk
             type_python: "list[list[str]]"
         decision_log: >
-          Exact match. Override scans subdirectories
-          (one directory = one epoch).
+          Override scans subdirectories at depth 1 (one directory = one epoch);
+          that much matches.
+          DIVERGENCE (recorded 2026-08-24, not yet fixed): the group-completeness
+          rule differs. MATLAB delegates to vlt findfilegroups(exp_path,
+          filematch, 'SearchParent',0,'SearchDepth',1), which forms a group only
+          where the directory satisfies EVERY filematch pattern (an AND) -- see
+          NDI-matlab bec87e211, whose message states the AND is "matching stock
+          epochdir semantics" -- and then drops hidden/AppleDouble groups via
+          ndi.util.removehiddenfilegroups. Python's _match_files_in_dir collects
+          per-file matches and epochdir.py accepts the directory on ANY single
+          pattern hit, so a directory holding only a subset of the configured
+          FileParameters still becomes an epoch where MATLAB forms none. Python
+          skips dotfiles per file, which covers part of what
+          removehiddenfilegroups does, but there is no group-level filter.
+          Evidence note: vlt-matlab is not vendored or installed here, so
+          findfilegroups' source could not be read directly; the AND reading
+          rests on the NDI-matlab commit message plus the call signature.
+          Confirm against vlt before changing Python's behavior -- this shifts
+          epoch formation for every epochdir-based DAQ system, so it needs its
+          own TDD task, not a drive-by fix.
 
       - name: epochid
         input_arguments:

@@ -105,7 +105,16 @@ def _build_registry() -> dict[str, type]:
     registry[ndi_file_navigator_rhd_series_epochdir.NDI_FILENAVIGATOR_CLASS] = (
         ndi_file_navigator_rhd_series_epochdir
     )
-    # Custom lab-specific navigators mapped to epochdir until dedicated classes exist
+    # Custom lab-specific navigators mapped to epochdir until dedicated classes exist.
+    #
+    # NOT a parity stand-in: as of NDI-matlab bec87e211 (PR #863) the real
+    # vhlab_np_epochdir forms one epoch per `Epoch_Set_X` subdirectory of a
+    # `*_g0` run, and only when the combined file group matches EVERY
+    # FileParameter (an AND). ndi_file_navigator_epochdir here forms one epoch
+    # per first-level subdirectory on ANY single match, and never descends into
+    # `Epoch_Set_X`, so a `vhajbpod_np` tree yields different epochs (and
+    # different epoch ids -- MATLAB now returns '<g0dir>_<Epoch_Set_dir>') than
+    # MATLAB does. Porting that navigator is tracked as drift item S8.
     registry["ndi.setup.file.navigator.vhlab_np_epochdir"] = ndi_file_navigator_epochdir
 
     return registry

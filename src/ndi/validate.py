@@ -60,6 +60,45 @@ def _check_integer_params(value: Any, params: Any) -> str | None:
     return None
 
 
+def _matrix_shape(value: Any) -> tuple[int, ...] | None:
+    """Return the shape of a nested-list matrix, or ``None`` if it is ragged.
+
+    A flat list ``[1, 2, 3]`` has shape ``(3,)`` — JSON carries no row/column
+    orientation, so a 1-D list is a vector of unspecified orientation.
+    """
+    if not isinstance(value, (list, tuple)):
+        return ()
+    if len(value) == 0:
+        return (0,)
+    inner = [_matrix_shape(v) for v in value]
+    first = inner[0]
+    if first is None or any(s != first for s in inner):
+        return None
+    return (len(value), *first)
+
+
+def _check_matrix_params(value: Any) -> str | None:
+    """Check the structural well-formedness of a matrix-typed value.
+
+    Mirrors the invariant behind NDI-matlab ``bf85e24b7`` ("empty matrix fields
+    must be 0x1, not 0x0"): an unused optional matrix field must still be a
+    well-formed empty of the declared shape. JSON has no 0x0/0x1 distinction,
+    so the part of that invariant which survives serialization is that the
+    empty is ``[]`` (checked by the caller, which rejects ``None``) and that
+    the matrix is rectangular.
+
+    Declared ``parameters`` dimensions are deliberately **not** enforced: a
+    flat JSON list is orientation-free, so ``[N, 1]`` and ``[1, N]`` are
+    indistinguishable on the wire, and Python and MATLAB do not currently agree
+    on the orientation of the nested case (see ``t0_t1``, declared ``[2, NaN]``
+    and emitted N-by-2 by Python). Deciding that convention is a cross-language
+    change, not a validation tweak.
+    """
+    if _matrix_shape(value) is None:
+        return "ragged matrix: rows have differing lengths"
+    return None
+
+
 def _check_did_uid_params(value: str, params: Any) -> str | None:
     """Check did_uid string length against parameter."""
     if isinstance(params, (int, float)) and params > 0:
@@ -245,6 +284,19 @@ def _validate_properties(
 
         value = doc_section[prop_name]
 
+        # A matrix field's empty is `[]`, never `null`. MATLAB (bf85e24b7)
+        # requires an unused optional matrix field to be a well-formed empty of
+        # the declared shape; a JSON `null` decodes MATLAB-side to an unshaped
+        # 0x0 and is rejected there as "Invalid sub-field ... size 0x0". Catch
+        # it here rather than let the document reach MATLAB. Checked before the
+        # generic None skip below so only matrix fields change behavior.
+        if prop_type == "matrix" and value is None:
+            errors.append(
+                f'{class_name}.{prop_name}: expected type "matrix", got NoneType '
+                f"(an empty matrix must be [], not null)"
+            )
+            continue
+
         # Allow None/empty for optional fields
         if value is None or value == "":
             continue
@@ -266,6 +318,11 @@ def _validate_properties(
 
         if prop_type == "did_uid" and isinstance(params, (int, float)):
             param_err = _check_did_uid_params(str(value), params)
+            if param_err:
+                errors.append(f"{class_name}.{prop_name}: {param_err}")
+
+        if prop_type == "matrix":
+            param_err = _check_matrix_params(value)
             if param_err:
                 errors.append(f"{class_name}.{prop_name}: {param_err}")
 

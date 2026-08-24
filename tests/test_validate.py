@@ -776,3 +776,108 @@ class TestSchemaFailClosed:
             except Exception as exc:  # noqa: BLE001
                 bad.append(f"{p.relative_to(root)}: {exc}")
         assert not bad, "Unparseable bundled JSON:\n" + "\n".join(bad)
+
+
+# ---------------------------------------------------------------------------
+# Matrix-shape validation (S6)
+#
+# Port of the invariant behind NDI-matlab bf85e24b7 ("Fix probe_geometry
+# validation: empty matrix fields must be 0x1, not 0x0"). MATLAB's emitter
+# coerced every matrix-valued probe_geometry field to a column vector so that
+# an unused optional field (e.g. contact_shape_radius on a square-contact
+# probe) is a well-formed empty of the declared [N x 1] shape rather than an
+# unshaped 0x0.
+#
+# JSON has no 0x0/0x1 distinction, so the Python-side invariant is the one that
+# survives serialization: a matrix field's empty is ``[]``, never ``null``, and
+# a matrix must not be ragged.
+# ---------------------------------------------------------------------------
+
+
+MATRIX_SCHEMA = {
+    "classname": "probe_geometry",
+    "superclasses": [],
+    "probe_geometry": [
+        {"name": "site_locations_depth", "type": "matrix", "parameters": [float("nan"), 1]},
+        {"name": "contact_shape_radius", "type": "matrix", "parameters": [float("nan"), 1]},
+    ],
+}
+
+
+def _matrix_props(**fields):
+    section = {"site_locations_depth": [], "contact_shape_radius": []}
+    section.update(fields)
+    return {"probe_geometry": section}
+
+
+class TestMatrixEmptyIsList:
+    def test_empty_list_is_a_valid_empty_matrix(self):
+        """`[]` is the JSON spelling of MATLAB's 0x1 empty and must validate."""
+        errors = _validate_properties(_matrix_props(), "probe_geometry", MATRIX_SCHEMA)
+        assert errors == []
+
+    def test_none_is_not_a_valid_empty_matrix(self):
+        """`null` is the unshaped empty (MATLAB reads it back as 0x0) and is
+        rejected, so the document does not fail validation on the MATLAB side."""
+        errors = _validate_properties(
+            _matrix_props(contact_shape_radius=None), "probe_geometry", MATRIX_SCHEMA
+        )
+        assert any("contact_shape_radius" in e and "matrix" in e for e in errors)
+
+    def test_none_error_names_the_fix(self):
+        errors = _validate_properties(
+            _matrix_props(contact_shape_radius=None), "probe_geometry", MATRIX_SCHEMA
+        )
+        assert any("[]" in e for e in errors)
+
+    def test_populated_column_still_validates(self):
+        errors = _validate_properties(
+            _matrix_props(site_locations_depth=[0.0, 20.0, 40.0]),
+            "probe_geometry",
+            MATRIX_SCHEMA,
+        )
+        assert errors == []
+
+    def test_nested_column_still_validates(self):
+        errors = _validate_properties(
+            _matrix_props(site_locations_depth=[[0.0], [20.0], [40.0]]),
+            "probe_geometry",
+            MATRIX_SCHEMA,
+        )
+        assert errors == []
+
+    def test_scalar_is_still_a_type_error(self):
+        errors = _validate_properties(
+            _matrix_props(site_locations_depth=3.0), "probe_geometry", MATRIX_SCHEMA
+        )
+        assert any("site_locations_depth" in e and "matrix" in e for e in errors)
+
+
+class TestMatrixRagged:
+    def test_ragged_rows_are_rejected(self):
+        errors = _validate_properties(
+            _matrix_props(site_locations_depth=[[0.0, 1.0], [2.0]]),
+            "probe_geometry",
+            MATRIX_SCHEMA,
+        )
+        assert any("site_locations_depth" in e and "ragged" in e for e in errors)
+
+    def test_rectangular_rows_are_accepted(self):
+        errors = _validate_properties(
+            _matrix_props(site_locations_depth=[[0.0, 1.0], [2.0, 3.0]]),
+            "probe_geometry",
+            MATRIX_SCHEMA,
+        )
+        assert errors == []
+
+    def test_non_matrix_fields_are_untouched(self, base_schema):
+        """The matrix rule must not change how char/string/None behave."""
+        props = {
+            "base": {
+                "session_id": None,
+                "id": None,
+                "name": None,
+                "datestamp": None,
+            },
+        }
+        assert _validate_properties(props, "base", base_schema) == []

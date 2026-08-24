@@ -1094,8 +1094,15 @@ functions:
         default: "None"
     output_arguments:
       - name: user
-        type_python: "dict[str, Any]"
+        type_python: "APIResponse | dict[str, Any]"
     decision_log: >
+      Return type corrected 2026-08-24: this entry and the annotation on
+      users.me both claimed dict[str, Any], but me() returns the APIResponse
+      wrapper that CloudClient.get produces (it proxies dict access, so
+      result.get(...) works, which is why the mismatch went unnoticed), and
+      falls back to the bare payload only for stand-in clients whose get()
+      returns a plain dict. Annotation only -- no runtime change; me() carries
+      no @validate_call, so nothing enforced the old claim.
       Re-synced to MATLAB f2b91923f (PR #858), which derives the parallel
       convenience arrays organizationID / organizationName /
       organizationCanUploadDataset from the raw 'organizations' list returned
