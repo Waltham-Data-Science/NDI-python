@@ -1,0 +1,112 @@
+name: Cloud Janitor
+
+# Sweeps leftover NDI_PYTEST_* datasets out of the NDI Cloud test tenancies.
+#
+# This exists as its own workflow, and not just as a teardown step inside
+# test-cloud-api.yml, because cleanup has to happen even when the test workflow
+# is red, cancelled, or never started. The failure it replaces is measured:
+# the old in-test sweep reported 72 -> 73 -> 74 -> 75 leftover prod datasets on
+# four consecutive nights and deleted 0 of 294 (294/294 of the Aug-22 ids were
+# still present on Aug-24), because every delete was wrapped in
+# `except Exception: pass`.
+#
+# EXPECT THIS WORKFLOW TO BE RED until the standing orphans are cleared.
+# As of 2026-08-24 there are 75 in prod and 223 in dev, all named
+# NDI_PYTEST_TEMP_DATASET and all left with isSubmitted=true by the publish
+# tests. If the API refuses to un-submit them, no client-side janitor can
+# remove them and they need a server-side purge (a Steve-side ask). A red run
+# whose summary lists the surviving ids is the honest state; a green run that
+# swept nothing is what we are replacing.
+
+on:
+  schedule:
+    # Offset from test-cloud-api.yml's 00:00 nightly so the sweep normally runs
+    # after the lifecycle tests have finished. The shared concurrency group
+    # below enforces it even when they overrun.
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      prefix:
+        description: 'Only datasets whose name starts with this are removed'
+        type: string
+        default: 'NDI_PYTEST'
+      dry_run:
+        description: 'Report what would be deleted without deleting anything'
+        type: boolean
+        default: false
+      fail_on_residual:
+        description: 'Fail the job if any targeted dataset survives the sweep'
+        type: boolean
+        default: true
+
+# Same group as test-cloud-api.yml, on purpose: the sweep deletes every
+# NDI_PYTEST_* dataset it can see, so it must never run while a lifecycle test
+# is holding one. Cancellation stays off -- a half-finished sweep is how
+# orphans are created, not how they are removed.
+concurrency:
+  group: ndi-cloud-destructive
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sweep:
+    name: Sweep ${{ matrix.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        environment: [prod, dev]
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install with ndi_install.py
+        run: |
+          python -m pip install --upgrade pip
+          python ndi_install.py --dev --no-validate --verbose
+
+      # TEST_USER_1 is the only identity with write privileges, so it is the
+      # only one that can have created -- or can remove -- these datasets.
+      # TEST_USER_2 is read-only and leaks nothing.
+      - name: Sweep leftover test datasets
+        shell: bash
+        env:
+          NDI_CLOUD_USERNAME: ${{ secrets.TEST_USER_1_USERNAME }}
+          NDI_CLOUD_PASSWORD: ${{ secrets.TEST_USER_1_PASSWORD }}
+          CLOUD_API_ENVIRONMENT: ${{ matrix.environment }}
+          PREFIX: ${{ inputs.prefix || 'NDI_PYTEST' }}
+        run: |
+          ARGS=(--prefix "$PREFIX" --max-age 0)
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            ARGS+=(--dry-run)
+          fi
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.fail_on_residual }}" = "true" ]; then
+            ARGS+=(--fail-on-residual)
+          fi
+
+          rc=0
+          python -m tests.tools.cloud_janitor "${ARGS[@]}" > janitor.log 2>&1 || rc=$?
+          cat janitor.log
+          {
+            echo "### Cloud janitor — ${{ matrix.environment }}"
+            echo ''
+            echo "prefix: \`$PREFIX\`  exit: \`$rc\`"
+            echo ''
+            echo '```'
+            cat janitor.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::Cloud janitor exited $rc — leftover test datasets remain in ${{ matrix.environment }}. If un-submit is being refused, this needs a server-side purge."
+          fi
+          exit "$rc"

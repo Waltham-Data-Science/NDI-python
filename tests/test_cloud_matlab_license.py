@@ -60,7 +60,17 @@ fatal_check_license_env()
 # reported even when credentials are also missing.
 # ---------------------------------------------------------------------------
 _has_creds = bool(os.environ.get("NDI_CLOUD_USERNAME") and os.environ.get("NDI_CLOUD_PASSWORD"))
-pytestmark = pytest.mark.skipif(not _has_creds, reason="NDI cloud credentials not set")
+
+# The whole module is marked destructive, not just the two lifecycle tests.
+# Importing it runs fatal_check_license_env(), which requires the CI operator to
+# declare NDI_CLOUD_TEST_USER_HAS_MATLAB_LICENSE -- and declaring it "false" is
+# what arms DELETE /users/me/matlab-license. A read-only job must not collect
+# this module at all, so the marker sits at module scope; the read-only
+# getMatlabLicense check rides along rather than being carved out.
+pytestmark = [
+    pytest.mark.skipif(not _has_creds, reason="NDI cloud credentials not set"),
+    pytest.mark.destructive,
+]
 
 
 USER_HAS_EXISTING_LICENSE = user_has_existing_license()

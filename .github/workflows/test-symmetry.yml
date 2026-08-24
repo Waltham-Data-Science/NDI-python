@@ -5,6 +5,15 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      matlab_ref:
+        description: >-
+          NDI-matlab ref (branch, tag, or full SHA) to check out. Leave empty to
+          use the branch-matching behaviour. Supply a SHA for a reproducible run
+          -- the default path tracks the tip of NDI-matlab main, so an upstream
+          commit can turn this job red or green with no change in this repo.
+        type: string
+        default: ''
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -22,25 +31,55 @@ jobs:
         with:
           path: NDI-python
 
-      - name: Check out NDI-matlab (matching branch, fall back to main)
+      - name: Check out NDI-matlab (requested ref, else matching branch)
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           repository: VH-Lab/NDI-matlab
-          # Use the same branch name as NDI-python so paired feature
-          # branches stay in sync; fall back to main when the matlab
-          # branch does not exist.
-          ref: ${{ github.head_ref || github.ref_name }}
+          # An explicit workflow_dispatch ref wins. Otherwise use the same
+          # branch name as NDI-python so paired feature branches stay in
+          # sync; fall back to main when the matlab branch does not exist.
+          ref: ${{ inputs.matlab_ref || github.head_ref || github.ref_name }}
           path: NDI-matlab
         continue-on-error: true
         id: matlab_checkout_branch
 
+      # An explicitly requested ref must NOT silently degrade to main -- that
+      # would report a reproducible run while testing against something else.
+      - name: Fail if the requested NDI-matlab ref does not exist
+        if: steps.matlab_checkout_branch.outcome == 'failure' && inputs.matlab_ref != ''
+        run: |
+          echo "::error::Requested NDI-matlab ref '${{ inputs.matlab_ref }}' could not be checked out"
+          exit 1
+
       - name: Check out NDI-matlab (main fallback)
-        if: steps.matlab_checkout_branch.outcome == 'failure'
+        if: steps.matlab_checkout_branch.outcome == 'failure' && inputs.matlab_ref == ''
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           repository: VH-Lab/NDI-matlab
           ref: main
           path: NDI-matlab
+
+      # The MATLAB side of this job was pinned to nothing: a branch-name match
+      # against the tip of NDI-matlab, or main, with `release: latest` on top.
+      # Nothing recorded which revision actually ran, so a red symmetry job
+      # could not be attributed to either repo. Record it before anything runs.
+      - name: Record resolved NDI-matlab revision
+        shell: bash
+        run: |
+          MATLAB_SHA="$(git -C NDI-matlab rev-parse HEAD)"
+          MATLAB_DESC="$(git -C NDI-matlab log -1 --format='%h %ad %s' --date=short)"
+          PYTHON_SHA="$(git -C NDI-python rev-parse HEAD)"
+          echo "NDI_MATLAB_SHA=$MATLAB_SHA" >> "$GITHUB_ENV"
+          {
+            echo "### Symmetry inputs"
+            echo ''
+            echo "| repo | ref requested | resolved SHA |"
+            echo "| --- | --- | --- |"
+            echo "| NDI-python | \`${{ github.head_ref || github.ref_name }}\` | \`$PYTHON_SHA\` |"
+            echo "| NDI-matlab | \`${{ inputs.matlab_ref || github.head_ref || github.ref_name }}\` (fallback: main) | \`$MATLAB_SHA\` |"
+            echo ''
+            echo "NDI-matlab HEAD: $MATLAB_DESC"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # ── Runtime setup ──────────────────────────────────────────────────
       - name: Start virtual display server
@@ -95,6 +134,17 @@ jobs:
             symDir = fullfile(pwd, "tests", "+ndi", "+symmetry");
             matbox.installRequirements(symDir);
 
+            % Record MATLAB's tempdir. Python's symmetry conftest derives the
+            % artifact root from tempfile.gettempdir(); MATLAB Stage 1 writes
+            % under MATLAB's tempdir. Nothing verified the two resolve to the
+            % same place, and if they diverge every read test skips and the job
+            % goes green having compared nothing. The next step compares them.
+            tempDirFile = fullfile(getenv("GITHUB_WORKSPACE"), "ndi_symmetry_matlab_tempdir.txt");
+            fid = fopen(tempDirFile, "w");
+            assert(fid > 0, "Could not write MATLAB tempdir file.");
+            fprintf(fid, "%s", tempdir);
+            fclose(fid);
+
             % Persist the fully-resolved search path (NDI dirs + the matbox
             % dependencies just installed) so Stage 3 can reuse this one
             % installation instead of running installRequirements a second
@@ -121,16 +171,83 @@ jobs:
                 nnz([results.Passed]), nnz([results.Failed]));
             assert(all(~[results.Failed]), "MATLAB makeArtifacts failed")
 
-      # ── Stage 2: Python makeArtifacts + readArtifacts ──────────────────
-      - name: "Stage 2: Python symmetry tests (make + read)"
-        working-directory: NDI-python
+      # ── Gate: the MATLAB producer must actually have produced ──────────
+      #
+      # Verified: with /tmp/NDI/symmetryTest absent -- exactly the state after a
+      # Stage 1 that produced nothing -- the old Stage 2 command reported
+      # "42 skipped in 1.35s" and exited 0. Every read test guards on
+      # `if not artifact_dir.exists(): pytest.skip(...)`, 35 sites across 14
+      # files, so the consumer side could not fail while the producer side
+      # could. Two independent gates now close that: this step (the artifact
+      # tree exists and both runtimes agree where it is) and
+      # NDI_SYMMETRY_REQUIRE_ARTIFACTS below (individual artifacts cannot go
+      # missing quietly).
+      - name: Assert MATLAB and Python agree on the artifact root
+        shell: bash
         run: |
-          echo "=== Running Python makeArtifacts ==="
-          pytest tests/symmetry/make_artifacts/ -v --tb=short
+          MATLAB_TMP="$(cat "$GITHUB_WORKSPACE/ndi_symmetry_matlab_tempdir.txt")"
+          PYTHON_TMP="$(python -c 'import tempfile; print(tempfile.gettempdir())')"
+          # Compare resolved paths: /tmp vs /private/tmp vs a trailing slash are
+          # the same directory but different strings.
+          MATLAB_REAL="$(python -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$MATLAB_TMP")"
+          PYTHON_REAL="$(python -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$PYTHON_TMP")"
+          echo "MATLAB tempdir: $MATLAB_TMP -> $MATLAB_REAL"
+          echo "Python tempdir: $PYTHON_TMP -> $PYTHON_REAL"
+          {
+            echo ''
+            echo "artifact root — MATLAB: \`$MATLAB_REAL\`, Python: \`$PYTHON_REAL\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$MATLAB_REAL" != "$PYTHON_REAL" ]; then
+            echo "::error::MATLAB and Python resolve different temp roots; every read test would skip and this job would pass having compared nothing."
+            exit 1
+          fi
+          echo "SYMMETRY_BASE=$PYTHON_REAL/NDI/symmetryTest" >> "$GITHUB_ENV"
 
-          echo ""
-          echo "=== Running Python readArtifacts (reads both MATLAB and Python artifacts) ==="
-          pytest tests/symmetry/read_artifacts/ -v --tb=short
+      - name: Assert MATLAB Stage 1 produced artifacts
+        shell: bash
+        run: |
+          MATLAB_ARTIFACTS="$SYMMETRY_BASE/matlabArtifacts"
+          if [ ! -d "$MATLAB_ARTIFACTS" ]; then
+            echo "::error::Stage 1 produced no MATLAB artifacts at $MATLAB_ARTIFACTS"
+            exit 1
+          fi
+          COUNT="$(find "$MATLAB_ARTIFACTS" -name '*.json' | wc -l | tr -d ' ')"
+          echo "matlabArtifacts JSON files: $COUNT"
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::$MATLAB_ARTIFACTS contains no JSON artifacts"
+            exit 1
+          fi
+          echo "- matlabArtifacts JSON files: $COUNT" >> "$GITHUB_STEP_SUMMARY"
+
+      # ── Stage 2: Python makeArtifacts + readArtifacts ──────────────────
+      - name: "Stage 2a: Python makeArtifacts"
+        working-directory: NDI-python
+        run: pytest tests/symmetry/make_artifacts/ -v --tb=short -rs
+
+      - name: Assert Python Stage 2a produced artifacts
+        shell: bash
+        run: |
+          PYTHON_ARTIFACTS="$SYMMETRY_BASE/pythonArtifacts"
+          if [ ! -d "$PYTHON_ARTIFACTS" ]; then
+            echo "::error::Python makeArtifacts produced nothing at $PYTHON_ARTIFACTS"
+            exit 1
+          fi
+          COUNT="$(find "$PYTHON_ARTIFACTS" -name '*.json' | wc -l | tr -d ' ')"
+          echo "pythonArtifacts JSON files: $COUNT"
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::$PYTHON_ARTIFACTS contains no JSON artifacts"
+            exit 1
+          fi
+          echo "- pythonArtifacts JSON files: $COUNT" >> "$GITHUB_STEP_SUMMARY"
+
+      # NDI_SYMMETRY_REQUIRE_ARTIFACTS=1 turns every pytest.skip in the
+      # symmetry tree into a failure (tests/symmetry/conftest.py). Local
+      # developers without MATLAB keep the skips; CI does not get to.
+      - name: "Stage 2b: Python readArtifacts (no skips tolerated)"
+        working-directory: NDI-python
+        env:
+          NDI_SYMMETRY_REQUIRE_ARTIFACTS: "1"
+        run: pytest tests/symmetry/read_artifacts/ -v --tb=short -rs --strict-markers
 
       # ── Stage 3: MATLAB readArtifacts ──────────────────────────────────
       # Reuse the installation from Stage 1: restore the saved search path
