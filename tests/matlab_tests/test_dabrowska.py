@@ -25,11 +25,54 @@ MATLAB tutorial steps tested:
   7. Electrophysiology data exploration
   8. Elevated Plus Maze analysis
   9. Fear-Potentiated Startle analysis
+
+FIXTURE CONTAINMENT — read before editing the fixtures
+------------------------------------------------------
+Constructing an ``ndi_dataset`` **writes to the directory it is pointed at**.
+It always rewrites ``<path>/.ndi/reference.txt`` and
+``<path>/.ndi/unique_reference.txt``, and when the database still carries
+legacy ``dataset_session_info`` documents, ``build_session_info()`` calls
+``ndi_dataset.repairDatasetSessionInfo()``, which performs a ``database_add``
+of the replacement ``session_in_a_dataset`` documents followed by a
+``database_rm`` of the legacy document — an add *and a delete* against the
+live on-disk SQLite, during construction.
+
+The shared corpus under ``DABROWSKA_PATH`` is therefore **never opened in
+place**. ``dabrowska_corpus`` copies the whole corpus directory into a pytest
+tmp dir once per module, and ``dabrowska_dataset`` opens only that private
+copy. ``TestFixtureContainment`` is the regression gate for this: it checks the
+opened path, and it snapshots the shared corpus immediately either side of the
+``ndi_dataset(...)`` call so any write that construction performs is caught and
+correctly attributed. Other processes open this corpus too, so do not widen
+that window to the whole module — their writes would be reported as ours.
+
+CORPUS INTEGRITY PREFLIGHT / RESTORE PATH
+-----------------------------------------
+The local corpus is already damaged: exactly one ``session`` document was
+deleted from it at some point by an in-place open (SQLite AUTOINCREMENT shows
+14646 ``doc_idx`` values allocated but only 14645 rows, with ``doc_idx = 2``
+missing, and its ``doc_data`` rows cleanly removed — a ``database_rm``, not
+corruption). Every other document class still matches ``EXPECTED_TYPE_COUNTS``
+to the unit.
+
+``EXPECTED_TOTAL_DOCUMENTS`` (14646) and ``EXPECTED_TYPE_COUNTS["session"]``
+(3) are the **correct** values for the intended corpus and have been unchanged
+since they were captured. **Do not lower them** — that would pin the damage
+and permanently retire the coverage. Instead, ``_corpus_integrity()`` runs a
+read-only SQLite preflight at import time and the three count-dependent tests
+skip with a loud reason naming the restore path.
+
+To restore: re-fetch NDI Cloud dataset ``67f723d574f5f79c6062389d`` into the
+tutorials cache that ``DABROWSKA_PATH`` points at. The three tests then become
+real assertions again with no code change.
 """
 
 from __future__ import annotations
 
 import os
+import shutil
+import sqlite3
+import warnings
 from pathlib import Path
 
 import pytest
@@ -39,6 +82,12 @@ import pytest
 # ---------------------------------------------------------------------------
 
 DABROWSKA_PATH = Path(os.path.expanduser("~/Documents/ndi-projects/datasets/dabrowska"))
+
+#: NDI Cloud dataset to re-fetch from when the local corpus fails the preflight.
+DABROWSKA_CLOUD_DATASET_ID = "67f723d574f5f79c6062389d"
+
+#: Location of the DID SQLite database inside a corpus directory.
+CORPUS_DB_RELPATH = Path(".ndi") / "did-sqlite.sqlite"
 
 pytestmark = pytest.mark.skipif(
     not DABROWSKA_PATH.exists(),
@@ -61,21 +110,172 @@ EXPECTED_TYPE_COUNTS = {
     "treatment": 49,
 }
 
+#: Total document count of the intended corpus. NOT a floor to be lowered —
+#: see the "CORPUS INTEGRITY PREFLIGHT" section of the module docstring.
+EXPECTED_TOTAL_DOCUMENTS = 14646
+
 
 # ---------------------------------------------------------------------------
-# Session-scoped fixtures — loaded once for all tests
+# Corpus integrity preflight (read-only SQLite — never opens ndi_dataset)
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="session")
-def dabrowska_dataset():
-    """Load the Dabrowska dataset from SQLite."""
+def _restore_message(detail: str) -> str:
+    """Build the loud skip reason that names the restore path."""
+    real = os.path.realpath(DABROWSKA_PATH) if DABROWSKA_PATH.exists() else "<missing>"
+    return (
+        "DABROWSKA CORPUS IS DAMAGED OR INCOMPLETE — THIS IS A FIXTURE "
+        f"PROBLEM, NOT A CODE FAILURE. {detail}. "
+        f"Corpus: {DABROWSKA_PATH} (resolves to {real}). "
+        "RESTORE IT by re-fetching NDI Cloud dataset "
+        f"{DABROWSKA_CLOUD_DATASET_ID} into that cache directory, then re-run; "
+        "these tests become real assertions again with no code change. "
+        "DO NOT lower EXPECTED_TOTAL_DOCUMENTS or EXPECTED_TYPE_COUNTS to go "
+        "green — those values are correct for the intended corpus and pinning "
+        "the damaged counts would freeze the defect."
+    )
+
+
+def _corpus_integrity(corpus_path: Path) -> tuple[bool, str]:
+    """Check corpus document/session counts straight from SQLite, read-only.
+
+    Deliberately bypasses ``ndi_dataset`` — constructing one would write to the
+    corpus, which is the very thing this module exists to avoid.
+
+    Returns:
+        ``(intact, reason)``. *reason* is empty when *intact* is True.
+    """
+    db_path = corpus_path / CORPUS_DB_RELPATH
+    if not db_path.exists():
+        return False, _restore_message(f"no DID SQLite database at {db_path}")
+
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    except sqlite3.Error as exc:  # pragma: no cover - depends on local disk state
+        return False, _restore_message(f"cannot open {db_path} read-only: {exc}")
+
+    try:
+        total_docs = conn.execute("SELECT COUNT(*) FROM docs").fetchone()[0]
+        row = conn.execute(
+            "SELECT field_idx FROM fields WHERE field_name = 'meta.class'"
+        ).fetchone()
+        if row is None:
+            return False, _restore_message("'meta.class' is missing from the fields table")
+        n_sessions = conn.execute(
+            "SELECT COUNT(*) FROM doc_data WHERE field_idx = ? AND value = 'session'",
+            (row[0],),
+        ).fetchone()[0]
+    except sqlite3.Error as exc:  # pragma: no cover - depends on local disk state
+        return False, _restore_message(f"integrity query failed: {exc}")
+    finally:
+        conn.close()
+
+    problems = []
+    if total_docs < EXPECTED_TOTAL_DOCUMENTS:
+        problems.append(
+            f"corpus holds {total_docs} documents, expected >= {EXPECTED_TOTAL_DOCUMENTS} "
+            f"({EXPECTED_TOTAL_DOCUMENTS - total_docs} missing)"
+        )
+    expected_sessions = EXPECTED_TYPE_COUNTS["session"]
+    if n_sessions < expected_sessions:
+        problems.append(
+            f"corpus holds {n_sessions} 'session' documents, expected >= {expected_sessions}"
+        )
+    if problems:
+        return False, _restore_message("; ".join(problems))
+    return True, ""
+
+
+if DABROWSKA_PATH.exists():
+    CORPUS_INTACT, CORPUS_PROBLEM = _corpus_integrity(DABROWSKA_PATH)
+    if not CORPUS_INTACT:
+        warnings.warn(CORPUS_PROBLEM, stacklevel=1)
+else:
+    CORPUS_INTACT, CORPUS_PROBLEM = False, "Dabrowska dataset not downloaded locally"
+
+#: Applied to the tests whose expectations depend on a complete corpus. They
+#: are real assertions on an intact corpus and loud skips on a damaged one.
+requires_intact_corpus = pytest.mark.skipif(not CORPUS_INTACT, reason=CORPUS_PROBLEM)
+
+
+# ---------------------------------------------------------------------------
+# Shared-corpus mutation canary
+# ---------------------------------------------------------------------------
+
+
+def _snapshot_tree(root: Path) -> dict[str, tuple[int, int]]:
+    """Map every regular file under *root* to ``(size, mtime_ns)``.
+
+    Symlinks are followed so the snapshot covers the real cache directory that
+    ``DABROWSKA_PATH/.ndi`` points at.
+    """
+    snapshot: dict[str, tuple[int, int]] = {}
+    for dirpath, _dirnames, filenames in os.walk(root, followlinks=True):
+        for name in filenames:
+            path = Path(dirpath) / name
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
+            snapshot[str(path.relative_to(root))] = (stat.st_size, stat.st_mtime_ns)
+    return snapshot
+
+
+#: Entries under the shared corpus whose ``(size, mtime_ns)`` changed while
+#: ``dabrowska_dataset`` was constructing its ndi_dataset. Populated by that
+#: fixture; asserted empty by ``TestFixtureContainment``.
+#:
+#: The window is deliberately just the construction call rather than the whole
+#: module. Other processes open this same corpus (the tutorials/verification
+#: harnesses, and sibling test runs), so a module-wide window reports their
+#: writes as ours — observed happening during development.
+SHARED_CORPUS_WRITES: list[str] = []
+
+
+# ---------------------------------------------------------------------------
+# Module-scoped fixtures — corpus copied once, then loaded once for all tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def dabrowska_corpus(tmp_path_factory):
+    """Private, writable copy of the shared Dabrowska corpus.
+
+    Opening an ``ndi_dataset`` mutates the directory it is given (see the
+    module docstring), so tests get their own copy and the shared corpus is
+    only ever read. ~102 MB, copied once per module.
+    """
+    destination = tmp_path_factory.mktemp("dabrowska_corpus") / "dabrowska"
+    shutil.copytree(
+        DABROWSKA_PATH,
+        destination,
+        symlinks=False,
+        ignore_dangling_symlinks=True,
+    )
+    yield destination
+    shutil.rmtree(destination.parent, ignore_errors=True)
+
+
+@pytest.fixture(scope="module")
+def dabrowska_dataset(dabrowska_corpus):
+    """Load the Dabrowska dataset from the private copy — never the shared corpus.
+
+    Brackets the construction call with a snapshot of the shared corpus so
+    ``TestFixtureContainment`` can prove this open wrote nothing to it.
+    """
     import ndi.dataset
 
-    return ndi.dataset.ndi_dataset(DABROWSKA_PATH)
+    before = _snapshot_tree(DABROWSKA_PATH)
+    dataset = ndi.dataset.ndi_dataset(dabrowska_corpus)
+    after = _snapshot_tree(DABROWSKA_PATH)
+
+    SHARED_CORPUS_WRITES[:] = sorted(
+        name for name in set(before) | set(after) if before.get(name) != after.get(name)
+    )
+    return dataset
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def subject_table(dabrowska_dataset):
     """Build subject summary table."""
     from ndi.fun.doc_table import subject as subject_summary
@@ -83,7 +283,7 @@ def subject_table(dabrowska_dataset):
     return subject_summary(dabrowska_dataset)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def probe_summary(dabrowska_dataset):
     """Build probe summary table."""
     from ndi.fun.doc_table import probe as probe_table
@@ -91,7 +291,7 @@ def probe_summary(dabrowska_dataset):
     return probe_table(dabrowska_dataset)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def epoch_summary(dabrowska_dataset):
     """Build epoch summary table."""
     from ndi.fun.doc_table import epoch as epoch_table
@@ -99,7 +299,7 @@ def epoch_summary(dabrowska_dataset):
     return epoch_table(dabrowska_dataset)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def epm_table(dabrowska_dataset):
     """Query and convert EPM OTR docs to table."""
     from ndi.fun.doc_table import ontologyTableRowDoc2Table
@@ -111,7 +311,7 @@ def epm_table(dabrowska_dataset):
     return tables[0]
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def fps_table(dabrowska_dataset):
     """Query and convert FPS OTR docs to table."""
     from ndi.fun.doc_table import ontologyTableRowDoc2Table
@@ -121,6 +321,44 @@ def fps_table(dabrowska_dataset):
     docs = dabrowska_dataset.database_search(query)
     tables, *_ = ontologyTableRowDoc2Table(docs)
     return tables[0]
+
+
+# ===========================================================================
+# Class 0: TestFixtureContainment
+# ===========================================================================
+
+
+class TestFixtureContainment:
+    """Guard the shared corpus against in-place opens.
+
+    ``ndi_dataset`` construction writes to the directory it opens, and under
+    ``repairDatasetSessionInfo`` it also deletes documents from the live
+    database. One such delete already cost this corpus a ``session`` document.
+    These two tests fail the moment a fixture points ``ndi_dataset`` at
+    ``DABROWSKA_PATH`` again.
+    """
+
+    def test_dataset_opens_a_private_copy(self, dabrowska_corpus, dabrowska_dataset):
+        """The opened dataset is the tmp-dir copy, not the shared corpus."""
+        shared = Path(os.path.realpath(DABROWSKA_PATH))
+        opened = Path(os.path.realpath(dabrowska_dataset.getpath()))
+
+        assert opened != shared, f"dataset was opened in place at the shared corpus {shared}"
+        assert shared not in opened.parents, f"{opened} lives inside the shared corpus {shared}"
+        assert opened == Path(os.path.realpath(dabrowska_corpus))
+
+    def test_shared_corpus_is_not_mutated(self, dabrowska_dataset):
+        """Constructing the dataset wrote nothing under the shared corpus.
+
+        ``dabrowska_dataset`` brackets its ``ndi_dataset(...)`` call with a
+        snapshot of the shared corpus; requesting the fixture here guarantees
+        that has already happened.
+        """
+        assert not SHARED_CORPUS_WRITES, (
+            "Constructing the ndi_dataset wrote to the SHARED Dabrowska corpus — "
+            "a fixture is opening it in place again instead of the tmp-dir copy. "
+            f"Entries changed under {DABROWSKA_PATH}: {SHARED_CORPUS_WRITES}"
+        )
 
 
 # ===========================================================================
@@ -135,34 +373,46 @@ class TestDatasetLoading:
         """ndi_dataset object is created successfully."""
         assert dabrowska_dataset is not None
 
+    @requires_intact_corpus
     def test_document_type_counts(self, dabrowska_dataset):
-        """All 13+ document types have expected counts."""
+        """All 13+ document types have expected counts.
+
+        Every type is checked and all mismatches are reported together — an
+        early mismatch used to abort the loop and hide the types after it.
+        """
         from ndi.fun.doc import getDocTypes
 
         doc_types, doc_counts = getDocTypes(dabrowska_dataset)
         actual = dict(zip(doc_types, doc_counts))
+
+        mismatches: list[str] = []
         for dtype, expected in EXPECTED_TYPE_COUNTS.items():
             actual_count = actual.get(dtype, 0)
             if dtype == "session":
-                assert (
-                    actual_count >= expected
-                ), f"{dtype}: expected >= {expected}, got {actual_count}"
-            else:
-                assert actual_count == expected, f"{dtype}: expected {expected}, got {actual_count}"
+                if actual_count < expected:
+                    mismatches.append(f"{dtype}: expected >= {expected}, got {actual_count}")
+            elif actual_count != expected:
+                mismatches.append(f"{dtype}: expected {expected}, got {actual_count}")
 
+        assert not mismatches, "Document type count mismatches:\n  " + "\n  ".join(mismatches)
+
+    @requires_intact_corpus
     def test_total_document_count(self, dabrowska_dataset):
         """Total documents >= 14,646."""
         from ndi.query import ndi_query
 
         docs = dabrowska_dataset.database_search(ndi_query("").isa("base"))
-        assert len(docs) >= 14646, f"Expected >= 14646, got {len(docs)}"
+        assert (
+            len(docs) >= EXPECTED_TOTAL_DOCUMENTS
+        ), f"Expected >= {EXPECTED_TOTAL_DOCUMENTS}, got {len(docs)}"
 
+    @requires_intact_corpus
     def test_session_docs_exist(self, dabrowska_dataset):
         """At least 3 session documents exist."""
         from ndi.query import ndi_query
 
         docs = dabrowska_dataset.database_search(ndi_query("").isa("session"))
-        assert len(docs) >= 3
+        assert len(docs) >= EXPECTED_TYPE_COUNTS["session"]
 
 
 # ===========================================================================
