@@ -279,6 +279,7 @@ class ndi_daq_reader(ndi_ido, ABC):
         If the large values fill a *column* the matrix is [t0-row, t1-row]
         (transpose); if they fill a *row* it is already per-clock.
         """
+
         def _num(x: object) -> float:
             try:
                 return abs(float(x))

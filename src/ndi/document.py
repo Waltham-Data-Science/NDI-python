@@ -896,9 +896,7 @@ class ndi_document:
                     sc_def = sc.get("definition", "")
                     if sc_def:
                         # Extract document type from the definition path
-                        def_type = sc_def.replace("$NDIDOCUMENTPATH/", "").replace(
-                            ".json", ""
-                        )
+                        def_type = sc_def.replace("$NDIDOCUMENTPATH/", "").replace(".json", "")
                         if def_type and def_type not in sc_types:
                             sc_types.append(def_type)
                 for sc_type in sc_types:
@@ -925,9 +923,7 @@ class ndi_document:
                         if key not in definition:
                             definition[key] = deepcopy(value)
                         elif key == "depends_on":
-                            definition[key] = ndi_document._merge_depends_on(
-                                definition[key], value
-                            )
+                            definition[key] = ndi_document._merge_depends_on(definition[key], value)
                         elif key == "files":
                             definition[key] = ndi_document._merge_files(definition[key], value)
                         # else: keep the child's own value (child overrides).

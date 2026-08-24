@@ -635,9 +635,7 @@ class ndi_app_oridirtuning(ndi_app, ndi_app_appdoc):
 
         # Mirrors MATLAB oridirtuning/calculate_tuning_curve: tune over 'angle'
         # (labelled 'direction'), restricted to stimuli that carry sFrequency.
-        constraint = [
-            {"field": "sFrequency", "operation": "hasfield", "param1": "", "param2": ""}
-        ]
+        constraint = [{"field": "sFrequency", "operation": "hasfield", "param1": "", "param2": ""}]
         tuning_doc = rapp.tuning_curve(
             ndi_response_doc,
             independent_label=["direction"],

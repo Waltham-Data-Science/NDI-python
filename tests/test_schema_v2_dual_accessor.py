@@ -57,9 +57,7 @@ class TestDocSuperclassDualAccessor:
     def test_v1_definition_only_superclass_unchanged(self):
         """Legacy did_v1 shape (the entire current corpus): the definition path
         is read to recover the name. Regression guard — behavior must not change."""
-        doc = ndi_document(
-            _props("element_like", [{"definition": "$NDIDOCUMENTPATH/base.json"}])
-        )
+        doc = ndi_document(_props("element_like", [{"definition": "$NDIDOCUMENTPATH/base.json"}]))
         assert "base" in doc.doc_superclass()
         assert doc.doc_isa("base")
 

@@ -90,9 +90,13 @@ def _first_epoch_id(daq):
 
 
 def _read(daq, epoch_id, channeltype, channel, t0, t1):
-    s0, s1 = (int(v) for v in np.ravel(daq.epochtimes2samples(channeltype, channel, epoch_id, [t0, t1])))
+    s0, s1 = (
+        int(v) for v in np.ravel(daq.epochtimes2samples(channeltype, channel, epoch_id, [t0, t1]))
+    )
     data = np.asarray(daq.readchannels_epochsamples(channeltype, channel, epoch_id, s0, s1))
-    times = np.ravel(np.asarray(daq.epochsamples2times(channeltype, channel, epoch_id, np.arange(s0, s1 + 1))))
+    times = np.ravel(
+        np.asarray(daq.epochsamples2times(channeltype, channel, epoch_id, np.arange(s0, s1 + 1)))
+    )
     return data, times
 
 

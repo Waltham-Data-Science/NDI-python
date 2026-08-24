@@ -197,9 +197,7 @@ class ndi_element_timeseries(ndi_element):
                 # (the dabrowska/mfdaq path already does this) — open+close
                 # materialises it locally, then re-check for the path.
                 try:
-                    fobj = self._session.database_openbinarydoc(
-                        doc, "epoch_binary_data.vhsb"
-                    )
+                    fobj = self._session.database_openbinarydoc(doc, "epoch_binary_data.vhsb")
                     self._session.database_closebinarydoc(fobj)
                     exists, binary_path = self._session.database_existbinarydoc(
                         doc, "epoch_binary_data.vhsb"

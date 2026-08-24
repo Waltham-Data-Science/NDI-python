@@ -249,9 +249,7 @@ class TestCalculateOridirIndexes:
         stc = td.document_properties["stimulus_tuningcurve"]
         stc["independent_variable_value"] = list(ANGLES)
         # reps-first shape (reps, n_directions) — MATLAB's serialisation order.
-        stc["individual_responses_real"] = [
-            [float(mean[i]) for i in range(n)] for _ in range(reps)
-        ]
+        stc["individual_responses_real"] = [[float(mean[i]) for i in range(n)] for _ in range(reps)]
         stc["individual_responses_imaginary"] = [[0.0] * n for _ in range(reps)]
         stc["control_individual_responses_real"] = [[0.0] * n for _ in range(reps)]
         stc["control_individual_responses_imaginary"] = [[0.0] * n for _ in range(reps)]

@@ -490,9 +490,7 @@ class ndi_app_spikeextractor(ndi_app, ndi_app_appdoc):
         return waveforms_sdn, spiketimes, waveparameters
 
     @staticmethod
-    def _resolve_sample_rate(
-        ndi_timeseries_obj: Any, epoch: Any, times: np.ndarray
-    ) -> float:
+    def _resolve_sample_rate(ndi_timeseries_obj: Any, epoch: Any, times: np.ndarray) -> float:
         """Return the epoch's sampling rate in Hz.
 
         Prefer the element's per-epoch ``samplerate(epoch)`` accessor (the

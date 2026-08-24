@@ -67,9 +67,7 @@ def readtablechar(c: str, ext: str = ".txt", *args: Any, **kwargs: Any) -> Any:
     text = c or ""
     if not text.endswith("\n"):
         text += "\n"
-    return pd.read_csv(
-        io.StringIO(text), sep=delim, header=header, skip_blank_lines=True
-    )
+    return pd.read_csv(io.StringIO(text), sep=delim, header=header, skip_blank_lines=True)
 
 
 def findallantecedents(

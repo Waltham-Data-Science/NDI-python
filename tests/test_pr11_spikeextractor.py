@@ -366,9 +366,7 @@ def test_spike_center_index_matlab_parity_odd_window():
     # MATLAB-parity: the spike is reported at its true peak sample (1500).
     assert reported_sample == pytest.approx(float(loc), abs=1e-6)
     # The pre-fix banker's centre would report exactly one sample EARLIER.
-    banker_reported = reported_sample - (
-        matlab_center_in_samples - banker_center_in_samples
-    )
+    banker_reported = reported_sample - (matlab_center_in_samples - banker_center_in_samples)
     assert banker_reported == pytest.approx(float(loc) - 1.0, abs=1e-6)
 
 
@@ -431,6 +429,4 @@ def test_extract_epoch_inmemory_raises_when_rate_unresolvable():
     params = dict(app.default_extraction_parameters())
     params["filter_type"] = "none"
     with pytest.raises(ValueError, match="positive sample rate"):
-        app.extract_epoch_inmemory(
-            ts, epoch=1, extraction_doc=params, t0=-np.inf, t1=np.inf
-        )
+        app.extract_epoch_inmemory(ts, epoch=1, extraction_doc=params, t0=-np.inf, t1=np.inf)

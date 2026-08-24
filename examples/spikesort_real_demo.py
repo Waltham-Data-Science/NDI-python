@@ -66,7 +66,7 @@ def build_real_waveforms(noise_frac: float = 0.08, seed: int = 0, oversample: in
     # unit shows a real waveform), sorted by electrode index.
     p2p = templates.max(axis=1) - templates.min(axis=1)  # (nUnits, nChannels)
     peak_chan = p2p.argmax(axis=1)
-    channels = sorted(set(int(c) for c in peak_chan))
+    channels = sorted({int(c) for c in peak_chan})
 
     n = clusters.size
     waves = np.zeros((n_samples, len(channels), n), dtype=float)
@@ -112,7 +112,9 @@ def main() -> None:
     print(f"  units       : {info['n_units']} (Kilosort)")
     print(f"  waveform    : {info['n_samples']} samples x {len(info['channels'])} channels")
     print(f"  channels    : {info['channels']}")
-    print(f"  mode        : {'FRESH (unclustered -- click Cluster all)' if fresh else 'pre-loaded real 13-unit sort'}")
+    print(
+        f"  mode        : {'FRESH (unclustered -- click Cluster all)' if fresh else 'pre-loaded real 13-unit sort'}"
+    )
     print("-" * 70)
     print("  zoom: mouse-wheel | pan: drag | box-zoom: right-drag | auto: 'A'")
     print("  try: Feature pca3<->2points, scatter X/Y dims, Cluster all,")
@@ -126,7 +128,7 @@ def main() -> None:
             f"Could not import the spike-sorter GUI ({exc}).\n"
             "Install NDI-python with the GUI support and PyQt6+pyqtgraph "
             "(pip install PyQt6 pyqtgraph)."
-        )
+        ) from exc
     if not gui_available():
         raise SystemExit("PyQt6/pyqtgraph not installed -- run: pip install PyQt6 pyqtgraph")
 
@@ -162,10 +164,14 @@ def main() -> None:
         print("\nCancelled -- no curated result returned.")
         return
     finite = ids[~np.isnan(ids)]
-    n_units = len(set(int(x) for x in finite))
-    print(f"\nDONE -- curated into {n_units} unit(s); {int(np.isnan(ids).sum())} spike(s) left unclassified.")
+    n_units = len({int(x) for x in finite})
+    print(
+        f"\nDONE -- curated into {n_units} unit(s); {int(np.isnan(ids).sum())} spike(s) left unclassified."
+    )
     for ci in clusterinfo:
-        print(f"  unit {ci['number']:>3}: N={ci['number_of_spikes']:>4}  quality={ci['qualitylabel']}")
+        print(
+            f"  unit {ci['number']:>3}: N={ci['number_of_spikes']:>4}  quality={ci['qualitylabel']}"
+        )
 
 
 if __name__ == "__main__":

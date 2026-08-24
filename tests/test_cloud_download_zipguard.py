@@ -43,9 +43,7 @@ def _patch_get(monkeypatch):
     """Patch requests.get to return a fixed ZIP payload."""
 
     def _install(zip_bytes: bytes):
-        monkeypatch.setattr(
-            requests, "get", lambda *a, **k: _FakeResp(zip_bytes, 200)
-        )
+        monkeypatch.setattr(requests, "get", lambda *a, **k: _FakeResp(zip_bytes, 200))
 
     return _install
 

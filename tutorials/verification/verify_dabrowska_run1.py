@@ -6,12 +6,15 @@ columns + head so it can be diffed against the tutorial's RECORDED HTML output.
 Source of truth = tutorials/tutorial_67f723d574f5f79c6062389d.html. NO HARDCODING.
 Credentials come from the env (CloudClient.from_env); values are never printed.
 """
-import os, time, traceback
 
-from ndi.cloud.client import CloudClient
-from ndi.cloud.orchestration import downloadDataset
+import os
+import time
+import traceback
+
 import ndi.fun.doc as fdoc
 import ndi.fun.doc_table as fdt
+from ndi.cloud.client import CloudClient
+from ndi.cloud.orchestration import downloadDataset
 
 DS = "67f723d574f5f79c6062389d"
 # Relocated 2026-07-20 into NDI-python/tutorials/verification/. Paths resolve
@@ -40,10 +43,12 @@ def show(name, fn):
 
 def main():
     import os.path as osp
+
     store = osp.join(CACHE, DS)
     t0 = time.time()
     if osp.isdir(osp.join(store, ".ndi")):
         from ndi.dataset import ndi_dataset_dir
+
         dataset = ndi_dataset_dir("", store)
         print(f"warm-loaded cached store in {time.time() - t0:.0f}s", flush=True)
     else:

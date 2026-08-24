@@ -42,13 +42,9 @@ def _patch_common(reader, monkeypatch):
         "daqreader_mfdaq_epochdata_ingested": {"parameters": {"sample_analog_segment": 100}}
     }
     monkeypatch.setattr(reader, "getingesteddocument", lambda *a, **k: doc)
-    monkeypatch.setattr(
-        reader, "samplerate_ingested", lambda *a, **k: ([30000.0], [0.0], [1.0])
-    )
+    monkeypatch.setattr(reader, "samplerate_ingested", lambda *a, **k: ([30000.0], [0.0], [1.0]))
     monkeypatch.setattr(reader, "t0_t1_ingested", lambda *a, **k: [(0.0, 1.0)])
-    monkeypatch.setattr(
-        reader, "epochtimes2samples_ingested", lambda *a, **k: np.array([0, 250])
-    )
+    monkeypatch.setattr(reader, "epochtimes2samples_ingested", lambda *a, **k: np.array([0, 250]))
     monkeypatch.setattr(reader, "getchannelsepoch_ingested", lambda *a, **k: [object()])
     from ndi.file.type.mfdaq_epoch_channel import ndi_file_type_mfdaq__epoch__channel
 

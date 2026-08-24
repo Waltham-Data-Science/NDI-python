@@ -52,7 +52,10 @@ dependencies = [
     # both together. This un-reverts the earlier @main float now that the
     # lockstep NDR-python change has landed.
     "vhlab-toolbox-python @ git+https://github.com/VH-Lab/vhlab-toolbox-python.git@b073185565ea5b47bb0307cddeae923fa9b86268",
-    "ndi-compress @ git+https://github.com/Waltham-Data-Science/NDI-compress-python.git@0c05d9dbd63ed5d15866eb1bf0a096568ef0c192",
+    # 225468e = exp/backend-hardening-2026-07 tip: tar path-traversal containment (b1a1b33),
+    # subprocess timeouts (a5bd5c1), int16/digital validation (38fd4b2, 64ddc8c). The prior pin
+    # 0c05d9d predated all of these.
+    "ndi-compress @ git+https://github.com/Waltham-Data-Science/NDI-compress-python.git@225468edc953a22821b9a195bfa1e1a07a2996f6",
     "numpy>=1.20.0",
     "networkx>=2.6",
     "jsonschema>=4.0.0",

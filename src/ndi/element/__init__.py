@@ -19,7 +19,7 @@ from ..ido import ndi_ido
 from ..time import ndi_time_clocktype
 
 
-def _t0_t1_per_clock(t0t1_raw: Any, nclocks: int) -> List[Tuple[float, float]]:
+def _t0_t1_per_clock(t0t1_raw: Any, nclocks: int) -> list[tuple[float, float]]:
     """Normalise an element_epoch ``t0_t1`` to per-clock ``(t0, t1)`` tuples.
 
     Shares the daq reader's layout detection: MATLAB ingestion writes a
@@ -39,10 +39,7 @@ def _t0_t1_per_clock(t0t1_raw: Any, nclocks: int) -> List[Tuple[float, float]]:
         ]
     from ..daq.reader_base import ndi_daq_reader
 
-    return [
-        (float(a), float(b))
-        for a, b in ndi_daq_reader._t0_t1_to_per_clock(rows, nclocks)
-    ]
+    return [(float(a), float(b)) for a, b in ndi_daq_reader._t0_t1_to_per_clock(rows, nclocks)]
 
 
 class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):

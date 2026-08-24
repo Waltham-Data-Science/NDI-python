@@ -7,6 +7,7 @@ Ground truth = NDI-matlab/src/ndi/+ndi/+setup/+conv/+haley/tutorial_682e7772cdf3
 (the authoritative render; repointed 2026-07-20 from the former root copy, which
 was archived — re-baseline the Run-1 parity numbers on the first post-repoint run).
 """
+
 import os
 import os.path as osp
 import time
@@ -44,10 +45,12 @@ def main():
     t0 = time.time()
     if osp.isdir(osp.join(LOADED, ".ndi")):
         from ndi.dataset import ndi_dataset_dir
+
         dataset = ndi_dataset_dir("", LOADED)
         print(f"warm-opened loaded store in {time.time() - t0:.0f}s", flush=True)
     else:
         from ndi.cloud.orchestration import load_dataset_from_json_dir
+
         os.makedirs(LOADED, exist_ok=True)
         dataset = load_dataset_from_json_dir(DOCS, target_folder=LOADED, verbose=False)
         print(f"bulk-loaded JSON dir in {time.time() - t0:.0f}s", flush=True)
@@ -66,7 +69,9 @@ def main():
         res = fdoc.ontologyTableRowVars(dataset)
         full, short, nodes = res[0], res[1], res[2]
         import pandas as pd
+
         return pd.DataFrame({"fullName": full, "shortName": short, "ontologyNode": nodes})
+
     show("ontologyTableRowVars(dataset)", _otrvars)
 
     def _otr2table():
@@ -74,11 +79,14 @@ def main():
         print(f"  (ontologyTableRow docs: {len(docs)})", flush=True)
         res = fdoc.ontologyTableRowDoc2Table(docs)
         tables = res[0] if isinstance(res, tuple) else res
-        print(f"  grouped into {len(tables)} tables; shapes: "
-              f"{[t.shape for t in tables]}", flush=True)
+        print(
+            f"  grouped into {len(tables)} tables; shapes: " f"{[t.shape for t in tables]}",
+            flush=True,
+        )
         for gi, t in enumerate(tables):
             print(f"  --- dataTable[{gi}] {t.shape} cols={list(t.columns)[:6]} ---", flush=True)
         return tables[0] if tables else None
+
     show("ontologyTableRowDoc2Table(docs) [grouped]", _otr2table)
 
     show("docTable.subject(C.elegans session)", lambda: fdt.subject(session))
@@ -88,6 +96,7 @@ def main():
 
 def _doctypes_df(res):
     import pandas as pd
+
     if isinstance(res, tuple):
         types, counts = res
         return pd.DataFrame({"docTypes": types, "docCounts": counts})

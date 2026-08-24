@@ -394,9 +394,7 @@ def epoch(
     #    epochtable.t0_t1 is [[t0 per clock], [t1 per clock]] with clock order
     #    given by epochtable.epochclock.
     timing_by_epoch: dict[str, dict] = {}
-    for doc in session.database_search(
-        ndi_query("").isa("daqreader_mfdaq_epochdata_ingested")
-    ):
+    for doc in session.database_search(ndi_query("").isa("daqreader_mfdaq_epochdata_ingested")):
         props = _props(doc)
         eid = props.get("epochid", {}).get("epochid", "")
         if not eid:
@@ -407,20 +405,12 @@ def epoch(
         t0row = t0_t1[0] if len(t0_t1) > 0 else []
         t1row = t0_t1[1] if len(t0_t1) > 1 else []
         rec = {"local_t0": "", "local_t1": "", "global_t0": "", "global_t1": ""}
-        local_idx = next(
-            (i for i, c in enumerate(clocks) if "dev_local_time" in str(c)), None
-        )
-        global_idx = next(
-            (i for i, c in enumerate(clocks) if str(c) in _GLOBAL_CLOCKS), None
-        )
+        local_idx = next((i for i, c in enumerate(clocks) if "dev_local_time" in str(c)), None)
+        global_idx = next((i for i, c in enumerate(clocks) if str(c) in _GLOBAL_CLOCKS), None)
         if local_idx is not None and local_idx < len(t0row) and local_idx < len(t1row):
             rec["local_t0"] = t0row[local_idx]
             rec["local_t1"] = t1row[local_idx]
-        if (
-            global_idx is not None
-            and global_idx < len(t0row)
-            and global_idx < len(t1row)
-        ):
+        if global_idx is not None and global_idx < len(t0row) and global_idx < len(t1row):
             rec["global_t0"] = _datenum_to_str(t0row[global_idx])
             rec["global_t1"] = _datenum_to_str(t1row[global_idx])
         timing_by_epoch[eid] = rec
@@ -434,9 +424,7 @@ def epoch(
         if not eid:
             continue
         mt = props.get("stimulus_bath", {}).get("mixture_table", "")
-        st = mixture_by_epoch.setdefault(
-            eid, {"names": [], "onts": [], "seen": set()}
-        )
+        st = mixture_by_epoch.setdefault(eid, {"names": [], "onts": [], "seen": set()})
         if not mt:
             continue
         try:
@@ -460,9 +448,7 @@ def epoch(
         fields = props.get("openminds", {}).get("fields", {})
         nm = fields.get("name", "") or ""
         on = fields.get("preferredOntologyIdentifier", "") or ""
-        st = approach_by_epoch.setdefault(
-            eid, {"names": [], "onts": [], "seen": set()}
-        )
+        st = approach_by_epoch.setdefault(eid, {"names": [], "onts": [], "seen": set()})
         if (nm, on) in st["seen"]:
             continue
         st["seen"].add((nm, on))

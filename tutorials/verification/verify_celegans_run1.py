@@ -6,13 +6,12 @@ Ground truth = tutorials/tutorial_69bc5ca11d547b1f6d083761.html:
   t0 docTypes, t1 subjectTable (101x28), t4 odorTable (11x10, readtablechar),
   t5 imageStack, t7 treatment Gantt (10x9, readtablechar).
 """
-import os.path as osp
-import time
+
+import os
 import traceback
 
 import numpy as np
 
-import os
 # Relocated 2026-07-20 into NDI-python/tutorials/verification/. Paths resolve
 # against the sibling ndi-projects workspace root (override NDI_PROJECTS_ROOT).
 _WS = os.environ.get("NDI_PROJECTS_ROOT", os.path.expanduser("~/Documents/ndi-projects"))
@@ -38,7 +37,6 @@ def show(name, fn):
 def main():
     import ndi.fun.doc as fdoc
     import ndi.fun.doc_table as fdt
-    import ndi.fun.table as ftab
     from ndi.database_fun import readtablechar
     from ndi.dataset import ndi_dataset_dir
     from ndi.query import ndi_query
@@ -46,6 +44,7 @@ def main():
     ds = ndi_dataset_dir("", STORE)
     try:
         from ndi.cloud.client import CloudClient
+
         ds.cloud_client = CloudClient.from_env()
     except Exception as e:
         print("WARN no cloud_client:", e)
@@ -54,15 +53,18 @@ def main():
     sess = ds.open_session(ids[0]) if ids else ds
 
     show("getDocTypes", lambda: _dt(fdoc.getDocTypes(ds)))
-    subjectTable = show("docTable.subject", lambda: fdt.subject(sess))
+    show("docTable.subject", lambda: fdt.subject(sess))
 
     # ontologyTableRowDoc2Table StackAll=True
     def _stackall():
         docs = ds.database_search(ndi_query("").isa("ontologyTableRow"))
         res = fdoc.ontologyTableRowDoc2Table(docs, StackAll=True)
         tables = res[0] if isinstance(res, tuple) else res
-        print(f"  StackAll -> {len(tables)} table(s); shapes {[t.shape for t in tables]}", flush=True)
+        print(
+            f"  StackAll -> {len(tables)} table(s); shapes {[t.shape for t in tables]}", flush=True
+        )
         return tables[0] if tables else None
+
     stacked = show("ontologyTableRowDoc2Table(StackAll=True)", _stackall)
 
     # odorTable: readtablechar on the mixture column (if present)
@@ -79,6 +81,7 @@ def main():
                         print("    readtablechar err:", e, flush=True)
             if parts:
                 import pandas as pd
+
                 odor = pd.concat(parts, ignore_index=True).drop_duplicates()
                 print(f"  odorTable: {odor.shape} cols={list(odor.columns)}", flush=True)
                 print(odor.head(6).to_string(), flush=True)
@@ -86,6 +89,7 @@ def main():
     # treatment_drug -> treatmentTable via readtablechar
     def _treatment():
         import pandas as pd
+
         tdocs = sess.database_search(ndi_query("").isa("treatment_drug"))
         print(f"  treatment_drug docs: {len(tdocs)}", flush=True)
         rows = []
@@ -101,11 +105,13 @@ def main():
                 except Exception as e:
                     print("    rtc err:", e, flush=True)
         return pd.DataFrame(rows) if rows else pd.DataFrame()
+
     show("treatmentTable (treatment_drug + readtablechar)", _treatment)
 
     # imageStack read
     def _img():
         import ndi.fun.data as fdata
+
         isd = sess.database_search(ndi_query("").isa("imageStack"))
         print(f"  imageStack docs: {len(isd)}", flush=True)
         if not isd:
@@ -113,6 +119,7 @@ def main():
         img, info = fdata.readImageStack(sess, isd[0], "auto")
         img = np.asarray(img)
         return f"readImageStack -> shape={img.shape} dtype={img.dtype}"
+
     show("imageStack readImageStack", _img)
 
     print("\n=== harness done ===", flush=True)
@@ -120,6 +127,7 @@ def main():
 
 def _dt(res):
     import pandas as pd
+
     if isinstance(res, tuple):
         return pd.DataFrame({"docTypes": res[0], "docCounts": res[1]})
     return res

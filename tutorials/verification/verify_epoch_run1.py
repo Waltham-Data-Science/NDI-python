@@ -8,12 +8,14 @@ EpochDocumentIdentifier and verify the data columns by value:
   ApproachName, ApproachOntology, SubjectDocumentIdentifier.
 NO HARDCODING — ground truth = the HTML.
 """
-import re
-import pandas as pd
-from ndi.dataset import ndi_dataset_dir
-import ndi.fun.doc_table as fdt
 
 import os
+
+import pandas as pd
+
+import ndi.fun.doc_table as fdt
+from ndi.dataset import ndi_dataset_dir
+
 # Relocated 2026-07-20 into NDI-python/tutorials/verification/. Paths resolve
 # against the sibling ndi-projects workspace root (override NDI_PROJECTS_ROOT).
 # HTML ground truth is repointed at the committed NDI-matlab dabrowska copy
@@ -21,7 +23,14 @@ import os
 _WS = os.environ.get("NDI_PROJECTS_ROOT", os.path.expanduser("~/Documents/ndi-projects"))
 STORE = os.path.join(_WS, "tutorials", "_cache", "67f723d574f5f79c6062389d")
 HTML = os.path.join(
-    _WS, "NDI-matlab", "src", "ndi", "+ndi", "+setup", "+conv", "+dabrowska",
+    _WS,
+    "NDI-matlab",
+    "src",
+    "ndi",
+    "+ndi",
+    "+setup",
+    "+conv",
+    "+dabrowska",
     "tutorial_67f723d574f5f79c6062389d.html",
 )
 
@@ -64,8 +73,16 @@ def main():
     # Science columns (the PASS bar). SubjectDocumentIdentifier is checked
     # separately below — it is a data-linkage handle that has drifted in the
     # re-ingested dataset (WT vs OTRCre), not something the port controls.
-    datacols = ["local_t0", "local_t1", "global_t0", "global_t1",
-                "MixtureName", "MixtureOntology", "ApproachName", "ApproachOntology"]
+    datacols = [
+        "local_t0",
+        "local_t1",
+        "global_t0",
+        "global_t1",
+        "MixtureName",
+        "MixtureOntology",
+        "ApproachName",
+        "ApproachOntology",
+    ]
     datacols = [c for c in datacols if c in got.columns and c in html.columns]
 
     checked = 0
@@ -101,7 +118,9 @@ def main():
                 subj_drift += 1
 
     print(f"\n=== SCIENCE columns: epochs checked={checked}, mismatches={mism} ===")
-    print(f"=== Subject-linkage drift (separate, data-level): {subj_drift}/{checked} epochs differ ===")
+    print(
+        f"=== Subject-linkage drift (separate, data-level): {subj_drift}/{checked} epochs differ ==="
+    )
     print("RESULT:", "PASS ✅" if mism == 0 else "FAIL ❌")
 
 

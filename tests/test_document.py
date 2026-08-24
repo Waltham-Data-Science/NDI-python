@@ -568,8 +568,12 @@ class TestPortedImageIngestionType:
         import ndi
 
         attrs = json.loads(
-            (Path(ndi.__file__).parent / "ndi_common" / "resources" / "ndiDocumentAttributes.json")
-            .read_text()
+            (
+                Path(ndi.__file__).parent
+                / "ndi_common"
+                / "resources"
+                / "ndiDocumentAttributes.json"
+            ).read_text()
         )
         assert attrs["daqreader_image_epochdata_ingested"]["attributes"] == ["Raw imageseries"]
 
