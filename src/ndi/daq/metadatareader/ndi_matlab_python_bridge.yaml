@@ -315,7 +315,7 @@ classes:
   - name: RayoLabStims
     type: class
     matlab_path: "+ndi/+daq/+metadatareader/RayoLabStims.m"
-    matlab_last_sync_hash: "2566fe4d"
+    matlab_last_sync_hash: "a05a0a80"
     python_path: "ndi/daq/metadatareader/rayolab_stims.py"
     python_class: "ndi_daq_metadatareader_RayoLabStims"
     inherits: "ndi.daq.metadatareader"
@@ -356,6 +356,17 @@ classes:
           Trivial constant reader. Ignores epochfiles and always
           returns [{"stimid": 1}], matching the mk2 marker channel
           stimulus id emitted by the RayoLab intan-series stimulator.
+          Overriding readmetadata (not only readmetadatafromfile) is load
+          bearing and matches MATLAB a05a0a80a (PR #876): the base class
+          requires its tab_separated_file_parameter regexp to match exactly
+          one epochfile before returning anything, so sessions already built
+          with the navigator-only '#' pattern stored in their
+          daqmetadatareader document would otherwise abort ingest. The
+          companion half of that commit corrected
+          ndi_common/daq_systems/rayolab/rayo_stim.json's
+          MetadataReaderFileParameters from '#...' to a plain '.*' regexp;
+          FileParameters / EpochProbeMapFileParameters keep '#', which
+          ndi.file.navigator resolves.
 
       - name: readmetadatafromfile
         input_arguments:

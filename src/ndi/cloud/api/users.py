@@ -37,13 +37,92 @@ def createUser(
     )
 
 
+def _add_organization_fields(payload: Any) -> Any:
+    """Derive the ``organization*`` convenience arrays on a ``/users/me`` body.
+
+    ``GET /users/me`` returns each organization as an ``OrganizationListItem``
+    with ``id``, ``name`` and ``canUploadDataset`` (see the NDI Cloud API
+    definition of ``UserWithOrganizations``). This adds three parallel lists
+    derived from that raw ``organizations`` value, leaving ``organizations``
+    itself untouched for callers that want the full objects.
+
+    The three fields are always defined -- an empty list when the user belongs
+    to no organizations, or when ``organizations`` is missing or of an
+    unexpected type -- so callers never have to test for their presence.
+
+    A non-object *payload* is returned unchanged.
+
+    MATLAB equivalent: ``+cloud/+api/+implementation/+users/Me.m`` (NDI-matlab
+    ``f2b91923f``, PR #858).
+    """
+    if not isinstance(payload, dict):
+        return payload
+
+    org_ids: list[str] = []
+    org_names: list[str] = []
+    org_can_upload: list[bool] = []
+
+    orgs = payload.get("organizations")
+    # Normalize to a list of objects so that a list (typical) and a single
+    # bare object are handled identically; MATLAB does the same for a struct
+    # array vs. a cell array of structs.
+    if isinstance(orgs, dict):
+        org_list: list[Any] = [orgs]
+    elif isinstance(orgs, (list, tuple)):
+        org_list = list(orgs)
+    else:
+        org_list = []
+
+    for org in org_list:
+        if not isinstance(org, dict):
+            continue
+        if "id" in org:
+            org_ids.append(str(org["id"]))
+        if "name" in org:
+            org_names.append(str(org["name"]))
+        if "canUploadDataset" in org:
+            org_can_upload.append(bool(org["canUploadDataset"]))
+
+    payload["organizationID"] = org_ids
+    payload["organizationName"] = org_names
+    payload["organizationCanUploadDataset"] = org_can_upload
+    return payload
+
+
 @_auto_client
 def me(*, client: _Client = None) -> dict[str, Any]:
     """GET /users/me -- Get the authenticated user's profile.
 
-    The response includes the user's organization memberships.
+    On success the response carries the fields the NDI Cloud API returns for
+    the current user (``id``, ``name``, ``email``, ``isValidated``,
+    ``isAdmin``, ``bookmarkedDatasetIds``, and ``organizations`` -- the raw
+    organization objects, each with ``id``, ``name`` and
+    ``canUploadDataset``), plus three convenience fields derived from
+    ``organizations``:
+
+    ``organizationID``
+        List of the organization IDs (``str``) the user belongs to.
+    ``organizationName``
+        List of organization names (``str``), parallel to ``organizationID``.
+    ``organizationCanUploadDataset``
+        List of ``bool``, parallel to ``organizationID``, indicating upload
+        permission.
+
+    Example::
+
+        info = me()
+        for org_id, org_name in zip(
+            info["organizationID"], info["organizationName"]
+        ):
+            print(f"{org_name} ({org_id})")
+
+    MATLAB equivalent: ``+cloud/+api/+users/me.m``
     """
-    return client.get("/users/me")
+    result = client.get("/users/me")
+    if hasattr(result, "data"):
+        result.data = _add_organization_fields(result.data)
+        return result
+    return _add_organization_fields(result)
 
 
 @_auto_client

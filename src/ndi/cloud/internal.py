@@ -84,6 +84,22 @@ def formatApiError(api_response: Any) -> str:
     return "unknown error"
 
 
+def _localDatabase(dataset: Any) -> Any | None:
+    """Return the ``ndi_database`` behind *dataset*, or ``None``.
+
+    A session exposes it as the ``database`` property; an ``ndi_dataset``
+    does not — it keeps the database on its backing session
+    (``dataset._session._database``). Accept either shape.
+    """
+    database = getattr(dataset, "database", None)
+    if database is not None:
+        return database
+    session = getattr(dataset, "_session", None)
+    if session is not None:
+        return getattr(session, "_database", None)
+    return None
+
+
 def getCloudDatasetIdForLocalDataset(
     dataset: Any,
     *,
@@ -92,18 +108,27 @@ def getCloudDatasetIdForLocalDataset(
     """Resolve the cloud dataset ID from a local dataset.
 
     Looks for a ``dataset_remote`` document in the local database
-    that links this dataset to a cloud dataset.
+    that links this dataset to a cloud dataset. Purely local: no network
+    call is made, and *client* is accepted only for signature compatibility.
 
     Args:
-        dataset: A local :class:`~ndi.dataset.ndi_dataset` instance.
-        client: Authenticated cloud client (auto-created if omitted).
+        dataset: A local :class:`~ndi.dataset.ndi_dataset` instance, or any
+            object exposing a ``database``.
+        client: Unused; accepted for call-site compatibility.
 
     Returns:
         Tuple of ``(cloud_dataset_id, remote_doc)`` where
         *remote_doc* is the linking document or ``None``.
+
+    See also: :meth:`ndi.dataset.ndi_dataset.isInCloud`, which answers the
+    same question and must agree with this function.
     """
     try:
-        db = dataset.database
+        db = _localDatabase(dataset)
+        if db is None:
+            logger.debug("getCloudDatasetIdForLocalDataset: no database on %r", type(dataset))
+            return "", None
+
         from ndi.query import ndi_query
 
         q = ndi_query("").isa("dataset_remote")
@@ -114,10 +139,11 @@ def getCloudDatasetIdForLocalDataset(
             cloud_id = ""
             if isinstance(props, dict):
                 remote = props.get("dataset_remote", {})
-                cloud_id = remote.get("dataset_id", "")
+                if isinstance(remote, dict):
+                    cloud_id = remote.get("dataset_id", "") or ""
             return cloud_id, doc
-    except Exception:
-        pass
+    except Exception:  # noqa: BLE001 - a lookup helper must never break a caller
+        logger.debug("getCloudDatasetIdForLocalDataset: lookup failed", exc_info=True)
     return "", None
 
 

@@ -1086,7 +1086,7 @@ functions:
 
   - name: me
     matlab_path: "+ndi/+cloud/+api/+users/me.m"
-    matlab_last_sync_hash: "f0c2597f"
+    matlab_last_sync_hash: "f2b91923"
     python_path: "ndi/cloud/api/users.py"
     input_arguments:
       - name: client
@@ -1095,7 +1095,20 @@ functions:
     output_arguments:
       - name: user
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      Re-synced to MATLAB f2b91923f (PR #858), which derives the parallel
+      convenience arrays organizationID / organizationName /
+      organizationCanUploadDataset from the raw 'organizations' list returned
+      by GET /users/me. Python adds them in the module-level helper
+      _add_organization_fields, which is the analogue of the static
+      Me.parseOrganizations that MATLAB extracted in dfcd7f797 for the same
+      reason -- so the parsing is testable without live credentials. Same
+      normalization rules: a single bare object is treated as a one-element
+      list (MATLAB's struct-array vs cell-array case), non-object entries are
+      skipped, each field is appended only when present, ids/names are coerced
+      with str() (MATLAB char(string(v))) and canUploadDataset with bool()
+      (MATLAB logical()). The three fields are always defined, empty when
+      there are no organizations. The raw 'organizations' value is untouched.
 
   - name: GetUser
     matlab_path: "+ndi/+cloud/+api/+users/GetUser.m"

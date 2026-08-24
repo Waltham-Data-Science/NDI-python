@@ -19,10 +19,13 @@ Example:
     doc = db.read(doc_id)
 """
 
+import logging
 from pathlib import Path
 
 from .document import ndi_document
 from .query import ndi_query
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_doc_props(props: dict) -> dict:
@@ -270,6 +273,28 @@ class SQLiteDriver:
                 continue
         return results
 
+    def close(self) -> None:
+        """Release the underlying SQLite connection.
+
+        DID-python's ``SQLiteDB`` opens a ``sqlite3.Connection`` in its
+        constructor and holds it open for the object's lifetime; it does not
+        reopen lazily. Callers that are about to delete the database file (or
+        the directory holding it) must close it first — on Windows an open
+        file cannot be removed, so the delete fails outright.
+
+        Idempotent, and tolerant of a driver that has already been torn down.
+
+        MATLAB equivalent: ``mksqlite(0,'close')`` (NDI-matlab ``26d0638bf``,
+        issue #870).
+        """
+        db = getattr(self, "_db", None)
+        if db is None:
+            return
+        try:
+            db.close()
+        except Exception:  # noqa: BLE001 - already closed / partially built driver
+            logger.debug("SQLite connection close raised; treating as closed", exc_info=True)
+
 
 class ndi_database:
     """NDI database interface.
@@ -404,55 +429,67 @@ class ndi_database:
             except Exception:  # noqa: BLE001 - unreadable stamp -> re-import below
                 pass
 
+        # Both drivers below are throwaway: nothing outside this method ever
+        # uses them, but each holds an open sqlite3.Connection for its own
+        # lifetime — `dst` on the very did-sqlite.sqlite the erase paths later
+        # delete. Leaving them open would defeat the close-before-rmtree fix on
+        # Windows for exactly the MATLAB-written datasets issue #870 was
+        # reported against, so close both on every exit path.
         src = SQLiteDriver(db_path)  # branch auto-detected ("main")
-        src_ids = src._db.get_doc_ids(src._branch_id)
-        if not src_ids:
-            return db_path
-
-        # ndi.db changed (or first import): rebuild the Python copy from scratch so
-        # in-place edits AND deletions are reflected — the additive import below
-        # alone would keep stale/deleted documents. Remove the prior file (and its
-        # sqlite -wal/-shm sidecars) before re-importing.
-        if python_db.exists():
-            for suffix in ("", "-wal", "-shm"):
-                stale = python_db.with_name(python_db.name + suffix)
-                try:
-                    stale.unlink()
-                except OSError:
-                    pass
-
-        # Import in chunks. DID's add_docs is O(N^2) within a single call, so a
-        # one-shot insert of tens of thousands of documents takes minutes; a
-        # fixed chunk size keeps each insert bounded (constant per chunk) and the
-        # whole import linear. Read + normalize each chunk lazily so peak memory
-        # stays bounded too.
-        dst = SQLiteDriver(python_db, branch_id="a")
-        existing = set(dst._db.get_doc_ids(dst._branch_id))
-        CHUNK = 4000
-        for start in range(0, len(src_ids), CHUNK):
-            chunk_ids = src_ids[start : start + CHUNK]
-            raw = src._db.get_docs(chunk_ids, src._branch_id, OnMissing="ignore")
-            if not isinstance(raw, (list, tuple)):
-                raw = [raw]
-            new_docs = []
-            for d in raw:
-                if d is None:
-                    continue
-                doc_id = d.document_properties.get("base", {}).get("id", "")
-                if not doc_id or doc_id in existing:
-                    continue
-                new_docs.append(dst._DIDDocument(_normalize_doc_props(d.document_properties)))
-                existing.add(doc_id)
-            if new_docs:
-                dst._db.add_docs(new_docs, dst._branch_id)
-
-        # Record the source stamp so the next open can skip re-import while ndi.db
-        # is unchanged.
+        dst: SQLiteDriver | None = None
         try:
-            stamp_path.write_text(json.dumps(current_stamp))
-        except OSError:
-            pass
-        return python_db
+            src_ids = src._db.get_doc_ids(src._branch_id)
+            if not src_ids:
+                return db_path
+
+            # ndi.db changed (or first import): rebuild the Python copy from scratch so
+            # in-place edits AND deletions are reflected — the additive import below
+            # alone would keep stale/deleted documents. Remove the prior file (and its
+            # sqlite -wal/-shm sidecars) before re-importing.
+            if python_db.exists():
+                for suffix in ("", "-wal", "-shm"):
+                    stale = python_db.with_name(python_db.name + suffix)
+                    try:
+                        stale.unlink()
+                    except OSError:
+                        pass
+
+            # Import in chunks. DID's add_docs is O(N^2) within a single call, so a
+            # one-shot insert of tens of thousands of documents takes minutes; a
+            # fixed chunk size keeps each insert bounded (constant per chunk) and the
+            # whole import linear. Read + normalize each chunk lazily so peak memory
+            # stays bounded too.
+            dst = SQLiteDriver(python_db, branch_id="a")
+            existing = set(dst._db.get_doc_ids(dst._branch_id))
+            CHUNK = 4000
+            for start in range(0, len(src_ids), CHUNK):
+                chunk_ids = src_ids[start : start + CHUNK]
+                raw = src._db.get_docs(chunk_ids, src._branch_id, OnMissing="ignore")
+                if not isinstance(raw, (list, tuple)):
+                    raw = [raw]
+                new_docs = []
+                for d in raw:
+                    if d is None:
+                        continue
+                    doc_id = d.document_properties.get("base", {}).get("id", "")
+                    if not doc_id or doc_id in existing:
+                        continue
+                    new_docs.append(dst._DIDDocument(_normalize_doc_props(d.document_properties)))
+                    existing.add(doc_id)
+                if new_docs:
+                    dst._db.add_docs(new_docs, dst._branch_id)
+
+            # Record the source stamp so the next open can skip re-import while ndi.db
+            # is unchanged.
+            try:
+                stamp_path.write_text(json.dumps(current_stamp))
+            except OSError:
+                pass
+            return python_db
+        finally:
+            src.close()
+            if dst is not None:
+                dst.close()
 
     @property
     def database_path(self) -> Path:
@@ -463,6 +500,24 @@ class ndi_database:
     def binary_path(self) -> Path:
         """Path where binary files are stored."""
         return self._binary_dir
+
+    def close(self) -> None:
+        """Release the SQLite connection held by the backing driver.
+
+        Call this before deleting the database file or the directory that
+        contains it: DID-python holds its ``sqlite3.Connection`` open for the
+        driver's lifetime and never reopens it lazily, and on Windows an open
+        file cannot be removed, so a delete over a live handle fails.
+
+        Idempotent. The database object must not be used for further
+        operations afterwards.
+
+        MATLAB equivalent: ``mksqlite(0,'close')`` (NDI-matlab ``26d0638bf`` /
+        ``71758b893``, issue #870).
+        """
+        driver = getattr(self, "_driver", None)
+        if driver is not None:
+            driver.close()
 
     # === CRUD Operations ===
 

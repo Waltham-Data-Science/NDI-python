@@ -266,6 +266,69 @@ class ndi_dataset:
                 return False
         return True
 
+    def isInCloud(self) -> tuple[bool, str]:
+        """Return whether this dataset is linked to a dataset on NDI Cloud.
+
+        A dataset is considered to be "in the cloud" if its database contains
+        a ``dataset_remote`` document. That document is created and stored
+        locally the first time the dataset is uploaded (see
+        ``ndi.cloud.uploadDataset``).
+
+        This is a purely local check: it inspects only the dataset's own
+        database and performs NO network communication, so it does not verify
+        that the remote dataset still exists or is up to date. It also does
+        not open the dataset's linked sessions — the ``dataset_remote``
+        document lives in the dataset's own database, since its
+        ``base.session_id`` is the dataset id — so the check is cheap enough
+        to call while listing datasets. That is why it reads the session
+        database directly rather than going through
+        :meth:`database_search`, which fans out to every linked session.
+
+        Returns:
+            ``(in_cloud, cloud_dataset_id)``. *cloud_dataset_id* is the remote
+            NDI Cloud dataset id when *in_cloud* is True, or ``""`` when it is
+            False. If more than one ``dataset_remote`` document is present —
+            which indicates a misconfiguration — the id of the first is
+            returned rather than raising, so this status check never throws.
+
+        MATLAB equivalent: ``ndi.dataset/isInCloud``
+        (NDI-matlab ``41ef50f54``, PR #859).
+
+        See also: :meth:`isIngested`,
+        ``ndi.cloud.internal.getCloudDatasetIdForLocalDataset``
+        """
+        try:
+            database = getattr(self._session, "_database", None)
+            if database is None:
+                return False, ""
+            docs = list(database.search(ndi_query("").isa("dataset_remote")))
+        except Exception:  # noqa: BLE001 - a status check must never throw
+            logger.debug("isInCloud: dataset_remote lookup failed", exc_info=True)
+            return False, ""
+
+        if not docs:
+            return False, ""
+
+        return True, self._cloud_dataset_id_from_doc(docs[0])
+
+    @staticmethod
+    def _cloud_dataset_id_from_doc(doc: Any) -> str:
+        """Best-effort ``dataset_remote.dataset_id`` extraction, never raising.
+
+        Mirrors MATLAB's ``char(string(...))`` coercion; a document of an
+        unexpected shape yields ``""`` rather than an error.
+        """
+        props = getattr(doc, "document_properties", doc)
+        if not isinstance(props, dict):
+            return ""
+        remote = props.get("dataset_remote")
+        if not isinstance(remote, dict):
+            return ""
+        dataset_id = remote.get("dataset_id")
+        if dataset_id is None:
+            return ""
+        return str(dataset_id)
+
     def convertLinkedSessionToIngested(
         self,
         session_id: str,
@@ -954,7 +1017,7 @@ class ndi_dataset_dir(ndi_dataset):
             # minutes to load; add_documents fetches the id set once.
             self.add_doc_failures.extend(self._session._database.add_documents(documents))
             # Re-create session without forced ID (reads from database)
-            self._session = ndi_session_dir(ref or "temp", self._path)
+            self._rebind_session(ndi_session_dir(ref or "temp", self._path))
         elif path_or_ref is None and not ref:
             # 1-arg form: try opening existing, or create with dir name as reference
             session_path = self._dataset_session_path()
@@ -1026,7 +1089,9 @@ class ndi_dataset_dir(ndi_dataset):
                 # Re-create session with the correct reference and ID, keeping
                 # the MATLAB .ndi_dataset location so the existing database is
                 # preserved rather than replaced by an empty one at self._path.
-                self._session = ndi_session_dir(ref, self._dataset_session_path(), session_id=sid)
+                self._rebind_session(
+                    ndi_session_dir(ref, self._dataset_session_path(), session_id=sid)
+                )
 
         # Repair legacy dataset_session_info if found
         if dsi_docs:
@@ -1085,6 +1150,24 @@ class ndi_dataset_dir(ndi_dataset):
             except Exception:
                 logger.debug("Could not register session %s: skipping", sid)
 
+    def _rebind_session(self, session: Any) -> None:
+        """Adopt *session*, closing the SQLite handle of the one it replaces.
+
+        The constructor and the session-discovery repair both re-create the
+        backing ``ndi_session_dir`` over the SAME ``did-sqlite.sqlite`` file.
+        Plain rebinding leaves the previous DID connection open on that file
+        until the discarded object happens to be garbage-collected; on Windows
+        such an orphaned handle blocks a later ``dataset_erase``/``rmtree`` of
+        the dataset directory. That is exactly the failure NDI-matlab
+        ``26d0638bf`` addressed by closing *every* connection rather than one
+        (issue #870) — MATLAB's global ``mksqlite(0,'close')`` has no Python
+        equivalent, so close the handle we are about to drop.
+        """
+        previous = getattr(self, "_session", None)
+        if previous is not None and previous is not session:
+            previous._close_database()
+        self._session = session
+
     @staticmethod
     def exists(path: str | Path) -> bool:
         """Does an ndi_dataset exist at a given path?
@@ -1123,6 +1206,13 @@ class ndi_dataset_dir(ndi_dataset):
         if areyousure.lower() == "yes":
             ndi_dir = ndi_dataset_dir_obj.getpath() / ".ndi"
             if ndi_dir.exists():
+                # Close the SQLite handle on did-sqlite.sqlite BEFORE removing
+                # the directory: on Windows an open file cannot be deleted, so
+                # the rmtree would fail outright (NDI-matlab 71758b893 /
+                # 26d0638bf, issue #870).
+                session = getattr(ndi_dataset_dir_obj, "_session", None)
+                if session is not None:
+                    session._close_database()
                 shutil.rmtree(ndi_dir)
         else:
             logger.info(

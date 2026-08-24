@@ -56,8 +56,17 @@ class ndi_session_mock(ndi_session_dir):
         super().__init__(reference, self._tmpdir)
 
     def close(self) -> None:
-        """Close the session and clean up the temporary directory."""
+        """Close the session and clean up the temporary directory.
+
+        Releases the SQLite handle before removing the tree: the temp
+        directory holds ``.ndi/did-sqlite.sqlite``, and on Windows an open
+        file cannot be deleted — with ``ignore_errors=True`` that failure is
+        silent and leaks the whole directory. MATLAB fixed the same exposure
+        in its ``closeAndRemoveDir`` test helper (NDI-matlab ``26d0638bf``,
+        issue #870).
+        """
         if self._cleanup and Path(self._tmpdir).exists():
+            self._close_database()
             shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     def __enter__(self) -> ndi_session_mock:
