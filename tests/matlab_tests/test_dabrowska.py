@@ -40,8 +40,11 @@ live on-disk SQLite, during construction.
 The shared corpus under ``DABROWSKA_PATH`` is therefore **never opened in
 place**. ``dabrowska_corpus`` copies the whole corpus directory into a pytest
 tmp dir once per module, and ``dabrowska_dataset`` opens only that private
-copy. ``TestFixtureContainment`` is the regression gate for this: it snapshots
-the shared corpus at import time and fails if anything under it changed.
+copy. ``TestFixtureContainment`` is the regression gate for this: it checks the
+opened path, and it snapshots the shared corpus immediately either side of the
+``ndi_dataset(...)`` call so any write that construction performs is caught and
+correctly attributed. Other processes open this corpus too, so do not widen
+that window to the whole module — their writes would be reported as ours.
 
 CORPUS INTEGRITY PREFLIGHT / RESTORE PATH
 -----------------------------------------
@@ -218,8 +221,15 @@ def _snapshot_tree(root: Path) -> dict[str, tuple[int, int]]:
     return snapshot
 
 
-#: Captured at import, i.e. before any fixture has had a chance to open anything.
-SHARED_CORPUS_SNAPSHOT = _snapshot_tree(DABROWSKA_PATH) if DABROWSKA_PATH.exists() else {}
+#: Entries under the shared corpus whose ``(size, mtime_ns)`` changed while
+#: ``dabrowska_dataset`` was constructing its ndi_dataset. Populated by that
+#: fixture; asserted empty by ``TestFixtureContainment``.
+#:
+#: The window is deliberately just the construction call rather than the whole
+#: module. Other processes open this same corpus (the tutorials/verification
+#: harnesses, and sibling test runs), so a module-wide window reports their
+#: writes as ours — observed happening during development.
+SHARED_CORPUS_WRITES: list[str] = []
 
 
 # ---------------------------------------------------------------------------
@@ -248,10 +258,21 @@ def dabrowska_corpus(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def dabrowska_dataset(dabrowska_corpus):
-    """Load the Dabrowska dataset from the private copy — never the shared corpus."""
+    """Load the Dabrowska dataset from the private copy — never the shared corpus.
+
+    Brackets the construction call with a snapshot of the shared corpus so
+    ``TestFixtureContainment`` can prove this open wrote nothing to it.
+    """
     import ndi.dataset
 
-    return ndi.dataset.ndi_dataset(dabrowska_corpus)
+    before = _snapshot_tree(DABROWSKA_PATH)
+    dataset = ndi.dataset.ndi_dataset(dabrowska_corpus)
+    after = _snapshot_tree(DABROWSKA_PATH)
+
+    SHARED_CORPUS_WRITES[:] = sorted(
+        name for name in set(before) | set(after) if before.get(name) != after.get(name)
+    )
+    return dataset
 
 
 @pytest.fixture(scope="module")
@@ -327,24 +348,16 @@ class TestFixtureContainment:
         assert opened == Path(os.path.realpath(dabrowska_corpus))
 
     def test_shared_corpus_is_not_mutated(self, dabrowska_dataset):
-        """Nothing under the shared corpus changed while the dataset was built.
+        """Constructing the dataset wrote nothing under the shared corpus.
 
-        Compares against ``SHARED_CORPUS_SNAPSHOT``, taken at import time.
-        Requesting ``dabrowska_dataset`` forces the full open to have happened
-        before this assertion runs.
+        ``dabrowska_dataset`` brackets its ``ndi_dataset(...)`` call with a
+        snapshot of the shared corpus; requesting the fixture here guarantees
+        that has already happened.
         """
-        current = _snapshot_tree(DABROWSKA_PATH)
-        changed = sorted(
-            name
-            for name in set(SHARED_CORPUS_SNAPSHOT) | set(current)
-            if SHARED_CORPUS_SNAPSHOT.get(name) != current.get(name)
-        )
-        assert not changed, (
-            "The shared Dabrowska corpus was written to during this test run. "
-            "Either a fixture here opened it in place again, or another process "
-            "is opening the same corpus concurrently (the tutorials/verification "
-            "harnesses do). Changed entries under "
-            f"{DABROWSKA_PATH}: {changed}"
+        assert not SHARED_CORPUS_WRITES, (
+            "Constructing the ndi_dataset wrote to the SHARED Dabrowska corpus — "
+            "a fixture is opening it in place again instead of the tmp-dir copy. "
+            f"Entries changed under {DABROWSKA_PATH}: {SHARED_CORPUS_WRITES}"
         )
 
 
