@@ -954,7 +954,7 @@ class ndi_dataset_dir(ndi_dataset):
             # minutes to load; add_documents fetches the id set once.
             self.add_doc_failures.extend(self._session._database.add_documents(documents))
             # Re-create session without forced ID (reads from database)
-            self._session = ndi_session_dir(ref or "temp", self._path)
+            self._rebind_session(ndi_session_dir(ref or "temp", self._path))
         elif path_or_ref is None and not ref:
             # 1-arg form: try opening existing, or create with dir name as reference
             session_path = self._dataset_session_path()
@@ -1018,7 +1018,9 @@ class ndi_dataset_dir(ndi_dataset):
                 # Re-create session with the correct reference and ID, keeping
                 # the MATLAB .ndi_dataset location so the existing database is
                 # preserved rather than replaced by an empty one at self._path.
-                self._session = ndi_session_dir(ref, self._dataset_session_path(), session_id=sid)
+                self._rebind_session(
+                    ndi_session_dir(ref, self._dataset_session_path(), session_id=sid)
+                )
 
         # Repair legacy dataset_session_info if found
         if dsi_docs:
@@ -1077,6 +1079,24 @@ class ndi_dataset_dir(ndi_dataset):
             except Exception:
                 logger.debug("Could not register session %s: skipping", sid)
 
+    def _rebind_session(self, session: Any) -> None:
+        """Adopt *session*, closing the SQLite handle of the one it replaces.
+
+        The constructor and the session-discovery repair both re-create the
+        backing ``ndi_session_dir`` over the SAME ``did-sqlite.sqlite`` file.
+        Plain rebinding leaves the previous DID connection open on that file
+        until the discarded object happens to be garbage-collected; on Windows
+        such an orphaned handle blocks a later ``dataset_erase``/``rmtree`` of
+        the dataset directory. That is exactly the failure NDI-matlab
+        ``26d0638bf`` addressed by closing *every* connection rather than one
+        (issue #870) — MATLAB's global ``mksqlite(0,'close')`` has no Python
+        equivalent, so close the handle we are about to drop.
+        """
+        previous = getattr(self, "_session", None)
+        if previous is not None and previous is not session:
+            previous._close_database()
+        self._session = session
+
     @staticmethod
     def dataset_erase(ndi_dataset_dir_obj: ndi_dataset_dir, areyousure: str = "no") -> None:
         """
@@ -1096,6 +1116,13 @@ class ndi_dataset_dir(ndi_dataset):
         if areyousure.lower() == "yes":
             ndi_dir = ndi_dataset_dir_obj.getpath() / ".ndi"
             if ndi_dir.exists():
+                # Close the SQLite handle on did-sqlite.sqlite BEFORE removing
+                # the directory: on Windows an open file cannot be deleted, so
+                # the rmtree would fail outright (NDI-matlab 71758b893 /
+                # 26d0638bf, issue #870).
+                session = getattr(ndi_dataset_dir_obj, "_session", None)
+                if session is not None:
+                    session._close_database()
                 shutil.rmtree(ndi_dir)
         else:
             logger.info(

@@ -227,10 +227,26 @@ class ndi_session_dir(ndi_session):
         if passed:
             ndi_dir = self._path / ".ndi"
             if ndi_dir.exists():
+                # Close the SQLite handle on did-sqlite.sqlite BEFORE removing
+                # the directory: on Windows an open file cannot be deleted, so
+                # the rmtree would fail outright (NDI-matlab 71758b893 /
+                # 26d0638bf, issue #870).
+                self._close_database()
                 shutil.rmtree(ndi_dir)
             return None
 
         return self
+
+    def _close_database(self) -> None:
+        """Release this session's SQLite connection, if it has one.
+
+        MATLAB equivalent: ``mksqlite(0,'close')``. Used by the erase paths
+        below; the session must not be used for database operations after
+        this, but they all destroy the database directory anyway.
+        """
+        database = getattr(self, "_database", None)
+        if database is not None:
+            database.close()
 
     @staticmethod
     def exists(path: str | Path) -> bool:
@@ -268,6 +284,10 @@ class ndi_session_dir(ndi_session):
 
         ndi_dir = session._path / ".ndi"
         if ndi_dir.exists():
+            # Close the SQLite handle first so Windows will allow
+            # did-sqlite.sqlite to be deleted (NDI-matlab 71758b893 /
+            # 26d0638bf, issue #870).
+            session._close_database()
             shutil.rmtree(ndi_dir)
 
     def __eq__(self, other: Any) -> bool:

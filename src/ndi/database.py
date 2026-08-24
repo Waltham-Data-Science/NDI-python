@@ -19,10 +19,13 @@ Example:
     doc = db.read(doc_id)
 """
 
+import logging
 from pathlib import Path
 
 from .document import ndi_document
 from .query import ndi_query
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_doc_props(props: dict) -> dict:
@@ -270,6 +273,28 @@ class SQLiteDriver:
                 continue
         return results
 
+    def close(self) -> None:
+        """Release the underlying SQLite connection.
+
+        DID-python's ``SQLiteDB`` opens a ``sqlite3.Connection`` in its
+        constructor and holds it open for the object's lifetime; it does not
+        reopen lazily. Callers that are about to delete the database file (or
+        the directory holding it) must close it first — on Windows an open
+        file cannot be removed, so the delete fails outright.
+
+        Idempotent, and tolerant of a driver that has already been torn down.
+
+        MATLAB equivalent: ``mksqlite(0,'close')`` (NDI-matlab ``26d0638bf``,
+        issue #870).
+        """
+        db = getattr(self, "_db", None)
+        if db is None:
+            return
+        try:
+            db.close()
+        except Exception:  # noqa: BLE001 - already closed / partially built driver
+            logger.debug("SQLite connection close raised; treating as closed", exc_info=True)
+
 
 class ndi_database:
     """NDI database interface.
@@ -463,6 +488,24 @@ class ndi_database:
     def binary_path(self) -> Path:
         """Path where binary files are stored."""
         return self._binary_dir
+
+    def close(self) -> None:
+        """Release the SQLite connection held by the backing driver.
+
+        Call this before deleting the database file or the directory that
+        contains it: DID-python holds its ``sqlite3.Connection`` open for the
+        driver's lifetime and never reopens it lazily, and on Windows an open
+        file cannot be removed, so a delete over a live handle fails.
+
+        Idempotent. The database object must not be used for further
+        operations afterwards.
+
+        MATLAB equivalent: ``mksqlite(0,'close')`` (NDI-matlab ``26d0638bf`` /
+        ``71758b893``, issue #870).
+        """
+        driver = getattr(self, "_driver", None)
+        if driver is not None:
+            driver.close()
 
     # === CRUD Operations ===
 
