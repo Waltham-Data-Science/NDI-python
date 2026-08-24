@@ -209,6 +209,17 @@ def elementDirectoryName(element: Any) -> tuple[str, str]:
     return dir_name, legacy_dir_name
 
 
+def _is_single_path_component(name: str) -> bool:
+    """True if *name* names one ordinary child of a directory.
+
+    Guards the legacy-folder fallback in :func:`elementDirectory`: ``''``
+    resolves to the parent itself, ``'.'`` likewise, ``'..'`` resolves above it,
+    and a name carrying a separator nests.  None of those may ever be treated as
+    an element's working folder.
+    """
+    return bool(name) and name not in (".", "..") and "/" not in name and "\\" not in name
+
+
 def elementDirectory(parent_dir: str | Path, element: Any) -> tuple[Path, str, bool]:
     """The working directory for an element or probe, with legacy fallback.
 
@@ -227,6 +238,15 @@ def elementDirectory(parent_dir: str | Path, element: Any) -> tuple[Path, str, b
 
     This function never creates anything on disk.
 
+    DIVERGENCE FROM MATLAB: MATLAB builds the legacy candidate with ``fullfile``
+    and tests it with ``isfolder``.  ``fullfile(parentDir, '')`` is ``parentDir``
+    and ``isfolder(parentDir)`` is true, so an element string that sanitizes
+    from nothing makes MATLAB return the *parent* as the element directory -- an
+    exporter would then write straight into it -- and ``'..'`` resolves above
+    it.  This port refuses the fallback unless the legacy name is a single,
+    ordinary path component.  The returned new name is safe by construction:
+    :func:`pathSafeName` never yields ``''``, ``'.'``, ``'..'`` or a separator.
+
     Args:
         parent_dir: The directory that holds the per-element folders.
         element: An ndi.element / ndi.probe object (anything that answers
@@ -244,7 +264,7 @@ def elementDirectory(parent_dir: str | Path, element: Any) -> tuple[Path, str, b
     dir_name, legacy_dir_name = elementDirectoryName(element)
     is_legacy = False
 
-    if dir_name != legacy_dir_name:
+    if dir_name != legacy_dir_name and _is_single_path_component(legacy_dir_name):
         if not (parent / dir_name).is_dir() and (parent / legacy_dir_name).is_dir():
             dir_name = legacy_dir_name
             is_legacy = True

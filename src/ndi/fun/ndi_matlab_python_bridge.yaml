@@ -839,13 +839,23 @@ functions:
         type_matlab: "logical"
         type_python: "bool"
     decision_log: >
-      Exact match in resolution semantics. Prefers the pathSafeName folder;
-      falls back to an existing legacy ('|'-separated) folder only when the
-      new-name folder does not exist and the legacy one does, so data written
-      by earlier versions of NDI is still found. Creates nothing on disk.
+      Matches MATLAB resolution semantics for every real element string.
+      Prefers the pathSafeName folder; falls back to an existing legacy
+      ('|'-separated) folder only when the new-name folder does not exist and
+      the legacy one does, so data written by earlier versions of NDI is still
+      found. Creates nothing on disk.
       TYPE DIVERGENCE: MATLAB returns dirPath as a char path built with
       fullfile; Python returns a pathlib.Path (repo-wide convention). MATLAB
       returns three outputs; Python returns them as a tuple in the same order.
+      BEHAVIOR DIVERGENCE (deliberate hardening — report upstream): MATLAB
+      builds the legacy candidate with fullfile and tests it with isfolder.
+      fullfile(parentDir,'') is parentDir and isfolder(parentDir) is true, so
+      an element string that sanitizes from nothing makes MATLAB return the
+      PARENT directory as the element directory (an exporter then writes
+      straight into it), and '..' resolves above it. The port refuses the
+      legacy fallback unless the legacy name is a single ordinary path
+      component (not '', '.', '..', and no separator). The new name needs no
+      such guard: pathSafeName never yields any of those.
 
   # =========================================================================
   # Functions — plot.py

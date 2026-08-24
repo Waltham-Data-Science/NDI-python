@@ -253,6 +253,44 @@ class TestElementDirectory:
         _dir_path, dir_name, _is_legacy = elementDirectory(tmp_path, "ctx | 1")
         assert dir_name == "ctx_-_1"
 
+    # -- degenerate legacy names must never resolve outside a child folder ---
+    # DIVERGENCE FROM MATLAB: MATLAB builds the legacy candidate with fullfile
+    # and tests it with isfolder. fullfile(parentDir,'') is parentDir and
+    # isfolder(parentDir) is true, so an element string that sanitizes from
+    # nothing makes MATLAB return the PARENT as the element directory -- an
+    # exporter would then write straight into it. '..' escapes above it. The
+    # port refuses the fallback for anything that is not a single, ordinary
+    # path component.
+
+    def test_empty_element_string_does_not_resolve_to_the_parent(self, tmp_path):
+        dir_path, dir_name, is_legacy = elementDirectory(tmp_path, "")
+        assert dir_name == "x"
+        assert dir_path == tmp_path / "x"
+        assert dir_path != tmp_path
+        assert is_legacy is False
+
+    def test_dot_element_string_does_not_resolve_to_the_parent(self, tmp_path):
+        dir_path, dir_name, is_legacy = elementDirectory(tmp_path, ".")
+        assert dir_name == "x"
+        assert dir_path == tmp_path / "x"
+        assert is_legacy is False
+
+    def test_dotdot_element_string_does_not_escape_the_parent(self, tmp_path):
+        dir_path, dir_name, is_legacy = elementDirectory(tmp_path, "..")
+        assert dir_name == "x"
+        assert dir_path == tmp_path / "x"
+        assert tmp_path in dir_path.parents
+        assert is_legacy is False
+
+    def test_separator_in_legacy_name_does_not_nest(self, tmp_path):
+        # 'a/b | 1' would make the legacy candidate a nested path
+        nested = tmp_path / "a" / "b_|_1"
+        nested.mkdir(parents=True)
+        dir_path, dir_name, is_legacy = elementDirectory(tmp_path, "a/b | 1")
+        assert dir_name == "a-b_-_1"
+        assert dir_path == tmp_path / "a-b_-_1"
+        assert is_legacy is False
+
 
 # ===========================================================================
 # Call sites: the folders these helpers are supposed to be building
