@@ -352,3 +352,16 @@ class TestKilosortImportDirectory:
         info, _summary = kilosort.getInfo(_InfoSession(tmp_path), _InfoProbe("ctx | 1"))
         assert Path(info["directory"]) == kdir
         assert info["num_clusters"] == 2
+
+    def test_getinfo_nosubfolder_reads_the_probe_directory_itself(self, tmp_path):
+        # noSubFolder drops the subdir; the probe directory is read directly.
+        from ndi.fun.probe.import_ import kilosort
+
+        kdir = tmp_path / "kilosort" / "ctx_-_1"
+        _write_min_kilosort_fixture(kdir)
+
+        info, _summary = kilosort.getInfo(
+            _InfoSession(tmp_path), _InfoProbe("ctx | 1"), noSubFolder=True
+        )
+        assert Path(info["directory"]) == kdir
+        assert info["num_clusters"] == 2
