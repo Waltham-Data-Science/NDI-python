@@ -1130,6 +1130,117 @@ functions:
       Exact match. NOTE: MATLAB source is in +ndi/+fun/+calc/;
       Python places it in ndi.fun.stimulus (different namespace).
 
+  - name: whatVaries_parameterList
+    type: function
+    matlab_path: "+ndi/+fun/+stimulus/whatVaries_parameterList.m"
+    python_path: "ndi/fun/stimulus.py"
+    matlab_last_sync_hash: "a54b7685f"
+    input_arguments:
+      - name: stimuli
+        type_matlab: "ndi.document | cell | struct"
+        type_python: "Any"
+    output_arguments:
+      - name: params
+        type_matlab: "1xN cell of scalar parameter structs"
+        type_python: "list[dict[str, Any]]"
+    decision_log: >
+      Exact match in behavior; the input dispatch is restated in Python terms
+      because MATLAB's cell-array and struct-array branches collapse onto the
+      single Python `list`. MATLAB decides "cell of parameter structs" vs
+      "struct array of stimuli" from the container type; Python cannot, so each
+      list entry is classified by its own shape instead: an object exposing
+      `document_properties` is a document; a dict whose `stimulus_presentation`
+      is a mapping is document_properties-shaped; a dict whose `parameters` is a
+      mapping is one stimulus_presentation.stimuli entry; any other dict is a
+      bare parameter dict. A single dict is classified the same way. The one
+      behavioral difference this creates is a parameter dict that itself has a
+      `parameters` mapping key -- MATLAB's cell branch would pass it through
+      verbatim, Python unwraps it. Errors: MATLAB
+      ndi:fun:stimulus:whatVaries_parameterList:{badInput,badCellEntry} ->
+      TypeError, :notPresentation -> ValueError, each message prefixed with the
+      MATLAB identifier so the parity is greppable from either side.
+
+  - name: whatVaries
+    type: function
+    matlab_path: "+ndi/+fun/+stimulus/whatVaries.m"
+    python_path: "ndi/fun/stimulus.py"
+    matlab_last_sync_hash: "fa5542b32"
+    input_arguments:
+      - name: stimuli
+        type_matlab: "ndi.document | cell | struct"
+        type_python: "Any"
+      - name: exclude_blank
+        type_matlab: "options.excludeBlank (1,1) logical"
+        type_python: "bool"
+        default: "True"
+        note_python: >
+          MATLAB name-value 'excludeBlank'; Python keyword-only `exclude_blank`
+          per the repo's snake_case keyword convention.
+    output_arguments:
+      - name: varies
+        type_matlab: "struct array with fields parameter, values"
+        type_python: "list[dict[str, Any]]"
+      - name: constant
+        type_matlab: "struct array with fields parameter, value"
+        type_python: "list[dict[str, Any]]"
+    decision_log: >
+      Port of MATLAB main @ fa5542b32, i.e. including the blank-stimulus
+      exclusion (1456b8e4b), the cell/array-valued-constant crash fix
+      (1103b9481), and the local reimplementation of vlt.data.structwhatvaries
+      (fa5542b32). MATLAB struct arrays -> Python lists of dicts; the empty
+      result is `[]` rather than a 0x0 struct with the documented fields, so the
+      MATLAB test's isfield() check on an empty result has no Python analogue.
+      `values` is a list in both the scalar and non-scalar cases (MATLAB returns
+      a numeric row vector in the first and a cell in the second); the
+      distinction survives only as ordering -- sorted ascending with repeated
+      NaNs collapsed to one trailing NaN when every value is a numeric/logical
+      scalar, otherwise order of first appearance.
+      DELIBERATE DIVERGENCE, value equality: MATLAB compares with
+      vlt.data.eqlen, which reduces (via vlt.data.eqtot -> vlt.data.eqemp) to
+      sizeeq() plus a bare `x==y`. Two consequences follow from reading that
+      source (NOT executed -- no MATLAB on the porting machine, so treat both as
+      source-read claims to confirm upstream, not measurements): `x==y` on two
+      cell arrays is undefined in MATLAB, so local_varyingFields should throw
+      whenever a cell-valued parameter is present in two or more stimuli --
+      the same class of failure 1103b9481 fixed on the struct-assembly side but
+      apparently not on the comparison side, and its own regression test
+      testCellValuedConstantParameter drives exactly that path; and NaN ~= NaN
+      makes an all-NaN parameter report as varying. Python instead uses a
+      recursive isequaln-style comparison (equal shape and contents, NaN equals
+      NaN, lists/dicts/numpy arrays compared elementwise), matching the
+      documented intent and matching local_uniqueValues, which already uses
+      isequaln.
+      Scalar-ness: MATLAB isscalar() is true for a 1x1 array, so a MATLAB
+      1-element vector takes the sorted-numeric path; in Python a 1-element
+      list/tuple/ndarray is treated as a vector and only bare int/float/bool,
+      numpy scalars, and 0-d arrays are scalars. Complex values are excluded
+      from the scalar path because Python cannot order them.
+      No Python consumer: MATLAB's only caller is
+      +gui/+app/stimulusDecoder.m, which is in the MATLAB-only GUI group;
+      +app/+stimulus/decoder.m does not use these functions, so
+      ndi/app/stimulus/decoder.py is deliberately left unchanged.
+
+  - name: whatIsConstant
+    type: function
+    matlab_path: "+ndi/+fun/+stimulus/whatIsConstant.m"
+    python_path: "ndi/fun/stimulus.py"
+    matlab_last_sync_hash: "1456b8e4b"
+    input_arguments:
+      - name: stimuli
+        type_matlab: "ndi.document | cell | struct"
+        type_python: "Any"
+      - name: exclude_blank
+        type_matlab: "options.excludeBlank (1,1) logical"
+        type_python: "bool"
+        default: "True"
+    output_arguments:
+      - name: constant
+        type_matlab: "struct array with fields parameter, value"
+        type_python: "list[dict[str, Any]]"
+    decision_log: >
+      Exact match. Convenience wrapper returning the second output of
+      whatVaries, with excludeBlank passed straight through.
+
   # =========================================================================
   # Functions — table.py
   # MATLAB: +ndi/+fun/+table/*.m
