@@ -727,5 +727,8 @@ class TestFunImports:
         assert hasattr(stimulus, "tuning_curve_to_response_type")
         assert hasattr(stimulus, "findMixtureName")
         assert hasattr(stimulus, "stimulustemporalfrequency")
+        assert hasattr(stimulus, "whatVaries")
+        assert hasattr(stimulus, "whatIsConstant")
+        assert hasattr(stimulus, "whatVaries_parameterList")
         assert hasattr(session, "diff")
         assert hasattr(dataset, "diff")
