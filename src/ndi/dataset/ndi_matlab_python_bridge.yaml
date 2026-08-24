@@ -139,6 +139,30 @@ classes:
           session.isIngested() on each opened session.
           Synchronized with MATLAB main as of 2026-06 (commit 2d76370).
 
+      - name: isInCloud
+        input_arguments: []
+        output_arguments:
+          - name: b
+            type_matlab: "logical"
+            type_python: "bool"
+          - name: cloudDatasetId
+            type_matlab: "char"
+            type_python: "str"
+        decision_log: >
+          Ported from MATLAB 41ef50f54 (PR #859, dataset.m:260-296). MATLAB
+          returns two outputs [b, cloudDatasetId]; Python returns the tuple
+          (in_cloud, cloud_dataset_id), the idiomatic equivalent. True when the
+          dataset's own database holds a dataset_remote document, written
+          locally on first upload. Purely local — no network call, and it does
+          NOT open linked sessions, so it reads session._database.search
+          directly rather than dataset.database_search (which fans out to every
+          linked session), matching MATLAB's
+          ndi_dataset_obj.session.database.search. Never throws: a missing
+          database, a failing search, or a malformed document yields
+          (False, '') / an empty id, and several dataset_remote documents
+          (a misconfiguration) return the first rather than raising. The id is
+          coerced with str(), mirroring MATLAB's char(string(...)).
+
       - name: convertLinkedSessionToIngested
         input_arguments:
           - name: session_id
