@@ -13,6 +13,8 @@ from typing import Any
 
 import numpy as np
 
+from ndi.fun.file import elementDirectory
+
 
 def export_binary(
     probe: Any,
@@ -123,9 +125,15 @@ def export_all_binary(
     MATLAB equivalent: ndi.fun.probe.export_all_binary
 
     Creates a *kilosort_dir* directory inside the session path.  For each
-    probe of type ``n-trode``, a subdirectory named after the probe's
-    element string is created and a ``kilosort.bin`` file is written using
-    :func:`export_binary`.
+    probe of type ``n-trode``, a subdirectory is created and a
+    ``kilosort.bin`` file is written into it using :func:`export_binary`.
+
+    The subdirectory name comes from
+    :func:`ndi.fun.file.elementDirectoryName`; for a probe named ``'ctx'``
+    with reference 1 it is ``'ctx_-_1'``.  Folders written by older versions
+    of NDI, which used the ``'|'`` separator of ``elementstring()``
+    (``'ctx_|_1'``, not a legal folder name on Windows), are still found and
+    reused if they are present.
 
     Args:
         session: An NDI session object (must have ``path`` and
@@ -148,13 +156,12 @@ def export_all_binary(
     kilosort_path.mkdir(parents=True, exist_ok=True)
 
     for probe in probe_list:
-        elestr = probe.elementstring()
         if verbose:
-            print(f"Now working on probe {elestr}.")
+            print(f"Now working on probe {probe.elementstring()}.")
 
-        # Replace spaces with underscores for directory name
-        safe_name = elestr.replace(" ", "_")
-        this_path = kilosort_path / safe_name
+        # Platform-independent folder name, falling back to an existing
+        # legacy ('|'-separated) folder so older exports are still used.
+        this_path, _dir_name, _is_legacy = elementDirectory(kilosort_path, probe)
         this_path.mkdir(parents=True, exist_ok=True)
 
         outfile = this_path / "kilosort.bin"

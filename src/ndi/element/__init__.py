@@ -227,6 +227,11 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
         """
         Format element as human-readable string.
 
+        This string is for display only. It contains a ``'|'``, which is not a
+        legal filename character on Windows, so it must not be used to build
+        file or folder names; use :func:`ndi.fun.file.elementDirectoryName` (or
+        :func:`ndi.fun.file.elementDirectory`) for that.
+
         Returns:
             String in format "name | reference"
         """
