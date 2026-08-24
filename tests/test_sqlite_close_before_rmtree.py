@@ -239,6 +239,83 @@ class TestNoOrphanedConnections:
                 )
 
 
+class TestMatlabImportLeavesNoOrphanHandles:
+    """Importing a MATLAB-written ``ndi.db`` must not leak open connections.
+
+    ``ndi_database._maybe_import_matlab_db`` opens two throwaway
+    ``SQLiteDriver``s -- one reading the MATLAB ``ndi.db``, one writing the
+    normalized ``did-sqlite.sqlite`` -- and never closed either. The writer's
+    handle sits on exactly the file the erase paths later delete, so on
+    Windows a MATLAB-written dataset would still fail to erase even with the
+    erase-path close in place. That dataset shape is the one issue #870 was
+    reported against.
+    """
+
+    @staticmethod
+    def _matlab_style_db(tmp_path):
+        """A session directory whose .ndi holds a populated MATLAB ``ndi.db``."""
+        from ndi.database import SQLiteDriver
+
+        session_path = tmp_path / "sess"
+        db_dir = session_path / ".ndi"
+        db_dir.mkdir(parents=True)
+
+        writer = SQLiteDriver(db_dir / "ndi.db", branch_id="main")
+        writer.add(ndi_document("base", **{"base.name": "from-matlab"}).document_properties)
+        writer.close()
+        return session_path
+
+    @staticmethod
+    def _recording_driver(monkeypatch):
+        """Record every SQLiteDriver ndi_database builds."""
+        import ndi.database as database_module
+
+        built = []
+        real_cls = database_module.SQLiteDriver
+
+        def recorder(*args, **kwargs):
+            driver = real_cls(*args, **kwargs)
+            built.append(driver)
+            return driver
+
+        monkeypatch.setattr(database_module, "SQLiteDriver", recorder)
+        return built
+
+    def test_import_closes_its_throwaway_drivers(self, tmp_path, monkeypatch):
+        from ndi.database import ndi_database
+
+        session_path = self._matlab_style_db(tmp_path)
+        built = self._recording_driver(monkeypatch)
+
+        database = ndi_database(session_path)
+
+        assert len(built) > 1, (
+            "expected the MATLAB import path to build throwaway drivers; if it "
+            "no longer does, this orphaned-handle test needs updating"
+        )
+        for driver in built:
+            if driver is database._driver:
+                assert driver._db.dbid is not None
+            else:
+                assert driver._db.dbid is None, (
+                    "the MATLAB import left a throwaway SQLite handle open on "
+                    "the dataset's database directory"
+                )
+
+    def test_erasing_an_imported_matlab_session_closes_every_handle(self, tmp_path, monkeypatch):
+        """End-to-end: no handle survives the erase of a MATLAB-written session."""
+        session_path = self._matlab_style_db(tmp_path)
+        built = self._recording_driver(monkeypatch)
+
+        session = ndi_session_dir("erase_ref", session_path)
+        ndi_session_dir.database_erase(session, "yes")
+
+        assert built, "no drivers were built"
+        for driver in built:
+            assert driver._db.dbid is None
+        assert not (session_path / ".ndi").exists()
+
+
 class TestDatabaseClose:
     """``ndi_database.close()`` is the primitive the erase paths call."""
 
