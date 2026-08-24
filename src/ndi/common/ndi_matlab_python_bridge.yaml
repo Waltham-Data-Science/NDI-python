@@ -232,11 +232,13 @@ vendored_data:
 
   - name: sync_rules
     matlab_path: "src/ndi/ndi_common/sync_rules/"
-    python_path: null
-    matlab_last_sync_hash: null
+    python_path: "src/ndi/ndi_common/sync_rules/"
+    matlab_last_sync_hash: "881919d39"
     decision_log: >
-      Absent in NDI-python. Owned by the ndi.setup.lab / addSyncRules work
-      (drift item M4), not by this vendored-data pass.
+      Vendored byte-for-byte (vhlab/vhintan_intan2spike2.json,
+      vhlab/vhtaste_sync2bpod.json) by the M4 lab-config port, which also
+      ported ndi.setup.sync.addSyncRules/syncRuleFromConfigFile. See
+      src/ndi/setup/sync/ndi_matlab_python_bridge.yaml for the code contract.
 
   - name: matlab_only_assets
     matlab_path: "src/ndi/ndi_common/{example_app_sessions/,example_datasets/oldDataset/,.matlab2markdown-ignore}"
