@@ -25,11 +25,29 @@ MATLAB tutorial steps tested:
   7. Electrophysiology data exploration
   8. Elevated Plus Maze analysis
   9. Fear-Potentiated Startle analysis
+
+FIXTURE CONTAINMENT — read before editing the fixtures
+------------------------------------------------------
+Constructing an ``ndi_dataset`` **writes to the directory it is pointed at**.
+It always rewrites ``<path>/.ndi/reference.txt`` and
+``<path>/.ndi/unique_reference.txt``, and when the database still carries
+legacy ``dataset_session_info`` documents, ``build_session_info()`` calls
+``ndi_dataset.repairDatasetSessionInfo()``, which performs a ``database_add``
+of the replacement ``session_in_a_dataset`` documents followed by a
+``database_rm`` of the legacy document — an add *and a delete* against the
+live on-disk SQLite, during construction.
+
+The shared corpus under ``DABROWSKA_PATH`` is therefore **never opened in
+place**. ``dabrowska_corpus`` copies the whole corpus directory into a pytest
+tmp dir once per module, and ``dabrowska_dataset`` opens only that private
+copy. ``TestFixtureContainment`` is the regression gate for this: it snapshots
+the shared corpus at import time and fails if anything under it changed.
 """
 
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -61,21 +79,66 @@ EXPECTED_TYPE_COUNTS = {
     "treatment": 49,
 }
 
+# ---------------------------------------------------------------------------
+# Shared-corpus mutation canary
+# ---------------------------------------------------------------------------
+
+
+def _snapshot_tree(root: Path) -> dict[str, tuple[int, int]]:
+    """Map every regular file under *root* to ``(size, mtime_ns)``.
+
+    Symlinks are followed so the snapshot covers the real cache directory that
+    ``DABROWSKA_PATH/.ndi`` points at.
+    """
+    snapshot: dict[str, tuple[int, int]] = {}
+    for dirpath, _dirnames, filenames in os.walk(root, followlinks=True):
+        for name in filenames:
+            path = Path(dirpath) / name
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
+            snapshot[str(path.relative_to(root))] = (stat.st_size, stat.st_mtime_ns)
+    return snapshot
+
+
+#: Captured at import, i.e. before any fixture has had a chance to open anything.
+SHARED_CORPUS_SNAPSHOT = _snapshot_tree(DABROWSKA_PATH) if DABROWSKA_PATH.exists() else {}
+
 
 # ---------------------------------------------------------------------------
-# Session-scoped fixtures — loaded once for all tests
+# Module-scoped fixtures — corpus copied once, then loaded once for all tests
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="session")
-def dabrowska_dataset():
-    """Load the Dabrowska dataset from SQLite."""
+@pytest.fixture(scope="module")
+def dabrowska_corpus(tmp_path_factory):
+    """Private, writable copy of the shared Dabrowska corpus.
+
+    Opening an ``ndi_dataset`` mutates the directory it is given (see the
+    module docstring), so tests get their own copy and the shared corpus is
+    only ever read. ~102 MB, copied once per module.
+    """
+    destination = tmp_path_factory.mktemp("dabrowska_corpus") / "dabrowska"
+    shutil.copytree(
+        DABROWSKA_PATH,
+        destination,
+        symlinks=False,
+        ignore_dangling_symlinks=True,
+    )
+    yield destination
+    shutil.rmtree(destination.parent, ignore_errors=True)
+
+
+@pytest.fixture(scope="module")
+def dabrowska_dataset(dabrowska_corpus):
+    """Load the Dabrowska dataset from the private copy — never the shared corpus."""
     import ndi.dataset
 
-    return ndi.dataset.ndi_dataset(DABROWSKA_PATH)
+    return ndi.dataset.ndi_dataset(dabrowska_corpus)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def subject_table(dabrowska_dataset):
     """Build subject summary table."""
     from ndi.fun.doc_table import subject as subject_summary
@@ -83,7 +146,7 @@ def subject_table(dabrowska_dataset):
     return subject_summary(dabrowska_dataset)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def probe_summary(dabrowska_dataset):
     """Build probe summary table."""
     from ndi.fun.doc_table import probe as probe_table
@@ -91,7 +154,7 @@ def probe_summary(dabrowska_dataset):
     return probe_table(dabrowska_dataset)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def epoch_summary(dabrowska_dataset):
     """Build epoch summary table."""
     from ndi.fun.doc_table import epoch as epoch_table
@@ -99,7 +162,7 @@ def epoch_summary(dabrowska_dataset):
     return epoch_table(dabrowska_dataset)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def epm_table(dabrowska_dataset):
     """Query and convert EPM OTR docs to table."""
     from ndi.fun.doc_table import ontologyTableRowDoc2Table
@@ -111,7 +174,7 @@ def epm_table(dabrowska_dataset):
     return tables[0]
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def fps_table(dabrowska_dataset):
     """Query and convert FPS OTR docs to table."""
     from ndi.fun.doc_table import ontologyTableRowDoc2Table
@@ -121,6 +184,52 @@ def fps_table(dabrowska_dataset):
     docs = dabrowska_dataset.database_search(query)
     tables, *_ = ontologyTableRowDoc2Table(docs)
     return tables[0]
+
+
+# ===========================================================================
+# Class 0: TestFixtureContainment
+# ===========================================================================
+
+
+class TestFixtureContainment:
+    """Guard the shared corpus against in-place opens.
+
+    ``ndi_dataset`` construction writes to the directory it opens, and under
+    ``repairDatasetSessionInfo`` it also deletes documents from the live
+    database. One such delete already cost this corpus a ``session`` document.
+    These two tests fail the moment a fixture points ``ndi_dataset`` at
+    ``DABROWSKA_PATH`` again.
+    """
+
+    def test_dataset_opens_a_private_copy(self, dabrowska_corpus, dabrowska_dataset):
+        """The opened dataset is the tmp-dir copy, not the shared corpus."""
+        shared = Path(os.path.realpath(DABROWSKA_PATH))
+        opened = Path(os.path.realpath(dabrowska_dataset.getpath()))
+
+        assert opened != shared, f"dataset was opened in place at the shared corpus {shared}"
+        assert shared not in opened.parents, f"{opened} lives inside the shared corpus {shared}"
+        assert opened == Path(os.path.realpath(dabrowska_corpus))
+
+    def test_shared_corpus_is_not_mutated(self, dabrowska_dataset):
+        """Nothing under the shared corpus changed while the dataset was built.
+
+        Compares against ``SHARED_CORPUS_SNAPSHOT``, taken at import time.
+        Requesting ``dabrowska_dataset`` forces the full open to have happened
+        before this assertion runs.
+        """
+        current = _snapshot_tree(DABROWSKA_PATH)
+        changed = sorted(
+            name
+            for name in set(SHARED_CORPUS_SNAPSHOT) | set(current)
+            if SHARED_CORPUS_SNAPSHOT.get(name) != current.get(name)
+        )
+        assert not changed, (
+            "The shared Dabrowska corpus was written to during this test run. "
+            "Either a fixture here opened it in place again, or another process "
+            "is opening the same corpus concurrently (the tutorials/verification "
+            "harnesses do). Changed entries under "
+            f"{DABROWSKA_PATH}: {changed}"
+        )
 
 
 # ===========================================================================
