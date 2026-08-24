@@ -25,6 +25,25 @@ functions:
       probetype2object.json. Returns a dict mapping type strings
       to class name strings.
 
+      The .m function is synced; its DATA FILE
+      (src/ndi/ndi_common/probe/probetype2object.json) is only PARTIALLY
+      synced and deliberately still differs from NDI-matlab origin/main:
+        SYNCED — the 'event' -> ndi.probe.timeseries.stimulator row
+          (MATLAB 22ea823d8, 2026-02-17). It predates the imaging rework and
+          its target class exists in NDI-python, so it is portable alone.
+        NOT SYNCED — the imaging rows. MATLAB 831a3fbef renamed the class
+          ndi.probe.timage -> ndi.probe.image and c3b5e6758 renamed the types
+          to letter-initial ('2-photon-imaging' -> 'two-photon-imaging',
+          '1-photon-imaging' -> 'one-photon-imaging') while dropping the
+          interim 'prairieTP' row. Both belong to the schema-coupled imaging
+          block and land with it.
+      Consequently do NOT bump matlab_last_sync_hash for this file. Note the
+      wide-field-imaging row carries classname "ndi_probe.timage" — an
+      underscore-for-dot typo inherited from NDI-matlab, which MATLAB fixed in
+      831a3fbef; it is left as-is because the fix is entangled with the class
+      rename above. The map is pure strings (no import at load), so the bad
+      value only fails at probe construction for that one type.
+
   - name: getProbeTypeMap
     type: function
     matlab_path: "+ndi/+probe/+fun/getProbeTypeMap.m"
