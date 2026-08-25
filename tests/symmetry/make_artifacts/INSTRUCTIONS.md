@@ -41,6 +41,38 @@ same `SCENARIO` referents, runs `CASES`, and writes a matching file;
 `read_artifacts/time/` compares the two and skips until the MATLAB artifact exists
 — full cross-language closure needs the MATLAB runtime.
 
+The `fun/` namespace holds two more of these: `fun/test_path_safe_name.py`
+(`pathSafeNameCases.json`, from `tests/symmetry/_path_safe_name_cases`) and
+`fun/test_what_varies.py` (`whatVariesCases.json`, from
+`tests/symmetry/_what_varies_scenarios`).
+
+Three conventions those two established, worth copying:
+
+* **Write strict JSON.** `jsonencode(...,'ConvertInfAndNaN',true)` writes NaN as
+  `null` and Python's `json.dumps(allow_nan=True)` writes the non-standard `NaN`
+  token; neither survives the round trip. Use `allow_nan=False` and carry NaN as
+  an explicit sentinel (`"__NaN__"`), documented in the payload.
+* **Carry the input in a form the other language can rebuild exactly.**
+  `pathSafeNameCases.json` records each input as a string, as Unicode code
+  points, *and* as UTF-16 code units, so the read side can prove both languages
+  ran the same input before it compares outputs. That matters wherever the two
+  languages count characters differently.
+* **Give every case a `comparison_policy`.** `strict` means the languages must
+  agree and a MATLAB artifact that omits the case is a failure. Where a
+  divergence is already documented in a bridge YAML, mark the case
+  `expectedDivergence` and carry both a `divergence_note` and a
+  `matlab_expected`; MATLAB may then omit the case (no row, or a row with
+  `"omitted": true`). A divergence with no written reason is a mismatch wearing
+  a label — the read side asserts the note is there.
+
+## Object-type marker (`.ndi/ndi_object_type.txt`)
+
+Every make test whose artifact is a session or dataset directory ends with
+`assert_object_type_marker(artifact_dir, "session" | "dataset")` from
+`tests/symmetry/_object_type_marker`. The inventory of those directories lives
+in the same module and the read side iterates it, so a new session/dataset
+artifact must be added there too.
+
 ## Adding a new symmetry test:
 
 1. Create a sub-package under `make_artifacts/` named after the NDI domain (e.g., `session/`, `document/`, `probe/`).

@@ -24,6 +24,7 @@ import ndi.setup
 from ndi.query import ndi_query
 from ndi.session.dir import ndi_session_dir
 from ndi.util import sessionSummary
+from tests.symmetry._object_type_marker import assert_object_type_marker
 from tests.symmetry.conftest import PYTHON_ARTIFACTS
 
 ARTIFACT_DIR = PYTHON_ARTIFACTS / "session" / "blankSessionMarderlab" / "testBlankSessionMarderlab"
@@ -78,3 +79,8 @@ class TestBlankSessionMarderlab:
         assert artifact_dir.exists()
         assert summary_path.exists()
         assert json_docs_dir.exists()
+
+        # M1 object-type marker: the artifact directory must carry
+        # .ndi/ndi_object_type.txt reading 'session', so MATLAB's
+        # ndi.session.dir.directorytype can classify it without opening it.
+        assert_object_type_marker(artifact_dir, "session")

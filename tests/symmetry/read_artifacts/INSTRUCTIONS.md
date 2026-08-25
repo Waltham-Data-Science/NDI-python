@@ -59,6 +59,45 @@ class TestBuildSession:
         assert len(actual_probes) == len(expected_probes)
 ```
 
+## Two things that make a read test measure what it claims
+
+**Do not let the act of reading create the thing you are checking.** Opening an
+NDI directory backfills `.ndi/ndi_object_type.txt` — both languages do this
+deliberately, so legacy directories migrate on first open. A marker test that
+opened the session first would therefore be reading Python's own backfill and
+reporting it as MATLAB's output. `read_artifacts/conftest.py` snapshots every
+artifact's marker once, before the first read test runs, and
+`*/test_object_type_marker.py` asserts against that snapshot (replaying it into
+a throwaway directory so the real `directorytype()` is still the thing under
+test). Any future check of state that a Python read can *create* needs the same
+treatment.
+
+**A comparison that compared nothing is not a pass.** Skipping on an absent
+artifact directory is required (rule 4 above), but a test that finds the
+directory and then silently iterates zero items is the same hole with extra
+steps. Where a test loops over a set of artifacts or cases, assert that the set
+was non-empty — see `test_matlab_ran_something` in
+`read_artifacts/fun/test_what_varies.py` and the `_present_*_dirs` helpers in
+the marker tests. Cross-language comparisons additionally skip unless *both*
+sources are present, so a one-sided run cannot report success having compared an
+artifact to itself.
+
+## Comparison policies (computation-style pairs)
+
+`fun/test_what_varies.py` reads a per-case `comparison_policy` written by the
+make side. `strict` cases must agree, and a MATLAB artifact that omits one is a
+failure — silence is not agreement. `expectedDivergence` cases may be omitted by
+MATLAB entirely, or supplied with `"omitted": true`; when MATLAB does run one,
+no equality is required, but both sides must still agree that the case *is*
+divergent, so a reclassification cannot slip past the strict check.
+
+## MATLAB JSON shape
+
+`jsonencode` collapses a 1x1 struct array to a bare object and a 1x1 numeric
+array to a bare number, so MATLAB's `varies` for a single result arrives as
+`{...}` rather than `[{...}]`. Normalize before comparing, and compare numbers
+with a tolerance — MATLAB has only doubles.
+
 ## Adding a new symmetry test:
 
 1. Create a sub-package under `read_artifacts/` matching the namespace used in `make_artifacts/` (e.g., `session/`, `document/`).

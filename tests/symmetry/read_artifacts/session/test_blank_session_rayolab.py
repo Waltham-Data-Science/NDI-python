@@ -24,9 +24,17 @@ import pytest
 from ndi.session.dir import ndi_session_dir
 from ndi.util import compareSessionSummary, sessionSummary
 from tests.symmetry.conftest import SOURCE_TYPES, SYMMETRY_BASE
+from tests.symmetry.read_artifacts.session._lab_config_helpers import (
+    assert_metadata_readers_agree,
+    assert_metadata_readers_match_lab_config,
+    assert_sync_rules_agree,
+    assert_sync_rules_match_lab_config,
+)
 from tests.symmetry.read_artifacts.session._summary_helpers import (
     sort_daq_systems_by_name,
 )
+
+LAB_NAME = "rayolab"
 
 EXPECTED_DAQ_NAMES = {"rayo_intanSeries", "rayo_stim"}
 RHD_SERIES_CLASS = "ndi.file.navigator.rhd_series"
@@ -118,3 +126,51 @@ class TestBlankSessionRayolab:
             f"Session summary mismatch against {source_type} generated "
             f"artifacts:\n" + "\n".join(report)
         )
+
+    # ---- lab configuration (M4 / S1 defect fix) ---------------------------
+    #
+    # Added to this class rather than to a module of its own so the per-lab
+    # context stays in one place.  Neither the daqmetadatareader file
+    # parameters nor the syncrule documents appear in sessionSummary, so the
+    # comparison above passed throughout the W3-A defect -- ndi.setup.lab()
+    # dropping every metadata reader's file parameter and installing no sync
+    # rules at all -- and would pass again if it regressed.  See
+    # _lab_config_helpers for why the expectations come from the shared
+    # ndi_common JSON rather than from ndi.setup.lab's own helpers.
+
+    def test_blank_session_rayolab_metadata_reader_file_parameters(self, source_type):
+        """Each daqmetadatareader carries the file parameter the lab config declares."""
+        _artifact_dir, session = self._open_session(source_type)
+        assert_metadata_readers_match_lab_config(session, LAB_NAME, source_type)
+
+    def test_blank_session_rayolab_sync_rules_installed(self, source_type):
+        """The lab's syncrules are installed, with their parameters intact."""
+        _artifact_dir, session = self._open_session(source_type)
+        assert_sync_rules_match_lab_config(session, LAB_NAME, source_type)
+
+    def _open_both_languages(self):
+        """Open the MATLAB and Python artifacts of this lab, or skip.
+
+        Skips unless BOTH exist: a one-sided "comparison" would report success
+        having compared one artifact to itself.
+        """
+        sessions = {}
+        for source in SOURCE_TYPES:
+            artifact_dir = self._artifact_dir(source)
+            if not artifact_dir.is_dir():
+                pytest.skip(
+                    f"Cross-language comparison needs both artifact sets; "
+                    f"{artifact_dir} ({source}) is missing."
+                )
+            sessions[source] = ndi_session_dir("exp1", artifact_dir)
+        return sessions["pythonArtifacts"], sessions["matlabArtifacts"]
+
+    def test_blank_session_rayolab_metadata_readers_agree_across_languages(self):
+        """MATLAB and Python wrote the same per-DAQ-system metadata readers."""
+        python_session, matlab_session = self._open_both_languages()
+        assert_metadata_readers_agree(python_session, matlab_session, LAB_NAME)
+
+    def test_blank_session_rayolab_sync_rules_agree_across_languages(self):
+        """MATLAB and Python installed the same syncrules."""
+        python_session, matlab_session = self._open_both_languages()
+        assert_sync_rules_agree(python_session, matlab_session, LAB_NAME)
