@@ -1,29 +1,48 @@
-"""Read + verify the ``pathSafeName`` / ``elementDirectoryName`` artifacts (fun namespace).
+"""Read + verify the pathSafeName symmetry artifacts (fun namespace).
 
-Python equivalent of (to be authored):
-    tests/+ndi/+symmetry/+readArtifacts/+fun/pathSafeName.m
+Python counterpart of MATLAB
+``tests/+ndi/+symmetry/+readArtifacts/+fun/pathSafeName.m``.
 
-Two layers, following the ``read_artifacts/time/test_time_convert.py``
-precedent:
+Three checks, each skipping when the required artifact is absent (and
+``NDI_SYMMETRY_REQUIRE_ARTIFACTS=1`` turns every one of those skips into a
+failure -- see ``tests/symmetry/conftest.py``):
 
-  * Python self-consistency: re-run the shared case vector and confirm the
-    current ``pathSafeName`` / ``elementDirectoryName`` still reproduce the
-    recorded ``pythonArtifacts`` outputs.  A cross-run regression guard that
-    needs no MATLAB.
-  * Cross-language symmetry: if ``matlabArtifacts/fun/.../pathSafeNameCases.json``
-    exists, assert MATLAB's outputs match Python's -- case by case, after first
-    proving both languages ran the same input.  Skips until the MATLAB artifact
-    exists; FULL closure needs the MATLAB runtime.
+* ``test_python_artifacts_reproduce`` -- re-run the battery and confirm the
+  current ``pathSafeName`` / ``elementDirectoryName`` reproduce the recorded
+  ``pythonArtifacts`` outputs.  A cross-run regression guard, independent of
+  MATLAB.
+* ``test_matlab_python_symmetry`` -- assert MATLAB's sanitized names match
+  Python's for the same cases.
+* ``test_inputs_agree`` -- prove both languages started from the same input
+  codepoints, or the output comparison means nothing.
+
+The comparison is on the per-case SIGNATURE built by
+``_fun_cases.path_safe_signature``: status, sanitized name, element directory
+name, the legacy directory name as CODEPOINTS (so no JSON text-encoding
+difference can masquerade as a behaviour difference), and both length counts.
+Error identifiers and messages are recorded in the artifact but never compared:
+MATLAB identifiers and Python exception names can never match, and pinning them
+would make this a translation table instead of a behaviour check.
+
+THE ASTRAL CASES ARE THE POINT.  MATLAB counts UTF-16 code units, so a character
+above U+FFFF is a surrogate pair and sanitizes to TWO ``'-'``.  Python counts
+code points.  ``inputUtf16Units`` and ``inputCodepointCount`` are both in the
+signature, so if the two languages ever stop agreeing about the folder name for
+an element, this test says so.
 
 Run the matching ``make_artifacts`` test first to populate pythonArtifacts.
 """
 
-import json
-
 import pytest
 
-from tests.symmetry._path_safe_name_cases import (
-    run_element_directory_name_cases,
+from tests.symmetry._fun_cases import (
+    as_int_list,
+    compare_maps,
+    envelope_problems,
+    index_by_name,
+    load_cases,
+    load_payload,
+    path_safe_signature,
     run_path_safe_name_cases,
 )
 from tests.symmetry.conftest import MATLAB_ARTIFACTS, PYTHON_ARTIFACTS
@@ -35,108 +54,76 @@ ML_FILE = MATLAB_ARTIFACTS / _REL
 _MAKE_HINT = "run make_artifacts/fun/test_path_safe_name.py first"
 
 
-def _index(rows):
-    return {row["id"]: row for row in rows}
+def _python_cases():
+    if not PY_FILE.exists():
+        pytest.skip(f"{PY_FILE} missing — {_MAKE_HINT}")
+    return index_by_name(load_cases(PY_FILE))
 
 
-def _load(path):
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def _assert_same_input(case_id, a, b, a_label, b_label):
-    """Prove both sides ran the same input before comparing their outputs.
-
-    UTF-16 code units are the comparison unit because that is the unit
-    ``pathSafeName`` counts -- a non-BMP character is one Python code point but
-    two MATLAB ``char`` elements, and the whole point of the astral cases is
-    that both languages emit two ``'-'`` for it.  Comparing the decoded strings
-    alone would let a transport that mangled a surrogate pair look like
-    agreement.
-    """
-    assert a["input_utf16"] == b["input_utf16"], (
-        f"case {case_id!r}: {a_label} and {b_label} ran different inputs.\n"
-        f"  {a_label}: utf16={a['input_utf16']} str={a['input']!r}\n"
-        f"  {b_label}: utf16={b['input_utf16']} str={b['input']!r}"
-    )
+def _matlab_cases():
+    if not ML_FILE.exists():
+        pytest.skip(
+            f"{ML_FILE} missing — MATLAB pathSafeName artifacts not generated yet "
+            "(full cross-language closure needs the MATLAB runtime)"
+        )
+    return index_by_name(load_cases(ML_FILE))
 
 
 class TestPathSafeNamePythonSelfConsistency:
     """The recorded pythonArtifacts still match what the code does today."""
 
-    def _payload(self):
+    def test_envelope_is_well_formed(self):
         if not PY_FILE.exists():
             pytest.skip(f"{PY_FILE} missing — {_MAKE_HINT}")
-        return _load(PY_FILE)
+        problems = envelope_problems(load_payload(PY_FILE), expected_language="python")
+        assert not problems, "pythonArtifacts envelope problems:\n" + "\n".join(problems)
 
-    def test_path_safe_name_reproduces(self):
-        recorded = _index(self._payload()["pathSafeName"])
-        fresh = _index(run_path_safe_name_cases())
-        assert recorded.keys() == fresh.keys()
-        for case_id, rec in recorded.items():
-            new = fresh[case_id]
-            _assert_same_input(case_id, rec, new, "recorded", "fresh")
-            assert rec["output"] == new["output"], (
-                f"case {case_id!r}: recorded={rec['output']!r} "
-                f"fresh={new['output']!r}"
-            )
-
-    def test_element_directory_name_reproduces(self):
-        recorded = _index(self._payload()["elementDirectoryName"])
-        fresh = _index(run_element_directory_name_cases())
-        assert recorded.keys() == fresh.keys()
-        for case_id, rec in recorded.items():
-            new = fresh[case_id]
-            _assert_same_input(case_id, rec, new, "recorded", "fresh")
-            for field in ("dir_name", "legacy_dir_name"):
-                assert rec[field] == new[field], (
-                    f"case {case_id!r} {field}: recorded={rec[field]!r} "
-                    f"fresh={new[field]!r}"
-                )
+    def test_python_artifacts_reproduce(self):
+        recorded = _python_cases()
+        fresh = index_by_name(run_path_safe_name_cases())
+        assert recorded.keys() == fresh.keys(), (
+            "recorded and freshly computed Python pathSafeName cases differ: "
+            f"recorded-only={sorted(recorded.keys() - fresh.keys())} "
+            f"fresh-only={sorted(fresh.keys() - recorded.keys())}"
+        )
+        problems, _ = compare_maps(recorded, fresh, "Python recorded vs fresh", path_safe_signature)
+        assert not problems, "\n".join(problems)
 
 
 class TestPathSafeNameMatlabPythonSymmetry:
     """MATLAB and Python agree, case by case."""
 
-    def _payloads(self):
-        if not ML_FILE.exists():
-            pytest.skip(
-                f"{ML_FILE} missing — MATLAB pathSafeName artifacts not generated "
-                "yet (full cross-language closure needs the MATLAB runtime)"
-            )
-        if not PY_FILE.exists():
-            pytest.skip(f"{PY_FILE} missing — {_MAKE_HINT}")
-        return _load(PY_FILE), _load(ML_FILE)
-
-    def test_path_safe_name_symmetry(self):
-        py, ml = self._payloads()
-        py_rows, ml_rows = _index(py["pathSafeName"]), _index(ml["pathSafeName"])
-        assert py_rows.keys() == ml_rows.keys(), (
+    def test_matlab_python_symmetry(self):
+        py, ml = _python_cases(), _matlab_cases()
+        assert py.keys() == ml.keys(), (
             "MATLAB and Python ran different pathSafeName cases: "
-            f"python-only={sorted(py_rows.keys() - ml_rows.keys())} "
-            f"matlab-only={sorted(ml_rows.keys() - py_rows.keys())}"
+            f"python-only={sorted(py.keys() - ml.keys())} "
+            f"matlab-only={sorted(ml.keys() - py.keys())}"
         )
-        for case_id, p in py_rows.items():
-            m = ml_rows[case_id]
-            _assert_same_input(case_id, p, m, "python", "matlab")
-            assert p["output"] == m["output"], (
-                f"pathSafeName({p['input']!r}) [{case_id}]: "
-                f"python={p['output']!r} matlab={m['output']!r} — {p['note']}"
-            )
+        problems, _ = compare_maps(ml, py, "MATLAB vs Python", path_safe_signature)
+        assert not problems, "\n".join(problems)
 
-    def test_element_directory_name_symmetry(self):
-        py, ml = self._payloads()
-        py_rows = _index(py["elementDirectoryName"])
-        ml_rows = _index(ml["elementDirectoryName"])
-        assert py_rows.keys() == ml_rows.keys(), (
-            "MATLAB and Python ran different elementDirectoryName cases: "
-            f"python-only={sorted(py_rows.keys() - ml_rows.keys())} "
-            f"matlab-only={sorted(ml_rows.keys() - py_rows.keys())}"
+    def test_inputs_agree(self):
+        """Both languages must have started from the same inputs.
+
+        The input is specified as Unicode scalar values precisely so this check
+        is exact: a transport that mangled a surrogate pair would otherwise look
+        like agreement on the outputs.
+        """
+        py, ml = _python_cases(), _matlab_cases()
+        problems = []
+        for name in sorted(ml.keys() & py.keys()):
+            a = as_int_list(ml[name]["inputCodepoints"])
+            b = as_int_list(py[name]["inputCodepoints"])
+            if a != b:
+                problems.append(f"case {name!r}: matlab={a} python={b}")
+        assert not problems, "input codepoints differ between languages:\n" + "\n".join(problems)
+
+    def test_matlab_artifact_contributed_comparisons(self):
+        """A MATLAB artifact that compared nothing is not a pass."""
+        py, ml = _python_cases(), _matlab_cases()
+        compared = sorted(py.keys() & ml.keys())
+        assert compared, (
+            "the MATLAB pathSafeName artifact exists but shares no case name with "
+            "Python's; nothing was actually compared."
         )
-        for case_id, p in py_rows.items():
-            m = ml_rows[case_id]
-            _assert_same_input(case_id, p, m, "python", "matlab")
-            for field in ("dir_name", "legacy_dir_name"):
-                assert p[field] == m[field], (
-                    f"elementDirectoryName({p['input']!r}) [{case_id}] {field}: "
-                    f"python={p[field]!r} matlab={m[field]!r} — {p['note']}"
-                )

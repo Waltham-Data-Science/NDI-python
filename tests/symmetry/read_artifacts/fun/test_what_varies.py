@@ -1,46 +1,53 @@
-"""Read + verify the ``whatVaries`` trio artifacts (fun namespace).
+"""Read + verify the whatVaries / whatIsConstant symmetry artifacts (fun namespace).
 
-Python equivalent of (to be authored):
-    tests/+ndi/+symmetry/+readArtifacts/+fun/whatVaries.m
+Python counterpart of MATLAB
+``tests/+ndi/+symmetry/+readArtifacts/+fun/whatVaries.m``.
 
-Two layers, following the ``read_artifacts/time/test_time_convert.py``
-precedent:
+Checks, each skipping when the required artifact is absent (and
+``NDI_SYMMETRY_REQUIRE_ARTIFACTS=1`` turns every one of those skips into a
+failure -- see ``tests/symmetry/conftest.py``):
 
-  * Python self-consistency: re-run the shared scenario battery and confirm the
-    current ``whatVaries`` / ``whatIsConstant`` still reproduce the recorded
-    ``pythonArtifacts`` outputs.
-  * Cross-language symmetry: if ``matlabArtifacts/fun/.../whatVariesCases.json``
-    exists, compare scenario by scenario, honouring each scenario's
-    ``comparison_policy``.
+* ``test_python_artifacts_reproduce`` -- re-run the battery and confirm the
+  current ``whatVaries`` reproduces the recorded ``pythonArtifacts`` outputs.
+  EVERY case is compared here, divergences included: the allow-list is about the
+  two languages disagreeing, and Python must at least agree with itself.
+* ``test_matlab_python_symmetry`` -- assert MATLAB's outputs match Python's,
+  EXCEPT the cases in ``_fun_cases.known_divergences()``, which are reported
+  rather than failed.
+* ``test_known_divergences_are_still_real`` -- report whether each listed
+  divergence actually showed up.  A listed case that now AGREES means the
+  upstream fix landed and the entry must be deleted; that is surfaced as a
+  warning, not buried in stdout, because a stale allow-list is exactly how a
+  symmetry suite goes quietly green over the bug it is supposed to be watching.
 
-Comparison policy, enforced here
---------------------------------
-``strict``
-    MATLAB must have run the case, must not have marked it omitted, and its
-    ``varies`` / ``constant`` / ``what_is_constant`` must match Python's.
-``expectedDivergence``
-    MATLAB may omit the case (no row at all, or a row with ``"omitted": true``).
-    If MATLAB did run it, no equality is required -- the divergence is the
-    documented expectation -- but the outcome is surfaced in the test's own
-    reporting so a *newly agreeing* case does not stay invisible forever.
+The comparison is on the per-case SIGNATURE built by
+``_fun_cases.what_varies_signature``: status, excludeBlank, the rendered input,
+the varying and constant parameter/value pairs, and the whatIsConstant result.
+Error identifiers and messages are recorded but never compared -- MATLAB
+identifiers (``ndi:fun:stimulus:whatVaries_parameterList:badInput``) and Python
+exception names can never match, so only the fact of the error is symmetric.
+The rendered INPUT is in the signature so that a battery which has drifted apart
+between the two languages is caught as a mismatch instead of silently comparing
+two different inputs.
 
-MATLAB JSON shape
------------------
-``jsonencode`` collapses a 1x1 struct array to a bare object and a 1x1 numeric
-array to a bare number, so MATLAB's ``varies`` for a single varying parameter
-arrives as ``{...}`` rather than ``[{...}]`` and its ``values`` for a single
-distinct value as ``5`` rather than ``[5]``.  Both are normalized before
-comparison; without that every single-result scenario would report a spurious
-mismatch.  Numbers are compared with a tolerance because MATLAB has only
-doubles: its ``0`` and Python's ``0`` vs ``0.0`` are the same value.
+Run the matching ``make_artifacts`` test first to populate pythonArtifacts.
 """
 
-import json
-import math
+import warnings
 
 import pytest
 
-from tests.symmetry._what_varies_scenarios import NAN_SENTINEL, run_scenarios
+from tests.symmetry._fun_cases import (
+    audit_known_divergences,
+    compare_maps,
+    envelope_problems,
+    index_by_name,
+    known_divergences,
+    load_cases,
+    load_payload,
+    run_what_varies_cases,
+    what_varies_signature,
+)
 from tests.symmetry.conftest import MATLAB_ARTIFACTS, PYTHON_ARTIFACTS
 
 _REL = "fun/whatVaries/testWhatVariesArtifacts/whatVariesCases.json"
@@ -49,216 +56,107 @@ ML_FILE = MATLAB_ARTIFACTS / _REL
 
 _MAKE_HINT = "run make_artifacts/fun/test_what_varies.py first"
 
-_RESULT_FIELDS = ("varies", "constant", "what_is_constant")
 
-_TOL = 1e-9
-
-
-def _index(cases):
-    return {case["id"]: case for case in cases}
+def _python_cases():
+    if not PY_FILE.exists():
+        pytest.skip(f"{PY_FILE} missing — {_MAKE_HINT}")
+    return index_by_name(load_cases(PY_FILE))
 
 
-def _load(path):
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def _as_list(value):
-    """MATLAB jsonencode collapses a 1x1 struct array to a bare object."""
-    if value is None:
-        return None
-    if isinstance(value, list):
-        return value
-    return [value]
-
-
-def _numbers_equal(a, b):
-    if isinstance(a, bool) or isinstance(b, bool):
-        return bool(a) == bool(b)
-    fa, fb = float(a), float(b)
-    if math.isnan(fa) or math.isnan(fb):
-        return math.isnan(fa) and math.isnan(fb)
-    return abs(fa - fb) <= _TOL * max(1.0, abs(fa), abs(fb))
-
-
-def _values_equal(a, b):
-    """Deep equality across the MATLAB/Python JSON shapes.
-
-    ``NAN_SENTINEL`` is treated as a NaN rather than as the string it is
-    transported as, so a NaN on one side and a NaN on the other compare equal
-    while a NaN against a real value does not.
-    """
-    if a == NAN_SENTINEL or b == NAN_SENTINEL:
-        return a == b
-    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
-        return _numbers_equal(a, b)
-    if isinstance(a, list) and isinstance(b, list):
-        return len(a) == len(b) and all(_values_equal(x, y) for x, y in zip(a, b))
-    if isinstance(a, dict) and isinstance(b, dict):
-        if set(a) != set(b):
-            return False
-        return all(_values_equal(a[k], b[k]) for k in a)
-    return a == b
-
-
-def _normalized_entries(entries):
-    """Normalize one ``varies`` / ``constant`` list for comparison."""
-    entries = _as_list(entries)
-    if entries is None:
-        return None
-    out = []
-    for entry in entries:
-        entry = dict(entry)
-        if "values" in entry:
-            entry["values"] = _as_list(entry["values"])
-        out.append(entry)
-    return out
-
-
-def _entries_equal(a, b):
-    a, b = _normalized_entries(a), _normalized_entries(b)
-    if a is None or b is None:
-        return a == b
-    return _values_equal(a, b)
+def _matlab_cases():
+    if not ML_FILE.exists():
+        pytest.skip(
+            f"{ML_FILE} missing — MATLAB whatVaries artifacts not generated yet "
+            "(full cross-language closure needs the MATLAB runtime)"
+        )
+    return index_by_name(load_cases(ML_FILE))
 
 
 class TestWhatVariesPythonSelfConsistency:
     """The recorded pythonArtifacts still match what the code does today."""
 
-    def _cases(self):
+    def test_envelope_is_well_formed(self):
         if not PY_FILE.exists():
             pytest.skip(f"{PY_FILE} missing — {_MAKE_HINT}")
-        return _index(_load(PY_FILE)["cases"])
+        problems = envelope_problems(load_payload(PY_FILE), expected_language="python")
+        assert not problems, "pythonArtifacts envelope problems:\n" + "\n".join(problems)
 
-    def test_scenarios_reproduce(self):
-        recorded = self._cases()
-        fresh = _index(run_scenarios())
-        assert recorded.keys() == fresh.keys()
-        for case_id, rec in recorded.items():
-            new = fresh[case_id]
-            assert rec["error"] == new["error"], f"case {case_id!r}: error flag changed"
-            assert rec["error_identifier"] == new["error_identifier"], (
-                f"case {case_id!r}: error identifier "
-                f"recorded={rec['error_identifier']!r} fresh={new['error_identifier']!r}"
-            )
-            for field in _RESULT_FIELDS:
-                assert rec[field] == new[field], (
-                    f"case {case_id!r} {field}: recorded={rec[field]} fresh={new[field]}"
-                )
-
-    def test_comparison_policy_is_declared_for_every_case(self):
-        """No case may reach the read side without a policy and, if divergent, a reason.
-
-        This is the guard on the guard: an ``expectedDivergence`` label is how a
-        case opts out of the equality assertion, so a case that acquired the
-        label without an explanation would be a silent hole in the symmetry
-        proof rather than a documented gap in it.
-        """
-        for case_id, case in self._cases().items():
-            policy = case.get("comparison_policy")
-            assert policy in ("strict", "expectedDivergence"), (
-                f"case {case_id!r} has comparison_policy {policy!r}"
-            )
-            if policy == "expectedDivergence":
-                assert case.get("divergence_note"), f"case {case_id!r} has no divergence_note"
-                assert case.get("matlab_expected"), f"case {case_id!r} has no matlab_expected"
+    def test_python_artifacts_reproduce(self):
+        recorded = _python_cases()
+        fresh = index_by_name(run_what_varies_cases())
+        assert recorded.keys() == fresh.keys(), (
+            "recorded and freshly computed Python whatVaries cases differ: "
+            f"recorded-only={sorted(recorded.keys() - fresh.keys())} "
+            f"fresh-only={sorted(fresh.keys() - recorded.keys())}"
+        )
+        # No divergence allow-list here: Python must reproduce itself.
+        problems, _ = compare_maps(
+            recorded, fresh, "Python recorded vs fresh", what_varies_signature
+        )
+        assert not problems, "\n".join(problems)
 
 
 class TestWhatVariesMatlabPythonSymmetry:
-    """MATLAB and Python agree wherever the policy says they must."""
+    """MATLAB and Python agree wherever the allow-list does not say otherwise."""
 
-    def _payloads(self):
-        if not ML_FILE.exists():
-            pytest.skip(
-                f"{ML_FILE} missing — MATLAB whatVaries artifacts not generated yet "
-                "(full cross-language closure needs the MATLAB runtime)"
-            )
-        if not PY_FILE.exists():
-            pytest.skip(f"{PY_FILE} missing — {_MAKE_HINT}")
-        return _index(_load(PY_FILE)["cases"]), _index(_load(ML_FILE)["cases"])
-
-    @staticmethod
-    def _matlab_omitted(row):
-        return row is None or bool(row.get("omitted"))
-
-    def test_strict_cases_agree(self):
-        py, ml = self._payloads()
-        strict = {
-            case_id: case
-            for case_id, case in py.items()
-            if case["comparison_policy"] == "strict"
-        }
-        assert strict, "the Python artifact declared no strict cases to compare"
-
-        missing = [
-            case_id for case_id in strict if self._matlab_omitted(ml.get(case_id))
-        ]
-        assert not missing, (
-            "MATLAB omitted these strict whatVaries cases; a case whose policy says "
-            "the languages must agree cannot be settled by silence: "
-            f"{sorted(missing)}"
+    def test_matlab_python_symmetry(self, capsys):
+        py, ml = _python_cases(), _matlab_cases()
+        assert py.keys() == ml.keys(), (
+            "MATLAB and Python ran different whatVaries cases: "
+            f"python-only={sorted(py.keys() - ml.keys())} "
+            f"matlab-only={sorted(ml.keys() - py.keys())}"
         )
+        problems, reports = compare_maps(
+            ml, py, "MATLAB vs Python", what_varies_signature, known_divergences()
+        )
+        with capsys.disabled():
+            for line in reports:
+                print(line)
+        assert not problems, "\n".join(problems)
 
-        problems = []
-        for case_id, p in strict.items():
-            m = ml[case_id]
-            if p["error"] != m["error"]:
-                problems.append(
-                    f"{case_id}: error flag python={p['error']} matlab={m['error']} "
-                    f"(python msg={p.get('error_message')!r}, "
-                    f"matlab msg={m.get('error_message')!r})"
-                )
-                continue
-            if p["error"]:
-                if p["error_identifier"] != m["error_identifier"]:
-                    problems.append(
-                        f"{case_id}: error identifier python={p['error_identifier']!r} "
-                        f"matlab={m['error_identifier']!r}"
-                    )
-                continue
-            for field in _RESULT_FIELDS:
-                if not _entries_equal(p[field], m[field]):
-                    problems.append(
-                        f"{case_id} {field}: python={p[field]} matlab={m[field]} "
-                        f"({p['description']})"
-                    )
-        assert not problems, "whatVaries strict-case mismatches:\n" + "\n".join(problems)
+    def test_strict_cases_cannot_be_settled_by_silence(self):
+        """A case the allow-list does not cover must actually have been compared.
 
-    def test_divergent_cases_are_reported_not_asserted(self):
-        """Surface what MATLAB did with each documented-divergence case.
-
-        No equality is required.  What IS required is that the case is still
-        declared divergent on both sides when both ran it -- a MATLAB artifact
-        that quietly reclassified one of these as strict would otherwise slip
-        past ``test_strict_cases_agree``, which only looks at Python's policy.
+        ``test_matlab_python_symmetry`` iterates MATLAB's cases, so a MATLAB
+        artifact that simply omitted a case would contribute no mismatch and no
+        failure.  Silence is not agreement: every non-allow-listed case Python
+        ran must be present on the MATLAB side too.
         """
-        py, ml = self._payloads()
-        divergent = {
-            case_id: case
-            for case_id, case in py.items()
-            if case["comparison_policy"] == "expectedDivergence"
-        }
-        assert divergent, "the Python artifact declared no divergence cases"
-
-        for case_id, p in divergent.items():
-            m = ml.get(case_id)
-            if self._matlab_omitted(m):
-                continue
-            assert m["comparison_policy"] == "expectedDivergence", (
-                f"case {case_id!r} is expectedDivergence in Python but "
-                f"{m['comparison_policy']!r} in MATLAB; the two sides disagree about "
-                f"whether this case is allowed to differ. Python note: "
-                f"{p['divergence_note']}"
-            )
-
-    def test_matlab_ran_something(self):
-        """A MATLAB artifact that contributed no comparisons is not a pass."""
-        py, ml = self._payloads()
-        compared = [
-            case_id
-            for case_id, case in py.items()
-            if case["comparison_policy"] == "strict" and not self._matlab_omitted(ml.get(case_id))
-        ]
-        assert compared, (
-            "the MATLAB whatVaries artifact exists but supplied no strict case that "
-            "Python also ran; nothing was actually compared."
+        py, ml = _python_cases(), _matlab_cases()
+        allowed = set(known_divergences())
+        missing = sorted(name for name in py if name not in allowed and name not in ml)
+        assert not missing, (
+            "MATLAB omitted these whatVaries cases, whose policy says the two "
+            "languages must agree; a case cannot be settled by silence: "
+            f"{missing}"
         )
+
+    def test_matlab_artifact_contributed_comparisons(self):
+        """A MATLAB artifact that compared nothing is not a pass."""
+        py, ml = _python_cases(), _matlab_cases()
+        allowed = set(known_divergences())
+        compared = sorted((py.keys() & ml.keys()) - allowed)
+        assert compared, (
+            "the MATLAB whatVaries artifact exists but supplied no asserted case "
+            "that Python also ran; nothing was actually compared."
+        )
+
+    def test_known_divergences_are_still_real(self, capsys):
+        """Audit the allow-list. Reports; never fails.
+
+        A ``knownDivergences`` entry that now agrees across the two languages
+        means the upstream fix (``eqlen`` -> ``isequaln`` in
+        ``local_varyingFields``) has landed, and the entry -- plus the matching
+        ``divergence_expected`` flag -- should be deleted so the case becomes a
+        hard assertion again.  The finding is raised as a warning as well as
+        printed, so it survives a CI log nobody scrolls through.
+        """
+        py, ml = _python_cases(), _matlab_cases()
+        stale, live = audit_known_divergences(ml, py)
+        with capsys.disabled():
+            for line in live:
+                print(line)
+            for line in stale:
+                print(line)
+        for line in stale:
+            warnings.warn(line, stacklevel=1)

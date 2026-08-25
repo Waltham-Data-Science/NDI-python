@@ -189,6 +189,48 @@ class TestWhatVariesSemantics:
         assert varies[0]["parameter"] == "rect"
         assert varies[0]["values"] == [[0, 0, 100, 100], [0, 0, 200, 200]]
 
+    def test_cell_valued_varying_parameter(self):
+        """A cell-valued parameter that actually VARIES.
+
+        Relocated here from the cross-language ``fun`` symmetry battery, which
+        joins 1:1 with MATLAB's case list and has no row for it.  Kept because it
+        reaches a second code path that the constant case does not: the constant
+        case is settled inside ``_varying_fields``, while this one also runs
+        ``_unique_values``' first-appearance branch on two list values.  On the
+        MATLAB side both paths bottom out in ``vlt.data.eqlen``'s bare ``==``,
+        which is undefined for two cell arrays -- so a MATLAB build that survived
+        the comparison would still have a second place to throw.
+        """
+        from ndi.fun.stimulus import whatVaries
+
+        p = [{"color": ["r", "g"], "angle": 0}, {"color": ["b", "y"], "angle": 0}]
+        varies, constant = whatVaries(p)
+        assert varies[0]["parameter"] == "color"
+        assert varies[0]["values"] == [["r", "g"], ["b", "y"]]
+        assert constant[0]["parameter"] == "angle"
+        assert constant[0]["value"] == 0
+
+    def test_one_element_vector_values_are_not_scalars(self):
+        """A one-element list is a VECTOR here, not a scalar.
+
+        Relocated here from the ``fun`` symmetry battery for the same reason, and
+        this one is a genuine documented divergence rather than extra coverage:
+        MATLAB's ``isscalar`` is true for a 1x1 array, so ``[2]`` and ``[10]``
+        take ``local_uniqueValues``' sorted-numeric path there and come back as
+        bare sorted numbers.  Python has no 1x1 scalar, so the values stay
+        wrapped and keep first-appearance order.  Asserting that here rather than
+        in the symmetry battery keeps the cross-language case list joinable
+        1:1 while still pinning the behaviour.  See the whatVaries decision_log
+        in src/ndi/fun/ndi_matlab_python_bridge.yaml.
+        """
+        from ndi.fun.stimulus import whatVaries
+
+        p = [{"gain": [10]}, {"gain": [2]}]
+        varies, _ = whatVaries(p)
+        assert varies[0]["parameter"] == "gain"
+        # first appearance, still wrapped -- NOT [2, 10] and NOT [2], [10]
+        assert varies[0]["values"] == [[10], [2]]
+
     def test_non_numeric_values_returned_in_first_appearance_order(self):
         """MATLAB testNonNumericValuesReturnedAsCell."""
         from ndi.fun.stimulus import whatVaries

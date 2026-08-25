@@ -42,28 +42,47 @@ same `SCENARIO` referents, runs `CASES`, and writes a matching file;
 — full cross-language closure needs the MATLAB runtime.
 
 The `fun/` namespace holds two more of these: `fun/test_path_safe_name.py`
-(`pathSafeNameCases.json`, from `tests/symmetry/_path_safe_name_cases`) and
-`fun/test_what_varies.py` (`whatVariesCases.json`, from
-`tests/symmetry/_what_varies_scenarios`).
+(`pathSafeNameCases.json`) and `fun/test_what_varies.py`
+(`whatVariesCases.json`), both built from the shared battery in
+`tests/symmetry/_fun_cases.py`.
 
-Three conventions those two established, worth copying:
+**Those two implement a written cross-language contract**, and it is not this
+file: `tests/+ndi/+symmetry/FUN_CASES_SCHEMA.md` in NDI-matlab, whose MATLAB
+counterpart is `tests/+ndi/+symmetry/+fun/cases.m`. Read the schema before
+changing either side — a change here that is not also a change there is how the
+suite starts comparing two different things. Four conventions from it are worth
+copying to the next computation-style pair:
 
+* **Compare rendered strings, not values.** Every compared value goes through one
+  small language-neutral grammar (`_fun_cases.render`) first: numbers `%.12g`,
+  non-finite in MATLAB's spelling (`NaN`/`Inf`/`-Inf`), text single-quoted,
+  *every* container `[a, b]`, mappings `{key: value}` with keys sorted. That is
+  what stops the usual symmetry-test rot — MATLAB `double` vs Python `int`,
+  MATLAB cell vs Python list, `jsondecode` collapsing a one-element array. A
+  field that is semantically a list even when it holds one element goes through
+  `render_sequence`, which always brackets (`[5]`, never `5`).
 * **Write strict JSON.** `jsonencode(...,'ConvertInfAndNaN',true)` writes NaN as
   `null` and Python's `json.dumps(allow_nan=True)` writes the non-standard `NaN`
-  token; neither survives the round trip. Use `allow_nan=False` and carry NaN as
-  an explicit sentinel (`"__NaN__"`), documented in the payload.
+  token; neither survives the round trip. Under the grammar the problem
+  disappears — a NaN is already the *string* `'NaN'` before encoding — so
+  `allow_nan=False` stops being a precaution and becomes a proof that nothing
+  bypassed the renderer. (The earlier `"__NaN__"` sentinel is gone; if you need
+  a sentinel, the grammar is not being applied.)
 * **Carry the input in a form the other language can rebuild exactly.**
-  `pathSafeNameCases.json` records each input as a string, as Unicode code
-  points, *and* as UTF-16 code units, so the read side can prove both languages
-  ran the same input before it compares outputs. That matters wherever the two
-  languages count characters differently.
-* **Give every case a `comparison_policy`.** `strict` means the languages must
-  agree and a MATLAB artifact that omits the case is a failure. Where a
-  divergence is already documented in a bridge YAML, mark the case
-  `expectedDivergence` and carry both a `divergence_note` and a
-  `matlab_expected`; MATLAB may then omit the case (no row, or a row with
-  `"omitted": true`). A divergence with no written reason is a mismatch wearing
-  a label — the read side asserts the note is there.
+  `pathSafeNameCases.json` specifies each input as Unicode scalar values, not as
+  a source literal, so neither side has to trust a file encoding, and it records
+  *both* length counts (UTF-16 code units and code points) so the read side can
+  prove both languages ran the same input before comparing outputs. That matters
+  wherever the two languages count characters differently. `whatVariesCases.json`
+  does the same job with `inputRendered`, which is compared: without it the suite
+  could go green while silently comparing two different inputs.
+* **Every field is always present, and cases join by name.** A field that does
+  not apply is `""`, `[]` or `false`, never absent — that keeps `jsondecode`
+  returning a clean struct array. Order is irrelevant to the comparison.
+
+Divergences between the two languages live in one allow-list
+(`_fun_cases.known_divergences`), not in a per-case policy field, and the read
+side audits it: see the read-side INSTRUCTIONS.
 
 ## Object-type marker (`.ndi/ndi_object_type.txt`)
 

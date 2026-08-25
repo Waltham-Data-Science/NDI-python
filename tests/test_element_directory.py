@@ -134,6 +134,20 @@ class TestPathSafeName:
         assert pathSafeName("神経") == "--"
         assert pathSafeName("a\U0001f389b") == "a--b"
 
+    def test_reserved_check_runs_on_the_sanitized_name(self):
+        """The reserved-name test sees the SANITIZED string, not the input.
+
+        Relocated here from the cross-language ``fun`` symmetry battery, whose
+        case list joins 1:1 with MATLAB's and has no row for it.  'CON🎉'
+        sanitizes to 'CON--' before the reserved check runs, and 'CON--' is not a
+        reserved device name -- so no '_' prefix.  Checking the input instead
+        would prefix it.
+        """
+        assert pathSafeName("CON\U0001f389") == "CON--"
+        assert pathSafeName("CON\U0001f389.txt") == "CON--.txt"
+        # ...while a trailing character that sanitizes AWAY leaves it reserved.
+        assert pathSafeName("CON.") == "_CON"
+
     def test_result_is_always_in_the_portable_set(self):
         import re
 
@@ -186,6 +200,27 @@ class TestElementDirectoryName:
         dir_name, legacy = elementDirectoryName("CON | 1")
         assert legacy == "CON_|_1"
         assert dir_name == "CON_-_1"  # baseName has no '.', 'CON_-_1' != 'CON'
+
+    def test_empty_element_string(self):
+        """Relocated from the ``fun`` symmetry battery, which records the legacy
+        name per case but asserts it as codepoints.  The two names diverge here:
+        the legacy name is empty (the input, spaces replaced, nothing else) while
+        the new name is 'x', because pathSafeName never returns an empty string.
+        That difference is what ``elementDirectory``'s single-path-component
+        guard exists for -- an empty legacy name would resolve to the parent."""
+        dir_name, legacy = elementDirectoryName("")
+        assert legacy == ""
+        assert dir_name == "x"
+
+    def test_astral_character_in_an_element_string(self):
+        """Relocated from the ``fun`` symmetry battery, whose astral cases carry
+        no space.  MATLAB counts UTF-16 code units, so the astral character is a
+        surrogate pair and becomes TWO '-'; the spaces become '_' in both names.
+        If the two languages disagreed here they would disagree about which
+        folder an element's data lives in."""
+        dir_name, legacy = elementDirectoryName("ctx \U0001f389 1")
+        assert legacy == "ctx_\U0001f389_1"
+        assert dir_name == "ctx_--_1"
 
 
 # ===========================================================================
