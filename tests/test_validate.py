@@ -747,6 +747,26 @@ class TestModuleImport:
 # Fail-closed on missing/unparseable schema + bundled-JSON integrity
 # ===========================================================================
 
+# Bundled JSON that is known-broken *in an upstream dependency we do not own*.
+#
+# This is a quarantine, not a suppression: every other file is still required
+# to parse, and a quarantined file that starts parsing fails the test until its
+# entry is deleted (see the tripwire in test_all_bundled_json_parses).  An entry
+# must name the owning repo, the pinned ref, the defect, and why it cannot be
+# fixed here — an unexplained entry is indistinguishable from a suppression.
+KNOWN_BAD_UPSTREAM_JSON = {
+    "schema_documents/calc/stimloopsplitter_calc_schema.json": (
+        "VH-Lab/NDIcalc-vis-matlab, pinned to tag v0.9.0 by ndi_install.py "
+        "DEPENDENCIES and copied into ndi_common at install time. Line 5 reads "
+        '{"name": stimulus_presentation_id", "mustbenotempty": 1} — the opening '
+        "quote of the value is missing, so the file is unparseable and the "
+        "stimloopsplitter_calc class ships with no loadable schema. Broken at "
+        "v0.9.0 (the repository's only tag) and still broken at its default-branch "
+        "head, so no pin bump fixes it; it needs an upstream fix. Reported to the "
+        "NDI maintainers in the 2026-08 catch-up PR."
+    ),
+}
+
 
 class TestSchemaFailClosed:
     def test_missing_schema_fails_closed(self, monkeypatch):
@@ -761,7 +781,16 @@ class TestSchemaFailClosed:
     def test_all_bundled_json_parses(self):
         """Every shipped schema/definition JSON must be parseable — a shipped
         *_schema.json with an illegal token (bare Inf, trailing comma) silently
-        disabled validation for that class."""
+        disabled validation for that class.
+
+        Scope note: ``ndi_common`` is only partly ours.  ``ndi_install.py``
+        copies ``{database,schema}_documents`` in from the dependencies that
+        declare ``ndi_common: True``, so on a checkout where that installer has
+        not run, the dependency-supplied files are simply absent and this test
+        silently checks a smaller tree than CI does.  That is exactly how the
+        defect quarantined below reached CI green-on-a-developer-machine: the
+        whole ``schema_documents/calc/`` tree was missing locally.
+        """
         import json
         from pathlib import Path
 
@@ -769,13 +798,30 @@ class TestSchemaFailClosed:
 
         root = Path(ndi.__file__).parent / "ndi_common"
         assert root.is_dir(), f"ndi_common not found at {root}"
-        bad = []
+
+        bad = {}
         for p in sorted(root.rglob("*.json")):
             try:
                 json.loads(p.read_text())
             except Exception as exc:  # noqa: BLE001
-                bad.append(f"{p.relative_to(root)}: {exc}")
-        assert not bad, "Unparseable bundled JSON:\n" + "\n".join(bad)
+                bad[p.relative_to(root).as_posix()] = str(exc)
+
+        unexpected = {rel: err for rel, err in bad.items() if rel not in KNOWN_BAD_UPSTREAM_JSON}
+        assert not unexpected, "Unparseable bundled JSON:\n" + "\n".join(
+            f"  {rel}: {err}" for rel, err in unexpected.items()
+        )
+
+        # Tripwire: a quarantined file that parses again must leave the list,
+        # or the quarantine silently grows into the blanket suppression it was
+        # written to avoid.  Absent files are not "fixed" — a checkout without
+        # the dependency installed must not trip this.
+        resurrected = [
+            rel for rel in KNOWN_BAD_UPSTREAM_JSON if rel not in bad and (root / rel).is_file()
+        ]
+        assert not resurrected, (
+            "These files are quarantined as unparseable but now parse. Delete their "
+            "entries from KNOWN_BAD_UPSTREAM_JSON:\n" + "\n".join(f"  {rel}" for rel in resurrected)
+        )
 
 
 # ---------------------------------------------------------------------------
