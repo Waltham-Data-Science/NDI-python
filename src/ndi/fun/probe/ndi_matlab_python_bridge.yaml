@@ -126,7 +126,7 @@ functions:
     type: function
     matlab_path: "+ndi/+fun/+probe/plotProbeGeometry.m"
     python_path: "ndi/fun/probe/plotProbeGeometry.py"
-    matlab_last_sync_hash: "4f7c78c82"
+    matlab_last_sync_hash: "ac1b68d2f"
     input_arguments:
       - name: pg
         type_matlab: "struct or ndi.document (probe_geometry)"
@@ -159,6 +159,19 @@ functions:
       the module imports cleanly in the standard env. MATLAB vlt.data.assign
       name-value parsing is replaced by native Python keyword arguments (no vlt
       dependency). pyplot.gca() stands in for MATLAB gca.
+      examined 2026-08 at ac1b68d2f; deferred: the site-label surface added
+      by ac1b68d2f is NOT ported. That commit (a KIASORT/GUI-flavoured
+      change, drift category 5) adds four name-value options to the MATLAB
+      function -- show_labels (DEFAULT TRUE), labels, label_font_size,
+      label_color -- and a fifth output field h.labels holding the text
+      handles. The input_arguments/output_arguments above therefore
+      describe the 4f7c78c82 contract, not ac1b68d2f. VISIBLE DIVERGENCE:
+      because show_labels defaults to true, MATLAB now draws a number on
+      every site by default and Python does not, so the same probe_geometry
+      renders differently in the two languages. Deferred rather than taken
+      because it arrived with the kiasort work and Python has no consumer
+      driving it; port it with S5/S7 if the geometry library lands.
+      The hash records the examination point, NOT a completed sync.
 
 # =========================================================================
 # Not yet ported
@@ -167,7 +180,7 @@ not_yet_ported:
 
   - name: geometry.fromStruct
     matlab_path: "+ndi/+fun/+probe/+geometry/fromStruct.m"
-    matlab_last_sync_hash: "bf85e24b7"
+    matlab_last_sync_hash: "f252f1eb9"
     status: not_yet_ported
     decision_log: >
       Drift item S6. MATLAB bf85e24b7 makes fromStruct coerce every
@@ -190,3 +203,12 @@ not_yet_ported:
       (element_epoch/epochclocktimes t0_t1 is declared [2, NaN] but emitted
       N-by-2 by Python). Settling that convention is a cross-language decision,
       not a validation tweak.
+      examined 2026-08 at f252f1eb9; deferred: still not ported, and the
+      hash is bumped from bf85e24b7 (the S6 commit this entry was written
+      against) to the current head of the file. f252f1eb9 is a
+      gui.app.ElectrodeMap change (channel counts, plot button,
+      click-to-highlight) that also touched fromStruct.m; it is MATLAB-ONLY
+      by surface, and the whole ndi.fun.probe.geometry package remains
+      drift item S5 (sized L). Recording the file's real head is what makes
+      the next genuine fromStruct change visible -- pinned at bf85e24b7
+      this entry already looked stale by one commit.

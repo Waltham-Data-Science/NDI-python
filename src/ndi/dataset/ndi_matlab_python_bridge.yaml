@@ -14,9 +14,20 @@ classes:
   - name: dataset
     type: class
     matlab_path: "+ndi/dataset.m"
-    matlab_last_sync_hash: "f485088"
+    matlab_last_sync_hash: "41ef50f54"
     python_path: "ndi/dataset/_dataset.py"
     python_class: "ndi_dataset"
+    decision_log: >
+      2026-08-24: examined at 41ef50f54 and PARTIALLY re-synced. Ported in
+      this program: drift item M3 — isInCloud() -> (bool, cloudDatasetId),
+      MATLAB 41ef50f54 / PR #859, a pure-local ndi.query('','isa',
+      'dataset_remote') against the dataset's own database. DIVERGENCE:
+      Python reads self._session._database.search directly rather than
+      database_search, because database_search fans out to and opens linked
+      sessions — that would turn a local check into disk work MATLAB does
+      not do. Never throws; returns the first document when several match.
+      No other method on this class was re-verified against 41ef50f54 —
+      the hash records examination, not a completed whole-file sync.
 
     properties:
       - name: session
@@ -378,10 +389,25 @@ classes:
   - name: dir
     type: class
     matlab_path: "+ndi/+dataset/dir.m"
-    matlab_last_sync_hash: "7512bcb0"
+    matlab_last_sync_hash: "26d0638bf"
     python_path: "ndi/dataset/_dataset.py"
     python_class: "ndi_dataset_dir"
     inherits: "ndi.dataset"
+    decision_log: >
+      2026-08-24: examined at 26d0638bf and PARTIALLY re-synced. Ported in
+      this program: (a) drift item M1 — the constructor now ends with
+      setObjectTypeMarker("dataset") unconditionally (so empty and legacy
+      datasets are marked/migrated), plus static exists(path) ==
+      directorytype(path)=='dataset', MATLAB 0d91e5f0c / f98c9a9a4; (b)
+      drift item S9 — dataset_erase closes SQLite before rmtree, and the
+      two sites that rebind _session over the same did-sqlite.sqlite now go
+      through _rebind_session, which closes the handle it drops (MATLAB
+      26d0638bf, issue #870). DIVERGENCE: Python's .ndi_dataset layout has
+      no MATLAB counterpart — for such a directory the marker lands in
+      <path>/.ndi_dataset/.ndi/ and directorytype(<path>) reports 'none';
+      MATLAB origin/main reports the same for the same directory, so no
+      fallback was invented. DEFERRED at this hash: mustNotBeSession.
+      The hash records examination, not a completed whole-file sync.
 
     properties:
       - name: path

@@ -150,7 +150,7 @@ vendored_data:
   - name: probe_geometry_library
     matlab_path: "src/ndi/ndi_common/probe/geometry/"
     python_path: "src/ndi/ndi_common/probe/geometry/"
-    matlab_last_sync_hash: "7509dc96c"
+    matlab_last_sync_hash: "1be6aac75"
     matlab_source_commits: ["db7aee405", "5762f371c", "3bac2f35a", "1be6aac75"]
     decision_log: >
       Byte-for-byte vendoring of the electrode-layout library added by PR #849
@@ -161,11 +161,26 @@ vendored_data:
       keeps the two trees converged and makes S5 a code-only port later.
       Not V_eta/schema-coupled: layouts are inputs to a probe_geometry document,
       not a document or schema definition themselves.
+      2026-08-24: matlab_last_sync_hash corrected from 7509dc96c to
+      1be6aac75. 7509dc96c was NDI-matlab's origin/main BRANCH HEAD, not a
+      per-file hash. Under PYTHON_PORTING_GUIDE §3 the field holds the last
+      commit that touched the tracked path, obtained with
+      `git log -1 --format=%h origin/main -- <path>`; 1be6aac75 (2026-07-21)
+      is that commit for this directory. A branch head breaks drift
+      detection in the noisy direction: it never equals the per-file hash
+      once any unrelated commit lands, so every future check reports drift
+      for a directory that has not changed.
 
   - name: empty_ontology_example_ids
     matlab_path: "src/ndi/ndi_common/schema_documents/{data/{generic_file,imageStack,ontologyImage,ontologyLabel},element/distance_metadata}_schema.json"
     python_path: "src/ndi/ndi_common/schema_documents/"
-    matlab_last_sync_hash: "7509dc96c"
+    matlab_last_sync_hash: "64aef69fe"
+    matlab_last_sync_hash_by_file:
+      "schema_documents/data/generic_file_schema.json": "95112ae03"
+      "schema_documents/data/imageStack_schema.json": "95112ae03"
+      "schema_documents/data/ontologyImage_schema.json": "95112ae03"
+      "schema_documents/data/ontologyLabel_schema.json": "95112ae03"
+      "schema_documents/element/distance_metadata_schema.json": "64aef69fe"
     matlab_source_commits: ["95112ae03", "64aef69fe"]
     decision_log: >
       Corrects five 'documentation' strings that still quoted the pre-2026-01
@@ -177,25 +192,45 @@ vendored_data:
       live resolver expects — ndi.ontology.providers.EMPTYProvider keys its
       lookup with term.zfill(7) — so the old examples named ids that provider
       could never resolve. Prose only; no validation behaviour changes.
+      2026-08-24: matlab_last_sync_hash corrected from 7509dc96c (the
+      origin/main BRANCH HEAD, which is not a valid value for this field —
+      see PYTHON_PORTING_GUIDE §3) to real per-file hashes. This entry
+      covers five files spanning two commits, so a single scalar cannot
+      express it: matlab_last_sync_hash_by_file carries the per-file
+      answer, and the scalar holds the newest of them (64aef69fe) for
+      tools that read only the scalar.
 
   - name: database_document_markdown_companions
     matlab_path: "src/ndi/ndi_common/database_documents/data/{filter,pyraview}.md"
     python_path: "src/ndi/ndi_common/database_documents/data/"
-    matlab_last_sync_hash: "7509dc96c"
+    matlab_last_sync_hash: "79ab22f40"
+    matlab_last_sync_hash_by_file:
+      "database_documents/data/filter.md": "68b17ce0b"
+      "database_documents/data/pyraview.md": "79ab22f40"
     decision_log: >
       The .json document definitions for filter and pyraview already shipped;
       their human-readable .md companions did not. NDI-python already vendors
       apps/jrclust/jrclust_clusters.md, so .md companions are in scope for the
       package. Documentation only.
+      2026-08-24: matlab_last_sync_hash corrected from 7509dc96c (the
+      origin/main BRANCH HEAD — not a valid value for this field) to real
+      per-file hashes. The two files come from different commits
+      (filter.md 68b17ce0b 2026-02-24, pyraview.md 79ab22f40 2026-02-25),
+      so the per-file map carries the truth and the scalar holds the newer.
 
   - name: vhtaste_bpod_daq_system
     matlab_path: "src/ndi/ndi_common/daq_systems/vhlab/vhtaste_bpod.json"
     python_path: "src/ndi/ndi_common/daq_systems/vhlab/vhtaste_bpod.json"
-    matlab_last_sync_hash: "7509dc96c"
+    matlab_last_sync_hash: "9f77f7919"
     decision_log: >
       Trailing-newline-only divergence introduced when NDI-python re-authored
       this file in 725a3b4. Normalised to the MATLAB bytes so future drift
       detection over this tree can rely on a plain diff/hash; no content change.
+      2026-08-24: matlab_last_sync_hash corrected from 7509dc96c (the
+      origin/main BRANCH HEAD — not a valid value for this field) to
+      9f77f7919, the last NDI-matlab commit touching this file (2026-02-17).
+      NOTE for readers: 725a3b4 named above is an NDI-PYTHON commit, not a
+      MATLAB one, and must never be written into matlab_last_sync_hash.
 
   # -----------------------------------------------------------------------
   # Deliberate Python adaptations — DO NOT "re-sync" these to MATLAB.

@@ -189,10 +189,28 @@ classes:
   - name: cedspike2
     type: class
     matlab_path: "+ndi/+daq/+reader/+mfdaq/cedspike2.m"
-    matlab_last_sync_hash: "fe64a9f5"
+    matlab_last_sync_hash: "ca2d556aa"
     python_path: "ndi/daq/reader/mfdaq/cedspike2.py"
     python_class: "ndi_daq_reader_mfdaq_cedspike2"
     inherits: "ndi.daq.reader.mfdaq_reader"
+    decision_log: >
+      examined 2026-08 at ca2d556aa; deferred: drift item S4 (64-bit
+      son64/.smrx reading) is BLOCKED-ON-NDR and architecturally moot on
+      the Python side. Two independent blockers, both verified by reading
+      source. (1) NDR-python @147f37c has no son64 support at all: no
+      isSON64, no ndr.format.ced.sonpipe, and read_SOMSMR_header.py
+      hard-rejects any extension other than .smr/.son, so a 64-bit file
+      cannot reach the reader; its header carries none of the
+      dTimeBase/maxFTime/usPerTime fields MATLAB's t0_t1 needs. (2)
+      MATLAB's ca2d556aa is entirely a call-site swap
+      (read_CED_SOMSMR_* -> ndr.format.ced.read_SOMSMR_*) so that NDR's
+      dispatch engages; Python's cedspike2 is a 63-line wrapper delegating
+      to ndi_daq_reader_SpikeInterfaceReader and never had the bare
+      sigTOOL calls, so there is no call site to re-route. Porting means
+      adding son64 to NDR first, then re-architecting this reader onto
+      NDR. NOTE: FILE_EXTENSIONS already advertises '.smrx' — that claim
+      is broader than what the reader can actually deliver today.
+      Hash bumped so further upstream cedspike2 changes are detectable.
 
     properties:
       - name: NDI_DAQREADER_CLASS

@@ -47,7 +47,8 @@ functions:
   - name: setup.lab
     type: function
     matlab_path: "+ndi/+setup/lab.m"
-    matlab_last_sync_hash: "2566fe4d"
+    matlab_last_sync_hash: "68431eb38"
+    canonical_contract: "src/ndi/setup/ndi_matlab_python_bridge.yaml"
     python_path: "ndi/setup/lab.py"
     input_arguments:
       - name: labName
@@ -69,11 +70,23 @@ functions:
       the session.dir from (ref, dirname); Python takes a session that
       the caller has already created and adds documents to it.
       Python signature: ndi.setup.lab(session, lab_name).
+      2026-08-24: hash reconciled from 2566fe4d to 68431eb38 (drift item
+      M4, ported by the 2026-08 catchup). DUPLICATE-ENTRY WARNING: this
+      entry and the one in src/ndi/setup/ndi_matlab_python_bridge.yaml
+      both describe +ndi/+setup/lab.m. The setup/ file is the CANONICAL
+      contract — it carries the full force_update / addSyncRules /
+      DaqSystemConfiguration detail and the divergent-signature rationale.
+      This entry is kept because the root contract has always listed the
+      ndi.setup entry points, but the two hashes had silently diverged
+      (2566fe4d here vs 68431eb38 there), which makes an upstream-drift
+      check answer differently depending on which file it reads. Keep them
+      equal, or delete this entry in favour of the canonical one.
 
   - name: setup.rayolab
     type: function
     matlab_path: "+ndi/+setup/rayolab.m"
-    matlab_last_sync_hash: "2566fe4d"
+    matlab_last_sync_hash: "ffe310085"
+    canonical_contract: "src/ndi/setup/ndi_matlab_python_bridge.yaml"
     python_path: "ndi/setup/rayolab.py"
     input_arguments:
       - name: ref
@@ -94,6 +107,11 @@ functions:
       ndi.setup.lab('rayolab', ref, dirname); Python rayolab(session)
       calls lab(session, "rayolab"). Python signature:
       ndi.setup.rayolab(session).
+      2026-08-24: hash reconciled from 2566fe4d to ffe310085 (drift item
+      M4, force_update forwarded to lab(); ported by the 2026-08 catchup).
+      DUPLICATE-ENTRY WARNING: see setup.lab above — the canonical
+      contract for this file is src/ndi/setup/ndi_matlab_python_bridge.yaml
+      and the two hashes must be kept equal.
 
 # =========================================================================
 # Classes
@@ -1016,7 +1034,7 @@ classes:
   - name: preferences
     type: class
     matlab_path: "+ndi/preferences.m"
-    matlab_last_sync_hash: "9061865d"
+    matlab_last_sync_hash: "9a9150e7c"
     python_path: "ndi/preferences.py"
     python_class: "Preferences"
     inherits: ""
@@ -1024,6 +1042,14 @@ classes:
     decision_log: >
       matlab and python both persist to ~/.ndi/NDI_Preferences.json on
       all platforms (synchronized 2026-05-11).
+      examined 2026-08 at 9a9150e7c; deferred: MATLAB-ONLY. The only
+      in-window change to this file (9a9150e7c / 94aec7ce3, drift
+      "Blocked / not portable today") adds the Parallel/OpenPoolIfNone
+      preference, which exists to decide whether ndi.fun.parallelWorkers
+      opens a MATLAB parallel pool. Python has no parallel-pool concept
+      and no ndi.fun.parallelWorkers, so the preference would name a
+      setting nothing reads. Hash bumped so a future non-parallel change
+      to preferences.m is detectable.
 
 # =========================================================================
 # Not ported / Not applicable
