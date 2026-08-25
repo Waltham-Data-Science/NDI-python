@@ -555,11 +555,19 @@ def what_varies_input(name: str) -> tuple[Any, bool]:
         return {"stimulus_presentation": {"stimuli": _three_angle_stimuli()}}, True
 
     if name == "poolingAcrossPresentations":
+        # Presentation 2 carries TWO stimuli deliberately: a 1x1 struct array
+        # collapses to a mapping under MATLAB's jsonencode/render, so a nested
+        # single-element list here would render differently across languages
+        # (FUN_CASES_SCHEMA.md §5: every nested list in a fixture needs >=2
+        # elements). Mirrors NDI-matlab cases.m @ 4e9b9fda6.
         return [
             {"stimulus_presentation": {"stimuli": _three_angle_stimuli()}},
             {
                 "stimulus_presentation": {
-                    "stimuli": [{"parameters": {"angle": 270, "contrast": 1, "sFrequency": 0.5}}]
+                    "stimuli": [
+                        {"parameters": {"angle": 270, "contrast": 1, "sFrequency": 0.5}},
+                        {"parameters": {"angle": 315, "contrast": 1, "sFrequency": 0.5}},
+                    ]
                 }
             },
         ], True
@@ -681,7 +689,7 @@ WHAT_VARIES_DEFS: tuple[tuple[str, str, str, str, tuple, tuple, tuple, tuple, bo
         "testPoolingAcrossPresentations",
         "ok",
         ("angle",),
-        ("[0, 90, 180, 270]",),
+        ("[0, 90, 180, 270, 315]",),
         ("contrast", "sFrequency"),
         ("1", "0.5"),
         False,
