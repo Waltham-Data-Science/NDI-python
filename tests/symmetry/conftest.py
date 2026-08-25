@@ -40,6 +40,54 @@ REQUIRE_ARTIFACTS_ENV = "NDI_SYMMETRY_REQUIRE_ARTIFACTS"
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
 
 
+# MATLAB artifacts whose *producer does not exist in any merged NDI-matlab
+# revision yet*, so no run of this workflow can generate them.
+#
+# This is the one hole REQUIRE_ARTIFACTS cannot legitimately close.  The
+# workflow checks out VH-Lab/NDI-matlab at the branch whose name matches this
+# repo's head ref and falls back to `main` when there is none.  The paired
+# MATLAB work for these surfaces lives on a differently-named branch on a fork
+# (VH-Lab/NDI-matlab#886, `catchup/ndi-matlab-2026-08` on audriB/NDI-matlab),
+# so the pairing cannot match, the checkout degrades to `main`, and `main` has
+# no `tests/+ndi/+symmetry/+makeArtifacts/+fun` package at all.  Requiring an
+# artifact that no reachable revision can produce does not test anything; it
+# just makes the job unreadable.
+#
+# This is a declared pairing gap, not a softening of the gate:
+#   * keys are the exact MATLAB artifact, so only skips caused by *that*
+#     missing file are exempt -- a missing pythonArtifacts file, or any other
+#     surface's missing MATLAB file, still fails;
+#   * the exemption applies only while the artifact is genuinely absent;
+#   * test_pending_matlab_counterparts.py fails once the artifact appears,
+#     forcing the entry out of this table when NDI-matlab#886 merges.
+#
+# Delete an entry the moment its MATLAB counterpart lands upstream.
+PENDING_MATLAB_COUNTERPART = {
+    "fun/pathSafeName/testPathSafeNameArtifacts/pathSafeNameCases.json": (
+        "producer tests/+ndi/+symmetry/+makeArtifacts/+fun/pathSafeName.m is on "
+        "VH-Lab/NDI-matlab#886 (draft) and absent from NDI-matlab main"
+    ),
+    "fun/whatVaries/testWhatVariesArtifacts/whatVariesCases.json": (
+        "producer tests/+ndi/+symmetry/+makeArtifacts/+fun/whatVaries.m is on "
+        "VH-Lab/NDI-matlab#886 (draft) and absent from NDI-matlab main"
+    ),
+}
+
+
+def pending_counterpart_for(reason: str) -> tuple[str, str] | None:
+    """Return (artifact, why) when ``reason`` is a skip for a pending MATLAB artifact.
+
+    Matched on the ``matlabArtifacts/<rel>`` path fragment rather than the
+    absolute path so that the tempdir spelling (/tmp vs /private/tmp) cannot
+    change the outcome, and so a *pythonArtifacts* skip of the same relative
+    path is never mistaken for a pending MATLAB one.
+    """
+    for rel, why in PENDING_MATLAB_COUNTERPART.items():
+        if f"matlabArtifacts/{rel}" in reason and not (MATLAB_ARTIFACTS / rel).is_file():
+            return rel, why
+    return None
+
+
 def require_artifacts_enabled(environ: Mapping[str, str] | None = None) -> bool:
     """Return True when missing symmetry artifacts must fail rather than skip."""
     env = os.environ if environ is None else environ
@@ -70,6 +118,30 @@ def pytest_runtest_makereport(item, call):
     if not report.skipped:
         return
     reason = _skip_reason(report)
+
+    # A surface whose MATLAB producer does not exist in any merged revision
+    # stays a skip -- but a loudly labelled one, so it reads as a declared
+    # pairing gap and never as a passing comparison.
+    pending = pending_counterpart_for(reason)
+    if pending is not None:
+        rel, why = pending
+        # A skipped report's longrepr must stay the (path, lineno, reason)
+        # tuple that pytest's -rs summary unpacks -- CI runs with -rs, and a
+        # bare string crashes the terminal reporter. Rewrite only the reason.
+        note = (
+            f"PENDING MATLAB COUNTERPART ({rel}): {why}. Exempt from "
+            f"{REQUIRE_ARTIFACTS_ENV} because no reachable NDI-matlab revision "
+            f"can produce this artifact; nothing was compared for this surface, "
+            f"so the Python side is unverified against MATLAB."
+        )
+        longrepr = getattr(report, "longrepr", None)
+        if isinstance(longrepr, tuple) and len(longrepr) == 3:
+            path, lineno, _old = longrepr
+            report.longrepr = (path, lineno, note)
+        else:
+            report.longrepr = note
+        return
+
     report.outcome = "failed"
     report.longrepr = (
         f"{REQUIRE_ARTIFACTS_ENV} is set, so a skipped symmetry test is a failure.\n"
