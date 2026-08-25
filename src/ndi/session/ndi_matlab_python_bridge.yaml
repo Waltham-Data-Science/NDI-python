@@ -33,9 +33,19 @@ classes:
   - name: session
     type: class
     matlab_path: "+ndi/session.m"
-    matlab_last_sync_hash: "a97ab7d0"
+    matlab_last_sync_hash: "3cde88c87"
     python_path: "ndi/session/session_base.py"
     python_class: "ndi_session"
+    decision_log: >
+      examined 2026-08 at 3cde88c87; deferred: no drift item in the
+      2026-06-15..2026-08-22 window resolved to a change in this file. The
+      base class was read end-to-end while porting M1 (object-type marker)
+      and S9 (SQLite close-before-rmdir), both of which landed in the
+      ndi.session.dir subclass, and while confirming that MATLAB's
+      database_search filters by base.session_id (+ndi/session.m:328) so
+      Python's mirror is faithful. Hash bumped so future upstream edits to
+      +ndi/session.m are detectable; this is an examination record, NOT a
+      claim that the whole class was re-synced.
 
     properties:
       - name: reference
@@ -415,10 +425,26 @@ classes:
   - name: dir
     type: class
     matlab_path: "+ndi/+session/dir.m"
-    matlab_last_sync_hash: "b640e6ff"
+    matlab_last_sync_hash: "26d0638bf"
     python_path: "ndi/session/dir.py"
     python_class: "ndi_session_dir"
     inherits: "ndi.session"
+    decision_log: >
+      2026-08-24: examined at 26d0638bf and PARTIALLY re-synced. Ported in
+      this program: (a) drift item M1 — the ndi_object_type.txt on-disk
+      marker (objecttypemarkerfilename / setObjectTypeMarker /
+      updateObjectTypeMarker / static directorytype), MATLAB e8d8a204d,
+      97444ee46, 0d91e5f0c, f98c9a9a4, PRs #852/#854/#874; (b) drift item
+      S9 — SQLite handles are now closed before every rmtree
+      (deleteSessionDataStructures, database_erase), MATLAB 26d0638bf /
+      71758b893, issue #870. DIVERGENCE: MATLAB's mksqlite(0,'close') has
+      no Python equivalent (DID's SQLiteDB._open_db is called only from
+      __init__, so close is terminal); the same protection is obtained
+      structurally via _close_database/_rebind_session rather than a global
+      close. DEFERRED at this hash: ndi.dataset.dir.mustNotBeSession (needs
+      its own design pass against Python's legacy .ndi_dataset layout).
+      The rest of the class was not line-by-line re-verified — the hash
+      records examination, not a completed whole-file sync.
 
     properties:
       - name: path

@@ -411,10 +411,20 @@ classes:
   - name: mfdaq_reader
     type: class
     matlab_path: "+ndi/+daq/+reader/mfdaq.m"
-    matlab_last_sync_hash: "9e11fbb"
+    matlab_last_sync_hash: "866bee2bd"
     python_path: "ndi/daq/mfdaq.py"
     python_class: "ndi_daq_reader_mfdaq"
     inherits: "ndi.daq.reader"
+    decision_log: >
+      examined 2026-08 at 866bee2bd; deferred: nothing to attach the fix
+      to. MATLAB 866bee2bd (PR #875) makes ingest_epochfiles skip the
+      sample-rate lookup for eventmarktext channels, which have no sample
+      rate. Python has no ingest-write path at all — ndi/daq/mfdaq.py
+      carries underlying_datatype but no sample_rates_here loop, and only
+      ever READS already-ingested eventmarktext data. Re-evaluate when
+      NDI-python gains ingestion; the fix must land with that work, not
+      before it. Hash bumped so later upstream mfdaq.m changes are
+      detectable against a known examination point.
 
     methods:
       - name: epochclock

@@ -1039,7 +1039,7 @@ functions:
   # --- profile.py (singleton manager for cloud login profiles) ---
   - name: profile
     matlab_path: "+ndi/+cloud/profile.m"
-    matlab_last_sync_hash: "2566fe4d"
+    matlab_last_sync_hash: "c4562f578"
     python_path: "ndi/cloud/profile.py"
     input_arguments: []
     output_arguments: []
@@ -1062,6 +1062,29 @@ functions:
       Email, Stage, PasswordSecret) match MATLAB exactly so the on-disk
       JSON is interchangeable.  GUI editor (MATLAB ndi.gui.profileEditor)
       is intentionally NOT ported -- separate workstream.
+      examined 2026-08 at c4562f578; deferred: NOT ported by the 2026-08
+      catchup. Three in-window MATLAB commits (+80/-14) landed on this
+      file and none was taken: 46672187a (default backend switched from
+      vault to AES), a232c864a (stop the spurious owner-only permission
+      warning on POSIX), c4562f578 (AES passwords returned as a row char).
+      c4562f578 is MATLAB char-orientation only and has no Python meaning.
+      LIVE INTEROP DIVERGENCE from 46672187a, recorded not fixed: MATLAB
+      now ALWAYS defaults to the AES file backend, because its vault
+      (setSecret) is interactive and cannot persist a password supplied in
+      code; its own documentation states the AES file is deliberately
+      readable from ndi-python on the same host+user. Python's
+      _detect_backend still prefers the OS keyring whenever the keyring
+      module imports, and only falls back to AES. So on a normal machine
+      with keyring installed, the two languages share
+      NDI_Cloud_Profiles.json (metadata) but write the PASSWORD to two
+      different stores -- MATLAB to NDI_Cloud_Secrets.json, Python to the
+      OS credential store -- and neither can read the other's credential.
+      The "on-disk JSON is interchangeable" claim above therefore holds
+      for profile metadata but NOT for secrets. Deciding whether Python
+      should follow MATLAB to an AES default is a security/UX decision
+      (it moves secrets out of the OS keychain into a file keyed by
+      hostname+username), so it is deferred rather than taken silently.
+      Hash bumped so the next upstream profile.m change is detectable.
 
 # =============================================================================
 # Not-yet-ported MATLAB functions

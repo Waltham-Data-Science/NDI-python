@@ -740,6 +740,7 @@ functions:
   - name: dateCreated
     type: function
     matlab_path: "+ndi/+fun/+file/dateCreated.m"
+    matlab_last_sync_hash: "5e97cdeaf"
     python_path: "ndi/fun/file.py"
     input_arguments:
       - name: file_path
@@ -753,6 +754,20 @@ functions:
       Exact match. Gets the creation date of a file. Uses
       st_birthtime on macOS, falls back to st_ctime elsewhere.
       Returns UTC datetime or None if unavailable.
+      examined 2026-08 at 5e97cdeaf; deferred: no code change taken.
+      5e97cdeaf (2026-08-21, drift category 10) made two real changes to
+      the MATLAB side: the parse is wrapped so a failure yields NaT instead
+      of throwing, and the birth time is now read as epoch seconds
+      ('stat -c %W' / 'stat -f %B') in preference to parsing localized
+      text. Python already satisfies both — Path.stat().st_birthtime is
+      epoch seconds, and the broad except returns None (the NaT analogue)
+      rather than raising — so there was nothing to port.
+      BEHAVIOUR DIVERGENCE, recorded not fixed: where the filesystem has no
+      birth time (most Linux ext4), MATLAB at this commit yields NaT, while
+      Python falls back to st_ctime — the inode metadata-change time, a
+      different quantity returned silently as if it were a creation date.
+      Aligning would mean returning None there; that is a behaviour change
+      for existing callers and needs its own decision, so it is deferred.
 
   - name: dateUpdated
     type: function
@@ -773,6 +788,7 @@ functions:
   - name: pathSafeName
     type: function
     matlab_path: "+ndi/+fun/+file/pathSafeName.m"
+    matlab_last_sync_hash: "1b99d29a0"
     python_path: "ndi/fun/file.py"
     input_arguments:
       - name: name
@@ -795,10 +811,16 @@ functions:
       code points, so the port emits two '-' for code points above U+FFFF
       to keep both languages producing the same folder name for the same
       element. MATLAB's mustBeTextScalar is enforced as TypeError.
+      2026-08-24: ported this program from MATLAB 1b99d29a0 (PR #881) as
+      drift item M2. New file in MATLAB and new function in Python; the
+      contract vectors are derived by reading pathSafeName.m branch by
+      branch, NOT by executing MATLAB (none installed on the porting
+      machine), so one cross-execution run is still owed before merge.
 
   - name: elementDirectoryName
     type: function
     matlab_path: "+ndi/+fun/+file/elementDirectoryName.m"
+    matlab_last_sync_hash: "1b99d29a0"
     python_path: "ndi/fun/file.py"
     input_arguments:
       - name: element
@@ -817,10 +839,13 @@ functions:
       ('ctx_|_1'), returned so callers can still find data written by older
       versions of NDI. MATLAB returns [dirName, legacyDirName] as two
       outputs; Python returns them as a tuple in the same order.
+      2026-08-24: ported this program from MATLAB 1b99d29a0 (PR #881) as
+      drift item M2.
 
   - name: elementDirectory
     type: function
     matlab_path: "+ndi/+fun/+file/elementDirectory.m"
+    matlab_last_sync_hash: "1b99d29a0"
     python_path: "ndi/fun/file.py"
     input_arguments:
       - name: parent_dir
@@ -856,6 +881,9 @@ functions:
       legacy fallback unless the legacy name is a single ordinary path
       component (not '', '.', '..', and no separator). The new name needs no
       such guard: pathSafeName never yields any of those.
+      2026-08-24: ported this program from MATLAB 1b99d29a0 (PR #881) as
+      drift item M2. The BEHAVIOR DIVERGENCE above is an open upstream bug
+      report for the MATLAB side, not a Python defect.
 
   # =========================================================================
   # Functions — plot.py

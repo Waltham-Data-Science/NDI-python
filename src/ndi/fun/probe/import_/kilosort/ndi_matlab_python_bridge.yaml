@@ -26,7 +26,7 @@ functions:
     type: function
     matlab_path: "+ndi/+fun/+probe/+import/+kilosort/session.m"
     python_path: "ndi/fun/probe/import_/kilosort/session.py"
-    matlab_last_sync_hash: "0a14cf2dc"
+    matlab_last_sync_hash: "1b99d29a0"
     input_arguments:
       - name: session
         type_matlab: "ndi.session"
@@ -47,12 +47,24 @@ functions:
       per-probe kilosort directory, skips (with a warning) any probe lacking the
       directory or spike_times.npy, and delegates to kilosort.probe. Spaces in the
       element string are replaced by underscores, matching the export layout.
+      2026-08-24 SUPERSEDES the previous sentence: the directory is no
+      longer built by replacing spaces. Ported this program at MATLAB
+      1b99d29a0 (PR #881, drift item M2) — this read-side call site now
+      resolves through ndi.fun.file.elementDirectory, which prefers the
+      pathSafeName folder ('ctx_-_1') and falls back to the legacy
+      space-replaced form ('ctx_|_1') only when the new folder is absent
+      and the legacy one exists. Fixing only the writer would have split
+      the pipeline: the exporter would write ctx_-_1 while this importer
+      still looked for ctx_|_1. DEFERRED at this hash: drift item S7 (the
+      Kilosort mean-waveform recalculation rework) is NOT ported — see the
+      not_yet_ported block. The hash records examination, not a whole-file
+      sync.
 
   - name: probe
     type: function
     matlab_path: "+ndi/+fun/+probe/+import/+kilosort/probe.m"
     python_path: "ndi/fun/probe/import_/kilosort/probe.py"
-    matlab_last_sync_hash: "cbbb099bb"
+    matlab_last_sync_hash: "1b99d29a0"
     input_arguments:
       - { name: session, type_matlab: "ndi.session", type_python: "Any", note_python: "MATLAB arg name is S." }
       - { name: probe, type_matlab: "ndi.probe/ndi.element", type_python: "Any" }
@@ -98,12 +110,19 @@ functions:
       PROVENANCE: app.interpreter/interpreter_version record Python (not MATLAB) and
       app.url points at NDI-python; app.name/version still encode the Kilosort->phy
       pipeline string.
+      2026-08-24: examined at 1b99d29a0 (PR #881). Ported this program:
+      drift item M2 — the per-probe kilosort directory is now resolved
+      through ndi.fun.file.elementDirectory instead of
+      elementstring().replace(' ','_'), with the legacy-name fallback, so
+      writer and reader agree on the folder. DEFERRED at this hash: drift
+      item S7 (mean-waveform recalculation rework) is NOT ported. The hash
+      records examination, not a whole-file sync.
 
   - name: getInfo
     type: function
     matlab_path: "+ndi/+fun/+probe/+import/+kilosort/getInfo.m"
     python_path: "ndi/fun/probe/import_/kilosort/getInfo.py"
-    matlab_last_sync_hash: "0c1ae7454"
+    matlab_last_sync_hash: "1b99d29a0"
     input_arguments:
       - { name: session, type_matlab: "ndi.session", type_python: "Any", note_python: "MATLAB arg name is S." }
       - { name: probe, type_matlab: "ndi.probe/ndi.element", type_python: "Any" }
@@ -118,6 +137,13 @@ functions:
       Exact match. Reads the on-disk sort (no database writes) and returns the same
       summary fields. MATLAB NaN for absent template dimensions becomes Python None.
       unique_tags are sorted (MATLAB `unique` sorts) and tag_counts parallel them.
+      2026-08-24: examined at 1b99d29a0 (PR #881). Ported this program:
+      drift item M2 — the kilosort directory is resolved through
+      ndi.fun.file.elementDirectory, including the noSubFolder path, which
+      had zero test coverage repo-wide before this program and is now
+      guarded. DEFERRED at this hash: drift item S7 (mean-waveform
+      recalculation rework, which also touched getInfo.m upstream) is NOT
+      ported. The hash records examination, not a whole-file sync.
 
   - name: labels
     type: function
@@ -206,3 +232,61 @@ document_types:
       ndi_common and is required by kilosort.probe. Referenced from Python by its
       relative path 'apps/kilosort/kilosort_clusters' (NDI-python doc-type
       convention), unlike MATLAB's bare class name.
+
+# =========================================================================
+# Not yet ported — drift item S7 (Kilosort mean-waveform rework, sized L)
+# Recorded 2026-08-24 by the porting-log examination sweep. These four
+# MATLAB files were examined against Python and have NO Python counterpart;
+# the hashes exist so a future upstream change to them is detectable, and
+# the status field is what stops that being read as a completed sync.
+# =========================================================================
+not_yet_ported:
+
+  - name: recalculatemeanwaveform
+    matlab_path: "+ndi/+fun/+probe/+import/+kilosort/recalculatemeanwaveform.m"
+    matlab_last_sync_hash: "c5df2bf7e"
+    python_path: null
+    status: not_yet_ported
+    decision_log: >
+      examined 2026-08 at c5df2bf7e; deferred: drift item S7, sized L.
+      MATLAB PRs #857/#864/#867 rework mean-waveform recalculation into a
+      streaming, memory-budgeted pass that takes the channel stride from
+      the raw file rather than n_channels_dat and clamps the read window
+      per epoch. NOT the same function as meanwaveform.m: that one
+      (ported, see above) averages templates already on disk, whereas this
+      one re-reads the raw binary. Python has no equivalent — meanwaveform.py
+      implements only meanwaveform(). Porting needs the binary-reading
+      helpers below, which are also absent.
+
+  - name: binaryinfo
+    matlab_path: "+ndi/+fun/+probe/+import/+kilosort/binaryinfo.m"
+    matlab_last_sync_hash: "c5df2bf7e"
+    python_path: null
+    status: not_yet_ported
+    decision_log: >
+      examined 2026-08 at c5df2bf7e; deferred: drift item S7. Reports the
+      raw-binary layout (channel count and stride read from the file
+      itself) that the streaming recalculation depends on. No Python
+      counterpart.
+
+  - name: promptrawbinary
+    matlab_path: "+ndi/+fun/+probe/+import/+kilosort/promptrawbinary.m"
+    matlab_last_sync_hash: "6e20c544d"
+    python_path: null
+    status: not_yet_ported
+    decision_log: >
+      examined 2026-08 at 6e20c544d; deferred: drift item S7. Interactive
+      MATLAB prompt for locating the raw binary. Even once S7 lands, a
+      uigetfile-style prompt is not the right Python surface — the path
+      should be an argument. Recorded so the file is tracked, not because
+      it should be mirrored as-is.
+
+  - name: readspikeglxmeta
+    matlab_path: "+ndi/+fun/+probe/+import/+kilosort/readspikeglxmeta.m"
+    matlab_last_sync_hash: "6e20c544d"
+    python_path: null
+    status: not_yet_ported
+    decision_log: >
+      examined 2026-08 at 6e20c544d; deferred: drift item S7. Parses the
+      SpikeGLX .meta sidecar for the channel/stride information the
+      recalculation needs. No Python counterpart.

@@ -153,10 +153,21 @@ classes:
   - name: element
     type: class
     matlab_path: "+ndi/element.m"
-    matlab_last_sync_hash: "c0de73f0"
+    matlab_last_sync_hash: "1b99d29a0"
     python_path: "ndi/element/__init__.py"
     python_class: "ndi_element"
     inherits: "ndi.ido, ndi.epoch.epochset, ndi.documentservice"
+    decision_log: >
+      2026-08-24: examined at 1b99d29a0 (PR #881) and PARTIALLY re-synced.
+      Ported in this program: the drift-item-M2 doc-guard MATLAB added at
+      +ndi/element.m:331-340 — elementstring() embeds ' | ', which is not
+      path-safe, so callers must route through ndi.fun.file.pathSafeName /
+      elementDirectoryName / elementDirectory rather than sanitising the
+      element string themselves. Python's change is docstring-only on
+      elementstring(); the behavioural half of M2 landed in ndi/fun/file.py
+      and in the four call sites (fun/probe/export_binary.py and the three
+      kilosort readers). Nothing else in ndi.element was re-verified at
+      this hash — the bump records examination, not a whole-file sync.
 
     properties:
       - name: name
