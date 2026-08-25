@@ -25,6 +25,7 @@ import pytest
 from ndi.dataset import Dataset
 from ndi.query import Query
 from ndi.util import datasetSummary
+from tests.symmetry._object_type_marker import assert_object_type_marker
 from tests.symmetry.conftest import PYTHON_ARTIFACTS
 
 ARTIFACT_DIR = PYTHON_ARTIFACTS / "dataset" / "downloadIngested" / "testDownloadIngestedArtifacts"
@@ -120,3 +121,9 @@ class TestDownloadIngested:
         assert artifact_dir.exists()
         assert summary_path.exists()
         assert dataset_path.is_dir()
+
+        # M1 object-type marker: the unpacked dataset directory must carry
+        # .ndi/ndi_object_type.txt reading 'dataset'.  Note this one is written
+        # by Dataset() backfilling a marker-less archive, which is exactly the
+        # legacy-migration path MATLAB's updateObjectTypeMarker also takes.
+        assert_object_type_marker(dataset_path, "dataset")

@@ -25,6 +25,7 @@ from ndi.document import Document
 from ndi.query import Query
 from ndi.session.dir import DirSession
 from ndi.util import datasetSummary
+from tests.symmetry._object_type_marker import assert_object_type_marker
 from tests.symmetry.conftest import PYTHON_ARTIFACTS
 
 ARTIFACT_DIR = PYTHON_ARTIFACTS / "dataset" / "buildDataset" / "testBuildDatasetArtifacts"
@@ -119,3 +120,8 @@ class TestBuildDataset:
         assert summary_path.exists()
         assert json_docs_dir.exists()
         assert len(list(json_docs_dir.glob("**/*.json"))) > 0
+
+        # M1 object-type marker: the artifact directory must carry
+        # .ndi/ndi_object_type.txt reading 'dataset', so MATLAB's
+        # ndi.dataset.dir.exists can classify it without opening it.
+        assert_object_type_marker(artifact_dir, "dataset")

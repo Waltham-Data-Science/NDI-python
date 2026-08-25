@@ -28,6 +28,7 @@ from ndi.query import ndi_query
 from ndi.session.dir import ndi_session_dir
 from ndi.subject import ndi_subject
 from ndi.util import sessionSummary
+from tests.symmetry._object_type_marker import assert_object_type_marker
 from tests.symmetry.conftest import PYTHON_ARTIFACTS
 from tests.symmetry.make_artifacts.session._ingestion_helpers import (
     delete_raw_files,
@@ -177,3 +178,8 @@ class TestIngestionAxonNDR:
         assert summary_path.exists()
         assert json_docs_dir.exists()
         assert len(list(json_docs_dir.glob("*.json"))) > 0
+
+        # M1 object-type marker: the artifact directory must carry
+        # .ndi/ndi_object_type.txt reading 'session', so MATLAB's
+        # ndi.session.dir.directorytype can classify it without opening it.
+        assert_object_type_marker(artifact_dir, "session")
