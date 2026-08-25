@@ -88,6 +88,17 @@ def assert_object_type_marker(ndi_object_dir: str | Path, expected: str) -> None
         f"Object-type marker {path} reads {contents!r}, expected {expected!r} "
         f"(exact bytes: the marker is written with no trailing newline)."
     )
+    # FUN_CASES_SCHEMA.md §7: run the real classifier on the freshly written
+    # artifact, before any constructor has had the chance to backfill the
+    # marker. directorytype() is a static read — it never writes.
+    from ndi.session.dir import ndi_session_dir
+
+    classified = ndi_session_dir.directorytype(ndi_object_dir)
+    assert classified == expected, (
+        f"directorytype({ndi_object_dir}) returned {classified!r} on a freshly "
+        f"written artifact whose marker reads {expected!r} — classifier and "
+        f"marker disagree before any other code opened the directory."
+    )
 
 
 def _all_known_object_dirs() -> list[Path]:
