@@ -8,6 +8,7 @@ NDI experiments including DAQ systems, database, syncgraph, and probes.
 from __future__ import annotations
 
 import logging
+import warnings
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -38,6 +39,17 @@ def empty_id() -> str:
     base_id = ido.id
     # Replace all non-underscore characters with '0'
     return "".join("0" if c != "_" else "_" for c in base_id)
+
+
+def _doc_label(document) -> str:
+    """Name a document for a diagnostic message: its name, then its id."""
+    props = getattr(document, "document_properties", None)
+    base = props.get("base", {}) if isinstance(props, dict) else {}
+    name = base.get("name", "")
+    doc_id = base.get("id", "")
+    if name and doc_id:
+        return f"{name!r} (id {doc_id})"
+    return f"{name!r}" if name else f"id {doc_id!r}"
 
 
 def _binary_handle(file_path):
@@ -271,6 +283,16 @@ class ndi_session(ABC):
         Example:
             >>> all_daqs = session.daqsystem_load(name='(.*)')
             >>> intan_daq = session.daqsystem_load(name='Intan')
+
+        Note:
+            A document that cannot be turned into an object is skipped with
+            a RuntimeWarning rather than raising. MATLAB's daqsystem_load
+            has no try/catch and propagates instead; the divergence is
+            deliberate, because Python is a partial port and a session may
+            legitimately contain a daq class that is not implemented here
+            yet. Skipping quietly, which is what this did before, made that
+            situation indistinguishable from the session simply having
+            fewer daq systems.
         """
 
         # Build query
@@ -297,8 +319,12 @@ class ndi_session(ABC):
                 daq = self._document_to_object(doc)
                 if daq is not None:
                     dev.append(daq)
-            except Exception:
-                pass
+            except Exception as e:
+                warnings.warn(
+                    f"Skipping daqsystem document {_doc_label(doc)}: {type(e).__name__}: {e}",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
 
         if len(dev) == 0:
             return None
@@ -880,8 +906,12 @@ class ndi_session(ABC):
                 obj = self._document_to_object(doc)
                 if obj is not None:
                     existing_probes.append(obj)
-            except Exception:
-                pass
+            except Exception as e:
+                warnings.warn(
+                    f"Skipping probe document {_doc_label(doc)}: {type(e).__name__}: {e}",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
 
         # Create new probe objects for those not in database
         probes = []
@@ -976,8 +1006,12 @@ class ndi_session(ABC):
                 obj = self._document_to_object(doc)
                 if obj is not None:
                     elements.append(obj)
-            except Exception:
-                pass
+            except Exception as e:
+                warnings.warn(
+                    f"Skipping element document {_doc_label(doc)}: {type(e).__name__}: {e}",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
 
         return elements
 
