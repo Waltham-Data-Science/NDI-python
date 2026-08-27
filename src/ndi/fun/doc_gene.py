@@ -37,6 +37,7 @@ The format is verified against ``conformance_tile.bin``, the same fixture
 NDI-matlab's ``TestTileFormat`` asserts on, so all three implementations
 agree on one artifact rather than pairwise with each other.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -97,8 +98,9 @@ def writeTileFile(filename: str, x, y, gene_index, count) -> None:
         fh.write(_pack(x, y, gene_index, count))
 
 
-def renderTile(tile: dict[str, Any], gene_rows, h: int, w: int,
-               binSize: int = 1, out=None) -> np.ndarray:
+def renderTile(
+    tile: dict[str, Any], gene_rows, h: int, w: int, binSize: int = 1, out=None
+) -> np.ndarray:
     """Collapse a tile's gene axis into a dense ``(h, w)`` raster.
 
     Args:
@@ -133,20 +135,19 @@ def renderTile(tile: dict[str, Any], gene_rows, h: int, w: int,
         keep = g[gi] if g.dtype == bool else np.isin(gi, g)
         if not keep.any():
             return img
-        per_pixel = np.add.reduceat(np.where(keep, cnt, 0).astype(np.float32),
-                                    off[:-1])
+        per_pixel = np.add.reduceat(np.where(keep, cnt, 0).astype(np.float32), off[:-1])
     # reduceat on an empty run returns the element at that index rather
     # than zero, so empty pixels have to be zeroed explicitly.
     per_pixel[np.diff(off) == 0] = 0
 
     if binSize != 1:
         per_pixel = per_pixel * np.float32(1.0 / (binSize * binSize))
-    np.add.at(img, (tile["y"].astype(np.int64), tile["x"].astype(np.int64)),
-              per_pixel)
+    np.add.at(img, (tile["y"].astype(np.int64), tile["x"].astype(np.int64)), per_pixel)
     return img
 
 
 # -- codec ---------------------------------------------------------------
+
 
 def _pack(x, y, gene_index, count) -> bytes:
     x = np.asarray(x, np.int64)
@@ -156,11 +157,17 @@ def _pack(x, y, gene_index, count) -> bytes:
     if not (len(x) == len(y) == len(gene_index) == len(count)):
         raise ValueError(
             f"x, y, gene_index and count must be the same length, got "
-            f"{len(x)}, {len(y)}, {len(gene_index)}, {len(count)}")
+            f"{len(x)}, {len(y)}, {len(gene_index)}, {len(count)}"
+        )
 
     if len(x) == 0:
-        return b"".join([np.uint32(0).tobytes(), np.uint32(0).tobytes(),
-                         np.zeros(1, _DTYPES["offset"]).tobytes()])
+        return b"".join(
+            [
+                np.uint32(0).tobytes(),
+                np.uint32(0).tobytes(),
+                np.zeros(1, _DTYPES["offset"]).tobytes(),
+            ]
+        )
 
     # (y, x) packed into one integer so the sort is a single pass. y in
     # the high half makes the order row-major, matching index_order.
@@ -175,15 +182,17 @@ def _pack(x, y, gene_index, count) -> bytes:
     starts = np.flatnonzero(new)
     offset = np.append(starts, len(key)).astype(_DTYPES["offset"])
 
-    return b"".join([
-        np.uint32(len(starts)).tobytes(),
-        np.uint32(len(key)).tobytes(),
-        x[starts].astype(_DTYPES["coordinate"]).tobytes(),
-        y[starts].astype(_DTYPES["coordinate"]).tobytes(),
-        offset.tobytes(),
-        gene_index.astype(_DTYPES["gene_index"]).tobytes(),
-        count.astype(_DTYPES["count"]).tobytes(),
-    ])
+    return b"".join(
+        [
+            np.uint32(len(starts)).tobytes(),
+            np.uint32(len(key)).tobytes(),
+            x[starts].astype(_DTYPES["coordinate"]).tobytes(),
+            y[starts].astype(_DTYPES["coordinate"]).tobytes(),
+            offset.tobytes(),
+            gene_index.astype(_DTYPES["gene_index"]).tobytes(),
+            count.astype(_DTYPES["count"]).tobytes(),
+        ]
+    )
 
 
 def _unpack(raw: bytes) -> dict[str, Any]:
@@ -197,16 +206,19 @@ def _unpack(raw: bytes) -> dict[str, Any]:
     # truncated file surfaces as numpy's "buffer is smaller than requested
     # size", which says nothing about which field ran out or what the
     # header claimed.
-    expected = (2 * _DTYPES["offset"].itemsize
-                + 2 * n_pixels * _DTYPES["coordinate"].itemsize
-                + (n_pixels + 1) * _DTYPES["offset"].itemsize
-                + n_nonzero * _DTYPES["gene_index"].itemsize
-                + n_nonzero * _DTYPES["count"].itemsize)
+    expected = (
+        2 * _DTYPES["offset"].itemsize
+        + 2 * n_pixels * _DTYPES["coordinate"].itemsize
+        + (n_pixels + 1) * _DTYPES["offset"].itemsize
+        + n_nonzero * _DTYPES["gene_index"].itemsize
+        + n_nonzero * _DTYPES["count"].itemsize
+    )
     if len(raw) != expected:
         raise ValueError(
             f"tile file has {len(raw)} bytes but its header describes "
             f"{expected} (n_pixels={n_pixels}, n_nonzero={n_nonzero}); "
-            f"the file is truncated or not format version 1")
+            f"the file is truncated or not format version 1"
+        )
 
     def take(dt, n):
         nonlocal o
@@ -220,8 +232,15 @@ def _unpack(raw: bytes) -> dict[str, Any]:
     gene_index = take(_DTYPES["gene_index"], n_nonzero)
     count = take(_DTYPES["count"], n_nonzero)
     assert o == len(raw), "size check above should have caught this"
-    return dict(n_pixels=n_pixels, n_nonzero=n_nonzero, x=x, y=y,
-                offset=offset, gene_index=gene_index, count=count)
+    return {
+        "n_pixels": n_pixels,
+        "n_nonzero": n_nonzero,
+        "x": x,
+        "y": y,
+        "offset": offset,
+        "gene_index": gene_index,
+        "count": count,
+    }
 
 
 # =========================================================================
@@ -235,9 +254,11 @@ import os
 import tempfile
 
 from ..document import ndi_document
-from ..query import ndi_query
 
-__all__ += ["makeGeneList", "makePyramid", "readViewport", "exportRegion"]
+# Only what exists. makePyramid, readViewport and exportRegion are still
+# to come; declaring them here early made __all__ a promise the module
+# could not keep, and ruff was right to call it.
+__all__ += ["makeGeneList"]
 
 
 def _blank(document_type: str, **properties):
@@ -274,19 +295,26 @@ def _store_doc(session, doc, file_names, file_paths):
     if len(file_names) != len(file_paths):
         raise ValueError(
             f"file_names and file_paths must be the same length, got "
-            f"{len(file_names)} and {len(file_paths)}")
+            f"{len(file_names)} and {len(file_paths)}"
+        )
     for name, path in zip(file_names, file_paths):
         if not os.path.isfile(path):
-            raise FileNotFoundError(
-                f"file {path!r} for document entry {name!r} does not exist")
+            raise FileNotFoundError(f"file {path!r} for document entry {name!r} does not exist")
         doc = doc.add_file(name, path)
     session.database_add(doc)
     return doc
 
 
-def makeGeneList(session, gene_id, gene_name, genomeAssembly: str = "",
-                 annotationSource: str = "", geneIdNamespace: str = "",
-                 geneSymbolNamespace: str = "", label: str = ""):
+def makeGeneList(
+    session,
+    gene_id,
+    gene_name,
+    genomeAssembly: str = "",
+    annotationSource: str = "",
+    geneIdNamespace: str = "",
+    geneSymbolNamespace: str = "",
+    label: str = "",
+):
     """Create a ``geneList`` document from accessions and symbols.
 
     ``n_genes``, ``gene_name_completeness`` and ``n_duplicate_gene_names``
@@ -317,8 +345,8 @@ def makeGeneList(session, gene_id, gene_name, genomeAssembly: str = "",
     n = len(gene_id)
     if len(gene_name) != n:
         raise ValueError(
-            f"gene_id and gene_name must be the same length, got {n} and "
-            f"{len(gene_name)}")
+            f"gene_id and gene_name must be the same length, got {n} and " f"{len(gene_name)}"
+        )
 
     named = [g for g in gene_name if g]
     completeness = (len(named) / n) if n else 0.0
@@ -337,16 +365,22 @@ def makeGeneList(session, gene_id, gene_name, genomeAssembly: str = "",
             # rather than trust that row order survived transport.
             fh.write(f"{i}\t{gene_id[i]}\t{gene_name[i]}\n")
 
-    doc = _blank("geneList", geneList={
-        "label": label,
-        "n_genes": n,
-        "genome_assembly": genomeAssembly,
-        "gene_id_namespace": geneIdNamespace,
-        "gene_symbol_namespace": geneSymbolNamespace,
-        "annotation_source": annotationSource,
-        "gene_name_completeness": completeness,
-        "n_duplicate_gene_names": n_dup,
-    }) + session.newdocument()
+    doc = (
+        _blank(
+            "geneList",
+            geneList={
+                "label": label,
+                "n_genes": n,
+                "genome_assembly": genomeAssembly,
+                "gene_id_namespace": geneIdNamespace,
+                "gene_symbol_namespace": geneSymbolNamespace,
+                "annotation_source": annotationSource,
+                "gene_name_completeness": completeness,
+                "n_duplicate_gene_names": n_dup,
+            },
+        )
+        + session.newdocument()
+    )
     try:
         return _store_doc(session, doc, ["genes.tsv"], [tsv_path])
     finally:

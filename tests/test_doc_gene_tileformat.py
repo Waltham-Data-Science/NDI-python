@@ -15,6 +15,7 @@ actually cross language boundaries, not under arbitrary ones:
 * a gene row of 70000, which a uint16 index would truncate;
 * unsorted input, so grouping and the CSR row pointer are exercised.
 """
+
 from __future__ import annotations
 
 import json
@@ -46,7 +47,8 @@ def test_decode_matches_fixture(tile, expected):
         np.testing.assert_array_equal(
             np.asarray(tile[field], np.int64),
             np.asarray(expected[field], np.int64),
-            err_msg=f"field {field!r} differs from the conformance fixture")
+            err_msg=f"field {field!r} differs from the conformance fixture",
+        )
 
 
 def test_wide_fields_are_not_truncated(tile):
@@ -60,17 +62,16 @@ def test_render_all_genes(tile, expected):
     img = doc_gene.renderTile(tile, None, expected["height"], expected["width"])
     assert img.sum() == pytest.approx(expected["render_all_genes_sum"])
     for px in expected["render_all_genes_nonzero_pixels"]:
-        assert img[px["y"], px["x"]] == pytest.approx(px["value"]), (
-            f"pixel (x={px['x']}, y={px['y']}) should hold {px['value']}")
+        assert img[px["y"], px["x"]] == pytest.approx(
+            px["value"]
+        ), f"pixel (x={px['x']}, y={px['y']}) should hold {px['value']}"
     # Exactly those pixels and no others, so a reader that lands values in
     # the right total but the wrong places still fails.
-    assert int(np.count_nonzero(img)) == len(
-        expected["render_all_genes_nonzero_pixels"])
+    assert int(np.count_nonzero(img)) == len(expected["render_all_genes_nonzero_pixels"])
 
 
 def test_render_single_gene(tile, expected):
-    img = doc_gene.renderTile(tile, [70000], expected["height"],
-                              expected["width"])
+    img = doc_gene.renderTile(tile, [70000], expected["height"], expected["width"])
     assert img.sum() == pytest.approx(expected["render_gene_70000_sum"])
 
 
@@ -78,17 +79,14 @@ def test_render_boolean_mask_matches_row_list(tile, expected):
     """The boolean fast path and the row-list path must agree."""
     mask = np.zeros(70001, bool)
     mask[70000] = True
-    by_mask = doc_gene.renderTile(tile, mask, expected["height"],
-                                  expected["width"])
-    by_rows = doc_gene.renderTile(tile, [70000], expected["height"],
-                                  expected["width"])
+    by_mask = doc_gene.renderTile(tile, mask, expected["height"], expected["width"])
+    by_rows = doc_gene.renderTile(tile, [70000], expected["height"], expected["width"])
     np.testing.assert_array_equal(by_mask, by_rows)
 
 
 def test_render_binsize_divides_by_area(tile, expected):
     """binSize divides by the AREA, not the linear factor."""
-    img = doc_gene.renderTile(tile, None, expected["height"],
-                              expected["width"], binSize=4)
+    img = doc_gene.renderTile(tile, None, expected["height"], expected["width"], binSize=4)
     assert img.sum() == pytest.approx(expected["render_binsize4_sum"])
     assert img.sum() == pytest.approx(expected["render_all_genes_sum"] / 16)
 
@@ -120,7 +118,7 @@ def test_write_sorts_unordered_records(tmp_path):
     out = tmp_path / "unsorted.bin"
     doc_gene.writeTileFile(str(out), x, y, g, c)
     t = doc_gene.readTileFile(str(out))
-    assert t["n_pixels"] == 3          # (0,0), (5,1), (9,2)
+    assert t["n_pixels"] == 3  # (0,0), (5,1), (9,2)
     assert t["n_nonzero"] == 4
     # row-major: y ascending, then x
     np.testing.assert_array_equal(np.asarray(t["y"], np.int64), [0, 1, 2])

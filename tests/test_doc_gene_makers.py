@@ -3,12 +3,13 @@
 Mirrors NDI-matlab's TestGeneDocs. Assertions are chosen so the failures
 that would actually occur are caught rather than averaged away.
 """
+
 from __future__ import annotations
 
 import pytest
 
-from ndi.session.dir import ndi_session_dir
 from ndi.fun import doc_gene
+from ndi.session.dir import ndi_session_dir
 
 
 @pytest.fixture
@@ -24,9 +25,9 @@ def test_geneList_counts_duplicate_symbols(session):
     duplicated ones is computed rather than assumed."""
     ids = ["ENSX0001", "ENSX0002", "ENSX0003", "ENSX0004", "ENSX0005"]
     names = ["HOXA", "HOXA", "PAX6", "HOXA", ""]
-    doc = doc_gene.makeGeneList(session, ids, names,
-                                genomeAssembly="testAsm",
-                                geneIdNamespace="Ensembl")
+    doc = doc_gene.makeGeneList(
+        session, ids, names, genomeAssembly="testAsm", geneIdNamespace="Ensembl"
+    )
     g = doc.document_properties["geneList"]
     assert g["n_genes"] == 5
     assert g["n_duplicate_gene_names"] == 1, "HOXA on three rows is ONE duplicated symbol"
@@ -57,7 +58,7 @@ def test_geneList_writes_zero_based_index(session):
     assert lines[1].split("\t")[0] == "0", "first gene is index 0, not 1"
     assert lines[-1].split("\t")[0] == "3"
     # row order must match the input order
-    assert [l.split("\t")[1] for l in lines[1:]] == ids
+    assert [row.split("\t")[1] for row in lines[1:]] == ids
 
 
 def test_geneList_blank_symbol_keeps_its_column(session):
