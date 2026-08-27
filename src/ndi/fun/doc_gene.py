@@ -254,11 +254,9 @@ import os
 import tempfile
 
 from ..document import ndi_document
+from ..query import ndi_query
 
-# Only what exists. makePyramid, readViewport and exportRegion are still
-# to come; declaring them here early made __all__ a promise the module
-# could not keep, and ruff was right to call it.
-__all__ += ["makeGeneList"]
+__all__ += ["makeGeneList", "makePyramid", "readViewport", "exportRegion"]
 
 
 def _blank(document_type: str, **properties):
@@ -386,3 +384,445 @@ def makeGeneList(
     finally:
         if os.path.exists(tsv_path):
             os.unlink(tsv_path)
+
+
+def makePyramid(
+    session,
+    x,
+    y,
+    gene_index,
+    count,
+    gene_list_doc,
+    subjectID: str,
+    binSizes=(1, 2, 4, 8, 16, 32),
+    grid: int = 9,
+    basePixelSize=(0.5, 0.5),
+    pixelSizeUnits: str = "micrometer",
+    label: str = "",
+    assay: str = "",
+    chipSerial: str = "",
+    pipelineVersion: str = "",
+    origin=None,
+):
+    """Bin flat spatial records into a tiled pyramid and store its documents.
+
+    Creates one ``spatialGeneExpressionPyramid`` holding the shared
+    identity -- gene list, origin, tile grid, bin sizes -- and one
+    ``spatialGeneExpressionTiles`` per bin size depending on it. Levels are
+    siblings rather than a chain, so enumerating them is a single query and
+    no level orphans another.
+
+    Args:
+        session: an ndi.session or ndi.dataset.
+        x, y: source coordinates, one per record.
+        gene_index: ZERO-BASED geneList row, one per record.
+        count: UMI count, one per record.
+        gene_list_doc: the geneList these indices are against.
+        subjectID: REQUIRED. The pyramid schema declares ``subject_id``
+            mustbenotempty, because a section is measured from an animal
+            and NDI records that on the measurement. Checked here so the
+            failure names the argument rather than surfacing from inside
+            database validation.
+        binSizes: level ladder, finest first. Dyadic by default: each
+            transition compresses the dynamic range of sparse counts by
+            the step's AREA factor while leaving the mean unchanged, so
+            uniform small ratios zoom most smoothly.
+        grid: tile grid, ``grid`` by ``grid`` at EVERY level. Constant
+            because nonzeros barely fall with bin size, so every level
+            wants comparable tiling and a viewport maps to tile indices
+            once, independent of zoom.
+        basePixelSize: (x, y) physical size of one base pixel.
+        origin: ``(min_x, min_y)`` of the tiled region, or None to take it
+            from the data. Prefer the acquisition's own bounding box when
+            known: a data-derived origin moves if the gene set changes.
+
+    Returns:
+        ``(pyramid_doc, [tiles_doc, ...])``, levels finest first.
+    """
+    x = np.asarray(x)
+    y = np.asarray(y)
+    gene_index = np.asarray(gene_index)
+    count = np.asarray(count)
+    n = len(x)
+    if not (len(y) == len(gene_index) == len(count) == n):
+        raise ValueError(
+            f"x, y, gene_index and count must be the same length, got "
+            f"{n}, {len(y)}, {len(gene_index)}, {len(count)}"
+        )
+    if n == 0:
+        raise ValueError("no records were supplied")
+    if not subjectID:
+        raise ValueError(
+            "a subject is required: pass subjectID with the id of a subject "
+            "document. The spatialGeneExpressionPyramid schema declares "
+            "subject_id mustbenotempty."
+        )
+
+    n_genes = int(gene_list_doc.document_properties["geneList"]["n_genes"])
+    if int(gene_index.max()) >= n_genes:
+        raise ValueError(
+            f"largest gene index is {int(gene_index.max())} but the geneList "
+            f"has {n_genes} genes; indices are ZERO-BASED"
+        )
+
+    if origin is None:
+        min_x, min_y = int(x.min()), int(y.min())
+    else:
+        min_x, min_y = int(origin[0]), int(origin[1])
+        if int(x.min()) < min_x or int(y.min()) < min_y:
+            raise ValueError(
+                f"origin ({min_x}, {min_y}) is larger than the data minimum "
+                f"({int(x.min())}, {int(y.min())})"
+            )
+    extent_x = int(x.max()) - min_x + 1
+    extent_y = int(y.max()) - min_y + 1
+    bins = sorted(int(b) for b in binSizes)
+
+    pyr_doc = (
+        _blank(
+            "spatialGeneExpressionPyramid",
+            spatialGeneExpressionPyramid={
+                "label": label,
+                "chip_serial": chipSerial,
+                "pipeline_version": pipelineVersion,
+                "bin_sizes": bins,
+                "base_pixel_size_x": float(basePixelSize[0]),
+                "base_pixel_size_y": float(basePixelSize[1]),
+                "pixel_size_units": pixelSizeUnits,
+                "origin_x": min_x,
+                "origin_y": min_y,
+                "extent_x": extent_x,
+                "extent_y": extent_y,
+                "tile_rows": grid,
+                "tile_columns": grid,
+                "index_order": "row-major",
+                "origin_corner": "upper-left",
+                "byte_order": "little",
+            },
+            geneExpression={"assay": assay, "count_type": "raw", "count_units": "UMI"},
+        )
+        + session.newdocument()
+    )
+    pyr_doc = pyr_doc.set_dependency_value("geneList_id", gene_list_doc.id)
+    pyr_doc = pyr_doc.set_dependency_value("subject_id", subjectID)
+
+    totals_path = _write_gene_totals(gene_index, count, n_genes)
+    try:
+        pyr_doc = _store_doc(session, pyr_doc, ["gene_totals.tsv"], [totals_path])
+    finally:
+        if os.path.exists(totals_path):
+            os.unlink(totals_path)
+
+    tile_docs = [
+        _make_level(
+            session,
+            x,
+            y,
+            gene_index,
+            count,
+            min_x,
+            min_y,
+            extent_x,
+            extent_y,
+            b,
+            grid,
+            n_genes,
+            pyr_doc,
+            basePixelSize,
+            pixelSizeUnits,
+            subjectID,
+        )
+        for b in bins
+    ]
+    return pyr_doc, tile_docs
+
+
+def _make_level(
+    session,
+    x,
+    y,
+    gi,
+    c,
+    min_x,
+    min_y,
+    extent_x,
+    extent_y,
+    b,
+    grid,
+    n_genes,
+    pyr_doc,
+    base_pixel_size,
+    pixel_size_units,
+    subject_id,
+):
+    """Build and store one resolution level."""
+    lw = -(-extent_x // b)  # ceil
+    lh = -(-extent_y // b)
+    tw = -(-lw // grid)
+    th = -(-lh // grid)
+    n_tiles = grid * grid
+
+    px = (x - min_x) // b
+    py = (y - min_y) // b
+    tcol = px // tw
+    trow = py // th
+    xl = px - tcol * tw
+    yl = py - trow * th
+    tid = trow * grid + tcol
+
+    # ONE sort, on a TILE-MAJOR key, so tile boundaries fall out of the
+    # sorted order with a searchsorted instead of needing a second sort.
+    #
+    # int64 from the first term. This product reaches ~1e13 on a real
+    # section; under NumPy's weak promotion an int32 array times a Python
+    # int stays int32, which wraps SILENTLY at 2.15e9. Distinct
+    # (pixel, gene) pairs then collide and the dedup below merges them --
+    # about 1.7M spurious merges on one measured section, matching the
+    # n**2/2**33 collision estimate. Assert rather than trust: no fixture
+    # small enough to run quickly can reach the overflow.
+    key = ((tid.astype(np.int64) * th + yl) * tw + xl) * n_genes + gi
+    if key.dtype != np.int64:
+        raise TypeError(f"sort key must be int64, got {key.dtype}")
+    span = np.int64(th) * tw * n_genes
+    if n_tiles * span >= 2**63:
+        raise OverflowError(f"sort key would reach {n_tiles * span:,}, past int64")
+
+    order = np.argsort(key, kind="stable")
+    key = key[order]
+    xl = xl[order]
+    yl = yl[order]
+    g = gi[order]
+    # int32 is enough: a group sums at most b*b base records.
+    cc = c[order].astype(np.int64)
+
+    # Collapse duplicate (pixel, gene) pairs created by binning.
+    new = np.empty(len(key), bool)
+    new[0] = True
+    np.not_equal(key[1:], key[:-1], out=new[1:])
+    starts = np.flatnonzero(new)
+    cc = np.add.reduceat(cc, starts)
+    xl, yl, g, key = xl[starts], yl[starts], g[starts], key[starts]
+    cc = np.minimum(cc, 65535)  # data_type_count is uint16
+
+    tid_sorted = key // span
+    bounds = np.searchsorted(tid_sorted, np.arange(n_tiles + 1))
+
+    names, paths = [], []
+    tmpdir = tempfile.mkdtemp()
+    try:
+        for t in range(n_tiles):
+            lo, hi = int(bounds[t]), int(bounds[t + 1])
+            if lo == hi:
+                continue  # tiles with no data are not written
+            p = os.path.join(tmpdir, f"tile.bin_{t}")
+            writeTileFile(p, xl[lo:hi], yl[lo:hi], g[lo:hi], cc[lo:hi])
+            names.append(f"tile.bin_{t}")
+            paths.append(p)
+
+        doc = (
+            _blank(
+                "spatialGeneExpressionTiles",
+                spatialGeneExpressionTiles={
+                    "label": f"bin{b}",
+                    "bin_size": b,
+                    "pixel_size_x": float(base_pixel_size[0]) * b,
+                    "pixel_size_y": float(base_pixel_size[1]) * b,
+                    "pixel_size_units": pixel_size_units,
+                    "dimension_order": "YXG",
+                    "dimension_labels": "height,width,gene",
+                    "dimension_size": [lh, lw, n_genes],
+                    "dimension_scale": [
+                        float(base_pixel_size[1]) * b,
+                        float(base_pixel_size[0]) * b,
+                        1,
+                    ],
+                    "dimension_scale_units": "micrometer,micrometer,dimensionless",
+                    "tile_size_x_bins": tw,
+                    "tile_size_y_bins": th,
+                    "n_tiles_stored": len(names),
+                    "data_type_gene_index": "uint32",
+                    "data_type_count": "uint16",
+                    "data_type_offset": "uint32",
+                    "data_type_coordinate": "uint16",
+                    "tile_compression": "none",
+                    "tile_format_version": 1,
+                },
+            )
+            + session.newdocument()
+        )
+        doc = doc.set_dependency_value("spatialGeneExpressionPyramid_id", pyr_doc.id)
+        doc = doc.set_dependency_value("subject_id", subject_id)
+        return _store_doc(session, doc, names, paths)
+    finally:
+        for p in paths:
+            if os.path.exists(p):
+                os.unlink(p)
+        if os.path.isdir(tmpdir):
+            os.rmdir(tmpdir)
+
+
+def _write_gene_totals(gene_index, count, n_genes):
+    """Per-gene totals for THIS dataset.
+
+    Deliberately not a column of ``genes.tsv``: that file belongs to the
+    geneList, which several datasets may share and which would then
+    disagree about totals. Totals are a property of the counts, so they
+    live with the pyramid.
+    """
+    tot = np.bincount(
+        np.asarray(gene_index, np.int64),
+        weights=np.asarray(count, np.float64),
+        minlength=n_genes,
+    ).astype(np.int64)
+    npx = np.bincount(np.asarray(gene_index, np.int64), minlength=n_genes).astype(np.int64)
+    fd, path = tempfile.mkstemp(suffix=".tsv")
+    with os.fdopen(fd, "w") as fh:
+        fh.write("gene_index\ttotal_counts\tn_records\n")
+        for i in range(n_genes):
+            fh.write(f"{i}\t{int(tot[i])}\t{int(npx[i])}\n")
+    return path
+
+
+def _find_level(session, pyr_doc, bin_size):
+    """The tiles document for one bin size, and its property struct."""
+    q = ndi_query("").isa("spatialGeneExpressionTiles") & ndi_query("").depends_on(
+        "spatialGeneExpressionPyramid_id", pyr_doc.id
+    )
+    for d in session.database_search(q):
+        lv = d.document_properties["spatialGeneExpressionTiles"]
+        if int(lv["bin_size"]) == int(bin_size):
+            return d, lv
+    raise ValueError(f"this pyramid has no level with bin_size {bin_size}")
+
+
+def readViewport(session, pyr_doc, bin_size, rect=None, gene_rows=None, density=True):
+    """Render a rectangle of one pyramid level.
+
+    Fetches only the tiles that intersect *rect*. Tiles that were never
+    written contribute zeros without any read.
+
+    Args:
+        session: an ndi.session or ndi.dataset.
+        pyr_doc: a spatialGeneExpressionPyramid document.
+        bin_size: which level to read; must be one of the pyramid's.
+        rect: ``(x0, y0, width, height)`` in pixels OF THAT LEVEL,
+            zero-based, relative to the level's upper-left. None reads the
+            whole level.
+        gene_rows: ZERO-BASED geneList rows to include, or None for all.
+        density: divide by ``bin_size ** 2``, giving counts per base
+            pixel. Binning SUMS, so without this a coarse level is
+            ``bin_size ** 2`` brighter than a fine one and a single
+            contrast range cannot serve a whole pyramid.
+
+    Returns:
+        ``(img, info)`` -- a float32 array over *rect*, and a dict with
+        ``tiles_read``, ``tiles_empty``, ``bin_size``, ``level_size``.
+    """
+    p = pyr_doc.document_properties["spatialGeneExpressionPyramid"]
+    tile_doc, lv = _find_level(session, pyr_doc, bin_size)
+
+    lh, lw = int(lv["dimension_size"][0]), int(lv["dimension_size"][1])
+    th, tw = int(lv["tile_size_y_bins"]), int(lv["tile_size_x_bins"])
+    rows, cols = int(p["tile_rows"]), int(p["tile_columns"])
+
+    if rect is None:
+        rect = (0, 0, lw, lh)
+    x0, y0, w_rect, h_rect = (int(v) for v in rect)
+    x1 = min(x0 + w_rect, lw)
+    y1 = min(y0 + h_rect, lh)
+
+    img = np.zeros((h_rect, w_rect), np.float32)
+    info = {
+        "tiles_read": 0,
+        "tiles_empty": 0,
+        "bin_size": int(bin_size),
+        "level_size": (lh, lw),
+    }
+    stored = set(tile_doc.current_file_list())
+
+    for r in range(y0 // th, min(max(y1 - 1, y0) // th, rows - 1) + 1):
+        for c in range(x0 // tw, min(max(x1 - 1, x0) // tw, cols - 1) + 1):
+            name = f"tile.bin_{r * cols + c}"
+            if name not in stored:
+                info["tiles_empty"] += 1
+                continue
+            fh = session.database_openbinarydoc(tile_doc, name)
+            try:
+                t = readTileFile(fh)
+            finally:
+                session.database_closebinarydoc(fh)
+            info["tiles_read"] += 1
+
+            t_img = renderTile(t, gene_rows, th, tw, binSize=(bin_size if density else 1))
+            # Place this tile's overlap with the requested rectangle.
+            tx0, ty0 = c * tw, r * th
+            ax0, ax1 = max(x0, tx0), min(x1, tx0 + tw)
+            ay0, ay1 = max(y0, ty0), min(y1, ty0 + th)
+            if ax1 <= ax0 or ay1 <= ay0:
+                continue
+            img[ay0 - y0 : ay1 - y0, ax0 - x0 : ax1 - x0] = t_img[
+                ay0 - ty0 : ay1 - ty0, ax0 - tx0 : ax1 - tx0
+            ]
+    return img, info
+
+
+def exportRegion(session, pyr_doc, bin_size, rect=None):
+    """Export a region as a sparse (pixel x gene) matrix of RAW counts.
+
+    Deliberately not normalized: density is a display concern, and an
+    export that applied it would be lossy. Use :func:`readViewport` for
+    something to look at, this for something to compute on.
+
+    Args:
+        rect: as :func:`readViewport`; None exports the whole level.
+
+    Returns:
+        ``(M, pixel_xy)`` -- a ``scipy.sparse`` CSR matrix with one row per
+        OCCUPIED pixel and one column per gene, and an ``(n_pixels, 2)``
+        int array of that pixel's ``(x, y)`` in level coordinates,
+        relative to the level origin.
+    """
+    from scipy import sparse
+
+    p = pyr_doc.document_properties["spatialGeneExpressionPyramid"]
+    tile_doc, lv = _find_level(session, pyr_doc, bin_size)
+    lh, lw = int(lv["dimension_size"][0]), int(lv["dimension_size"][1])
+    n_genes = int(lv["dimension_size"][2])
+    th, tw = int(lv["tile_size_y_bins"]), int(lv["tile_size_x_bins"])
+    cols = int(p["tile_columns"])
+
+    if rect is None:
+        rect = (0, 0, lw, lh)
+    x0, y0, w_rect, h_rect = (int(v) for v in rect)
+    x1, y1 = min(x0 + w_rect, lw), min(y0 + h_rect, lh)
+
+    rows_idx, cols_idx, vals, coords = [], [], [], []
+    n_px = 0
+    for name in sorted(tile_doc.current_file_list()):
+        t_id = int(name.rsplit("_", 1)[1])
+        tr, tc = divmod(t_id, cols)
+        tx0, ty0 = tc * tw, tr * th
+        if tx0 >= x1 or tx0 + tw <= x0 or ty0 >= y1 or ty0 + th <= y0:
+            continue
+        fh = session.database_openbinarydoc(tile_doc, name)
+        try:
+            t = readTileFile(fh)
+        finally:
+            session.database_closebinarydoc(fh)
+        if t["n_pixels"] == 0:
+            continue
+        gx = t["x"].astype(np.int64) + tx0
+        gy = t["y"].astype(np.int64) + ty0
+        keep = (gx >= x0) & (gx < x1) & (gy >= y0) & (gy < y1)
+        for i in np.flatnonzero(keep):
+            lo, hi = int(t["offset"][i]), int(t["offset"][i + 1])
+            if lo == hi:
+                continue
+            rows_idx.extend([n_px] * (hi - lo))
+            cols_idx.extend(t["gene_index"][lo:hi].astype(np.int64).tolist())
+            vals.extend(t["count"][lo:hi].astype(np.int64).tolist())
+            coords.append((int(gx[i]), int(gy[i])))
+            n_px += 1
+
+    M = sparse.csr_matrix((vals, (rows_idx, cols_idx)), shape=(n_px, n_genes), dtype=np.int64)
+    return M, np.array(coords, np.int64).reshape(-1, 2)
