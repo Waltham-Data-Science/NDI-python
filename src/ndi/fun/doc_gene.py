@@ -55,20 +55,28 @@ _DTYPES: dict[str, Any] = {
 }
 
 
-def readTileFile(filename: str) -> dict[str, Any]:
-    """Read one ``tile.bin_N`` file.
+def readTileFile(source: Any) -> dict[str, Any]:
+    """Read one ``tile.bin_N`` tile.
 
     Args:
-        filename: path to the tile file.
+        source: a path, an open binary file object, or raw ``bytes``.
+            The file-object form matters:
+            :meth:`ndi.session.database_openbinarydoc` returns an open
+            handle rather than a path, unlike MATLAB's, which returns an
+            object carrying ``fullpathfilename``. Accepting both keeps
+            callers from having to spill a database file to disk first.
 
     Returns:
         dict with ``n_pixels``, ``n_nonzero`` and the CSR arrays ``x``,
         ``y``, ``offset``, ``gene_index``, ``count``. Every index is
         ZERO-BASED.
     """
-    with open(filename, "rb") as fh:
-        raw = fh.read()
-    return _unpack(raw)
+    if isinstance(source, (bytes, bytearray)):
+        return _unpack(bytes(source))
+    if hasattr(source, "read"):
+        return _unpack(source.read())
+    with open(source, "rb") as fh:
+        return _unpack(fh.read())
 
 
 def writeTileFile(filename: str, x, y, gene_index, count) -> None:
@@ -214,3 +222,133 @@ def _unpack(raw: bytes) -> dict[str, Any]:
     assert o == len(raw), "size check above should have caught this"
     return dict(n_pixels=n_pixels, n_nonzero=n_nonzero, x=x, y=y,
                 offset=offset, gene_index=gene_index, count=count)
+
+
+# =========================================================================
+# Document makers
+#
+# Mirrors +ndi/+fun/+doc/+gene/{makeGeneList,makePyramid,readViewport,
+# exportRegion}.m and its private/storeDoc.m.
+# =========================================================================
+
+import os
+import tempfile
+
+from ..document import ndi_document
+from ..query import ndi_query
+
+__all__ += ["makeGeneList", "makePyramid", "readViewport", "exportRegion"]
+
+
+def _blank(document_type: str, **properties):
+    """Construct a blank document by type name, subdirectory or not.
+
+    ASYMMETRY, worked around here rather than papered over. MATLAB's
+    ``ndi.document`` resolves a bare class name against the whole
+    ``database_documents`` tree, so ``ndi.document('geneList')`` finds
+    ``data/geneList.json``. NDI-python's ``read_blank_definition`` looks
+    only at the top level, so the same call needs ``'data/geneList'``.
+    That affects every document under a subdirectory -- ``image``,
+    ``generic_file`` and the stimulus family included -- not just these.
+
+    Trying the bare name first means this code reads the same as the
+    MATLAB it mirrors, and starts working by the symmetric path the day
+    the resolver is fixed, without an edit here.
+    """
+    try:
+        return ndi_document(document_type, **properties)
+    except FileNotFoundError:
+        return ndi_document(f"data/{document_type}", **properties)
+
+
+def _store_doc(session, doc, file_names, file_paths):
+    """Attach files to a document and add it to the database.
+
+    The single place in this module where a document acquires files and
+    enters the database, so a mistake in the document API is one
+    correction rather than several.
+
+    Files are ingested, so the originals may be deleted once the database
+    has copied them. Pass copies if the caller still needs them.
+    """
+    if len(file_names) != len(file_paths):
+        raise ValueError(
+            f"file_names and file_paths must be the same length, got "
+            f"{len(file_names)} and {len(file_paths)}")
+    for name, path in zip(file_names, file_paths):
+        if not os.path.isfile(path):
+            raise FileNotFoundError(
+                f"file {path!r} for document entry {name!r} does not exist")
+        doc = doc.add_file(name, path)
+    session.database_add(doc)
+    return doc
+
+
+def makeGeneList(session, gene_id, gene_name, genomeAssembly: str = "",
+                 annotationSource: str = "", geneIdNamespace: str = "",
+                 geneSymbolNamespace: str = "", label: str = ""):
+    """Create a ``geneList`` document from accessions and symbols.
+
+    ``n_genes``, ``gene_name_completeness`` and ``n_duplicate_gene_names``
+    are computed here rather than supplied. The last matters: symbols are
+    NOT unique in real annotations -- the opossum SAW gene list repeats
+    5,531 of them, PAX8 across 89 rows -- so a consumer that keys on
+    symbol silently discards most of such a gene. Recording the count lets
+    it know not to.
+
+    Args:
+        session: an ndi.session or ndi.dataset.
+        gene_id: accessions, one per gene row.
+        gene_name: symbols, one per gene row; '' where the annotation has
+            none.
+        genomeAssembly: the assembly the annotation is against. Describes
+            the ANNOTATION, not the animal -- the subject's species
+            belongs on an animalsubject or openminds_subject document.
+        annotationSource: e.g. 'Ensembl 110'.
+        geneIdNamespace: e.g. 'Ensembl'.
+        geneSymbolNamespace: e.g. 'HGNC'.
+        label: free text.
+
+    Returns:
+        The stored ndi_document.
+    """
+    gene_id = [str(g) for g in gene_id]
+    gene_name = [str(g) for g in gene_name]
+    n = len(gene_id)
+    if len(gene_name) != n:
+        raise ValueError(
+            f"gene_id and gene_name must be the same length, got {n} and "
+            f"{len(gene_name)}")
+
+    named = [g for g in gene_name if g]
+    completeness = (len(named) / n) if n else 0.0
+    # Symbols carried by more than one row.
+    seen: dict[str, int] = {}
+    for g in named:
+        seen[g] = seen.get(g, 0) + 1
+    n_dup = sum(1 for v in seen.values() if v > 1)
+
+    fd, tsv_path = tempfile.mkstemp(suffix=".tsv")
+    with os.fdopen(fd, "w") as fh:
+        fh.write("gene_index\tgene_id\tgene_name\n")
+        for i in range(n):
+            # gene_index is written explicitly and is ZERO-BASED, matching
+            # the tile files and NDI-matlab. A reader should assert it
+            # rather than trust that row order survived transport.
+            fh.write(f"{i}\t{gene_id[i]}\t{gene_name[i]}\n")
+
+    doc = _blank("geneList", geneList={
+        "label": label,
+        "n_genes": n,
+        "genome_assembly": genomeAssembly,
+        "gene_id_namespace": geneIdNamespace,
+        "gene_symbol_namespace": geneSymbolNamespace,
+        "annotation_source": annotationSource,
+        "gene_name_completeness": completeness,
+        "n_duplicate_gene_names": n_dup,
+    }) + session.newdocument()
+    try:
+        return _store_doc(session, doc, ["genes.tsv"], [tsv_path])
+    finally:
+        if os.path.exists(tsv_path):
+            os.unlink(tsv_path)
