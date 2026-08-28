@@ -1,0 +1,277 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/daq/reader/image/
+# The Primary Contract for the ndi.daq.reader.image namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Standalone functions
+# =========================================================================
+functions:
+
+  - name: emptymetadata
+    type: function
+    matlab_path: "+ndi/+daq/+reader/image.m"
+    python_path: "ndi/daq/reader/image/__init__.py"
+    output_arguments:
+      - name: m
+        type_python: "dict[str, Any]"
+    decision_log: >
+      MATLAB declares this as a static method of ndi.daq.reader.image;
+      Python exposes it as a module-level function, which is the Python
+      idiom for a constructor of a plain value with no object state. Both
+      return the same field set, mirroring ndr.reader.base.emptyimagemetadata
+      on the NDR side. ALL TIME FIELDS ARE IN SECONDS.
+
+  - name: _metadata_to_json
+    type: function
+    matlab_path: null
+    python_path: "ndi/daq/reader/image/__init__.py"
+    input_arguments:
+      - name: m
+        type_python: "dict[str, Any]"
+    output_arguments:
+      - name: m
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Python-specific. json.dumps writes a bare NaN token for float NaN,
+      which is not valid JSON and which MATLAB's jsondecode cannot read.
+      MATLAB's jsonencode writes null for NaN, so replacing NaN with None
+      on write is both valid and the symmetric choice. No MATLAB
+      equivalent: MATLAB's encoder does this itself.
+
+  - name: _metadata_from_json
+    type: function
+    matlab_path: null
+    python_path: "ndi/daq/reader/image/__init__.py"
+    input_arguments:
+      - name: m
+        type_python: "dict[str, Any]"
+    output_arguments:
+      - name: m
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Python-specific inverse of _metadata_to_json, so that a write/read
+      round trip returns NaN where NaN went in.
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # =========================================================================
+  # ndi.daq.reader.image
+  # =========================================================================
+  - name: image
+    type: class
+    matlab_path: "+ndi/+daq/+reader/image.m"
+    matlab_last_sync_hash: "42e378c4"
+    python_path: "ndi/daq/reader/image/__init__.py"
+    python_class: "ndi_daq_reader_image"
+    inherits: "ndi.daq.reader"
+
+    properties:
+      - name: NDI_DAQREADER_CLASS
+        type_python: "str"
+        access: "class variable"
+        decision_log: "Value: 'ndi.daq.reader.image'. Exact match."
+
+    methods:
+      - name: numframes
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+        output_arguments:
+          - name: n
+            type_python: "int"
+        decision_log: >
+          Abstract; concrete subclasses override. MATLAB raises
+          ndi:daq:reader:image:abstract, Python raises NotImplementedError,
+          which is the Python idiom for the same condition.
+
+      - name: framesize
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+        output_arguments:
+          - name: sz
+            type_python: "list[int]"
+        decision_log: >
+          Abstract. Returns [Y X C Z T]. MATLAB returns a 1x5 double row
+          vector; Python returns a list of int, which is the natural
+          Python spelling of a fixed-length integer extent.
+
+      - name: dimensionorder
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+        output_arguments:
+          - name: order
+            type_python: "str"
+        decision_log: "Defaults to 'YXCZT'. Exact match."
+
+      - name: datatype
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+        output_arguments:
+          - name: dt
+            type_python: "str"
+        decision_log: >
+          Abstract. Returns a numeric class name. MATLAB spellings
+          ('uint16', 'single') and numpy dtype names coincide for every
+          type an image reader produces except single/float32, which a
+          concrete reader must report in its own language's spelling.
+
+      - name: frametimes
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+          - name: frameind
+            type_python: "Any"
+        output_arguments:
+          - name: t
+            type_python: "np.ndarray"
+        decision_log: >
+          Abstract. Semantic Parity: frameind is 1-based in both languages
+          (a user-facing frame number).
+
+      - name: readframes
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+          - name: frameind
+            type_python: "Any"
+          - name: select_c
+            type_python: "Any"
+          - name: select_z
+            type_python: "Any"
+        output_arguments:
+          - name: frames
+            type_python: "np.ndarray"
+        decision_log: >
+          Abstract. MATLAB takes 'SelectC'/'SelectZ' name-value options;
+          Python takes select_c/select_z keyword arguments, the Python
+          spelling of the same optional selection. Semantic Parity: all
+          three index arguments are 1-based.
+
+      - name: getchannelsepoch
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+        output_arguments:
+          - name: channels
+            type_python: "list[dict[str, Any]]"
+        decision_log: >
+          Default is a single 'image' channel named 'image1'. MATLAB
+          returns a struct array with fields name/type/time_channel;
+          Python returns a list of dicts with the same keys.
+
+      - name: metadata
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+        output_arguments:
+          - name: m
+            type_python: "dict[str, Any]"
+        decision_log: >
+          Standardized image-acquisition metadata; defaults to
+          emptymetadata(). MATLAB struct -> Python dict.
+
+      - name: ingest_epochfiles
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+          - name: epoch_id
+            type_python: "str"
+        output_arguments:
+          - name: d
+            type_python: "Any"
+        decision_log: >
+          Creates a daqreader_image_epochdata_ingested document plus a
+          flat frames.bin. The binary is written in column-major
+          (Fortran) order because MATLAB's fwrite consumes the array that
+          way; this is what makes a MATLAB-written and a Python-written
+          frames.bin byte-interchangeable.
+
+      - name: readframes_ingested
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+          - name: frameind
+            type_python: "Any"
+          - name: session
+            type_python: "Any"
+          - name: select_c
+            type_python: "Any"
+          - name: select_z
+            type_python: "Any"
+        output_arguments:
+          - name: frames
+            type_python: "np.ndarray"
+        decision_log: >
+          Reads frames.bin back column-major. MATLAB names the session
+          argument S and takes it third; Python names it session and
+          accepts it by keyword, so the selection options can be passed
+          without it.
+
+  # =========================================================================
+  # ndi.daq.reader.image.ndr
+  # =========================================================================
+  - name: ndr
+    type: class
+    matlab_path: "+ndi/+daq/+reader/+image/ndr.m"
+    matlab_last_sync_hash: "78c4c610"
+    python_path: "ndi/daq/reader/image/ndr.py"
+    python_class: "ndi_daq_reader_image_ndr"
+    inherits: "ndi.daq.reader.image"
+
+    properties:
+      - name: NDI_DAQREADER_CLASS
+        type_python: "str"
+        access: "class variable"
+        decision_log: "Value: 'ndi.daq.reader.image.ndr'. Exact match."
+
+      - name: ndr_reader_string
+        type_matlab: "char"
+        type_python: "str"
+        decision_log: >
+          The NDR reader type this bridge forwards to, e.g. 'tiffstack',
+          'prairieview'. Exact match.
+
+    methods:
+      - name: __init__
+        input_arguments:
+          - name: ndr_reader_string
+            type_python: "str"
+          - name: identifier
+            type_python: "str | None"
+          - name: session
+            type_python: "Any | None"
+          - name: document
+            type_python: "Any | None"
+        decision_log: >
+          DIVERGENCE, deliberate. MATLAB validates the reader string
+          against ndr.known_readers() in the constructor and errors on an
+          unknown string. NDR-python exposes no known_readers, so Python
+          defers validation to first use: constructing always succeeds and
+          an unknown string surfaces as an error from NDR on a data call.
+          This also lets a session naming an image DAQ system load and
+          report its structure on an installation whose NDR does not
+          implement that format yet, which is the difference between a
+          readable session and an unopenable one during an incremental
+          port.
+
+      - name: _forward
+        input_arguments:
+          - name: method
+            type_python: "str"
+        decision_log: >
+          Python-specific helper. Instantiates the NDR reader and calls
+          the named method, raising NotImplementedError with the reader
+          string and method name when NDR lacks it. NDR-python grew the
+          multichannel API before the frame API, so a missing frame
+          method is a version mismatch and is named as one rather than
+          surfacing as an AttributeError on an internal object.

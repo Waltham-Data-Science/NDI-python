@@ -1,0 +1,91 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/setup/file/navigator/
+# The Primary Contract for the ndi.setup.file.navigator namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # =========================================================================
+  # ndi.setup.file.navigator.vhPrairie2p
+  # =========================================================================
+  - name: vhPrairie2p
+    type: class
+    matlab_path: "+ndi/+setup/+file/+navigator/vhPrairie2p.m"
+    matlab_last_sync_hash: "94c711ee"
+    python_path: "ndi/setup/file/navigator/vhprairie2p.py"
+    python_class: "ndi_setup_file_navigator_vhPrairie2p"
+    inherits: "ndi.file.navigator"
+
+    properties:
+      - name: NDI_FILENAVIGATOR_CLASS
+        type_python: "str"
+        access: "class variable"
+        decision_log: "Value: 'ndi.setup.file.navigator.vhPrairie2p'. Exact match."
+
+      - name: INDEX_FILE
+        type_python: "str"
+        access: "class variable"
+        decision_log: >
+          Value: 'reference.txt'. MATLAB declares it in a Constant
+          properties block; Python uses a class variable, the equivalent.
+
+      - name: SYNC_FILE
+        type_python: "str"
+        access: "class variable"
+        decision_log: "Value: 'frametrigger.txt'. Exact match."
+
+      - name: FRAME_EXTENSIONS
+        type_python: "tuple[str, ...]"
+        access: "class variable"
+        decision_log: >
+          Python-specific. MATLAB inlines {'.tif','.tiff'} in nonTiffFiles;
+          naming it makes the same rule reachable from the class.
+
+    methods:
+      - name: epochid
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+          - name: epochfiles
+            type_python: "list[str] | None"
+        output_arguments:
+          - name: id
+            type_python: "str"
+        decision_log: >
+          Semantic Parity: epoch_number is 1-indexed. Returns the <BASE>
+          directory name, taken from the parent of epochfiles[0], which is
+          always <BASE>/reference.txt.
+
+      - name: selectfilegroups_disk
+        output_arguments:
+          - name: epochfiles_disk
+            type_python: "list[list[str]]"
+        decision_log: >
+          Assembles epochs from <BASE> / <BASE>-NNN directory pairs. The
+          default navigator cannot express this rule: the relationship
+          lives in the directory NAMES, and the '#' same-string symbol
+          matches only within one directory's file names. MATLAB returns a
+          cell array of cell arrays; Python returns a list of lists.
+
+      - name: _acquisition_dirs
+        matlab_path: "+ndi/+setup/+file/+navigator/vhPrairie2p.m"
+        decision_log: >
+          MATLAB name: acquisitionDirs (private static). Python uses the
+          leading-underscore convention for the same non-public status,
+          and snake_case per the Python naming rules for methods.
+
+      - name: _non_frame_files
+        matlab_path: "+ndi/+setup/+file/+navigator/vhPrairie2p.m"
+        decision_log: >
+          MATLAB name: nonTiffFiles (private static). Renamed to
+          _non_frame_files because the rule is "not an image frame", and
+          FRAME_EXTENSIONS names which extensions those are; TIFF is the
+          only format PrairieView writes today but the rule is about
+          frames, not about TIFF.

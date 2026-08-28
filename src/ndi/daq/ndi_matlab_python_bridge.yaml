@@ -954,6 +954,100 @@ classes:
         decision_log: "Mapped to Python __eq__ dunder method."
 
   # =========================================================================
+  # ndi.daq.system.image
+  # =========================================================================
+  - name: system_image
+    type: class
+    matlab_path: "+ndi/+daq/+system/image.m"
+    matlab_last_sync_hash: "f75a8514"
+    python_path: "ndi/daq/system_image.py"
+    python_class: "ndi_daq_system_image"
+    inherits: "ndi.daq.system"
+
+    properties:
+      - name: NDI_DAQSYSTEM_CLASS
+        type_python: "str"
+        access: "class variable"
+        decision_log: "Value: 'ndi.daq.system.image'. Exact match."
+
+    methods:
+      - name: __init__
+        decision_log: >
+          Errors if the daqreader is not an ndi.daq.reader.image. MATLAB
+          raises a plain error; Python raises TypeError, which is the
+          Python idiom for an argument of the wrong type.
+
+      - name: numframes
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: n
+            type_python: "int"
+        decision_log: >
+          Semantic Parity: epoch_number is 1-indexed. Delegates to the
+          reader, using the live files or the ingested-epoch document.
+
+      - name: framesize
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: sz
+            type_python: "list[int]"
+        decision_log: "Semantic Parity: epoch_number is 1-indexed. Returns [Y X C Z T]."
+
+      - name: frametimes
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+          - name: frameind
+            type_python: "Any"
+        output_arguments:
+          - name: t
+            type_python: "np.ndarray"
+        decision_log: "Semantic Parity: epoch_number and frameind are both 1-indexed."
+
+      - name: readframes
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+          - name: frameind
+            type_python: "Any"
+          - name: select_c
+            type_python: "Any"
+          - name: select_z
+            type_python: "Any"
+        output_arguments:
+          - name: frames
+            type_python: "np.ndarray"
+        decision_log: >
+          MATLAB takes 'SelectC'/'SelectZ' name-value options; Python
+          takes select_c/select_z keyword arguments. Semantic Parity: all
+          index arguments are 1-based.
+
+      - name: metadata
+        input_arguments:
+          - name: epoch_number
+            type_matlab: "integer"
+            type_python: "int"
+        output_arguments:
+          - name: m
+            type_python: "dict[str, Any]"
+        decision_log: "MATLAB struct -> Python dict. Time fields in seconds."
+
+      - name: _reader_call
+        matlab_path: null
+        decision_log: >
+          Python-specific helper. Every frame method resolves the epoch's
+          files then dispatches to the live method or its *_ingested twin;
+          MATLAB repeats that branch in each method.
+
+  # =========================================================================
   # ndi.daq.system.mfdaq
   # =========================================================================
   - name: system_mfdaq

@@ -1177,6 +1177,13 @@ class ndi_session(ABC):
 
                 return ndi_daq_system_mfdaq(session=self, document=document)
 
+            # Anything else that is registered builds through its own class
+            # (e.g. ndi.daq.system.image), so an image DAQ system does not
+            # silently degrade to the generic system and lose its frame API.
+            SysCls = get_class(daq_class_name)
+            if SysCls is not None:
+                return SysCls(session=self, document=document)
+
             from ..daq.system import ndi_daq_system
 
             return ndi_daq_system(session=self, document=document)

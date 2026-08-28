@@ -7,10 +7,14 @@ Python was indistinguishable from a session that simply had fewer DAQ
 systems.
 
 That is how ``vhprairieview`` -- added to NDI-matlab on 2026-07-20 and
-naming ``ndi.daq.reader.image.ndr``, which has no Python counterpart --
+naming ``ndi.daq.reader.image.ndr``, which had no Python counterpart --
 surfaced only as a symmetry test complaining that two summaries had
 different lengths. The real message, ``Unknown DAQ reader class:
 'ndi.daq.reader.image.ndr'``, was raised the whole time and thrown away.
+
+That particular class is ported now, so these tests use a reader class
+that genuinely does not exist. The behaviour under test is the reporting,
+not the gap that first exposed it.
 """
 
 from __future__ import annotations
@@ -38,13 +42,15 @@ GOOD = {
     "HasEpochDirectories": True,
 }
 
-# Same shape as vhprairieview: a reader class with no Python implementation.
+# Same shape vhprairieview had: a reader class with no Python
+# implementation. Deliberately a name nothing will ever register, so that
+# porting a real reader cannot quietly turn this test green.
 UNPORTABLE = {
     "Name": "unportable_sys",
-    "DaqSystemClass": "ndi.daq.system.image",
-    "DaqReaderClass": "ndi.daq.reader.image.ndr",
+    "DaqSystemClass": "ndi.daq.system.mfdaq",
+    "DaqReaderClass": "ndi.daq.reader.mfdaq.no_such_reader",
     "FileParameters": ["reference.txt"],
-    "DaqReaderFileParameters": "prairieview",
+    "DaqReaderFileParameters": "no_such_format",
     "HasEpochDirectories": False,
 }
 
@@ -76,7 +82,7 @@ def test_skipped_document_raises_a_warning(session_with_unportable):
     messages = [str(w.message) for w in record]
     assert any("unportable_sys" in m for m in messages), messages
     # The underlying reason must survive, not just the fact of a skip.
-    assert any("ndi.daq.reader.image.ndr" in m for m in messages), messages
+    assert any("ndi.daq.reader.mfdaq.no_such_reader" in m for m in messages), messages
 
 
 def test_loadable_systems_are_still_returned(session_with_unportable):
