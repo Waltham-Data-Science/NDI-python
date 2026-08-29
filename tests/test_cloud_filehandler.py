@@ -314,7 +314,14 @@ class TestGetOrCreateCloudClient:
 class TestTryCloudFetch:
     """Tests for ndi_session._try_cloud_fetch with mocked cloud calls."""
 
-    def _make_session_with_doc(self, tmp_path, file_info):
+    #: The file slot ``data/generic_file`` declares.  These documents used to be
+    #: class ``base`` carrying a made-up ``recording.dat``; DID-python's
+    #: validator (run by ``add_docs`` since 2026-08-28) rejects a file a
+    #: document's schema does not declare, so they now use the document class
+    #: that exists for carrying one arbitrary file.
+    FILE_SLOT = "generic_file.ext"
+
+    def _make_session_with_doc(self, tmp_path, file_info, doc_type="data/generic_file"):
         """Create a ndi_session_dir with a document containing given file_info."""
         from ndi.session.dir import ndi_session_dir
 
@@ -325,12 +332,24 @@ class TestTryCloudFetch:
         # Create and add a document with file_info
         from ndi.document import ndi_document
 
-        doc = ndi_document("base")
+        doc = ndi_document(doc_type)
         doc = doc.set_session_id(session.id())
+        if doc_type == "data/generic_file":
+            # generic_file.json ships "" for two double fields whose schema
+            # allows no empty value (parameters [0,10000000,1] -- three
+            # entries, so can-be-empty is off).  A blank generic_file document
+            # therefore cannot be added in either language; the defect is in
+            # the shared ndi_common JSON, so it is worked around here rather
+            # than patched in NDI-python's copy.  See PORTING_LOG.
+            doc.document_properties["generic_file"]["dateCreated"] = 0
+            doc.document_properties["generic_file"]["dateUpdated"] = 0
 
         # Inject file_info into the document properties
         props = doc.document_properties
-        props["files"] = {"file_info": file_info}
+        props["files"] = {
+            "file_list": [f.get("name") for f in file_info],
+            "file_info": file_info,
+        }
 
         session.database_add(doc)
         return session, doc
@@ -339,7 +358,7 @@ class TestTryCloudFetch:
         """_try_cloud_fetch returns True when ndic:// location is found and fetch succeeds."""
         file_info = [
             {
-                "name": "recording.dat",
+                "name": self.FILE_SLOT,
                 "locations": [
                     {
                         "uid": "uid_test",
@@ -357,7 +376,7 @@ class TestTryCloudFetch:
         with patch("ndi.cloud.filehandler.fetch_cloud_file") as mock_fetch:
             mock_fetch.return_value = True
             target = tmp_path / "target.bin"
-            result = session._try_cloud_fetch(doc, "recording.dat", target)
+            result = session._try_cloud_fetch(doc, self.FILE_SLOT, target)
 
         assert result is True
         mock_fetch.assert_called_once()
@@ -366,7 +385,7 @@ class TestTryCloudFetch:
         """_try_cloud_fetch returns False when no ndic:// location matches."""
         file_info = [
             {
-                "name": "recording.dat",
+                "name": self.FILE_SLOT,
                 "locations": [
                     {
                         "uid": "uid_test",
@@ -379,15 +398,19 @@ class TestTryCloudFetch:
 
         session, doc = self._make_session_with_doc(tmp_path, file_info)
         target = tmp_path / "target.bin"
-        result = session._try_cloud_fetch(doc, "recording.dat", target)
+        result = session._try_cloud_fetch(doc, self.FILE_SLOT, target)
 
         assert result is False
 
     def test_try_cloud_fetch_wrong_filename(self, tmp_path):
-        """_try_cloud_fetch returns False when filename doesn't match."""
+        """_try_cloud_fetch returns False when filename doesn't match.
+
+        The document carries its declared file; the caller asks for a name the
+        document does not have.
+        """
         file_info = [
             {
-                "name": "other_file.dat",
+                "name": self.FILE_SLOT,
                 "locations": [
                     {
                         "uid": "uid_test",
@@ -405,8 +428,12 @@ class TestTryCloudFetch:
         assert result is False
 
     def test_try_cloud_fetch_no_file_info(self, tmp_path):
-        """_try_cloud_fetch returns False for documents without file_info."""
-        session, doc = self._make_session_with_doc(tmp_path, [])
+        """_try_cloud_fetch returns False for documents without file_info.
+
+        ``base`` rather than ``generic_file``: a document that carries no file
+        is precisely a document whose class declares none.
+        """
+        session, doc = self._make_session_with_doc(tmp_path, [], doc_type="base")
         target = tmp_path / "target.bin"
         result = session._try_cloud_fetch(doc, "recording.dat", target)
 

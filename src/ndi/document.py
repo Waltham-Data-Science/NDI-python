@@ -784,21 +784,88 @@ class ndi_document:
         with open(json_path) as f:
             definition = json.load(f)
 
-        # Process superclasses recursively
-        if "document_class" in definition and "superclasses" in definition["document_class"]:
-            for sc in definition["document_class"]["superclasses"]:
-                sc_def = sc.get("definition", "")
-                if sc_def:
-                    # Extract document type from definition path
-                    sc_type = sc_def.replace("$NDIDOCUMENTPATH/", "").replace(".json", "")
-                    try:
-                        sc_props = ndi_document.read_blank_definition(sc_type)
-                        # Merge superclass properties
-                        for key, value in sc_props.items():
-                            if key != "document_class" and key not in definition:
-                                definition[key] = value
-                    except FileNotFoundError:
-                        pass  # Skip missing superclass definitions
+        # Process superclasses recursively.
+        #
+        # Three things are inherited, matching did.document._merge_superclasses
+        # and MATLAB's did.document: property groups, the dependency list, and
+        # the superclass list itself.  The last two were missing here, which is
+        # why documents built by NDI-python carried only their *direct*
+        # superclasses and only their *own* dependencies, while the schemas --
+        # written against MATLAB, where DID flattens both -- declare the
+        # transitive closure.  DID-python's validator compares the two, so the
+        # gap turned into "Dissimilar superclasses defined/found" on every
+        # ingestion document the moment add_docs began validating.
+        class_props = definition.get("document_class")
+        raw_superclasses = class_props.get("superclasses") if class_props else None
+        if isinstance(raw_superclasses, dict):  # MATLAB unwraps a 1-element cell
+            raw_superclasses = [raw_superclasses]
+
+        if raw_superclasses:
+            merged_superclasses: list[dict] = []
+            for sc in raw_superclasses:
+                sc_def = sc.get("definition", "") if isinstance(sc, dict) else sc
+                if not sc_def:
+                    continue
+
+                entry = dict(sc) if isinstance(sc, dict) else {"definition": sc_def}
+
+                # Extract document type from definition path
+                sc_type = sc_def.replace("$NDIDOCUMENTPATH/", "").replace(".json", "")
+                try:
+                    sc_props = ndi_document.read_blank_definition(sc_type)
+                except FileNotFoundError:
+                    # Skip missing superclass definitions, but keep the entry:
+                    # dropping it would silently shorten the superclass list.
+                    merged_superclasses.append(entry)
+                    continue
+
+                merged_superclasses.append(entry)
+
+                # The superclass's own superclasses join ours.  sc_props is
+                # already merged, so this is the whole transitive closure.
+                sc_class = sc_props.get("document_class") or {}
+                inherited = sc_class.get("superclasses")
+                if isinstance(inherited, dict):
+                    inherited = [inherited]
+                for item in inherited or []:
+                    if isinstance(item, dict) and "definition" in item:
+                        merged_superclasses.append(dict(item))
+
+                # Dependencies are unioned by name, this class winning.
+                own_depends = definition.get("depends_on")
+                sc_depends = sc_props.get("depends_on")
+                if isinstance(own_depends, dict):
+                    own_depends = [own_depends]
+                if isinstance(sc_depends, dict):
+                    sc_depends = [sc_depends]
+                if sc_depends:
+                    seen_names = set()
+                    unique_depends = []
+                    for dependency in list(own_depends or []) + list(sc_depends):
+                        name = (
+                            dependency.get("name") if isinstance(dependency, dict) else dependency
+                        )
+                        if name in seen_names:
+                            continue
+                        seen_names.add(name)
+                        unique_depends.append(dependency)
+                    definition["depends_on"] = unique_depends
+
+                # Merge superclass properties
+                for key, value in sc_props.items():
+                    if key not in ("document_class", "depends_on") and key not in definition:
+                        definition[key] = value
+
+            # Unique by definition string, preserving order.
+            seen_definitions = set()
+            unique_superclasses = []
+            for entry in merged_superclasses:
+                sc_def = entry.get("definition")
+                if sc_def in seen_definitions:
+                    continue
+                seen_definitions.add(sc_def)
+                unique_superclasses.append(entry)
+            definition["document_class"]["superclasses"] = unique_superclasses
 
         return definition
 

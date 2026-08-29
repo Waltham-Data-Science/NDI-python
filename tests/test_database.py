@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 
 from ndi import ndi_database, ndi_document, ndi_ido, ndi_query, open_database
-from ndi.common import timestamp
 
 
 @pytest.fixture
@@ -18,41 +17,43 @@ def temp_session():
     shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+# These fixtures build documents through ``ndi_document(type)`` rather than by
+# hand.  A hand-built ``document_class`` carries only ``class_name`` and
+# ``superclasses``; DID-python's validator (which ``add_docs`` now runs by
+# default) requires the full contract MATLAB has always written --
+# ``definition``, ``validation`` and ``property_list_name`` -- so a literal
+# stands in for a document NDI itself would never create.
+
+
 @pytest.fixture
-def sample_doc():
+def session_id():
+    """A syntactically valid session id (base.session_id must be a did UID)."""
+    return ndi_ido().id
+
+
+@pytest.fixture
+def sample_doc(session_id):
     """Create a sample document for testing."""
-    ido = ndi_ido()
     return ndi_document(
-        {
-            "base": {
-                "id": ido.id,
-                "datestamp": timestamp(),
-                "name": "test_doc",
-                "session_id": "session_123",
-            },
-            "document_class": {"class_name": "base", "superclasses": []},
-        }
+        "base",
+        **{
+            "base.name": "test_doc",
+            "base.session_id": session_id,
+        },
     )
 
 
 @pytest.fixture
-def element_doc():
+def element_doc(session_id):
     """Create a sample element document for testing."""
-    ido = ndi_ido()
     return ndi_document(
-        {
-            "base": {
-                "id": ido.id,
-                "datestamp": timestamp(),
-                "name": "electrode1",
-                "session_id": "session_123",
-            },
-            "document_class": {
-                "class_name": "element",
-                "superclasses": [{"definition": "$NDIDOCUMENTPATH/base.json"}],
-            },
-            "element": {"type": "probe", "reference": "ground"},
-        }
+        "element",
+        **{
+            "base.name": "electrode1",
+            "base.session_id": session_id,
+            "element.type": "probe",
+            "element.reference": "ground",
+        },
     )
 
 
@@ -103,21 +104,7 @@ class TestDatabaseAdd:
     def test_add_many(self, temp_session):
         """Test adding multiple documents."""
         db = ndi_database(temp_session)
-        docs = []
-        for i in range(3):
-            ido = ndi_ido()
-            doc = ndi_document(
-                {
-                    "base": {
-                        "id": ido.id,
-                        "datestamp": timestamp(),
-                        "name": f"doc_{i}",
-                        "session_id": "",
-                    },
-                    "document_class": {"class_name": "base", "superclasses": []},
-                }
-            )
-            docs.append(doc)
+        docs = [ndi_document("base", **{"base.name": f"doc_{i}"}) for i in range(3)]
 
         added = db.add_many(docs)
         assert len(added) == 3
@@ -235,19 +222,7 @@ class TestDatabaseSearch:
 
         # Add some documents
         for i in range(3):
-            ido = ndi_ido()
-            doc = ndi_document(
-                {
-                    "base": {
-                        "id": ido.id,
-                        "datestamp": timestamp(),
-                        "name": f"doc_{i}",
-                        "session_id": "",
-                    },
-                    "document_class": {"class_name": "base", "superclasses": []},
-                }
-            )
-            db.add(doc)
+            db.add(ndi_document("base", **{"base.name": f"doc_{i}"}))
 
         results = db.search()
         assert len(results) == 3
@@ -258,19 +233,7 @@ class TestDatabaseSearch:
 
         # Add documents with different names
         for name in ["alpha", "beta", "gamma"]:
-            ido = ndi_ido()
-            doc = ndi_document(
-                {
-                    "base": {
-                        "id": ido.id,
-                        "datestamp": timestamp(),
-                        "name": name,
-                        "session_id": "",
-                    },
-                    "document_class": {"class_name": "base", "superclasses": []},
-                }
-            )
-            db.add(doc)
+            db.add(ndi_document("base", **{"base.name": name}))
 
         # Search for specific name
         query = ndi_query("base.name") == "beta"
@@ -301,19 +264,7 @@ class TestDatabaseCounts:
         db = ndi_database(temp_session)
 
         for i in range(5):
-            ido = ndi_ido()
-            doc = ndi_document(
-                {
-                    "base": {
-                        "id": ido.id,
-                        "datestamp": timestamp(),
-                        "name": f"doc_{i}",
-                        "session_id": "",
-                    },
-                    "document_class": {"class_name": "base", "superclasses": []},
-                }
-            )
-            db.add(doc)
+            db.add(ndi_document("base", **{"base.name": f"doc_{i}"}))
 
         assert db.numdocs() == 5
 
@@ -323,20 +274,9 @@ class TestDatabaseCounts:
         added_ids = []
 
         for i in range(3):
-            ido = ndi_ido()
-            doc = ndi_document(
-                {
-                    "base": {
-                        "id": ido.id,
-                        "datestamp": timestamp(),
-                        "name": f"doc_{i}",
-                        "session_id": "",
-                    },
-                    "document_class": {"class_name": "base", "superclasses": []},
-                }
-            )
+            doc = ndi_document("base", **{"base.name": f"doc_{i}"})
             db.add(doc)
-            added_ids.append(ido.id)
+            added_ids.append(doc.id)
 
         all_ids = db.alldocids()
         assert len(all_ids) == 3
@@ -351,41 +291,22 @@ class TestDatabaseDependencies:
         """Test finding dependencies of a document."""
         db = ndi_database(temp_session)
 
-        # Create parent document
-        parent_ido = ndi_ido()
-        parent = ndi_document(
-            {
-                "base": {
-                    "id": parent_ido.id,
-                    "datestamp": timestamp(),
-                    "name": "parent",
-                    "session_id": "",
-                },
-                "document_class": {"class_name": "base", "superclasses": []},
-            }
-        )
+        # ``syncgraph`` stands in for a generic parent/child pair: its schema
+        # declares exactly one optional dependency (``syncrule_id``), so a
+        # child can name a parent without dragging in required siblings.
+        parent = ndi_document("base", **{"base.name": "parent"})
         db.add(parent)
 
-        # Create child document with dependency
-        child_ido = ndi_ido()
-        child = ndi_document(
-            {
-                "base": {
-                    "id": child_ido.id,
-                    "datestamp": timestamp(),
-                    "name": "child",
-                    "session_id": "",
-                },
-                "document_class": {"class_name": "base", "superclasses": []},
-                "depends_on": [{"name": "parent_doc", "value": parent_ido.id}],
-            }
-        )
+        child = ndi_document("daq/syncgraph", **{"base.name": "child"})
+        # ``syncrule_id`` is enumerated: syncgraph.json seeds no entry, so the
+        # child grows one (``syncrule_id1``) the way ndi.syncgraph does.
+        child = child.add_dependency_value_n("syncrule_id", parent.id)
         db.add(child)
 
         # Find child's dependencies
         deps = db.find_dependencies(child)
         assert len(deps) == 1
-        assert deps[0].id == parent_ido.id
+        assert deps[0].id == parent.id
 
 
 class TestDatabaseDependsSQLite:
@@ -395,42 +316,25 @@ class TestDatabaseDependsSQLite:
         """Test that a bare dict depends_on (MATLAB-style) is stored in doc_data."""
         db = ndi_database(temp_session)
 
-        parent_ido = ndi_ido()
-        parent = ndi_document(
-            {
-                "base": {
-                    "id": parent_ido.id,
-                    "datestamp": timestamp(),
-                    "name": "parent",
-                    "session_id": "",
-                },
-                "document_class": {"class_name": "base", "superclasses": []},
-            }
-        )
+        parent = ndi_document("base", **{"base.name": "parent"})
         db.add(parent)
 
-        child_ido = ndi_ido()
-        # Use bare dict (MATLAB-style) for depends_on
-        child = ndi_document(
-            {
-                "base": {
-                    "id": child_ido.id,
-                    "datestamp": timestamp(),
-                    "name": "child",
-                    "session_id": "",
-                },
-                "document_class": {"class_name": "base", "superclasses": []},
-                "depends_on": {"name": "parent_doc", "value": parent_ido.id},
-            }
-        )
+        # MATLAB's jsonencode unwraps a one-element cell array, so a document
+        # written by MATLAB carries ``depends_on`` as a bare struct rather than
+        # a list.  Written here deliberately in that shape.
+        child = ndi_document("daq/syncgraph", **{"base.name": "child"})
+        child.document_properties["depends_on"] = {
+            "name": "syncrule_id",
+            "value": parent.id,
+        }
         db.add(child)
 
         # Verify depends_on was stored in doc_data by querying with depends_on
         from ndi.query import ndi_query
 
-        results = db.search(ndi_query("").depends_on("parent_doc", parent_ido.id))
+        results = db.search(ndi_query("").depends_on("syncrule_id", parent.id))
         assert len(results) == 1
-        assert results[0].id == child_ido.id
+        assert results[0].id == child.id
 
 
 class TestDatabasePaths:
@@ -463,19 +367,10 @@ class TestDatabaseRemoveMany:
 
         # Add documents with different types
         for name, doc_type in [("a", "alpha"), ("b", "alpha"), ("c", "beta")]:
-            ido = ndi_ido()
-            doc = ndi_document(
-                {
-                    "base": {
-                        "id": ido.id,
-                        "datestamp": timestamp(),
-                        "name": name,
-                        "session_id": "",
-                    },
-                    "document_class": {"class_name": "base", "superclasses": []},
-                    "meta": {"type": doc_type},
-                }
-            )
+            doc = ndi_document("base", **{"base.name": name})
+            # ``meta`` is not declared by base_schema.json; an undeclared extra
+            # property is carried through, which is what this test queries on.
+            doc.document_properties["meta"] = {"type": doc_type}
             db.add(doc)
 
         assert db.numdocs() == 3
