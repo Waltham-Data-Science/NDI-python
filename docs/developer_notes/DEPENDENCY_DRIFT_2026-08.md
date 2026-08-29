@@ -130,16 +130,23 @@ Reproduced with DID alone, no NDI involved. In NDI-python it breaks
 `session.database_rm` for any document with a binary attached
 (`tests/matlab_tests/test_database.py::TestNDIDocument::test_document_creation_and_io`).
 
-**There is no NDI-side fix** — the missing `DELETE` is inside DID's driver. The
-suggested repair is one statement in `_do_remove_doc`, beside the existing
-`doc_data` delete:
+**There is no NDI-side fix** — the missing `DELETE` is inside DID's driver.
+Fixed upstream in [VH-Lab/DID-python#39](https://github.com/VH-Lab/DID-python/pull/39),
+which adds the missing statement and a rollback (the failure also left the
+`branch_docs` delete sitting in an open transaction for the next commit on the
+connection to pick up).
 
-```python
-cursor.execute("DELETE FROM files WHERE doc_idx = ?", (doc_idx,))
-```
+**The fix is independent of DID-matlab; nothing there needs to change.**
+MATLAB's `do_remove_doc` deletes only the `branch_docs` row — the `docs` and
+`doc_data` deletes sit in a commented-out block under `% TODO - remove all
+document records if no branch references remain?`. Python implements that TODO,
+so only Python ever deletes the row the foreign key points at, and only Python
+can hit the constraint. The bridge recorded this pair as "Exact match", which
+is why the asymmetry went unnoticed; #39 corrects it.
 
-Held here as a **strict xfail** in `tests/test_did_integration.py`, so the day
-DID repairs it CI says so by name instead of staying quietly red.
+Held here as a **strict xfail** in two places — `tests/test_did_integration.py`
+and `tests/matlab_tests/test_database.py` — so the day #39 lands CI says so by
+name instead of staying quietly red.
 
 ---
 
@@ -308,6 +315,8 @@ be written, but it is now a port rather than a blocked one.
 **DID-python**
 
 1. `_do_remove_doc` must delete the document's `files` rows (§3). Blocking.
+   Submitted as [DID-python#39](https://github.com/VH-Lab/DID-python/pull/39);
+   the two strict xfails here come out when it merges.
 
 **NDI-matlab** (shared `ndi_common`, both languages)
 

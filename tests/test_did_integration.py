@@ -279,8 +279,9 @@ class TestBundledDefinitions:
         "Upstream DID-python bug: sqlitedb gained a 'files' table with "
         "FOREIGN KEY(doc_idx) REFERENCES docs(doc_idx) (commit 9997412), but "
         "_do_remove_doc still deletes only doc_data and docs, so removing any "
-        "document that carries a file raises sqlite3.IntegrityError. Reported "
-        "upstream; when DID fixes it this test passes and the marker goes."
+        "document that carries a file raises sqlite3.IntegrityError. Fixed "
+        "upstream in VH-Lab/DID-python#39; when that merges this test passes "
+        "and the marker comes out."
     ),
 )
 def test_removing_a_file_bearing_document(tmp_path):
