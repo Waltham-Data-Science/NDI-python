@@ -225,7 +225,6 @@ Fixed in **NDI-matlab first** (it leads) and mirrored here:
 
 | File | Defect | Fix |
 |---|---|---|
-| `schema_documents/apps/calculations/simple_calc_schema.json`, `…/simple_calc_v2_schema.json`, `schema_documents/apps/markgarbage/valid_interval_schema.json` | `"parameters": [-Inf,Inf,0]` — `Inf` is **not valid JSON**, so these schemas could not be parsed by either language and their document types could not be validated at all | `[-1.7976931348623157e308, 1.7976931348623157e308, 0]` — the largest finite double, exact in both `realmax` and Python |
 | `schema_documents/data/image_schema.json` | superclass named `imageStackParameters`; the definition's actual superclass is `imageStack_parameters` | renamed to match |
 | `schema_documents/ingestion/daqreader_epochdata_ingested_schema.json` | `superclasses: ["base"]`, but the definition names `base` **and** `epochid`, and the child class's schema already lists `epochid` | added `"epochid"` |
 | `database_documents/apps/calculators/simple_calc.json`, `apps/jrclust/jrclust_clusters.json`, and four `apps/vhlab_voltage2firingrate/*` | dependency default `"value": 0` — a number where every other definition uses `""`, which DID rejects as a non-character dependency value | `"value": ""` |
@@ -238,6 +237,50 @@ Python-side drift, re-synced from NDI-matlab:
 
 `tests/test_did_integration.py::test_every_bundled_json_parses` now keeps the
 whole `ndi_common` tree parseable.
+
+---
+
+## 4b. `[-Inf,Inf,0]` is not a defect — a correction
+
+An earlier pass on this work read `"parameters": [-Inf,Inf,0]` in
+`apps/calculations/simple_calc_schema.json`, `simple_calc_v2_schema.json` and
+`apps/markgarbage/valid_interval_schema.json`, saw Python's `json` reject it,
+and concluded the files were broken in both languages. **That was wrong**, and
+the substitution it prompted (the largest finite double) has been reverted.
+
+MATLAB's `jsondecode` accepts the bare tokens `Inf`, `-Inf` and `NaN`. Python's
+`json` accepts `Infinity` / `-Infinity` / `NaN` but not `Inf`. Only Python was
+failing.
+
+The evidence, rather than an appeal to what `jsondecode` ought to do: NDI-matlab
+PR #889 is the change that first made `testSimple` exercise the whole validation
+path — `verifySelfTests` → `run()` → `database_add` → `did.database/validate_docs`
+→ `get_document_schema` on the document's own `validation` pointer, which after
+that PR is `simple_calc_v2_schema.json`, the file containing `[-Inf,Inf,0]`.
+`testSimple` is collected by `TestSuite.fromFolder(tests, IncludingSubfolders=true)`
+and is neither a cloud nor a `Graphical` test. `run-tests.yml` run 1313
+(2026-08-26) is **green on a real MATLAB runner**, as is every run on `main`
+since. A `jsondecode` that rejected `-Inf` would have failed it.
+
+So the bound really is infinite and MATLAB really reads it. Rewriting the shared
+JSON to a finite bound would have narrowed what those schemas mean in the
+language that reads them correctly, to accommodate the parser in the language
+that does not. The reader is what needed fixing:
+[VH-Lab/DID-python#40](https://github.com/VH-Lab/DID-python/pull/40) widens bare
+`Inf` to `Infinity` outside strings in DID's two definition-file loaders.
+
+Until that pin lands, `apps/calculators/simple_calc` and
+`apps/markgarbage/valid_interval` sit in `KNOWN_UNVALIDATABLE_DEFINITIONS` with
+`ValidationFileBad` and a note to delete them when it does — they are the one
+group in that list that clears without anyone touching a definition file. The
+`test_every_bundled_json_parses` gate applies the same widening locally, so it
+measures the files rather than the reader.
+
+**General lesson for this kind of sweep:** "Python cannot parse it" is not the
+same as "it is malformed". Where the two languages read the same bytes, check
+what the language that owns the file actually does before calling the file
+wrong — a green CI run on the path that reads it is the cheapest proof
+available.
 
 ---
 
@@ -326,11 +369,7 @@ be written, but it is now a port rather than a blocked one.
 3. The blank-template values that violate their own schemas (§4a) — whether
    the template or the schema is wrong is the same question as `t0_t1`
    orientation and should be answered once for the whole family.
-4. `[-Inf,Inf,0]` was repaired here by substituting the largest finite double.
-   If the intent was genuinely unbounded, the alternative is teaching both
-   languages' schema readers to accept `Infinity`; that is a bigger change and
-   was not made.
-5. The three shared-JSON repairs above (`Inf`, `imageStackParameters`,
-   `"value": 0`) are on `claude/ndi-python-dependency-drift-uxa35e` in
-   NDI-matlab and want a MATLAB-side run before they go further — none of them
-   was executed against a MATLAB runtime here.
+4. The three shared-JSON repairs above (`imageStackParameters`, the ingestion
+   `epochid`, `"value": 0`) are on `claude/ndi-python-dependency-drift-uxa35e`
+   in NDI-matlab and want a MATLAB-side run before they go further — none was
+   executed against a MATLAB runtime here.

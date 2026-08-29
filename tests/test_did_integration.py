@@ -16,6 +16,7 @@ consequences are pinned here:
 from __future__ import annotations
 
 import json
+import re
 import warnings
 from pathlib import Path
 
@@ -162,6 +163,14 @@ class TestValidatedAdd:
 #: A type that starts validating must be deleted from this list; the test says
 #: so by name.  A type that stops validating fails the test.
 KNOWN_UNVALIDATABLE_DEFINITIONS = {
+    # These two are NOT defects in the shared JSON, and are the one group that
+    # will clear without anyone touching a definition file. Their schemas
+    # declare "parameters": [-Inf,Inf,0] -- MATLAB's jsondecode reads bare Inf,
+    # Python's json does not -- so the installed DID cannot load the schema at
+    # all and reports ValidationFileBad. Fixed in VH-Lab/DID-python#40; delete
+    # both entries once the did pin carries it.
+    "apps/calculators/simple_calc": "DID:Database:ValidationFileBad",
+    "apps/markgarbage/valid_interval": "DID:Database:ValidationFileBad",
     "apps/vhlab_voltage2firingrate/binnedspikeratevm": "DID:Database:PropertyFieldMissing",
     "apps/vhlab_voltage2firingrate/vmneuralresponseresiduals": "DID:Database:PropertyFieldMissing",
     "apps/vhlab_voltage2firingrate/vmspikefilteringparameters": "DID:Database:PropertyFieldMissing",
@@ -188,11 +197,32 @@ _BLANK_TEMPLATE_IDENTIFIERS = frozenset(
 )
 
 
+#: ``Inf`` outside a string. The string alternative comes first so a
+#: documentation string mentioning Inf is consumed whole and left alone; the
+#: word boundary keeps ``Infinity`` and ``Info`` intact. Same expression DID
+#: uses -- delete this and call ``did.validate.loads_matlab_json`` once the pin
+#: carries VH-Lab/DID-python#40.
+_MATLAB_INF = re.compile(r'"(?:[^"\\]|\\.)*"|\bInf\b')
+
+
+def _loads_as_matlab_reads(text):
+    """``json.loads``, tolerating MATLAB's bare ``Inf`` / ``-Inf``."""
+    try:
+        return json.loads(text)
+    except ValueError:
+        return json.loads(
+            _MATLAB_INF.sub(
+                lambda m: m.group(0) if m.group(0).startswith('"') else "Infinity",
+                text,
+            )
+        )
+
+
 def _bundled_document_types():
     root = Path(str(ndi_common_PathConstants.DOCUMENT_PATH))
     for path in sorted(root.rglob("*.json")):
         try:
-            raw = json.loads(path.read_text())
+            raw = _loads_as_matlab_reads(path.read_text())
         except ValueError:
             continue
         document_class = raw.get("document_class")
@@ -226,11 +256,24 @@ class TestBundledDefinitions:
     """Every bundled definition parses, resolves, and validates -- or is listed."""
 
     def test_every_bundled_json_parses(self):
+        """Every bundled file parses the way the languages actually read it.
+
+        Not ``json.loads``: MATLAB's ``jsondecode`` accepts the bare tokens
+        ``Inf``, ``-Inf`` and ``NaN``, and definition files written against it
+        use them -- ``simple_calc_schema.json`` and
+        ``valid_interval_schema.json`` declare ``"parameters": [-Inf,Inf,0]``
+        for a double with no bounds. Those files are correct; NDI-matlab's own
+        suite validates a simple_calc document against one of them. It is
+        Python's stricter parser that has to catch up, which DID does in
+        ``did.validate.loads_matlab_json`` (VH-Lab/DID-python#40). Until that
+        pin lands, this applies the same widening locally, so the test measures
+        the files rather than the reader.
+        """
         root = Path(str(ndi_common_PathConstants.COMMON_FOLDER))
         unparseable = []
         for path in sorted(root.rglob("*.json")):
             try:
-                json.loads(path.read_text())
+                _loads_as_matlab_reads(path.read_text())
             except ValueError as exc:
                 unparseable.append(f"{path.relative_to(root)}: {exc}")
         assert not unparseable, "unparseable JSON in ndi_common:\n" + "\n".join(unparseable)
