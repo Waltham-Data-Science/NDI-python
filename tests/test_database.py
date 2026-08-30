@@ -329,16 +329,33 @@ class TestDatabasePaths:
         assert db.database_path.exists()
         assert str(db.database_path).endswith("did-sqlite.sqlite")
 
-    def test_binary_path(self, temp_session):
-        """Test binary_path property."""
-        db = ndi_database(temp_session)
-        assert db.binary_path.exists()
+    def test_binary_path_is_dids_file_directory(self, temp_session):
+        """binary_path reports DID's FileDir, not a second store beside it.
 
-    def test_get_binary_path(self, temp_session, sample_doc):
-        """Test get_binary_path method."""
+        NDI used to keep its own ``<db>/files`` directory and name files
+        ``{doc_id}_{filename}``. Since #65 files are DID's, as they already
+        were in NDI-matlab, so this must agree with where DID actually puts
+        them -- ``files/`` beside the database file.
+        """
         db = ndi_database(temp_session)
-        path = db.get_binary_path(sample_doc, "data.bin")
-        assert str(path).endswith(f"{sample_doc.id}_data.bin")
+        assert db.binary_path == Path(db._driver._db._file_dir())
+        assert db.binary_path.name == "files"
+
+    def test_the_composed_path_api_is_gone(self, temp_session):
+        """``get_binary_path`` handed back a path without saying if anything
+        was there, and composed it in a layout only NDI-python ever used.
+        ``open_binary`` / ``exist_binary`` ask DID instead."""
+        db = ndi_database(temp_session)
+        assert not hasattr(db, "get_binary_path")
+        assert hasattr(db, "open_binary")
+        assert hasattr(db, "exist_binary")
+
+    def test_exist_binary_is_false_for_a_document_with_no_file(self, temp_session, sample_doc):
+        db = ndi_database(temp_session)
+        db.add(sample_doc)
+        found, path = db.exist_binary(sample_doc, "data.bin")
+        assert found is False
+        assert path is None
 
 
 class TestDatabaseRemoveMany:

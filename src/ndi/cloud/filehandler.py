@@ -275,3 +275,39 @@ def updateFileInfoForLocalFiles(
 
 # Backward-compatible alias
 rewrite_file_info_for_cloud = updateFileInfoForRemoteFiles
+
+
+def download_file_from_cloud(
+    dest_path: str | Path,
+    source_path: str,
+    client: CloudClient | None = None,
+) -> None:
+    """Retrieve a remote file for DID, satisfying its ``custom_file_handler``.
+
+    DID downloads nothing itself, in either language. Both ``add_docs`` and
+    ``open_doc`` take a ``custom_file_handler(dest_path, source_path)`` that a
+    downstream package supplies; this is NDI's, and the counterpart of the
+    ``@download_file_from_cloud`` handle NDI-matlab's ``didsqlite.m`` passes to
+    ``add_docs`` and ``open_doc``.
+
+    Note the argument order. DID calls ``handler(dest_path, source_path)`` --
+    destination first -- while :func:`fetch_cloud_file` takes the URI first.
+    This wrapper exists mostly to get that the right way round in one place.
+
+    A location that is not an ``ndic://`` URI is left alone: DID only calls
+    this for locations it has already decided are remote, and a scheme NDI
+    does not serve should surface as "no file was produced" from DID rather
+    than as a confusing parse error from here.
+
+    Args:
+        dest_path: Where DID expects the file to exist when this returns.
+        source_path: The remote location recorded for the file.
+        client: Authenticated client; falls back to the ambient one.
+
+    Raises:
+        CloudError: If the download fails. DID reports the failure against the
+            location that produced it.
+    """
+    if not str(source_path).startswith(NDIC_SCHEME):
+        return
+    fetch_cloud_file(str(source_path), dest_path, client=client)

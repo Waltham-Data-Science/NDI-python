@@ -359,44 +359,7 @@ class ndi_session(ABC):
 
             self._database.add(doc)
 
-            # Ingest binary files: copy from original location to binary dir
-            self._ingest_binary_files(doc)
-
         return self
-
-    def _ingest_binary_files(self, doc: ndi_document) -> None:
-        """Copy binary file attachments into the database's binary directory.
-
-        For each file location with ``ingest=True``, the source file is
-        copied to ``<binary_dir>/<doc.id>_<filename>`` so that
-        ``database_openbinarydoc`` can find it.
-        """
-        import shutil
-
-        if self._database is None:
-            return
-        props = doc.document_properties
-        files = props.get("files", {})
-        if not isinstance(files, dict):
-            return
-        for fi in files.get("file_info", []):
-            name = fi.get("name", "")
-            if not name:
-                continue
-            for loc in fi.get("locations", []):
-                if not loc.get("ingest", False):
-                    continue
-                source = loc.get("location", "")
-                if not source:
-                    continue
-                from pathlib import Path
-
-                src_path = Path(source)
-                if not src_path.exists():
-                    continue
-                dest_path = self._database.get_binary_path(doc, name)
-                dest_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(str(src_path), str(dest_path))
 
     def database_rm(
         self,
@@ -523,17 +486,19 @@ class ndi_session(ABC):
         if doc is None:
             raise FileNotFoundError(f"ndi_document {doc_id} not found")
 
-        file_path = self._database.get_binary_path(doc, filename)
-        if not file_path.exists():
-            # Attempt on-demand fetch from cloud via ndic:// protocol
-            if self._try_cloud_fetch(doc, filename, file_path):
-                return _binary_handle(file_path)
+        # DID resolves the location and retrieves a remote one through NDI's
+        # handler, exactly as NDI-matlab's do_openbinarydoc does. It raises
+        # FileAccessError -- a FileNotFoundError -- when nothing is reachable,
+        # naming the locations it tried, so no existence check is needed here.
+        try:
+            file_path = self._database.open_binary(doc_id, filename)
+        except FileNotFoundError as exc:
             raise FileNotFoundError(
                 f"Binary file '{filename}' not found for document {doc_id}. "
                 f"If this is a cloud dataset, ensure NDI_CLOUD_USERNAME and "
                 f"NDI_CLOUD_PASSWORD environment variables are set, or pass "
-                f"a cloud_client to the session/dataset."
-            )
+                f"a cloud_client to the session/dataset. ({exc})"
+            ) from exc
 
         return _binary_handle(file_path)
 
@@ -560,8 +525,7 @@ class ndi_session(ABC):
         if doc is None:
             return False, None
 
-        file_path = self._database.get_binary_path(doc, filename)
-        return file_path.exists(), file_path
+        return self._database.exist_binary(doc_id, filename)
 
     def database_closebinarydoc(self, file_obj: Any) -> None:
         """
@@ -572,87 +536,6 @@ class ndi_session(ABC):
         """
         if hasattr(file_obj, "close"):
             file_obj.close()
-
-    def _try_cloud_fetch(
-        self,
-        doc: ndi_document,
-        filename: str,
-        target_path: Path,
-    ) -> bool:
-        """Attempt to fetch a binary file from NDI Cloud via ndic:// protocol.
-
-        Scans the document's file_info for an ``ndic://`` location matching
-        *filename* and downloads the file on demand.
-
-        Args:
-            doc: The document that owns the file.
-            filename: Name of the binary file to fetch.
-            target_path: Local path where the file should be saved.
-
-        Returns:
-            True if the file was fetched successfully, False otherwise.
-        """
-        try:
-            from ..cloud.filehandler import NDIC_SCHEME, fetch_cloud_file
-        except ImportError:
-            return False
-
-        props = doc.document_properties
-        files = props.get("files", {})
-        if not isinstance(files, dict):
-            return False
-
-        file_info = files.get("file_info")
-        if file_info is None:
-            return False
-
-        # Normalise to list
-        if isinstance(file_info, dict):
-            file_info = [file_info]
-        if not isinstance(file_info, list):
-            return False
-
-        for fi in file_info:
-            if not isinstance(fi, dict):
-                continue
-            if fi.get("name", "") != filename:
-                continue
-
-            locations = fi.get("locations")
-            if locations is None:
-                continue
-            if isinstance(locations, dict):
-                locations = [locations]
-            if not isinstance(locations, list):
-                continue
-
-            for loc in locations:
-                if not isinstance(loc, dict):
-                    continue
-                location = loc.get("location", "")
-                if not location.startswith(NDIC_SCHEME):
-                    continue
-
-                try:
-                    return fetch_cloud_file(
-                        location,
-                        target_path,
-                        client=self._cloud_client,
-                    )
-                except Exception as exc:
-                    logger.debug(
-                        "Cloud fetch failed for %s: %s",
-                        location,
-                        exc,
-                        exc_info=True,
-                    )
-                    return False
-
-        return False
-
-    # =========================================================================
-    # ndi_time_syncgraph Methods
-    # =========================================================================
 
     def syncgraph_addrule(self, rule: ndi_time_syncrule) -> ndi_session:
         """
