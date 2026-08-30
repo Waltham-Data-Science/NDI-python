@@ -584,6 +584,104 @@ class TestSessionSyncGraph:
         except FileNotFoundError:
             pytest.skip("Schema not available")
 
+    def test_second_addrule_keeps_first_rules_document(self, session):
+        """A rule that survives an update keeps its document, and its id.
+
+        _update_syncgraph_in_db used to delete every syncrule document and
+        re-add documents built from the same rule objects, which carry the
+        original ids. DID retires the id of a document removed from its last
+        branch and refuses it on any later add, so this second add raised.
+        It needs two adds: a single add, or an add followed by removing the
+        only rule, never re-adds anything (NDI-python#67).
+        """
+        from ndi.time.syncrule.filematch import ndi_time_syncrule_filematch
+
+        try:
+            session.syncgraph_addrule(ndi_time_syncrule_filematch({"number_fullpath_matches": 2}))
+            first_id = session.syncgraph.rules[0].id
+            assert session.database.read(first_id) is not None
+
+            session.syncgraph_addrule(ndi_time_syncrule_filematch({"number_fullpath_matches": 3}))
+        except FileNotFoundError:
+            pytest.skip("Schema not available")
+
+        assert len(session.syncgraph.rules) == 2
+        assert session.syncgraph.rules[0].id == first_id
+        assert session.database.read(first_id) is not None
+
+        rule_docs = session.database_search(ndi_query("").isa("syncrule"))
+        assert len(rule_docs) == 2
+        assert {doc.id for doc in rule_docs} == {rule.id for rule in session.syncgraph.rules}
+
+    def test_syncgraph_document_references_every_rule(self, session):
+        """The rebuilt syncgraph must depend on the survivor as well as the new rule."""
+        from ndi.time.syncrule.filematch import ndi_time_syncrule_filematch
+
+        try:
+            session.syncgraph_addrule(ndi_time_syncrule_filematch({"number_fullpath_matches": 2}))
+            session.syncgraph_addrule(ndi_time_syncrule_filematch({"number_fullpath_matches": 3}))
+        except FileNotFoundError:
+            pytest.skip("Schema not available")
+
+        graph_docs = session.database_search(ndi_query("").isa("syncgraph"))
+        assert len(graph_docs) == 1
+        assert graph_docs[0].id == session.syncgraph.id
+
+        _, deps = graph_docs[0].dependency()
+        referenced = {dep["value"] for dep in deps}
+        assert referenced == {rule.id for rule in session.syncgraph.rules}
+
+    def test_third_addrule_keeps_both_survivors(self, session):
+        """Two survivors on one update, not just one."""
+        from ndi.time.syncrule.filematch import ndi_time_syncrule_filematch
+
+        try:
+            session.syncgraph_addrule(ndi_time_syncrule_filematch({"number_fullpath_matches": 2}))
+            session.syncgraph_addrule(ndi_time_syncrule_filematch({"number_fullpath_matches": 3}))
+            kept = [rule.id for rule in session.syncgraph.rules]
+
+            session.syncgraph_addrule(ndi_time_syncrule_filematch({"number_fullpath_matches": 4}))
+        except FileNotFoundError:
+            pytest.skip("Schema not available")
+
+        assert len(session.syncgraph.rules) == 3
+        for rule_id in kept:
+            assert session.database.read(rule_id) is not None
+        assert len(session.database_search(ndi_query("").isa("syncrule"))) == 3
+
+    def test_rmrule_removes_only_that_rules_document(self, session):
+        """Removing one of two rules leaves the survivor's document alone."""
+        from ndi.time.syncrule.filematch import ndi_time_syncrule_filematch
+
+        try:
+            session.syncgraph_addrule(ndi_time_syncrule_filematch({"number_fullpath_matches": 2}))
+            session.syncgraph_addrule(ndi_time_syncrule_filematch({"number_fullpath_matches": 3}))
+            removed_id = session.syncgraph.rules[0].id
+            survivor_id = session.syncgraph.rules[1].id
+
+            session.syncgraph_rmrule(0)
+        except FileNotFoundError:
+            pytest.skip("Schema not available")
+
+        assert len(session.syncgraph.rules) == 1
+        assert session.syncgraph.rules[0].id == survivor_id
+        assert session.database.read(removed_id) is None
+        assert session.database.read(survivor_id) is not None
+        assert len(session.database_search(ndi_query("").isa("syncrule"))) == 1
+
+    def test_rmrule_of_only_rule_leaves_no_syncrule_documents(self, session):
+        """Removing the only rule leaves nothing behind."""
+        from ndi.time.syncrule.filematch import ndi_time_syncrule_filematch
+
+        try:
+            session.syncgraph_addrule(ndi_time_syncrule_filematch({"number_fullpath_matches": 2}))
+            session.syncgraph_rmrule(0)
+        except FileNotFoundError:
+            pytest.skip("Schema not available")
+
+        assert len(session.syncgraph.rules) == 0
+        assert session.database_search(ndi_query("").isa("syncrule")) == []
+
 
 # ==============================================================================
 # Integration Tests

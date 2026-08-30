@@ -691,19 +691,12 @@ class ndi_session(ABC):
         if self._syncgraph is None or self._database is None:
             return
 
-        # Remove old syncgraph docs
         old_docs = self.database_search(
             ndi_query("").isa("syncgraph") & (ndi_query("base.session_id") == self.id())
         )
-        for doc in old_docs:
-            self._database.remove(doc)
-
-        # Remove old syncrule docs
         old_rules = self.database_search(
             ndi_query("").isa("syncrule") & (ndi_query("base.session_id") == self.id())
         )
-        for doc in old_rules:
-            self._database.remove(doc)
 
         # Rebuild the syncgraph so the documents about to be written carry a
         # fresh id, as NDI-matlab's update_syncgraph_in_db does:
@@ -720,14 +713,43 @@ class ndi_session(ABC):
             rebuilt.add_rule(rule)
         self._syncgraph = rebuilt
 
+        # That covers the syncgraph and nothing else. The syncrules are not
+        # rebuilt: add_rule appends the object it is handed without cloning it,
+        # and syncrule.new_document() uses that object's id. Removing every
+        # syncrule document and re-adding documents built from the rules that
+        # survived would hand DID ids it has just retired, so the second update
+        # of a syncgraph that keeps a rule would raise. Touch only the
+        # difference instead -- remove the documents of rules that are actually
+        # gone, add the documents of rules that are actually new, and leave the
+        # survivors where they are. NDI-matlab#898 / NDI-python#67; the choice
+        # among the options there was made in NDI-matlab, which this mirrors.
+        rule_ids = {rule.id for rule in self._syncgraph.rules}
+        stored_rule_ids = {doc.id for doc in old_rules}
+        stale_rule_docs = [doc for doc in old_rules if doc.id not in rule_ids]
+
+        # Delete before adding, matching MATLAB: there the removal of a syncrule
+        # document cascades to whatever depends on it, which would include the
+        # syncgraph document being written.
+        for doc in old_docs:
+            self._database.remove(doc)
+        for doc in stale_rule_docs:
+            self._database.remove(doc)
+
+        # new_document() returns the syncgraph document first and then one
+        # document per rule, each carrying that rule's id.
+        generated = self._syncgraph.new_document()
+        if not generated:
+            return
+        docs_to_add = [generated[0]] + [
+            doc for doc in generated[1:] if doc.id not in stored_rule_ids
+        ]
+
         # Add the whole set in one call, as MATLAB's database_add(newdocs)
-        # does. new_document() returns the syncgraph first and its syncrule
-        # documents after it, and the syncgraph depends on those rules --
-        # adding one at a time validates the syncgraph against a batch that
-        # does not yet contain them, which DID rejects as a dangling
-        # dependency now that enumerated names like "syncrule_id_1" have their
-        # values checked (DID-python#41).
-        new_docs = [doc.set_session_id(self.id()) for doc in self._syncgraph.new_document()]
+        # does. The syncgraph depends on its rules -- adding one at a time
+        # validates the syncgraph against a batch that does not yet contain
+        # them, which DID rejects as a dangling dependency now that enumerated
+        # names like "syncrule_id_1" have their values checked (DID-python#41).
+        new_docs = [doc.set_session_id(self.id()) for doc in docs_to_add]
         if new_docs:
             self._database.add_many(new_docs)
 
