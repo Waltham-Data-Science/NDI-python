@@ -311,133 +311,107 @@ class TestGetOrCreateCloudClient:
 # ---------------------------------------------------------------------------
 
 
-class TestTryCloudFetch:
-    """Tests for ndi_session._try_cloud_fetch with mocked cloud calls."""
+class TestCloudRetrievalThroughDID:
+    """Cloud retrieval reaches DID through the custom_file_handler contract.
 
-    #: The file slot ``data/generic_file`` declares.  These documents used to be
-    #: class ``base`` carrying a made-up ``recording.dat``; DID-python's
-    #: validator (run by ``add_docs`` since 2026-08-28) rejects a file a
-    #: document's schema does not declare, so they now use the document class
-    #: that exists for carrying one arbitrary file.
+    These replace the old ``TestTryCloudFetch`` suite. ``_try_cloud_fetch``
+    was NDI reaching around DID: it composed a path in NDI's own binary store
+    and downloaded into it. Since #65 files belong to DID in Python as they
+    already did in MATLAB, and DID calls back into NDI for retrieval through
+    ``custom_file_handler(dest_path, source_path)`` -- the counterpart of the
+    ``@download_file_from_cloud`` handle NDI-matlab's didsqlite.m passes.
+
+    The behaviour under test is the same; what changed is who calls whom.
+    """
+
     FILE_SLOT = "generic_file.ext"
 
-    def _make_session_with_doc(self, tmp_path, file_info, doc_type="data/generic_file"):
-        """Create a ndi_session_dir with a document containing given file_info."""
+    def test_ndic_location_is_downloaded(self, tmp_path):
+        """An ndic:// source is fetched to the destination DID asked for."""
+        from ndi.cloud.filehandler import download_file_from_cloud
+
+        dest = tmp_path / "did_wants_it_here.bin"
+        with patch("ndi.cloud.filehandler.fetch_cloud_file") as mock_fetch:
+            download_file_from_cloud(dest, "ndic://ds_test/uid_test")
+
+        mock_fetch.assert_called_once()
+        args, kwargs = mock_fetch.call_args
+        # DID's contract is (dest, source); fetch_cloud_file takes (uri, target).
+        # Getting that the right way round is the whole job of this wrapper.
+        assert args[0] == "ndic://ds_test/uid_test"
+        assert args[1] == dest
+
+    def test_non_ndic_location_is_left_alone(self, tmp_path):
+        """A scheme NDI does not serve produces no file, and no parse error.
+
+        DID reports "custom_file_handler did not produce a file", naming the
+        location it could not reach -- a better error than a ValueError raised
+        from inside the handler about a URI it was never meant to parse.
+        """
+        from ndi.cloud.filehandler import download_file_from_cloud
+
+        dest = tmp_path / "unused.bin"
+        with patch("ndi.cloud.filehandler.fetch_cloud_file") as mock_fetch:
+            download_file_from_cloud(dest, "s3://somewhere/else")
+
+        mock_fetch.assert_not_called()
+        assert not dest.exists()
+
+    def test_every_add_path_hands_did_the_handler(self, tmp_path):
+        """Single and batch adds must both pass it.
+
+        They are separate call sites, and the batch one was missed at first:
+        a lone add would retrieve a remote file and the same documents added
+        together would not. downloadDataset and dataset ingestion both take
+        the batch path, so that is the one that matters most.
+        """
+        from ndi.document import ndi_document
+        from ndi.session.dir import ndi_session_dir
+
+        session_dir = tmp_path / "session_paths"
+        session_dir.mkdir()
+        session = ndi_session_dir("test_session", session_dir)
+        db = session._database
+
+        doc = ndi_document("base").set_session_id(session.id())
+
+        with patch.object(db._driver._db, "add_docs") as mock_add:
+            db._driver.add(doc.document_properties)
+            assert (
+                mock_add.call_args.kwargs.get("custom_file_handler") is not None
+            ), "single add must hand DID the retriever"
+
+        with patch.object(db._driver._db, "add_docs") as mock_add:
+            db.add_many([doc])
+            assert (
+                mock_add.call_args.kwargs.get("custom_file_handler") is not None
+            ), "batch add must hand DID the retriever too"
+
+    def test_the_handler_reaches_did_from_the_driver(self, tmp_path):
+        """The wiring, not just the handler: DID is given NDI's retriever.
+
+        Without this the handler could be perfect and never called. Asserted
+        on the driver's add path, which is where NDI-matlab passes it too.
+        """
         from ndi.session.dir import ndi_session_dir
 
         session_dir = tmp_path / "session"
         session_dir.mkdir()
         session = ndi_session_dir("test_session", session_dir)
 
-        # Create and add a document with file_info
-        from ndi.document import ndi_document
+        driver = session._database._driver
+        with patch.object(driver._db, "add_docs") as mock_add:
+            from ndi.document import ndi_document
 
-        doc = ndi_document(doc_type)
-        doc = doc.set_session_id(session.id())
-        if doc_type == "data/generic_file":
-            # generic_file.json ships "" for two double fields whose schema
-            # allows no empty value (parameters [0,10000000,1] -- three
-            # entries, so can-be-empty is off).  A blank generic_file document
-            # therefore cannot be added in either language; the defect is in
-            # the shared ndi_common JSON, so it is worked around here rather
-            # than patched in NDI-python's copy.  See PORTING_LOG.
-            doc.document_properties["generic_file"]["dateCreated"] = 0
-            doc.document_properties["generic_file"]["dateUpdated"] = 0
+            doc = ndi_document("base").set_session_id(session.id())
+            driver.add(doc.document_properties)
 
-        # Inject file_info into the document properties
-        props = doc.document_properties
-        props["files"] = {
-            "file_list": [f.get("name") for f in file_info],
-            "file_info": file_info,
-        }
-
-        session.database_add(doc)
-        return session, doc
-
-    def test_try_cloud_fetch_with_ndic_uri(self, tmp_path):
-        """_try_cloud_fetch returns True when ndic:// location is found and fetch succeeds."""
-        file_info = [
-            {
-                "name": self.FILE_SLOT,
-                "locations": [
-                    {
-                        "uid": "uid_test",
-                        "location": "ndic://ds_test/uid_test",
-                        "location_type": "ndicloud",
-                        "ingest": 0,
-                        "delete_original": 0,
-                    }
-                ],
-            }
-        ]
-
-        session, doc = self._make_session_with_doc(tmp_path, file_info)
-
+        _, kwargs = mock_add.call_args
+        handler = kwargs.get("custom_file_handler")
+        assert handler is not None, "DID must be given NDI's retriever on add"
         with patch("ndi.cloud.filehandler.fetch_cloud_file") as mock_fetch:
-            mock_fetch.return_value = True
-            target = tmp_path / "target.bin"
-            result = session._try_cloud_fetch(doc, self.FILE_SLOT, target)
-
-        assert result is True
+            handler(str(tmp_path / "x.bin"), "ndic://ds/uid")
         mock_fetch.assert_called_once()
-
-    def test_try_cloud_fetch_no_ndic_uri(self, tmp_path):
-        """_try_cloud_fetch returns False when no ndic:// location matches."""
-        file_info = [
-            {
-                "name": self.FILE_SLOT,
-                "locations": [
-                    {
-                        "uid": "uid_test",
-                        "location": "/local/path/recording.dat",
-                        "location_type": "file",
-                    }
-                ],
-            }
-        ]
-
-        session, doc = self._make_session_with_doc(tmp_path, file_info)
-        target = tmp_path / "target.bin"
-        result = session._try_cloud_fetch(doc, self.FILE_SLOT, target)
-
-        assert result is False
-
-    def test_try_cloud_fetch_wrong_filename(self, tmp_path):
-        """_try_cloud_fetch returns False when filename doesn't match.
-
-        The document carries its declared file; the caller asks for a name the
-        document does not have.
-        """
-        file_info = [
-            {
-                "name": self.FILE_SLOT,
-                "locations": [
-                    {
-                        "uid": "uid_test",
-                        "location": "ndic://ds_test/uid_test",
-                        "location_type": "ndicloud",
-                    }
-                ],
-            }
-        ]
-
-        session, doc = self._make_session_with_doc(tmp_path, file_info)
-        target = tmp_path / "target.bin"
-        result = session._try_cloud_fetch(doc, "recording.dat", target)
-
-        assert result is False
-
-    def test_try_cloud_fetch_no_file_info(self, tmp_path):
-        """_try_cloud_fetch returns False for documents without file_info.
-
-        ``base`` rather than ``generic_file``: a document that carries no file
-        is precisely a document whose class declares none.
-        """
-        session, doc = self._make_session_with_doc(tmp_path, [], doc_type="base")
-        target = tmp_path / "target.bin"
-        result = session._try_cloud_fetch(doc, "recording.dat", target)
-
-        assert result is False
 
 
 # ---------------------------------------------------------------------------

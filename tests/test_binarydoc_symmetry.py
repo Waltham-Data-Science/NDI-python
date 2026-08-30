@@ -9,6 +9,8 @@ different name.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from ndi.document import ndi_document
@@ -49,7 +51,14 @@ def test_handle_carries_fullpathfilename(session_with_binary):
             "against that API must work here too"
         )
         assert fh.fullpathfilename == fh.name
-        assert fh.fullpathfilename.endswith(name)
+        # Not endswith(name). Files belong to DID now (#65), and DID stores an
+        # ingested copy at <FileDir>/<uid> in BOTH languages -- DID-matlab's
+        # sqlitedb.m builds the same fullfile(this_obj.FileDir, uid). The old
+        # assertion pinned NDI-python's private "{doc_id}_{filename}" scheme,
+        # which never existed in MATLAB and is what #65 replaced. What the
+        # test is actually for -- that the handle answers to MATLAB's
+        # attribute name, and that the path is real -- is unchanged.
+        assert Path(fh.fullpathfilename).is_file()
     finally:
         S.database_closebinarydoc(fh)
 
