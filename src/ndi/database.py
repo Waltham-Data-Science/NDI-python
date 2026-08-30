@@ -238,22 +238,6 @@ class ndi_database:
         db_path = db_dir / "did-sqlite.sqlite"
         self._driver = SQLiteDriver(db_path, **backend_kwargs)
 
-        # Create DID's file directory up front. DID-python's _file_dir() only
-        # computes the path; nothing creates it until the first file is
-        # ingested, so a database that has never stored one has no files/ at
-        # all. MATLAB's .ndi has it from the start:
-        #
-        #   did-sqlite.sqlite  files  ndi_object_type.txt
-        #   reference.txt      unique_reference.txt
-        #
-        # and the symmetry tests compare that listing, so a lazily-created
-        # directory reads as a missing entry (#73).
-        #
-        # Arguably this belongs in DID-python, next to _file_dir() itself --
-        # DID owns the directory. Done here because NDI is what creates the
-        # database, and this keeps the fix in one repository.
-        self.binary_path.mkdir(parents=True, exist_ok=True)
-
     @property
     def database_path(self) -> Path:
         """Path to the SQLite database file."""
