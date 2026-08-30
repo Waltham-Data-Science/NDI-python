@@ -93,6 +93,44 @@ class TestDirectoryType:
         assert ndi_session_dir.directorytype(str(tmp_path)) == "dataset"
 
 
+class TestDotNdiLayout:
+    """The .ndi listing MATLAB expects.
+
+    The symmetry tests compare this listing between languages, so the set has
+    to match exactly -- a lazily-created directory reads as a missing entry
+    just as a never-written file does (#73).
+    """
+
+    #: Confirmed against a real MATLAB-generated .ndi directory.
+    MATLAB_ENTRIES = {
+        "did-sqlite.sqlite",
+        "files",
+        "ndi_object_type.txt",
+        "reference.txt",
+        "unique_reference.txt",
+    }
+
+    def test_session_dot_ndi_matches_matlab(self, tmp_path):
+        ndi_session_dir("sess", str(tmp_path))
+        assert {p.name for p in (tmp_path / ".ndi").iterdir()} == self.MATLAB_ENTRIES
+
+    def test_files_directory_exists_before_any_file_is_stored(self, tmp_path):
+        """DID creates files/ lazily; MATLAB has it from the start."""
+        ndi_session_dir("sess", str(tmp_path))
+        assert (tmp_path / ".ndi" / "files").is_dir()
+
+    def test_dataset_dot_ndi_matches_matlab(self, tmp_path):
+        ndi_dataset_dir("myds", str(tmp_path))
+        assert {p.name for p in (tmp_path / ".ndi").iterdir()} == self.MATLAB_ENTRIES
+
+    def test_summary_agrees_with_disk(self, tmp_path):
+        """filesInDotNDI is what the symmetry comparison actually reads."""
+        from ndi.util.session_summary import sessionSummary
+
+        s = ndi_session_dir("sess", str(tmp_path))
+        assert set(sessionSummary(s)["filesInDotNDI"]) == self.MATLAB_ENTRIES
+
+
 class TestSetObjectTypeMarker:
     def test_writes_the_value(self, tmp_path):
         s = ndi_session_dir("sess", str(tmp_path))
