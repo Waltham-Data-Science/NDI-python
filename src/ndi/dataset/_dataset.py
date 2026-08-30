@@ -933,6 +933,13 @@ class ndi_dataset_dir(ndi_dataset):
             # 2-arg form
             self._session = ndi_session_dir(ref or self._path.name, self._path)
 
+        # Mark the directory as a dataset. The underlying session sits at the
+        # same path and marks it 'session' on construction, so a dataset has to
+        # correct that -- an empty dataset has no bookkeeping documents for
+        # updateObjectTypeMarker to recognise it by. MATLAB's ndi.dataset.dir
+        # constructor does the same. See #73.
+        self._session.setObjectTypeMarker("dataset")
+
         # ndi_session discovery: find the correct session ID and reference
         # from documents in the database. Mirrors the MATLAB
         # ndi.dataset.dir constructor logic.
