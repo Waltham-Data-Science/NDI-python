@@ -1068,16 +1068,25 @@ class ndi_session(ABC):
             if isinstance(props, dict):
                 daq_class_name = props.get("daqsystem", {}).get("ndi_daqsystem_class", "")
 
-            # Check for mfdaq in the class name, or default to mfdaq
-            # if class name is missing (most DAQ systems are MFDAQ)
+            # Default to mfdaq when the class name is missing: most DAQ
+            # systems are MFDAQ, and older documents omit it.
             if "mfdaq" in daq_class_name or not daq_class_name:
                 from ..daq.system_mfdaq import ndi_daq_system_mfdaq
 
                 return ndi_daq_system_mfdaq(session=self, document=document)
 
-            from ..daq.system import ndi_daq_system
-
-            return ndi_daq_system(session=self, document=document)
+            # Otherwise use the registered class for this name. Falling
+            # straight through to the generic ndi_daq_system, as this used to,
+            # silently downgraded every non-mfdaq system to the base class --
+            # so a document naming e.g. ndi.daq.system.image was built as a
+            # plain DAQ system and nothing said so.
+            daq_cls = get_class(daq_class_name)
+            if daq_cls is None:
+                raise ValueError(
+                    f"Unknown DAQ system class: {daq_class_name!r}. "
+                    "Register it in ndi.class_registry."
+                )
+            return daq_cls(session=self, document=document)
 
         if document.doc_isa("element"):
             props = document.document_properties
