@@ -741,7 +741,13 @@ class ndi_dataset:
                 continue
             try:
                 found, resolved = source_session._database.exist_binary(doc.id, name)
-            except Exception:
+            except (FileNotFoundError, ValueError, KeyError, AttributeError):
+                # The source cannot say where this file is: no such document,
+                # no such file slot, or a database that does not answer the
+                # question. Leave the location as the document has it and let
+                # the destination's own ingest report the failure against the
+                # real path -- swallowing everything here would also hide, say,
+                # a database error worth surfacing.
                 continue
             if not found or resolved is None:
                 continue

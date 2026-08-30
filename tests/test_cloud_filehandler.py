@@ -357,6 +357,36 @@ class TestCloudRetrievalThroughDID:
         mock_fetch.assert_not_called()
         assert not dest.exists()
 
+    def test_every_add_path_hands_did_the_handler(self, tmp_path):
+        """Single and batch adds must both pass it.
+
+        They are separate call sites, and the batch one was missed at first:
+        a lone add would retrieve a remote file and the same documents added
+        together would not. downloadDataset and dataset ingestion both take
+        the batch path, so that is the one that matters most.
+        """
+        from ndi.document import ndi_document
+        from ndi.session.dir import ndi_session_dir
+
+        session_dir = tmp_path / "session_paths"
+        session_dir.mkdir()
+        session = ndi_session_dir("test_session", session_dir)
+        db = session._database
+
+        doc = ndi_document("base").set_session_id(session.id())
+
+        with patch.object(db._driver._db, "add_docs") as mock_add:
+            db._driver.add(doc.document_properties)
+            assert (
+                mock_add.call_args.kwargs.get("custom_file_handler") is not None
+            ), "single add must hand DID the retriever"
+
+        with patch.object(db._driver._db, "add_docs") as mock_add:
+            db.add_many([doc])
+            assert (
+                mock_add.call_args.kwargs.get("custom_file_handler") is not None
+            ), "batch add must hand DID the retriever too"
+
     def test_the_handler_reaches_did_from_the_driver(self, tmp_path):
         """The wiring, not just the handler: DID is given NDI's retriever.
 

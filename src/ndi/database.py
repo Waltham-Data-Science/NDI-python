@@ -254,6 +254,13 @@ class ndi_database:
         ``{doc_id}_{filename}``. Files are DID's now, as they already were in
         NDI-matlab, so this reports DID's location rather than a second one.
         """
+        # Reaching into DID for a private name, deliberately and with a
+        # caveat: DID-matlab exposes this as a public FileDir property on
+        # sqlitedb, and DID-python has only _file_dir(). Duplicating the rule
+        # here ("files/ beside the database file") would put DID's storage
+        # layout in two places, which is the mistake this whole change
+        # removes. The asymmetry belongs in DID-python's bridge; until it is
+        # closed, this is the single point that breaks if DID renames it.
         return Path(self._driver._db._file_dir())
 
     # === CRUD Operations ===
@@ -476,7 +483,11 @@ class ndi_database:
             did_docs.append(self._driver._DIDDocument(props))
 
         if did_docs:
-            self._driver._db.add_docs(did_docs, self._driver._branch_id)
+            self._driver._db.add_docs(
+                did_docs,
+                self._driver._branch_id,
+                custom_file_handler=_cloud_file_handler,
+            )
         return list(documents)
 
     def remove_many(
