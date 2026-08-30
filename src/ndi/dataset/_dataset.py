@@ -12,6 +12,7 @@ MATLAB equivalents:
 
 from __future__ import annotations
 
+import copy
 import logging
 from pathlib import Path
 from typing import Any
@@ -161,13 +162,20 @@ class ndi_dataset:
         # We add directly via _database.add() because session.database_add()
         # enforces session_id == self._session.id(), but ingested docs retain
         # their *original* session_id so we can tell which session they came from.
-        # Binary files are also copied from the source session.
+        # Binary files come across with them, ingested by DID on add.
         all_docs = session.database_search(ndi_query("").isa("base"))
         ingestion_failures: list[tuple[str, str]] = []
         for doc in all_docs:
             try:
+                # DID ingests the document's files as part of the add, so
+                # the locations it is handed have to be reachable. A document
+                # read back from the source session still names the path the
+                # file was ingested FROM, and add_file defaults
+                # delete_original to true, so that path is usually gone by
+                # now. Point each location at the source session's ingested
+                # copy before handing the document over.
+                doc = self._relocate_files_to_source(session, doc)
                 self._session._database.add(doc)
-                self._copy_binary_files(session, doc)
             except FileExistsError:
                 pass  # Re-ingestion duplicates are expected
             except Exception as exc:
@@ -692,36 +700,69 @@ class ndi_dataset:
 
         return None
 
-    def _copy_binary_files(self, source_session: Any, doc: ndi_document) -> None:
-        """Copy binary file attachments from a source session to this dataset."""
-        import shutil
+    def _relocate_files_to_source(self, source_session: Any, doc: ndi_document) -> ndi_document:
+        """Rewrite a document's file locations to the source session's copies.
 
-        if self._session._database is None:
-            return
-        props = doc.document_properties
-        files = props.get("files", {})
+        The two records of where a file lives disagree once it has been
+        ingested: DID's ``files`` table knows the ingested copy, while the
+        stored document JSON still names the original the file came from.
+        Copying a document between databases hands over the JSON, so the
+        destination would try to ingest from a path that no longer exists.
+
+        Ask the source database where the file actually is and write that in.
+        Locations that cannot be resolved are left alone -- a remote
+        ``ndic://`` location is still perfectly good, and DID will retrieve it
+        through the cloud handler.
+
+        ``delete_original`` is cleared on the way through: the "original" is
+        now the source session's own ingested copy, and ingesting into the
+        dataset must not empty the session it came from.
+        """
+        if source_session is None or getattr(source_session, "_database", None) is None:
+            return doc
+
+        props = copy.deepcopy(doc.document_properties)
+        files = props.get("files")
         if not isinstance(files, dict):
-            return
-        for fi in files.get("file_info", []):
+            return doc
+
+        file_info = files.get("file_info")
+        if isinstance(file_info, dict):
+            file_info = [file_info]
+        if not isinstance(file_info, list):
+            return doc
+
+        changed = False
+        for fi in file_info:
+            if not isinstance(fi, dict):
+                continue
             name = fi.get("name", "")
             if not name:
                 continue
-            if hasattr(source_session, "_database") and source_session._database is not None:
-                src_path = source_session._database.get_binary_path(doc, name)
-                if src_path.exists():
-                    dest_path = self._session._database.get_binary_path(doc, name)
-                    dest_path.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(str(src_path), str(dest_path))
+            try:
+                found, resolved = source_session._database.exist_binary(doc.id, name)
+            except Exception:
+                continue
+            if not found or resolved is None:
+                continue
+
+            locations = fi.get("locations")
+            was_dict = isinstance(locations, dict)
+            loc_list = [locations] if was_dict else locations
+            if not isinstance(loc_list, list):
+                continue
+            for loc in loc_list:
+                if not isinstance(loc, dict):
                     continue
-            for loc in fi.get("locations", []):
-                source = loc.get("location", "")
-                if source:
-                    src_path = Path(source)
-                    if src_path.exists():
-                        dest_path = self._session._database.get_binary_path(doc, name)
-                        dest_path.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(str(src_path), str(dest_path))
-                        break
+                loc["location"] = str(resolved)
+                loc["location_type"] = "file"
+                loc["ingest"] = 1
+                loc["delete_original"] = 0
+                changed = True
+
+        if not changed:
+            return doc
+        return ndi_document(props)
 
     def _open_linked_sessions(self) -> None:
         """Ensure all linked sessions are open and cached.

@@ -25,6 +25,25 @@ from .document import ndi_document
 from .query import ndi_query
 
 
+def _cloud_file_handler(dest_path, source_path):
+    """DID's ``custom_file_handler``, wired to NDI's cloud retrieval.
+
+    DID downloads nothing itself; a downstream package supplies retrieval.
+    NDI-matlab passes ``@download_file_from_cloud`` to both ``add_docs`` and
+    ``open_doc`` in didsqlite.m, and this is the same handler.
+
+    Imported lazily and tolerant of failure: the cloud extra may be absent,
+    and a session that never touches a remote location must not require it.
+    DID reports a handler that produced no file as a retrieval failure naming
+    the location, which is a better error than an ImportError from here.
+    """
+    try:
+        from .cloud.filehandler import download_file_from_cloud
+    except ImportError:
+        return
+    download_file_from_cloud(dest_path, source_path)
+
+
 class SQLiteDriver:
     """SQLite database driver using DID-python's SQLiteDB.
 
@@ -91,7 +110,7 @@ class SQLiteDriver:
 
         # Create DID ndi_document and add (DID-python now populates doc_data)
         did_doc = self._DIDDocument(document)
-        self._db.add_docs([did_doc], self._branch_id)
+        self._db.add_docs([did_doc], self._branch_id, custom_file_handler=_cloud_file_handler)
 
     def bulk_add(self, documents: list[dict]) -> tuple[int, int]:
         """Add many documents at once, bypassing per-doc duplicate checks.
@@ -112,11 +131,35 @@ class SQLiteDriver:
                 continue
 
             did_doc = self._DIDDocument(doc)
-            self._db.add_docs([did_doc], self._branch_id)
+            self._db.add_docs([did_doc], self._branch_id, custom_file_handler=_cloud_file_handler)
             existing_ids.add(doc_id)
             added += 1
 
         return added, skipped
+
+    def open_binary(self, doc_id: str, filename: str) -> str:
+        """Resolve a document's file to a local path, retrieving it if needed.
+
+        Delegates to DID's ``open_doc``, which serves a local location
+        directly and hands a remote one to ``custom_file_handler``. Mirrors
+        NDI-matlab's ``didsqlite/do_openbinarydoc``.
+
+        Returns the path rather than DID's file object: NDI's public
+        ``database_openbinarydoc`` contract is an ordinary Python file object
+        carrying ``fullpathfilename``, and DID's ``Fileobj`` is neither. The
+        path is what both need.
+        """
+        handle = self._db.open_doc(doc_id, filename, custom_file_handler=_cloud_file_handler)
+        return handle.fullpathfilename
+
+    def exist_binary(self, doc_id: str, filename: str) -> tuple[bool, str | None]:
+        """Is this document's file on disk, and where?
+
+        Delegates to DID's ``exist_doc``, the port of MATLAB's
+        ``check_exist_doc``. True exactly when ``open_binary`` would succeed
+        without needing to retrieve anything.
+        """
+        return self._db.exist_doc(doc_id, filename)
 
     def delete_by_id(self, doc_id: str) -> bool:
         """Delete a document by ID."""
@@ -197,8 +240,6 @@ class ndi_database:
 
         # Binary/files directory for file attachments
         # Named "files" for compatibility with NDI-MATLAB
-        self._binary_dir = self.session_path / db_name / "files"
-        self._binary_dir.mkdir(parents=True, exist_ok=True)
 
     @property
     def database_path(self) -> Path:
@@ -207,8 +248,13 @@ class ndi_database:
 
     @property
     def binary_path(self) -> Path:
-        """Path where binary files are stored."""
-        return self._binary_dir
+        """Directory DID keeps ingested files in.
+
+        NDI used to keep its own directory beside the database and name files
+        ``{doc_id}_{filename}``. Files are DID's now, as they already were in
+        NDI-matlab, so this reports DID's location rather than a second one.
+        """
+        return Path(self._driver._db._file_dir())
 
     # === CRUD Operations ===
 
@@ -467,17 +513,27 @@ class ndi_database:
 
     # === File Management ===
 
-    def get_binary_path(self, document: ndi_document, file_name: str) -> Path:
-        """Get the path where a document's binary file should be stored.
+    def open_binary(self, doc_or_id: ndi_document | str, file_name: str) -> Path:
+        """Resolve a document's file to a local path, retrieving it if needed.
 
-        Args:
-            document: The document that owns the file.
-            file_name: Name of the file.
+        Replaces ``get_binary_path``, which composed a path in NDI's own store
+        and told the caller nothing about whether a file was there. DID owns
+        the mapping from (document, filename) to a location now, so ask it.
 
-        Returns:
-            Path to store the binary file.
+        Raises:
+            FileNotFoundError: subclassed by DID's FileAccessError, when no
+                location can be reached.
         """
-        return self._binary_dir / f"{document.id}_{file_name}"
+        doc_id = doc_or_id.id if isinstance(doc_or_id, ndi_document) else doc_or_id
+        return Path(self._driver.open_binary(doc_id, file_name))
+
+    def exist_binary(
+        self, doc_or_id: ndi_document | str, file_name: str
+    ) -> tuple[bool, Path | None]:
+        """Is this document's file on disk, and where?"""
+        doc_id = doc_or_id.id if isinstance(doc_or_id, ndi_document) else doc_or_id
+        found, path = self._driver.exist_binary(doc_id, file_name)
+        return found, (Path(path) if path else None)
 
     def __repr__(self) -> str:
         return f"ndi_database('{self.session_path}')"
