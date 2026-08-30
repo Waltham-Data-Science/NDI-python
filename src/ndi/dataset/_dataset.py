@@ -844,13 +844,27 @@ class ndi_dataset_dir(ndi_dataset):
                 self._path,
                 session_id=dataset_session_id,
             )
-            # Bulk-add all documents to the database
-            for doc in documents:
-                try:
-                    self._session._database.add(doc)
-                except Exception as exc:
-                    doc_id = self._get_doc_id(doc)
-                    self.add_doc_failures.append((doc_id, str(exc)))
+            # Add the whole set in one call, as MATLAB does
+            # (ndi.dataset.dir(reference, path_name, docs) -> add_docs(docs)).
+            # This is not just fewer round trips: did.database.validate_docs
+            # checks each dependency against "the superset of document ids
+            # already in the database and those in this batch, so a batch may
+            # depend on itself". Adding one at a time shrinks that batch to a
+            # single document, so any document referring to one later in the
+            # list is judged to have a dangling dependency.
+            #
+            # A batch add is atomic, so on failure it falls back to per-document
+            # adds to find out which ones are bad -- add_doc_failures has to
+            # name them, not just report that something went wrong.
+            try:
+                self._session._database.add_many(documents)
+            except Exception:
+                for doc in documents:
+                    try:
+                        self._session._database.add(doc)
+                    except Exception as exc:
+                        doc_id = self._get_doc_id(doc)
+                        self.add_doc_failures.append((doc_id, str(exc)))
             # Re-create session without forced ID (reads from database)
             self._session = ndi_session_dir(ref or "temp", self._path)
         elif path_or_ref is None and not ref:

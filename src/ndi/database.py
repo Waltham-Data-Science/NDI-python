@@ -450,13 +450,27 @@ class ndi_database:
         Returns:
             List of added Documents.
 
+        Adds the whole list in a single ``did.database.add_docs`` call, as
+        MATLAB does. Validation checks each dependency against the ids already
+        stored *plus the ids in this batch*, so a set of documents that refer
+        to one another only validates when it is offered together -- added one
+        at a time, anything referring to a document later in the list looks
+        like a dangling reference.
+
         Note:
-            Stops on first error. Use add() individually for error handling.
+            Atomic: nothing is added if any document fails validation.
         """
-        added = []
+        did_docs = []
         for doc in documents:
-            added.append(self.add(doc))
-        return added
+            props = doc.document_properties if hasattr(doc, "document_properties") else doc
+            doc_id = props.get("base", {}).get("id", "")
+            if not doc_id:
+                raise ValueError("ndi_document must have a base.id")
+            did_docs.append(self._driver._DIDDocument(props))
+
+        if did_docs:
+            self._driver._db.add_docs(did_docs, self._driver._branch_id)
+        return list(documents)
 
     def remove_many(
         self, query: ndi_query | None = None, documents: list[ndi_document] | None = None

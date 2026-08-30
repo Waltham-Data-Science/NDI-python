@@ -382,3 +382,74 @@ def test_removing_a_file_bearing_document(tmp_path):
     session.database_rm(doc)
 
     assert session.database_search(ndi_query("base.id") == doc.id) == []
+
+
+# ---------------------------------------------------------------------------
+# Documents that refer to one another have to be offered together
+# ---------------------------------------------------------------------------
+
+
+class TestBatchAdd:
+    """A set of documents is added in one call, as MATLAB does.
+
+    ``did.database.validate_docs`` checks each dependency against "the superset
+    of document ids already in the database and those in this batch, so a batch
+    may depend on itself".  Adding one document at a time shrinks that batch to
+    one, so anything referring to a document later in the list is judged to have
+    a dangling dependency and is rejected.
+
+    MATLAB hands the whole set over at once -- ``ndi.dataset.dir(reference,
+    path_name, docs)`` -> ``add_docs(docs)`` -- so this never arose there.
+    """
+
+    def _subject_and_element(self):
+        """An element and the subject it requires. ``subject_id`` is declared
+        ``mustbenotempty``, so its value really is checked against the batch."""
+        subject = ndi_document("subject", **{"base.name": "s"})
+        element = ndi_document(
+            "element",
+            **{"base.name": "e", "element.type": "probe", "element.reference": 1},
+        )
+        element = element.set_dependency_value("subject_id", subject.id)
+        return subject, element
+
+    def test_dependent_document_first_is_rejected_one_at_a_time(self, tmp_path):
+        """The failure this exists to prevent, at its source."""
+        from did.validate import ValidationError
+
+        from ndi.database import ndi_database
+
+        db = ndi_database(tmp_path)
+        _subject, element = self._subject_and_element()
+        with pytest.raises(ValidationError):
+            db.add(element)
+
+    def test_the_same_pair_added_as_one_batch_is_accepted(self, tmp_path):
+        from ndi.database import ndi_database
+
+        db = ndi_database(tmp_path)
+        subject, element = self._subject_and_element()
+
+        # Dependent document first: order within the batch must not matter.
+        db.add_many([element, subject])
+
+        assert db.numdocs() == 2
+        assert db.read(element.id) is not None
+        assert db.read(subject.id) is not None
+
+    def test_a_dataset_built_from_such_documents_keeps_them_all(self, tmp_path):
+        """The path downloadDataset takes: ndi_dataset_dir(..., documents=...)."""
+        from ndi.dataset import ndi_dataset_dir
+
+        subject, element = self._subject_and_element()
+        target = tmp_path / "ds"
+        target.mkdir()
+        dataset = ndi_dataset_dir("", target, documents=[element, subject])
+
+        assert dataset.add_doc_failures == [], dataset.add_doc_failures
+        stored = set(
+            dataset._session._database._driver._db.get_doc_ids(
+                dataset._session._database._driver._branch_id
+            )
+        )
+        assert {element.id, subject.id} <= stored

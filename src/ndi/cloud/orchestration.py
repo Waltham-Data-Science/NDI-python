@@ -172,14 +172,37 @@ def downloadDataset(
 
             missing_docs_path.write_text(json.dumps(missing_jsons, indent=2, default=str))
 
+            # Why each one failed, not just that it is absent. The dataset
+            # constructor records the reason per document; reporting only the
+            # ids left the cause invisible -- a CI failure named 501 documents
+            # and nothing about what was wrong with them.
+            reasons = dict(getattr(dataset, "add_doc_failures", []) or [])
+            distinct = {}
+            for doc_id, _cls in real_missing:
+                reason = reasons.get(doc_id)
+                if reason:
+                    distinct.setdefault(reason, []).append(doc_id)
+
             lines = [
                 f"Downloaded {len(doc_jsons)} documents but "
                 f"{len(real_missing)} are missing from the local dataset:"
             ]
             for doc_id, doc_class in real_missing[:50]:
-                lines.append(f"\n  - {doc_id} (class: {doc_class})")
+                reason = reasons.get(doc_id)
+                suffix = f" -- {reason}" if reason else ""
+                lines.append(f"\n  - {doc_id} (class: {doc_class}){suffix}")
             if len(real_missing) > 50:
                 lines.append(f"\n  ... and {len(real_missing) - 50} more")
+            if distinct:
+                lines.append("\n\nDistinct failure reasons:")
+                for reason, ids in sorted(distinct.items(), key=lambda kv: -len(kv[1])):
+                    lines.append(f"\n  [{len(ids)}x] {reason}")
+            elif real_missing:
+                lines.append(
+                    "\n\nNo failure reason was recorded for any of these -- they "
+                    "were not rejected on the way in, so they never reached the "
+                    "database at all."
+                )
             lines.append(f"\nFull JSON of missing documents written to:\n  {missing_docs_path}")
             raise RuntimeError("".join(lines))
 
