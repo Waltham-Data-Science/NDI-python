@@ -139,28 +139,34 @@ class TestDatabaseRead:
         assert result.id == sample_doc.id
 
 
-class TestDatabaseUpdate:
-    """Test ndi_database update operations."""
+class TestDatabaseImmutability:
+    """Documents cannot be updated in place, and ids are not re-usable.
 
-    def test_update_existing(self, temp_session, sample_doc):
-        """Test updating an existing document."""
+    ``ndi_database`` used to expose ``update()`` and ``add_or_replace()``,
+    both implemented as remove-then-add under the same id. NDI-matlab's
+    ``ndi.database`` has neither, and DID has no update primitive in either
+    language -- ``add_docs`` takes OnDuplicate in {ignore, warn, error}, with
+    no replace. DID also retires the id of a document removed from its last
+    branch (DID-matlab#55), so the mechanism those methods used is now
+    refused outright. They were removed rather than reimplemented.
+    """
+
+    def test_adding_a_duplicate_id_raises_and_says_what_to_do(self, temp_session, sample_doc):
         db = ndi_database(temp_session)
         db.add(sample_doc)
 
-        # Modify and update
-        sample_doc = sample_doc.setproperties(**{"base.name": "updated_name"})
-        result = db.update(sample_doc)
-        assert result.document_properties["base"]["name"] == "updated_name"
+        with pytest.raises(ValueError) as excinfo:
+            db.add(sample_doc)
 
-        # Verify persisted
-        reread = db.read(sample_doc.id)
-        assert reread.document_properties["base"]["name"] == "updated_name"
+        message = str(excinfo.value)
+        assert sample_doc.id in message
+        assert "immutable" in message
 
-    def test_update_nonexistent_raises(self, temp_session, sample_doc):
-        """Test updating nonexistent document raises error."""
+    def test_the_update_surface_is_gone(self, temp_session):
+        """Pinned so neither method comes back without this decision reopening."""
         db = ndi_database(temp_session)
-        with pytest.raises(ValueError, match="not found"):
-            db.update(sample_doc)
+        assert not hasattr(db, "update")
+        assert not hasattr(db, "add_or_replace")
 
 
 class TestDatabaseRemove:
@@ -188,29 +194,6 @@ class TestDatabaseRemove:
         db = ndi_database(temp_session)
         result = db.remove("nonexistent_id")
         assert result is False
-
-
-class TestDatabaseAddOrReplace:
-    """Test ndi_database add_or_replace operations."""
-
-    def test_add_or_replace_new(self, temp_session, sample_doc):
-        """Test add_or_replace adds new document."""
-        db = ndi_database(temp_session)
-        result = db.add_or_replace(sample_doc)
-        assert result.id == sample_doc.id
-        assert db.numdocs() == 1
-
-    def test_add_or_replace_existing(self, temp_session, sample_doc):
-        """Test add_or_replace replaces existing document."""
-        db = ndi_database(temp_session)
-        db.add(sample_doc)
-
-        sample_doc = sample_doc.setproperties(**{"base.name": "replaced_name"})
-        db.add_or_replace(sample_doc)
-
-        reread = db.read(sample_doc.id)
-        assert reread.document_properties["base"]["name"] == "replaced_name"
-        assert db.numdocs() == 1  # Still just one document
 
 
 class TestDatabaseSearch:

@@ -52,10 +52,31 @@ class SQLiteDriver:
         # Initialize SQLiteDB
         self._db = SQLiteDB(str(db_path))
 
-        # Create branch if it doesn't exist
+        # Create the branch, but only where it can be created as a root.
+        #
+        # DID's add_branch reads an empty or omitted parent as "the current
+        # branch", not "no parent" (DID-python#51, matching MATLAB's isempty,
+        # which covers both [] and ''). A root is made only when there is no
+        # current branch. With no branches at all there cannot be one, so
+        # omitting the parent here is structurally a root -- as NDI-matlab's
+        # didsqlite.m gets it from the same isempty(bid) guard.
+        #
+        # The previous "" argument happened to work only because did.database
+        # initialises current_branch_id to empty and never restores it from
+        # the file; that is DID's implementation detail, not a guarantee this
+        # constructor can make.
         existing_branches = self._db.all_branch_ids()
-        if branch_id not in existing_branches:
-            self._db.add_branch(branch_id, "")  # Empty string for root branch
+        if not existing_branches:
+            self._db.add_branch(branch_id)
+        elif branch_id not in existing_branches:
+            # Creating it now would attach it to whatever the current branch
+            # happens to be, so name the problem instead. get_doc_ids on a
+            # branch that does not exist raises in current DID, so leaving it
+            # missing only defers the failure to a less informative place.
+            raise ValueError(
+                f"The DID database at {db_path} has branches "
+                f"{sorted(existing_branches)} but not {branch_id!r}."
+            )
 
     def add(self, document: dict) -> None:
         """Add a document to the database."""
@@ -96,20 +117,6 @@ class SQLiteDriver:
             added += 1
 
         return added, skipped
-
-    def update(self, document: dict) -> None:
-        """Update an existing document."""
-        doc_id = document.get("base", {}).get("id", "")
-
-        # Check if document exists
-        existing_ids = self._db.get_doc_ids(self._branch_id)
-        if doc_id not in existing_ids:
-            raise FileNotFoundError(f"ndi_document {doc_id} not found")
-
-        # Remove old and add new (DID handles doc_data cleanup and repopulation)
-        self._db.remove_docs([doc_id], self._branch_id)
-        did_doc = self._DIDDocument(document)
-        self._db.add_docs([did_doc], self._branch_id)
 
     def delete_by_id(self, doc_id: str) -> bool:
         """Delete a document by ID."""
@@ -226,7 +233,8 @@ class ndi_database:
         except FileExistsError as exc:
             raise ValueError(
                 f"ndi_document with ID {document.id} already exists. "
-                f"Use update() or add_or_replace()."
+                f"Documents are immutable once added; remove it first, or "
+                f"give the new document its own id."
             ) from exc
         return document
 
@@ -270,53 +278,6 @@ class ndi_database:
         """
         doc_id = document.id if isinstance(document, ndi_document) else document
         return self._driver.delete_by_id(doc_id)
-
-    def update(self, document: ndi_document) -> ndi_document:
-        """Update an existing document.
-
-        Args:
-            document: The ndi_document with updated properties.
-
-        Returns:
-            The updated document.
-
-        Raises:
-            ValueError: If document doesn't exist.
-
-        Example:
-            doc = db.read('abc123')
-            doc = doc.setproperties(**{'base.name': 'new_name'})
-            db.update(doc)
-        """
-        try:
-            self._driver.update(document.document_properties)
-        except FileNotFoundError as exc:
-            raise ValueError(
-                f"ndi_document with ID {document.id} not found. " f"Use add() for new documents."
-            ) from exc
-        return document
-
-    def add_or_replace(self, document: ndi_document) -> ndi_document:
-        """Add or replace a document.
-
-        If document exists, replaces it. Otherwise, adds it.
-
-        Args:
-            document: The ndi_document to add or replace.
-
-        Returns:
-            The document.
-
-        Example:
-            db.add_or_replace(doc)
-        """
-        existing = self._driver.find_by_id(document.id)
-        if existing:
-            self._driver.update(document.document_properties)
-        else:
-            self._driver.add(document.document_properties)
-
-        return document
 
     # === ndi_query Operations ===
 
