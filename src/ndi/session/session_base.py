@@ -705,11 +705,31 @@ class ndi_session(ABC):
         for doc in old_rules:
             self._database.remove(doc)
 
-        # Add new documents
-        new_docs = self._syncgraph.new_document()
-        for doc in new_docs:
-            doc = doc.set_session_id(self.id())
-            self._database.add(doc)
+        # Rebuild the syncgraph so the documents about to be written carry a
+        # fresh id, as NDI-matlab's update_syncgraph_in_db does:
+        #
+        #     newsyncgraph = ndi.time.syncgraph(ndi_session_obj);
+        #     for i=1:numel(...rules), newsyncgraph = newsyncgraph.addrule(...)
+        #
+        # This is not cosmetic. DID retires the id of a document removed from
+        # its last branch and refuses to add it again (DID-matlab#55 and the
+        # DID-python port), so re-adding the syncgraph under the id just
+        # removed above raises. A new object means a new id.
+        rebuilt = ndi_time_syncgraph(self)
+        for rule in self._syncgraph.rules:
+            rebuilt.add_rule(rule)
+        self._syncgraph = rebuilt
+
+        # Add the whole set in one call, as MATLAB's database_add(newdocs)
+        # does. new_document() returns the syncgraph first and its syncrule
+        # documents after it, and the syncgraph depends on those rules --
+        # adding one at a time validates the syncgraph against a batch that
+        # does not yet contain them, which DID rejects as a dangling
+        # dependency now that enumerated names like "syncrule_id_1" have their
+        # values checked (DID-python#41).
+        new_docs = [doc.set_session_id(self.id()) for doc in self._syncgraph.new_document()]
+        if new_docs:
+            self._database.add_many(new_docs)
 
     # =========================================================================
     # Ingest Methods
