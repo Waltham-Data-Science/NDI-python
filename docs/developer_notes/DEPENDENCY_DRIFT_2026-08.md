@@ -102,9 +102,12 @@ Also newly available and not yet used by NDI-python:
 * `SQLiteDB.open_doc(..., custom_file_handler=...)` and the new `files` table —
   DID's own seam for retrieving a document's files from a non-local location.
   NDI-python already does this outside DID, in `ndi.cloud.filehandler` /
-  `session._try_cloud_fetch`. DID-python's `did_matlab_python_bridge` records
-  how NDI-**matlab** supplies file retrieval to DID; aligning Python with that
-  is its own task.
+  `session._try_cloud_fetch`, and keeps its own binaries at
+  `<binary_dir>/<doc.id>_<name>`. So there are now two records of where each
+  file lives and they disagree — DID's `files` rows point at the *original*
+  source, and MATLAB's `do_open_doc` resolves through that table rather than
+  through the document JSON. Tracked as **#65**, with the migration hazard
+  (sessions predating the `files` table) written up there.
 * `did.file.binaryTable` / `FileCache`, wired into `open_doc`.
 * `did.document` ISO-8601 UTC datestamp — ported *from* NDI-python into DID
   (`875de5c`), so `ndi.common.timestamp` could now delegate rather than
