@@ -15,8 +15,6 @@ consequences are pinned here:
 
 from __future__ import annotations
 
-import json
-import re
 import warnings
 from pathlib import Path
 
@@ -163,14 +161,6 @@ class TestValidatedAdd:
 #: A type that starts validating must be deleted from this list; the test says
 #: so by name.  A type that stops validating fails the test.
 KNOWN_UNVALIDATABLE_DEFINITIONS = {
-    # These two are NOT defects in the shared JSON, and are the one group that
-    # will clear without anyone touching a definition file. Their schemas
-    # declare "parameters": [-Inf,Inf,0] -- MATLAB's jsondecode reads bare Inf,
-    # Python's json does not -- so the installed DID cannot load the schema at
-    # all and reports ValidationFileBad. Fixed in VH-Lab/DID-python#40; delete
-    # both entries once the did pin carries it.
-    "apps/calculators/simple_calc": "DID:Database:ValidationFileBad",
-    "apps/markgarbage/valid_interval": "DID:Database:ValidationFileBad",
     "apps/vhlab_voltage2firingrate/binnedspikeratevm": "DID:Database:PropertyFieldMissing",
     "apps/vhlab_voltage2firingrate/vmneuralresponseresiduals": "DID:Database:PropertyFieldMissing",
     "apps/vhlab_voltage2firingrate/vmspikefilteringparameters": "DID:Database:PropertyFieldMissing",
@@ -189,6 +179,27 @@ KNOWN_UNVALIDATABLE_DEFINITIONS = {
     "session_in_a_dataset": "DID:Database:ValidationFieldDouble",
 }
 
+#: The same, for definitions ndi_install.py copies in from NDIcalc-vis-matlab.
+#: Kept separate because they are absent on a bare checkout, so their existence
+#: is not asserted -- only their behaviour when they are installed. Both were
+#: named by NDI-matlab's own sweep (854a658) before this repo could see them.
+KNOWN_UNVALIDATABLE_FROM_DEPENDENCIES = {
+    # Inherits ngrid, which its schema omits.
+    "neuro/hartley_reverse_correlation": "DID:Database:ValidationSuperClasses",
+    "neuro/reverse_correlation": "DID:Database:ValidationFieldInteger",
+}
+
+#: Files that are not valid JSON and cannot be fixed from this repository.
+#: stimloopsplitter_calc_schema.json is missing the opening quote of a value
+#: (line 5), so stimloopsplitter_calc ships with no loadable schema in either
+#: language. Broken at NDIcalc-vis-matlab's only tag (v0.9.0) *and* at its
+#: default-branch head, so no pin bump fixes it -- it needs a one-character
+#: change upstream. Quarantined, not suppressed: the test below fails if the
+#: file ever parses, so the entry cannot rot.
+KNOWN_BAD_UPSTREAM_JSON = {
+    "schema_documents/calc/stimloopsplitter_calc_schema.json",
+}
+
 #: A blank template legitimately leaves required dependencies empty -- the
 #: document that fills them in is the one that gets stored -- so these two
 #: identifiers say nothing about the definition's structure.
@@ -197,25 +208,17 @@ _BLANK_TEMPLATE_IDENTIFIERS = frozenset(
 )
 
 
-#: ``Inf`` outside a string. The string alternative comes first so a
-#: documentation string mentioning Inf is consumed whole and left alone; the
-#: word boundary keeps ``Infinity`` and ``Info`` intact. Same expression DID
-#: uses -- delete this and call ``did.validate.loads_matlab_json`` once the pin
-#: carries VH-Lab/DID-python#40.
-_MATLAB_INF = re.compile(r'"(?:[^"\\]|\\.)*"|\bInf\b')
-
-
 def _loads_as_matlab_reads(text):
-    """``json.loads``, tolerating MATLAB's bare ``Inf`` / ``-Inf``."""
-    try:
-        return json.loads(text)
-    except ValueError:
-        return json.loads(
-            _MATLAB_INF.sub(
-                lambda m: m.group(0) if m.group(0).startswith('"') else "Infinity",
-                text,
-            )
-        )
+    """``json.loads`` as MATLAB reads it: bare ``Inf`` / ``-Inf`` allowed.
+
+    MATLAB's ``jsondecode`` accepts those tokens and definition files use them
+    (``"parameters": [-Inf,Inf,0]`` for a double with no bounds). DID does the
+    widening in ``did.validate.loads_matlab_json`` (VH-Lab/DID-python#40); this
+    calls it so the gate measures the files by the same rule the reader uses.
+    """
+    from did.validate import loads_matlab_json
+
+    return loads_matlab_json(text)
 
 
 def _bundled_document_types():
@@ -263,19 +266,32 @@ class TestBundledDefinitions:
         use them -- ``simple_calc_schema.json`` and
         ``valid_interval_schema.json`` declare ``"parameters": [-Inf,Inf,0]``
         for a double with no bounds. Those files are correct; NDI-matlab's own
-        suite validates a simple_calc document against one of them. It is
-        Python's stricter parser that has to catch up, which DID does in
-        ``did.validate.loads_matlab_json`` (VH-Lab/DID-python#40). Until that
-        pin lands, this applies the same widening locally, so the test measures
-        the files rather than the reader.
+        suite validates a simple_calc document against one of them. It was
+        Python's stricter parser that had to catch up, which it now does in
+        ``did.validate.loads_matlab_json``.
+
+        Files the dependency trees supply are scanned too, so this only checks
+        what is actually installed -- a machine where ``ndi_install.py`` has not
+        run sees a smaller bundle than CI does.
         """
         root = Path(str(ndi_common_PathConstants.COMMON_FOLDER))
         unparseable = []
+        still_bad = set()
         for path in sorted(root.rglob("*.json")):
+            relative = str(path.relative_to(root))
             try:
                 _loads_as_matlab_reads(path.read_text())
             except ValueError as exc:
-                unparseable.append(f"{path.relative_to(root)}: {exc}")
+                if relative in KNOWN_BAD_UPSTREAM_JSON:
+                    still_bad.add(relative)
+                    continue
+                unparseable.append(f"{relative}: {exc}")
+            else:
+                if relative in KNOWN_BAD_UPSTREAM_JSON:
+                    raise AssertionError(
+                        f"{relative} parses now -- delete it from "
+                        "KNOWN_BAD_UPSTREAM_JSON in this file."
+                    )
         assert not unparseable, "unparseable JSON in ndi_common:\n" + "\n".join(unparseable)
 
     def test_definitions_validate_or_are_listed(self):
@@ -283,7 +299,9 @@ class TestBundledDefinitions:
         newly_fixed = []
         for doc_type, _path in _bundled_document_types():
             identifier = _structural_failure(doc_type)
-            expected = KNOWN_UNVALIDATABLE_DEFINITIONS.get(doc_type)
+            expected = KNOWN_UNVALIDATABLE_DEFINITIONS.get(
+                doc_type
+            ) or KNOWN_UNVALIDATABLE_FROM_DEPENDENCIES.get(doc_type)
             if identifier and not expected:
                 newly_broken[doc_type] = identifier
             elif identifier and expected and identifier != expected:
@@ -296,13 +314,18 @@ class TestBundledDefinitions:
             "schemas:\n" + "\n".join(f"  {k}: {v}" for k, v in sorted(newly_broken.items()))
         )
         assert not newly_fixed, (
-            "these definitions now validate -- delete them from "
-            "KNOWN_UNVALIDATABLE_DEFINITIONS in this file:\n"
+            "these definitions now validate -- delete them from the "
+            "KNOWN_UNVALIDATABLE_* list in this file:\n"
             + "\n".join(f"  {t}" for t in sorted(newly_fixed))
         )
 
     def test_listed_entries_still_exist(self):
-        """A renamed or deleted definition must not linger in the list."""
+        """A renamed or deleted definition must not linger in the list.
+
+        Only NDI's own tree is checked. The dependency-supplied list is not:
+        those files are absent until ``ndi_install.py`` copies them in, and a
+        bare checkout must not fail for that.
+        """
         present = {t for t, _ in _bundled_document_types()}
         stale = sorted(set(KNOWN_UNVALIDATABLE_DEFINITIONS) - present)
         assert not stale, (
@@ -316,23 +339,15 @@ class TestBundledDefinitions:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Upstream DID-python bug: sqlitedb gained a 'files' table with "
-        "FOREIGN KEY(doc_idx) REFERENCES docs(doc_idx) (commit 9997412), but "
-        "_do_remove_doc still deletes only doc_data and docs, so removing any "
-        "document that carries a file raises sqlite3.IntegrityError. Fixed "
-        "upstream in VH-Lab/DID-python#39; when that merges this test passes "
-        "and the marker comes out."
-    ),
-)
 def test_removing_a_file_bearing_document(tmp_path):
-    """NDI cannot delete a document with a binary file attached.
+    """A document with a binary attached can be removed again.
 
-    This is not an NDI defect and there is no NDI-side fix -- the missing
-    DELETE is inside DID's own SQLite driver.  Held as a strict xfail so the
-    day DID repairs it, CI says so instead of staying quietly red.
+    DID's sqlitedb grew a ``files`` table with
+    ``FOREIGN KEY(doc_idx) REFERENCES docs(doc_idx)`` while ``_do_remove_doc``
+    still deleted only ``doc_data`` and ``docs``, so every document carrying a
+    file was un-removable (``sqlite3.IntegrityError``).  Fixed upstream in
+    VH-Lab/DID-python#39; kept here as the NDI-side regression, since
+    ``session.database_rm`` is where it surfaced.
     """
     from ndi.session.dir import ndi_session_dir
 
@@ -365,3 +380,5 @@ def test_removing_a_file_bearing_document(tmp_path):
     }
     session.database_add(doc)
     session.database_rm(doc)
+
+    assert session.database_search(ndi_query("base.id") == doc.id) == []

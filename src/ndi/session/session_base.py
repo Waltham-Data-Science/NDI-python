@@ -40,6 +40,29 @@ def empty_id() -> str:
     return "".join("0" if c != "_" else "_" for c in base_id)
 
 
+def _binary_handle(file_path):
+    """Open a binary document file with MATLAB's attribute name on it.
+
+    MATLAB's ``database_openbinarydoc`` returns an ``ndi.database.binarydoc``
+    carrying ``fullpathfilename`` -- session.m uses it itself, as the key
+    for its autoclose listeners. Python returned a bare file object, so
+    code written against the documented MATLAB API broke here even though
+    the information was present the whole time under a different name
+    (``.name``).
+
+    The returned object is still an ordinary file object, so every existing
+    caller is unaffected; it simply also answers to the MATLAB name.
+
+    Not yet symmetric: MATLAB takes an ``autoClose`` option implemented
+    with object-destruction listeners. The Python idiom would be a context
+    manager rather than a listener, which is a design decision rather than
+    an attribute, so it is left for its own change.
+    """
+    fh = open(file_path, "rb")
+    fh.fullpathfilename = str(file_path)
+    return fh
+
+
 class ndi_session(ABC):
     """
     Abstract base class for NDI sessions.
@@ -504,7 +527,7 @@ class ndi_session(ABC):
         if not file_path.exists():
             # Attempt on-demand fetch from cloud via ndic:// protocol
             if self._try_cloud_fetch(doc, filename, file_path):
-                return open(file_path, "rb")
+                return _binary_handle(file_path)
             raise FileNotFoundError(
                 f"Binary file '{filename}' not found for document {doc_id}. "
                 f"If this is a cloud dataset, ensure NDI_CLOUD_USERNAME and "
@@ -512,7 +535,7 @@ class ndi_session(ABC):
                 f"a cloud_client to the session/dataset."
             )
 
-        return open(file_path, "rb")
+        return _binary_handle(file_path)
 
     def database_existbinarydoc(
         self,

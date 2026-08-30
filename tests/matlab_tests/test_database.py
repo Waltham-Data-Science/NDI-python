@@ -28,19 +28,6 @@ from ndi.session.dir import ndi_session_dir
 class TestNDIDocument:
     """Test full document create-add-search-read-binary workflow."""
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "Upstream DID-python bug: sqlitedb's new 'files' table has "
-            "FOREIGN KEY(doc_idx) REFERENCES docs(doc_idx), but _do_remove_doc "
-            "never deletes from it, so database_rm on a document carrying a "
-            "binary raises sqlite3.IntegrityError. No NDI-side fix exists; "
-            "fixed upstream in VH-Lab/DID-python#39. "
-            "Tracked, with a minimal repro, in "
-            "tests/test_did_integration.py::test_removing_a_file_bearing_document "
-            "and docs/developer_notes/DEPENDENCY_DRIFT_2026-08.md."
-        ),
-    )
     def test_document_creation_and_io(self, tmp_path):
         """Full lifecycle: create → add → search → read binary → remove.
 
