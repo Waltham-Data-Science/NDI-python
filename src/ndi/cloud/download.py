@@ -165,6 +165,31 @@ def downloadDocumentCollection(
             _log(f"  Chunk {i + 1}: extraction failed: {exc}")
 
     _log(f"Downloaded {len(all_documents)} documents total")
+
+    # Every failure above is logged and skipped, so a chunk that times out or
+    # fails to extract silently shortens the result. Nothing downstream checks,
+    # and a partial set does not look broken -- it looks like a dataset whose
+    # documents refer to documents that do not exist, which is what a caller
+    # eventually reports, a long way from here.
+    #
+    # Compare what came back against what was asked for and fail loudly.
+    received = {
+        (d.get("base", {}).get("id", "") if isinstance(d, dict) else "").lower()
+        for d in all_documents
+    }
+    received.discard("")
+    absent = [d for d in doc_ids if str(d).lower() not in received]
+    if absent:
+        sample = ", ".join(str(d) for d in absent[:10])
+        more = f" (and {len(absent) - 10} more)" if len(absent) > 10 else ""
+        raise RuntimeError(
+            f"Document download is incomplete: {len(absent)} of {len(doc_ids)} "
+            f"requested documents did not come back. Missing: {sample}{more}. "
+            f"Chunk-level failures are logged above; a partial set would "
+            f"otherwise surface later as documents depending on documents "
+            f"that were never downloaded."
+        )
+
     return all_documents
 
 
