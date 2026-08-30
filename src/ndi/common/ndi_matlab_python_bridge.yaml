@@ -83,8 +83,8 @@ classes:
   # =========================================================================
   - name: ndi_common_PathConstants
     type: class
-    matlab_path: "+ndi/+common/ndi_common_PathConstants.m"
-    matlab_last_sync_hash: "fe64a9f5"
+    matlab_path: "+ndi/+common/PathConstants.m"
+    matlab_last_sync_hash: "cb34982"
     python_path: "ndi/common/__init__.py"
     python_class: "ndi_common_PathConstants"
 
@@ -133,3 +133,37 @@ classes:
         decision_log: >
           Python-specific method for programmatic path overrides.
           MATLAB uses environment variables or property assignment.
+          Re-registers the DID globals after moving a path, so DID keeps
+          resolving $NDI...PATH to where NDI now keeps its definitions.
+
+      - name: updateDIDConstants
+        kind: "module-level function (MATLAB: static method)"
+        matlab_path: "+ndi/+common/PathConstants.m"
+        matlab_last_sync_hash: "cb34982"
+        python_path: "ndi/common/__init__.py"
+        input_arguments:
+          - name: force
+            type_python: "bool"
+            default: "False"
+        output_arguments:
+          - name: registered
+            type_python: "dict[str, str]"
+        decision_log: >
+          Registers NDI's $PATH placeholders in
+          did.common.PathConstants.DEFINITIONS, so DID can resolve every
+          document definition and validation schema NDI names. MATLAB does
+          this from the constant-property validator mustUpdateDidGlobals and
+          from the static updateDIDConstants; Python has no property
+          validators, so ndi.common calls it at import time.
+          Divergence, recorded deliberately: MATLAB registers
+          $NDICALCDOCUMENTPATH / $NDICALCSCHEMAPATH as a cell array of
+          calculator-toolbox directories found by ndi.fun.find_calc_directories.
+          Python has no separate calculator packages -- ndi_install.py copies
+          each dependency's ndi_common/{database,schema}_documents into
+          NDI-python's own tree -- so both calc placeholders resolve to the
+          same two directories as $NDIDOCUMENTPATH / $NDISCHEMAPATH.
+          Like MATLAB, an already-registered key is left alone unless
+          force=True, and an unresolvable $NDIDOCUMENTPATH raises.
+          Ported 2026-08-29 because DID-python's add_docs began validating
+          documents against their schemas; before that an unregistered
+          placeholder merely made superclass lookups miss silently.

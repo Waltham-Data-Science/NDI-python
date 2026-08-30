@@ -27,6 +27,14 @@ def session_with_binary(tmp_path):
     payload.write_bytes(PAYLOAD)
 
     doc = ndi_document("data/generic_file") + S.newdocument()
+    # generic_file.json ships "" for two double fields whose schema allows no
+    # empty value (parameters [0,10000000,1] -- three entries, so can-be-empty
+    # is off), so a blank generic_file document cannot be added in either
+    # language. The defect is in the shared ndi_common JSON and is reported
+    # upstream; worked around here rather than patched in NDI-python's copy.
+    # See docs/developer_notes/DEPENDENCY_DRIFT_2026-08.md.
+    doc.document_properties["generic_file"]["dateCreated"] = 0
+    doc.document_properties["generic_file"]["dateUpdated"] = 0
     doc = doc.add_file("generic_file.ext", str(payload))
     S.database_add(doc)
     return S, doc, "generic_file.ext"

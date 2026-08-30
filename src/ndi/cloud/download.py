@@ -115,8 +115,11 @@ def downloadDocumentCollection(
 
     from .api import documents as docs_api
 
+    trail: list[str] = []
+
     def _log(msg: str) -> None:
         logger.info(msg)
+        trail.append(msg)
         if progress:
             progress(msg)
 
@@ -142,6 +145,7 @@ def downloadDocumentCollection(
         chunk_ids = doc_ids[start:end]
 
         _log(f"  Processing chunk {i + 1} of {num_chunks} " f"({len(chunk_ids)} documents)...")
+        before = len(all_documents)
 
         # Get presigned URL for this chunk
         try:
@@ -158,13 +162,43 @@ def downloadDocumentCollection(
         try:
             chunk_docs = _download_chunk_zip(url, timeout, retry_interval)
             all_documents.extend(chunk_docs)
-            _log(f"  Chunk {i + 1}: extracted {len(chunk_docs)} documents")
+            # asked-for vs got, per chunk: the only place a shortfall can be
+            # attributed to a particular chunk rather than noticed in a total.
+            shortfall = len(chunk_ids) - (len(all_documents) - before)
+            note = f"  ({shortfall} SHORT)" if shortfall else ""
+            _log(f"  Chunk {i + 1}: asked {len(chunk_ids)}, " f"extracted {len(chunk_docs)}{note}")
         except TimeoutError as exc:
             _log(f"  Chunk {i + 1}: {exc}")
         except Exception as exc:
             _log(f"  Chunk {i + 1}: extraction failed: {exc}")
 
     _log(f"Downloaded {len(all_documents)} documents total")
+
+    # Every failure above is logged and skipped, so a chunk that times out or
+    # fails to extract silently shortens the result. Nothing downstream checks,
+    # and a partial set does not look broken -- it looks like a dataset whose
+    # documents refer to documents that do not exist, which is what a caller
+    # eventually reports, a long way from here.
+    #
+    # Compared by count, not by id: doc_ids are the cloud's own identifiers
+    # (24-hex ObjectIds from the listing endpoint), while a downloaded
+    # document's base.id is an NDI id (33 chars, underscore-separated). They
+    # are different id spaces and there is no mapping between them here, so
+    # matching one against the other reports every document as missing.
+    from .diagnostics import document_set_report
+
+    report = document_set_report(all_documents)
+    _log(report)
+
+    if len(all_documents) != len(doc_ids):
+        raise RuntimeError(
+            f"Document download is incomplete: asked for {len(doc_ids)} "
+            f"documents, {len(all_documents)} came back "
+            f"({len(doc_ids) - len(all_documents)} short). A partial set "
+            f"would otherwise surface later as documents depending on "
+            f"documents that were never downloaded.\n\n" + "\n".join(trail)
+        )
+
     return all_documents
 
 
