@@ -172,22 +172,19 @@ def downloadDocumentCollection(
     # documents refer to documents that do not exist, which is what a caller
     # eventually reports, a long way from here.
     #
-    # Compare what came back against what was asked for and fail loudly.
-    received = {
-        (d.get("base", {}).get("id", "") if isinstance(d, dict) else "").lower()
-        for d in all_documents
-    }
-    received.discard("")
-    absent = [d for d in doc_ids if str(d).lower() not in received]
-    if absent:
-        sample = ", ".join(str(d) for d in absent[:10])
-        more = f" (and {len(absent) - 10} more)" if len(absent) > 10 else ""
+    # Compared by count, not by id: doc_ids are the cloud's own identifiers
+    # (24-hex ObjectIds from the listing endpoint), while a downloaded
+    # document's base.id is an NDI id (33 chars, underscore-separated). They
+    # are different id spaces and there is no mapping between them here, so
+    # matching one against the other reports every document as missing.
+    if len(all_documents) != len(doc_ids):
         raise RuntimeError(
-            f"Document download is incomplete: {len(absent)} of {len(doc_ids)} "
-            f"requested documents did not come back. Missing: {sample}{more}. "
-            f"Chunk-level failures are logged above; a partial set would "
-            f"otherwise surface later as documents depending on documents "
-            f"that were never downloaded."
+            f"Document download is incomplete: asked for {len(doc_ids)} "
+            f"documents, {len(all_documents)} came back "
+            f"({len(doc_ids) - len(all_documents)} short). Chunk-level "
+            f"failures are logged above; a partial set would otherwise "
+            f"surface later as documents depending on documents that were "
+            f"never downloaded."
         )
 
     return all_documents
