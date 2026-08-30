@@ -52,10 +52,31 @@ class SQLiteDriver:
         # Initialize SQLiteDB
         self._db = SQLiteDB(str(db_path))
 
-        # Create branch if it doesn't exist
+        # Create the branch, but only where it can be created as a root.
+        #
+        # DID's add_branch reads an empty or omitted parent as "the current
+        # branch", not "no parent" (DID-python#51, matching MATLAB's isempty,
+        # which covers both [] and ''). A root is made only when there is no
+        # current branch. With no branches at all there cannot be one, so
+        # omitting the parent here is structurally a root -- as NDI-matlab's
+        # didsqlite.m gets it from the same isempty(bid) guard.
+        #
+        # The previous "" argument happened to work only because did.database
+        # initialises current_branch_id to empty and never restores it from
+        # the file; that is DID's implementation detail, not a guarantee this
+        # constructor can make.
         existing_branches = self._db.all_branch_ids()
-        if branch_id not in existing_branches:
-            self._db.add_branch(branch_id, "")  # Empty string for root branch
+        if not existing_branches:
+            self._db.add_branch(branch_id)
+        elif branch_id not in existing_branches:
+            # Creating it now would attach it to whatever the current branch
+            # happens to be, so name the problem instead. get_doc_ids on a
+            # branch that does not exist raises in current DID, so leaving it
+            # missing only defers the failure to a less informative place.
+            raise ValueError(
+                f"The DID database at {db_path} has branches "
+                f"{sorted(existing_branches)} but not {branch_id!r}."
+            )
 
     def add(self, document: dict) -> None:
         """Add a document to the database."""
