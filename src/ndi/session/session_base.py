@@ -290,15 +290,21 @@ class ndi_session(ABC):
         # Search database
         dev_docs = self.database_search(q)
 
-        # Convert to ndi_daq_system objects
+        # Convert to ndi_daq_system objects.
+        #
+        # Failures are NOT swallowed. MATLAB's ndi.session/daqsystem_load calls
+        # ndi_document2ndi_object in a bare loop, so a document naming a class
+        # that cannot be constructed raises there; catching it here was a silent
+        # divergence. It also hid real gaps: a DAQ system whose class is missing
+        # from this port simply vanished from the returned list, so the only
+        # symptom was a session that reported fewer DAQ systems than it stored
+        # -- which is how the absent image/imageseries path (#71) stayed
+        # invisible behind a count mismatch instead of naming itself.
         dev = []
         for doc in dev_docs:
-            try:
-                daq = self._document_to_object(doc)
-                if daq is not None:
-                    dev.append(daq)
-            except Exception:
-                pass
+            daq = self._document_to_object(doc)
+            if daq is not None:
+                dev.append(daq)
 
         if len(dev) == 0:
             return None
