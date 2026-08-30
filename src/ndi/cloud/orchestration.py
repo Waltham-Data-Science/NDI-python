@@ -72,6 +72,14 @@ def downloadDataset(
     if verbose:
         print(f"  Downloaded {len(doc_jsons)} documents")
 
+    # Describe the set before anything tries to store it. If a dependency
+    # points outside the set, no add strategy can succeed and the problem is
+    # upstream of the database entirely -- worth knowing before reading a
+    # thousand lines of per-document add errors.
+    from .diagnostics import document_set_report
+
+    set_report = document_set_report(doc_jsons)
+
     # When not syncing files, rewrite file_info locations to ndic:// URIs
     # so binary files can be fetched on demand later.
     if not sync_files:
@@ -257,6 +265,16 @@ def downloadDataset(
                     "database at all."
                 )
             lines.append(f"\nFull JSON of missing documents written to:\n  {missing_docs_path}")
+            lines.append("\n\n" + set_report)
+
+            # What the add stage did with it, so the two halves can be
+            # compared: offered, stored, and how many of each class survived.
+            lines.append(
+                f"\n\n=== add stage ===\n"
+                f"  documents offered:    {len(documents)}\n"
+                f"  ids in database:      {len(db_ids)}\n"
+                f"  add_doc_failures:     {len(getattr(dataset, 'add_doc_failures', []) or [])}"
+            )
             raise RuntimeError("".join(lines))
 
     return dataset
