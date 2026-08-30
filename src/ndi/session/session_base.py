@@ -290,15 +290,21 @@ class ndi_session(ABC):
         # Search database
         dev_docs = self.database_search(q)
 
-        # Convert to ndi_daq_system objects
+        # Convert to ndi_daq_system objects.
+        #
+        # Failures are NOT swallowed. MATLAB's ndi.session/daqsystem_load calls
+        # ndi_document2ndi_object in a bare loop, so a document naming a class
+        # that cannot be constructed raises there; catching it here was a silent
+        # divergence. It also hid real gaps: a DAQ system whose class is missing
+        # from this port simply vanished from the returned list, so the only
+        # symptom was a session that reported fewer DAQ systems than it stored
+        # -- which is how the absent image/imageseries path (#71) stayed
+        # invisible behind a count mismatch instead of naming itself.
         dev = []
         for doc in dev_docs:
-            try:
-                daq = self._document_to_object(doc)
-                if daq is not None:
-                    dev.append(daq)
-            except Exception:
-                pass
+            daq = self._document_to_object(doc)
+            if daq is not None:
+                dev.append(daq)
 
         if len(dev) == 0:
             return None
@@ -798,15 +804,16 @@ class ndi_session(ABC):
             ndi_query("element.ndi_element_class").contains("probe")
         )
 
-        # Convert existing docs to probe objects
+        # Convert existing docs to probe objects. Failures raise, as in
+        # daqsystem_load above and as in MATLAB, whose getprobes builds each
+        # stored probe with a bare ndi_document2ndi_object call. Swallowing
+        # here silently reported a session as having fewer stored probes than
+        # it does, and would then re-create the ones it failed to load.
         existing_probes = []
         for doc in existing_docs:
-            try:
-                obj = self._document_to_object(doc)
-                if obj is not None:
-                    existing_probes.append(obj)
-            except Exception:
-                pass
+            obj = self._document_to_object(doc)
+            if obj is not None:
+                existing_probes.append(obj)
 
         # Create new probe objects for those not in database
         probes = []
@@ -1061,16 +1068,25 @@ class ndi_session(ABC):
             if isinstance(props, dict):
                 daq_class_name = props.get("daqsystem", {}).get("ndi_daqsystem_class", "")
 
-            # Check for mfdaq in the class name, or default to mfdaq
-            # if class name is missing (most DAQ systems are MFDAQ)
+            # Default to mfdaq when the class name is missing: most DAQ
+            # systems are MFDAQ, and older documents omit it.
             if "mfdaq" in daq_class_name or not daq_class_name:
                 from ..daq.system_mfdaq import ndi_daq_system_mfdaq
 
                 return ndi_daq_system_mfdaq(session=self, document=document)
 
-            from ..daq.system import ndi_daq_system
-
-            return ndi_daq_system(session=self, document=document)
+            # Otherwise use the registered class for this name. Falling
+            # straight through to the generic ndi_daq_system, as this used to,
+            # silently downgraded every non-mfdaq system to the base class --
+            # so a document naming e.g. ndi.daq.system.image was built as a
+            # plain DAQ system and nothing said so.
+            daq_cls = get_class(daq_class_name)
+            if daq_cls is None:
+                raise ValueError(
+                    f"Unknown DAQ system class: {daq_class_name!r}. "
+                    "Register it in ndi.class_registry."
+                )
+            return daq_cls(session=self, document=document)
 
         if document.doc_isa("element"):
             props = document.document_properties
