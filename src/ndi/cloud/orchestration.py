@@ -10,6 +10,7 @@ MATLAB equivalents: downloadDataset.m, uploadDataset.m, syncDataset.m,
 
 from __future__ import annotations
 
+import re
 import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -177,11 +178,34 @@ def downloadDataset(
             # ids left the cause invisible -- a CI failure named 501 documents
             # and nothing about what was wrong with them.
             reasons = dict(getattr(dataset, "add_doc_failures", []) or [])
-            distinct = {}
+
+            # Separate the genuine problems from the fallout.
+            #
+            # After a batch add is rejected, each document is retried alone,
+            # and every document whose dependency sits later in the list then
+            # fails too -- hundreds of ValidationDependency errors that say
+            # nothing. The ones that matter name an id that is absent from the
+            # whole downloaded set: no ordering could have satisfied those.
+            offered_ids = {
+                (dj.get("base", {}).get("id", "") if isinstance(dj, dict) else "").lower()
+                for dj in doc_jsons
+            }
+            offered_ids.discard("")
+            dangling = re.compile(r'Dependent doc ID "([^"]+)"')
+
+            genuine: dict[str, list[str]] = {}
+            fallout = 0
+            distinct: dict[str, list[str]] = {}
             for doc_id, _cls in real_missing:
                 reason = reasons.get(doc_id)
-                if reason:
-                    distinct.setdefault(reason, []).append(doc_id)
+                if not reason:
+                    continue
+                distinct.setdefault(reason, []).append(doc_id)
+                match = dangling.search(reason)
+                if match and match.group(1).lower() in offered_ids:
+                    fallout += 1  # resolvable within the batch
+                else:
+                    genuine.setdefault(reason, []).append(doc_id)
 
             lines = [
                 f"Downloaded {len(doc_jsons)} documents but "
@@ -201,15 +225,30 @@ def downloadDataset(
                     "mostly fallout from that retry, not independent problems."
                     f"\n\nBatch rejection: {batch_failure}\n\n",
                 )
-            for doc_id, doc_class in real_missing[:50]:
+            for doc_id, doc_class in real_missing[:10]:
                 reason = reasons.get(doc_id)
                 suffix = f" -- {reason}" if reason else ""
                 lines.append(f"\n  - {doc_id} (class: {doc_class}){suffix}")
-            if len(real_missing) > 50:
-                lines.append(f"\n  ... and {len(real_missing) - 50} more")
-            if distinct:
+            if len(real_missing) > 10:
+                lines.append(f"\n  ... and {len(real_missing) - 10} more")
+            if genuine:
+                lines.append(
+                    f"\n\n{len(genuine)} reason(s) name an id that is absent from the "
+                    f"entire downloaded set -- no ordering could satisfy these, so "
+                    f"they are the real problem:"
+                )
+                for reason, ids in sorted(genuine.items(), key=lambda kv: -len(kv[1]))[:20]:
+                    lines.append(f"\n  [{len(ids)}x] {reason}")
+            if fallout:
+                lines.append(
+                    f"\n\n{fallout} further document(s) failed only because the "
+                    f"document they depend on was retried later; those references "
+                    f"resolve within the downloaded set and are not independent "
+                    f"problems."
+                )
+            elif distinct and not genuine:
                 lines.append("\n\nDistinct failure reasons:")
-                for reason, ids in sorted(distinct.items(), key=lambda kv: -len(kv[1])):
+                for reason, ids in sorted(distinct.items(), key=lambda kv: -len(kv[1]))[:20]:
                     lines.append(f"\n  [{len(ids)}x] {reason}")
             elif real_missing:
                 lines.append(
