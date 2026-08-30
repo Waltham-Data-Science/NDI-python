@@ -804,15 +804,16 @@ class ndi_session(ABC):
             ndi_query("element.ndi_element_class").contains("probe")
         )
 
-        # Convert existing docs to probe objects
+        # Convert existing docs to probe objects. Failures raise, as in
+        # daqsystem_load above and as in MATLAB, whose getprobes builds each
+        # stored probe with a bare ndi_document2ndi_object call. Swallowing
+        # here silently reported a session as having fewer stored probes than
+        # it does, and would then re-create the ones it failed to load.
         existing_probes = []
         for doc in existing_docs:
-            try:
-                obj = self._document_to_object(doc)
-                if obj is not None:
-                    existing_probes.append(obj)
-            except Exception:
-                pass
+            obj = self._document_to_object(doc)
+            if obj is not None:
+                existing_probes.append(obj)
 
         # Create new probe objects for those not in database
         probes = []
