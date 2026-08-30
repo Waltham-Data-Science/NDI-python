@@ -187,6 +187,20 @@ def downloadDataset(
                 f"Downloaded {len(doc_jsons)} documents but "
                 f"{len(real_missing)} are missing from the local dataset:"
             ]
+            batch_failure = getattr(dataset, "add_batch_failure", None)
+            if batch_failure:
+                # Everything below is fallout. The documents are validated as
+                # one batch, so a single bad document rejects the whole set,
+                # and the per-document retry then fails for every document
+                # whose dependency sits later in the list. Lead with the one
+                # reason that is not an artifact of that retry.
+                lines.insert(
+                    0,
+                    "The batch add was rejected as a whole, so each document "
+                    "was retried alone; the per-document reasons below are "
+                    "mostly fallout from that retry, not independent problems."
+                    f"\n\nBatch rejection: {batch_failure}\n\n",
+                )
             for doc_id, doc_class in real_missing[:50]:
                 reason = reasons.get(doc_id)
                 suffix = f" -- {reason}" if reason else ""

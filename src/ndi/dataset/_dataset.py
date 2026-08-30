@@ -833,6 +833,9 @@ class ndi_dataset_dir(ndi_dataset):
         # Track documents that failed to add (list of (doc_id, reason) tuples).
         # Callers (e.g. downloadDataset) can inspect this after construction.
         self.add_doc_failures: list[tuple[str, str]] = []
+        # Set when the single batch add failed; the reason the set as a whole
+        # was rejected, as distinct from the per-document fallout after it.
+        self.add_batch_failure: str | None = None
 
         if documents is not None and documents:
             # Hidden 3rd argument: create from pre-loaded documents.
@@ -858,7 +861,13 @@ class ndi_dataset_dir(ndi_dataset):
             # name them, not just report that something went wrong.
             try:
                 self._session._database.add_many(documents)
-            except Exception:
+            except Exception as batch_exc:
+                # The batch is validated as a unit, so one bad document takes
+                # the whole set down. Record *that* reason first: it is the
+                # root cause, and the per-document pass below cannot recover
+                # it once the batch has been abandoned.
+                self.add_batch_failure = str(batch_exc)
+                self.add_doc_failures.append(("<batch>", str(batch_exc)))
                 for doc in documents:
                     try:
                         self._session._database.add(doc)
