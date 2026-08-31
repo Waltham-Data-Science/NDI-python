@@ -21,7 +21,7 @@ import math
 import pytest
 
 from tests.symmetry import _time_scenario as scenario
-from tests.symmetry.conftest import SOURCE_TYPES, SYMMETRY_BASE
+from tests.symmetry.conftest import SOURCE_TYPES, SYMMETRY_BASE, missing_artifact
 
 REL_PATH = ("time", "timeConvert", "testTimeConvertArtifacts", "timeConvertCases.json")
 
@@ -102,7 +102,7 @@ class TestTimeConvertReadArtifacts:
     def test_artifacts_reproduce(self, source_type):
         artifact_file = _artifact_file(source_type)
         if not artifact_file.is_file():
-            pytest.skip(
+            missing_artifact(
                 f"{source_type} time_convert artifact missing. "
                 f"Run the corresponding makeArtifacts suite first."
             )
@@ -115,9 +115,9 @@ class TestTimeConvertReadArtifacts:
         ml_file = _artifact_file("matlabArtifacts")
         py_file = _artifact_file("pythonArtifacts")
         if not ml_file.is_file():
-            pytest.skip("matlabArtifacts time_convert artifact missing.")
+            missing_artifact("matlabArtifacts time_convert artifact missing.")
         if not py_file.is_file():
-            pytest.skip("pythonArtifacts time_convert artifact missing.")
+            missing_artifact("pythonArtifacts time_convert artifact missing.")
 
         ml = _load_cases(ml_file)
         py = _load_cases(py_file)

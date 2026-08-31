@@ -23,7 +23,7 @@ import pytest
 
 from ndi.session.dir import ndi_session_dir
 from ndi.util import compareSessionSummary, sessionSummary
-from tests.symmetry.conftest import SOURCE_TYPES, SYMMETRY_BASE
+from tests.symmetry.conftest import SOURCE_TYPES, SYMMETRY_BASE, missing_artifact
 from tests.symmetry.read_artifacts.session._summary_helpers import (
     sort_daq_systems_by_name,
 )
@@ -52,7 +52,7 @@ class TestBlankSessionRayolab:
     def _open_session(self, source_type):
         artifact_dir = self._artifact_dir(source_type)
         if not artifact_dir.exists():
-            pytest.skip(
+            missing_artifact(
                 f"Artifact directory from {source_type} does not exist. "
                 f"Run the corresponding makeArtifacts suite first."
             )
@@ -98,7 +98,7 @@ class TestBlankSessionRayolab:
 
         summary_path = artifact_dir / "sessionSummary.json"
         if not summary_path.is_file():
-            pytest.skip(
+            missing_artifact(
                 f"sessionSummary.json not found in {source_type} artifact dir; "
                 f"skipping summary comparison."
             )
