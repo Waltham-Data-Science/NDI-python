@@ -250,37 +250,38 @@ def definitions() -> list[dict]:
             ["cell"],
             ["['café', 'naïve']"],
         ),
-        # --- the two traps, expectations deferred -------------------------
+        # --- the two traps, both settled by the first real MATLAB run -----
         _case(
-            "multipleGroupsFirstGroupWins",
-            "TRAP. Only the FIRST capture group is read. Row 2 matches the second "
-            "alternative, so group 1 did not participate and a row that plainly "
-            "matched records the empty string. The shipped XylidineDose rule in "
-            "+setup/+conv/+babu/textParser.json has exactly this shape. Python's "
-            "regex engine gives None where MATLAB gives '', so a port must map "
-            "None to '' or diverge here.",
+            "multipleGroupsFirstParticipatingGroupWins",
+            "SETTLED BY THE FIRST REAL MATLAB RUN, against the prediction. Only "
+            "the first PARTICIPATING capture group is read. Row 2 matches the "
+            "second alternative, so group 1 is not part of the match at all: "
+            "MATLAB's regexp(...,'tokens','once') returns tokens for the matched "
+            "alternative alone and reads 7, where Python returns one entry per "
+            "group in the whole pattern with None for the absentees. The "
+            "prediction was that MATLAB recorded '' here; it does not, and the "
+            "column is double rather than cell. The shipped XylidineDose rule in "
+            "+setup/+conv/+babu/textParser.json has exactly this shape.",
             True,
             [("Dose", r"(\d+)MM|(\d+)\s+mM")],
             [["5MM"], ["7 mM"]],
-            [],
-            [],
-            [],
-            deferred=True,
+            ["Dose"],
+            ["double"],
+            ["[5, 7]"],
         ),
         _case(
             "escapedParenTreatedAsToken",
-            "TRAP. The '(' scan cannot tell an escaped paren from a capture group, "
-            "so this is treated as a token rule even though it has no groups. What "
-            "the engine returns for a group-less pattern decides whether the rows "
-            "record NaN or something else, and that is a source-read prediction on "
-            "the MATLAB side -- hence deferred.",
+            "SETTLED BY THE FIRST REAL MATLAB RUN, confirming the prediction. The "
+            "'(' scan cannot tell an escaped paren from a capture group, so this "
+            "is treated as a token rule even though it has no groups; the "
+            "group-less match yields no tokens, so every row takes the miss "
+            "branch and records NaN because the pattern text contains '\\d'.",
             False,
             [("Paren", r"value\(\d+\)")],
             [["value(5)"], ["value(9)"]],
-            [],
-            [],
-            [],
-            deferred=True,
+            ["Paren"],
+            ["double"],
+            ["[NaN, NaN]"],
         ),
     ]
 

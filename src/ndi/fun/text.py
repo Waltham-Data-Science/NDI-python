@@ -22,6 +22,11 @@ files, **33 fail to compile under** :mod:`re` (24 for the inline flag, 8 for
 the lookbehind, and one — ``PT3602`` — because it has an unbalanced ``)``
 and is malformed under any engine). ``regex`` compiles all but that last one.
 
+On Python 3.10 the count is lower and the situation is *worse*, not better: a
+mid-pattern global flag was only deprecated there, not an error, so those 24
+compile and the flag silently applies to the **whole** pattern. The stdlib
+does not refuse them on 3.10, it answers them differently.
+
 Hoisting a mid-pattern ``(?i)`` to the front to satisfy :mod:`re` is not a
 workaround, it is a **behaviour change**: MATLAB applies the flag from that
 point onward, so in ``(?<!To.*)(?i)WT`` the lookbehind stays case-sensitive
@@ -167,12 +172,15 @@ def parse_text(
     * **A column of nothing but empty strings becomes a logical column of
       False**, because MATLAB's flattening pass treats ``''`` as empty; with
       *clean* set it is then dropped entirely.
-    * **Only the first capture group is read.** With alternating groups such
-      as ``(\\d+)MM|(\\d+)\\s+mM``, a row matching the second alternative
-      leaves group 1 unparticipating and records the empty string even though
-      the row plainly matched. MATLAB yields ``''`` there and Python's regex
-      engine yields ``None``; the ``None`` is mapped to ``''`` so the two
-      languages agree.
+    * **Only the first PARTICIPATING capture group is read.** With alternating
+      groups such as ``(\\d+)MM|(\\d+)\\s+mM``, a row matching the second
+      alternative leaves group 1 out of the match. MATLAB's ``regexp(...,
+      'tokens', 'once')`` returns tokens for the matched alternative alone,
+      so it reads ``7``; Python returns one entry per group in the whole
+      pattern, with ``None`` for the ones that did not take part. The
+      non-participating entries are dropped so the two languages agree.
+      (Measured, not assumed: this case was recorded as a deferred trap and
+      the first real MATLAB run settled it, refuting the opposite reading.)
 
     Example::
 
@@ -205,16 +213,19 @@ def parse_text(
                 continue
 
             match = compiled.search(row_text)
-            groups = match.groups() if match is not None else ()
+            # Only the groups that PARTICIPATED, in pattern order. MATLAB's
+            # regexp(..., 'tokens', 'once') returns tokens for the matched
+            # alternative alone, where Python returns one entry per group in
+            # the whole pattern with None for the ones that did not take part.
+            # Dropping the Nones is what makes the two agree -- see the
+            # multipleGroupsFirstParticipatingGroupWins case.
+            groups = tuple(g for g in match.groups() if g is not None) if match is not None else ()
             if not groups:
                 # No match at all, or a match by a pattern with no groups.
                 data[f][v] = math.nan if misses_are_nan else ""
                 continue
 
             token = groups[0]
-            if token is None:
-                # The group did not participate. MATLAB records '' here.
-                token = ""
             if any(ch in _ASCII_DIGITS for ch in token):
                 # '_' is rewritten to '.' first, so '3_5' parses as 3.5.
                 value = _str2double(token.replace("_", "."))

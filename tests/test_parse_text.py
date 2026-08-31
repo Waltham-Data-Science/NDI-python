@@ -31,28 +31,61 @@ def _rules_file(tmp_path, rules, name="rules.json"):
 #   +ndi/+setup/+conv/+babu/textParser.json
 #   +ndi/+setup/+conv/+dabrowska/dabrowska_fileManifest_ephys.json
 # They are the reason this module uses `regex` and not `re`.
-SHIPPED_PATTERNS_RE_CANNOT_COMPILE = [
-    r"(?i)heat|(?<!\s+to\s+.*|\+)37",  # variable-width lookbehind
-    r"(?<!To.*)(?i)WT",  # inline flag mid-pattern
-    r"neurons/((?i)[a-z]{3} \d{1,2} \d{4})",  # inline flag mid-pattern
-    r"(?<!To.*)P1(?!_?P2)",  # variable-width lookbehind
+
+# Variable-width lookbehind: a hard error in `re` on every supported version.
+LOOKBEHIND_PATTERNS = [
+    r"(?i)heat|(?<!\s+to\s+.*|\+)37",
+    r"(?<!To.*)(?i)WT",
+    r"(?<!To.*)P1(?!_?P2)",
 ]
+
+# An inline flag part-way through a pattern, paired with a subject on which
+# MATLAB's scoping and a whole-pattern flag give DIFFERENT answers. With
+# MATLAB (and `regex`) semantics the leading literal `neurons/` stays
+# case-sensitive, so an upper-case prefix must not match.
+INLINE_FLAG_PATTERNS = [
+    (r"neurons/((?i)[a-z]{3} \d{1,2} \d{4})", "NEURONS/Jan 5 2020"),
+]
+
+ALL_SHIPPED_PATTERNS = LOOKBEHIND_PATTERNS + [p for p, _ in INLINE_FLAG_PATTERNS]
 
 
 class TestRegexEngineRequirement:
     """Why this module depends on `regex`. These are the load-bearing tests."""
 
-    @pytest.mark.parametrize("pattern", SHIPPED_PATTERNS_RE_CANNOT_COMPILE)
-    def test_stdlib_re_cannot_compile_shipped_patterns(self, pattern):
-        """The standard library rejects these outright -- not a style preference.
+    @pytest.mark.parametrize("pattern", LOOKBEHIND_PATTERNS)
+    def test_stdlib_re_rejects_variable_width_lookbehind(self, pattern):
+        """`re` has never supported this, on any version NDI-python targets.
 
-        If this ever stops raising, the standard library has grown the feature
+        If it ever stops raising, the standard library has grown the feature
         and the dependency can be revisited.
         """
         with pytest.raises(re.error):
             re.compile(pattern)
 
-    @pytest.mark.parametrize("pattern", SHIPPED_PATTERNS_RE_CANNOT_COMPILE)
+    @pytest.mark.parametrize(("pattern", "subject"), INLINE_FLAG_PATTERNS)
+    def test_stdlib_re_cannot_serve_a_mid_pattern_inline_flag(self, pattern, subject):
+        """`re` either refuses the pattern or answers differently. Both are fatal.
+
+        The two failure modes are version-dependent, which is why this is not
+        a plain ``pytest.raises``: on 3.11+ a global flag that is not at the
+        start of the expression is a ``re.error``, while on 3.10 it compiles
+        and the flag applies to the WHOLE pattern. The second is the worse
+        outcome -- a silently different answer rather than a refusal -- and it
+        is what this asserts when the compile succeeds.
+        """
+        try:
+            compiled = re.compile(pattern)
+        except re.error:
+            return  # 3.11+: refused outright, which is enough
+        stdlib_matched = compiled.search(subject) is not None
+        matlab_matched = regex.search(pattern, subject) is not None
+        assert stdlib_matched != matlab_matched, (
+            "`re` compiled the pattern AND agreed with MATLAB scoping, so the "
+            "reason for the dependency no longer holds on this version."
+        )
+
+    @pytest.mark.parametrize("pattern", ALL_SHIPPED_PATTERNS)
     def test_regex_module_compiles_shipped_patterns(self, pattern):
         assert regex.compile(pattern) is not None
 
@@ -102,17 +135,34 @@ class TestTokenConversion:
         frame = parse_text([["label_1B"], ["label_42"]], f)
         assert list(frame["Label"]) == ["1B", 42.0]
 
-    def test_non_participating_group_records_empty_string(self, tmp_path):
-        """The one place a port diverges for free: regex gives None, MATLAB ''.
+    def test_only_the_first_participating_group_is_read(self, tmp_path):
+        """The one place a port diverges for free, settled by measurement.
 
-        Row 2 matches the second alternative, so group 1 did not participate.
-        MATLAB records ''; without the mapping this side would record None and
-        the two languages would disagree on a row that plainly matched.
+        Row 2 matches the second alternative, so group 1 is not part of the
+        match at all. MATLAB's regexp(..., 'tokens', 'once') returns tokens
+        for the matched alternative alone and reads 7; Python returns one
+        entry per group in the whole pattern, with None for the absentees.
+        Dropping the Nones is what makes the two agree.
+
+        The opposite reading -- that MATLAB records '' for the absent group --
+        was the original prediction, and the first real MATLAB run of the
+        symmetry battery refuted it: MATLAB produced a double column [5, 7]
+        where this side produced a cell column [5, ''].
         """
         f = _rules_file(tmp_path, [("Dose", r"(\d+)MM|(\d+)\s+mM")])
         frame = parse_text([["5MM"], ["7 mM"]], f)
-        assert list(frame["Dose"]) == [5.0, ""]
-        assert None not in list(frame["Dose"])
+        assert list(frame["Dose"]) == [5.0, 7.0]
+        assert frame["Dose"].dtype == float, "Both rows are numbers, so the column is double."
+
+    def test_an_optional_group_inside_a_matched_alternative_still_counts(self, tmp_path):
+        """Dropping the Nones must not disturb the group that DID participate.
+
+        '12 hour' matches with the optional inner group absent; group 1 took
+        part and is still the one read.
+        """
+        f = _rules_file(tmp_path, [("Hours", r"(\d+([._]\d+)?)[_ ]*(?:hr|hour)")])
+        frame = parse_text([["3_5 hr"], ["12 hour"]], f)
+        assert list(frame["Hours"]) == [3.5, 12.0]
 
 
 class TestMissesAndCleaning:

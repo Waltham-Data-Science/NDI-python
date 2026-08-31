@@ -74,34 +74,6 @@ class TestParseTextReadArtifacts:
                 py[name]
             ), f"Inputs differ between languages for case {name!r}."
 
-    def test_deferred_expectations_are_reported(self, capsys):
-        """Report what MATLAB really recorded for the two trap cases.
-
-        They carry no predicted value because the exact return shape for a
-        pattern whose capture group did not participate is a source-read
-        prediction on the MATLAB side, not a measurement. This reports; it does
-        not fail on the answer. Once settled, fill in the expected table in
-        ``definitions()`` on BOTH sides and clear ``expectationDeferred`` -- a
-        deferred flag left on a case that is now understood is a silently
-        skipped assertion.
-        """
-        ml = _load("matlabArtifacts")
-        deferred = [d for d in parse_text_cases.definitions() if d["expectationDeferred"]]
-        assert deferred, (
-            "No deferred cases found. If both traps have been settled, delete "
-            "this test along with the expectationDeferred flag."
-        )
-        with capsys.disabled():
-            for defn in deferred:
-                name = defn["name"]
-                if name not in ml:
-                    print(f"parseText deferred case {name!r} is MISSING from the artifact.")
-                    continue
-                print(
-                    f"parseText deferred case {name!r} MATLAB recorded: "
-                    f"{parse_text_cases.signature(ml[name])}"
-                )
-
 
 class TestReaderSurvivesMatlabJsonShapes:
     """The comparison must survive MATLAB's jsonencode collapsing a container.
