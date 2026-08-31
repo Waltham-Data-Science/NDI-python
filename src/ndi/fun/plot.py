@@ -282,3 +282,83 @@ def stimulusTimeseries(
             h_texts.append(ht)
 
     return h_lines, h_texts, stimulus_data, stimulus_time_data
+
+
+def plot_extracellular_spikeshapes(
+    S: Any,
+    space: float,
+    g: list[Any] | None = None,
+) -> list[Any]:
+    """Plot the spike shapes of extracellularly recorded neurons in a session.
+
+    MATLAB equivalent: ``ndi.fun.plot_extracellular_spikeshapes`` -- note that
+    MATLAB places this at the top of ``+fun``, not inside ``+fun/+plot``, so
+    it is re-exported from :mod:`ndi.fun` and the mirror path
+    ``ndi.fun.plot_extracellular_spikeshapes`` is the one to call.
+
+    Searches *S* for extracellular documents and plots each one's mean
+    waveform on its own panel of a 4x4 super-subplot grid, then puts every
+    panel on common axes.
+
+    Args:
+        S: The session to search.
+        space: Spacing between multichannel waveforms, in the same units as
+            the spike waveform.
+        g: Pre-fetched documents. When omitted, they are searched for.
+
+    Returns:
+        The list of documents plotted.
+
+    Raises:
+        ImportError: If matplotlib is not installed.
+
+    Note:
+        Two deliberate departures from the MATLAB source, both reported for
+        an upstream fix:
+
+        - MATLAB computes the shared x-limit as
+          ``x_axis(2) = max(x_axis(1), max(...))``, reading index 1 -- the
+          running *minimum* -- where it means index 2. The upper limit
+          therefore tracks the minimum rather than accumulating the maximum.
+          This port accumulates correctly.
+        - MATLAB's help text says it searches for ``neuron_extracellular``
+          documents, but the code queries ``extracellular``. The code is
+          followed here, since that is the observable behaviour.
+    """
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError as exc:
+        raise ImportError(
+            "matplotlib is required for ndi.fun.plot. " "Install it with: pip install matplotlib"
+        ) from exc
+
+    from vlt.plot import supersubplot
+
+    from ndi.query import ndi_query
+
+    if g is None:
+        g = S.database_search(ndi_query("").isa("extracellular"))
+
+    fig = plt.figure()
+
+    x_axis = [float("inf"), float("-inf")]
+    y_axis = [float("inf"), float("-inf")]
+
+    for i, doc in enumerate(g):
+        supersubplot(fig, 4, 4, i + 1)
+        plt.cla()
+        props = doc.document_properties if hasattr(doc, "document_properties") else doc
+        gi = props["neuron_extracellular"]
+        times = np.asarray(gi["waveform_sample_times"])
+        multichan(np.asarray(gi["mean_waveform"]), times, space)
+        x_axis[0] = min(x_axis[0], float(np.min(times)))
+        # MATLAB reads x_axis(1) here; see the Note above.
+        x_axis[1] = max(x_axis[1], float(np.max(times)))
+        bottom, top = plt.gca().get_ylim()
+        y_axis = [min(bottom, y_axis[0]), max(top, y_axis[1])]
+
+    for i in range(len(g)):
+        supersubplot(fig, 4, 4, i + 1)
+        plt.axis([x_axis[0], x_axis[1], y_axis[0], y_axis[1]])
+
+    return g
