@@ -17,9 +17,7 @@ the key-set check above already fails on.
 
 import json
 
-import pytest
-
-from tests.symmetry.conftest import SYMMETRY_BASE
+from tests.symmetry.conftest import SYMMETRY_BASE, missing_artifact
 from tests.symmetry.fun import cases
 
 REL_PATH = ("fun", "whatVaries", "testWhatVariesArtifacts", "whatVariesCases.json")
@@ -32,7 +30,7 @@ def _artifact_file(source_type: str):
 def _load(source_type: str) -> dict[str, dict]:
     f = _artifact_file(source_type)
     if not f.is_file():
-        pytest.skip(f"{source_type} whatVaries artifact missing. Skipping.")
+        missing_artifact(f"{source_type} whatVaries artifact missing. Skipping.")
     return cases.index_by_name(json.loads(f.read_text(encoding="utf-8"))["cases"])
 
 

@@ -118,9 +118,27 @@ jobs:
             runner = TestRunner.withTextOutput("Verbosity", "Detailed");
             results = runner.run(suite);
 
-            fprintf("\n=== MATLAB makeArtifacts: %d passed, %d failed ===\n", ...
-                nnz([results.Passed]), nnz([results.Failed]));
+            fprintf("\n=== MATLAB makeArtifacts: %d passed, %d failed, %d incomplete out of %d ===\n", ...
+                nnz([results.Passed]), nnz([results.Failed]), ...
+                nnz([results.Incomplete]), numel(results));
             assert(all(~[results.Failed]), "MATLAB makeArtifacts failed")
+
+            % An Incomplete test verified nothing. In THIS workflow every
+            % artifact is produced by an earlier stage, so a filtered
+            % assumption means a generator broke -- it does not mean the
+            % artifact legitimately does not exist. So gate on it. NDI-matlab's
+            % own symmetry job deliberately does NOT: Python artifacts really
+            % are absent there, and its incomplete count is honest reporting.
+            % See Waltham-Data-Science/NDI-python#77.
+            incompleteNames = string({results([results.Incomplete]).Name});
+            % "%s" as the format, message as the argument: a test name
+            % containing a percent sign must not be read as a format spec.
+            assert(isempty(incompleteNames), "%s", ...
+                "MATLAB makeArtifacts: " + numel(incompleteNames) + ...
+                " test(s) verified nothing because an assumption was" + ...
+                " filtered, which in this workflow means a missing" + ...
+                " artifact:" + newline + "  " + ...
+                strjoin(incompleteNames, newline + "  "))
 
       # ── Stage 2: Python makeArtifacts + readArtifacts ──────────────────
       - name: "Stage 2: Python symmetry tests (make + read)"
@@ -131,7 +149,11 @@ jobs:
 
           echo ""
           echo "=== Running Python readArtifacts (reads both MATLAB and Python artifacts) ==="
-          pytest tests/symmetry/read_artifacts/ -v --tb=short
+          # Strict mode: a missing artifact is a failure here, not a skip.
+          # Stage 1 produced the matlabArtifacts and the step above produced
+          # the pythonArtifacts, so nothing is legitimately absent. Locally
+          # the same tests still skip, since most contributors have no MATLAB.
+          NDI_SYMMETRY_STRICT=1 pytest tests/symmetry/read_artifacts/ -v --tb=short
 
       # ── Stage 3: MATLAB readArtifacts ──────────────────────────────────
       # Reuse the installation from Stage 1: restore the saved search path
@@ -163,6 +185,24 @@ jobs:
             runner = TestRunner.withTextOutput("Verbosity", "Detailed");
             results = runner.run(suite);
 
-            fprintf("\n=== MATLAB readArtifacts: %d passed, %d failed ===\n", ...
-                nnz([results.Passed]), nnz([results.Failed]));
+            fprintf("\n=== MATLAB readArtifacts: %d passed, %d failed, %d incomplete out of %d ===\n", ...
+                nnz([results.Passed]), nnz([results.Failed]), ...
+                nnz([results.Incomplete]), numel(results));
             assert(all(~[results.Failed]), "MATLAB readArtifacts failed")
+
+            % An Incomplete test verified nothing. In THIS workflow every
+            % artifact is produced by an earlier stage, so a filtered
+            % assumption means a generator broke -- it does not mean the
+            % artifact legitimately does not exist. So gate on it. NDI-matlab's
+            % own symmetry job deliberately does NOT: Python artifacts really
+            % are absent there, and its incomplete count is honest reporting.
+            % See Waltham-Data-Science/NDI-python#77.
+            incompleteNames = string({results([results.Incomplete]).Name});
+            % "%s" as the format, message as the argument: a test name
+            % containing a percent sign must not be read as a format spec.
+            assert(isempty(incompleteNames), "%s", ...
+                "MATLAB readArtifacts: " + numel(incompleteNames) + ...
+                " test(s) verified nothing because an assumption was" + ...
+                " filtered, which in this workflow means a missing" + ...
+                " artifact:" + newline + "  " + ...
+                strjoin(incompleteNames, newline + "  "))

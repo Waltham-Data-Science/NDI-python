@@ -22,7 +22,7 @@ import pytest
 from ndi.dataset import Dataset
 from ndi.query import Query
 from ndi.util import compareDatasetSummary, datasetSummary
-from tests.symmetry.conftest import SOURCE_TYPES, SYMMETRY_BASE
+from tests.symmetry.conftest import SOURCE_TYPES, SYMMETRY_BASE, missing_artifact
 
 
 @pytest.fixture(params=SOURCE_TYPES)
@@ -46,19 +46,19 @@ class TestDownloadIngested:
     def _open_dataset(self, source_type):
         artifact_dir = self._artifact_dir(source_type)
         if not artifact_dir.exists():
-            pytest.skip(
+            missing_artifact(
                 f"Artifact directory from {source_type} does not exist. "
                 f"Run the corresponding makeArtifacts suite first."
             )
 
         summary_path = artifact_dir / "datasetSummary.json"
         if not summary_path.exists():
-            pytest.skip(f"datasetSummary.json not found in {source_type} artifact directory.")
+            missing_artifact(f"datasetSummary.json not found in {source_type} artifact directory.")
 
         # Find the single dataset subdirectory (name may differ from archive)
         subdirs = [p for p in artifact_dir.iterdir() if p.is_dir() and p.name != "jsonDocuments"]
         if len(subdirs) != 1:
-            pytest.skip(
+            missing_artifact(
                 f"Expected exactly one dataset directory in {source_type} artifacts, "
                 f"found {len(subdirs)}."
             )
@@ -106,7 +106,7 @@ class TestDownloadIngested:
 
         expected_doc_counts = expected.get("documentCounts")
         if not expected_doc_counts:
-            pytest.skip(f"No documentCounts in {source_type} datasetSummary.json.")
+            missing_artifact(f"No documentCounts in {source_type} datasetSummary.json.")
 
         _ref_list, id_list, *_ = dataset.session_list()
 
