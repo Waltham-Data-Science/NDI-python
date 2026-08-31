@@ -9,7 +9,11 @@ and probe utilities.
 
 from __future__ import annotations
 
-from . import probe  # noqa: F401 — make ndi.fun.probe accessible
+from . import (
+    file,  # noqa: F401 — make ndi.fun.file accessible
+    probe,  # noqa: F401 — make ndi.fun.probe accessible
+    stimulus,  # noqa: F401 — make ndi.fun.stimulus accessible
+)
 from .utils import (
     channelname2prefixnumber,
     name2variable_name,
