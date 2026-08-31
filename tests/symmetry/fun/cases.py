@@ -334,7 +334,7 @@ WHAT_VARIES_DEFS: list[tuple[str, str, str]] = [
     ("nonNumericValues", "structArrayOfParameterStructs", "testNonNumericValuesReturnedAsCell"),
     ("allConstantSingleStimulus", "singleParameterStruct", "testAllConstantSingleStimulus"),
     ("emptyInput", "emptyCell", "testEmptyInput"),
-    ("allNaNParameter", "cellOfParameterStructs", "none - added divergence probe"),
+    ("allNaNParameter", "cellOfParameterStructs", "testAllNaNParameterIsConstant"),
     ("badInputNumeric", "badInput", "testBadInputErrors, first assertion"),
     ("badCellEntry", "badInput", "testBadInputErrors, second assertion"),
 ]
@@ -343,25 +343,31 @@ WHAT_VARIES_DEFS: list[tuple[str, str, str]] = [
 def known_divergences() -> list[str]:
     """Cases where MATLAB main and this port are MEASURED to disagree today.
 
-    ``local_varyingFields`` in MATLAB's ``whatVaries.m`` compares with
-    ``vlt.data.eqlen``, which bottoms out in a bare ``==``, while this port
-    uses ``isequaln`` semantics throughout.
+    **Empty, and that is the goal state**: every case in the battery is a hard
+    assertion in both languages. Both auditors iterate this list, so an empty
+    one simply asserts nothing extra.
 
-    - ``allNaNParameter``: MATLAB reports ``angle`` varying
-      (``eqlen(NaN, NaN)`` is false); Python reports it constant.
+    It held two entries, and they left for opposite reasons:
 
-    ``cellValuedConstantParameter`` was listed here too, on the source-read
-    prediction that ``==`` is undefined for two cell arrays and MATLAB would
-    therefore ERROR. The first real MATLAB run refuted that: MATLAB reports
-    ``color`` constant and ``angle`` varying, byte-for-byte what this port
-    reports. The entry was removed and the case is a hard assertion again.
+    - ``cellValuedConstantParameter`` never diverged. It was listed on the
+      source-read prediction that ``==`` is undefined for two cell arrays and
+      MATLAB would therefore ERROR. The first real MATLAB run refuted that:
+      MATLAB reports ``color`` constant and ``angle`` varying, byte-for-byte
+      what this port reports.
+    - ``allNaNParameter`` really did diverge, and was FIXED upstream.
+      ``local_varyingFields`` in MATLAB's ``whatVaries.m`` compared with
+      ``vlt.data.eqlen``, which bottoms out in a bare ``==``, so an all-NaN
+      parameter was reported varying over one distinct value --
+      ``local_uniqueValues`` in the same file already used ``isequaln``. That
+      comparison is ``isequaln`` now, matching this port, which has used
+      ``isequaln`` semantics throughout from the start.
 
-    A listed case that now AGREES means the upstream fix landed -- remove the
-    entry. A stale allow-list is how a symmetry suite goes quietly green over
-    the bug it exists to watch, which is why the auditor fails rather than
-    prints.
+    A listed case that now AGREES means the fix landed, or the entry was never
+    right -- remove it. A stale allow-list is how a symmetry suite goes quietly
+    green over the bug it exists to watch, which is why the auditor fails
+    rather than prints.
     """
-    return ["allNaNParameter"]
+    return []
 
 
 def run_what_varies_cases() -> list[dict]:

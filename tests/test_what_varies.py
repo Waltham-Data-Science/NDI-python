@@ -151,11 +151,15 @@ class TestWhatIsConstant:
 
 
 class TestIsequalnSemantics:
-    """This port uses isequaln throughout; MATLAB's whatVaries uses eqlen.
+    """This port uses isequaln throughout, and MATLAB now does too.
 
-    These two cases are the recorded cross-language divergences. Pinning the
-    Python behaviour here means a change to it is caught in Python's own
-    suite, not only when the symmetry artifacts are compared.
+    Both cases below were once recorded as cross-language divergences, and
+    both have been retired -- the cell-valued one because the divergence was
+    predicted from source-reading and never actually existed, the NaN one
+    because MATLAB's ``local_varyingFields`` was fixed to compare with
+    ``isequaln`` instead of ``vlt.data.eqlen``. Pinning the Python behaviour
+    here means a change to it is caught in Python's own suite, not only when
+    the symmetry artifacts are compared.
     """
 
     def test_nan_equals_nan_so_an_all_nan_parameter_is_constant(self):
@@ -163,6 +167,21 @@ class TestIsequalnSemantics:
         varies, constant = whatVaries([{"angle": nan, "contrast": 1}] * 2)
         assert varies == []
         assert math.isnan(_const(constant, "angle"))
+
+    def test_nan_against_a_real_value_still_varies(self):
+        """The companion guard to the case above.
+
+        Without it, an equality that ignored the parameter altogether would
+        leave the suite green. Mirrors MATLAB's
+        ``testNaNVaryingAgainstNonNaNStillVaries``.
+        """
+        nan = float("nan")
+        varies, constant = whatVaries([{"angle": nan, "contrast": 1}, {"angle": 90, "contrast": 1}])
+        values = _params(varies, "angle")
+        assert len(values) == 2
+        assert 90 in values
+        assert any(isinstance(v, float) and math.isnan(v) for v in values)
+        assert _const(constant, "contrast") == 1
 
     def test_cell_valued_constant_parameter_succeeds(self):
         varies, constant = whatVaries(
