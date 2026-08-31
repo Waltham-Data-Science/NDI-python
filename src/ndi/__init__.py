@@ -37,6 +37,7 @@ from . import (
     cloud,
     common,
     daq,
+    data,
     epoch,
     file,
     session,
