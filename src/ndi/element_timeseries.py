@@ -5,16 +5,38 @@ This module provides ndi_element_timeseries, an extension of ndi_element that
 can read and write time series data (e.g., voltage traces, spike times).
 
 ndi_element_timeseries is the intermediate class between ndi_element and ndi_neuron.
+
+Epoch data is stored in **VHSB**, the VH-Lab series binary format, in a
+document file named ``epoch_binary_data.vhsb`` -- byte-for-byte the same
+contract as MATLAB's ``ndi.element.timeseries``:
+
+    MATLAB   vlt.file.custom_file_formats.vhsb_write(fname, timepoints, datapoints, 'use_filelock', 0)
+             epochdoc.add_file('epoch_binary_data.vhsb', fname)
+    Python   vlt.file.custom_file_formats.vhsb_write(fname, timepoints, datapoints, use_filelock=0)
+             doc.add_file(BINARY_FILE_NAME, fname)
+
+VHSB stores a timestamp per sample whenever the sampling interval is not
+constant, which is what makes it usable for a **marked point process** -- an
+ensemble epoch, where the spike times are irregular and *are* the data. An
+implementation that stores only the data and reconstructs times from a sample
+rate is correct for a regularly sampled trace and silently wrong for spikes.
 """
 
 from __future__ import annotations
 
+import os
+import tempfile
 from typing import Any
 
 import numpy as np
 
 from .element import ndi_element
 from .time import ndi_time_clocktype
+
+#: The document file name both languages use for an epoch's binary data. It is
+#: also the only name ``element_epoch.json`` declares in its ``file_list``, in
+#: both repositories, so nothing else can be attached under this document.
+BINARY_FILE_NAME = "epoch_binary_data.vhsb"
 
 
 class ndi_element_timeseries(ndi_element):
@@ -73,13 +95,22 @@ class ndi_element_timeseries(ndi_element):
         if self._session is None:
             raise ValueError("ndi_session required to read time series")
 
-        # Resolve epoch
-        epoch_number = self._resolve_epoch(timeref_or_epoch)
-        if epoch_number is None:
-            raise ValueError(f"Could not resolve epoch: {timeref_or_epoch}")
-
-        # Try to read from ingested data first
-        data, times = self._read_from_ingested(epoch_number, t0, t1)
+        # Resolve to an epoch ID. MATLAB queries the epoch document by
+        # epochid.epochid; resolving to a position and indexing a search
+        # result would depend on the database returning documents in a
+        # defined order, which it does not promise.
+        #
+        # An epoch we cannot resolve, or one with no stored binary, is not an
+        # error here: it falls through to the underlying element, which may
+        # well have that epoch. MATLAB errors instead ("Could not find
+        # epochdoc for epoch X") because it reaches this code only for a
+        # non-direct element. That asymmetry is pre-existing and is left
+        # alone; changing it would turn the documented empty return of
+        # readtimeseries on an element with no data into a raise.
+        epoch_id = self._resolve_epoch_id(timeref_or_epoch)
+        data, times = (
+            (None, None) if epoch_id is None else self._read_from_ingested(epoch_id, t0, t1)
+        )
         if data is not None:
             return data, times, None
 
@@ -114,62 +145,87 @@ class ndi_element_timeseries(ndi_element):
 
         return None
 
+    def _resolve_epoch_id(self, timeref_or_epoch: Any) -> str | None:
+        """Resolve a timeref / epoch number / epoch id to an epoch ID string."""
+        if isinstance(timeref_or_epoch, str):
+            return timeref_or_epoch
+
+        if isinstance(timeref_or_epoch, int):
+            et, _ = self.epochtable()
+            for entry in et:
+                if entry.get("epoch_number") == timeref_or_epoch:
+                    return entry.get("epoch_id")
+            return None
+
+        if hasattr(timeref_or_epoch, "epoch"):
+            return self._resolve_epoch_id(timeref_or_epoch.epoch)
+
+        return None
+
+    def _epoch_document(self, epoch_id: str) -> Any | None:
+        """The element_epoch document for EPOCH_ID, or None.
+
+        Mirrors the MATLAB query in ndi.element.timeseries/readtimeseries:
+        isa element_epoch, depends_on element_id, and an exact epochid match.
+        """
+        from .query import ndi_query
+
+        q = (
+            ndi_query("").isa("element_epoch")
+            & ndi_query("").depends_on("element_id", self.id)
+            & ndi_query("epochid.epochid", "exact_string", epoch_id, "")
+        )
+        docs = self._session.database_search(q)
+        if not docs:
+            return None
+        return docs[0]
+
     def _read_from_ingested(
         self,
-        epoch_number: int,
+        epoch_id: str,
         t0: float,
         t1: float,
     ) -> tuple[np.ndarray | None, np.ndarray | None]:
         """
-        Read data from ingested epoch documents.
-
-        Looks for element_epoch documents that have associated binary data.
+        Read one epoch's data back out of its VHSB binary.
 
         Returns:
-            Tuple of (data, times) or (None, None) if not available
+            Tuple of (data, times), or (None, None) when this epoch has no
+            stored binary -- which is not an error: the caller then falls back
+            to the underlying element.
+
+        ``vhsb_read`` returns ``(y, x)`` -- data first, times second -- which
+        is the order MATLAB's ``[data, t] = vhsb_read(...)`` uses, and the
+        order ``readtimeseries`` returns them in. Getting it backwards
+        produces two arrays of the right length and entirely wrong content,
+        so it is spelled out rather than left to the reader.
         """
         if self._session is None:
             return None, None
 
-        from .query import ndi_query
+        from vlt.file.custom_file_formats import vhsb_read
 
-        # Find epoch document
-        q = ndi_query("").isa("element_epoch") & ndi_query("").depends_on("element_id", self.id)
-        epoch_docs = self._session.database_search(q)
-
-        if epoch_number < 1 or epoch_number > len(epoch_docs):
+        doc = self._epoch_document(epoch_id)
+        if doc is None:
             return None, None
 
-        doc = epoch_docs[epoch_number - 1]
+        exists, _ = self._session.database_existbinarydoc(doc, BINARY_FILE_NAME)
+        if not exists:
+            return None, None
 
-        # Check for binary data
+        fid = self._session.database_openbinarydoc(doc, BINARY_FILE_NAME)
         try:
-            exists, binary_path = self._session.database_existbinarydoc(doc, "timeseries.vhsb")
-            if not exists:
-                return None, None
+            # The handle carries fullpathfilename, which is what
+            # vlt.file.filename_value reads -- the same way MATLAB hands its
+            # ndi.database.binarydoc straight to vhsb_read.
+            data, times = vhsb_read(fid, t0, t1)
+        finally:
+            self._session.database_closebinarydoc(fid)
 
-            # Read VHSB file
-            fid = self._session.database_openbinarydoc(doc, "timeseries.vhsb")
-            if fid is None:
-                return None, None
-
-            try:
-                raw_data = fid.read()
-                if not raw_data:
-                    return None, None
-                # Parse VHSB format
-                data = np.frombuffer(raw_data, dtype=np.float64)
-                # Reconstruct time array
-                sr = self._get_samplerate_from_doc(doc)
-                if sr > 0 and len(data) > 0:
-                    times = np.arange(len(data)) / sr
-                    return data.reshape(-1, 1), times
-                return data.reshape(-1, 1), np.arange(len(data), dtype=np.float64)
-            finally:
-                self._session.database_closebinarydoc(fid)
-
-        except Exception:
-            return None, None
+        data = np.asarray(data)
+        if data.ndim == 1:
+            data = data.reshape(-1, 1)
+        return data, np.asarray(times).ravel()
 
     def _get_samplerate_from_doc(self, doc: Any) -> float:
         """Extract sample rate from an epoch document."""
@@ -200,37 +256,58 @@ class ndi_element_timeseries(ndi_element):
 
         Returns:
             Tuple of (self, epoch_document)
+
+        The binary is attached BEFORE the document reaches the database,
+        because ``add_file`` records the file on the document and a document
+        already in the database is not revisited. MATLAB gets the same
+        ordering from its ``nargout<2`` deferral in
+        ``ndi.element.timeseries/addepoch``; ``add_to_database`` is the
+        explicit form of that, since Python has no ``nargout``.
         """
-        # Create the epoch document via parent
-        elem, doc = super().addepoch(epoch_id, epoch_clock, t0_t1)
+        has_data = timepoints is not None and datapoints is not None
 
-        # Store binary data if provided
-        if timepoints is not None and datapoints is not None and self._session is not None:
-            self._store_timeseries_data(doc, timepoints, datapoints)
+        if not has_data or self._session is None:
+            return super().addepoch(epoch_id, epoch_clock, t0_t1)
 
+        _, doc = super().addepoch(epoch_id, epoch_clock, t0_t1, add_to_database=False)
+        doc = self._attach_timeseries_data(doc, timepoints, datapoints)
+        self._session.database_add(doc)
+        self.resetepochtable()
         return self, doc
 
-    def _store_timeseries_data(
+    def _attach_timeseries_data(
         self,
         doc: Any,
         timepoints: np.ndarray,
         datapoints: np.ndarray,
-    ) -> None:
-        """Store time series data as binary file attached to document."""
-        if self._session is None:
-            return
+    ) -> Any:
+        """Write the epoch's samples to a VHSB file and attach it to DOC.
 
-        timepoints = np.asarray(timepoints, dtype=np.float64)
+        Errors are NOT swallowed. The previous implementation wrapped this in
+        a bare ``except Exception: pass`` under the banner "binary storage is
+        best-effort", which meant a caller that stored an epoch and got no
+        exception still had nothing on disk. Storage either happens or says
+        why.
+        """
+        from vlt.file.custom_file_formats import vhsb_write
+
+        timepoints = np.asarray(timepoints, dtype=np.float64).reshape(-1, 1)
         datapoints = np.asarray(datapoints, dtype=np.float64)
+        if datapoints.ndim == 1:
+            datapoints = datapoints.reshape(-1, 1)
+        if len(timepoints) != len(datapoints):
+            raise ValueError(
+                f"timepoints and datapoints must have the same number of samples; "
+                f"got {len(timepoints)} and {len(datapoints)}."
+            )
 
-        try:
-            fid = self._session.database_openbinarydoc(doc, "timeseries.vhsb")
-            if fid is not None:
-                # Write data in simple format: timepoints then datapoints
-                fid.write(datapoints.tobytes())
-                self._session.database_closebinarydoc(fid)
-        except Exception:
-            pass  # Binary storage is best-effort
+        # MATLAB writes to <TempFolder>/<epochdoc.id()>.vhsb and then attaches
+        # it under the document name; the temp name is not part of the
+        # contract but matching it keeps the two behaving alike.
+        tmpdir = tempfile.mkdtemp(prefix="ndi-vhsb-")
+        fname = os.path.join(tmpdir, f"{doc.id}.vhsb")
+        vhsb_write(fname, timepoints, datapoints, use_filelock=0)
+        return doc.add_file(BINARY_FILE_NAME, fname)
 
     def samplerate(self, epoch: Any = None) -> float:
         """

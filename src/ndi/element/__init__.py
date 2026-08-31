@@ -327,6 +327,8 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
         epoch_id: str,
         epoch_clock: list[ndi_time_clocktype],
         t0_t1: list[tuple[float, float]],
+        *,
+        add_to_database: bool = True,
     ) -> tuple[ndi_element, Any]:
         """
         Add a new epoch to this element.
@@ -337,6 +339,12 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
             epoch_id: Unique identifier for the epoch
             epoch_clock: List of clock types
             t0_t1: List of (t0, t1) time ranges
+            add_to_database: When False, the document is built and returned
+                but NOT added, leaving the caller to attach files to it first
+                and add it themselves. MATLAB expresses the same thing with
+                ``nargout<2``: "if a second output is requested, the DOC is
+                NOT added to the database". Python has no ``nargout``, so the
+                deferral is an explicit argument.
 
         Returns:
             Tuple of (self, epoch_document)
@@ -352,23 +360,46 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
 
         from ..document import ndi_document
 
+        # element_epoch.epoch_clock is a STRING in the schema, and t0_t1 is a
+        # 2-row matrix -- the shapes MATLAB writes:
+        #
+        #     epochclockstr = epochclock.ndi_clocktype2char();
+        #     t0_t1_input   = vlt.data.colvec(t0_t1);
+        #
+        # Passing a list for epoch_clock made every addepoch fail DID
+        # validation with "Invalid non-char sub-field
+        # element_epoch.epoch_clock", so no epoch document has ever been
+        # storable through this method.
+        clocks = list(epoch_clock) if isinstance(epoch_clock, (list, tuple)) else [epoch_clock]
+        if len(clocks) != 1:
+            raise ValueError(
+                f"element_epoch stores a single epoch_clock string, so exactly one "
+                f"clock type may be given; got {len(clocks)}."
+            )
+
+        ranges = list(t0_t1)
+        if ranges and not isinstance(ranges[0], (list, tuple)):
+            ranges = [ranges]  # a bare (t0, t1) pair
+        if len(ranges) != 1:
+            raise ValueError(f"element_epoch stores one [t0 t1] pair per epoch; got {len(ranges)}.")
+        t0, t1 = float(ranges[0][0]), float(ranges[0][1])
+
         # Create epoch document
         doc = ndi_document(
             "element_epoch",
             **{
-                "element_epoch.epoch_clock": [str(c) for c in epoch_clock],
-                "element_epoch.t0_t1": list(t0_t1),
+                "element_epoch.epoch_clock": str(clocks[0]),
+                "element_epoch.t0_t1": [t0, t1],
                 "epochid.epochid": epoch_id,
             },
         )
         doc.set_dependency_value("element_id", self.id)
         doc.set_session_id(self._session.id())
 
-        # Add to database
-        self._session.database_add(doc)
-
-        # Clear cache
-        self.resetepochtable()
+        if add_to_database:
+            self._session.database_add(doc)
+            # Clear cache
+            self.resetepochtable()
 
         return self, doc
 
