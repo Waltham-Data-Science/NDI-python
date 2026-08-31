@@ -238,9 +238,6 @@ class ndi_database:
         db_path = db_dir / "did-sqlite.sqlite"
         self._driver = SQLiteDriver(db_path, **backend_kwargs)
 
-        # Binary/files directory for file attachments
-        # Named "files" for compatibility with NDI-MATLAB
-
     @property
     def database_path(self) -> Path:
         """Path to the SQLite database file."""
