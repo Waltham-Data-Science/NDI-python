@@ -11,6 +11,11 @@ directory name, the legacy directory name as CODEPOINTS, and both length
 counts. Error identifiers and messages are recorded but never compared --
 MATLAB identifiers and Python exception names can never match, and pinning
 them would make this a translation table instead of a behaviour check.
+
+Both codepoint fields go through ``cases.as_row`` before comparison: MATLAB's
+``jsonencode`` writes a one-element numeric array as a bare number, so a
+single-codepoint case such as ``astralOnlyEmoji`` arrives here as ``129417``
+rather than ``[129417]``. See ``as_row`` for why both readers need this.
 """
 
 import json
@@ -64,6 +69,6 @@ class TestPathSafeNameReadArtifacts:
         ml = _load("matlabArtifacts")
         py = _load("pythonArtifacts")
         for name in sorted(set(ml) & set(py)):
-            assert list(ml[name]["inputCodepoints"]) == list(
+            assert cases.as_row(ml[name]["inputCodepoints"]) == cases.as_row(
                 py[name]["inputCodepoints"]
             ), f"Input codepoints differ between languages for case {name!r}."

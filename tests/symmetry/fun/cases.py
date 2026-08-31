@@ -223,7 +223,7 @@ def path_safe_signature(c: dict) -> tuple:
         c["status"],
         c["pathSafeName"],
         c["elementDirName"],
-        tuple(c["elementLegacyDirNameCodepoints"]),
+        tuple(as_row(c["elementLegacyDirNameCodepoints"])),
         c["inputUtf16Units"],
         c["inputCodepointCount"],
     )
@@ -341,23 +341,27 @@ WHAT_VARIES_DEFS: list[tuple[str, str, str]] = [
 
 
 def known_divergences() -> list[str]:
-    """Cases where MATLAB main and this port are believed to disagree today.
+    """Cases where MATLAB main and this port are MEASURED to disagree today.
 
-    Both trace to one line: ``local_varyingFields`` in MATLAB's
-    ``whatVaries.m`` compares with ``vlt.data.eqlen``, which bottoms out in a
-    bare ``==``, while this port uses ``isequaln`` semantics throughout.
+    ``local_varyingFields`` in MATLAB's ``whatVaries.m`` compares with
+    ``vlt.data.eqlen``, which bottoms out in a bare ``==``, while this port
+    uses ``isequaln`` semantics throughout.
 
-    - ``cellValuedConstantParameter``: MATLAB errors (``==`` is undefined for
-      two cell arrays); Python succeeds and reports ``color`` constant.
     - ``allNaNParameter``: MATLAB reports ``angle`` varying
       (``eqlen(NaN, NaN)`` is false); Python reports it constant.
+
+    ``cellValuedConstantParameter`` was listed here too, on the source-read
+    prediction that ``==`` is undefined for two cell arrays and MATLAB would
+    therefore ERROR. The first real MATLAB run refuted that: MATLAB reports
+    ``color`` constant and ``angle`` varying, byte-for-byte what this port
+    reports. The entry was removed and the case is a hard assertion again.
 
     A listed case that now AGREES means the upstream fix landed -- remove the
     entry. A stale allow-list is how a symmetry suite goes quietly green over
     the bug it exists to watch, which is why the auditor fails rather than
     prints.
     """
-    return ["cellValuedConstantParameter", "allNaNParameter"]
+    return ["allNaNParameter"]
 
 
 def run_what_varies_cases() -> list[dict]:
@@ -425,6 +429,28 @@ def what_varies_signature(c: dict) -> tuple:
         tuple(c["constantValues"]),
         c["whatIsConstantRendered"],
     )
+
+
+def as_row(v: Any) -> list[int]:
+    """Normalize a decoded-JSON number field to a list of ints.
+
+    The Python counterpart of ``ndi.symmetry.fun.cases.asRow``. MATLAB's
+    ``jsonencode`` cannot tell a one-element numeric array from a scalar, so a
+    field the schema calls an ``int list`` arrives from ``matlabArtifacts`` as
+    a bare number whenever it has exactly one element -- ``129417``, not
+    ``[129417]``. This is the same collapse the rendered-value grammar exists
+    to avoid; the codepoint fields are compared as numbers rather than through
+    the grammar, so they need the normalizer instead.
+
+    MATLAB's read side has always needed ``asRow`` for the mirror-image
+    reason: Python's ``[129417]`` decodes there to a 1x1 double. Neither
+    writer can fix this, so both readers normalize.
+    """
+    if v is None:
+        return []
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        return [int(v)]
+    return [int(x) for x in v]
 
 
 def index_by_name(cases: list[dict]) -> dict[str, dict]:
