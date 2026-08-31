@@ -13,7 +13,9 @@ from . import (
     file,  # noqa: F401 — make ndi.fun.file accessible
     probe,  # noqa: F401 — make ndi.fun.probe accessible
     stimulus,  # noqa: F401 — make ndi.fun.stimulus accessible
+    text,  # noqa: F401 — make ndi.fun.text accessible
 )
+from .text import parse_text, parseText
 from .utils import (
     channelname2prefixnumber,
     name2variable_name,
@@ -26,6 +28,8 @@ __all__ = [
     "channelname2prefixnumber",
     "name2variableName",
     "name2variable_name",
+    "parseText",
+    "parse_text",
     "probe",
     "pseudorandomint",
     "timestamp",
