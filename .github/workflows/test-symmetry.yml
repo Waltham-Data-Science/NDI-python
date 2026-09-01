@@ -3,8 +3,8 @@ name: Test Cross-Language Symmetry
 on:
   push:
     branches: [main]
+  # No branch filter: see ci.yml.
   pull_request:
-    branches: [main]
   workflow_dispatch:
 
 concurrency:

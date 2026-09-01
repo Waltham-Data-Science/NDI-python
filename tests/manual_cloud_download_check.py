@@ -1,7 +1,16 @@
 """
-Live integration test: NDI-python analysis + ndic:// on-demand file download.
+Manual live check: NDI-python analysis + ndic:// on-demand file download.
 
-This test exercises both the NDI-python document analysis pipeline AND the new
+NOT a pytest module. This is a standalone script -- it defines no test_*
+functions and pytest collects nothing from it. It was previously named
+test_cloud_download_live.py, which made it look like CI coverage it has
+never provided (see issue #91).
+
+Run it by hand. It is not wired into any workflow, and is not a drop-in
+candidate for one: it downloads a 743-document dataset, runs a full analysis
+pipeline, and hardcodes a prod dataset ID that does not resolve on dev.
+
+This script exercises both the NDI-python document analysis pipeline AND the
 ndic:// on-demand file downloader in a single run against the Carbon fiber
 microelectrode dataset (668b0539f13096e04f1feccd).
 
@@ -17,8 +26,8 @@ Requires:
   pass credentials via --username / --password CLI args.
 
 Usage:
-  python tests/test_cloud_download_live.py
-  python tests/test_cloud_download_live.py --username USER --password PASS
+  python tests/manual_cloud_download_check.py
+  python tests/manual_cloud_download_check.py --username USER --password PASS
 """
 
 from __future__ import annotations
@@ -36,7 +45,7 @@ logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s %(name)s %(levelname)s %(message)s",
 )
-logger = logging.getLogger("test_cloud_download_live")
+logger = logging.getLogger("manual_cloud_download_check")
 
 CARBON_FIBER_ID = "668b0539f13096e04f1feccd"
 
