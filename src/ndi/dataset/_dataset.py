@@ -251,6 +251,40 @@ class ndi_dataset:
 
         return self
 
+    def is_in_cloud(self) -> tuple[bool, str]:
+        """
+        Is this dataset linked to a dataset on NDI Cloud?
+
+        MATLAB equivalent: ``ndi.dataset/isInCloud``
+
+        A dataset counts as "in the cloud" when its database holds a
+        ``dataset_remote`` document, which is written locally the first time
+        the dataset is uploaded.
+
+        This is a purely LOCAL check. It performs no network communication,
+        so it does not verify that the remote dataset still exists or is up
+        to date, and it does not open the dataset's linked sessions -- the
+        ``dataset_remote`` document lives in the dataset's own database
+        because its ``base.session_id`` is the dataset id. That is what makes
+        it cheap enough to call while listing every dataset in a tree.
+
+        Returns:
+            ``(in_cloud, cloud_dataset_id)``. The id is the remote NDI Cloud
+            dataset id when ``in_cloud`` is True, and ``""`` otherwise. If
+            more than one ``dataset_remote`` document is present -- a
+            misconfiguration -- the first id is returned rather than raising,
+            so a status check never throws.
+        """
+        if self._session is None:
+            return False, ""
+
+        docs = self._session.database_search(ndi_query("").isa("dataset_remote"))
+        if not docs:
+            return False, ""
+
+        remote = docs[0].document_properties.get("dataset_remote", {})
+        return True, str(remote.get("dataset_id", "") or "")
+
     def open_session(self, session_id: str) -> Any | None:
         """
         Open a session by its ID.
