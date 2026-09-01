@@ -399,11 +399,15 @@ def _qt_or_skip():
 
 class TestNavigatorQt:
     def test_builds_the_ported_pane_stack(self):
-        """MATLAB's stack is NDI, NDI Cloud, Datasets, Progress. Only NDI
-        Cloud is still unported; it inserts at index 1 when it lands."""
+        """MATLAB's stack, now complete."""
         _qt_or_skip()
         nav = Navigator()
-        assert [p.title for p in nav.panes] == ["NDI", "Datasets", "Progress"]
+        assert [p.title for p in nav.panes] == [
+            "NDI",
+            "NDI Cloud",
+            "Datasets",
+            "Progress",
+        ]
 
     def test_progress_pane_is_findable(self):
         _qt_or_skip()
@@ -444,11 +448,12 @@ class TestNavigatorQt:
         _qt_or_skip()
         nav = Navigator()
         progress = nav.progress_pane_handle()
+        datasets = nav.datasets_pane_handle()
         before = nav.position[3]
-        datasets_before = nav.panes[1].rendered_height
+        datasets_before = datasets.rendered_height
         progress.fit_to_bars(3)
         assert nav.position[3] == before
-        assert nav.panes[1].rendered_height < datasets_before
+        assert datasets.rendered_height < datasets_before
 
     def test_the_datasets_pane_absorbs_the_leftover_height(self):
         """With an elastic pane present the rows fill the window exactly and
@@ -469,7 +474,7 @@ class TestNavigatorQt:
         _qt_or_skip()
         nav = Navigator()
         before = nav.position[3]
-        nav.panes[1].toggle()
+        nav.datasets_pane_handle().toggle()
         assert nav.position[3] < before
 
     def test_a_pane_toggle_does_resize_the_window(self):

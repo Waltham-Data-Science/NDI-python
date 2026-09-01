@@ -19,12 +19,10 @@ split sharp is the only way this part of the port is checkable at all: a
 window that leaves a gap at the bottom, or a pane that will not drag down to
 its minimum, is a wrong number rather than a raised error.
 
-THE PANE STACK IS INCOMPLETE ON PURPOSE
-MATLAB's stack is NDI, NDI Cloud, Datasets, Progress. NDI Cloud is not
-ported yet, so it alone is missing; it slots into :meth:`build_panes` when it
-lands. Datasets is the elastic pane, so with it in place the navigator now
-takes the elastic branch: content changes are absorbed by resizing that pane
-rather than by resizing the window.
+THE PANE STACK
+NDI, NDI Cloud, Datasets, Progress -- MATLAB's stack, complete. Datasets is
+the elastic pane, so content changes are absorbed by resizing it rather than
+by resizing the window; the panes below it keep hugging the bottom edge.
 """
 
 from __future__ import annotations
@@ -33,6 +31,7 @@ from typing import Any
 
 from .cloud_colors import cloud_colors, rgb_to_hex
 from .nav import layout as nav_layout
+from .nav.cloud_pane import CloudPane
 from .nav.datasets_pane import DatasetsPane
 from .nav.ndi_pane import NdiPane
 from .nav.progress_pane import ProgressPane
@@ -74,6 +73,10 @@ class Navigator:
         self._busy = False
         self._dragging = False
         self._drag_last_y = 0.0
+        #: Alert boxes currently on screen. A shown QMessageBox with no
+        #: reference is collected and disappears, so they are held here and
+        #: dropped again when dismissed.
+        self._alert_boxes: list[Any] = []
 
         if build:
             self.build()
@@ -178,10 +181,24 @@ class Navigator:
             success=False,
         )
 
-    def alert(self, message: str, title: str, *, success: bool = True) -> None:
-        """Show a message on the navigator window."""
+    def alert(self, message: str, title: str, *, success: bool = True) -> Any:
+        """Show a message on the navigator window, WITHOUT blocking.
+
+        MATLAB's ``uialert`` displays the dialog and returns immediately --
+        it is modal to the figure, not to the caller. So this uses ``show()``
+        rather than ``exec()``: with ``exec()`` an action that reports its
+        outcome would stop dead until someone clicked OK, and a caller that
+        alerts and then carries on (the cloud pane's bulk check, the datasets
+        pane's ingest) would behave differently in the two languages. It also
+        deadlocks anything running without a user, tests included.
+
+        The box is kept on ``self._alert_boxes`` because a shown, unreferenced
+        QMessageBox is garbage-collected and vanishes off the screen.
+
+        Returns the box, so a caller (or a test) can inspect or close it.
+        """
         if self.figure is None:
-            return
+            return None
         from PySide6 import QtWidgets
 
         box = QtWidgets.QMessageBox(self.figure)
@@ -192,7 +209,16 @@ class Navigator:
             if success
             else QtWidgets.QMessageBox.Icon.Warning
         )
-        box.exec()
+        box.setAttribute(QtCore_WA_DeleteOnClose(), True)
+        box.finished.connect(lambda _=0, b=box: self._forget_alert(b))
+        self._alert_boxes.append(box)
+        box.show()
+        return box
+
+    def _forget_alert(self, box: Any) -> None:
+        """Drop a dismissed alert so the list does not grow without bound."""
+        if box in self._alert_boxes:
+            self._alert_boxes.remove(box)
 
     # ------------------------------------------------------------------
     # Qt
@@ -228,15 +254,16 @@ class Navigator:
     def build_panes(self) -> None:
         """Instantiate the pane stack, top to bottom.
 
-        MATLAB's order is NDI, NDI Cloud, Datasets, Progress. NDI Cloud is
-        not ported yet and inserts at index 1 when it lands; Progress stays
-        last so it goes on hugging the bottom edge.
-
-        Datasets is the ELASTIC pane, so its arrival takes the layout out of
-        its no-elastic branch for the first time: the window now absorbs
-        content changes by resizing that pane rather than by resizing itself.
+        NDI, NDI Cloud, Datasets, Progress -- MATLAB's order, now complete.
+        Progress stays last so it goes on hugging the bottom edge, and
+        Datasets is the elastic pane that absorbs the leftover height.
         """
-        self.panes = [NdiPane(self), DatasetsPane(self), ProgressPane(self)]
+        self.panes = [
+            NdiPane(self),
+            CloudPane(self),
+            DatasetsPane(self),
+            ProgressPane(self),
+        ]
         for row, pane in enumerate(self.panes):
             pane.build(self.root_layout, row)
 
@@ -357,3 +384,14 @@ class Navigator:
 
     def __repr__(self) -> str:
         return f"Navigator(panes={len(self.panes)}, height={self.figure_height:g})"
+
+
+def QtCore_WA_DeleteOnClose() -> Any:
+    """Qt.WidgetAttribute.WA_DeleteOnClose, imported lazily.
+
+    Named as a function so this module still imports without Qt installed --
+    the same reason every other Qt import here is inside a method.
+    """
+    from PySide6 import QtCore
+
+    return QtCore.Qt.WidgetAttribute.WA_DeleteOnClose
