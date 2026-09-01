@@ -9,6 +9,7 @@ from .index import SyncIndex
 from .mode import SyncMode, SyncOptions
 from .operations import (
     deleteLocalDocuments,
+    documentDifference,
     downloadNdiDocuments,
     downloadNew,
     mirrorFromRemote,
@@ -29,5 +30,6 @@ __all__ = [
     "twoWaySync",
     "sync",
     "deleteLocalDocuments",
+    "documentDifference",
     "downloadNdiDocuments",
 ]
