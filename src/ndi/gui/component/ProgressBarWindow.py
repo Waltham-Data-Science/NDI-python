@@ -41,6 +41,10 @@ class _BarRecord:
         "color",
         "clock_start",
         "clock_last",
+        # The row's container widget, so removeBar can take the whole row
+        # out. It is in __slots__ because addBar assigns it: without it,
+        # every addBar raised AttributeError and no bar could be drawn.
+        "_frame",
     )
 
     def __init__(self, tag: str, auto: bool, color: tuple[float, float, float]):
@@ -58,6 +62,7 @@ class _BarRecord:
         self.bar_widget: QtWidgets.QProgressBar | None = None
         self.pct_widget: QtWidgets.QLabel | None = None
         self.btn_widget: QtWidgets.QPushButton | None = None
+        self._frame: QtWidgets.QFrame | None = None
 
 
 class ndi_gui_component_ProgressBarWindow:
@@ -213,7 +218,7 @@ class ndi_gui_component_ProgressBarWindow:
         row_layout.addLayout(bot)
 
         # Store frame reference on record for later removal
-        rec._frame = row_frame  # type: ignore[attr-defined]
+        rec._frame = row_frame
         self._layout.addWidget(row_frame)
         self._bars.append(rec)
 

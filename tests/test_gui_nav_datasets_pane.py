@@ -175,12 +175,27 @@ class TestSessionApps:
         monkeypatch.setattr("ndi.gui.nav.datasets_pane.SessionApp.list", staticmethod(boom))
         assert session_apps() == []
 
-    def test_ndi_ships_no_session_apps_yet(self):
-        """MATLAB's eleven apps are not ported, so the built-in scan is empty.
-        The menu is still built, and fills itself as apps land -- or as soon
-        as a user names their own package in GUI.Navigator.SessionAppPackages.
+    def test_ndis_own_apps_are_discovered_with_no_edit_here(self):
+        """The check that the mechanism was right: ndi.gui.app.stimulusResponse
+        reaches the menu without this file, or the menu code, naming it. The
+        rest of MATLAB's eleven join it the same way as they land.
         """
-        assert session_apps() == []
+        found = {app["Label"]: app["Category"] for app in session_apps()}
+        assert found["Stimulus Response"] == "Stimulus"
+
+    def test_a_discovered_app_launches_the_class_it_named(self, monkeypatch):
+        """Label to launch: the record's Launch opens the class discovery
+        reported, on the session it is handed."""
+        opened = []
+        monkeypatch.setattr(
+            "ndi.gui.nav.datasets_pane.SessionApp.launch",
+            staticmethod(lambda cls, session: opened.append((cls, session))),
+        )
+        launch = next(
+            app["Launch"] for app in session_apps() if app["Label"] == "Stimulus Response"
+        )
+        launch("the-session")
+        assert opened == [("ndi.gui.app.stimulus_response.stimulusResponse", "the-session")]
 
 
 class TestTreeRows:
@@ -499,10 +514,13 @@ class TestMenusAreBuilt:
         menu = pane.build_node_menu(node)
         assert [a.text() for a in menu.actions()] == ["Apps", "Session"]
 
-    def test_the_apps_menu_is_present_even_with_no_apps_to_offer(self):
+    def test_the_apps_menu_is_present_even_with_no_apps_to_offer(self, monkeypatch):
         """Empty says 'no apps found'. Omitting it would say 'sessions have
-        no apps', which is false -- and NDI ships no apps yet."""
+        no apps', which is false. NDI now ships one, so discovery is stubbed
+        out here to get back to the empty case -- which a user still reaches
+        by breaking their own app package."""
         _qt_or_skip()
+        monkeypatch.setattr("ndi.gui.nav.datasets_pane.session_apps", list)
         nav, pane = _built_pane()
         pane.user_sessions = [FakeSession("a", path="/s/a")]
         pane.populate_tree()

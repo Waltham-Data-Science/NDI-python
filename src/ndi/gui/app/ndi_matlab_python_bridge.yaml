@@ -181,11 +181,195 @@ classes:
         decision_log: 'Ported. "" when the app declares no Category.'
 
   # -----------------------------------------------------------------------
-  # NOT YET PORTED: the apps that adopt the interface
+  # The apps that adopt the interface
+  # -----------------------------------------------------------------------
+
+  - name: stimulusResponse
+    type: class
+    matlab_path: "+ndi/+gui/+app/stimulusResponse.m"
+    matlab_last_sync_hash: "104c29e"
+    python_path: "ndi/gui/app/stimulus_response.py"
+    python_class: "stimulusResponse"
+    inherits: "ndi.gui.app.sessionApp"
+    decision_log: >
+      Ported. Synchronized with MATLAB main as of 2026-09-01. The class name
+      stays MATLAB's (AGENTS.md 3, Rule 3) and so do the Name and Category
+      constants, which are the menu text a user reads. Every method is
+      snake_case, the house style in ndi.gui, and no camelCase alias is kept:
+      nothing calls these methods by MATLAB's spelling, so a second spelling
+      would be a second thing to keep correct. Nothing is added to
+      tests/test_matlab_name_aliases.py for the same reason.
+
+      DIVERGENCE, deliberate: the widget selection is mirrored on the object
+      (probe_index, element_types, replace) rather than read back out of the
+      widgets on demand, as MATLAB's selectedProbe/selectedTypes do. It is
+      what lets the run path -- which elements are computed and which
+      documents are deleted -- be exercised with no display attached.
+
+      DEPENDENCY, unported: ndi.app.stimulus.tuning_response.stimulus_responses
+      raises NotImplementedError in this port (it is the framework, not the
+      signal processing). The app calls it per element and counts the failure,
+      as MATLAB does for any failing element, and its summary names the
+      unported computation rather than reporting a bare "0 computed".
+
+    properties:
+      - name: Name
+        type_matlab: "string (Constant)"
+        type_python: "ClassVar[str]"
+        decision_log: '"Stimulus Response", verbatim: it is the menu label.'
+      - name: Category
+        type_matlab: "string (Constant)"
+        type_python: "ClassVar[str]"
+        decision_log: '"Stimulus", verbatim: it names the submenu.'
+      - name: ElementTypes
+        type_matlab: "cell (Constant, private)"
+        type_python: "tuple[str, ...] (module constant ELEMENT_TYPES)"
+        decision_log: >
+          A module constant rather than a class attribute, so the listbox
+          contents can be read and asserted without constructing an app.
+          ("spikes",) in both languages.
+
+    methods:
+      - name: stimulusResponse
+        kind: constructor
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session (1,1)"
+            type_python: "Any"
+          - name: position
+            type_python: "tuple[float, float, float, float]"
+            default: "DEFAULT_POSITION (MATLAB's [100 100 640 460])"
+          - name: build
+            type_python: "bool"
+            default: "True"
+        decision_log: >
+          Ported. The session stays the first positional argument, which is
+          the sessionApp contract discovery and launch() rely on. build=False
+          is Python-only: it makes the object without a window, as
+          ndi.gui.profile_editor.ProfileEditor does.
+      - name: build
+        kind: private
+        python_name: build
+        decision_log: >
+          Ported to PySide6. MATLAB's uigridlayout rows become a QVBoxLayout
+          with two nested QHBoxLayouts; uidropdown/uilistbox/uicheckbox become
+          QComboBox/QListWidget (ExtendedSelection)/QCheckBox. The NDI Cloud
+          palette, the tooltip and the window Tag are MATLAB's.
+      - name: sessionPath
+        kind: private
+        python_name: session_path
+        output_arguments:
+          - name: p
+            type_python: "str"
+        decision_log: >
+          Ported. Best-effort in both languages: getpath(), then a path
+          property, then "".
+      - name: reloadProbes
+        kind: private
+        python_name: reload_probes
+        output_arguments:
+          - name: stimulators
+            type_python: "list[Any] (Python only; MATLAB sets the property)"
+        decision_log: >
+          Ported. session.getprobes('type','stimulator') becomes
+          getprobes(type="stimulator"). Returns the probes as well as storing
+          them, so a caller can see what a Reload found.
+      - name: selectedProbe
+        kind: private
+        python_name: selected_probe
+        decision_log: "Ported. Reads probe_index; None when nothing is chosen."
+      - name: selectedTypes
+        kind: private
+        python_name: selected_types
+        decision_log: >
+          Ported. MATLAB normalises a char to a cell; Python holds a list
+          throughout, so the normalisation has nothing to do.
+      - name: updateButtonState
+        kind: private
+        python_name: update_button_state
+        output_arguments:
+          - name: ok
+            type_python: "bool (Python only)"
+        decision_log: >
+          Ported, returning the state it set. MATLAB's onOff local function
+          has no counterpart: Qt takes a bool.
+      - name: runResponses
+        kind: private
+        python_name: run_responses
+        output_arguments:
+          - name: result
+            type_python: "RunResult (computed, skipped, failed, message)"
+        decision_log: >
+          Ported, including both database strategies: replace does ONE OR
+          search, removes what it finds, and recomputes everything; otherwise
+          ONE search lists the elements that already have a response and only
+          the rest are computed. stimulus_responses is called with reset=False
+          on both paths, as in MATLAB. MATLAB returns nothing and reports in a
+          dialog; Python also returns the counts, which is what makes the
+          decision testable. MATLAB's onCleanup(finishRun) becomes try/finally.
+      - name: elementsOfTypes
+        kind: private
+        python_name: elements_of_types
+        output_arguments:
+          - name: elements
+            type_python: "list[Any]"
+          - name: element_types
+            type_python: "list[str]"
+        decision_log: >
+          Ported. MATLAB's two outputs become a tuple, in MATLAB's order.
+          getelements('element.type', T) becomes
+          getelements(**{"element.type": T}).
+      - name: responseQuery
+        kind: private
+        python_name: response_query
+        input_arguments:
+          - name: stimulator_id
+            type_matlab: "ndi.probe (MATLAB passes the probe)"
+            type_python: "str"
+          - name: element_ids
+            type_matlab: "cell of ndi.element"
+            type_python: "Sequence[str]"
+        decision_log: >
+          Ported as a module function taking IDS rather than a method taking
+          objects: it is pure, and the query it builds -- a big OR over the
+          elements, ANDed onto the stimulator -- is the thing worth asserting.
+      - name: removeExistingResponses
+        kind: private
+        python_name: remove_existing_responses
+        output_arguments:
+          - name: n_removed
+            type_python: "int (Python only)"
+        decision_log: >
+          Ported, including the scalar-parameter documents: nothing points at
+          those but the response being deleted, so leaving them would orphan
+          them on every rebuild.
+      - name: existingResponseElementIds
+        kind: private
+        python_name: existing_response_element_ids
+        decision_log: "Ported. One search; the element ids read off its documents."
+      - name: finishRun
+        kind: private
+        python_name: finish_run
+        decision_log: >
+          Ported. MATLAB guards with isvalid(); update_button_state already
+          tolerates a window that is not there.
+      - name: withWait / withWaitOut / clearWait
+        kind: private
+        python_name: "(none)"
+        decision_log: >
+          NOT ported. MATLAB needs two spellings because varargout cannot be
+          forwarded through the one-output form, and a manual clearWait to
+          undo the dialog. The Python app does its loading in the constructor
+          and in reload_probes without a modal wait dialog; the long operation
+          -- the run itself -- reports through the NDI progress bar, which is
+          what a user watches in both languages.
+
+  # -----------------------------------------------------------------------
+  # NOT YET PORTED: the rest of MATLAB's eleven
   # -----------------------------------------------------------------------
   #   ElectrodeDataExport, ElectrodeMap, ensembleMaker, katzExporter,
   #   kiasort, pipelineEditor, pyraview, spikeSorterImporter,
-  #   stimulusDecoder, stimulusResponse, vhNDISpikeSorter
+  #   stimulusDecoder, vhNDISpikeSorter
   #
   # Each depends on further unported subsystems (ndi.cpipeline for the
   # pipeline editor, the sorters' own toolboxes, and so on) and each is its
@@ -232,3 +416,39 @@ functions:
     type: function
     python_path: "ndi/gui/app/session_app.py"
     decision_log: "Python only. MATLAB's unique(..., 'stable')."
+
+  - name: probe_labels
+    type: function
+    python_path: "ndi/gui/app/stimulus_response.py"
+    decision_log: >
+      The dropdown labels, MATLAB's loop over elementstring() lifted out of
+      reloadProbes. A probe that will not name itself falls back to its repr
+      rather than to "", so no row is blank.
+
+  - name: elements_to_compute
+    type: function
+    python_path: "ndi/gui/app/stimulus_response.py"
+    decision_log: >
+      MATLAB's todo vector, as a pure function of the elements and the ids
+      that already have responses. An element whose id cannot be read is
+      computed rather than skipped: a duplicate is visible, a silent gap is
+      not.
+
+  - name: summary_message
+    type: function
+    python_path: "ndi/gui/app/stimulus_response.py"
+    decision_log: >
+      MATLAB's two closing sentences, plus a third naming the unported
+      computation when the failures were NotImplementedError. MATLAB points a
+      user at the command window; in this port that window would only repeat
+      NotImplementedError, so the reason is said in the dialog instead.
+
+  - name: make_progress_bar / update_progress_bar / close_progress_bar
+    type: function
+    python_path: "ndi/gui/app/stimulus_response.py"
+    decision_log: >
+      MATLAB's i_makeBar / i_updateBar / i_closeBar local functions, and
+      swallowing as they do: a run that cannot draw a progress bar is still a
+      run worth finishing. DIVERGENCE, the component's rather than this app's:
+      MATLAB's ProgressBarWindow docks into an open navigator's Progress pane
+      and the ported component opens its own window.
