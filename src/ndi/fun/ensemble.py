@@ -42,7 +42,28 @@ from typing import Any
 
 import numpy as np
 
-__all__ = ["filter"]
+# The database-backed half of MATLAB's +ensemble package lives in
+# ensemble_db.py -- everything there needs a session, and keeping the pure
+# selection logic above importable without one is worth the split. It is
+# re-exported here (at the BOTTOM of this module, after `filter` is defined,
+# since ensemble_db imports `filter` from here) so callers see the single flat
+# namespace MATLAB's package presents: ndi.fun.ensemble.read, .create, and so
+# on, alongside .filter.
+__all__ = [
+    "filter",
+    "all_element",
+    "allElement",
+    "all_ntrodes",
+    "allNTrodes",
+    "create",
+    "find_existing",
+    "findExisting",
+    "load",
+    "neuron_quality",
+    "neuronQuality",
+    "plot",
+    "read",
+]
 
 
 def _member_mask(values: Sequence[Any], targets: Sequence[Any] | None) -> np.ndarray:
@@ -206,3 +227,22 @@ def filter(  # noqa: A001 - mirrors ndi.fun.ensemble.filter
         out["info"] = new_info
 
     return out
+
+
+# Re-export the database-backed functions. This import sits at the end of the
+# module on purpose: ensemble_db imports `filter` from here, so importing it
+# any earlier would be a circular import at module-execution time.
+from .ensemble_db import (  # noqa: E402,F401
+    all_element,
+    all_ntrodes,
+    allElement,
+    allNTrodes,
+    create,
+    find_existing,
+    findExisting,
+    load,
+    neuron_quality,
+    neuronQuality,
+    plot,
+    read,
+)
