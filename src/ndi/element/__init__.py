@@ -268,30 +268,54 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
         q = ndi_query("").isa("element_epoch") & ndi_query("").depends_on("element_id", self.id)
         epoch_docs = self._session.database_search(q)
 
+        # document_properties is a DICT. This function used attribute access on
+        # it (props.element_epoch, props.epochid), so every call raised
+        # AttributeError and no registered epoch table has ever been built.
+        # The two shape assumptions below were wrong for the same reason --
+        # nothing ever reached them:
+        #
+        #   * element_epoch.epoch_clock is a STRING (the schema stores one
+        #     clock name), so iterating it yielded single characters;
+        #   * element_epoch.t0_t1 is a flat [t0, t1] pair, so iterating it
+        #     yielded floats and the isinstance check discarded every one,
+        #     leaving t0_t1 empty.
+        #
+        # Both are still accepted in their list forms, since a document
+        # written by another tool may carry either.
         et = []
         for i, doc in enumerate(epoch_docs):
             props = doc.document_properties
+            element_epoch = props.get("element_epoch", {}) or {}
 
-            # Parse epoch_clock
-            clock_raw = getattr(props.element_epoch, "epoch_clock", [])
+            # Parse epoch_clock (a string, or a list of them)
+            clock_raw = element_epoch.get("epoch_clock", [])
+            if isinstance(clock_raw, (str, ndi_time_clocktype)):
+                clock_raw = [clock_raw]
             epoch_clock = []
             for c in clock_raw:
-                if isinstance(c, str):
-                    epoch_clock.append(ndi_time_clocktype(c))
-                elif isinstance(c, ndi_time_clocktype):
+                if isinstance(c, ndi_time_clocktype):
                     epoch_clock.append(c)
+                elif isinstance(c, str) and c:
+                    epoch_clock.append(ndi_time_clocktype(c))
 
-            # Parse t0_t1
-            t0t1_raw = getattr(props.element_epoch, "t0_t1", [])
+            # Parse t0_t1 (a flat [t0, t1], or a list of such pairs)
+            t0t1_raw = element_epoch.get("t0_t1", [])
             t0_t1 = []
-            for t in t0t1_raw:
-                if isinstance(t, (list, tuple)) and len(t) >= 2:
-                    t0_t1.append((float(t[0]), float(t[1])))
+            if (
+                isinstance(t0t1_raw, (list, tuple))
+                and len(t0t1_raw) == 2
+                and all(isinstance(v, (int, float)) for v in t0t1_raw)
+            ):
+                t0_t1 = [(float(t0t1_raw[0]), float(t0t1_raw[1]))]
+            else:
+                for t in t0t1_raw or []:
+                    if isinstance(t, (list, tuple)) and len(t) >= 2:
+                        t0_t1.append((float(t[0]), float(t[1])))
 
             et.append(
                 {
                     "epoch_number": i + 1,
-                    "epoch_id": getattr(props.epochid, "epochid", ""),
+                    "epoch_id": (props.get("epochid", {}) or {}).get("epochid", ""),
                     "epoch_session_id": self._session.id() if self._session else "",
                     "epochprobemap": [],  # Registered epochs don't have probepmaps
                     "epoch_clock": epoch_clock,

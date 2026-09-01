@@ -3,16 +3,21 @@ ndi.fun.export - Export NDI data into other analysis packages' formats.
 
 MATLAB equivalent: +ndi/+fun/+export/
 
-Currently provides :func:`blech_clust_write`, the low-level writer for
-blech_clust HMM HDF5 files.
+Provides :func:`blech_clust_write`, the low-level writer for blech_clust HMM
+HDF5 files, and :func:`blech_clust`, the wrapper that assembles its arrays
+from an NDI stimulator and probe.
 
-``blech_clust`` itself -- the acquisition wrapper that assembles these arrays
-from an NDI stimulator and probe -- is **not** ported here. It depends on
-``ndi.fun.ensemble.load`` / ``read`` / ``filter`` / ``neuronQuality``, on
-``ndi.element.ensemble``, and on ``ndi.app.stimulus.decoder``, none of which
-exist on this side yet. The MATLAB writer was deliberately factored to have no
-session, syncgraph or database dependencies precisely so it could be used and
-tested on its own, and that is what this module takes advantage of.
+The wrapper was previously absent here, because it needs
+``ndi.fun.ensemble.load`` / ``read`` / ``filter`` / ``neuron_quality``,
+``ndi.element.ensemble`` and ``ndi.app.stimulus.decoder``, none of which had
+been ported. They have been, so it is present now.
+
+The split between the two is worth keeping: MATLAB factored the writer to
+have no session, syncgraph or database dependencies precisely so it could be
+used and tested on its own, and the tests here take the same advantage --
+every binning rule is pinned against the writer directly, and the wrapper is
+tested for what only it does, which is finding the right documents and
+converting the stimulus times into the ensemble's clock.
 
 ``h5py`` is not declared in pyproject because ``vhlab-toolbox-python``, a core
 dependency, already requires it; the import is guarded anyway so a broken
@@ -34,7 +39,7 @@ try:
 except ImportError:  # pragma: no cover - exercised only without h5py
     h5py = None  # type: ignore[assignment]
 
-__all__ = ["blech_clust_write"]
+__all__ = ["blech_clust", "blech_clust_write"]
 
 # The compound type MATLAB builds by hand with H5T.create: three native ints.
 _UNIT_DESCRIPTOR_DTYPE = np.dtype(
@@ -251,3 +256,301 @@ def _write_units(
     # With no units MATLAB creates the dataset and never writes it, so HDF5
     # leaves one zero-filled row; the zeros() above matches that.
     handle.create_dataset("unit_descriptor", data=table)
+
+
+# ======================================================================
+# blech_clust -- the session-backed wrapper over blech_clust_write
+# ======================================================================
+#: Quality labels that mark a kept neuron as a single unit in
+#: ``/unit_descriptor``. Matched case-insensitively, as MATLAB does.
+DEFAULT_SINGLE_UNIT_LABELS = ("single", "good", "excellent")
+
+#: blech_clust hard-codes a 30 kHz acquisition rate (30 samples/ms).
+BLECH_SAMPLE_RATE = 30000.0
+
+
+def blech_clust(
+    stimulator: Any,
+    probe: Any,
+    epoch_id: str,
+    outputfile: str | os.PathLike,
+    *,
+    sample_rate: float = BLECH_SAMPLE_RATE,
+    pre_stim: float = 2000.0,
+    post_stim: float = 5000.0,
+    ensemble: Any = None,
+    min_quality: float | None = None,
+    quality_label: Any = "",
+    keep_unrated: bool = False,
+    include_names: Sequence[str] | None = None,
+    exclude_names: Sequence[str] | None = None,
+    include_ids: Sequence[str] | None = None,
+    exclude_ids: Sequence[str] | None = None,
+    include_index: Any = None,
+    exclude_index: Any = None,
+    single_unit_labels: Sequence[str] = DEFAULT_SINGLE_UNIT_LABELS,
+    stimulus_order: Any = None,
+    include_stimids: Any = None,
+    tastant_field: str = "tastant",
+    stimid_field: str = "stimid",
+    verbose: bool = True,
+) -> None:
+    """Export an NDI ensemble + tastant stimulus epoch to a blech_clust file.
+
+    MATLAB counterpart: ``ndi.fun.export.blech_clust``.
+
+    Pulls the sorted-unit ensemble recorded on PROBE and the tastant stimulus
+    identities and delivery times reported by STIMULATOR, for one epoch, and
+    writes the HDF5 layout the blech_clust HMM code reads
+    (https://github.com/vh-lab/blech_clust).
+
+    Where the pieces come from:
+
+    * **ensemble activity** -- ``ndi.fun.ensemble.load`` on PROBE for this
+      epoch, or ``ndi.fun.ensemble.read`` when ``ensemble`` names one.
+    * **stimulus identity** -- the ``stimid`` parameter of each stimulus in
+      the stimulator's ``stimulus_presentation`` document.
+    * **stimulus times** -- ``presentation_time.onset``, converted into the
+      ensemble's clock through the session syncgraph, so delivery times and
+      spike times are directly comparable.
+
+    Neuron selection uses the same vocabulary as ``ndi.fun.ensemble.read``,
+    and quality is a hard filter there too.
+
+    The binning and file writing are ``blech_clust_write``, which is pure and
+    separately tested; this function is the part that needs a session.
+    """
+    if sample_rate != BLECH_SAMPLE_RATE:
+        raise ValueError(
+            "blech_clust requires an acquisition sample rate of exactly 30000 Hz "
+            f"(30 samples/ms); received {sample_rate:g} Hz. Resample the data or "
+            "supply data recorded at 30 kHz."
+        )
+    if pre_stim < 0 or post_stim <= 0:
+        raise ValueError("pre_stim must be >= 0 and post_stim must be > 0 (milliseconds).")
+
+    session = probe.session
+
+    if verbose:
+        print("Reading ensemble spike times (ndi.fun.ensemble)...")
+    unit_spiketimes, unit_info, ensemble_clocktype = _blech_get_ensemble(
+        session,
+        probe,
+        epoch_id,
+        ensemble=ensemble,
+        min_quality=min_quality,
+        quality_label=quality_label,
+        keep_unrated=keep_unrated,
+        include_names=include_names,
+        exclude_names=exclude_names,
+        include_ids=include_ids,
+        exclude_ids=exclude_ids,
+        include_index=include_index,
+        exclude_index=exclude_index,
+        single_unit_labels=single_unit_labels,
+    )
+    if not unit_spiketimes:
+        raise ValueError(f"The ensemble for epoch {epoch_id} contains no neurons.")
+
+    if verbose:
+        print("Reading stimulus presentation (identities and times)...")
+    onset_probe, trial_stimid, stimid_tastant = _blech_get_stimulus_presentation(
+        session,
+        stimulator,
+        probe,
+        epoch_id,
+        ensemble_clocktype,
+        tastant_field=tastant_field,
+        stimid_field=stimid_field,
+    )
+
+    blech_clust_write(
+        outputfile,
+        unit_spiketimes,
+        unit_info,
+        onset_probe,
+        trial_stimid,
+        stimid_tastant,
+        pre_stim=round(pre_stim),
+        post_stim=round(post_stim),
+        sample_rate=sample_rate,
+        stimulus_order=stimulus_order,
+        include_stimids=include_stimids,
+        epoch_id=epoch_id,
+        verbose=verbose,
+    )
+
+
+def _blech_get_ensemble(
+    session: Any,
+    probe: Any,
+    epoch_id: str,
+    *,
+    ensemble: Any,
+    single_unit_labels: Sequence[str],
+    **filter_options: Any,
+) -> tuple[list[np.ndarray], list[dict[str, Any]], str]:
+    """The per-unit spike trains, unit descriptors, and the ensemble clock."""
+    from . import ensemble as ensemble_fun
+
+    if ensemble is not None:
+        E = ensemble_fun.read(session, ensemble, epoch_id, **filter_options)
+    else:
+        activity, neuron_ids, neuron_names, info, _ = ensemble_fun.load(session, probe, epoch_id)
+        E = {
+            "activity": activity,
+            "neuron_ids": neuron_ids,
+            "neuron_names": neuron_names,
+            "epoch": epoch_id,
+            "info": info,
+        }
+        E = _blech_apply_filter(session, E, filter_options)
+
+    clocktype = (E.get("info") or {}).get("clocktype", "")
+
+    activity = E["activity"]
+    dense = activity.toarray() if hasattr(activity, "toarray") else np.asarray(activity)
+    # Drop the zero right-padding. A spike at exactly 0.0 is indistinguishable
+    # from padding in this representation; that is inherent to the sparse
+    # export, and MATLAB drops it the same way.
+    unit_spiketimes = [row[row != 0] for row in np.atleast_2d(dense)]
+
+    # blech's /unit_descriptor flags. regular_spiking and fast_spiking are NOT
+    # inferred -- they only affect blech's raster colours, and guessing them
+    # would put a claim about cell type into the file that NDI never made.
+    _, qlabel = ensemble_fun.neuron_quality(session, E["neuron_ids"])
+    su_labels = {s.lower() for s in single_unit_labels}
+    names = list(E.get("neuron_names") or [])
+    unit_info: list[dict[str, Any]] = []
+    for i in range(len(unit_spiketimes)):
+        lab = qlabel[i] if i < len(qlabel) else ""
+        unit_info.append(
+            {
+                "name": names[i] if i < len(names) else "",
+                "single_unit": int(bool(lab) and lab.lower() in su_labels),
+                "regular_spiking": 0,
+                "fast_spiking": 0,
+            }
+        )
+    return unit_spiketimes, unit_info, clocktype
+
+
+def _blech_apply_filter(
+    session: Any, E: Mapping[str, Any], options: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Apply read()'s selection vocabulary to an already-loaded ensemble."""
+    from . import ensemble as ensemble_fun
+
+    min_quality = options.get("min_quality")
+    quality_label = options.get("quality_label") or ""
+    use_quality = min_quality is not None or bool(quality_label)
+    any_filter = use_quality or any(
+        options.get(k) is not None and len(np.atleast_1d(options.get(k))) > 0
+        for k in (
+            "include_names",
+            "exclude_names",
+            "include_ids",
+            "exclude_ids",
+            "include_index",
+            "exclude_index",
+        )
+    )
+    if not any_filter:
+        return dict(E)
+
+    excl_ids = list(options.get("exclude_ids") or [])
+    if use_quality:
+        qnum, qlabel = ensemble_fun.neuron_quality(session, E["neuron_ids"])
+        qmask = np.ones(len(E["neuron_ids"]), dtype=bool)
+        if min_quality is not None:
+            qmask &= qnum >= min_quality
+        if quality_label:
+            wanted = [quality_label] if isinstance(quality_label, str) else list(quality_label)
+            qmask &= np.array([lab in wanted for lab in qlabel], dtype=bool)
+        if options.get("keep_unrated"):
+            qmask |= np.isnan(qnum)
+        excl_ids += [nid for nid, ok in zip(E["neuron_ids"], qmask) if not ok]
+
+    return ensemble_fun.filter(
+        E,
+        include_names=options.get("include_names"),
+        exclude_names=options.get("exclude_names"),
+        include_index=options.get("include_index"),
+        exclude_index=options.get("exclude_index"),
+        include_ids=options.get("include_ids"),
+        exclude_ids=excl_ids,
+    )
+
+
+def _blech_get_stimulus_presentation(
+    session: Any,
+    stimulator: Any,
+    probe: Any,
+    epoch_id: str,
+    target_clocktype: str,
+    *,
+    tastant_field: str,
+    stimid_field: str,
+) -> tuple[np.ndarray, np.ndarray, dict[float, str]]:
+    """Stimulus identities and delivery times, in the ensemble's clock."""
+    from ..app.stimulus.decoder import ndi_app_stimulus_decoder
+    from ..query import ndi_query
+    from ..time.clocktype import ndi_time_clocktype
+    from ..time.timereference import ndi_time_timereference
+
+    q = (
+        ndi_query("").isa("stimulus_presentation")
+        & ndi_query("").depends_on("stimulus_element_id", stimulator.id)
+        & ndi_query("epochid.epochid", "exact_string", epoch_id, "")
+    )
+    stim_docs = session.database_search(q)
+    if not stim_docs:
+        raise ValueError(
+            f"No stimulus_presentation document was found for stimulator "
+            f"{stimulator.elementstring()}, epoch {epoch_id}. Run the stimulus "
+            "decoder on this session first."
+        )
+    stim_doc = stim_docs[0]
+
+    sp = stim_doc.document_properties["stimulus_presentation"]
+    presentation_order = np.asarray(sp["presentation_order"], dtype=float).ravel()
+
+    stimuli = sp["stimuli"]
+    unique_stimid = np.full(len(stimuli), np.nan, dtype=float)
+    stimid_tastant: dict[float, str] = {}
+    for k, stim in enumerate(stimuli):
+        params = stim.get("parameters", {}) or {}
+        # Fall back to the 1-based index when there is no stimid field, as
+        # MATLAB does, so an unlabelled protocol still exports.
+        unique_stimid[k] = float(params.get(stimid_field, k + 1))
+        stimid_tastant[unique_stimid[k]] = str(params.get(tastant_field, ""))
+
+    # presentation_order holds 1-BASED indices into `stimuli` (it is written by
+    # MATLAB), so subtract one before indexing.
+    trial_stimid = np.array([unique_stimid[int(i) - 1] for i in presentation_order], dtype=float)
+
+    decoder = ndi_app_stimulus_decoder(session)
+    presentation_time = decoder.load_presentation_time(stim_doc)
+    onset_stim = np.array([p["onset"] for p in presentation_time], dtype=float)
+    offset_stim = np.array([p["offset"] for p in presentation_time], dtype=float)
+
+    target = target_clocktype or "dev_local_time"
+    stim_timeref = ndi_time_timereference(
+        stimulator,
+        ndi_time_clocktype(presentation_time[0]["clocktype"]),
+        stim_doc.document_properties["epochid"]["epochid"],
+        0,
+    )
+    t_probe, _, msg = session.syncgraph.time_convert(
+        stim_timeref,
+        np.column_stack([onset_stim, offset_stim]),
+        probe,
+        ndi_time_clocktype(target),
+    )
+    if t_probe is None or np.size(t_probe) == 0:
+        raise ValueError(
+            f"Could not convert stimulus times into the ensemble clock ({target}) "
+            f"via the session syncgraph: {msg}"
+        )
+    t_probe = np.asarray(t_probe, dtype=float).reshape(len(onset_stim), 2)
+    return t_probe[:, 0], trial_stimid, stimid_tastant

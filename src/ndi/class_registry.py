@@ -36,6 +36,7 @@ def _build_registry() -> dict[str, type]:
     from .daq.system import ndi_daq_system
     from .daq.system_image import ndi_daq_system_image
     from .element import ndi_element
+    from .element.ensemble import ndi_element_ensemble
     from .file.navigator import ndi_file_navigator
     from .file.navigator.epochdir import ndi_file_navigator_epochdir
     from .file.navigator.rhd_series import ndi_file_navigator_rhd_series
@@ -68,6 +69,7 @@ def _build_registry() -> dict[str, type]:
     # Elements / probes (keyed by ndi_element_class() return value)
     for cls in (
         ndi_element,
+        ndi_element_ensemble,
         ndi_probe,
         ndi_probe_timeseries,
         ndi_probe_timeseries_mfdaq,

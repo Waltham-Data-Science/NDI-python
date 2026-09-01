@@ -240,6 +240,8 @@ class ndi_element_timeseries(ndi_element):
         t0_t1: list[tuple[float, float]],
         timepoints: np.ndarray | None = None,
         datapoints: np.ndarray | None = None,
+        *,
+        add_to_database: bool = True,
     ) -> tuple[ndi_element_timeseries, Any]:
         """
         Add a new epoch with optional time series data.
@@ -253,6 +255,12 @@ class ndi_element_timeseries(ndi_element):
             t0_t1: List of (t0, t1) time ranges
             timepoints: Optional array of time values
             datapoints: Optional array of data values
+            add_to_database: When False, the document is built and the binary
+                attached, but the document is NOT added -- the caller adds it,
+                typically because a second document depends on this one's id
+                and both must land together. Mirrors the base class's
+                argument of the same name, which in turn is MATLAB's
+                ``nargout<2`` deferral made explicit.
 
         Returns:
             Tuple of (self, epoch_document)
@@ -267,12 +275,13 @@ class ndi_element_timeseries(ndi_element):
         has_data = timepoints is not None and datapoints is not None
 
         if not has_data or self._session is None:
-            return super().addepoch(epoch_id, epoch_clock, t0_t1)
+            return super().addepoch(epoch_id, epoch_clock, t0_t1, add_to_database=add_to_database)
 
         _, doc = super().addepoch(epoch_id, epoch_clock, t0_t1, add_to_database=False)
         doc = self._attach_timeseries_data(doc, timepoints, datapoints)
-        self._session.database_add(doc)
-        self.resetepochtable()
+        if add_to_database:
+            self._session.database_add(doc)
+            self.resetepochtable()
         return self, doc
 
     def _attach_timeseries_data(

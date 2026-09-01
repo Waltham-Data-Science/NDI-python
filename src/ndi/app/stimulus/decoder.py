@@ -64,22 +64,54 @@ class ndi_app_stimulus_decoder(ndi_app):
     def load_presentation_time(
         self,
         stimulus_presentation_doc: ndi_document,
-    ) -> dict[str, Any] | None:
+    ) -> list[dict[str, Any]]:
         """
         Load presentation timing from a stimulus_presentation document.
 
         MATLAB equivalent: ndi.app.stimulus.decoder/load_presentation_time
 
+        Returns a list with one entry per trial, each carrying at least
+        ``onset``, ``offset`` and ``clocktype``. This was previously a stub
+        that returned None and documented a ``{'stimon', 'stimoff'}`` dict
+        that nothing produced; the real shape is the per-trial list MATLAB
+        returns, and the binary reader for it already existed in
+        ``ndi.database_fun.read_presentation_time_structure``.
+
         Args:
             stimulus_presentation_doc: stimulus_presentation document
 
         Returns:
-            Dict with 'stimon', 'stimoff' timing arrays, or None
+            A list of per-trial timing dicts (empty if there is no session).
         """
+        import warnings
+
+        from ...database_fun import read_presentation_time_structure
+
         if self._session is None:
-            return None
-        # Framework method
-        return None
+            return []
+
+        props = getattr(stimulus_presentation_doc, "document_properties", {}) or {}
+        sp = props.get("stimulus_presentation", {}) or {}
+        if "presentation_time" in sp:
+            # The deprecated in-document form. Still read, still warned about,
+            # exactly as MATLAB does -- old documents remain loadable.
+            warnings.warn(
+                "stimulus presentation document uses deprecated form of "
+                "presentation_time storage.",
+                stacklevel=2,
+            )
+            return list(sp["presentation_time"])
+
+        fobj = self._session.database_openbinarydoc(
+            stimulus_presentation_doc, "presentation_time.bin"
+        )
+        try:
+            _, presentation_time = read_presentation_time_structure(
+                getattr(fobj, "fullpathfilename", fobj)
+            )
+        finally:
+            self._session.database_closebinarydoc(fobj)
+        return presentation_time
 
     def _clear_presentations(self, ndi_element_stim: Any) -> None:
         """Clear existing stimulus presentation documents."""
