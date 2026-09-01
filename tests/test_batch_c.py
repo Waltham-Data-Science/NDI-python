@@ -319,15 +319,61 @@ class TestStimulusDecoder:
         assert existingdocs == []
 
     def test_load_presentation_time_no_session(self):
-        app = ndi_app_stimulus_decoder()
-        result = app.load_presentation_time(SimpleNamespace())
-        assert result is None
+        """Empty list, not None: every caller iterates the result.
 
-    def test_load_presentation_time_with_session(self):
+        This previously asserted None, pinning a stub that returned None
+        unconditionally -- including with a session, which is what made the
+        method unusable. It now reads the real per-trial timing.
+        """
+        app = ndi_app_stimulus_decoder()
+        assert app.load_presentation_time(SimpleNamespace()) == []
+
+    def test_load_presentation_time_reads_the_deprecated_inline_form(self):
         session = SimpleNamespace(id=lambda: "s")
         app = ndi_app_stimulus_decoder(session=session)
-        result = app.load_presentation_time(SimpleNamespace())
-        assert result is None
+        doc = SimpleNamespace(
+            document_properties={
+                "stimulus_presentation": {
+                    "presentation_time": [{"onset": 1.0, "offset": 2.0}]
+                }
+            }
+        )
+        import pytest as _pytest
+
+        with _pytest.warns(UserWarning, match="deprecated"):
+            assert app.load_presentation_time(doc) == [{"onset": 1.0, "offset": 2.0}]
+
+    def test_load_presentation_time_reads_the_binary_form(self, tmp_path):
+        """The modern form: the times live in presentation_time.bin."""
+        import numpy as np
+
+        from ndi.database_fun import write_presentation_time_structure
+
+        path = tmp_path / "presentation_time.bin"
+        write_presentation_time_structure(
+            str(path),
+            [
+                {
+                    "clocktype": "dev_local_time",
+                    "stimopen": 0.9,
+                    "onset": 1.0,
+                    "offset": 2.0,
+                    "stimclose": 2.1,
+                    "stimevents": np.zeros((0, 2)),
+                }
+            ],
+        )
+        opened = SimpleNamespace(fullpathfilename=str(path))
+        session = SimpleNamespace(
+            id=lambda: "s",
+            database_openbinarydoc=lambda d, n: opened,
+            database_closebinarydoc=lambda f: None,
+        )
+        app = ndi_app_stimulus_decoder(session=session)
+        got = app.load_presentation_time(
+            SimpleNamespace(document_properties={"stimulus_presentation": {}})
+        )
+        assert len(got) == 1 and got[0]["onset"] == 1.0
 
     def test_clear_presentations_no_session(self):
         app = ndi_app_stimulus_decoder()
