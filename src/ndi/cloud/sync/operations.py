@@ -541,3 +541,90 @@ def sync(
     if handler is None:
         raise CloudSyncError(f"Unknown sync mode: {mode}")
     return handler(dataset_path, cloud_dataset_id, options, client=client)
+
+
+def documentDifference(
+    dataset: Any,
+    cloud_dataset_id: str = "",
+    *,
+    verbose: bool = False,
+    client: CloudClient | None = None,
+) -> dict[str, Any]:
+    """Compare local and remote document presence by id.
+
+    MATLAB equivalent: ``ndi.cloud.sync.documentDifference``
+
+    Unlike :func:`ndi.cloud.internal.validateSync`, this compares document
+    IDS ONLY -- it never downloads document contents, which is what makes it
+    cheap enough to back an interactive "how many new documents are there?"
+    check. It therefore does not detect content mismatches between documents
+    that exist on both sides.
+
+    Nothing is added, deleted or modified on either side.
+
+    Args:
+        dataset: The local dataset. It must be linked to a remote NDI Cloud
+            dataset unless ``cloud_dataset_id`` is supplied.
+        cloud_dataset_id: The remote dataset id to compare against. Empty
+            resolves it from the local ``dataset_remote`` document.
+        verbose: Print progress.
+        client: Authenticated cloud client (auto-created if omitted).
+
+    Returns:
+        A report with ``local_only_ids``, ``remote_only_ids``, ``common_ids``
+        and their counts ``num_local_only``, ``num_remote_only``,
+        ``num_common``.
+
+        The three id lists are SORTED. MATLAB's ``setdiff`` returns sorted
+        output, while a Python set has no order at all, so sorting is what
+        makes the two ports agree and makes a given comparison reproducible
+        rather than varying between runs.
+
+    Raises:
+        CloudSyncError: If the dataset is not linked to a cloud dataset and
+            no id was supplied. That is a different situation from "no new
+            documents" and must not be reported as a count of zero.
+    """
+    from ..internal import getCloudDatasetIdForLocalDataset, listLocalDocuments
+
+    if not cloud_dataset_id:
+        try:
+            cloud_dataset_id, _ = getCloudDatasetIdForLocalDataset(dataset, client=client)
+        except Exception as exc:  # noqa: BLE001 - re-raised with the actionable message
+            raise CloudSyncError(
+                "Could not retrieve the cloud dataset id. Ensure the local "
+                f"dataset is linked to a remote one. Original error: {exc}"
+            ) from exc
+        if not cloud_dataset_id:
+            raise CloudSyncError(
+                "This dataset is not linked to a cloud dataset. " "Upload it to NDI Cloud first."
+            )
+
+    if verbose:
+        logger.info("Comparing document presence for cloud dataset %s...", cloud_dataset_id)
+
+    from ..internal import listRemoteDocumentIds
+
+    _, local_ids = listLocalDocuments(dataset)
+    remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
+
+    local_set = set(local_ids)
+    remote_set = set(remote_ids)
+
+    report = {
+        "local_only_ids": sorted(local_set - remote_set),
+        "remote_only_ids": sorted(remote_set - local_set),
+        "common_ids": sorted(local_set & remote_set),
+    }
+    report["num_local_only"] = len(report["local_only_ids"])
+    report["num_remote_only"] = len(report["remote_only_ids"])
+    report["num_common"] = len(report["common_ids"])
+
+    if verbose:
+        logger.info(
+            "%d local-only, %d remote-only, %d common document(s).",
+            report["num_local_only"],
+            report["num_remote_only"],
+            report["num_common"],
+        )
+    return report

@@ -49,16 +49,28 @@ UNNAMED_SESSION = "(unnamed session)"
 
 #: The sync-report fields summarised by :func:`sync_result_message`, with
 #: their singular and plural nouns, in the order MATLAB reports them.
-SYNC_FIELDS: tuple[tuple[str, str, str], ...] = (
-    ("uploaded_document_ids", "document uploaded", "documents uploaded"),
-    ("downloaded_document_ids", "document downloaded", "documents downloaded"),
+#:
+#: Each entry lists the field names to look for, MATLAB's first. The two
+#: ports name these differently: MATLAB's sync functions report
+#: ``uploaded_document_ids`` while ndi.cloud.sync.operations reports
+#: ``uploaded``. Reading only MATLAB's names would summarise every real
+#: Python sync report as "no changes were needed" -- silently, since a
+#: missing field and an empty one are indistinguishable here. So both are
+#: accepted until the underlying divergence is settled.
+SYNC_FIELDS: tuple[tuple[tuple[str, ...], str, str], ...] = (
+    (("uploaded_document_ids", "uploaded"), "document uploaded", "documents uploaded"),
     (
-        "deleted_local_document_ids",
+        ("downloaded_document_ids", "downloaded"),
+        "document downloaded",
+        "documents downloaded",
+    ),
+    (
+        ("deleted_local_document_ids", "deleted_local"),
         "local document deleted",
         "local documents deleted",
     ),
     (
-        "deleted_remote_document_ids",
+        ("deleted_remote_document_ids", "deleted_remote"),
         "remote document deleted",
         "remote documents deleted",
     ),
@@ -68,7 +80,7 @@ SYNC_FIELDS: tuple[tuple[str, str, str], ...] = (
 def append_count_phrase(
     phrases: list[str],
     report: Mapping[str, Any] | None,
-    field: str,
+    field: str | Sequence[str],
     singular: str,
     plural: str,
 ) -> list[str]:
@@ -77,10 +89,21 @@ def append_count_phrase(
     An absent field and a zero count both contribute nothing, which is what
     lets :func:`sync_result_message` say "no changes" for a report in which
     nothing happened rather than printing a row of zeroes.
+
+    ``field`` may be several candidate names, in which case the first one
+    PRESENT in the report wins -- present, not truthy, so an explicit empty
+    list under the first name is honoured rather than falling through to a
+    second name that might hold something else.
     """
-    if not isinstance(report, Mapping) or field not in report:
+    if not isinstance(report, Mapping):
         return phrases
-    value = report[field]
+    names = (field,) if isinstance(field, str) else tuple(field)
+    for name in names:
+        if name in report:
+            value = report[name]
+            break
+    else:
+        return phrases
     n = len(value) if value is not None else 0
     if n == 1:
         phrases.append(f"1 {singular}")
