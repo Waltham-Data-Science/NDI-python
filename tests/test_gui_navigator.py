@@ -480,13 +480,25 @@ class TestNavigatorQt:
         progress.toggle()
         assert nav.position[3] != before
 
-    def test_ndi_pane_prefs_click_reaches_the_navigator(self, monkeypatch):
+    def test_ndi_pane_prefs_click_opens_the_preferences_editor(self):
+        _qt_or_skip()
+        from ndi.gui.preferences_editor import WINDOW_TAG as PREFS_TAG
+
+        nav = Navigator()
+        editor = nav.open_preferences()
+        assert editor is not None
+        assert editor.figure.objectName() == PREFS_TAG
+        editor.close()
+
+    def test_a_second_prefs_click_raises_the_editor_already_open(self):
+        """MATLAB opens a fresh figure per click; here the handle has to be
+        held anyway (an unreferenced Qt window is garbage collected), so the
+        open one is raised rather than stacked."""
         _qt_or_skip()
         nav = Navigator()
-        seen = []
-        monkeypatch.setattr(nav, "alert", lambda m, t, success=True: seen.append((m, t, success)))
-        nav.open_preferences()
-        assert seen and "not been ported" in seen[0][0]
+        first = nav.open_preferences()
+        assert nav.open_preferences() is first
+        first.close()
 
     def test_min_height_follows_the_panes_not_a_constant(self):
         """An ELASTIC pane contributes its MINIMUM here, not the height it

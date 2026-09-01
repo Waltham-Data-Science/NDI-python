@@ -75,6 +75,10 @@ class Navigator:
         self._dragging = False
         self._drag_last_y = 0.0
 
+        #: The preferences editor opened from the Prefs button, held so the
+        #: window is not garbage collected while the user is looking at it.
+        self._preferences_editor: Any = None
+
         if build:
             self.build()
 
@@ -166,17 +170,32 @@ class Navigator:
     # ------------------------------------------------------------------
     # actions the panes call back into
     # ------------------------------------------------------------------
-    def open_preferences(self) -> None:
-        """Open the NDI preferences editor.
+    def open_preferences(self) -> Any | None:
+        """Open the NDI preferences editor (MATLAB's ``ndi.gui.preferencesEditor``).
 
-        Not yet ported (MATLAB's ``ndi.gui.preferencesEditor``), so this
-        reports that plainly rather than failing silently on the click.
+        Returns the editor, or None when Qt is missing -- which is reported
+        on the window rather than raised, because this runs off a button
+        click and an exception there would go nowhere the user can see.
+
+        An editor already up is raised rather than duplicated, and the
+        handle is HELD: a Qt window with no Python reference is garbage
+        collected and vanishes, where MATLAB's figure stays up on its own.
         """
-        self.alert(
-            "The preferences editor has not been ported to Python yet.",
-            "Preferences",
-            success=False,
-        )
+        editor = self._preferences_editor
+        if editor is not None and editor.is_open():
+            editor.show()
+            return editor
+
+        from .preferences_editor import PreferencesEditor
+
+        try:
+            editor = PreferencesEditor()
+        except ImportError as exc:  # PySide6 missing
+            self.alert(str(exc), "Preferences", success=False)
+            return None
+        self._preferences_editor = editor
+        editor.show()
+        return editor
 
     def alert(self, message: str, title: str, *, success: bool = True) -> None:
         """Show a message on the navigator window."""
