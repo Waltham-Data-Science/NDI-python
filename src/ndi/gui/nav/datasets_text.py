@@ -50,13 +50,15 @@ UNNAMED_SESSION = "(unnamed session)"
 #: The sync-report fields summarised by :func:`sync_result_message`, with
 #: their singular and plural nouns, in the order MATLAB reports them.
 #:
-#: Each entry lists the field names to look for, MATLAB's first. The two
-#: ports name these differently: MATLAB's sync functions report
-#: ``uploaded_document_ids`` while ndi.cloud.sync.operations reports
-#: ``uploaded``. Reading only MATLAB's names would summarise every real
-#: Python sync report as "no changes were needed" -- silently, since a
-#: missing field and an empty one are indistinguishable here. So both are
-#: accepted until the underlying divergence is settled.
+#: Each entry lists the field names to look for, MATLAB's first.
+#:
+#: ndi.cloud.sync now emits MATLAB's names, so the first name is the one that
+#: matches in practice. The short forms it used to emit (``uploaded`` and so
+#: on) are still accepted, because reading a report under the wrong name is
+#: SILENT here: a missing field and an empty one are indistinguishable, so a
+#: sync that moved a hundred documents would summarise as "no changes were
+#: needed". Keeping the second name costs nothing and makes that class of
+#: regression impossible rather than merely unlikely.
 SYNC_FIELDS: tuple[tuple[tuple[str, ...], str, str], ...] = (
     (("uploaded_document_ids", "uploaded"), "document uploaded", "documents uploaded"),
     (

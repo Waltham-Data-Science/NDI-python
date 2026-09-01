@@ -15,6 +15,7 @@ from __future__ import annotations
 import pytest
 
 from ndi.gui.nav import datasets_cloud as dc
+from ndi.gui.nav.datasets_text import sync_result_message
 
 
 class FakeDataset:
@@ -280,6 +281,72 @@ class TestResolveCloudTarget:
         monkeypatch.setattr(internal, "getCloudDatasetIdForLocalDataset", boom)
         with pytest.raises(ValueError, match="db closed"):
             dc.resolve_cloud_target(FakeDataset())
+
+
+class TestSyncReportFieldNames:
+    """ndi.cloud.sync reports must carry MATLAB's field names.
+
+    These are what sync_result_message reads. Reading a report under the
+    wrong name is SILENT -- a missing field and an empty one look the same --
+    so a mismatch does not raise, it just tells the user nothing happened.
+    """
+
+    #: What each sync function must emit, from the MATLAB counterparts.
+    EXPECTED = {
+        "uploadNew": {"uploaded_document_ids"},
+        "downloadNew": {"downloaded_document_ids"},
+        "mirrorToRemote": {"uploaded_document_ids", "deleted_remote_document_ids"},
+        "mirrorFromRemote": {"downloaded_document_ids", "deleted_local_document_ids"},
+        "twoWaySync": {
+            "uploaded_document_ids",
+            "downloaded_document_ids",
+            "deleted_local_document_ids",
+            "deleted_remote_document_ids",
+        },
+    }
+
+    def test_every_sync_function_initialises_matlabs_fields(self):
+        import inspect
+
+        import ndi.cloud.sync.operations as ops
+
+        for name, expected in self.EXPECTED.items():
+            source = inspect.getsource(getattr(ops, name))
+            missing = {f for f in expected if f'"{f}"' not in source}
+            assert not missing, f"{name} does not mention {sorted(missing)}"
+
+    def test_no_function_still_uses_the_old_short_names(self):
+        """The short names were the divergence. upload.py and
+        orchestration.py legitimately use "uploaded" as an integer counter in
+        FILE reports, which is why this checks only the sync module."""
+        import inspect
+
+        import ndi.cloud.sync.operations as ops
+
+        for name in self.EXPECTED:
+            source = inspect.getsource(getattr(ops, name))
+            for old in (
+                '"uploaded"',
+                '"downloaded"',
+                '"deleted_local"',
+                '"deleted_remote"',
+                '"deleted"',
+            ):
+                assert old not in source, f"{name} still uses {old}"
+
+    def test_a_mirror_to_cloud_report_names_its_deletions(self):
+        """The bug this rename fixes: mirrorToRemote recorded remote
+        deletions under "deleted", which sync_result_message read under
+        neither name -- so 50 permanent deletions were summarised as
+        "Done. 3 documents uploaded"."""
+        report = {
+            "mode": "mirror_to_remote",
+            "uploaded_document_ids": ["a", "b", "c"],
+            "deleted_remote_document_ids": [f"x{i}" for i in range(50)],
+        }
+        message = sync_result_message(report)
+        assert "3 documents uploaded" in message
+        assert "50 remote documents deleted" in message
 
 
 class TestDocumentDifference:
