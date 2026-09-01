@@ -3,12 +3,18 @@ name: CI
 on:
   push:
     branches: [main]
+  # No branch filter: a PR targeting a feature branch needs lint and tests
+  # just as much as one targeting main.
   pull_request:
-    branches: [main]
 
 jobs:
   lint:
     runs-on: ubuntu-latest
+    # Only the lint job gets cancel-in-progress. The test job talks to the
+    # live cloud, and cancelling it mid-run strands the datasets it created.
+    concurrency:
+      group: ci-lint-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
 
