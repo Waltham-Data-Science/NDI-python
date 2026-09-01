@@ -228,7 +228,11 @@ def _built_pane(navigator=None, **kwargs):
     nav = navigator if navigator is not None else Navigator()
     nav.alerts = []
     nav.alert = lambda m, t, success=True: nav.alerts.append((m, t, success))
-    pane = nav.panes[1] if hasattr(nav, "panes") and len(nav.panes) > 2 else None
+    # By TYPE, not by index: the stack order changes as panes are ported
+    # (CloudPane landing ahead of Datasets moved it from 1 to 2), and a test
+    # that hardcodes a position breaks for a reason that has nothing to do
+    # with what it is testing.
+    pane = nav.datasets_pane_handle()
     if pane is None:  # pragma: no cover - only if the stack changes
         pytest.skip("no datasets pane in the stack")
     for key, value in kwargs.items():

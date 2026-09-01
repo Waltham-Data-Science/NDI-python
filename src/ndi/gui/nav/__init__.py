@@ -22,6 +22,7 @@ appearance is not.
 from __future__ import annotations
 
 from . import datasets_cloud, datasets_model, datasets_text
+from .cloud_pane import CloudPane
 from .datasets_pane import DatasetsPane
 from .ndi_pane import NdiPane
 from .pane import NavPane
@@ -33,6 +34,7 @@ __all__ = [
     "datasets_cloud",
     "datasets_model",
     "datasets_text",
+    "CloudPane",
     "DatasetsPane",
     "NavPane",
     "NdiPane",
