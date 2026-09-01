@@ -116,9 +116,69 @@ class TestPaneShape:
 
 
 class TestSessionApps:
-    def test_no_apps_are_discovered_yet(self):
-        """ndi.gui.app.sessionApp is not ported. Nothing is hardcoded on
-        either side, so this fills itself when that subsystem lands."""
+    """The menu's contents come from ndi.gui.app.SessionApp.list, so what is
+    checked here is the translation of a discovery record into a menu record
+    -- not discovery itself, which is tested in test_gui_app_session_app."""
+
+    def _found(self, monkeypatch, records):
+        monkeypatch.setattr(
+            "ndi.gui.nav.datasets_pane.SessionApp.list",
+            staticmethod(lambda *a, **k: records),
+        )
+
+    def test_a_discovered_app_becomes_a_menu_record(self, monkeypatch):
+        self._found(
+            monkeypatch,
+            [{"Name": "Viewer", "Class": "mylab.apps.viewer", "Category": "Viewers"}],
+        )
+        (app,) = session_apps()
+        assert app["Label"] == "Viewer"
+        assert app["Category"] == "Viewers"
+        assert callable(app["Launch"])
+
+    def test_launch_opens_the_class_that_was_discovered(self, monkeypatch):
+        self._found(monkeypatch, [{"Name": "Viewer", "Class": "mylab.apps.viewer"}])
+        opened = []
+        monkeypatch.setattr(
+            "ndi.gui.nav.datasets_pane.SessionApp.launch",
+            staticmethod(lambda cls, session: opened.append((cls, session)) or "app"),
+        )
+        session = object()
+        assert session_apps()[0]["Launch"](session) == "app"
+        assert opened == [("mylab.apps.viewer", session)]
+
+    def test_each_record_launches_its_own_app(self, monkeypatch):
+        """A closure over the loop variable would make every item open the
+        last app, and every item would still look right in the menu."""
+        self._found(
+            monkeypatch,
+            [{"Name": "A", "Class": "pkg.a"}, {"Name": "B", "Class": "pkg.b"}],
+        )
+        opened = []
+        monkeypatch.setattr(
+            "ndi.gui.nav.datasets_pane.SessionApp.launch",
+            staticmethod(lambda cls, session: opened.append(cls)),
+        )
+        for app in session_apps():
+            app["Launch"](object())
+        assert opened == ["pkg.a", "pkg.b"]
+
+    def test_an_app_without_a_category_stays_at_the_top_level(self, monkeypatch):
+        self._found(monkeypatch, [{"Name": "Viewer", "Class": "pkg.viewer"}])
+        assert session_apps()[0]["Category"] == ""
+
+    def test_a_failed_discovery_costs_the_apps_and_nothing_else(self, monkeypatch):
+        def boom(*a, **k):
+            raise RuntimeError("scan failed")
+
+        monkeypatch.setattr("ndi.gui.nav.datasets_pane.SessionApp.list", staticmethod(boom))
+        assert session_apps() == []
+
+    def test_ndi_ships_no_session_apps_yet(self):
+        """MATLAB's eleven apps are not ported, so the built-in scan is empty.
+        The menu is still built, and fills itself as apps land -- or as soon
+        as a user names their own package in GUI.Navigator.SessionAppPackages.
+        """
         assert session_apps() == []
 
 
@@ -434,9 +494,9 @@ class TestMenusAreBuilt:
         menu = pane.build_node_menu(node)
         assert [a.text() for a in menu.actions()] == ["Apps", "Session"]
 
-    def test_the_apps_menu_is_present_but_empty(self):
+    def test_the_apps_menu_is_present_even_with_no_apps_to_offer(self):
         """Empty says 'no apps found'. Omitting it would say 'sessions have
-        no apps', which is false."""
+        no apps', which is false -- and NDI ships no apps yet."""
         _qt_or_skip()
         nav, pane = _built_pane()
         pane.user_sessions = [FakeSession("a", path="/s/a")]
@@ -445,6 +505,69 @@ class TestMenusAreBuilt:
         apps = menu.actions()[0].menu()
         assert apps is not None
         assert apps.actions() == []
+
+    def test_discovered_apps_reach_the_menu(self, monkeypatch):
+        """The end of the wire: what SessionApp.list found is what the user
+        is offered, grouped by Category and sorted case-insensitively."""
+        _qt_or_skip()
+        monkeypatch.setattr(
+            "ndi.gui.nav.datasets_pane.session_apps",
+            lambda: [
+                {"Label": "Viewer", "Launch": lambda s: s, "Category": ""},
+                {"Label": "Kiasort", "Launch": lambda s: s, "Category": "Spike Sorters"},
+            ],
+        )
+        nav, pane = _built_pane()
+        pane.user_sessions = [FakeSession("a", path="/s/a")]
+        pane.populate_tree()
+        menu = pane.build_node_menu(pane.tree.topLevelItem(0).child(0))
+        apps = menu.actions()[0].menu()
+        assert [a.text() for a in apps.actions()] == ["Spike Sorters", "Viewer"]
+        assert [a.text() for a in apps.actions()[0].menu().actions()] == ["Kiasort"]
+
+    def test_choosing_an_app_launches_it_on_that_nodes_session(self, monkeypatch):
+        _qt_or_skip()
+        opened = []
+        monkeypatch.setattr(
+            "ndi.gui.nav.datasets_pane.session_apps",
+            lambda: [
+                {
+                    "Label": "Viewer",
+                    "Launch": lambda s: opened.append(s) or "window",
+                    "Category": "",
+                }
+            ],
+        )
+        nav, pane = _built_pane()
+        session = FakeSession("a", path="/s/a")
+        pane.user_sessions = [session]
+        pane.populate_tree()
+        menu = pane.build_node_menu(pane.tree.topLevelItem(0).child(0))
+        menu.actions()[0].menu().actions()[0].trigger()
+        assert opened == [session]
+
+    def test_a_launched_app_is_kept_alive(self):
+        """MATLAB's figure holds its app through guidata; here the pane holds
+        it, or the app's window could be collected as launch_app returns."""
+        _qt_or_skip()
+        nav, pane = _built_pane()
+        session = FakeSession("a", path="/s/a")
+        pane.user_sessions = [session]
+        pane.populate_tree()
+        node = pane.tree.topLevelItem(0).child(0)
+        window = object()
+        pane.launch_app({"Label": "Viewer", "Launch": lambda s: window}, node)
+        assert pane.launched_apps == [window]
+
+    def test_an_app_that_fails_to_open_is_reported_not_raised(self):
+        _qt_or_skip()
+        nav, pane = _built_pane()
+        pane.user_sessions = [FakeSession("a", path="/s/a")]
+        pane.populate_tree()
+        node = pane.tree.topLevelItem(0).child(0)
+        pane.launch_app({"Label": "Viewer", "Launch": _raise("no display")}, node)
+        assert pane.launched_apps == []
+        assert any("no display" in m for m, _, _ in nav.alerts)
 
     def test_the_session_menu_items_are_alphabetical(self):
         _qt_or_skip()

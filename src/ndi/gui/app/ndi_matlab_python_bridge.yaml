@@ -1,0 +1,234 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/gui/app/
+# The Primary Contract for the ndi.gui.app namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  - name: sessionApp
+    type: class
+    matlab_path: "+ndi/+gui/+app/sessionApp.m"
+    matlab_last_sync_hash: "eaec593"
+    python_path: "ndi/gui/app/session_app.py"
+    python_class: "SessionApp"
+    inherits: "handle"
+
+    properties:
+      - name: Name
+        type_matlab: "string (Abstract, Constant)"
+        type_python: "ClassVar[str]"
+        decision_log: >
+          The menu label. MATLAB declares it an abstract constant, so a
+          subclass supplying none is abstract and meta.class reports it.
+          Python has no such declaration to read, so Name is an ANNOTATION
+          with no value: a subclass that never assigns it does not have the
+          attribute, and that absence is what is_abstract tests.
+      - name: Category
+        type_matlab: "string (Constant, optional)"
+        type_python: "ClassVar[str]"
+        decision_log: >
+          Optional submenu grouping, "" for none. Concrete in both
+          languages, so an app opts INTO a submenu rather than out of one.
+
+    methods:
+      - name: list
+        kind: static
+        input_arguments:
+          - name: packages
+            type_matlab: "string (1,:)"
+            type_python: "Sequence[str] | None"
+            default: "None (ndi.gui.app.SessionApp.default_packages())"
+        output_arguments:
+          - name: apps
+            type_matlab: "struct array with fields Name, Class, Category"
+            type_python: "list[dict[str, str]]"
+        decision_log: >
+          Ported. MATLAB reads meta.package/meta.class, which catalogues the
+          path without loading anything; Python has no such catalogue, so
+          the modules are imported and their classes inspected. A module
+          that will not import is SKIPPED rather than raised, mirroring
+          MATLAB's tolerance of packages that are not on the path: one
+          broken app must not empty the Apps menu. The struct array becomes
+          a list of dicts, keeping MATLAB's capitalised field names, because
+          the consumer (ndi.gui.nav.datasets_pane.session_apps) already
+          speaks in Label/Launch/Category records.
+      - name: defaultPackages
+        kind: static
+        python_name: default_packages
+        input_arguments: []
+        output_arguments:
+          - name: pkgs
+            type_matlab: "string (1,:)"
+            type_python: "list[str]"
+        decision_log: >
+          Ported. ndi.gui.app and ndi.app, plus the packages the user named
+          in the GUI.Navigator.SessionAppPackages preference, duplicates
+          dropped and order kept. An unreadable preference leaves the
+          built-ins in both languages.
+      - name: launch
+        kind: static
+        input_arguments:
+          - name: className
+            type_matlab: "string | char"
+            type_python: "str | type"
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+        output_arguments:
+          - name: obj
+            type_matlab: "the constructed app (cleared when nargout == 0)"
+            type_python: "Any (always returned)"
+        decision_log: >
+          Ported. MATLAB's feval(className, session) becomes an import plus
+          a call; the class object itself is accepted as well as its name.
+          DIVERGENCE, deliberate: MATLAB may discard the app because its
+          figure holds it through guidata, while a Python app that nothing
+          references can be garbage-collected -- window and all -- as soon
+          as launch returns. So launch always returns the object and
+          DatasetsPane.launch_app keeps it in DatasetsPane.launched_apps.
+      - name: parsePackageList
+        kind: static
+        python_name: parse_package_list
+        access_matlab: private
+        input_arguments:
+          - name: value
+            type_matlab: "string | char"
+            type_python: "Any"
+        output_arguments:
+          - name: pkgs
+            type_python: "list[str]"
+        decision_log: >
+          Ported. Splits on semicolons and commas, trims, drops empties.
+          Python also accepts a list or tuple: ndi.preferences stores values
+          verbatim with no type validation, so a user who set a list gets
+          what they meant rather than the repr of one.
+      - name: classesInPackages
+        kind: static
+        python_name: classes_in_packages
+        access_matlab: private
+        input_arguments:
+          - name: packages
+            type_python: "Sequence[str]"
+        output_arguments:
+          - name: classes
+            type_matlab: "string (1,:) of class names"
+            type_python: "list[type]"
+        decision_log: >
+          Ported, returning the classes themselves rather than their names,
+          since Python has already imported them by the time it can name
+          them. Recurses into subpackages, as MATLAB does through
+          meta.package.PackageList. Only classes whose __module__ IS the
+          module being scanned are reported, so a class re-exported by a
+          package __init__ is attributed to the module that defines it and
+          is never counted twice.
+      - name: isSessionApp
+        kind: static
+        python_name: is_session_app
+        access_matlab: private
+        input_arguments:
+          - name: cls
+            type_python: "Any"
+        output_arguments:
+          - name: tf
+            type_python: "bool"
+        decision_log: >
+          MATLAB walks SuperclassList recursively; Python's issubclass does
+          that walk itself. The interface is not an app: cls is SessionApp
+          returns False in both languages (MATLAB never lists it because it
+          is abstract).
+      - name: isAbstract
+        kind: static
+        python_name: is_abstract
+        access_matlab: "n/a (MATLAB reads meta.class.Abstract)"
+        input_arguments:
+          - name: cls
+            type_python: "type"
+        output_arguments:
+          - name: tf
+            type_python: "bool"
+        decision_log: >
+          NEW in Python, standing in for MATLAB's meta.class.Abstract: true
+          when the class is abc-abstract, or when it never supplied a Name.
+      - name: readName
+        kind: static
+        python_name: read_name
+        access_matlab: private
+        input_arguments:
+          - name: cls
+            type_python: "type"
+        output_arguments:
+          - name: name
+            type_python: "str"
+        decision_log: >
+          Ported, including MATLAB's fallback to the class's own name when
+          the label cannot be read.
+      - name: readCategory
+        kind: static
+        python_name: read_category
+        access_matlab: private
+        input_arguments:
+          - name: cls
+            type_python: "type"
+        output_arguments:
+          - name: cat
+            type_python: "str"
+        decision_log: 'Ported. "" when the app declares no Category.'
+
+  # -----------------------------------------------------------------------
+  # NOT YET PORTED: the apps that adopt the interface
+  # -----------------------------------------------------------------------
+  #   ElectrodeDataExport, ElectrodeMap, ensembleMaker, katzExporter,
+  #   kiasort, pipelineEditor, pyraview, spikeSorterImporter,
+  #   stimulusDecoder, stimulusResponse, vhNDISpikeSorter
+  #
+  # Each depends on further unported subsystems (ndi.cpipeline for the
+  # pipeline editor, the sorters' own toolboxes, and so on) and each is its
+  # own piece of work. Nothing here needs revisiting when they land: an app
+  # reaches the navigator's Apps menu by subclassing SessionApp, and by
+  # nothing else.
+
+# =========================================================================
+# Module-level helpers (Python only)
+# =========================================================================
+functions:
+
+  - name: class_name
+    type: function
+    python_path: "ndi/gui/app/session_app.py"
+    decision_log: >
+      Python only. The fully qualified name of a class, as list() reports it
+      in the Class field and launch() resolves.
+
+  - name: import_module
+    type: function
+    python_path: "ndi/gui/app/session_app.py"
+    decision_log: >
+      Python only. Imports a module or returns None. Standing in for the
+      part of MATLAB's meta.package lookup that simply finds nothing when a
+      package is not on the path.
+
+  - name: walk_modules
+    type: function
+    python_path: "ndi/gui/app/session_app.py"
+    decision_log: >
+      Python only. A module and, if it is a package, everything beneath it.
+      The recursion MATLAB does through meta.package.PackageList.
+
+  - name: resolve_class
+    type: function
+    python_path: "ndi/gui/app/session_app.py"
+    decision_log: >
+      Python only. Turns the Class string back into the class, which
+      MATLAB's feval does implicitly. Raises ValueError when the name names
+      nothing importable, or names something that is not a class.
+
+  - name: unique_stable
+    type: function
+    python_path: "ndi/gui/app/session_app.py"
+    decision_log: "Python only. MATLAB's unique(..., 'stable')."

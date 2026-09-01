@@ -17,15 +17,16 @@ Almost none of the decisions are in this file. The tree's contents come from
 is left here is widget construction and the wiring between the two, which is
 the part a display is genuinely needed to check.
 
-TWO GAPS, BOTH DELIBERATE AND BOTH VISIBLE
+ONE GAP LEFT, DELIBERATE AND VISIBLE
 
-``ndi.gui.app.sessionApp`` -- MATLAB's app-discovery mechanism, and the nine
-apps that adopt it -- has no Python counterpart at all. So
-:func:`session_apps` returns nothing and the per-session "Apps" menu is built
-but empty. It is still built, and it fills itself the moment that subsystem
-lands, because the emptiness is in the discovery function rather than in the
-menu code. An empty "Apps" menu says "no apps found" honestly; omitting the
-menu would say "sessions have no apps", which is false.
+The per-session "Apps" menu is filled by :func:`session_apps`, which asks
+:class:`ndi.gui.app.SessionApp` what apps exist rather than naming any --
+so an app appears in the menu by existing, in either language. MATLAB's own
+eleven apps are not ported yet, so what the menu offers today is whatever
+apps the user's own packages supply (see the
+``GUI.Navigator.SessionAppPackages`` preference). The menu is built either
+way: an empty "Apps" menu says "no apps found" honestly, while omitting it
+would say "sessions have no apps", which is false.
 
 The "+" add-dataset flows (new blank dataset, open dataset, open a cloud
 dataset, create/open a session) are the next slice. The button is therefore
@@ -38,6 +39,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..app.session_app import SessionApp
 from ..cloud_colors import cloud_colors, rgb_to_hex
 from . import datasets_cloud, datasets_model
 from .datasets_text import dataset_menu_enable
@@ -61,16 +63,38 @@ def session_apps() -> list[dict[str, Any]]:
     """The apps offered for a session, discovered dynamically.
 
     Returns records with ``Label``, ``Launch`` and ``Category``, as MATLAB's
-    ``sessionApps`` does.
+    ``sessionApps`` does: ``Launch`` takes the session and opens the app.
 
-    EMPTY FOR NOW. MATLAB discovers these through
-    ``ndi.gui.app.sessionApp.list()``, and neither that interface nor the
-    apps adopting it are ported. Nothing is hardcoded here in either
-    language, so this starts returning real entries as soon as the Python
-    side of that subsystem exists -- no change needed in this file or in the
-    menu that consumes it.
+    Nothing is hardcoded here in either language. The list comes from
+    :meth:`ndi.gui.app.SessionApp.list`, so any class adopting that
+    interface -- NDI's own, or one in a package the user named in the
+    ``GUI.Navigator.SessionAppPackages`` preference -- appears here without
+    this file, or the menu that consumes it, being touched.
+
+    A discovery failure yields no apps rather than an error, as MATLAB's
+    try/catch does: the rest of the session menu is still worth opening.
     """
-    return []
+    try:
+        found = SessionApp.list()
+    except Exception:  # noqa: BLE001 - a broken scan costs apps, not the menu
+        found = []
+    return [
+        {
+            "Label": str(entry.get("Name", "")),
+            "Launch": _launcher(str(entry.get("Class", ""))),
+            "Category": str(entry.get("Category", "") or ""),
+        }
+        for entry in found
+    ]
+
+
+def _launcher(app_class: str):
+    """The ``Launch`` callable for APP_CLASS.
+
+    A function of its own rather than a lambda in the comprehension, so each
+    record closes over its own class name instead of the loop variable.
+    """
+    return lambda session: SessionApp.launch(app_class, session)
 
 
 class DatasetsPane(NavPane):
@@ -100,6 +124,11 @@ class DatasetsPane(NavPane):
         #: object id -> the user's variable names holding it. Rebuilt on each
         #: tree build, and used only to decorate node labels.
         self.ws_var_index: dict[str, list[str]] = {}
+
+        #: The session apps opened from this pane, held so their windows are
+        #: not garbage-collected out from under the user. See
+        #: :meth:`launch_app`.
+        self.launched_apps: list[Any] = []
 
     def has_body(self) -> bool:
         return True
@@ -449,15 +478,24 @@ class DatasetsPane(NavPane):
     # session node actions
     # ------------------------------------------------------------------
     def launch_app(self, app: dict[str, Any], node: Any) -> None:
-        """Resolve NODE's session and start the chosen app."""
+        """Resolve NODE's session and start the chosen app.
+
+        The app object is kept, where MATLAB may discard it: a MATLAB app
+        stays alive because its figure holds it through guidata, while a
+        Python app that nothing references can be collected -- taking its
+        window with it -- as soon as this method returns.
+        """
         title = str(app.get("Label", "App"))
         session = self._resolve_or_report(node, title)
         if session is None:
             return
         try:
-            app["Launch"](session)
+            opened = app["Launch"](session)
         except Exception as exc:  # noqa: BLE001
             self._alert(str(exc), title, success=False)
+            return
+        if opened is not None:
+            self.launched_apps.append(opened)
 
     def clear_session_cache(self, node: Any) -> bool:
         """Clear the cache of NODE's session.
