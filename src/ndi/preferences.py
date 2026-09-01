@@ -200,6 +200,18 @@ class ndi_preferences:
             "float",
             "Maximum size of file batch upload in bytes (default 500 MB).",
         )
+        self._add_item(
+            "GUI",
+            "Navigator",
+            "SessionAppPackages",
+            "",
+            "str",
+            "Extra package names (semicolon- or comma-separated) to scan for "
+            "session GUI apps in the navigator Apps menu, e.g. "
+            '"mylab.apps; otherlab.gui". Classes in these packages that '
+            "subclass ndi.gui.app.SessionApp are added to the built-in "
+            "ndi.gui.app and ndi.app packages.",
+        )
 
     def _add_item(
         self,

@@ -378,6 +378,21 @@ def _qt_or_skip():
         pytest.skip(f"no usable Qt platform plugin: {exc}")
 
 
+def _category_item(editor, text):
+    """The top-level tree item for the category TEXT.
+
+    Found by name rather than by index: the tree mirrors whatever
+    preferences NDI registers, so a newly registered built-in category
+    (GUI.Navigator.SessionAppPackages, say) must not shift these tests onto
+    the wrong node.
+    """
+    tree = editor.tree_widget
+    for i in range(tree.topLevelItemCount()):
+        if tree.topLevelItem(i).text(0) == text:
+            return tree.topLevelItem(i)
+    raise AssertionError(f"no {text!r} category in the tree")
+
+
 class TestWindow:
     def test_window_is_titled_and_tagged(self, tmp_path):
         _qt_or_skip()
@@ -396,7 +411,9 @@ class TestWindow:
         editor = PreferencesEditor(prefs=make_prefs(tmp_path))
         tree = editor.tree_widget
         texts = [tree.topLevelItem(i).text(0) for i in range(tree.topLevelItemCount())]
-        assert texts == ["Cloud", "Display"]
+        assert texts == [node.text for node in editor.state.tree()]
+        assert texts[0] == "Cloud"
+        assert "Display" in texts
         cloud = tree.topLevelItem(0)
         assert [cloud.child(i).text(0) for i in range(cloud.childCount())] == [
             "Download",
@@ -426,7 +443,7 @@ class TestWindow:
         from PySide6 import QtWidgets
 
         editor = PreferencesEditor(prefs=make_prefs(tmp_path))
-        editor.tree_widget.setCurrentItem(editor.tree_widget.topLevelItem(1))  # Display
+        editor.tree_widget.setCurrentItem(_category_item(editor, "Display"))
         kinds = {editor.row_labels[i].text(): type(w) for i, w in editor.row_widgets.items()}
         assert kinds["Verbose"] is QtWidgets.QCheckBox
         assert kinds["Theme / Name"] is QtWidgets.QLineEdit
@@ -467,7 +484,7 @@ class TestWindow:
     def test_a_checkbox_records_its_new_state(self, tmp_path):
         _qt_or_skip()
         editor = PreferencesEditor(prefs=make_prefs(tmp_path))
-        editor.tree_widget.setCurrentItem(editor.tree_widget.topLevelItem(1))  # Display
+        editor.tree_widget.setCurrentItem(_category_item(editor, "Display"))
         index = [r.index for r in editor.state.rows() if r.kind == "bool"][0]
         editor.row_widgets[index].setChecked(False)
         assert editor.state.pending[index] is False

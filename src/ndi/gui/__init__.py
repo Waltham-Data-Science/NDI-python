@@ -27,6 +27,9 @@ PreferencesEditor
 
 Sub-packages
 ------------
+app
+    The ``SessionApp`` interface and the apps that adopt it; what the
+    navigator's per-session "Apps" menu is built from.
 component
     Progress bars and monitors (``ndi_gui_component_ProgressBarWindow``,
     ``ndi_gui_component_NDIProgressBar``, ``ndi_gui_component_CommandWindowProgressMonitor``).
