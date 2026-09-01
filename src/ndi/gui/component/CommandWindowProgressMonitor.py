@@ -12,7 +12,7 @@ import sys
 from datetime import datetime
 from typing import Any
 
-from ndi.gui.component.abstract.ndi_gui_component_abstract_ProgressMonitor import (
+from ndi.gui.component.abstract.ProgressMonitor import (
     ndi_gui_component_abstract_ProgressMonitor,
 )
 
