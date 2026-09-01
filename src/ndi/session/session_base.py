@@ -86,6 +86,16 @@ class ndi_session(ABC):
         >>> session = ndi_session_dir('/path/to/experiment')
         >>> session.daqsystem_add(my_daq)
         >>> docs = session.database_search(ndi_query('element.type') == 'probe')
+
+    CROSS-LANGUAGE NAMING
+    Methods that mirror MATLAB keep MATLAB's exact name, and each also has a
+    snake_case alias bound to the same function -- ``isIngestedInDataset`` and
+    ``is_ingested_in_dataset`` are one method under two names. Neither
+    audience should have to remember which spelling a given method happens to
+    carry: a script ported from MATLAB keeps working, and Python code can read
+    idiomatically. ``is_fully_ingested`` is the one method whose Python name
+    differs in more than case, so MATLAB's ``isIngested`` is aliased onto it.
+
     """
 
     def __init__(self, reference: str):
@@ -729,6 +739,9 @@ class ndi_session(ABC):
                     return False
         return True
 
+    #: MATLAB's name for this method, which Python renamed to say *fully*.
+    isIngested = is_fully_ingested
+
     def isIngestedInDataset(self) -> bool:
         """
         Check if the session is ingested in a dataset.
@@ -760,6 +773,9 @@ class ndi_session(ABC):
                 return True
 
         return False
+
+    #: Snake-case alias; same method, see the class note on naming.
+    is_ingested_in_dataset = isIngestedInDataset
 
     # =========================================================================
     # ndi_probe and ndi_element Methods
