@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from . import (
     calc,  # noqa: F401 — make ndi.fun.calc accessible
+    ensemble,  # noqa: F401 — make ndi.fun.ensemble accessible
+    export,  # noqa: F401 — make ndi.fun.export accessible
     file,  # noqa: F401 — make ndi.fun.file accessible
     probe,  # noqa: F401 — make ndi.fun.probe accessible
     stimulus,  # noqa: F401 — make ndi.fun.stimulus accessible
