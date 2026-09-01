@@ -42,6 +42,11 @@ dependencies = [
     "numpy>=1.20.0",
     "networkx>=2.6",
     "jsonschema>=4.0.0",
+    # ndi.fun.parse_text runs MATLAB-authored regexes: NDI-matlab's own
+    # parser files use variable-width lookbehind and mid-pattern inline
+    # flags, which the standard library's re rejects outright (33 of the
+    # 72 shipped rules fail to compile). See src/ndi/fun/text.py.
+    "regex>=2022.1.18",
     "requests>=2.28.0",
     "pydantic>=2.0",
     "openMINDS>=0.2.0",
