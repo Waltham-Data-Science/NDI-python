@@ -54,6 +54,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# PySide6 is the GUI toolkit (see src/ndi/gui/_qt_helpers.py). It stays an
+# EXTRA rather than a runtime dependency so a headless install -- a pipeline,
+# a container, an analysis box with no display -- does not pull in Qt. The
+# ndi.gui modules import through require_qt(), which raises a message naming
+# this extra, so the failure mode for a missing toolkit is a sentence rather
+# than a traceback.
+gui = [
+    "PySide6>=6.5",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
