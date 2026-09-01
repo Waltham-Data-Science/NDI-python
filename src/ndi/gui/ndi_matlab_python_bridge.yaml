@@ -45,6 +45,50 @@ functions:
       PySide6 with QGraphicsScene for the lab view.
       Synchronized with MATLAB main as of 2026-03-13.
 
+
+  - name: preferencesEditor
+    type: function
+    matlab_path: "+ndi/+gui/preferencesEditor.m"
+    python_path: "ndi/gui/preferences_editor.py"
+    python_name: "preferences_editor"
+    input_arguments:
+      - name: Position
+        type_matlab: "1x4 double"
+        type_python: "tuple[float, float, float, float]"
+        default: "(100, 100, 820, 540)"
+      - name: prefs
+        type_matlab: "n/a"
+        type_python: "ndi.preferences.ndi_preferences | None"
+        default: "None"
+      - name: visible
+        type_matlab: "n/a"
+        type_python: "bool"
+        default: "True"
+    output_arguments:
+      - name: fig
+        type_matlab: "matlab.ui.Figure"
+        type_python: "ndi.gui.preferences_editor.PreferencesEditor"
+    decision_log: >
+      Ported from MATLAB. Opens the preferences editor over
+      ndi.preferences: a category/subcategory tree on the left, one editor
+      row per preference on the right, and Revert / Apply / Save along the
+      bottom. Edits stay pending in the editor until Apply or Save, as in
+      MATLAB. Deviations, all documented in the module docstring:
+      (a) MATLAB returns the uifigure handle, Python returns the
+      PreferencesEditor object (its .figure is the Qt widget) -- a Qt window
+      with no Python reference is garbage collected, so the object is what
+      must be kept; (b) a `prefs` argument names the store to edit,
+      defaulting to the singleton MATLAB always edits, so the editor can be
+      tested against a temporary preferences file; (c) MATLAB's numeric
+      uieditfield refuses a non-numeric entry at the widget, so Python
+      coerces again on Apply (coerce_value) and reports a value that will
+      not convert the way MATLAB reports a failing set;
+      (d) the model -- tree, row selection, labels, widget choice, coercion
+      -- is plain Python in the same module and is tested without a display,
+      matching the split ndi.gui.navigator makes with ndi.gui.nav.layout;
+      (e) MATLAB's alias `preferencesEditor` is exported alongside the
+      snake_case `preferences_editor`.
+      Synchronized with MATLAB main as of 2026-09-01.
 # =========================================================================
 # Classes
 # =========================================================================
