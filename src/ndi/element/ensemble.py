@@ -231,15 +231,9 @@ class ndi_element_ensemble(ndi_element_timeseries):
         # the document stores ONE clocktype string. Unwrapping matters: taking
         # str() of the list stored "[<ndi_time_clocktype.DEV_LOCAL_TIME: ...>]"
         # into a queryable field, which no query would ever match.
-        clocks = (
-            list(epoch_clock)
-            if isinstance(epoch_clock, (list, tuple))
-            else [epoch_clock]
-        )
+        clocks = list(epoch_clock) if isinstance(epoch_clock, (list, tuple)) else [epoch_clock]
         if len(clocks) != 1:
-            raise ValueError(
-                f"An ensemble epoch stores a single clocktype; got {len(clocks)}."
-            )
+            raise ValueError(f"An ensemble epoch stores a single clocktype; got {len(clocks)}.")
         clockname = getattr(clocks[0], "type", None) or str(clocks[0])
 
         tmpdir = tempfile.mkdtemp(prefix="ndi-ensemble-")
@@ -296,9 +290,7 @@ class ndi_element_ensemble(ndi_element_timeseries):
         )
         docs = self._session.database_search(q)
         if not docs:
-            raise ValueError(
-                f"No ensemble map document was found for epoch '{epoch_id}'."
-            )
+            raise ValueError(f"No ensemble map document was found for epoch '{epoch_id}'.")
         if len(docs) > 1:
             raise ValueError(
                 f"More than one ensemble map document was found for epoch '{epoch_id}'."
@@ -351,9 +343,7 @@ class ndi_element_ensemble(ndi_element_timeseries):
         """The neuron element objects for an epoch, in column order."""
         from ..database_fun import ndi_document2ndi_object
 
-        return [
-            ndi_document2ndi_object(nid, self._session) for nid in self.neuron_ids(epoch)
-        ]
+        return [ndi_document2ndi_object(nid, self._session) for nid in self.neuron_ids(epoch)]
 
     # ------------------------------------------------------------------
     # export form
@@ -392,6 +382,4 @@ class ndi_element_ensemble(ndi_element_timeseries):
         return m.tocsr(), ids
 
     def __repr__(self) -> str:
-        return (
-            f"ndi_element_ensemble(name={self.name!r}, reference={self.reference!r})"
-        )
+        return f"ndi_element_ensemble(name={self.name!r}, reference={self.reference!r})"

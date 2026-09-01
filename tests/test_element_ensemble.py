@@ -204,9 +204,7 @@ class TestAddEnsembleEpoch:
         found_epoch = session.database_search(
             ndi_query("base.id", "exact_string", epoch_doc.id, "")
         )
-        found_map = session.database_search(
-            ndi_query("base.id", "exact_string", map_doc.id, "")
-        )
+        found_map = session.database_search(ndi_query("base.id", "exact_string", map_doc.id, ""))
         assert found_epoch == [] and found_map == []
         # ...but they are fully built, so the caller can add them itself.
         assert map_doc.dependency_value("element_epoch_id") == epoch_doc.id
@@ -239,9 +237,7 @@ class TestNeuronNamesFile:
     def test_names_with_spaces_and_unicode_survive(self, ensemble):
         session, elem, NEURON_IDS = ensemble
         names = ["cell one", "cellulé_2", "cell-3"]
-        elem.add_ensemble_epoch(
-            "epoch_1", _clock(), [(0.0, 3.0)], NEURON_IDS, names, SPIKE_ROWS
-        )
+        elem.add_ensemble_epoch("epoch_1", _clock(), [(0.0, 3.0)], NEURON_IDS, names, SPIKE_ROWS)
         assert elem.neuron_names("epoch_1") == names
 
     def test_trailing_newline_is_not_a_neuron(self, ensemble):

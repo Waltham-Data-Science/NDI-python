@@ -112,8 +112,7 @@ def _element_id(x: Any) -> str:
     ident = getattr(x, "id", None)
     if ident is None:
         raise TypeError(
-            "Expected an element object or a document id string; "
-            f"got {type(x).__name__}."
+            "Expected an element object or a document id string; " f"got {type(x).__name__}."
         )
     return ident
 
@@ -137,9 +136,7 @@ def _clock_name(clock: Any) -> str:
 # ----------------------------------------------------------------------
 # findExisting
 # ----------------------------------------------------------------------
-def find_existing(
-    session: Any, ensemble_element: Any, *, epochid: str = ""
-) -> list[Any]:
+def find_existing(session: Any, ensemble_element: Any, *, epochid: str = "") -> list[Any]:
     """The ``ensemble`` map documents belonging to an ensemble element.
 
     Optionally restricted to one epoch. Returns a list, empty if none. Used by
@@ -149,9 +146,7 @@ def find_existing(
     from ..query import ndi_query
 
     element_id = _element_id(ensemble_element)
-    q = ndi_query("").isa("ensemble") & ndi_query("").depends_on(
-        "element_id", element_id
-    )
+    q = ndi_query("").isa("ensemble") & ndi_query("").depends_on("element_id", element_id)
     if epochid:
         q = q & ndi_query("epochid.epochid", "exact_string", epochid, "")
     return session.database_search(q)
@@ -163,9 +158,7 @@ findExisting = find_existing
 # ----------------------------------------------------------------------
 # neuronQuality
 # ----------------------------------------------------------------------
-def neuron_quality(
-    session: Any, neuron_ids: Sequence[str]
-) -> tuple[np.ndarray, list[str]]:
+def neuron_quality(session: Any, neuron_ids: Sequence[str]) -> tuple[np.ndarray, list[str]]:
     """Spike-sorting quality for each neuron id.
 
     Returns ``(quality_number, quality_label)``. ``quality_number[i]`` is the
@@ -258,9 +251,7 @@ def load(
     et, _ = element_obj.epochtable()
     entry = next((e for e in et if e.get("epoch_id") == epochid), None)
     if entry is None:
-        raise ValueError(
-            f"Element '{element_obj.elementstring()}' has no epoch '{epochid}'."
-        )
+        raise ValueError(f"Element '{element_obj.elementstring()}' has no epoch '{epochid}'.")
 
     if not clocktype:
         # Prefer dev_local_time -- the clock readtimeseries resolves epochs
@@ -342,14 +333,9 @@ def load(
     activity = activity.tocsr()
 
     if verbose:
-        print(
-            f"ndi.fun.ensemble.load: built an ensemble of {n} neuron(s) "
-            f"for epoch {epochid}."
-        )
+        print(f"ndi.fun.ensemble.load: built an ensemble of {n} neuron(s) " f"for epoch {epochid}.")
 
-    vdesc = value_description or (
-        f"time of the n-th spike of neuron i, in the {clockname} clock"
-    )
+    vdesc = value_description or (f"time of the n-th spike of neuron i, in the {clockname} clock")
     info = {
         "num_neurons": n,
         "num_dimensions": 2,
@@ -405,8 +391,7 @@ def create(
 
     if verbose:
         print(
-            f"ndi.fun.ensemble.create: storing {len(neuron_ids)} neuron(s) "
-            f"for epoch {epochid}."
+            f"ndi.fun.ensemble.create: storing {len(neuron_ids)} neuron(s) " f"for epoch {epochid}."
         )
 
     ens.add_ensemble_epoch(
@@ -520,9 +505,7 @@ def read(
             # keep_unrated below is what puts them back.
             qmask &= qnum >= min_quality
         if quality_label:
-            wanted = (
-                [quality_label] if isinstance(quality_label, str) else list(quality_label)
-            )
+            wanted = [quality_label] if isinstance(quality_label, str) else list(quality_label)
             qmask &= np.array([lab in wanted for lab in qlabel], dtype=bool)
         if keep_unrated:
             qmask |= np.isnan(qnum)
@@ -557,9 +540,7 @@ def all_element(
     map and epoch documents, then rebuild).
     """
     if if_exists not in ("skip", "error", "replace"):
-        raise ValueError(
-            f"if_exists must be 'skip', 'error', or 'replace'; got {if_exists!r}."
-        )
+        raise ValueError(f"if_exists must be 'skip', 'error', or 'replace'; got {if_exists!r}.")
 
     element_obj = _element_object(element, session)
     ens = _find_or_create_ensemble_element(session, element_obj)
@@ -598,9 +579,7 @@ def all_element(
 allElement = all_element
 
 
-def _remove_ensemble_epoch(
-    session: Any, ens: Any, epochid: str, map_docs: Sequence[Any]
-) -> None:
+def _remove_ensemble_epoch(session: Any, ens: Any, epochid: str, map_docs: Sequence[Any]) -> None:
     """Delete an epoch's map documents and its element_epoch document.
 
     Both go, and the map goes first: it depends on the element_epoch document,
@@ -621,9 +600,7 @@ def all_ntrodes(
     """Build ensemble elements for every n-trode probe in a session."""
     from ..query import ndi_query
 
-    q = ndi_query("").isa("element") & ndi_query(
-        "element.type", "exact_string", NTRODE_TYPE, ""
-    )
+    q = ndi_query("").isa("element") & ndi_query("element.type", "exact_string", NTRODE_TYPE, "")
     docs = session.database_search(q)
     if verbose:
         print(f"ndi.fun.ensemble.allNTrodes: found {len(docs)} n-trode(s).")
@@ -632,9 +609,7 @@ def all_ntrodes(
     for d in docs:
         probe = _element_from_document(d, session)
         out.append(
-            all_element(
-                session, probe, if_exists=if_exists, verbose=verbose, **create_options
-            )
+            all_element(session, probe, if_exists=if_exists, verbose=verbose, **create_options)
         )
     return out
 

@@ -158,9 +158,7 @@ class TestPresentationTimeRoundTrip:
 
         class FakeDoc:
             document_properties = {
-                "stimulus_presentation": {
-                    "presentation_time": [{"onset": 1.0, "offset": 2.0}]
-                }
+                "stimulus_presentation": {"presentation_time": [{"onset": 1.0, "offset": 2.0}]}
             }
 
         decoder = ndi_app_stimulus_decoder(session)

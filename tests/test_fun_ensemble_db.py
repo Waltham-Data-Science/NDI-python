@@ -134,9 +134,7 @@ class TestFindExisting:
             subject_id=subject_id,
         )
         session.database_add(ens.newdocument())
-        ens.add_ensemble_epoch(
-            "epoch_1", _clock(), [(0.0, 1.0)], [nrn.id], ["n"], [[0.5]]
-        )
+        ens.add_ensemble_epoch("epoch_1", _clock(), [(0.0, 1.0)], [nrn.id], ["n"], [[0.5]])
 
         assert len(ens_fun.find_existing(session, ens)) == 1
         assert len(ens_fun.find_existing(session, ens, epochid="epoch_1")) == 1

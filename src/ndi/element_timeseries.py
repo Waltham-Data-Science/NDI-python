@@ -275,9 +275,7 @@ class ndi_element_timeseries(ndi_element):
         has_data = timepoints is not None and datapoints is not None
 
         if not has_data or self._session is None:
-            return super().addepoch(
-                epoch_id, epoch_clock, t0_t1, add_to_database=add_to_database
-            )
+            return super().addepoch(epoch_id, epoch_clock, t0_t1, add_to_database=add_to_database)
 
         _, doc = super().addepoch(epoch_id, epoch_clock, t0_t1, add_to_database=False)
         doc = self._attach_timeseries_data(doc, timepoints, datapoints)

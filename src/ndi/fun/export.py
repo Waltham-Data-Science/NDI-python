@@ -327,9 +327,7 @@ def blech_clust(
             "supply data recorded at 30 kHz."
         )
     if pre_stim < 0 or post_stim <= 0:
-        raise ValueError(
-            "pre_stim must be >= 0 and post_stim must be > 0 (milliseconds)."
-        )
+        raise ValueError("pre_stim must be >= 0 and post_stim must be > 0 (milliseconds).")
 
     session = probe.session
 
@@ -398,9 +396,7 @@ def _blech_get_ensemble(
     if ensemble is not None:
         E = ensemble_fun.read(session, ensemble, epoch_id, **filter_options)
     else:
-        activity, neuron_ids, neuron_names, info, _ = ensemble_fun.load(
-            session, probe, epoch_id
-        )
+        activity, neuron_ids, neuron_names, info, _ = ensemble_fun.load(session, probe, epoch_id)
         E = {
             "activity": activity,
             "neuron_ids": neuron_ids,
@@ -469,11 +465,7 @@ def _blech_apply_filter(
         if min_quality is not None:
             qmask &= qnum >= min_quality
         if quality_label:
-            wanted = (
-                [quality_label]
-                if isinstance(quality_label, str)
-                else list(quality_label)
-            )
+            wanted = [quality_label] if isinstance(quality_label, str) else list(quality_label)
             qmask &= np.array([lab in wanted for lab in qlabel], dtype=bool)
         if options.get("keep_unrated"):
             qmask |= np.isnan(qnum)
@@ -535,9 +527,7 @@ def _blech_get_stimulus_presentation(
 
     # presentation_order holds 1-BASED indices into `stimuli` (it is written by
     # MATLAB), so subtract one before indexing.
-    trial_stimid = np.array(
-        [unique_stimid[int(i) - 1] for i in presentation_order], dtype=float
-    )
+    trial_stimid = np.array([unique_stimid[int(i) - 1] for i in presentation_order], dtype=float)
 
     decoder = ndi_app_stimulus_decoder(session)
     presentation_time = decoder.load_presentation_time(stim_doc)

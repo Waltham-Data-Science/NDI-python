@@ -333,9 +333,7 @@ class TestStimulusDecoder:
         app = ndi_app_stimulus_decoder(session=session)
         doc = SimpleNamespace(
             document_properties={
-                "stimulus_presentation": {
-                    "presentation_time": [{"onset": 1.0, "offset": 2.0}]
-                }
+                "stimulus_presentation": {"presentation_time": [{"onset": 1.0, "offset": 2.0}]}
             }
         )
         import pytest as _pytest
