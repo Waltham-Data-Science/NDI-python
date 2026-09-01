@@ -16,12 +16,9 @@ A single-row pane with three controls on the right:
       in the cloud;
     * a "Profile" button for the NDI Cloud profile editor.
 
-ONE GAP
-``ndi.gui.profileEditor`` is not ported, so the Profile button reports that
-rather than failing silently on the click -- the same thing the navigator's
-Preferences button does. The button is still built: a user looking for where
-cloud accounts are managed should find the control and be told the honest
-reason it does nothing yet, rather than conclude the feature does not exist.
+The Profile button opens :class:`ndi.gui.profile_editor.ProfileEditor`,
+which is the only route to choosing the active cloud account -- so every
+cloud action in the datasets pane runs against whatever it last selected.
 """
 
 from __future__ import annotations
@@ -76,6 +73,8 @@ class CloudPane(NavPane):
         self.reload_button: Any = None
         self.check_button: Any = None
         self.profile_button: Any = None
+        #: The open editor, held so Qt does not collect the window.
+        self.profile_editor: Any = None
 
     def right_width(self) -> float:
         """reload (26) + 4 + C (26) + 4 + Profile (62)."""
@@ -166,17 +165,27 @@ class CloudPane(NavPane):
         self._alert(LOGOUT_MESSAGE, title, success=True)
         return True
 
-    def open_profile_editor(self) -> None:
-        """Open the NDI Cloud profile editor.
+    def open_profile_editor(self) -> Any:
+        """Open the NDI Cloud profile editor, returning it.
 
-        Not yet ported (MATLAB's ``ndi.gui.profileEditor``), so this reports
-        that plainly rather than failing silently on the click.
+        The editor is held on the pane. A Qt window with no reference is
+        garbage-collected and vanishes the instant this method returns, so
+        keeping it is what makes the button work at all rather than flicker.
+        Reopening reuses the window and refreshes it, so a second click
+        raises the one already on screen instead of stacking a duplicate.
         """
-        self._alert(
-            "The NDI Cloud profile editor has not been ported to Python yet.",
-            "Profile",
-            success=False,
-        )
+        from ..profile_editor import ProfileEditor
+
+        try:
+            if self.profile_editor is None or self.profile_editor.figure is None:
+                self.profile_editor = ProfileEditor()
+            else:
+                self.profile_editor.refresh()
+            self.profile_editor.show()
+        except Exception as exc:  # noqa: BLE001
+            self._alert(str(exc), "Profile", success=False)
+            return None
+        return self.profile_editor
 
     # ------------------------------------------------------------------
     # helpers
