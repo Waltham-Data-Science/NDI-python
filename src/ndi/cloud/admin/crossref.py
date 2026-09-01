@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
-from xml.etree.ElementTree import SubElement, ndi_element, tostring
+from xml.etree.ElementTree import Element, SubElement, tostring
 
 
 @dataclass(frozen=True)
@@ -46,7 +46,7 @@ def createDoiBatchSubmission(
     Returns:
         XML string suitable for Crossref deposit.
     """
-    root = ndi_element("doi_batch")
+    root = Element("doi_batch")
     root.set("version", "5.3.1")
     root.set("xmlns", "http://www.crossref.org/schema/5.3.1")
 
