@@ -35,7 +35,7 @@ class TestVhsbRoundTripMakeArtifacts:
             shutil.rmtree(ARTIFACT_DIR)
         names = vhsb_cases.write_cases(ARTIFACT_DIR)
 
-        assert len(names) == 8, "Expected 8 recorded cases."
+        assert len(names) == 9, "Expected 9 recorded cases."
         for name in names:
             assert (ARTIFACT_DIR / f"{name}.vhsb").is_file(), f"{name}.vhsb not written"
 

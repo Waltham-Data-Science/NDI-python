@@ -21,15 +21,18 @@ representable in float64 in both languages, so ``==`` is the right comparison
 and a mismatch is a real difference rather than a formatting artifact. A case
 built from, say, ``(0:99)/1000`` would not have that property.
 
-WHAT IS DELIBERATELY ABSENT
-A series whose sampling interval *shrinks monotonically*. That is the one
-shape where the two languages' ``X_constantinterval`` disagrees today: MATLAB
-tests ``max(diff(diff(x))) < 1e-7`` on the SIGNED second difference, so an
-all-negative one passes and the series is mis-flagged as constant-interval.
-Python takes ``abs`` and is correct. Reported as
-VH-Lab/vhlab-toolbox-matlab#145 and covered by the two toolboxes' own suites,
-not here -- an allow-listed entry in this battery would go red the moment that
-issue is fixed, which is the wrong reward for fixing it.
+WHAT THE SHRINKING-INTERVAL CASE PINS
+``shrinkingInterval`` is the one shape whose ``X_constantinterval`` the two
+languages disagreed about. MATLAB tested ``max(diff(diff(x))) < 1e-7`` on the
+SIGNED second difference, so an all-negative one passed and a series whose
+interval shrinks was recorded as constant-interval; Python already took
+``abs`` and was right. This battery deliberately left the shape out while that
+was true, because an allow-listed entry would have gone red the moment the bug
+was fixed -- the wrong reward for fixing it. It is fixed
+(VH-Lab/vhlab-toolbox-matlab#145, PR #147; mirrored in
+VH-Lab/vhlab-toolbox-python#23), so the case is in, and it is the only one
+here that tells the two rules apart: remove the ``abs`` on either side and
+this case alone goes red.
 """
 
 from __future__ import annotations
@@ -77,6 +80,14 @@ CASES: dict[str, tuple[list[float], list[Any], str]] = {
         "The n=3 boundary. MATLAB computes X_increment (numel>2) but NOT "
         "X_constantinterval (numel>3), so the header is increment 0.25 with "
         "the flag still 0. Python wrote 1 here before #21.",
+    ),
+    "shrinkingInterval": (
+        [0.0, 1.0, 1.5, 1.75],
+        [1.0, 2.0, 3.0, 4.0],
+        "Intervals 1, 0.5, 0.25 -- shrinking, so X_constantinterval must be 0 "
+        "even though X_increment is a median of 0.5 that describes none of "
+        "them. The reproduction from VH-Lab/vhlab-toolbox-matlab#145: MATLAB "
+        "wrote 1 here until PR #147 took abs() of the second difference.",
     ),
     "negativeTimes": (
         [-1.5, -0.5, 0.0, 0.5, 1.5],
@@ -187,9 +198,10 @@ def _expected_constant_interval(x) -> int:
 
     Compared as well as the values because the flag decides how a windowed
     read selects samples, and the two languages wrote different flags for the
-    same input until VH-Lab/vhlab-toolbox-python#21. ``abs`` matches the
-    corrected rule in both languages for every case in this battery -- see the
-    module docstring on the one shape that is deliberately excluded.
+    same input until VH-Lab/vhlab-toolbox-python#21 (Python's guards) and
+    VH-Lab/vhlab-toolbox-matlab#145 (MATLAB's missing ``abs``). Both now use
+    the rule below; ``shrinkingInterval`` is the case that separates it from
+    the signed one.
     """
     import numpy as np
 
