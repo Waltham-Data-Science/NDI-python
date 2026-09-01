@@ -17,7 +17,7 @@ Almost none of the decisions are in this file. The tree's contents come from
 is left here is widget construction and the wiring between the two, which is
 the part a display is genuinely needed to check.
 
-ONE GAP LEFT, DELIBERATE AND VISIBLE
+WHAT IS NOT PORTED, AND WHY THE PANE DOES NOT WAIT FOR IT
 
 The per-session "Apps" menu is filled by :func:`session_apps`, which asks
 :class:`ndi.gui.app.SessionApp` what apps exist rather than naming any --
@@ -28,11 +28,9 @@ apps the user's own packages supply (see the
 way: an empty "Apps" menu says "no apps found" honestly, while omitting it
 would say "sessions have no apps", which is false.
 
-The "+" add-dataset flows (new blank dataset, open dataset, open a cloud
-dataset, create/open a session) are the next slice. The button is therefore
-not built yet: a "+" that does nothing is worse than no "+". Datasets and
-sessions bound to variables in the user's workspace are still listed, which
-is how the tree has anything in it today.
+MATLAB's ``ndi.util.ListDialog``, used to pick a cloud dataset, is not
+ported either -- Qt's ``QInputDialog.getItem`` is the same control, so there
+is nothing to mirror.
 """
 
 from __future__ import annotations
@@ -42,11 +40,23 @@ from typing import Any
 from ..app.session_app import SessionApp
 from ..cloud_colors import cloud_colors, rgb_to_hex
 from . import datasets_cloud, datasets_model
-from .datasets_text import dataset_menu_enable
+from .datasets_text import (
+    cloud_dataset_id_label,
+    dataset_menu_enable,
+    normalize_cloud_list,
+    occupied_folder_message,
+)
 from .pane import NavPane
 from .status_icon import status_icon
 
-__all__ = ["DatasetsPane", "session_apps", "GRIP_HEIGHT", "REFRESH_WIDTH"]
+__all__ = [
+    "DatasetsPane",
+    "session_apps",
+    "fetch_cloud_datasets",
+    "GRIP_HEIGHT",
+    "REFRESH_WIDTH",
+    "PLUS_WIDTH",
+]
 
 #: Height of the thin divider strip at the bottom of the body, in pixels.
 GRIP_HEIGHT = 6
@@ -54,6 +64,9 @@ GRIP_HEIGHT = 6
 #: Width of the header's right-hand control column, in pixels. MATLAB's
 #: rightWidth: the "+" square plus the Refresh button.
 REFRESH_WIDTH = 108
+
+#: Width of the compact "+" button, in pixels.
+PLUS_WIDTH = 26
 
 #: The label of the root node holding sessions that belong to no dataset.
 UNAFFILIATED_TEXT = "Unaffiliated sessions"
@@ -97,6 +110,46 @@ def _launcher(app_class: str):
     return lambda session: SessionApp.launch(app_class, session)
 
 
+def fetch_cloud_datasets(is_public: bool) -> tuple[list[str], list[str]]:
+    """The NDI Cloud dataset labels and their ids.
+
+    Public reads the published catalogue; private authenticates first to get
+    the organization id, then lists that organization's datasets.
+
+    Entries whose id could not be extracted are DROPPED rather than listed
+    with an empty id: a row the user can select but nothing can open is worse
+    than a shorter list. Labels and ids stay index-aligned, which is what
+    lets the picker return a position instead of matching text back.
+    """
+    from ...cloud.api import datasets as datasets_api
+
+    if is_public:
+        answer = datasets_api.getPublished()
+    else:
+        from ...cloud.auth import authenticate
+
+        _, org_id = authenticate()
+        answer = datasets_api.listDatasets(org_id)
+
+    labels: list[str] = []
+    ids: list[str] = []
+    for record in normalize_cloud_list(_unwrap(answer)):
+        identifier, label = cloud_dataset_id_label(record)
+        if identifier:
+            ids.append(identifier)
+            labels.append(label)
+    return labels, ids
+
+
+def _unwrap(answer: Any) -> Any:
+    """The payload of a cloud response, whether or not it is wrapped.
+
+    The API helpers return an APIResponse for some calls and a plain dict or
+    list for others, so the ``.data`` attribute is taken when present.
+    """
+    return getattr(answer, "data", answer)
+
+
 class DatasetsPane(NavPane):
     """The navigator's Datasets pane: a tree of datasets and sessions."""
 
@@ -115,9 +168,11 @@ class DatasetsPane(NavPane):
         )
         self.tree: Any = None
         self.grip: Any = None
+        self.add_button: Any = None
+        self.refresh_button: Any = None
 
-        #: Datasets and sessions the user added by hand. Empty until the "+"
-        #: flows land; the tree is still populated from the workspace.
+        #: Datasets and sessions the user added by hand with "+", on top of
+        #: whatever the workspace scan finds.
         self.user_datasets: list[Any] = []
         self.user_sessions: list[Any] = []
 
@@ -167,21 +222,236 @@ class DatasetsPane(NavPane):
         self.populate_tree()
 
     def build_header_right(self, layout: Any) -> None:
-        """The header's right-hand controls.
+        """The header's right-hand controls: [+] then Refresh."""
+        from PySide6 import QtWidgets
 
-        Only Refresh for now. MATLAB also has a "+" that opens the
-        add-dataset menu; those flows are the next slice, and a "+" that did
-        nothing would be worse than none. The column keeps MATLAB's width so
-        the header does not shift when the button arrives.
+        self.add_button = QtWidgets.QPushButton("+")
+        self.add_button.setFixedWidth(PLUS_WIDTH)
+        font = self.add_button.font()
+        font.setBold(True)
+        self.add_button.setFont(font)
+        self.add_button.setToolTip("Add a dataset to the list")
+        self.add_button.clicked.connect(self.on_add_button)
+        self.accent_button(self.add_button)
+        layout.addWidget(self.add_button)
+
+        self.refresh_button = QtWidgets.QPushButton("Refresh")
+        self.refresh_button.setToolTip("Rebuild the list of datasets and sessions")
+        self.refresh_button.clicked.connect(self.refresh)
+        self.accent_button(self.refresh_button)
+        layout.addWidget(self.refresh_button)
+
+    # ------------------------------------------------------------------
+    # the "+" add menu and its flows
+    # ------------------------------------------------------------------
+    def on_add_button(self) -> Any:
+        """Pop the add menu under the "+" button."""
+        menu = self.build_add_menu()
+        if menu is not None and self.add_button is not None:
+            menu.exec(self.add_button.mapToGlobal(self.add_button.rect().bottomLeft()))
+        return menu
+
+    def build_add_menu(self) -> Any:
+        """The "+" menu: local first, then cloud."""
+        from PySide6 import QtWidgets
+
+        menu = QtWidgets.QMenu(self.panel)
+        menu.addAction("New blank dataset...", self.new_blank_dataset)
+        menu.addAction("Open dataset...", self.open_dataset)
+        menu.addSeparator()
+        menu.addAction("Open Public Cloud dataset...", lambda: self.open_cloud_dataset(True))
+        menu.addAction("Open Private Cloud dataset...", lambda: self.open_cloud_dataset(False))
+        return menu
+
+    def new_blank_dataset(self) -> Any:
+        """Create a new dataset from a reference and a folder."""
+        title = "New blank dataset"
+        reference = self._ask_text("Reference (name) for the new dataset:", title)
+        if reference is None:
+            return None
+        if not reference:
+            self._alert("A dataset reference is required.", title, success=False)
+            return None
+        folder = self._ask_folder("Choose a folder for the new dataset")
+        if not folder:
+            return None
+        try:
+            from ...dataset import ndi_dataset_dir
+
+            dataset = ndi_dataset_dir(reference, folder)
+        except Exception as exc:  # noqa: BLE001
+            self._alert(f"Could not create the dataset: {exc}", title, success=False)
+            return None
+        return self.add_user_dataset(dataset)
+
+    def open_dataset(self) -> Any:
+        """Open an existing dataset folder."""
+        title = "Open dataset"
+        folder = self._ask_folder("Open an existing dataset folder")
+        if not folder:
+            return None
+        try:
+            from ...dataset import ndi_dataset_dir
+
+            dataset = ndi_dataset_dir(folder)
+        except Exception as exc:  # noqa: BLE001
+            self._alert(f"Could not open the dataset: {exc}", title, success=False)
+            return None
+        return self.add_user_dataset(dataset)
+
+    def open_cloud_dataset(self, is_public: bool) -> Any:
+        """Browse NDI Cloud, download documents only, and list the result.
+
+        Documents only, never the binary files: the point is to look at a
+        dataset, and pulling every file first would turn browsing a catalogue
+        into a long download the user did not ask for.
+        """
+        title = "Open Public Cloud dataset" if is_public else "Open Private Cloud dataset"
+        try:
+            labels, ids = fetch_cloud_datasets(is_public)
+        except Exception as exc:  # noqa: BLE001
+            self._alert(str(exc), title, success=False)
+            return None
+        if not labels:
+            self._alert("No datasets were found.", title, success=False)
+            return None
+
+        index = self._ask_choice(labels, "Select a dataset to open:", title)
+        if index is None:
+            return None
+        folder = self._ask_folder("Choose a folder to download the dataset into")
+        if not folder:
+            return None
+
+        try:
+            from ...cloud.orchestration import downloadDataset
+
+            dataset = downloadDataset(ids[index], folder, sync_files=False, verbose=False)
+        except Exception as exc:  # noqa: BLE001
+            self._alert(f"Download failed: {exc}", title, success=False)
+            return None
+        return self.add_user_dataset(dataset)
+
+    def add_user_dataset(self, dataset: Any) -> Any:
+        """Add a dataset to the user list, de-duplicated by path, and refresh."""
+        if dataset is None:
+            return None
+        new_path = datasets_model.dataset_path(dataset)
+        if new_path and any(datasets_model.dataset_path(d) == new_path for d in self.user_datasets):
+            return dataset  # already listed
+        self.user_datasets.append(dataset)
+        self.refresh()
+        return dataset
+
+    def new_session(self) -> Any:
+        """Create a new session from a reference and an EMPTY folder.
+
+        Refuses a folder that already holds an NDI session or dataset, so an
+        existing object is never written over. A folder of unrecorded type is
+        refused too: it might hold something.
+        """
+        title = "Create new session"
+        reference = self._ask_text("Reference (name) for the new session:", title)
+        if reference is None:
+            return None
+        if not reference:
+            self._alert("A session reference is required.", title, success=False)
+            return None
+        folder = self._ask_folder("Choose a folder for the new session")
+        if not folder:
+            return None
+
+        from ...session.dir import ndi_session_dir
+
+        directory_type = ndi_session_dir.directorytype(folder)
+        if directory_type != "none":
+            self._alert(occupied_folder_message(directory_type), title, success=False)
+            return None
+        try:
+            session = ndi_session_dir(reference, folder)
+        except Exception as exc:  # noqa: BLE001
+            self._alert(f"Could not create the session: {exc}", title, success=False)
+            return None
+        return self.add_user_session(session)
+
+    def open_session(self) -> Any:
+        """Open an existing NDI session directory and list it.
+
+        Uses the session picker, which only returns a folder once it is
+        confirmed to be a session rather than a dataset -- so this cannot
+        open a dataset by mistake.
+        """
+        title = "Open session"
+        from ...util.choose_directory import choose_session
+
+        pathname, _ = choose_session(
+            title="Open an NDI session directory", parent=self._parent_widget()
+        )
+        if not pathname:
+            return None
+        try:
+            from ...session.dir import ndi_session_dir
+
+            session = ndi_session_dir(pathname)
+        except Exception as exc:  # noqa: BLE001
+            self._alert(f"Could not open the session: {exc}", title, success=False)
+            return None
+        return self.add_user_session(session)
+
+    def add_user_session(self, session: Any) -> Any:
+        """Add a session to the user list, de-duplicated by path, and refresh."""
+        if session is None:
+            return None
+        new_path = datasets_model.session_path(session)
+        if new_path and any(datasets_model.session_path(s) == new_path for s in self.user_sessions):
+            return session  # already listed
+        self.user_sessions.append(session)
+        self.refresh()
+        return session
+
+    # ------------------------------------------------------------------
+    # the small dialogs the flows above need
+    # ------------------------------------------------------------------
+    def _parent_widget(self) -> Any:
+        return getattr(self.navigator, "figure", None)
+
+    def _ask_text(self, prompt: str, title: str) -> str | None:
+        """A one-line text prompt. None when cancelled, "" when left blank.
+
+        The two are different and both callers act on the difference:
+        cancelling abandons the flow silently, while an empty answer earns a
+        "a reference is required" message.
         """
         from PySide6 import QtWidgets
 
-        button = QtWidgets.QPushButton("Refresh")
-        button.setToolTip("Rebuild the list of datasets and sessions")
-        button.clicked.connect(self.refresh)
-        self.accent_button(button)
-        layout.addWidget(button)
-        self.refresh_button = button
+        text, ok = QtWidgets.QInputDialog.getText(self._parent_widget(), title, prompt)
+        if not ok:
+            return None
+        return text.strip()
+
+    def _ask_folder(self, title: str) -> str:
+        from PySide6 import QtWidgets
+
+        return QtWidgets.QFileDialog.getExistingDirectory(self._parent_widget(), title)
+
+    def _ask_choice(self, labels: list[str], prompt: str, title: str) -> int | None:
+        """Pick one of LABELS. Returns its INDEX, or None when cancelled.
+
+        An index rather than the label, because two cloud datasets may share
+        a display label -- the id behind it is what the caller needs, and
+        matching back by text would pick the wrong one.
+
+        MATLAB uses ndi.util.ListDialog here; Qt's QInputDialog.getItem is
+        the same thing, so that class is not ported.
+        """
+        from PySide6 import QtWidgets
+
+        choice, ok = QtWidgets.QInputDialog.getItem(
+            self._parent_widget(), title, prompt, labels, 0, False
+        )
+        if not ok:
+            return None
+        return labels.index(choice)
 
     # ------------------------------------------------------------------
     # the tree
@@ -365,13 +635,13 @@ class DatasetsPane(NavPane):
         return menu
 
     def _unaffiliated_menu(self, node: Any) -> Any:
-        """The root node's menu.
+        """The root node's menu: create or open a session."""
+        from PySide6 import QtWidgets
 
-        Its two items create or open a session, and both belong to the "+"
-        slice. The menu is omitted entirely until then rather than shown with
-        dead entries.
-        """
-        return None
+        menu = QtWidgets.QMenu(self.tree)
+        menu.addAction("Create new session...", self.new_session)
+        menu.addAction("Open session...", self.open_session)
+        return menu
 
     def _dataset_menu(self, node: Any, dataset: Any) -> Any:
         from PySide6 import QtWidgets

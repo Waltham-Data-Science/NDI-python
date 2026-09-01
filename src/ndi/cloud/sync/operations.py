@@ -155,19 +155,19 @@ def uploadNew(
     report: dict[str, Any] = {
         "mode": "upload_new",
         "new_count": len(new_ids),
-        "uploaded": [],
+        "uploaded_document_ids": [],
         "dry_run": options.dry_run,
     }
 
     if options.dry_run:
-        report["uploaded"] = list(new_ids)
+        report["uploaded_document_ids"] = list(new_ids)
         return report
 
     failed: list[str] = []
     for doc_id in new_ids:
         try:
             docs_api.addDocument(cloud_dataset_id, {"ndiId": doc_id}, client=client)
-            report["uploaded"].append(doc_id)
+            report["uploaded_document_ids"].append(doc_id)
         except Exception as exc:
             logger.warning("Failed to upload %s: %s", doc_id, exc)
             failed.append(doc_id)
@@ -176,7 +176,7 @@ def uploadNew(
     # Update index
     index.update(
         list(local_ids),
-        list(remote_id_set | set(report["uploaded"])),
+        list(remote_id_set | set(report["uploaded_document_ids"])),
     )
     index.write(ds_path)
 
@@ -206,19 +206,19 @@ def downloadNew(
     report: dict[str, Any] = {
         "mode": "download_new",
         "new_count": len(new_ids),
-        "downloaded": [],
+        "downloaded_document_ids": [],
         "failed": [],
         "dry_run": options.dry_run,
     }
 
     if options.dry_run:
-        report["downloaded"] = list(new_ids)
+        report["downloaded_document_ids"] = list(new_ids)
         return report
 
     # Actually fetch documents from the cloud
     docs, failed = downloadNdiDocuments(cloud_dataset_id, remote_ids, new_ids, client=client)
     saved = _save_downloaded_docs(ds_path, docs)
-    report["downloaded"] = saved
+    report["downloaded_document_ids"] = saved
     report["failed"] = failed
 
     if options.verbose and saved:
@@ -260,8 +260,8 @@ def mirrorToRemote(
         "mode": "mirror_to_remote",
         "upload_count": len(to_upload),
         "delete_count": len(to_delete),
-        "uploaded": [],
-        "deleted": [],
+        "uploaded_document_ids": [],
+        "deleted_remote_document_ids": [],
         "dry_run": options.dry_run,
     }
 
@@ -270,7 +270,7 @@ def mirrorToRemote(
         for doc_id in to_upload:
             try:
                 docs_api.addDocument(cloud_dataset_id, {"ndiId": doc_id}, client=client)
-                report["uploaded"].append(doc_id)
+                report["uploaded_document_ids"].append(doc_id)
             except Exception as exc:
                 logger.warning("mirrorToRemote: failed to upload %s: %s", doc_id, exc)
                 failed.append(doc_id)
@@ -278,19 +278,19 @@ def mirrorToRemote(
             api_id = remote_ids.get(doc_id, doc_id)
             try:
                 docs_api.deleteDocument(cloud_dataset_id, api_id, client=client)
-                report["deleted"].append(doc_id)
+                report["deleted_remote_document_ids"].append(doc_id)
             except Exception as exc:
                 logger.warning("mirrorToRemote: failed to delete %s: %s", doc_id, exc)
                 failed.append(doc_id)
 
         # Upload associated files if requested
-        if options.sync_files and report["uploaded"]:
+        if options.sync_files and report["uploaded_document_ids"]:
             try:
                 from ..upload import uploadFilesForDatasetDocuments
 
                 doc_dir = ds_path / _DOC_DIR
                 doc_dicts = []
-                for doc_id in report["uploaded"]:
+                for doc_id in report["uploaded_document_ids"]:
                     doc_file = doc_dir / f"{doc_id}.json"
                     if doc_file.exists():
                         doc_dicts.append(json.loads(doc_file.read_text(encoding="utf-8")))
@@ -337,25 +337,25 @@ def mirrorFromRemote(
         "mode": "mirror_from_remote",
         "download_count": len(to_download),
         "delete_local_count": len(to_delete_local),
-        "downloaded": [],
-        "deleted_local": [],
+        "downloaded_document_ids": [],
+        "deleted_local_document_ids": [],
         "failed": [],
         "dry_run": options.dry_run,
     }
 
     if options.dry_run:
-        report["downloaded"] = list(to_download)
-        report["deleted_local"] = list(to_delete_local)
+        report["downloaded_document_ids"] = list(to_download)
+        report["deleted_local_document_ids"] = list(to_delete_local)
         return report
 
     # Delete local-only documents
     deleted = deleteLocalDocuments(ds_path, to_delete_local)
-    report["deleted_local"] = deleted
+    report["deleted_local_document_ids"] = deleted
 
     # Download remote-only documents
     docs, failed = downloadNdiDocuments(cloud_dataset_id, remote_ids, to_download, client=client)
     saved = _save_downloaded_docs(ds_path, docs)
-    report["downloaded"] = saved
+    report["downloaded_document_ids"] = saved
     report["failed"] = failed
 
     if options.verbose:
@@ -436,33 +436,33 @@ def twoWaySync(
         "delete_remote_count": len(to_delete_remote),
         "conflict_count": len(conflicts),
         "conflicts": list(conflicts),
-        "uploaded": [],
-        "downloaded": [],
-        "deleted_local": [],
-        "deleted_remote": [],
+        "uploaded_document_ids": [],
+        "downloaded_document_ids": [],
+        "deleted_local_document_ids": [],
+        "deleted_remote_document_ids": [],
         "failed": [],
         "dry_run": options.dry_run,
     }
 
     if options.dry_run:
-        report["uploaded"] = list(to_upload)
-        report["downloaded"] = list(to_download)
-        report["deleted_local"] = list(to_delete_local)
-        report["deleted_remote"] = list(to_delete_remote)
+        report["uploaded_document_ids"] = list(to_upload)
+        report["downloaded_document_ids"] = list(to_download)
+        report["deleted_local_document_ids"] = list(to_delete_local)
+        report["deleted_remote_document_ids"] = list(to_delete_remote)
         return report
 
     failed: list[str] = []
 
     # 1. Delete local docs that were removed on the remote
     deleted_local_ids = deleteLocalDocuments(ds_path, to_delete_local)
-    report["deleted_local"] = deleted_local_ids
+    report["deleted_local_document_ids"] = deleted_local_ids
 
     # 2. Delete remote docs that were removed locally
     for doc_id in to_delete_remote:
         api_id = remote_ids.get(doc_id, doc_id)
         try:
             docs_api.deleteDocument(cloud_dataset_id, api_id, client=client)
-            report["deleted_remote"].append(doc_id)
+            report["deleted_remote_document_ids"].append(doc_id)
         except Exception as exc:
             logger.warning("twoWaySync: failed to delete remote %s: %s", doc_id, exc)
             failed.append(doc_id)
@@ -471,7 +471,7 @@ def twoWaySync(
     for doc_id in to_upload:
         try:
             docs_api.addDocument(cloud_dataset_id, {"ndiId": doc_id}, client=client)
-            report["uploaded"].append(doc_id)
+            report["uploaded_document_ids"].append(doc_id)
         except Exception as exc:
             logger.warning("twoWaySync: failed to upload %s: %s", doc_id, exc)
             failed.append(doc_id)
@@ -479,7 +479,7 @@ def twoWaySync(
     # 4. Download remote-only docs
     docs, dl_failed = downloadNdiDocuments(cloud_dataset_id, remote_ids, to_download, client=client)
     saved = _save_downloaded_docs(ds_path, docs)
-    report["downloaded"] = saved
+    report["downloaded_document_ids"] = saved
     failed.extend(dl_failed)
 
     report["failed"] = failed
@@ -487,16 +487,18 @@ def twoWaySync(
     if options.verbose:
         logger.info(
             "twoWaySync: uploaded=%d downloaded=%d " "del_local=%d del_remote=%d conflicts=%d",
-            len(report["uploaded"]),
-            len(report["downloaded"]),
-            len(report["deleted_local"]),
-            len(report["deleted_remote"]),
+            len(report["uploaded_document_ids"]),
+            len(report["downloaded_document_ids"]),
+            len(report["deleted_local_document_ids"]),
+            len(report["deleted_remote_document_ids"]),
             len(conflicts),
         )
 
     # Compute expected final state
     final_local = (current_local | set(saved)) - set(deleted_local_ids)
-    final_remote = (current_remote | set(report["uploaded"])) - set(report["deleted_remote"])
+    final_remote = (current_remote | set(report["uploaded_document_ids"])) - set(
+        report["deleted_remote_document_ids"]
+    )
     index.update(list(final_local), list(final_remote))
     index.write(ds_path)
 
