@@ -175,12 +175,17 @@ class TestSessionApps:
         monkeypatch.setattr("ndi.gui.nav.datasets_pane.SessionApp.list", staticmethod(boom))
         assert session_apps() == []
 
-    def test_ndi_ships_no_session_apps_yet(self):
-        """MATLAB's eleven apps are not ported, so the built-in scan is empty.
-        The menu is still built, and fills itself as apps land -- or as soon
-        as a user names their own package in GUI.Navigator.SessionAppPackages.
+    def test_ndi_s_own_apps_are_discovered(self):
+        """The built-in scan finds the apps that ship in ndi.gui.app.
+
+        ndi.gui.app.ensembleMaker is the first of MATLAB's eleven to be
+        ported, and it reached this list without a line of datasets_pane
+        changing -- which is the check that discovery was the right
+        mechanism. The remaining ten will arrive the same way, as will an
+        app in a package a user names in GUI.Navigator.SessionAppPackages.
         """
-        assert session_apps() == []
+        offered = [(app["Label"], app["Category"]) for app in session_apps()]
+        assert ("Ensemble Maker", "Ensembles") in offered
 
 
 class TestTreeRows:
@@ -499,10 +504,16 @@ class TestMenusAreBuilt:
         menu = pane.build_node_menu(node)
         assert [a.text() for a in menu.actions()] == ["Apps", "Session"]
 
-    def test_the_apps_menu_is_present_even_with_no_apps_to_offer(self):
+    def test_the_apps_menu_is_present_even_with_no_apps_to_offer(self, monkeypatch):
         """Empty says 'no apps found'. Omitting it would say 'sessions have
-        no apps', which is false -- and NDI ships no apps yet."""
+        no apps', which is false.
+
+        Discovery is stubbed out rather than relied on to find nothing: NDI
+        now ships apps of its own, and this is a claim about the menu, not
+        about how many apps exist.
+        """
         _qt_or_skip()
+        monkeypatch.setattr("ndi.gui.nav.datasets_pane.session_apps", list)
         nav, pane = _built_pane()
         pane.user_sessions = [FakeSession("a", path="/s/a")]
         pane.populate_tree()

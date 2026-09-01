@@ -21,12 +21,15 @@ WHAT IS NOT PORTED, AND WHY THE PANE DOES NOT WAIT FOR IT
 
 The per-session "Apps" menu is filled by :func:`session_apps`, which asks
 :class:`ndi.gui.app.SessionApp` what apps exist rather than naming any --
-so an app appears in the menu by existing, in either language. MATLAB's own
-eleven apps are not ported yet, so what the menu offers today is whatever
-apps the user's own packages supply (see the
-``GUI.Navigator.SessionAppPackages`` preference). The menu is built either
-way: an empty "Apps" menu says "no apps found" honestly, while omitting it
-would say "sessions have no apps", which is false.
+so an app appears in the menu by existing, in either language.
+``ndi.gui.app.ensembleMaker`` reached this menu without a line of this file
+changing, which is the check that the mechanism was right; the other ten of
+MATLAB's apps are not ported yet, and the menu also carries whatever apps
+the user's own packages supply (see the
+``GUI.Navigator.SessionAppPackages`` preference). The menu is built even
+when discovery finds nothing: an empty "Apps" menu says "no apps found"
+honestly, while omitting it would say "sessions have no apps", which is
+false.
 
 MATLAB's ``ndi.util.ListDialog``, used to pick a cloud dataset, is not
 ported either -- Qt's ``QInputDialog.getItem`` is the same control, so there
