@@ -164,20 +164,47 @@ def _safe_field(name: str) -> str:
 
 
 def _detect_backend() -> _BackendName:
-    try:
-        import keyring  # noqa: F401
-    except ImportError:
+    """Which secrets backend is usable here.
+
+    Each probe catches more than ImportError, because "installed" and
+    "usable" are different: a partially-built native extension (a
+    ``cryptography`` whose ``_rust`` module cannot load, say) raises
+    something else entirely -- pyo3 raises a PanicException, which is not
+    even an Exception subclass, so no ordinary caller downstream could
+    defend against it. Letting that escape takes down everything that
+    touches the profile store, including the GUI editor, when the
+    documented behaviour is to fall back to the in-memory backend.
+
+    KeyboardInterrupt and SystemExit are re-raised: those are the user
+    asking to stop, not a backend being unavailable.
+    """
+
+    def _usable(import_it) -> bool:
         try:
-            from cryptography.hazmat.primitives.ciphers import Cipher  # noqa: F401
-        except ImportError:
-            logger.warning(
-                "Neither 'keyring' nor 'cryptography' is installed; "
-                "ndi.cloud.profile will fall back to the in-memory backend "
-                "which does NOT persist secrets to disk."
-            )
-            return "memory"
+            import_it()
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except BaseException as exc:  # noqa: BLE001 - see the docstring
+            logger.debug("secrets backend probe failed: %s", exc)
+            return False
+        return True
+
+    def _keyring() -> None:
+        import keyring  # noqa: F401
+
+    def _cryptography() -> None:
+        from cryptography.hazmat.primitives.ciphers import Cipher  # noqa: F401
+
+    if _usable(_keyring):
+        return "keyring"
+    if _usable(_cryptography):
         return "aes"
-    return "keyring"
+    logger.warning(
+        "Neither 'keyring' nor 'cryptography' is usable; "
+        "ndi.cloud.profile will fall back to the in-memory backend "
+        "which does NOT persist secrets to disk."
+    )
+    return "memory"
 
 
 # ---------------------------------------------------------------------------

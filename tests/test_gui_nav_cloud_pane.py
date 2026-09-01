@@ -150,15 +150,35 @@ class TestRefreshLogin:
 
 
 class TestProfileEditor:
-    def test_it_reports_the_gap_rather_than_failing_silently(self):
-        """A user looking for where cloud accounts are managed should find
-        the control and be told the honest reason it does nothing yet."""
+    """The button used to report that the editor was not ported. It is, so
+    these test what it now does instead."""
+
+    def test_a_failure_to_open_is_reported_not_raised(self, monkeypatch):
+        """Opening reads the profile store, which can fail on a machine with
+        no usable secrets backend. The click must say so, not raise into
+        Qt's event loop where nothing would show the user anything."""
+        import ndi.gui.profile_editor as pe
+
+        def boom(*args, **kwargs):
+            raise RuntimeError("profile store is unreadable")
+
+        monkeypatch.setattr(pe, "ProfileEditor", boom)
         pane = CloudPane(RecordingNavigator())
-        pane.open_profile_editor()
+        assert pane.open_profile_editor() is None
         message, title, success = pane.navigator.alerts[0]
-        assert "has not been ported" in message
+        assert "unreadable" in message
         assert title == "Profile"
         assert success is False
+
+    def test_nothing_is_held_when_opening_failed(self, monkeypatch):
+        """A half-constructed editor must not be kept and then reused by the
+        next click."""
+        import ndi.gui.profile_editor as pe
+
+        monkeypatch.setattr(pe, "ProfileEditor", _raise("nope"))
+        pane = CloudPane(RecordingNavigator())
+        pane.open_profile_editor()
+        assert pane.profile_editor is None
 
 
 # ----------------------------------------------------------------------
@@ -263,3 +283,10 @@ class TestNavigatorAlertDoesNotBlock:
 
 if __name__ == "__main__":
     pytest.main([__file__])
+
+
+def _raise(message):
+    def boom(*args, **kwargs):
+        raise RuntimeError(message)
+
+    return boom
