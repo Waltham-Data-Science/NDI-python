@@ -21,6 +21,7 @@ appearance is not.
 
 from __future__ import annotations
 
+from . import datasets_text
 from .ndi_pane import NdiPane
 from .pane import NavPane
 from .progress_pane import ProgressPane
@@ -28,6 +29,7 @@ from .session_info import SessionInfo
 from .status_icon import status_icon, statusIcon
 
 __all__ = [
+    "datasets_text",
     "NavPane",
     "NdiPane",
     "ProgressPane",
