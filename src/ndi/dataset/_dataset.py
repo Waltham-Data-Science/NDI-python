@@ -44,6 +44,15 @@ class ndi_dataset:
 
     Attributes:
         reference: Human-readable dataset reference name (from session)
+
+    CROSS-LANGUAGE NAMING
+    Methods that mirror MATLAB keep MATLAB's exact name, and each also has a
+    snake_case alias bound to the same function -- ``isIngestedInDataset`` and
+    ``is_ingested_in_dataset`` are one method under two names. Neither
+    audience should have to remember which spelling a given method happens to
+    carry: a script ported from MATLAB keeps working, and Python code can read
+    idiomatically.
+
     """
 
     def __init__(self) -> None:
@@ -533,6 +542,9 @@ class ndi_dataset:
 
         return self
 
+    #: Snake-case alias; same method, see the class note on naming.
+    delete_ingested_session = deleteIngestedSession
+
     def document_session(self, document: ndi_document) -> Any | None:
         """Find which session a document belongs to.
 
@@ -647,6 +659,9 @@ class ndi_dataset:
 
         return new_docs
 
+    #: Snake-case alias; same method, see the class note on naming.
+    repair_dataset_session_info = repairDatasetSessionInfo
+
     @staticmethod
     def addSessionInfoToDataset(
         dataset_obj: ndi_dataset,
@@ -666,6 +681,9 @@ class ndi_dataset:
         dataset_obj._session.database_add(new_doc)
         return new_doc
 
+    #: Snake-case alias; same method, see the class note on naming.
+    add_session_info_to_dataset = addSessionInfoToDataset
+
     @staticmethod
     def removeSessionInfoFromDataset(
         dataset_obj: ndi_dataset,
@@ -681,6 +699,9 @@ class ndi_dataset:
         docs = dataset_obj._session.database_search(q)
         for doc in docs:
             dataset_obj._session.database_rm(doc)
+
+    #: Snake-case alias; same method, see the class note on naming.
+    remove_session_info_from_dataset = removeSessionInfoFromDataset
 
     # =========================================================================
     # Internal Helpers

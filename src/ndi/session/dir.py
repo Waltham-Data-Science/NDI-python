@@ -34,6 +34,15 @@ class ndi_session_dir(ndi_session):
 
         # Access session data
         >>> probes = session.getprobes()
+
+    CROSS-LANGUAGE NAMING
+    Methods that mirror MATLAB keep MATLAB's exact name, and each also has a
+    snake_case alias bound to the same function -- ``isIngestedInDataset`` and
+    ``is_ingested_in_dataset`` are one method under two names. Neither
+    audience should have to remember which spelling a given method happens to
+    carry: a script ported from MATLAB keeps working, and Python code can read
+    idiomatically.
+
     """
 
     def __init__(
@@ -209,6 +218,9 @@ class ndi_session_dir(ndi_session):
         markerfile = self._ndi_pathname() / self.objecttypemarkerfilename()
         markerfile.write_text(typestr)
 
+    #: Snake-case alias; same method, see the class note on naming.
+    set_object_type_marker = setObjectTypeMarker
+
     def updateObjectTypeMarker(self) -> None:  # noqa: N802 (MATLAB mirror)
         """Write or refresh the .ndi object-type marker.
 
@@ -248,6 +260,9 @@ class ndi_session_dir(ndi_session):
             is_dataset = False
 
         self.setObjectTypeMarker("dataset" if is_dataset else "session")
+
+    #: Snake-case alias; same method, see the class note on naming.
+    update_object_type_marker = updateObjectTypeMarker
 
     @staticmethod
     def directorytype(path: str | Path) -> str:
@@ -334,6 +349,9 @@ class ndi_session_dir(ndi_session):
             return None
 
         return self
+
+    #: Snake-case alias; same method, see the class note on naming.
+    delete_session_data_structures = deleteSessionDataStructures
 
     @staticmethod
     def exists(path: str | Path) -> bool:
