@@ -399,11 +399,11 @@ def _qt_or_skip():
 
 class TestNavigatorQt:
     def test_builds_the_ported_pane_stack(self):
+        """MATLAB's stack is NDI, NDI Cloud, Datasets, Progress. Only NDI
+        Cloud is still unported; it inserts at index 1 when it lands."""
         _qt_or_skip()
         nav = Navigator()
-        assert len(nav.panes) == 2
-        assert nav.panes[0].title == "NDI"
-        assert nav.panes[1].title == "Progress"
+        assert [p.title for p in nav.panes] == ["NDI", "Datasets", "Progress"]
 
     def test_progress_pane_is_findable(self):
         _qt_or_skip()
@@ -433,41 +433,44 @@ class TestNavigatorQt:
         )
         assert abs(nav.position[3] - expected) <= 1
 
-    def test_docking_does_not_move_a_window_that_has_an_elastic_pane(self):
-        """The quiet path's promise, through the real navigator: a background
+    def test_docking_does_not_move_the_window(self):
+        """The quiet path's promise, now through the REAL stack: a background
         task engaging the progress pane must not move the window.
 
-        It holds only while some pane can absorb the new body, so the
-        not-yet-ported elastic pane stands in as a fake. This is the
-        invariant datasetsPane will have to keep when it lands.
+        This stood in a fake elastic pane while datasetsPane was unported.
+        The datasets pane is the real one, and it keeps the invariant: it
+        shrinks to make room instead of the window growing.
         """
         _qt_or_skip()
         nav = Navigator()
-        nav.panes.insert(1, FakePane(height=200, min_height=50, resizable=True, collapsible=True))
-        nav.layout()
         progress = nav.progress_pane_handle()
         before = nav.position[3]
+        datasets_before = nav.panes[1].rendered_height
         progress.fit_to_bars(3)
         assert nav.position[3] == before
+        assert nav.panes[1].rendered_height < datasets_before
 
-    def test_docking_sizes_the_current_stack_to_its_content(self):
-        """What the same docking does to the stack as actually ported.
-
-        With no elastic pane yet, nothing can absorb the progress pane's new
-        body, so distribute() takes its no-elastic branch and the window
-        follows its content. That is correct for this stack, not a violation
-        of the quiet path -- the test above is what this case becomes once
-        datasetsPane lands.
-        """
+    def test_the_datasets_pane_absorbs_the_leftover_height(self):
+        """With an elastic pane present the rows fill the window exactly and
+        distribute() leaves the window alone -- no gap at the bottom, and no
+        window that resizes itself when content changes."""
         _qt_or_skip()
         nav = Navigator()
-        progress = nav.progress_pane_handle()
-        progress.fit_to_bars(3)
         heights = nav.layout()
-        expected = nav_layout.figure_height_for_content(
-            sum(heights), len(nav.panes), nav.min_figure_height()
-        )
-        assert abs(nav.position[3] - expected) <= 1
+        available = nav_layout.content_height(nav.figure_height, len(nav.panes))
+        assert abs(sum(heights) - available) <= 1
+        _, new_height = nav_layout.distribute(nav.panes, nav.figure_height)
+        assert new_height is None
+
+    def test_collapsing_the_datasets_pane_does_resize_the_window(self):
+        """A STRUCTURAL change still moves the window: with the only elastic
+        pane collapsed there is nothing left to absorb, so the window sizes
+        to its content."""
+        _qt_or_skip()
+        nav = Navigator()
+        before = nav.position[3]
+        nav.panes[1].toggle()
+        assert nav.position[3] < before
 
     def test_a_pane_toggle_does_resize_the_window(self):
         _qt_or_skip()
@@ -486,8 +489,19 @@ class TestNavigatorQt:
         assert seen and "not been ported" in seen[0][0]
 
     def test_min_height_follows_the_panes_not_a_constant(self):
+        """An ELASTIC pane contributes its MINIMUM here, not the height it
+        currently asks for -- otherwise the window could never be dragged
+        smaller than whatever size the datasets tree happened to open at."""
         _qt_or_skip()
         nav = Navigator()
-        computed = sum(p.current_height() for p in nav.panes) + 2 * 6 + 4
+        computed = (
+            sum(
+                p.min_height if getattr(p, "resizable", False) else p.current_height()
+                for p in nav.panes
+            )
+            + 2 * nav_layout.PAD
+            + (len(nav.panes) - 1) * nav_layout.SPACING
+        )
         assert nav.min_figure_height() == computed
+        assert nav.min_figure_height() < sum(p.current_height() for p in nav.panes)
         assert not math.isnan(nav.min_figure_height())

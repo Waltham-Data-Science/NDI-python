@@ -20,12 +20,11 @@ window that leaves a gap at the bottom, or a pane that will not drag down to
 its minimum, is a wrong number rather than a raised error.
 
 THE PANE STACK IS INCOMPLETE ON PURPOSE
-MATLAB's stack is NDI, NDI Cloud, Datasets, Progress. Only the NDI and
-Progress panes are ported so far, so only those are built. The other two slot
-into :meth:`build_panes` when they land. Note that Datasets is the elastic
-pane, so until it exists the navigator always takes the no-elastic-pane
-branch and sizes itself to its content -- correct behaviour for the current
-stack, and it changes on its own once a resizable pane is added.
+MATLAB's stack is NDI, NDI Cloud, Datasets, Progress. NDI Cloud is not
+ported yet, so it alone is missing; it slots into :meth:`build_panes` when it
+lands. Datasets is the elastic pane, so with it in place the navigator now
+takes the elastic branch: content changes are absorbed by resizing that pane
+rather than by resizing the window.
 """
 
 from __future__ import annotations
@@ -34,6 +33,7 @@ from typing import Any
 
 from .cloud_colors import cloud_colors, rgb_to_hex
 from .nav import layout as nav_layout
+from .nav.datasets_pane import DatasetsPane
 from .nav.ndi_pane import NdiPane
 from .nav.progress_pane import ProgressPane
 
@@ -228,11 +228,15 @@ class Navigator:
     def build_panes(self) -> None:
         """Instantiate the pane stack, top to bottom.
 
-        MATLAB's order is NDI, NDI Cloud, Datasets, Progress. The two middle
-        panes are not ported yet; they insert here, keeping Progress last so
-        it goes on hugging the bottom edge.
+        MATLAB's order is NDI, NDI Cloud, Datasets, Progress. NDI Cloud is
+        not ported yet and inserts at index 1 when it lands; Progress stays
+        last so it goes on hugging the bottom edge.
+
+        Datasets is the ELASTIC pane, so its arrival takes the layout out of
+        its no-elastic branch for the first time: the window now absorbs
+        content changes by resizing that pane rather than by resizing itself.
         """
-        self.panes = [NdiPane(self), ProgressPane(self)]
+        self.panes = [NdiPane(self), DatasetsPane(self), ProgressPane(self)]
         for row, pane in enumerate(self.panes):
             pane.build(self.root_layout, row)
 
