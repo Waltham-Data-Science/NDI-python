@@ -14,6 +14,7 @@ Qt tests skip without PySide6, as elsewhere in this package.
 from __future__ import annotations
 
 import os
+import sys
 
 import pytest
 
@@ -478,13 +479,346 @@ class TestMenusAreBuilt:
             "Mirror to Cloud",
         ]
 
-    def test_the_unaffiliated_root_has_no_menu_until_the_add_flows_land(self):
-        """Its two items create and open sessions, both in the next slice.
-        Omitted entirely rather than shown dead."""
+    def test_the_unaffiliated_root_offers_create_and_open_session(self):
         _qt_or_skip()
         nav, pane = _built_pane()
         pane.populate_tree()
-        assert pane.build_node_menu(pane.tree.topLevelItem(0)) is None
+        menu = pane.build_node_menu(pane.tree.topLevelItem(0))
+        assert [a.text() for a in menu.actions()] == [
+            "Create new session...",
+            "Open session...",
+        ]
+
+
+class TestAddMenuFlows:
+    """The "+" flows. Every dialog is stubbed, so what is tested is the
+    decision each flow makes, not Qt."""
+
+    def _pane(self, monkeypatch, **answers):
+        nav, pane = _built_pane()
+        monkeypatch.setattr(pane, "_ask_text", lambda p, t: answers.get("text"))
+        monkeypatch.setattr(pane, "_ask_folder", lambda t: answers.get("folder", ""))
+        monkeypatch.setattr(pane, "_ask_choice", lambda ls, p, t: answers.get("choice"))
+        return nav, pane
+
+    def test_the_add_menu_lists_local_then_cloud(self):
+        _qt_or_skip()
+        nav, pane = _built_pane()
+        labels = [a.text() for a in pane.build_add_menu().actions() if a.text()]
+        assert labels == [
+            "New blank dataset...",
+            "Open dataset...",
+            "Open Public Cloud dataset...",
+            "Open Private Cloud dataset...",
+        ]
+
+    def test_cancelling_the_reference_prompt_creates_nothing(self, monkeypatch):
+        """Cancel and blank are different answers: cancel is silent."""
+        _qt_or_skip()
+        nav, pane = self._pane(monkeypatch, text=None)
+        assert pane.new_blank_dataset() is None
+        assert pane.user_datasets == []
+        assert nav.alerts == []
+
+    def test_a_blank_reference_is_refused_with_a_message(self, monkeypatch):
+        _qt_or_skip()
+        nav, pane = self._pane(monkeypatch, text="")
+        assert pane.new_blank_dataset() is None
+        assert any("reference is required" in m for m, _, _ in nav.alerts)
+
+    def test_cancelling_the_folder_creates_nothing(self, monkeypatch):
+        _qt_or_skip()
+        nav, pane = self._pane(monkeypatch, text="ref", folder="")
+        assert pane.new_blank_dataset() is None
+        assert pane.user_datasets == []
+
+    def test_a_failing_constructor_is_reported(self, monkeypatch):
+        _qt_or_skip()
+        nav, pane = self._pane(monkeypatch, text="ref", folder="/nope")
+        import ndi.dataset as ds_mod
+
+        monkeypatch.setattr(ds_mod, "ndi_dataset_dir", _raise("disk is full"))
+        assert pane.new_blank_dataset() is None
+        assert any("Could not create the dataset" in m for m, _, _ in nav.alerts)
+
+    def test_a_created_dataset_is_listed(self, monkeypatch, tmp_path):
+        _qt_or_skip()
+        made = FakeDataset("new")
+        nav, pane = self._pane(monkeypatch, text="ref", folder=str(tmp_path))
+        import ndi.dataset as ds_mod
+
+        monkeypatch.setattr(ds_mod, "ndi_dataset_dir", lambda *a, **k: made)
+        assert pane.new_blank_dataset() is made
+        assert pane.user_datasets == [made]
+
+    def test_open_dataset_reports_a_failure_with_its_own_wording(self, monkeypatch):
+        _qt_or_skip()
+        nav, pane = self._pane(monkeypatch, folder="/nope")
+        import ndi.dataset as ds_mod
+
+        monkeypatch.setattr(ds_mod, "ndi_dataset_dir", _raise("not a dataset"))
+        assert pane.open_dataset() is None
+        assert any("Could not open the dataset" in m for m, _, _ in nav.alerts)
+
+
+class TestDeduplication:
+    def test_a_dataset_already_listed_at_that_path_is_not_added_twice(self):
+        _qt_or_skip()
+        nav, pane = _built_pane()
+        first = FakeDataset("a")
+        pane.add_user_dataset(first)
+        pane.add_user_dataset(FakeDataset("a"))  # same getpath
+        assert pane.user_datasets == [first]
+
+    def test_a_different_path_is_added(self):
+        _qt_or_skip()
+        nav, pane = _built_pane()
+        pane.add_user_dataset(FakeDataset("a"))
+        pane.add_user_dataset(FakeDataset("b"))
+        assert len(pane.user_datasets) == 2
+
+    def test_a_session_without_a_path_is_never_a_duplicate(self):
+        """Two sessions that cannot say where they live are not the same
+        session -- the same rule the workspace scan uses."""
+        _qt_or_skip()
+        nav, pane = _built_pane()
+        pane.add_user_session(FakeSession("a", path=""))
+        pane.add_user_session(FakeSession("b", path=""))
+        assert len(pane.user_sessions) == 2
+
+    def test_none_is_ignored(self):
+        _qt_or_skip()
+        nav, pane = _built_pane()
+        assert pane.add_user_dataset(None) is None
+        assert pane.add_user_session(None) is None
+        assert pane.user_datasets == [] and pane.user_sessions == []
+
+
+class TestNewSessionRefusesOccupiedFolders:
+    def _pane(self, monkeypatch, folder, directory_type):
+        nav, pane = _built_pane()
+        monkeypatch.setattr(pane, "_ask_text", lambda p, t: "ref")
+        monkeypatch.setattr(pane, "_ask_folder", lambda t: folder)
+        from ndi.session.dir import ndi_session_dir
+
+        monkeypatch.setattr(
+            ndi_session_dir, "directorytype", staticmethod(lambda p: directory_type)
+        )
+        return nav, pane
+
+    def test_a_folder_holding_a_session_is_refused(self, monkeypatch):
+        """An existing object must never be written over."""
+        _qt_or_skip()
+        nav, pane = self._pane(monkeypatch, "/occupied", "session")
+        assert pane.new_session() is None
+        assert any("already contains an NDI session" in m for m, _, _ in nav.alerts)
+
+    def test_a_folder_holding_a_dataset_is_refused(self, monkeypatch):
+        _qt_or_skip()
+        nav, pane = self._pane(monkeypatch, "/occupied", "dataset")
+        assert pane.new_session() is None
+        assert any("already contains an NDI dataset" in m for m, _, _ in nav.alerts)
+
+    def test_an_unconfirmed_ndi_folder_is_refused_too(self, monkeypatch):
+        """It might hold something; 'unknown' is not 'empty'."""
+        _qt_or_skip()
+        nav, pane = self._pane(monkeypatch, "/occupied", "unknown")
+        assert pane.new_session() is None
+        assert nav.alerts
+
+    def test_an_empty_folder_is_accepted(self, monkeypatch):
+        _qt_or_skip()
+        nav, pane = _built_pane()
+        monkeypatch.setattr(pane, "_ask_text", lambda p, t: "ref")
+        monkeypatch.setattr(pane, "_ask_folder", lambda t: "/empty")
+
+        made = FakeSession("new", path="/empty")
+
+        class Stub:
+            """new_session both asks this for directorytype and constructs
+            it, so the stand-in has to answer to each."""
+
+            directorytype = staticmethod(lambda path: "none")
+
+            def __new__(cls, *args, **kwargs):
+                return made
+
+        # sys.modules, not "import ndi.session.dir as ...": the package
+        # rebinds the name `dir` to the CLASS, shadowing its own module --
+        # the same aliasing that makes ndi.dataset.ndi_dataset the dir
+        # subclass rather than the base.
+        monkeypatch.setattr(sys.modules["ndi.session.dir"], "ndi_session_dir", Stub)
+        assert pane.new_session() is made
+        assert pane.user_sessions == [made]
+
+
+class TestOpenSessionUsesTheSessionPicker:
+    def test_it_cannot_be_handed_a_dataset(self, monkeypatch):
+        """The picker only returns a confirmed session, so this flow cannot
+        open a dataset by mistake."""
+        _qt_or_skip()
+        nav, pane = _built_pane()
+        import ndi.util.choose_directory as cdmod
+
+        seen = {}
+
+        def fake_choose_session(*, title="", parent=None, **kw):
+            seen["called"] = True
+            return "/s", "session"
+
+        monkeypatch.setattr(cdmod, "choose_session", fake_choose_session)
+        made = FakeSession("opened", path="/s")
+        dir_mod = sys.modules["ndi.session.dir"]
+        monkeypatch.setattr(dir_mod, "ndi_session_dir", lambda *a, **k: made)
+        assert pane.open_session() is made
+        assert seen.get("called")
+
+    def test_cancelling_the_picker_opens_nothing(self, monkeypatch):
+        _qt_or_skip()
+        nav, pane = _built_pane()
+        import ndi.util.choose_directory as cdmod
+
+        monkeypatch.setattr(cdmod, "choose_session", lambda **kw: ("", ""))
+        assert pane.open_session() is None
+        assert pane.user_sessions == []
+
+
+class TestOpenCloudDataset:
+    def _pane(self, monkeypatch, labels_ids, choice=0, folder="/dl"):
+        nav, pane = _built_pane()
+        import ndi.gui.nav.datasets_pane as dp
+
+        monkeypatch.setattr(dp, "fetch_cloud_datasets", lambda pub: labels_ids)
+        monkeypatch.setattr(pane, "_ask_choice", lambda ls, p, t: choice)
+        monkeypatch.setattr(pane, "_ask_folder", lambda t: folder)
+        return nav, pane
+
+    def test_an_empty_catalogue_says_so(self, monkeypatch):
+        _qt_or_skip()
+        nav, pane = self._pane(monkeypatch, ([], []))
+        assert pane.open_cloud_dataset(True) is None
+        assert any("No datasets were found" in m for m, _, _ in nav.alerts)
+
+    def test_a_fetch_failure_is_reported_not_raised(self, monkeypatch):
+        _qt_or_skip()
+        nav, pane = _built_pane()
+        import ndi.gui.nav.datasets_pane as dp
+
+        monkeypatch.setattr(dp, "fetch_cloud_datasets", _raise("not signed in"))
+        assert pane.open_cloud_dataset(False) is None
+        assert any("not signed in" in m for m, _, _ in nav.alerts)
+
+    def test_cancelling_the_picker_downloads_nothing(self, monkeypatch):
+        _qt_or_skip()
+        nav, pane = self._pane(monkeypatch, (["a"], ["ida"]), choice=None)
+        calls = []
+        import ndi.cloud.orchestration as orch
+
+        monkeypatch.setattr(orch, "downloadDataset", lambda *a, **k: calls.append(a))
+        assert pane.open_cloud_dataset(True) is None
+        assert calls == []
+
+    def test_the_chosen_index_selects_the_id(self, monkeypatch):
+        """The picker returns a position, not a label: two cloud datasets may
+        share a display label, and matching back by text would download the
+        wrong one."""
+        _qt_or_skip()
+        nav, pane = self._pane(monkeypatch, (["a", "b"], ["ida", "idb"]), choice=1)
+        seen = {}
+        import ndi.cloud.orchestration as orch
+
+        def fake_download(cloud_id, folder, sync_files=True, verbose=True):
+            seen["id"] = cloud_id
+            seen["sync_files"] = sync_files
+            return FakeDataset("dl")
+
+        monkeypatch.setattr(orch, "downloadDataset", fake_download)
+        pane.open_cloud_dataset(True)
+        assert seen["id"] == "idb"
+
+    def test_it_downloads_documents_only(self, monkeypatch):
+        """Browsing a catalogue must not turn into pulling every binary."""
+        _qt_or_skip()
+        nav, pane = self._pane(monkeypatch, (["a"], ["ida"]))
+        seen = {}
+        import ndi.cloud.orchestration as orch
+
+        def fake_download(cloud_id, folder, sync_files=True, verbose=True):
+            seen["sync_files"] = sync_files
+            return FakeDataset("dl")
+
+        monkeypatch.setattr(orch, "downloadDataset", fake_download)
+        pane.open_cloud_dataset(True)
+        assert seen["sync_files"] is False
+
+    def test_a_failed_download_is_reported(self, monkeypatch):
+        _qt_or_skip()
+        nav, pane = self._pane(monkeypatch, (["a"], ["ida"]))
+        import ndi.cloud.orchestration as orch
+
+        monkeypatch.setattr(orch, "downloadDataset", _raise("connection reset"))
+        assert pane.open_cloud_dataset(True) is None
+        assert any("Download failed" in m for m, _, _ in nav.alerts)
+
+
+class TestFetchCloudDatasets:
+    def test_entries_without_an_id_are_dropped(self, monkeypatch):
+        """A row the user can select but nothing can open is worse than a
+        shorter list."""
+        import ndi.cloud.api.datasets as api
+        from ndi.gui.nav.datasets_pane import fetch_cloud_datasets
+
+        monkeypatch.setattr(
+            api,
+            "getPublished",
+            lambda *a, **k: {
+                "datasets": [
+                    {"id": "i1", "name": "One"},
+                    {"name": "No id at all"},
+                    {"id": "i2", "name": "Two"},
+                ]
+            },
+        )
+        labels, ids = fetch_cloud_datasets(True)
+        assert ids == ["i1", "i2"]
+        assert len(labels) == len(ids)
+
+    def test_labels_and_ids_stay_index_aligned(self, monkeypatch):
+        import ndi.cloud.api.datasets as api
+        from ndi.gui.nav.datasets_pane import fetch_cloud_datasets
+
+        monkeypatch.setattr(
+            api,
+            "getPublished",
+            lambda *a, **k: {"datasets": [{"id": "i1", "name": "One"}, {"id": "i2"}]},
+        )
+        labels, ids = fetch_cloud_datasets(True)
+        assert labels[0] == "One  (i1)"
+        assert labels[1] == "i2"
+        assert ids == ["i1", "i2"]
+
+    def test_private_authenticates_first(self, monkeypatch):
+        import ndi.cloud.api.datasets as api
+        import ndi.cloud.auth as auth
+        from ndi.gui.nav.datasets_pane import fetch_cloud_datasets
+
+        seen = {}
+        monkeypatch.setattr(auth, "authenticate", lambda *a, **k: ("tok", "org-7"))
+
+        def fake_list(org_id, *a, **k):
+            seen["org"] = org_id
+            return {"datasets": []}
+
+        monkeypatch.setattr(api, "listDatasets", fake_list)
+        fetch_cloud_datasets(False)
+        assert seen["org"] == "org-7"
+
+    def test_an_empty_catalogue_is_two_empty_lists(self, monkeypatch):
+        import ndi.cloud.api.datasets as api
+        from ndi.gui.nav.datasets_pane import fetch_cloud_datasets
+
+        monkeypatch.setattr(api, "getPublished", lambda *a, **k: {"datasets": []})
+        assert fetch_cloud_datasets(True) == ([], [])
 
 
 def _raise(message):
