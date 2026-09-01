@@ -172,8 +172,9 @@ class ndi_preferences:
         This is the canonical place to add new preferences. Each call to
         :meth:`_add_item` registers one item with its category,
         subcategory, name, default value, expected type, and a short
-        description used by :func:`list_items` and any future
-        preferences editor.
+        description used by :func:`list_items` and by
+        :mod:`ndi.gui.preferences_editor`, which reads ``type`` to choose
+        each row's widget and shows ``description`` as its tooltip.
         """
         self._add_item(
             "Cloud",
