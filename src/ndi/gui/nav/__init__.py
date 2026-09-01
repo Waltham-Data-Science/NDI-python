@@ -23,5 +23,15 @@ from __future__ import annotations
 
 from .ndi_pane import NdiPane
 from .pane import NavPane
+from .progress_pane import ProgressPane
+from .session_info import SessionInfo
+from .status_icon import status_icon, statusIcon
 
-__all__ = ["NavPane", "NdiPane"]
+__all__ = [
+    "NavPane",
+    "NdiPane",
+    "ProgressPane",
+    "SessionInfo",
+    "status_icon",
+    "statusIcon",
+]
