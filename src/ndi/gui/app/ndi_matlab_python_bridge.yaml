@@ -373,12 +373,133 @@ classes:
           when there is a window; show and close mirror the figure's
           lifecycle, and close also drops the rasters the app opened.
 
+  - name: spikeSorterImporter
+    type: class
+    matlab_path: "+ndi/+gui/+app/spikeSorterImporter.m"
+    matlab_last_sync_hash: "eaec593"
+    python_path: "ndi/gui/app/spike_sorter_importer.py"
+    python_class: "spikeSorterImporter"
+    inherits: "ndi.gui.app.sessionApp"
+
+    decision_log: >
+      The class NAME is MATLAB's exactly, as is the Name constant -- which is
+      also the menu label, and which MATLAB spells in camelCase
+      ("spikeSorterImporter") rather than as a phrase. MATLAB declares no
+      Category, so the app sits at the Apps menu's top level; Python inherits
+      the "" default rather than declaring one. Methods are snake_case, so
+      the class needs no entry in tests/test_matlab_name_aliases.py.
+      WHY THIS APP MATTERS BEYOND ITS OWN WINDOW: it is the only route by
+      which spiking neurons enter a Python NDI session
+      (ndi.app.spikesorter.clusters2neurons still raises
+      NotImplementedError), and the 'spikes' elements it creates are what
+      ndi.fun.ensemble reads -- so it is what gives ndi.gui.app.ensembleMaker
+      something to build an ensemble from.
+
+    properties:
+      - name: Name
+        type_matlab: "string (Constant)"
+        type_python: "ClassVar[str]"
+        value: "spikeSorterImporter"
+      - name: "session, fig"
+        python_name: "session, figure"
+        type_python: "Any"
+      - name: "probeDropdown, sessionList, pipelineList, tagList, overwriteCheckbox, recalcCheckbox, waveformT0Field, waveformT1Field, pipelineSelector, filterCheckbox, binaryStatusLabel"
+        python_name: "probe_dropdown, session_list, pipeline_list, tag_list, overwrite_checkbox, recalc_checkbox, waveform_t0_field, waveform_t1_field, pipeline_selector, filter_checkbox, binary_status_label"
+        type_matlab: "uidropdown / uilistbox / uicheckbox / uieditfield / uilabel"
+        type_python: "Qt widgets, None until build() runs"
+      - name: "probes, sessionEntries, pipelineInfo, waitDlg"
+        python_name: "probes, session_entries, pipeline_info, wait_dialog"
+        type_python: "list / list[dict] / dict | None / QProgressDialog | None"
+      - name: "(none)"
+        python_name: "probe_items, probe_index, session_items, session_selection, pipeline_items, pipeline_error, tags, selected_tags, pipeline, filter_by_pipeline, overwrite, recalculate, waveform_t0_ms, waveform_t1_ms, binary_status, last_alert, auto_confirm"
+        decision_log: >
+          NEW in Python, the same model/widget split ensembleMaker documents:
+          MATLAB keeps this state in the widgets (ItemsData, Value), here the
+          widgets mirror attributes, so every decision is checkable with no
+          display and build=False constructs the model alone. Selection
+          indices are 0-BASED Qt rows where MATLAB's ItemsData is 1:n -- they
+          index a Python list and are never shown, so they are internal data
+          access rather than a user-facing count. auto_confirm is Python-only
+          and answers confirm() for a caller with no display; with neither a
+          window nor auto_confirm a destructive action does NOT proceed.
+
+    methods:
+      - name: spikeSorterImporter
+        kind: constructor
+        decision_log: >
+          Ported. Builds the window, then loads the probes under the wait
+          dialog. position and build are Python-only, as in ensembleMaker.
+      - name: buildUI
+        python_name: build
+        decision_log: >
+          Ported to PySide6: the 4-row uigridlayout becomes a QVBoxLayout
+          whose last row is a three-column QHBoxLayout. Same widgets, same
+          labels, same tooltips. Named build() to match the other ported
+          windows rather than MATLAB's buildUI.
+      - name: "sessionPath"
+        python_name: _session_path
+        decision_log: >
+          Ported by DELEGATION to ndi.gui.app.ensemble_maker.session_path,
+          which is the same best-effort getpath/path lookup MATLAB duplicates
+          in both apps. One implementation, so the two windows cannot
+          disagree about a session's path.
+      - name: "selectedProbe, reloadProbes, onProbeChanged, reloadProbeData, reloadSessionNeurons, reloadPipeline, clearSessionList, clearPipelineList"
+        python_name: "selected_probe, reload_probes, on_probe_changed, reload_probe_data, reload_session_neurons, reload_pipeline, clear_session_list, clear_pipeline_list"
+        decision_log: >
+          Ported. reload_pipeline reports a missing sort in the pane, as
+          MATLAB does, rather than raising: no Kilosort output is the common
+          case for a probe that has not been sorted.
+      - name: onImport
+        python_name: on_import
+        output_arguments:
+          - name: imported
+            type_python: "int (number of neurons imported; 0 when it did not run)"
+        decision_log: >
+          Ported, including the confirmation, the ms-to-seconds window
+          conversion, the orphaned-marker cleanup before importing, and the
+          alert on failure. Returns the count, which MATLAB does not.
+      - name: onDelete
+        python_name: on_delete
+        decision_log: >
+          Ported. Deletes the selected neurons' element documents (the
+          removal cascades to their epoch and neuron_extracellular
+          documents), then clears any now-orphaned kilosort_clusters
+          document. Returns how many were removed.
+      - name: cleanupOrphanClusters
+        python_name: cleanup_orphan_clusters
+        decision_log: >
+          Ported. Removes a kilosort_clusters document only when no
+          neuron_extracellular still depends on it -- which is what lets the
+          same sort be imported again after every neuron is deleted, and why
+          a PARTIAL delete still reports "already imported".
+      - name: "qualityValuesFor, pipelineKey, updateBinaryStatus"
+        python_name: "quality_values_for, pipeline_key, binary_status_text"
+        decision_log: >
+          Ported as module-level functions rather than methods: they are pure,
+          so what the app computes is checkable without a window.
+          binary_status_text returns (text, tooltip) for the caller to apply,
+          where MATLAB's updateBinaryStatus sets the label directly.
+      - name: "withWait, clearWait"
+        python_name: "with_wait, clear_wait"
+        decision_log: >
+          Ported, nestable as MATLAB's is, and returning what the callable
+          returns so on_import can hand back its count.
+      - name: "(none)"
+        python_name: "session_neuron_items, pipeline_items, tag_defaults, import_confirm_message, delete_confirm_message, set_probe, set_tags, set_session_selection, set_overwrite, set_recalculate, set_filter_by_pipeline, set_window_ms, kilosort_version, alert, confirm, show, close"
+        decision_log: >
+          NEW in Python. The item builders and message builders are the pane
+          contents and the confirmation text, lifted out so both are testable
+          without a display; the setters are how a caller without one says
+          what the user would have clicked; alert records what it said in
+          last_alert; confirm is the single gate every destructive action
+          passes through.
+
   # -----------------------------------------------------------------------
-  # NOT YET PORTED: the remaining ten apps
+  # NOT YET PORTED: the remaining nine apps
   # -----------------------------------------------------------------------
   #   ElectrodeDataExport, ElectrodeMap, katzExporter, kiasort,
-  #   pipelineEditor, pyraview, spikeSorterImporter, stimulusDecoder,
-  #   stimulusResponse, vhNDISpikeSorter
+  #   pipelineEditor, pyraview, stimulusDecoder, stimulusResponse,
+  #   vhNDISpikeSorter
   #
   # Three are blocked on something outside this repo (ndi.cpipeline for the
   # pipeline editor, the sorters' own toolboxes for kiasort and

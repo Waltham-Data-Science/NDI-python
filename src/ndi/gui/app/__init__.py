@@ -10,10 +10,13 @@ anywhere for it to be added to.
 
 The package is also one of the two scanned by default (with ``ndi.app``),
 so an app dropped in here is discovered by being here --
-:class:`~ndi.gui.app.ensemble_maker.ensembleMaker` reaches the navigator's
-Apps menu by living in this package and by nothing else. The other ten of
-MATLAB's eleven apps -- pyraview, the spike sorters, the exporters -- are
-not ported yet, and each is its own piece of work; the Apps menu also
+:class:`~ndi.gui.app.ensemble_maker.ensembleMaker` and
+:class:`~ndi.gui.app.spike_sorter_importer.spikeSorterImporter` reach the
+navigator's Apps menu by living in this package and by nothing else. The two
+of them also close a loop: the importer creates the spiking-neuron elements
+that the ensemble maker builds ensembles from. The other nine of MATLAB's
+eleven apps -- pyraview, the spike sorters, the exporters -- are not ported
+yet, and each is its own piece of work; the Apps menu also
 carries whatever a user names in the ``GUI.Navigator.SessionAppPackages``
 preference, which is the extension path MATLAB offers.
 
@@ -27,5 +30,6 @@ from __future__ import annotations
 
 from .ensemble_maker import ensembleMaker
 from .session_app import SessionApp, sessionApp
+from .spike_sorter_importer import spikeSorterImporter
 
-__all__ = ["SessionApp", "sessionApp", "ensembleMaker"]
+__all__ = ["SessionApp", "sessionApp", "ensembleMaker", "spikeSorterImporter"]
