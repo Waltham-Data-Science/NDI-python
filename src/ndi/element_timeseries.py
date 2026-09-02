@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import numpy as np
@@ -348,6 +349,167 @@ class ndi_element_timeseries(ndi_element):
 
         return 0.0
 
+    # ------------------------------------------------------------------
+    # batched creation
+    # ------------------------------------------------------------------
+    @staticmethod
+    def add_multiple(
+        session: Any,
+        underlying_element: Any,
+        specs: Sequence[Mapping[str, Any]],
+        *,
+        element_class: str = "ndi.neuron",
+        chunksize: int = 100,
+        progressbar: bool = False,
+        verbose: bool = False,
+        build_objects: bool = False,
+    ) -> list[Any]:
+        """Create many timeseries elements with epochs, in batched writes.
+
+        MATLAB equivalent: ``ndi.element.timeseries.addMultiple``.
+
+        Each entry of SPECS describes one element to create on the shared
+        UNDERLYING_ELEMENT (which supplies the subject and the
+        ``underlying_element_id`` dependency), with keys:
+
+        ``name``, ``reference``
+            The element's name and reference number.
+        ``type``
+            The element type; ``'spikes'`` when absent. This is what
+            ``ndi.fun.ensemble.load`` looks for, so a spiking neuron written
+            here is one an ensemble will later find.
+        ``epochs``
+            A sequence of mappings with ``epoch_id``, ``epoch_clock``,
+            ``t0_t1``, ``timepoints`` and ``datapoints``.
+        ``extra_documents``
+            Optional documents committed in the same batch, each stamped with
+            the new element's ``element_id`` -- a ``neuron_extracellular``
+            document per neuron, in the importer's case.
+
+        WHY THIS EXISTS AT ALL: constructing each element and calling
+        ``addepoch`` per epoch costs a database search and a separate write
+        for every epoch of every element. Here the documents are built in
+        memory and committed a chunk at a time -- elements first, then
+        everything that depends on them, which is the order that keeps a
+        dependency from naming a document the database has not seen yet.
+
+        ``build_objects`` returns the constructed element objects, which
+        MATLAB does only when an output is requested; the importer does not
+        ask for them, since building each one costs a load it has no use for.
+        """
+        results: list[Any] = []
+        specs = list(specs)
+        if not specs:
+            return results
+
+        cls = _element_class_for(element_class)
+        subject_id = getattr(underlying_element, "subject_id", "")
+
+        bar = _progress_bar("Creating neurons") if progressbar else None
+        done = 0
+        for start in range(0, len(specs), max(int(chunksize), 1)):
+            chunk = specs[start : start + max(int(chunksize), 1)]
+            element_docs = []
+            dependent_docs = []
+
+            for spec in chunk:
+                element = ndi_element_timeseries(
+                    session=session,
+                    name=str(spec["name"]),
+                    reference=spec["reference"],
+                    type=str(spec.get("type") or "spikes"),
+                    underlying_element=underlying_element,
+                    direct=False,
+                    subject_id=subject_id,
+                )
+                doc = element.newdocument()
+                # The element is BUILT as a timeseries but RECORDED as
+                # element_class, exactly as MATLAB's addMultiple writes
+                # element.ndi_element_class from its option: the object only
+                # has to hold the epochs while they are written, while the
+                # stored class is what the element loads back as.
+                doc.document_properties["element"]["ndi_element_class"] = element_class
+                element_docs.append(doc)
+
+                for epoch in spec.get("epochs") or []:
+                    _, epoch_doc = element.addepoch(
+                        epoch["epoch_id"],
+                        [epoch["epoch_clock"]],
+                        [tuple(epoch["t0_t1"])],
+                        epoch.get("timepoints"),
+                        epoch.get("datapoints"),
+                        add_to_database=False,
+                    )
+                    dependent_docs.append(epoch_doc)
+
+                for extra in spec.get("extra_documents") or []:
+                    dependent_docs.append(extra.set_dependency_value("element_id", element.id))
+
+                if build_objects:
+                    results.append(cls(session=session, document=doc))
+                if verbose:
+                    print(f"  Built {spec['name']}.")
+
+            session.database_add(element_docs)
+            if dependent_docs:
+                session.database_add(dependent_docs)
+
+            done += len(chunk)
+            if bar is not None:
+                bar(done / len(specs))
+
+        if bar is not None:
+            bar(1.0)
+        return results
+
+    #: MATLAB's spelling, as elsewhere in this port.
+    addMultiple = add_multiple  # noqa: N815
+
     def __repr__(self) -> str:
         """String representation."""
         return f"ndi_element_timeseries({self._name}|{self._reference}|{self._type})"
+
+
+def _element_class_for(element_class: str) -> type:
+    """The Python class recording itself as ELEMENT_CLASS.
+
+    The class registry answers for the classes it knows; ``ndi.neuron`` is
+    not among them (it registers no ndi_element_class of its own -- the same
+    pre-existing gap ndi.element.ensemble documents), so it is named here
+    rather than left to fall through to the base timeseries.
+    """
+    from .class_registry import get_class
+
+    found = get_class(element_class)
+    if found is not None:
+        return found
+    if element_class in ("ndi.neuron", "ndi_neuron"):
+        from .neuron import ndi_neuron
+
+        return ndi_neuron
+    return ndi_element_timeseries
+
+
+def _progress_bar(label: str) -> Any:
+    """A callable taking a 0..1 fraction, or None when no bar can be shown.
+
+    The progress bar is optional in both languages: MATLAB wraps its
+    ProgressBarWindow construction in try/catch, because a batch import must
+    not fail for want of a display.
+    """
+    try:
+        from .gui.component.ProgressBarWindow import ProgressBarWindow
+
+        window = ProgressBarWindow("NDI import")
+        tag = label
+        window.addBar(Label=label, Tag=tag, Auto=True)
+
+        def update(fraction: float) -> None:
+            try:
+                window.updateBar(tag, max(0.0, min(1.0, float(fraction))))
+            except Exception:  # noqa: BLE001 - a bar that stops updating is not an error
+                pass
+
+        return update
+    except Exception:  # noqa: BLE001 - no display, no bar, no failure
+        return None

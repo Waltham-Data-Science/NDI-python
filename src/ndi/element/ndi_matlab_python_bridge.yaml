@@ -361,3 +361,62 @@ classes:
         decision_log: >
           Mapped to Python __eq__ dunder method. Compares by
           name, reference, and type.
+
+  # =========================================================================
+  # ndi.element.timeseries — static methods
+  # =========================================================================
+  - name: addMultiple
+    kind: static
+    matlab_path: "+ndi/+element/timeseries.m"
+    matlab_last_sync_hash: "eaec593"
+    python_path: "ndi/element_timeseries.py"
+    python_class: "ndi_element_timeseries"
+    python_name: add_multiple
+    input_arguments:
+      - name: S
+        type_matlab: "ndi.session"
+        type_python: "Any"
+      - name: underlying_element
+        type_matlab: "ndi.element"
+        type_python: "Any"
+      - name: specs
+        type_matlab: "struct array (name, reference, type, epochs, extra_documents)"
+        type_python: "Sequence[Mapping[str, Any]] with the same keys"
+      - name: element_class
+        type_python: "str"
+        default: "'ndi.neuron'"
+      - name: chunksize
+        type_python: "int"
+        default: "100"
+      - name: progressbar
+        type_python: "bool"
+        default: "False"
+      - name: verbose
+        type_python: "bool"
+        default: "False"
+      - name: build_objects
+        type_matlab: "n/a (MATLAB uses nargout>=1)"
+        type_python: "bool"
+        default: "False"
+    output_arguments:
+      - name: neurons
+        type_matlab: "array of element objects (only when nargout>=1)"
+        type_python: "list[Any] (empty unless build_objects)"
+    decision_log: >
+      Ported, with addMultiple kept beside add_multiple as the same function.
+      Creates many timeseries elements with their epochs in batched database
+      writes -- elements first, then everything depending on them, which is
+      the order that keeps a dependency from naming a document the database
+      has not seen yet. ndi.fun.probe.import_.kilosort.probe commits through
+      it.
+      DIVERGENCE, small and deliberate: where MATLAB hand-builds each element
+      and epoch document, Python constructs an ndi_element_timeseries and
+      uses its own newdocument() and addepoch(add_to_database=False), so the
+      tested VHSB attach path is reused rather than duplicated. The one thing
+      patched afterwards is element.ndi_element_class, which is written from
+      the element_class option exactly as MATLAB writes it: the object only
+      has to hold the epochs while they are written, while the STORED class
+      is what the element loads back as.
+      MATLAB's nargout>=1 deferral becomes the explicit build_objects flag,
+      Python having no nargout. The progress bar is optional in both
+      languages and degrades quietly with no display.

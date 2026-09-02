@@ -177,13 +177,17 @@ class TestSessionApps:
 
     def test_ndis_own_apps_are_discovered_with_no_help_from_the_pane(self):
         """The proof that the mechanism works from the app's side: the pane
-        knows nothing about ElectrodeDataExport, and offers it because
-        SessionApp.list found it in ndi.gui.app. The rest of MATLAB's eleven
-        land the same way, as does any package a user names in
+        knows nothing about any of these, and offers them because
+        SessionApp.list found them in ndi.gui.app. The rest of MATLAB's
+        eleven land the same way, as does any package a user names in
         GUI.Navigator.SessionAppPackages.
         """
-        labels = [app["Label"] for app in session_apps()]
+        offered = [(app["Label"], app["Category"]) for app in session_apps()]
+        labels = [label for label, _ in offered]
         assert "Electrode Data Export" in labels
+        assert "spikeSorterImporter" in labels
+        # and a categorised one, which the menu groups into a submenu
+        assert ("Ensemble Maker", "Ensembles") in offered
 
 
 class TestTreeRows:
@@ -504,7 +508,12 @@ class TestMenusAreBuilt:
 
     def test_the_apps_menu_is_present_even_with_no_apps_to_offer(self, monkeypatch):
         """Empty says 'no apps found'. Omitting it would say 'sessions have
-        no apps', which is false."""
+        no apps', which is false.
+
+        Discovery is stubbed out rather than relied on to find nothing: NDI
+        now ships apps of its own, and this is a claim about the menu, not
+        about how many apps exist.
+        """
         _qt_or_skip()
         monkeypatch.setattr("ndi.gui.nav.datasets_pane.session_apps", list)
         nav, pane = _built_pane()

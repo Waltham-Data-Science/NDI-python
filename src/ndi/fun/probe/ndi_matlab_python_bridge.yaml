@@ -385,3 +385,135 @@ functions:
       sorter run and is usually wrong for a real array. MATLAB's errors on a
       bad num_channels or a wrong-length array become ValueError.
       snake_case alias write_kilosort_map.
+
+# =========================================================================
+# ndi.fun.probe.extracellularInfo
+# =========================================================================
+
+  - name: extracellularInfo
+    type: function
+    matlab_path: "+ndi/+fun/+probe/extracellularInfo.m"
+    matlab_last_sync_hash: "eaec593"
+    python_path: "ndi/fun/probe/extracellular_info.py"
+    python_name: extracellularInfo
+    input_arguments:
+      - name: S
+        type_matlab: "ndi.session"
+        type_python: "Any"
+      - name: probe
+        type_matlab: "ndi.probe or ndi.element"
+        type_python: "Any"
+      - name: quality_labels
+        type_matlab: "string (1,:), name/value"
+        type_python: "Sequence[str], keyword-only"
+        default: "() (no filter)"
+    output_arguments:
+      - name: info
+        type_matlab: "struct array, sorted by cluster_index"
+        type_python: "list[dict[str, Any]]"
+      - name: summary
+        type_matlab: "char (multiline)"
+        type_python: "str"
+    decision_log: >
+      Ported. The struct array becomes a list of dicts keeping MATLAB's field
+      names (element_name, element_id, cluster_index, quality_label,
+      quality_number, pipeline, number_of_channels,
+      number_of_samples_per_channel, neuron_extracellular, document). A
+      neuron belongs to the probe when it is an element whose underlying
+      element is the probe AND it has a neuron_extracellular document, which
+      is the pair the kilosort importer creates. The dependency filter is
+      OR'd over the probe's own elements, as MATLAB does, so a session with
+      several probes does not load every other probe's neurons.
+      A snake_case alias, extracellular_info, is bound to the same function.
+
+# =========================================================================
+# ndi.fun.probe.import  (MATLAB +ndi/+fun/+probe/+import/)
+# -------------------------------------------------------------------------
+# INTERFACE UPDATE: the package is named import_ in Python, not import.
+# MATLAB's package is +import and this port mirrors MATLAB names, but
+# 'import' is a Python KEYWORD: a module of that name is reachable only
+# through importlib, and ndi.fun.probe.import.kilosort would be a syntax
+# error wherever it was written. The trailing underscore is PEP 8's
+# convention for exactly this collision. This is the naming exception
+# AGENTS.md Rule 3 requires to be recorded here rather than taken silently.
+#
+# Unlike +export, this package keeps its MATLAB SHAPE as a package rather
+# than collapsing to one module: +kilosort holds thirteen files and ~2,200
+# lines, and flattening them would make one unreadable module.
+#
+# MATLAB's +kiasort importer under this package is NOT ported; it is blocked
+# on the external kiasort toolbox (Waltham-Data-Science/NDI-python#122).
+# =========================================================================
+
+  - name: import.kilosort
+    type: package
+    matlab_path: "+ndi/+fun/+probe/+import/+kilosort/"
+    matlab_last_sync_hash: "eaec593"
+    python_path: "ndi/fun/probe/import_/kilosort/"
+    decision_log: >
+      Ported in full: all thirteen MATLAB files. The flat namespace MATLAB's
+      package presents is reproduced by the package __init__, so
+      kilosort.probe, kilosort.getInfo and kilosort.binaryinfo all resolve
+      whichever module defines them. MATLAB's one-word function names are the
+      primary Python names (binaryinfo, meanwaveform, removeold, ...), each
+      with a readable snake_case alias bound to the same function
+      (binary_info, mean_waveform, remove_old, ...), the convention
+      ndi.fun.ensemble already uses. Module FILES are snake_case
+      (get_info.py, binary_info.py), as ndi.gui.app.ensemble_maker is for
+      ensembleMaker.m.
+      MATLAB's ndi.util.readNPY has no Python counterpart to port: numpy
+      reads its own format, so numpy.load stands in throughout.
+      Per-function notes:
+      probe -- the importer proper; creates one 'spikes' element per kept
+      cluster with its spike trains as epochs, plus a neuron_extracellular
+      document, and a kilosort_clusters provenance document carrying the MD5
+      of spike_clusters.npy for idempotency. Returns the number of neurons
+      imported, which MATLAB only prints. SEMANTIC PARITY, and the one place
+      a silent error was possible: MATLAB converts a spike's 0-based global
+      offset to a local sample with (offset + 1) because
+      ndi.probe.timeseries.samples2times is 1-BASED there; Python's is
+      documented 0-BASED, so the +1 is deliberately absent -- keeping it
+      would have shifted every stored spike one sample late.
+      session -- sweeps the session's n-trode probes, skipping with a warning
+      any whose kilosort output is missing; returns the total imported.
+      getInfo -- ported with get_info as its alias, returning (info, summary)
+      as MATLAB does. The directory lookup is shared with the importer as
+      kilosort_directory(), so the two cannot disagree.
+      binaryinfo -- locates the raw binary from an explicit path or the NDI
+      export '.metadata' sidecar, and NEVER from params.py dat_path (which
+      for external sorts names Kilosort's whitened temp file); dat_path is
+      parsed and returned for reporting only, as in MATLAB. The sidecar
+      reader replaces vlt.file.loadStructArray with a 'key: value' parser
+      matching what ndi.fun.probe.export_binary writes on this side.
+      promptrawbinary -- MATLAB's uigetfile/questdlg/inputdlg become Qt
+      dialogs, and an 'ask' object may supply the three answers instead,
+      which is how a headless caller or a test drives it. DIVERGENCE,
+      forced: constructing a QApplication with no usable platform plugin
+      ABORTS THE PROCESS (a native abort no except can catch), where
+      MATLAB's uigetfile merely errors under -nodisplay. So the Qt path is
+      attempted only when a display is actually available; without one the
+      prompt reports "cancelled" and the importer falls back to template
+      waveforms, which is what MATLAB's catch does.
+      recalculatemeanwaveforms -- ported including the single streaming pass,
+      the chunk-size derivation from maxChunkBytes, the epoch-seam guard and
+      the evenly spaced maxSpikes subset. MATLAB's cheby1/filtfilt become
+      scipy.signal's; when scipy or a valid cutoff is missing, both languages
+      warn and leave the data unfiltered rather than failing an import. The
+      spike-selection and window helpers (select_spikes, window_offsets,
+      design_highpass) are Python-only and SHARED with the single-cluster
+      function, so what counts as a usable spike cannot drift between them.
+      recalculatemeanwaveform -- the single-cluster form, kept because it
+      states plainly what the batched pass does; a test asserts the two agree
+      spike for spike.
+      labels -- MATLAB's readtable becomes csv with a tab delimiter; labels
+      come back as a list of str rather than a MATLAB string array.
+      waveformdata -- numpy.load replaces ndi.util.readNPY.
+      meanwaveform -- ported, including the amplitude-weighted average over
+      the templates contributing to a merged cluster and the optional
+      un-whitening.
+      neuropixelsmultiplier -- same constants (NP1 0.6/512/500, NP2
+      0.5/8192/80) and the same accepted spellings.
+      readspikeglxmeta -- matlab.lang.makeValidName becomes a small regex; a
+      value that parses whole as a number comes back numeric, as in MATLAB.
+      removeold -- removes the neuron elements and their epoch documents
+      before the neuron documents, then the cluster document itself.
