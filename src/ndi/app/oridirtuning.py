@@ -62,6 +62,17 @@ def _parameters_of(stimulus: Any) -> dict:
     return getattr(stimulus, "parameters", {}) or {}
 
 
+def _column(value: Any) -> list[float]:
+    """A flat list of floats from an independent-variable value.
+
+    MATLAB's vlt.data.colvec on the same field; the values arrive either as a
+    flat list or, for a multivariate curve, as rows.
+    """
+    import numpy as np
+
+    return [float(v) for v in np.asarray(value, dtype=float).ravel()]
+
+
 def _is_blank(parameters: dict) -> bool:
     """MATLAB's rule: a stimulus counts unless it says it is blank.
 
@@ -242,9 +253,37 @@ class ndi_app_oridirtuning(ndi_app, ndi_app_appdoc):
         Returns:
             List of orientation_direction_tuning documents
         """
-        raise NotImplementedError(
-            "The orientation/direction indices come from vlt, where the math is complete and correct, but two import lines stop it running (oridir_vectorindexes reaches its helper as module.function where the package has bound the bare function to that name). Reported as VH-Lab/vhlab-toolbox-python#24. Not worked around here: vendoring a copy of another project's bug would have to be removed again."
+        from ..fun.utils import identifier
+        from ..query import ndi_query
+
+        if self._session is None:
+            raise RuntimeError("calculate_all_oridir_indexes requires a session.")
+
+        element_id = identifier(ndi_element_obj)
+        responses = self._session.database_search(
+            ndi_query("").isa("stimulus_response_scalar")
+            & ndi_query("").depends_on("element_id", element_id)
         )
+
+        oriprops: list[ndi_document] = []
+        for response_doc in responses:
+            if not self.is_oridir_stimulus_response(response_doc):
+                continue
+            # The tuning curves computed from THIS response, for THIS element.
+            tuning_docs = self._session.database_search(
+                ndi_query("").isa("stimulus_tuningcurve")
+                & ndi_query("").depends_on("stimulus_response_scalar_id", identifier(response_doc))
+                & ndi_query("").depends_on("element_id", element_id)
+            )
+            for tuning_doc in tuning_docs:
+                made = self.add_appdoc(
+                    "orientation_direction_tuning",
+                    {"tuning_doc_id": identifier(tuning_doc)},
+                    docexistsaction,
+                    tuning_doc,
+                )
+                oriprops.extend(made)
+        return oriprops
 
     def calculate_oridir_indexes(
         self,
@@ -265,9 +304,179 @@ class ndi_app_oridirtuning(ndi_app, ndi_app_appdoc):
         Returns:
             Orientation/direction tuning document, or None
         """
-        raise NotImplementedError(
-            "The orientation/direction indices come from vlt, where the math is complete and correct, but two import lines stop it running (oridir_fitindexes reaches its helper as module.function where the package has bound the bare function to that name). Reported as VH-Lab/vhlab-toolbox-python#24. Not worked around here: vendoring a copy of another project's bug would have to be removed again."
+        import numpy as np
+        from vhlib.response_stats.neural_response_significance import (
+            neural_response_significance,
         )
+        from vlt.neuro.vision.oridir.index.oridir_fitindexes import oridir_fitindexes
+        from vlt.neuro.vision.oridir.index.oridir_vectorindexes import oridir_vectorindexes
+
+        from ..fun.utils import identifier
+        from ..query import ndi_query
+        from .stimulus.tuning_response import (
+            _mean_magnitude,
+            _nanstd,
+            _nanstderr,
+            _real_or_magnitude,
+            _rows,
+            ndi_app_stimulus_tuning__response,
+        )
+
+        if self._session is None:
+            raise RuntimeError("calculate_oridir_indexes requires a session.")
+
+        response_id = tuning_doc.dependency_value(
+            "stimulus_response_scalar_id", error_if_not_found=False
+        )
+        found = (
+            self._session.database_search(ndi_query("base.id") == response_id)
+            if response_id
+            else []
+        )
+        if not found:
+            raise RuntimeError(
+                "Cannot find the stimulus response document this tuning curve "
+                f"depends on ({response_id!r}); do not know what to do."
+            )
+        stim_response_doc = found[0]
+
+        tuning_doc = ndi_app_stimulus_tuning__response.tuningdoc_fixcellarrays_static(tuning_doc)
+        curve = tuning_doc.document_properties.get("stimulus_tuningcurve", {}) or {}
+
+        individual_real = _rows(curve.get("individual_responses_real", []))
+        individual_imag = _rows(curve.get("individual_responses_imaginary", []))
+        control_real = _rows(curve.get("control_individual_responses_real", []))
+        control_imag = _rows(curve.get("control_individual_responses_imaginary", []))
+
+        raw_individual: list[np.ndarray] = []
+        control_individual: list[np.ndarray] = []
+        response_individual: list[np.ndarray] = []
+        response_mean: list[float] = []
+        response_stddev: list[float] = []
+        response_stderr: list[float] = []
+
+        for i in range(len(individual_real)):
+            values = np.asarray(individual_real[i], dtype=float) + 1j * np.asarray(
+                individual_imag[i], dtype=float
+            )
+            controls = np.asarray(control_real[i], dtype=float) + 1j * np.asarray(
+                control_imag[i], dtype=float
+            )
+            raw_individual.append(_real_or_magnitude(values))
+            control_individual.append(_real_or_magnitude(controls))
+            difference = values - controls
+            response_mean.append(_mean_magnitude(difference))
+            response_stddev.append(_nanstd(difference))
+            response_stderr.append(_nanstderr(difference))
+            response_individual.append(_real_or_magnitude(difference))
+
+        # TWO STRUCTS, NOT ONE. MATLAB builds these separately
+        # (oridirtuning.m:155-165) and they differ in `ind`:
+        #
+        #   significance  gets the RAW individual responses, against the blank
+        #   the indices    get the CONTROL-SUBTRACTED ones
+        #
+        # Asking whether a cell responded at all is a question about what it
+        # did, compared with the blank; asking how sharply it is tuned is a
+        # question about response above baseline. Passing one struct to both
+        # would silently answer one of them wrong.
+        #
+        # ndi.app.stimulus.tuning_response.tuningcurvedoc2vhlabrespstruct is
+        # deliberately NOT used here: MATLAB's version of it returns the raw
+        # individuals while the Python port returns the subtracted ones, so it
+        # matches neither caller cleanly. See the note in the PR.
+        blank = control_individual[0] if control_individual else np.asarray([])
+        significance_p, visual_p = neural_response_significance(
+            {"ind": raw_individual, "blankind": blank}
+        )
+
+        response = {
+            "curve": np.vstack(
+                [
+                    np.asarray(curve.get("independent_variable_value", []), dtype=float).ravel(),
+                    np.asarray(response_mean, dtype=float),
+                    np.asarray(response_stddev, dtype=float),
+                    np.asarray(response_stderr, dtype=float),
+                ]
+            ),
+            "ind": response_individual,
+        }
+        vector_indices = oridir_vectorindexes(response)
+        fit_indices = oridir_fitindexes(response)
+
+        fit_angles, fit_values = np.asarray(fit_indices["fit"], dtype=float)
+        properties = {
+            "coordinates": "compass",
+            "response_units": curve.get("response_units", ""),
+            "response_type": stim_response_doc.document_properties.get(
+                "stimulus_response_scalar", {}
+            ).get("response_type", ""),
+        }
+        oriprops_struct = {
+            "properties": properties,
+            "tuning_curve": {
+                "direction": _column(curve.get("independent_variable_value", [])),
+                "mean": [float(v) for v in response_mean],
+                "stddev": [float(v) for v in response_stddev],
+                "stderr": [float(v) for v in response_stderr],
+                "individual": [list(map(float, r)) for r in response_individual],
+                "raw_individual": [list(map(float, r)) for r in raw_individual],
+                "control_individual": [list(map(float, r)) for r in control_individual],
+            },
+            "significance": {
+                # MATLAB maps these crosswise (oridirtuning.m:206): the
+                # "visual response" p-value is the one that INCLUDES the blank.
+                "visual_response_anova_p": float(visual_p),
+                "across_stimuli_anova_p": float(significance_p),
+            },
+            "vector": {
+                "circular_variance": float(vector_indices["ot_circularvariance"]),
+                "direction_circular_variance": float(vector_indices["dir_circularvariance"]),
+                "Hotelling2Test": float(vector_indices["ot_HotellingT2_p"]),
+                "orientation_preference": float(vector_indices["ot_pref"]),
+                "direction_preference": float(vector_indices["dir_pref"]),
+                "direction_hotelling2test": float(vector_indices["dir_HotellingT2_p"]),
+                "dot_direction_significance": float(vector_indices["dir_dotproduct_sig_p"]),
+            },
+            "fit": {
+                "double_gaussian_parameters": [
+                    float(v) for v in np.asarray(fit_indices["fit_parameters"]).ravel()
+                ],
+                "double_gaussian_fit_angles": [float(v) for v in fit_angles],
+                "double_gaussian_fit_values": [float(v) for v in fit_values],
+                "orientation_preferred_orthogonal_ratio": float(fit_indices["ot_index"]),
+                "direction_preferred_null_ratio": float(fit_indices["dir_index"]),
+                "orientation_preferred_orthogonal_ratio_rectified": float(
+                    fit_indices["ot_index_rectified"]
+                ),
+                "direction_preferred_null_ratio_rectified": float(
+                    fit_indices["dir_index_rectified"]
+                ),
+                # Orientation space is direction space modulo 180: a bar at 30
+                # and a bar at 210 have the same orientation.
+                "orientation_angle_preference": float(fit_indices["dirpref"]) % 180.0,
+                "direction_angle_preference": float(fit_indices["dirpref"]),
+                "hwhh": float(fit_indices["tuning_width"]),
+            },
+        }
+
+        from ..document import ndi_document
+
+        oriprops = ndi_document(
+            "orientation_direction_tuning",
+            orientation_direction_tuning=oriprops_struct,
+        )
+        oriprops = oriprops.set_dependency_value(
+            "element_id",
+            stim_response_doc.dependency_value("element_id", error_if_not_found=False),
+        )
+        oriprops = oriprops.set_dependency_value("stimulus_tuningcurve_id", identifier(tuning_doc))
+
+        if do_add:
+            self._session.database_add(oriprops)
+        if do_plot:
+            self.plot_oridir_response(oriprops)
+        return oriprops
 
     def is_oridir_stimulus_response(self, response_doc: ndi_document) -> bool:
         """
@@ -338,24 +547,58 @@ class ndi_app_oridirtuning(ndi_app, ndi_app_appdoc):
 
         return list(structwhatvaries(included)) == ["angle"]
 
-    def plot_oridir_response(self, oriprops_doc: ndi_document) -> None:
+    def plot_oridir_response(self, oriprops_doc: ndi_document) -> Any:
         """
-        Plot orientation/direction response.
+        Plot the tuning curve and its double-gaussian fit.
 
-        MATLAB equivalent: ndi.app.oridirtuning/plot_oridir_response
+        MATLAB equivalent: ``ndi.app.oridirtuning/plot_oridir_response``
+
+        Draws the measured points with standard-error bars, a dashed zero
+        line, and the fitted curve, into the CURRENT matplotlib axes -- the
+        caller decides whether that is a new figure, a subplot or a GUI
+        canvas, where MATLAB always opens a figure.
+
+        The title differs from MATLAB deliberately. MATLAB re-reads the
+        element document to build "elementstring.type; response_type";
+        doing that here would make plotting hit the database, so the title
+        is the response type alone and the caller can set a richer one.
 
         Args:
-            oriprops_doc: Orientation/direction tuning document
+            oriprops_doc: an ``orientation_direction_tuning`` document.
 
-        Python-specific Notes:
-            Not applicable in Python without GUI. Use matplotlib
-            directly for plotting.
+        Returns:
+            The matplotlib Axes, so a caller can adjust it.
         """
-        raise NotImplementedError(
-            "plot_oridir_response draws an orientation_direction_tuning document, "
-            "which calculate_oridir_indexes cannot yet produce. Blocked behind the "
-            "same VH-Lab/vhlab-toolbox-python#24 as the index methods."
+        import matplotlib.pyplot as plt
+
+        properties = tuning_doc_properties = oriprops_doc.document_properties.get(
+            "orientation_direction_tuning", {}
         )
+        curve = tuning_doc_properties.get("tuning_curve", {})
+        fit = tuning_doc_properties.get("fit", {})
+
+        axes = plt.gca()
+        axes.errorbar(
+            curve.get("direction", []),
+            curve.get("mean", []),
+            yerr=curve.get("stderr", []),
+            color="k",
+            marker="o",
+            linestyle="none",
+        )
+        # The zero line is what makes a suppressed response readable as
+        # suppression rather than as a small response.
+        axes.plot([0, 360], [0, 0], "k--")
+        axes.plot(
+            fit.get("double_gaussian_fit_angles", []),
+            fit.get("double_gaussian_fit_values", []),
+            "k-",
+        )
+        axes.set_xlabel("Direction (\u00b0)")
+        axes.set_ylabel(properties.get("properties", {}).get("response_units", ""))
+        axes.set_title(properties.get("properties", {}).get("response_type", ""))
+        axes.spines[["top", "right"]].set_visible(False)
+        return axes
 
     #: MATLAB's constructor spells the tuning-curve type "tuning_curve" while
     #: the rest of that class uses "stimulus_tuningcurve". Both reach the

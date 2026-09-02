@@ -770,16 +770,27 @@ classes:
           - name: oriprops
             type_python: "list[ndi_document]"
         decision_log: >
-          NOT IMPLEMENTED. Raises NotImplementedError naming its blocker.
-          The indices come from vlt.neuro.vision.oridir.index, where the math
-          is complete and correct -- measured on a synthetic cell tuned to 90
-          degrees, oridir_vectorindexes returns dir_pref 92.3 and
-          oridir_fitindexes returns the double-gaussian fit with dirpref
-          90.6. Two import lines stop it running (the alias names a function
-          rather than the module it is called as), reported as
-          VH-Lab/vhlab-toolbox-python#24. Deliberately not worked around
-          here: vendoring a copy of another project's bug would have to be
-          removed again.
+          Implemented. Finds the element's angle-varying responses, then the
+          tuning curves computed from each, and adds an
+          orientation_direction_tuning appdoc per curve.
+
+          The indices themselves come from vlt.neuro.vision.oridir.index
+          (oridir_vectorindexes, oridir_fitindexes) and the two ANOVA
+          p-values from vhlib.response_stats.neural_response_significance --
+          none of that arithmetic is reimplemented here, mirroring
+          NDI-matlab, which calls both toolboxes directly. Reaching those
+          needed VH-Lab/vhlab-toolbox-python#24 (import bug) and
+          VH-Lab/vhlab-library-python#8 and #10 (the port, and packaging so
+          it can be depended on); all three landed.
+
+          DIVERGENCE WORTH KNOWING: MATLAB builds two response structs
+          (oridirtuning.m:155-165) that differ in `ind` -- the significance
+          test gets the RAW individual responses against the blank, the
+          indices get the control-SUBTRACTED ones. Python does the same. The
+          shared helper tuningcurvedoc2vhlabrespstruct is deliberately NOT
+          used, because MATLAB's version of it returns the raw individuals
+          while the Python port returns the subtracted ones, so it matches
+          neither caller cleanly.
 
       - name: calculate_oridir_indexes
         input_arguments:

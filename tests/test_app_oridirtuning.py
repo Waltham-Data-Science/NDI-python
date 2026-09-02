@@ -245,22 +245,194 @@ class TestAppdocDescription:
             assert field in text
 
 
-class TestTheBlockedMethodsSayWhy:
-    """A NotImplementedError that names its blocker is the difference between
-    "nobody wrote this" and "this is waiting on a known, filed fix"."""
+def _tuned_curve_doc(rng=None):
+    """A direction-selective cell: strong at 90 degrees, weaker null at 270."""
+    import numpy as np
 
-    @pytest.mark.parametrize(
-        "call",
-        [
-            lambda a: a.calculate_all_oridir_indexes(object()),
-            lambda a: a.calculate_oridir_indexes(FakeDoc({}, {})),
-            lambda a: a.plot_oridir_response(FakeDoc({}, {})),
-        ],
+    from ndi.document import ndi_document
+
+    rng = rng or np.random.default_rng(0)
+    directions = [float(d) for d in range(0, 360, 30)]
+    peak = [
+        10 * np.exp(-((d - 90) ** 2) / (2 * 25.0**2))
+        + 4 * np.exp(-((d - 270) ** 2) / (2 * 25.0**2))
+        for d in directions
+    ]
+    doc = ndi_document(
+        "stimulus_tuningcurve",
+        stimulus_tuningcurve={
+            "independent_variable_label": ["direction"],
+            "independent_variable_value": directions,
+            "individual_responses_real": [
+                [float(p + rng.normal(0, 0.4)) for _ in range(5)] for p in peak
+            ],
+            "individual_responses_imaginary": [[0.0] * 5 for _ in directions],
+            "control_individual_responses_real": [
+                [float(rng.normal(0, 0.4)) for _ in range(5)] for _ in directions
+            ],
+            "control_individual_responses_imaginary": [[0.0] * 5 for _ in directions],
+            "response_units": "Spikes/s",
+        },
     )
-    def test_each_points_at_the_toolbox_issue(self, call):
+    return doc.set_dependency_value("stimulus_response_scalar_id", "resp1")
+
+
+def _response_doc():
+    from ndi.document import ndi_document
+
+    doc = ndi_document(
+        "stimulus_response_scalar", stimulus_response_scalar={"response_type": "mean"}
+    )
+    return doc.set_dependency_value("element_id", "elem1")
+
+
+class TestCalculateOridirIndexes:
+    """The index half. Blocked until VH-Lab/vhlab-toolbox-python#24 fixed the
+    vlt imports and VH-Lab/vhlab-library-python#8 ported
+    neural_response_significance; both landed, so this now runs for real."""
+
+    def _app(self):
+        return ndi_app_oridirtuning(FakeSession([_response_doc()]))
+
+    def _properties(self):
+        doc = self._app().calculate_oridir_indexes(_tuned_curve_doc(), do_add=False)
+        return doc.document_properties["orientation_direction_tuning"]
+
+    def test_it_recovers_the_preferred_direction(self):
+        """The end-to-end assertion that matters: a cell built to prefer 90
+        degrees is reported as preferring roughly 90, by both routes."""
+        p = self._properties()
+        assert p["vector"]["direction_preference"] == pytest.approx(90, abs=15)
+        assert p["fit"]["direction_angle_preference"] == pytest.approx(90, abs=15)
+
+    def test_orientation_preference_is_direction_preference_modulo_180(self):
+        """A bar at 30 and a bar at 210 have the same orientation."""
+        p = self._properties()
+        assert p["fit"]["orientation_angle_preference"] == pytest.approx(
+            p["fit"]["direction_angle_preference"] % 180.0
+        )
+
+    def test_a_tuned_cell_is_significant_on_both_anovas(self):
+        p = self._properties()
+        assert p["significance"]["across_stimuli_anova_p"] < 0.01
+        assert p["significance"]["visual_response_anova_p"] < 0.01
+
+    def test_the_fit_is_returned_as_a_curve_a_caller_can_plot(self):
+        p = self._properties()
+        angles = p["fit"]["double_gaussian_fit_angles"]
+        values = p["fit"]["double_gaussian_fit_values"]
+        assert len(angles) == len(values) == 360
+
+    def test_the_tuning_curve_keeps_raw_and_subtracted_responses_apart(self):
+        """Both are stored, because they answer different questions."""
+        p = self._properties()
+        curve = p["tuning_curve"]
+        assert len(curve["individual"]) == len(curve["raw_individual"])
+        assert curve["individual"] != curve["raw_individual"]
+
+    def test_it_depends_on_the_element_and_the_tuning_curve(self):
+        doc = self._app().calculate_oridir_indexes(_tuned_curve_doc(), do_add=False)
+        assert doc.dependency_value("element_id", error_if_not_found=False) == "elem1"
+        assert doc.dependency_value("stimulus_tuningcurve_id", error_if_not_found=False)
+
+    def test_do_add_false_leaves_the_database_alone(self):
+        session = FakeSession([_response_doc()])
+        ndi_app_oridirtuning(session).calculate_oridir_indexes(_tuned_curve_doc(), do_add=False)
+        assert session.added == []
+
+    def test_do_add_true_stores_the_document(self):
+        session = FakeSession([_response_doc()])
+        ndi_app_oridirtuning(session).calculate_oridir_indexes(_tuned_curve_doc(), do_add=True)
+        assert len(session.added) == 1
+
+    def test_a_missing_response_document_raises(self):
+        """MATLAB errors here too. A tuning curve whose response document is
+        gone is a broken database, not a cell with no tuning."""
         app = ndi_app_oridirtuning(FakeSession([]))
-        with pytest.raises(NotImplementedError, match="vhlab-toolbox-python#24"):
-            call(app)
+        with pytest.raises(RuntimeError, match="Cannot find the stimulus response"):
+            app.calculate_oridir_indexes(_tuned_curve_doc(), do_add=False)
+
+    def test_without_a_session_it_raises(self):
+        with pytest.raises(RuntimeError, match="requires a session"):
+            ndi_app_oridirtuning(None).calculate_oridir_indexes(_tuned_curve_doc())
+
+
+class TestSignificanceUsesRawResponsesNotSubtracted:
+    """MATLAB builds TWO structs (oridirtuning.m:155-165) and they differ in
+    `ind`: the significance test gets the RAW individual responses against the
+    blank, while the indices get the control-SUBTRACTED ones.
+
+    That distinction is invisible in the output unless you look for it, and
+    passing one struct to both would silently answer one question wrong. This
+    pins that the two are not interchangeable.
+    """
+
+    def test_the_two_structs_give_different_answers(self):
+        import numpy as np
+        from vhlib.response_stats.neural_response_significance import (
+            neural_response_significance,
+        )
+
+        rng = np.random.default_rng(1)
+        raw = [np.asarray([5.0 + rng.normal(0, 0.3) for _ in range(5)]) for _ in range(4)]
+        control = [np.asarray([4.0 + rng.normal(0, 0.3) for _ in range(5)]) for _ in range(4)]
+        subtracted = [r - c for r, c in zip(raw, control)]
+        blank = control[0]
+
+        raw_p = neural_response_significance({"ind": raw, "blankind": blank})
+        sub_p = neural_response_significance({"ind": subtracted, "blankind": blank})
+        assert raw_p != sub_p, "if these agree the fixture is too weak to prove the structs differ"
+
+    def test_the_app_passes_the_raw_ones(self):
+        """A flat cell whose RAW responses sit well above its blank is
+        visually responsive even though it is not tuned. Subtracting first
+        would hide that, so this is the case that distinguishes them."""
+        import numpy as np
+
+        from ndi.document import ndi_document
+
+        directions = [float(d) for d in range(0, 360, 90)]
+        rng = np.random.default_rng(2)
+        doc = ndi_document(
+            "stimulus_tuningcurve",
+            stimulus_tuningcurve={
+                "independent_variable_label": ["direction"],
+                "independent_variable_value": directions,
+                "individual_responses_real": [
+                    [float(8 + rng.normal(0, 0.2)) for _ in range(5)] for _ in directions
+                ],
+                "individual_responses_imaginary": [[0.0] * 5 for _ in directions],
+                "control_individual_responses_real": [
+                    [float(rng.normal(0, 0.2)) for _ in range(5)] for _ in directions
+                ],
+                "control_individual_responses_imaginary": [[0.0] * 5 for _ in directions],
+                "response_units": "Spikes/s",
+            },
+        ).set_dependency_value("stimulus_response_scalar_id", "resp1")
+
+        app = ndi_app_oridirtuning(FakeSession([_response_doc()]))
+        p = app.calculate_oridir_indexes(doc, do_add=False).document_properties[
+            "orientation_direction_tuning"
+        ]
+        # Responds to everything, equally: strongly visual, not tuned.
+        assert p["significance"]["visual_response_anova_p"] < 0.01
+        assert p["significance"]["across_stimuli_anova_p"] > 0.01
+
+
+class TestPlotOridirResponse:
+    def test_it_draws_the_points_the_zero_line_and_the_fit(self):
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        app = ndi_app_oridirtuning(FakeSession([_response_doc()]))
+        doc = app.calculate_oridir_indexes(_tuned_curve_doc(), do_add=False)
+        plt.figure()
+        axes = app.plot_oridir_response(doc)
+        assert axes.get_ylabel() == "Spikes/s"
+        assert len(axes.lines) >= 2  # zero line and fit
+        plt.close("all")
 
 
 if __name__ == "__main__":

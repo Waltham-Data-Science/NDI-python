@@ -533,9 +533,13 @@ class TestOriDirTuning:
         with pytest.raises(RuntimeError, match="requires a session"):
             app.calculate_all_tuning_curves(SimpleNamespace())
 
-    def test_calculate_oridir_indexes_raises(self):
+    def test_calculate_all_oridir_indexes_requires_a_session(self):
+        """Was: asserted NotImplementedError. Both index methods are
+        implemented now that VH-Lab/vhlab-toolbox-python#24 and
+        VH-Lab/vhlab-library-python#8 landed, so the no-session case is what
+        distinguishes a missing session from an untuned cell."""
         app = ndi_app_oridirtuning()
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(RuntimeError, match="requires a session"):
             app.calculate_all_oridir_indexes(SimpleNamespace())
 
     def test_is_oridir_stimulus_response_needs_a_session(self):
