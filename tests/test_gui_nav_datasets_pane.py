@@ -177,14 +177,18 @@ class TestSessionApps:
 
     def test_ndis_own_apps_are_discovered_with_no_help_from_the_pane(self):
         """The proof that the mechanism works from the app's side: the pane
-        knows nothing about either app, and offers both because
+        knows nothing about any of these, and offers them because
         SessionApp.list found them in ndi.gui.app. The rest of MATLAB's
         eleven land the same way, as does any package a user names in
         GUI.Navigator.SessionAppPackages.
         """
-        found = {app["Label"]: app["Category"] for app in session_apps()}
-        assert "Electrode Data Export" in found
-        assert found["Stimulus Response"] == "Stimulus"
+        offered = [(app["Label"], app["Category"]) for app in session_apps()]
+        labels = [label for label, _ in offered]
+        assert "Electrode Data Export" in labels
+        assert "spikeSorterImporter" in labels
+        # and the categorised ones, which the menu groups into submenus
+        assert ("Ensemble Maker", "Ensembles") in offered
+        assert ("Stimulus Response", "Stimulus") in offered
 
     def test_a_discovered_app_launches_the_class_it_named(self, monkeypatch):
         """Label to launch: the record's Launch opens the class discovery
@@ -519,9 +523,12 @@ class TestMenusAreBuilt:
 
     def test_the_apps_menu_is_present_even_with_no_apps_to_offer(self, monkeypatch):
         """Empty says 'no apps found'. Omitting it would say 'sessions have
-        no apps', which is false. NDI now ships two, so discovery is stubbed
-        out here to get back to the empty case -- which a user still reaches
-        by breaking their own app package."""
+        no apps', which is false.
+
+        Discovery is stubbed out rather than relied on to find nothing: NDI
+        now ships apps of its own, and this is a claim about the menu, not
+        about how many apps exist.
+        """
         _qt_or_skip()
         monkeypatch.setattr("ndi.gui.nav.datasets_pane.session_apps", list)
         nav, pane = _built_pane()

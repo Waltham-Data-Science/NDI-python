@@ -476,6 +476,316 @@ classes:
   # The apps that adopt the interface
   # -----------------------------------------------------------------------
 
+  - name: ensembleMaker
+    type: class
+    matlab_path: "+ndi/+gui/+app/ensembleMaker.m"
+    matlab_last_sync_hash: "eaec593"
+    python_path: "ndi/gui/app/ensemble_maker.py"
+    python_class: "ensembleMaker"
+    inherits: "ndi.gui.app.sessionApp"
+
+    decision_log: >
+      The CLASS NAME is MATLAB's exactly, as the porting guide requires of a
+      class mirroring a .m file, and so are the Name and Category constants:
+      they are the text of the Apps menu, so a "Pythonized" label would be a
+      user-visible divergence. The METHODS are snake_case, which is the house
+      style and what every module ported for the navigator uses. No caller
+      wants MATLAB's spelling of a private method of a GUI app, so no
+      camelCase alias is carried and the class needs no entry in
+      tests/test_matlab_name_aliases.py.
+
+    properties:
+      - name: Name
+        type_matlab: "string (Constant)"
+        type_python: "ClassVar[str]"
+        value: "Ensemble Maker"
+      - name: Category
+        type_matlab: "string (Constant)"
+        type_python: "ClassVar[str]"
+        value: "Ensembles"
+      - name: session
+        type_matlab: "ndi.session (private)"
+        type_python: "Any"
+      - name: fig
+        python_name: figure
+        type_matlab: "uifigure (private)"
+        type_python: "QtWidgets.QWidget | None"
+        decision_log: >
+          Named figure here, as ndi.gui.profile_editor names its window, so
+          the two ported windows answer to the same attribute.
+      - name: "probeList, epochDropdown, plotButton, rebuildCheckbox, makeButton"
+        python_name: "probe_list, epoch_dropdown, plot_button, rebuild_checkbox, make_button"
+        type_matlab: "uilistbox / uidropdown / uibutton / uicheckbox (private)"
+        type_python: "Qt widgets, None until build() runs"
+      - name: "probes, haveEnsemble, ensembleMap, waitDlg"
+        python_name: "probes, have_ensemble, ensemble_map, wait_dialog"
+        type_matlab: "cell / cell / containers.Map / uiprogressdlg (private)"
+        type_python: "list / list[str] / dict[str, Any] / QProgressDialog | None"
+      - name: "(none)"
+        python_name: "items, selection, epoch_items, epoch, rebuild, make_enabled, plot_enabled, epoch_enabled, last_alert"
+        type_python: "list[str] / list[int] / list[str] / str / bool / bool / bool / bool / tuple[str, str] | None"
+        decision_log: >
+          NEW in Python. MATLAB keeps this state IN the widgets -- the
+          listbox's ItemsData is the probe index, the dropdown's Value is the
+          epoch, and an alert leaves no trace. Here the state lives on the
+          object and the widgets mirror it, so every decision the app makes is
+          checkable with no display attached and a build failure costs the
+          window rather than the class (build=False constructs the model
+          alone). selection holds 0-BASED Qt rows where MATLAB's ItemsData
+          holds 1:n: they index a Python list and are never shown, so they are
+          internal data access rather than a user-facing count.
+
+    methods:
+      - name: ensembleMaker
+        kind: constructor
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session (1,1)"
+            type_python: "Any"
+          - name: position
+            type_python: "tuple[float, float, float, float]"
+            default: "DEFAULT_POSITION (100, 100, 560, 500)"
+          - name: build
+            type_python: "bool"
+            default: "True"
+        decision_log: >
+          Ported. Builds the window, then loads the probes under the wait
+          dialog. build=False is Python-only and builds the model without Qt.
+          MATLAB's arguments block validates the session class; Python does
+          not, following the rest of ndi.gui, which takes the session as
+          given (nothing in the package uses pydantic).
+      - name: build
+        kind: private
+        decision_log: >
+          Ported to PySide6: MATLAB's uigridlayout rows become a QVBoxLayout
+          with two QHBoxLayout rows, and the NDI Cloud palette is applied
+          through style sheets. Same widgets, same order, same labels.
+      - name: sessionPath
+        python_name: session_path
+        kind: private
+        decision_log: >
+          Ported, as both a module function and a method. Best-effort in both
+          languages: getpath() first, then a path property, then "" -- a
+          session need not be on disk, and a header line is not worth an
+          exception.
+      - name: reloadProbes
+        python_name: reload_probes
+        kind: private
+        output_arguments:
+          - name: items
+            type_python: "list[str]"
+        decision_log: >
+          Ported, including the preserved selection and MATLAB's tolerance of
+          a session that cannot list probes (empty list, not an error).
+          Returns the labels, which MATLAB has no need to since its listbox
+          holds them.
+      - name: buildEnsembleMap
+        python_name: build_ensemble_map
+        kind: private
+        decision_log: >
+          Ported as a method delegating to the module function ensemble_map.
+          DIVERGENCE, deliberate: MATLAB walks each 'ensemble' map document
+          back to its element with ndi.database.fun.ndi_document2ndi_object.
+          The Python function of that name maps the stored class to a
+          constructor that builds a BRAND NEW element from its name,
+          reference and type -- fresh id, no underlying element -- so the walk
+          back to the probe would find nothing (the trap
+          ndi.fun.ensemble_db._element_from_document documents). Python
+          constructs ndi.element.ensemble from the document instead, the load
+          form that restores the id and the underlying element, which is what
+          MATLAB's helper achieves there.
+      - name: selectedProbes
+        python_name: selected_probes
+        kind: private
+      - name: singlePlottableProbe
+        python_name: single_plottable_probe
+        kind: private
+        output_arguments:
+          - name: "[probe, ens]"
+            type_python: "tuple[Any, Any] -- (None, None) when there is not exactly one"
+      - name: onSelectionChanged
+        python_name: on_selection_changed
+        kind: private
+      - name: updateButtonState
+        python_name: update_button_state
+        kind: private
+      - name: updateEpochChoices
+        python_name: update_epoch_choices
+        kind: private
+        decision_log: >
+          Ported, including keeping the previously chosen epoch when it is
+          still on offer. The list of epochs itself is the module function
+          epoch_choices, so what the dropdown offers is checkable on its own.
+      - name: makeEnsembles
+        python_name: make_ensembles
+        kind: private
+        output_arguments:
+          - name: errors
+            type_python: "list[str] -- one 'probe: reason' line per failure"
+        decision_log: >
+          Ported. Calls ndi.fun.ensemble.all_element per selected probe with
+          IfExists 'skip' or 'replace' from the checkbox, collecting failures
+          rather than stopping. Returns the failure lines, which MATLAB only
+          shows; the progress dialog is closed on every path, as MATLAB's
+          onCleanup does.
+      - name: finishMake
+        python_name: finish_make
+        kind: private
+      - name: plotEnsemble
+        python_name: plot_ensemble
+        kind: private
+      - name: doPlot
+        python_name: do_plot
+        kind: private
+      - name: "(part of doPlot)"
+        python_name: draw_raster
+        kind: private
+        decision_log: >
+          NEW in Python, splitting the drawing out of do_plot. MATLAB must
+          create the figure, create the axes and make them CURRENT before
+          calling ndi.fun.ensemble.plot, which draws into whatever is current;
+          the Python function takes the axes as an argument, so the figure is
+          built and handed over -- same picture, no global state in between.
+      - name: withWait
+        python_name: with_wait
+        kind: private
+        decision_log: >
+          Ported, nestable as MATLAB's is. Returns what the callable returns,
+          which MATLAB discards -- that is what lets plot_ensemble hand back
+          its figure.
+      - name: clearWait
+        python_name: clear_wait
+        kind: private
+      - name: "(none)"
+        python_name: "set_selection, set_epoch, set_rebuild, alert, show, close"
+        decision_log: >
+          NEW in Python. The setters are how a caller without a display says
+          what the user would have clicked; alert records what it said in
+          last_alert (MATLAB's uialert leaves no trace) and shows a box only
+          when there is a window; show and close mirror the figure's
+          lifecycle, and close also drops the rasters the app opened.
+
+  - name: spikeSorterImporter
+    type: class
+    matlab_path: "+ndi/+gui/+app/spikeSorterImporter.m"
+    matlab_last_sync_hash: "eaec593"
+    python_path: "ndi/gui/app/spike_sorter_importer.py"
+    python_class: "spikeSorterImporter"
+    inherits: "ndi.gui.app.sessionApp"
+
+    decision_log: >
+      The class NAME is MATLAB's exactly, as is the Name constant -- which is
+      also the menu label, and which MATLAB spells in camelCase
+      ("spikeSorterImporter") rather than as a phrase. MATLAB declares no
+      Category, so the app sits at the Apps menu's top level; Python inherits
+      the "" default rather than declaring one. Methods are snake_case, so
+      the class needs no entry in tests/test_matlab_name_aliases.py.
+      WHY THIS APP MATTERS BEYOND ITS OWN WINDOW: it is the only route by
+      which spiking neurons enter a Python NDI session
+      (ndi.app.spikesorter.clusters2neurons still raises
+      NotImplementedError), and the 'spikes' elements it creates are what
+      ndi.fun.ensemble reads -- so it is what gives ndi.gui.app.ensembleMaker
+      something to build an ensemble from.
+
+    properties:
+      - name: Name
+        type_matlab: "string (Constant)"
+        type_python: "ClassVar[str]"
+        value: "spikeSorterImporter"
+      - name: "session, fig"
+        python_name: "session, figure"
+        type_python: "Any"
+      - name: "probeDropdown, sessionList, pipelineList, tagList, overwriteCheckbox, recalcCheckbox, waveformT0Field, waveformT1Field, pipelineSelector, filterCheckbox, binaryStatusLabel"
+        python_name: "probe_dropdown, session_list, pipeline_list, tag_list, overwrite_checkbox, recalc_checkbox, waveform_t0_field, waveform_t1_field, pipeline_selector, filter_checkbox, binary_status_label"
+        type_matlab: "uidropdown / uilistbox / uicheckbox / uieditfield / uilabel"
+        type_python: "Qt widgets, None until build() runs"
+      - name: "probes, sessionEntries, pipelineInfo, waitDlg"
+        python_name: "probes, session_entries, pipeline_info, wait_dialog"
+        type_python: "list / list[dict] / dict | None / QProgressDialog | None"
+      - name: "(none)"
+        python_name: "probe_items, probe_index, session_items, session_selection, pipeline_items, pipeline_error, tags, selected_tags, pipeline, filter_by_pipeline, overwrite, recalculate, waveform_t0_ms, waveform_t1_ms, binary_status, last_alert, auto_confirm"
+        decision_log: >
+          NEW in Python, the same model/widget split ensembleMaker documents:
+          MATLAB keeps this state in the widgets (ItemsData, Value), here the
+          widgets mirror attributes, so every decision is checkable with no
+          display and build=False constructs the model alone. Selection
+          indices are 0-BASED Qt rows where MATLAB's ItemsData is 1:n -- they
+          index a Python list and are never shown, so they are internal data
+          access rather than a user-facing count. auto_confirm is Python-only
+          and answers confirm() for a caller with no display; with neither a
+          window nor auto_confirm a destructive action does NOT proceed.
+
+    methods:
+      - name: spikeSorterImporter
+        kind: constructor
+        decision_log: >
+          Ported. Builds the window, then loads the probes under the wait
+          dialog. position and build are Python-only, as in ensembleMaker.
+      - name: buildUI
+        python_name: build
+        decision_log: >
+          Ported to PySide6: the 4-row uigridlayout becomes a QVBoxLayout
+          whose last row is a three-column QHBoxLayout. Same widgets, same
+          labels, same tooltips. Named build() to match the other ported
+          windows rather than MATLAB's buildUI.
+      - name: "sessionPath"
+        python_name: _session_path
+        decision_log: >
+          Ported by DELEGATION to ndi.gui.app.ensemble_maker.session_path,
+          which is the same best-effort getpath/path lookup MATLAB duplicates
+          in both apps. One implementation, so the two windows cannot
+          disagree about a session's path.
+      - name: "selectedProbe, reloadProbes, onProbeChanged, reloadProbeData, reloadSessionNeurons, reloadPipeline, clearSessionList, clearPipelineList"
+        python_name: "selected_probe, reload_probes, on_probe_changed, reload_probe_data, reload_session_neurons, reload_pipeline, clear_session_list, clear_pipeline_list"
+        decision_log: >
+          Ported. reload_pipeline reports a missing sort in the pane, as
+          MATLAB does, rather than raising: no Kilosort output is the common
+          case for a probe that has not been sorted.
+      - name: onImport
+        python_name: on_import
+        output_arguments:
+          - name: imported
+            type_python: "int (number of neurons imported; 0 when it did not run)"
+        decision_log: >
+          Ported, including the confirmation, the ms-to-seconds window
+          conversion, the orphaned-marker cleanup before importing, and the
+          alert on failure. Returns the count, which MATLAB does not.
+      - name: onDelete
+        python_name: on_delete
+        decision_log: >
+          Ported. Deletes the selected neurons' element documents (the
+          removal cascades to their epoch and neuron_extracellular
+          documents), then clears any now-orphaned kilosort_clusters
+          document. Returns how many were removed.
+      - name: cleanupOrphanClusters
+        python_name: cleanup_orphan_clusters
+        decision_log: >
+          Ported. Removes a kilosort_clusters document only when no
+          neuron_extracellular still depends on it -- which is what lets the
+          same sort be imported again after every neuron is deleted, and why
+          a PARTIAL delete still reports "already imported".
+      - name: "qualityValuesFor, pipelineKey, updateBinaryStatus"
+        python_name: "quality_values_for, pipeline_key, binary_status_text"
+        decision_log: >
+          Ported as module-level functions rather than methods: they are pure,
+          so what the app computes is checkable without a window.
+          binary_status_text returns (text, tooltip) for the caller to apply,
+          where MATLAB's updateBinaryStatus sets the label directly.
+      - name: "withWait, clearWait"
+        python_name: "with_wait, clear_wait"
+        decision_log: >
+          Ported, nestable as MATLAB's is, and returning what the callable
+          returns so on_import can hand back its count.
+      - name: "(none)"
+        python_name: "session_neuron_items, pipeline_items, tag_defaults, import_confirm_message, delete_confirm_message, set_probe, set_tags, set_session_selection, set_overwrite, set_recalculate, set_filter_by_pipeline, set_window_ms, kilosort_version, alert, confirm, show, close"
+        decision_log: >
+          NEW in Python. The item builders and message builders are the pane
+          contents and the confirmation text, lifted out so both are testable
+          without a display; the setters are how a caller without one says
+          what the user would have clicked; alert records what it said in
+          last_alert; confirm is the single gate every destructive action
+          passes through.
+
   - name: stimulusResponse
     type: class
     matlab_path: "+ndi/+gui/+app/stimulusResponse.m"
@@ -498,11 +808,12 @@ classes:
       what lets the run path -- which elements are computed and which
       documents are deleted -- be exercised with no display attached.
 
-      DEPENDENCY, unported: ndi.app.stimulus.tuning_response.stimulus_responses
-      raises NotImplementedError in this port (it is the framework, not the
-      signal processing). The app calls it per element and counts the failure,
-      as MATLAB does for any failing element, and its summary names the
-      unported computation rather than reporting a bare "0 computed".
+      DEPENDENCY: ndi.app.stimulus.tuning_response.stimulus_responses, ported
+      alongside this app in the same change. An element can still reach some
+      OTHER unported step (a reader for a format nobody has written yet, say);
+      a NotImplementedError from any depth is counted as that element's
+      failure, as MATLAB counts any failure, and the summary says the failures
+      were an unported step rather than leaving a bare "0 computed".
 
     properties:
       - name: Name
@@ -657,10 +968,10 @@ classes:
           what a user watches in both languages.
 
   # -----------------------------------------------------------------------
-  # NOT YET PORTED: the rest of MATLAB's eleven
+  # NOT YET PORTED: the other apps that adopt the interface
   # -----------------------------------------------------------------------
-  #   ElectrodeMap, ensembleMaker, katzExporter, kiasort, pipelineEditor,
-  #   pyraview, spikeSorterImporter, vhNDISpikeSorter
+  #   ElectrodeMap, katzExporter, kiasort, pipelineEditor, pyraview,
+  #   vhNDISpikeSorter
   #
   # Three are blocked on subsystems outside this repo (ndi.cpipeline for the
   # pipeline editor, the sorters' own toolboxes for kiasort and
@@ -709,6 +1020,68 @@ functions:
     python_path: "ndi/gui/app/session_app.py"
     decision_log: "Python only. MATLAB's unique(..., 'stable')."
 
+  # --- ndi/gui/app/ensemble_maker.py -------------------------------------
+  # What the Ensemble Maker's window SHOWS, lifted out of the class so it can
+  # be checked without one. MATLAB computes each of these inline in the
+  # method that draws it.
+
+  - name: probe_items
+    type: function
+    python_path: "ndi/gui/app/ensemble_maker.py"
+    decision_log: >
+      Python only. The list labels: one per probe, "* "-marked when the probe
+      already has an ensemble, padded so the names line up. MATLAB builds
+      these inline in reloadProbes.
+
+  - name: ensemble_map
+    type: function
+    python_path: "ndi/gui/app/ensemble_maker.py"
+    decision_log: >
+      Python only as a free function; MATLAB's buildEnsembleMap method. Probe
+      element id -> its ndi.element.ensemble, found through the 'ensemble' MAP
+      documents (which exist only once an epoch is built) and walked back to
+      the underlying probe. See the method entry above for why the walk is
+      not ndi_document2ndi_object.
+
+  - name: epoch_choices
+    type: function
+    python_path: "ndi/gui/app/ensemble_maker.py"
+    decision_log: >
+      Python only. The epoch dropdown's entries and whether it is usable.
+      Accepts both epochtable shapes: Python's returns (table, hashvalue),
+      MATLAB's the table alone.
+
+  - name: session_path
+    type: function
+    python_path: "ndi/gui/app/ensemble_maker.py"
+    decision_log: "Python only as a free function; MATLAB's sessionPath method."
+
+  - name: number_of_neurons
+    type: function
+    python_path: "ndi/gui/app/ensemble_maker.py"
+    decision_log: >
+      Python only. Rows of an ensemble's activity matrix, dense or sparse --
+      MATLAB's size(E.activity, 1).
+
+  - name: if_exists_for
+    type: function
+    python_path: "ndi/gui/app/ensemble_maker.py"
+    decision_log: >
+      Python only. The Rebuild checkbox's state as all_element's if_exists:
+      'replace' when ticked, 'skip' when not.
+
+  - name: "built_message, failures_message, empty_ensemble_message, raster_title"
+    type: function
+    python_path: "ndi/gui/app/ensemble_maker.py"
+    decision_log: >
+      Python only. The text of the app's alerts and its raster title, as
+      MATLAB sprintf's them inline. Free functions so what the user is told is
+      checkable without a display.
+
+  # --- ndi/gui/app/stimulus_response.py ---------------------------------
+  # What the Stimulus Response window SHOWS and DECIDES, lifted out of the
+  # class so both can be checked with no display attached.
+
   - name: probe_labels
     type: function
     python_path: "ndi/gui/app/stimulus_response.py"
@@ -730,10 +1103,12 @@ functions:
     type: function
     python_path: "ndi/gui/app/stimulus_response.py"
     decision_log: >
-      MATLAB's two closing sentences, plus a third naming the unported
-      computation when the failures were NotImplementedError. MATLAB points a
-      user at the command window; in this port that window would only repeat
-      NotImplementedError, so the reason is said in the dialog instead.
+      MATLAB's two closing sentences, plus a third when the failures were
+      NotImplementedError rather than the data. MATLAB points a user at the
+      command window; in this port that window would only repeat
+      NotImplementedError, so the reason is said in the dialog instead. The
+      third sentence does NOT name a particular unported function: which step
+      raised is not known here, and stimulus_responses itself is ported.
 
   - name: make_progress_bar / update_progress_bar / close_progress_bar
     type: function

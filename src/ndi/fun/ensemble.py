@@ -3,22 +3,22 @@ ndi.fun.ensemble - Operations on spiking-neuron ensembles.
 
 MATLAB equivalent: +ndi/+fun/+ensemble/
 
-Currently provides :func:`filter`, the one function of the MATLAB package that
-is a pure in-memory operation on an ensemble structure.
+The whole MATLAB package is ported. :func:`filter` is defined here, being the
+one function that is a pure in-memory operation on an ensemble structure; the
+other eight need a session and live in ``ensemble_db.py``, re-exported at the
+bottom of this module so callers see the single flat namespace MATLAB's
+``+ensemble`` presents.
 
-The other eight are **not** ported yet, and most of them cannot be. They go
-through ``ndi.element.ensemble``, which does not exist on this side, and that
-class in turn needs the element-timeseries binary store to round-trip
-irregular timestamps. It does not: ``ndi_element_timeseries._store_timeseries_data``
-writes only ``datapoints.tobytes()`` and drops the timepoints, and the read
-path reconstructs times as ``arange(len(data)) / samplerate``. That is fine for
-a regularly sampled series and wrong for a marked point process, which is
-exactly what an ensemble epoch stores -- the spike times *are* the data and are
-not on a grid. Building ``spikeMatrix`` on top of it would return silently
-wrong spike times.
-
-``filter`` has no such dependency: it takes the structure ``read`` returns and
-subsets it.
+THE BLOCKER THAT USED TO BE HERE IS GONE, and this note is kept because its
+absence is easy to re-doubt. Everything below ``filter`` rests on
+``ndi.element.ensemble``, which rests in turn on the element-timeseries binary
+store round-tripping IRREGULAR timestamps -- an ensemble epoch is a marked
+point process, where the spike times are the data and are not on a grid. An
+earlier store wrote ``datapoints.tobytes()`` alone and reconstructed times as
+``arange(len(data)) / samplerate``, which is right for a regularly sampled
+trace and silently wrong for spikes. It now writes VHSB, which carries a
+timestamp per sample (see the ``ndi.element_timeseries`` module docstring), so
+``spike_matrix`` returns the times that were stored.
 
 The ensemble structure
 ----------------------

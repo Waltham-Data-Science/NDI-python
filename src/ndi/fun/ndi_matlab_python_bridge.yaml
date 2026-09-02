@@ -722,6 +722,35 @@ functions:
   # MATLAB: +ndi/+fun/+file/*.m
   # =========================================================================
 
+  - name: elementDirectory
+    type: function
+    matlab_path: "+ndi/+fun/+file/elementDirectory.m"
+    matlab_last_sync_hash: "eaec593"
+    python_path: "ndi/fun/file.py"
+    python_name: elementDirectory
+    input_arguments:
+      - name: parentDir
+        type_matlab: "char | string"
+        type_python: "str | Path"
+      - name: element
+        type_matlab: "ndi.element | ndi.probe | char"
+        type_python: "Any (an object answering elementstring(), or the string)"
+    output_arguments:
+      - name: dirPath
+        type_python: "str"
+      - name: dirName
+        type_python: "str"
+      - name: isLegacy
+        type_python: "bool"
+    decision_log: >
+      Ported, with element_directory as its snake_case alias. Prefers the
+      platform-independent name from elementDirectoryName, falling back to
+      the legacy '|'-separated folder when only that one exists, so data
+      written by earlier versions of NDI is still found; when neither exists
+      the NEW name is returned, so a caller that creates the folder creates
+      it under the current name. ndi.fun.probe.import_.kilosort locates every
+      sort through this.
+
   - name: MD5
     type: function
     matlab_path: "+ndi/+fun/+file/MD5.m"

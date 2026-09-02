@@ -191,6 +191,39 @@ def pathSafeName(name: str) -> str:  # noqa: N802 (MATLAB mirror)
     return s
 
 
+def elementDirectory(  # noqa: N802 (MATLAB mirror)
+    parent_dir: str | Path, element: Any
+) -> tuple[str, str, bool]:
+    """The per-element working folder inside PARENT_DIR, with legacy fallback.
+
+    Returns ``(dir_path, dir_name, is_legacy)``.
+
+    *element* may be an object answering ``elementstring()`` or the element
+    string itself. The current, platform-independent name from
+    :func:`elementDirectoryName` is preferred; when no folder by that name
+    exists but one by the legacy ``|``-separated name does, the legacy folder
+    is returned instead, so data written by earlier versions of NDI is still
+    found. When neither exists the NEW name is returned, so a caller that
+    creates the folder creates it under the current name.
+
+    MATLAB equivalent: ``ndi.fun.file.elementDirectory``.
+    """
+    parent = Path(parent_dir)
+    dir_name, legacy_dir_name = elementDirectoryName(element)
+    is_legacy = False
+
+    if dir_name != legacy_dir_name:
+        if not (parent / dir_name).is_dir() and (parent / legacy_dir_name).is_dir():
+            dir_name = legacy_dir_name
+            is_legacy = True
+
+    return str(parent / dir_name), dir_name, is_legacy
+
+
+#: snake_case alias, as elsewhere in this module.
+element_directory = elementDirectory
+
+
 def elementDirectoryName(element: Any) -> tuple[str, str]:  # noqa: N802 (MATLAB mirror)
     """The folder name NDI uses for an element or probe.
 

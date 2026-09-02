@@ -106,8 +106,8 @@ NO_STIMULATORS = "(no stimulator probes)"
 #: Appended when the failures were the unported computation rather than the
 #: data. See the module docstring.
 UNPORTED_NOTE = (
-    " The response computation itself (ndi.app.stimulus.tuning_response."
-    "stimulus_responses) is not ported yet, so no responses could be computed."
+    " Those failures were a step that is not ported yet, not the data:"
+    " something the computation reached raised NotImplementedError."
 )
 
 
