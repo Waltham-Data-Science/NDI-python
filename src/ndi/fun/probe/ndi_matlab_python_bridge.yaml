@@ -11,6 +11,33 @@ project_metadata:
 # =========================================================================
 functions:
 
+  - name: channelCount
+    type: function
+    matlab_path: "+ndi/+fun/+probe/channelCount.m"
+    matlab_last_sync_hash: "0e2caa0"
+    python_path: "ndi/fun/probe/channel_count.py"
+    input_arguments:
+      - name: probe
+        type_matlab: "ndi.probe or ndi.element"
+        type_python: "Any"
+      - name: epoch
+        type_matlab: "epoch number or epoch_id ([])"
+        type_python: "Any"
+        default: "None (the probe's first epoch)"
+    output_arguments:
+      - name: nchan
+        type_matlab: "double ([] if unknown)"
+        type_python: "int | None"
+    decision_log: >
+      Ported. MATLAB reads the fifth output of getchanneldevinfo; Python has
+      two shapes for that call -- timeseries_mfdaq returns
+      (device, device_epoch, channeltype, channellist) and the base probe
+      returns a dict -- so both are read and anything else yields None,
+      MATLAB's []. MATLAB asks by epoch_id; the base Python probe wants an
+      epoch NUMBER and raises on a string, so the 1-based number is tried
+      after the id. A snake_case alias channel_count is bound to the same
+      function.
+
   - name: export_binary
     type: function
     matlab_path: "+ndi/+fun/+probe/export_binary.m"
@@ -36,10 +63,12 @@ functions:
         default: "'int16'"
     output_arguments: []
     decision_log: >
-      Exact match. Exports data from a probe to a binary file.
-      Creates metadata file alongside outputfile with .metadata
-      extension. ndi_probe must be an ndi.element.ndi_element or
-      ndi.probe.ndi_probe of type 'n-trode'.
+      RETAINED NAME, not a separate implementation. MATLAB has since moved
+      export_binary.m into the +export/ package as binary.m; this name now
+      calls ndi.fun.probe.export.binary so code written against the earlier
+      port keeps working. New code should call export.binary, which takes
+      the arguments this shape cannot express (noBinary, progressfcn, the
+      output file name).
 
   - name: export_all_binary
     type: function
@@ -63,8 +92,9 @@ functions:
         default: "5.128205128205128"
     output_arguments: []
     decision_log: >
-      Exact match. Exports all n-trode probes in a session to binary
-      files. Creates subdirectories and kilosort.bin files. Default
+      RETAINED NAME, as export_binary above: MATLAB's export_all_binary.m is
+      now +export/all_binary.m, and this calls
+      ndi.fun.probe.export.all_binary with binary_dir=kilosort_dir. Default
       multiplier is 1/0.195 (approx 5.128).
 
   - name: location
@@ -88,6 +118,277 @@ functions:
       for an NDI element. Traverses underlying_element dependency
       tree until ndi_probe object is found. element can be an
       ndi.element.ndi_element object or string identifier.
+
+# =========================================================================
+# ndi.fun.probe.export  (MATLAB +ndi/+fun/+probe/+export/)
+# -------------------------------------------------------------------------
+# MATLAB's package becomes ONE MODULE here, ndi/fun/probe/export.py, as
+# +ndi/+fun/+export/ became ndi/fun/export.py. The MATLAB call spelling is
+# unchanged either way: ndi.fun.probe.export.binary(...).
+# =========================================================================
+  - name: export.binary
+    type: function
+    matlab_path: "+ndi/+fun/+probe/+export/binary.m"
+    matlab_last_sync_hash: "0e2caa0"
+    python_path: "ndi/fun/probe/export.py"
+    input_arguments:
+      - name: probe
+        type_python: "Any"
+      - name: outputfile
+        type_matlab: "char"
+        type_python: "str | Path"
+      - name: multiplier
+        type_matlab: "double (1)"
+        type_python: "float"
+        default: "1.0"
+      - name: verbose
+        type_matlab: "double (1)"
+        type_python: "int | bool"
+        default: "1"
+      - name: precision
+        type_matlab: "char ('int16')"
+        type_python: "str"
+        default: "'int16'"
+      - name: noBinary
+        type_matlab: "logical (false)"
+        type_python: "bool"
+        default: "False"
+      - name: progressfcn
+        type_matlab: "function handle f(pct,msg) ([])"
+        type_python: "Callable[[float, str], None] | None"
+        default: "None"
+    output_arguments: []
+    decision_log: >
+      Ported. Two things the earlier ndi/fun/probe/export_binary.py got
+      wrong are corrected here and pinned by tests. (1) SAMPLE ORDER: MATLAB
+      writes data' with fwrite, which is column-major, i.e.
+      channel-interleaved; the earlier port transposed AND wrote C-order,
+      writing each channel end to end. A sorter reads such a file as a
+      recording with its sample and channel counts swapped and does not
+      complain. (2) THE METADATA SIDECAR is now written with
+      vlt.file.saveStructArray, the same tab-delimited form MATLAB writes,
+      rather than a bespoke text layout -- which is what lets
+      geometry.writeKilosortMap read num_channels back out of a sidecar
+      written by either language. MATLAB's t0:chunk:t1 is reproduced by a
+      _colon helper rather than numpy.arange, which for a single-sample
+      epoch would yield no chunks and write nothing.
+
+  - name: export.all_binary
+    type: function
+    matlab_path: "+ndi/+fun/+probe/+export/all_binary.m"
+    matlab_last_sync_hash: "1b99d29"
+    python_path: "ndi/fun/probe/export.py"
+    input_arguments:
+      - name: S
+        type_matlab: "ndi.session"
+        type_python: "Any"
+      - name: binary_dir
+        type_matlab: "char ('kilosort')"
+        type_python: "str"
+        default: "'kilosort'"
+      - name: binaryFileName
+        type_matlab: "char ('kilosort.bin')"
+        type_python: "str"
+        default: "'kilosort.bin'"
+      - name: verbose
+        type_python: "int | bool"
+        default: "1"
+      - name: multiplier
+        type_matlab: "double (1/0.195)"
+        type_python: "float"
+        default: "1/0.195"
+      - name: noBinary
+        type_python: "bool"
+        default: "False"
+    output_arguments: []
+    decision_log: >
+      Ported. Per-probe folders now come from ndi.fun.file.elementDirectory,
+      as MATLAB's do, so an existing legacy '|' folder is reused rather than
+      duplicated; the earlier port built the name itself by replacing spaces.
+
+  - name: export.autoMultiplier
+    type: function
+    matlab_path: "+ndi/+fun/+probe/+export/autoMultiplier.m"
+    matlab_last_sync_hash: "0e2caa0"
+    python_path: "ndi/fun/probe/export.py"
+    input_arguments:
+      - name: probe
+        type_python: "Any"
+    output_arguments:
+      - name: mult
+        type_python: "float"
+    decision_log: >
+      Ported. 1 for integer-class samples, 1/0.195 (Intan uV) otherwise, and
+      the default whenever the probe cannot be sampled. snake_case alias
+      auto_multiplier.
+
+  - name: export.oneProbe
+    type: function
+    matlab_path: "+ndi/+fun/+probe/+export/oneProbe.m"
+    matlab_last_sync_hash: "1b99d29"
+    python_path: "ndi/fun/probe/export.py"
+    input_arguments:
+      - name: S
+        type_matlab: "ndi.session"
+        type_python: "Any"
+      - name: probe
+        type_python: "Any"
+      - name: binary_dir
+        type_matlab: "char ('kiasort')"
+        type_python: "str"
+        default: "'kiasort'"
+      - name: binaryFileName
+        type_matlab: "char ('kiasort.bin')"
+        type_python: "str"
+        default: "'kiasort.bin'"
+      - name: multiplier
+        type_matlab: "double ([] = auto)"
+        type_python: "float | None"
+        default: "None (auto)"
+      - name: channelMap
+        type_matlab: "logical (true)"
+        type_python: "bool"
+        default: "True"
+      - name: progressfcn
+        type_python: "Callable[[float, str], None] | None"
+        default: "None"
+      - name: verbose
+        type_python: "int | bool"
+        default: "1"
+    output_arguments:
+      - name: status
+        type_matlab: "struct (binaryFile, multiplier, channelMapFile, hadGeometry)"
+        type_python: "dict[str, Any] with the same four keys"
+    decision_log: >
+      Ported. The STATUS struct becomes a dict with MATLAB's field names
+      kept, as SessionApp.list's records do. hadGeometry is the caller's cue
+      that the channel map is a default linear placeholder rather than the
+      probe's real layout. snake_case alias one_probe.
+
+# =========================================================================
+# ndi.fun.probe.geometry  (MATLAB +ndi/+fun/+probe/+geometry/)
+# -------------------------------------------------------------------------
+# One module, ndi/fun/probe/geometry.py, as with export above. Only the
+# three functions an export needs are ported; fromKilosortMap, fromLibrary,
+# fromProbeInterface, fromStruct, listLibrary, plot, readLibrary and
+# writeLibrary are NOT YET PORTED.
+# =========================================================================
+  - name: geometry.get
+    type: function
+    matlab_path: "+ndi/+fun/+probe/+geometry/get.m"
+    matlab_last_sync_hash: "0e2caa0"
+    python_path: "ndi/fun/probe/geometry.py"
+    input_arguments:
+      - name: S
+        type_matlab: "ndi.session"
+        type_python: "Any"
+      - name: probe
+        type_python: "Any"
+      - name: verbose
+        type_matlab: "double (0)"
+        type_python: "int | bool"
+        default: "0"
+    output_arguments:
+      - name: G
+        type_matlab: "struct (found, pg, pg_doc, map, s2c_doc)"
+        type_python: "ProbeGeometry dataclass with those fields"
+    decision_log: >
+      Ported. MATLAB's G struct becomes a dataclass rather than a dict, so
+      the same field names read the same way on both sides (G.found, G.pg)
+      and a typo is an AttributeError rather than a silent None. Python adds
+      one field, all_pg_docs, so a caller can see the ambiguity MATLAB only
+      warns about when several probe_geometry documents exist.
+
+  - name: geometry.toKilosortMap
+    type: function
+    matlab_path: "+ndi/+fun/+probe/+geometry/toKilosortMap.m"
+    matlab_last_sync_hash: "0e2caa0"
+    python_path: "ndi/fun/probe/geometry.py"
+    input_arguments:
+      - name: S
+        type_python: "Any"
+      - name: probe
+        type_python: "Any"
+      - name: outputfile
+        type_matlab: "char"
+        type_python: "str | Path"
+      - name: num_channels
+        type_matlab: "double ([])"
+        type_python: "int | None"
+        default: "None (read one sample from the probe)"
+      - name: horizontal_axis
+        type_matlab: "char ('leftright' | 'frontback')"
+        type_python: "str"
+        default: "'leftright'"
+      - name: verbose
+        type_python: "int | bool"
+        default: "1"
+    output_arguments:
+      - name: tf
+        type_python: "bool"
+      - name: outputfile
+        type_python: "str"
+    decision_log: >
+      Ported, including every fall-back-to-no-geometry case: no document, no
+      site locations, no site2channelmap with a site count that disagrees
+      with the channels, and a map that places no site on any exported
+      channel. All four write nothing and return False, because a
+      half-placed geometry would be worse than the caller's default map.
+      Channel indices stay 1-based (MATLAB's, and the user-facing count that
+      ndi_xlang_principles requires); only the array offsets are 0-based. A
+      map that looks 0-based is shifted up by one, as MATLAB does.
+      snake_case alias to_kilosort_map.
+
+  - name: geometry.writeKilosortMap
+    type: function
+    matlab_path: "+ndi/+fun/+probe/+geometry/writeKilosortMap.m"
+    matlab_last_sync_hash: "0e2caa0"
+    python_path: "ndi/fun/probe/geometry.py"
+    input_arguments:
+      - name: outputfile
+        type_matlab: "char"
+        type_python: "str | Path"
+      - name: num_channels
+        type_python: "int | None"
+        default: "None (read from a .metadata sidecar)"
+      - name: metadataFile
+        type_python: "str | Path"
+        default: "''"
+      - name: chanMap
+        type_python: "Any | None"
+        default: "None (1..num_channels)"
+      - name: connected
+        type_python: "Any | None"
+        default: "None (all true)"
+      - name: xcoords
+        type_python: "Any | None"
+        default: "None (zeros)"
+      - name: ycoords
+        type_python: "Any | None"
+        default: "None (0:spacing:(n-1)*spacing)"
+      - name: kcoords
+        type_python: "Any | None"
+        default: "None (ones)"
+      - name: spacing
+        type_matlab: "double (20)"
+        type_python: "float"
+        default: "20.0"
+      - name: verbose
+        type_python: "int | bool"
+        default: "1"
+    output_arguments: []
+    decision_log: >
+      Ported. MATLAB's save(..., '-v7') becomes scipy.io.savemat with
+      format='5', and every field is written as a COLUMN vector, as MATLAB
+      saves them, so a MATLAB or Kilosort load sees the shapes it indexes.
+      The default single-column linear geometry still warns: it lets a
+      sorter run and is usually wrong for a real array. MATLAB's errors on a
+      bad num_channels or a wrong-length array become ValueError.
+      snake_case alias write_kilosort_map.
+
+# =========================================================================
+# ndi.fun.probe.extracellularInfo
+# =========================================================================
 
   - name: extracellularInfo
     type: function
@@ -126,27 +427,26 @@ functions:
       A snake_case alias, extracellular_info, is bound to the same function.
 
 # =========================================================================
-# Sub-packages
+# ndi.fun.probe.import  (MATLAB +ndi/+fun/+probe/+import/)
+# -------------------------------------------------------------------------
+# INTERFACE UPDATE: the package is named import_ in Python, not import.
+# MATLAB's package is +import and this port mirrors MATLAB names, but
+# 'import' is a Python KEYWORD: a module of that name is reachable only
+# through importlib, and ndi.fun.probe.import.kilosort would be a syntax
+# error wherever it was written. The trailing underscore is PEP 8's
+# convention for exactly this collision. This is the naming exception
+# AGENTS.md Rule 3 requires to be recorded here rather than taken silently.
+#
+# Unlike +export, this package keeps its MATLAB SHAPE as a package rather
+# than collapsing to one module: +kilosort holds thirteen files and ~2,200
+# lines, and flattening them would make one unreadable module.
+#
+# MATLAB's +kiasort importer under this package is NOT ported; it is blocked
+# on the external kiasort toolbox (Waltham-Data-Science/NDI-python#122).
 # =========================================================================
-subpackages:
-
-  - name: import
-    matlab_path: "+ndi/+fun/+probe/+import/"
-    python_path: "ndi/fun/probe/import_/"
-    python_name: import_
-    decision_log: >
-      INTERFACE UPDATE: the package is named import_ in Python, not import.
-      MATLAB's package is +import and this port mirrors MATLAB names, but
-      'import' is a Python KEYWORD: a module of that name is reachable only
-      through importlib, and ndi.fun.probe.import.kilosort would be a syntax
-      error wherever it was written. The trailing underscore is PEP 8's
-      convention for exactly this collision. This is the naming exception
-      AGENTS.md Rule 3 requires to be recorded here rather than taken
-      silently.
-      MATLAB's +kiasort importer under this package is NOT ported; it is
-      blocked on the external kiasort toolbox (NDI-python#122).
 
   - name: import.kilosort
+    type: package
     matlab_path: "+ndi/+fun/+probe/+import/+kilosort/"
     matlab_last_sync_hash: "eaec593"
     python_path: "ndi/fun/probe/import_/kilosort/"
@@ -163,94 +463,57 @@ subpackages:
       ensembleMaker.m.
       MATLAB's ndi.util.readNPY has no Python counterpart to port: numpy
       reads its own format, so numpy.load stands in throughout.
-
-    functions:
-      - name: probe
-        decision_log: >
-          Ported. The importer proper: creates one 'spikes' element per kept
-          cluster with its spike trains as epochs, plus a
-          neuron_extracellular document, and a kilosort_clusters provenance
-          document carrying the MD5 of spike_clusters.npy for idempotency.
-          Returns the number of neurons imported, which MATLAB only prints.
-          SEMANTIC PARITY, and the one place a silent error was possible:
-          MATLAB converts a spike's 0-based global offset to a local sample
-          with (offset + 1) because ndi.probe.timeseries.samples2times is
-          1-BASED there. Python's is documented as 0-BASED, so the offset IS
-          the sample index and the +1 is deliberately absent; keeping it
-          would have shifted every stored spike one sample late.
-          progressbar goes through ndi.gui.component.ProgressBarWindow via
-          ndi.element_timeseries.add_multiple, degrading quietly with no
-          display.
-      - name: session
-        decision_log: >
-          Ported. Sweeps the session's n-trode probes, skipping with a
-          warning any whose kilosort output is missing. Returns the total
-          number of neurons imported.
-      - name: getInfo
-        python_name: getInfo
-        decision_log: >
-          Ported, with get_info as its snake_case alias. Returns (info,
-          summary) as MATLAB does; info is a dict with MATLAB's field names.
-          The directory lookup is shared with the importer as
-          kilosort_directory(), so the two cannot disagree about which
-          directory they mean.
-      - name: binaryinfo
-        decision_log: >
-          Ported. Locates the raw binary from an explicit path or the NDI
-          export '.metadata' sidecar, and NEVER from params.py dat_path
-          (which for external sorts names Kilosort's whitened temp file);
-          dat_path is parsed and returned for reporting only, as in MATLAB.
-          The sidecar reader replaces vlt.file.loadStructArray with a small
-          'key: value' parser matching what ndi.fun.probe.export_binary
-          writes on this side.
-      - name: promptrawbinary
-        decision_log: >
-          Ported. MATLAB's uigetfile/questdlg/inputdlg become Qt dialogs, and
-          an 'ask' object may supply the three answers instead -- which is how
-          a headless caller, or a test, drives it without a display.
-          DIVERGENCE, forced: constructing a QApplication with no usable
-          platform plugin ABORTS THE PROCESS (a native abort no except can
-          catch), where MATLAB's uigetfile merely errors under -nodisplay. So
-          the Qt path is attempted only when a display is actually available;
-          without one the prompt reports "cancelled" and the importer falls
-          back to template waveforms, which is what MATLAB's catch does.
-      - name: recalculatemeanwaveforms
-        decision_log: >
-          Ported, including the single streaming pass, the chunk-size
-          derivation from maxChunkBytes, the epoch-seam guard and the evenly
-          spaced maxSpikes subset. MATLAB's cheby1/filtfilt become
-          scipy.signal's; when scipy or a valid cutoff is missing, both
-          languages warn and leave the data unfiltered rather than failing an
-          import. The spike-selection and window helpers (select_spikes,
-          window_offsets, design_highpass) are Python-only and SHARED with
-          the single-cluster function, so what counts as a usable spike
-          cannot drift between the two.
-      - name: recalculatemeanwaveform
-        decision_log: >
-          Ported. The single-cluster form, kept because it states plainly
-          what the batched pass does and because a caller inspecting one unit
-          should not have to hand it a cluster list. A test asserts the two
-          agree spike for spike.
-      - name: labels
-        decision_log: >
-          Ported. MATLAB's readtable becomes csv with a tab delimiter.
-          Returns (cluster_ids, cluster_labels) with the labels as a list of
-          str rather than a MATLAB string array.
-      - name: waveformdata
-        decision_log: "Ported; numpy.load replaces ndi.util.readNPY."
-      - name: meanwaveform
-        decision_log: >
-          Ported, including the amplitude-weighted average over the templates
-          contributing to a merged cluster and the optional un-whitening.
-      - name: neuropixelsmultiplier
-        decision_log: >
-          Ported, with the same constants (NP1 0.6/512/500, NP2
-          0.5/8192/80) and the same accepted spellings.
-      - name: readspikeglxmeta
-        decision_log: >
-          Ported. matlab.lang.makeValidName becomes a small regex; a value
-          that parses whole as a number comes back numeric, as in MATLAB.
-      - name: removeold
-        decision_log: >
-          Ported. Removes the neuron elements and their epoch documents
-          before the neuron documents, then the cluster document itself.
+      Per-function notes:
+      probe -- the importer proper; creates one 'spikes' element per kept
+      cluster with its spike trains as epochs, plus a neuron_extracellular
+      document, and a kilosort_clusters provenance document carrying the MD5
+      of spike_clusters.npy for idempotency. Returns the number of neurons
+      imported, which MATLAB only prints. SEMANTIC PARITY, and the one place
+      a silent error was possible: MATLAB converts a spike's 0-based global
+      offset to a local sample with (offset + 1) because
+      ndi.probe.timeseries.samples2times is 1-BASED there; Python's is
+      documented 0-BASED, so the +1 is deliberately absent -- keeping it
+      would have shifted every stored spike one sample late.
+      session -- sweeps the session's n-trode probes, skipping with a warning
+      any whose kilosort output is missing; returns the total imported.
+      getInfo -- ported with get_info as its alias, returning (info, summary)
+      as MATLAB does. The directory lookup is shared with the importer as
+      kilosort_directory(), so the two cannot disagree.
+      binaryinfo -- locates the raw binary from an explicit path or the NDI
+      export '.metadata' sidecar, and NEVER from params.py dat_path (which
+      for external sorts names Kilosort's whitened temp file); dat_path is
+      parsed and returned for reporting only, as in MATLAB. The sidecar
+      reader replaces vlt.file.loadStructArray with a 'key: value' parser
+      matching what ndi.fun.probe.export_binary writes on this side.
+      promptrawbinary -- MATLAB's uigetfile/questdlg/inputdlg become Qt
+      dialogs, and an 'ask' object may supply the three answers instead,
+      which is how a headless caller or a test drives it. DIVERGENCE,
+      forced: constructing a QApplication with no usable platform plugin
+      ABORTS THE PROCESS (a native abort no except can catch), where
+      MATLAB's uigetfile merely errors under -nodisplay. So the Qt path is
+      attempted only when a display is actually available; without one the
+      prompt reports "cancelled" and the importer falls back to template
+      waveforms, which is what MATLAB's catch does.
+      recalculatemeanwaveforms -- ported including the single streaming pass,
+      the chunk-size derivation from maxChunkBytes, the epoch-seam guard and
+      the evenly spaced maxSpikes subset. MATLAB's cheby1/filtfilt become
+      scipy.signal's; when scipy or a valid cutoff is missing, both languages
+      warn and leave the data unfiltered rather than failing an import. The
+      spike-selection and window helpers (select_spikes, window_offsets,
+      design_highpass) are Python-only and SHARED with the single-cluster
+      function, so what counts as a usable spike cannot drift between them.
+      recalculatemeanwaveform -- the single-cluster form, kept because it
+      states plainly what the batched pass does; a test asserts the two agree
+      spike for spike.
+      labels -- MATLAB's readtable becomes csv with a tab delimiter; labels
+      come back as a list of str rather than a MATLAB string array.
+      waveformdata -- numpy.load replaces ndi.util.readNPY.
+      meanwaveform -- ported, including the amplitude-weighted average over
+      the templates contributing to a merged cluster and the optional
+      un-whitening.
+      neuropixelsmultiplier -- same constants (NP1 0.6/512/500, NP2
+      0.5/8192/80) and the same accepted spellings.
+      readspikeglxmeta -- matlab.lang.makeValidName becomes a small regex; a
+      value that parses whole as a number comes back numeric, as in MATLAB.
+      removeold -- removes the neuron elements and their epoch documents
+      before the neuron documents, then the cluster document itself.

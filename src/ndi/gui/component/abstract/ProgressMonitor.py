@@ -5,6 +5,12 @@ Mirrors MATLAB: ndi.gui.component.abstract.ndi_gui_component_abstract_ProgressMo
 Provides timing, event-listener wiring, and time-remaining estimation.
 Subclasses must implement :meth:`updateProgressDisplay`,
 :meth:`updateMessage`, and :meth:`finish`.
+
+CROSS-LANGUAGE NAMING
+Methods mirroring MATLAB keep MATLAB's exact name and also carry a
+snake_case alias bound to the same function -- one method under two names,
+so neither a ported MATLAB script nor idiomatic Python has to remember which
+spelling a given method happens to have.
 """
 
 from __future__ import annotations
@@ -13,7 +19,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import Any
 
-from ndi.gui.component.internal.ndi_gui_component_internal_ProgressTracker import (
+from ndi.gui.component.internal.ProgressTracker import (
     ndi_gui_component_internal_ProgressTracker,
 )
 
@@ -61,11 +67,17 @@ class ndi_gui_component_abstract_ProgressMonitor(ABC):
             self.ndi_gui_component_internal_ProgressTracker.setCompleted()
         self.finish()
 
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    mark_complete = markComplete
+
     def setProgressTracker(self, tracker: ndi_gui_component_internal_ProgressTracker) -> None:
         """Attach a new :class:`ndi_gui_component_internal_ProgressTracker` and wire up listeners."""
         self._detach_listeners()
         self.ndi_gui_component_internal_ProgressTracker = tracker
         self._attach_listeners(tracker)
+
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    set_progress_tracker = setProgressTracker
 
     # -- Abstract methods (subclasses MUST implement) ---------------------
 
@@ -73,9 +85,15 @@ class ndi_gui_component_abstract_ProgressMonitor(ABC):
     def updateProgressDisplay(self) -> None:
         """Update the visual progress display."""
 
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    update_progress_display = updateProgressDisplay
+
     @abstractmethod
     def updateMessage(self, message: str) -> None:
         """Update the displayed message."""
+
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    update_message = updateMessage
 
     @abstractmethod
     def finish(self) -> None:
@@ -89,6 +107,9 @@ class ndi_gui_component_abstract_ProgressMonitor(ABC):
             return 0.0
         return self.ndi_gui_component_internal_ProgressTracker.PercentageComplete / 100.0
 
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    get_progress_value = getProgressValue
+
     def getProgressTitle(self) -> str:
         """Return the tracker's rendered message, or *Title*."""
         if (
@@ -98,6 +119,9 @@ class ndi_gui_component_abstract_ProgressMonitor(ABC):
             return self.ndi_gui_component_internal_ProgressTracker.Message
         return self.Title
 
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    get_progress_title = getProgressTitle
+
     def formatMessage(self, message: str) -> str:
         """Append estimated remaining time to *message* if enabled."""
         if not self.DisplayRemainingTime:
@@ -106,6 +130,9 @@ class ndi_gui_component_abstract_ProgressMonitor(ABC):
         if remaining is None:
             return message
         return f"{message} ({self._formatDuration(remaining)} remaining)"
+
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    format_message = formatMessage
 
     # -- Time estimation --------------------------------------------------
 

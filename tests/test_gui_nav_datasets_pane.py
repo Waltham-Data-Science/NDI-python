@@ -175,16 +175,18 @@ class TestSessionApps:
         monkeypatch.setattr("ndi.gui.nav.datasets_pane.SessionApp.list", staticmethod(boom))
         assert session_apps() == []
 
-    def test_ndi_s_own_apps_are_discovered(self):
-        """The built-in scan finds the apps that ship in ndi.gui.app.
-
-        ndi.gui.app.ensembleMaker is the first of MATLAB's eleven to be
-        ported, and it reached this list without a line of datasets_pane
-        changing -- which is the check that discovery was the right
-        mechanism. The remaining ten will arrive the same way, as will an
-        app in a package a user names in GUI.Navigator.SessionAppPackages.
+    def test_ndis_own_apps_are_discovered_with_no_help_from_the_pane(self):
+        """The proof that the mechanism works from the app's side: the pane
+        knows nothing about any of these, and offers them because
+        SessionApp.list found them in ndi.gui.app. The rest of MATLAB's
+        eleven land the same way, as does any package a user names in
+        GUI.Navigator.SessionAppPackages.
         """
         offered = [(app["Label"], app["Category"]) for app in session_apps()]
+        labels = [label for label, _ in offered]
+        assert "Electrode Data Export" in labels
+        assert "spikeSorterImporter" in labels
+        # and a categorised one, which the menu groups into a submenu
         assert ("Ensemble Maker", "Ensembles") in offered
 
 
@@ -521,6 +523,17 @@ class TestMenusAreBuilt:
         apps = menu.actions()[0].menu()
         assert apps is not None
         assert apps.actions() == []
+
+    def test_a_session_is_offered_ndis_own_apps(self):
+        """End to end, with nothing patched: right-clicking a session offers
+        an app that reached the menu purely by subclassing SessionApp."""
+        _qt_or_skip()
+        nav, pane = _built_pane()
+        pane.user_sessions = [FakeSession("a", path="/s/a")]
+        pane.populate_tree()
+        menu = pane.build_node_menu(pane.tree.topLevelItem(0).child(0))
+        apps = menu.actions()[0].menu()
+        assert "Electrode Data Export" in [a.text() for a in apps.actions()]
 
     def test_discovered_apps_reach_the_menu(self, monkeypatch):
         """The end of the wire: what SessionApp.list found is what the user

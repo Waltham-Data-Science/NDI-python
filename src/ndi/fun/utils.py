@@ -104,3 +104,22 @@ def timestamp() -> str:
     # Leap-second guard (Python doesn't really produce :60 but be safe)
     ts = ts.replace(":60.", ":59.999")
     return ts
+
+
+def identifier(obj) -> str | None:
+    """The id of an NDI object, whether ``id`` is a method or a property.
+
+    Python only; MATLAB has one spelling, ``obj.id()``, and every port of a
+    MATLAB call site reaches for it. This side is not uniform: a session's
+    ``id`` IS a method, while a document's, an element's and a probe's are
+    properties inherited from :class:`ndi.ido.ndi_ido`. So ``probe.id()``
+    raises ``TypeError: 'str' object is not callable`` on a real probe while
+    passing every test whose double defines ``id`` as a method -- a failure
+    that appears only against real objects.
+
+    Reading it either way costs nothing and removes a whole class of that
+    mistake from the ported call sites. Returns None when OBJ has no id at
+    all, which is what a caller building a query wants to notice.
+    """
+    value = getattr(obj, "id", None)
+    return value() if callable(value) else value

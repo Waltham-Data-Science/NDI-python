@@ -4,6 +4,12 @@ Mirrors MATLAB: ndi.gui.component.internal.ndi_gui_component_internal_ProgressTr
 
 Provides step counting, percentage calculation, template-based messages,
 and event callbacks for progress updates, message changes, and completion.
+
+CROSS-LANGUAGE NAMING
+Methods mirroring MATLAB keep MATLAB's exact name and also carry a
+snake_case alias bound to the same function -- one method under two names,
+so neither a ported MATLAB script nor idiomatic Python has to remember which
+spelling a given method happens to have.
 """
 
 from __future__ import annotations
@@ -67,6 +73,9 @@ class ndi_gui_component_internal_ProgressTracker:
             return 0.0
         return (self.CurrentStep / self.TotalSteps) * 100.0
 
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    percentage_complete = PercentageComplete
+
     @property
     def Message(self) -> str:
         """Rendered message from *TemplateMessage* with ``{{…}}`` substitution."""
@@ -99,12 +108,18 @@ class ndi_gui_component_internal_ProgressTracker:
             self._last_notify_time = now
             self._fire_progress_updated()
 
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    update_progress = updateProgress
+
     def setCompleted(self) -> None:
         """Mark the task as finished and notify listeners."""
         self.IsFinished = True
         self.CurrentStep = self.TotalSteps
         self._fire_progress_updated()
         self._fire_task_completed()
+
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    set_completed = setCompleted
 
     def reset(self) -> None:
         """Re-initialise the tracker to step 0."""

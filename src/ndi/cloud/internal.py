@@ -52,26 +52,51 @@ def getCloudDatasetIdForLocalDataset(
         client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
-        Tuple of ``(cloud_dataset_id, remote_doc)`` where
-        *remote_doc* is the linking document or ``None``.
-    """
-    try:
-        db = dataset.database
-        from ndi.query import ndi_query
+        Tuple of ``(cloud_dataset_id, remote_doc)``. When the dataset has
+        never been uploaded, that is ``("", None)``.
 
-        q = ndi_query("").isa("dataset_remote")
-        results = db.search(q)
-        if results:
-            doc = results[0]
-            props = doc.document_properties if hasattr(doc, "document_properties") else doc
-            cloud_id = ""
-            if isinstance(props, dict):
-                remote = props.get("dataset_remote", {})
-                cloud_id = remote.get("dataset_id", "")
-            return cloud_id, doc
-    except Exception:
-        pass
-    return "", None
+    Raises:
+        CloudSyncError: More than one ``dataset_remote`` document is present.
+            MATLAB raises ``NDICloud:Sync:MultipleCloudDatasetId`` here and
+            so do we: the caller is about to decide which remote dataset to
+            write to, and picking one of several arbitrarily is worse than
+            stopping.
+
+    Note:
+        This searches through :meth:`ndi.dataset.ndi_dataset.database_search`,
+        which also covers linked sessions, matching MATLAB. The related
+        :meth:`ndi.dataset.ndi_dataset.is_in_cloud` searches only the
+        dataset's own session and never raises, likewise matching MATLAB --
+        the two differ on purpose, because one resolves a sync target and the
+        other answers a status question while a tree of datasets is listed.
+    """
+    from ndi.query import ndi_query
+
+    # NOT wrapped in try/except. An unreadable database is not the same
+    # answer as "never uploaded", and reporting it as one is what made this
+    # function return ("", None) for every dataset that had in fact been
+    # uploaded: it reached for a `database` attribute that ndi_dataset does
+    # not have, and a bare `except Exception: pass` swallowed the
+    # AttributeError. Callers act on a "" by CREATING a new remote dataset,
+    # so a swallowed error here silently duplicates datasets in the cloud.
+    results = dataset.database_search(ndi_query("").isa("dataset_remote"))
+
+    if not results:
+        return "", None
+    if len(results) > 1:
+        from .exceptions import CloudSyncError
+
+        raise CloudSyncError(
+            f"Found more than one remote cloud dataset id ({len(results)}) "
+            f"for the local dataset: {getattr(dataset, 'path', dataset)!r}."
+        )
+
+    doc = results[0]
+    props = doc.document_properties if hasattr(doc, "document_properties") else doc
+    cloud_id = ""
+    if isinstance(props, dict):
+        cloud_id = props.get("dataset_remote", {}).get("dataset_id", "")
+    return cloud_id, doc
 
 
 def createRemoteDatasetDoc(
@@ -104,10 +129,13 @@ def listLocalDocuments(dataset: Any) -> tuple[list[Any], list[str]]:
     """
     from ndi.query import ndi_query
 
-    try:
-        docs = dataset.session.database_search(ndi_query("").isa("base"))
-    except Exception:
-        docs = []
+    # NOT wrapped in try/except, and NOT `dataset.session`: ndi_dataset has
+    # no `session` attribute, so the previous version raised AttributeError
+    # on every real dataset and a bare `except Exception` turned that into an
+    # empty document list. Callers -- validateSync and documentDifference --
+    # then reported every remote document as "remote only" and every local
+    # one as absent. An empty list must mean an empty dataset, nothing else.
+    docs = dataset.database_search(ndi_query("").isa("base"))
 
     ids = []
     for d in docs:

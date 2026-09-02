@@ -12,7 +12,7 @@ internal
     ``ndi_gui_component_internal_AsynchProgressTracker``, event data classes).
 """
 
-from ndi.gui.component.ndi_gui_component_CommandWindowProgressMonitor import (
+from ndi.gui.component.CommandWindowProgressMonitor import (
     ndi_gui_component_CommandWindowProgressMonitor,
 )
 
@@ -27,13 +27,13 @@ __all__ = [
 
 def __getattr__(name: str):  # noqa: ANN204
     if name == "ndi_gui_component_NDIProgressBar":
-        from ndi.gui.component.ndi_gui_component_NDIProgressBar import (
+        from ndi.gui.component.NDIProgressBar import (
             ndi_gui_component_NDIProgressBar,
         )
 
         return ndi_gui_component_NDIProgressBar
     if name == "ndi_gui_component_ProgressBarWindow":
-        from ndi.gui.component.ndi_gui_component_ProgressBarWindow import (
+        from ndi.gui.component.ProgressBarWindow import (
             ndi_gui_component_ProgressBarWindow,
         )
 

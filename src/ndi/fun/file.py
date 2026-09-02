@@ -252,3 +252,47 @@ def elementDirectoryName(element: Any) -> tuple[str, str]:  # noqa: N802 (MATLAB
 
     legacy_dir_name = element_string.replace(" ", "_")
     return pathSafeName(legacy_dir_name), legacy_dir_name
+
+
+def elementDirectory(  # noqa: N802 (MATLAB mirror)
+    parentDir: str | Path,  # noqa: N803 (MATLAB mirror)
+    element: Any,
+) -> tuple[str, str, bool]:
+    """The working directory for an element or probe, with legacy fallback.
+
+    Returns ``(dirPath, dirName, isLegacy)``.
+
+    *parentDir* is the folder the per-element folder lives in -- typically
+    ``<session.path>/kilosort`` or ``<session.path>/kiasort``. *element* may
+    be an object answering ``elementstring()``, or the element string itself.
+
+    The platform-independent name from :func:`elementDirectoryName` is
+    preferred. If no folder by that name exists but one by the legacy name
+    does -- the pre-existing form separating the element name from its
+    reference with ``|``, which is not a legal Windows filename character --
+    the legacy folder is returned instead, so data written by earlier
+    versions of NDI is still found. When neither exists the new name is
+    returned, so a caller that creates the folder creates it under the new
+    name.
+
+    ``isLegacy`` is True when the legacy folder was chosen.
+
+    MATLAB equivalent: ``ndi.fun.file.elementDirectory``.
+    """
+    parent = Path(str(parentDir))
+    dir_name, legacy_dir_name = elementDirectoryName(element)
+    is_legacy = False
+
+    if dir_name != legacy_dir_name:
+        if not (parent / dir_name).is_dir() and (parent / legacy_dir_name).is_dir():
+            dir_name = legacy_dir_name
+            is_legacy = True
+
+    return str(parent / dir_name), dir_name, is_legacy
+
+
+#: snake_case spelling of :func:`elementDirectory`, the house style for new
+#: code; the MATLAB spelling stays the primary name, as elsewhere in this
+#: module.
+element_directory = elementDirectory
+element_directory_name = elementDirectoryName

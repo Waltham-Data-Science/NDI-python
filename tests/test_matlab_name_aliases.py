@@ -26,6 +26,26 @@ import re
 import pytest
 
 from ndi.dataset import _DatasetBase
+from ndi.file.type.mfdaq_epoch_channel import ndi_file_type_mfdaq__epoch__channel
+from ndi.gui.cloud_colors import CloudColors
+from ndi.gui.component.abstract.ProgressMonitor import (
+    ndi_gui_component_abstract_ProgressMonitor,
+)
+from ndi.gui.component.CommandWindowProgressMonitor import (
+    ndi_gui_component_CommandWindowProgressMonitor,
+)
+from ndi.gui.component.internal.AsynchProgressTracker import (
+    ndi_gui_component_internal_AsynchProgressTracker,
+)
+from ndi.gui.component.internal.ProgressTracker import (
+    ndi_gui_component_internal_ProgressTracker,
+)
+from ndi.gui.component.NDIProgressBar import ndi_gui_component_NDIProgressBar
+from ndi.gui.component.ProgressBarWindow import ndi_gui_component_ProgressBarWindow
+from ndi.gui.data import ndi_gui_Data
+from ndi.gui.docViewer import ndi_gui_docViewer
+from ndi.gui.icon import ndi_gui_Icon
+from ndi.gui.lab import ndi_gui_Lab
 from ndi.session.dir import ndi_session_dir
 from ndi.session.session_base import ndi_session
 
@@ -43,7 +63,59 @@ ALIASES = [
 ]
 
 #: The classes the convention covers.
-COVERED = [ndi_session, ndi_session_dir, _DatasetBase]
+COVERED = [
+    ndi_session,
+    ndi_session_dir,
+    _DatasetBase,
+    ndi_file_type_mfdaq__epoch__channel,
+    ndi_gui_component_abstract_ProgressMonitor,
+    ndi_gui_component_CommandWindowProgressMonitor,
+    ndi_gui_component_NDIProgressBar,
+    ndi_gui_component_ProgressBarWindow,
+    ndi_gui_component_internal_ProgressTracker,
+    ndi_gui_component_internal_AsynchProgressTracker,
+    ndi_gui_Data,
+    ndi_gui_docViewer,
+    ndi_gui_Icon,
+    ndi_gui_Lab,
+]
+
+#: A camelCase method that is overridden, and the base it overrides. An alias
+#: placed only on the base would bind the BASE implementation while the
+#: camelCase name binds the override -- two names for "the same method" that
+#: quietly do different things, and nothing would raise.
+OVERRIDDEN = [
+    (
+        ndi_gui_component_NDIProgressBar,
+        ndi_gui_component_abstract_ProgressMonitor,
+        "updateProgressDisplay",
+        "update_progress_display",
+    ),
+    (
+        ndi_gui_component_NDIProgressBar,
+        ndi_gui_component_abstract_ProgressMonitor,
+        "updateMessage",
+        "update_message",
+    ),
+    (
+        ndi_gui_component_CommandWindowProgressMonitor,
+        ndi_gui_component_abstract_ProgressMonitor,
+        "updateProgressDisplay",
+        "update_progress_display",
+    ),
+    (
+        ndi_gui_component_CommandWindowProgressMonitor,
+        ndi_gui_component_abstract_ProgressMonitor,
+        "updateMessage",
+        "update_message",
+    ),
+    (
+        ndi_gui_component_internal_AsynchProgressTracker,
+        ndi_gui_component_internal_ProgressTracker,
+        "updateProgress",
+        "update_progress",
+    ),
+]
 
 
 def _snake(name: str) -> str:
@@ -145,10 +217,82 @@ class TestTheConventionCannotErode:
 
 class TestTheClassNoteExists:
     @pytest.mark.parametrize("cls", COVERED, ids=lambda c: c.__name__)
-    def test_the_convention_is_documented_on_the_class(self, cls):
-        """Someone reading the class should learn why there are two names,
-        not have to infer it from the aliases."""
-        assert "CROSS-LANGUAGE NAMING" in (cls.__doc__ or "")
+    def test_the_convention_is_documented_where_a_reader_would_look(self, cls):
+        """Someone reading the code should learn why there are two names,
+        not have to infer it from the aliases.
+
+        The class docstring or its module's will do. The three core classes
+        carry it themselves; the GUI modules carry it once at module level
+        rather than repeating the same paragraph on every small class in the
+        file.
+        """
+        import sys
+
+        module_doc = getattr(sys.modules.get(cls.__module__), "__doc__", "") or ""
+        assert "CROSS-LANGUAGE NAMING" in (cls.__doc__ or "") + module_doc
+
+
+class TestOverridesSurviveTheirAlias:
+    """The trap this convention can fall into, and does not.
+
+    An alias on an abstract base binds the BASE implementation. A subclass
+    that overrides the camelCase method would then have two names that
+    disagree -- and neither raises, so nothing would notice.
+    """
+
+    @pytest.mark.parametrize(
+        "cls,base,camel,snake", OVERRIDDEN, ids=[f"{c.__name__}.{s}" for c, _, _, s in OVERRIDDEN]
+    )
+    def test_the_alias_binds_the_subclass_implementation(self, cls, base, camel, snake):
+        own = inspect.getattr_static(cls, camel)
+        assert inspect.getattr_static(cls, snake) is own
+        assert inspect.getattr_static(cls, snake) is not inspect.getattr_static(base, snake)
+
+    def test_a_base_only_alias_really_would_be_wrong(self):
+        """Proof the case above is worth testing: with the alias only on the
+        base, the two names return different things."""
+
+        class Base:
+            def updateMessage(self):  # noqa: N802
+                return "base"
+
+            update_message = updateMessage
+
+        class Child(Base):
+            def updateMessage(self):  # noqa: N802
+                return "child"
+
+        child = Child()
+        assert child.updateMessage() == "child"
+        assert child.update_message() == "base"
+
+
+class TestCloudColorsIsExemptForAReason:
+    """CloudColors is deliberately NOT in COVERED.
+
+    Its camelCase names are @property accessors over a NamedTuple's
+    snake_case fields, so both spellings already resolve -- they are simply
+    not the same OBJECT, which is all the guard can see. Adding an alias
+    would be a third name for the same value.
+    """
+
+    @pytest.mark.parametrize(
+        "camel,snake",
+        [
+            ("darkBlue", "dark_blue"),
+            ("lightBlue", "light_blue"),
+            ("offWhite", "off_white"),
+            ("okGreen", "ok_green"),
+            ("warnAmber", "warn_amber"),
+            ("neutralGrey", "neutral_grey"),
+        ],
+    )
+    def test_both_spellings_resolve_to_the_same_value(self, camel, snake):
+        colors = CloudColors()
+        assert getattr(colors, camel) == getattr(colors, snake)
+
+    def test_the_camelcase_name_is_a_property_not_a_stored_field(self):
+        assert isinstance(inspect.getattr_static(CloudColors, "darkBlue"), property)
 
 
 if __name__ == "__main__":
