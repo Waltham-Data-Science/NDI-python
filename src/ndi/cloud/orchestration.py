@@ -397,6 +397,24 @@ def uploadDataset(
     from .internal import createRemoteDatasetDoc, getCloudDatasetIdForLocalDataset
     from .upload import uploadDocumentCollection, uploadFilesForDatasetDocuments
 
+    # MATLAB refuses to upload a dataset that is not fully ingested, and it is
+    # the FIRST thing uploadDataset.m does (line 53). This had no counterpart
+    # here for a simpler reason than oversight: ndi_dataset had no isIngested()
+    # to call (issue #136). A dataset with linked sessions uploaded happily,
+    # and whatever lived outside the dataset directory silently did not go --
+    # the remote dataset then looks complete and is not.
+    #
+    # Asked by duck typing rather than isinstance: uploadDataset takes Any,
+    # and a caller passing a stand-in dataset should not be blocked by a
+    # method it never claimed to have.
+    is_ingested = getattr(dataset, "isIngested", None)
+    if callable(is_ingested) and not is_ingested():
+        return (
+            False,
+            "",
+            "Dataset is not fully ingested. All sessions must be ingested " "before uploading.",
+        )
+
     # Resolve or create remote dataset
     cloud_id = ""
     if not upload_as_new:

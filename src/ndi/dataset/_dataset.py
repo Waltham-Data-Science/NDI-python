@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -167,42 +168,7 @@ class ndi_dataset:
                 f"in ingested form to a dataset."
             )
 
-        # Copy all documents from source session into the dataset's database.
-        # We add directly via _database.add() because session.database_add()
-        # enforces session_id == self._session.id(), but ingested docs retain
-        # their *original* session_id so we can tell which session they came from.
-        # Binary files come across with them, ingested by DID on add.
-        all_docs = session.database_search(ndi_query("").isa("base"))
-        ingestion_failures: list[tuple[str, str]] = []
-        for doc in all_docs:
-            try:
-                # DID ingests the document's files as part of the add, so
-                # the locations it is handed have to be reachable. A document
-                # read back from the source session still names the path the
-                # file was ingested FROM, and add_file defaults
-                # delete_original to true, so that path is usually gone by
-                # now. Point each location at the source session's ingested
-                # copy before handing the document over.
-                doc = self._relocate_files_to_source(session, doc)
-                self._session._database.add(doc)
-            except FileExistsError:
-                pass  # Re-ingestion duplicates are expected
-            except Exception as exc:
-                doc_id = ndi_dataset_dir._get_doc_id(doc)
-                ingestion_failures.append((doc_id, str(exc)))
-        if ingestion_failures:
-            failure_details = "\n".join(
-                f"  - {doc_id}: {err}" for doc_id, err in ingestion_failures[:20]
-            )
-            extra = (
-                f"\n  ... and {len(ingestion_failures) - 20} more"
-                if len(ingestion_failures) > 20
-                else ""
-            )
-            raise RuntimeError(
-                f"Failed to add {len(ingestion_failures)} of {len(all_docs)} "
-                f"documents during session ingestion:\n{failure_details}{extra}"
-            )
+        self._copy_session_documents(session)
 
         session_info_here = self._make_session_info(session, is_linked=False)
         # For ingested sessions, clear the path arg (matches MATLAB kludge)
@@ -259,6 +225,173 @@ class ndi_dataset:
         self.build_session_info()
 
         return self
+
+    def convertLinkedSessionToIngested(
+        self,
+        session_id: str,
+        are_you_sure: bool = False,
+    ) -> ndi_dataset:
+        """
+        Convert a linked session in this dataset into an ingested one.
+
+        MATLAB equivalent: ``ndi.dataset/convertLinkedSessionToIngested``
+
+        Copies the session's documents *and* its binary files into the
+        dataset, so the dataset no longer depends on the original session
+        path. The session must already be fully ingested itself: a linked
+        session that still reads from raw acquisition files has nothing to
+        copy, and MATLAB refuses the same case (``dataset.m:433``).
+
+        DISK SPACE
+        The copy leaves two copies of the session's files in existence -- the
+        session's own and the dataset's -- which is where MATLAB's "requires
+        approximately 2x the disk space" note comes from. MATLAB checks
+        nothing and can therefore stop half way, leaving the dataset holding
+        some of the session's documents under a ``session_in_a_dataset``
+        record that still says ``linked``. This checks first and refuses
+        cleanly instead, which is a deliberate addition rather than a port.
+
+        Args:
+            session_id: ID of the linked session to convert.
+            are_you_sure: Must be True to proceed. MATLAB additionally offers
+                ``askUserToConfirm``, which puts up a dialog; there is no
+                dialog here, so this flag is the whole gate.
+
+        Returns:
+            self for chaining.
+
+        Raises:
+            ValueError: If not confirmed, if the session is not in the
+                dataset, if it is already ingested rather than linked, if it
+                cannot be opened, or if it is not itself fully ingested.
+            NotImplementedError: If the session is not directory-backed.
+            OSError: If the dataset's filesystem has too little free space to
+                hold the copy.
+        """
+        from ..session.dir import ndi_session_dir
+
+        if not self._session_info:
+            self.build_session_info()
+
+        # Step 1: find the session and verify it is linked
+        match = self._find_session_in_info(session_id)
+        if match is None:
+            raise ValueError(f"ndi_session with ID {session_id} not found in dataset {self.id()}.")
+
+        is_linked = match.get("is_linked", False)
+        if isinstance(is_linked, (int, float)):
+            is_linked = bool(is_linked)
+        if not is_linked:
+            raise ValueError(
+                f"ndi_session with ID {session_id} is already an INGESTED session, "
+                f"not a linked session."
+            )
+
+        # Step 2: open it and verify it is fully ingested
+        session = self.open_session(session_id)
+        if session is None:
+            raise ValueError(
+                f"ndi_session with ID {session_id} is listed in dataset {self.id()} "
+                f"but could not be opened, so there is nothing to copy. The linked "
+                f"session's path may have moved."
+            )
+
+        if not session.isIngested():
+            raise ValueError(
+                f"ndi_session with ID {session_id} and reference {session.reference} "
+                f"is not yet fully ingested. Call ingest() on the session before "
+                f"converting it."
+            )
+
+        # Step 3: only directory-backed sessions can be copied
+        if not isinstance(session, ndi_session_dir):
+            raise NotImplementedError(
+                f"Not smart enough to convert linked sessions of type "
+                f"{type(session).__name__} yet."
+            )
+
+        # Step 4: confirm
+        if not are_you_sure:
+            raise ValueError(
+                "Must set are_you_sure=True to convert a linked session to an "
+                "ingested one. This copies all of the session's data into the "
+                "dataset."
+            )
+
+        # Step 5: refuse a copy the disk cannot hold, BEFORE writing anything
+        self._require_space_for_session(session)
+
+        # Step 6: copy every document and its files into the dataset. No
+        # duplicate check: the session is deliberately already listed here,
+        # as a linked one. MATLAB passes skipDuplicateCheck for the same
+        # reason (dataset.m:462).
+        self._copy_session_documents(session)
+
+        # Step 7: replace the linked record with an ingested one
+        self.removeSessionInfoFromDataset(self, session_id)
+
+        session_info_here = self._make_session_info(session, is_linked=False)
+        # Clear the stored path so open_session reads from the dataset from
+        # now on -- the point of the conversion.
+        session_info_here["session_creator_input2"] = ""
+        new_doc = self.addSessionInfoToDataset(self, session_info_here)
+        session_info_here["session_doc_in_dataset_id"] = new_doc.id
+
+        # Step 8: rebuild in-memory state
+        self.build_session_info()
+
+        return self
+
+    #: Snake-case alias; same method, see the class note on naming.
+    convert_linked_session_to_ingested = convertLinkedSessionToIngested
+
+    def isIngested(self) -> bool:
+        """
+        Is every session in this dataset ingested?
+
+        MATLAB equivalent: ``ndi.dataset/isIngested``
+
+        Note this is the DATASET method, not ``ndi.session/isIngested``. The
+        session one asks whether one session's raw data has been ingested;
+        this one asks whether the dataset is self-contained, which is the
+        precondition ``ndi.cloud.uploadDataset`` refuses to skip
+        (``uploadDataset.m:53``).
+
+        A dataset with no sessions is ingested -- MATLAB says so explicitly
+        (``dataset.m:241-247``) and it is easy to get backwards.
+
+        A session that is listed but cannot be opened counts as NOT ingested,
+        and is logged. MATLAB has no such case to handle because its
+        ``open_session`` raises; here it returns None, and answering True for
+        a session nobody can read would let an unusable dataset upload.
+
+        Returns:
+            True if all sessions are ingested (or there are none).
+        """
+        if not self._session_info:
+            self.build_session_info()
+
+        if not self._session_info:
+            return True
+
+        for info in self._session_info:
+            session_id = info.get("session_id", "")
+            session = self.open_session(session_id)
+            if session is None:
+                logger.warning(
+                    "isIngested: session %s is listed in dataset %s but could not be "
+                    "opened; treating the dataset as not fully ingested",
+                    session_id,
+                    self.id(),
+                )
+                return False
+            if not session.isIngested():
+                return False
+
+        return True
+
+    #: Snake-case alias; same method, see the class note on naming.
+    is_ingested = isIngested
 
     def is_in_cloud(self) -> tuple[bool, str]:
         """
@@ -706,6 +839,119 @@ class ndi_dataset:
     # =========================================================================
     # Internal Helpers
     # =========================================================================
+
+    def _copy_session_documents(self, session: Any) -> None:
+        """Copy every document in SESSION, with its files, into this dataset.
+
+        Shared by :meth:`add_ingested_session` and
+        :meth:`convertLinkedSessionToIngested`, which differ only in what they
+        check beforehand and what session record they write afterwards. The
+        copy itself is one operation and belongs in one place; MATLAB reaches
+        the same arrangement through the static ``copySessionToDataset``.
+
+        Documents are added straight through ``_database.add()`` rather than
+        ``session.database_add()``: the latter enforces
+        ``session_id == self._session.id()``, but an ingested document keeps
+        its ORIGINAL session_id, which is how the dataset can still say which
+        session each document came from.
+
+        Raises:
+            RuntimeError: If any document could not be added, listing the
+                failures. A partial copy is reported, never passed off as a
+                success.
+        """
+        all_docs = session.database_search(ndi_query("").isa("base"))
+        ingestion_failures: list[tuple[str, str]] = []
+        for doc in all_docs:
+            try:
+                # DID ingests the document's files as part of the add, so the
+                # locations it is handed have to be reachable. A document read
+                # back from the source session still names the path the file
+                # was ingested FROM, and add_file defaults delete_original to
+                # true, so that path is usually gone by now. Point each
+                # location at the source session's ingested copy before
+                # handing the document over.
+                doc = self._relocate_files_to_source(session, doc)
+                self._session._database.add(doc)
+            except FileExistsError:
+                pass  # Re-ingestion duplicates are expected
+            except Exception as exc:  # noqa: BLE001 - collected and re-raised below
+                doc_id = ndi_dataset_dir._get_doc_id(doc)
+                ingestion_failures.append((doc_id, str(exc)))
+
+        if ingestion_failures:
+            failure_details = "\n".join(
+                f"  - {doc_id}: {err}" for doc_id, err in ingestion_failures[:20]
+            )
+            extra = (
+                f"\n  ... and {len(ingestion_failures) - 20} more"
+                if len(ingestion_failures) > 20
+                else ""
+            )
+            raise RuntimeError(
+                f"Failed to add {len(ingestion_failures)} of {len(all_docs)} "
+                f"documents during session ingestion:\n{failure_details}{extra}"
+            )
+
+    def _require_space_for_session(self, session: Any) -> None:
+        """Refuse the copy if this dataset's filesystem cannot hold it.
+
+        The bytes about to be duplicated are the session's ingested files,
+        which DID keeps in one directory; measuring that directory measures
+        the copy. Documents themselves are rows in SQLite and are negligible
+        beside their binaries.
+
+        A check that cannot be made is not a check that failed: if the
+        session's file directory cannot be located or measured, the copy goes
+        ahead and DID reports whatever actually breaks. The point is to catch
+        the knowable case -- a copy that plainly does not fit -- before the
+        first document is written, not to add a new way to refuse work.
+
+        Raises:
+            OSError: If the free space is known and is smaller than the copy.
+        """
+        needed = self._session_file_bytes(session)
+        if needed is None or needed == 0:
+            return
+
+        try:
+            free = shutil.disk_usage(str(self.getpath())).free
+        except OSError as exc:
+            logger.debug("Could not determine free space for %s: %s", self.getpath(), exc)
+            return
+
+        if needed > free:
+            raise OSError(
+                f"Not enough free space to copy session {session.id()} into dataset "
+                f"{self.id()}: the session's files are {needed} bytes and "
+                f"{self.getpath()} has {free} bytes free. The copy would leave the "
+                f"dataset holding part of the session, so nothing was written. Free "
+                f"up space and try again."
+            )
+
+    @staticmethod
+    def _session_file_bytes(session: Any) -> int | None:
+        """Total bytes of SESSION's ingested files, or None if unmeasurable."""
+        database = getattr(session, "_database", None)
+        if database is None:
+            return None
+        try:
+            binary_path = Path(database.binary_path)
+        except Exception:  # noqa: BLE001 - an unmeasurable session is not an error
+            return None
+        if not binary_path.is_dir():
+            return None
+
+        total = 0
+        for entry in binary_path.rglob("*"):
+            try:
+                if entry.is_file():
+                    total += entry.stat().st_size
+            except OSError:
+                # A file that vanished or cannot be stat'ed mid-walk only
+                # makes the estimate low; it is not worth failing over.
+                continue
+        return total
 
     def _find_session_in_info(self, session_id: str) -> dict[str, Any] | None:
         """Find session info entry by session_id."""
