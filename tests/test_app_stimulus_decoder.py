@@ -264,3 +264,56 @@ class TestParseStimuli:
             FakeStimulator(element_id), epochids=["not-an-epoch"]
         )
         assert newdocs == []
+
+
+class TestItFeedsTheNextStep:
+    """What parse_stimuli writes is what tuning_response reads.
+
+    The join between the two halves of the stimulus pipeline, and the reason
+    both had to be ported before either could be checked end to end. These
+    are here rather than in the tuning_response tests because the input is a
+    real decoder output, not a document hand-built to look like one.
+    """
+
+    def test_control_stimulus_finds_the_blank_in_the_document_just_written(self):
+        """FakeStimulator alternates a grating with a blank, so trial 2 and
+        trial 4 are the controls -- 1-based trial numbers, as stored."""
+        from ndi.app.stimulus.tuning_response import ndi_app_stimulus_tuning__response
+
+        session, element_id = real_session()
+        newdocs, _ = ndi_app_stimulus_decoder(session).parse_stimuli(FakeStimulator(element_id))
+
+        responder = ndi_app_stimulus_tuning__response(session)
+        cs_ids, cs_doc = responder.control_stimulus(newdocs[0])
+
+        assert cs_ids == [2.0, 2.0, 4.0, 4.0]
+        assert cs_doc.dependency_value("stimulus_presentation_id") == newdocs[0].id
+
+    def test_label_control_stimuli_labels_every_presentation_written(self):
+        from ndi.app.stimulus.tuning_response import ndi_app_stimulus_tuning__response
+
+        session, element_id = real_session()
+        stimulator = FakeStimulator(element_id)
+        newdocs, _ = ndi_app_stimulus_decoder(session).parse_stimuli(stimulator)
+        assert len(newdocs) == 2  # one per epoch
+
+        cs_docs = ndi_app_stimulus_tuning__response(session).label_control_stimuli(stimulator)
+        assert len(cs_docs) == len(newdocs)
+
+    def test_the_stored_parameters_carry_what_decides_an_f1_response(self):
+        """ndi.fun.stimulustemporalfrequency reads the stimulus parameters
+        out of this document to decide whether F1 and F2 exist at all. The
+        grating here declares no temporal frequency, so it has none -- which
+        is the answer, not a failure to look."""
+        from ndi.fun.stimulus import stimulustemporalfrequency
+
+        session, element_id = real_session()
+        newdocs, _ = ndi_app_stimulus_decoder(session).parse_stimuli(FakeStimulator(element_id))
+        stimuli = newdocs[0].document_properties["stimulus_presentation"]["stimuli"]
+
+        assert stimuli[0]["parameters"] == {"isblank": 0, "angle": 30}
+        assert stimulustemporalfrequency(stimuli[0]["parameters"]) == (None, "")
+        assert stimulustemporalfrequency({**stimuli[0]["parameters"], "tFrequency": 4.0}) == (
+            4.0,
+            "tFrequency",
+        )

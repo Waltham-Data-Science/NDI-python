@@ -186,8 +186,23 @@ class TestSessionApps:
         labels = [label for label, _ in offered]
         assert "Electrode Data Export" in labels
         assert "spikeSorterImporter" in labels
-        # and a categorised one, which the menu groups into a submenu
+        # and the categorised ones, which the menu groups into submenus
         assert ("Ensemble Maker", "Ensembles") in offered
+        assert ("Stimulus Response", "Stimulus") in offered
+
+    def test_a_discovered_app_launches_the_class_it_named(self, monkeypatch):
+        """Label to launch: the record's Launch opens the class discovery
+        reported, on the session it is handed."""
+        opened = []
+        monkeypatch.setattr(
+            "ndi.gui.nav.datasets_pane.SessionApp.launch",
+            staticmethod(lambda cls, session: opened.append((cls, session))),
+        )
+        launch = next(
+            app["Launch"] for app in session_apps() if app["Label"] == "Stimulus Response"
+        )
+        launch("the-session")
+        assert opened == [("ndi.gui.app.stimulus_response.stimulusResponse", "the-session")]
 
 
 class TestTreeRows:

@@ -182,8 +182,24 @@ def stimulustemporalfrequency(
 
     MATLAB equivalent: ndi.fun.stimulustemporalfrequency
 
-    Uses a JSON config that maps parameter names to temporal frequency
-    with optional multiplier, adder, and period-inversion.
+    A stimulus can encode its temporal frequency in several ways -- directly
+    in Hz, scaled, or as a period to be inverted -- so which parameter to
+    read and what to do with it is data, not code: the rules live in
+    ``ndi_common/stimulus/ndi_stimulusparameters2temporalfrequency.json``,
+    shared verbatim with NDI-matlab. Rules are tried in file order and the
+    first match wins, as MATLAB does.
+
+    THIS READ THE WRONG FILE AND THE WRONG KEYS. It looked for
+    ``temporal_frequency_rules.json``, which does not exist in ndi_common,
+    and then for rule keys (``parameterName``, ``multiplier``, ``adder``,
+    ``multiplyByParameter``) that are not the ones the shipped file uses
+    (``parameter_name``, ``temporalFrequencyMultiplier``,
+    ``temporalFrequencyAdder``, ``parameterMultiplier``). Either alone made
+    it return ``(None, "")`` for every stimulus ever passed to it -- so no
+    stimulus had a fundamental frequency, and
+    ``ndi.app.stimulus.tuning_response`` computed only F0, silently skipping
+    the F1 and F2 responses that are the whole reason a response is stored
+    as a complex number.
 
     Args:
         stimulus_parameters: Dict of stimulus parameter values.
@@ -199,7 +215,7 @@ def stimulustemporalfrequency(
             config_path = str(
                 ndi_common_PathConstants.COMMON_FOLDER
                 / "stimulus"
-                / "temporal_frequency_rules.json"
+                / "ndi_stimulusparameters2temporalfrequency.json"
             )
         except Exception:
             return None, ""
@@ -215,31 +231,36 @@ def stimulustemporalfrequency(
         rules = rules.get("rules", []) if isinstance(rules, dict) else []
 
     for rule in rules:
-        param_name = rule.get("parameterName", "")
+        param_name = rule.get("parameter_name", "")
         if param_name not in stimulus_parameters:
             continue
 
         val = stimulus_parameters[param_name]
-        if not isinstance(val, (int, float)):
+        if isinstance(val, bool) or not isinstance(val, (int, float)):
             continue
 
-        multiplier = rule.get("multiplier", 1.0)
-        adder = rule.get("adder", 0.0)
+        multiplier = rule.get("temporalFrequencyMultiplier", 1.0)
+        adder = rule.get("temporalFrequencyAdder", 0.0)
         is_period = rule.get("isPeriod", False)
 
-        tf = val * multiplier + adder
+        tf = adder + multiplier * val
 
         if is_period:
             if tf == 0:
                 continue
             tf = 1.0 / tf
 
-        # Optional secondary parameter multiplication
-        secondary = rule.get("multiplyByParameter", "")
-        if secondary and secondary in stimulus_parameters:
-            sec_val = stimulus_parameters[secondary]
-            if isinstance(sec_val, (int, float)):
-                tf *= sec_val
+        # A period given in frames needs the refresh rate to become seconds,
+        # which is what parameterMultiplier names. MATLAB errors when the
+        # named parameter is absent; here the rule is skipped and the next
+        # one tried, so a stimulus set with one malformed entry still
+        # reports the frequencies of the rest.
+        secondary = rule.get("parameterMultiplier", "")
+        if secondary:
+            sec_val = stimulus_parameters.get(secondary)
+            if isinstance(sec_val, bool) or not isinstance(sec_val, (int, float)):
+                continue
+            tf *= sec_val
 
         return tf, param_name
 

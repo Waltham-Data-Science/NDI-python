@@ -14,7 +14,7 @@ We provide:
   - Integration tests (skip if ndi_session_dir unavailable) for full flow.
 """
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -299,3 +299,150 @@ class TestMarkGarbageMocked:
         times = sorted([(i["t0"], i["t1"]) for i in intervals])
         assert times[0] == (2.0, 4.0)
         assert times[1] == (8.0, 10.0)
+
+
+# ===========================================================================
+# TestIdentifyValidIntervals — the reader compute_stimulus_response_scalar needs
+# ===========================================================================
+
+
+class TestIdentifyValidIntervals:
+    """identifyvalidintervals projects stored markings into a query's time.
+
+    It decides which stretch of a recording an analysis is allowed to use, so
+    the failure that matters is not an exception -- it is silently returning
+    the wrong stretch, which changes every response computed from it. The
+    cases below are the branches MATLAB distinguishes: no markings at all, a
+    marking that projects, one that cannot be projected, and one that lands
+    in another epoch.
+    """
+
+    def _app(self, intervals, converted=None, epoch="epoch1"):
+        from ndi.app.markgarbage import ndi_app_markgarbage
+
+        session = MagicMock()
+        session.id.return_value = "session-1"
+        session.database_search = MagicMock(return_value=[])
+        if converted is not None:
+            session.syncgraph.time_convert = MagicMock(side_effect=converted)
+        app = ndi_app_markgarbage(session)
+        app.loadvalidinterval = MagicMock(return_value=(intervals, []))
+        return app, session
+
+    def _timeref(self, epoch="epoch1"):
+        timeref = MagicMock()
+        timeref.epoch = epoch
+        return timeref
+
+    def _marking(self, t0=1.0, t1=3.0, resolvable=True):
+        struct = {
+            "referent_epochsetname": "probe1" if resolvable else "",
+            "referent_classname": "ndi.probe" if resolvable else "",
+            "clocktypestring": "dev_local_time" if resolvable else "",
+            "epoch": "epoch1",
+            "session_id": "session-1",
+            "time": 0,
+        }
+        return {"timeref_structt0": struct, "t0": t0, "timeref_structt1": struct, "t1": t1}
+
+    def test_no_markings_means_the_whole_interval_is_valid(self):
+        """The common case, and the one every caller depends on."""
+        app, _ = self._app([])
+        assert app.identifyvalidintervals(MagicMock(), self._timeref(), 0, 100) == [(0.0, 100.0)]
+
+    def test_a_marking_that_projects_carves_out_its_region(self):
+        app, _ = self._app(
+            [self._marking(1.0, 3.0)],
+            converted=[
+                (1.0, MagicMock(epoch="epoch1"), ""),
+                (3.0, MagicMock(epoch="epoch1"), ""),
+            ],
+        )
+        with patch(
+            "ndi.time.timereference.ndi_time_timereference.from_struct",
+            return_value=MagicMock(),
+        ):
+            found = app.identifyvalidintervals(MagicMock(), self._timeref(), 0, 100)
+        assert found == [(1.0, 3.0)]
+
+    def test_a_marking_that_cannot_be_rebuilt_restricts_nothing(self):
+        """An unresolvable marking is not evidence that the data is bad, only
+        that this marking says nothing about here."""
+        app, _ = self._app([self._marking(resolvable=False)])
+        assert app.identifyvalidintervals(MagicMock(), self._timeref(), 0, 100) == [(0.0, 100.0)]
+
+    def test_a_marking_from_another_epoch_restricts_nothing(self):
+        app, _ = self._app(
+            [self._marking(1.0, 3.0)],
+            converted=[
+                (1.0, MagicMock(epoch="other-epoch"), ""),
+                (3.0, MagicMock(epoch="other-epoch"), ""),
+            ],
+        )
+        with patch(
+            "ndi.time.timereference.ndi_time_timereference.from_struct",
+            return_value=MagicMock(),
+        ):
+            found = app.identifyvalidintervals(MagicMock(), self._timeref(), 0, 100)
+        assert found == [(0.0, 100.0)]
+
+    def test_a_marking_that_does_not_project_restricts_nothing(self):
+        app, _ = self._app(
+            [self._marking(1.0, 3.0)],
+            converted=[(None, None, "no path"), (None, None, "no path")],
+        )
+        with patch(
+            "ndi.time.timereference.ndi_time_timereference.from_struct",
+            return_value=MagicMock(),
+        ):
+            found = app.identifyvalidintervals(MagicMock(), self._timeref(), 0, 100)
+        assert found == [(0.0, 100.0)]
+
+    def test_without_a_session_the_whole_interval_is_valid(self):
+        from ndi.app.markgarbage import ndi_app_markgarbage
+
+        app = ndi_app_markgarbage()
+        assert app.identifyvalidintervals(MagicMock(), MagicMock(), 0, 5) == [(0.0, 5.0)]
+
+
+class TestMarkValidIntervalSchema:
+    """What markvalidinterval writes has to be what identifyvalidintervals
+    reads -- and what NDI-matlab reads. It used to be neither."""
+
+    def _app(self):
+        from ndi.app.markgarbage import ndi_app_markgarbage
+
+        session = MagicMock()
+        session.id.return_value = "session-1"
+        session.database_add = MagicMock()
+        return ndi_app_markgarbage(session), session
+
+    def _timeref(self):
+        from ndi.time.clocktype import ndi_time_clocktype
+        from ndi.time.timereference import ndi_time_timereference
+
+        referent = MagicMock()
+        referent.session.id.return_value = "session-1"
+        referent.name = "probe1"
+        return ndi_time_timereference(referent, ndi_time_clocktype("dev_local_time"), "epoch1", 0)
+
+    def test_the_stored_fields_are_the_schema_ones(self):
+        app, session = self._app()
+        app.markvalidinterval(MagicMock(), 1.0, self._timeref(), 3.0, self._timeref())
+        stored = session.database_add.call_args.args[0].document_properties["valid_interval"]
+        assert set(stored) == {"timeref_structt0", "t0", "timeref_structt1", "t1"}
+
+    def test_the_struct_carries_what_a_reference_is_rebuilt_from(self):
+        app, session = self._app()
+        app.markvalidinterval(MagicMock(), 1.0, self._timeref(), 3.0, self._timeref())
+        stored = session.database_add.call_args.args[0].document_properties["valid_interval"]
+        struct = stored["timeref_structt0"]
+        assert struct["clocktypestring"] == "dev_local_time"
+        assert struct["epoch"] == "epoch1"
+        assert struct["referent_classname"]
+
+    def test_a_reference_that_cannot_describe_itself_still_stores(self):
+        app, session = self._app()
+        app.markvalidinterval(MagicMock(), 1.0, "not a timeref", 3.0, None)
+        stored = session.database_add.call_args.args[0].document_properties["valid_interval"]
+        assert stored["timeref_structt0"]["clocktypestring"] == ""

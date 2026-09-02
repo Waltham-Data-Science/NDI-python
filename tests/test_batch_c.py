@@ -103,7 +103,14 @@ class TestMarkGarbage:
         assert docs == []
 
     def test_markvalidinterval_calls_save(self):
-        """Verify markvalidinterval builds struct and calls savevalidinterval."""
+        """Verify markvalidinterval builds the struct and calls savevalidinterval.
+
+        The time references are stored as the schema's ``timeref_structt0``
+        and ``timeref_structt1`` structs, not as the stringified references
+        this once wrote -- see the schema and identifyvalidintervals, which
+        reads them back. A reference that cannot describe itself (a bare
+        string, here) stores the empty struct.
+        """
         saved = []
 
         class MockMarkGarbage(ndi_app_markgarbage):
@@ -121,8 +128,8 @@ class TestMarkGarbage:
         assert len(saved) == 1
         assert saved[0]["t0"] == 0.5
         assert saved[0]["t1"] == 10.0
-        assert saved[0]["timeref_t0"] == "ref_utc"
-        assert saved[0]["timeref_t1"] == "ref_utc"
+        assert set(saved[0]) == {"timeref_structt0", "t0", "timeref_structt1", "t1"}
+        assert saved[0]["timeref_structt0"]["clocktypestring"] == ""
 
 
 # ===========================================================================
@@ -426,15 +433,18 @@ class TestTuningResponse:
     def test_inherits_app(self):
         assert issubclass(ndi_app_stimulus_tuning__response, ndi_app)
 
-    def test_stimulus_responses_raises(self):
+    def test_stimulus_responses_without_a_session_finds_nothing(self):
+        """These raised NotImplementedError until the compute methods were
+        ported; the behaviour without a session is now an empty result, as in
+        the rest of the app layer. The port itself is covered in
+        tests/test_app_stimulus_tuning_response.py."""
         app = ndi_app_stimulus_tuning__response()
-        with pytest.raises(NotImplementedError):
-            app.stimulus_responses(SimpleNamespace(), SimpleNamespace())
+        assert app.stimulus_responses(SimpleNamespace(), SimpleNamespace()) == []
 
-    def test_tuning_curve_raises(self):
+    def test_tuning_curve_without_a_session_says_so(self):
         app = ndi_app_stimulus_tuning__response()
-        with pytest.raises(NotImplementedError):
-            app.tuning_curve(SimpleNamespace())
+        with pytest.raises(RuntimeError, match="requires a session"):
+            app.tuning_curve(SimpleNamespace(), independent_parameter=["angle"])
 
     def test_label_control_stimuli_needs_a_session(self):
         """It writes documents, so a session is not optional. This
@@ -460,13 +470,16 @@ class TestTuningResponse:
         assert srs_docs == []
 
     def test_find_tuningcurve_with_session(self):
+        from ndi.query import ndi_query
+
         session = SimpleNamespace(
             id=lambda: "s1",
+            searchquery=lambda: ndi_query("base.session_id", "exact_string", "s1", ""),
             database_search=lambda q: [],
         )
         app = ndi_app_stimulus_tuning__response(session=session)
         tc_docs, srs_docs = app.find_tuningcurve_document(
-            SimpleNamespace(id="elem1"),
+            SimpleNamespace(id=lambda: "elem1"),
             "epoch1",
         )
         assert tc_docs == []

@@ -1142,6 +1142,26 @@ functions:
       config_path parameter not present in MATLAB (Python-only
       convenience for specifying custom config file path).
 
+      FIXED 2026-09-02: this returned (None, "") for EVERY stimulus. It
+      looked for a config named temporal_frequency_rules.json, which does
+      not exist in ndi_common, and read rule keys (parameterName,
+      multiplier, adder, multiplyByParameter) that are not the ones the
+      shipped file uses. It now reads
+      ndi_common/stimulus/ndi_stimulusparameters2temporalfrequency.json --
+      the same file MATLAB reads -- and its keys parameter_name,
+      temporalFrequencyMultiplier, temporalFrequencyAdder, isPeriod and
+      parameterMultiplier, applying them in MATLAB's order
+      (adder + multiplier * value, then invert if isPeriod, then multiply by
+      the named parameter). The silence was not harmless: a stimulus with no
+      temporal frequency gets no F1 or F2 response, so
+      ndi.app.stimulus.tuning_response computed means only.
+
+      DIVERGENCE, deliberate: MATLAB errors when a rule names a
+      parameterMultiplier that the stimulus does not carry. Python skips
+      that rule and tries the next, so one malformed stimulus in a set does
+      not cost the frequencies of the rest; the caller still gets
+      (None, "") when nothing matches.
+
   - name: stimulus_tuningcurve_log
     type: function
     matlab_path: "+ndi/+fun/+calc/stimulus_tuningcurve_log.m"

@@ -112,6 +112,47 @@ classes:
     python_path: "ndi/app/stimulus/tuning_response.py"
     python_class: "ndi_app_stimulus_tuning__response"
     inherits: "ndi.app"
+    decision_log: >
+      PORTED. Synchronized with MATLAB main as of 2026-09-02. Every compute
+      method raised NotImplementedError before this: the class shipped with
+      the initial bulk port as a framework (signatures, docstrings, document
+      plumbing) and the numerics were never written, which left a hole in the
+      middle of the pipeline between ndi.app.stimulus.decoder and
+      ndi.calc.stimulus.tuningcurve, both of which are implemented.
+
+      THE MATH COMES FROM vhlab-toolbox-python, not from a second copy of it
+      here: fieldsearch, stimids2reps, findclosest, findrowvec, nanstderr,
+      findcontrolstimulus, fouriercoeffs_tf2 and fouriercoeffs_tf_spikes are
+      all imported from vlt, as MATLAB calls them.
+
+      ONE EXCEPTION, temporary: vlt.neuro.stimulus.stimulus_response_scalar
+      cannot run as of vhlab-toolbox-python 9228e90 -- it reaches its helpers
+      as module.function where the package __init__ has bound the bare
+      function to that name, and its output arrays are preallocated float so
+      the F1/F2 path raises when a complex response is stored. Reported as
+      VH-Lab/vhlab-toolbox-python#24. The module-level scalar_responses() here
+      is that loop and only that loop, written to the same signature so it
+      can be deleted for the toolbox function when the toolbox is fixed.
+
+      MIRRORED UPSTREAM BUG: MATLAB passes control_stimulus_ids -- a
+      per-presentation vector of control PRESENTATION numbers -- to vlt's
+      control_stimid argument, which that function documents as the id of the
+      control STIMULUS. The quantities differ, so the stimulus subtracted as
+      the blank is whichever one's id equals the blank's position in
+      repetition 1 -- right by coincidence for an unshuffled order, a
+      different grating each epoch for a pseudorandom one. The error is close
+      to a constant baseline offset (tuning shape and preferred direction
+      unchanged), which is why it went unnoticed, but it can be as large as
+      the whole response amplitude.
+
+      Mirrored rather than corrected: a divergence would make the two ports
+      store different controls for the same data. Reported as
+      VH-Lab/NDI-matlab#912 with the one-line fix; when that lands, this port
+      follows it and the tests that pin the current pairing change with it.
+
+      DEPENDENCY ported alongside: ndi.app.markgarbage.identifyvalidintervals,
+      which compute_stimulus_response_scalar calls to find the usable stretch
+      of the response recording, and which also raised NotImplementedError.
 
     methods:
       - name: tuning_response
@@ -165,8 +206,15 @@ classes:
           - name: response_doc
             type_python: "ndi_document | None"
         decision_log: >
-          DISCREPANCY FIXED: Method was missing from Python.
-          Added stub.
+          Ported. One document per frequency command: 'mean' always, plus
+          'F1' and 'F2' when any stimulus in the set declares a fundamental
+          frequency, as MATLAB decides it. Extra keyword arguments mirror
+          MATLAB's name/value pairs (temporalfreqfunc, freq_response,
+          prestimulus_time, prestimulus_normalization, isspike,
+          spiketrain_dt); isspike defaults to reading the element's type,
+          as MATLAB does. Returns the LIST of documents, where the MATLAB
+          signature names one: the function has always produced up to three
+          and MATLAB's own variable is a cell array.
 
       - name: tuning_curve
         input_arguments:
@@ -174,17 +222,36 @@ classes:
             type_matlab: "ndi.document"
             type_python: "ndi_document"
           - name: independent_label
-            type_matlab: "char (Name-Value via varargin)"
-            type_python: "str"
-            default: "'angle'"
+            type_matlab: "cell (Name-Value via varargin)"
+            type_python: "str | list[str]"
+            default: "'label1'"
           - name: independent_parameter
-            type_matlab: "char (Name-Value via varargin)"
+            type_matlab: "cell (Name-Value via varargin)"
+            type_python: "str | list[str] (required)"
+            default: "None"
+          - name: constraint
+            type_matlab: "vlt.data.fieldsearch struct array"
+            type_python: "list[dict] | None"
+            default: "None"
+          - name: do_Add
+            type_matlab: "logical"
+            type_python: "bool (do_add)"
+            default: "True"
+          - name: response_units
+            type_matlab: "char"
             type_python: "str"
-            default: "'angle'"
+            default: "'Spikes/s'"
         output_arguments:
           - name: tuning_doc
             type_python: "ndi_document | None"
-        decision_log: "Exact match."
+        decision_log: >
+          Ported. MATLAB's name/value pairs become keyword arguments;
+          do_Add is spelled do_add, the only rename, since a mixed-case
+          keyword argument reads as a mistake in Python. A complex mean is
+          stored as its magnitude, as MATLAB does -- the phase of an F1
+          response depends on when the stimulus started, so it is not
+          comparable across stimuli. Returns None with a warning for an
+          empty curve, MATLAB's behaviour.
 
       - name: label_control_stimuli
         input_arguments:
@@ -236,12 +303,18 @@ classes:
           - name: cs_doc
             type_python: "ndi_document | None"
         decision_log: >
-          NOW PORTED; it previously raised NotImplementedError. MATLAB's
-          name/value pairs become keyword arguments. The matching itself runs
-          on the same vlt functions as MATLAB's -- vlt.data.fieldsearch for
-          the control stimulus, vlt.neuro.stimulus.stimids2reps for the
-          repetition structure, vlt.data.findclosest for the irregular case
-          -- so the assignment agrees across languages by construction.
+          Ported. Both methods: 'pseudorandom' pairs each trial with the
+          control from the same repetition (the previous repetition's control
+          stands in for an incomplete last one), 'hasfield' takes any stimulus
+          carrying the parameter. An irregular presentation order takes the
+          control closest in ONSET, which needs the per-stimulus timing; a
+          document carrying none raises ValueError naming that as the reason.
+
+          The matching runs on the same vlt functions MATLAB's does --
+          vlt.data.fieldsearch for the control stimulus,
+          vlt.neuro.stimulus.stimids2reps for the repetition structure,
+          vlt.data.findclosest for the irregular case -- so the assignment
+          agrees across languages by construction.
 
           COUNTING: cs_ids are 1-BASED TRIAL indexes, as MATLAB's are and as
           presentation_order is; only the array offsets inside are 0-based.
@@ -268,8 +341,12 @@ classes:
           - name: srs_doc
             type_python: "list[ndi_document]"
         decision_log: >
-          DISCREPANCY FIXED: MATLAB returns [tc_doc, srs_doc] 2-tuple.
-          Python was returning single list. Updated to return tuple.
+          Ported, INCLUDING MATLAB's two filters, which the stub dropped:
+          only curves whose response document matches BOTH the requested
+          response_type and the requested element epoch are returned, and
+          the two lists are aligned. An element usually has a mean and an F1
+          curve for every epoch, so returning all of them made the caller
+          guess, and a wrong guess is a plausible-looking wrong answer.
 
       - name: make_1d_tuning
         input_arguments:
@@ -289,17 +366,80 @@ classes:
           - name: tuning_docs
             type_python: "list[ndi_document]"
         decision_log: >
-          DISCREPANCY FIXED: Method was missing from Python.
-          Added stub.
+          Ported. One tuning curve per unique value of param_to_fix, with
+          blank stimuli excluded. param_to_fix is a single parameter name in
+          both languages (MATLAB's signature takes one; the earlier bridge
+          entry called it a cell array, which the MATLAB source does not
+          support).
+
+      - name: tuningcurvedoc2vhlabrespstruct
+        kind: static
+        input_arguments:
+          - name: tuning_doc
+            type_python: "ndi_document"
+        output_arguments:
+          - name: resp
+            type_matlab: "struct with curve, ind, spont, spontind, blankresp, blankind"
+            type_python: "dict with the same keys"
+        decision_log: >
+          Ported. Previously listed as not_applicable ("VH-lab specific
+          format, no Python equivalent needed"), which was wrong in both
+          directions: the VH lab libraries are being ported too, and this is
+          how a tuning curve reaches them. The struct becomes a dict and
+          MATLAB's 4-row curve becomes a (4, N) NumPy array.
+
+      - name: tuningdoc_fixcellarrays_static
+        kind: static
+        input_arguments:
+          - name: tc_doc
+            type_python: "ndi_document"
+        output_arguments:
+          - name: tc_doc
+            type_python: "ndi_document"
+        decision_log: >
+          Ported, and MOSTLY A NO-OP here by construction. MATLAB needs it
+          because a cell array of equal-length entries comes back from JSON
+          as a matrix and one of scalars as a vector, so the field's type
+          depends on its contents; Python lists survive the round trip. What
+          remains is the genuinely ambiguous stored case -- one repetition
+          per point written as bare numbers -- which is wrapped so a caller
+          can always index [point][repetition]. MATLAB's datestamp-based
+          transpose is NOT ported: it corrects an orientation that only
+          MATLAB's writer produced.
+
+      - name: modulated_or_mean
+        kind: static
+        input_arguments:
+          - name: stimulus_response_scalar_docs
+            type_python: "list[ndi_document]"
+          - name: modulated_response_names
+            type_python: "tuple[str, ...]"
+            default: "('F1', 'modulated')"
+          - name: mean_response_names
+            type_python: "tuple[str, ...]"
+            default: "('F0', 'mean')"
+        output_arguments:
+          - name: b
+            type_python: "int (1 modulated, 0 mean, -1 no basis)"
+          - name: ratio
+            type_python: "float"
+          - name: meanresponse
+            type_python: "float"
+          - name: modulatedresponse
+            type_python: "float"
+          - name: mean_index
+            type_python: "int | None"
+          - name: modulated_index
+            type_python: "int | None"
+        decision_log: >
+          Ported. MATLAB's six outputs become a tuple in MATLAB's order.
+          MATLAB leaves mean_index/modulated_index undefined when it returns
+          early; Python returns None for them, since a tuple has no
+          "undefined" element.
 
     not_applicable:
-      - name: tuningcurvedoc2vhlabrespstruct
-        reason: "Static utility for VH-lab specific format. No Python equivalent needed."
       - name: tuningdoc_fixcellarrays
-        reason: "Deprecated MATLAB method for cell array formatting."
-      - name: tuningdoc_fixcellarrays_static
-        reason: "Static version of deprecated method."
-      - name: modulated_or_mean
         reason: >
-          Static analysis method. May be added in future if needed
-          for downstream analysis.
+          Deprecated in MATLAB, where it raises immediately and directs the
+          caller to tuningdoc_fixcellarrays_static. Porting a function whose
+          whole body is an error would only reproduce the error.
