@@ -39,6 +39,7 @@ from __future__ import annotations
 from .electrode_data_export import ElectrodeDataExport
 from .electrode_map import ElectrodeMap
 from .ensemble_maker import ensembleMaker
+from .katz_exporter import katzExporter
 from .session_app import SessionApp, sessionApp
 from .spike_sorter_importer import spikeSorterImporter
 from .stimulus_decoder import stimulusDecoder
@@ -49,6 +50,7 @@ __all__ = [
     "ElectrodeMap",
     "SessionApp",
     "ensembleMaker",
+    "katzExporter",
     "sessionApp",
     "spikeSorterImporter",
     "stimulusDecoder",
