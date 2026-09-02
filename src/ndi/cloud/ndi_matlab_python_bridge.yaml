@@ -1085,3 +1085,79 @@ not_yet_ported:
     decision_log: >
       MATLAB internal helper. Python uses zipForUpload which handles
       this internally with zipfile module.
+  # =======================================================================
+  # +ndi/+cloud/+ui - MATLAB's cloud dialogs.
+  #
+  # Recorded here because an unrecorded file is indistinguishable from an
+  # overlooked one. Two of these are covered elsewhere in Python; three are
+  # genuine gaps with the reason each is still open.
+  # =======================================================================
+
+  - name: selectCloudDataset
+    matlab_path: "+ndi/+cloud/+ui/+dialog/selectCloudDataset.m"
+    matlab_last_sync_hash: "b7102250"
+    status: ported_elsewhere
+    python_path: "ndi/gui/nav/datasets_pane.py"
+    decision_log: >
+      MATLAB opens a modal picker over ndi.cloud.api.datasets.getPublished
+      (public) or listDatasets (private). Python covers the same ground from
+      the navigator instead of a standalone dialog:
+      fetch_cloud_datasets(is_public) calls those same two endpoints, and
+      open_cloud_dataset(is_public) is the menu action that uses it. Same
+      public/private split, same endpoints, different entry point.
+
+      One difference worth recording: MATLAB's listDatasets() takes no
+      argument, while Python authenticates first and passes the resulting
+      organization id. Python also DROPS records whose id cannot be
+      extracted rather than offering a row that nothing can open.
+
+  - name: LoginDialog
+    matlab_path: "+ndi/+cloud/+ui/+dialog/LoginDialog.mlapp"
+    matlab_last_sync_hash: "b7102250"
+    status: ported_elsewhere
+    python_path: "ndi/gui/profile_editor.py"
+    decision_log: >
+      MATLAB App Designer credential prompt, the UI behind uilogin (recorded
+      separately as not_applicable). Python collects and stores credentials
+      through ndi.gui.profile_editor.ProfileEditor -- add_profile() and
+      change_password() -- which keeps the password masked rather than
+      echoing it, so there is no separate login dialog to port.
+
+  - name: selectOrganization
+    matlab_path: "+ndi/+cloud/+ui/+dialog/selectOrganization.m"
+    matlab_last_sync_hash: "56e2669c"
+    status: not_yet_ported
+    decision_log: >
+      The interactive counterpart to the "use the first organization"
+      behaviour that Python already has in
+      ndi.cloud.auth._extract_first_organization_id. A user who belongs to
+      more than one organization cannot currently choose which one to act
+      on: Python takes the first and logs a warning saying selection is
+      unsupported. That warning is the honest marker of this gap, and this
+      entry is where the gap is recorded. Porting it means porting
+      organizationLabels below with it.
+
+  - name: organizationLabels
+    matlab_path: "+ndi/+cloud/+ui/+dialog/organizationLabels.m"
+    matlab_last_sync_hash: "56e2669c"
+    status: not_yet_ported
+    decision_log: >
+      Pure helper for selectOrganization: turns parallel name/id lists into
+      unique display labels, falling back to the id when a name is empty and
+      appending the id in parentheses when two organizations share a name.
+      No UI and no MATLAB-only dependency, so it ports directly and is
+      exactly testable -- but it has no caller in Python until the picker
+      above exists, which is why it is deliberately deferred rather than
+      ported on its own.
+
+  - name: DatasetUploadMonitor
+    matlab_path: "+ndi/+cloud/+ui/DatasetUploadMonitor.mlapp"
+    matlab_last_sync_hash: "b7102250"
+    status: not_yet_ported
+    decision_log: >
+      MATLAB App Designer window showing per-document and per-file progress
+      during a cloud upload. Python has the progress components it would be
+      built from (ndi.gui.component.ProgressBarWindow and NDIProgressBar),
+      but nothing wires them to ndi.cloud.upload, which reports progress
+      only as verbose print output. Recorded as a gap rather than as
+      not_applicable: the need is real, only the wiring is missing.
