@@ -4,6 +4,12 @@ Mirrors MATLAB: ndi.gui.ndi_gui_Icon
 
 Represents a subject, probe, or DAQ device as a coloured rectangle with
 an image and a connection terminal in the QGraphicsScene.
+
+CROSS-LANGUAGE NAMING
+Methods mirroring MATLAB keep MATLAB's exact name and also carry a
+snake_case alias bound to the same function -- one method under two names,
+so neither a ported MATLAB script nor idiomatic Python has to remember which
+spelling a given method happens to have.
 """
 
 from __future__ import annotations
@@ -150,3 +156,6 @@ class ndi_gui_Icon:
         self.rect.moveBy(dx, dy)
         self.img.moveBy(dx, dy)
         self.term.moveBy(dx, dy)
+
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    set_pos = setPos
