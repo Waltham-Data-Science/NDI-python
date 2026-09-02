@@ -4,6 +4,12 @@ Mirrors MATLAB: ndi.gui.component.ndi_gui_component_CommandWindowProgressMonitor
 
 Displays progress updates in the terminal/console with optional
 timestamps and in-place updating.
+
+CROSS-LANGUAGE NAMING
+Methods mirroring MATLAB keep MATLAB's exact name and also carry a
+snake_case alias bound to the same function -- one method under two names,
+so neither a ported MATLAB script nor idiomatic Python has to remember which
+spelling a given method happens to have.
 """
 
 from __future__ import annotations
@@ -51,10 +57,16 @@ class ndi_gui_component_CommandWindowProgressMonitor(ndi_gui_component_abstract_
         msg = self.formatMessage(msg)
         self._print(msg)
 
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    update_progress_display = updateProgressDisplay
+
     def updateMessage(self, message: str) -> None:
         """Print an updated message."""
         msg = self.formatMessage(message)
         self._print(msg)
+
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    update_message = updateMessage
 
     def finish(self) -> None:
         """Print the completion message."""

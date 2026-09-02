@@ -9,22 +9,25 @@ per-session "Apps" menu -- no registration step, and no list of apps
 anywhere for it to be added to.
 
 The package is also one of the two scanned by default (with ``ndi.app``),
-so an app dropped in here is discovered by being here. That includes the
-apps a user adds themselves: naming their package in the
-``GUI.Navigator.SessionAppPackages`` preference is the extension path
-MATLAB offers, and this port offers it too.
+so an app dropped in here is discovered by being here. A user extends the
+menu the same way, by naming their own package in the
+``GUI.Navigator.SessionAppPackages`` preference -- exactly the extension
+path MATLAB offers.
 
 WHAT IS HERE OF MATLAB'S ELEVEN
+:class:`~ndi.gui.app.electrode_data_export.ElectrodeDataExport` ("Electrode
+Data Export", at the top level) and
 :class:`~ndi.gui.app.stimulus_response.stimulusResponse` ("Stimulus
-Response", under the "Stimulus" submenu). The other ten are still to come;
-each depends on further unported subsystems -- ``ndi.cpipeline`` for the
-pipeline editor, the sorters' own toolboxes -- and each is its own piece of
-work.
+Response", under the "Stimulus" submenu). The other nine -- pyraview, the
+spike sorters, the remaining exporters -- are each their own piece of work,
+some still waiting on unported subsystems (``ndi.cpipeline`` for the
+pipeline editor, the sorters' own toolboxes).
 """
 
 from __future__ import annotations
 
+from .electrode_data_export import ElectrodeDataExport
 from .session_app import SessionApp, sessionApp
 from .stimulus_response import stimulusResponse
 
-__all__ = ["SessionApp", "sessionApp", "stimulusResponse"]
+__all__ = ["ElectrodeDataExport", "SessionApp", "sessionApp", "stimulusResponse"]

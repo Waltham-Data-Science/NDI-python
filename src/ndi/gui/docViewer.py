@@ -4,6 +4,12 @@ Mirrors MATLAB: ndi.gui.ndi_gui_docViewer
 
 A self-contained window with a document table, detail panel, search/filter
 controls, and dependency-graph visualisation.
+
+CROSS-LANGUAGE NAMING
+Methods mirroring MATLAB keep MATLAB's exact name and also carry a
+snake_case alias bound to the same function -- one method under two names,
+so neither a ported MATLAB script nor idiomatic Python has to remember which
+spelling a given method happens to have.
 """
 
 from __future__ import annotations
@@ -140,6 +146,9 @@ class ndi_gui_docViewer:
         self.tempDocuments = list(self.fullDocuments)
         self._refresh_table()
 
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    add_doc = addDoc
+
     def details(self, row_index: int) -> None:
         """Show details for the selected row."""
         if row_index < 0 or row_index >= len(self.tempTable):
@@ -209,6 +218,9 @@ class ndi_gui_docViewer:
         self._search_text.setText(searchStr)
         self.filter()
 
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    filter_helper = filterHelper
+
     def searchID(self, list_ID: list[str]) -> None:
         """Filter to show only documents whose IDs contain entries in *list_ID*."""
         self.tempTable = []
@@ -219,6 +231,9 @@ class ndi_gui_docViewer:
                     self.tempTable.append(row)
                     self.tempDocuments.append(self.fullDocuments[i])
         self._refresh_table()
+
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    search_id = searchID
 
     def contentSearch(self, fieldValue: str) -> None:
         """Search document content by field value.
@@ -245,6 +260,9 @@ class ndi_gui_docViewer:
                 self.tempTable.append(self.fullTable[i])
                 self.tempDocuments.append(self.fullDocuments[i])
         self._refresh_table()
+
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    content_search = contentSearch
 
     def searchFieldName(self, fieldName: str | None = None) -> None:
         """Filter to documents that have a given field name.
@@ -274,9 +292,15 @@ class ndi_gui_docViewer:
                 self.tempDocuments.append(self.fullDocuments[i])
         self._refresh_table()
 
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    search_field_name = searchFieldName
+
     def clearView(self) -> None:
         """Clear the table display."""
         self.table.setRowCount(0)
+
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    clear_view = clearView
 
     def restore(self) -> None:
         """Restore the full unfiltered table."""

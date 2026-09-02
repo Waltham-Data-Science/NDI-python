@@ -175,12 +175,15 @@ class TestSessionApps:
         monkeypatch.setattr("ndi.gui.nav.datasets_pane.SessionApp.list", staticmethod(boom))
         assert session_apps() == []
 
-    def test_ndis_own_apps_are_discovered_with_no_edit_here(self):
-        """The check that the mechanism was right: ndi.gui.app.stimulusResponse
-        reaches the menu without this file, or the menu code, naming it. The
-        rest of MATLAB's eleven join it the same way as they land.
+    def test_ndis_own_apps_are_discovered_with_no_help_from_the_pane(self):
+        """The proof that the mechanism works from the app's side: the pane
+        knows nothing about either app, and offers both because
+        SessionApp.list found them in ndi.gui.app. The rest of MATLAB's
+        eleven land the same way, as does any package a user names in
+        GUI.Navigator.SessionAppPackages.
         """
         found = {app["Label"]: app["Category"] for app in session_apps()}
+        assert "Electrode Data Export" in found
         assert found["Stimulus Response"] == "Stimulus"
 
     def test_a_discovered_app_launches_the_class_it_named(self, monkeypatch):
@@ -516,7 +519,7 @@ class TestMenusAreBuilt:
 
     def test_the_apps_menu_is_present_even_with_no_apps_to_offer(self, monkeypatch):
         """Empty says 'no apps found'. Omitting it would say 'sessions have
-        no apps', which is false. NDI now ships one, so discovery is stubbed
+        no apps', which is false. NDI now ships two, so discovery is stubbed
         out here to get back to the empty case -- which a user still reaches
         by breaking their own app package."""
         _qt_or_skip()
@@ -528,6 +531,17 @@ class TestMenusAreBuilt:
         apps = menu.actions()[0].menu()
         assert apps is not None
         assert apps.actions() == []
+
+    def test_a_session_is_offered_ndis_own_apps(self):
+        """End to end, with nothing patched: right-clicking a session offers
+        an app that reached the menu purely by subclassing SessionApp."""
+        _qt_or_skip()
+        nav, pane = _built_pane()
+        pane.user_sessions = [FakeSession("a", path="/s/a")]
+        pane.populate_tree()
+        menu = pane.build_node_menu(pane.tree.topLevelItem(0).child(0))
+        apps = menu.actions()[0].menu()
+        assert "Electrode Data Export" in [a.text() for a in apps.actions()]
 
     def test_discovered_apps_reach_the_menu(self, monkeypatch):
         """The end of the wire: what SessionApp.list found is what the user
