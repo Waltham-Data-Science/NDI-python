@@ -182,16 +182,40 @@ class TestFinddocsElementEpochType:
         result = finddocs_elementEpochType(session, "elem_123", "epoch_001", "spectrogram")
         assert result == []
 
-    def test_exception_fallback(self):
+    def test_a_failing_search_returns_no_documents(self):
+        """A failed search yields an empty list rather than propagating.
+
+        This replaces a test that asserted a ``session_or_dataset.session``
+        fallback was taken when the first search raised. That fallback could
+        only ever run under a MagicMock: MagicMock manufactures any attribute
+        on demand, while neither ndi_session nor ndi_dataset has ``session``
+        at all, so on a real object the fallback raised a second
+        AttributeError and the caller got [] regardless. The old assertion
+        held the dead branch in place and described behaviour that never
+        happened in production; the contract callers actually depend on is
+        the one asserted here. See tests/test_no_dead_database_access.py.
+        """
         from ndi.database_fun import finddocs_elementEpochType
 
         session = MagicMock()
         session.database_search.side_effect = Exception("DB error")
-        session.session = MagicMock()
-        session.session.database_search.return_value = ["doc1"]
 
         result = finddocs_elementEpochType(session, "elem_123", "epoch_001", "spectrogram")
-        assert result == ["doc1"]
+        assert result == []
+
+    def test_the_failure_is_logged_rather_than_silent(self, caplog):
+        """An unreadable database and an empty one look identical to the
+        caller, so the difference has to be visible somewhere."""
+        import logging
+
+        from ndi.database_fun import finddocs_elementEpochType
+
+        session = MagicMock()
+        session.database_search.side_effect = Exception("DB error")
+
+        with caplog.at_level(logging.DEBUG, logger="ndi.database_fun"):
+            finddocs_elementEpochType(session, "elem_123", "epoch_001", "spectrogram")
+        assert any("DB error" in r.getMessage() or r.exc_info for r in caplog.records)
 
 
 # =========================================================================

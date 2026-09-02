@@ -9,7 +9,10 @@ and document analysis utilities.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     pass
@@ -68,11 +71,9 @@ def findallantecedents(
 
     try:
         found = session_or_dataset.database_search(q)
-    except Exception:
-        try:
-            found = session_or_dataset.session.database_search(q)
-        except Exception:
-            found = []
+    except Exception:  # noqa: BLE001 - logged; callers expect a list
+        logger.debug("database_search failed; treating as no documents", exc_info=True)
+        found = []
 
     antecedents.extend(found)
 
@@ -117,11 +118,9 @@ def findalldependencies(
 
         try:
             found = session_or_dataset.database_search(q)
-        except Exception:
-            try:
-                found = session_or_dataset.session.database_search(q)
-            except Exception:
-                found = []
+        except Exception:  # noqa: BLE001 - logged; callers expect a list
+            logger.debug("database_search failed; treating as no documents", exc_info=True)
+            found = []
 
         new_found = []
         for f in found:
@@ -168,11 +167,9 @@ def docs_from_ids(
 
     try:
         found = session_or_dataset.database_search(q)
-    except Exception:
-        try:
-            found = session_or_dataset.session.database_search(q)
-        except Exception:
-            found = []
+    except Exception:  # noqa: BLE001 - logged; callers expect a list
+        logger.debug("database_search failed; treating as no documents", exc_info=True)
+        found = []
 
     # Build lookup
     found_map: dict[str, Any] = {}
@@ -244,11 +241,9 @@ def find_ingested_docs(session_or_dataset: Any) -> list[Any]:
 
     try:
         return session_or_dataset.database_search(q)
-    except Exception:
-        try:
-            return session_or_dataset.session.database_search(q)
-        except Exception:
-            return []
+    except Exception:  # noqa: BLE001 - logged; callers expect a list
+        logger.debug("database_search failed; treating as no documents", exc_info=True)
+        return []
 
 
 def finddocs_elementEpochType(
@@ -282,11 +277,9 @@ def finddocs_elementEpochType(
 
     try:
         return session_or_dataset.database_search(q)
-    except Exception:
-        try:
-            return session_or_dataset.session.database_search(q)
-        except Exception:
-            return []
+    except Exception:  # noqa: BLE001 - logged; callers expect a list
+        logger.debug("database_search failed; treating as no documents", exc_info=True)
+        return []
 
 
 def ndi_document2ndi_object(
@@ -448,11 +441,9 @@ def finddocs_missing_dependencies(
     # Find all docs with depends_on
     try:
         all_docs = session_or_dataset.database_search(ndi_query("").isa("base"))
-    except Exception:
-        try:
-            all_docs = session_or_dataset.session.database_search(ndi_query("").isa("base"))
-        except Exception:
-            return []
+    except Exception:  # noqa: BLE001 - logged; callers expect a list
+        logger.debug("database_search failed; treating as no documents", exc_info=True)
+        return []
 
     # Build cache of known IDs
     known_ids: set[str] = set()
