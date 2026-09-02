@@ -116,6 +116,24 @@ def run_checks() -> tuple[list[tuple[str, bool, str]], int, int]:
     ok, detail = _try_import("ndicompress")
     check("NDI-compress (ndicompress)", ok, detail)
 
+    # ndi.ontology re-exports this package, and every caller inside NDI-python
+    # imports it lazily inside a function body, so a missing or broken install
+    # stays invisible until someone performs a lookup -- and lookup() answers an
+    # unresolvable provider with an empty result rather than an error. Check it
+    # here, including the data files, since a wheel built without them imports
+    # perfectly well and then finds nothing.
+    ok, detail = _try_import("ndi_ontology")
+    if ok:
+        try:
+            from ndi_ontology.paths import NDIC_FILE, ONTOLOGY_LIST_FILE
+
+            missing = [str(f) for f in (ONTOLOGY_LIST_FILE, NDIC_FILE) if not f.exists()]
+            if missing:
+                ok, detail = False, f"installed but data files missing: {', '.join(missing)}"
+        except Exception as e:  # pragma: no cover - defensive
+            ok, detail = False, str(e)
+    check("ndi-ontology (ndi_ontology)", ok, detail)
+
     # vhlab-toolbox-python
     ok, detail = _try_import("vlt")
     check("vhlab-toolbox-python (vlt)", ok, detail)
