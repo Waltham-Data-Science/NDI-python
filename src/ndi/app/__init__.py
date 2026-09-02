@@ -110,10 +110,10 @@ class ndi_app(ndi_documentservice):
             if result_url.returncode == 0:
                 url = result_url.stdout.strip()
             else:
-                url = "https://github.com/Waltham-ndi_gui_Data-Science/NDI-python"
+                url = "https://github.com/Waltham-Data-Science/NDI-python"
         except Exception:
             version = "$Format:%H$"
-            url = "https://github.com/Waltham-ndi_gui_Data-Science/NDI-python"
+            url = "https://github.com/Waltham-Data-Science/NDI-python"
 
         return version, url
 

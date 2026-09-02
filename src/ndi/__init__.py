@@ -78,7 +78,7 @@ from .session import empty_id, ndi_session, ndi_session_dir
 from .subject import ndi_subject
 
 __version__ = "0.1.0"
-__author__ = "VH-ndi_gui_Lab"
+__author__ = "VH-Lab"
 
 
 def version() -> tuple:
@@ -94,7 +94,7 @@ def version() -> tuple:
     import subprocess
     from pathlib import Path as _Path
 
-    url = "https://github.com/Waltham-ndi_gui_Data-Science/NDI-python"
+    url = "https://github.com/Waltham-Data-Science/NDI-python"
     # Try git describe from the repo root
     repo = _Path(__file__).resolve().parent.parent.parent
     try:
