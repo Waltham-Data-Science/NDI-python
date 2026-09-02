@@ -22,6 +22,7 @@ from .plot import plot_extracellular_spikeshapes
 from .text import parse_text, parseText
 from .utils import (
     channelname2prefixnumber,
+    identifier,
     name2variable_name,
     name2variableName,
     pseudorandomint,
@@ -30,6 +31,7 @@ from .utils import (
 
 __all__ = [
     "channelname2prefixnumber",
+    "identifier",
     "plot_extracellular_spikeshapes",
     "name2variableName",
     "name2variable_name",

@@ -91,10 +91,13 @@ def get(S: Any, probe: Any, *, verbose: int | bool = 0) -> ProbeGeometry:  # noq
     MATLAB equivalent: ``ndi.fun.probe.geometry.get``.
     """
     from ...query import ndi_query
+    from ..utils import identifier
 
     result = ProbeGeometry()
 
-    q_geom = ndi_query("").isa("probe_geometry") & ndi_query("").depends_on("probe_id", probe.id())
+    q_geom = ndi_query("").isa("probe_geometry") & ndi_query("").depends_on(
+        "probe_id", identifier(probe)
+    )
     geomdocs = S.database_search(q_geom)
 
     if not geomdocs:
@@ -113,7 +116,7 @@ def get(S: Any, probe: Any, *, verbose: int | bool = 0) -> ProbeGeometry:  # noq
     result.found = True
 
     q_s2c = ndi_query("").isa("site2channelmap") & ndi_query("").depends_on(
-        "probe_geometry_id", result.pg_doc.id()
+        "probe_geometry_id", identifier(result.pg_doc)
     )
     s2cdocs = S.database_search(q_s2c)
     if s2cdocs:
