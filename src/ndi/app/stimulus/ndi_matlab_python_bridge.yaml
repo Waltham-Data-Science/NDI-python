@@ -17,6 +17,7 @@ classes:
   - name: decoder
     type: class
     matlab_path: "src/ndi/+ndi/+app/+stimulus/decoder.m"
+    matlab_last_sync_hash: "0e2caa0"
     python_path: "ndi/app/stimulus/decoder.py"
     python_class: "ndi_app_stimulus_decoder"
     inherits: "ndi.app"
@@ -43,6 +44,10 @@ classes:
             type_matlab: "logical"
             type_python: "bool"
             default: "False"
+          - name: epochids
+            type_matlab: "char | cell array of char"
+            type_python: "str | list[str] | None"
+            default: "None (all epochs)"
         output_arguments:
           - name: newdocs
             type_matlab: "cell array of ndi.document"
@@ -51,9 +56,36 @@ classes:
             type_matlab: "cell array of ndi.document"
             type_python: "list[ndi_document]"
         decision_log: >
-          DISCREPANCY FIXED: MATLAB returns [newdocs, existingdocs]
-          2-tuple. Python was returning single list. Updated Python
-          to return tuple of (newdocs, existingdocs).
+          PORTED, 2026-09-02. This was a stub that returned ([], []) with the
+          comment "Framework method - actual parsing depends on stimulus
+          format", so nothing in Python ever wrote a stimulus_presentation
+          document -- and every later stage of the stimulus pipeline reads
+          those and nothing else. The epochids argument, which MATLAB has and
+          the earlier signature omitted, is now present.
+
+          One document per epoch, written from the stimulator's own record:
+          readtimeseriesepoch over the whole epoch (-inf..inf, as MATLAB), the
+          presentation order and each stimulus's parameters into the document,
+          and the per-presentation timing into an attached
+          presentation_time.bin via ndi.database_fun
+          .write_presentation_time_structure -- the binary form MATLAB moved
+          to, which load_presentation_time already read.
+
+          An epoch that already has a document is skipped, so parsing is
+          idempotent and can be re-run when new epochs arrive; reset removes
+          only the documents of the epochs the call covers, never another
+          epoch's.
+
+          DIVERGENCE, deliberate: an epoch whose record holds no stimuli gets
+          NO document, where MATLAB writes one with empty fields. A document
+          that answers every search with nothing in it is worse than no
+          document, and the callers all treat "no presentation document" as
+          "nothing was shown in this epoch" already.
+
+          DIVERGENCE, mechanical: MATLAB's ndi.file.temp_name() has no Python
+          counterpart, so tempfile.mkstemp is used, and the temp file is
+          removed after the database add whether or not the add succeeded.
+          MATLAB relies on the ingest to delete it.
 
       - name: load_presentation_time
         input_arguments:

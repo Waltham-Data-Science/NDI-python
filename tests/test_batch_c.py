@@ -314,14 +314,22 @@ class TestStimulusDecoder:
         with pytest.raises(RuntimeError, match="No session"):
             app.parse_stimuli(SimpleNamespace())
 
-    def test_parse_returns_empty_tuple(self):
+    def test_parse_an_element_with_no_epochs_writes_nothing(self):
+        """This once asserted the stub's unconditional ([], []). It now
+        exercises the real path with an element that has no epochs, which is
+        the only way the answer is still two empty lists. The port is
+        covered in tests/test_app_stimulus_decoder.py."""
+        from ndi.query import ndi_query
+
         session = SimpleNamespace(
             id=lambda: "s1",
+            searchquery=lambda: ndi_query("base.session_id", "exact_string", "s1", ""),
             database_search=lambda q: [],
             database_remove=lambda d: None,
         )
         app = ndi_app_stimulus_decoder(session=session)
-        newdocs, existingdocs = app.parse_stimuli(SimpleNamespace(id="stim1"))
+        element = SimpleNamespace(id=lambda: "stim1", epochtable=lambda: [])
+        newdocs, existingdocs = app.parse_stimuli(element)
         assert newdocs == []
         assert existingdocs == []
 
