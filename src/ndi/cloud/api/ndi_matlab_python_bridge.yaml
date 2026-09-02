@@ -767,7 +767,8 @@ functions:
     decision_log: "Exact match."
 
   - name: getBulkUploadURL
-    matlab_path: "+ndi/+cloud/+api/+files/getBulkUploadURL.m"  # Note: also in +documents
+    matlab_path: "+ndi/+cloud/+api/+documents/getBulkUploadURL.m"
+    matlab_last_sync_hash: "9b75c0fe"
     python_path: "ndi/cloud/api/files.py"
     python_qualified: "ndi.cloud.api.files.getBulkUploadURL"
     input_arguments:
@@ -783,7 +784,11 @@ functions:
         type_python: "str"
     decision_log: >
       Disambiguated from documents.getBulkUploadURL by full module path.
-      Exact name match.
+      Exact name match. MATLAB ships the function only under +api/+documents;
+      this entry used to name a +api/+files/getBulkUploadURL.m that does not
+      exist, which the bridge-completeness check (#131) caught. Python
+      exposes it from both api.files and api.documents because the bulk
+      upload it returns a URL for is a file operation reached from either.
 
   - name: putFiles
     matlab_path: "+ndi/+cloud/+api/+files/putFiles.m"

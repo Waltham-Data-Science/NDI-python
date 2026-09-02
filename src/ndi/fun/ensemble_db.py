@@ -66,10 +66,11 @@ def _element_from_document(doc: Any, session: Any) -> Any:
 
     The class comes from the registry when the document names a registered
     one; otherwise ndi_element_timeseries, since every element read here is
-    read as a timeseries. (Elements written as plain timeseries record
-    ndi_element_class "ndi.element" because ndi_element_timeseries does not
-    override it, so the registry alone would strand them without
-    readtimeseries.)
+    read as a timeseries. The fallback also covers a document written before
+    issue #133, when ndi_element_timeseries and ndi_neuron did not override
+    ndi_element_class() and so recorded "ndi.element": the registry resolves
+    that name to the base class, which has no readtimeseries, and reading an
+    ensemble's marks through it would yield nothing.
     """
     from ..class_registry import get_class
     from ..element_timeseries import ndi_element_timeseries
