@@ -268,10 +268,11 @@ functions:
 # =========================================================================
 # ndi.fun.probe.geometry  (MATLAB +ndi/+fun/+probe/+geometry/)
 # -------------------------------------------------------------------------
-# One module, ndi/fun/probe/geometry.py, as with export above. Only the
-# three functions an export needs are ported; fromKilosortMap, fromLibrary,
-# fromProbeInterface, fromStruct, listLibrary, plot, readLibrary and
-# writeLibrary are NOT YET PORTED.
+# One module, ndi/fun/probe/geometry.py, as with export above. The three
+# functions an export needs, plus the five the electrode-layout library and
+# the Electrode Map app need (listLibrary, readLibrary, fromStruct,
+# fromLibrary, plot). fromKilosortMap, fromProbeInterface and writeLibrary
+# are NOT YET PORTED: no Python caller needs them.
 # =========================================================================
   - name: geometry.get
     type: function
@@ -517,3 +518,168 @@ functions:
       value that parses whole as a number comes back numeric, as in MATLAB.
       removeold -- removes the neuron elements and their epoch documents
       before the neuron documents, then the cluster document itself.
+
+  - name: geometry.listLibrary
+    type: function
+    matlab_path: "+ndi/+fun/+probe/+geometry/listLibrary.m"
+    matlab_last_sync_hash: "eaec593"
+    python_path: "ndi/fun/probe/geometry.py"
+    python_name: list_library
+    input_arguments:
+      - name: group
+        type_matlab: "char"
+        type_python: "str | None"
+        default: "None (every group)"
+    output_arguments:
+      - name: names
+        type_matlab: "cell array"
+        type_python: "list[str]"
+    decision_log: >
+      Ported. Reads ndi_common/probe/geometry/<group>/<model>.json, which
+      ships with this change (7 layouts across generic, neuronexus,
+      neuropixels and ucla, copied from NDI-matlab). DIVERGENCE: the result
+      is SORTED, where MATLAB returns dir() order -- the Electrode Map app
+      shows this list to a user, and it would otherwise be ordered by
+      whatever the filesystem returned. snake_case primary, listLibrary
+      alias.
+      Synchronized with MATLAB main as of 2026-09-02.
+
+  - name: geometry.readLibrary
+    type: function
+    matlab_path: "+ndi/+fun/+probe/+geometry/readLibrary.m"
+    matlab_last_sync_hash: "eaec593"
+    python_path: "ndi/fun/probe/geometry.py"
+    python_name: read_library
+    input_arguments:
+      - name: name
+        type_matlab: "char ('group/model' or 'model')"
+        type_python: "str"
+    output_arguments:
+      - name: geom
+        type_matlab: "struct"
+        type_python: "dict[str, Any]"
+      - name: filepath
+        type_matlab: "char (optional second output)"
+        type_python: "str (always returned, second half of the tuple)"
+    decision_log: >
+      Ported. A bare model name is searched across groups and raises when two
+      groups have it, as MATLAB does. Both outputs are always returned:
+      Python has no nargout, and the path is what makes "which one did it
+      read?" answerable.
+      Synchronized with MATLAB main as of 2026-09-02.
+
+  - name: geometry.fromStruct
+    type: function
+    matlab_path: "+ndi/+fun/+probe/+geometry/fromStruct.m"
+    matlab_last_sync_hash: "eaec593"
+    python_path: "ndi/fun/probe/geometry.py"
+    python_name: from_struct
+    input_arguments:
+      - name: S
+        type_python: "Any"
+      - name: probe
+        type_python: "Any"
+      - name: geom
+        type_matlab: "struct"
+        type_python: "dict[str, Any]"
+      - name: "map / add / replace / check_channels / verbose"
+        type_matlab: "name-value pairs"
+        type_python: "keyword-only arguments"
+    output_arguments:
+      - name: pg_doc
+        type_python: "ndi_document"
+      - name: s2c_doc
+        type_python: "ndi_document | None"
+      - name: info
+        type_matlab: "struct (n_sites, n_channels, channel_mismatch, message)"
+        type_python: "dict with the same keys"
+    decision_log: >
+      Ported, including the third output INFO, which exists so a GUI can put
+      the site/channel mismatch in a dialog rather than scraping lastwarn.
+      THE EMPTY-COLUMN RULE IS THE ONE THING THAT HAD TO CHANGE SHAPE: the
+      schema shapes these fields [N x 1], and MATLAB writes zeros(0,1)
+      rather than [] for an absent optional field because validation rejects
+      a 0x0. Python has no 0x1; the shape the validator accepts is [[]],
+      read as 1x0 under the same rule that lets a row vector stand for a
+      column. So [[]] goes into documents (EMPTY_COLUMN / _document_column)
+      and _column reads it back as empty, which is also why geometry.get
+      normalises what it returns. Without it every layout with an empty
+      optional field fails validation.
+      Synchronized with MATLAB main as of 2026-09-02.
+
+  - name: geometry.fromLibrary
+    type: function
+    matlab_path: "+ndi/+fun/+probe/+geometry/fromLibrary.m"
+    matlab_last_sync_hash: "eaec593"
+    python_path: "ndi/fun/probe/geometry.py"
+    python_name: from_library
+    input_arguments:
+      - name: S
+        type_python: "Any"
+      - name: probe
+        type_python: "Any"
+      - name: name
+        type_matlab: "char"
+        type_python: "str"
+      - name: "map / add / replace / verbose"
+        type_matlab: "name-value pairs"
+        type_python: "keyword-only arguments"
+    output_arguments:
+      - name: pg_doc
+        type_python: "ndi_document"
+      - name: s2c_doc
+        type_python: "ndi_document | None"
+      - name: info
+        type_python: "dict"
+    decision_log: >
+      Ported. A layout's shipped 'map' becomes a site2channelmap unless the
+      caller supplies one, and is removed before the geometry document is
+      built since it is a layout field and not a probe_geometry field.
+      Sites are not channels: the wiring depends on the headstage, not the
+      electrode, which is why it is a second document at all.
+      Synchronized with MATLAB main as of 2026-09-02.
+
+  - name: geometry.plot
+    type: function
+    matlab_path: "+ndi/+fun/+probe/+geometry/plot.m"
+    matlab_last_sync_hash: "eaec593"
+    python_path: "ndi/fun/probe/geometry.py"
+    python_name: plot
+    input_arguments:
+      - name: source
+        type_matlab: "char | struct | ndi.document"
+        type_python: "str | dict | ndi_document"
+      - name: "axes / title"
+        type_matlab: "name-value pairs"
+        type_python: "ax=..., title=..."
+    output_arguments:
+      - name: h
+        type_python: "dict of matplotlib artists"
+    decision_log: >
+      Ported. Opens a new figure when no axes is given, as MATLAB does.
+      MATLAB's 'axes' option is spelled 'ax', matplotlib's name for it.
+      Synchronized with MATLAB main as of 2026-09-02.
+
+  - name: plotProbeGeometry
+    type: function
+    matlab_path: "+ndi/+fun/+probe/plotProbeGeometry.m"
+    matlab_last_sync_hash: "eaec593"
+    python_path: "ndi/fun/probe/plot_probe_geometry.py"
+    python_name: plot_probe_geometry
+    input_arguments:
+      - name: pg
+        type_matlab: "struct | ndi.document"
+        type_python: "dict | ndi_document"
+      - name: "axes / marker_size / contour_color / contour_linewidth / show_labels / labels / label_font_size / label_color"
+        type_matlab: "name-value pairs"
+        type_python: "keyword arguments (ax=...)"
+    output_arguments:
+      - name: h
+        type_matlab: "struct of graphics handles"
+        type_python: "dict of matplotlib artists"
+    decision_log: >
+      Ported to matplotlib. Sites coloured by shank_id, body contour when the
+      layout has one, site numbers 1..N (1-based: a site number is read off a
+      datasheet, not indexed into a list), and a Shank ID colorbar when there
+      is more than one shank.
+      Synchronized with MATLAB main as of 2026-09-02.
