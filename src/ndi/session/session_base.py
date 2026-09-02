@@ -24,6 +24,27 @@ from ..util.classname import ndi_matlab_classname
 logger = logging.getLogger(__name__)
 
 
+def _element_doc_id(document: Any) -> str:
+    """The base.id of a document, for a log line, without ever raising."""
+    doc_id = getattr(document, "id", None)
+    if doc_id:
+        return str(doc_id)
+    props = getattr(document, "document_properties", None)
+    if isinstance(props, dict):
+        return str(props.get("base", {}).get("id", "<unknown id>"))
+    return "<unknown id>"
+
+
+def _element_doc_class(document: Any) -> str:
+    """The stored element.ndi_element_class, for a log line, without raising."""
+    props = getattr(document, "document_properties", None)
+    if isinstance(props, dict):
+        element = props.get("element", {})
+        if isinstance(element, dict):
+            return str(element.get("ndi_element_class", ""))
+    return ""
+
+
 def empty_id() -> str:
     """
     Produce the empty session ID.
@@ -922,10 +943,23 @@ class ndi_session(ABC):
         for doc in docs:
             try:
                 obj = self._document_to_object(doc)
-                if obj is not None:
-                    elements.append(obj)
-            except Exception:
-                pass
+            except Exception:  # noqa: BLE001 - one bad document must not cost the others
+                # Silence here is what kept issue #133 invisible: "ndi.neuron"
+                # was in no class registry, so every MATLAB-written neuron
+                # raised on reconstruction and this handler dropped it. A user
+                # asking a MATLAB-written session for its neurons got [] and no
+                # reason. Skipping still beats failing the whole call over one
+                # document, but it no longer happens quietly.
+                logger.warning(
+                    "getelements: dropping element document %s (element.ndi_element_class=%r); "
+                    "it could not be reconstructed",
+                    _element_doc_id(doc),
+                    _element_doc_class(doc),
+                    exc_info=True,
+                )
+                continue
+            if obj is not None:
+                elements.append(obj)
 
         return elements
 
@@ -1106,11 +1140,30 @@ class ndi_session(ABC):
 
         if document.doc_isa("element"):
             props = document.document_properties
-            ndi_class = props.get("element", {}).get("ndi_element_class", "")
+            element = props.get("element", {}) if isinstance(props, dict) else {}
+            ndi_class = element.get("ndi_element_class", "")
             cls = get_class(ndi_class)
             if cls is None:
                 raise ValueError(
                     f"Unknown element class: {ndi_class!r}. " f"Register it in ndi.class_registry."
+                )
+            if ndi_class == "ndi.element" and element.get("type", "") == "neuron":
+                # A neuron labelled "ndi.element" was written by a version of
+                # NDI-python from before issue #133: ndi_neuron did not
+                # override ndi_element_class(), so it stored the base class
+                # name. The label is not rewritten here -- guessing a class
+                # from element.type would diverge from MATLAB, which builds
+                # feval(stored class name) and nothing else -- so the document
+                # still loads as a plain ndi_element, without readtimeseries.
+                # Saying so is the difference between stale data a user can
+                # act on and data that is silently the wrong kind.
+                logger.warning(
+                    "Element document %s has element.type 'neuron' but "
+                    "element.ndi_element_class 'ndi.element'; it was probably written by "
+                    "NDI-python before the ndi_neuron class-name fix (issue #133). It loads "
+                    "as a plain ndi_element and has no readtimeseries. Rewrite the document "
+                    "with an ndi_neuron to restore it.",
+                    _element_doc_id(document),
                 )
             return cls(session=self, document=document)
 

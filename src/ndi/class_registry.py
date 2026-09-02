@@ -37,12 +37,14 @@ def _build_registry() -> dict[str, type]:
     from .daq.system_image import ndi_daq_system_image
     from .element import ndi_element
     from .element.ensemble import ndi_element_ensemble
+    from .element_timeseries import ndi_element_timeseries
     from .file.navigator import ndi_file_navigator
     from .file.navigator.epochdir import ndi_file_navigator_epochdir
     from .file.navigator.rhd_series import ndi_file_navigator_rhd_series
     from .file.navigator.rhd_series_epochdir import (
         ndi_file_navigator_rhd_series_epochdir,
     )
+    from .neuron import ndi_neuron
     from .probe import ndi_probe
     from .probe.timeseries import ndi_probe_timeseries
     from .probe.timeseries_mfdaq import ndi_probe_timeseries_mfdaq
@@ -67,9 +69,18 @@ def _build_registry() -> dict[str, type]:
     registry: dict[str, type] = {}
 
     # Elements / probes (keyed by ndi_element_class() return value)
+    #
+    # ndi_element_timeseries and ndi_neuron MUST be present or a document whose
+    # element.ndi_element_class is "ndi.element.timeseries"/"ndi.neuron" cannot
+    # be reconstructed -- MATLAB stores class(obj), so those are exactly the
+    # names a MATLAB-written timeseries element or neuron carries, and
+    # ndi_session_base._document_to_object raises on a name it cannot resolve
+    # (issue #133).
     for cls in (
         ndi_element,
         ndi_element_ensemble,
+        ndi_element_timeseries,
+        ndi_neuron,
         ndi_probe,
         ndi_probe_timeseries,
         ndi_probe_timeseries_mfdaq,
