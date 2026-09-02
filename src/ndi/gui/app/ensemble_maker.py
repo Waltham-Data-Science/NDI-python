@@ -11,6 +11,25 @@ one ensemble.
 Ensembles produced here are what ``ndi.fun.export.blech_clust`` -- and
 MATLAB's ``ndi.gui.app.katzExporter``, not ported yet -- read when exporting.
 
+WHAT THIS APP CONSUMES, AND WHAT DOES NOT YET PRODUCE IT
+An ensemble is built from the SPIKING-NEURON elements recorded on a probe:
+``ndi.fun.ensemble.load`` collects the elements of type ``'spikes'`` that
+have the probe as their underlying element. A probe with none yields an
+ensemble of zero neurons -- built, marked, and empty when plotted -- which is
+what MATLAB does too, and is the reason the "no neurons to plot" message
+exists in both.
+
+Those neuron elements come from spike sorting, and Python cannot yet produce
+them: ``ndi.app.spikesorter.clusters2neurons`` and ``loadwaveforms``, and
+several ``ndi.app.spikeextractor`` methods, raise NotImplementedError, while
+MATLAB's two sorter apps (kiasort, vhNDISpikeSorter) are blocked on their own
+external toolboxes. So this app is fully useful today on a session whose
+neurons arrived from somewhere else -- sorted in MATLAB, pulled from the
+cloud, or written by a lab's own code -- and will build empty ensembles on
+one sorted entirely within Python, until that pipeline lands. Nothing here
+needs revisiting when it does; the app reads whatever ``'spikes'`` elements
+the session holds.
+
 THE MODEL IS PYTHON, NOT THE WIDGETS
 MATLAB keeps this app's state IN the widgets: the listbox's ``ItemsData`` is
 the probe index, the dropdown's ``Value`` is the epoch. Here the state lives
