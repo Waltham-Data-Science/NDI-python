@@ -637,6 +637,59 @@ class TestVhlabRespStruct:
         }
         return doc
 
+    def test_ind_holds_the_raw_individuals_not_the_subtracted_ones(self):
+        """The field this helper got wrong, and nothing was asserting.
+
+        MATLAB sets resp.ind = ind_real (tuning_response.m:834) -- the raw
+        individual responses. The Python port returned the control-subtracted
+        ones instead, which no test noticed because none of them looked at
+        `ind`.
+        """
+        resp = ndi_app_stimulus_tuning__response.tuningcurvedoc2vhlabrespstruct(self._curve_doc())
+        assert [list(row) for row in resp["ind"]] == [[10.0, 12.0], [20.0, 22.0]]
+
+    def test_ind_and_curve_answer_different_questions(self):
+        """`ind` is raw and `curve` is control-subtracted, in the same struct.
+
+        Not an inconsistency: a tuning curve is about response above
+        baseline, while a caller comparing responses against the blank --
+        neural_response_significance -- needs both groups on the same
+        footing, and gets the controls as `blankind`.
+        """
+        resp = ndi_app_stimulus_tuning__response.tuningcurvedoc2vhlabrespstruct(self._curve_doc())
+        assert resp["ind"][0][0] == 10.0  # raw
+        assert resp["curve"][1][0] == pytest.approx(10.0)  # 11 mean - 1 control
+        assert np.asarray(resp["blankind"]).ravel().tolist() == [1.0, 1.0]
+
+    def test_a_complex_response_is_not_subtracted_before_its_magnitude(self):
+        """Why the raw/subtracted distinction is not cosmetic.
+
+        F1 and F2 responses are complex, and their phase depends on when the
+        stimulus started, so the relative phase between a response and its
+        control is arbitrary. abs(a - b) swings with that phase where
+        abs(a) - abs(b) does not: signal 10 against control 3 gives 7 at 0
+        degrees and 13 at 180.
+
+        Here the response is 10 at 90 degrees of phase and the control is 3
+        at 0. Raw magnitude is 10. Had the control been subtracted first the
+        magnitude would be abs(10j - 3) = 10.44.
+        """
+        doc = self._curve_doc()
+        doc.document_properties["stimulus_tuningcurve"].update(
+            {
+                # Two repetitions per point: one would make the standard
+                # error a division by zero and emit a RuntimeWarning that has
+                # nothing to do with what this test is about.
+                "individual_responses_real": [[0.0, 0.0], [0.0, 0.0]],
+                "individual_responses_imaginary": [[10.0, 10.0], [10.0, 10.0]],
+                "control_individual_responses_real": [[3.0, 3.0], [3.0, 3.0]],
+                "control_individual_responses_imaginary": [[0.0, 0.0], [0.0, 0.0]],
+            }
+        )
+        resp = ndi_app_stimulus_tuning__response.tuningcurvedoc2vhlabrespstruct(doc)
+        assert resp["ind"][0][0] == pytest.approx(10.0)
+        assert resp["ind"][0][0] != pytest.approx(abs(10j - 3))
+
     def test_the_curve_is_four_rows_with_the_control_subtracted(self):
         resp = ndi_app_stimulus_tuning__response.tuningcurvedoc2vhlabrespstruct(self._curve_doc())
         assert resp["curve"].shape == (4, 2)

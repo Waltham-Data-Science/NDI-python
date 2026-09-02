@@ -6,28 +6,26 @@ tuning curves, and then into the selectivity indices most callers want.
 
 MATLAB equivalent: src/ndi/+ndi/+app/oridirtuning.m
 
-TWO HALVES, ONE OF THEM BLOCKED
-The tuning-curve half is here and works: it delegates to
-:meth:`ndi.app.stimulus.tuning_response.tuning_curve`, so nothing about the
-averaging is reimplemented.
+WHERE THE MATH COMES FROM
+Almost none of it is here. The tuning-curve half delegates to
+:meth:`ndi.app.stimulus.tuning_response.tuning_curve`; the indices come from
+``vlt.neuro.vision.oridir.index`` (vector and double-gaussian fit) and the
+two ANOVA p-values from
+``vhlib.response_stats.neural_response_significance``. That mirrors
+NDI-matlab, which calls both toolboxes directly rather than carrying its own
+copies.
 
-The index half -- calculate_oridir_indexes and calculate_all_oridir_indexes
--- is NOT implemented, and deliberately not worked around. Both indices come
-from vlt, and the math there is complete and correct: on a synthetic cell
-tuned to 90 degrees, oridir_vectorindexes returns dir_pref 92.3 with
-significant Hotelling p-values, and oridir_fitindexes returns the
-double-gaussian fit with dirpref 90.6. What stops them running is two import
-lines in the toolbox, where the alias names a function rather than the module
-it is called as:
+TWO RESPONSE STRUCTS, NOT ONE
+calculate_oridir_indexes builds two, as MATLAB does (oridirtuning.m:155-165),
+and they differ in one field:
 
-    oridir_vectorindexes.py:2   hotelling.hotellingt2test(...)
-    oridir_fitindexes.py:2      otfit.otfit_carandini(...)
+    the significance test  gets the RAW individual responses, vs the blank
+    the indices            get the CONTROL-SUBTRACTED ones
 
-Reported as VH-Lab/vhlab-toolbox-python#24, which names both files. Once that
-lands, the two methods below are a thin translation of the MATLAB, because
-the arithmetic is already written and tested on the other side. Vendoring a
-workaround here would put a copy of another project's bug in this one, and
-would have to be removed again.
+Whether a cell responded at all is a question about what it did compared with
+the blank; how sharply it is tuned is a question about response above
+baseline. One struct passed to both would silently answer one of them wrong,
+and the difference never shows up in the output.
 
 THE STIMULUS TEST IS NOT A FIELD LOOKUP
 is_oridir_stimulus_response has to follow the response document to its
@@ -381,10 +379,13 @@ class ndi_app_oridirtuning(ndi_app, ndi_app_appdoc):
         # question about response above baseline. Passing one struct to both
         # would silently answer one of them wrong.
         #
-        # ndi.app.stimulus.tuning_response.tuningcurvedoc2vhlabrespstruct is
-        # deliberately NOT used here: MATLAB's version of it returns the raw
-        # individuals while the Python port returns the subtracted ones, so it
-        # matches neither caller cleanly. See the note in the PR.
+        # ndi.app.stimulus.tuning_response.tuningcurvedoc2vhlabrespstruct now
+        # returns exactly the significance struct -- raw `ind` plus
+        # `blankind` -- since #151 corrected it to match MATLAB. It is still
+        # not used here, for the reason MATLAB inlines the same loop: the
+        # index call needs the CONTROL-SUBTRACTED individuals, which that
+        # helper does not return, so the loop above has to exist regardless
+        # and calling the helper as well would compute everything twice.
         blank = control_individual[0] if control_individual else np.asarray([])
         significance_p, visual_p = neural_response_significance(
             {"ind": raw_individual, "blankind": blank}
