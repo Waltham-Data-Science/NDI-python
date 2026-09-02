@@ -10,9 +10,10 @@ anywhere for it to be added to.
 
 The package is also one of the two scanned by default (with ``ndi.app``),
 so an app dropped in here is discovered by being here.
-:class:`~ndi.gui.app.electrode_data_export.ElectrodeDataExport` is the
-first of MATLAB's eleven apps to land, and so the first thing NDI's own
-scan finds; the rest -- pyraview, the spike sorters, the exporters -- are
+:class:`~ndi.gui.app.electrode_data_export.ElectrodeDataExport` and
+:class:`~ndi.gui.app.stimulus_decoder.stimulusDecoder` are the first of
+MATLAB's eleven apps to land, and so the first things NDI's own scan
+finds; the rest -- pyraview, the spike sorters, the other exporters -- are
 each their own piece of work, some of them still waiting on unported
 subsystems. A user can extend the menu meanwhile by naming their own
 packages in the ``GUI.Navigator.SessionAppPackages`` preference, which is
@@ -23,5 +24,6 @@ from __future__ import annotations
 
 from .electrode_data_export import ElectrodeDataExport
 from .session_app import SessionApp, sessionApp
+from .stimulus_decoder import stimulusDecoder
 
-__all__ = ["ElectrodeDataExport", "SessionApp", "sessionApp"]
+__all__ = ["ElectrodeDataExport", "SessionApp", "sessionApp", "stimulusDecoder"]
