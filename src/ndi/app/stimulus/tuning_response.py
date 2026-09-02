@@ -46,15 +46,22 @@ array of samples, into the presentation order) is 0-based, per
 ``docs/developer_notes/ndi_xlang_principles.md``. The conversions are made
 explicitly at each boundary rather than absorbed, so they can be checked.
 
-AN UPSTREAM ODDITY, MIRRORED DELIBERATELY
+AN UPSTREAM BUG, MIRRORED DELIBERATELY
 MATLAB hands ``control_stimulus_ids`` -- a per-presentation vector of control
-PRESENTATION indexes -- to a vlt argument named ``control_stimid``, which
+PRESENTATION numbers -- to a vlt argument named ``control_stimid``, which
 that function documents as the id of the control STIMULUS. The two are
-different quantities, and the effect is that the control chosen per
-presentation is not the one ``control_stimulus()`` computed. It is mirrored
-here rather than corrected: parity with NDI-matlab is the contract, a
-divergence would make the two ports disagree on stored responses, and this
-belongs upstream. See the bridge file's decision_log.
+different quantities, so the stimulus subtracted as the "blank" is whichever
+one's id happens to equal the blank's position in repetition 1: correct by
+coincidence for an unshuffled order, a different grating each epoch for a
+pseudorandom one. The effect is close to a constant baseline offset -- tuning
+shape and preferred direction are unchanged, which is why it went unnoticed
+-- but the offset can be as large as the whole response when the substitute
+lands on the preferred direction.
+
+It is mirrored here rather than corrected: parity with NDI-matlab is the
+contract, and a divergence would make the two ports store different controls
+for the same data. Reported as VH-Lab/NDI-matlab#912, with the one-line fix;
+this port should follow whatever lands there.
 """
 
 from __future__ import annotations

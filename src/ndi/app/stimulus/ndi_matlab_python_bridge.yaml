@@ -130,14 +130,21 @@ classes:
       is that loop and only that loop, written to the same signature so it
       can be deleted for the toolbox function when the toolbox is fixed.
 
-      MIRRORED UPSTREAM ODDITY: MATLAB passes control_stimulus_ids -- a
-      per-presentation vector of control PRESENTATION indexes -- to vlt's
+      MIRRORED UPSTREAM BUG: MATLAB passes control_stimulus_ids -- a
+      per-presentation vector of control PRESENTATION numbers -- to vlt's
       control_stimid argument, which that function documents as the id of the
-      control STIMULUS. The quantities differ, so the control actually paired
-      with each presentation is not the one control_stimulus() computed. It
-      is mirrored rather than corrected: a divergence would make the two
-      ports store different responses for the same data. Worth an NDI-matlab
-      issue.
+      control STIMULUS. The quantities differ, so the stimulus subtracted as
+      the blank is whichever one's id equals the blank's position in
+      repetition 1 -- right by coincidence for an unshuffled order, a
+      different grating each epoch for a pseudorandom one. The error is close
+      to a constant baseline offset (tuning shape and preferred direction
+      unchanged), which is why it went unnoticed, but it can be as large as
+      the whole response amplitude.
+
+      Mirrored rather than corrected: a divergence would make the two ports
+      store different controls for the same data. Reported as
+      VH-Lab/NDI-matlab#912 with the one-line fix; when that lands, this port
+      follows it and the tests that pin the current pairing change with it.
 
       DEPENDENCY ported alongside: ndi.app.markgarbage.identifyvalidintervals,
       which compute_stimulus_response_scalar calls to find the usable stretch
