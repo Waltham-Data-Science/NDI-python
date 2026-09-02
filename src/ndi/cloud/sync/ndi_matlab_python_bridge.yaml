@@ -248,6 +248,40 @@ functions:
         type_python: "dict[str, Any]"
     decision_log: "Exact match."
 
+  - name: documentDifference
+    matlab_path: "+ndi/+cloud/+sync/documentDifference.m"
+    matlab_last_sync_hash: "56e2669c"
+    python_path: "ndi/cloud/sync/operations.py"
+    input_arguments:
+      - name: dataset
+        type_matlab: "ndi.dataset"
+        type_python: "Any"
+      - name: cloud_dataset_id
+        type_matlab: "char (name-value 'cloudDatasetId')"
+        type_python: "str"
+        default: '""'
+      - name: verbose
+        type_matlab: "logical (name-value 'Verbose')"
+        type_python: "bool"
+        default: "False"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: report
+        type_matlab: "struct"
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Ported in #112 alongside the navigator's datasetsPane cloud actions;
+      this entry was omitted at the time and is added here (#131). Field
+      names match MATLAB's struct exactly (local_only_ids, remote_only_ids,
+      common_ids, num_local_only, num_remote_only, num_common). The three
+      id lists are sorted, because MATLAB's setdiff returns sorted output
+      and a Python set has no order at all -- sorting is what makes a given
+      comparison reproducible and the two ports agree. MATLAB's
+      name-value arguments become a positional cloud_dataset_id plus a
+      keyword-only verbose, matching the other sync operations in this file.
+
   - name: sync
     matlab_path: "N/A"
     python_path: "ndi/cloud/sync/operations.py"
@@ -347,3 +381,21 @@ not_yet_ported:
     decision_log: >
       MATLAB path resolver. Python handles this inside
       SyncIndex.read() and SyncIndex.write() methods.
+
+  - name: uploadedDocumentIds
+    matlab_path: "+ndi/+cloud/+sync/+internal/uploadedDocumentIds.m"
+    matlab_last_sync_hash: "29546720"
+    status: not_applicable
+    decision_log: >
+      MATLAB needs this because uploadDocumentCollection reports a
+      manifest of INTENDED ids alongside a parallel per-entry status
+      list, so mirrorToRemote and twoWaySync had to filter one by the
+      other -- and before it existed they reported every intended id as
+      uploaded even when the upload failed. The Python
+      uploadDocumentCollection has no such gap to close: it appends a
+      document id to report['manifest'] only after addDocument returns,
+      so the manifest already IS the uploaded set (report['status'] is a
+      single scalar, not a per-entry list). mirrorToRemote and
+      twoWaySync likewise append to uploaded_document_ids per successful
+      document. Porting the filter would mean first introducing the
+      shape it exists to correct.

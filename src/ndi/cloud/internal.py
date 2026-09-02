@@ -339,3 +339,66 @@ def duplicateDocuments(
             print(f"Found {len(duplicate_docs)} duplicates, but deletion was not requested.")
 
     return duplicate_docs, original_docs
+
+
+def formatApiError(response: Any) -> str:
+    """Build a human-readable message describing a failed API call.
+
+    MATLAB equivalent: ndi.cloud.internal.formatApiError
+
+    Args:
+        response: Whatever the failing call had to hand -- a
+            ``requests.Response``, an :class:`~ndi.cloud.client.APIResponse`,
+            an already-parsed body (dict or str), or ``None``.
+
+    Returns:
+        A non-empty message.  ``"HTTP 400 Bad Request - MATLAB license
+        required"`` when both halves are available, whichever half is
+        available on its own otherwise, and ``"no response from server"``
+        / ``"unknown error"`` when nothing usable is present.
+
+    The MATLAB version exists because #624 was a crash inside the error
+    path: the code that formatted an API failure assumed a struct body
+    with a ``message`` field, so a response that carried a string body,
+    no body, or a differently-shaped error replaced the real failure with
+    a MATLAB error about indexing.  Every branch here is therefore
+    tolerant -- an error formatter that can itself fail hides the error
+    it was called to report.
+    """
+    if response is None:
+        return "no response from server"
+
+    status_part = ""
+    status = getattr(response, "status_code", None)
+    if isinstance(status, int) and status:
+        status_part = f"HTTP {status}"
+        reason = getattr(response, "reason", "")
+        if isinstance(reason, str) and reason:
+            status_part = f"{status_part} {reason}"
+
+    body: Any = response
+    if hasattr(response, "data"):  # APIResponse
+        body = response.data
+    elif hasattr(response, "json"):  # requests.Response
+        try:
+            body = response.json()
+        except Exception:
+            body = getattr(response, "text", "")
+
+    body_part = ""
+    if isinstance(body, dict):
+        for key in ("message", "error"):
+            value = body.get(key)
+            if value:
+                body_part = str(value)
+                break
+    elif isinstance(body, str):
+        body_part = body
+
+    if status_part and body_part:
+        return f"{status_part} - {body_part}"
+    if status_part:
+        return status_part
+    if body_part:
+        return body_part
+    return "unknown error"
