@@ -509,17 +509,28 @@ class TestOriDirTuning:
     def test_doc_types(self):
         app = ndi_app_oridirtuning()
         assert "orientation_direction_tuning" in app.doc_types
-        assert "tuning_curve" in app.doc_types
+        assert "stimulus_tuningcurve" in app.doc_types
         assert len(app.doc_types) == 2
 
-    def test_doc_document_types(self):
-        app = ndi_app_oridirtuning()
-        assert "apps/oridirtuning/orientation_direction_tuning" in app.doc_document_types
-        assert "apps/oridirtuning/tuning_curve" in app.doc_document_types
+    def test_doc_document_types_name_documents_that_exist(self):
+        """Was: asserted the strings "apps/oridirtuning/...".
 
-    def test_calculate_tuning_curves_raises(self):
+        Those paths name no document in ndi_common -- ndi_document() raises
+        FileNotFoundError on both -- so struct2doc, add_appdoc and
+        calculate_all_tuning_curves could not have produced anything. The old
+        test passed because it compared strings and never built a document.
+        This one builds them.
+        """
         app = ndi_app_oridirtuning()
-        with pytest.raises(NotImplementedError):
+        for appdoc_type in app.doc_types:
+            doc = app.struct2doc(appdoc_type, {})
+            assert doc.document_properties["document_class"]["class_name"] == appdoc_type
+
+    def test_calculate_all_tuning_curves_requires_a_session(self):
+        """Was: asserted NotImplementedError. The method is implemented now;
+        without a session it raises RuntimeError instead."""
+        app = ndi_app_oridirtuning()
+        with pytest.raises(RuntimeError, match="requires a session"):
             app.calculate_all_tuning_curves(SimpleNamespace())
 
     def test_calculate_oridir_indexes_raises(self):
@@ -527,57 +538,33 @@ class TestOriDirTuning:
         with pytest.raises(NotImplementedError):
             app.calculate_all_oridir_indexes(SimpleNamespace())
 
-    def test_is_oridir_stimulus_angle(self):
-        doc = SimpleNamespace(
-            document_properties=SimpleNamespace(
-                stimulus_tuningcurve=SimpleNamespace(
-                    independent_variable_label="angle",
-                ),
-            ),
-        )
-        assert ndi_app_oridirtuning.is_oridir_stimulus_response(doc) is True
+    def test_is_oridir_stimulus_response_needs_a_session(self):
+        """Replaces five tests that asserted a label lookup on the response
+        document: each built a SimpleNamespace carrying
+        ``document_properties.stimulus_tuningcurve.independent_variable_label``
+        and checked that label against a list of words.
 
-    def test_is_oridir_stimulus_direction(self):
-        doc = SimpleNamespace(
-            document_properties=SimpleNamespace(
-                stimulus_tuningcurve=SimpleNamespace(
-                    independent_variable_label="Direction",
-                ),
-            ),
-        )
-        assert ndi_app_oridirtuning.is_oridir_stimulus_response(doc) is True
+        No ``stimulus_response_scalar`` document has a
+        ``stimulus_tuningcurve`` field -- it is a different document type --
+        so against a real document the lookup raised and the answer was
+        always False. SimpleNamespace accepts any attribute, which is what
+        let five tests agree with each other and with nothing else.
 
-    def test_is_oridir_stimulus_orientation(self):
-        doc = SimpleNamespace(
-            document_properties=SimpleNamespace(
-                stimulus_tuningcurve=SimpleNamespace(
-                    independent_variable_label="ORIENTATION",
-                ),
-            ),
-        )
-        assert ndi_app_oridirtuning.is_oridir_stimulus_response(doc) is True
-
-    def test_is_oridir_stimulus_false(self):
-        doc = SimpleNamespace(
-            document_properties=SimpleNamespace(
-                stimulus_tuningcurve=SimpleNamespace(
-                    independent_variable_label="spatial_frequency",
-                ),
-            ),
-        )
-        assert ndi_app_oridirtuning.is_oridir_stimulus_response(doc) is False
-
-    def test_is_oridir_stimulus_no_attr(self):
-        doc = SimpleNamespace(document_properties=SimpleNamespace())
-        assert ndi_app_oridirtuning.is_oridir_stimulus_response(doc) is False
-
-    def test_struct2doc_maps_type_correctly(self):
-        """struct2doc maps appdoc_type to correct schema path."""
+        MATLAB follows the response to its stimulus presentation and asks
+        what varies across the stimuli, which needs the session. The real
+        behaviour is covered against realistic documents in
+        tests/test_app_oridirtuning.py.
+        """
         app = ndi_app_oridirtuning()
-        idx = app.doc_types.index("tuning_curve")
-        assert app.doc_document_types[idx] == "apps/oridirtuning/tuning_curve"
-        idx2 = app.doc_types.index("orientation_direction_tuning")
-        assert app.doc_document_types[idx2] == "apps/oridirtuning/orientation_direction_tuning"
+        with pytest.raises(RuntimeError, match="requires a session"):
+            app.is_oridir_stimulus_response(SimpleNamespace())
+
+    def test_matlabs_other_tuning_curve_spelling_still_resolves(self):
+        """MATLAB's constructor says "tuning_curve" while its struct2doc and
+        add_appdoc say "stimulus_tuningcurve". Both reach the document."""
+        app = ndi_app_oridirtuning()
+        doc = app.struct2doc("tuning_curve", {})
+        assert doc.document_properties["document_class"]["class_name"] == "stimulus_tuningcurve"
 
     def test_find_appdoc_no_session(self):
         app = ndi_app_oridirtuning()

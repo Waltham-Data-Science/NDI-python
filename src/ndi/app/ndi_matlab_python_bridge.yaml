@@ -702,6 +702,7 @@ classes:
   - name: oridirtuning
     type: class
     matlab_path: "src/ndi/+ndi/+app/oridirtuning.m"
+    matlab_last_sync_hash: "b7102250"
     python_path: "ndi/app/oridirtuning.py"
     python_class: "ndi_app_oridirtuning"
     inherits: "ndi.app & ndi.app.appdoc"
@@ -731,7 +732,11 @@ classes:
         output_arguments:
           - name: tuning_doc
             type_python: "list[ndi_document]"
-        decision_log: "Exact match."
+        decision_log: >
+          Implemented. Searches the element's stimulus_response_scalar
+          documents, keeps the ones whose stimulus set varies only in angle,
+          and adds a stimulus_tuningcurve appdoc for each. Responses from
+          other stimulus sets are skipped rather than erroring, as in MATLAB.
 
       - name: calculate_tuning_curve
         input_arguments:
@@ -764,7 +769,17 @@ classes:
         output_arguments:
           - name: oriprops
             type_python: "list[ndi_document]"
-        decision_log: "Exact match."
+        decision_log: >
+          NOT IMPLEMENTED. Raises NotImplementedError naming its blocker.
+          The indices come from vlt.neuro.vision.oridir.index, where the math
+          is complete and correct -- measured on a synthetic cell tuned to 90
+          degrees, oridir_vectorindexes returns dir_pref 92.3 and
+          oridir_fitindexes returns the double-gaussian fit with dirpref
+          90.6. Two import lines stop it running (the alias names a function
+          rather than the module it is called as), reported as
+          VH-Lab/vhlab-toolbox-python#24. Deliberately not worked around
+          here: vendoring a copy of another project's bug would have to be
+          removed again.
 
       - name: calculate_oridir_indexes
         input_arguments:
