@@ -770,6 +770,73 @@ functions:
       Exact match. Gets the last modification date of a file.
       Returns UTC datetime or None if file doesn't exist.
 
+  - name: pathSafeName
+    type: function
+    matlab_path: "+ndi/+fun/+file/pathSafeName.m"
+    matlab_last_sync_hash: "1b99d29"
+    python_path: "ndi/fun/file.py"
+    input_arguments:
+      - name: name
+        type_matlab: "char"
+        type_python: "str"
+    output_arguments:
+      - name: safe
+        type_python: "str"
+    decision_log: >
+      Ported. Whitespace becomes '_' and anything outside [A-Za-z0-9._-]
+      becomes '-'. MATLAB spelling kept (noqa N802), as the bridge's naming
+      policy requires.
+
+  - name: elementDirectoryName
+    type: function
+    matlab_path: "+ndi/+fun/+file/elementDirectoryName.m"
+    matlab_last_sync_hash: "1b99d29"
+    python_path: "ndi/fun/file.py"
+    input_arguments:
+      - name: element
+        type_matlab: "ndi.element, ndi.probe, or char"
+        type_python: "Any"
+    output_arguments:
+      - name: dirName
+        type_python: "str"
+      - name: legacyDirName
+        type_python: "str"
+    decision_log: >
+      Ported, returning both names as a tuple. The legacy name is the
+      pre-existing form separating an element from its reference with '|',
+      which is not a legal Windows filename character.
+
+  - name: elementDirectory
+    type: function
+    matlab_path: "+ndi/+fun/+file/elementDirectory.m"
+    matlab_last_sync_hash: "1b99d29"
+    python_path: "ndi/fun/file.py"
+    input_arguments:
+      - name: parentDir
+        type_matlab: "char"
+        type_python: "str | Path"
+      - name: element
+        type_matlab: "ndi.element, ndi.probe, or char"
+        type_python: "Any"
+    output_arguments:
+      - name: dirPath
+        type_matlab: "char"
+        type_python: "str"
+      - name: dirName
+        type_python: "str"
+      - name: isLegacy
+        type_matlab: "logical"
+        type_python: "bool"
+    decision_log: >
+      Ported, all three outputs as a tuple. The platform-independent name is
+      preferred; the legacy '|' folder is returned only when it exists and
+      the new one does not, so data written by an earlier NDI is still found
+      and a new folder is still created under the new name. Callers here are
+      ndi.fun.probe.export.all_binary / .oneProbe and
+      ndi.gui.app.ElectrodeDataExport, all of which would otherwise write a
+      second folder beside an existing export. snake_case alias
+      element_directory.
+
   # =========================================================================
   # Functions — plot.py
   # MATLAB: +ndi/+fun/+plot/*.m
