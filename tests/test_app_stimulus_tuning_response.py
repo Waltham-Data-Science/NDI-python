@@ -259,17 +259,21 @@ class TestControlStimulus:
     def test_each_repetition_uses_its_own_control(self):
         """The whole point of pseudorandom pairing: a baseline from minutes
         away is a different baseline."""
-        doc = _presentation_doc(self._stimuli(), [1, 2, 3, 1, 2, 3])
+        doc = _presentation_doc(
+            self._stimuli(), [1, 2, 3, 1, 2, 3], timing=_timing([0, 2, 4, 6, 8, 10])
+        )
         ids, _ = _app().control_stimulus(doc)
         assert ids == [3.0, 3.0, 3.0, 6.0, 6.0, 6.0]
 
     def test_an_incomplete_last_repetition_reuses_the_previous_control(self):
-        doc = _presentation_doc(self._stimuli(), [1, 2, 3, 1, 2])
+        doc = _presentation_doc(self._stimuli(), [1, 2, 3, 1, 2], timing=_timing([0, 2, 4, 6, 8]))
         ids, _ = _app().control_stimulus(doc)
         assert ids[-1] == 3.0
 
     def test_a_set_with_no_control_gives_nan_throughout(self):
-        doc = _presentation_doc(self._stimuli(blank_index=None), [1, 2, 3, 1, 2, 3])
+        doc = _presentation_doc(
+            self._stimuli(blank_index=None), [1, 2, 3, 1, 2, 3], timing=_timing([0, 2, 4, 6, 8, 10])
+        )
         ids, _ = _app().control_stimulus(doc)
         assert all(np.isnan(i) for i in ids)
 
@@ -280,7 +284,7 @@ class TestControlStimulus:
             _app().control_stimulus(doc)
 
     def test_an_unknown_method_is_refused(self):
-        with pytest.raises(ValueError, match="Unknown control stimulus method"):
+        with pytest.raises(ValueError, match="Unknown control_stim_method"):
             _app().control_stimulus(_presentation_doc([], []), control_stim_method="nonsense")
 
     def test_hasfield_takes_any_stimulus_carrying_the_parameter(self):
@@ -289,7 +293,7 @@ class TestControlStimulus:
             {"parameters": {"angle": 90}},
             {"parameters": {"angle": 0, "isblank": 0}},
         ]
-        doc = _presentation_doc(stimuli, [1, 2, 3, 1, 2, 3])
+        doc = _presentation_doc(stimuli, [1, 2, 3, 1, 2, 3], timing=_timing([0, 2, 4, 6, 8, 10]))
         ids, _ = _app().control_stimulus(doc, control_stim_method="hasfield")
         assert ids == [3.0, 3.0, 3.0, 6.0, 6.0, 6.0]
 
@@ -302,15 +306,17 @@ class TestControlStimulus:
             ids, _ = _app().control_stimulus(doc)
         assert ids == [4.0, 4.0, 4.0, 4.0, 4.0, 6.0]
 
-    def test_an_irregular_order_without_timing_says_why(self):
+    def test_an_irregular_order_without_timing_reports_unknown(self):
+        """No time for every trial means no "closest in time" to find. NaN
+        per trial says that; guessing a neighbour would not."""
         doc = _presentation_doc(self._stimuli(), [1, 1, 2, 3, 2, 3])
         with patch(DECODER) as decoder:
             decoder.return_value.load_presentation_time.return_value = []
-            with pytest.raises(ValueError, match="closest in time"):
-                _app().control_stimulus(doc)
+            ids, _ = _app().control_stimulus(doc)
+        assert all(np.isnan(i) for i in ids)
 
     def test_the_document_records_the_method_and_the_presentation(self):
-        doc = _presentation_doc(self._stimuli(), [1, 2, 3])
+        doc = _presentation_doc(self._stimuli(), [1, 2, 3], timing=_timing([0, 2, 4]))
         session = _session()
         _, control_doc = _app(session).control_stimulus(doc, controlid="isblank")
         method = control_doc.document_properties["control_stimulus_ids"][
@@ -323,26 +329,33 @@ class TestControlStimulus:
 
 
 class TestLabelControlStimuli:
-    def test_without_a_session_there_is_nothing_to_label(self):
-        assert ndi_app_stimulus_tuning__response().label_control_stimuli(SimpleNamespace()) == []
+    def test_without_a_session_it_says_so(self):
+        """An empty list would read as "this element has no presentations",
+        which is a different thing from "there is nowhere to look"."""
+        with pytest.raises(RuntimeError, match="No session configured"):
+            ndi_app_stimulus_tuning__response().label_control_stimuli(SimpleNamespace())
 
     def test_one_document_per_presentation(self):
         doc = _presentation_doc(
-            [{"parameters": {"angle": 0}}, {"parameters": {"isblank": 1}}], [1, 2, 1, 2]
+            [{"parameters": {"angle": 0}}, {"parameters": {"isblank": 1}}],
+            [1, 2, 1, 2],
+            timing=_timing([0, 2, 4, 6]),
         )
         session = _session(search=lambda q: [doc])
-        stimulator = SimpleNamespace(id=lambda: "stim-1")
+        stimulator = SimpleNamespace(id="stim-1")
         docs = _app(session).label_control_stimuli(stimulator)
         assert len(docs) == 1
         assert docs[0].doc_class() == "control_stimulus_ids"
 
     def test_reset_removes_the_existing_labels_first(self):
         doc = _presentation_doc(
-            [{"parameters": {"angle": 0}}, {"parameters": {"isblank": 1}}], [1, 2]
+            [{"parameters": {"angle": 0}}, {"parameters": {"isblank": 1}}],
+            [1, 2],
+            timing=_timing([0, 2]),
         )
         old = ndi_document("control_stimulus_ids")
         session = _session(search=lambda q: [doc] if _is_presentation_query(q) else [old])
-        _app(session).label_control_stimuli(SimpleNamespace(id=lambda: "stim-1"), reset=True)
+        _app(session).label_control_stimuli(SimpleNamespace(id="stim-1"), reset=True)
         session.database_rm.assert_called_once()
 
 
@@ -543,14 +556,14 @@ class TestFindTuningcurveDocument:
         returning all of them would leave the caller to guess."""
         curve, response, _ = self._docs()
         app = _app(self._session_for(curve, response))
-        element = SimpleNamespace(id=lambda: "element-1")
+        element = SimpleNamespace(id="element-1")
         assert app.find_tuningcurve_document(element, "epoch1", "F1") == ([curve], [response])
         assert app.find_tuningcurve_document(element, "epoch1", "mean") == ([], [])
 
     def test_the_epoch_is_filtered_on(self):
         curve, response, _ = self._docs()
         app = _app(self._session_for(curve, response))
-        element = SimpleNamespace(id=lambda: "element-1")
+        element = SimpleNamespace(id="element-1")
         assert app.find_tuningcurve_document(element, "other-epoch", "F1") == ([], [])
 
     def test_without_a_session_there_is_nothing_to_find(self):
@@ -675,7 +688,7 @@ class TestStimulusResponses:
         with patch(DECODER) as decoder:
             decoder.return_value.load_presentation_time.return_value = []
             found = _app(session).stimulus_responses(
-                SimpleNamespace(id=lambda: "stim"), SimpleNamespace(id=lambda: "element")
+                SimpleNamespace(id="stim"), SimpleNamespace(id="element")
             )
         assert found == []
 
@@ -685,12 +698,10 @@ class TestStimulusResponses:
         doc = _presentation_doc([{"parameters": {}}], [1])
         session = _session(search=lambda q: [doc])
         session.syncgraph.time_convert.return_value = (None, None, "no path")
-        stimulator = SimpleNamespace(id=lambda: "stim", session=session)
+        stimulator = SimpleNamespace(id="stim", session=session)
         with patch(DECODER) as decoder:
             decoder.return_value.load_presentation_time.return_value = _timing([0.0])
-            found = _app(session).stimulus_responses(
-                stimulator, SimpleNamespace(id=lambda: "element")
-            )
+            found = _app(session).stimulus_responses(stimulator, SimpleNamespace(id="element"))
         assert found == []
         session.database_add.assert_not_called()
 
@@ -711,8 +722,8 @@ class TestStimulusResponses:
 
         session = _session(search=search)
         _app(session).stimulus_responses(
-            SimpleNamespace(id=lambda: "stim"),
-            SimpleNamespace(id=lambda: "element"),
+            SimpleNamespace(id="stim"),
+            SimpleNamespace(id="element"),
             reset=True,
         )
         removed = [call.args[0] for call in session.database_rm.call_args_list]
@@ -783,7 +794,7 @@ class TestTheWholePipeline:
         store: list = []
         session = self._session_for(presentation, store)
         element = SimpleNamespace(
-            id=lambda: "neuron-1",
+            id="neuron-1",
             type="spikes",
             session=session,
             readtimeseries=lambda epoch, t0, t1: (
@@ -792,7 +803,7 @@ class TestTheWholePipeline:
                 SimpleNamespace(epoch="epoch1"),
             ),
         )
-        stimulator = SimpleNamespace(id=lambda: "stim-1", session=session)
+        stimulator = SimpleNamespace(id="stim-1", session=session)
 
         app = _app(session)
         _, control_doc = app.control_stimulus(presentation)

@@ -1,36 +1,39 @@
-"""ndi.app.stimulus.decoder - what was shown, and when.
+"""
+ndi.app.stimulus.decoder - Stimulus presentation decoder.
 
-MATLAB counterpart: ``src/ndi/+ndi/+app/+stimulus/decoder.m``
+Parses stimulus timing and parameters from stimulus elements
+into structured stimulus_presentation documents.
 
-The first step of the stimulus pipeline. A stimulator probe records, epoch by
-epoch, which stimulus was shown and when it went up and came down;
-:meth:`parse_stimuli` reads that and writes it as one
-``stimulus_presentation`` document per epoch. Everything after it --
-``ndi.app.stimulus.tuning_response``, then ``ndi.calc.stimulus.tuningcurve``
--- reads those documents and nothing else, so until this runs there is
-nothing in the database to compute a response against.
+MATLAB equivalent: src/ndi/+ndi/+app/+stimulus/decoder.m
 
-WHY THE TIMING GOES IN A BINARY FILE
-A presentation document holds one entry per stimulus PRESENTATION, and an
-experiment can have tens of thousands. Kept inline they would make the
-document's JSON enormous and slow to search; kept in ``presentation_time.bin``
-the document stays small and the times are read only when a response is
-computed. MATLAB moved to this form and left the inline reader in place for
-documents written before it, which :meth:`load_presentation_time` still
-honours -- with the same warning MATLAB gives.
+WHAT A stimulus_presentation DOCUMENT IS FOR
+It is the record of what was shown and when: the order stimuli were
+presented in, the parameters of each distinct stimulus, and -- in an
+attached binary -- the open/onset/offset/close times of every trial.
+Everything downstream of a stimulus experiment reads it: the tuning-response
+app, ``ndi.fun.export.blech_clust``, the Katz exporter, and the
+"what varies / what is constant" panels of
+:class:`ndi.gui.app.stimulusDecoder`. Until it exists, none of them can say
+anything about the session.
 
-ONE DOCUMENT PER EPOCH, AND EPOCHS ARE NOT REDONE
-An epoch that already has a presentation document is skipped, not rewritten:
-parsing is idempotent, so it can be run again after new epochs arrive without
-disturbing what is already there or orphaning the responses computed from it.
-``reset=True`` is the deliberate opposite, and removes only the documents of
-the epochs it is about to redo.
+WHY THE TIMES GO IN A FILE
+The document's schema still carries a ``presentation_time`` field, and
+MATLAB still reads it when an old document has one, but nothing writes it
+any more: a run of ten thousand trials would put ten thousand nested structs
+inside a JSON document. The times are written to ``presentation_time.bin``
+instead, through ``ndi.database_fun.write_presentation_time_structure``, and
+read back by :meth:`load_presentation_time`.
 """
 
 from __future__ import annotations
 
+import os
+import tempfile
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
+
+from ...fun.utils import identifier
 from .. import ndi_app
 
 if TYPE_CHECKING:
@@ -60,31 +63,36 @@ class ndi_app_stimulus_decoder(ndi_app):
         reset: bool = False,
         epochids: str | list[str] | None = None,
     ) -> tuple[list[ndi_document], list[ndi_document]]:
-        """Write a ``stimulus_presentation`` document for each stimulus epoch.
+        """
+        Write stimulus_presentation documents for a stimulus element's epochs.
 
-        MATLAB equivalent: ``ndi.app.stimulus.decoder/parse_stimuli``.
+        MATLAB equivalent: ndi.app.stimulus.decoder/parse_stimuli
 
-        For every epoch of NDI_ELEMENT_STIM that does not already have one,
-        this reads the epoch's stimulus record and stores what was shown
-        (each stimulus's parameters, and the order they were presented in)
-        as the document, with the per-presentation timing in an attached
-        ``presentation_time.bin``.
+        For each epoch of *ndi_element_stim* that does not already have one,
+        reads the epoch's stimulus record and writes a
+        ``stimulus_presentation`` document -- with the presentation times in
+        an attached ``presentation_time.bin`` -- INTO THE DATABASE. An epoch
+        that already has one is left alone and reported in *existingdocs*,
+        which is what makes the call safe to repeat over a session that is
+        half decoded.
 
         Args:
-            ndi_element_stim: the stimulator element or probe.
-            reset: remove and rebuild the documents of the epochs this call
-                covers. Only those epochs: a reset of one epoch must not
-                delete another epoch's work.
-            epochids: an epoch id, or a list of them, to limit the call to.
-                None means every epoch of the element.
+            ndi_element_stim: Stimulus element or probe.
+            reset: Remove and rebuild the documents of the epochs this call
+                operates on. Only those epochs' documents are removed, so
+                re-decoding one epoch never costs the others.
+            epochids: An epoch id, or a list of them, to restrict the call
+                to. None (the default) means every epoch of the element.
 
         Returns:
-            ``(newdocs, existingdocs)`` -- the documents written now, and
-            the ones that were already there. MATLAB's two outputs, in
-            MATLAB's order.
+            Tuple of (newdocs, existingdocs): the documents written by this
+            call, and the ones that already existed and were kept.
 
-        Raises:
-            RuntimeError: when the app has no session to write to.
+        DEVIATION, deliberate: MATLAB's ``intersect``/``setdiff`` sort the
+        epoch ids alphabetically, so its documents are written in that
+        order; here the element's own epoch-table order is kept. The
+        documents are identical either way -- each is keyed by its epoch id
+        -- and epoch-table order is the order the caller sees in the GUI.
         """
         if self._session is None:
             raise RuntimeError("No session configured")
@@ -92,165 +100,107 @@ class ndi_app_stimulus_decoder(ndi_app):
         from ...query import ndi_query
 
         session = self._session
-        existing = session.database_search(
-            ndi_query("").isa("stimulus_presentation")
-            & session.searchquery()
-            & ndi_query("").depends_on("stimulus_element_id", ndi_element_stim.id())
-        )
-        existing_epochs = [self._document_epochid(doc) for doc in existing]
+        element_id = identifier(ndi_element_stim)
 
-        target_epochs = self._target_epochs(ndi_element_stim, epochids)
+        requested = _as_epoch_id_list(epochids)
+
+        existing_docs = session.database_search(
+            ndi_query("").isa("stimulus_presentation")
+            & ndi_query("").depends_on("stimulus_element_id", element_id)
+            & session.searchquery()
+        )
+        existing_epoch_ids = [_doc_epoch_id(doc) for doc in existing_docs]
+
+        target_epochs = _element_epoch_ids(ndi_element_stim)
+        if requested:
+            target_epochs = [e for e in target_epochs if e in requested]
 
         if reset:
-            stale = [
+            # Only the target epochs' documents go. Removing the element's
+            # whole set would silently destroy epochs the caller did not ask
+            # about -- and each takes minutes to rebuild.
+            doomed = [
                 doc
-                for doc, epoch in zip(existing, existing_epochs, strict=True)
+                for doc, epoch in zip(existing_docs, existing_epoch_ids)
                 if epoch in target_epochs
             ]
-            if stale:
-                session.database_rm(stale)
-            keep = [
+            if doomed:
+                session.database_rm(doomed)
+            kept = [
                 (doc, epoch)
-                for doc, epoch in zip(existing, existing_epochs, strict=True)
+                for doc, epoch in zip(existing_docs, existing_epoch_ids)
                 if epoch not in target_epochs
             ]
-            existing = [doc for doc, _ in keep]
-            existing_epochs = [epoch for _, epoch in keep]
+            existing_docs = [doc for doc, _ in kept]
+            existing_epoch_ids = [epoch for _, epoch in kept]
 
-        finished = set(existing_epochs)
+        finished = set(existing_epoch_ids)
         remaining = [epoch for epoch in target_epochs if epoch not in finished]
 
         newdocs: list[ndi_document] = []
-        written: list[str] = []
-        for epoch in remaining:
-            doc, path = self._presentation_document(ndi_element_stim, epoch)
-            if doc is not None:
-                newdocs.append(doc)
-                written.append(path)
-
+        temp_files: list[str] = []
         try:
+            for epoch_id in remaining:
+                doc, temp_path = self._presentation_document(ndi_element_stim, epoch_id, element_id)
+                newdocs.append(doc)
+                temp_files.append(temp_path)
+
+            # The temp files must OUTLIVE the add: add_file only records
+            # where the bytes are, and the database copies them in here.
+            # Deleting them before this point ingests nothing and leaves a
+            # document whose presentation_time.bin cannot be opened -- which
+            # nothing notices until something tries to read the times back.
             if newdocs:
                 session.database_add(newdocs)
         finally:
-            # The database ingests each timing file; whether it removes the
-            # original is its business, not this app's. Cleaning up here
-            # leaves nothing behind either way -- including when the add
-            # raised, which is when a stranded temp file would otherwise be
-            # the only trace of the attempt.
-            _remove_files(written)
-        return newdocs, existing
+            for temp_path in temp_files:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
 
-    def _target_epochs(self, ndi_element_stim: Any, epochids: Any) -> list[str]:
-        """The epochs this call covers, in the element's own order.
-
-        An id that names no epoch of this element is dropped rather than
-        raising: asking to parse an epoch that is not there has already been
-        answered, and the epochs that ARE there should still be parsed.
-        """
-        try:
-            table = ndi_element_stim.epochtable()
-        except Exception:  # noqa: BLE001 - an element that cannot list its epochs
-            return []
-        epochs = [str(entry.get("epoch_id", "")) for entry in _as_list(table)]
-        epochs = [epoch for epoch in epochs if epoch]
-        if epochids is None:
-            return epochs
-        wanted = {str(epochids)} if isinstance(epochids, str) else {str(e) for e in epochids}
-        return [epoch for epoch in epochs if epoch in wanted]
+        return newdocs, list(existing_docs)
 
     def _presentation_document(
-        self, ndi_element_stim: Any, epoch: str
-    ) -> tuple[ndi_document | None, str]:
-        """The ``stimulus_presentation`` document for one epoch, and its file.
+        self,
+        ndi_element_stim: Any,
+        epoch_id: str,
+        element_id: str,
+    ) -> tuple[ndi_document, str]:
+        """Build one epoch's document; returns it and its pending temp file.
 
-        Returns ``(None, "")`` when the epoch holds no stimuli at all -- an
-        epoch the stimulator was running through but did not present in.
-        Writing an empty document for it would make every later search return
-        something with nothing in it.
+        The document is NOT added here, and the temp file holding its
+        presentation times is NOT removed here: both are the caller's, which
+        is what keeps the file alive until the database has copied it in.
         """
-        import os
-        import tempfile
+        session = self._session
+        data, t, timeref = ndi_element_stim.readtimeseriesepoch(
+            epoch_id, float("-inf"), float("inf")
+        )
+        data = data or {}
+        t = t or {}
+
+        stimuli = [{"parameters": p} for p in data.get("parameters", [])]
+        presentation_time = _presentation_time(t, timeref)
 
         from ...database_fun import write_presentation_time_structure
 
-        data, t, timeref = ndi_element_stim.readtimeseriesepoch(epoch, float("-inf"), float("inf"))
-        if data is None or t is None:
-            return None, ""
-        stimids = _as_list(data.get("stimid"))
-        onsets = _as_list(t.get("stimon"))
-        if not stimids or not onsets:
-            return None, ""
-
-        stimuli = [{"parameters": parameters} for parameters in _as_list(data.get("parameters"))]
-        presentation_time = self._presentation_time(t, timeref)
-
-        handle, path = tempfile.mkstemp(suffix=".bin", prefix="ndi_presentation_time_")
+        handle, temp_path = tempfile.mkstemp(suffix=".bin", prefix="presentation_time_")
         os.close(handle)
-        write_presentation_time_structure(path, presentation_time)
+        write_presentation_time_structure(temp_path, presentation_time)
 
-        doc = self._session.newdocument(
+        doc = session.newdocument(
             "stimulus_presentation",
             **{
                 "stimulus_presentation": {
-                    "presentation_order": [int(s) for s in stimids],
+                    "presentation_order": _presentation_order(data),
                     "stimuli": stimuli,
                 },
-                "epochid.epochid": str(epoch),
+                "epochid.epochid": epoch_id,
             },
         )
         doc = doc + self.newdocument()
-        doc = doc.set_dependency_value(
-            "stimulus_element_id", ndi_element_stim.id(), error_if_not_found=False
-        )
-        doc = doc.add_file("presentation_time.bin", path)
-        return doc, path
-
-    @staticmethod
-    def _presentation_time(t: dict[str, Any], timeref: Any) -> list[dict[str, Any]]:
-        """One timing entry per presentation, in the schema's field order.
-
-        ``stimopen``/``stimclose`` bracket the whole trial and
-        ``onset``/``offset`` the stimulus itself; they differ when the
-        display was opened before the stimulus began. Both are kept, as
-        MATLAB keeps them, because a prestimulus baseline is measured
-        against the first and a response against the second.
-        """
-        import numpy as np
-
-        clocktype = ""
-        try:
-            clocktype = str(timeref.clocktype)
-        except Exception:  # noqa: BLE001 - a reference that will not name its clock
-            clocktype = ""
-
-        onsets = np.asarray(_as_list(t.get("stimon")), dtype=float).ravel()
-        offsets = np.asarray(_as_list(t.get("stimoff")), dtype=float).ravel()
-        openclose = np.atleast_2d(np.asarray(_as_list(t.get("stimopenclose")), dtype=float))
-        events = _as_list(t.get("stimevents"))
-
-        entries: list[dict[str, Any]] = []
-        for z in range(onsets.size):
-            onset = float(onsets[z])
-            offset = float(offsets[z]) if z < offsets.size else float("nan")
-            if openclose.shape[0] > z and openclose.shape[1] >= 2:
-                stimopen, stimclose = float(openclose[z, 0]), float(openclose[z, 1])
-            else:
-                stimopen, stimclose = onset, offset
-            entries.append(
-                {
-                    "clocktype": clocktype,
-                    "stimopen": stimopen,
-                    "onset": onset,
-                    "offset": offset,
-                    "stimclose": stimclose,
-                    "stimevents": _events_in_window(events, onset, offset, stimopen, stimclose),
-                }
-            )
-        return entries
-
-    @staticmethod
-    def _document_epochid(doc: ndi_document) -> str:
-        return str((doc.document_properties.get("epochid", {}) or {}).get("epochid", ""))
+        doc = doc.set_dependency_value("stimulus_element_id", element_id)
+        doc = doc.add_file("presentation_time.bin", temp_path)
+        return doc, temp_path
 
     def load_presentation_time(
         self,
@@ -305,73 +255,168 @@ class ndi_app_stimulus_decoder(ndi_app):
         return presentation_time
 
     def _clear_presentations(self, ndi_element_stim: Any) -> None:
-        """Clear existing stimulus presentation documents."""
+        """Remove every stimulus_presentation document of an element.
+
+        The whole-element form. :meth:`parse_stimuli` does NOT use it -- a
+        reset there removes only the epochs it was asked about -- so this
+        stays for a caller that genuinely wants the element wiped.
+
+        Two things were wrong here and are fixed: ``id`` was read as an
+        attribute rather than called, so the query filtered on a bound
+        method and matched nothing, and removal called ``database_remove``,
+        which no session has. Between them the method removed nothing at all
+        while appearing to succeed.
+        """
         if self._session is None:
             return
         from ...query import ndi_query
 
         q = ndi_query("").isa("stimulus_presentation")
-        if hasattr(ndi_element_stim, "id"):
-            q = q & ndi_query("").depends_on("stimulus_element_id", ndi_element_stim.id)
+        element_id = identifier(ndi_element_stim)
+        if element_id is not None:
+            q = q & ndi_query("").depends_on("stimulus_element_id", element_id)
         docs = self._session.database_search(q)
-        for doc in docs:
-            self._session.database_remove(doc)
+        if docs:
+            self._session.database_rm(docs)
 
     def __repr__(self) -> str:
         return f"ndi_app_stimulus_decoder(session={self._session is not None})"
 
 
-def _events_in_window(
-    events: Any, onset: float, offset: float, stimopen: float, stimclose: float
-) -> Any:
-    """The events of this trial as an ``(N, 2)`` array of [time, channel].
-
-    Channel numbers are 1-based, as MATLAB stores them: they identify a
-    marker channel to a person reading the document, not a Python index.
-    The window is the WIDEST of the trial's bounds -- an event can arrive
-    before the stimulus is drawn or after it is taken down, and dropping it
-    would lose the record of something the rig actually did.
-    """
-    import numpy as np
-
-    if not events:
-        return np.zeros((0, 2))
-
-    start = np.nanmin([onset, stimopen])
-    end = np.nanmax([offset, stimclose])
-    rows = []
-    for channel, times in enumerate(events, start=1):
-        times = np.asarray(times, dtype=float).ravel()
-        if times.size == 0:
-            continue
-        inside = times[(times >= start) & (times <= end)]
-        if inside.size:
-            rows.append(np.column_stack([inside, np.full(inside.size, float(channel))]))
-    if not rows:
-        return np.zeros((0, 2))
-    stacked = np.vstack(rows)
-    return stacked[np.argsort(stacked[:, 0])]
+# ----------------------------------------------------------------------
+# module helpers
+# ----------------------------------------------------------------------
 
 
-def _remove_files(paths: list[str]) -> None:
-    """Delete PATHS if they are still there. Missing is the expected case."""
-    import os
-
-    for path in paths:
-        try:
-            os.unlink(path)
-        except OSError:
-            pass
-
-
-def _as_list(value: Any) -> list:
-    """VALUE as a list, without asking whether it is "truthy".
-
-    Everything a stimulator reports arrives as a NumPy array, and
-    ``value or []`` on an array of more than one element raises
-    "truth value of an array is ambiguous" -- which is why this exists
-    rather than the shorter idiom.
-    """
-    if value is None:
+def _as_epoch_id_list(epochids: Any) -> list[str]:
+    """Normalise the epochids argument to a list. None or "" means "all"."""
+    if epochids is None:
         return []
-    return list(value)
+    if isinstance(epochids, str):
+        return [epochids] if epochids else []
+    return [str(e) for e in epochids]
+
+
+def _element_epoch_ids(element: Any) -> list[str]:
+    """The element's epoch ids, in epoch-table order."""
+    result = element.epochtable()
+    et = result[0] if isinstance(result, tuple) else result
+    ids = []
+    for entry in et or []:
+        epoch_id = entry.get("epoch_id") if isinstance(entry, dict) else entry.epoch_id
+        if epoch_id is not None:
+            ids.append(epoch_id)
+    return ids
+
+
+def _doc_epoch_id(doc: Any) -> str | None:
+    """The epoch a stimulus_presentation document belongs to, or None.
+
+    A document with no readable epochid cannot be matched to an epoch, so it
+    is neither counted as finished nor removed on a reset -- MATLAB's
+    ``try``/``continue`` around the same read.
+    """
+    try:
+        return doc.document_properties["epochid"]["epochid"]
+    except Exception:  # noqa: BLE001 - an unreadable epochid matches nothing
+        return None
+
+
+def _presentation_order(data: dict[str, Any]) -> list[int]:
+    """The stimulus id shown on each trial, as a plain list of ints."""
+    stimid = data.get("stimid", [])
+    return [int(v) for v in np.asarray(stimid).ravel().tolist()]
+
+
+def _presentation_time(t: dict[str, Any], timeref: Any) -> list[dict[str, Any]]:
+    """One timing entry per trial, in presentation order.
+
+    Each entry carries the clock the times are in, the four times that
+    bracket the trial (stimulus opened, came on, went off, closed), and any
+    stimulus events that fall inside that bracket.
+    """
+    clocktype = _clocktype_string(timeref)
+    stimon = np.asarray(t.get("stimon", []), dtype=float).ravel()
+    stimoff = np.asarray(t.get("stimoff", []), dtype=float).ravel()
+    openclose = np.asarray(t.get("stimopenclose", []), dtype=float)
+    if openclose.size and openclose.ndim == 1:
+        openclose = openclose.reshape(-1, 2)
+
+    entries: list[dict[str, Any]] = []
+    for index in range(stimon.size):
+        onset = float(stimon[index])
+        offset = float(stimoff[index]) if index < stimoff.size else float("nan")
+        stimopen = float(openclose[index, 0]) if index < len(openclose) else float("nan")
+        stimclose = float(openclose[index, 1]) if index < len(openclose) else float("nan")
+        entries.append(
+            {
+                "clocktype": clocktype,
+                "stimopen": stimopen,
+                "onset": onset,
+                "offset": offset,
+                "stimclose": stimclose,
+                "stimevents": _stimevents_in_window(
+                    t.get("stimevents"), onset, offset, stimopen, stimclose
+                ),
+            }
+        )
+    return entries
+
+
+def _stimevents_in_window(
+    stimevents: Any,
+    onset: float,
+    offset: float,
+    stimopen: float,
+    stimclose: float,
+) -> np.ndarray:
+    """The events falling inside one trial, as an Nx2 ``[time, channel]`` array.
+
+    The window is the WIDEST bracket the trial offers -- ``nanmin`` of onset
+    and stimopen to ``nanmax`` of offset and stimclose -- because a stimulus
+    computer's open/close marks and its on/off marks do not always nest the
+    way you would expect, and an event dropped here is a spike time lost
+    from the record. Rows come back sorted by time across channels, as
+    MATLAB sorts them.
+    """
+    if not stimevents:
+        return np.empty((0, 2), dtype=float)
+
+    opens = [v for v in (onset, stimopen) if np.isfinite(v)]
+    closes = [v for v in (offset, stimclose) if np.isfinite(v)]
+    if not opens or not closes:
+        # A trial with no usable bracket keeps nothing. Reaching for
+        # nanmin of all-NaN would only warn its way to the same answer.
+        return np.empty((0, 2), dtype=float)
+    start, stop = min(opens), max(closes)
+
+    rows: list[np.ndarray] = []
+    for channel_index, times in enumerate(stimevents):
+        values = np.asarray(times, dtype=float).ravel()
+        if values.size == 0:
+            continue
+        inside = values[(values >= start) & (values <= stop)]
+        if inside.size == 0:
+            continue
+        # Channels are 1-based, as MATLAB numbers them and as the reader of
+        # this file expects.
+        channel = np.full(inside.size, channel_index + 1, dtype=float)
+        rows.append(np.column_stack((inside, channel)))
+
+    if not rows:
+        return np.empty((0, 2), dtype=float)
+    events = np.vstack(rows)
+    return events[np.argsort(events[:, 0], kind="stable")]
+
+
+def _clocktype_string(timeref: Any) -> str:
+    """The clock the trial times are kept in, as the file records it.
+
+    MATLAB's ``timeref.clocktype.ndi_clocktype2char()``; here the enum's own
+    string. A time reference that cannot name its clock yields "", which the
+    reader treats as unknown rather than misreporting a clock.
+    """
+    clocktype = getattr(timeref, "clocktype", None)
+    if clocktype is None:
+        return ""
+    return str(clocktype)

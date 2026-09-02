@@ -7,10 +7,11 @@ stimulator probe, pick the element types to compute on, press the button: for
 each element of those types the app computes the responses to that
 stimulator's presentations and stores them in the session database.
 
-Responses need the stimuli decoded and their control stimuli labeled first
-(``stimulusDecoder`` in MATLAB, not yet ported). Without the
-``stimulus_presentation`` and ``control_stimulus_ids`` documents there is
-nothing to compute against, and each element simply produces nothing.
+Responses need the stimuli decoded and their control stimuli labeled first,
+which is what :class:`ndi.gui.app.stimulus_decoder.stimulusDecoder` does.
+Without the ``stimulus_presentation`` and ``control_stimulus_ids`` documents
+there is nothing to compute against, and each element simply produces
+nothing. The two apps are the two halves of the pipeline, in that order.
 
 TWO SEARCHES, NOT TWO PER ELEMENT
 The expensive thing here is the database, not the arithmetic, so both paths
@@ -35,14 +36,13 @@ driven, and tested, with no display attached, which matters for an app whose
 interesting behaviour is which elements it decides to compute and which
 documents it decides to delete.
 
-THE COMPUTATION ITSELF IS NOT PORTED YET
-``ndi.app.stimulus.tuning_response.stimulus_responses`` raises
-NotImplementedError in this port -- it is the framework, not the signal
-processing. This app is the caller, and it is complete: it finds the
-elements, decides which need work, cleans up, and reports. Until the
-computation lands, every element it tries reports a failure, and the summary
-says so in as many words rather than leaving a user to read "0 computed" and
-guess why. See :func:`summary_message`.
+AN ELEMENT THAT REACHES AN UNPORTED PATH SAYS SO
+``stimulus_responses`` is ported, but an element can still reach something
+that is not -- a reader for a format nobody has written yet, say. A
+NotImplementedError from any depth is counted as that element's failure, as
+MATLAB counts any failure, and the summary names the unported computation
+rather than leaving a user to read "0 computed" and guess why. See
+:func:`summary_message`.
 
 PROGRESS DOCKS IN MATLAB AND DOES NOT HERE
 MATLAB's ProgressBarWindow docks into an open navigator's Progress pane. The
@@ -57,6 +57,7 @@ import warnings
 from collections.abc import Sequence
 from typing import Any, NamedTuple
 
+from ...fun.utils import identifier
 from .session_app import SessionApp
 
 __all__ = [
@@ -179,7 +180,7 @@ def elements_to_compute(elements: Sequence[Any], existing_ids: Sequence[str]) ->
     todo = []
     for element in elements:
         try:
-            element_id = str(element.id())
+            element_id = str(identifier(element))
         except Exception:  # noqa: BLE001 - an element that will not identify itself
             element_id = ""
         todo.append(element_id not in known)
@@ -334,7 +335,7 @@ class stimulusResponse(SessionApp):  # noqa: N801 - MATLAB class name, per AGENT
         which is why the skip path costs one query and not one per element.
         """
         try:
-            docs = self.session.database_search(response_query(probe.id(), []))
+            docs = self.session.database_search(response_query(identifier(probe), []))
         except Exception:  # noqa: BLE001 - an unsearchable database has no responses
             docs = []
         ids: list[str] = []
@@ -358,11 +359,11 @@ class stimulusResponse(SessionApp):  # noqa: N801 - MATLAB class name, per AGENT
         element_ids = []
         for element in elements:
             try:
-                element_ids.append(str(element.id()))
+                element_ids.append(str(identifier(element)))
             except Exception:  # noqa: BLE001 - an element that will not identify itself
                 continue
         try:
-            docs = self.session.database_search(response_query(probe.id(), element_ids))
+            docs = self.session.database_search(response_query(identifier(probe), element_ids))
         except Exception:  # noqa: BLE001 - an unsearchable database has nothing to remove
             docs = []
         docs = list(docs or [])
@@ -444,7 +445,7 @@ class stimulusResponse(SessionApp):  # noqa: N801 - MATLAB class name, per AGENT
 
         responder = ndi_app_stimulus_tuning__response(self.session)
 
-        tag = f"stimresp_{probe.id()}"
+        tag = f"stimresp_{identifier(probe)}"
         bar = make_progress_bar(
             "Stimulus Response", f"Computing responses ({n_todo} element(s))", tag
         )

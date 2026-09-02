@@ -16,18 +16,29 @@ path MATLAB offers.
 
 WHAT IS HERE OF MATLAB'S ELEVEN
 :class:`~ndi.gui.app.electrode_data_export.ElectrodeDataExport` ("Electrode
-Data Export", at the top level) and
-:class:`~ndi.gui.app.stimulus_response.stimulusResponse` ("Stimulus
-Response", under the "Stimulus" submenu). The other nine -- pyraview, the
-spike sorters, the remaining exporters -- are each their own piece of work,
-some still waiting on unported subsystems (``ndi.cpipeline`` for the
-pipeline editor, the sorters' own toolboxes).
+Data Export", at the top level),
+:class:`~ndi.gui.app.stimulus_decoder.stimulusDecoder` ("Stimulus Decoder")
+and :class:`~ndi.gui.app.stimulus_response.stimulusResponse` ("Stimulus
+Response"), the last two under the "Stimulus" submenu. Together the latter
+two are the stimulus pipeline's two halves: one writes what was shown, the
+other measures how an element answered it.
+
+The remaining eight -- pyraview, the spike sorters, the other exporters --
+are each their own piece of work, some still waiting on unported subsystems
+(``ndi.cpipeline`` for the pipeline editor, the sorters' own toolboxes).
 """
 
 from __future__ import annotations
 
 from .electrode_data_export import ElectrodeDataExport
 from .session_app import SessionApp, sessionApp
+from .stimulus_decoder import stimulusDecoder
 from .stimulus_response import stimulusResponse
 
-__all__ = ["ElectrodeDataExport", "SessionApp", "sessionApp", "stimulusResponse"]
+__all__ = [
+    "ElectrodeDataExport",
+    "SessionApp",
+    "sessionApp",
+    "stimulusDecoder",
+    "stimulusResponse",
+]

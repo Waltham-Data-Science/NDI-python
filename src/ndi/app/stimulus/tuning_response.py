@@ -71,6 +71,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from ...fun.utils import identifier
 from .. import ndi_app
 
 if TYPE_CHECKING:
@@ -469,7 +470,7 @@ class ndi_app_stimulus_tuning__response(ndi_app):
         doc_stim = session.database_search(
             ndi_query("").isa("stimulus_presentation")
             & in_session
-            & ndi_query("").depends_on("stimulus_element_id", ndi_element_stim.id())
+            & ndi_query("").depends_on("stimulus_element_id", identifier(ndi_element_stim))
         )
         if reset:
             self._remove_responses(ndi_element_stim, ndi_timeseries_obj)
@@ -706,7 +707,7 @@ class ndi_app_stimulus_tuning__response(ndi_app):
                 "stimulus_response_scalar_parameters_id", param_doc.id, error_if_not_found=False
             )
             doc = doc.set_dependency_value(
-                "element_id", ndi_timeseries_obj.id(), error_if_not_found=False
+                "element_id", identifier(ndi_timeseries_obj), error_if_not_found=False
             )
             doc = doc.set_dependency_value(
                 "stimulus_presentation_id", stim_doc.id, error_if_not_found=False
@@ -716,7 +717,7 @@ class ndi_app_stimulus_tuning__response(ndi_app):
                     "stimulus_control_id", control_doc.id, error_if_not_found=False
                 )
             doc = doc.set_dependency_value(
-                "stimulator_id", ndi_stim_obj.id(), error_if_not_found=False
+                "stimulator_id", identifier(ndi_stim_obj), error_if_not_found=False
             )
             session.database_add(doc)
             response_docs.append(doc)
@@ -980,7 +981,7 @@ class ndi_app_stimulus_tuning__response(ndi_app):
         curves = session.database_search(
             session.searchquery()
             & ndi_query("").isa("stimulus_tuningcurve")
-            & ndi_query("").depends_on("element_id", ndi_element_obj.id())
+            & ndi_query("").depends_on("element_id", identifier(ndi_element_obj))
         )
 
         tuning_docs: list[ndi_document] = []
@@ -1032,16 +1033,21 @@ class ndi_app_stimulus_tuning__response(ndi_app):
 
         Returns:
             The ``control_stimulus_ids`` documents written.
+
+        Raises:
+            RuntimeError: when the app has no session to write to. An empty
+                list would say "this element has no presentations", which is
+                a different thing from "there is nowhere to look".
         """
         if self._session is None:
-            return []
+            raise RuntimeError("No session configured")
 
         from ...query import ndi_query
 
         session = self._session
         stim_docs = session.database_search(
             ndi_query("").isa("stimulus_presentation")
-            & ndi_query("").depends_on("stimulus_element_id", stimulus_element_obj.id())
+            & ndi_query("").depends_on("stimulus_element_id", identifier(stimulus_element_obj))
         )
 
         if reset:
@@ -1063,136 +1069,101 @@ class ndi_app_stimulus_tuning__response(ndi_app):
     def control_stimulus(
         self,
         stim_doc: ndi_document,
-        *,
         control_stim_method: str = "pseudorandom",
         controlid: str = "isblank",
         controlid_value: Any = 1,
     ) -> tuple[list[float], ndi_document | None]:
-        """Which presentation is the control for each presentation.
+        """
+        Name the control trial for each trial of one stimulus presentation.
 
-        MATLAB equivalent: ``tuning_response/control_stimulus``.
+        MATLAB equivalent: ndi.app.stimulus.tuning_response/control_stimulus
 
-        ``pseudorandom`` pairs each presentation with the control shown in
-        the SAME repetition, which is the point: a baseline measured minutes
-        away is a different baseline. When the last repetition is incomplete
-        the previous repetition's control stands in. ``hasfield`` instead
-        takes any stimulus carrying the CONTROLID parameter.
+        Returns ``(cs_ids, cs_doc)``. ``cs_ids`` has one entry per trial in
+        the presentation: the 1-BASED trial index of the control trial that
+        trial should be compared against, or NaN when the presentation has
+        no control stimulus at all. ``cs_doc`` is the
+        ``control_stimulus_ids`` document holding them, which is added to
+        the database.
 
-        An irregular presentation order has no repetitions to pair within, so
-        each presentation takes the control CLOSEST IN TIME -- which needs
-        the per-stimulus onsets, and is the one path that can fail on a
-        document that has none.
+        HOW THE CONTROL TRIAL IS CHOSEN
+        First the control STIMULUS is identified among the distinct stimuli,
+        by ``control_stim_method``:
+
+        * ``pseudorandom`` -- the stimulus whose parameters have
+          ``controlid`` equal to ``controlid_value`` (by default
+          ``isblank == 1``);
+        * ``hasfield`` -- the stimulus whose parameters merely HAVE a
+          ``controlid`` field, whatever its value.
+
+        Then each trial is matched to one presentation of it. When the
+        presentation order is regular -- every stimulus shown once per
+        repetition -- the control trial of the same repetition is used, so
+        the comparison is local in time. When it is not, the control trial
+        CLOSEST IN TIME is used instead, which is the best available
+        approximation of the same thing.
 
         Args:
-            stim_doc: the ``stimulus_presentation`` document.
-            control_stim_method: ``"pseudorandom"`` or ``"hasfield"``.
-            controlid: the parameter marking a control stimulus.
-            controlid_value: the value of that parameter that marks one.
-
-        Returns:
-            ``(control_stimulus_ids, document)``. The ids are 1-based
-            presentation numbers, NaN where the set has no control at all.
+            stim_doc: A stimulus_presentation document.
+            control_stim_method: ``'pseudorandom'`` or ``'hasfield'``.
+            controlid: The parameter that marks a control stimulus.
+            controlid_value: The value of that parameter that marks it, for
+                ``pseudorandom``.
 
         Raises:
-            ValueError: on an unknown method, on more than one kind of
-                control stimulus, or on an irregular order in a document with
-                no timing.
+            ValueError: for an unknown method, or when more than one
+                stimulus looks like the control -- MATLAB errors there too,
+                because which of them a trial belongs to is genuinely
+                undecidable rather than merely awkward.
         """
-        from vlt.data.fieldsearch import fieldsearch
-        from vlt.data.findclosest import findclosest
-        from vlt.neuro.stimulus.stimids2reps import stimids2reps
+        if self._session is None:
+            raise RuntimeError("No session configured")
 
         method = str(control_stim_method).lower()
         if method not in ("pseudorandom", "hasfield"):
-            raise ValueError(f"Unknown control stimulus method {control_stim_method}.")
+            raise ValueError(f"Unknown control_stim_method {control_stim_method}.")
 
-        presentation = stim_doc.document_properties.get("stimulus_presentation", {}) or {}
-        stimuli = presentation.get("stimuli", []) or []
-        stimids = np.asarray(presentation.get("presentation_order", []) or [])
-
-        if method == "pseudorandom":
-            constraint = {
-                "field": controlid,
-                "operation": "exact_number",
-                "param1": controlid_value,
-                "param2": "",
-            }
-        else:
-            constraint = {"field": controlid, "operation": "hasfield", "param1": "", "param2": ""}
-
-        control_stimulus_numbers = [
-            n + 1  # 1-based stimulus number, as the presentation order holds them
-            for n, stimulus in enumerate(stimuli)
-            if fieldsearch(stimulus.get("parameters", {}) or {}, [constraint])
-        ]
-        if len(control_stimulus_numbers) > 1:
-            raise ValueError(
-                "Do not know what to do with more than one control stimulus type "
-                f"(found stimuli {control_stimulus_numbers})."
-            )
-
-        reps, isregular = stimids2reps(stimids, len(stimuli))
-        control_positions = np.asarray([], dtype=int)
-        if control_stimulus_numbers:
-            # 1-based positions in the presentation order.
-            control_positions = np.where(stimids == control_stimulus_numbers[0])[0] + 1
-
-        if control_positions.size == 0:
-            control_ids = np.full(stimids.shape, np.nan, dtype=float)
-        elif isregular:
-            positions = control_positions.tolist()
-            if np.unique(reps).size > len(positions):
-                positions.append(positions[-1])
-            control_ids = np.asarray([positions[int(r) - 1] for r in reps], dtype=float)
-        else:
-            control_ids = self._closest_controls(stim_doc, stimids, control_positions, findclosest)
-
-        control_doc = self._new_document("control_stimulus_ids")
-        control_doc.document_properties["control_stimulus_ids"] = {
-            "control_stimulus_ids": control_ids.tolist(),
-            "control_stimulus_id_method": {
-                "method": control_stim_method,
-                "controlid": controlid,
-                "controlid_value": controlid_value,
-            },
-        }
-        control_doc = control_doc.set_dependency_value(
-            "stimulus_presentation_id", stim_doc.id, error_if_not_found=False
-        )
-        if self._session is not None:
-            self._session.database_add(control_doc)
-        return control_ids.tolist(), control_doc
-
-    def _closest_controls(
-        self,
-        stim_doc: ndi_document,
-        stimids: np.ndarray,
-        control_positions: np.ndarray,
-        findclosest,
-    ) -> np.ndarray:
-        """Each presentation's nearest-in-time control. MATLAB's slow branch."""
+        from ...document import ndi_document
         from .decoder import ndi_app_stimulus_decoder
 
-        presentation_time = []
-        if self._session is not None:
+        presentation = _presentation_properties(stim_doc)
+        stimuli = presentation.get("stimuli", []) or []
+        stimids = np.asarray(presentation.get("presentation_order", []), dtype=float).ravel()
+
+        control_stim_ids = _control_stimulus_indexes(stimuli, method, controlid, controlid_value)
+        if len(control_stim_ids) > 1:
+            raise ValueError("Do not know what to do with more than one control stimulus type.")
+
+        if control_stim_ids:
             presentation_time = ndi_app_stimulus_decoder(self._session).load_presentation_time(
                 stim_doc
             )
-        if not presentation_time:
-            raise ValueError(
-                "An irregular presentation order pairs each stimulus with the control "
-                "closest in time, and this stimulus_presentation document carries no "
-                "onsets (neither an inline 'presentation_time' nor a readable "
-                "'presentation_time.bin'), so there is no time to be close in."
+            cs_ids = _match_trials_to_controls(
+                stimids, len(stimuli), control_stim_ids[0], presentation_time
             )
-        onsets = np.asarray([p["onset"] for p in presentation_time], dtype=float)
-        control_onsets = onsets[control_positions - 1]
-        control_ids = np.empty(stimids.size, dtype=float)
-        for n in range(stimids.size):
-            nearest = findclosest(control_onsets, onsets[n])
-            index = int(np.atleast_1d(nearest)[0])
-            control_ids[n] = float(control_positions[index])
-        return control_ids
+        else:
+            # No control stimulus in this set. NaN per trial, not an error:
+            # a run with no blank is a legitimate experiment, it simply
+            # cannot be baselined.
+            cs_ids = [float("nan")] * int(stimids.size)
+
+        method_struct = {
+            "method": method,
+            "controlid": controlid,
+            "controlid_value": controlid_value,
+        }
+        cs_doc = ndi_document(
+            "control_stimulus_ids",
+            **{
+                "control_stimulus_ids": {
+                    "control_stimulus_ids": list(cs_ids),
+                    "control_stimulus_id_method": method_struct,
+                }
+            },
+        )
+        cs_doc = cs_doc + self.newdocument()
+        cs_doc = cs_doc.set_dependency_value("stimulus_presentation_id", identifier(stim_doc))
+        self._session.database_add(cs_doc)
+        return list(cs_ids), cs_doc
 
     # ------------------------------------------------------------------
     # statics
@@ -1462,8 +1433,8 @@ class ndi_app_stimulus_tuning__response(ndi_app):
         docs = session.database_search(
             ndi_query("").isa("stimulus_response_scalar")
             & session.searchquery()
-            & ndi_query("").depends_on("stimulator_id", ndi_element_stim.id())
-            & ndi_query("").depends_on("element_id", ndi_timeseries_obj.id())
+            & ndi_query("").depends_on("stimulator_id", identifier(ndi_element_stim))
+            & ndi_query("").depends_on("element_id", identifier(ndi_timeseries_obj))
         )
         if not docs:
             return
@@ -1495,7 +1466,7 @@ class ndi_app_stimulus_tuning__response(ndi_app):
         query = (
             session.searchquery()
             & ndi_query("").isa("stimulus_response_scalar")
-            & ndi_query("").depends_on("element_id", ndi_timeseries_obj.id())
+            & ndi_query("").depends_on("element_id", identifier(ndi_timeseries_obj))
             & ndi_query("").depends_on("stimulus_presentation_id", stim_doc.id)
             & ndi_query("").depends_on("stimulus_response_scalar_parameters_id", param_doc.id)
         )
@@ -1638,3 +1609,123 @@ def _responses_by_stimulus(doc: ndi_document) -> dict[int, float]:
         # and the magnitude otherwise; 1e-6 is its threshold.
         out[int(stimulus)] = float(np.abs(mean)) if abs(mean.imag) > 1e-6 else float(mean.real)
     return out
+
+
+def _presentation_properties(stim_doc: Any) -> dict[str, Any]:
+    """The ``stimulus_presentation`` block of a document, or an empty one."""
+    props = getattr(stim_doc, "document_properties", None) or {}
+    return props.get("stimulus_presentation", {}) or {}
+
+
+def _stimulus_parameters(stimulus: Any) -> dict[str, Any]:
+    """One stimulus's parameter dict, however the document nests it."""
+    if isinstance(stimulus, dict):
+        parameters = stimulus.get("parameters", stimulus)
+        return parameters if isinstance(parameters, dict) else {}
+    parameters = getattr(stimulus, "parameters", None)
+    return parameters if isinstance(parameters, dict) else {}
+
+
+def _control_stimulus_indexes(
+    stimuli: Any,
+    method: str,
+    controlid: str,
+    controlid_value: Any,
+) -> list[int]:
+    """The 1-based indexes of the stimuli that count as controls.
+
+    ``vlt.data.fieldsearch`` does the matching, as MATLAB's does, so
+    ``exact_number`` and ``hasfield`` mean the same thing on both sides.
+    """
+    from vlt.data import fieldsearch
+
+    if method == "pseudorandom":
+        search = {
+            "field": controlid,
+            "operation": "exact_number",
+            "param1": controlid_value,
+            "param2": [],
+        }
+    else:  # hasfield
+        search = {"field": controlid, "operation": "hasfield", "param1": [], "param2": []}
+
+    found: list[int] = []
+    for index, stimulus in enumerate(stimuli):
+        try:
+            matched = bool(fieldsearch(_stimulus_parameters(stimulus), search))
+        except Exception:  # noqa: BLE001 - a stimulus that cannot be searched is not a control
+            matched = False
+        if matched:
+            found.append(index + 1)  # 1-based, as the presentation order is
+    return found
+
+
+def _match_trials_to_controls(
+    stimids: np.ndarray,
+    num_stimuli: int,
+    control_stim_id: int,
+    presentation_time: list[dict[str, Any]],
+) -> list[float]:
+    """One control TRIAL index per trial, both 1-based.
+
+    Regular presentation order -- every stimulus once per repetition -- lets
+    each trial take the control of its own repetition, which is the local
+    comparison a drifting preparation needs. Irregular order falls back to
+    the control trial closest in time.
+    """
+    from vlt.data import findclosest
+    from vlt.neuro.stimulus import stimids2reps
+
+    trial_count = int(stimids.size)
+    control_trials = [i + 1 for i in range(trial_count) if stimids[i] == control_stim_id]
+    if not control_trials:
+        return [float("nan")] * trial_count
+
+    reps, is_regular = _stimids2reps(stimids2reps, stimids, num_stimuli)
+
+    if is_regular and reps is not None and len(reps) == trial_count:
+        trials = list(control_trials)
+        if len({int(r) for r in reps}) > len(trials):
+            # A final, incomplete repetition has no control of its own; the
+            # previous one stands in, as MATLAB lets it.
+            trials.append(trials[-1])
+        out: list[float] = []
+        for rep in reps:
+            index = int(rep) - 1
+            out.append(float(trials[index]) if 0 <= index < len(trials) else float("nan"))
+        return out
+
+    onsets = [float(entry.get("onset", float("nan"))) for entry in presentation_time]
+    if len(onsets) < trial_count:
+        # Without a time for every trial there is no "closest in time" to
+        # find; report unknown rather than guess a neighbour.
+        return [float("nan")] * trial_count
+
+    control_onsets = [onsets[t - 1] for t in control_trials]
+    out = []
+    for trial in range(trial_count):
+        nearest = int(findclosest(control_onsets, onsets[trial])[0])
+        out.append(float(control_trials[nearest]))
+    return out
+
+
+def _stimids2reps(stimids2reps: Any, stimids: np.ndarray, num_stimuli: int):
+    """Call vlt's stimids2reps, tolerating either return shape.
+
+    It answers "which repetition is each trial in, and is the order
+    regular?". A version that returns only the repetitions is read as
+    irregular, which costs the local comparison but never mismatches a
+    control.
+    """
+    try:
+        result = stimids2reps(stimids, num_stimuli)
+    except Exception:  # noqa: BLE001 - an order it cannot read is not regular
+        return None, False
+    if isinstance(result, tuple):
+        reps = result[0]
+        is_regular = bool(result[1]) if len(result) > 1 else False
+    else:
+        reps, is_regular = result, False
+    if reps is None:
+        return None, False
+    return np.asarray(reps).ravel(), is_regular

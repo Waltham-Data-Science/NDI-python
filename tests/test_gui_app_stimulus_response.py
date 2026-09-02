@@ -45,11 +45,20 @@ TUNING_RESPONSE = "ndi.app.stimulus.tuning_response.ndi_app_stimulus_tuning__res
 
 
 class FakeElement:
+    """A stand-in element.
+
+    ``id`` is a PROPERTY, not a method, because that is what a real
+    ndi.element and ndi.probe inherit from ndi.ido -- and a fake that made it
+    callable is exactly what let ``element.id()`` through code review and
+    into a TypeError against real data. See ndi.fun.utils.identifier.
+    """
+
     def __init__(self, element_id, name="e", element_type="spikes"):
         self._id = element_id
         self.name = name
         self.type = element_type
 
+    @property
     def id(self):
         return self._id
 

@@ -837,6 +837,28 @@ functions:
       second folder beside an existing export. snake_case alias
       element_directory.
 
+  - name: identifier
+    type: function
+    matlab_path: "n/a (Python only)"
+    python_path: "ndi/fun/utils.py"
+    input_arguments:
+      - name: obj
+        type_python: "Any"
+    output_arguments:
+      - name: id
+        type_python: "str | None"
+    decision_log: >
+      PYTHON ONLY, standing in for a MATLAB uniformity Python does not have.
+      MATLAB has one spelling, obj.id(), and every ported call site reaches
+      for it; on this side a session's id IS a method while a document's, an
+      element's and a probe's are properties inherited from ndi.ido. So
+      probe.id() raises TypeError against a real probe while passing every
+      test whose double defines id as a method -- a failure that appears only
+      against real objects, and did: ndi.fun.probe.geometry.get carried it.
+      Reading it either way removes the whole class of mistake from the
+      ported call sites. None when the object has no id at all, which is what
+      a caller building a query wants to notice.
+
   # =========================================================================
   # Functions — plot.py
   # MATLAB: +ndi/+fun/+plot/*.m

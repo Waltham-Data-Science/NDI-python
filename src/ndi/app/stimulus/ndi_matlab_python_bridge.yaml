@@ -45,7 +45,7 @@ classes:
             type_python: "bool"
             default: "False"
           - name: epochids
-            type_matlab: "char | cell array of char"
+            type_matlab: "char or cell array of char ({} = all epochs)"
             type_python: "str | list[str] | None"
             default: "None (all epochs)"
         output_arguments:
@@ -56,36 +56,26 @@ classes:
             type_matlab: "cell array of ndi.document"
             type_python: "list[ndi_document]"
         decision_log: >
-          PORTED, 2026-09-02. This was a stub that returned ([], []) with the
-          comment "Framework method - actual parsing depends on stimulus
-          format", so nothing in Python ever wrote a stimulus_presentation
-          document -- and every later stage of the stimulus pipeline reads
-          those and nothing else. The epochids argument, which MATLAB has and
-          the earlier signature omitted, is now present.
+          NOW PORTED. This was a stub that returned ([], []) unconditionally
+          -- reporting success having written nothing -- with MATLAB's third
+          argument, epochids, missing entirely. It now reads each epoch,
+          writes the stimulus_presentation document with its presentation
+          times in an attached presentation_time.bin, and adds it to the
+          database, as MATLAB does. Epochs that already have a document are
+          left alone and reported in existingdocs, and reset removes only the
+          documents of the epochs this call operates on.
 
-          One document per epoch, written from the stimulator's own record:
-          readtimeseriesepoch over the whole epoch (-inf..inf, as MATLAB), the
-          presentation order and each stimulus's parameters into the document,
-          and the per-presentation timing into an attached
-          presentation_time.bin via ndi.database_fun
-          .write_presentation_time_structure -- the binary form MATLAB moved
-          to, which load_presentation_time already read.
+          DEVIATION, deliberate: MATLAB's intersect/setdiff sort the epoch
+          ids alphabetically, so its documents are written in that order;
+          Python keeps the element's own epoch-table order. The documents are
+          identical either way -- each is keyed by its epoch id -- and
+          epoch-table order is the order the GUI shows.
 
-          An epoch that already has a document is skipped, so parsing is
-          idempotent and can be re-run when new epochs arrive; reset removes
-          only the documents of the epochs the call covers, never another
-          epoch's.
-
-          DIVERGENCE, deliberate: an epoch whose record holds no stimuli gets
-          NO document, where MATLAB writes one with empty fields. A document
-          that answers every search with nothing in it is worse than no
-          document, and the callers all treat "no presentation document" as
-          "nothing was shown in this epoch" already.
-
-          DIVERGENCE, mechanical: MATLAB's ndi.file.temp_name() has no Python
-          counterpart, so tempfile.mkstemp is used, and the temp file is
-          removed after the database add whether or not the add succeeded.
-          MATLAB relies on the ingest to delete it.
+          ORDERING THAT MATTERS: the temp files holding the presentation
+          times must outlive database_add, which is what copies them into the
+          database. Removing them earlier stores a document whose
+          presentation_time.bin cannot be opened, and nothing notices until
+          something reads the times back.
 
       - name: load_presentation_time
         input_arguments:
@@ -94,9 +84,23 @@ classes:
             type_python: "ndi_document"
         output_arguments:
           - name: presentation_time
-            type_matlab: "struct"
-            type_python: "dict[str, Any] | None"
-        decision_log: "Exact match."
+            type_matlab: "struct array, one entry per trial"
+            type_python: "list[dict[str, Any]]"
+        decision_log: >
+          Ported. A LIST, one entry per trial, as MATLAB's struct array is --
+          not the single dict an earlier version of this contract named.
+          The deprecated in-document form is still read and still warned
+          about, so documents written before the binary form remain loadable.
+
+      - name: _clear_presentations
+        kind: "Python only"
+        decision_log: >
+          Removes every stimulus_presentation of an element -- the
+          whole-element form, which parse_stimuli does NOT use. Two faults
+          fixed: `id` was read as an attribute rather than resolved (the
+          query then filtered on a bound method and matched nothing), and
+          removal called `database_remove`, which no session defines.
+          Between them it removed nothing while appearing to succeed.
 
   # =========================================================================
   # ndi.app.stimulus.tuning_response
@@ -258,30 +262,66 @@ classes:
             type_matlab: "logical"
             type_python: "bool"
             default: "False"
+          - name: varargin
+            type_matlab: "name/value pairs passed to control_stimulus"
+            type_python: "**kwargs"
         output_arguments:
           - name: cs_doc
             type_python: "list[ndi_document]"
-        decision_log: "Exact match."
+        decision_log: >
+          NOW PORTED. This was a stub returning [] with or without a session,
+          indistinguishable from "this element has no presentations". It now
+          finds every stimulus_presentation of the element, labels each one's
+          control stimuli, and adds the control_stimulus_ids documents to the
+          database. As in MATLAB there is NO per-epoch filter: it operates on
+          all of the element's presentations, which is why
+          ndi.gui.app.stimulusDecoder gates its button on the probe having a
+          decoded epoch rather than on a selection. A missing session now
+          raises rather than returning [], matching parse_stimuli.
 
       - name: control_stimulus
         input_arguments:
           - name: stim_doc
             type_matlab: "ndi.document"
             type_python: "ndi_document"
+          - name: control_stim_method
+            type_matlab: "char ('pseudorandom')"
+            type_python: "str"
+            default: "'pseudorandom'"
+          - name: controlid
+            type_matlab: "char ('isblank')"
+            type_python: "str"
+            default: "'isblank'"
+          - name: controlid_value
+            type_matlab: "double (1)"
+            type_python: "Any"
+            default: "1"
         output_arguments:
           - name: cs_ids
-            type_python: "list[int]"
+            type_matlab: "double vector, one per trial (NaN where none)"
+            type_python: "list[float]"
           - name: cs_doc
             type_python: "ndi_document | None"
         decision_log: >
-          Ported, both methods: 'pseudorandom' pairs each presentation with
-          the control from the same repetition (the previous repetition's
-          control stands in for an incomplete last one) and 'hasfield' takes
-          any stimulus carrying the parameter. An irregular presentation
-          order takes the control closest in ONSET, which needs the
-          per-stimulus timing; a document carrying none raises ValueError
-          naming that as the reason. cs_ids are 1-based presentation
-          numbers, NaN where the set has no control, as MATLAB stores them.
+          Ported. Both methods: 'pseudorandom' pairs each trial with the
+          control from the same repetition (the previous repetition's control
+          stands in for an incomplete last one), 'hasfield' takes any stimulus
+          carrying the parameter. An irregular presentation order takes the
+          control closest in ONSET, which needs the per-stimulus timing; a
+          document carrying none raises ValueError naming that as the reason.
+
+          The matching runs on the same vlt functions MATLAB's does --
+          vlt.data.fieldsearch for the control stimulus,
+          vlt.neuro.stimulus.stimids2reps for the repetition structure,
+          vlt.data.findclosest for the irregular case -- so the assignment
+          agrees across languages by construction.
+
+          COUNTING: cs_ids are 1-BASED TRIAL indexes, as MATLAB's are and as
+          presentation_order is; only the array offsets inside are 0-based.
+          NaN per trial when the set has no control stimulus at all, which is
+          a legitimate experiment rather than an error. More than one control
+          stimulus IS an error in both languages: which of them a trial
+          belongs to is undecidable.
 
       - name: find_tuningcurve_document
         input_arguments:

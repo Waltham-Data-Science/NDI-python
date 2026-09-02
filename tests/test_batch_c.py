@@ -27,6 +27,7 @@ from ndi.app.stimulus.tuning_response import (
 from ndi.calc.stimulus import ndi_calc_stimulus_tuningcurve
 from ndi.calc.stimulus.tuningcurve import ndi_calc_stimulus_tuningcurve as TuningCurveCalcDirect
 from ndi.calculator import ndi_calculator
+from ndi.query import ndi_query
 
 
 class TestImports:
@@ -314,22 +315,24 @@ class TestStimulusDecoder:
         with pytest.raises(RuntimeError, match="No session"):
             app.parse_stimuli(SimpleNamespace())
 
-    def test_parse_an_element_with_no_epochs_writes_nothing(self):
-        """This once asserted the stub's unconditional ([], []). It now
-        exercises the real path with an element that has no epochs, which is
-        the only way the answer is still two empty lists. The port is
-        covered in tests/test_app_stimulus_decoder.py."""
-        from ndi.query import ndi_query
-
+    def test_an_element_with_no_epochs_decodes_nothing(self):
+        """Empty because there is nothing to decode, not because the method
+        is a stub. This previously pinned ``return [], []``, which is what
+        made the decoder unusable: it reported success having written no
+        documents at all. See tests/test_app_stimulus_decoder.py for what
+        it writes when there ARE epochs.
+        """
         session = SimpleNamespace(
             id=lambda: "s1",
-            searchquery=lambda: ndi_query("base.session_id", "exact_string", "s1", ""),
+            searchquery=lambda: ndi_query("base.session_id") == "s1",
             database_search=lambda q: [],
-            database_remove=lambda d: None,
+            database_rm=lambda d: None,
         )
         app = ndi_app_stimulus_decoder(session=session)
-        element = SimpleNamespace(id=lambda: "stim1", epochtable=lambda: [])
+        element = SimpleNamespace(id="stim1", epochtable=lambda: ([], "hash"))
+
         newdocs, existingdocs = app.parse_stimuli(element)
+
         assert newdocs == []
         assert existingdocs == []
 
@@ -394,15 +397,21 @@ class TestStimulusDecoder:
         app._clear_presentations(SimpleNamespace(id="stim1"))
 
     def test_clear_presentations_with_session(self):
+        """Removal goes through database_rm, which sessions actually have.
+
+        The double here previously supplied ``database_remove``, a method no
+        session defines, so this passed while the real call raised
+        AttributeError against every real session.
+        """
         removed = []
         session = SimpleNamespace(
             id=lambda: "s1",
             database_search=lambda q: [SimpleNamespace(id="doc1")],
-            database_remove=lambda d: removed.append(d),
+            database_rm=lambda d: removed.append(d),
         )
         app = ndi_app_stimulus_decoder(session=session)
         app._clear_presentations(SimpleNamespace(id="stim1"))
-        assert len(removed) == 1
+        assert removed == [[SimpleNamespace(id="doc1")]]
 
     def test_repr(self):
         assert "ndi_app_stimulus_decoder" in repr(ndi_app_stimulus_decoder())
@@ -437,10 +446,19 @@ class TestTuningResponse:
         with pytest.raises(RuntimeError, match="requires a session"):
             app.tuning_curve(SimpleNamespace(), independent_parameter=["angle"])
 
-    def test_label_control_stimuli(self):
+    def test_label_control_stimuli_needs_a_session(self):
+        """It writes documents, so a session is not optional. This
+        previously asserted [] from a stub that returned [] with or without
+        one -- indistinguishable from "this element has no presentations".
+        """
         app = ndi_app_stimulus_tuning__response()
-        result = app.label_control_stimuli(SimpleNamespace())
-        assert result == []
+        with pytest.raises(RuntimeError, match="No session"):
+            app.label_control_stimuli(SimpleNamespace())
+
+    def test_label_control_stimuli_with_no_presentations_writes_nothing(self):
+        session = SimpleNamespace(id=lambda: "s1", database_search=lambda q: [])
+        app = ndi_app_stimulus_tuning__response(session=session)
+        assert app.label_control_stimuli(SimpleNamespace(id="stim1")) == []
 
     def test_find_tuningcurve_no_session(self):
         app = ndi_app_stimulus_tuning__response()

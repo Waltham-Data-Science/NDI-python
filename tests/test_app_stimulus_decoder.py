@@ -1,354 +1,319 @@
 """Tests for ndi.app.stimulus.decoder.parse_stimuli.
 
-MATLAB counterpart: ndi.app.stimulus.decoder/parse_stimuli
+MATLAB counterpart: +ndi/+app/+stimulus/decoder.m
 
-This is the first step of the stimulus pipeline: it turns a stimulator's
-per-epoch record into the ``stimulus_presentation`` documents that everything
-downstream reads. So the tests care about three things:
+The stimulus_presentation document is the record of what was shown and
+when, and everything downstream of a stimulus experiment reads it. Two
+things about it fail silently and are therefore pinned hardest here.
 
-  * that what the stimulator reported comes back out of the document
-    unchanged -- the presentation order, each stimulus's parameters, and the
-    per-presentation timing written to ``presentation_time.bin``;
-  * that re-running it does not disturb epochs already done, and that
-    ``reset`` disturbs ONLY the epochs it was asked for;
-  * that the timing survives the round trip through the binary file, since
-    that file is the only place the onsets exist once the document is stored.
+The first is WHICH EPOCH a document belongs to: a document keyed to the
+wrong epoch lines a recording up against the wrong stimuli, and nothing
+raises -- the tuning curves simply come out flat.
 
-The last class runs the output straight into ndi.app.stimulus.tuning_response,
-which is the join this port was missing: before it, nothing in Python wrote
-the documents that app reads.
+The second is THE PRESENTATION TIMES SURVIVING THE WRITE. They go to a temp
+file that the database copies in during ``database_add``; delete that file
+first and the document is stored with a ``presentation_time.bin`` that
+cannot be opened, which nothing notices until something tries to read the
+times back. The round-trip test through a real session database is what
+catches that, so it is not mocked.
 """
 
 from __future__ import annotations
 
-import os
-import pathlib
-from types import SimpleNamespace
-from typing import Any
-from unittest.mock import MagicMock
+import tempfile
 
 import numpy as np
 import pytest
 
-from ndi.app.stimulus.decoder import ndi_app_stimulus_decoder
-from ndi.database_fun import read_presentation_time_structure
-from ndi.document import ndi_document
-from ndi.query import ndi_query
-
-
-# ----------------------------------------------------------------------
-# fixtures
-# ----------------------------------------------------------------------
-def _session(search=None):
-    session = MagicMock()
-    session.id.return_value = "session-1"
-    session.searchquery.return_value = ndi_query("base.session_id", "exact_string", "session-1", "")
-    session.database_search = MagicMock(side_effect=search or (lambda q: []))
-    session.database_rm = MagicMock()
-    session.database_add = MagicMock()
-    session.newdocument = MagicMock(side_effect=_newdocument)
-    return session
-
-
-def _newdocument(document_type, **properties):
-    doc = ndi_document(document_type, **properties)
-    return doc.set_session_id("session-1")
+from ndi.app.stimulus.decoder import (
+    _presentation_time,
+    _stimevents_in_window,
+    ndi_app_stimulus_decoder,
+)
 
 
 class FakeStimulator:
-    """A stimulator that reports a fixed record for each of its epochs."""
+    """A stimulus element answering the decoder's API.
 
-    def __init__(self, epochs):
-        self.epochs = epochs  # {epoch_id: (data, t)}
-        self.reads = []
-
-    def id(self):
-        return "stimulator-1"
-
-    def epochtable(self):
-        return [{"epoch_id": e, "epoch_number": i + 1} for i, e in enumerate(self.epochs)]
-
-    def readtimeseriesepoch(self, epoch, t0, t1):
-        self.reads.append((epoch, t0, t1))
-        data, t = self.epochs.get(epoch, (None, None))
-        return data, t, SimpleNamespace(clocktype="dev_local_time")
-
-
-def _record(stimids=(1, 2, 3, 1, 2, 3), onsets=None, events=None):
-    """One epoch's worth of what a stimulator reports."""
-    onsets = list(onsets if onsets is not None else [i * 2.0 for i in range(len(stimids))])
-    data = {
-        "stimid": np.asarray(stimids, dtype=int),
-        "parameters": [
-            {"angle": 0.0, "tFrequency": 2.0},
-            {"angle": 90.0, "tFrequency": 2.0},
-            {"isblank": 1},
-        ],
-    }
-    t = {
-        "stimon": np.asarray(onsets, dtype=float),
-        "stimoff": np.asarray([o + 1.5 for o in onsets], dtype=float),
-        "stimopenclose": np.asarray([[o - 0.1, o + 1.6] for o in onsets], dtype=float),
-        "stimevents": events or [],
-    }
-    return data, t
-
-
-def _existing_doc(epoch, element_id="stimulator-1"):
-    doc = ndi_document("stimulus_presentation")
-    doc.document_properties["epochid"] = {"epochid": epoch}
-    return doc.set_dependency_value("stimulus_element_id", element_id, error_if_not_found=False)
-
-
-def _app(session):
-    return ndi_app_stimulus_decoder(session=session)
-
-
-# ----------------------------------------------------------------------
-class TestWhatIsWritten:
-    def test_one_document_per_epoch(self):
-        stimulator = FakeStimulator({"ep1": _record(), "ep2": _record()})
-        session = _session()
-        newdocs, existing = _app(session).parse_stimuli(stimulator)
-        assert len(newdocs) == 2
-        assert existing == []
-        assert {d.document_properties["epochid"]["epochid"] for d in newdocs} == {"ep1", "ep2"}
-
-    def test_the_presentation_order_is_what_the_stimulator_reported(self):
-        stimulator = FakeStimulator({"ep1": _record(stimids=(2, 1, 3, 3, 1, 2))})
-        (doc,), _ = _app(_session()).parse_stimuli(stimulator)
-        presentation = doc.document_properties["stimulus_presentation"]
-        assert presentation["presentation_order"] == [2, 1, 3, 3, 1, 2]
-
-    def test_each_stimulus_keeps_its_parameters(self):
-        stimulator = FakeStimulator({"ep1": _record()})
-        (doc,), _ = _app(_session()).parse_stimuli(stimulator)
-        stimuli = doc.document_properties["stimulus_presentation"]["stimuli"]
-        assert [s["parameters"] for s in stimuli] == [
-            {"angle": 0.0, "tFrequency": 2.0},
-            {"angle": 90.0, "tFrequency": 2.0},
-            {"isblank": 1},
-        ]
-
-    def test_the_document_depends_on_the_stimulator(self):
-        stimulator = FakeStimulator({"ep1": _record()})
-        (doc,), _ = _app(_session()).parse_stimuli(stimulator)
-        assert doc.dependency_value("stimulus_element_id") == "stimulator-1"
-
-    def test_the_whole_epoch_is_read(self):
-        """-inf to inf: the record is whatever the epoch holds, and a
-        narrower window would silently drop stimuli at either end."""
-        stimulator = FakeStimulator({"ep1": _record()})
-        _app(_session()).parse_stimuli(stimulator)
-        assert stimulator.reads == [("ep1", float("-inf"), float("inf"))]
-
-    def test_an_epoch_with_no_stimuli_gets_no_document(self):
-        """A stimulator can be running through an epoch it never presented
-        in. An empty document would make every later search return
-        something with nothing in it."""
-        empty = ({"stimid": [], "parameters": []}, {"stimon": [], "stimoff": []})
-        stimulator = FakeStimulator({"ep1": empty, "ep2": _record()})
-        newdocs, _ = _app(_session()).parse_stimuli(stimulator)
-        assert [d.document_properties["epochid"]["epochid"] for d in newdocs] == ["ep2"]
-
-    def test_an_element_with_no_epochs_writes_nothing(self):
-        session = _session()
-        newdocs, existing = _app(session).parse_stimuli(FakeStimulator({}))
-        assert (newdocs, existing) == ([], [])
-        session.database_add.assert_not_called()
-
-    def test_no_session_is_refused(self):
-        with pytest.raises(RuntimeError, match="No session"):
-            ndi_app_stimulus_decoder().parse_stimuli(FakeStimulator({}))
-
-
-class TestTheTimingFile:
-    """What parse_stimuli actually wrote to disk, read back off disk.
-
-    The database sees the file at add time and the app cleans it up
-    afterwards, so the fake database keeps a COPY of the bytes -- which is
-    the only way to check the real file rather than a re-derivation of it.
+    Two epochs, four trials each: stimulus 1 (a grating) and stimulus 2
+    (blank) alternating, so a document keyed to the wrong epoch or a
+    presentation order read the wrong way round is visible in the numbers.
     """
 
-    def _timing(self, epoch_record, tmp_path):
-        stimulator = FakeStimulator({"ep1": epoch_record})
-        session = _session()
-        captured: dict[str, Any] = {}
+    def __init__(self, element_id="stim1", epochs=("e1", "e2")):
+        self.id = element_id
+        self.epochs = list(epochs)
+        self.read_epochs: list[str] = []
 
-        def capture(docs):
-            for doc in docs if isinstance(docs, list) else [docs]:
-                info = doc.document_properties["files"]["file_info"][0]
-                path = info["locations"][0]["location"]
-                captured["path"] = path
-                copy = tmp_path / "captured.bin"
-                copy.write_bytes(pathlib.Path(path).read_bytes())
-                captured["copy"] = str(copy)
+    def elementstring(self):
+        return "vhvis_spike2 | 1"
 
-        session.database_add = MagicMock(side_effect=capture)
-        (doc,), _ = _app(session).parse_stimuli(stimulator)
-        return captured, doc
+    def epochtable(self):
+        return [{"epoch_id": e, "t0_t1": [[0.0, 10.0]]} for e in self.epochs], "hash"
 
-    def test_the_times_survive_the_round_trip(self, tmp_path):
-        """Once the document is stored, this file is the ONLY place the
-        onsets exist -- tuning_response reads them back from it."""
-        onsets = [0.0, 2.0, 4.0]
-        captured, _ = self._timing(_record(stimids=(1, 2, 3), onsets=onsets), tmp_path)
-        _, entries = read_presentation_time_structure(captured["copy"])
-        assert [e["onset"] for e in entries] == pytest.approx(onsets)
-        assert [e["offset"] for e in entries] == pytest.approx([o + 1.5 for o in onsets])
-        assert {e["clocktype"] for e in entries} == {"dev_local_time"}
-
-    def test_the_file_is_named_as_the_schema_declares(self, tmp_path):
-        _, doc = self._timing(_record(stimids=(1, 2, 3)), tmp_path)
-        assert doc.document_properties["files"]["file_info"][0]["name"] == "presentation_time.bin"
-
-    def test_nothing_is_left_in_the_temp_directory(self, tmp_path):
-        """The database ingests the file; whatever it does with the
-        original, the app leaves none behind."""
-        captured, _ = self._timing(_record(stimids=(1, 2, 3)), tmp_path)
-        assert not os.path.exists(captured["path"])
+    def readtimeseriesepoch(self, epoch, t0, t1):  # noqa: ARG002
+        self.read_epochs.append(epoch)
+        data = {
+            "stimid": np.array([1, 2, 1, 2]),
+            "parameters": [{"isblank": 0, "angle": 30}, {"isblank": 1}],
+        }
+        t = {
+            "stimon": np.array([1.0, 2.0, 3.0, 4.0]),
+            "stimoff": np.array([1.5, 2.5, 3.5, 4.5]),
+            "stimopenclose": np.array([[0.9, 1.6], [1.9, 2.6], [2.9, 3.6], [3.9, 4.6]]),
+            "stimevents": [np.array([1.1, 2.2, 9.9])],
+        }
+        return data, t, _FakeTimeRef()
 
 
-class TestTimingContent:
-    """The timing entries, read back from a file written the same way."""
+class _FakeTimeRef:
+    class clocktype:  # noqa: N801 - stands in for the enum
+        def __str__(self):
+            return "dev_local_time"
 
-    def _entries(self, record, tmp_path):
-        app = ndi_app_stimulus_decoder(session=_session())
-        data, t = record
-        entries = app._presentation_time(t, SimpleNamespace(clocktype="dev_local_time"))
-        from ndi.database_fun import write_presentation_time_structure
+    clocktype = clocktype()
 
-        path = str(tmp_path / "presentation_time.bin")
-        write_presentation_time_structure(path, entries)
-        _, read_back = read_presentation_time_structure(path)
-        return entries, read_back
 
-    def test_one_entry_per_presentation(self, tmp_path):
-        entries, read_back = self._entries(_record(stimids=(1, 2, 3, 1)), tmp_path)
+def real_session():
+    """A real ndi.session.dir with a subject and a stimulator element document.
+
+    The element has to exist in the database because the document written
+    depends on it, and the database validates that.
+    """
+    from ndi.session.dir import ndi_session_dir
+
+    session = ndi_session_dir("testref", tempfile.mkdtemp())
+    subject = session.newdocument(
+        "subject",
+        **{"subject.local_identifier": "mock@nosuchlab.org", "subject.description": ""},
+    )
+    session.database_add(subject)
+    element = session.newdocument(
+        "element",
+        **{
+            "element.ndi_element_class": "ndi.element",
+            "element.name": "vhvis_spike2",
+            "element.reference": 1,
+            "element.type": "stimulator",
+            "element.direct": 1,
+        },
+    )
+    element = element.set_dependency_value("subject_id", subject.id)
+    session.database_add(element)
+    return session, element.id
+
+
+class TestStimeventsWindow:
+    def test_events_inside_the_trial_are_kept_with_their_channel(self):
+        events = _stimevents_in_window([np.array([1.1, 9.9])], 1.0, 1.5, 0.9, 1.6)
+        assert events.tolist() == [[1.1, 1.0]]
+
+    def test_channels_are_numbered_from_one(self):
+        """As MATLAB numbers them, and as the reader of the file expects."""
+        events = _stimevents_in_window([np.array([]), np.array([1.2])], 1.0, 1.5, 0.9, 1.6)
+        assert events.tolist() == [[1.2, 2.0]]
+
+    def test_the_window_is_the_widest_bracket_the_trial_offers(self):
+        """An event between stimopen and onset is still this trial's; taking
+        only onset..offset would drop it from the record."""
+        events = _stimevents_in_window([np.array([0.95])], 1.0, 1.5, 0.9, 1.6)
+        assert events.tolist() == [[0.95, 1.0]]
+
+    def test_rows_come_back_sorted_by_time_across_channels(self):
+        events = _stimevents_in_window([np.array([1.4]), np.array([1.1])], 1.0, 1.5, 0.9, 1.6)
+        assert events[:, 0].tolist() == [1.1, 1.4]
+        assert events[:, 1].tolist() == [2.0, 1.0]
+
+    def test_no_events_is_an_empty_two_column_array(self):
+        """Shape matters: the writer packs an Nx2 matrix."""
+        assert _stimevents_in_window(None, 1.0, 1.5, 0.9, 1.6).shape == (0, 2)
+
+    def test_a_trial_with_no_finite_bracket_keeps_nothing(self):
+        nan = float("nan")
+        assert _stimevents_in_window([np.array([1.0])], nan, nan, nan, nan).shape == (0, 2)
+
+
+class TestPresentationTime:
+    def test_one_entry_per_trial_in_presentation_order(self):
+        _data, t, timeref = FakeStimulator().readtimeseriesepoch("e1", 0, 1)
+        entries = _presentation_time(t, timeref)
         assert len(entries) == 4
-        assert len(read_back) == 4
+        assert [e["onset"] for e in entries] == [1.0, 2.0, 3.0, 4.0]
 
-    def test_the_onsets_and_offsets_round_trip(self, tmp_path):
-        onsets = [0.0, 2.0, 4.0]
-        _, read_back = self._entries(_record(stimids=(1, 2, 3), onsets=onsets), tmp_path)
-        assert [e["onset"] for e in read_back] == pytest.approx(onsets)
-        assert [e["offset"] for e in read_back] == pytest.approx([o + 1.5 for o in onsets])
+    def test_each_entry_carries_the_full_bracket_and_the_clock(self):
+        _data, t, timeref = FakeStimulator().readtimeseriesepoch("e1", 0, 1)
+        first = _presentation_time(t, timeref)[0]
+        assert (first["stimopen"], first["onset"], first["offset"], first["stimclose"]) == (
+            0.9,
+            1.0,
+            1.5,
+            1.6,
+        )
+        assert first["clocktype"] == "dev_local_time"
 
-    def test_open_and_close_bracket_the_stimulus(self, tmp_path):
-        """They differ from onset/offset when the display was opened before
-        the stimulus began; both are kept because a prestimulus baseline is
-        measured against one and a response against the other."""
-        entries, _ = self._entries(_record(stimids=(1,), onsets=[10.0]), tmp_path)
-        assert entries[0]["stimopen"] == pytest.approx(9.9)
-        assert entries[0]["stimclose"] == pytest.approx(11.6)
-
-    def test_the_clock_is_recorded(self, tmp_path):
-        entries, read_back = self._entries(_record(stimids=(1,)), tmp_path)
-        assert entries[0]["clocktype"] == "dev_local_time"
-        assert read_back[0]["clocktype"] == "dev_local_time"
-
-    def test_events_are_matched_to_the_trial_they_fall_in(self, tmp_path):
-        record = _record(stimids=(1, 2), onsets=[0.0, 10.0], events=[[0.5, 10.5], [0.7]])
-        entries, _ = self._entries(record, tmp_path)
-        first = np.asarray(entries[0]["stimevents"])
-        second = np.asarray(entries[1]["stimevents"])
-        assert first[:, 0].tolist() == [0.5, 0.7]
-        assert second[:, 0].tolist() == [10.5]
-
-    def test_event_channels_are_one_based(self, tmp_path):
-        """They name a marker channel to a person reading the document, not
-        a Python index."""
-        record = _record(stimids=(1,), onsets=[0.0], events=[[0.5], [0.6]])
-        entries, _ = self._entries(record, tmp_path)
-        assert np.asarray(entries[0]["stimevents"])[:, 1].tolist() == [1.0, 2.0]
-
-    def test_events_are_sorted_by_time_across_channels(self, tmp_path):
-        record = _record(stimids=(1,), onsets=[0.0], events=[[0.9], [0.2]])
-        entries, _ = self._entries(record, tmp_path)
-        assert np.asarray(entries[0]["stimevents"])[:, 0].tolist() == [0.2, 0.9]
-
-    def test_an_event_just_outside_the_stimulus_but_inside_the_trial_is_kept(self, tmp_path):
-        """The window is the widest of the trial's bounds: the rig can mark
-        something before the stimulus is drawn, and losing it would lose the
-        record of something that happened."""
-        record = _record(stimids=(1,), onsets=[10.0], events=[[9.95]])
-        entries, _ = self._entries(record, tmp_path)
-        assert np.asarray(entries[0]["stimevents"])[:, 0].tolist() == [9.95]
-
-    def test_an_epoch_with_no_events_has_an_empty_matrix(self, tmp_path):
-        entries, _ = self._entries(_record(stimids=(1,)), tmp_path)
-        assert np.asarray(entries[0]["stimevents"]).shape == (0, 2)
+    def test_a_time_reference_that_cannot_name_its_clock_gives_empty(self):
+        """Not a made-up clock name: the reader treats "" as unknown, and a
+        wrong clock silently misplaces every time in the file."""
+        _data, t, _ = FakeStimulator().readtimeseriesepoch("e1", 0, 1)
+        assert _presentation_time(t, object())[0]["clocktype"] == ""
 
 
-class TestRerunningIt:
-    def test_an_epoch_that_is_done_is_left_alone(self):
-        """Parsing is idempotent, so it can be run again after new epochs
-        arrive without disturbing the responses already computed from the
-        old ones."""
-        stimulator = FakeStimulator({"ep1": _record(), "ep2": _record()})
-        done = _existing_doc("ep1")
-        session = _session(search=lambda q: [done])
-        newdocs, existing = _app(session).parse_stimuli(stimulator)
-        assert [d.document_properties["epochid"]["epochid"] for d in newdocs] == ["ep2"]
-        assert existing == [done]
-        session.database_rm.assert_not_called()
+class TestParseStimuli:
+    def test_no_session_is_refused(self):
+        with pytest.raises(RuntimeError, match="No session"):
+            ndi_app_stimulus_decoder().parse_stimuli(FakeStimulator())
 
-    def test_reset_rebuilds_the_epochs_it_covers(self):
-        stimulator = FakeStimulator({"ep1": _record()})
-        done = _existing_doc("ep1")
-        session = _session(search=lambda q: [done])
-        newdocs, existing = _app(session).parse_stimuli(stimulator, reset=True)
-        session.database_rm.assert_called_once_with([done])
-        assert [d.document_properties["epochid"]["epochid"] for d in newdocs] == ["ep1"]
-        assert existing == []
+    def test_every_epoch_gets_a_document_keyed_to_it(self):
+        session, element_id = real_session()
+        stim = FakeStimulator(element_id)
 
-    def test_reset_of_one_epoch_leaves_another_epochs_work_alone(self):
-        """The reason reset takes the epoch list into account at all."""
-        stimulator = FakeStimulator({"ep1": _record(), "ep2": _record()})
-        done1, done2 = _existing_doc("ep1"), _existing_doc("ep2")
-        session = _session(search=lambda q: [done1, done2])
-        newdocs, existing = _app(session).parse_stimuli(stimulator, reset=True, epochids="ep1")
-        session.database_rm.assert_called_once_with([done1])
-        assert [d.document_properties["epochid"]["epochid"] for d in newdocs] == ["ep1"]
-        assert existing == [done2]
+        newdocs, existingdocs = ndi_app_stimulus_decoder(session).parse_stimuli(stim)
 
-    def test_epochids_limits_which_epochs_are_parsed(self):
-        stimulator = FakeStimulator({"ep1": _record(), "ep2": _record(), "ep3": _record()})
-        newdocs, _ = _app(_session()).parse_stimuli(stimulator, epochids=["ep1", "ep3"])
-        assert [d.document_properties["epochid"]["epochid"] for d in newdocs] == ["ep1", "ep3"]
+        assert existingdocs == []
+        assert [d.document_properties["epochid"]["epochid"] for d in newdocs] == ["e1", "e2"]
 
-    def test_an_epochid_that_names_nothing_is_not_an_error(self):
-        """Asking to parse an epoch that is not there has already been
-        answered; the epochs that ARE there should still be parsed."""
-        stimulator = FakeStimulator({"ep1": _record()})
-        newdocs, _ = _app(_session()).parse_stimuli(stimulator, epochids=["ep1", "nosuchepoch"])
-        assert [d.document_properties["epochid"]["epochid"] for d in newdocs] == ["ep1"]
+    def test_the_document_records_the_order_and_the_stimuli(self):
+        session, element_id = real_session()
+        newdocs, _ = ndi_app_stimulus_decoder(session).parse_stimuli(FakeStimulator(element_id))
+        presentation = newdocs[0].document_properties["stimulus_presentation"]
+        assert presentation["presentation_order"] == [1, 2, 1, 2]
+        assert presentation["stimuli"][0]["parameters"] == {"isblank": 0, "angle": 30}
+
+    def test_it_depends_on_the_element_it_decoded(self):
+        session, element_id = real_session()
+        newdocs, _ = ndi_app_stimulus_decoder(session).parse_stimuli(FakeStimulator(element_id))
+        assert newdocs[0].dependency_value("stimulus_element_id") == element_id
+
+    def test_the_presentation_times_survive_the_write(self):
+        """The round trip that a deleted temp file breaks. Storing a
+        document whose presentation_time.bin cannot be opened raises
+        nothing at write time -- only here, when something reads it."""
+        session, element_id = real_session()
+        decoder = ndi_app_stimulus_decoder(session)
+        newdocs, _ = decoder.parse_stimuli(FakeStimulator(element_id))
+
+        times = decoder.load_presentation_time(newdocs[0])
+
+        assert len(times) == 4
+        assert times[0]["onset"] == 1.0
+        assert times[0]["clocktype"] == "dev_local_time"
+
+    def test_a_second_run_decodes_nothing_and_reports_what_is_there(self):
+        """Re-running over a decoded probe has to be free: each epoch costs
+        minutes, and the GUI's Run button is one click away."""
+        session, element_id = real_session()
+        stim = FakeStimulator(element_id)
+        decoder = ndi_app_stimulus_decoder(session)
+        decoder.parse_stimuli(stim)
+
+        newdocs, existingdocs = decoder.parse_stimuli(stim)
+
+        assert newdocs == []
+        assert len(existingdocs) == 2
+
+    def test_only_the_requested_epochs_are_decoded(self):
+        session, element_id = real_session()
+        stim = FakeStimulator(element_id)
+
+        newdocs, _ = ndi_app_stimulus_decoder(session).parse_stimuli(stim, epochids=["e2"])
+
+        assert [d.document_properties["epochid"]["epochid"] for d in newdocs] == ["e2"]
+        assert stim.read_epochs == ["e2"]
+
+    def test_a_single_epoch_id_may_be_given_as_a_string(self):
+        session, element_id = real_session()
+        newdocs, _ = ndi_app_stimulus_decoder(session).parse_stimuli(
+            FakeStimulator(element_id), epochids="e1"
+        )
+        assert [d.document_properties["epochid"]["epochid"] for d in newdocs] == ["e1"]
+
+    def test_reset_rebuilds_only_the_epochs_it_was_asked_about(self):
+        """The whole point of the per-epoch reset: re-decoding one epoch
+        must not destroy the others, each of which cost minutes."""
+        session, element_id = real_session()
+        stim = FakeStimulator(element_id)
+        decoder = ndi_app_stimulus_decoder(session)
+        first, _ = decoder.parse_stimuli(stim)
+        kept_id = next(d.id for d in first if d.document_properties["epochid"]["epochid"] == "e2")
+
+        newdocs, existingdocs = decoder.parse_stimuli(stim, True, ["e1"])
+
+        assert [d.document_properties["epochid"]["epochid"] for d in newdocs] == ["e1"]
+        assert [d.id for d in existingdocs] == [kept_id]
+
+    def test_reset_writes_a_new_document_rather_than_reusing_the_old_one(self):
+        session, element_id = real_session()
+        stim = FakeStimulator(element_id)
+        decoder = ndi_app_stimulus_decoder(session)
+        first, _ = decoder.parse_stimuli(stim, epochids=["e1"])
+
+        second, _ = decoder.parse_stimuli(stim, True, ["e1"])
+
+        assert second[0].id != first[0].id
+
+    def test_an_element_with_no_epochs_writes_nothing(self):
+        session, element_id = real_session()
+        newdocs, existingdocs = ndi_app_stimulus_decoder(session).parse_stimuli(
+            FakeStimulator(element_id, epochs=())
+        )
+        assert (newdocs, existingdocs) == ([], [])
+
+    def test_an_unknown_epoch_id_decodes_nothing(self):
+        session, element_id = real_session()
+        newdocs, _ = ndi_app_stimulus_decoder(session).parse_stimuli(
+            FakeStimulator(element_id), epochids=["not-an-epoch"]
+        )
+        assert newdocs == []
 
 
 class TestItFeedsTheNextStep:
-    """The join this port was missing: what parse_stimuli writes is what
-    ndi.app.stimulus.tuning_response reads."""
+    """What parse_stimuli writes is what tuning_response reads.
 
-    def test_the_document_is_one_tuning_response_can_work_from(self):
+    The join between the two halves of the stimulus pipeline, and the reason
+    both had to be ported before either could be checked end to end. These
+    are here rather than in the tuning_response tests because the input is a
+    real decoder output, not a document hand-built to look like one.
+    """
+
+    def test_control_stimulus_finds_the_blank_in_the_document_just_written(self):
+        """FakeStimulator alternates a grating with a blank, so trial 2 and
+        trial 4 are the controls -- 1-based trial numbers, as stored."""
         from ndi.app.stimulus.tuning_response import ndi_app_stimulus_tuning__response
 
-        stimulator = FakeStimulator({"ep1": _record(stimids=(1, 2, 3, 1, 2, 3))})
-        session = _session()
-        (presentation,), _ = _app(session).parse_stimuli(stimulator)
+        session, element_id = real_session()
+        newdocs, _ = ndi_app_stimulus_decoder(session).parse_stimuli(FakeStimulator(element_id))
 
-        # control_stimulus reads the same document, and finds the blank
-        # (stimulus 3, the one carrying isblank) in each repetition.
-        responder = ndi_app_stimulus_tuning__response(session=session)
-        control_ids, control_doc = responder.control_stimulus(presentation)
-        assert control_ids == [3.0, 3.0, 3.0, 6.0, 6.0, 6.0]
-        assert control_doc.dependency_value("stimulus_presentation_id") == presentation.id
+        responder = ndi_app_stimulus_tuning__response(session)
+        cs_ids, cs_doc = responder.control_stimulus(newdocs[0])
 
-    def test_the_stimuli_carry_the_frequency_that_earns_an_f1_response(self):
-        """tFrequency is what ndi.fun.stimulustemporalfrequency reads to
-        decide there is an F1 and F2 to compute at all."""
+        assert cs_ids == [2.0, 2.0, 4.0, 4.0]
+        assert cs_doc.dependency_value("stimulus_presentation_id") == newdocs[0].id
+
+    def test_label_control_stimuli_labels_every_presentation_written(self):
+        from ndi.app.stimulus.tuning_response import ndi_app_stimulus_tuning__response
+
+        session, element_id = real_session()
+        stimulator = FakeStimulator(element_id)
+        newdocs, _ = ndi_app_stimulus_decoder(session).parse_stimuli(stimulator)
+        assert len(newdocs) == 2  # one per epoch
+
+        cs_docs = ndi_app_stimulus_tuning__response(session).label_control_stimuli(stimulator)
+        assert len(cs_docs) == len(newdocs)
+
+    def test_the_stored_parameters_carry_what_decides_an_f1_response(self):
+        """ndi.fun.stimulustemporalfrequency reads the stimulus parameters
+        out of this document to decide whether F1 and F2 exist at all. The
+        grating here declares no temporal frequency, so it has none -- which
+        is the answer, not a failure to look."""
         from ndi.fun.stimulus import stimulustemporalfrequency
 
-        stimulator = FakeStimulator({"ep1": _record()})
-        (presentation,), _ = _app(_session()).parse_stimuli(stimulator)
-        stimuli = presentation.document_properties["stimulus_presentation"]["stimuli"]
-        assert stimulustemporalfrequency(stimuli[0]["parameters"]) == (2.0, "tFrequency")
+        session, element_id = real_session()
+        newdocs, _ = ndi_app_stimulus_decoder(session).parse_stimuli(FakeStimulator(element_id))
+        stimuli = newdocs[0].document_properties["stimulus_presentation"]["stimuli"]
+
+        assert stimuli[0]["parameters"] == {"isblank": 0, "angle": 30}
+        assert stimulustemporalfrequency(stimuli[0]["parameters"]) == (None, "")
+        assert stimulustemporalfrequency({**stimuli[0]["parameters"], "tFrequency": 4.0}) == (
+            4.0,
+            "tFrequency",
+        )
