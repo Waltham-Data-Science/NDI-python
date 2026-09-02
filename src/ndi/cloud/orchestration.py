@@ -412,12 +412,23 @@ def uploadDataset(
         except Exception as exc:
             return False, "", f"Failed to create remote dataset: {exc}"
 
-        # Store link locally
+        # Store link locally. MATLAB: ndiDataset.database_add(remoteDatasetDoc)
+        # (uploadDataset.m:91). Reported, never swallowed: without this
+        # document the dataset does not know it has been uploaded, so the next
+        # upload creates a SECOND remote dataset. Returning success with the
+        # link missing is what made that duplication silent.
         remote_doc = createRemoteDatasetDoc(cloud_id, dataset)
         try:
-            dataset.session.database_add(remote_doc)
-        except Exception:
-            pass
+            dataset.database_add(remote_doc)
+        except Exception as exc:  # noqa: BLE001 - reported to the caller
+            return (
+                False,
+                cloud_id,
+                f"Remote dataset {cloud_id} was created, but the local "
+                f"dataset_remote link could not be written: {exc}. Re-running "
+                "the upload would create a second remote dataset -- write the "
+                "link or remove the remote dataset before retrying.",
+            )
 
     if verbose:
         print(f"Uploading to cloud dataset: {cloud_id}")
@@ -425,10 +436,15 @@ def uploadDataset(
     # Gather local documents
     from ndi.query import ndi_query
 
-    try:
-        all_docs = dataset.session.database_search(ndi_query(""))
-    except Exception:
-        all_docs = []
+    # MATLAB: ndiDataset.database_search(ndi.query('','isa','base'))
+    # (uploadDataset.m:96). Two separate mistakes lived on this line: it went
+    # through `dataset.session`, which ndi_dataset does not have, and it used
+    # a bare ndi_query(""), which matches no documents at all. Either one on
+    # its own uploads an empty dataset while reporting success.
+    #
+    # Not wrapped: an unreadable database is not an empty dataset, and
+    # uploading nothing must never be the reported outcome of failing to look.
+    all_docs = dataset.database_search(ndi_query("").isa("base"))
 
     doc_jsons = []
     for doc in all_docs:
@@ -571,10 +587,10 @@ def _sync_download_new(
     # Find local IDs
     from ndi.query import ndi_query
 
-    try:
-        local_docs = dataset.session.database_search(ndi_query(""))
-    except Exception:
-        local_docs = []
+    # Same fix as uploadDataset: dataset.database_search, and isa("base")
+    # rather than a bare query that matches nothing. Reported as an empty
+    # local side, this made every remote document look new.
+    local_docs = dataset.database_search(ndi_query("").isa("base"))
 
     local_ids = set()
     for ld in local_docs:
@@ -596,7 +612,7 @@ def _sync_download_new(
     failures: list[tuple[str, str]] = []
     for doc in documents:
         try:
-            dataset.session.database_add(doc)
+            dataset.database_add(doc)
             added += 1
         except Exception as exc:
             doc_id = getattr(doc, "id", None) or "<unknown>"
@@ -636,10 +652,10 @@ def _sync_upload_new(
 
     from ndi.query import ndi_query
 
-    try:
-        local_docs = dataset.session.database_search(ndi_query(""))
-    except Exception:
-        local_docs = []
+    # Same fix as uploadDataset: dataset.database_search, and isa("base")
+    # rather than a bare query that matches nothing. Reported as an empty
+    # local side, this made every remote document look new.
+    local_docs = dataset.database_search(ndi_query("").isa("base"))
 
     new_jsons = []
     for ld in local_docs:
