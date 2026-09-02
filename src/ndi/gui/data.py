@@ -5,6 +5,12 @@ Mirrors MATLAB: ndi.gui.ndi_gui_Data
 Provides a table of NDI documents with search, filtering (contains,
 begins with, ends with), a detail panel, and dependency-graph
 visualisation using *networkx*.
+
+CROSS-LANGUAGE NAMING
+Methods mirroring MATLAB keep MATLAB's exact name and also carry a
+snake_case alias bound to the same function -- one method under two names,
+so neither a ported MATLAB script nor idiomatic Python has to remember which
+spelling a given method happens to have.
 """
 
 from __future__ import annotations
@@ -121,6 +127,9 @@ class ndi_gui_Data:
         self.tempTable = list(self.fullTable)
         self.tempDocuments = list(self.fullDocuments)
         self._refresh_table()
+
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    add_doc = addDoc
 
     def filter(self) -> None:
         """Filter the table using current search controls."""

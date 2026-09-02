@@ -4,6 +4,12 @@ Mirrors MATLAB: ndi.gui.component.ndi_gui_component_NDIProgressBar
 
 Provides a single progress bar with NDI styling (blue colour scheme),
 a text label, and optional time-remaining display.  Uses PySide6.
+
+CROSS-LANGUAGE NAMING
+Methods mirroring MATLAB keep MATLAB's exact name and also carry a
+snake_case alias bound to the same function -- one method under two names,
+so neither a ported MATLAB script nor idiomatic Python has to remember which
+spelling a given method happens to have.
 """
 
 from __future__ import annotations
@@ -94,10 +100,16 @@ class ndi_gui_component_NDIProgressBar(ndi_gui_component_abstract_ProgressMonito
         pct = self.Value * 100
         self._bar.setFormat(f"{pct:.0f}%")
 
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    update_progress_display = updateProgressDisplay
+
     def updateMessage(self, message: str) -> None:
         """Update the label text."""
         self._message_text = message
         self._label.setText(self.formatMessage(message))
+
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    update_message = updateMessage
 
     def finish(self) -> None:
         """Set bar to 100 % and show completion text."""

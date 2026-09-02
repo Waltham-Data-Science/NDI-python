@@ -6,6 +6,12 @@ Creates and manages a PySide6 window that can display one or more
 progress bars.  Bars can be added, updated, and removed dynamically.
 Each bar shows a label, a coloured progress bar, a percentage, an
 estimated-time-remaining label, and a close button.
+
+CROSS-LANGUAGE NAMING
+Methods mirroring MATLAB keep MATLAB's exact name and also carry a
+snake_case alias bound to the same function -- one method under two names,
+so neither a ported MATLAB script nor idiomatic Python has to remember which
+spelling a given method happens to have.
 """
 
 from __future__ import annotations
@@ -220,6 +226,9 @@ class ndi_gui_component_ProgressBarWindow:
         self._resize_window()
         self._window.raise_()
 
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    add_bar = addBar
+
     def updateBar(self, barID: int | str, progress: float) -> None:
         """Update the progress of a bar.
 
@@ -268,6 +277,9 @@ class ndi_gui_component_ProgressBarWindow:
         except RuntimeError:
             warnings.warn(f"Execution of task {rec.Tag} terminated.", stacklevel=2)
 
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    update_bar = updateBar
+
     def removeBar(self, barID: int | str) -> None:
         """Remove a progress bar row."""
         idx, status = self.getBarNum(barID)
@@ -304,6 +316,9 @@ class ndi_gui_component_ProgressBarWindow:
         if self.AutoDelete:
             self._deleteIfNoOpenBars()
 
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    remove_bar = removeBar
+
     def getBarNum(self, barID: int | str) -> tuple[int | None, dict[str, str]]:
         """Find bar index by numeric index or Tag.
 
@@ -334,6 +349,9 @@ class ndi_gui_component_ProgressBarWindow:
         status["message"] = f'BarID Tag "{barID}" not found.'
         return None, status
 
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    get_bar_num = getBarNum
+
     def getState(self, barID: int | str) -> str:
         """Return the state of a specific bar."""
         idx, status = self.getBarNum(barID)
@@ -344,17 +362,29 @@ class ndi_gui_component_ProgressBarWindow:
             return ""
         return self._bars[idx].State
 
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    get_state = getState
+
     def setTimeout(self, newTimeout: float) -> None:
         """Set the timeout duration in seconds."""
         self.Timeout = newTimeout
+
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    set_timeout = setTimeout
 
     def checkTimeout(self) -> list[int]:
         """Flag bars that have timed out."""
         return self._check_timeout()
 
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    check_timeout = checkTimeout
+
     def checkComplete(self) -> list[int]:
         """Flag bars that have reached 100%."""
         return self._check_complete()
+
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    check_complete = checkComplete
 
     # -- Private helpers --------------------------------------------------
 
