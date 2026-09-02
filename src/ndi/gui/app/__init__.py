@@ -37,6 +37,7 @@ that this file never mentioned would be found just the same.
 from __future__ import annotations
 
 from .electrode_data_export import ElectrodeDataExport
+from .electrode_map import ElectrodeMap
 from .ensemble_maker import ensembleMaker
 from .session_app import SessionApp, sessionApp
 from .spike_sorter_importer import spikeSorterImporter
@@ -45,6 +46,7 @@ from .stimulus_response import stimulusResponse
 
 __all__ = [
     "ElectrodeDataExport",
+    "ElectrodeMap",
     "SessionApp",
     "ensembleMaker",
     "sessionApp",

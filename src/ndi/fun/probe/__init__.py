@@ -10,8 +10,9 @@ curated sort back in, as ``import_.kilosort``),
 maps built from it),
 :func:`~ndi.fun.probe.extracellular_info.extracellularInfo` (the neurons an
 import has already put in the database),
-:func:`~ndi.fun.probe.channel_count.channelCount`, and
-:func:`~ndi.fun.probe.location.location`.
+:func:`~ndi.fun.probe.channel_count.channelCount`,
+:func:`~ndi.fun.probe.plot_probe_geometry.plotProbeGeometry` (drawing one),
+and :func:`~ndi.fun.probe.location.location`.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from .channel_count import channel_count, channelCount
 from .export_binary import export_all_binary, export_binary
 from .extracellular_info import extracellular_info, extracellularInfo
 from .location import location
+from .plot_probe_geometry import plot_probe_geometry, plotProbeGeometry
 
 __all__ = [
     "channelCount",
@@ -33,4 +35,6 @@ __all__ = [
     "geometry",
     "import_",
     "location",
+    "plotProbeGeometry",
+    "plot_probe_geometry",
 ]
