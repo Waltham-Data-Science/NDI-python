@@ -702,6 +702,7 @@ classes:
   - name: oridirtuning
     type: class
     matlab_path: "src/ndi/+ndi/+app/oridirtuning.m"
+    matlab_last_sync_hash: "b7102250"
     python_path: "ndi/app/oridirtuning.py"
     python_class: "ndi_app_oridirtuning"
     inherits: "ndi.app & ndi.app.appdoc"
@@ -731,7 +732,11 @@ classes:
         output_arguments:
           - name: tuning_doc
             type_python: "list[ndi_document]"
-        decision_log: "Exact match."
+        decision_log: >
+          Implemented. Searches the element's stimulus_response_scalar
+          documents, keeps the ones whose stimulus set varies only in angle,
+          and adds a stimulus_tuningcurve appdoc for each. Responses from
+          other stimulus sets are skipped rather than erroring, as in MATLAB.
 
       - name: calculate_tuning_curve
         input_arguments:
@@ -764,7 +769,28 @@ classes:
         output_arguments:
           - name: oriprops
             type_python: "list[ndi_document]"
-        decision_log: "Exact match."
+        decision_log: >
+          Implemented. Finds the element's angle-varying responses, then the
+          tuning curves computed from each, and adds an
+          orientation_direction_tuning appdoc per curve.
+
+          The indices themselves come from vlt.neuro.vision.oridir.index
+          (oridir_vectorindexes, oridir_fitindexes) and the two ANOVA
+          p-values from vhlib.response_stats.neural_response_significance --
+          none of that arithmetic is reimplemented here, mirroring
+          NDI-matlab, which calls both toolboxes directly. Reaching those
+          needed VH-Lab/vhlab-toolbox-python#24 (import bug) and
+          VH-Lab/vhlab-library-python#8 and #10 (the port, and packaging so
+          it can be depended on); all three landed.
+
+          DIVERGENCE WORTH KNOWING: MATLAB builds two response structs
+          (oridirtuning.m:155-165) that differ in `ind` -- the significance
+          test gets the RAW individual responses against the blank, the
+          indices get the control-SUBTRACTED ones. Python does the same. The
+          shared helper tuningcurvedoc2vhlabrespstruct is deliberately NOT
+          used, because MATLAB's version of it returns the raw individuals
+          while the Python port returns the subtracted ones, so it matches
+          neither caller cleanly.
 
       - name: calculate_oridir_indexes
         input_arguments:

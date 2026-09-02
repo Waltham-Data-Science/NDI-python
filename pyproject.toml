@@ -38,6 +38,10 @@ dependencies = [
     "did @ git+https://github.com/VH-Lab/DID-python.git@main",
     "ndr[formats] @ git+https://github.com/VH-lab/NDR-python.git@main",
     "vhlab-toolbox-python @ git+https://github.com/VH-Lab/vhlab-toolbox-python.git@main",
+    # ndi.app.oridirtuning needs vhlib.response_stats.neural_response_significance,
+    # mirroring NDI-matlab, which calls vhlab-library-matlab directly (see
+    # NDI-matlab/src/ndi/docs/developer_notes/vhlabLibraryMatlab.md).
+    "vhlab-library-python @ git+https://github.com/VH-Lab/vhlab-library-python.git@main",
     "ndi-compress @ git+https://github.com/Waltham-Data-Science/NDI-compress-python.git@main",
     # ndi.ontology is a re-export of this package -- see src/ndi/ontology.py.
     # It tracks ndi-ontology-matlab, which is where NDI-matlab's ontology code
