@@ -5,20 +5,23 @@ Public functions accept an optional ``client`` keyword argument.  When
 omitted, a client is created automatically from environment variables.
 
 MATLAB equivalents: downloadDataset.m, uploadDataset.m, syncDataset.m,
-    +upload/newDataset.m, +upload/scanForUpload.m
+    helloMatlab.m, +upload/newDataset.m, +upload/scanForUpload.m
 """
 
 from __future__ import annotations
 
+import logging
 import re
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from .client import _auto_client
 
 if TYPE_CHECKING:
     from .client import CloudClient
+
+logger = logging.getLogger(__name__)
 
 
 @_auto_client
@@ -577,6 +580,238 @@ def newDataset(
 
         raise CloudError(f"Failed to create new cloud dataset: {msg}")
     return cloud_id
+
+
+# ---------------------------------------------------------------------------
+# helloMatlab -- the end-to-end MATLAB BYOL check
+# ---------------------------------------------------------------------------
+
+#: The pipeline helloMatlab runs. Its verify stage boots an EC2 instance,
+#: runs ``matlab -batch "ver"`` there under the caller's BYOL licence, and
+#: writes the License Manager's own words back into the session document.
+HELLO_MATLAB_PIPELINE_ID = "hello-matlab-v1"
+
+#: Statuses that end the poll loop. Read on both the session and its verify
+#: stage: MATLAB checks ABORTED only on the session, but an aborted stage is
+#: not a state to keep waiting on either, so the same set covers both.
+_STAGE_SUCCESS = "COMPLETED"
+_STAGE_FAILURE = ("FAILED", "ABORTED")
+
+
+class HelloMatlabResult(NamedTuple):
+    """What :func:`helloMatlab` reports back.
+
+    A NamedTuple so it unpacks in MATLAB's output order --
+    ``success, sessionId, statusMessage, sessionDoc = helloMatlab()``
+    mirrors ``[success, sessionId, statusMessage, sessionDoc] =
+    ndi.cloud.helloMatlab()`` -- while still reading as
+    ``result.statusMessage`` in Python.
+    """
+
+    success: bool
+    sessionId: str  # noqa: N815 - MATLAB's output name, per bridge Rule 3
+    statusMessage: str  # noqa: N815
+    sessionDoc: dict[str, Any]  # noqa: N815
+
+
+def _session_id_from(answer: Any) -> str:
+    """The session id in a POST /compute/start response.
+
+    The API has answered with both spellings, so accept either rather
+    than reporting "no sessionId" for a session that was in fact started
+    and is now billing.
+    """
+    for key in ("sessionId", "id"):
+        value = _read_field(answer, key)
+        if value:
+            return value
+    return ""
+
+
+def _read_field(source: Any, name: str, default: str = "") -> str:
+    """A string field of a response body, whatever shape it arrived in."""
+    if hasattr(source, "get"):
+        value = source.get(name)
+        if value not in (None, "", [], {}):
+            return str(value)
+    return default
+
+
+def _verify_stage(session_doc: Any) -> dict[str, Any]:
+    """The ``history.verify`` sub-document, or an empty one."""
+    history = session_doc.get("history") if hasattr(session_doc, "get") else None
+    if isinstance(history, dict):
+        verify = history.get("verify")
+        if isinstance(verify, dict):
+            return verify
+    return {}
+
+
+def _hello_matlab_verdict(session_status: str, stage_status: str) -> bool | None:
+    """True (done), False (failed), or None (still running).
+
+    Kept separate from the polling so the terminal-state rule can be
+    tested without a clock or a network: this is the decision that
+    determines whether a 20-minute wait ends at minute one.
+    """
+    if stage_status == _STAGE_SUCCESS or session_status == _STAGE_SUCCESS:
+        return True
+    if stage_status in _STAGE_FAILURE or session_status in _STAGE_FAILURE:
+        return False
+    return None
+
+
+def _start_failure_message(exc: Exception) -> str:
+    """Say why POST /compute/start refused, in the server's own terms.
+
+    The two refusals a caller will actually hit are
+    ``MATLAB_LICENSE_REQUIRED`` (no BYOL licence registered for the
+    release the pipeline asks for) and ``MATLAB_LICENSE_DECRYPT_FAILED``.
+    Both arrive as an HTTP 400 whose body names the code and the required
+    release, and both are fixed by the caller rather than by retrying --
+    so the fix belongs in the message, not in the raw payload.
+    """
+    body = getattr(exc, "response_body", None)
+    code = _read_field(body, "code")
+    if code:
+        required = _read_field(body, "requiredRelease")
+        if code == "MATLAB_LICENSE_REQUIRED":
+            return (
+                f"MATLAB_LICENSE_REQUIRED (need release {required}); register one via "
+                "ndi.cloud.api.users.allocateMatlabLicenseMac + setMatlabLicense"
+            )
+        if code == "MATLAB_LICENSE_DECRYPT_FAILED":
+            return f"MATLAB_LICENSE_DECRYPT_FAILED for {required}: {_read_field(body, 'error')}"
+        return f"{code}: {_read_field(body, 'message')}"
+    message = _read_field(body, "message")
+    if message:
+        return message
+    return str(exc)
+
+
+@_auto_client
+def helloMatlab(
+    *,
+    timeout_seconds: float = 1200.0,
+    poll_interval_seconds: float = 10.0,
+    verbose: bool = True,
+    client: CloudClient | None = None,
+) -> HelloMatlabResult:
+    """Check that this user's MATLAB BYOL registration works on NDI Cloud.
+
+    MATLAB equivalent: ndi.cloud.helloMatlab
+
+    Starts the ``hello-matlab-v1`` compute pipeline, then polls
+    ``GET /compute/{sessionId}`` until its verify stage reaches a
+    terminal state, and returns the message MATLAB wrote back from the
+    EC2 instance.  This is the end-to-end check: it exercises the
+    licence registration, the pipeline, the instance, and the status
+    handler that carries MATLAB's answer home.
+
+    Args:
+        timeout_seconds: Hard cap on polling.  The stage has its own
+            15-minute watchdog, so the 20-minute default lets the
+            stage's own failure be the one reported.
+        poll_interval_seconds: Seconds between status polls.
+        verbose: Print one line per status *change* (not per poll).
+        client: Authenticated cloud client (auto-created if omitted, which
+            is what performs the ``ndi.cloud.authenticate()`` step MATLAB
+            does explicitly).
+
+    Returns:
+        :class:`HelloMatlabResult` -- ``success`` is True only if the
+        verify stage reached COMPLETED.  ``statusMessage`` carries the
+        License Manager string on success or failure, or the reason the
+        API refused to start a session at all.  ``sessionDoc`` is the
+        final session document, or the start-call error payload.
+
+    Prerequisite: a registered BYOL licence matching the pipeline's
+    ``requiresMatlabRelease``.  Register one with
+    :func:`ndi.cloud.api.users.allocateMatlabLicenseMac` and
+    :func:`ndi.cloud.api.users.setMatlabLicense`.  Without one the API
+    refuses the start call with ``MATLAB_LICENSE_REQUIRED``, which this
+    function reports directly rather than as a raw HTTP 400.
+
+    See also: ndi.cloud.api.compute.startSession,
+        ndi.cloud.api.compute.getSessionStatus,
+        ndi.cloud.api.users.getMatlabLicense
+    """
+    import time
+
+    from .api import compute as compute_api
+    from .exceptions import CloudError
+
+    if verbose:
+        print(f"helloMatlab: starting pipeline {HELLO_MATLAB_PIPELINE_ID} ...")
+
+    try:
+        answer = compute_api.startSession(HELLO_MATLAB_PIPELINE_ID, client=client)
+    except CloudError as exc:
+        message = _start_failure_message(exc)
+        if verbose:
+            print(f"helloMatlab: start failed -- {message}")
+        body = getattr(exc, "response_body", None)
+        return HelloMatlabResult(False, "", message, body if isinstance(body, dict) else {})
+
+    session_id = _session_id_from(answer)
+    if not session_id:
+        # A started session with an unreadable id is worse than a failed
+        # start: it is billing and nothing here can abort it. Say so.
+        return HelloMatlabResult(
+            False,
+            "",
+            "start response had no sessionId",
+            dict(answer) if hasattr(answer, "keys") else {},
+        )
+
+    if verbose:
+        print(f"helloMatlab: session {session_id} started; polling verify stage...")
+
+    deadline = time.monotonic() + timeout_seconds
+    session_doc: dict[str, Any] = {}
+    last_line = ""
+
+    while True:
+        if time.monotonic() > deadline:
+            return HelloMatlabResult(
+                False,
+                session_id,
+                f"polling timed out after {timeout_seconds:g} seconds",
+                session_doc,
+            )
+
+        try:
+            status = compute_api.getSessionStatus(session_id, client=client)
+        except CloudError as exc:
+            # A transient API hiccup should not end a run that is minutes
+            # into a billed EC2 instance, so keep polling -- but say what
+            # happened, because a status call failing every time until the
+            # deadline is a different problem from a slow pipeline, and
+            # silence cannot tell them apart.
+            logger.warning("helloMatlab: status poll failed, retrying: %s", exc)
+            time.sleep(poll_interval_seconds)
+            continue
+
+        session_doc = dict(status) if hasattr(status, "keys") else {}
+        session_status = _read_field(session_doc, "status")
+        verify = _verify_stage(session_doc)
+        stage_status = _read_field(verify, "status")
+        stage_message = _read_field(verify, "statusMessage")
+
+        if verbose:
+            line = (
+                f"session={session_status} stage={stage_status} "
+                f"instance={_read_field(verify, 'awsResourceId')} :: {stage_message}"
+            )
+            if line != last_line:
+                print(f"  {line}")
+                last_line = line
+
+        verdict = _hello_matlab_verdict(session_status, stage_status)
+        if verdict is not None:
+            return HelloMatlabResult(verdict, session_id, stage_message, session_doc)
+
+        time.sleep(poll_interval_seconds)
 
 
 # Re-export from upload module (MATLAB: ndi.cloud.upload.scanForUpload)

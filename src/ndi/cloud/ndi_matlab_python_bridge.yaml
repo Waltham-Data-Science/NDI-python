@@ -295,6 +295,34 @@ functions:
         type_python: "bool"
     decision_log: "Python-only convenience. No MATLAB equivalent."
 
+  - name: formatApiError
+    matlab_path: "+ndi/+cloud/+internal/formatApiError.m"
+    matlab_last_sync_hash: "0e2caa09"
+    python_path: "ndi/cloud/internal.py"
+    input_arguments:
+      - name: response
+        type_matlab: "matlab.net.http.ResponseMessage"
+        type_python: "Any"
+    output_arguments:
+      - name: msg
+        type_matlab: "char"
+        type_python: "str"
+    decision_log: >
+      Ported in #131. MATLAB accepts only a ResponseMessage; the Python
+      version accepts a requests.Response, an APIResponse, an
+      already-parsed body, or None, because those are the four shapes a
+      Python caller has to hand at the point of failure. The message
+      format is MATLAB's: "HTTP <code> <reason> - <body message>", with
+      either half alone when only one is available, and
+      "no response from server" / "unknown error" for the empty cases.
+
+      CloudClient._handle_response now builds its CloudAPIError message
+      through this, so str(exc) carries the server's own explanation
+      instead of a bare "API error (HTTP 400)". That is what lets
+      helloMatlab report MATLAB_LICENSE_REQUIRED, and what MATLAB's #624
+      was about: an error formatter that assumes a struct body with a
+      'message' field replaces the real failure with its own crash.
+
   - name: getActiveToken
     matlab_path: "+ndi/+cloud/+internal/getActiveToken.m"
     matlab_last_sync_hash: "2566fe4d"
@@ -420,6 +448,64 @@ functions:
         type_python: "dict[str, Any]"
     decision_log: "Exact match."
 
+  - name: helloMatlab
+    matlab_path: "+ndi/+cloud/helloMatlab.m"
+    matlab_last_sync_hash: "0e2caa09"
+    python_path: "ndi/cloud/orchestration.py"
+    input_arguments:
+      - name: timeout_seconds
+        type_matlab: "double (name-value 'TimeoutSeconds')"
+        type_python: "float"
+        default: "1200.0"
+      - name: poll_interval_seconds
+        type_matlab: "double (name-value 'PollIntervalSeconds')"
+        type_python: "float"
+        default: "10.0"
+      - name: verbose
+        type_matlab: "logical (name-value 'Verbose')"
+        type_python: "bool"
+        default: "True"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: success
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: sessionId
+        type_matlab: "string"
+        type_python: "str"
+      - name: statusMessage
+        type_matlab: "string"
+        type_python: "str"
+      - name: sessionDoc
+        type_matlab: "struct"
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Ported in #131. Returns a HelloMatlabResult NamedTuple so MATLAB's
+      four outputs unpack in order -- success, sessionId, statusMessage,
+      sessionDoc -- while still reading as result.statusMessage in Python.
+      The output NAMES keep MATLAB's spelling per Rule 3.
+
+      Three differences from the MATLAB source, all forced by the Python
+      client:
+      (1) MATLAB opens with an explicit ndi.cloud.authenticate() call;
+      Python's @_auto_client does exactly that when no client is passed,
+      so the step is present but not written out.
+      (2) MATLAB's api wrappers return [b, answer, apiResponse, ~] and
+      helloMatlab branches on b; the Python wrappers RAISE CloudAPIError
+      instead, so the start call is wrapped in try/except and the payload
+      is read off exc.response_body. The MATLAB_LICENSE_REQUIRED /
+      MATLAB_LICENSE_DECRYPT_FAILED messages are byte-for-byte the same.
+      (3) A failed status poll is logged before the retry. MATLAB retries
+      silently, which cannot distinguish a slow pipeline from a status
+      endpoint that failed on every one of the 120 polls -- and this
+      function's whole job is to report which of those happened.
+
+      The terminal-state rule (_hello_matlab_verdict) and the response
+      readers are separate pure functions so the decision that ends a
+      20-minute wait can be tested without a clock or a network.
+
   - name: newDataset
     matlab_path: "+ndi/+cloud/+upload/newDataset.m"
     matlab_last_sync_hash: "80092b7c"
@@ -542,8 +628,7 @@ functions:
       Python takes (dataset_id, documents, target_dir). Exact name match.
 
   - name: jsons2documents
-    matlab_path: "+ndi/+cloud/+download/jsons2documents.m"
-    matlab_last_sync_hash: "fe64a9f5"
+    matlab_path: "N/A"
     python_path: "ndi/cloud/download.py"
     input_arguments:
       - name: doc_jsons
@@ -555,7 +640,11 @@ functions:
     decision_log: >
       MATLAB file removed (old pipeline). Python function retained because
       it is used by the modern orchestration layer (downloadDataset,
-      syncDataset).
+      syncDataset). matlab_path is N/A rather than the removed
+      +download/jsons2documents.m, which the bridge-completeness check
+      (#131) caught pointing at nothing. The conversion MATLAB still does
+      is +download/+internal/structsToNdiDocuments.m, recorded separately
+      below and ported under that name too.
 
   - name: downloadGenericFiles
     matlab_path: "+ndi/+cloud/+download/downloadGenericFiles.m"
@@ -594,6 +683,33 @@ functions:
       - name: report
         type_python: "dict[str, Any]"
     decision_log: "Exact match."
+
+  - name: safeLocalFilename
+    matlab_path: "+ndi/+cloud/+download/+internal/safeLocalFilename.m"
+    matlab_last_sync_hash: "ac2df649"
+    python_path: "ndi/cloud/download.py"
+    input_arguments:
+      - name: file_uid
+        type_matlab: "string"
+        type_python: "str"
+    output_arguments:
+      - name: safeFileName
+        type_matlab: "char"
+        type_python: "str"
+      - name: isSafe
+        type_matlab: "logical"
+        type_python: "bool"
+    decision_log: >
+      Ported in #131. The MATLAB file's own header says it is the
+      counterpart of "the basename + containment guard already present in
+      NDI-python download.py" -- which was not true: downloadFilesForDocument
+      wrote to target_dir / file_uid with the uid verbatim from the API, and
+      downloadGenericFiles built its filename from the document's
+      server-supplied generic_file.filename. Both are now routed through
+      this helper, so the claim holds. A second check (_contained_path,
+      Python-only) asserts the joined path really is under the target
+      folder; safeLocalFilename should have made that unreachable, which
+      is the point of checking it.
 
   - name: structsToNdiDocuments
     matlab_path: "+ndi/+cloud/+download/+internal/structsToNdiDocuments.m"
@@ -1069,10 +1185,13 @@ not_yet_ported:
     decision_log: "MATLAB validation function for metadata."
 
   - name: authenticateOriginal
-    matlab_path: "+ndi/+cloud/authenticateOriginal.m"
-    matlab_last_sync_hash: "80092b7c"
+    matlab_path: "N/A"
     status: not_applicable
-    decision_log: "Deprecated MATLAB function. Not needed in Python."
+    decision_log: >
+      Deprecated MATLAB function, since removed from NDI-matlab. Not needed
+      in Python. matlab_path is N/A rather than the deleted
+      +ndi/+cloud/authenticateOriginal.m; the entry is kept so the
+      deliberate decision is not re-litigated.
 
   - name: uilogin
     matlab_path: "+ndi/+cloud/uilogin.m"
@@ -1083,6 +1202,67 @@ not_yet_ported:
       simply returns False when env credentials are absent (since a
       Python CLI session has no UI). The MATLAB profileEditor GUI is a
       separate workstream.
+
+  # --- +ui: the MATLAB cloud dialogs (#131) ---------------------------------
+  # Recorded rather than left silent. Python's cloud GUI is the navigator
+  # (#111/#112) plus ndi.gui.profile_editor; where that covers a dialog the
+  # status is not_applicable, and where it does not, the honest status is
+  # not_yet_ported rather than a claim of coverage.
+
+  - name: LoginDialog
+    matlab_path: "+ndi/+cloud/+ui/+dialog/LoginDialog.mlapp"
+    matlab_last_sync_hash: "0e2caa09"
+    status: not_applicable
+    decision_log: >
+      MATLAB App Designer login window, and the UI half of uilogin (already
+      not_applicable above). Python's route to choosing the active cloud
+      account is ndi.gui.profile_editor, the port of ndi.gui.profileEditor;
+      every cloud action in the navigator runs against whatever it last
+      selected. A second login window would be a second answer to the same
+      question.
+
+  - name: DatasetUploadMonitor
+    matlab_path: "+ndi/+cloud/+ui/DatasetUploadMonitor.mlapp"
+    matlab_last_sync_hash: "0e2caa09"
+    status: not_yet_ported
+    decision_log: >
+      MATLAB App Designer window that watches a dataset upload. Python has
+      the progress-reporting layer it would be built on
+      (ndi.gui.component.ProgressBarWindow / NDIProgressBar /
+      CommandWindowProgressMonitor, and the navigator's progressPane) but
+      no upload-monitor window over it. Not superseded -- simply not built.
+
+  - name: selectOrganization
+    matlab_path: "+ndi/+cloud/+ui/+dialog/selectOrganization.m"
+    matlab_last_sync_hash: "56e2669c"
+    status: not_yet_ported
+    decision_log: >
+      Modal picker over the organizations from ndi.cloud.api.users.me; the
+      interactive counterpart to authenticate()'s "take the first
+      organization". Python's auth._extract_first_organization_id does the
+      non-interactive half and WARNS when the user belongs to more than
+      one, so a multi-organization user is told rather than silently acted
+      on for the wrong one -- but there is no way yet to choose.
+
+  - name: organizationLabels
+    matlab_path: "+ndi/+cloud/+ui/+dialog/organizationLabels.m"
+    matlab_last_sync_hash: "56e2669c"
+    status: not_yet_ported
+    decision_log: >
+      Pure helper (no GUI): builds display labels for a list of
+      organizations, disambiguating a shared name by appending the id.
+      Its only caller is selectOrganization, so it lands when that does.
+
+  - name: selectCloudDataset
+    matlab_path: "+ndi/+cloud/+ui/+dialog/selectCloudDataset.m"
+    matlab_last_sync_hash: "0e2caa09"
+    status: not_yet_ported
+    decision_log: >
+      Modal picker over the published or private cloud datasets. The
+      navigator's datasets pane (#111/#112) lists and acts on datasets the
+      user already has locally, and its cloud actions resolve the remote id
+      from the local dataset -- it does not browse the cloud's own catalog,
+      which is what this dialog is for.
 
   - name: zip_documents_for_upload
     matlab_path: "+ndi/+cloud/+upload/+internal/zip_documents_for_upload.m"

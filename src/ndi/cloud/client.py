@@ -289,8 +289,15 @@ class CloudClient:
                 body = resp.json()
             except Exception:
                 pass
+            # The server's own explanation belongs in str(exc), not only in
+            # .response_body: a caller that prints the exception (or a log
+            # line that captures it) would otherwise report "API error
+            # (HTTP 400)" for a failure the server described precisely --
+            # e.g. MATLAB_LICENSE_REQUIRED from POST /compute/start.
+            from .internal import formatApiError
+
             raise CloudAPIError(
-                f"API error (HTTP {status})",
+                f"API error ({formatApiError(resp)})",
                 status_code=status,
                 response_body=body,
             )

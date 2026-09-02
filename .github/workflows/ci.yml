@@ -34,6 +34,60 @@ jobs:
       - name: Lint with ruff
         run: ruff check src/ tests/
 
+  bridge:
+    name: MATLAB/Python bridge completeness
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ci-bridge-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      # Two checkouts, laid out as siblings, because the check compares
+      # NDI-matlab's +ndi/+cloud tree against this repo's bridge YAMLs.
+      # No MATLAB runtime is needed -- it only reads the source tree --
+      # so this stays a fast job rather than joining test-symmetry.yml.
+      - uses: actions/checkout@v4
+        with:
+          path: NDI-python
+
+      - name: Check out NDI-matlab (matching branch, fall back to main)
+        uses: actions/checkout@v4
+        with:
+          repository: VH-Lab/NDI-matlab
+          # Same pairing rule as test-symmetry.yml: a bridge entry usually
+          # lands in the same feature branch as the MATLAB function it
+          # records, so check that branch when it exists.
+          ref: ${{ github.head_ref || github.ref_name }}
+          path: NDI-matlab
+        continue-on-error: true
+        id: matlab_checkout_branch
+
+      - name: Check out NDI-matlab (main fallback)
+        if: steps.matlab_checkout_branch.outcome == 'failure'
+        uses: actions/checkout@v4
+        with:
+          repository: VH-Lab/NDI-matlab
+          ref: main
+          path: NDI-matlab
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pytest and PyYAML
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pyyaml
+
+      - name: Check bridge completeness
+        working-directory: NDI-python
+        env:
+          # Both repos are checked out above, so an absent MATLAB tree
+          # means the checkout step broke. Fail instead of skipping --
+          # a check that could not run must not report a pass (see #77).
+          NDI_BRIDGE_CHECK_STRICT: "1"
+        run: pytest tests/test_matlab_bridge_completeness.py -v --tb=short
+
   test:
     runs-on: ubuntu-latest
     strategy:
