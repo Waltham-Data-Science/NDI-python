@@ -67,6 +67,20 @@ class ndi_element_timeseries(ndi_element):
         """
         super().__init__(**kwargs)
 
+    def ndi_element_class(self) -> str:
+        """Return the NDI element class name for document storage.
+
+        MATLAB equivalent: ``class(obj)`` == ``'ndi.element.timeseries'``
+        (``+ndi/+element/timeseries.m``).
+
+        Inherited from :class:`~ndi.element.ndi_element` this returned
+        ``'ndi.element'``, so a timeseries element written by Python was
+        stored as a plain element and came back as one -- without
+        ``readtimeseries``, which is the entire reason this class exists.
+        Same defect as ``ndi_neuron``'s; see issue #133.
+        """
+        return "ndi.element.timeseries"
+
     def readtimeseries(
         self,
         timeref_or_epoch: Any,

@@ -95,8 +95,8 @@ class ndi_element_ensemble(ndi_element_timeseries):
 
         Must be overridden or an ensemble would be written to the database as
         a plain ``ndi.element`` and would load back as one, losing every
-        method below. (``ndi_element_timeseries`` does not override this; that
-        is a separate pre-existing gap, not this class's to fix.)
+        method below. (``ndi_element_timeseries`` and ``ndi_neuron`` had the
+        same gap until issue #133; both now override it too.)
         """
         return "ndi.element.ensemble"
 

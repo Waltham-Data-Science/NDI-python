@@ -80,6 +80,23 @@ class ndi_neuron(ndi_element_timeseries):
             document=document,
         )
 
+    def ndi_element_class(self) -> str:
+        """Return the NDI element class name for document storage.
+
+        MATLAB equivalent: ``class(obj)`` == ``'ndi.neuron'``, which is what
+        ``ndi.element/newdocument`` stores (``+ndi/element.m:546``).
+
+        Without this override ``ndi_neuron`` inherited ``'ndi.element'`` from
+        :class:`~ndi.element.ndi_element`, and the loss ran in both
+        directions. A neuron written by Python was labelled a plain element,
+        so it round-tripped as one and arrived without ``readtimeseries``. A
+        neuron written by MATLAB carried ``'ndi.neuron'``, which was not in
+        :mod:`ndi.class_registry`, so reconstructing it raised and
+        ``getelements`` -- which swallowed the exception -- returned no
+        neurons at all. Neither direction said anything (issue #133).
+        """
+        return "ndi.neuron"
+
     def newdocument(self) -> ndi_document:
         """
         Create a new document for this neuron.
