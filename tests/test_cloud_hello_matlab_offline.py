@@ -3,11 +3,11 @@
 MATLAB counterpart: ``src/ndi/+ndi/+cloud/helloMatlab.m``
 
 ``tests/test_cloud_hello_matlab.py`` runs the real pipeline: it needs
-credentials, a registered MATLAB BYOL licence, and an opt-in environment
+credentials, a registered MATLAB BYOL license, and an opt-in environment
 variable, because a run boots a billed EC2 instance for two to four
 minutes. That test is the proof the port works. It is not a test that can
 run on every commit, and every branch in helloMatlab that MATTERS is a
-branch it does not take -- the licence refusal, the status endpoint
+branch it does not take -- the license refusal, the status endpoint
 failing mid-poll, the pipeline never finishing.
 
 So these tests drive the same function with a stubbed compute API. What
@@ -137,11 +137,11 @@ class TestTheHappyPath:
         assert result.success is True
 
 
-class TestTheLicenceRefusal:
+class TestTheLicenseRefusal:
     """The failure a user will actually hit, and the reason this is a
     diagnostic rather than a smoke test.
 
-    Without a registered BYOL licence the API refuses the start call with
+    Without a registered BYOL license the API refuses the start call with
     HTTP 400 and a payload naming the code and the release it needs. The
     fix is the user's to make, so the message has to say what it is.
     """
@@ -175,7 +175,7 @@ class TestTheLicenceRefusal:
 
         assert result.statusMessage == "MATLAB_LICENSE_DECRYPT_FAILED for R2024b: bad key"
 
-    def test_an_unrecognised_code_is_still_reported_verbatim(self, compute):
+    def test_an_unrecognized_code_is_still_reported_verbatim(self, compute):
         compute.start_result = CloudAPIError(
             "API error (HTTP 400)",
             status_code=400,
@@ -205,7 +205,7 @@ class TestTheLicenceRefusal:
 class TestTheThingsThatGoWrongMidRun:
     def test_a_failed_stage_reports_matlabs_own_message(self, compute):
         """The License Manager string is the whole point: it is what MATLAB
-        on the EC2 instance said about the licence, and no other layer can
+        on the EC2 instance said about the license, and no other layer can
         produce it."""
         compute.start_result = {"sessionId": "sess-1"}
         compute.polls = [

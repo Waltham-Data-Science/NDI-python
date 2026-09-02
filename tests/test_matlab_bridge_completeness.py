@@ -182,8 +182,8 @@ class BridgeIndex:
         names: Every ``name:`` and ``matlab_equivalent:`` value found at
             any depth -- so a method recording its MATLAB counterpart
             counts exactly as much as a top-level function entry.
-        paths: Every ``matlab_path:`` value, normalised by
-            :func:`normalise_matlab_path`. ``"N/A"`` is dropped: it means
+        paths: Every ``matlab_path:`` value, normalized by
+            :func:`normalize_matlab_path`. ``"N/A"`` is dropped: it means
             "no MATLAB file", which is the opposite of a reference to one.
         sources: The YAML files read, for failure messages.
     """
@@ -212,7 +212,7 @@ class BridgeIndex:
 _MATLAB_PATH_PREFIX = "src/ndi/"
 
 
-def normalise_matlab_path(value: str) -> str:
+def normalize_matlab_path(value: str) -> str:
     """A ``matlab_path:`` value as a path relative to NDI-matlab/src/ndi.
 
     Returns ``""`` for a value that names no file (``""``, ``"N/A"``).
@@ -223,12 +223,12 @@ def normalise_matlab_path(value: str) -> str:
     test_every_recorded_matlab_path_points_at_a_real_file` skips it
     entirely, so a stale path in those packages would never be caught.
     """
-    normalised = value.replace("\\", "/").strip().lstrip("/")
-    if not normalised or normalised == "N/A":
+    normalized = value.replace("\\", "/").strip().lstrip("/")
+    if not normalized or normalized == "N/A":
         return ""
-    if normalised.startswith(_MATLAB_PATH_PREFIX):
-        normalised = normalised[len(_MATLAB_PATH_PREFIX) :]
-    return normalised
+    if normalized.startswith(_MATLAB_PATH_PREFIX):
+        normalized = normalized[len(_MATLAB_PATH_PREFIX) :]
+    return normalized
 
 
 def _collect(node: Any, names: set[str], paths: set[str]) -> None:
@@ -241,9 +241,9 @@ def _collect(node: Any, names: set[str], paths: set[str]) -> None:
             if key in ("name", "matlab_equivalent") and isinstance(value, str):
                 names.add(value)
             elif key == "matlab_path" and isinstance(value, str):
-                normalised = normalise_matlab_path(value)
-                if normalised:
-                    paths.add(normalised)
+                normalized = normalize_matlab_path(value)
+                if normalized:
+                    paths.add(normalized)
             _collect(value, names, paths)
     elif isinstance(node, list):
         for item in node:
@@ -458,7 +458,7 @@ class TestBothMatlabPathConventions:
         ],
     )
     def test_both_spellings_reduce_to_one(self, written, expected):
-        assert normalise_matlab_path(written) == expected
+        assert normalize_matlab_path(written) == expected
 
     def test_a_prefixed_entry_matches_by_path_not_by_luck(self):
         names: set[str] = set()
@@ -480,11 +480,11 @@ class TestBothMatlabPathConventions:
                 assert path in index.paths, f"{path} is matched only by name"
 
     def test_a_prefixed_stale_path_is_now_caught(self):
-        """The consequence that matters: before normalising, a
+        """The consequence that matters: before normalizing, a
         ``src/ndi/``-style entry naming a deleted file was invisible to the
         stale-path check, because the check filters on the bare prefix."""
         root = require_matlab_root()
-        stale = normalise_matlab_path("src/ndi/+ndi/+app/deletedLongAgo.m")
+        stale = normalize_matlab_path("src/ndi/+ndi/+app/deletedLongAgo.m")
         assert stale.startswith("+ndi/+app/"), "must survive the check's prefix filter"
         assert not (root / stale).exists()
 
