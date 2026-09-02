@@ -78,7 +78,7 @@ class TestSafeLocalFilename:
 
 
 class TestContainedPath:
-    """Defence in depth. safeLocalFilename should make this unreachable,
+    """Defense in depth. safeLocalFilename should make this unreachable,
     which is exactly why it is worth asserting rather than assuming."""
 
     def test_a_normal_name_resolves_under_the_target(self, tmp_path):
