@@ -967,11 +967,116 @@ classes:
           -- the run itself -- reports through the NDI progress bar, which is
           what a user watches in both languages.
 
+  - name: ElectrodeMap
+    type: class
+    matlab_path: "+ndi/+gui/+app/ElectrodeMap.m"
+    matlab_last_sync_hash: "eaec593"
+    python_path: "ndi/gui/app/electrode_map.py"
+    python_class: "ElectrodeMap"
+    inherits: "ndi.gui.app.sessionApp"
+
+    properties:
+      - name: Name
+        type_matlab: "string (Constant)"
+        type_python: "ClassVar[str]"
+        decision_log: '"Electrode Map", verbatim: it is the menu text.'
+      - name: Category
+        type_matlab: "(not declared)"
+        type_python: 'inherited ""'
+        decision_log: >
+          MATLAB declares none, so the app stays at the top level of the Apps
+          menu rather than in a submenu.
+
+    methods:
+      - name: ElectrodeMap
+        kind: constructor
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+          - name: build
+            type_python: "bool (keyword-only)"
+            default: "True"
+        output_arguments:
+          - name: obj
+            type_python: "ElectrodeMap"
+        decision_log: >
+          Ported. The build keyword is Python-only and exists so the window's
+          CONTENTS can be tested without a display, as elsewhere in ndi.gui;
+          the app the navigator launches takes the default and builds.
+      - name: build
+        access_matlab: private
+        decision_log: >
+          Ported to PySide6. MATLAB's uigridlayout becomes QVBoxLayout /
+          QHBoxLayout, its uilistbox a QListWidget, and the ItemsData that
+          maps a row back to a library name or a probe index becomes the row
+          index into self.geometry_names / self.probes.
+      - name: loadGeometries
+        python_name: load_geometries
+        access_matlab: private
+        decision_log: >
+          Ported. Returns the labels rather than assigning them to a widget,
+          so what the list will say is testable without one. A layout that
+          will not read keeps its bare name instead of vanishing: the library
+          is data on disk, and one unreadable file must not empty the list.
+      - name: loadProbes
+        python_name: load_probes
+        access_matlab: private
+        decision_log: "Ported. session.getprobes(type='n-trode')."
+      - name: refreshProbeList
+        python_name: refresh_probe_list
+        access_matlab: private
+        decision_log: >
+          Ported, split in two: probe_rows() computes the labels with no Qt,
+          refresh_probe_list() puts them in the widget and restores the
+          selected row.
+      - name: assignedGeometryLabel
+        python_name: assigned_geometry_label
+        access_matlab: private
+        decision_log: >
+          Ported, including MATLAB's fallback to "assigned" for a geometry
+          with no probe_model -- without it the window would invite the user
+          to assign an already-assigned probe. Reads geometry.get, whose
+          answer is a ProbeGeometry dataclass on this side.
+      - name: onProbeSelected
+        python_name: on_probe_selected
+        access_matlab: private
+        decision_log: >
+          Ported. Matching is on probe_model rather than on the library name:
+          the name is where the file sits, the model is what a document
+          records.
+      - name: updateButtonState
+        python_name: update_button_state
+        access_matlab: private
+        decision_log: >
+          Ported. Assign needs both selections, Plot needs only a geometry.
+      - name: plotSelectedGeometry
+        python_name: plot_selected_geometry
+        access_matlab: private
+        decision_log: >
+          Ported. show_plot() is split out because a matplotlib figure, unlike
+          MATLAB's, does not show itself -- and so a test can plot without a
+          window manager.
+      - name: assignSelected
+        python_name: assign_selected
+        access_matlab: private
+        decision_log: >
+          Ported. Calls geometry.from_library with replace=True, so
+          re-assigning overwrites rather than stacking a second
+          probe_geometry. A channel mismatch is shown in a dialog AFTER the
+          assignment succeeds: advisory in both languages, since a probe can
+          record a subset of a layout's sites.
+      - name: onOff
+        python_name: "(none)"
+        access_matlab: "local function"
+        decision_log: >
+          Not ported. MATLAB needs it to turn a logical into 'on'/'off' for a
+          uicontrol Enable property; Qt's setEnabled takes the bool.
+
   # -----------------------------------------------------------------------
   # NOT YET PORTED: the other apps that adopt the interface
   # -----------------------------------------------------------------------
-  #   ElectrodeMap, katzExporter, kiasort, pipelineEditor, pyraview,
-  #   vhNDISpikeSorter
+  #   katzExporter, kiasort, pipelineEditor, pyraview, vhNDISpikeSorter
   #
   # Three are blocked on subsystems outside this repo (ndi.cpipeline for the
   # pipeline editor, the sorters' own toolboxes for kiasort and
