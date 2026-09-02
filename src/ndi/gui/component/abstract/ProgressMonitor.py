@@ -13,7 +13,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import Any
 
-from ndi.gui.component.internal.ndi_gui_component_internal_ProgressTracker import (
+from ndi.gui.component.internal.ProgressTracker import (
     ndi_gui_component_internal_ProgressTracker,
 )
 

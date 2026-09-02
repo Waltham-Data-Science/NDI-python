@@ -175,12 +175,15 @@ class TestSessionApps:
         monkeypatch.setattr("ndi.gui.nav.datasets_pane.SessionApp.list", staticmethod(boom))
         assert session_apps() == []
 
-    def test_ndi_ships_no_session_apps_yet(self):
-        """MATLAB's eleven apps are not ported, so the built-in scan is empty.
-        The menu is still built, and fills itself as apps land -- or as soon
-        as a user names their own package in GUI.Navigator.SessionAppPackages.
+    def test_ndis_own_apps_are_discovered_with_no_help_from_the_pane(self):
+        """The proof that the mechanism works from the app's side: the pane
+        knows nothing about ElectrodeDataExport, and offers it because
+        SessionApp.list found it in ndi.gui.app. The rest of MATLAB's eleven
+        land the same way, as does any package a user names in
+        GUI.Navigator.SessionAppPackages.
         """
-        assert session_apps() == []
+        labels = [app["Label"] for app in session_apps()]
+        assert "Electrode Data Export" in labels
 
 
 class TestTreeRows:
@@ -499,10 +502,11 @@ class TestMenusAreBuilt:
         menu = pane.build_node_menu(node)
         assert [a.text() for a in menu.actions()] == ["Apps", "Session"]
 
-    def test_the_apps_menu_is_present_even_with_no_apps_to_offer(self):
+    def test_the_apps_menu_is_present_even_with_no_apps_to_offer(self, monkeypatch):
         """Empty says 'no apps found'. Omitting it would say 'sessions have
-        no apps', which is false -- and NDI ships no apps yet."""
+        no apps', which is false."""
         _qt_or_skip()
+        monkeypatch.setattr("ndi.gui.nav.datasets_pane.session_apps", list)
         nav, pane = _built_pane()
         pane.user_sessions = [FakeSession("a", path="/s/a")]
         pane.populate_tree()
@@ -510,6 +514,17 @@ class TestMenusAreBuilt:
         apps = menu.actions()[0].menu()
         assert apps is not None
         assert apps.actions() == []
+
+    def test_a_session_is_offered_ndis_own_apps(self):
+        """End to end, with nothing patched: right-clicking a session offers
+        an app that reached the menu purely by subclassing SessionApp."""
+        _qt_or_skip()
+        nav, pane = _built_pane()
+        pane.user_sessions = [FakeSession("a", path="/s/a")]
+        pane.populate_tree()
+        menu = pane.build_node_menu(pane.tree.topLevelItem(0).child(0))
+        apps = menu.actions()[0].menu()
+        assert "Electrode Data Export" in [a.text() for a in apps.actions()]
 
     def test_discovered_apps_reach_the_menu(self, monkeypatch):
         """The end of the wire: what SessionApp.list found is what the user
