@@ -173,6 +173,13 @@ KNOWN_UNVALIDATABLE_DEFINITIONS = {
     "data/imageStack_parameters": "DID:Database:ValidationFieldMatrix",
     "data/ngrid": "DID:Database:ValidationFieldInteger",
     "data/ontologyImage": "DID:Database:ValidationFieldInteger",
+    # Its blank decimation vectors are [], which reads as 0x0 against a
+    # schema shape of [1 NaN] -- the same thing epochclocktimes below is
+    # listed for, and pyraview inherits epochclocktimes. Copied byte for byte
+    # from NDI-matlab, so it is recorded rather than edited: a definition that
+    # differed between the ports would be worse than one that fails its own
+    # schema in both.
+    "data/pyraview": "DID:Database:ValidationFieldMatrix",
     "demoNDI": "DID:Database:ValidationFieldInteger",
     "epochclocktimes": "DID:Database:ValidationFieldMatrix",
     "mock/demoNDIMock": "DID:Database:ValidationFieldInteger",
