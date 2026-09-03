@@ -599,8 +599,20 @@ class ndi_dataset:
         doc_or_id: Any,
         filename: str,
     ) -> Any:
-        """Open a binary document file."""
-        return self._session.database_openbinarydoc(doc_or_id, filename)
+        """Open a binary document file.
+
+        MATLAB equivalent: ``ndi.dataset/database_openbinarydoc``
+
+        Resolves the doc's owning session (the dataset's internal
+        session or one of its linked/ingested member sessions) and
+        delegates to that session, mirroring MATLAB's dispatch. A
+        member-session doc cannot be opened through the internal
+        session's database driver -- the file lives inside the member
+        session's own store -- so without this dispatch such an open
+        raises FileNotFoundError even when the file is really there.
+        """
+        session = self._session_for_doc(doc_or_id)
+        return session.database_openbinarydoc(doc_or_id, filename)
 
     def database_existbinarydoc(
         self,
@@ -619,7 +631,62 @@ class ndi_dataset:
         Returns:
             Tuple of (exists, file_path).
         """
-        return self._session.database_existbinarydoc(doc_or_id, filename)
+        session = self._session_for_doc(doc_or_id)
+        return session.database_existbinarydoc(doc_or_id, filename)
+
+    def _session_for_doc(self, doc_or_id: Any) -> Any:
+        """Return the session that owns *doc_or_id*.
+
+        For an ndi_document the base.session_id is authoritative. For a
+        raw id string we look the doc up in every linked/ingested
+        session's database in turn. If the resolved session_id is not
+        the dataset's own, we open (or reuse) that session and return
+        it; otherwise we return the dataset's internal session. On any
+        failure to resolve (unknown session, no doc found, session
+        won't open) we fall back to the internal session, matching
+        MATLAB's try/catch fall-through in +ndi/dataset.m:database_openbinarydoc.
+        """
+        session_id = self._doc_session_id(doc_or_id)
+        if session_id and session_id != self.id():
+            try:
+                owner = self.open_session(session_id)
+            except Exception:  # noqa: BLE001 - fall back like MATLAB does
+                owner = None
+            if owner is not None:
+                return owner
+        return self._session
+
+    def _doc_session_id(self, doc_or_id: Any) -> str:
+        """Look up *doc_or_id*'s owning session_id, or return '' when unknown.
+
+        An ndi_document carries base.session_id directly. For a raw id
+        string we search the dataset's own database first, then each
+        linked/ingested member session's database until we find a
+        matching document.
+        """
+        if isinstance(doc_or_id, ndi_document):
+            return doc_or_id.session_id
+        doc_id = str(doc_or_id)
+        if self._session._database is not None:
+            doc = self._session._database.read(doc_id)
+            if doc is not None:
+                return doc.session_id
+        self._open_linked_sessions()
+        for i, si in enumerate(self._session_info):
+            if not si.get("is_linked", False):
+                continue
+            if i >= len(self._session_array):
+                continue
+            member = self._session_array[i].get("session")
+            if member is None or getattr(member, "_database", None) is None:
+                continue
+            try:
+                doc = member._database.read(doc_id)
+            except Exception:  # noqa: BLE001 - keep trying other sessions
+                continue
+            if doc is not None:
+                return doc.session_id
+        return ""
 
     def database_closebinarydoc(self, fid: Any) -> None:
         """Close a binary document file."""
