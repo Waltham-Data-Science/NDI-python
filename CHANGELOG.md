@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Changed
+
+- **`ndi.element.epochtable()` now returns registered epochs alphabetized by
+  `epoch_id`** (NDI-python#162). They previously came back in the database's
+  natural row order, which was stable for a given database but was neither
+  insertion order nor anything a caller could predict. Sorting matches
+  MATLAB, whose `ndi.element/buildepochtable` already orders them through
+  `intersect`. The order is plain codepoint order on the raw id, so
+  `epoch_10` precedes `epoch_2` — the ids are not zero-padded.
+
+  **This changes the epoch order an existing database reports.** Two
+  consequences worth knowing:
+
+  - `ndi.fun.probe.export.binary` concatenates a probe's epochs in
+    `epochtable()` order, and `ndi.fun.probe.import_.kilosort` maps spike
+    sample indices back through it. A binary exported BEFORE this change does
+    not necessarily match one imported after — re-export before importing a
+    sort made against an older binary.
+  - `epoch_number` is assigned from the sorted position, so an epoch's number
+    can differ from what an older run reported. Code pairing epochs by number
+    rather than by `epoch_id` should be checked.
+
+  Epochs of a *direct* element are unaffected: they are the underlying
+  element's, paired by position, and are deliberately left in that order.
+
 ## [0.1.0] - 2026-02-07
 
 ### Added

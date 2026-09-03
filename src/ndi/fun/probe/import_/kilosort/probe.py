@@ -24,15 +24,14 @@ index past the end of the last epoch means the sort does not belong to this
 probe. That is raised, not silently dropped, because dropping it would import
 a plausible-looking subset of somebody else's recording.
 
-A CAVEAT ABOUT THAT ORDER, worth knowing before it surprises someone: on this
-side ``epochtable()`` returns epochs in the order ``database_search`` yields
-their documents, which is stable for a given database but is NOT necessarily
-the order the epochs were added. Export and import agree because both ask the
-same probe the same question. A sort EXPORTED BY ONE LANGUAGE and IMPORTED BY
-THE OTHER only agrees if the two order the table alike, which nothing here
-enforces -- so check the epoch assignment when crossing languages with a
-multi-epoch probe. Ordering epochtable is a change for the epoch layer, not
-for this importer to make locally.
+THAT ORDER IS NOW DEFINED, which it was not when this importer landed.
+``epochtable()`` used to return registered epochs in whatever order
+``database_search`` yielded their documents -- stable for a given database,
+but neither insertion order nor anything a caller could predict, so a sort
+exported by one language and imported by the other could land spikes in the
+wrong epochs without erroring. Registered epochs are now alphabetised by
+``epoch_id`` (NDI-python#162), which is what MATLAB's ``intersect`` produces,
+so both languages agree on the concatenation this file's arithmetic assumes.
 
 IDEMPOTENCY
 A ``kilosort_clusters`` document records the MD5 of ``spike_clusters.npy``.

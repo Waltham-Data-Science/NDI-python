@@ -266,6 +266,25 @@ classes:
           Exact match. If direct=True, uses underlying_element's
           epochs. If direct=False, loads registered epochs from
           the database.
+          ORDERING (NDI-python#162): REGISTERED epochs are returned
+          ALPHABETIZED by epoch_id, and epoch_number follows the sorted
+          position. They previously came back in the order database_search
+          yielded their documents -- stable for a given database, but neither
+          insertion order nor anything a caller could predict. Sorting is
+          parity, not a Python convention: MATLAB's buildepochtable maps added
+          epochs with intersect({et_added.epoch_id}, {underlying_et.epoch_id})
+          (element.m:276), and intersect returns its output sorted.
+          The sort is plain codepoint order on the raw id -- NO case folding
+          and NO locale-aware collation, either of which would diverge from
+          intersect on an epoch_id carrying a capital letter. epoch_10
+          therefore precedes epoch_2, the ids not being zero-padded.
+          DIRECT epochs are deliberately NOT reordered: they ARE the
+          underlying element's, paired by position, exactly as MATLAB's direct
+          branch pairs them with ib = 1:numel(underlying_et). Re-sorting would
+          break that pairing.
+          This order is the contract ndi.fun.probe.export.binary concatenates
+          in and ndi.fun.probe.import_.kilosort maps sample indices back
+          through, so the two languages now agree on it.
 
       - name: epochsetname
         input_arguments: []
