@@ -25,7 +25,9 @@ from .hexDiffBytes import hexDiffBytes
 from .hexDump import hexDump
 from .matlab_regex import matlab_to_python_regex
 from .rehydrateJSONNanNull import rehydrateJSONNanNull
+from .removehiddenfilegroups import is_hidden_file, removehiddenfilegroups
 from .session_summary import sessionSummary
+from .sparse_array import readSparse, writeSparse
 from .unwrapTableCellContent import unwrapTableCellContent
 
 __all__ = [
@@ -42,6 +44,10 @@ __all__ = [
     "hexDump",
     "matlab_to_python_regex",
     "rehydrateJSONNanNull",
+    "removehiddenfilegroups",
+    "is_hidden_file",
+    "readSparse",
+    "writeSparse",
     "sessionSummary",
     "unwrapTableCellContent",
 ]

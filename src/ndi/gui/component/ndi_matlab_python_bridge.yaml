@@ -16,7 +16,7 @@ classes:
   # -----------------------------------------------------------------------
   - name: ndi_gui_component_abstract_ProgressMonitor
     type: class
-    matlab_path: "+ndi/+gui/+component/+abstract/ndi_gui_component_abstract_ProgressMonitor.m"
+    matlab_path: "+ndi/+gui/+component/+abstract/ProgressMonitor.m"
     python_path: "ndi/gui/component/abstract/ndi_gui_component_abstract_ProgressMonitor.py"
     python_class: "ndi_gui_component_abstract_ProgressMonitor"
     inherits: "handle (abstract)"
@@ -131,7 +131,7 @@ classes:
   # -----------------------------------------------------------------------
   - name: ndi_gui_component_internal_ProgressTracker
     type: class
-    matlab_path: "+ndi/+gui/+component/+internal/ndi_gui_component_internal_ProgressTracker.m"
+    matlab_path: "+ndi/+gui/+component/+internal/ProgressTracker.m"
     python_path: "ndi/gui/component/internal/ndi_gui_component_internal_ProgressTracker.py"
     python_class: "ndi_gui_component_internal_ProgressTracker"
     inherits: "handle"
@@ -216,7 +216,7 @@ classes:
   # -----------------------------------------------------------------------
   - name: ndi_gui_component_internal_AsynchProgressTracker
     type: class
-    matlab_path: "+ndi/+gui/+component/+internal/ndi_gui_component_internal_AsynchProgressTracker.m"
+    matlab_path: "+ndi/+gui/+component/+internal/AsynchProgressTracker.m"
     python_path: "ndi/gui/component/internal/ndi_gui_component_internal_AsynchProgressTracker.py"
     python_class: "ndi_gui_component_internal_AsynchProgressTracker"
     inherits: "ndi.gui.component.internal.ndi_gui_component_internal_ProgressTracker"
@@ -252,7 +252,7 @@ classes:
   # -----------------------------------------------------------------------
   - name: ndi_gui_component_internal_event_ProgressUpdatedEventData
     type: class
-    matlab_path: "+ndi/+gui/+component/+internal/+event/ndi_gui_component_internal_event_ProgressUpdatedEventData.m"
+    matlab_path: "+ndi/+gui/+component/+internal/+event/ProgressUpdatedEventData.m"
     python_path: "ndi/gui/component/internal/event/ndi_gui_component_internal_event_ProgressUpdatedEventData.py"
     python_class: "ndi_gui_component_internal_event_ProgressUpdatedEventData"
     inherits: "event.EventData"
@@ -280,7 +280,7 @@ classes:
   # -----------------------------------------------------------------------
   - name: ndi_gui_component_internal_event_MessageUpdatedEventData
     type: class
-    matlab_path: "+ndi/+gui/+component/+internal/+event/ndi_gui_component_internal_event_MessageUpdatedEventData.m"
+    matlab_path: "+ndi/+gui/+component/+internal/+event/MessageUpdatedEventData.m"
     python_path: "ndi/gui/component/internal/event/ndi_gui_component_internal_event_MessageUpdatedEventData.py"
     python_class: "ndi_gui_component_internal_event_MessageUpdatedEventData"
     inherits: "event.EventData"
@@ -308,7 +308,7 @@ classes:
   # -----------------------------------------------------------------------
   - name: ndi_gui_component_CommandWindowProgressMonitor
     type: class
-    matlab_path: "+ndi/+gui/+component/ndi_gui_component_CommandWindowProgressMonitor.m"
+    matlab_path: "+ndi/+gui/+component/CommandWindowProgressMonitor.m"
     python_path: "ndi/gui/component/ndi_gui_component_CommandWindowProgressMonitor.py"
     python_class: "ndi_gui_component_CommandWindowProgressMonitor"
     inherits: "ndi.gui.component.abstract.ndi_gui_component_abstract_ProgressMonitor"
@@ -350,7 +350,7 @@ classes:
   # -----------------------------------------------------------------------
   - name: ndi_gui_component_NDIProgressBar
     type: class
-    matlab_path: "+ndi/+gui/+component/ndi_gui_component_NDIProgressBar.m"
+    matlab_path: "+ndi/+gui/+component/NDIProgressBar.m"
     python_path: "ndi/gui/component/ndi_gui_component_NDIProgressBar.py"
     python_class: "ndi_gui_component_NDIProgressBar"
     inherits: "ndi.gui.component.abstract.ndi_gui_component_abstract_ProgressMonitor"
@@ -400,7 +400,7 @@ classes:
   # -----------------------------------------------------------------------
   - name: ndi_gui_component_ProgressBarWindow
     type: class
-    matlab_path: "+ndi/+gui/+component/ndi_gui_component_ProgressBarWindow.m"
+    matlab_path: "+ndi/+gui/+component/ProgressBarWindow.m"
     python_path: "ndi/gui/component/ndi_gui_component_ProgressBarWindow.py"
     python_class: "ndi_gui_component_ProgressBarWindow"
     inherits: "matlab.apps.AppBase"

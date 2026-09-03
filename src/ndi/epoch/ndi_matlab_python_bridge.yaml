@@ -76,7 +76,7 @@ functions:
 
   - name: parse_devicestring
     type: function
-    matlab_path: "+ndi/+epoch/epochprobemap_daqsystem.m (inline)"
+    matlab_path: "+ndi/+epoch/epochprobemap_daqsystem.m"
     matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/epoch/epochprobemap.py"
     input_arguments:
@@ -92,7 +92,7 @@ functions:
 
   - name: build_devicestring
     type: function
-    matlab_path: "+ndi/+epoch/epochprobemap_daqsystem.m (inline)"
+    matlab_path: "+ndi/+epoch/epochprobemap_daqsystem.m"
     matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/epoch/epochprobemap.py"
     input_arguments:
@@ -271,7 +271,8 @@ classes:
   # =========================================================================
   - name: epoch
     type: class
-    matlab_path: "+ndi/+epoch/epoch.m"
+    matlab_path: "+ndi/epoch.m"
+    matlab_last_sync_hash: "0e2caa09"
     python_path: "ndi/epoch/epoch.py"
     python_class: "ndi_epoch_epoch"
 
@@ -583,3 +584,55 @@ classes:
           - name: epm_list
             type_python: "list[ndi_epoch_epochprobemap__daqsystem]"
         decision_log: "MATLAB is a static method. Python uses classmethod."
+
+# =========================================================================
+# Not-yet-ported MATLAB functions and classes
+# =========================================================================
+not_yet_ported:
+
+  - name: param
+    matlab_path: "+ndi/+epoch/+epochset/param.m"
+    matlab_last_sync_hash: "e94c2b2f"
+    status: not_applicable
+    decision_log: >
+      MATLAB's ndi.epoch.epochset.param is an abstract layer between
+      ndi.epoch.epochset and the two classes that need epoch parameters:
+      ndi.file.navigator and ndi.daq.system (the syncrules inherit it
+      through those). It carries two groups of methods -- the
+      epochprobemap group (epochprobemapfilename, verifyepochprobemap,
+      getepochprobemap, setepochprobemap) and the epoch-tag group
+      (epochtagfilename, getepochtag, setepochtag, addepochtag,
+      removeepochtag).
+      Python does not have the intermediate class: the epochprobemap
+      methods live directly on the classes that need them --
+      ndi_file_navigator.epochprobemapfilename / getepochprobemap and
+      ndi_daq_system.getepochprobemap / verifyepochprobemap. With two
+      concrete subclasses and no third on the horizon, a shared abstract
+      base buys an indirection rather than reuse, so the layer is
+      deliberately collapsed. Same reasoning as ndi.cloud.sync's SyncIndex,
+      recorded in src/ndi/cloud/sync/.
+      One half is NOT merely relocated, and this is the honest part of the
+      entry: the epoch-TAG methods have no Python implementation anywhere.
+      Nothing in the port reads or writes epoch tags. That is a genuine
+      gap rather than a structural choice, and it lands whenever a caller
+      needs tags.
+
+  - name: epochNodeName
+    matlab_path: "+ndi/+epoch/+fun/epochNodeName.m"
+    matlab_last_sync_hash: "0e2caa09"
+    status: not_yet_ported
+    decision_log: >
+      Builds the display name for an epochnode: "objectname; epochStr",
+      where a full-form epoch_id (epoch_ plus 16 alphanumerics, an
+      underscore, 16 more) is shortened to its last four characters and any
+      other id is used whole, with "probe: " abbreviated to "p:" and
+      "element: " to "e:".
+      Presentation only -- it names nodes for a reader, and nothing in the
+      port computes over the result. Python has no caller yet: the epoch
+      functions module (ndi/epoch/functions.py) has epochrange and
+      findepochnode, both of which are used, and no display layer that
+      needs node labels. It belongs with whichever GUI first shows an
+      epoch graph. Worth porting exactly when it lands: the four-character
+      abbreviation makes two nodes look identical when their ids differ
+      only earlier in the string, so a reimplementation that "improves"
+      the rule would disagree with MATLAB's labels on the same data.

@@ -611,3 +611,43 @@ classes:
           grouping rules to each, concatenating all groups. Reuses
           ndi_file_navigator_rhd_series._group_directory for parity
           with the flat-session navigator. Synchronized 2026-05-11.
+
+# =========================================================================
+# Not-yet-ported MATLAB functions
+# =========================================================================
+not_yet_ported:
+
+  - name: temp_name
+    matlab_path: "+ndi/+file/temp_name.m"
+    matlab_last_sync_hash: "0e2caa09"
+    status: not_applicable
+    decision_log: >
+      Returns a unique temporary filename under
+      ndi.common.PathConstants.TempFolder, named by a fresh ndi.ido id.
+      Python uses the standard library instead: callers that need scratch
+      space call tempfile.mkdtemp / NamedTemporaryFile directly (see
+      element_timeseries.py, which writes its .vhsb into a
+      tempfile.mkdtemp("ndi-vhsb-") directory before attaching it). The
+      standard library already guarantees the uniqueness the ndi.ido id was
+      providing, and it honours TMPDIR, so a caller's environment decides
+      where scratch files land.
+      One difference, recorded rather than hidden: MATLAB centralizes
+      temporary files under an NDI-controlled TempFolder, and Python's
+      ndi_common_PathConstants has no TempFolder at all, so Python's
+      scratch files land wherever the OS puts them. That matters only if
+      something needs to enumerate or clean NDI's temporary files as a set
+      -- nothing does today. If that changes, add TempFolder to
+      PathConstants and port this rather than reinventing the location.
+
+  - name: temp_fid
+    matlab_path: "+ndi/+file/temp_fid.m"
+    matlab_last_sync_hash: "0e2caa09"
+    status: not_applicable
+    decision_log: >
+      Opens the temp_name() file for writing in little-endian byte order
+      and returns [fid, fname], erroring if the open fails. Both halves are
+      Python built-ins: open() raises on failure rather than returning a
+      negative handle, and byte order is a property of how a caller packs
+      its data (numpy dtypes, struct format characters), not of the file
+      handle -- there is no fopen machine-format argument to mirror. Falls
+      with temp_name above.

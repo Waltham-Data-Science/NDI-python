@@ -96,7 +96,7 @@ classes:
 
   - name: ndi_gui_Data
     type: class
-    matlab_path: "+ndi/+gui/ndi_gui_Data.m"
+    matlab_path: "+ndi/+gui/Data.m"
     python_path: "ndi/gui/data.py"
     python_class: "ndi_gui_Data"
     inherits: "handle"
@@ -186,7 +186,7 @@ classes:
 
   - name: ndi_gui_Icon
     type: class
-    matlab_path: "+ndi/+gui/ndi_gui_Icon.m"
+    matlab_path: "+ndi/+gui/Icon.m"
     python_path: "ndi/gui/icon.py"
     python_class: "ndi_gui_Icon"
     inherits: "handle"
@@ -270,7 +270,7 @@ classes:
 
   - name: ndi_gui_Lab
     type: class
-    matlab_path: "+ndi/+gui/ndi_gui_Lab.m"
+    matlab_path: "+ndi/+gui/Lab.m"
     python_path: "ndi/gui/lab.py"
     python_class: "ndi_gui_Lab"
     inherits: "handle"
@@ -405,7 +405,7 @@ classes:
 
   - name: ndi_gui_docViewer
     type: class
-    matlab_path: "+ndi/+gui/ndi_gui_docViewer.m"
+    matlab_path: "+ndi/+gui/docViewer.m"
     python_path: "ndi/gui/ndi_gui_docViewer.py"
     python_class: "ndi_gui_docViewer"
     inherits: "handle"
@@ -532,3 +532,140 @@ classes:
             type_python: "int"
         output_arguments: []
         decision_log: "Exact match. Same as ndi_gui_Data.subgraph."
+
+# =========================================================================
+# Recorded in #154. Most of this package was ported over #88-#148 and the
+# entries were never written; the three sorter/pipeline apps below are the
+# genuine gaps.
+#
+# The +component entries are NOT here: they were already written, in
+# src/ndi/gui/component/, and #154 only corrected their matlab_path. Each
+# named a file MATLAB does not have and never had --
+# "+component/ndi_gui_component_NDIProgressBar.m" -- because the path was
+# built from the PYTHON class name, which mangles the package prefix into
+# the class, instead of read off the MATLAB tree, where the prefix is the
+# folder and the file is plain NDIProgressBar.m. The four classes at
+# +gui/ (Data, Icon, Lab, docViewer) had the same invented paths for the
+# same reason. Nothing had ever compared a matlab_path against MATLAB, so
+# twelve entries pointed at nothing and read as if they pointed at
+# something; registering this package is what surfaced them.
+# =========================================================================
+ported_late:
+
+  # --- ndi.gui.nav: the navigator's pane stack ---------------------------
+  - name: pane
+    matlab_path: "+ndi/+gui/+nav/pane.m"
+    matlab_last_sync_hash: "87c6d08a"
+    python_path: "ndi/gui/nav/pane.py"
+    decision_log: "Base pane: geometry, palette, show/hide. Ported in #88."
+
+  - name: ndiPane
+    matlab_path: "+ndi/+gui/+nav/ndiPane.m"
+    matlab_last_sync_hash: "8653c2c8"
+    python_path: "ndi/gui/nav/ndi_pane.py"
+    decision_log: "The NDI-branded pane. Ported in #88."
+
+  - name: datasetsPane
+    matlab_path: "+ndi/+gui/+nav/datasetsPane.m"
+    matlab_last_sync_hash: "958ff7c5"
+    python_path: "ndi/gui/nav/datasets_pane.py"
+    decision_log: >
+      The navigator's elastic pane, ported across #103, #109, #110 and
+      #111 in four layers (pure, model, cloud actions, widgets) which is
+      why Python spreads it over datasets_pane.py, datasets_model.py,
+      datasets_cloud.py and datasets_text.py rather than one module.
+
+  - name: cloudPane
+    matlab_path: "+ndi/+gui/+nav/cloudPane.m"
+    matlab_last_sync_hash: "92d7d903"
+    python_path: "ndi/gui/nav/cloud_pane.py"
+    decision_log: "Cloud status and actions pane. Ported in #112."
+
+  - name: progressPane
+    matlab_path: "+ndi/+gui/+nav/progressPane.m"
+    matlab_last_sync_hash: "0e2caa09"
+    python_path: "ndi/gui/nav/progress_pane.py"
+    decision_log: "Ported in #103 with sessionInfo."
+
+  - name: sessionInfo
+    matlab_path: "+ndi/+gui/+nav/sessionInfo.m"
+    matlab_last_sync_hash: "46672187"
+    python_path: "ndi/gui/nav/session_info.py"
+    decision_log: "Ported in #103."
+
+  - name: statusIcon
+    matlab_path: "+ndi/+gui/+nav/statusIcon.m"
+    matlab_last_sync_hash: "41ef50f5"
+    python_path: "ndi/gui/nav/status_icon.py"
+    decision_log: >
+      The badge. Ported in #89 with no imaging dependency, and it is the
+      one GUI component with a cross-language symmetry battery
+      (tests/symmetry/gui/status_icon_cases.py) -- badge state is pure
+      given a dataset's flags, so both languages can be asked the same
+      question and compared.
+
+  # --- ndi.gui top level -------------------------------------------------
+  - name: navigator
+    matlab_path: "+ndi/+gui/navigator.m"
+    matlab_last_sync_hash: "be84180d"
+    python_path: "ndi/gui/navigator.py"
+    decision_log: "The navigator window and its layout arithmetic. #105."
+
+  - name: profileEditor
+    matlab_path: "+ndi/+gui/profileEditor.m"
+    matlab_last_sync_hash: "46672187"
+    python_path: "ndi/gui/profile_editor.py"
+    decision_log: >
+      Ported in #121. The only route to choosing the active cloud
+      account, which is why ndi.cloud.uilogin and the +cloud/+ui
+      LoginDialog are both recorded not_applicable in src/ndi/cloud/.
+
+  - name: cloudColors
+    matlab_path: "+ndi/+gui/cloudColors.m"
+    matlab_last_sync_hash: "b9ccf47b"
+    python_path: "ndi/gui/cloud_colors.py"
+    python_class: "CloudColors"
+    decision_log: >
+      The NDI Cloud palette. Deliberately NOT in the alias guard's
+      COVERED list: its camelCase names are @property accessors over a
+      NamedTuple's snake_case fields, so both spellings already resolve
+      and an alias would be a third name for one value. That exemption is
+      itself tested, in TestCloudColorsIsExemptForAReason.
+
+  - name: kiasort
+    matlab_path: "+ndi/+gui/+app/kiasort.m"
+    matlab_last_sync_hash: "0e2caa09"
+    status: not_yet_ported
+    decision_log: >
+      The KIASORT spike-sorting app. Blocked on the same thing as the
+      import package: KIASORT is a MATLAB sorter, and
+      ndi.fun.probe.import.kiasort is recorded not_yet_ported in
+      src/ndi/fun/ for that reason. Python already names KIASORT as an
+      export TARGET (ndi.gui.app.electrode_data_export offers it
+      alongside Kilosort, writing kiasort/kiasort.bin), so the export
+      half of the loop works; what is missing is running the sorter and
+      importing its results, neither of which Python can do without a
+      Python KIASORT. ndi.gui.app.ensemble_maker's module docstring
+      already says so.
+
+  - name: vhNDISpikeSorter
+    matlab_path: "+ndi/+gui/+app/vhNDISpikeSorter.m"
+    matlab_last_sync_hash: "0e2caa09"
+    status: not_yet_ported
+    decision_log: >
+      The VH Lab manual spike-sorting app: a curation GUI for accepting,
+      splitting and merging clusters. Same class of gap as kiasort --
+      an interactive sorter with no Python implementation behind it --
+      and the two are named together in ensemble_maker's docstring as the
+      pair blocking that app's sorter menu.
+
+  - name: pipelineEditor
+    matlab_path: "+ndi/+gui/+app/pipelineEditor.m"
+    matlab_last_sync_hash: "5088f2ae"
+    status: not_yet_ported
+    decision_log: >
+      Edits an analysis pipeline: the ordered list of calculators to run
+      over a session. Python has the calculator layer underneath
+      (ndi.calc, recorded in src/ndi/calc/) but no pipeline document and
+      no editor over it, so there is nothing for the app to edit yet.
+      It lands after a pipeline representation does, not before.

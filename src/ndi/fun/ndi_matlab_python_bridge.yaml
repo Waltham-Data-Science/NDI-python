@@ -1299,24 +1299,585 @@ functions:
       with NaN.
 
 # =========================================================================
+# Functions — ensemble.py, ensemble_db.py
+# MATLAB: +ndi/+fun/+ensemble/
+#
+# MATLAB splits the ensemble helpers across ten files in one package;
+# Python splits them across TWO modules on a different seam, because the
+# seam that matters in Python is not the file boundary but the database.
+# ensemble.py holds `filter`, the one operation that touches no session
+# (it reshapes a structure already in memory); ensemble_db.py holds the
+# nine that do. ndi.fun.ensemble re-exports all of them, so a caller
+# writing ndi.fun.ensemble.read sees MATLAB's layout regardless.
+#
+# Every function is exported under BOTH its MATLAB name and a snake_case
+# alias (allElement / all_element), as elsewhere in ndi.fun.
+# =========================================================================
+
+  - name: allElement
+    type: function
+    matlab_path: "+ndi/+fun/+ensemble/allElement.m"
+    matlab_last_sync_hash: "0e2caa09"
+    python_path: "ndi/fun/ensemble_db.py"
+    python_name: all_element
+    input_arguments:
+      - name: S
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "session"
+      - name: element
+        type_matlab: "ndi.element | ndi.probe"
+        type_python: "element | probe"
+      - name: "IfExists / verbose"
+        type_matlab: "name-value pairs"
+        type_python: "keyword arguments (if_exists='skip', verbose=False)"
+    output_arguments:
+      - name: ensembleElement
+        type_matlab: "ndi.element.ensemble"
+        type_python: "ndi.element.ensemble"
+    decision_log: >
+      Ported. Finds or creates the ensemble element for ELEMENT and adds an
+      epoch for each of ELEMENT's epochs, via create. MATLAB's IfExists
+      option is spelled if_exists; its remaining name-value pairs are passed
+      through to create as **create_options rather than being re-declared,
+      so the two cannot drift apart. Exported as both allElement and
+      all_element.
+
+  - name: allNTrodes
+    type: function
+    matlab_path: "+ndi/+fun/+ensemble/allNTrodes.m"
+    matlab_last_sync_hash: "0e2caa09"
+    python_path: "ndi/fun/ensemble_db.py"
+    python_name: all_ntrodes
+    input_arguments:
+      - name: S
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "session"
+      - name: "IfExists / verbose"
+        type_matlab: "name-value pairs"
+        type_python: "keyword arguments (if_exists='skip', verbose=False)"
+    output_arguments:
+      - name: ensembleElements
+        type_matlab: "cell array of ndi.element.ensemble"
+        type_python: "list of ndi.element.ensemble"
+    decision_log: >
+      Ported. Sweeps every probe of type 'n-trode' (the constant
+      NTRODE_TYPE, named so the string appears once) and calls allElement
+      on each. MATLAB's cell array becomes a list.
+
+  - name: create
+    type: function
+    matlab_path: "+ndi/+fun/+ensemble/create.m"
+    matlab_last_sync_hash: "0e2caa09"
+    python_path: "ndi/fun/ensemble_db.py"
+    python_name: create
+    input_arguments:
+      - name: S
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "session"
+      - name: element
+        type_matlab: "ndi.element | ndi.probe"
+        type_python: "element | probe"
+      - name: epochid
+        type_matlab: "char"
+        type_python: "str"
+      - name: "CheckExisting / verbose / load options"
+        type_matlab: "name-value pairs"
+        type_python: "keyword arguments (check_existing=True, verbose=False, **load_options)"
+    output_arguments:
+      - name: ensembleElement
+        type_matlab: "ndi.element.ensemble"
+        type_python: "ndi.element.ensemble"
+      - name: existing
+        type_matlab: "cell array of ndi.document"
+        type_python: "list of ndi_document"
+    decision_log: >
+      Ported. Adds EPOCHID to the ensemble element for ELEMENT: reads the
+      epoch's spikes with load, writes them as a marked point process, and
+      stores the per-epoch 'ensemble' map document naming the neuron ids and
+      names behind each column. MATLAB returns [ensembleElement, existing];
+      Python returns the same pair as a tuple, so a caller who wants only
+      the element takes [0].
+
+  - name: filter
+    type: function
+    matlab_path: "+ndi/+fun/+ensemble/filter.m"
+    matlab_last_sync_hash: "0e2caa09"
+    python_path: "ndi/fun/ensemble.py"
+    python_name: filter
+    input_arguments:
+      - name: E
+        type_matlab: "struct (from ndi.fun.ensemble.read)"
+        type_python: "Mapping[str, Any]"
+      - name: "IncludeNames / ExcludeNames / IncludeIndex / ExcludeIndex / IncludeIds / ExcludeIds / Keep"
+        type_matlab: "name-value pairs"
+        type_python: "keyword arguments (include_names=..., exclude_index=..., keep=...)"
+    output_arguments:
+      - name: E
+        type_matlab: "struct"
+        type_python: "dict"
+    decision_log: >
+      Ported. The one ensemble function that touches no session, which is
+      why it lives in ensemble.py rather than ensemble_db.py. Pure and
+      in-memory: subsets the rows of E['activity'] and the matching entries
+      of neuron_ids / neuron_names, updates info['num_neurons'], and trims
+      trailing all-zero columns. include_index and exclude_index stay
+      1-BASED in Python, matching MATLAB's IncludeIndex: the shared symmetry
+      battery feeds one case list to both languages, so a 0-based Python
+      variant would make identical inputs mean different neurons in the two
+      ports. The reason is stated at _index_mask, where a reader who thinks
+      it is a leftover would go to change it. Shadows the builtin `filter`,
+      deliberately and with a noqa, because Strict Naming wins.
+
+  - name: findExisting
+    type: function
+    matlab_path: "+ndi/+fun/+ensemble/findExisting.m"
+    matlab_last_sync_hash: "0e2caa09"
+    python_path: "ndi/fun/ensemble_db.py"
+    python_name: find_existing
+    input_arguments:
+      - name: S
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "session"
+      - name: ensembleElement
+        type_matlab: "ndi.element.ensemble | char (document id)"
+        type_python: "ndi.element.ensemble | str"
+      - name: epochid
+        type_matlab: "name-value pair"
+        type_python: "keyword argument (epochid='')"
+    output_arguments:
+      - name: docs
+        type_matlab: "cell array of ndi.document"
+        type_python: "list of ndi_document"
+    decision_log: >
+      Exact match. Returns the 'ensemble' map documents belonging to an
+      ensemble element, optionally restricted to one epoch. Empty epochid
+      means "every epoch", as MATLAB's empty default does.
+
+  - name: load
+    type: function
+    matlab_path: "+ndi/+fun/+ensemble/load.m"
+    matlab_last_sync_hash: "0e2caa09"
+    python_path: "ndi/fun/ensemble_db.py"
+    python_name: load
+    input_arguments:
+      - name: S
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "session"
+      - name: element
+        type_matlab: "ndi.element | ndi.probe"
+        type_python: "element | probe"
+      - name: epochid
+        type_matlab: "char"
+        type_python: "str"
+      - name: "neurons / clocktype / value_type / value_description / verbose"
+        type_matlab: "name-value pairs"
+        type_python: "keyword arguments"
+    output_arguments:
+      - name: activity
+        type_matlab: "sparse double (neurons x spikes)"
+        type_python: "scipy.sparse matrix"
+      - name: neuron_ids
+        type_python: "list[str]"
+      - name: neuron_names
+        type_python: "list[str]"
+      - name: info
+        type_matlab: "struct"
+        type_python: "dict"
+      - name: spike_rows
+        type_python: "list"
+    decision_log: >
+      Ported. Finds the 'spikes' elements built on ELEMENT (the constant
+      SPIKES_TYPE), reads each neuron's spike times against a time reference
+      on ELEMENT for EPOCHID, and packs them into a sparse matrix where
+      row i, column n is the time of neuron i's n-th spike. MATLAB's five
+      outputs become a five-tuple. The matrix has the shape
+      ndi.element.ensemble.spikeMatrix calls "the export form", the one
+      ndi.util.writeSparse serializes -- but neither language's ensemble
+      path writes it through writeSparse today; both store the epoch as a
+      marked point process and rebuild the matrix on read. So the two
+      toolboxes agree on the SHAPE here and on the FILE FORMAT in
+      ndi.util.sparse_array, and nothing yet joins them.
+
+  - name: neuronQuality
+    type: function
+    matlab_path: "+ndi/+fun/+ensemble/neuronQuality.m"
+    matlab_last_sync_hash: "0e2caa09"
+    python_path: "ndi/fun/ensemble_db.py"
+    python_name: neuron_quality
+    input_arguments:
+      - name: S
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "session"
+      - name: neuron_ids
+        type_matlab: "cell array of char"
+        type_python: "Sequence[str]"
+    output_arguments:
+      - name: quality_number
+        type_matlab: "1xN double"
+        type_python: "np.ndarray"
+      - name: quality_label
+        type_matlab: "1xN cell of char"
+        type_python: "list[str]"
+    decision_log: >
+      Exact match. Looks up each neuron's 'neuron_extracellular' document
+      and returns its spike-sorting quality. A neuron with no such document
+      gives NaN and '', exactly as MATLAB does — the absence is reported,
+      not silently dropped, so quality_number stays aligned with neuron_ids.
+
+  - name: plot
+    type: function
+    matlab_path: "+ndi/+fun/+ensemble/plot.m"
+    matlab_last_sync_hash: "0e2caa09"
+    python_path: "ndi/fun/ensemble_db.py"
+    python_name: plot
+    input_arguments:
+      - name: E
+        type_matlab: "struct (from ndi.fun.ensemble.read)"
+        type_python: "Mapping[str, Any]"
+      - name: "axes / color / marker size / labels"
+        type_matlab: "name-value pairs"
+        type_python: "keyword arguments (ax=None, color='k', marker_size=2.0, show_names=True)"
+    output_arguments:
+      - name: h
+        type_matlab: "graphics handle"
+        type_python: "matplotlib artist"
+    decision_log: >
+      Ported to matplotlib, with one of MATLAB's two calling forms. MATLAB
+      accepts plot(E, ...) and plot(S, ENSEMBLEELEMENT, EPOCH, ...); Python
+      accepts only the first, because the second is exactly
+      plot(read(S, ensembleElement, epoch)) and Python has no varargin
+      dispatch to make the shorthand free. A caller porting the three
+      argument form writes the read call out. MATLAB's 'axes' is spelled
+      'ax', matplotlib's name for it.
+
+  - name: read
+    type: function
+    matlab_path: "+ndi/+fun/+ensemble/read.m"
+    matlab_last_sync_hash: "0e2caa09"
+    python_path: "ndi/fun/ensemble_db.py"
+    python_name: read
+    input_arguments:
+      - name: S
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "session"
+      - name: ensembleElement
+        type_matlab: "ndi.element.ensemble | ndi.document | char"
+        type_python: "ndi.element.ensemble | ndi_document | str"
+      - name: epoch
+        type_matlab: "char | double"
+        type_python: "str | int"
+      - name: "the filter and quality name-value pairs"
+        type_matlab: "name-value pairs"
+        type_python: "keyword arguments (include_names=..., min_quality=..., ...)"
+    output_arguments:
+      - name: E
+        type_matlab: "struct"
+        type_python: "dict"
+    decision_log: >
+      Ported. Reads one epoch of an ensemble element and returns the
+      activity, neuron ids, neuron names and info as a single mapping — the
+      one-step equivalent of read followed by filter (and neuronQuality for
+      the quality options), as in MATLAB. MATLAB's struct becomes a dict
+      rather than a class: the fields are data, and a caller round-tripping
+      one through filter should not have to construct a type to do it.
+
+  - name: ensembleElementFor
+    type: function
+    matlab_path: "+ndi/+fun/+ensemble/private/ensembleElementFor.m"
+    matlab_last_sync_hash: "0e2caa09"
+    python_path: "ndi/fun/ensemble_db.py"
+    python_name: _find_or_create_ensemble_element
+    input_arguments:
+      - name: S
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "session"
+      - name: probe
+        type_matlab: "ndi.element | ndi.probe"
+        type_python: "element | probe"
+    output_arguments:
+      - name: ens
+        type_matlab: "ndi.element.ensemble"
+        type_python: "ndi.element.ensemble"
+    decision_log: >
+      Ported as a private helper. MATLAB puts it in a `private/` folder,
+      which makes it callable only from within +ensemble; Python's
+      equivalent is the leading underscore, so the name is
+      _find_or_create_ensemble_element rather than a Strict Naming mirror —
+      Strict Naming governs the public surface, and this file is
+      deliberately not on it. Finds or constructs the ndi.element.ensemble
+      whose underlying element is PROBE, named [probe.name '_ensemble'].
+
+# =========================================================================
+# Functions — export.py
+# MATLAB: +ndi/+fun/+export/blech_clust.m, blech_clust_write.m
+# =========================================================================
+
+  - name: blech_clust
+    type: function
+    matlab_path: "+ndi/+fun/+export/blech_clust.m"
+    matlab_last_sync_hash: "e2d961df"
+    python_path: "ndi/fun/export.py"
+    python_name: blech_clust
+    input_arguments:
+      - name: stimulator
+        type_matlab: "ndi.probe"
+        type_python: "probe"
+      - name: probe
+        type_matlab: "ndi.probe"
+        type_python: "probe"
+      - name: epochID
+        type_matlab: "char"
+        type_python: "str"
+      - name: outputfile
+        type_matlab: "char"
+        type_python: "str | os.PathLike"
+      - name: "sample_rate / pre_stim / post_stim / ensemble / quality filters"
+        type_matlab: "name-value pairs"
+        type_python: "keyword arguments"
+    decision_log: >
+      Ported. Gathers an epoch's ensemble, stimulus onsets and stimulus ids
+      and hands them to blech_clust_write. The HDF5 file it produces is read
+      by the blech_clust pipeline, so the layout is fixed by that consumer
+      rather than by either toolbox; h5py is imported lazily (_require_h5py)
+      so the rest of ndi.fun.export stays importable without it.
+
+  - name: blech_clust_write
+    type: function
+    matlab_path: "+ndi/+fun/+export/blech_clust_write.m"
+    matlab_last_sync_hash: "e2d961df"
+    python_path: "ndi/fun/export.py"
+    python_name: blech_clust_write
+    input_arguments:
+      - name: outputfile
+        type_matlab: "char"
+        type_python: "str | os.PathLike"
+      - name: unit_spiketimes
+        type_matlab: "cell array"
+        type_python: "Sequence[Any]"
+      - name: unit_info
+        type_matlab: "struct array"
+        type_python: "Sequence[Mapping[str, Any]]"
+      - name: onset_times
+        type_python: "array-like"
+      - name: trial_stimid
+        type_python: "array-like"
+      - name: stimid_tastant
+        type_matlab: "containers.Map"
+        type_python: "Mapping[Any, str]"
+      - name: "pre_stim / post_stim / sample_rate"
+        type_matlab: "name-value pairs"
+        type_python: "keyword arguments"
+    decision_log: >
+      Ported. Writes the blech_clust HDF5 file. Sample indices are computed
+      with _matlab_round, which rounds halves away from zero the way
+      MATLAB's round does rather than to even the way Python's does — a
+      difference of one sample in the spike raster otherwise. MATLAB's
+      containers.Map becomes a plain Mapping.
+
+# =========================================================================
+# Functions — stimulus.py (continued)
+# MATLAB: +ndi/+fun/+stimulus/whatVaries.m, whatIsConstant.m,
+#         whatVaries_parameterList.m
+# =========================================================================
+
+  - name: whatVaries
+    type: function
+    matlab_path: "+ndi/+fun/+stimulus/whatVaries.m"
+    matlab_last_sync_hash: "bab2747b"
+    python_path: "ndi/fun/stimulus.py"
+    python_name: whatVaries
+    input_arguments:
+      - name: stimuli
+        type_matlab: "ndi.document | struct array | cell array"
+        type_python: "ndi_document | Sequence[dict]"
+      - name: excludeBlank
+        type_matlab: "name-value pair (default true)"
+        type_python: "excludeBlank: bool = True"
+    output_arguments:
+      - name: varies
+        type_matlab: "struct array"
+        type_python: "list[dict]"
+      - name: constant
+        type_matlab: "struct array"
+        type_python: "list[dict]"
+    decision_log: >
+      Exact match. Reports which stimulus parameters take more than one
+      value across a stimulus set, and which do not. MATLAB's two outputs
+      become a tuple; whatIsConstant is the second alone. excludeBlank keeps
+      its MATLAB spelling (Strict Naming) even though it is the only
+      camelCase keyword argument in the module.
+
+  - name: whatIsConstant
+    type: function
+    matlab_path: "+ndi/+fun/+stimulus/whatIsConstant.m"
+    matlab_last_sync_hash: "1456b8e4"
+    python_path: "ndi/fun/stimulus.py"
+    python_name: whatIsConstant
+    input_arguments:
+      - name: stimuli
+        type_matlab: "ndi.document | struct array | cell array"
+        type_python: "ndi_document | Sequence[dict]"
+      - name: excludeBlank
+        type_matlab: "name-value pair (default true)"
+        type_python: "excludeBlank: bool = True"
+    output_arguments:
+      - name: constant
+        type_matlab: "struct array"
+        type_python: "list[dict]"
+    decision_log: >
+      Exact match. The parameters that hold one value across the whole
+      stimulus set. Delegates to whatVaries and returns its second output,
+      as MATLAB's does, so the two answers cannot disagree.
+
+  - name: whatVaries_parameterList
+    type: function
+    matlab_path: "+ndi/+fun/+stimulus/whatVaries_parameterList.m"
+    matlab_last_sync_hash: "a54b7685"
+    python_path: "ndi/fun/stimulus.py"
+    python_name: whatVaries_parameterList
+    input_arguments:
+      - name: stimuli
+        type_matlab: "ndi.document | struct array | cell array"
+        type_python: "ndi_document | Sequence[dict]"
+    output_arguments:
+      - name: params
+        type_matlab: "struct array"
+        type_python: "list[dict]"
+    decision_log: >
+      Exact match. Normalizes a stimulus set into the flat parameter list
+      whatVaries and whatIsConstant work from, accepting an ndi.document, a
+      list of documents, or plain parameter mappings.
+
+# =========================================================================
+# Functions — cache.py, text.py
+# MATLAB: +ndi/+fun/clearAllCaches.m, parseText.m
+# =========================================================================
+
+  - name: clearAllCaches
+    type: function
+    matlab_path: "+ndi/+fun/clearAllCaches.m"
+    matlab_last_sync_hash: "8653c2c8"
+    python_path: "ndi/fun/cache.py"
+    python_name: clear_all_caches
+    input_arguments:
+      - name: varargin
+        type_matlab: "objects to clear"
+        type_python: "*objects"
+      - name: verbose
+        type_python: "keyword argument (verbose=False)"
+    output_arguments:
+      - name: cleared
+        type_matlab: "(none; prints)"
+        type_python: "list[str]"
+    decision_log: >
+      Ported. Clears the caches reachable from the given objects (sessions,
+      datasets, and their sub-objects). MATLAB returns nothing and reports
+      nothing, so a caller cannot tell which caches it actually found;
+      Python RETURNS the list of names and prints them under verbose, so a
+      test can assert that a cache is still being cleared rather than
+      silently skipped. Exported as both clearAllCaches and
+      clear_all_caches.
+
+  - name: parseText
+    type: function
+    matlab_path: "+ndi/+fun/parseText.m"
+    matlab_last_sync_hash: "0e2caa09"
+    python_path: "ndi/fun/text.py"
+    python_name: parse_text
+    input_arguments:
+      - name: inputText
+        type_matlab: "char | cell array | string array"
+        type_python: "str | Sequence[str] | Sequence[Sequence[str]]"
+      - name: textParser
+        type_matlab: "ndi.document | struct"
+        type_python: "ndi_document | Mapping"
+      - name: clean
+        type_matlab: "name-value pair (default true)"
+        type_python: "keyword argument (clean=True)"
+    output_arguments:
+      - name: variableTable
+        type_matlab: "table"
+        type_python: "pd.DataFrame"
+    decision_log: >
+      Ported. Applies a text_parser document's rules to free text and
+      returns the extracted variables as a table. MATLAB's table becomes a
+      DataFrame; pandas is imported lazily (_require_pandas), as elsewhere
+      in ndi.fun. matlab_column_class is exported alongside it because
+      MATLAB's per-column class is what the 'clean' step tests, and a
+      DataFrame's dtype is not the same question.
+
+# =========================================================================
 # Not ported / Not applicable
 # =========================================================================
 not_applicable:
 
+  - name: avi2mp4
+    matlab_path: "+ndi/+fun/+data/avi2mp4.m"
+    matlab_last_sync_hash: "0e2caa09"
+    status: not_yet_ported
+    decision_log: >
+      Not ported. Batch-compresses .avi to H.264 .mp4 by shelling out to
+      FFmpeg; nothing in it is NDI-specific beyond the recursive search, and
+      no Python caller needs it yet. A port is a thin subprocess wrapper
+      whenever one does. Deferred, not declined: unlike the MATLAB path and
+      logging helpers below, this is portable work that simply has no
+      demand.
+
+  - name: prism2csv
+    matlab_path: "+ndi/+fun/+data/prism2csv.m"
+    matlab_last_sync_hash: "0e2caa09"
+    status: not_yet_ported
+    decision_log: >
+      Not ported. Converts GraphPad Prism files to CSV by invoking an R
+      script that ships beside the .m file. Porting it means either shipping
+      that R script in the Python package too or finding a Python reader for
+      the .prism format; both are real decisions and neither is needed by a
+      current caller, so the choice is left to whoever needs it.
+
+  - name: parallelWorkers
+    matlab_path: "+ndi/+fun/parallelWorkers.m"
+    matlab_last_sync_hash: "9a9150e7"
+    status: not_applicable
+    decision_log: >
+      Not applicable. Returns the worker limit to pass as the second
+      argument of a MATLAB `parfor`, reading the Parallel.OpenPoolIfNone and
+      Parallel.NumberOfWorkers preferences. Python has no parfor: parallel
+      code here uses multiprocessing or joblib, which take a worker count
+      directly, so there is no argument for this function to compute. The
+      preferences themselves stay meaningful on the MATLAB side; a Python
+      caller that grows a worker pool should read them through
+      ndi.preferences rather than reviving this signature.
+
   - name: assertAddonOnPath
     matlab_path: "+ndi/+fun/assertAddonOnPath.m"
     status: not_applicable
-    decision_log: "MATLAB-specific path/addon management."
+    decision_log: >
+      Not applicable. Asks MATLAB's `ver` whether a named add-on is
+      installed and errors naming what required it. Python states its
+      requirements in pyproject.toml and pip refuses to install without
+      them, so the check happens before any code runs and there is nothing
+      left for a runtime assertion to catch.
 
   - name: check_Matlab_toolboxes
     matlab_path: "+ndi/+fun/check_Matlab_toolboxes.m"
     status: not_applicable
-    decision_log: "MATLAB-specific toolbox checker."
+    decision_log: >
+      Not applicable, for the same reason as assertAddonOnPath: it reads
+      ndi_common/requirements/ndi-matlab-toolboxes.json and warns about
+      MATLAB toolboxes `ver` does not list. The file names MATLAB products
+      (Signal Processing Toolbox, and so on); Python's equivalent list is
+      pyproject.toml's dependencies, enforced by the installer.
 
   - name: console
     matlab_path: "+ndi/+fun/console.m"
     status: not_applicable
-    decision_log: "MATLAB-specific console utility."
+    decision_log: >
+      Not applicable. Opens a macOS Terminal window tailing a log file, so
+      a long MATLAB run can be watched from outside the MATLAB console; the
+      function itself says only macOS is supported. Python code that wants
+      this runs `tail -f` in the terminal it was already launched from, and
+      logging goes through the standard logging module, which the user
+      configures rather than a helper spawning a window.
 
   - name: convertoldnsd2ndi
     matlab_path: "+ndi/+fun/convertoldnsd2ndi.m"
@@ -1336,17 +1897,37 @@ not_applicable:
   - name: find_calc_directories
     matlab_path: "+ndi/+fun/find_calc_directories.m"
     status: not_applicable
-    decision_log: "MATLAB path/toolbox discovery."
+    decision_log: >
+      Not applicable. Finds NDIcalc-*-matlab calculator toolboxes by going
+      three directories up from ndi.toolboxdir and globbing the siblings --
+      a search that only works because MATLAB toolboxes are installed side
+      by side. Python calculators are found through the ndi.calc package
+      and the class registry (ndi/class_registry.py), which is an import
+      question rather than a filesystem one; a third-party calculator
+      distributed as its own package is discovered by being importable.
 
   - name: plot_extracellular_spikeshapes
     matlab_path: "+ndi/+fun/plot_extracellular_spikeshapes.m"
-    status: not_applicable
-    decision_log: "MATLAB GUI plotting function."
+    status: not_yet_ported
+    decision_log: >
+      Not ported -- and reclassified in #154 from not_applicable, which was
+      wrong. It is not a GUI: it queries the session for
+      'neuron_extracellular' documents and draws their mean waveforms
+      offset by SPACE, which is ordinary plotting work, and this port does
+      port plotting (ndi.fun.probe.geometry.plot and ndi.fun.ensemble.plot
+      are both matplotlib). Nothing blocks it; nobody has needed it. Saying
+      "not applicable" would have closed the question for good, which is
+      what the status is for.
 
   - name: run_Linux_checks
     matlab_path: "+ndi/+fun/run_Linux_checks.m"
     status: not_applicable
-    decision_log: "MATLAB Linux environment checks."
+    decision_log: >
+      Not applicable. Warns about the known Linux incompatibilities of the
+      MATLAB RUNTIME (it branches on computer('arch') returning GLNXA64).
+      The problems it warns about are MATLAB's, not NDI's; CPython on Linux
+      has none of them, and this project's own CI runs on Linux, which is a
+      stronger check than a warning.
 
   - name: syslog
     matlab_path: "+ndi/+fun/syslog.m"
