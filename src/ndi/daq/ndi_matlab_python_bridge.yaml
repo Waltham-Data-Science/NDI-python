@@ -1143,3 +1143,80 @@ classes:
           - name: fulltype
             type_python: "str"
         decision_log: "Exact match."
+
+# =========================================================================
+# Imaging acquisition, and two readers recorded late (#154)
+#
+# All five below were ported and simply never recorded. The imaging trio
+# (system.image, reader.image, reader.image.ndr) landed together as the
+# acquisition path for image-series data; ndi.element.image and
+# ndi.probe.image on top of them are still missing, recorded in
+# src/ndi/element/ and src/ndi/probe/.
+# =========================================================================
+imaging_and_readers:
+
+  - name: image
+    type: class
+    matlab_path: "+ndi/+daq/+system/image.m"
+    matlab_last_sync_hash: "2e6f3c35"
+    python_path: "ndi/daq/system_image.py"
+    python_class: "ndi_daq_system_image"
+    decision_log: >
+      The image-series DAQ system: frames on a pixel grid rather than
+      (sample x channel) columns, the imaging peer of
+      ndi.daq.system.mfdaq. MATLAB nests it as +daq/+system/image.m;
+      Python flattens to daq/system_image.py because daq/system.py is a
+      module rather than a package, which is the same shaping already used
+      for system_mfdaq.py. The class name keeps MATLAB's reading order
+      (ndi_daq_system_image).
+
+  - name: image
+    type: class
+    matlab_path: "+ndi/+daq/+reader/image.m"
+    matlab_last_sync_hash: "2e6f3c35"
+    python_path: "ndi/daq/reader/image/__init__.py"
+    python_class: "ndi_daq_reader_image"
+    decision_log: >
+      Abstract reader for image-series acquisition: fixes the frame API
+      (frametimes, readframes) the way ndi.daq.reader.mfdaq fixes the
+      sample API. MATLAB has it as a class file with a sibling +image
+      package for its subclasses; Python makes the package and puts the
+      abstract class in its __init__, so ndi.daq.reader.image names the
+      class in both languages and the subclass sits under it either way.
+
+  - name: ndr
+    type: class
+    matlab_path: "+ndi/+daq/+reader/+image/ndr.m"
+    matlab_last_sync_hash: "2e6f3c35"
+    python_path: "ndi/daq/reader/image/ndr.py"
+    python_class: "ndi_daq_reader_image_ndr"
+    decision_log: >
+      Forwards frame reads to NDR-python, as its mfdaq sibling does for
+      multichannel time series; ndr_reader_string names the NDR reader
+      ('tiffstack', 'prairieview'). Exact structural match.
+
+  - name: ndr
+    type: class
+    matlab_path: "+ndi/+daq/+reader/+mfdaq/ndr.m"
+    matlab_last_sync_hash: "0e2caa09"
+    python_path: "ndi/daq/reader/mfdaq/ndr.py"
+    python_class: "ndi_daq_reader_mfdaq_ndr"
+    decision_log: >
+      Delegates every read to the NDR-python reader named by
+      ndr_reader_string ('neuropixelsGLX', 'intan_rhd', 'axon_abf', ...).
+      Ported early and used by the ingestion symmetry tests; the entry was
+      simply never written. Exact structural match.
+
+  - name: VHAudreyBPod
+    type: class
+    matlab_path: "+ndi/+daq/+metadatareader/VHAudreyBPod.m"
+    matlab_last_sync_hash: "0e2caa09"
+    python_path: "ndi/daq/metadatareader/vhaudreybpod_stims.py"
+    python_class: "ndi_daq_metadatareader_VHAudreyBPod"
+    decision_log: >
+      Reads stimulus parameters from the BPod behavioral-task summary JSON
+      of the VH Lab taste experiments. The CLASS name keeps MATLAB's
+      capitalization per Rule 3; only the MODULE file is snake_case
+      (vhaudreybpod_stims.py), matching the other metadata readers in this
+      package -- newstim_stims.py, nielsenlab_stims.py, rayolab_stims.py --
+      whose MATLAB counterparts are likewise CamelCase class files.

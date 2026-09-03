@@ -807,3 +807,127 @@ classes:
     decision_log: >
       Python dataclass. Container for sync graph information.
       Mirrors the MATLAB struct used to hold graph state.
+
+# =========================================================================
+# ndi.time.fun and ndi.time.timeseries (#154)
+# =========================================================================
+time_fun:
+
+  - name: syncTriggerTrains
+    matlab_path: "+ndi/+time/+fun/syncTriggerTrains.m"
+    matlab_last_sync_hash: "0e2caa09"
+    python_path: "ndi/time/syncrule/common_triggers_overlapping_epochs.py"
+    python_qualified: "_sync_triggers"
+    input_arguments:
+      - name: t1
+        type_matlab: "double vector"
+        type_python: "np.ndarray"
+      - name: t2
+        type_matlab: "double vector"
+        type_python: "np.ndarray"
+    output_arguments:
+      - name: shift
+        type_python: "float"
+      - name: scale
+        type_python: "float"
+    decision_log: >
+      MATLAB keeps this as a free function in +time/+fun because two
+      syncrules could use it; Python has one caller, so it lives as the
+      private _sync_triggers beside it. That part is only placement.
+      DIVERGENCE, and the reason this entry is worth reading: the two are
+      not the same algorithm. MATLAB's is 169 lines of drift-tolerant
+      inter-pulse-interval hashing -- it finds candidate alignments by
+      quantized IPI, validates each against a window that widens to absorb
+      200ppm+ clock drift over long files, PERMITS EXACTLY ONE MISSING
+      PULSE, and raises when more than one distinct alignment validates.
+      Python's is a least-squares polyfit that requires len(t1) == len(t2)
+      and raises "Trigger count mismatch" otherwise.
+      So Python fails precisely where MATLAB was engineered to succeed: a
+      single dropped pulse, which the MATLAB header calls out as the case
+      it exists for. Two devices that MATLAB can align, Python refuses to.
+      Recorded rather than fixed here: porting the real algorithm is its
+      own change with its own tests, and it needs cross-language cases to
+      prove the two agree on the same pulse trains.
+
+  - name: syncRandomTriggers
+    matlab_path: "+ndi/+time/+fun/syncRandomTriggers.m"
+    matlab_last_sync_hash: "0e2caa09"
+    python_path: "ndi/time/syncrule/random_pulses.py"
+    python_qualified: "_sync_random_triggers"
+    input_arguments:
+      - name: t1
+        type_matlab: "double vector"
+        type_python: "np.ndarray"
+      - name: t2
+        type_matlab: "double vector"
+        type_python: "np.ndarray"
+    output_arguments:
+      - name: shift
+        type_python: "float"
+      - name: scale
+        type_python: "float"
+    decision_log: >
+      Same placement story as syncTriggerTrains: a free function in MATLAB,
+      a private helper beside its one caller in Python.
+      DIVERGENCE, smaller than its neighbour but real. Both find an offset
+      from inter-event intervals and then fit, so they agree in shape.
+      MATLAB builds a hash map of interval fingerprints from the longer
+      recording and probes it in randomized order, then validates the
+      candidate with a secondary pulse check and RAISES if the match is
+      ambiguous. Python cross-correlates the normalized IPI sequences and
+      takes the argmax, which always yields an answer -- an ambiguous
+      alignment produces a confident wrong one rather than an error.
+      The failure mode differs even where the result usually agrees, so a
+      caller cannot treat a Python answer as carrying MATLAB's guarantee.
+
+  - name: samples2times
+    matlab_path: "+ndi/+time/+fun/samples2times.m"
+    matlab_last_sync_hash: "0e2caa09"
+    python_path: "ndi/probe/timeseries.py"
+    python_qualified: "ndi_probe_timeseries.samples2times"
+    decision_log: >
+      MATLAB has the arithmetic as a free function taking (s, t0_t1, sr);
+      Python has it as a method that reads t0_t1 and the sample rate off
+      the epoch it is given, so callers pass an epoch instead of three
+      loose arguments. Same conversion either way.
+      INDEXING, and it is not a mistake: MATLAB is 1-based
+      (t = (s-1)/sr + t0), Python is 0-based (t = s/sr + t0). This is the
+      one place ndi_xlang_principles says to diverge -- a sample index is
+      an internal data-structure position, not a user-facing count -- and
+      the method docstrings say so at the point of use. A caller porting a
+      MATLAB line that passes a literal sample number must subtract one.
+      The infinite-sample clamping (-Inf to t0, +Inf to t1) is carried over.
+
+  - name: times2samples
+    matlab_path: "+ndi/+time/+fun/times2samples.m"
+    matlab_last_sync_hash: "0e2caa09"
+    python_path: "ndi/probe/timeseries.py"
+    python_qualified: "ndi_probe_timeseries.times2samples"
+    decision_log: >
+      The inverse of samples2times, and the same two notes apply: a method
+      over an epoch rather than a free function over (t, t0_t1, sr), and
+      0-based where MATLAB is 1-based. Rounding is to nearest in both.
+
+not_yet_ported:
+
+  - name: timeseries
+    matlab_path: "+ndi/+time/timeseries.m"
+    matlab_last_sync_hash: "0e2caa09"
+    status: not_applicable
+    decision_log: >
+      MATLAB's ndi.time.timeseries is an abstract mixin: it declares
+      readtimeseries / samplerate / times2samples / samples2times and the
+      epoch-clock contract, and the concrete timeseries classes
+      (ndi.probe.timeseries, ndi.element.timeseries, and the image pair)
+      inherit it alongside their main base.
+      Python has no such mixin because it does not need one: the same
+      methods are declared on ndi_probe_timeseries and
+      ndi_element_timeseries directly. MATLAB uses multiple inheritance to
+      attach the contract to classes whose primary base is elsewhere;
+      Python's classes reach it through their own hierarchy, so a second
+      base would add a name without adding behaviour.
+      The cost is recorded honestly: there is no single Python type that
+      means "is a timeseries", so generic code cannot isinstance-check for
+      one the way MATLAB code can ask isa(obj,'ndi.time.timeseries'). If
+      something needs that test, this is the entry to revisit -- a Protocol
+      would be the Python-shaped answer.
