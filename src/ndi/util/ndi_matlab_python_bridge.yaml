@@ -276,7 +276,160 @@ functions:
 # =========================================================================
 # Not ported / Not applicable
 # =========================================================================
+  # --- Folder-picker trio, ported into one module (#154) ------------------
+
+  - name: chooseDatasetOrSession
+    matlab_path: "+ndi/+util/chooseDatasetOrSession.m"
+    matlab_last_sync_hash: "db5e45c6"
+    python_path: "ndi/util/choose_directory.py"
+    python_qualified: "choose_dataset_or_session"
+    decision_log: >
+      Opens a folder dialog and keeps asking until the chosen directory is
+      an NDI session or dataset. MATLAB has one .m file per picker; Python
+      groups the three into choose_directory.py, which names all three
+      MATLAB counterparts in its module docstring. Ported with the
+      navigator's add-dataset flows and never recorded until now.
+
+  - name: chooseSession
+    matlab_path: "+ndi/+util/chooseSession.m"
+    matlab_last_sync_hash: "db5e45c6"
+    python_path: "ndi/util/choose_directory.py"
+    python_qualified: "choose_session"
+    decision_log: >
+      The session-only picker. Python keeps MATLAB's acceptance rule: an
+      NDI folder created before the object-type marker existed is accepted
+      by choose_dataset_or_session (ACCEPT_ALL) but NOT by choose_session
+      or choose_dataset, which need to know which of the two it is.
+
+  - name: chooseDataset
+    matlab_path: "+ndi/+util/chooseDataset.m"
+    matlab_last_sync_hash: "db5e45c6"
+    python_path: "ndi/util/choose_directory.py"
+    python_qualified: "choose_dataset"
+    decision_log: "The dataset-only picker. Same rule as chooseSession above."
+
+  # --- Safe dotted-path struct access (#154) -----------------------------
+
+  - name: getfieldpath
+    matlab_path: "+ndi/+util/getfieldpath.m"
+    matlab_last_sync_hash: "0e2caa09"
+    python_path: "ndi/document.py"
+    python_qualified: "ndi_document._get_nested_property"
+    decision_log: >
+      Reads a nested field named by a dotted path ('base.name').
+      MATLAB's reason for existing does NOT transfer: it replaces
+      eval(['s.' name]), which lets a property name read from a document
+      execute arbitrary code, and it therefore validates every segment
+      with isvarname and raises on a bad one. Python never had that
+      exposure -- the path is split and used as dict keys, which cannot
+      execute anything -- so the validation is absent by design rather
+      than by omission.
+      One behavioural difference worth knowing: MATLAB RAISES
+      ndi:util:getfieldpath:invalidPropertyName for a malformed path;
+      Python returns the caller's default. A caller porting MATLAB code
+      that relies on the error to detect a typo will get a silent default
+      instead.
+
+  - name: assignPropertyPath
+    matlab_path: "+ndi/+util/assignPropertyPath.m"
+    matlab_last_sync_hash: "0e2caa09"
+    python_path: "ndi/document.py"
+    python_qualified: "ndi_document._set_nested_property"
+    decision_log: >
+      The write half of getfieldpath: assigns through a dotted path,
+      creating intermediate levels as needed. Same story -- MATLAB exists
+      to avoid eval(['s.' name '=value']) and validates with isvarname;
+      Python assigns into nested dicts, where a crafted key is only ever a
+      key. Both create missing intermediate levels, so the shapes agree.
+
+
 not_applicable:
+
+  - name: readNPY
+    matlab_path: "+ndi/+util/readNPY.m"
+    matlab_last_sync_hash: "0e2caa09"
+    status: not_applicable
+    decision_log: >
+      A dependency-free .npy reader MATLAB needs because it cannot read
+      NumPy's own format. Python reads it with numpy.load, which is where
+      the format comes from -- there is nothing to port. NDI-python
+      already relies on that: the kilosort waveform reader says so in a
+      comment at ndi/fun/probe/import_/kilosort/waveform_data.py, noting
+      "MATLAB reads these through ndi.util.readNPY; numpy reads its own".
+
+  - name: ListDialog
+    matlab_path: "+ndi/+util/ListDialog.m"
+    matlab_last_sync_hash: "46672187"
+    status: not_yet_ported
+    decision_log: >
+      A modal list picker replacing MATLAB's LISTDLG, whose font size is
+      fixed and tiny; styled in the NDI Cloud colours. Its MATLAB callers
+      are the cloud organization dialogs (selectOrganization,
+      organizationLabels -- both recorded not_yet_ported in
+      src/ndi/cloud/) and the navigator's datasetsPane.
+      Python has no equivalent because it does not need the workaround:
+      Qt list widgets take a font like any other widget, so a Python
+      caller would build a QListWidget rather than a styled replacement
+      for a built-in it does not have. What is NOT yet ported is the
+      organization picker that MATLAB uses this for -- that gap is
+      recorded on selectOrganization, not here.
+
+  - name: removehiddenfilegroups
+    matlab_path: "+ndi/+util/removehiddenfilegroups.m"
+    matlab_last_sync_hash: "0e2caa09"
+    status: not_applicable
+    decision_log: >
+      Both languages drop hidden files from epoch file groups, and both do
+      it for the same reason: macOS AppleDouble shadow files
+      ('._Epoch6_g0_t0.imec0.ap.bin') otherwise match '#'-style filematch
+      patterns and produce spurious duplicate epochs sharing the genuine
+      epoch's epoch_id. MATLAB factors it into this helper; Python does it
+      inline in ndi_file_navigator.selectfilegroups.
+      DIVERGENCE, recorded rather than fixed: the two do not agree on a
+      MIXED group. MATLAB drops the WHOLE GROUP if any member is hidden;
+      Python strips the hidden members and keeps the group if anything
+      visible remains. For a group that is entirely shadow files the
+      outcomes match (both drop it), which is the case the helper was
+      written for. For a group holding one real file and one shadow file
+      MATLAB discards the epoch and Python keeps it -- Python's answer is
+      arguably the better one, but it is not MATLAB's, and epoch counts
+      are exactly what the cross-language symmetry tests compare. Changing
+      either side needs a symmetry case first.
+
+  - name: writeSparse
+    matlab_path: "+ndi/+util/writeSparse.m"
+    matlab_last_sync_hash: "0e2caa09"
+    status: not_yet_ported
+    decision_log: >
+      Writes a sparse N-dimensional array in the NDI .ndisparse binary
+      format; ndi.element.ensemble uses it to store spike matrices.
+      NDI-python has no reader or writer for that format: nothing under
+      src/ or tests/ mentions .ndisparse, and ndi.element.ensemble builds
+      its neuron-by-spike matrix in memory with scipy.sparse.lil_matrix
+      instead.
+      Worth flagging because MATLAB's own header makes a claim about
+      Python that does not hold here: it says the file "can be read back
+      with ndi.util.readSparse in MATLAB or with ndi_sparse.read_sparse in
+      Python; the two implementations produce byte-for-byte identical
+      files". No ndi_sparse module is importable from NDI-python's
+      dependency set (ndi-compress installs 'ndicompress', which exposes
+      compression helpers and no sparse reader). Until that module exists
+      and is depended on, a .ndisparse file written by MATLAB cannot be
+      read by NDI-python -- which matters, because ensembles are meant to
+      move between the two toolboxes. Same shape of unverified
+      cross-language claim as safeLocalFilename's, recorded in
+      src/ndi/cloud/.
+
+  - name: readSparse
+    matlab_path: "+ndi/+util/readSparse.m"
+    matlab_last_sync_hash: "0e2caa09"
+    status: not_yet_ported
+    decision_log: >
+      The read half of writeSparse above, and it lands with it. MATLAB
+      returns a native sparse matrix for 2-D and a subs/vals/size struct
+      for N-D, since MATLAB has no N-dimensional sparse type; a Python
+      port would not need that split, scipy.sparse and an (indices,
+      values, shape) triple covering both.
 
   - name: choosefile
     matlab_path: "+ndi/+util/choosefile.m"
