@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **`ndi.probe.timeseries.readtimeseries()` names its first argument
+  `timeref_or_epoch`, matching MATLAB and `ndi.element.timeseries`**
+  (NDI-python#166). It was called `epoch`, so the two classes could not be
+  used interchangeably by keyword: `readtimeseries(epoch=...)` bound on a
+  probe and raised `TypeError` on an element. `ndi.fun.probe.export.binary`
+  called it that way, which made exporting silently probe-only even though a
+  non-direct `ndi.element.timeseries` with registered epochs is a reasonable
+  thing to export. The four call sites in `ndi.fun.probe` now pass
+  positionally, which works against both classes.
+
+  The argument also now accepts an `ndi.time.timereference` in that position,
+  as MATLAB's does; the extra `timeref=` keyword, which has no MATLAB
+  counterpart, keeps working. **Callers passing `epoch=` by keyword must
+  update** -- pass it positionally, or as `timeref_or_epoch=`.
+  `readtimeseriesepoch()` still takes `epoch`, which is correct: it takes an
+  epoch and nothing else.
+
 - **`ndi_install.py` no longer times out installing on a slow network**
   (NDI-python#165). The editable install was capped at 120 seconds while
   taking about 80 on a healthy machine, and `pip install -e .` resolves six

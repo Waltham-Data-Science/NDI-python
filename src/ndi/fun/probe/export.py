@@ -121,7 +121,7 @@ def binary(
                 # The channel count is still wanted for the sidecar. One
                 # sample is cheap; a whole epoch is not.
                 if num_channels is None:
-                    data, _t, _ref = probe.readtimeseries(epoch=epoch_id, t0=t0, t1=t0)
+                    data, _t, _ref = probe.readtimeseries(epoch_id, t0, t0)
                     num_channels = _channel_count(data)
                 continue
 
@@ -134,7 +134,7 @@ def binary(
                     )
                 start_time = float(chunk_start)
                 end_time = min(chunk_start + CHUNK_DURATION - single_sample_time, t1)
-                data, _t, _ref = probe.readtimeseries(epoch=epoch_id, t0=start_time, t1=end_time)
+                data, _t, _ref = probe.readtimeseries(epoch_id, start_time, end_time)
                 if data is not None and len(data) > 0:
                     num_channels = _channel_count(data)
                     fid.write(_interleaved_bytes(multiplier * data, dtype))
@@ -225,7 +225,7 @@ def autoMultiplier(probe: Any) -> float:  # noqa: N802 (MATLAB mirror)
         if not et:
             return INTAN_MULTIPLIER
         t0, _t1 = _epoch_t0_t1(et[0])
-        data, _t, _ref = probe.readtimeseries(epoch=et[0].get("epoch_id", 1), t0=t0, t1=t0)
+        data, _t, _ref = probe.readtimeseries(et[0].get("epoch_id", 1), t0, t0)
         if data is not None and np.issubdtype(np.asarray(data).dtype, np.integer):
             return 1.0
     except Exception:  # noqa: BLE001 - an unsamplable probe keeps the default

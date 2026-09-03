@@ -177,7 +177,7 @@ class TestReadIngested:
             )
 
         # Debug: read first 9 samples from t=0 to check alignment
-        d_first, t_first, _ = probe.readtimeseries(epoch=1, t0=0, t1=0.001)
+        d_first, t_first, _ = probe.readtimeseries(1, 0, 0.001)
         if d_first is not None:
             print("  ALIGNMENT CHECK: first 9 samples from t=0:")
             print(f"  d_first.shape={d_first.shape}")
@@ -190,7 +190,7 @@ class TestReadIngested:
                 "  EXPECTED: [2.0475, 0.4760, -0.1080, -0.1020, -0.0528, 0.0006, 0.0242, 0.1517, 0.0909]"
             )
 
-        d1, t1, _ = probe.readtimeseries(epoch=1, t0=10, t1=20)
+        d1, t1, _ = probe.readtimeseries(1, 10, 20)
 
         assert (
             d1 is not None
@@ -221,7 +221,7 @@ class TestReadIngested:
         if d1.shape[0] > 1:
             print(f"  d1[1,:5]={d1[1,:5]}")
         # Read one sample earlier to check alignment
-        d_check, t_check, _ = probe.readtimeseries(epoch=1, t0=9.99995, t1=10.0001)
+        d_check, t_check, _ = probe.readtimeseries(1, 9.99995, 10.0001)
         if d_check is not None:
             print(f"  d_check.shape={d_check.shape}")
             for i in range(min(5, d_check.shape[0])):
@@ -330,7 +330,7 @@ class TestReadIngested:
                     f"  channeltype={non_md_ct}, channel={non_md_ch}, devepoch={devepoch}"
                 )
 
-        ds, ts, _ = stim.readtimeseries(epoch=1, t0=10, t1=20)
+        ds, ts, _ = stim.readtimeseries(1, 10, 20)
 
         assert ds is not None, "readtimeseries returned None for data"
         assert ts is not None, "readtimeseries returned None for times"

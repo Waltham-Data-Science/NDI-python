@@ -60,7 +60,7 @@ class FakeProbe:
     def times2samples(self, epoch_id, times):  # noqa: ARG002
         return np.round(np.asarray(times) * self._rate).astype(int)
 
-    def readtimeseries(self, epoch=None, t0=0.0, t1=0.0, timeref=None):  # noqa: ARG002
+    def readtimeseries(self, timeref_or_epoch=None, t0=0.0, t1=0.0, timeref=None):  # noqa: ARG002
         first = int(round(t0 * self._rate))
         last = int(round(t1 * self._rate))
         n = max(last - first + 1, 0)
@@ -175,7 +175,7 @@ class TestAutoMultiplier:
 
     def test_an_unsamplable_probe_keeps_the_default(self):
         class Broken(FakeProbe):
-            def readtimeseries(self, **kwargs):
+            def readtimeseries(self, *args, **kwargs):
                 raise RuntimeError("no data")
 
         assert autoMultiplier(Broken()) == pytest.approx(INTAN_MULTIPLIER)

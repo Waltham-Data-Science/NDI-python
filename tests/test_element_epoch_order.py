@@ -190,12 +190,13 @@ class TestTheExportImportContract:
         class Probe(ndi_element_timeseries):
             """An element carrying the probe API export and import require.
 
-            A real ndi.probe.timeseries names readtimeseries' first parameter
-            ``epoch``, which is the spelling export.binary calls with.
+            It needs no readtimeseries override: export.binary calls that
+            method positionally, so an element works in a probe's place. Until
+            #166 it did not -- export passed ``epoch=``, the probe's spelling
+            for a parameter MATLAB and the element class both call
+            ``timeref_or_epoch`` -- and this stand-in had to redeclare the
+            method to get past it.
             """
-
-            def readtimeseries(self, epoch=None, t0=0.0, t1=float("inf"), timeref=None):
-                return super().readtimeseries(epoch, t0, t1)
 
             def samplerate(self, epoch=None):
                 return rate
