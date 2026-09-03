@@ -410,6 +410,12 @@ functions:
     decision_log: >
       MATLAB takes (ndiDataset, syncOptions, options.*).
       Python unpacks into keyword args. Name exact match.
+      Issue #136: Python now performs MATLAB's first check --
+      "Dataset is not fully ingested" (uploadDataset.m:53) -- which it
+      previously could not, because ndi_dataset had no isIngested().
+      The dataset is asked by duck typing rather than isinstance, so a
+      caller passing a stand-in for the dataset is not blocked by a method
+      it never claimed to have.
 
   - name: syncDataset
     matlab_path: "+ndi/+cloud/syncDataset.m"
