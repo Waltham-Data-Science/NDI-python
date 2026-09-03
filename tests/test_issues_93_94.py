@@ -227,7 +227,7 @@ class TestDeMorganAndComposite:
         right_all = all(leaf_matches(leaf) for leaf in top["param2"])
         assert left_all or right_all, (
             "regression: an OR of negated conjuncts should keep other "
-            "probes; got left=%s right=%s" % (left_all, right_all)
+            f"probes; got left={left_all} right={right_all}"
         )
 
 
