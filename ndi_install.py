@@ -296,7 +296,7 @@ def pip_install_dependency(name: str, repo_dir: Path) -> bool:
     """
     info(f"Building and installing {name}...")
     result = subprocess.run(
-        [sys.executable, "-m", "pip", "install", str(repo_dir)],
+        [sys.executable, "-m", "pip", "install", "--timeout", "600", str(repo_dir)],
         capture_output=True,
         text=True,
         timeout=1800,

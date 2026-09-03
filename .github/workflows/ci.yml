@@ -7,6 +7,12 @@ on:
   # just as much as one targeting main.
   pull_request:
 
+env:
+  # See the comment on the Pyraview build in ndi_install.py: pip's default
+  # 15s network cap turns a slow PyPI slot into "No matching distribution
+  # found". 600s here covers every pip subprocess the workflow runs.
+  PIP_DEFAULT_TIMEOUT: "600"
+
 jobs:
   lint:
     runs-on: ubuntu-latest
