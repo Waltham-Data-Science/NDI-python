@@ -51,6 +51,7 @@ from typing import Any
 
 import numpy as np
 
+from .. import epoch_map as epoch_map_module
 from .binary_info import binaryinfo
 from .get_info import DEFAULT_QUALITY_LABELS, kilosort_directory
 from .labels import labels as read_labels
@@ -67,7 +68,15 @@ DEFAULT_QUALITY_VALUES = (1, 4)
 
 #: The clock spike times are stored against. Chosen because it is the clock
 #: readtimeseries resolves epochs through, so a stored spike train reads back.
-SPIKE_CLOCK = "dev_local_time"
+# The epoch bookkeeping is shared with the KIASORT importer: both map sample
+# offsets into the same concatenated stream ndi.fun.probe.export.binary wrote,
+# so the arithmetic has one correct answer and lives in one place.
+_epochtable = epoch_map_module.epochtable
+_clocks = epoch_map_module.clocks
+_ranges = epoch_map_module.ranges
+_first_range = epoch_map_module.first_range
+_clock_index = epoch_map_module.clock_index
+SPIKE_CLOCK = epoch_map_module.SPIKE_CLOCK
 
 
 def app_provenance(kilosort_version: str) -> dict[str, Any]:
@@ -538,40 +547,3 @@ def _waveform_for(
     trough_sample = int(np.argmin(mean_wf[:, trough_channel]))
     wst = (np.arange(mean_wf.shape[0], dtype=float) - trough_sample) / sample_rate
     return mean_wf, wst
-
-
-def _epochtable(probe_obj: Any) -> tuple[list[dict[str, Any]], Any]:
-    """PROBE_OBJ's epoch table, whichever shape it returns.
-
-    ndi.epoch.epochset.epochtable returns ``(table, hashvalue)``; MATLAB's
-    returns the table alone.
-    """
-    result = probe_obj.epochtable()
-    if isinstance(result, tuple):
-        return list(result[0]), result[1]
-    return list(result), None
-
-
-def _clocks(entry: dict[str, Any]) -> list[Any]:
-    clocks = entry.get("epoch_clock") or []
-    return list(clocks) if isinstance(clocks, (list, tuple)) else [clocks]
-
-
-def _ranges(entry: dict[str, Any]) -> list[Any]:
-    ranges = entry.get("t0_t1") or []
-    if ranges and not isinstance(ranges[0], (list, tuple, np.ndarray)):
-        return [ranges]
-    return list(ranges)
-
-
-def _first_range(entry: dict[str, Any]) -> Any:
-    """The epoch's first ``[t0 t1]``, which is what export.binary counted with."""
-    ranges = _ranges(entry)
-    return ranges[0] if ranges else (0.0, 0.0)
-
-
-def _clock_index(entry: dict[str, Any], clock_name: str) -> int | None:
-    for index, clock in enumerate(_clocks(entry)):
-        if (getattr(clock, "type", None) or str(clock)) == clock_name:
-            return index
-    return None

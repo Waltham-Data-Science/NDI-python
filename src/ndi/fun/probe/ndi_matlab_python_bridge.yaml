@@ -442,8 +442,9 @@ functions:
 # than collapsing to one module: +kilosort holds thirteen files and ~2,200
 # lines, and flattening them would make one unreadable module.
 #
-# MATLAB's +kiasort importer under this package is NOT ported; it is blocked
-# on the external kiasort toolbox (Waltham-Data-Science/NDI-python#122).
+# MATLAB's +kiasort importer is ported too, on the same shape, with the
+# split recorded in its own entry below: its IMPORT side in full, its
+# toolbox drivers (run, curate) not at all.
 # =========================================================================
 
   - name: import.kilosort
@@ -683,3 +684,84 @@ functions:
       datasheet, not indexed into a list), and a Shank ID colorbar when there
       is more than one shank.
       Synchronized with MATLAB main as of 2026-09-02.
+
+  - name: import.kiasort
+    type: package
+    matlab_path: "+ndi/+fun/+probe/+import/+kiasort/"
+    matlab_last_sync_hash: "1b99d29"
+    python_path: "ndi/fun/probe/import_/kiasort/"
+    decision_log: >
+      PARTIALLY PORTED, and the split is the point. MATLAB's twelve files
+      divide cleanly into an import side, which is data on disk, and a driver
+      side, which calls the KIASORT toolbox.
+
+      PORTED IN FULL (nine of twelve): probe, session, getInfo, status,
+      results, labels, meanwaveform, unitstats, removeold. These read
+      KIASORT's HDF5 output and the .mat holding its per-unit statistics, and
+      turn them into ndi.neuron elements and neuron_extracellular documents.
+      A lab that sorts in MATLAB, or receives a collaborator's KIASORT
+      output, can import it into a Python session end to end.
+
+      NOT PORTED, AND NOT PORTABLE (three of twelve): run,
+      run_stages_with_progress and curate drive the KIASORT toolbox itself --
+      run_kiasort_nogui, the kiaSort_main_* stage functions, and
+      kiaSort_curate_results, which is a MATLAB app. KIASORT is MATLAB; there
+      is no Python KIASORT to call. ndi.fun.probe.import.kiasort.run and
+      .curate exist here ONLY to raise NotImplementedError naming the MATLAB
+      entry point and the ported import path, so a caller who expected
+      MATLAB's package shape gets a sentence rather than an AttributeError.
+      This mirrors +kilosort, which has no run or curate in either language.
+
+      Naming follows +kilosort exactly: MATLAB's one-word function names are
+      primary (meanwaveform, removeold, unitstats, getInfo), each with a
+      snake_case alias bound to the same function; module FILES are
+      snake_case (get_info.py, unit_stats.py, mean_waveform.py).
+
+      Per-function notes:
+      results -- KIASORT stores 1-BASED sample indices; the conversion to the
+      0-based convention the rest of NDI uses happens here, ONCE, so
+      spike_samples_global is 0-based from that point. Doing it later or
+      twice moves every spike by a sample. MATLAB's R struct becomes a
+      Results class, as geometry.get's G did, so the same field names read
+      the same way on both sides.
+      unitstats -- reads both MAT versions. MATLAB writes v7 (which
+      scipy.io.loadmat reads) or v7.3 for anything over 2 GB (which loadmat
+      refuses and h5py reads); a real sort can be either, and "too big to
+      import" would be an absurd failure. v7.3 also needs the axis order
+      reversed back: MATLAB reverses dimensions writing HDF5, so a
+      (units, samples, channels) array arrives as its transpose and every
+      unit would get another unit's waveform.
+      labels -- every unit of a plain KIASORT sort is labelled "good".
+      KIASORT tags nothing, unlike Phy, so this is what makes the default
+      quality filter import the units rather than none. A real difference
+      from +kilosort, not a placeholder.
+      meanwaveform -- finds the unit BY ITS LABEL, not by row: labels are
+      unit ids and a curated sort renumbers them.
+      probe -- as +kilosort's, including the MD5 idempotency marker
+      (kiasort_clusters) and the empty-waveform divergence its
+      _storable_waveform documents. The kiasort_clusters document type and
+      schema are copied from MATLAB unchanged.
+      status -- new to this port's GUI needs in MATLAB too; three filesystem
+      questions (exported / run / curated). Python adds Status.words(),
+      which orders the states so a caller cannot render "run, exported".
+
+  - name: import_.epoch_map
+    type: module
+    matlab_path: "n/a (Python only)"
+    python_path: "ndi/fun/probe/import_/epoch_map.py"
+    decision_log: >
+      PYTHON ONLY. MATLAB inlines this arithmetic in each importer; here it
+      is shared, because ndi.fun.probe.export.binary writes a probe's epochs
+      end to end into one binary and EVERY sorter then reports spikes as
+      offsets into that stream. Turning an offset back into an epoch and a
+      time therefore has one correct answer, and two copies would be two
+      chances to drift -- silently, filing spikes under the wrong epoch. The
+      five helpers were lifted out of import_/kilosort/probe.py, which now
+      binds its former private names to them, so its behaviour is unchanged.
+
+      COUNTING: EpochMap.epoch_slice returns 0-BASED local samples where
+      MATLAB adds one. MATLAB's probe.samples2times is 1-based (sample 1 is
+      the epoch's first) and this port's is 0-based, so each language's
+      arithmetic is right for its own indexing and the times agree, which is
+      what has to be true. This is the same divergence import_/kilosort/probe
+      already documented inline.
