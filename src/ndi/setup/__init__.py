@@ -9,7 +9,8 @@ Usage::
     ndi.setup.rayolab(session)
 """
 
+from . import sync
 from .lab import lab
 from .rayolab import rayolab
 
-__all__ = ["lab", "rayolab"]
+__all__ = ["lab", "rayolab", "sync"]
