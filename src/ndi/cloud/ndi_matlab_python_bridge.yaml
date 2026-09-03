@@ -1315,7 +1315,7 @@ not_yet_ported:
     status: not_yet_ported
     decision_log: >
       The interactive counterpart to the "use the first organization"
-      behaviour that Python already has in
+      behavior that Python already has in
       ndi.cloud.auth._extract_first_organization_id. A user who belongs to
       more than one organization cannot currently choose which one to act
       on: Python takes the first and logs a warning saying selection is

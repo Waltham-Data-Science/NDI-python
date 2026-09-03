@@ -6,7 +6,7 @@ MATLAB counterpart: ``+ndi/+cloud/+internal/formatApiError.m``
 ``.response_body``, but its MESSAGE was ``"API error (HTTP 400)"`` -- so
 anything that printed or logged the exception, which is most things,
 reported a code and dropped the explanation. The server's 400 for a
-missing MATLAB BYOL licence says ``MATLAB_LICENSE_REQUIRED`` and names the
+missing MATLAB BYOL license says ``MATLAB_LICENSE_REQUIRED`` and names the
 release; the user saw ``400``.
 
 MATLAB wrote its version of this after #624, where the error FORMATTER
@@ -80,7 +80,7 @@ class TestTheShapesThatBrokeMatlab:
 
     def test_a_bare_parsed_body(self):
         """The caller may only have the decoded payload."""
-        assert formatApiError({"message": "no licence"}) == "no licence"
+        assert formatApiError({"message": "no license"}) == "no license"
 
     def test_a_bare_string(self):
         assert formatApiError("something went wrong") == "something went wrong"
@@ -120,13 +120,13 @@ class TestTheClientUsesIt:
         failing = response(
             status=400,
             reason="Bad Request",
-            body={"code": "MATLAB_LICENSE_REQUIRED", "message": "no licence for R2024b"},
+            body={"code": "MATLAB_LICENSE_REQUIRED", "message": "no license for R2024b"},
         )
 
         with pytest.raises(CloudAPIError) as caught:
             client._handle_response(failing)
 
-        assert "no licence for R2024b" in str(caught.value)
+        assert "no license for R2024b" in str(caught.value)
         assert caught.value.status_code == 400
         assert caught.value.response_body["code"] == "MATLAB_LICENSE_REQUIRED"
 

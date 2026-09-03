@@ -44,7 +44,7 @@ def safeLocalFilename(file_uid: str) -> tuple[str, bool]:
         (``""``, ``"."`` or ``".."``); callers must skip those rather
         than substitute a name of their own.
 
-    Callers should still assert containment of the joined path as defence
+    Callers should still assert containment of the joined path as defense
     in depth, which is what :func:`_contained_path` does.
     """
     last = re.split(r"[\\/]", str(file_uid))[-1]

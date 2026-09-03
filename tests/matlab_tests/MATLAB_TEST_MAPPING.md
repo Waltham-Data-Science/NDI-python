@@ -224,15 +224,17 @@ All cloud tests are **dual-mode**: mocked by default, live when `NDI_CLOUD_USERN
 
 ---
 
-## Batch 15: Ontology Tests
+## Batch 15: Ontology Tests — moved out of this repository
 
-**Python file:** `tests/matlab_tests/test_ontology.py`
+These tests now live in
+[ndi-ontology-python](https://github.com/Waltham-Data-Science/ndi-ontology-python),
+at `tests/matlab_tests/test_ontology.py`, alongside the implementation they
+cover. Their MATLAB source moved too: `+ontology/TestOntologyLookup.m` is in
+`ndi-ontology-matlab`, not NDI-matlab.
 
-| MATLAB File | Python Class | Key Tests |
-|------------|-------------|-----------|
-| `+ontology/TestOntologyLookup.m` | `TestOntologyResult` | `test_result_creation`, `test_result_bool_empty`, `test_result_to_dict` |
-| `+ontology/TestOntologyLookup.m` | `TestOntologyLookupMocked` | `test_lookup_returns_ontology_result`, `test_lookup_no_colon_returns_empty`, `test_clear_cache_function` |
-| `+ontology/TestOntologyLookup.m` | `TestOntologyLookupLive` | `test_lookup_ncbi_taxonomy`, `test_lookup_cell_ontology` (requires network) |
+What NDI-python still owns is the re-export — that `ndi.ontology` resolves to
+the `ndi_ontology` distribution and shares its state rather than being a
+second copy. That is `tests/test_ontology_reexport.py`.
 
 ---
 

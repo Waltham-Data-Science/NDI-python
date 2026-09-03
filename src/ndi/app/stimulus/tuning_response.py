@@ -1195,7 +1195,6 @@ class ndi_app_stimulus_tuning__response(ndi_app):
 
         individual: list[np.ndarray] = []
         control_individual: list[np.ndarray] = []
-        response_individual: list[np.ndarray] = []
         response_mean: list[float] = []
         response_stddev: list[float] = []
         response_stderr: list[float] = []
@@ -1213,7 +1212,6 @@ class ndi_app_stimulus_tuning__response(ndi_app):
             response_mean.append(_mean_magnitude(difference))
             response_stddev.append(_nanstd(difference))
             response_stderr.append(_nanstderr(difference))
-            response_individual.append(_real_or_magnitude(difference))
 
         blank = control_individual[0] if control_individual else np.asarray([])
         blank_flat = np.asarray(blank, dtype=float).ravel()
@@ -1240,7 +1238,28 @@ class ndi_app_stimulus_tuning__response(ndi_app):
                     np.asarray(response_stderr, dtype=float),
                 ]
             ),
-            "ind": response_individual,
+            # RAW individual responses, not the control-subtracted ones, as in
+            # MATLAB (tuning_response.m:834 sets resp.ind = ind_real).
+            #
+            # The distinction matters because these can be complex. An F1 or
+            # F2 response carries a phase that depends on when the stimulus
+            # happened to start -- see the note at the top of this module --
+            # and the control is measured in a different window, so the
+            # relative phase between a response and its control is arbitrary.
+            # Complex subtraction is vector subtraction, so that arbitrary
+            # phase moves the answer: for a signal of magnitude 10 against a
+            # control of 3, abs(a - b) runs from 7 to 13 across the phase
+            # range, where abs(a) - abs(b) is 7 throughout.
+            #
+            # Nothing here needs a difference. The control individuals are
+            # returned alongside as `blankind`, so a caller comparing the two
+            # groups -- which is what neural_response_significance does --
+            # compares magnitudes, and that is well defined.
+            #
+            # `curve` above is still built from the subtracted means, again
+            # as in MATLAB: a tuning curve is about response above baseline,
+            # and its mean is taken before the magnitude is.
+            "ind": individual,
             "blankind": blank,
             "spontind": blank,
             "blankresp": blank_response,

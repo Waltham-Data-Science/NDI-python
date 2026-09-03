@@ -9,7 +9,7 @@ rebuilds) ensembles for the probes you select, and raster-plots one epoch of
 one ensemble.
 
 Ensembles produced here are what ``ndi.fun.export.blech_clust`` -- and
-MATLAB's ``ndi.gui.app.katzExporter``, not ported yet -- read when exporting.
+:mod:`ndi.gui.app.katz_exporter`, the app over it -- read when exporting.
 
 WHAT THIS APP CONSUMES, AND WHAT DOES NOT YET PRODUCE IT
 An ensemble is built from the SPIKING-NEURON elements recorded on a probe:

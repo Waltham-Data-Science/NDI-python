@@ -587,7 +587,7 @@ def newDataset(
 # ---------------------------------------------------------------------------
 
 #: The pipeline helloMatlab runs. Its verify stage boots an EC2 instance,
-#: runs ``matlab -batch "ver"`` there under the caller's BYOL licence, and
+#: runs ``matlab -batch "ver"`` there under the caller's BYOL license, and
 #: writes the License Manager's own words back into the session document.
 HELLO_MATLAB_PIPELINE_ID = "hello-matlab-v1"
 
@@ -665,7 +665,7 @@ def _start_failure_message(exc: Exception) -> str:
     """Say why POST /compute/start refused, in the server's own terms.
 
     The two refusals a caller will actually hit are
-    ``MATLAB_LICENSE_REQUIRED`` (no BYOL licence registered for the
+    ``MATLAB_LICENSE_REQUIRED`` (no BYOL license registered for the
     release the pipeline asks for) and ``MATLAB_LICENSE_DECRYPT_FAILED``.
     Both arrive as an HTTP 400 whose body names the code and the required
     release, and both are fixed by the caller rather than by retrying --
@@ -705,7 +705,7 @@ def helloMatlab(
     ``GET /compute/{sessionId}`` until its verify stage reaches a
     terminal state, and returns the message MATLAB wrote back from the
     EC2 instance.  This is the end-to-end check: it exercises the
-    licence registration, the pipeline, the instance, and the status
+    license registration, the pipeline, the instance, and the status
     handler that carries MATLAB's answer home.
 
     Args:
@@ -725,7 +725,7 @@ def helloMatlab(
         API refused to start a session at all.  ``sessionDoc`` is the
         final session document, or the start-call error payload.
 
-    Prerequisite: a registered BYOL licence matching the pipeline's
+    Prerequisite: a registered BYOL license matching the pipeline's
     ``requiresMatlabRelease``.  Register one with
     :func:`ndi.cloud.api.users.allocateMatlabLicenseMac` and
     :func:`ndi.cloud.api.users.setMatlabLicense`.  Without one the API
