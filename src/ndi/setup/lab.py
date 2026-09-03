@@ -226,7 +226,5 @@ def lab(session, lab_name: str, force_update: bool = False) -> None:
     from ..time.syncrule import ndi_time_syncrule_filematch
     from .sync import add_sync_rules
 
-    session.syncgraph_addrule(
-        ndi_time_syncrule_filematch({"number_fullpath_matches": 2})
-    )
+    session.syncgraph_addrule(ndi_time_syncrule_filematch({"number_fullpath_matches": 2}))
     add_sync_rules(session, lab_name, force_update=force_update)

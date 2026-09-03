@@ -32,7 +32,6 @@ from ndi.time.syncrule import (
     resolve_syncrule_class,
 )
 
-
 # ---------------------------------------------------------------------------
 # Issue 93.4 — every bundled schema parses
 # ---------------------------------------------------------------------------
@@ -42,18 +41,46 @@ def _schema_dir() -> Path:
     return Path(ndi.ndi_common.__path__[0]) / "schema_documents"
 
 
+#: Upstream calc schemas that ``ndi_install.py`` copies in but that are
+#: broken at the upstream tag AND at head, so we cannot fix them from this
+#: repository. Kept in sync with ``tests/test_did_integration.py``'s
+#: ``KNOWN_BAD_UPSTREAM_JSON`` and named as ``schema_documents``-relative
+#: POSIX paths — see the quarantine comment there.
+_KNOWN_BAD_UPSTREAM_SCHEMAS = {
+    "calc/stimloopsplitter_calc_schema.json",
+}
+
+
 def test_all_bundled_schemas_parse():
-    """Tripwire so a third unparseable schema cannot appear silently."""
+    """Tripwire so a third unparseable schema cannot appear silently.
+
+    Files already tracked as broken upstream in
+    ``tests/test_did_integration.py`` are quarantined; if one of them ever
+    starts parsing, the second assertion below fails and this list must be
+    trimmed so the quarantine cannot rot.
+    """
+    root = _schema_dir()
     failures: list[tuple[Path, str]] = []
-    for path in sorted(_schema_dir().rglob("*.json")):
+    unexpected_parses: list[str] = []
+    for path in sorted(root.rglob("*.json")):
+        rel = path.relative_to(root).as_posix()
         try:
             with open(path, encoding="utf-8") as f:
                 json.load(f)
-        except (json.JSONDecodeError, OSError) as exc:  # pragma: no cover
-            failures.append((path, str(exc)))
-    assert not failures, (
-        "the following bundled schemas failed to parse:\n"
-        + "\n".join(f"  {p}: {msg}" for p, msg in failures)
+        except (json.JSONDecodeError, OSError) as exc:
+            if rel not in _KNOWN_BAD_UPSTREAM_SCHEMAS:
+                failures.append((path, str(exc)))
+        else:
+            if rel in _KNOWN_BAD_UPSTREAM_SCHEMAS:
+                unexpected_parses.append(rel)
+
+    assert not failures, "the following bundled schemas failed to parse:\n" + "\n".join(
+        f"  {p}: {msg}" for p, msg in failures
+    )
+    assert not unexpected_parses, (
+        "the following schemas are quarantined as unparseable but now parse "
+        "— drop them from _KNOWN_BAD_UPSTREAM_SCHEMAS:\n"
+        + "\n".join(f"  {p}" for p in unexpected_parses)
     )
 
 
@@ -198,7 +225,7 @@ class TestDeMorganAndComposite:
 
         left_all = all(leaf_matches(leaf) for leaf in top["param1"])
         right_all = all(leaf_matches(leaf) for leaf in top["param2"])
-        assert (left_all or right_all), (
+        assert left_all or right_all, (
             "regression: an OR of negated conjuncts should keep other "
             "probes; got left=%s right=%s" % (left_all, right_all)
         )
@@ -392,9 +419,9 @@ def test_setup_lab_populates_metadata_reader_file_parameter():
     narendra_readers = [
         d for d in _metadata_reader_docs(session) if d.props["base.name"] == "narendra_intan"
     ]
-    assert len(narendra_readers) == len(tsv_files), (
-        f"expected 3 metadata readers for narendra_intan, got {len(narendra_readers)}"
-    )
+    assert len(narendra_readers) == len(
+        tsv_files
+    ), f"expected 3 metadata readers for narendra_intan, got {len(narendra_readers)}"
 
     file_params_seen = sorted(
         r.props["daqmetadatareader.tab_separated_file_parameter"] for r in narendra_readers

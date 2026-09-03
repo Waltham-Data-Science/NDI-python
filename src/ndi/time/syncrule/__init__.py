@@ -50,6 +50,4 @@ def resolve_syncrule_class(name: str) -> type[ndi_time_syncrule]:
     if name in _MATLAB_TO_CLASS:
         return _MATLAB_TO_CLASS[name]
     known = sorted(_MATLAB_TO_CLASS)
-    raise ValueError(
-        f"Unknown syncrule class {name!r}; expected one of {known}"
-    )
+    raise ValueError(f"Unknown syncrule class {name!r}; expected one of {known}")
