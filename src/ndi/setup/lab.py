@@ -48,7 +48,7 @@ def _find_daq_configs(lab_name: str) -> list[dict]:
     return configs
 
 
-def lab(session, lab_name: str) -> None:
+def lab(session, lab_name: str, force_update: bool = False) -> None:
     """Add DAQ system documents to a session based on lab JSON configs.
 
     For each JSON config in ``ndi_common/daq_systems/<lab_name>/``, creates:
@@ -58,6 +58,11 @@ def lab(session, lab_name: str) -> None:
     - Optionally a ``daq/daqmetadatareader`` document
     - A ``daq/daqsystem`` document linking them together
 
+    Also installs the default ``ndi.time.syncrule.filematch`` rule (with
+    ``number_fullpath_matches = 2``, mirroring MATLAB ``+setup/lab.m``) into
+    the session's syncgraph, followed by any lab-specific sync rules defined
+    under ``ndi_common/sync_rules/<lab_name>/``.
+
     Parameters
     ----------
     session : ndi.session.session_base
@@ -65,6 +70,8 @@ def lab(session, lab_name: str) -> None:
     lab_name : str
         Name of the lab directory under ``ndi_common/daq_systems/``
         (e.g. ``"vhlab"``, ``"marderlab"``, ``"kjnielsenlab"``).
+    force_update : bool
+        Passed through to ``ndi.setup.sync.add_sync_rules``.
     """
     configs = _find_daq_configs(lab_name)
 
@@ -160,21 +167,64 @@ def lab(session, lab_name: str) -> None:
         )
         daq_doc = daq_doc.set_dependency_value("daqreader_id", dr_doc.id, error_if_not_found=False)
 
-        # Create daqmetadatareader document if configured
+        # Create daqmetadatareader documents if configured. Mirrors MATLAB
+        # +setup/@DaqSystemConfiguration/createMetadataReader: one reader per
+        # MetadataReaderFileParameters entry (a single class is shared across
+        # every entry; N classes must pair 1:1 with N file parameters), and
+        # the file parameter is written into the document as
+        # ``daqmetadatareader.tab_separated_file_parameter`` so the
+        # downstream metadata reader can find its file(s) in the epoch.
         if metadata_reader_class and metadata_reader_class != []:
-            mr_class = (
-                metadata_reader_class
+            mr_class_list = (
+                [metadata_reader_class]
                 if isinstance(metadata_reader_class, str)
-                else metadata_reader_class[0]
+                else list(metadata_reader_class)
             )
-            mr_doc = session.newdocument(
-                "daq/daqmetadatareader",
-                **{
-                    "base.name": name,
-                    "daqmetadatareader.ndi_daqmetadatareader_class": mr_class,
-                },
-            )
-            session.database_add(mr_doc)
-            daq_doc = daq_doc.add_dependency_value_n("daqmetadatareader_id", mr_doc.id)
+
+            mr_file_params_raw = config.get("MetadataReaderFileParameters", "")
+            if isinstance(mr_file_params_raw, str):
+                mr_file_params_list = [mr_file_params_raw] if mr_file_params_raw else []
+            else:
+                mr_file_params_list = list(mr_file_params_raw)
+
+            if not mr_file_params_list:
+                if len(mr_class_list) > 1:
+                    raise ValueError(
+                        f"{name}: {len(mr_class_list)} MetadataReaderClass entries "
+                        "but no MetadataReaderFileParameters — cannot pair them."
+                    )
+                pairs = [(mr_class_list[0], "")]
+            elif len(mr_class_list) == 1:
+                pairs = [(mr_class_list[0], fp) for fp in mr_file_params_list]
+            elif len(mr_class_list) == len(mr_file_params_list):
+                pairs = list(zip(mr_class_list, mr_file_params_list))
+            else:
+                raise ValueError(
+                    f"{name}: {len(mr_class_list)} MetadataReaderClass entries do not "
+                    f"match {len(mr_file_params_list)} MetadataReaderFileParameters entries; "
+                    "provide one class (shared across every file parameter) or one class "
+                    "per file parameter."
+                )
+
+            for mr_class, mr_fp in pairs:
+                mr_doc = session.newdocument(
+                    "daq/daqmetadatareader",
+                    **{
+                        "base.name": name,
+                        "daqmetadatareader.ndi_daqmetadatareader_class": mr_class,
+                        "daqmetadatareader.tab_separated_file_parameter": mr_fp,
+                    },
+                )
+                session.database_add(mr_doc)
+                daq_doc = daq_doc.add_dependency_value_n("daqmetadatareader_id", mr_doc.id)
 
         session.database_add(daq_doc)
+
+    # MATLAB +setup/lab.m installs a default filematch(2) syncrule and then
+    # any lab-specific rules from ndi_common/sync_rules/<lab_name>. Do the
+    # same here so Python labs come up with the same syncgraph as MATLAB.
+    from ..time.syncrule import ndi_time_syncrule_filematch
+    from .sync import add_sync_rules
+
+    session.syncgraph_addrule(ndi_time_syncrule_filematch({"number_fullpath_matches": 2}))
+    add_sync_rules(session, lab_name, force_update=force_update)
