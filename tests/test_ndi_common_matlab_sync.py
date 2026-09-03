@@ -93,7 +93,6 @@ MATLAB_ONLY_EXPECTED: frozenset[str] = frozenset(
 MATLAB_ONLY_PREFIXES: tuple[str, ...] = (
     "example_app_sessions/",
     "example_datasets/oldDataset/",
-    "schema_documents/apps/calculations/",
 )
 
 
@@ -114,19 +113,6 @@ PYTHON_ONLY_EXPECTED: frozenset[str] = frozenset(
 # is not silent. When one of these converges, the test asks the caller to
 # remove it from this map -- so the map itself never grows stale.
 EXPECTED_DIVERGENCES: dict[str, str] = {
-    # MATLAB refactored the calculator base class and bumped simple_calc/
-    # tuningcurve_calc to v2 schemas that live under a different path
-    # (apps/calculations/) than the docs (apps/calculators/). Adopting that
-    # refactor is a separate coordination item; keep Python on v1 for now.
-    "database_documents/apps/calculators/tuningcurve_calc.json": "v1 vs v2 refactor",
-    "database_documents/apps/calculators/simple_calc.json": "v1 vs v2 refactor",
-    # probe/probetype2object.json: MATLAB renamed classname 'ndi_probe.timage'
-    # to 'ndi.probe.image', renamed '2-photon-imaging' to 'two-photon-imaging'
-    # etc., and added an 'event' stimulator entry. Adopting these renames is
-    # a coordinated change (existing Python datasets reference the current
-    # names); the extra 'event' entry is safe to add on its own but is left
-    # with the rename cluster so the whole file lands together.
-    "probe/probetype2object.json": "classname/type renames + extra entry",
     # daq_systems/rayolab/rayo_stim.json: MATLAB widened the
     # MetadataReaderFileParameters regex from `#_\d{6}_...` (matches only a
     # literal '#') to `.*_\d{6}_...` (matches any prefix). Likely a bug fix
