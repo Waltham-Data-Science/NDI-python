@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`ndi_install.py` no longer times out installing on a slow network**
+  (NDI-python#165). The editable install was capped at 120 seconds while
+  taking about 80 on a healthy machine, and `pip install -e .` resolves six
+  git-URL dependencies from `pyproject.toml`, so a slow clone crossed the line
+  and failed the install outright. In CI that meant random red test jobs that
+  had never run a test.
+
+  Network-bound steps -- the clone, the pull, and both pip installs -- now
+  share a `NETWORK_TIMEOUT` of 600 seconds; purely local git commands share a
+  `LOCAL_TIMEOUT` of 30. Naming them is the point: it makes "does this talk to
+  the network?" a question the next author answers rather than skips, and a
+  test enforces that every installer subprocess uses one of the two or is a
+  literal listed with a reason.
+
 ### Changed
 
 - **`ndi.element.epochtable()` now returns registered epochs alphabetized by

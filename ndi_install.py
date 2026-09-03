@@ -66,6 +66,27 @@ DEFAULT_TOOLS_DIR = Path.home() / ".ndi" / "tools"
 
 PTH_FILENAME = "ndi-deps.pth"
 
+# Seconds allowed for a subprocess that talks to the NETWORK: a git clone, a
+# git pull, or the editable install (which resolves six git-URL dependencies
+# from pyproject.toml, so pip clones as well as downloads).
+#
+# It was 120, which was not enough. The editable install alone takes ~80 s on
+# a healthy GitHub runner, so a slow clone crossed the line often enough to
+# fail CI at random -- in one run, on one commit, test (3.10) installed in
+# 80 s while test (3.11) and test (3.12) both timed out. The failure was
+# especially unhelpful because it happened during install, so no test ran and
+# the job looked like a test failure. See NDI-python#165.
+#
+# The point of a bound here is to stop a genuinely hung command from wedging
+# a job forever, not to police how fast a network is; the CI job's own
+# timeout is the real backstop. So this is generous on purpose.
+NETWORK_TIMEOUT = 600
+
+# Seconds allowed for a purely LOCAL subprocess -- git status, git stash.
+# These touch the working tree and nothing else, so they stay tight: a local
+# git command that takes half a minute is stuck, not slow.
+LOCAL_TIMEOUT = 30
+
 # Additional pip dependencies not covered by pyproject.toml's [project.optional-dependencies].
 PIP_DEPS = [
     "scipy>=1.9.0",
@@ -186,7 +207,7 @@ def git_clone(repo_url: str, target_dir: Path, branch: str) -> bool:
         ],
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=NETWORK_TIMEOUT,
     )
     if result.returncode != 0:
         fail(f"git clone failed: {result.stderr.strip()}")
@@ -200,7 +221,7 @@ def git_has_changes(repo_dir: Path) -> bool:
         ["git", "-C", str(repo_dir), "status", "--porcelain"],
         capture_output=True,
         text=True,
-        timeout=10,
+        timeout=LOCAL_TIMEOUT,
     )
     return bool(result.stdout.strip())
 
@@ -216,7 +237,7 @@ def git_update(repo_dir: Path) -> bool:
             ["git", "-C", str(repo_dir), "stash"],
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=LOCAL_TIMEOUT,
         )
         if result.returncode == 0:
             stashed = True
@@ -229,7 +250,7 @@ def git_update(repo_dir: Path) -> bool:
         ["git", "-C", str(repo_dir), "pull", "--ff-only"],
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=NETWORK_TIMEOUT,
     )
     if result.returncode != 0:
         warn(f"git pull failed: {result.stderr.strip()}")
@@ -239,7 +260,7 @@ def git_update(repo_dir: Path) -> bool:
                 ["git", "-C", str(repo_dir), "stash", "pop"],
                 capture_output=True,
                 text=True,
-                timeout=30,
+                timeout=LOCAL_TIMEOUT,
             )
         return False
 
@@ -252,7 +273,7 @@ def git_update(repo_dir: Path) -> bool:
             ["git", "-C", str(repo_dir), "stash", "pop"],
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=LOCAL_TIMEOUT,
         )
         if pop_result.returncode != 0:
             warn("Could not restore stashed changes (may need manual merge)")
@@ -295,6 +316,9 @@ def pip_install_dependency(name: str, repo_dir: Path) -> bool:
     thing but could never be published to an index.
     """
     info(f"Building and installing {name}...")
+    # Not NETWORK_TIMEOUT: this one COMPILES a C++ library rather than merely
+    # fetching, so its cost is the machine's, not the network's, and half an
+    # hour is the bound that suits it.
     result = subprocess.run(
         [sys.executable, "-m", "pip", "install", str(repo_dir)],
         capture_output=True,
@@ -420,7 +444,7 @@ def pip_install(packages: list[str], extra_args: list[str] | None = None) -> boo
     """Run pip install with the given packages."""
     cmd = [sys.executable, "-m", "pip", "install", "--quiet"] + (extra_args or []) + packages
     detail(f"pip install {' '.join(packages[:3])}{'...' if len(packages) > 3 else ''}")
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=NETWORK_TIMEOUT)
     if result.returncode != 0:
         # Show stderr but filter out the common "already satisfied" noise
         err = result.stderr.strip()
@@ -453,7 +477,7 @@ def install_ndi_and_deps(ndi_root: Path, include_dev: bool = False) -> bool:
         ],
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=NETWORK_TIMEOUT,
         cwd=str(ndi_root),
     )
     if result.returncode != 0:
