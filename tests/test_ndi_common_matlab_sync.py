@@ -114,21 +114,10 @@ PYTHON_ONLY_EXPECTED: frozenset[str] = frozenset(
 # is not silent. When one of these converges, the test asks the caller to
 # remove it from this map -- so the map itself never grows stale.
 EXPECTED_DIVERGENCES: dict[str, str] = {
-    # EMPTY ontology ids: Python uses 8-digit ids (EMPTY:00000090); MATLAB
-    # switched to 7-digit ids (EMPTY:0000002). These are documentation
-    # strings inside schema files and must match the id format the Python
-    # ontology package actually resolves.
-    "schema_documents/element/distance_metadata_schema.json": "EMPTY id format",
-    "schema_documents/data/ontologyLabel_schema.json": "EMPTY id format",
-    "schema_documents/data/ontologyImage_schema.json": "EMPTY id format",
-    "schema_documents/data/ontologyTableRow_schema.json": "EMPTY id format + depends_on",
-    "schema_documents/data/generic_file_schema.json": "EMPTY id format",
-    "schema_documents/data/imageStack_schema.json": "EMPTY id format",
     # MATLAB refactored the calculator base class and bumped simple_calc/
     # tuningcurve_calc to v2 schemas that live under a different path
     # (apps/calculations/) than the docs (apps/calculators/). Adopting that
     # refactor is a separate coordination item; keep Python on v1 for now.
-    "database_documents/data/ontologyTableRow.json": "depends_on not yet added",
     "database_documents/apps/calculators/tuningcurve_calc.json": "v1 vs v2 refactor",
     "database_documents/apps/calculators/simple_calc.json": "v1 vs v2 refactor",
     # probe/probetype2object.json: MATLAB renamed classname 'ndi_probe.timage'
