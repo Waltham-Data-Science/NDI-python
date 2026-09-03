@@ -282,9 +282,7 @@ def _validate_properties(
         # Do this before the general None-skip so a null slips through only
         # for non-matrix types.
         if prop_type == "matrix" and value is None:
-            errors.append(
-                f"{class_name}.{prop_name}: matrix field must be [] rather than null"
-            )
+            errors.append(f"{class_name}.{prop_name}: matrix field must be [] rather than null")
             continue
 
         # Allow None/empty for optional fields

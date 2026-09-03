@@ -317,15 +317,11 @@ class TestValidateMatrixInvariant:
 
     def test_null_matrix_is_rejected(self, schema_with_matrix):
         """null in place of a matrix must be caught: schema says [], not null."""
-        errors = _validate_properties(
-            {"geom": {"coords": None}}, "geom", schema_with_matrix
-        )
+        errors = _validate_properties({"geom": {"coords": None}}, "geom", schema_with_matrix)
         assert any("matrix field must be []" in e for e in errors)
 
     def test_empty_matrix_is_accepted(self, schema_with_matrix):
-        errors = _validate_properties(
-            {"geom": {"coords": []}}, "geom", schema_with_matrix
-        )
+        errors = _validate_properties({"geom": {"coords": []}}, "geom", schema_with_matrix)
         assert errors == []
 
     def test_rectangular_matrix_is_accepted(self, schema_with_matrix):

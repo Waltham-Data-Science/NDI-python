@@ -154,11 +154,7 @@ EXPECTED_DIVERGENCES: dict[str, str] = {
 
 def _list_files(root: Path) -> set[str]:
     """Return every file under ``root``, as POSIX relative paths."""
-    return {
-        str(p.relative_to(root).as_posix())
-        for p in root.rglob("*")
-        if p.is_file()
-    }
+    return {str(p.relative_to(root).as_posix()) for p in root.rglob("*") if p.is_file()}
 
 
 def _matches_prefix(path: str, prefixes: tuple[str, ...]) -> bool:
@@ -194,8 +190,7 @@ def test_no_undeclared_files_missing_in_python(python_common, matlab_common):
     assert not unexpected, (
         "The following files exist in NDI-matlab/ndi_common but not in "
         "NDI-python. Either vendor them, or add them to MATLAB_ONLY_EXPECTED "
-        "/ MATLAB_ONLY_PREFIXES with a reason:\n  "
-        + "\n  ".join(sorted(unexpected))
+        "/ MATLAB_ONLY_PREFIXES with a reason:\n  " + "\n  ".join(sorted(unexpected))
     )
 
 
@@ -225,8 +220,7 @@ def test_no_undeclared_byte_divergences(python_common, matlab_common):
     assert not unexpected, (
         "The following files differ between NDI-python and NDI-matlab and "
         "are NOT on the EXPECTED_DIVERGENCES list. Re-sync them, or add "
-        "each to EXPECTED_DIVERGENCES with a reason:\n  "
-        + "\n  ".join(sorted(unexpected))
+        "each to EXPECTED_DIVERGENCES with a reason:\n  " + "\n  ".join(sorted(unexpected))
     )
 
 
@@ -247,6 +241,5 @@ def test_declared_divergences_still_diverge(python_common, matlab_common):
             stale.append(rel)
     assert not stale, (
         "The following files are on EXPECTED_DIVERGENCES but now match "
-        "byte-for-byte. Remove them from the list:\n  "
-        + "\n  ".join(sorted(stale))
+        "byte-for-byte. Remove them from the list:\n  " + "\n  ".join(sorted(stale))
     )
