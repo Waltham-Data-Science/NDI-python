@@ -167,3 +167,25 @@ classes:
           Ported 2026-08-29 because DID-python's add_docs began validating
           documents against their schemas; before that an unregistered
           placeholder merely made superclass lookups miss silently.
+
+# =========================================================================
+# Not-yet-ported MATLAB functions
+# =========================================================================
+not_yet_ported:
+
+  - name: systemCurlEnvPrefix
+    matlab_path: "+ndi/+common/systemCurlEnvPrefix.m"
+    matlab_last_sync_hash: "74db0c8c"
+    status: not_applicable
+    decision_log: >
+      Returns a shell prefix that resets LD_LIBRARY_PATH so a curl launched
+      with SYSTEM() loads the OS libraries rather than the ones MATLAB
+      bundles. The whole problem is MATLAB-specific: MATLAB prepends its
+      own library directories to LD_LIBRARY_PATH and child processes
+      inherit that, so after a MATLAB upgrade the system curl can fail with
+      "version `CURL_OPENSSL_4' not found".
+      Python has no such shadowing and, more to the point, never shells out
+      to curl -- every HTTP call goes through CloudClient and requests, in
+      process. There is nothing here to prefix. If Python ever does invoke
+      an external transfer binary, this entry is the reason to look at what
+      MATLAB learned first.

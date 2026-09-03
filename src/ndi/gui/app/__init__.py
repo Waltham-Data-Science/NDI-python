@@ -9,22 +9,27 @@ per-session "Apps" menu -- no registration step, and no list of apps
 anywhere for it to be added to.
 
 The package is also one of the two scanned by default (with ``ndi.app``),
-so an app dropped in here is discovered by being here. Five of MATLAB's
-eleven have landed --
-:class:`~ndi.gui.app.electrode_data_export.ElectrodeDataExport`,
-:class:`~ndi.gui.app.ensemble_maker.ensembleMaker`,
-:class:`~ndi.gui.app.spike_sorter_importer.spikeSorterImporter`,
-:class:`~ndi.gui.app.stimulus_decoder.stimulusDecoder` and
-:class:`~ndi.gui.app.stimulus_response.stimulusResponse` -- and each
-reaches the Apps menu by living in this package and by nothing else. Two
-pairs of them close a loop: the importer creates the spiking-neuron
-elements that the ensemble maker builds ensembles from, and the two
-stimulus apps are the stimulus pipeline's two halves -- one writes what
-was shown, the other measures how an element answered it. The remaining
-six -- pyraview, the other spike sorters, the other exporters -- are each
-their own piece of work, some still waiting on unported subsystems
-(``ndi.cpipeline`` for the pipeline editor, the sorters' own toolboxes). A
-user can extend the menu meanwhile by naming their own packages in the
+so an app dropped in here is discovered by being here. Nine of MATLAB's
+eleven have landed -- ``ElectrodeDataExport``, ``ElectrodeMap``,
+``ensembleMaker``, ``katzExporter``, ``pyraview``,
+``spikeSorterImporter``, ``stimulusDecoder``, ``stimulusResponse`` and
+``vhNDISpikeSorter`` -- and each reaches the Apps menu by living in this
+package and by nothing else. Several close loops with each other: the
+importer creates the spiking-neuron elements the ensemble maker builds
+ensembles from, the two stimulus apps are the stimulus pipeline's halves
+(one writes what was shown, the other measures how an element answered),
+and the electrode map assigns the geometry the data export writes into a
+sorter's channel map.
+
+The two still out are ``kiasort`` and ``pipelineEditor``, and both are
+windows over something Python cannot reach: KIASORT is a MATLAB toolbox
+(its import side IS ported -- see
+:mod:`ndi.fun.probe.import_.kiasort`), and ``ndi.cpipeline`` is not ported.
+``vhNDISpikeSorter`` is the same shape and landed anyway, because MATLAB
+writes it as an availability check that explains itself when the sorter is
+absent -- so the port is honest about the absence rather than hiding it.
+
+A user can extend the menu by naming their own packages in the
 ``GUI.Navigator.SessionAppPackages`` preference, which is exactly the
 extension path MATLAB offers.
 
@@ -44,6 +49,7 @@ from .session_app import SessionApp, sessionApp
 from .spike_sorter_importer import spikeSorterImporter
 from .stimulus_decoder import stimulusDecoder
 from .stimulus_response import stimulusResponse
+from .vh_ndi_spike_sorter import vhNDISpikeSorter
 
 __all__ = [
     "ElectrodeDataExport",
@@ -55,4 +61,5 @@ __all__ = [
     "spikeSorterImporter",
     "stimulusDecoder",
     "stimulusResponse",
+    "vhNDISpikeSorter",
 ]

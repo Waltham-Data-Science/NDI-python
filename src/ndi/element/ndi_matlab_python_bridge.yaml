@@ -266,6 +266,25 @@ classes:
           Exact match. If direct=True, uses underlying_element's
           epochs. If direct=False, loads registered epochs from
           the database.
+          ORDERING (NDI-python#162): REGISTERED epochs are returned
+          ALPHABETIZED by epoch_id, and epoch_number follows the sorted
+          position. They previously came back in the order database_search
+          yielded their documents -- stable for a given database, but neither
+          insertion order nor anything a caller could predict. Sorting is
+          parity, not a Python convention: MATLAB's buildepochtable maps added
+          epochs with intersect({et_added.epoch_id}, {underlying_et.epoch_id})
+          (element.m:276), and intersect returns its output sorted.
+          The sort is plain codepoint order on the raw id -- NO case folding
+          and NO locale-aware collation, either of which would diverge from
+          intersect on an epoch_id carrying a capital letter. epoch_10
+          therefore precedes epoch_2, the ids not being zero-padded.
+          DIRECT epochs are deliberately NOT reordered: they ARE the
+          underlying element's, paired by position, exactly as MATLAB's direct
+          branch pairs them with ib = 1:numel(underlying_et). Re-sorting would
+          break that pairing.
+          This order is the contract ndi.fun.probe.export.binary concatenates
+          in and ndi.fun.probe.import_.kilosort maps sample indices back
+          through, so the two languages now agree on it.
 
       - name: epochsetname
         input_arguments: []
@@ -420,3 +439,52 @@ classes:
       MATLAB's nargout>=1 deferral becomes the explicit build_objects flag,
       Python having no nargout. The progress bar is optional in both
       languages and degrades quietly with no display.
+
+  # =========================================================================
+  # ndi.element.ensemble
+  # =========================================================================
+  - name: ensemble
+    type: class
+    matlab_path: "+ndi/+element/ensemble.m"
+    matlab_last_sync_hash: "0e2caa09"
+    python_path: "ndi/element/ensemble.py"
+    python_class: "ndi_element_ensemble"
+    decision_log: >
+      Ported alongside ndi.fun.ensemble and the ensemble document; this
+      entry was omitted at the time and is added here (#154). Subclasses
+      ndi_element_timeseries on both sides, so the timeseries contract
+      (readtimeseries, samplerate, epoch handling) is inherited rather than
+      restated. Name matches MATLAB exactly.
+
+# =========================================================================
+# Not-yet-ported MATLAB functions and classes
+# =========================================================================
+not_yet_ported:
+
+  - name: image
+    matlab_path: "+ndi/+element/image.m"
+    matlab_last_sync_hash: "2e6f3c35"
+    status: not_yet_ported
+    decision_log: >
+      The imaging counterpart of ndi.element.timeseries: exposes
+      readframes / readimages, returning frames with each frame's time
+      through the epoch clock and syncgraph, and addressing frames by index
+      on a clockless ('no_time') stack.
+      Half of the same gap as ndi.probe.image, recorded in src/ndi/probe/.
+      Python has the daq layer under both -- ndi.daq.system.image and
+      ndi.daq.reader.image, recorded in src/ndi/daq/ -- so what is missing
+      is the element/probe pair on top, not the acquisition path. They land
+      together or not at all: an imaging dataset needs the element to read
+      frames and the probe to have produced it.
+
+  - name: oneepoch_bkup
+    matlab_path: "+ndi/+element/oneepoch_bkup.m"
+    matlab_last_sync_hash: "0e2caa09"
+    status: not_applicable
+    decision_log: >
+      A superseded copy of oneepoch.m, sitting beside the live one in the
+      MATLAB tree (the _bkup suffix is the whole story). oneepoch itself IS
+      ported, as ndi.element.functions.oneepoch, recorded above. Porting a
+      backup would give Python two spellings of one function and no way for
+      a reader to tell which is current. Recorded so the file stops looking
+      like an unexamined gap; if MATLAB deletes it, delete this entry.

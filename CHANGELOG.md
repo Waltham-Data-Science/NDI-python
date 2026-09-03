@@ -4,6 +4,49 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- **`ndi_install.py` no longer times out installing on a slow network**
+  (NDI-python#165). The editable install was capped at 120 seconds while
+  taking about 80 on a healthy machine, and `pip install -e .` resolves six
+  git-URL dependencies from `pyproject.toml`, so a slow clone crossed the line
+  and failed the install outright. In CI that meant random red test jobs that
+  had never run a test.
+
+  Network-bound steps -- the clone, the pull, and both pip installs -- now
+  share a `NETWORK_TIMEOUT` of 600 seconds; purely local git commands share a
+  `LOCAL_TIMEOUT` of 30. Naming them is the point: it makes "does this talk to
+  the network?" a question the next author answers rather than skips, and a
+  test enforces that every installer subprocess uses one of the two or is a
+  literal listed with a reason.
+
+### Changed
+
+- **`ndi.element.epochtable()` now returns registered epochs alphabetized by
+  `epoch_id`** (NDI-python#162). They previously came back in the database's
+  natural row order, which was stable for a given database but was neither
+  insertion order nor anything a caller could predict. Sorting matches
+  MATLAB, whose `ndi.element/buildepochtable` already orders them through
+  `intersect`. The order is plain codepoint order on the raw id, so
+  `epoch_10` precedes `epoch_2` — the ids are not zero-padded.
+
+  **This changes the epoch order an existing database reports.** Two
+  consequences worth knowing:
+
+  - `ndi.fun.probe.export.binary` concatenates a probe's epochs in
+    `epochtable()` order, and `ndi.fun.probe.import_.kilosort` maps spike
+    sample indices back through it. A binary exported BEFORE this change does
+    not necessarily match one imported after — re-export before importing a
+    sort made against an older binary.
+  - `epoch_number` is assigned from the sorted position, so an epoch's number
+    can differ from what an older run reported. Code pairing epochs by number
+    rather than by `epoch_id` should be checked.
+
+  Epochs of a *direct* element are unaffected: they are the underlying
+  element's, paired by position, and are deliberately left in that order.
+
 ## [0.1.0] - 2026-02-07
 
 ### Added
