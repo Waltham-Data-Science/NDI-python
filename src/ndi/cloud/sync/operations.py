@@ -34,18 +34,36 @@ _DOC_DIR = ".ndi" / Path("documents")
 def _save_downloaded_docs(
     ds_path: Path,
     docs: list[dict[str, Any]],
-) -> list[str]:
-    """Save downloaded document JSONs to ``<dataset>/.ndi/documents/``."""
+) -> tuple[list[str], list[str]]:
+    """Save downloaded document JSONs to ``<dataset>/.ndi/documents/``.
+
+    Returns ``(saved, unsaved)`` -- the NDI IDs actually written, and a
+    best-effort identifier for every document the cloud returned that could
+    not be stored because it carried no usable ID.
+
+    ``unsaved`` exists because these documents are otherwise invisible. They
+    do not reach ``failed`` upstream: ``downloadNdiDocuments`` decides what
+    failed by whether a requested document's *api* ID came back, so one that
+    arrives with a good ``_id`` but no ``ndiId`` counts as downloaded and is
+    then discarded here. Dropping it silently makes the report claim a
+    download that did not happen.
+    """
     doc_dir = ds_path / _DOC_DIR
     doc_dir.mkdir(parents=True, exist_ok=True)
     saved: list[str] = []
-    for doc in docs:
-        ndi_id = doc.get("ndiId", doc.get("id", ""))
+    unsaved: list[str] = []
+    for position, doc in enumerate(docs):
+        # Not doc.get("ndiId", doc.get("id", "")): a key that is present but
+        # empty beats the default, so the "id" fallback never fired.
+        ndi_id = doc.get("ndiId") or doc.get("id") or ""
         if not ndi_id:
+            label = str(doc.get("_id") or f"<unidentified document at position {position}>")
+            logger.warning("Downloaded document %s has no ndiId; not saved", label)
+            unsaved.append(label)
             continue
         (doc_dir / f"{ndi_id}.json").write_text(json.dumps(doc, indent=2), encoding="utf-8")
         saved.append(ndi_id)
-    return saved
+    return saved, unsaved
 
 
 def deleteLocalDocuments(ds_path: Path, doc_ids: set[str]) -> list[str]:
@@ -106,7 +124,11 @@ def downloadNdiDocuments(
     for doc in docs:
         api_id = doc.get("_id", doc.get("id", ""))
         ndi_id = api_to_ndi.get(api_id, api_id)
-        doc.setdefault("ndiId", ndi_id)
+        # Assign rather than setdefault: a document carrying an "ndiId" key
+        # that is present but empty would keep the empty value and be
+        # discarded by _save_downloaded_docs without ever reaching "failed".
+        if not doc.get("ndiId"):
+            doc["ndiId"] = ndi_id
 
     # Determine which IDs we failed to download
     failed = [
@@ -208,6 +230,7 @@ def downloadNew(
         "new_count": len(new_ids),
         "downloaded_document_ids": [],
         "failed": [],
+        "unsaved_documents": [],
         "dry_run": options.dry_run,
     }
 
@@ -217,17 +240,22 @@ def downloadNew(
 
     # Actually fetch documents from the cloud
     docs, failed = downloadNdiDocuments(cloud_dataset_id, remote_ids, new_ids, client=client)
-    saved = _save_downloaded_docs(ds_path, docs)
+    saved, unsaved = _save_downloaded_docs(ds_path, docs)
     report["downloaded_document_ids"] = saved
     report["failed"] = failed
+    report["unsaved_documents"] = unsaved
 
     if options.verbose and saved:
         logger.info("downloadNew: downloaded %d documents", len(saved))
 
-    # Update index
+    # Update index. A document we set out to fetch but did not land on disk
+    # is not synced, so it must not enter either list: recording it on the
+    # remote side would make remote_doc_ids_last_sync a claim about documents
+    # that were never fetched.
+    not_obtained = new_ids - set(saved)
     index.update(
         list(local_ids | set(saved)),
-        list(remote_id_set),
+        list(remote_id_set - not_obtained),
     )
     index.write(ds_path)
 
@@ -265,48 +293,62 @@ def mirrorToRemote(
         "dry_run": options.dry_run,
     }
 
+    # A dry run reports what it would do and changes nothing -- writing the
+    # index here would record a sync that never happened. Every other mode
+    # returns before its index write for the same reason.
+    if options.dry_run:
+        report["uploaded_document_ids"] = list(to_upload)
+        report["deleted_remote_document_ids"] = list(to_delete)
+        report["failed"] = []
+        return report
+
     failed: list[str] = []
-    if not options.dry_run:
-        for doc_id in to_upload:
-            try:
-                docs_api.addDocument(cloud_dataset_id, {"ndiId": doc_id}, client=client)
-                report["uploaded_document_ids"].append(doc_id)
-            except Exception as exc:
-                logger.warning("mirrorToRemote: failed to upload %s: %s", doc_id, exc)
-                failed.append(doc_id)
-        for doc_id in to_delete:
-            api_id = remote_ids.get(doc_id, doc_id)
-            try:
-                docs_api.deleteDocument(cloud_dataset_id, api_id, client=client)
-                report["deleted_remote_document_ids"].append(doc_id)
-            except Exception as exc:
-                logger.warning("mirrorToRemote: failed to delete %s: %s", doc_id, exc)
-                failed.append(doc_id)
+    for doc_id in to_upload:
+        try:
+            docs_api.addDocument(cloud_dataset_id, {"ndiId": doc_id}, client=client)
+            report["uploaded_document_ids"].append(doc_id)
+        except Exception as exc:
+            logger.warning("mirrorToRemote: failed to upload %s: %s", doc_id, exc)
+            failed.append(doc_id)
+    for doc_id in to_delete:
+        api_id = remote_ids.get(doc_id, doc_id)
+        try:
+            docs_api.deleteDocument(cloud_dataset_id, api_id, client=client)
+            report["deleted_remote_document_ids"].append(doc_id)
+        except Exception as exc:
+            logger.warning("mirrorToRemote: failed to delete %s: %s", doc_id, exc)
+            failed.append(doc_id)
 
-        # Upload associated files if requested
-        if options.sync_files and report["uploaded_document_ids"]:
-            try:
-                from ..upload import uploadFilesForDatasetDocuments
+    # Upload associated files if requested
+    if options.sync_files and report["uploaded_document_ids"]:
+        try:
+            from ..upload import uploadFilesForDatasetDocuments
 
-                doc_dir = ds_path / _DOC_DIR
-                doc_dicts = []
-                for doc_id in report["uploaded_document_ids"]:
-                    doc_file = doc_dir / f"{doc_id}.json"
-                    if doc_file.exists():
-                        doc_dicts.append(json.loads(doc_file.read_text(encoding="utf-8")))
-                if doc_dicts:
-                    uploadFilesForDatasetDocuments(
-                        client.config.org_id,
-                        cloud_dataset_id,
-                        doc_dicts,
-                        client=client,
-                    )
-            except Exception as exc:
-                logger.warning("mirrorToRemote: file upload failed: %s", exc)
+            doc_dir = ds_path / _DOC_DIR
+            doc_dicts = []
+            for doc_id in report["uploaded_document_ids"]:
+                doc_file = doc_dir / f"{doc_id}.json"
+                if doc_file.exists():
+                    doc_dicts.append(json.loads(doc_file.read_text(encoding="utf-8")))
+            if doc_dicts:
+                uploadFilesForDatasetDocuments(
+                    client.config.org_id,
+                    cloud_dataset_id,
+                    doc_dicts,
+                    client=client,
+                )
+        except Exception as exc:
+            logger.warning("mirrorToRemote: file upload failed: %s", exc)
 
     report["failed"] = failed
 
-    index.update(list(local_ids), list(local_ids))
+    # The remote is what it held, plus what we actually uploaded, minus what
+    # we actually deleted -- not a blanket "remote now equals local", which
+    # would silently absorb every failed upload and every failed deletion.
+    final_remote = (remote_id_set | set(report["uploaded_document_ids"])) - set(
+        report["deleted_remote_document_ids"]
+    )
+    index.update(list(local_ids), list(final_remote))
     index.write(ds_path)
 
     return report
@@ -340,6 +382,7 @@ def mirrorFromRemote(
         "downloaded_document_ids": [],
         "deleted_local_document_ids": [],
         "failed": [],
+        "unsaved_documents": [],
         "dry_run": options.dry_run,
     }
 
@@ -354,9 +397,10 @@ def mirrorFromRemote(
 
     # Download remote-only documents
     docs, failed = downloadNdiDocuments(cloud_dataset_id, remote_ids, to_download, client=client)
-    saved = _save_downloaded_docs(ds_path, docs)
+    saved, unsaved = _save_downloaded_docs(ds_path, docs)
     report["downloaded_document_ids"] = saved
     report["failed"] = failed
+    report["unsaved_documents"] = unsaved
 
     if options.verbose:
         logger.info(
@@ -365,7 +409,13 @@ def mirrorFromRemote(
             len(deleted),
         )
 
-    index.update(list(remote_id_set), list(remote_id_set))
+    # Mirroring leaves both sides equal, but only over the documents that
+    # actually landed. Recording a failed download as local was the more
+    # damaging half of this: the next run computes to_download as
+    # remote_id_set - local_ids, so the document would never be retried.
+    not_obtained = to_download - set(saved)
+    mirrored = remote_id_set - not_obtained
+    index.update(list(mirrored), list(mirrored))
     index.write(ds_path)
 
     return report
@@ -441,6 +491,7 @@ def twoWaySync(
         "deleted_local_document_ids": [],
         "deleted_remote_document_ids": [],
         "failed": [],
+        "unsaved_documents": [],
         "dry_run": options.dry_run,
     }
 
@@ -478,8 +529,9 @@ def twoWaySync(
 
     # 4. Download remote-only docs
     docs, dl_failed = downloadNdiDocuments(cloud_dataset_id, remote_ids, to_download, client=client)
-    saved = _save_downloaded_docs(ds_path, docs)
+    saved, unsaved = _save_downloaded_docs(ds_path, docs)
     report["downloaded_document_ids"] = saved
+    report["unsaved_documents"] = unsaved
     failed.extend(dl_failed)
 
     report["failed"] = failed
@@ -494,10 +546,15 @@ def twoWaySync(
             len(conflicts),
         )
 
-    # Compute expected final state
+    # Compute expected final state. A remote-only document we failed to
+    # download drops out of the remote side too, so the next run still sees
+    # it as remote work outstanding rather than as already synced.
+    not_obtained = to_download - set(saved)
     final_local = (current_local | set(saved)) - set(deleted_local_ids)
-    final_remote = (current_remote | set(report["uploaded_document_ids"])) - set(
-        report["deleted_remote_document_ids"]
+    final_remote = (
+        (current_remote | set(report["uploaded_document_ids"]))
+        - set(report["deleted_remote_document_ids"])
+        - not_obtained
     )
     index.update(list(final_local), list(final_remote))
     index.write(ds_path)
