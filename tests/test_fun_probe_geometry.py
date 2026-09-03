@@ -42,7 +42,7 @@ class FakeProbe:
     def epochtable(self):
         return [{"epoch_id": "e1", "t0_t1": [[0.0, 1.0]]}], "hash"
 
-    def readtimeseries(self, epoch=None, t0=0.0, t1=0.0, timeref=None):  # noqa: ARG002
+    def readtimeseries(self, timeref_or_epoch=None, t0=0.0, t1=0.0, timeref=None):  # noqa: ARG002
         return np.zeros((1, self._channels)), np.zeros(1), None
 
 

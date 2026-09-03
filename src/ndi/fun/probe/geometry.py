@@ -800,7 +800,7 @@ def _num_channels_from_probe(probe: Any) -> int:
     from .export import _epoch_t0_t1
 
     t0, _t1 = _epoch_t0_t1(et[0])
-    data, _t, _ref = probe.readtimeseries(epoch=et[0].get("epoch_id", 1), t0=t0, t1=t0)
+    data, _t, _ref = probe.readtimeseries(et[0].get("epoch_id", 1), t0, t0)
     array = np.asarray(data)
     return int(array.shape[1]) if array.ndim == 2 else 1
 

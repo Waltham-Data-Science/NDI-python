@@ -61,7 +61,7 @@ class FakeProbe:
     def times2samples(self, epoch_id, times):  # noqa: ARG002
         return np.round(np.asarray(times) * self._rate).astype(int)
 
-    def readtimeseries(self, epoch=None, t0=0.0, t1=0.0, timeref=None):  # noqa: ARG002
+    def readtimeseries(self, timeref_or_epoch=None, t0=0.0, t1=0.0, timeref=None):  # noqa: ARG002
         n = max(int(round(t1 * self._rate)) - int(round(t0 * self._rate)) + 1, 0)
         return np.zeros((n, self._channels)), np.zeros(n), None
 
@@ -443,7 +443,7 @@ class TestExporting:
         good = FakeProbe(reference=2)
 
         class Unreadable(FakeProbe):
-            def readtimeseries(self, **kwargs):
+            def readtimeseries(self, *args, **kwargs):
                 raise RuntimeError("epoch is missing")
 
         app = _window(FakeSession(tmp_path, [Unreadable(), good]))

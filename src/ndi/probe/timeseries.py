@@ -13,6 +13,7 @@ from typing import Any
 
 import numpy as np
 
+from ..time.timereference import ndi_time_timereference
 from . import ndi_probe
 
 
@@ -29,7 +30,7 @@ class ndi_probe_timeseries(ndi_probe):
 
     Example:
         >>> probe = ndi_probe_timeseries_mfdaq(session, 'electrode1', 1, 'n-trode')
-        >>> data, t, timeref = probe.readtimeseries(epoch=1, t0=0, t1=10)
+        >>> data, t, timeref = probe.readtimeseries(1, t0=0, t1=10)
     """
 
     def ndi_element_class(self) -> str:
@@ -38,7 +39,7 @@ class ndi_probe_timeseries(ndi_probe):
 
     def readtimeseries(
         self,
-        epoch: int | str | Any = None,
+        timeref_or_epoch: int | str | Any = None,
         t0: float = 0.0,
         t1: float = float("inf"),
         timeref: Any | None = None,
@@ -50,10 +51,15 @@ class ndi_probe_timeseries(ndi_probe):
         timeref is provided, converts time using the session's syncgraph.
 
         Args:
-            epoch: ndi_epoch_epoch number (1-indexed) or epoch_id string
+            timeref_or_epoch: an ndi_time_timereference, or an epoch number
+                (1-indexed) or epoch_id string
             t0: Start time
             t1: End time
-            timeref: Optional time reference for cross-epoch reading
+            timeref: Optional time reference for cross-epoch reading. MATLAB
+                has no such parameter -- it takes the timereference in
+                TIMEREF_OR_EPOCH -- and no caller in this repository passes
+                it. It is kept because it is public API, and is equivalent to
+                passing the same object as TIMEREF_OR_EPOCH.
 
         Returns:
             Tuple of (data, t, timeref_out):
@@ -61,15 +67,24 @@ class ndi_probe_timeseries(ndi_probe):
             - t: Time array or None
             - timeref_out: Time reference for the returned data or None
         """
-        if epoch is None and timeref is None:
-            raise ValueError("Must specify either epoch or timeref")
+        if timeref_or_epoch is None and timeref is None:
+            raise ValueError("Must specify either timeref_or_epoch or timeref")
+
+        # MATLAB's first argument takes EITHER a timereference or an epoch
+        # (+ndi/+probe/timeseries.m:23, and likewise in +ndi/+element and
+        # +ndi/+time), so the name has to be true of both here: a
+        # timereference arriving in it routes to the syncgraph, exactly as one
+        # arriving in `timeref` does. ndi_element_timeseries already accepts
+        # both in this position.
+        if timeref is None and isinstance(timeref_or_epoch, ndi_time_timereference):
+            timeref, timeref_or_epoch = timeref_or_epoch, None
 
         # If timeref provided, use syncgraph for time conversion
         if timeref is not None:
             return self._readtimeseries_via_syncgraph(timeref, t0, t1)
 
         # Direct epoch reading
-        return self.readtimeseriesepoch(epoch, t0, t1)
+        return self.readtimeseriesepoch(timeref_or_epoch, t0, t1)
 
     def _readtimeseries_via_syncgraph(
         self,

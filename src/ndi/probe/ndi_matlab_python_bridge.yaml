@@ -218,8 +218,8 @@ classes:
     methods:
       - name: readtimeseries
         input_arguments:
-          - name: epoch
-            type_matlab: "integer | char"
+          - name: timeref_or_epoch
+            type_matlab: "ndi.time.timereference | integer | char"
             type_python: "int | str | Any | None"
             default: "None"
           - name: t0
@@ -242,9 +242,28 @@ classes:
           - name: timeref_out
             type_python: "Any | None"
         decision_log: >
-          Exact match. Returns 3-tuple. If timeref is provided,
-          uses syncgraph for time conversion. epoch_number is
-          1-indexed (user concept).
+          Returns 3-tuple. If a timereference is given -- in
+          timeref_or_epoch, as MATLAB takes it, or in the extra
+          timeref argument -- the syncgraph does the time
+          conversion; otherwise the epoch is read directly.
+          epoch_number is 1-indexed (user concept).
+          NAMING (issue #166): the first argument was called
+          `epoch` here until 2026-09, while MATLAB and
+          ndi.element.timeseries both call it timeref_or_epoch
+          (+ndi/+probe/timeseries.m:23, +ndi/+element/timeseries.m:15,
+          +ndi/+time/timeseries.m:23). That was not cosmetic: a
+          caller passing the argument by keyword bound on a probe
+          and raised TypeError on an element, which made
+          ndi.fun.probe.export.binary silently probe-only. The name
+          now matches, and the argument accepts either a
+          timereference or an epoch, as MATLAB's does. This entry
+          previously read "Exact match", which is the divergence
+          this contract exists to catch -- a renamed argument must
+          be checked against the .m file, not against the entry.
+          The trailing timeref argument has no MATLAB counterpart
+          and is a FORCED DIVERGENCE retained as pre-existing
+          public API; it is equivalent to passing the same object
+          as timeref_or_epoch.
 
       - name: readtimeseriesepoch
         input_arguments:
