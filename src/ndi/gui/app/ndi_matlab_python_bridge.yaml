@@ -1193,6 +1193,166 @@ classes:
           Not ported. MATLAB needs it to turn a logical into 'on'/'off' for a
           uicontrol Enable property; Qt's setEnabled takes the bool.
 
+
+  - name: pyraview
+    type: class
+    matlab_path: "+ndi/+gui/+app/pyraview.m"
+    matlab_last_sync_hash: "eaec593"
+    python_path: "ndi/gui/app/pyraview/viewer.py"
+    python_class: "pyraview"
+    inherits: "ndi.gui.app.sessionApp"
+    decision_log: >
+      The signal viewer. MATLAB is one classdef beside a +pyraview helper
+      package; Python is a package whose viewer module holds the class, so
+      the helpers keep the same names in the same place (see
+      ndi/gui/app/pyraview/ndi_matlab_python_bridge.yaml). The pyramid
+      itself is neither port's code: both call the Pyraview library, which
+      is why the level-choosing rule cannot drift between them.
+
+    properties:
+      - name: Name
+        type_matlab: "string (Constant)"
+        type_python: "ClassVar[str]"
+        decision_log: '"pyraview", verbatim: it is the menu text.'
+      - name: Category
+        type_matlab: "(none)"
+        type_python: "ClassVar[str] inherited as \"\""
+        decision_log: >
+          MATLAB declares no Category, so the app sits at the top level of
+          the Apps menu; Python inherits sessionApp's "" for the same
+          result.
+      - name: "the loaded-buffer properties"
+        type_matlab: "current_data / current_time / current_level / current_data_t0 / current_data_t1 / loaded_pixel_span / loaded_view_duration (private)"
+        type_python: "same names, instance attributes"
+        decision_log: >
+          Kept name for name, because they are what needs_reload reads.
+          MATLAB's comment about spiking_info living on the handle object
+          rather than in appdata has no Python equivalent to make: an
+          attribute on the object is already a reference.
+
+    methods:
+      - name: pyraview
+        kind: constructor
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+          - name: build
+            type_python: "bool (keyword-only)"
+            default: "True"
+        output_arguments:
+          - name: obj
+            type_python: "pyraview"
+        decision_log: >
+          Ported. The build keyword is Python-only, as in the other ported
+          apps: the model -- probes, epochs, view, everything the rules act
+          on -- is constructed either way, so all of it is testable with no
+          display attached.
+      - name: build
+        access_matlab: private
+        decision_log: >
+          Ported to PySide6. The figure becomes a QMainWindow, the
+          uicontrol row a QToolBar-style header of QComboBoxes, the axes a
+          matplotlib FigureCanvasQTAgg, and the pan/zoom scrollbars
+          QSliders. DIVERGENCE: MATLAB draws the main and spiking axes into
+          one figure and drags a split bar between them (startDrag /
+          dragSplit / stopDrag / onResize); Python uses a QSplitter, which
+          is the same gesture with the same DEFAULT_SPLIT fraction and no
+          hand-written hit testing, so those four methods have no Python
+          counterpart.
+      - name: controlCallback / dispatch
+        python_name: "the _on_* slots"
+        access_matlab: private
+        decision_log: >
+          DIVERGENCE of mechanism, not behaviour. MATLAB routes every
+          control through one callback that switches on a command string,
+          because callbacks are wired by Tag; Qt connects each signal to
+          its own slot. The commands map one to one:
+          probe/epoch/band/mapping/spacing/pan/zoom/spiking/reset.
+      - name: update_epoch_list
+        python_name: epoch_items
+        access_matlab: private
+        decision_log: >
+          Ported as a rule that returns the list, with _sync_epoch_dropdown
+          putting it in the widget. MATLAB's placeholder -- a single space
+          that carries no epoch -- is kept exactly (EMPTY_EPOCH_ITEM), as
+          is the "No probes found" entry, because both are user-visible.
+      - name: check_and_load
+        access_matlab: private
+        decision_log: >
+          Ported. Finds the pyraview document for this probe, epoch and
+          band, and builds it with make_pyraview_doc when there is none.
+          The query is ndi.query on the four fields MATLAB uses; the
+          exact-string form is this repo's 4-argument positional one, since
+          ndi_query has no .exact_string method.
+      - name: update_spiking_list_ui / apply_spiking_sort / sortSpikingInfo
+        python_name: _sync_spiking_list / sort_spiking_info
+        access_matlab: "private / static private"
+        decision_log: >
+          Ported, with the sort itself a module-level function: by_channel
+          descending, then relabelled and recoloured from COLOR_CYCLE,
+          which is MATLAB's cycle in MATLAB's order. Colours are what the
+          user matches ticks to waveforms by, so they are not a place to
+          differ.
+      - name: ensure_spike_times_loaded
+        access_matlab: private
+        decision_log: >
+          Ported, and lazy in both languages for the same reason: reading
+          spike times for hundreds of units up front is what made the
+          earlier function version slow to open.
+      - name: update_spiking_plot / update_spike_overlay
+        python_name: draw_spike_overlay / spike_lines
+        access_matlab: private
+        decision_log: >
+          Ported, split: spike_lines is the transform (through
+          transformSpikeData) and draw_spike_overlay puts it on the axes.
+          MATLAB's bring_ticks_to_front is not ported -- matplotlib takes a
+          zorder on the artist rather than reordering Children.
+      - name: waveform_reset_x / waveform_zoom_x
+        python_name: reset_x
+        access_matlab: private
+        decision_log: >
+          Ported as one method. MATLAB has two because its zoom mode is a
+          figure mode that must be turned off before the limits can be set;
+          matplotlib has no such mode to clear.
+      - name: update_spacing
+        python_name: set_spacing / spacing_or_default
+        access_matlab: private
+        decision_log: >
+          Ported. The rule -- a positive number, or DEFAULT_SPACING when
+          the box holds anything else -- is a module-level function, so
+          "what does this typo do" is answerable without a window.
+      - name: update_from_scrollbars / update_scrollbars / update_pan_slider / onZoomPan
+        python_name: set_pan / set_zoom / sync_scrollbars / pan_slider_state
+        access_matlab: private
+        decision_log: >
+          Ported. duration_for_zoom and zoom_for_duration are MATLAB's
+          logarithmic map, quantised to the same ZOOM_STEPS notches, so the
+          slider steps through the same durations in both ports; the pan
+          slider carries milliseconds because a Qt slider is integer-valued
+          where MATLAB's is not.
+      - name: update_view
+        access_matlab: private
+        decision_log: >
+          Ported, and the one method worth reading twice: needs_reload is
+          MATLAB's reload rule verbatim -- the view left the buffer, the
+          pixel span changed by more than a tenth, or the view is under 80%
+          of the duration last read for -- and everything else pans by
+          moving the x limits. WHICH LEVEL to read is not decided here in
+          either port; both ask the library.
+      - name: plot_data
+        access_matlab: private
+        decision_log: >
+          Ported, split into plot_lines (the transform) and plot_data (the
+          drawing), through transformPlotData in both.
+      - name: emptySpikingInfo
+        kind: static
+        python_name: "(none)"
+        access_matlab: private
+        decision_log: >
+          Not ported. MATLAB needs a 0x0 struct with the right fields so
+          the array can be grown; Python's empty list needs no shape.
+
   # -----------------------------------------------------------------------
   - name: vhNDISpikeSorter
     type: class

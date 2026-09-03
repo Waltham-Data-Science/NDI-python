@@ -14,7 +14,7 @@ classes:
   - name: dataset
     type: class
     matlab_path: "+ndi/dataset.m"
-    matlab_last_sync_hash: "f485088"
+    matlab_last_sync_hash: "41ef50f"
     python_path: "ndi/dataset/_dataset.py"
     python_class: "ndi_dataset"
 
@@ -133,13 +133,42 @@ classes:
             type_matlab: "logical (name-value)"
             type_python: "bool"
             default: "False"
-        output_arguments: []
+        output_arguments:
+          - name: ndi_dataset_obj
+            type_python: "ndi_dataset"
         decision_log: >
-          New in sync f485088. Converts a linked session to ingested by
-          copying its documents into the dataset. MATLAB uses name-value
-          args (areYouSure, askUserToConfirm); Python omits the GUI
-          confirmation dialog (askUserToConfirm not applicable).
-          Not yet implemented in Python — stub only.
+          Implemented for issue #136; the entry was a stub before that.
+          Copies a linked session's documents AND binary files into the
+          dataset so it stops depending on the session path.
+          MATLAB uses name-value args (areYouSure, askUserToConfirm);
+          askUserToConfirm has no Python counterpart because there is no
+          confirmation dialog, so are_you_sure is the whole gate.
+          MATLAB returns nothing; Python returns self, matching its sibling
+          methods unlink_session and deleteIngestedSession.
+          Python adds a free-space precheck MATLAB does not have: MATLAB
+          documents a ~2x disk requirement and checks nothing, so a short
+          disk leaves the dataset holding part of a session under a record
+          that still says linked. Python refuses before writing anything.
+          Raises NotImplementedError for non-directory sessions where MATLAB
+          raises a generic error.
+
+      - name: isIngested
+        input_arguments: []
+        output_arguments:
+          - name: b
+            type_matlab: "logical"
+            type_python: "bool"
+        decision_log: >
+          Implemented for issue #136; previously absent, which is why
+          ndi.cloud.uploadDataset had no ingestion gate to call.
+          NOT the same method as ndi.session/isIngested: that one asks
+          whether one session's raw data is ingested, this asks whether
+          every session in the dataset is. A dataset with no sessions is
+          ingested, matching MATLAB dataset.m:241-247.
+          Python alias: is_ingested. Divergence: a listed session that
+          cannot be opened counts as NOT ingested and is logged; MATLAB has
+          no such case because its open_session raises where Python's
+          returns None.
 
       - name: open_session
         input_arguments:
