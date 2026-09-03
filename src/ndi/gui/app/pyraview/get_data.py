@@ -2,133 +2,59 @@
 
 MATLAB counterpart: ``+ndi/+gui/+app/+pyraview/getData.m``
 
-WHY THE LEVEL TABLE IS BUILT HERE RATHER THAN BY pyraview.PyraviewDataset
-The Pyraview library has two bindings and they have drifted from each other.
-MATLAB's ``pyraview.Dataset`` is constructed from PROPERTIES -- native rate,
-channels, decimation levels and rates, and an explicit list of files -- which
-is how NDI uses it: the numbers come out of the pyraview DOCUMENT and the
-level files live inside that document, not in a folder. Python's
-``PyraviewDataset`` instead scans a folder for ``*_L*.bin``, has no level-0
-(raw) candidate at all, truncates sample indices where MATLAB floors and
-ceils, uses one start time for every level, and returns
-``(samples x channels*2)`` where MATLAB returns ``(samples x channels x 2)``.
+Both ports build a ``pyraview`` Dataset from the DOCUMENT's properties --
+native rate and start time, channel count, data type, the decimation levels
+and their rates and start times, and the level file names -- then ask it which
+level to read for the window and how many samples. The library decides; this
+function only supplies the document's numbers and reads what it is told to.
 
-Building a view on it would make the Python viewer behave differently from
-the MATLAB one, on the same documents. So the level table and the level
-choice are mirrored from ``pyraview.Dataset.getLevelForReading`` here, and
-the actual reads go through ``pyraview.read_file``, which IS identical across
-the two bindings -- same 0-based inclusive sample range, same
-``(samples x channels x 2)`` result. Same format, same inputs, same answer.
+That is deliberate. An earlier version of this file mirrored the level-choice
+algorithm here, because the Python binding then offered only a folder scan and
+had no level-0 candidate. The binding now takes the same properties MATLAB's
+does and its ``get_level_for_reading`` is the same algorithm, so mirroring it
+would be the thing that drifts. One library, one level choice, two callers.
 """
 
 from __future__ import annotations
 
-import math
 import warnings
-from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 
-__all__ = ["get_data", "getData", "LevelTable", "Level", "level_file_names", "DEFAULT_READ_EXCESS"]
+__all__ = [
+    "get_data",
+    "getData",
+    "dataset_from_document",
+    "level_file_names",
+    "DEFAULT_READ_EXCESS",
+]
 
 #: Seconds read either side of the request before filtering, so the filter's
-#: transient lands outside the data that is kept. MATLAB's readExcess.
+#: start-up transient lands outside the data that is kept. MATLAB's readExcess.
 DEFAULT_READ_EXCESS = 1.0
 
 
-@dataclass(frozen=True)
-class Level:
-    """One candidate resolution: level 0 is raw, above 0 is a pyramid file."""
-
-    level: int
-    rate: float
-    start_time: float
-
-
-@dataclass
-class LevelTable:
-    """The resolutions a pyraview document offers, and how to choose one.
-
-    Mirrors the parts of MATLAB's ``pyraview.Dataset`` that NDI uses: built
-    from the document's properties rather than from a folder scan.
-    """
-
-    native_rate: float
-    native_start_time: float
-    channels: int
-    data_type: str
-    decimation_levels: list[int] = field(default_factory=list)
-    decimation_sampling_rates: list[float] = field(default_factory=list)
-    decimation_start_times: list[float] = field(default_factory=list)
-    files: list[str] = field(default_factory=list)
-
-    def candidates(self) -> list[Level]:
-        """Every resolution available, raw first, as MATLAB assembles them."""
-        levels = [Level(0, float(self.native_rate), float(self.native_start_time))]
-        for index, rate in enumerate(self.decimation_sampling_rates):
-            if index < len(self.decimation_start_times):
-                start = float(self.decimation_start_times[index])
-            else:
-                start = float(self.native_start_time)
-            levels.append(Level(index + 1, float(rate), start))
-        return levels
-
-    def level_for_reading(
-        self, t_start: float, t_end: float, pixels: float
-    ) -> tuple[np.ndarray, int | None, int, int]:
-        """Choose a level for the window, and the samples to read from it.
-
-        Returns ``(t_vec, level, sample_start, sample_end)``, with ``level``
-        None when there is nothing to read.
-
-        The rule is MATLAB's: of the levels whose rate is at least one sample
-        per pixel, take the COARSEST -- the least data that still fills the
-        screen. When every level is too coarse, which is what zooming far in
-        means, take the finest available instead.
-        """
-        duration = t_end - t_start
-        if duration <= 0:
-            return np.array([]), None, 0, 0
-
-        target_rate = pixels / duration
-        candidates = self.candidates()
-        if not candidates:
-            return np.array([]), None, 0, 0
-
-        sufficient = [c for c in candidates if c.rate >= target_rate]
-        chosen = (
-            min(sufficient, key=lambda c: c.rate)
-            if sufficient
-            else max(candidates, key=lambda c: c.rate)
-        )
-
-        # Samples are 0-based from the start of the level: t = start + idx/rate.
-        index_start = math.floor((t_start - chosen.start_time) * chosen.rate)
-        index_end = math.ceil((t_end - chosen.start_time) * chosen.rate)
-        index_start = max(index_start, 0)
-        index_end = max(index_end, index_start)
-
-        count = index_end - index_start
-        if count > 0:
-            t_vec = chosen.start_time + (index_start + np.arange(count)) / chosen.rate
-        else:
-            t_vec = np.array([])
-        return t_vec, chosen.level, index_start, index_end
-
-
 def level_file_names(count: int) -> list[str]:
-    """``level1.bin`` .. ``levelN.bin`` -- the names NDI stores them under.
+    """``level1.bin`` .. ``levelN.bin`` -- the names NDI stores the levels under.
 
-    MATLAB builds the same list. This is the naming that matters for
-    interoperability: Pyraview's own Python Dataset looks for ``*_L*.bin``
-    instead, which is why it cannot read an NDI document's files.
+    MATLAB's getData builds the same list. The pyramid writer emits
+    ``<prefix>_L1.bin`` on disk and ``make_pyraview_doc`` attaches those to the
+    document under these names, so these are what a document's files are
+    called and what a reader must ask for.
     """
     return [f"level{index}.bin" for index in range(1, count + 1)]
 
 
-def table_from_document(doc: Any) -> LevelTable:
-    """The level table a pyraview document describes."""
+def dataset_from_document(doc: Any) -> Any:
+    """A ``pyraview.PyraviewDataset`` describing DOC's pyramid.
+
+    Built from properties rather than by scanning a folder: an NDI document's
+    level files live inside the document, not in a directory, and are named
+    ``levelN.bin`` rather than the writer's ``<prefix>_LN.bin``.
+    """
+    import pyraview
+
     properties = doc.document_properties
     if "pyraview" not in properties:
         raise ValueError("Document is not a valid pyraview document.")
@@ -139,18 +65,19 @@ def table_from_document(doc: Any) -> LevelTable:
     if starts is None:
         starts = [pv["nativeStartTime"]]
 
-    levels = list(np.atleast_1d(np.asarray(pv.get("decimationLevels", []))).ravel())
-    return LevelTable(
+    levels = [int(v) for v in np.atleast_1d(np.asarray(pv.get("decimationLevels", []))).ravel()]
+    rates = [
+        float(v) for v in np.atleast_1d(np.asarray(pv.get("decimationSamplingRates", []))).ravel()
+    ]
+
+    return pyraview.PyraviewDataset(
         native_rate=float(pv["nativeRate"]),
         native_start_time=float(pv["nativeStartTime"]),
         channels=int(pv["channels"]),
-        data_type=str(pv.get("dataType", "double")),
-        decimation_levels=[int(v) for v in levels],
-        decimation_sampling_rates=[
-            float(v)
-            for v in np.atleast_1d(np.asarray(pv.get("decimationSamplingRates", []))).ravel()
-        ],
-        decimation_start_times=[float(v) for v in np.atleast_1d(np.asarray(starts)).ravel()],
+        data_type=pv.get("dataType", "double"),
+        decimation_levels=levels,
+        decimation_sampling_rates=rates,
+        decimation_start_time=[float(v) for v in np.atleast_1d(np.asarray(starts)).ravel()],
         files=level_file_names(len(levels)),
     )
 
@@ -167,33 +94,35 @@ def get_data(
 
     Returns ``(t_vec, data, level)``. At level 0 DATA is
     ``(samples x channels)`` raw filtered samples; above it,
-    ``(samples x channels x 2)`` min/max pairs from the pyramid.
+    ``(samples x channels x 2)`` min/max pairs read from the pyramid.
 
     A window either side of the request is read as well -- MATLAB reads
     ``delta`` before and after -- so panning by less than a screen width
     usually needs no new read at all.
     """
-    table = table_from_document(doc)
+    dataset = dataset_from_document(doc)
 
     delta = t1 - t0
     read_t0 = t0 - delta
     read_t1 = t1 + delta
 
-    t_vec, level, sample_start, sample_end = table.level_for_reading(read_t0, read_t1, pixel_span)
+    t_vec, level, sample_start, sample_end = dataset.get_level_for_reading(
+        read_t0, read_t1, pixel_span
+    )
     if level is None:
         return np.array([]), np.array([]), None
 
     if level == 0:
         return _read_raw(probe, doc, read_t0, read_t1, read_excess)
 
-    if level > len(table.files):
+    if level > len(dataset.files):
         warnings.warn(
-            f"Level {level} requested but only {len(table.files)} files available.",
+            f"Level {level} requested but only {len(dataset.files)} files available.",
             stacklevel=2,
         )
         return np.array([]), np.array([]), None
 
-    data = _read_level(probe, doc, table.files[level - 1], sample_start, sample_end)
+    data = _read_level(probe, doc, dataset.files[level - 1], sample_start, sample_end)
     if data is None:
         return np.array([]), np.array([]), None
 
@@ -208,8 +137,10 @@ def _read_raw(
 ) -> tuple[np.ndarray, np.ndarray, int | None]:
     """Level 0: read raw samples from the probe and filter them.
 
-    The extra ``read_excess`` seconds either side are read and then trimmed
-    off, so the filter's start-up transient never reaches the screen.
+    The pyramid holds no raw level -- level 0 IS the probe -- so this is the
+    one branch the library cannot serve. The extra ``read_excess`` seconds
+    either side are read and then trimmed off, so the filter's start-up
+    transient never reaches the screen.
     """
     from .filter_data import filter_data
 
@@ -269,8 +200,9 @@ def _read_level(
             warnings.warn("Binary doc object does not expose fullpathfilename.", stacklevel=2)
             return None
         try:
-            # 0-based, inclusive of the end sample -- MATLAB passes sEnd-1 for
-            # the same reason, and read_file means the same thing in both.
+            # get_level_for_reading's end sample is EXCLUSIVE and read_file's
+            # is INCLUSIVE, so the -1 is required, not an off-by-one. MATLAB
+            # passes sEnd-1 for the same reason.
             return np.asarray(pyraview.read_file(str(path), sample_start, sample_end - 1))
         except Exception as exc:  # noqa: BLE001
             warnings.warn(f"Failed to read file {path}: {exc}", stacklevel=2)

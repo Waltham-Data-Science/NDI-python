@@ -33,9 +33,12 @@ from . import (
     mappings,
     transform_plot_data,
     transform_spike_data,
+    viewer,
 )
+from .viewer import pyraview
 
 __all__ = [
+    "pyraview",
     "filter_data",
     "get_data",
     "load_spiking_neurons",
@@ -43,4 +46,5 @@ __all__ = [
     "mappings",
     "transform_plot_data",
     "transform_spike_data",
+    "viewer",
 ]

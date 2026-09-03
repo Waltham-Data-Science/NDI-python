@@ -41,7 +41,7 @@ def load_spiking_neurons(session: Any, probe: Any, epochid: str) -> list[dict[st
     from ....query import ndi_query
 
     element_docs = session.database_search(
-        ndi_query("element.type").exact_string("spikes")
+        ndi_query("element.type", "exact_string", "spikes", "")
         & ndi_query("").depends_on("underlying_element_id", identifier(probe))
     )
     if not element_docs:

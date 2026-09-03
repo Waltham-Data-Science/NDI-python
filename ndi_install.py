@@ -24,7 +24,6 @@ from __future__ import annotations
 import argparse
 import importlib
 import os
-import shutil
 import subprocess
 import sys
 import sysconfig
@@ -54,9 +53,12 @@ DEPENDENCIES = [
         "name": "Pyraview",
         "repo": "https://github.com/VH-Lab/Pyraview.git",
         "branch": "main",
-        "python_path": "src/python",
-        "cmake_build": True,
-        "description": "Multi-resolution signal pyramids (not on PyPI; needs a C++ build)",
+        # pip-installed rather than added to the path: the package carries a
+        # compiled library, so it has to be built and installed, not imported
+        # from a checkout. The clone is still what --update pulls.
+        "python_path": "",
+        "pip_install": True,
+        "description": "Multi-resolution signal pyramids (not on PyPI; builds a C++ library)",
     },
 ]
 
@@ -279,65 +281,34 @@ def clone_or_update(name: str, repo_url: str, target_dir: Path, branch: str, upd
 # ---------------------------------------------------------------------------
 
 
-def build_cmake_dependency(name: str, repo_dir: Path) -> bool:
-    """Build a dependency's C++ library and put it where its binding looks.
+def pip_install_dependency(name: str, repo_dir: Path) -> bool:
+    """Install a cloned dependency that has to be built rather than imported.
 
-    Pyraview is a C++ core with MATLAB and Python bindings; the Python one is
-    a ctypes wrapper that raises ImportError at import unless it can load
-    ``libpyraview.so``. Pip cannot supply that -- the package on the repo
-    ships no binary -- which is why this dependency is built here rather than
-    listed in pyproject.toml.
+    Pyraview is a C++ core with a ctypes binding: the Python package cannot
+    import until it can load libpyraview. Its own build (scikit-build-core
+    driving CMake) compiles the library into the installed package, so
+    installing the checkout is all that is needed -- and is why this one is
+    pip-installed instead of being added to ndi-deps.pth like the others.
 
-    The library is copied to ``src/c/`` beside ``src/python/``, which is the
-    layout the binding's own ``_find_library`` looks for after the environment
-    variable. So an install done this way needs no ``PYRAVIEW_LIB`` set, and
-    one done another way still honours it.
+    It is not on PyPI, which is why it is cloned here at all rather than
+    named in pyproject.toml; a direct git URL there would install the same
+    thing but could never be published to an index.
     """
-    if shutil.which("cmake") is None:
-        fail(f"{name} needs cmake to build its C++ library, and cmake was not found")
-        warn("  Install cmake, or download a prebuilt library from the project's")
-        warn("  Releases page and point PYRAVIEW_LIB at it.")
+    info(f"Building and installing {name}...")
+    result = subprocess.run(
+        [sys.executable, "-m", "pip", "install", str(repo_dir)],
+        capture_output=True,
+        text=True,
+        timeout=1800,
+    )
+    if result.returncode != 0:
+        fail(f"{name}: pip install failed")
+        detail(result.stderr.strip()[-2000:])
+        warn("  This build needs a C++ compiler and CMake.")
         return False
 
-    build_dir = repo_dir / "build"
-    build_dir.mkdir(exist_ok=True)
-
-    for step, command in (
-        ("configure", ["cmake", "..", "-DCMAKE_BUILD_TYPE=Release"]),
-        ("build", ["cmake", "--build", ".", "-j", "4"]),
-    ):
-        detail(f"cmake {step}...")
-        result = subprocess.run(command, cwd=build_dir, capture_output=True, text=True, timeout=900)
-        if result.returncode != 0:
-            fail(f"{name}: cmake {step} failed")
-            detail(result.stderr.strip()[-2000:])
-            return False
-
-    # Where the binding looks, in the order it looks.
-    library = _library_filename()
-    built = build_dir / "bin" / library
-    if not built.is_file():
-        fail(f"{name}: built, but {built} is missing")
-        return False
-
-    destination = repo_dir / "src" / "c" / library
-    try:
-        shutil.copy2(built, destination)
-    except OSError as e:
-        fail(f"{name}: could not place {library}: {e}")
-        return False
-
-    detail(f"Placed {destination}")
+    detail(result.stdout.strip()[-500:])
     return True
-
-
-def _library_filename() -> str:
-    """The shared-library name for this platform, as the binding spells it."""
-    if sys.platform == "win32":
-        return "pyraview.dll"
-    if sys.platform == "darwin":
-        return "libpyraview.dylib"
-    return "libpyraview.so"
 
 
 # ---------------------------------------------------------------------------
@@ -650,8 +621,8 @@ def main() -> int:
     for dep in DEPENDENCIES:
         target = tools_dir / dep["name"]
         ok = clone_or_update(dep["name"], dep["repo"], target, dep["branch"], args.update)
-        if ok and dep.get("cmake_build"):
-            ok = build_cmake_dependency(dep["name"], target)
+        if ok and dep.get("pip_install"):
+            ok = pip_install_dependency(dep["name"], target)
         if not ok:
             all_cloned = False
 
