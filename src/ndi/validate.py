@@ -69,6 +69,39 @@ def _check_did_uid_params(value: str, params: Any) -> str | None:
     return None
 
 
+def _check_matrix_shape(value: Any) -> str | None:
+    """Check that a matrix value obeys the shape invariant.
+
+    A matrix-valued schema field must be ``[]`` (an empty list) rather than
+    ``null`` when no data is present, and any nested rows must be rectangular
+    -- every row the same length. Ragged rows silently break MATLAB readers
+    that assume a rectangular ``double[][]``.
+
+    Declared-dimension enforcement (``[N, M]`` in the schema's ``parameters``)
+    is deliberately not checked here yet: the ``t0_t1`` orientation is
+    unsettled (element_epoch/epochclocktimes schemas declare ``[2, NaN]``
+    while Python emits N x 2), and flat JSON cannot distinguish the two
+    orientations. Enforcing declared dimensions before that decision would
+    reject valid documents. See ndi-python issue #96.
+    """
+    if not isinstance(value, list):
+        return None  # non-list types are caught elsewhere
+    if not value:
+        return None  # empty matrix, [], is the required "no data" form
+    if not isinstance(value[0], list):
+        return None  # 1-D matrix, no rectangularity constraint to enforce
+    expected_len = len(value[0])
+    for i, row in enumerate(value):
+        if not isinstance(row, list):
+            return f"row {i} is not a list (matrix must be rectangular)"
+        if len(row) != expected_len:
+            return (
+                f"row {i} has length {len(row)}, expected {expected_len} "
+                f"(matrix must be rectangular)"
+            )
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Schema loading
 # ---------------------------------------------------------------------------
@@ -245,6 +278,15 @@ def _validate_properties(
 
         value = doc_section[prop_name]
 
+        # Matrix fields must be [] rather than null when empty.
+        # Do this before the general None-skip so a null slips through only
+        # for non-matrix types.
+        if prop_type == "matrix" and value is None:
+            errors.append(
+                f"{class_name}.{prop_name}: matrix field must be [] rather than null"
+            )
+            continue
+
         # Allow None/empty for optional fields
         if value is None or value == "":
             continue
@@ -268,6 +310,11 @@ def _validate_properties(
             param_err = _check_did_uid_params(str(value), params)
             if param_err:
                 errors.append(f"{class_name}.{prop_name}: {param_err}")
+
+        if prop_type == "matrix":
+            shape_err = _check_matrix_shape(value)
+            if shape_err:
+                errors.append(f"{class_name}.{prop_name}: {shape_err}")
 
     return errors
 
