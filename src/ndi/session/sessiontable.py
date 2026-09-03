@@ -23,8 +23,11 @@ class ndi_session_sessiontable:
     that sessions can be quickly located by ID without providing full
     paths each time.
 
-    The table file lives at ``~/.ndi/preferences/local_sessiontable.txt``
-    by default.
+    The table file lives at ``~/.ndi/local_sessiontable.txt`` by default,
+    the same location MATLAB writes to (see NDI-matlab #922), so a
+    registry populated by one client is visible to the other. A legacy
+    ``~/.ndi/preferences/local_sessiontable.txt`` (and its ``_bkup*``
+    siblings) is migrated over on first access.
 
     Example:
         >>> table = ndi_session_sessiontable()
@@ -41,17 +44,77 @@ class ndi_session_sessiontable:
 
         Args:
             table_path: Override the default table file location.
-                        If None, uses ``localtablefilename()``.
+                        If None, uses ``localtablefilename()``. When the
+                        default path is used, a legacy table under
+                        ``~/.ndi/preferences/`` is migrated once here.
         """
-        self._table_path = Path(table_path) if table_path is not None else self.localtablefilename()
+        if table_path is not None:
+            self._table_path = Path(table_path)
+        else:
+            self._table_path = self.localtablefilename()
+            self._migrate_legacy_if_needed()
 
     @staticmethod
     def localtablefilename() -> Path:
         """Return the default session table file path.
 
+        Since NDI-matlab #922 / NDI-python #172 this is
+        ``~/.ndi/local_sessiontable.txt`` -- the same location MATLAB
+        writes to via ``PathConstants.Preferences``. Prior to that,
+        Python wrote to ``~/.ndi/preferences/local_sessiontable.txt``;
+        that legacy file is migrated to the new location on first
+        instantiation, so callers do not lose their registry.
+
         MATLAB equivalent: ``ndi.session.sessiontable.localtablefilename``
         """
+        return Path.home() / ".ndi" / "local_sessiontable.txt"
+
+    @staticmethod
+    def _legacy_table_path() -> Path:
         return Path.home() / ".ndi" / "preferences" / "local_sessiontable.txt"
+
+    def _migrate_legacy_if_needed(self) -> None:
+        """Copy a legacy ``~/.ndi/preferences/`` table into the new location.
+
+        No-op when the new file already exists or when no legacy file is
+        found. Best-effort: an OSError is swallowed with a warning so
+        the sessiontable stays usable even if migration fails. Legacy
+        files are left in place (copy, not move) so a downgrade to a
+        pre-migration ndi-python keeps working -- same rule as the
+        profile migration in ndi.cloud.profile.
+        """
+        if self._table_path.exists():
+            return
+        legacy = self._legacy_table_path()
+        if not legacy.is_file():
+            return
+        try:
+            self._table_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(legacy, self._table_path)
+        except OSError as exc:
+            import warnings
+
+            warnings.warn(
+                f"Could not migrate legacy sessiontable {legacy} -> " f"{self._table_path}: {exc}",
+                stacklevel=2,
+            )
+            return
+        # Backups: same stem, _bkupNNN.txt siblings. Copy them too.
+        stem = self._table_path.stem
+        ext = self._table_path.suffix
+        for backup in legacy.parent.glob(f"{stem}_bkup*{ext}"):
+            dest = self._table_path.parent / backup.name
+            if dest.exists():
+                continue
+            try:
+                shutil.copy2(backup, dest)
+            except OSError as exc:
+                import warnings
+
+                warnings.warn(
+                    f"Could not migrate legacy backup {backup} -> {dest}: {exc}",
+                    stacklevel=2,
+                )
 
     # ------------------------------------------------------------------
     # Read operations

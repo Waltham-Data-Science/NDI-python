@@ -19,10 +19,9 @@ The file is read once on first access and rewritten by
 :func:`ndi_preferences.set` and :func:`ndi_preferences.reset`. A missing
 or corrupt file is tolerated: defaults are used and a warning is issued.
 
-MATLAB deviates here by using ``fullfile(prefdir, 'NDI_Preferences.json')``
-(MATLAB's per-installation prefdir). Python has no equivalent of
-``prefdir``, so we use ``~/.ndi/NDI_Preferences.json``. The directory
-is created on first save.
+MATLAB uses the same location -- ``fullfile(userHome, '.ndi',
+'NDI_Preferences.json')`` -- so a preferences file written by one
+client is read by the other. The directory is created on first save.
 
 Access
 ------
@@ -127,10 +126,10 @@ class PreferenceItem:
 def _default_filename() -> Path:
     """Return the absolute path of the JSON file used for persistence.
 
-    Deviates from MATLAB ``fullfile(prefdir, 'NDI_Preferences.json')``
-    because Python has no equivalent of MATLAB's per-installation
-    ``prefdir``. We use ``~/.ndi/NDI_Preferences.json`` and create the
-    directory lazily on first save.
+    Uses ``~/.ndi/NDI_Preferences.json``. MATLAB writes to the same
+    path via ``fullfile(userHome, '.ndi', 'NDI_Preferences.json')``,
+    so the file is interchangeable between the two clients. The
+    directory is created lazily on first save.
     """
     return Path.home() / ".ndi" / "NDI_Preferences.json"
 
