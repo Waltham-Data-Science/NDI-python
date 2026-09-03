@@ -249,6 +249,120 @@ class TestEpochSet:
         es.resetepochtable()
         assert es._epochtable_cache is None
 
+    def test_matchedepochtable_predicate(self):
+        """matchedepochtable is a cache-validity predicate (MATLAB parity)."""
+        es = ConcreteEpochSet([{"epoch_number": 1, "epoch_id": "ep1"}])
+        # Nothing cached yet -> False regardless of the value asked about.
+        assert es.matchedepochtable("anything") is False
+
+        _, h = es.epochtable()
+        assert es.matchedepochtable(h) is True
+        assert es.matchedepochtable("not-the-hash") is False
+
+        # Rebuild with different contents -> old hash no longer matches.
+        es._epochs = [{"epoch_number": 1, "epoch_id": "ep2"}]
+        _, new_h = es.epochtable(force_rebuild=True)
+        assert new_h != h
+        assert es.matchedepochtable(h) is False
+        assert es.matchedepochtable(new_h) is True
+
+    def test_epochnodes_one_per_clock(self):
+        """epochnodes yields one node per (epoch, clocktype) pair."""
+        epochs = [
+            {
+                "epoch_number": 1,
+                "epoch_id": "ep1",
+                "epoch_session_id": "s1",
+                "epoch_clock": [DEV_LOCAL_TIME, UTC],
+                "t0_t1": [(0.0, 10.0), (1000.0, 1010.0)],
+            },
+            {
+                "epoch_number": 2,
+                "epoch_id": "ep2",
+                "epoch_session_id": "s1",
+                "epoch_clock": [DEV_LOCAL_TIME],
+                "t0_t1": [(0.0, 5.0)],
+            },
+        ]
+        nodes = ConcreteEpochSet(epochs).epochnodes()
+        assert len(nodes) == 3
+        assert [n["epoch_id"] for n in nodes] == ["ep1", "ep1", "ep2"]
+        assert nodes[0]["epoch_clock"] == DEV_LOCAL_TIME
+        assert nodes[0]["t0_t1"] == (0.0, 10.0)
+        assert nodes[1]["epoch_clock"] == UTC
+        assert nodes[1]["t0_t1"] == (1000.0, 1010.0)
+        assert all(n["objectname"] == "test_epochset" for n in nodes)
+        assert all(n["objectclass"] == "ConcreteEpochSet" for n in nodes)
+        assert all("epoch_number" not in n for n in nodes)
+
+    def test_epochgraph_cost_and_mapping(self):
+        """epochgraph returns MATLAB (cost, mapping) with linear same-epoch edges."""
+        import numpy as np
+
+        epochs = [
+            {
+                "epoch_number": 1,
+                "epoch_id": "ep1",
+                "epoch_session_id": "s1",
+                "epoch_clock": [DEV_LOCAL_TIME, UTC],
+                # A same-epoch cross-clock rescale: dev [0,10] -> utc [1000,1020].
+                "t0_t1": [(0.0, 10.0), (1000.0, 1020.0)],
+            },
+        ]
+        es = ConcreteEpochSet(epochs)
+        cost, mapping = es.epochgraph()
+
+        assert cost.shape == (2, 2)
+        # Diagonal always 1 with the trivial mapping.
+        assert cost[0, 0] == 1.0 and cost[1, 1] == 1.0
+        assert mapping[0][0].map(3.0) == 3.0
+        # Same-epoch cross-clock: dev 5 -> utc 1010.
+        assert cost[0, 1] == 1.0
+        assert mapping[0][1] is not None
+        assert mapping[0][1].map(5.0) == pytest.approx(1010.0)
+        # Reverse direction is also filled in.
+        assert cost[1, 0] == 1.0
+        assert mapping[1][0].map(1010.0) == pytest.approx(5.0)
+
+        # UTC<->UTC (a disjoint second epoch) uses the clocktype edge.
+        epochs.append(
+            {
+                "epoch_number": 2,
+                "epoch_id": "ep2",
+                "epoch_session_id": "s1",
+                "epoch_clock": [UTC],
+                "t0_t1": [(2000.0, 2010.0)],
+            }
+        )
+        es2 = ConcreteEpochSet(epochs)
+        cost2, mapping2 = es2.epochgraph()
+        assert cost2.shape == (3, 3)
+        # UTC-node-of-ep1 (index 1) to UTC-node-of-ep2 (index 2): finite cost.
+        assert not np.isinf(cost2[1, 2])
+        assert mapping2[1][2] is not None
+
+    def test_epochgraph_cached_and_invalidated(self):
+        """epochgraph is cached and invalidated when the epoch table changes."""
+        epochs = [
+            {
+                "epoch_number": 1,
+                "epoch_id": "ep1",
+                "epoch_session_id": "s1",
+                "epoch_clock": [UTC],
+                "t0_t1": [(0.0, 10.0)],
+            },
+        ]
+        es = ConcreteEpochSet(epochs)
+        g1 = es.epochgraph()
+        g2 = es.epochgraph()
+        assert g1 is g2  # Cached tuple identity
+
+        # Reset clears the graph cache alongside the table.
+        es.resetepochtable()
+        assert es._epochgraph_cache is None
+        g3 = es.epochgraph()
+        assert g3 is not g1
+
 
 # =============================================================================
 # ndi_epoch_epoch Tests

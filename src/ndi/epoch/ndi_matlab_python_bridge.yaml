@@ -229,18 +229,22 @@ classes:
 
       - name: matchedepochtable
         input_arguments:
-          - name: epoch_number
-            type_matlab: "integer (optional)"
-            type_python: "int | None"
-            default: "None"
-          - name: epoch_id
-            type_matlab: "char (optional)"
-            type_python: "str | None"
-            default: "None"
+          - name: hashvalue
+            type_matlab: "char"
+            type_python: "str"
         output_arguments:
-          - name: et
-            type_python: "list[dict[str, Any]]"
-        decision_log: "Exact match."
+          - name: b
+            type_matlab: "logical"
+            type_python: "bool"
+        decision_log: >
+          INTERFACE UPDATE (issue #139, 2026-09): brought back into
+          semantic parity with MATLAB. Predicate answering "does this hash
+          still match the cached epoch table?" — used by
+          ``cached_epochgraph`` to decide whether the cached graph is
+          fresh. The prior Python signature took (epoch_number, epoch_id)
+          and returned a filtered epoch table; that behaviour had no
+          callers and was removed rather than renamed. Callers wanting a
+          filtered lookup can iterate ``epochtable()`` directly.
 
       - name: epochtableentry
         input_arguments:
@@ -254,17 +258,65 @@ classes:
           Semantic Parity: epoch_number is 1-indexed (user concept).
           Internally maps to 0-based index.
 
-      - name: epochgraph
+      - name: epochnodes
         input_arguments: []
         output_arguments:
           - name: nodes
+            type_matlab: "struct array"
             type_python: "list[dict[str, Any]]"
-        decision_log: "Exact match."
+        decision_log: >
+          INTERFACE UPDATE (issue #139, 2026-09): the abstract-class
+          ``epochnodes`` was previously present only on subclasses
+          (``ndi.daq.system``, ``ndi.file.navigator``). Base-class version
+          added so ``buildepochgraph`` has a canonical node source. One
+          node per (epoch, clocktype) pair; each carries the epoch-table
+          fields (minus ``epoch_number``) plus ``objectname`` and
+          ``objectclass``. The MATLAB signature's optional second
+          ``underlyingnodes`` output is not ported (no Python caller).
+
+      - name: epochgraph
+        input_arguments: []
+        output_arguments:
+          - name: cost
+            type_matlab: "MxM double"
+            type_python: "numpy.ndarray"
+          - name: mapping
+            type_matlab: "MxM cell of ndi.time.timemapping"
+            type_python: "list[list[ndi_time_timemapping | None]]"
+        decision_log: >
+          INTERFACE UPDATE (issue #139, 2026-09): brought back into
+          semantic parity with MATLAB. Returns the cost matrix and
+          per-edge time mappings over this object's epoch nodes; result is
+          cached and invalidated when the epoch-table hash changes. The
+          prior Python signature returned a flat list of (epoch, clock)
+          nodes; that shape had zero callers and now lives on
+          ``epochnodes`` where it belongs — ``syncgraph`` already assumed
+          MATLAB's ``(cost, mapping)`` here (``syncgraph.py:284``).
+
+      - name: buildepochgraph
+        input_arguments: []
+        output_arguments:
+          - name: cost
+            type_matlab: "MxM double"
+            type_python: "numpy.ndarray"
+          - name: mapping
+            type_matlab: "MxM cell of ndi.time.timemapping"
+            type_python: "list[list[ndi_time_timemapping | None]]"
+        decision_log: >
+          INTERFACE UPDATE (issue #139, 2026-09). Default implementation
+          links nodes sharing (epoch_id, epoch_session_id) with a linear
+          rescale between their ``t0_t1`` ranges and delegates cross-clock
+          edges to ``ndi_time_clocktype.epochgraph_edge``. Subclasses
+          override to add richer inter-epoch relationships (see the
+          MATLAB developer note on ``dev_local_time`` <-> ``utc``).
 
       - name: resetepochtable
         input_arguments: []
         output_arguments: []
-        decision_log: "Exact match. Clears the epoch table cache."
+        decision_log: >
+          Exact match. Clears the epoch table cache; in Python this also
+          clears the epoch graph cache, which is invalidated by any
+          epoch-table change.
 
   # =========================================================================
   # ndi.epoch.epoch  (immutable data class)
