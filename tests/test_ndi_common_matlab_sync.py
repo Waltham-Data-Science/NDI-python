@@ -112,14 +112,7 @@ PYTHON_ONLY_EXPECTED: frozenset[str] = frozenset(
 # Each entry pairs the relative path with a one-line reason so the exclusion
 # is not silent. When one of these converges, the test asks the caller to
 # remove it from this map -- so the map itself never grows stale.
-EXPECTED_DIVERGENCES: dict[str, str] = {
-    # daq_systems/rayolab/rayo_stim.json: MATLAB widened the
-    # MetadataReaderFileParameters regex from `#_\d{6}_...` (matches only a
-    # literal '#') to `.*_\d{6}_...` (matches any prefix). Likely a bug fix
-    # on the MATLAB side, but changing what files the reader picks up needs
-    # verification against the actual rayo_stim data corpus before we sync.
-    "daq_systems/rayolab/rayo_stim.json": "MetadataReaderFileParameters regex",
-}
+EXPECTED_DIVERGENCES: dict[str, str] = {}
 
 
 # ---------------------------------------------------------------------------
