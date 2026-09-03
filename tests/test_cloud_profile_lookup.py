@@ -10,8 +10,6 @@ the widened lookup, so a test on the shared helper covers all of them.
 
 from __future__ import annotations
 
-import os
-
 import pytest
 
 from ndi.cloud import profile
@@ -90,11 +88,19 @@ def test_remove_by_nickname_clears_current_and_default_if_matched():
     assert profile.get_default() is None
 
 
-def test_switch_profile_by_nickname_sets_env_from_the_saved_profile():
+def test_switch_profile_by_nickname_sets_env_from_the_saved_profile(monkeypatch):
+    # monkeypatch owns every env-var mutation here: switch_profile writes
+    # NDI_CLOUD_USERNAME/NDI_CLOUD_PASSWORD/CLOUD_API_ENVIRONMENT to the
+    # process env, and if this test leaves them set, downstream cloud tests
+    # (e.g. test_cloud_read_ingested.py) would pick them up and fail to
+    # authenticate. monkeypatch restores whatever was there before.
+    monkeypatch.delenv("CLOUD_API_ENVIRONMENT", raising=False)
+    monkeypatch.delenv("NDI_CLOUD_USERNAME", raising=False)
+    monkeypatch.delenv("NDI_CLOUD_PASSWORD", raising=False)
     _add_lab_and_dev()
-    for var in ("CLOUD_API_ENVIRONMENT", "NDI_CLOUD_USERNAME", "NDI_CLOUD_PASSWORD"):
-        os.environ.pop(var, None)
     profile.switch_profile("lab-primary")
+    import os
+
     assert os.environ["NDI_CLOUD_USERNAME"] == "me@lab.org"
     assert os.environ["NDI_CLOUD_PASSWORD"] == "pw-lab"
     assert os.environ["CLOUD_API_ENVIRONMENT"] == "prod"
