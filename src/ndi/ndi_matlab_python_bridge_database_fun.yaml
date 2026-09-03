@@ -453,16 +453,70 @@ not_applicable:
 
   - name: readtablechar
     matlab_path: "+ndi/+database/+fun/readtablechar.m"
-    status: not_applicable
+    matlab_last_sync_hash: "234c356"
+    python_path: "ndi/database_fun.py"
+    python_name: readtablechar
+    input_arguments:
+      - name: c
+        type_matlab: "char (1,:)"
+        type_python: "str"
+        decision_log: "The table AS TEXT -- there is no file anywhere in this."
+      - name: ext
+        type_matlab: "char (1,:)"
+        type_python: "str"
+        decision_log: >
+          Kept for signature parity and validated, but it selects the parser
+          rather than naming a file. MATLAB prepends the dot when it is
+          missing; so does this.
+      - name: varargin
+        type_matlab: "name-value, passed to readtable"
+        type_python: "*args | **kwargs"
+        decision_log: >
+          Accepted BOTH ways: MATLAB-style positional pairs so a ported call
+          site reads like its twin, and keywords so new code need not. Only
+          the readtable options NDI uses are mapped (Delimiter -> sep,
+          ReadVariableNames -> header); anything else RAISES rather than
+          being ignored, because a dropped Delimiter returns one column of
+          joined text that still looks like a table.
     decision_log: >
-      MATLAB utility for reading table data from character-delimited
-      files into MATLAB table objects. Python equivalent is
-      pandas.read_csv() which is more capable and widely used.
+      PORTED. This entry previously read status: not_applicable, "Python
+      equivalent is pandas.read_csv() which is more capable and widely
+      used". That is what a FILE reader would be. These two read and write a
+      CHARACTER ARRAY, which is the entire point: NDI stores small tables --
+      drug mixtures, odor lists -- inside a document as delimited text in a
+      string field, and there is no file to point read_csv at.
+
+      The not_applicable verdict is why the gap survived: it recorded the
+      absence as a decision rather than a hole, so nothing downstream looked
+      for the missing piece. Every mixture table written by MATLAB was
+      unreadable in Python, and ndi.fun.doc_table.epoch and .treatment both
+      shipped mixture columns they could not fill. See
+      Waltham-Data-Science/NDI-python#138.
 
   - name: writetablechar
     matlab_path: "+ndi/+database/+fun/writetablechar.m"
-    status: not_applicable
+    matlab_last_sync_hash: "234c356"
+    python_path: "ndi/database_fun.py"
+    python_name: writetablechar
+    input_arguments:
+      - name: t
+        type_matlab: "table"
+        type_python: "pandas.DataFrame"
+      - name: varargin
+        type_matlab: "name-value, passed to writetable"
+        type_python: "*args | **kwargs"
+        decision_log: >
+          As readtablechar: Delimiter and WriteVariableNames are mapped,
+          anything else raises. Defaults match writetable -- comma-delimited
+          with a header line -- which matters because marderbath.m calls
+          this with NO options, so those defaults ARE the format of every
+          mixture table already sitting in a document.
     decision_log: >
-      MATLAB utility for writing MATLAB table objects to
-      character-delimited files. Python equivalent is
-      pandas.DataFrame.to_csv() which is more capable and widely used.
+      PORTED, with readtablechar; see that entry for why both were wrongly
+      recorded as not_applicable. MATLAB writes to a temporary file and
+      reads the bytes back; the text is built in memory here, since the
+      temporary file is an artifact of writetable needing a filename.
+
+      Round-tripping is the contract, and the test is MATLAB's own docstring
+      example: values survive to 1e-15, not text identity -- a float is not
+      written back the way it was typed, in either language.

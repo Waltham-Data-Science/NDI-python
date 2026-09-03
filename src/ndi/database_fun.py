@@ -12,7 +12,21 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+try:
+    import pandas as pd
+except ImportError:
+    pd = None  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
+
+
+def _require_pandas() -> None:
+    if pd is None:
+        raise ImportError(
+            "pandas is required for ndi.database.fun table utilities. "
+            "Install it with: pip install pandas"
+        )
+
 
 if TYPE_CHECKING:
     pass
@@ -781,3 +795,148 @@ def extract_doc_files(
                     pass
 
     return docs, target_path
+
+
+# =========================================================================
+# Tables stored inside documents, as character arrays
+# =========================================================================
+#
+# NDI keeps small tables -- a drug mixture, an odor list -- INSIDE a document
+# rather than beside it as a file: the schema field is a string, and the
+# string is the delimited text a table would have been written to. These two
+# functions are the door in and out of that representation.
+#
+# The bridge contract used to record both as not_applicable, "Python
+# equivalent is pandas.read_csv()". That is what a file reader would be;
+# these read and write a CHARACTER ARRAY, which is the whole point -- there
+# is no file. Documents written by MATLAB carry mixture tables that nothing
+# in Python could read until now, which is issue #138.
+
+
+def _readtable_options(args: tuple[Any, ...], kwargs: dict[str, Any]) -> dict[str, Any]:
+    """MATLAB name-value pairs and Python keywords, as one option dict.
+
+    MATLAB passes ``..., 'Delimiter', ','`` positionally; a Python caller
+    would rather write ``Delimiter=","``. Both are accepted so a ported call
+    site can read like its MATLAB twin without forcing that style on new code.
+    """
+    opts: dict[str, Any] = {}
+    if len(args) % 2 != 0:
+        raise ValueError(
+            "name-value options must come in pairs; got an odd number of "
+            f"positional arguments ({len(args)})"
+        )
+    for name, value in zip(args[::2], args[1::2], strict=True):
+        opts[str(name)] = value
+    opts.update(kwargs)
+    return opts
+
+
+def readtablechar(c: str, ext: str = ".txt", *args: Any, **kwargs: Any) -> pd.DataFrame:
+    """Read a table from a character array.
+
+    MATLAB equivalent: ``ndi.database.fun.readtablechar``, which writes *c* to
+    a temporary file with extension *ext* and calls ``readtable`` on it. Here
+    the text is parsed in memory instead -- the temporary file is an artifact
+    of MATLAB needing a filename, not part of the meaning -- so *ext* only
+    selects the parser and a caller may pass it with or without the leading
+    dot, as MATLAB allows.
+
+    The ``readtable`` options NDI actually uses are mapped onto
+    :func:`pandas.read_csv`: ``Delimiter`` -> ``sep`` and
+    ``ReadVariableNames`` -> ``header``. An option with no counterpart is
+    refused rather than ignored, because silently dropping ``Delimiter``
+    would return one column of joined text that still looks like a table.
+
+    Args:
+        c: The table as delimited text.
+        ext: The extension the text would have as a file. ``.txt`` and
+            ``.csv`` are equivalent here; both are delimited text.
+        *args: MATLAB-style name-value pairs, e.g. ``"Delimiter", ","``.
+        **kwargs: The same options as keywords, e.g. ``Delimiter=","``.
+
+    Returns:
+        The table as a :class:`pandas.DataFrame`.
+
+    Raises:
+        ValueError: If an option has no pandas counterpart, or the pairs are
+            malformed.
+
+    Example:
+        >>> c = "name,value\\nsaline,2\\n"
+        >>> readtablechar(c, ".txt", "Delimiter", ",")["name"].tolist()
+        ['saline']
+    """
+    _require_pandas()
+
+    opts = _readtable_options(args, kwargs)
+    read_kwargs: dict[str, Any] = {}
+
+    for name, value in opts.items():
+        key = name.lower()
+        if key == "delimiter":
+            read_kwargs["sep"] = value
+        elif key == "readvariablenames":
+            read_kwargs["header"] = 0 if value else None
+        else:
+            raise ValueError(
+                f"readtablechar: no pandas counterpart for readtable option {name!r}. "
+                "Supported: Delimiter, ReadVariableNames."
+            )
+
+    read_kwargs.setdefault("sep", ",")
+
+    ext = ext if ext.startswith(".") else "." + ext
+    if ext.lower() not in (".txt", ".csv", ".dat", ".tsv"):
+        raise ValueError(
+            f"readtablechar: unsupported extension {ext!r}; "
+            "the content must be delimited text (.txt, .csv, .tsv, .dat)."
+        )
+
+    import io
+
+    return pd.read_csv(io.StringIO(c), **read_kwargs)
+
+
+def writetablechar(t: pd.DataFrame, *args: Any, **kwargs: Any) -> str:
+    """Write a table to a character array.
+
+    MATLAB equivalent: ``ndi.database.fun.writetablechar`` -- the inverse of
+    :func:`readtablechar`, and what put the mixture tables into the documents
+    Python is now reading. MATLAB writes to a temporary file and reads the
+    bytes back; here the text is produced in memory.
+
+    Defaults match MATLAB's ``writetable``: comma-delimited, with the variable
+    names as the first line. ``marderbath.m`` calls this with no options at
+    all, so those defaults are the shape of the stored mixture tables.
+
+    Args:
+        t: The table to write.
+        *args: MATLAB-style name-value pairs, e.g. ``"Delimiter", "\\t"``.
+        **kwargs: The same options as keywords.
+
+    Returns:
+        The table as delimited text, newline-terminated as MATLAB writes it.
+
+    Raises:
+        ValueError: If an option has no pandas counterpart.
+    """
+    _require_pandas()
+
+    opts = _readtable_options(args, kwargs)
+    sep = ","
+    header = True
+
+    for name, value in opts.items():
+        key = name.lower()
+        if key == "delimiter":
+            sep = value
+        elif key == "writevariablenames":
+            header = bool(value)
+        else:
+            raise ValueError(
+                f"writetablechar: no pandas counterpart for writetable option {name!r}. "
+                "Supported: Delimiter, WriteVariableNames."
+            )
+
+    return t.to_csv(index=False, sep=sep, header=header, lineterminator="\n")
