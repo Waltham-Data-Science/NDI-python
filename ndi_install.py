@@ -626,7 +626,12 @@ def main() -> int:
         return 1
 
     if not install_ndi_and_deps(ndi_root, include_dev=args.dev):
-        warn("Some packages may not have installed correctly")
+        # Only reachable when `pip install -e .` itself failed, or a required
+        # pip dependency did. Either way NDI is not installed, so this cannot
+        # be a warning: three CI workflows run this script and would carry on
+        # against a half-installed tree, failing later somewhere less obvious.
+        fail("Installation failed: see the pip errors above")
+        return 1
 
     # Copy document definitions from external dependencies
     install_ndi_common_docs(tools_dir, ndi_root)
@@ -643,13 +648,12 @@ def main() -> int:
 
         passed, total = validate()
 
-        heading("Installation Complete")
+        heading("Installation Complete" if passed == total else "Installation Incomplete")
         if passed == total:
             print(f"\n  All {total} checks passed. NDI-python is ready to use.")
         else:
             print(f"\n  {passed}/{total} checks passed.")
-            if passed < total:
-                print("  Some checks failed — see above for details.")
+            print("  Some checks failed — see above for details.")
 
         print("\n  Next steps:")
         print("    python -m ndi check          # Re-run validation anytime")
@@ -657,7 +661,14 @@ def main() -> int:
         print("    python tutorials/tutorial_67f723d574f5f79c6062389d.py  # Run a tutorial")
         print()
 
-    return 0 if not args.no_validate else 0
+        if passed != total:
+            # `python -m ndi check` runs these same checks and already exits
+            # 1 when any fails (ndi/check.py). The installer printed the same
+            # failures and exited 0, so `python ndi_install.py && <next step>`
+            # ran the next step against a broken install.
+            return 1
+
+    return 0
 
 
 if __name__ == "__main__":
