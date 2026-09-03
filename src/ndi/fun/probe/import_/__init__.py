@@ -9,12 +9,13 @@ module of that name could be reached only through importlib, and
 written. ``import_`` is PEP 8's convention for exactly this collision, and is
 recorded as such in the bridge file.
 
-MATLAB also holds a ``+kiasort`` importer here; it is not ported, being
-blocked on the external kiasort toolbox (see NDI-python#122).
+MATLAB's ``+kiasort`` importer is here too. Its IMPORT side is ported in
+full; its ``run`` and ``curate``, which drive the KIASORT MATLAB toolbox,
+are not and cannot be (see :mod:`ndi.fun.probe.import_.kiasort`).
 """
 
 from __future__ import annotations
 
-from . import kilosort
+from . import epoch_map, kiasort, kilosort
 
-__all__ = ["kilosort"]
+__all__ = ["epoch_map", "kiasort", "kilosort"]
