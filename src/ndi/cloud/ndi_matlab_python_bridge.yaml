@@ -1152,27 +1152,114 @@ functions:
     matlab_path: "+ndi/+cloud/profile.m"
     matlab_last_sync_hash: "2566fe4d"
     python_path: "ndi/cloud/profile.py"
-    input_arguments: []
-    output_arguments: []
+    functions:
+      - matlab: "ndi.cloud.profile.list()"
+        python: "ndi.cloud.profile.list_profiles()"
+        returns: "list[ProfileEntry]"
+        note: >
+          Python name diverges from MATLAB `list` to avoid shadowing the
+          Python `list` builtin. Inputs and outputs are equivalent.
+      - matlab: "ndi.cloud.profile.get(uid)"
+        python: "ndi.cloud.profile.get(key)"
+        returns: "ProfileEntry"
+        note: >
+          Widened by ndi-python#168 / ndi-matlab#920: `key` may be a UID,
+          Nickname, or (case-insensitive) Email. Ambiguous nickname/email
+          raises with the candidate UIDs.
+      - matlab: "ndi.cloud.profile.add(nickname, email, password)"
+        python: "ndi.cloud.profile.add(nickname, email, password)"
+        returns: "str  # new UID"
+      - matlab: "ndi.cloud.profile.remove(uid)"
+        python: "ndi.cloud.profile.remove(key)"
+        returns: "None"
+        note: "`key` is UID | Nickname | Email (see get)."
+      - matlab: "ndi.cloud.profile.getCurrent()"
+        python: "ndi.cloud.profile.get_current()"
+        returns: "ProfileEntry | None"
+      - matlab: "ndi.cloud.profile.setCurrent(uid)"
+        python: "ndi.cloud.profile.set_current(key)"
+        returns: "None"
+        note: "`key` is UID | Nickname | Email; the resolved UID is stored."
+      - matlab: "ndi.cloud.profile.getDefault()"
+        python: "ndi.cloud.profile.get_default()"
+        returns: "ProfileEntry | None"
+      - matlab: "ndi.cloud.profile.setDefault(uid)"
+        python: "ndi.cloud.profile.set_default(key)"
+        returns: "None"
+        note: "`key` is UID | Nickname | Email; the resolved UID is persisted."
+      - matlab: "ndi.cloud.profile.clearDefault()"
+        python: "ndi.cloud.profile.clear_default()"
+        returns: "None"
+      - matlab: "ndi.cloud.profile.getPassword(uid)"
+        python: "ndi.cloud.profile.get_password(key)"
+        returns: "str"
+      - matlab: "ndi.cloud.profile.setPassword(uid, password)"
+        python: "ndi.cloud.profile.set_password(key, password)"
+        returns: "None"
+      - matlab: "ndi.cloud.profile.getStage(uid)"
+        python: "ndi.cloud.profile.get_stage(key)"
+        returns: "str  # 'prod' or 'dev'"
+      - matlab: "ndi.cloud.profile.setStage(uid, stage)"
+        python: "ndi.cloud.profile.set_stage(key, stage)"
+        returns: "None"
+      - matlab: "ndi.cloud.profile.switchProfile(uid)"
+        python: "ndi.cloud.profile.switch_profile(key)"
+        returns: "None"
+        note: >
+          `key` is UID | Nickname | Email. Calls logout(), sets
+          CLOUD_API_ENVIRONMENT, NDI_CLOUD_USERNAME, NDI_CLOUD_PASSWORD
+          from the resolved profile, marks the resolved UID current.
+      - matlab: "ndi.cloud.profile.filename()"
+        python: "ndi.cloud.profile.filename()"
+        returns: "Path  # ~/.ndi/NDI_Cloud_Profiles.json"
+      - matlab: "ndi.cloud.profile.secretsFilename()"
+        python: "ndi.cloud.profile.secrets_filename()"
+        returns: "Path  # ~/.ndi/NDI_Cloud_Secrets.json"
+      - matlab: "ndi.cloud.profile.backend()"
+        python: "ndi.cloud.profile.backend()"
+        returns: "str  # 'keyring'|'vault'|'aes'|'memory'"
+      - matlab: "ndi.cloud.profile.useBackend(name)"
+        python: "ndi.cloud.profile.use_backend(name)"
+        returns: "None"
+      - matlab: "ndi.cloud.profile.reload()"
+        python: "ndi.cloud.profile.reload()"
+        returns: "None"
+      - matlab: "ndi.cloud.profile.reset()"
+        python: "ndi.cloud.profile.reset()"
+        returns: "None"
     decision_log: >
       Ported from MATLAB main as of 2026-05-11 (matlab HEAD 2566fe4d,
       commit 970b6854b1). MATLAB exposes ndi.cloud.profile as a singleton
-      classdef with static methods (add, remove, getCurrent, setCurrent,
-      getDefault, setDefault, getPassword, setPassword, getStage,
-      setStage, switchProfile, etc.).  Python ports the same surface as
+      classdef with static methods; Python ports the same surface as
       module-level functions in ndi.cloud.profile, backed by a
-      _ProfileSingleton dataclass.  Backends: keyring (preferred,
+      _ProfileSingleton dataclass. Backends: keyring (preferred,
       mirrors MATLAB's "vault"), aes (mirrors MATLAB's AES file
-      backend), or memory (test-only).  Profile metadata persists to
-      ~/.ndi/NDI_Cloud_Profiles.json; AES ciphertext (when used) goes
-      to NDI_Cloud_Secrets.json in the same directory.  Python uses
-      Python-idiomatic snake_case for the public functions
-      (list_profiles, get_current, set_current, set_default,
-      switch_profile, use_backend) since these are convenience helpers,
-      not strict API mirrors; ProfileEntry field names (UID, Nickname,
-      Email, Stage, PasswordSecret) match MATLAB exactly so the on-disk
-      JSON is interchangeable.  GUI editor (MATLAB ndi.gui.profileEditor)
-      is intentionally NOT ported -- separate workstream.
+      backend), or memory (test-only).
+
+      On-disk location parity: profile metadata is at
+      ~/.ndi/NDI_Cloud_Profiles.json and AES ciphertext (when used) at
+      ~/.ndi/NDI_Cloud_Secrets.json. MATLAB was moved from `prefdir` to
+      the same ~/.ndi/ location in vh-lab/ndi-matlab#920 so the two
+      clients share saved profiles by default; the AES key
+      (SHA-256([host " " user " " "NDI Cloud"]), first 16 bytes,
+      AES-128-CBC/PKCS7 + JSON) is already interchangeable.
+      ProfileEntry field names (UID, Nickname, Email, Stage,
+      PasswordSecret) match MATLAB exactly so the JSON round-trips.
+
+      Naming: Python public functions use snake_case (get_current,
+      set_current, switch_profile, ...). `list_profiles` further diverges
+      from MATLAB `list` to avoid shadowing the Python builtin.
+
+      Lookup widening (ndi-python#168 / ndi-matlab#920, 2026-09-03): the
+      static helper `_find_index` now accepts a UID, an exact Nickname,
+      or a case-insensitive Email, in that order. Every function above
+      that takes `key` inherits this. Ambiguous matches raise KeyError
+      naming the candidate UIDs. `set_current`, `set_default`, and
+      `switch_profile` always store the resolved UID, never the
+      caller's raw key, so downstream comparisons remain UID-based.
+
+      GUI editor (MATLAB ndi.gui.profileEditor) is intentionally NOT
+      ported here -- separate workstream.
 
 # =============================================================================
 # Not-yet-ported MATLAB functions
