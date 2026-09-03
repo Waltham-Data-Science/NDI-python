@@ -49,6 +49,17 @@ DEPENDENCIES = [
         "ndi_common": True,
         "description": "NDI calculator and visualization document definitions",
     },
+    {
+        "name": "Pyraview",
+        "repo": "https://github.com/VH-Lab/Pyraview.git",
+        "branch": "main",
+        # pip-installed rather than added to the path: the package carries a
+        # compiled library, so it has to be built and installed, not imported
+        # from a checkout. The clone is still what --update pulls.
+        "python_path": "",
+        "pip_install": True,
+        "description": "Multi-resolution signal pyramids (not on PyPI; builds a C++ library)",
+    },
 ]
 
 DEFAULT_TOOLS_DIR = Path.home() / ".ndi" / "tools"
@@ -266,6 +277,41 @@ def clone_or_update(name: str, repo_url: str, target_dir: Path, branch: str, upd
 
 
 # ---------------------------------------------------------------------------
+# Compiled dependencies
+# ---------------------------------------------------------------------------
+
+
+def pip_install_dependency(name: str, repo_dir: Path) -> bool:
+    """Install a cloned dependency that has to be built rather than imported.
+
+    Pyraview is a C++ core with a ctypes binding: the Python package cannot
+    import until it can load libpyraview. Its own build (scikit-build-core
+    driving CMake) compiles the library into the installed package, so
+    installing the checkout is all that is needed -- and is why this one is
+    pip-installed instead of being added to ndi-deps.pth like the others.
+
+    It is not on PyPI, which is why it is cloned here at all rather than
+    named in pyproject.toml; a direct git URL there would install the same
+    thing but could never be published to an index.
+    """
+    info(f"Building and installing {name}...")
+    result = subprocess.run(
+        [sys.executable, "-m", "pip", "install", str(repo_dir)],
+        capture_output=True,
+        text=True,
+        timeout=1800,
+    )
+    if result.returncode != 0:
+        fail(f"{name}: pip install failed")
+        detail(result.stderr.strip()[-2000:])
+        warn("  This build needs a C++ compiler and CMake.")
+        return False
+
+    detail(result.stdout.strip()[-500:])
+    return True
+
+
+# ---------------------------------------------------------------------------
 # .pth file management
 # ---------------------------------------------------------------------------
 
@@ -446,6 +492,7 @@ def validate() -> tuple[int, int]:
         ("DID (did.implementations.sqlitedb)", "did.implementations.sqlitedb"),
         ("DID (did.datastructures)", "did.datastructures"),
         ("vhlab-toolbox (vlt)", "vlt"),
+        ("pyraview (signal pyramids)", "pyraview"),
         ("numpy", "numpy"),
         ("networkx", "networkx"),
         ("jsonschema", "jsonschema"),
@@ -574,6 +621,8 @@ def main() -> int:
     for dep in DEPENDENCIES:
         target = tools_dir / dep["name"]
         ok = clone_or_update(dep["name"], dep["repo"], target, dep["branch"], args.update)
+        if ok and dep.get("pip_install"):
+            ok = pip_install_dependency(dep["name"], target)
         if not ok:
             all_cloned = False
 

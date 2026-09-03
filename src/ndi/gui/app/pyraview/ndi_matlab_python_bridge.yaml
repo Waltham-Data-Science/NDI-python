@@ -1,0 +1,241 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/gui/app/pyraview/
+# The Primary Contract for the ndi.gui.app.pyraview namespace.
+#
+# MATLAB has a class (+ndi/+gui/+app/pyraview.m) and a helper package
+# (+ndi/+gui/+app/+pyraview/) of the same name side by side. Python cannot,
+# so this package holds both: the viewer class lives in viewer.py and is
+# re-exported as ndi.gui.app.pyraview.pyraview, and the helpers keep MATLAB's
+# names in snake_case. The class itself is documented in the parent bridge,
+# src/ndi/gui/app/ndi_matlab_python_bridge.yaml.
+#
+# WHERE THE PYRAMID COMES FROM
+# Neither port implements the multi-resolution pyramid. Both call the VH-Lab
+# Pyraview library (https://github.com/VH-Lab/Pyraview) -- a C++ core with a
+# MEX binding for MATLAB and a ctypes binding for Python -- to write the
+# levels and to decide which level a view should read. That is what keeps the
+# two ports from drifting on the one decision they make constantly, and it is
+# why ndi_install.py treats the library as a required dependency.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+functions:
+
+  - name: mappings
+    type: function
+    matlab_path: "+ndi/+gui/+app/+pyraview/mappings.m"
+    matlab_last_sync_hash: "eaec593"
+    python_path: "ndi/gui/app/pyraview/mappings.py"
+    python_function: "mappings"
+    input_arguments:
+      - name: channels
+        type_matlab: "numeric vector (1:N)"
+        type_python: "Sequence[int]"
+      - name: mapping_name
+        type_matlab: "char"
+        type_python: "str"
+    output_arguments:
+      - name: mapped_channels
+        type_matlab: "numeric vector"
+        type_python: "list[int]"
+    decision_log: >
+      Ported. Channel numbers stay 1-BASED: they are electrode labels a user
+      reads off a headstage, not indices into an array, and PlexonSV is a
+      published wiring order. The permutation is MATLAB's, element for
+      element. Both ports refuse PlexonSV for anything but exactly channels
+      1:32, because a silently wrong electrode order is invisible in the
+      trace it draws.
+
+  - name: filterData
+    type: function
+    python_name: filter_data
+    matlab_path: "+ndi/+gui/+app/+pyraview/filterData.m"
+    matlab_last_sync_hash: "eaec593"
+    python_path: "ndi/gui/app/pyraview/filter_data.py"
+    python_function: "filter_data"
+    input_arguments:
+      - name: data
+        type_matlab: "numeric (Samples x Channels)"
+        type_python: "np.ndarray"
+      - name: sr
+        type_matlab: "double"
+        type_python: "float"
+      - name: type
+        type_matlab: "char: 'low' | 'high' | 'all' | 'none'"
+        type_python: "str"
+    output_arguments:
+      - name: filtered_data
+        type_python: "np.ndarray"
+      - name: filterStruct
+        type_matlab: "struct matching the ndi filter document"
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Ported. MATLAB's cheby1(4, 0.8, cutoff/(sr/2), type) becomes scipy's
+      cheby1 with the same order, ripple and normalised cutoff. It is applied
+      with lfilter, NOT filtfilt: MATLAB uses filter, so the result is causal
+      with a start-up transient, and the callers read a second of excess
+      either side precisely to throw that transient away. filtfilt would be a
+      better filter and a different signal. 'all' and 'none' are both an
+      all-pass returning the data unchanged, and both describe themselves as
+      'none' in the struct, since that is the filter type the document
+      stores. A cutoff at or above Nyquist is clamped to 0.99 with a warning
+      rather than raising, as MATLAB's is.
+
+  - name: transformPlotData
+    type: function
+    python_name: transform_plot_data
+    matlab_path: "+ndi/+gui/+app/+pyraview/transformPlotData.m"
+    matlab_last_sync_hash: "eaec593"
+    python_path: "ndi/gui/app/pyraview/transform_plot_data.py"
+    python_function: "transform_plot_data"
+    input_arguments:
+      - name: data
+        type_matlab: "numeric (Samples x Channels) or (Samples x Channels x 2)"
+        type_python: "np.ndarray"
+      - name: tVec
+        type_python: "np.ndarray"
+      - name: level
+        type_python: "int"
+      - name: spacing
+        type_python: "float"
+      - name: mapping
+        type_matlab: "optional"
+        type_python: "Sequence[int] | None"
+    output_arguments:
+      - name: X / Y
+        type_python: "tuple[np.ndarray, np.ndarray]"
+    decision_log: >
+      Ported. One NaN-separated polyline for every channel, which is the
+      whole point of the function: matplotlib and MATLAB both draw one line
+      far faster than N lines, and a NaN breaks it between channels. Level 0
+      draws the samples; a level above 0 draws each sample as a vertical
+      min/max bar, since that is what a decimated sample IS. Channel n is
+      offset by n*spacing in both, so a mapping reorders what is drawn where.
+
+  - name: transformSpikeData
+    type: function
+    python_name: transform_spike_data
+    matlab_path: "+ndi/+gui/+app/+pyraview/transformSpikeData.m"
+    matlab_last_sync_hash: "eaec593"
+    python_path: "ndi/gui/app/pyraview/transform_spike_data.py"
+    python_function: "transform_spike_data"
+    input_arguments:
+      - name: spiking_info
+        type_matlab: "struct array"
+        type_python: "Sequence[Mapping[str, Any]]"
+      - name: selectedIdx
+        python_name: selected
+        type_matlab: "1-based indices"
+        type_python: "Sequence[int], 0-BASED"
+      - name: t0 / t1 / spacing
+        type_python: "float"
+      - name: show_box
+        type_matlab: "optional, default false"
+        type_python: "bool, default False"
+    output_arguments:
+      - name: X / Y
+        type_python: "tuple[np.ndarray, np.ndarray]"
+    decision_log: >
+      Ported, with one INDEXING DIVERGENCE, deliberate: the argument (`selected` in
+      Python) indexes a Python list, so it is 0-based. It is an index into a data structure,
+      not a user-facing number (PYTHON_PORTING_GUIDE's rule); best_channel,
+      low_channel and high_channel inside the records stay 1-based, because
+      those are the electrode labels above. Ticks span 0.4 to 0.6 of the
+      spacing on the unit's best channel, and the optional box is 2 ms wide
+      (BOX_HALF_WIDTH either side) spanning low_channel to high_channel --
+      MATLAB's numbers exactly, because they are what a user compares between
+      the two ports. Spikes outside [t0, t1] are dropped in both.
+
+  - name: load_spiking_neurons
+    type: function
+    matlab_path: "+ndi/+gui/+app/+pyraview/load_spiking_neurons.m"
+    matlab_last_sync_hash: "eaec593"
+    python_path: "ndi/gui/app/pyraview/load_spiking_neurons.py"
+    python_function: "load_spiking_neurons"
+    input_arguments:
+      - name: session / probe / epochid
+        type_python: "Any / Any / str"
+    output_arguments:
+      - name: spiking_info
+        type_matlab: "struct array"
+        type_python: "list[dict[str, Any]]"
+    decision_log: >
+      Ported, keeping MATLAB's laziness rather than tidying it away: the
+      spike TIMES are not read here (times_loaded is False and element_obj is
+      None until the viewer asks). Reading them for hundreds of units up
+      front is what made the earlier MATLAB version slow to open, and the
+      Python port would be slow for the same reason. waveform_channels is
+      MATLAB's rule for which channels a unit is on -- the peak channel, and
+      the run of neighbours above SIGNIFICANT_AMPLITUDE_FRACTION (0.10) of
+      its amplitude -- returning 1-based channel numbers.
+
+  - name: makePyraviewDoc
+    type: function
+    python_name: make_pyraview_doc
+    matlab_path: "+ndi/+gui/+app/+pyraview/makePyraviewDoc.m"
+    matlab_last_sync_hash: "eaec593"
+    python_path: "ndi/gui/app/pyraview/make_pyraview_doc.py"
+    python_function: "make_pyraview_doc"
+    input_arguments:
+      - name: probe / epochid / filterband
+        type_python: "Any / str / str"
+      - name: chunk_duration / chunk_excess
+        type_matlab: "name-value, default 50 / 1"
+        type_python: "keyword, same defaults"
+    output_arguments:
+      - name: pyraview_doc
+        type_python: "ndi.document"
+    decision_log: >
+      Ported. The decimation ladder is MATLAB's (100, then 10 six times) and
+      so is the required clock, dev_local_time -- a pyramid built on a
+      different clock would read back at the wrong times. The epoch is read
+      in chunks with chunk_excess seconds of overlap that are FILTERED and
+      then TRIMMED OFF, so the filter's transient never reaches the pyramid;
+      that ordering is the reason the excess exists and is worth not
+      rearranging. The levels are written by the Pyraview library's
+      process_chunk in both ports and attached to the document as
+      level1.bin .. levelN.bin.
+
+  - name: getData
+    type: function
+    python_name: get_data
+    matlab_path: "+ndi/+gui/+app/+pyraview/getData.m"
+    matlab_last_sync_hash: "eaec593"
+    python_path: "ndi/gui/app/pyraview/get_data.py"
+    python_function: "get_data"
+    input_arguments:
+      - name: probe / doc / t0 / t1 / pixelSpan
+        type_python: "Any / Any / float / float / int"
+      - name: readExcess
+        type_matlab: "name-value, default 1.0"
+        type_python: "read_excess, keyword, default 1.0"
+    output_arguments:
+      - name: tVec / dataOut / level
+        type_python: "tuple[np.ndarray, np.ndarray, int]"
+    decision_log: >
+      Ported. Both ports build a Pyraview Dataset from the DOCUMENT's
+      properties -- native rate and start time, channels, data type, the
+      decimation levels with their rates and start times, and the level file
+      names -- and then ask the library, through getLevelForReading /
+      get_level_for_reading, which level to read and which samples. Level 0
+      means read the probe and filter it; any other level reads that level's
+      binary out of the document. HISTORY worth recording: an earlier version
+      of this file reimplemented the level choice in Python, because the
+      binding then offered only a folder scan. The binding now takes the same
+      properties MATLAB's does, so mirroring the algorithm would have been
+      the thing that drifts, and the mirror was removed. One INDEX
+      DIVERGENCE, forced by the library: get_level_for_reading returns an
+      EXCLUSIVE end sample while read_file takes an INCLUSIVE one, so the
+      Python reader passes end - 1.
+
+  - name: dataset_from_document / level_file_names
+    type: function
+    python_path: "ndi/gui/app/pyraview/get_data.py"
+    matlab_path: "(inline in getData.m)"
+    decision_log: >
+      Python only, as named functions. MATLAB builds the Dataset and the
+      level file-name list inline; splitting them out lets a test build a
+      Dataset from a document without reading anything, which is where the
+      document-to-library translation is actually checked.
