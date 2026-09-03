@@ -102,15 +102,31 @@ class BridgedPackage:
 #: The eight after those (common, epoch, file, probe, then element, time,
 #: daq, then util) were the ones that needed real work: thirty functions
 #: between them, each now recorded as ported or deferred with a reason.
-#: See #154.
+#: gui and fun, last and largest, closed the remaining fifty-eight. See
+#: #154.
 #:
-#: Still unlisted, with what each would need first (measured against
-#: NDI-matlab main at the time of writing):
+#: That is every MATLAB package that HAS a Python package with a bridge
+#: file of its own -- seventeen of MATLAB's twenty-three. The six that
+#: remain are not deferred work of the same kind; each is unlistable for a
+#: structural reason, and saying so here is the point, because "not in
+#: PACKAGES" otherwise reads as "nobody got to it yet":
 #:
-#:     gui      33 unrecorded      fun       32 unrecorded
+#:     +database (124 files)  its bridge is src/ndi/ndi_matlab_python_bridge
+#:                            _database.yaml -- a different FILENAME at the
+#:                            src/ndi/ root, which rglob(BRIDGE_FILENAME)
+#:                            does not see and a BridgedPackage cannot name.
+#:     +setup    ( 98 files)  src/ndi/setup exists and has no bridge file.
+#:     +test     ( 43 files)  MATLAB's own test suite; Python has its own.
+#:     +example  ( 13 files)  demo scripts.
+#:     +docs     (  7 files)  documentation generators.
+#:     +data     (  1 file)   no Python package.
 #:
-#: Each needs its own pass to decide port-or-defer and write the reason;
-#: adding one here before that pass would land a red test.
+#: The ~20 classes directly under ``+ndi/`` (document.m, session.m, ...)
+#: are in the same position as +database: recorded in bridge files at
+#: src/ndi/ that no BridgedPackage points at. Reaching them means teaching
+#: the guard about a package's own directory without its subdirectories,
+#: which is a real change to matlab_functions() rather than a new entry
+#: here. Recorded so the next reader knows the gap is known.
 PACKAGES = [
     BridgedPackage(
         python_dir="src/ndi/cloud",
@@ -140,6 +156,8 @@ PACKAGES = [
     BridgedPackage(python_dir="src/ndi/time", matlab_dir="+ndi/+time"),
     BridgedPackage(python_dir="src/ndi/daq", matlab_dir="+ndi/+daq"),
     BridgedPackage(python_dir="src/ndi/util", matlab_dir="+ndi/+util"),
+    BridgedPackage(python_dir="src/ndi/gui", matlab_dir="+ndi/+gui"),
+    BridgedPackage(python_dir="src/ndi/fun", matlab_dir="+ndi/+fun"),
 ]
 
 
@@ -201,6 +219,11 @@ class BridgeIndex:
     paths: frozenset[str]
     sources: tuple[Path, ...]
 
+    @property
+    def path_stems(self) -> set[str]:
+        """The file stems that some entry claims by an explicit path."""
+        return {Path(p).stem for p in self.paths if not p.endswith("/")}
+
     def records(self, matlab_path: str) -> bool:
         """True if this MATLAB file is recorded, by path or by name."""
         if matlab_path in self.paths:
@@ -210,7 +233,16 @@ class BridgeIndex:
         # the three free functions its methods replace.
         if any(matlab_path.startswith(p) for p in self.paths if p.endswith("/")):
             return True
-        return Path(matlab_path).stem in self.names
+        # A bare name vouches for a file only when NO entry claims that stem
+        # by path. Otherwise a name recorded for one package silently covers
+        # a same-named file in another: +fun/+probe/+import/+kilosort's
+        # entries for probe / session / status were vouching for the files
+        # of the same name under +kiasort, which is a DIFFERENT spike
+        # sorter. Three files counted as recorded while nothing described
+        # them. Once a stem is used precisely somewhere, it has to be used
+        # precisely everywhere.
+        stem = Path(matlab_path).stem
+        return stem in self.names and stem not in self.path_stems
 
 
 #: The bridge files spell matlab_path two ways. Most write it relative to

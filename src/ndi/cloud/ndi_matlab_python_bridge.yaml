@@ -175,6 +175,31 @@ functions:
     output_arguments: []
     decision_log: "Exact match."
 
+  - name: logout
+    matlab_path: "+ndi/+cloud/+api/+auth/logout.m"
+    matlab_last_sync_hash: "0e2caa09"
+    python_path: "ndi/cloud/auth.py"
+    python_qualified: "logout"
+    input_arguments: []
+    output_arguments:
+      - name: b
+        type_matlab: "logical"
+        type_python: "None (raises on failure)"
+    decision_log: >
+      MATLAB has TWO logout functions and Python has one. This is the raw
+      API wrapper, returning the usual [b, answer, apiResponse, apiURL];
+      ndi.cloud.logout (recorded above) is the user-facing one that calls
+      it and then clears NDI_CLOUD_TOKEN and NDI_CLOUD_ORGANIZATION_ID.
+      Python's auth.logout does both in one function -- invalidate
+      server-side, then clear the environment -- so the pair collapses,
+      the same way the other +api/+auth wrappers (login, changePassword,
+      resetPassword, verifyUser, resendConfirmation) live in auth.py
+      rather than an api/auth module.
+      Recorded in #154, when scoping the bare-name match caught it: the
+      entry for +ndi/+cloud/logout.m was vouching for this file too,
+      because the checker accepted a matching NAME from anywhere. Two
+      different MATLAB files called logout.m, one entry between them.
+
   - name: changePassword
     matlab_path: "+ndi/+cloud/+api/+auth/changePassword.m"
     matlab_last_sync_hash: "9b75c0fe"
