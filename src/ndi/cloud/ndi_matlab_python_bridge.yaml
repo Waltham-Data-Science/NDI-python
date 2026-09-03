@@ -27,6 +27,16 @@ infrastructure:
       Python-only HTTP client. MATLAB uses webread/webwrite/call.m;
       Python wraps requests.ndi_session for all REST calls.
 
+      Issue #137: the client retries transient gateway failures (502, 503,
+      504, plus dropped connections and read timeouts) on idempotent
+      methods only, three attempts total, with exponential backoff and full
+      jitter. This has no MATLAB counterpart -- the +ndi/+cloud layer
+      retries nothing, and its waitFor* helpers poll a job rather than
+      repeat a request -- so it is a deliberate Python-side divergence
+      rather than a port. POST is excluded on purpose: most POST routes
+      create resources, so a repeat could duplicate them. Widening
+      RETRY_METHODS is a correctness decision, not a tuning one.
+
   - name: APIResponse
     type: class
     python_path: "ndi/cloud/client.py"
