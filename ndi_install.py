@@ -420,7 +420,7 @@ def pip_install(packages: list[str], extra_args: list[str] | None = None) -> boo
     """Run pip install with the given packages."""
     cmd = [sys.executable, "-m", "pip", "install", "--quiet"] + (extra_args or []) + packages
     detail(f"pip install {' '.join(packages[:3])}{'...' if len(packages) > 3 else ''}")
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     if result.returncode != 0:
         # Show stderr but filter out the common "already satisfied" noise
         err = result.stderr.strip()
@@ -453,7 +453,7 @@ def install_ndi_and_deps(ndi_root: Path, include_dev: bool = False) -> bool:
         ],
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=600,
         cwd=str(ndi_root),
     )
     if result.returncode != 0:
