@@ -34,18 +34,36 @@ _DOC_DIR = ".ndi" / Path("documents")
 def _save_downloaded_docs(
     ds_path: Path,
     docs: list[dict[str, Any]],
-) -> list[str]:
-    """Save downloaded document JSONs to ``<dataset>/.ndi/documents/``."""
+) -> tuple[list[str], list[str]]:
+    """Save downloaded document JSONs to ``<dataset>/.ndi/documents/``.
+
+    Returns ``(saved, unsaved)`` -- the NDI IDs actually written, and a
+    best-effort identifier for every document the cloud returned that could
+    not be stored because it carried no usable ID.
+
+    ``unsaved`` exists because these documents are otherwise invisible. They
+    do not reach ``failed`` upstream: ``downloadNdiDocuments`` decides what
+    failed by whether a requested document's *api* ID came back, so one that
+    arrives with a good ``_id`` but no ``ndiId`` counts as downloaded and is
+    then discarded here. Dropping it silently makes the report claim a
+    download that did not happen.
+    """
     doc_dir = ds_path / _DOC_DIR
     doc_dir.mkdir(parents=True, exist_ok=True)
     saved: list[str] = []
-    for doc in docs:
-        ndi_id = doc.get("ndiId", doc.get("id", ""))
+    unsaved: list[str] = []
+    for position, doc in enumerate(docs):
+        # Not doc.get("ndiId", doc.get("id", "")): a key that is present but
+        # empty beats the default, so the "id" fallback never fired.
+        ndi_id = doc.get("ndiId") or doc.get("id") or ""
         if not ndi_id:
+            label = str(doc.get("_id") or f"<unidentified document at position {position}>")
+            logger.warning("Downloaded document %s has no ndiId; not saved", label)
+            unsaved.append(label)
             continue
         (doc_dir / f"{ndi_id}.json").write_text(json.dumps(doc, indent=2), encoding="utf-8")
         saved.append(ndi_id)
-    return saved
+    return saved, unsaved
 
 
 def deleteLocalDocuments(ds_path: Path, doc_ids: set[str]) -> list[str]:
@@ -106,7 +124,11 @@ def downloadNdiDocuments(
     for doc in docs:
         api_id = doc.get("_id", doc.get("id", ""))
         ndi_id = api_to_ndi.get(api_id, api_id)
-        doc.setdefault("ndiId", ndi_id)
+        # Assign rather than setdefault: a document carrying an "ndiId" key
+        # that is present but empty would keep the empty value and be
+        # discarded by _save_downloaded_docs without ever reaching "failed".
+        if not doc.get("ndiId"):
+            doc["ndiId"] = ndi_id
 
     # Determine which IDs we failed to download
     failed = [
@@ -208,6 +230,7 @@ def downloadNew(
         "new_count": len(new_ids),
         "downloaded_document_ids": [],
         "failed": [],
+        "unsaved_documents": [],
         "dry_run": options.dry_run,
     }
 
@@ -217,9 +240,10 @@ def downloadNew(
 
     # Actually fetch documents from the cloud
     docs, failed = downloadNdiDocuments(cloud_dataset_id, remote_ids, new_ids, client=client)
-    saved = _save_downloaded_docs(ds_path, docs)
+    saved, unsaved = _save_downloaded_docs(ds_path, docs)
     report["downloaded_document_ids"] = saved
     report["failed"] = failed
+    report["unsaved_documents"] = unsaved
 
     if options.verbose and saved:
         logger.info("downloadNew: downloaded %d documents", len(saved))
@@ -358,6 +382,7 @@ def mirrorFromRemote(
         "downloaded_document_ids": [],
         "deleted_local_document_ids": [],
         "failed": [],
+        "unsaved_documents": [],
         "dry_run": options.dry_run,
     }
 
@@ -372,9 +397,10 @@ def mirrorFromRemote(
 
     # Download remote-only documents
     docs, failed = downloadNdiDocuments(cloud_dataset_id, remote_ids, to_download, client=client)
-    saved = _save_downloaded_docs(ds_path, docs)
+    saved, unsaved = _save_downloaded_docs(ds_path, docs)
     report["downloaded_document_ids"] = saved
     report["failed"] = failed
+    report["unsaved_documents"] = unsaved
 
     if options.verbose:
         logger.info(
@@ -465,6 +491,7 @@ def twoWaySync(
         "deleted_local_document_ids": [],
         "deleted_remote_document_ids": [],
         "failed": [],
+        "unsaved_documents": [],
         "dry_run": options.dry_run,
     }
 
@@ -502,8 +529,9 @@ def twoWaySync(
 
     # 4. Download remote-only docs
     docs, dl_failed = downloadNdiDocuments(cloud_dataset_id, remote_ids, to_download, client=client)
-    saved = _save_downloaded_docs(ds_path, docs)
+    saved, unsaved = _save_downloaded_docs(ds_path, docs)
     report["downloaded_document_ids"] = saved
+    report["unsaved_documents"] = unsaved
     failed.extend(dl_failed)
 
     report["failed"] = failed
