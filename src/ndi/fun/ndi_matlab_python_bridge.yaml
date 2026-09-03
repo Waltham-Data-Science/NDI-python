@@ -538,11 +538,29 @@ functions:
     output_arguments:
       - name: table
         type_python: "pd.DataFrame"
+    matlab_last_sync_hash: "234c356"
     decision_log: >
-      Exact match. Creates a summary table of epoch-related documents
-      with columns: EpochNumber, EpochDocumentIdentifier,
-      ProbeDocumentIdentifier, SubjectDocumentIdentifier, MixtureName,
-      MixtureOntology, ApproachName, ApproachOntology.
+      Creates a summary table of epoch-related documents with columns:
+      EpochNumber, EpochDocumentIdentifier, ProbeDocumentIdentifier,
+      SubjectDocumentIdentifier, MixtureName, MixtureOntology,
+      ApproachName, ApproachOntology.
+
+      FIXED (issue #138): MixtureName and MixtureOntology were read from
+      stimulus_bath.location.name and .ontologyNode -- the place the bath was
+      applied, not what was in it. The columns were populated and plausible
+      and named the wrong thing, which is why nobody caught it: a bath
+      location reads like a perfectly good string to find under MixtureName.
+      MATLAB parses stimulus_bath.mixture_table (epoch.m:108) and joins the
+      compounds' name and ontologyName; that needed readtablechar, which had
+      no Python implementation, so this could not have been right.
+
+      Two further corrections came with it, both MATLAB behaviours the old
+      code did not have: EVERY stimulus_bath in the epoch contributes, not
+      just the first (MATLAB vstacks them, so a two-bath epoch kept only one
+      drug before), and repeats collapse in first-seen order
+      (unique(...,'stable')).
+
+      This entry previously read "Exact match", which it was not.
 
   - name: openminds (docTable)
     type: function
@@ -623,11 +641,37 @@ functions:
       - name: dependency_ids
         type_matlab: "dependencyIDs"
         type_python: "list[str]"
+    matlab_last_sync_hash: "234c356"
     decision_log: >
-      Exact match. Python now returns 3 outputs (table, doc_ids,
-      dependency_ids) matching MATLAB. Options depends_on,
-      errorIfEmpty, depends_on_docs, hideMixtureTable are now
-      available.
+      Returns MATLAB's 3 outputs (table, doc_ids, dependency_ids), and the
+      options depends_on, errorIfEmpty, depends_on_docs and hideMixtureTable.
+
+      FIXED (issue #138): the three mixture columns MATLAB always writes --
+      DrugTreatmentMixtureName, ...Quantity, ...Ontology (treatment.m:111-114)
+      -- did not exist here at all. Two reasons, both now addressed. The query
+      asked only for "treatment"; treatment_drug is a SIBLING class, so no
+      drug document was ever returned and mixture_table was never in reach.
+      And hideMixtureTable dropped every column whose name contained
+      "Mixture", which would have discarded the expansion along with its
+      source: MATLAB computes the three columns unconditionally and the flag
+      governs only the RAW table column.
+
+      DIVERGENCE, deliberate: MATLAB assigns the mixture columns straight from
+      the parsed table, which fits a one-row table only when the mixture has a
+      single compound; real mixtures have several
+      (mixtureStr2mixtureTable builds one row per compound). The compounds are
+      comma-joined into one cell instead -- what the sibling docTable/epoch
+      does with the same data, and what this function's own header promises
+      ("strings become comma-separated lists").
+
+      STILL DIVERGENT, not addressed here and worth its own issue: MATLAB also
+      queries virus_injection and measurement documents, aggregates all
+      treatments per dependency into ONE row, and parses the _time fields into
+      datetimes. Python returns one row per document, no aggregation, and
+      leaves times as strings. Fixing the mixture columns did not require it
+      and doing it silently would have changed the table's shape.
+
+      This entry previously read "Exact match", which it was not.
 
   - name: subject (docTable)
     type: function
