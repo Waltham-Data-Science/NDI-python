@@ -477,3 +477,57 @@ classes:
           Exact match. Utility method to parse raw marker channel
           data into structured stimulus events. Returns dict with
           stimid, stimon, stimoff, stimopenclose arrays.
+
+# =========================================================================
+# Not-yet-ported MATLAB functions and classes
+# =========================================================================
+not_yet_ported:
+
+  - name: probestruct2probe
+    matlab_path: "+ndi/+probe/+fun/probestruct2probe.m"
+    matlab_last_sync_hash: "0e2caa09"
+    status: not_yet_ported
+    decision_log: >
+      Turns probe structs (name, reference, type) into probe OBJECTS by
+      looking each type up in getProbeTypeMap and constructing the class it
+      names -- ndi.probe.timeseries.mfdaq for an ephys probe,
+      ndi.probe.timeseries.stimulator for a stimulator, and so on. It
+      raises NDI:Probe:ProbeTypeNotFound for a type the map does not carry.
+      This records a real divergence, not just a missing helper.
+      getProbeTypeMap itself IS ported (above), but nothing calls it:
+      ndi_session.getprobes constructs a base ndi_probe for every struct,
+      whatever its type. So where MATLAB hands back typed probes that can
+      readtimeseries, Python hands back generic ones that cannot, and the
+      substitution is silent -- no error, just a less capable object.
+      Porting it is a behavior change to getprobes rather than a new
+      function, and it needs the classes the map names to exist first:
+      ndi.probe.image is absent (see below) and ndi.probe.timage, which
+      probetype2object.json names for the wide-field, 2-photon and
+      1-photon types, has no MATLAB source either. A faithful port would
+      raise ProbeTypeNotFound for those types where today they quietly
+      become base probes. That is the better failure, but it is a
+      deliberate change with its own tests, not a side effect of recording
+      this entry.
+
+  - name: image
+    matlab_path: "+ndi/+probe/image.m"
+    matlab_last_sync_hash: "2e6f3c35"
+    status: not_yet_ported
+    decision_log: >
+      The imaging counterpart of ndi.probe.timeseries: reads frames from an
+      ndi.daq.system.image and returns each frame's time through the epoch
+      clock and syncgraph, so an image series participates in time
+      conversion the way a timeseries does. Implements ndi.time.timeseries,
+      with samplerate() returning -1 and times2samples / samples2times
+      mapping through frametimes rather than assuming a constant rate,
+      because frames are not regularly sampled.
+      Python has the layer underneath it -- ndi.daq.system_image and
+      ndi.daq.reader.image landed already -- but not the probe on top, and
+      not ndi.element.image either.
+      Worth knowing before anyone opens an imaging dataset: Python ships
+      probetype2object.json naming "ndi.probe.image" for the
+      brightfield-imaging type, and the class registry has no such entry,
+      so that mapping resolves to nothing on this side. Today it does no
+      visible harm only because getprobes ignores the map entirely (see
+      probestruct2probe above); the two gaps hide each other, and closing
+      either one alone surfaces the other.

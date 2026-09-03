@@ -99,14 +99,16 @@ class BridgedPackage:
 #: moment it is clean, not once someone finds time for it -- an unguarded
 #: package that happens to be complete is one commit away from not being.
 #:
+#: The four after those (common, epoch, file, probe) were the first that
+#: needed real work: seven functions between them, each now recorded as
+#: ported or deferred with a reason. See #154.
+#:
 #: Still unlisted, with what each would need first (measured against
 #: NDI-matlab main at the time of writing):
 #:
-#:     fun      38 unrecorded      util      10 unrecorded
-#:     gui      35 unrecorded      daq        5 unrecorded
+#:     gui      33 unrecorded      fun       32 unrecorded
+#:     util     10 unrecorded      daq        5 unrecorded
 #:     time      5 unrecorded      element    3 unrecorded
-#:     epoch     2 unrecorded      file       2 unrecorded
-#:     probe     2 unrecorded      common     1 unrecorded
 #:
 #: Each needs its own pass to decide port-or-defer and write the reason;
 #: adding one here before that pass would land a red test.
@@ -131,6 +133,10 @@ PACKAGES = [
     BridgedPackage(python_dir="src/ndi/mock", matlab_dir="+ndi/+mock"),
     BridgedPackage(python_dir="src/ndi/session", matlab_dir="+ndi/+session"),
     BridgedPackage(python_dir="src/ndi/validators", matlab_dir="+ndi/+validators"),
+    BridgedPackage(python_dir="src/ndi/common", matlab_dir="+ndi/+common"),
+    BridgedPackage(python_dir="src/ndi/epoch", matlab_dir="+ndi/+epoch"),
+    BridgedPackage(python_dir="src/ndi/file", matlab_dir="+ndi/+file"),
+    BridgedPackage(python_dir="src/ndi/probe", matlab_dir="+ndi/+probe"),
 ]
 
 
