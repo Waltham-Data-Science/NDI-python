@@ -68,4 +68,4 @@ class TestEnsembleFilterMakeArtifacts:
         out_file.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
         assert out_file.is_file(), "Artifact file was not written."
-        assert len(results) == 15, "Expected 15 recorded cases."
+        assert len(results) == 17, "Expected 17 recorded cases (15 dense + 2 sparse)."

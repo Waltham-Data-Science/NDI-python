@@ -42,6 +42,18 @@ the canonical grammar because MATLAB's column-major and Python's row-major
 iteration render one the wrong way round. Rows are 1-D though, so the battery
 encodes activity as a list of rendered row sequences -- exactly the pattern
 ``parseText`` uses for ``inputRendered``.
+
+Sparse activity
+---------------
+``ndi.element.ensemble.spike_matrix`` returns sparse activity by default and
+the round-trip format (``ndi.util.readSparse`` / ``writeSparse``) is
+NDI-specific and exists precisely so ensembles move sparsely between the two
+languages. Two sparse cases (``sparseInputBasic`` and
+``sparseNothingKeptPreservesWidth``) run the same fixture through the sparse
+code path -- the outputs are densified before rendering, so the signature is
+identical to the dense case's, but ``input_signature`` records ``storage`` so
+one language sparse and the other dense would fail as a real disagreement
+rather than pass because the numbers happened to match.
 """
 
 from __future__ import annotations
@@ -73,6 +85,7 @@ def _case(
     exclude_ids: list[str] | None = None,
     keep_logical: list[bool] | None = None,
     keep_index: list[int] | None = None,
+    storage: str = "dense",
     expected_ids: list[str] | None = None,
     expected_names: list[str] | None = None,
     expected_activity: list[list[float]] | None = None,
@@ -81,10 +94,17 @@ def _case(
 ) -> dict:
     """One case definition.
 
+    ``storage`` picks how the activity is handed to ``filter``: ``'dense'``
+    (a plain 2-D array) or ``'sparse'`` (scipy CSR / MATLAB sparse). It is in
+    ``input_signature`` so a green comparison cannot be one language dense and
+    the other sparse.
+
     ``expected_activity`` and ``expected_shape`` are ignored when
     ``expected_status`` is ``'error'``: an error case pins the FACT of an error
     only, per section 4 of the schema.
     """
+    if storage not in ("dense", "sparse"):
+        raise ValueError(f"storage must be 'dense' or 'sparse'; got {storage!r}.")
     return {
         "name": name,
         "note": note,
@@ -92,6 +112,7 @@ def _case(
         "neuronIds": list(neuron_ids),
         "neuronNames": list(neuron_names),
         "activity": [list(row) for row in activity],
+        "storage": storage,
         "includeNames": list(include_names or []),
         "excludeNames": list(exclude_names or []),
         "includeIndex": list(include_index or []),
@@ -127,7 +148,7 @@ _ACTIVITY = [
 
 
 def definitions() -> list[dict]:
-    """The 14-case battery, in the fixed order.
+    """The 17-case battery (15 dense + 2 sparse), in the fixed order.
 
     Cases are joined by NAME on the read side, so order here is for humans.
     """
@@ -344,6 +365,48 @@ def definitions() -> list[dict]:
             keep_logical=[True, False, True],
             expected_status="error",
         ),
+        # --- sparse activity -----------------------------------------------
+        # ndi.element.ensemble stores activity sparsely (ndi.util.readSparse /
+        # writeSparse is the round-trip format), so the real caller of filter
+        # passes sparse. Both cases mirror a dense case, so an accidental
+        # sparse/dense divergence shows as a signature mismatch on the case
+        # pair rather than a hidden code-path drift.
+        _case(
+            "sparseInputBasic",
+            "Same input and options as includeNamesBasic but the activity is "
+            "SPARSE (scipy CSR on the Python side, MATLAB sparse on the MATLAB "
+            "side). The filter must produce the same result whichever storage "
+            "the caller uses; ndi.element.ensemble.spike_matrix returns sparse "
+            "and this is the code path production actually takes.",
+            "testIncludeNames + sparse round trip",
+            _IDS,
+            _NAMES,
+            _ACTIVITY,
+            include_names=["B", "D"],
+            storage="sparse",
+            expected_ids=["id2", "id4"],
+            expected_names=["B", "D"],
+            expected_activity=[[21, 22], [41, 0]],
+            expected_shape=(2, 2),
+        ),
+        _case(
+            "sparseNothingKeptPreservesWidth",
+            "Sparse-storage twin of nothingKeptPreservesWidth. The isempty "
+            "guard in local_trim_columns must return early on a 0-row sparse "
+            "slice too, so the 0-by-3 width survives -- if it did not, a "
+            "sparse ensemble would silently redefine its temporal width on a "
+            "no-neuron filter.",
+            "-- pins isempty asymmetry, sparse path",
+            _IDS,
+            _NAMES,
+            _ACTIVITY,
+            exclude_names=["A", "B", "C", "D"],
+            storage="sparse",
+            expected_ids=[],
+            expected_names=[],
+            expected_activity=[],
+            expected_shape=(0, 3),
+        ),
     ]
 
 
@@ -364,19 +427,36 @@ def _activity_matrix(rows: list[list[float]], n_neurons: int) -> np.ndarray:
     return np.asarray(rows, dtype=float)
 
 
+def _densify(matrix: Any) -> np.ndarray:
+    """A dense 2-D float array from either a dense array or a scipy sparse one.
+
+    ``np.asarray`` on a scipy CSR yields an object array pointing at the CSR
+    (nothing gets densified), which then breaks every row-wise op below;
+    ``.toarray()`` is the sparse-side entry point that gives back a plain 2-D
+    array of floats. Both ``filter``s return sparse output when handed sparse
+    input, so this is exercised by every sparse case.
+    """
+    if hasattr(matrix, "toarray"):
+        return matrix.toarray()
+    return np.asarray(matrix, dtype=float)
+
+
 def _rendered_rows(matrix: Any) -> list[str]:
     """One rendered sequence per row of ``matrix``. Empty rows are dropped.
 
     A 0-row matrix returns ``[]``, not one entry per column, so the empty case
     round-trips through JSON without becoming a list of empty strings.
     """
-    arr = np.asarray(matrix, dtype=float)
+    arr = _densify(matrix)
     if arr.size == 0 or arr.shape[0] == 0:
         return []
     return [cases.render_sequence([float(x) for x in row]) for row in arr]
 
 
 def _output_shape(matrix: Any) -> tuple[int, int]:
+    if hasattr(matrix, "shape") and not isinstance(matrix, np.ndarray):
+        rows, cols = matrix.shape
+        return int(rows), int(cols)
     arr = np.asarray(matrix, dtype=float)
     if arr.ndim == 1:
         arr = arr.reshape(1, -1)
@@ -420,11 +500,15 @@ def run_cases() -> list[dict]:
     and costs the suite every other case's coverage. The error is asserted
     against MATLAB in the readArtifacts twin.
     """
+    from scipy.sparse import csr_matrix
+
     from ndi.fun.ensemble import filter as ensemble_filter
 
     results: list[dict] = []
     for defn in definitions():
         activity = _activity_matrix(defn["activity"], len(defn["neuronIds"]))
+        if defn["storage"] == "sparse":
+            activity = csr_matrix(activity)
         record = {
             "name": defn["name"],
             "note": defn["note"],
@@ -432,6 +516,7 @@ def run_cases() -> list[dict]:
             "neuronIds": list(defn["neuronIds"]),
             "neuronNames": list(defn["neuronNames"]),
             "activity": _rendered_rows(defn["activity"]) if defn["activity"] else [],
+            "storage": defn["storage"],
             "includeNames": list(defn["includeNames"]),
             "excludeNames": list(defn["excludeNames"]),
             "includeIndex": list(defn["includeIndex"]),
@@ -538,6 +623,10 @@ def input_signature(c: dict) -> str:
             f"ids={'|'.join(_as_list(c['neuronIds']))}",
             f"names={'|'.join(_as_list(c['neuronNames']))}",
             f"activity={'|'.join(_as_list(c['activity']))}",
+            # storage defaults to 'dense' for records written before the field
+            # existed, so the pre-sparse artifacts do not falsely disagree with
+            # this reader.
+            f"storage={c.get('storage') or 'dense'}",
             f"includeNames={'|'.join(_as_list(c['includeNames']))}",
             f"excludeNames={'|'.join(_as_list(c['excludeNames']))}",
             f"includeIndex={'|'.join(str(x) for x in _as_int_list(c['includeIndex']))}",
