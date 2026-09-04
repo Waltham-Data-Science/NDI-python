@@ -19,6 +19,41 @@ from ..ido import ndi_ido
 from ..time import ndi_time_clocktype
 
 
+def _parse_t0_t1(raw: Any) -> list[tuple[float, float]]:
+    """Read element_epoch.t0_t1 in MATLAB's on-disk shape.
+
+    MATLAB stores t0_t1 as a 2 x N matrix (schema parameters ``[2, NaN]``),
+    one column per epoch clocktype. ``jsonencode`` writes that as either
+
+      * ``[t0, t1]`` -- the flat 2-vector MATLAB emits for the single-clock
+        case (a 2x1 collapses on write), or
+      * ``[[t0_1, t0_2, ..., t0_N], [t1_1, t1_2, ..., t1_N]]`` -- an outer
+        list of length 2 (row 0 = t0's, row 1 = t1's), each inner list of
+        length N.
+
+    Returns a list of ``(t0, t1)`` tuples in clock order.
+    """
+    if not raw:
+        return []
+    # Flat [t0, t1]: single clocktype, the common case.
+    if (
+        isinstance(raw, (list, tuple))
+        and len(raw) == 2
+        and all(isinstance(v, (int, float)) for v in raw)
+    ):
+        return [(float(raw[0]), float(raw[1]))]
+    # MATLAB 2 x N on the wire: outer length 2, each inner length N.
+    if (
+        isinstance(raw, (list, tuple))
+        and len(raw) == 2
+        and all(isinstance(row, (list, tuple)) for row in raw)
+        and len(raw[0]) == len(raw[1])
+    ):
+        t0_row, t1_row = raw
+        return [(float(t0_row[k]), float(t1_row[k])) for k in range(len(t0_row))]
+    return []
+
+
 class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
     """
     Base class for data elements.
@@ -331,19 +366,7 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
                 elif isinstance(c, str) and c:
                     epoch_clock.append(ndi_time_clocktype(c))
 
-            # Parse t0_t1 (a flat [t0, t1], or a list of such pairs)
-            t0t1_raw = element_epoch.get("t0_t1", [])
-            t0_t1 = []
-            if (
-                isinstance(t0t1_raw, (list, tuple))
-                and len(t0t1_raw) == 2
-                and all(isinstance(v, (int, float)) for v in t0t1_raw)
-            ):
-                t0_t1 = [(float(t0t1_raw[0]), float(t0t1_raw[1]))]
-            else:
-                for t in t0t1_raw or []:
-                    if isinstance(t, (list, tuple)) and len(t) >= 2:
-                        t0_t1.append((float(t[0]), float(t[1])))
+            t0_t1 = _parse_t0_t1(element_epoch.get("t0_t1", []))
 
             et.append(
                 {

@@ -101,30 +101,76 @@ class TestT0T1ToArray:
     def test_basic_conversion(self):
         from ndi.fun.epoch import t0_t1cell2array
 
+        # MATLAB shape: 2 x N, one column per clocktype's (t0; t1).
         result = t0_t1cell2array([[0.0, 1.5], [2.0, 3.5]])
-        expected = np.array([[0.0, 1.5], [2.0, 3.5]])
+        expected = np.array([[0.0, 2.0], [1.5, 3.5]])
         np.testing.assert_array_equal(result, expected)
 
     def test_empty_input(self):
         from ndi.fun.epoch import t0_t1cell2array
 
         result = t0_t1cell2array([])
-        assert result.shape == (0, 2)
+        assert result.shape == (2, 0)
 
     def test_single_pair(self):
         from ndi.fun.epoch import t0_t1cell2array
 
         result = t0_t1cell2array([[10.0, 20.0]])
-        assert result.shape == (1, 2)
+        assert result.shape == (2, 1)
         assert result[0, 0] == 10.0
-        assert result[0, 1] == 20.0
+        assert result[1, 0] == 20.0
 
     def test_tuples(self):
         from ndi.fun.epoch import t0_t1cell2array
 
         result = t0_t1cell2array([(0.0, 1.0), (2.0, 3.0)])
         assert result.shape == (2, 2)
-        assert result[1, 0] == 2.0
+        # column 0 = first clock's (t0, t1), column 1 = second clock's
+        assert result[0, 0] == 0.0
+        assert result[1, 0] == 1.0
+        assert result[0, 1] == 2.0
+        assert result[1, 1] == 3.0
+
+
+class TestParseT0T1WireForm:
+    """The element_epoch.t0_t1 on-disk shape MATLAB writes (issue #100 part 3).
+
+    MATLAB stores t0_t1 as 2 x N (schema ``parameters: [2, NaN]``, one column
+    per clocktype). ``jsonencode`` writes that as either a flat ``[t0, t1]``
+    (single-clock 2x1 collapse) or a nested ``[[t0_1,...],[t1_1,...]]``
+    (outer row-major). ``_parse_t0_t1`` reads both forms.
+    """
+
+    def test_flat_two_vector_is_single_clock(self):
+        from ndi.element import _parse_t0_t1
+
+        assert _parse_t0_t1([0.0, 100.0]) == [(0.0, 100.0)]
+
+    def test_empty_yields_no_pairs(self):
+        from ndi.element import _parse_t0_t1
+
+        assert _parse_t0_t1([]) == []
+        assert _parse_t0_t1(None) == []
+
+    def test_matlab_two_by_n_two_clocks(self):
+        from ndi.element import _parse_t0_t1
+
+        # MATLAB wire form for two clocktypes: row 0 = all t0's, row 1 = all t1's.
+        wire = [[0.0, 5.0], [1.5, 6.5]]
+        assert _parse_t0_t1(wire) == [(0.0, 1.5), (5.0, 6.5)]
+
+    def test_matlab_two_by_n_three_clocks(self):
+        from ndi.element import _parse_t0_t1
+
+        wire = [[0.0, 10.0, 20.0], [1.0, 11.0, 21.0]]
+        assert _parse_t0_t1(wire) == [(0.0, 1.0), (10.0, 11.0), (20.0, 21.0)]
+
+    def test_ragged_rows_are_rejected(self):
+        # Not a valid 2 x N; parser should fall through to []. We never want
+        # to silently guess an orientation from malformed input.
+        from ndi.element import _parse_t0_t1
+
+        assert _parse_t0_t1([[0.0, 5.0], [1.5]]) == []
 
 
 class TestOntologyTableRowVars:
