@@ -2209,6 +2209,43 @@ functions:
 # documents rebuilds byte-identical tiles, which is what proves the
 # document round trip rather than only the codec. If MATLAB gains them, the
 # names and argument order here are what it should mirror.
+  - name: readGEF
+    matlab_path: "+ndi/+fun/+doc/+gene/readGEF.m"
+    matlab_last_sync_hash: "f4aa5d8c"
+    python_path: "ndi/fun/doc_gene.py"
+    decision_log: >
+      Reads a vendor file, unlike the rest of this package, which reads and
+      writes the formats NDI itself defines (tile.bin, contours.bin,
+      cells.tsv). It was promoted from readStomicsGef.m in
+      bscholl-genomics-python, which had been reading real GEFs since
+      August and was the only MATLAB code that had; the harness there now
+      borrows it back so the two cannot drift. The interface was kept
+      IDENTICAL on promotion because compareMatlabToPython had already
+      validated that exact signature against 444 real tiles, and changing
+      it would have thrown that validation away.
+      Both sides return the same seven values in the same order rather than
+      Python bundling them into a dict, because the first four are exactly
+      makePyramid's first four positional arguments in both languages, so
+      the call reads the same on either side.
+      Option names are the MATLAB name-value names verbatim (probeOnly,
+      maxGenes, countCeiling), per the naming policy.
+      probeOnly exists for a GUI: a real section is ~10^8 records and
+      minutes, and an ingest dialog listing genes, extent and chip must not
+      pay that. nRecords stays exact under it because it is the sum of the
+      gene table's own counts, and the extent is reported as UNVALIDATED
+      because with no records there is nothing to check the attributes
+      against -- a caller must be able to tell that apart from a box the
+      data agreed with.
+      Nothing about the layout is assumed on either side: the group,
+      expression dataset and every field name are probed against candidate
+      lists, because GEF layouts drift between SAW versions. The extent
+      attributes are accepted only when they CONTAIN the data, probed
+      nearest-first from the bin group outward -- probing only the file
+      root yields a 1x1 pyramid on files that put them deeper.
+      Counts are clipped in a WIDE type in both languages. Clipping in the
+      narrow type saturates SAW's uint8 bin1 counts at 255 rather than at
+      countCeiling, silently; that trap has bitten this code before.
+
 # =========================================================================
 
   - name: readGeneList
