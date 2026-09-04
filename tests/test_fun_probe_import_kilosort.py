@@ -827,6 +827,29 @@ class TestImport:
         entry = extracellularInfo(session, probe)[0][0]
         assert entry["pipeline"].startswith("Kilosort3.0 to phy to")
 
+    def test_kilosort_directory_field_uses_the_platform_safe_folder_name(self, sorted_session):
+        """The provenance doc records the folder actually on disk, not elementstring().
+
+        MATLAB after VH-Lab/NDI-matlab@1b99d29 stores the sanitized
+        ``elementDirectory`` name in ``kilosort_clusters.kilosort_directory``,
+        so a document written on one platform names the same folder on
+        another. The probe here has name ``ctx`` and reference ``1``, whose
+        ``elementstring()`` is ``"ctx | 1"`` -- a name whose ``|`` is not
+        legal on Windows -- and whose folder is ``ctx_-_1``. The doc field
+        must be the second form, not the first, or a MATLAB reader on this
+        session cannot find the folder.
+        """
+        session, probe, _, _ = sorted_session
+        kilosort.probe(session, probe, RecalculateMeanWaveforms=False, verbose=False)
+        docs = session.database_search(ndi_query("").isa("kilosort_clusters"))
+        assert len(docs) == 1
+        directory = docs[0].document_properties["kilosort_clusters"]["kilosort_directory"]
+        assert directory == "kilosort/ctx_-_1", (
+            f"expected 'kilosort/ctx_-_1', got {directory!r} -- looks like "
+            "the field is being built from elementstring() instead of "
+            "elementDirectory()"
+        )
+
     def test_removing_the_import_takes_the_neurons_with_it(self, sorted_session):
         session, probe, _, _ = sorted_session
         kilosort.probe(session, probe, RecalculateMeanWaveforms=False, verbose=False)

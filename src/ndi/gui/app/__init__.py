@@ -9,25 +9,27 @@ per-session "Apps" menu -- no registration step, and no list of apps
 anywhere for it to be added to.
 
 The package is also one of the two scanned by default (with ``ndi.app``),
-so an app dropped in here is discovered by being here. Nine of MATLAB's
-eleven have landed -- ``ElectrodeDataExport``, ``ElectrodeMap``,
-``ensembleMaker``, ``katzExporter``, ``pyraview``,
-``spikeSorterImporter``, ``stimulusDecoder``, ``stimulusResponse`` and
-``vhNDISpikeSorter`` -- and each reaches the Apps menu by living in this
-package and by nothing else. Several close loops with each other: the
-importer creates the spiking-neuron elements the ensemble maker builds
-ensembles from, the two stimulus apps are the stimulus pipeline's halves
-(one writes what was shown, the other measures how an element answered),
-and the electrode map assigns the geometry the data export writes into a
-sorter's channel map.
+so an app dropped in here is discovered by being here. All eleven of
+MATLAB's apps have landed -- ``ElectrodeDataExport``, ``ElectrodeMap``,
+``ensembleMaker``, ``katzExporter``, ``kiasort``, ``pipelineEditor``,
+``pyraview``, ``spikeSorterImporter``, ``stimulusDecoder``,
+``stimulusResponse`` and ``vhNDISpikeSorter`` -- and each reaches the Apps
+menu by living in this package and by nothing else. Several close loops
+with each other: the importer creates the spiking-neuron elements the
+ensemble maker builds ensembles from, the two stimulus apps are the
+stimulus pipeline's halves (one writes what was shown, the other measures
+how an element answered), and the electrode map assigns the geometry the
+data export writes into a sorter's channel map.
 
-The two still out are ``kiasort`` and ``pipelineEditor``, and both are
-windows over something Python cannot reach: KIASORT is a MATLAB toolbox
-(its import side IS ported -- see
-:mod:`ndi.fun.probe.import_.kiasort`), and ``ndi.cpipeline`` is not ported.
-``vhNDISpikeSorter`` is the same shape and landed anyway, because MATLAB
-writes it as an availability check that explains itself when the sorter is
-absent -- so the port is honest about the absence rather than hiding it.
+Three of the eleven wrap something Python cannot reach yet:
+``vhNDISpikeSorter`` (needs the vhlab-library-matlab MATLAB library),
+``kiasort`` (KIASORT is a MATLAB toolbox; its import side IS ported --
+see :mod:`ndi.fun.probe.import_.kiasort`), and ``pipelineEditor``
+(``ndi.cpipeline`` is not ported). Each is an availability check that
+opens either way and explains itself when the tool is absent, so the port
+is honest about the absence rather than hiding it -- and a lab that grows
+a Python drop-in of any of the three gets a working button with no change
+here.
 
 A user can extend the menu by naming their own packages in the
 ``GUI.Navigator.SessionAppPackages`` preference, which is exactly the
@@ -45,6 +47,8 @@ from .electrode_data_export import ElectrodeDataExport
 from .electrode_map import ElectrodeMap
 from .ensemble_maker import ensembleMaker
 from .katz_exporter import katzExporter
+from .kiasort import kiasort
+from .pipeline_editor import pipelineEditor
 from .session_app import SessionApp, sessionApp
 from .spike_sorter_importer import spikeSorterImporter
 from .stimulus_decoder import stimulusDecoder
@@ -57,6 +61,8 @@ __all__ = [
     "SessionApp",
     "ensembleMaker",
     "katzExporter",
+    "kiasort",
+    "pipelineEditor",
     "sessionApp",
     "spikeSorterImporter",
     "stimulusDecoder",
