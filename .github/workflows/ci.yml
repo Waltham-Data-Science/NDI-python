@@ -152,12 +152,16 @@ jobs:
           python ndi_install.py --dev --no-validate --verbose
 
       - name: Install sonpipe (pulls CED's sonpy)
-        # Uses the entry point NDR-python exposes for this purpose so the git
-        # URL only lives in NDR-python's [ced] extra. --check afterwards
-        # fails the job if the CLI is still not reachable through the bridge.
+        # Direct pip install while NDR-python#14 (which adds the [ced] extra
+        # and `python -m ndr.setup.sonpipe` entry point) is still open. Once
+        # that PR merges and this repo's ndr @ git+...@main dep picks it up,
+        # swap the two lines below for:
+        #   python -m ndr.setup.sonpipe
+        #   python -m ndr.setup.sonpipe --check
+        # so the git URL only lives in NDR-python's [ced] extra.
         run: |
-          python -m ndr.setup.sonpipe
-          python -m ndr.setup.sonpipe --check
+          pip install "sonpipe @ git+https://github.com/VH-Lab/sonpipe.git"
+          sonpipe --version
 
       - name: Run CED integration tests against the real CLI
         # NDI_REQUIRE_SONPIPE turns "sonpipe missing" from skip to failure so
