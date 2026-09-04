@@ -60,11 +60,6 @@ dependencies = [
     "pydantic>=2.0",
     "openMINDS>=0.2.0",
     "scipy>=1.9.0",
-    # ndi.fun.doc_gene.readGEF reads Stereo-seq .gef files, which are HDF5.
-    # It arrives transitively via vhlab-toolbox-python today, but this
-    # package now imports it directly, so it is declared directly: a
-    # transitive dependency is not a promise.
-    "h5py>=3.0",
 ]
 
 [project.optional-dependencies]
