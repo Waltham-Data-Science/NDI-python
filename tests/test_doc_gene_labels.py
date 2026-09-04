@@ -23,12 +23,22 @@ def cells(tmp_path):
     S.database_add(sub)
     gl = makeGeneList(S, ["E1", "E2"], ["a", "b"])
     pyr, _ = makePyramid(
-        S, [1000, 1005], [2000, 2003], [0, 1], [2, 3], gl,
-        subjectID=sub.id, binSizes=[1], grid=1,
+        S,
+        [1000, 1005],
+        [2000, 2003],
+        [0, 1],
+        [2, 3],
+        gl,
+        subjectID=sub.id,
+        binSizes=[1],
+        grid=1,
     )
     cells_doc = makeCells(
-        S, ["c0", "c1", "c2", "c3"], [1000, 1002, 1004, 1006],
-        [2000, 2001, 2002, 2003], pyr,
+        S,
+        ["c0", "c1", "c2", "c3"],
+        [1000, 1002, 1004, 1006],
+        [2000, 2001, 2002, 2003],
+        pyr,
     )
     return S, cells_doc
 
@@ -39,9 +49,7 @@ def _props(doc):
 
 def test_counts_are_computed_not_supplied(cells):
     S, cells_doc = cells
-    doc = makeCellTypeLabels(
-        S, ["Pvalb", "L2/3 IT", "Pvalb", ""], cells_doc, isUnsupervised=False
-    )
+    doc = makeCellTypeLabels(S, ["Pvalb", "L2/3 IT", "Pvalb", ""], cells_doc, isUnsupervised=False)
     p = _props(doc)
     assert p["n_cells"] == 4
     # Two distinct categories; the empty string is UNLABELED, not a third.
@@ -68,7 +76,9 @@ def test_is_unsupervised_defaults_to_the_safer_assumption(cells):
 def test_a_cell_type_call_must_say_so(cells):
     S, cells_doc = cells
     doc = makeCellTypeLabels(
-        S, ["Pvalb", "Astro", "Pvalb", "Astro"], cells_doc,
+        S,
+        ["Pvalb", "Astro", "Pvalb", "Astro"],
+        cells_doc,
         isUnsupervised=False,
         labelName="subclass_nn_column",
         taxonomyLevel="subclass",
@@ -112,11 +122,17 @@ def test_several_labelings_coexist_on_one_segmentation(cells):
     """The reason labels are their own document."""
     S, cells_doc = cells
     atlas = makeCellTypeLabels(
-        S, ["Pvalb", "Astro", "Pvalb", "Astro"], cells_doc,
-        isUnsupervised=False, labelName="subclass_nn_column",
+        S,
+        ["Pvalb", "Astro", "Pvalb", "Astro"],
+        cells_doc,
+        isUnsupervised=False,
+        labelName="subclass_nn_column",
     )
     leiden = makeCellTypeLabels(
-        S, ["0", "1", "0", "2"], cells_doc, labelName="leiden_res1.0",
+        S,
+        ["0", "1", "0", "2"],
+        cells_doc,
+        labelName="leiden_res1.0",
     )
     assert atlas.id != leiden.id
     assert atlas.dependency_value("cells_document_id") == cells_doc.id

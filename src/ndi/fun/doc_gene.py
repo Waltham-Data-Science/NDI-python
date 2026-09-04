@@ -1585,22 +1585,23 @@ def makeCellTypeLabels(
     blank = [i for i, v in enumerate(labels) if not v.strip()]
     n_categories = len({v for v in labels if v.strip()})
 
-    doc = _blank(
-        "cellTypeLabels",
-        cellTypeLabels={
-            "label": label,
-            "label_name": labelName,
-            "taxonomy_level": taxonomyLevel,
-            "n_cells": n,
-            "n_categories": n_categories,
-            "n_unlabeled": len(blank),
-            "assignment_method": assignmentMethod,
-            "is_unsupervised": int(bool(isUnsupervised)),
-        },
-    ) + session.newdocument()
-    doc = doc.set_dependency_value(
-        "cells_document_id", cells_doc.id, error_if_not_found=False
+    doc = (
+        _blank(
+            "cellTypeLabels",
+            cellTypeLabels={
+                "label": label,
+                "label_name": labelName,
+                "taxonomy_level": taxonomyLevel,
+                "n_cells": n,
+                "n_categories": n_categories,
+                "n_unlabeled": len(blank),
+                "assignment_method": assignmentMethod,
+                "is_unsupervised": int(bool(isUnsupervised)),
+            },
+        )
+        + session.newdocument()
     )
+    doc = doc.set_dependency_value("cells_document_id", cells_doc.id, error_if_not_found=False)
     if referenceDocID:
         doc = doc.set_dependency_value(
             "reference_document_id", referenceDocID, error_if_not_found=False
