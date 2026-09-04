@@ -167,22 +167,40 @@ functions:
 
   - name: evaluate_fitcurve
     type: function
-    matlab_path: "N/A"
+    matlab_path: "+ndi/+data/evaluate_fitcurve.m (in a different namespace)"
     python_path: "ndi/fun/data.py"
     input_arguments:
       - name: fitcurve_doc
-        type_matlab: "N/A"
+        type_matlab: "N/A here (see canonical)"
         type_python: "Any"
       - name: "*args"
-        type_matlab: "N/A"
+        type_matlab: "N/A here (see canonical)"
         type_python: "np.ndarray"
     output_arguments:
       - name: values
         type_python: "np.ndarray"
     decision_log: >
-      Python-only function. No MATLAB equivalent exists in
-      +ndi/+fun/+data/. Evaluates a fitted curve at given
-      independent variable values.
+      Predates the canonical port. MATLAB's evaluate_fitcurve lives at
+      +ndi/+data/, which mirrors to ndi.data.evaluate_fitcurve (see the
+      root ndi_matlab_python_bridge.yaml); this ndi.fun.data variant is a
+      different, Python-invented shape and is not the Mirror Rule entry.
+
+      The differences matter to a caller:
+
+      * Schema. This variant reads fit_variable_names (with the dependent
+        variable as the last entry) and fit_parameter_values; the canonical
+        reads MATLAB's fit_independent_variable_names,
+        fit_dependent_variable_names and fit_parameters.
+      * Safety. This variant restricts eval()'s builtins and namespace;
+        the canonical parses the equation to an AST and walks it against
+        an allow-list, refusing attribute access, subscripts, calls to
+        anything unlisted, comprehensions and lambdas. A fitcurve document
+        is data that can arrive from a shared or cloud dataset, so the
+        canonical is the one to use in that setting.
+
+      This entry stays for backward compatibility with tests/test_phase1_gaps.py
+      and any caller already importing from ndi.fun.data. New code should
+      import from ndi.data.
 
   - name: readImageStack
     type: function
@@ -1209,9 +1227,10 @@ functions:
   - name: stimulus_tuningcurve_log
     type: function
     matlab_path: "+ndi/+fun/+calc/stimulus_tuningcurve_log.m"
-    python_path: "ndi/fun/stimulus.py"
+    matlab_last_sync_hash: "76b0673"
+    python_path: "ndi/fun/calc.py"
     input_arguments:
-      - name: session
+      - name: S
         type_matlab: "ndi.session (S)"
         type_python: "Any"
       - name: doc
@@ -1222,8 +1241,18 @@ functions:
         type_matlab: "log_str"
         type_python: "str"
     decision_log: >
-      Exact match. NOTE: MATLAB source is in +ndi/+fun/+calc/;
-      Python places it in ndi.fun.stimulus (different namespace).
+      Ported at its MATLAB mirror path -- MATLAB's +ndi/+fun/+calc/ becomes
+      ndi/fun/calc.py -- and reachable as ndi.fun.calc.stimulus_tuningcurve_log.
+      Uses doc.dependency_value(), matching MATLAB.
+
+      A second implementation lives at ndi.fun.stimulus.stimulus_tuningcurve_log
+      (predates this port; walks document_properties.depends_on directly and is
+      covered by tests/test_phase2_gaps.py). It stays for backward
+      compatibility -- callers already imported from that path -- but the
+      calc.py entry is the canonical one for Mirror Rule purposes. Anything
+      new should reach for ndi.fun.calc; consolidation onto one implementation
+      is its own follow-up because the two use different duck-typing
+      strategies and the phase2 tests would need updating.
 
   # =========================================================================
   # Functions — table.py
@@ -1952,16 +1981,30 @@ not_applicable:
 
   - name: plot_extracellular_spikeshapes
     matlab_path: "+ndi/+fun/plot_extracellular_spikeshapes.m"
-    status: not_yet_ported
+    matlab_last_sync_hash: "960fff8"
+    status: implemented
+    python_path: "ndi/fun/plot.py"
     decision_log: >
-      Not ported -- and reclassified in #154 from not_applicable, which was
-      wrong. It is not a GUI: it queries the session for
-      'neuron_extracellular' documents and draws their mean waveforms
-      offset by SPACE, which is ordinary plotting work, and this port does
-      port plotting (ndi.fun.probe.geometry.plot and ndi.fun.ensemble.plot
-      are both matplotlib). Nothing blocks it; nobody has needed it. Saying
-      "not applicable" would have closed the question for good, which is
-      what the status is for.
+      Ported (issue #78 tranche a). Defined in ndi/fun/plot.py and re-exported
+      from ndi.fun, so ndi.fun.plot_extracellular_spikeshapes is the mirror
+      path -- MATLAB puts this file at the top of +fun, not inside +fun/+plot.
+
+      Two deliberate departures from the MATLAB source, both documented in
+      the function's docstring and covered by tests/test_fun_plot_spikeshapes.py:
+
+      1. MATLAB accumulates the shared upper x-limit as
+         x_axis(2) = max(x_axis(1), max(...)) -- reading index 1, the running
+         MINIMUM, instead of index 2. The upper limit therefore tracks the
+         minimum rather than the maximum. This port accumulates correctly;
+         one test drives the case where the ordering makes the difference
+         observable.
+      2. MATLAB's help text says the search is for 'neuron_extracellular'
+         documents; the code queries 'extracellular'. The code is followed
+         here, since that is the observable behaviour.
+
+      Rendering is exercised through matplotlib's Agg backend so the tests
+      run headless. matplotlib is imported lazily inside the function with
+      the same ImportError contract as the rest of ndi.fun.plot.
 
   - name: run_Linux_checks
     matlab_path: "+ndi/+fun/run_Linux_checks.m"
