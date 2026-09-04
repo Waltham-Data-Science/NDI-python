@@ -253,12 +253,18 @@ class Navigator:
         c = cloud_colors()
         x, y, w, h = self.position
 
-        self.figure = QtWidgets.QWidget()
+        self.figure = _NavigatorWidget(self)
         self.figure.setWindowTitle("NDI Navigator")
         self.figure.setObjectName(WINDOW_TAG)
         self.figure.setGeometry(int(x), int(y), int(w), int(h))
         self.figure.setStyleSheet(f"background-color: {rgb_to_hex(c.dark_blue)};")
         self.figure.setMinimumWidth(nav_layout.MIN_WIDTH)
+        # Mouse-tracking so hover events fire without a button held; this is
+        # how the grip cursor changes when the pointer crosses the edge.
+        self.figure.setMouseTracking(True)
+        # Back-reference on the widget, mirroring MATLAB's guidata(fig, obj),
+        # so find_open() can recover the navigator from a widget handle.
+        self.figure.setProperty("_ndi_navigator", self)
 
         self.root_layout = QtWidgets.QVBoxLayout(self.figure)
         self.root_layout.setContentsMargins(
@@ -401,8 +407,121 @@ class Navigator:
     def end_drag(self) -> None:
         self._dragging = False
 
+    # ------------------------------------------------------------------
+    # Qt event dispatch (called by _NavigatorWidget)
+    # ------------------------------------------------------------------
+    def _on_button_down(self, y_from_bottom: float) -> None:
+        """Begin a grip drag if the click is on the edge."""
+        self.begin_drag(y_from_bottom)
+
+    def _on_mouse_motion(self, y_from_bottom: float) -> None:
+        """Drive a drag in progress, or update the edge cursor on hover.
+
+        When a drag is in progress the drag delta is applied; otherwise the
+        widget cursor becomes a hand when the pointer is on the grip and an
+        arrow otherwise -- MATLAB does the same, and without it the drag
+        region is invisible to the user.
+        """
+        if self._dragging:
+            self.drag_to(y_from_bottom)
+            return
+        if self.figure is None:
+            return
+        from PySide6 import QtCore
+
+        cursor_shape = (
+            QtCore.Qt.CursorShape.SizeVerCursor
+            if self.is_on_grip(y_from_bottom)
+            else QtCore.Qt.CursorShape.ArrowCursor
+        )
+        self.figure.setCursor(cursor_shape)
+
+    def _on_button_up(self) -> None:
+        """End a grip drag, restoring the arrow cursor."""
+        if self._dragging:
+            self.end_drag()
+            if self.figure is not None:
+                from PySide6 import QtCore
+
+                self.figure.setCursor(QtCore.Qt.CursorShape.ArrowCursor)
+
+    # ------------------------------------------------------------------
+    # discovery of open navigators
+    # ------------------------------------------------------------------
+    @staticmethod
+    def find_open() -> list["Navigator"]:
+        """Return open Navigator instances, newest last.
+
+        Mirrors MATLAB's ``ndi.gui.navigator.findOpen``. Searches the running
+        Qt application's top-level widgets for those tagged with the
+        navigator ``WINDOW_TAG`` and returns their attached Navigator
+        objects. Returns an empty list when no Qt application exists yet or
+        when no navigator is open, so callers can use it in a ``for`` loop
+        without an existence check.
+
+        This is how :class:`ndi.gui.component.ProgressBarWindow` discovers a
+        navigator to dock progress bars into, without a caller passing one
+        in.
+        """
+        try:
+            from PySide6 import QtWidgets
+        except ImportError:
+            return []
+
+        app = QtWidgets.QApplication.instance()
+        if app is None:
+            return []
+
+        found: list[Navigator] = []
+        for widget in app.topLevelWidgets():
+            if widget.objectName() != WINDOW_TAG:
+                continue
+            nav = widget.property("_ndi_navigator")
+            if isinstance(nav, Navigator):
+                found.append(nav)
+        return found
+
     def __repr__(self) -> str:
         return f"Navigator(panes={len(self.panes)}, height={self.figure_height:g})"
+
+
+def _NavigatorWidget(navigator: "Navigator") -> Any:
+    """Build a QWidget subclass whose events dispatch to NAVIGATOR.
+
+    Defined as a factory rather than at module scope so this module keeps
+    importing without PySide6 installed -- every Qt symbol here is the same
+    lazy pattern used everywhere else in this file.
+
+    Y is converted from Qt's top-anchored coordinate to the bottom-anchored
+    coordinate the grip API expects, because MATLAB's figure coordinates are
+    bottom-anchored and the layout math is written in those terms.
+    """
+    from PySide6 import QtWidgets
+
+    class _Widget(QtWidgets.QWidget):
+        def __init__(self, nav: "Navigator"):
+            super().__init__()
+            self._nav = nav
+
+        def resizeEvent(self, event):  # noqa: N802 - Qt override name
+            super().resizeEvent(event)
+            self._nav.on_figure_resized()
+
+        def mousePressEvent(self, event):  # noqa: N802
+            y_from_bottom = float(self.height() - event.position().y())
+            self._nav._on_button_down(y_from_bottom)
+            super().mousePressEvent(event)
+
+        def mouseMoveEvent(self, event):  # noqa: N802
+            y_from_bottom = float(self.height() - event.position().y())
+            self._nav._on_mouse_motion(y_from_bottom)
+            super().mouseMoveEvent(event)
+
+        def mouseReleaseEvent(self, event):  # noqa: N802
+            self._nav._on_button_up()
+            super().mouseReleaseEvent(event)
+
+    return _Widget(navigator)
 
 
 def QtCore_WA_DeleteOnClose() -> Any:

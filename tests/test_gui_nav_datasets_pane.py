@@ -376,7 +376,14 @@ class TestCloudStateCaching:
         nav, pane = _built_pane(user_datasets=[FakeDataset("a", in_cloud=True), FakeDataset("b")])
         pane.populate_tree()
         report = pane.check_all_cloud_status()
-        assert report == {"total": 2, "in_cloud": 1, "not_in_cloud": 1, "errors": 0}
+        assert report == {
+            "total": 2,
+            "in_cloud": 1,
+            "not_in_cloud": 1,
+            "errors": 0,
+            "inCloud": 1,
+            "notInCloud": 1,
+        }
         states = [n.data(0, 32).get("cloud") for n in pane.dataset_nodes()]
         assert states == ["incloud", "notincloud"]
 

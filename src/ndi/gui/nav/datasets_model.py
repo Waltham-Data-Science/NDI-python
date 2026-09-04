@@ -420,7 +420,10 @@ def check_all_cloud_status(
     Returns ``(report, states)``. The report counts ``total``, ``in_cloud``,
     ``not_in_cloud`` and ``errors``; ``states`` is the per-dataset state in
     the same order, one of ``"incloud"``, ``"notincloud"`` or ``"unknown"``,
-    for the caller to apply as badges.
+    for the caller to apply as badges. MATLAB-style keys ``inCloud`` and
+    ``notInCloud`` are included as aliases so a consumer that reads the
+    report by either name gets the same number; without the aliases such a
+    consumer would silently read zero.
 
     A dataset that cannot be checked counts as an ERROR and gets
     ``"unknown"``, never ``"notincloud"``. The distinction is the whole point
@@ -450,4 +453,6 @@ def check_all_cloud_status(
         else:
             report["not_in_cloud"] += 1
             states.append("notincloud")
+    report["inCloud"] = report["in_cloud"]
+    report["notInCloud"] = report["not_in_cloud"]
     return report, states

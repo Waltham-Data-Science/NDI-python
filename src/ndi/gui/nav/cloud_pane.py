@@ -137,11 +137,16 @@ class CloudPane(NavPane):
             self._alert(NO_DATASETS_PANE, title, success=False)
             return None
 
+        dialog = self._open_progress_dialog(title)
         try:
-            report = pane.check_all_cloud_status(self._progress)
+            report = pane.check_all_cloud_status(
+                lambda f, m: self._progress(f, m, dialog)
+            )
         except Exception as exc:  # noqa: BLE001 - reported, not swallowed
+            self._close_progress_dialog(dialog)
             self._alert(str(exc), title, success=False)
             return None
+        self._close_progress_dialog(dialog)
 
         self._alert(cloud_summary_message(report), title, success=True)
         return report
@@ -196,14 +201,66 @@ class CloudPane(NavPane):
         handle = getattr(self.navigator, "datasets_pane_handle", None)
         return handle() if callable(handle) else None
 
-    def _progress(self, fraction: float, message: str) -> None:
+    def _open_progress_dialog(self, title: str) -> Any | None:
+        """Return a non-modal ``QProgressDialog``, or None when Qt is missing.
+
+        Non-modal so the check loop is not blocked; the caller drives it
+        through :meth:`_progress` on every dataset. Returns None when a Qt
+        application is not running (headless tests, no display); the check
+        still runs, just without a visible dialog. Mirrors MATLAB's
+        ``uiprogressdlg`` for the bulk cloud-status check.
+        """
+        try:
+            from PySide6 import QtCore, QtWidgets
+        except ImportError:
+            return None
+        parent = getattr(self.navigator, "figure", None)
+        try:
+            dialog = QtWidgets.QProgressDialog(
+                "Checking NDI Cloud status...", "", 0, 100, parent
+            )
+        except Exception:  # noqa: BLE001 - no display, no Qt app
+            return None
+        # No cancel button: mirroring MATLAB's Cancelable=false, and the
+        # check itself does not accept cancellation.
+        dialog.setCancelButton(None)
+        dialog.setWindowTitle(title)
+        dialog.setWindowModality(QtCore.Qt.WindowModality.NonModal)
+        dialog.setMinimumDuration(0)
+        dialog.setAutoClose(False)
+        dialog.setAutoReset(False)
+        dialog.setValue(0)
+        dialog.show()
+        return dialog
+
+    def _close_progress_dialog(self, dialog: Any) -> None:
+        if dialog is None:
+            return
+        dialog.reset()
+        dialog.close()
+
+    def _progress(
+        self, fraction: float, message: str, dialog: Any = None
+    ) -> None:
         """Progress callback for the bulk check.
 
-        A no-op for now: MATLAB drives a uiprogressdlg here, and a modal Qt
-        dialog driven from inside the loop would block the very work it is
-        reporting on. The datasets pane already accepts the callback, so a
-        real progress widget slots in here without touching that side.
+        Advances the shared ``QProgressDialog`` in place. Kept processing
+        events on each call so the dialog stays live under a synchronous
+        Python loop -- MATLAB's uiprogressdlg redraws itself; Qt's does not
+        until control returns to the event loop.
         """
+        if dialog is None:
+            return
+        try:
+            from PySide6 import QtCore, QtWidgets
+        except ImportError:
+            return
+        percent = max(0, min(100, int(round(float(fraction) * 100))))
+        dialog.setValue(percent)
+        dialog.setLabelText(message)
+        app = QtWidgets.QApplication.instance()
+        if app is not None:
+            app.processEvents(QtCore.QEventLoop.ProcessEventsFlag.AllEvents)
 
     def _alert(self, message: str, title: str, *, success: bool) -> None:
         if self.navigator is None:

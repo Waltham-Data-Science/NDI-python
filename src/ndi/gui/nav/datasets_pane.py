@@ -173,6 +173,8 @@ class DatasetsPane(NavPane):
         self.grip: Any = None
         self.add_button: Any = None
         self.refresh_button: Any = None
+        #: Cached QMenu, built lazily on first "+" click and reused thereafter.
+        self._add_menu: Any = None
 
         #: Datasets and sessions the user added by hand with "+", on top of
         #: whatever the workspace scan finds.
@@ -248,8 +250,17 @@ class DatasetsPane(NavPane):
     # the "+" add menu and its flows
     # ------------------------------------------------------------------
     def on_add_button(self) -> Any:
-        """Pop the add menu under the "+" button."""
-        menu = self.build_add_menu()
+        """Pop the add menu under the "+" button.
+
+        The menu is built once and reused across clicks, mirroring MATLAB's
+        cache in ``AddMenu``. A rebuild per click would be cheap here but
+        would drop any state (e.g. a highlighted last-selected action) the
+        widget carries between opens.
+        """
+        menu = self._add_menu
+        if menu is None:
+            menu = self.build_add_menu()
+            self._add_menu = menu
         if menu is not None and self.add_button is not None:
             menu.exec(self.add_button.mapToGlobal(self.add_button.rect().bottomLeft()))
         return menu
