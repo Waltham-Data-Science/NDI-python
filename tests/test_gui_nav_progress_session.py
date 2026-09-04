@@ -374,6 +374,24 @@ class TestQtBuild:
         p.release_bars()
         assert p.bar_grid is None
 
+    def test_adopt_bar_grid_has_bar_percent_close_columns(self):
+        """MATLAB's grid is {'17.5x', '1.5x', '1x'} -- bar, percent, close.
+        A docking client (ProgressBarWindow) counts on that column shape;
+        a bare vertical stack silently loses the three-column layout."""
+        _qt_or_skip()
+        from PySide6 import QtWidgets
+
+        win = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(win)
+        p = ProgressPane()
+        p.build(layout, 0)
+        grid = p.adopt_bar_grid().layout()
+        assert isinstance(grid, QtWidgets.QGridLayout)
+        # 35 : 3 : 2 preserves 17.5 : 1.5 : 1 exactly.
+        assert grid.columnStretch(0) == 35
+        assert grid.columnStretch(1) == 3
+        assert grid.columnStretch(2) == 2
+
     def test_session_info_window_lists_every_section(self):
         _qt_or_skip()
         from PySide6 import QtWidgets
