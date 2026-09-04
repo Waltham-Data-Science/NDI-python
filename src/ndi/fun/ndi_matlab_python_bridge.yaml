@@ -2209,6 +2209,56 @@ functions:
 # documents rebuilds byte-identical tiles, which is what proves the
 # document round trip rather than only the codec. If MATLAB gains them, the
 # names and argument order here are what it should mirror.
+  - name: makeCellTypeLabels
+    matlab_path: "+ndi/+fun/+doc/+gene/makeCellTypeLabels.m"
+    matlab_last_sync_hash: "3d90a187"
+    python_path: "ndi/fun/doc_gene.py"
+    decision_log: >
+      Writes labels.tsv and stores a cellTypeLabels document depending on
+      the spatialGeneExpressionCells document it labels.
+
+      LABELS ARE THEIR OWN DOCUMENT rather than a column of cells.tsv
+      because one segmentation routinely carries several competing
+      labelings -- a transferred atlas call, a clustering at one
+      resolution, the same clustering at another -- arriving at different
+      times from different sources. One document each lets them coexist,
+      be added later, and be deleted independently, and a test asserts two
+      labelings can sit on one segmentation at once.
+
+      is_unsupervised is the one argument here that is not cosmetic, and
+      it DEFAULTS TO TRUE on both sides -- the safer assumption, meaning
+      "do not read biology into it". An unsupervised clustering carries no
+      biological identity: cluster 3 is an index, not a cell type, and
+      means nothing outside the run that produced it. A viewer colouring
+      by a clustering looks identical to one colouring by a subclass call,
+      so the difference must be carried in the data or it is lost, and
+      reading a cluster index as a cell type is a scientific error rather
+      than a display bug. The source file does not record which kind it
+      is; ndr.format.stereoseq.readCellBin can only GUESS from a column
+      name and marks its guess as one. This project has already lost work
+      to that guess, so here a caller claiming a labeling is a real cell
+      type call has to say so explicitly.
+
+      An empty label means UNLABELED, which is a real state rather than an
+      error, and it is excluded from n_categories. n_cells, n_categories
+      and n_unlabeled are computed rather than supplied; the last matters
+      because a labeling covering a third of the cells and one covering
+      all of them look the same in a legend.
+
+      A length mismatch against the cells document is an ERROR rather than
+      padded or truncated: labels are matched to cells by row order, so a
+      shifted labeling gives every cell its neighbour's type and nothing
+      downstream notices.
+
+      cell_index in labels.tsv is 0-BASED, as in cells.tsv and
+      contours.bin, and is written explicitly rather than inferred from
+      row order.
+
+      DIVERGENCE: MATLAB returns [doc, tsvPath], Python returns the
+      document alone. That follows each language's existing convention in
+      this package -- makeGeneList and makeCells already differ the same
+      way -- rather than introducing a third.
+
 # =========================================================================
 
   - name: readGeneList
