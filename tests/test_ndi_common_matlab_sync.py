@@ -8,8 +8,12 @@ downstream failure.
 
 The test needs a local checkout of NDI-matlab to compare against; it locates
 one via the ``NDI_MATLAB_PATH`` environment variable, or by walking up a small
-set of well-known sibling paths. When no checkout is found (the common CI
-case), the whole module skips loudly rather than passing silently.
+set of well-known sibling paths. When no checkout is found the tests skip --
+unless ``NDI_COMMON_SYNC_STRICT`` is set, which CI does after checking the
+repo out, so a workflow that stops providing the tree fails instead of
+quietly passing. Same reasoning as ``test_matlab_bridge_completeness.py``
+and ``NDI_BRIDGE_CHECK_STRICT``: a check that could not run must not report
+the same result as a check that ran and passed (issue #77).
 
 Three checks:
   1. **Missing from Python.** Files present in NDI-matlab under
@@ -33,6 +37,9 @@ from pathlib import Path
 import pytest
 
 NDI_COMMON_REL = Path("src/ndi/ndi_common")
+
+#: Set by CI once NDI-matlab is checked out. See the module docstring.
+STRICT_ENV_VAR = "NDI_COMMON_SYNC_STRICT"
 
 
 def _find_matlab_repo() -> Path | None:
@@ -62,13 +69,23 @@ def _find_matlab_repo() -> Path | None:
 
 
 _MATLAB_REPO = _find_matlab_repo()
-pytestmark = pytest.mark.skipif(
-    _MATLAB_REPO is None,
-    reason=(
+
+
+def _require_matlab_repo() -> Path:
+    """Return the NDI-matlab checkout, or skip/fail per strict mode."""
+    if _MATLAB_REPO is not None:
+        return _MATLAB_REPO
+    message = (
         "NDI-matlab checkout not found. Set NDI_MATLAB_PATH, or clone "
         "NDI-matlab next to NDI-python, to run the ndi_common sync tests."
-    ),
-)
+    )
+    if os.environ.get(STRICT_ENV_VAR, "").strip():
+        pytest.fail(
+            f"{message} ({STRICT_ENV_VAR} is set, so the tree was supposed to "
+            "be there -- a missing one means the workflow stopped providing it, "
+            "and skipping would report that as a pass.)"
+        )
+    pytest.skip(message)
 
 
 # ---------------------------------------------------------------------------
@@ -112,14 +129,7 @@ PYTHON_ONLY_EXPECTED: frozenset[str] = frozenset(
 # Each entry pairs the relative path with a one-line reason so the exclusion
 # is not silent. When one of these converges, the test asks the caller to
 # remove it from this map -- so the map itself never grows stale.
-EXPECTED_DIVERGENCES: dict[str, str] = {
-    # daq_systems/rayolab/rayo_stim.json: MATLAB widened the
-    # MetadataReaderFileParameters regex from `#_\d{6}_...` (matches only a
-    # literal '#') to `.*_\d{6}_...` (matches any prefix). Likely a bug fix
-    # on the MATLAB side, but changing what files the reader picks up needs
-    # verification against the actual rayo_stim data corpus before we sync.
-    "daq_systems/rayolab/rayo_stim.json": "MetadataReaderFileParameters regex",
-}
+EXPECTED_DIVERGENCES: dict[str, str] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -143,8 +153,7 @@ def python_common() -> Path:
 
 @pytest.fixture(scope="module")
 def matlab_common() -> Path:
-    assert _MATLAB_REPO is not None  # skip guard above
-    return _MATLAB_REPO / NDI_COMMON_REL
+    return _require_matlab_repo() / NDI_COMMON_REL
 
 
 # ---------------------------------------------------------------------------
