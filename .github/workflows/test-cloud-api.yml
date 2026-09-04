@@ -42,12 +42,9 @@ jobs:
           CLOUD_API_ENVIRONMENT: ${{ matrix.environment }}
           # The MATLAB BYOL tests call DELETE /users/me/matlab-license, so
           # tests/_matlab_license_guard.py refuses to run unless this is set
-          # explicitly. User 2 is the account ci.yml documents as having no
-          # registered license, so the destructive tests run end-to-end and
-          # clean up after themselves. User 1's license state is not
-          # established, so it gets "true": the destructive tests skip
-          # themselves and the teardown never calls clearMatlabLicense.
-          NDI_CLOUD_TEST_USER_HAS_MATLAB_LICENSE: ${{ matrix.user == 1 && 'true' || 'false' }}
+          # explicitly. Neither test account has a registered license, so
+          # the destructive tests run end-to-end and clean up after themselves.
+          NDI_CLOUD_TEST_USER_HAS_MATLAB_LICENSE: "false"
         run: |
           # All live cloud test files, not just test_cloud_live.py -- the
           # others were previously exercised only by ci.yml, so they had no
