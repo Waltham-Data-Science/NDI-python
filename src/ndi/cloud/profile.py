@@ -86,6 +86,14 @@ def _prefdir() -> Path:
     try:
         d = Path.home() / ".ndi"
         d.mkdir(parents=True, exist_ok=True)
+        # 0700 so a shared-workstation neighbour cannot read the AES-encrypted
+        # secrets file the aes backend writes here (the key is derived from
+        # hostname+username, which they may know). No-op on Windows, and
+        # honoured only when the mkdir call above created the directory.
+        try:
+            os.chmod(d, 0o700)
+        except OSError:
+            pass
         return d
     except OSError:
         return Path(tempfile.gettempdir())
@@ -150,7 +158,30 @@ def _read_secrets_file(filename: Path) -> dict:
 
 
 def _write_secrets_file(filename: Path, payload: dict) -> None:
-    filename.write_text(json.dumps(payload, indent=2))
+    # Write via os.open with 0600 so a shared-workstation neighbour cannot
+    # read the AES ciphertext. The AES key is derived from hostname+username
+    # (see _aes_key_bytes), which they may know. tempfile+replace so a
+    # concurrent open never sees the old file at the tightened mode with the
+    # wrong contents. No-op on Windows for the mode bits, atomic on all
+    # POSIX filesystems.
+    tmp = filename.with_suffix(filename.suffix + ".tmp")
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "w") as fh:
+            fh.write(json.dumps(payload, indent=2))
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    os.replace(tmp, filename)
+    # A pre-existing file may already carry a wider mode; tighten it too so a
+    # first write after an upgrade does not leave 0644 behind.
+    try:
+        os.chmod(filename, 0o600)
+    except OSError:
+        pass
 
 
 def _safe_field(name: str) -> str:

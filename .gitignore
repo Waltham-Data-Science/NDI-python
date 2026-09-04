@@ -47,6 +47,9 @@ site/
 .ndi/
 *.ndi
 
+# Build artifacts that must never be committed
+pythonArtifacts.tar.gz
+
 # Generated tutorial HTML (keep locally for review, not in repo)
 tutorials/*.html
 *.sqlite

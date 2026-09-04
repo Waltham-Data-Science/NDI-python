@@ -236,7 +236,12 @@ def login(
         raise CloudAuthError(f"Login request failed: {exc}") from exc
 
     if resp.status_code != 200:
-        raise CloudAuthError(f"Login failed (HTTP {resp.status_code}): {resp.text}")
+        # resp.text often echoes the submitted credentials on this endpoint,
+        # so keep it out of the raised message (which lands in tracebacks, CI
+        # logs, and error reporters). A DEBUG line preserves the body for
+        # local troubleshooting when the caller opts into it.
+        logger.debug("POST /auth/login failed body: %s", resp.text)
+        raise CloudAuthError(f"Login failed (HTTP {resp.status_code})")
 
     data = resp.json()
     token = data.get("token", "")
@@ -560,7 +565,8 @@ def changePassword(
         raise CloudAuthError(f"Change password request failed: {exc}") from exc
 
     if resp.status_code != 200:
-        raise CloudAuthError(f"Change password failed (HTTP {resp.status_code}): {resp.text}")
+        logger.debug("POST /auth/password failed body: %s", resp.text)
+        raise CloudAuthError(f"Change password failed (HTTP {resp.status_code})")
     return True
 
 
@@ -589,7 +595,8 @@ def resetPassword(
         raise CloudAuthError(f"Reset password request failed: {exc}") from exc
 
     if resp.status_code != 200:
-        raise CloudAuthError(f"Reset password failed (HTTP {resp.status_code}): {resp.text}")
+        logger.debug("POST /auth/password/forgot failed body: %s", resp.text)
+        raise CloudAuthError(f"Reset password failed (HTTP {resp.status_code})")
     return True
 
 
@@ -623,7 +630,8 @@ def verifyUser(
         raise CloudAuthError(f"Verify user request failed: {exc}") from exc
 
     if resp.status_code != 200:
-        raise CloudAuthError(f"Verify user failed (HTTP {resp.status_code}): {resp.text}")
+        logger.debug("POST /auth/verify failed body: %s", resp.text)
+        raise CloudAuthError(f"Verify user failed (HTTP {resp.status_code})")
     return True
 
 
@@ -652,7 +660,8 @@ def resendConfirmation(
         raise CloudAuthError(f"Resend confirmation failed: {exc}") from exc
 
     if resp.status_code != 200:
-        raise CloudAuthError(f"Resend confirmation failed (HTTP {resp.status_code}): {resp.text}")
+        logger.debug("POST /auth/confirmation/resend failed body: %s", resp.text)
+        raise CloudAuthError(f"Resend confirmation failed (HTTP {resp.status_code})")
     return True
 
 

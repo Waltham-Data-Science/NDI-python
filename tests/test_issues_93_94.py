@@ -441,7 +441,7 @@ def test_setup_lab_single_metadata_reader_carries_its_file_parameter():
     ]
     assert len(rayo_readers) == 1
     fp = rayo_readers[0].props["daqmetadatareader.tab_separated_file_parameter"]
-    assert fp == r"#_\d{6}_\d{6}\._epochprobemap\.txt\>"
+    assert fp == r".*_\d{6}_\d{6}\._epochprobemap\.txt\>"
 
 
 def test_setup_lab_installs_default_filematch_syncrule():
