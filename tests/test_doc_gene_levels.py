@@ -207,8 +207,6 @@ def cells_doc(pyramid, tmp_path):
     the reader is proved against a document assembled the way a maker
     would, rather than left untested until one exists.
     """
-    import os
-
     from ndi.fun.doc_gene import _store_doc
 
     S, pyr = pyramid
@@ -228,8 +226,12 @@ def cells_doc(pyramid, tmp_path):
     doc = doc.set_dependency_value(
         "spatialGeneExpressionPyramid_id", pyr.id, error_if_not_found=False
     )
+    # No assertion that the source survives: _store_doc's contract is that
+    # files are INGESTED, so "the originals may be deleted once the database
+    # has copied them". An earlier version of this fixture checked the
+    # source was still there, which only held while a staging copy was
+    # shielding it -- asserting the opposite of the documented behaviour.
     doc = _store_doc(S, doc, ["cells.tsv"], [str(path)])
-    assert os.path.isfile(path)
     return S, doc
 
 
