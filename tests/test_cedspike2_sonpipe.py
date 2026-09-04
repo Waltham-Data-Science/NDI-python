@@ -1,11 +1,13 @@
-"""Exercise the NDI CED Spike2 reader against NDR-python's fake sonpipe CLI.
+"""Exercise the NDI CED Spike2 reader against a fake sonpipe CLI.
 
 CED's sonpy has no wheel for CPython 3.10-3.13 on Linux or macOS, so the real
-CLI cannot run in CI. NDR-python ships ``tests/fake_sonpipe.py`` for exactly
-this: a stand-in that reproduces the CLI contract (JSON header/marker
-payloads, little-endian binary sample stdout, completion sentinel). Pointing
-NDI's wrapper at that CLI covers the whole call path -- header parsing,
-sample-window arithmetic, event and marker dispatch -- without needing sonpy.
+CLI cannot run in this repo's main test matrix. tests/_fake_sonpipe.py is
+vendored from NDR-python (see the header there) and reproduces the CLI
+contract: the JSON header/marker payloads, little-endian binary sample
+stdout, and completion sentinel. Pointing NDI's wrapper at that CLI covers
+the whole call path -- header parsing, sample-window arithmetic, event and
+marker dispatch -- without needing sonpy. The real sonpipe integration
+runs in tests/test_cedspike2_integration.py, in the ced-integration CI job.
 """
 
 from __future__ import annotations
@@ -20,14 +22,7 @@ from ndr.format.ced import sonpipe
 
 from ndi.daq.reader.mfdaq.cedspike2 import ndi_daq_reader_mfdaq_cedspike2
 
-FAKE = Path(__file__).parents[1].parent / "NDR-python" / "tests" / "fake_sonpipe.py"
-
-if not FAKE.exists():  # pragma: no cover - CI checkout layout differs
-    pytest.skip(
-        "NDR-python's fake_sonpipe.py is not available alongside this checkout; "
-        "the CED reader is exercised in NDR-python's own test suite in that case.",
-        allow_module_level=True,
-    )
+FAKE = Path(__file__).with_name("_fake_sonpipe.py")
 
 SR = 1000.0
 N = 500
