@@ -1488,3 +1488,134 @@ def makeCells(
         doc = doc.set_dependency_value("subject_id", subjectID, error_if_not_found=False)
 
     return _store_doc(session, doc, file_names, file_paths)
+
+
+__all__ += ["makeCellTypeLabels"]
+
+
+def makeCellTypeLabels(
+    session,
+    labels,
+    cells_doc,
+    isUnsupervised: bool = True,
+    labelName: str = "",
+    taxonomyLevel: str = "",
+    assignmentMethod: str = "",
+    label: str = "",
+    referenceDocID: str = "",
+):
+    """Create a cellTypeLabels document from per-cell labels.
+
+    MATLAB equivalent: ``ndi.fun.doc.gene.makeCellTypeLabels``
+
+    Writes ``labels.tsv`` and enters the document in the database. Labels
+    live in their own document rather than as a column of ``cells.tsv``
+    because one segmentation routinely carries SEVERAL competing labelings
+    -- a transferred atlas call, a clustering at one resolution, the same
+    clustering at another -- arriving at different times from different
+    sources. One document each lets them coexist, be added later, and be
+    deleted independently.
+
+    Args:
+        labels: one label per cell, in ``cells.tsv`` row order. An empty
+            string means UNLABELED, which is a real state, not an error.
+        cells_doc: the ``spatialGeneExpressionCells`` document these
+            label. Row order must match its ``cells.tsv``, which is why
+            this is positional and why the length is checked against it.
+        isUnsupervised: whether this labeling is an unsupervised
+            clustering. See below; it is the one argument here that is not
+            cosmetic.
+        labelName: what the labeling is called in its source, e.g.
+            ``"subclass_nn_column"`` or ``"leiden_res1.0"``.
+        taxonomyLevel: ``"class"``, ``"subclass"``, ``"cluster"`` -- where
+            it sits in a cell type hierarchy.
+        assignmentMethod: how each cell got its label.
+        label: human-readable label for the document itself.
+        referenceDocID: the atlas or reference this was transferred from,
+            when one is in the database.
+
+    Returns:
+        The stored cellTypeLabels document. The tsv path is not returned,
+        matching makeGeneList and makeCells here; MATLAB returns it as a
+        second output because that is its convention in this package.
+
+    IS_UNSUPERVISED IS NOT A DETAIL. An unsupervised clustering carries no
+    biological identity: cluster 3 is not a cell type, it is an index, and
+    it means nothing outside the run that produced it. A transferred atlas
+    call is an inference ABOUT each cell that can be right or wrong. A
+    viewer colouring by a clustering and one colouring by a subclass call
+    look identical, so the difference must be carried in the data or it is
+    lost -- and reading a cluster index as a cell type is a scientific
+    error, not a display bug.
+
+    The source file does not record which kind it is. Callers inferring it
+    from a column name are guessing, and this project has already lost work
+    to that guess. So the argument is explicit, defaults to the SAFER
+    assumption -- unsupervised, meaning "do not read biology into it" --
+    and a caller claiming a labeling is a real cell type call must say so.
+
+    ``n_cells``, ``n_categories`` and ``n_unlabeled`` are computed rather
+    than supplied. The last matters: a labeling covering a third of the
+    cells and one covering all of them look the same in a legend.
+    """
+    labels = ["" if v is None else str(v) for v in labels]
+    n = len(labels)
+    if n == 0:
+        raise ValueError("labels is empty.")
+
+    # Row order is the contract with cells.tsv, so a length mismatch is an
+    # error rather than something to pad or truncate: a shifted labeling
+    # gives every cell its neighbour's type and nothing downstream notices.
+    n_cells = _cells_doc_count(cells_doc)
+    if n_cells is not None and n_cells != n:
+        raise ValueError(
+            f"labels has {n} entries but the cells document has {n_cells} "
+            "cells. Labels are matched to cells by ROW ORDER, so a mismatch "
+            "would silently give cells the wrong type."
+        )
+
+    fd, tsv_path = tempfile.mkstemp(suffix=".tsv")
+    with os.fdopen(fd, "w") as fh:
+        # cell_index is the 0-BASED row of cells.tsv, written explicitly for
+        # the same reason it is there: never inferred from row order.
+        fh.write("cell_index\tlabel\n")
+        for i, v in enumerate(labels):
+            fh.write(f"{i}\t{v}\n")
+
+    blank = [i for i, v in enumerate(labels) if not v.strip()]
+    n_categories = len({v for v in labels if v.strip()})
+
+    doc = _blank(
+        "cellTypeLabels",
+        cellTypeLabels={
+            "label": label,
+            "label_name": labelName,
+            "taxonomy_level": taxonomyLevel,
+            "n_cells": n,
+            "n_categories": n_categories,
+            "n_unlabeled": len(blank),
+            "assignment_method": assignmentMethod,
+            "is_unsupervised": int(bool(isUnsupervised)),
+        },
+    ) + session.newdocument()
+    doc = doc.set_dependency_value(
+        "cells_document_id", cells_doc.id, error_if_not_found=False
+    )
+    if referenceDocID:
+        doc = doc.set_dependency_value(
+            "reference_document_id", referenceDocID, error_if_not_found=False
+        )
+
+    return _store_doc(session, doc, ["labels.tsv"], [tsv_path])
+
+
+def _cells_doc_count(cells_doc):
+    """The cells document's own n_cells, or None if it carries none."""
+    try:
+        props = cells_doc.document_properties
+        cells = props.get("spatialGeneExpressionCells")
+        if cells and "n_cells" in cells:
+            return int(cells["n_cells"])
+    except Exception:
+        pass
+    return None
