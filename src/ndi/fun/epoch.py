@@ -120,33 +120,35 @@ def filename2epochid(
 def t0_t1cell2array(
     t0t1_in: list | Any,
 ) -> np.ndarray:
-    """Convert a list of ``[t0, t1]`` interval pairs to an Nx2 numpy array.
+    """Convert a list of ``[t0, t1]`` interval pairs to a 2xN numpy array.
 
     MATLAB equivalent: ndi.fun.doc.t0_t1cell2array
 
-    Converts epoch table t0/t1 cell entries (list of ``[t0, t1]`` pairs)
-    into a numeric array suitable for inclusion in NDI documents.
+    Each input pair becomes a column: ``result[:, k] == [t0_k, t1_k]``. This
+    matches MATLAB's schema for ``element_epoch.t0_t1`` (``parameters:
+    [2, NaN]``, i.e. 2 rows x N columns, one column per epoch clocktype).
 
     Args:
         t0t1_in: List of ``[t0, t1]`` pairs. Each element can be a list,
             tuple, or array of two numbers.
 
     Returns:
-        Numpy array of shape ``(N, 2)`` where N is the number of intervals.
-        Returns an empty ``(0, 2)`` array if input is empty.
+        Numpy array of shape ``(2, N)`` where N is the number of intervals.
+        Row 0 holds the t0's, row 1 holds the t1's. Returns an empty
+        ``(2, 0)`` array if input is empty.
 
     Example:
         >>> t0_t1cell2array([[0.0, 1.5], [2.0, 3.5]])
-        array([[0. , 1.5],
-               [2. , 3.5]])
+        array([[0. , 2. ],
+               [1.5, 3.5]])
     """
     if not t0t1_in:
-        return np.empty((0, 2), dtype=float)
+        return np.empty((2, 0), dtype=float)
 
-    result = np.zeros((len(t0t1_in), 2), dtype=float)
+    result = np.zeros((2, len(t0t1_in)), dtype=float)
     for k, pair in enumerate(t0t1_in):
-        result[k, 0] = pair[0]
-        result[k, 1] = pair[1]
+        result[0, k] = pair[0]
+        result[1, k] = pair[1]
 
     return result
 

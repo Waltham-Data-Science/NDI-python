@@ -774,10 +774,15 @@ functions:
       - name: array
         type_python: "np.ndarray"
     decision_log: >
-      Exact match. Converts list of [t0, t1] interval pairs to Nx2
-      numpy array. Returns shape (N, 2) or empty (0, 2) if input is
-      empty. NOTE: MATLAB source is in +ndi/+fun/+doc/; Python places
-      it in ndi.fun.epoch (different namespace).
+      Exact match. Returns a 2 x N array, one column per input pair --
+      column k holds ``[t0_k; t1_k]``, matching MATLAB's ``element_epoch.t0_t1``
+      schema (``parameters: [2, NaN]``, "each column is for a different
+      epoch clock type"). Empty input returns shape (2, 0). NOTE: MATLAB
+      source is in +ndi/+fun/+doc/; Python places it in ndi.fun.epoch
+      (different namespace).
+      History: earlier versions returned (N, 2) -- the transpose of MATLAB's
+      output. Corrected as part of the issue #100 part 3 orientation
+      decision (adopt MATLAB's 2 x N as the wire form).
 
   # =========================================================================
   # Functions — file.py
