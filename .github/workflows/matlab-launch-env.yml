@@ -1,0 +1,68 @@
+name: MATLAB launch environment probe
+
+# Answers one question, on Linux, where it actually bites: when MATLAB's
+# system() launches a venv python, does that python still work?
+#
+# macOS was measured by hand and is clean -- MATLAB sets no MW_ORIG_* and
+# leaves DYLD_* empty -- but the curl failure this mirrors
+# (ndi.common.systemCurlEnvPrefix) was a Linux/CI failure, so Linux is the
+# case that needs a machine to answer it.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/matlab-launch-env-probe]
+
+jobs:
+  probe:
+    name: Does a venv python survive MATLAB's system()?
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build a venv holding what napari actually links against
+        run: |
+          python -m venv /tmp/ndivenv
+          /tmp/ndivenv/bin/python -m pip install -q --upgrade pip
+          # numpy and Qt are the two binary-linked imports that break when
+          # MATLAB's libstdc++ shadows the system one. napari itself is not
+          # needed to reproduce that and would cost minutes.
+          /tmp/ndivenv/bin/python -m pip install -q numpy PyQt5
+
+      - name: Set up MATLAB
+        uses: matlab-actions/setup-matlab@v2
+        with:
+          release: latest
+          cache: true
+
+      - name: BASELINE - probe from a plain shell
+        run: |
+          echo "=== baseline: no MATLAB anywhere in the chain ==="
+          /tmp/ndivenv/bin/python tools/matlab_launch_probe.py
+
+      - name: PROBE - same script, launched by MATLAB's system()
+        uses: matlab-actions/run-command@v2
+        with:
+          command: |
+            disp('=== raw: what MATLAB hands a child process ===');
+            system('echo "LD=[$LD_LIBRARY_PATH]"; env | grep -i "^MW_" || echo "(no MW_* variables)"');
+            disp(' ');
+            disp('=== unprotected: venv python straight from system() ===');
+            [s1, r1] = system('/tmp/ndivenv/bin/python tools/matlab_launch_probe.py');
+            fprintf('%s\nexit status = %d\n\n', r1, s1);
+            disp('=== protected: same thing through the napariViewGEF wrapper ===');
+            setenv('NDI_PYTHON', '/tmp/ndivenv/bin/python');
+            [s2, r2] = system('NDI_FROM_MATLAB=1 ./tools/napariViewGEF tools/matlab_launch_probe.py');
+            fprintf('%s\nexit status = %d\n\n', r2, s2);
+            fprintf('VERDICT unprotected=%d protected=%d\n', s1, s2);
+            if s1 ~= 0 && s2 == 0
+                disp('-> MATLAB DOES break a venv python on Linux, and the wrapper fixes it.');
+            elseif s1 == 0 && s2 == 0
+                disp('-> MATLAB does NOT break it here; the wrapper is insurance, not a fix.');
+            elseif s2 ~= 0
+                error('The wrapper did not produce a working python; look at the output above.');
+            end

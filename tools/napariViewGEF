@@ -1,0 +1,25 @@
+#!/bin/sh
+# Launcher for the NDI napari viewer, usable from a shell or from MATLAB.
+#
+# MATLAB prepends its bundled libraries to LD_LIBRARY_PATH on Linux and
+# system() children inherit it, so Qt and numpy can load MATLAB's
+# libstdc++ instead of the OS copies. MATLAB stashes the pre-MATLAB value
+# in MW_ORIG_LD_LIBRARY_PATH; restore that rather than blanking the
+# variable, so an HPC module or conda environment keeps the paths it meant
+# to set. Same problem ndi.common.systemCurlEnvPrefix solves for curl.
+#
+# Gated on NDI_FROM_MATLAB rather than on MW_ORIG_LD_LIBRARY_PATH being
+# present: on macOS MATLAB sets no MW_ORIG_* at all (measured), so
+# presence is not a reliable detector. The MATLAB-side launcher sets the
+# flag; it is one call site, and it does not depend on MATLAB internals
+# that vary by platform.
+if [ -n "${NDI_FROM_MATLAB:-}" ]; then
+    LD_LIBRARY_PATH="${MW_ORIG_LD_LIBRARY_PATH-}"; export LD_LIBRARY_PATH
+    DYLD_LIBRARY_PATH="${MW_ORIG_DYLD_LIBRARY_PATH-}"; export DYLD_LIBRARY_PATH
+    unset DYLD_FRAMEWORK_PATH DYLD_INSERT_LIBRARIES
+fi
+
+# Never legitimate here: it overrides the venv's prefix outright.
+unset PYTHONHOME
+
+exec "${NDI_PYTHON:-/usr/local/ndi/python/bin/python}" "$@"
