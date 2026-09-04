@@ -454,7 +454,7 @@ functions:
   - name: import.kilosort
     type: package
     matlab_path: "+ndi/+fun/+probe/+import/+kilosort/"
-    matlab_last_sync_hash: "eaec593"
+    matlab_last_sync_hash: "1b99d29"
     python_path: "ndi/fun/probe/import_/kilosort/"
     decision_log: >
       Ported in full: all thirteen MATLAB files. The flat namespace MATLAB's
@@ -523,6 +523,15 @@ functions:
       value that parses whole as a number comes back numeric, as in MATLAB.
       removeold -- removes the neuron elements and their epoch documents
       before the neuron documents, then the cluster document itself.
+      Platform-independent folder names (VH-Lab/NDI-matlab@1b99d29): probe
+      and session resolve the per-probe folder through
+      ndi.fun.file.elementDirectory rather than elementstring(), and probe
+      records that same platform-safe name (e.g. 'ctx_-_1') in
+      kilosort_clusters.kilosort_directory. Without this, a Python-written
+      document says 'kilosort/ctx | 1' while the folder on disk is
+      'kilosort/ctx_-_1', and a MATLAB reader would not find it (see the
+      elementDirectory legacy fallback for how documents written before this
+      change are still located).
 
   - name: import.kiasort
     type: package
