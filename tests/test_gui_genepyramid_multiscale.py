@@ -13,6 +13,8 @@ coincidentally agrees.
 
 from __future__ import annotations
 
+import importlib.util
+
 import numpy as np
 import pytest
 
@@ -24,6 +26,15 @@ from ndi.gui.app.genepyramid.multiscale import (
     worldTransform,
 )
 from ndi.session.dir import ndi_session_dir
+
+# dask is part of the "napari" extra, not the base install, so a headless
+# CI box does not have it. Only the ladder itself needs it; the coordinate
+# transforms below are pure arithmetic and must keep running everywhere,
+# because the registration bugs they catch are the ones that stay quiet.
+needs_dask = pytest.mark.skipif(
+    importlib.util.find_spec("dask") is None,
+    reason="dask is not installed (pip install 'ndi[napari]')",
+)
 
 OX, OY = 1000, 2000
 PX, PY = 0.5, 0.25  # deliberately NOT equal
@@ -59,6 +70,7 @@ def pyramid(tmp_path):
 # ------------------------------------------------------------- the ladder
 
 
+@needs_dask
 def test_one_array_per_level_finest_first(pyramid):
     S, pyr = pyramid
     arrays = levelArrays(S, pyr)
@@ -70,6 +82,7 @@ def test_one_array_per_level_finest_first(pyramid):
     assert widths == sorted(widths, reverse=True)
 
 
+@needs_dask
 def test_levels_are_cropped_to_their_true_size(pyramid):
     """The tile grid overshoots whenever a level does not divide evenly.
     Leaving the padding on makes levels disagree about their own field of
@@ -82,6 +95,7 @@ def test_levels_are_cropped_to_their_true_size(pyramid):
         assert arr.shape == (lv["levelHeight"], lv["levelWidth"])
 
 
+@needs_dask
 def test_opening_the_ladder_reads_no_tile_bytes(pyramid, monkeypatch):
     """A 4.9 GB pyramid must open instantly. Tile PATHS are resolved when
     the ladder is built -- see the note in multiscale.py about worker
@@ -99,6 +113,7 @@ def test_opening_the_ladder_reads_no_tile_bytes(pyramid, monkeypatch):
     assert reads, "computing a block must actually read a tile"
 
 
+@needs_dask
 def test_blocks_work_on_the_threaded_scheduler(pyramid):
     """The regression guard that matters.
 
@@ -118,6 +133,7 @@ def test_blocks_work_on_the_threaded_scheduler(pyramid):
     assert threaded.sum() > 0, "fixture must put counts in this corner"
 
 
+@needs_dask
 def test_a_computed_block_matches_readViewport(pyramid):
     """The lazy path and the documented reader must agree, or the viewer is
     drawing something no other caller would get."""
@@ -128,6 +144,7 @@ def test_a_computed_block_matches_readViewport(pyramid):
     np.testing.assert_allclose(got, want)
 
 
+@needs_dask
 def test_density_makes_levels_comparable(pyramid):
     """Binning sums, so without the divisor a coarse level is binSize^2
     brighter and one contrast range cannot serve the ladder -- the
@@ -142,6 +159,7 @@ def test_density_makes_levels_comparable(pyramid):
     assert dense[2] == pytest.approx(sum(COUNTS) / 16)
 
 
+@needs_dask
 def test_gene_selection_costs_no_extra_reads(pyramid):
     S, pyr = pyramid
     one = np.asarray(levelArrays(S, pyr, gene_rows=[0])[0].compute())
@@ -190,6 +208,7 @@ def test_source_to_world_does_not_apply_the_origin_twice(pyramid):
     assert col[0] == pytest.approx(translate[1])
 
 
+@needs_dask
 def test_layer_spec_is_what_add_image_takes(pyramid):
     S, pyr = pyramid
     spec = layerSpec(S, pyr)
@@ -201,6 +220,7 @@ def test_layer_spec_is_what_add_image_takes(pyramid):
     assert spec["rgb"] is False
 
 
+@needs_dask
 def test_layer_spec_name_falls_back_when_the_pyramid_has_no_label(tmp_path):
     d = tmp_path / "gp2"
     d.mkdir(parents=True, exist_ok=True)
