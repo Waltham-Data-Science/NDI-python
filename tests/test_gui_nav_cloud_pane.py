@@ -237,7 +237,14 @@ class TestCloudPaneQt:
         report = nav.panes[1].check_all_cloud()
         # No datasets in an empty workspace, but the wiring is what is
         # under test: the handle resolves and the report comes back.
-        assert report == {"total": 0, "in_cloud": 0, "not_in_cloud": 0, "errors": 0}
+        assert report == {
+            "total": 0,
+            "in_cloud": 0,
+            "not_in_cloud": 0,
+            "errors": 0,
+            "inCloud": 0,
+            "notInCloud": 0,
+        }
 
 
 class TestNavigatorAlertDoesNotBlock:

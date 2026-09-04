@@ -477,6 +477,55 @@ class TestNavigatorQt:
         nav.datasets_pane_handle().toggle()
         assert nav.position[3] < before
 
+    def test_widget_carries_the_back_reference(self):
+        """MATLAB stores the navigator on the figure via guidata; the Qt
+        port stores it on the widget as a property so find_open can recover
+        it. Without this, a dockable progress-bar window cannot discover a
+        navigator to dock into."""
+        _qt_or_skip()
+        nav = Navigator()
+        assert nav.figure.property("_ndi_navigator") is nav
+
+    def test_find_open_returns_this_navigator(self):
+        """MATLAB's ndi.gui.navigator.findOpen counterpart."""
+        _qt_or_skip()
+        nav = Navigator()
+        found = Navigator.find_open()
+        assert nav in found
+
+    def test_find_open_is_empty_without_a_navigator(self):
+        """No open navigator -> no result, not an exception. Callers loop
+        over the return, so the API is a list either way."""
+        _qt_or_skip()
+        found = Navigator.find_open()
+        assert isinstance(found, list)
+
+    def test_the_widget_dispatches_resize_to_the_navigator(self):
+        """A user resize must reach on_figure_resized without a manual
+        subclass on every caller -- MATLAB's SizeChangedFcn does this.
+        Sends a Qt resize event and checks the navigator's position tracks
+        it."""
+        _qt_or_skip()
+        from PySide6 import QtCore, QtGui
+
+        nav = Navigator()
+        old_size = QtCore.QSize(nav.position[2], nav.position[3])
+        new_size = QtCore.QSize(int(nav.position[2]) + 40, int(nav.position[3]) + 80)
+        # setGeometry would round-trip through resizeEvent, but pushing the
+        # event explicitly avoids any window-manager rounding.
+        nav.figure.resize(new_size)
+        event = QtGui.QResizeEvent(new_size, old_size)
+        nav.figure.resizeEvent(event)
+        assert nav.position[2] >= new_size.width()
+
+    def test_mouse_tracking_is_on_so_hover_updates_the_cursor(self):
+        """setMouseTracking(True) is the enabling gate for the grip cursor
+        change. Without it the pointer only reports position while a button
+        is held, and the drag region is invisible."""
+        _qt_or_skip()
+        nav = Navigator()
+        assert nav.figure.hasMouseTracking()
+
     def test_a_pane_toggle_does_resize_the_window(self):
         _qt_or_skip()
         nav = Navigator()

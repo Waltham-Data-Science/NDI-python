@@ -437,8 +437,24 @@ class TestCheckAllCloudStatus:
     def test_counts_and_states(self):
         datasets = [FakeDataset(in_cloud=True), FakeDataset(in_cloud=False)]
         report, states = dm.check_all_cloud_status(datasets)
-        assert report == {"total": 2, "in_cloud": 1, "not_in_cloud": 1, "errors": 0}
+        assert report == {
+            "total": 2,
+            "in_cloud": 1,
+            "not_in_cloud": 1,
+            "errors": 0,
+            "inCloud": 1,
+            "notInCloud": 1,
+        }
         assert states == ["incloud", "notincloud"]
+
+    def test_matlab_style_aliases_track_the_snake_case_counts(self):
+        """A consumer reading MATLAB-style keys sees the same numbers, not
+        zero. Without the aliases such a consumer would silently read zero
+        and report a passing run as no datasets in cloud."""
+        datasets = [FakeDataset(in_cloud=True), FakeDataset(in_cloud=False)]
+        report, _ = dm.check_all_cloud_status(datasets)
+        assert report["inCloud"] == report["in_cloud"]
+        assert report["notInCloud"] == report["not_in_cloud"]
 
     def test_a_dataset_that_cannot_be_checked_is_an_error_not_a_no(self):
         """'We asked and the answer was no' and 'we could not ask' must not
@@ -451,7 +467,14 @@ class TestCheckAllCloudStatus:
 
     def test_no_datasets(self):
         report, states = dm.check_all_cloud_status([])
-        assert report == {"total": 0, "in_cloud": 0, "not_in_cloud": 0, "errors": 0}
+        assert report == {
+            "total": 0,
+            "in_cloud": 0,
+            "not_in_cloud": 0,
+            "errors": 0,
+            "inCloud": 0,
+            "notInCloud": 0,
+        }
         assert states == []
 
     def test_progress_is_reported_per_dataset(self):
