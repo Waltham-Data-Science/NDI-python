@@ -228,7 +228,17 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
             return self._build_registered_epochtable()
 
     def _build_direct_epochtable(self) -> list[dict[str, Any]]:
-        """Build epoch table from underlying element."""
+        """Build epoch table from underlying element.
+
+        NOT sorted here, deliberately. A direct element's epochs ARE the
+        underlying element's, and the two are paired by position -- MATLAB's
+        direct branch is literally ``ib = 1:numel(underlying_et)``. Re-ordering
+        them would break that pairing and would also disagree with whatever
+        order the underlying element (a daq system, through its file
+        navigator) established for its own epochs. Registered epochs are the
+        ones with no order of their own, and those are alphabetised in
+        :meth:`_build_registered_epochtable`.
+        """
         if self._underlying_element is None:
             return []
 
@@ -268,30 +278,77 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
         q = ndi_query("").isa("element_epoch") & ndi_query("").depends_on("element_id", self.id)
         epoch_docs = self._session.database_search(q)
 
+        # ALPHABETICAL BY epoch_id, and only that.
+        #
+        # database_search returns documents in the backend's natural row
+        # order, which is neither insertion order nor any order a caller could
+        # predict -- five epochs added as epoch_1..epoch_5 came back as
+        # epoch_4, epoch_5, epoch_1, epoch_3, epoch_2. It was at least STABLE
+        # for a given database, which is why round-trips inside one language
+        # did not break; it was still the wrong order to show a user, and the
+        # wrong order to hand anything that pairs epochs by position.
+        #
+        # MATLAB sorts here already, though not visibly: ndi.element's
+        # buildepochtable maps added epochs with
+        #     [c,ia,ib] = intersect({et_added.epoch_id}, {underlying_et.epoch_id})
+        # and intersect returns its output sorted. So alphabetising matches
+        # MATLAB rather than inventing a convention for this port.
+        #
+        # Plain codepoint order on the raw id: NO case folding and NO
+        # locale-aware collation, both of which look like improvements and
+        # would diverge from intersect the moment an epoch_id carried a
+        # capital letter. It follows that epoch_10 sorts before epoch_2, since
+        # the ids are not zero-padded. That is intended, not an oversight.
+        epoch_docs = sorted(epoch_docs, key=_registered_epoch_sort_key)
+
+        # document_properties is a DICT. This function used attribute access on
+        # it (props.element_epoch, props.epochid), so every call raised
+        # AttributeError and no registered epoch table has ever been built.
+        # The two shape assumptions below were wrong for the same reason --
+        # nothing ever reached them:
+        #
+        #   * element_epoch.epoch_clock is a STRING (the schema stores one
+        #     clock name), so iterating it yielded single characters;
+        #   * element_epoch.t0_t1 is a flat [t0, t1] pair, so iterating it
+        #     yielded floats and the isinstance check discarded every one,
+        #     leaving t0_t1 empty.
+        #
+        # Both are still accepted in their list forms, since a document
+        # written by another tool may carry either.
         et = []
         for i, doc in enumerate(epoch_docs):
             props = doc.document_properties
+            element_epoch = props.get("element_epoch", {}) or {}
 
-            # Parse epoch_clock
-            clock_raw = getattr(props.element_epoch, "epoch_clock", [])
+            # Parse epoch_clock (a string, or a list of them)
+            clock_raw = element_epoch.get("epoch_clock", [])
+            if isinstance(clock_raw, (str, ndi_time_clocktype)):
+                clock_raw = [clock_raw]
             epoch_clock = []
             for c in clock_raw:
-                if isinstance(c, str):
-                    epoch_clock.append(ndi_time_clocktype(c))
-                elif isinstance(c, ndi_time_clocktype):
+                if isinstance(c, ndi_time_clocktype):
                     epoch_clock.append(c)
+                elif isinstance(c, str) and c:
+                    epoch_clock.append(ndi_time_clocktype(c))
 
-            # Parse t0_t1
-            t0t1_raw = getattr(props.element_epoch, "t0_t1", [])
+            # Parse t0_t1 (a flat [t0, t1], or a list of such pairs)
+            t0t1_raw = element_epoch.get("t0_t1", [])
             t0_t1 = []
-            for t in t0t1_raw:
-                if isinstance(t, (list, tuple)) and len(t) >= 2:
-                    t0_t1.append((float(t[0]), float(t[1])))
+            if (
+                isinstance(t0t1_raw, (list, tuple))
+                and len(t0t1_raw) == 2
+                and all(isinstance(v, (int, float)) for v in t0t1_raw)
+            ):
+                t0_t1 = [(float(t0t1_raw[0]), float(t0t1_raw[1]))]
+            else:
+                for t in t0t1_raw or []:
+                    if isinstance(t, (list, tuple)) and len(t) >= 2:
+                        t0_t1.append((float(t[0]), float(t[1])))
 
             et.append(
                 {
                     "epoch_number": i + 1,
-                    "epoch_id": getattr(props.epochid, "epochid", ""),
+                    "epoch_id": (props.get("epochid", {}) or {}).get("epochid", ""),
                     "epoch_session_id": self._session.id() if self._session else "",
                     "epochprobemap": [],  # Registered epochs don't have probepmaps
                     "epoch_clock": epoch_clock,
@@ -327,6 +384,8 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
         epoch_id: str,
         epoch_clock: list[ndi_time_clocktype],
         t0_t1: list[tuple[float, float]],
+        *,
+        add_to_database: bool = True,
     ) -> tuple[ndi_element, Any]:
         """
         Add a new epoch to this element.
@@ -337,6 +396,12 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
             epoch_id: Unique identifier for the epoch
             epoch_clock: List of clock types
             t0_t1: List of (t0, t1) time ranges
+            add_to_database: When False, the document is built and returned
+                but NOT added, leaving the caller to attach files to it first
+                and add it themselves. MATLAB expresses the same thing with
+                ``nargout<2``: "if a second output is requested, the DOC is
+                NOT added to the database". Python has no ``nargout``, so the
+                deferral is an explicit argument.
 
         Returns:
             Tuple of (self, epoch_document)
@@ -352,23 +417,46 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
 
         from ..document import ndi_document
 
+        # element_epoch.epoch_clock is a STRING in the schema, and t0_t1 is a
+        # 2-row matrix -- the shapes MATLAB writes:
+        #
+        #     epochclockstr = epochclock.ndi_clocktype2char();
+        #     t0_t1_input   = vlt.data.colvec(t0_t1);
+        #
+        # Passing a list for epoch_clock made every addepoch fail DID
+        # validation with "Invalid non-char sub-field
+        # element_epoch.epoch_clock", so no epoch document has ever been
+        # storable through this method.
+        clocks = list(epoch_clock) if isinstance(epoch_clock, (list, tuple)) else [epoch_clock]
+        if len(clocks) != 1:
+            raise ValueError(
+                f"element_epoch stores a single epoch_clock string, so exactly one "
+                f"clock type may be given; got {len(clocks)}."
+            )
+
+        ranges = list(t0_t1)
+        if ranges and not isinstance(ranges[0], (list, tuple)):
+            ranges = [ranges]  # a bare (t0, t1) pair
+        if len(ranges) != 1:
+            raise ValueError(f"element_epoch stores one [t0 t1] pair per epoch; got {len(ranges)}.")
+        t0, t1 = float(ranges[0][0]), float(ranges[0][1])
+
         # Create epoch document
         doc = ndi_document(
             "element_epoch",
             **{
-                "element_epoch.epoch_clock": [str(c) for c in epoch_clock],
-                "element_epoch.t0_t1": list(t0_t1),
+                "element_epoch.epoch_clock": str(clocks[0]),
+                "element_epoch.t0_t1": [t0, t1],
                 "epochid.epochid": epoch_id,
             },
         )
         doc.set_dependency_value("element_id", self.id)
         doc.set_session_id(self._session.id())
 
-        # Add to database
-        self._session.database_add(doc)
-
-        # Clear cache
-        self.resetepochtable()
+        if add_to_database:
+            self._session.database_add(doc)
+            # Clear cache
+            self.resetepochtable()
 
         return self, doc
 
@@ -494,3 +582,17 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
     def __repr__(self) -> str:
         """String representation."""
         return f"ndi_element({self._name}|{self._reference}|{self._type})"
+
+
+def _registered_epoch_sort_key(doc: Any) -> str:
+    """A registered epoch document's ``epoch_id``, for alphabetical ordering.
+
+    A document with no readable ``epochid.epochid`` sorts as ``""`` -- first,
+    and stably among its peers, since Python's sort is stable. Raising instead
+    would let one malformed document cost the whole epoch table, which is a
+    worse trade than an oddly placed row.
+    """
+    try:
+        return str((doc.document_properties.get("epochid", {}) or {}).get("epochid", "") or "")
+    except Exception:  # noqa: BLE001 - a document that will not answer sorts first
+        return ""

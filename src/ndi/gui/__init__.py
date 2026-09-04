@@ -21,9 +21,15 @@ ndi_gui_Lab
     Experiment view with connection wires.
 ndi_gui_docViewer
     Standalone document viewer window.
+PreferencesEditor
+    Window for browsing and editing ``ndi.preferences``; ``preferences_editor``
+    is the function form (MATLAB's ``ndi.gui.preferencesEditor``).
 
 Sub-packages
 ------------
+app
+    The ``SessionApp`` interface and the apps that adopt it; what the
+    navigator's per-session "Apps" menu is built from.
 component
     Progress bars and monitors (``ndi_gui_component_ProgressBarWindow``,
     ``ndi_gui_component_NDIProgressBar``, ``ndi_gui_component_CommandWindowProgressMonitor``).
@@ -42,6 +48,9 @@ __all__ = [
     "ndi_gui_Icon",
     "ndi_gui_Lab",
     "ndi_gui_docViewer",
+    "PreferencesEditor",
+    "preferences_editor",
+    "preferencesEditor",
 ]
 
 
@@ -55,6 +64,9 @@ def __getattr__(name: str):  # noqa: ANN204
         "ndi_gui_Icon": ("ndi.gui.icon", "ndi_gui_Icon"),
         "ndi_gui_Lab": ("ndi.gui.lab", "ndi_gui_Lab"),
         "ndi_gui_docViewer": ("ndi.gui.ndi_gui_docViewer", "ndi_gui_docViewer"),
+        "PreferencesEditor": ("ndi.gui.preferences_editor", "PreferencesEditor"),
+        "preferences_editor": ("ndi.gui.preferences_editor", "preferences_editor"),
+        "preferencesEditor": ("ndi.gui.preferences_editor", "preferences_editor"),
     }
     if name in _lazy:
         import importlib

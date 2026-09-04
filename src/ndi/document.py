@@ -12,6 +12,7 @@ Important Rules for Creating Documents:
 """
 
 import json
+import warnings
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,6 +32,26 @@ except ImportError:
 
 from .common import ndi_common_PathConstants, timestamp
 from .ido import ndi_ido
+
+
+def _definition_to_doc_type(definition: str) -> str:
+    """Turn a superclass ``definition`` path into a document type name.
+
+    Definitions name their target through a path VARIABLE:
+    ``$NDIDOCUMENTPATH/element.json`` for NDI's own documents,
+    ``$NDICALCDOCUMENTPATH/vision/contrast_tuning.json`` for ones shipped
+    by NDIcalc-vis-matlab. MATLAB registers both as DID globals
+    (ndi.common.PathConstants), so both resolve there.
+
+    Here they resolve to the same folder, because ndi_install.py copies
+    each dependency's ``ndi_common`` tree into NDI-python's own. So every
+    variable is stripped rather than only ``$NDIDOCUMENTPATH`` -- which is
+    what previously left ``$NDICALCDOCUMENTPATH/...`` as a literal path,
+    unfindable, and silently skipped.
+    """
+    import re
+
+    return re.sub(r"^\$[A-Z]+PATH/", "", definition).replace(".json", "")
 
 
 class ndi_document:
@@ -496,9 +517,7 @@ class ndi_document:
             definition = sc.get("definition", "")
             if definition:
                 try:
-                    sc_doc = ndi_document(
-                        definition.replace("$NDIDOCUMENTPATH/", "").replace(".json", "")
-                    )
+                    sc_doc = ndi_document(_definition_to_doc_type(definition))
                     sc_names.append(sc_doc.doc_class())
                 except Exception:
                     pass
@@ -771,11 +790,33 @@ class ndi_document:
         Returns:
             Dictionary with blank document structure.
         """
-        # Try to find the JSON definition
-        json_path = ndi_common_PathConstants.DOCUMENT_PATH / f"{document_type}.json"
+        root = ndi_common_PathConstants.DOCUMENT_PATH
+        json_path = root / f"{document_type}.json"
+
+        if not json_path.exists() and "/" not in document_type:
+            # Fall back to a recursive search for a BARE class name.
+            #
+            # MATLAB resolves a bare name against the whole document tree,
+            # so ndi.document('image') finds data/image.json. Here only the
+            # top level was tried, so the same call needed 'data/image' --
+            # a difference affecting every document in a subdirectory
+            # (image, generic_file, the whole stimulus family) and one that
+            # made otherwise-symmetric code diverge at the call site.
+            #
+            # Only for a bare name: a caller who wrote 'data/image'
+            # expects that exact file, and should not silently get a
+            # same-named document from elsewhere in the tree.
+            matches = sorted(root.rglob(f"{document_type}.json"))
+            if len(matches) == 1:
+                json_path = matches[0]
+            elif len(matches) > 1:
+                rel = ", ".join(str(m.relative_to(root)) for m in matches)
+                raise FileNotFoundError(
+                    f"ndi_document type {document_type!r} is ambiguous: {rel}. "
+                    f"Give the path, e.g. {matches[0].relative_to(root).with_suffix('')}."
+                )
 
         if not json_path.exists():
-            # Try without path constants (for testing)
             raise FileNotFoundError(
                 f"ndi_document definition not found: {json_path}. "
                 f"Make sure NDI is properly installed."
@@ -784,21 +825,105 @@ class ndi_document:
         with open(json_path) as f:
             definition = json.load(f)
 
-        # Process superclasses recursively
-        if "document_class" in definition and "superclasses" in definition["document_class"]:
-            for sc in definition["document_class"]["superclasses"]:
-                sc_def = sc.get("definition", "")
-                if sc_def:
-                    # Extract document type from definition path
-                    sc_type = sc_def.replace("$NDIDOCUMENTPATH/", "").replace(".json", "")
-                    try:
-                        sc_props = ndi_document.read_blank_definition(sc_type)
-                        # Merge superclass properties
-                        for key, value in sc_props.items():
-                            if key != "document_class" and key not in definition:
-                                definition[key] = value
-                    except FileNotFoundError:
-                        pass  # Skip missing superclass definitions
+        # Process superclasses recursively.
+        #
+        # Three things are inherited, matching did.document._merge_superclasses
+        # and MATLAB's did.document: property groups, the dependency list, and
+        # the superclass list itself.  The last two were missing here, which is
+        # why documents built by NDI-python carried only their *direct*
+        # superclasses and only their *own* dependencies, while the schemas --
+        # written against MATLAB, where DID flattens both -- declare the
+        # transitive closure.  DID-python's validator compares the two, so the
+        # gap turned into "Dissimilar superclasses defined/found" on every
+        # ingestion document the moment add_docs began validating.
+        class_props = definition.get("document_class")
+        raw_superclasses = class_props.get("superclasses") if class_props else None
+        if isinstance(raw_superclasses, dict):  # MATLAB unwraps a 1-element cell
+            raw_superclasses = [raw_superclasses]
+
+        if raw_superclasses:
+            merged_superclasses: list[dict] = []
+            for sc in raw_superclasses:
+                sc_def = sc.get("definition", "") if isinstance(sc, dict) else sc
+                if not sc_def:
+                    continue
+
+                entry = dict(sc) if isinstance(sc, dict) else {"definition": sc_def}
+                merged_superclasses.append(entry)
+
+                # Strip whatever $...PATH/ prefix the definition carries, not
+                # just $NDIDOCUMENTPATH: calculator documents name their
+                # superclasses through $NDICALCDOCUMENTPATH, and ndi_install.py
+                # merges every dependency's ndi_common into one tree.
+                sc_type = _definition_to_doc_type(sc_def)
+                try:
+                    sc_props = ndi_document.read_blank_definition(sc_type)
+                except FileNotFoundError:
+                    # Warn rather than swallow. A declared superclass that
+                    # cannot be found is a broken definition, and the document
+                    # silently loses everything that superclass would have
+                    # contributed -- including 'base'. That surfaced far away
+                    # as KeyError: 'base' at construction and took a bisect to
+                    # trace back here. Raising would be better still, but is a
+                    # wider behavioural change than this fix.
+                    #
+                    # The entry stays in the list either way: dropping it would
+                    # silently shorten the superclass list the schema is
+                    # validated against, trading one quiet failure for another.
+                    warnings.warn(
+                        f"superclass {sc_def!r} of {document_type!r} could "
+                        f"not be resolved (looked for {sc_type!r}); the "
+                        f"document will be missing whatever it defines",
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
+                    continue
+
+                # The superclass's own superclasses join ours.  sc_props is
+                # already merged, so this is the whole transitive closure.
+                sc_class = sc_props.get("document_class") or {}
+                inherited = sc_class.get("superclasses")
+                if isinstance(inherited, dict):
+                    inherited = [inherited]
+                for item in inherited or []:
+                    if isinstance(item, dict) and "definition" in item:
+                        merged_superclasses.append(dict(item))
+
+                # Dependencies are unioned by name, this class winning.
+                own_depends = definition.get("depends_on")
+                sc_depends = sc_props.get("depends_on")
+                if isinstance(own_depends, dict):
+                    own_depends = [own_depends]
+                if isinstance(sc_depends, dict):
+                    sc_depends = [sc_depends]
+                if sc_depends:
+                    seen_names = set()
+                    unique_depends = []
+                    for dependency in list(own_depends or []) + list(sc_depends):
+                        name = (
+                            dependency.get("name") if isinstance(dependency, dict) else dependency
+                        )
+                        if name in seen_names:
+                            continue
+                        seen_names.add(name)
+                        unique_depends.append(dependency)
+                    definition["depends_on"] = unique_depends
+
+                # Merge superclass properties
+                for key, value in sc_props.items():
+                    if key not in ("document_class", "depends_on") and key not in definition:
+                        definition[key] = value
+
+            # Unique by definition string, preserving order.
+            seen_definitions = set()
+            unique_superclasses = []
+            for entry in merged_superclasses:
+                sc_def = entry.get("definition")
+                if sc_def in seen_definitions:
+                    continue
+                seen_definitions.add(sc_def)
+                unique_superclasses.append(entry)
+            definition["document_class"]["superclasses"] = unique_superclasses
 
         return definition
 

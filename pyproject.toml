@@ -38,10 +38,24 @@ dependencies = [
     "did @ git+https://github.com/VH-Lab/DID-python.git@main",
     "ndr[formats] @ git+https://github.com/VH-lab/NDR-python.git@main",
     "vhlab-toolbox-python @ git+https://github.com/VH-Lab/vhlab-toolbox-python.git@main",
+    # ndi.app.oridirtuning needs vhlib.response_stats.neural_response_significance,
+    # mirroring NDI-matlab, which calls vhlab-library-matlab directly (see
+    # NDI-matlab/src/ndi/docs/developer_notes/vhlabLibraryMatlab.md).
+    "vhlab-library-python @ git+https://github.com/VH-Lab/vhlab-library-python.git@main",
     "ndi-compress @ git+https://github.com/Waltham-Data-Science/NDI-compress-python.git@main",
+    # ndi.ontology is a re-export of this package -- see src/ndi/ontology.py.
+    # It tracks ndi-ontology-matlab, which is where NDI-matlab's ontology code
+    # now lives; NDI-matlab pulls the MATLAB half in the same way, through its
+    # requirements.txt.
+    "ndi-ontology @ git+https://github.com/Waltham-Data-Science/ndi-ontology-python.git@main",
     "numpy>=1.20.0",
     "networkx>=2.6",
     "jsonschema>=4.0.0",
+    # ndi.fun.parse_text runs MATLAB-authored regexes: NDI-matlab's own
+    # parser files use variable-width lookbehind and mid-pattern inline
+    # flags, which the standard library's re rejects outright (33 of the
+    # 72 shipped rules fail to compile). See src/ndi/fun/text.py.
+    "regex>=2022.1.18",
     "requests>=2.28.0",
     "pydantic>=2.0",
     "openMINDS>=0.2.0",
@@ -49,12 +63,28 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# PySide6 is the GUI toolkit (see src/ndi/gui/_qt_helpers.py). It stays an
+# EXTRA rather than a runtime dependency so a headless install -- a pipeline,
+# a container, an analysis box with no display -- does not pull in Qt. The
+# ndi.gui modules import through require_qt(), which raises a message naming
+# this extra, so the failure mode for a missing toolkit is a sentence rather
+# than a traceback.
+gui = [
+    "PySide6>=6.5",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "black>=23.0.0",
     "ruff>=0.1.0",
     "mypy>=1.0.0",
+    # tests/test_matlab_bridge_completeness.py reads the
+    # ndi_matlab_python_bridge.yaml contracts. Only that test parses YAML,
+    # so this is a dev extra rather than a runtime dependency -- but it
+    # must be HERE and not only in the bridge CI job, because the main
+    # test job runs the whole tests/ tree and an unimportable module is a
+    # collection error that takes the entire run down with it.
+    "PyYAML>=6.0",
 ]
 docs = [
     "mkdocs>=1.4.0",

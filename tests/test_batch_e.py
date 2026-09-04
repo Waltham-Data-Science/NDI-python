@@ -169,7 +169,7 @@ class TestSessionTable:
 
     def test_init_default_path(self):
         table = ndi_session_sessiontable()
-        expected = Path.home() / ".ndi" / "preferences" / "local_sessiontable.txt"
+        expected = Path.home() / ".ndi" / "local_sessiontable.txt"
         assert table._table_path == expected
 
     def test_init_custom_path(self, table_dir):

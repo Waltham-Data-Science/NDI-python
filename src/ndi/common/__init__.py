@@ -120,6 +120,88 @@ class ndi_common_PathConstants:
             cls._document_path = Path(document_path)
         if schema_path is not None:
             cls._schema_path = Path(schema_path)
+        # Paths moved: re-register them with DID so its resolver follows.
+        updateDIDConstants(force=True)
+
+
+# ---------------------------------------------------------------------------
+# DID globals — mirrors MATLAB ndi.common.PathConstants.updateDIDConstants
+# ---------------------------------------------------------------------------
+
+#: NDI's ``$PATH`` placeholders, in the order MATLAB registers them.
+#:
+#: MATLAB keeps calculator definitions in separate toolboxes and so registers
+#: ``$NDICALC*PATH`` as a *list* of directories.  Python has no separate
+#: calculator packages: ``ndi_install.py`` copies every dependency's
+#: ``ndi_common/{database,schema}_documents`` tree into NDI-python's own
+#: ``ndi_common`` folder, so the calculator placeholders resolve to the same
+#: two directories as the non-calculator ones.  Recorded rather than papered
+#: over: if Python ever grows out-of-tree calculator packages this mapping is
+#: where the extra directories belong.
+_DID_PLACEHOLDERS = (
+    "$NDISCHEMAPATH",
+    "$NDIDOCUMENTPATH",
+    "$NDICALCSCHEMAPATH",
+    "$NDICALCDOCUMENTPATH",
+)
+
+
+def _did_placeholder_values() -> dict[str, str]:
+    """Current filesystem target for each NDI ``$PATH`` placeholder."""
+    document_path = str(ndi_common_PathConstants.DOCUMENT_PATH)
+    schema_path = str(ndi_common_PathConstants.SCHEMA_PATH)
+    return {
+        "$NDISCHEMAPATH": schema_path,
+        "$NDIDOCUMENTPATH": document_path,
+        "$NDICALCSCHEMAPATH": schema_path,
+        "$NDICALCDOCUMENTPATH": document_path,
+    }
+
+
+def updateDIDConstants(force: bool = False) -> dict[str, str]:
+    """Register NDI's ``$PATH`` placeholders with DID's ``PathConstants``.
+
+    MATLAB equivalent: ``ndi.common.PathConstants.updateDIDConstants`` (and the
+    ``mustUpdateDidGlobals`` validator that runs when the constant properties
+    are first touched).
+
+    DID resolves every ``definition`` and ``validation`` location through
+    ``did.common.PathConstants.DEFINITIONS``.  Since DID-python grew a real
+    document-vs-schema validator (``did.validate``), which ``add_docs`` runs by
+    default, an unregistered placeholder is no longer a silent miss: adding any
+    NDI document raises ``Validation file "$NDISCHEMAPATH/....json" not found``.
+    MATLAB has always registered these four keys; Python never did.
+
+    Args:
+        force: Overwrite entries that are already registered.  The default
+            (``False``) mirrors MATLAB, which only fills in keys that are
+            absent, so an embedding application can pre-point a placeholder
+            somewhere else and keep it.
+
+    Returns:
+        The mapping that is now in effect for NDI's placeholders.
+
+    Raises:
+        ValueError: if ``$NDIDOCUMENTPATH`` cannot be resolved.  MATLAB raises
+            ``'Could not update DID globals'`` for that one key alone; without
+            it no NDI document can name its own definition.
+    """
+    from did.common import PathConstants as _DIDPathConstants
+
+    definitions = _DIDPathConstants.DEFINITIONS
+    values = _did_placeholder_values()
+
+    if not values.get("$NDIDOCUMENTPATH"):
+        raise ValueError("Could not update DID globals")
+
+    for key in _DID_PLACEHOLDERS:
+        value = values.get(key)
+        if not value:
+            continue
+        if force or key not in definitions:
+            definitions[key] = value
+
+    return {key: definitions[key] for key in _DID_PLACEHOLDERS if key in definitions}
 
 
 def timestamp() -> str:
@@ -260,3 +342,26 @@ __all__ = [
     "getDatabaseHierarchy",
     "assertDIDInstalled",
 ]
+
+
+# Register NDI's $PATH placeholders with DID as soon as ``ndi.common`` is
+# imported — DID's validator runs on every ``add_docs``, so registration has to
+# happen before any NDI document reaches the database.  MATLAB gets this for
+# free from constant-property validators; Python needs an explicit call.
+#
+# A failure here is reported rather than raised: ``import ndi`` has never been
+# able to fail on a partially-installed tree, and ``python -m ndi check`` is
+# where a broken install is meant to surface.  It is not silent — the warning
+# names the exception, and the first document added will fail loudly anyway.
+try:
+    updateDIDConstants()
+except Exception as exc:  # pragma: no cover - only on a broken installation
+    import warnings
+
+    warnings.warn(
+        "ndi.common could not register NDI's $PATH placeholders with DID "
+        f"({exc!r}); document validation and superclass resolution will fail. "
+        "Run 'python -m ndi check'.",
+        RuntimeWarning,
+        stacklevel=2,
+    )

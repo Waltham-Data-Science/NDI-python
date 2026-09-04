@@ -21,7 +21,7 @@ import json
 import pytest
 
 import ndi.preferences as ndi_preferences
-from tests.symmetry.conftest import SOURCE_TYPES, SYMMETRY_BASE
+from tests.symmetry.conftest import SOURCE_TYPES, SYMMETRY_BASE, missing_artifact
 
 
 @pytest.fixture(params=SOURCE_TYPES)
@@ -39,7 +39,7 @@ class TestPreferencesReadArtifacts:
     def test_preferences(self, source_type):
         artifact_dir = self._artifact_dir(source_type)
         if not artifact_dir.exists():
-            pytest.skip(
+            missing_artifact(
                 f"Artifact directory from {source_type} does not exist. "
                 f"Run the corresponding makeArtifacts suite first."
             )

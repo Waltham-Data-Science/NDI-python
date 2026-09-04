@@ -97,6 +97,17 @@ def find_file_groups(
         dirs[:] = [d for d in dirs if not d.startswith(".")]
 
         for f in files:
+            # Hidden files are excluded here as well as by
+            # removehiddenfilegroups below, and the redundancy is deliberate
+            # for now. MATLAB's findfilegroups emits one group per EPOCH, so
+            # letting a shadow file through there produces a separate bad
+            # group that removehiddenfilegroups drops on its own. This
+            # grouping emits one group per DIRECTORY, so a shadow file would
+            # join the genuine epoch's group instead -- and the all-or-
+            # nothing rule would then delete the real epoch along with it.
+            # Until grouping is per-epoch, the walk is where the shadow file
+            # has to be stopped. See the bridge entry for
+            # removehiddenfilegroups.
             if f.startswith("."):
                 continue
             fullpath = os.path.join(root, f)
@@ -434,14 +445,11 @@ class ndi_file_navigator(ndi_ido):
 
         groups = find_file_groups(base_path, patterns)
 
-        # Filter out hidden files
-        filtered = []
-        for group in groups:
-            visible = [f for f in group if not os.path.basename(f).startswith(".")]
-            if visible:
-                filtered.append(visible)
+        # A group is one regexp match, so pruning is all-or-nothing: a group
+        # with a hidden member is a bad match, not a dirty one.
+        from ndi.util.removehiddenfilegroups import removehiddenfilegroups
 
-        return filtered
+        return removehiddenfilegroups(groups)
 
     def find_ingested_documents(self) -> list[dict[str, Any]]:
         """Find ingested epoch documents from database.

@@ -69,11 +69,54 @@ def _check_did_uid_params(value: str, params: Any) -> str | None:
     return None
 
 
+def _check_matrix_shape(value: Any) -> str | None:
+    """Check that a matrix value obeys the shape invariant.
+
+    A matrix-valued schema field must be ``[]`` (an empty list) rather than
+    ``null`` when no data is present, and any nested rows must be rectangular
+    -- every row the same length. Ragged rows silently break MATLAB readers
+    that assume a rectangular ``double[][]``.
+
+    Declared-dimension enforcement (``[N, M]`` in the schema's ``parameters``)
+    is deliberately not checked here yet: the ``t0_t1`` orientation is
+    unsettled (element_epoch/epochclocktimes schemas declare ``[2, NaN]``
+    while Python emits N x 2), and flat JSON cannot distinguish the two
+    orientations. Enforcing declared dimensions before that decision would
+    reject valid documents. See ndi-python issue #96.
+    """
+    if not isinstance(value, list):
+        return None  # non-list types are caught elsewhere
+    if not value:
+        return None  # empty matrix, [], is the required "no data" form
+    if not isinstance(value[0], list):
+        return None  # 1-D matrix, no rectangularity constraint to enforce
+    expected_len = len(value[0])
+    for i, row in enumerate(value):
+        if not isinstance(row, list):
+            return f"row {i} is not a list (matrix must be rectangular)"
+        if len(row) != expected_len:
+            return (
+                f"row {i} has length {len(row)}, expected {expected_len} "
+                f"(matrix must be rectangular)"
+            )
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Schema loading
 # ---------------------------------------------------------------------------
 
 _schema_cache: dict[str, dict] = {}
+
+
+class SchemaLoadError(Exception):
+    """Raised when a schema file exists but cannot be read or parsed.
+
+    Distinct from "not found" (``_load_schema`` returns ``None``): the
+    document declared a schema and a file was located for it, but the
+    contents were unusable. Callers must fail closed rather than treat
+    this as an absent schema.
+    """
 
 
 def _load_schema(schema_name: str) -> dict | None:
@@ -86,7 +129,10 @@ def _load_schema(schema_name: str) -> dict | None:
         schema_name: Schema name, possibly with subdirectory prefix.
 
     Returns:
-        Parsed JSON dict, or None if not found.
+        Parsed JSON dict, or ``None`` if no matching file was found.
+
+    Raises:
+        SchemaLoadError: A file was located but could not be read or parsed.
     """
     if schema_name in _schema_cache:
         return _schema_cache[schema_name]
@@ -111,10 +157,12 @@ def _load_schema(schema_name: str) -> dict | None:
     try:
         with open(full_path) as f:
             data = json.load(f)
-        _schema_cache[schema_name] = data
-        return data
-    except (json.JSONDecodeError, OSError):
-        return None
+    except (json.JSONDecodeError, OSError) as exc:
+        raise SchemaLoadError(
+            f"failed to load schema {schema_name!r} from {full_path}: {exc}"
+        ) from exc
+    _schema_cache[schema_name] = data
+    return data
 
 
 def _get_schema_for_document(doc: ndi_document) -> dict | None:
@@ -245,6 +293,13 @@ def _validate_properties(
 
         value = doc_section[prop_name]
 
+        # Matrix fields must be [] rather than null when empty.
+        # Do this before the general None-skip so a null slips through only
+        # for non-matrix types.
+        if prop_type == "matrix" and value is None:
+            errors.append(f"{class_name}.{prop_name}: matrix field must be [] rather than null")
+            continue
+
         # Allow None/empty for optional fields
         if value is None or value == "":
             continue
@@ -268,6 +323,11 @@ def _validate_properties(
             param_err = _check_did_uid_params(str(value), params)
             if param_err:
                 errors.append(f"{class_name}.{prop_name}: {param_err}")
+
+        if prop_type == "matrix":
+            shape_err = _check_matrix_shape(value)
+            if shape_err:
+                errors.append(f"{class_name}.{prop_name}: {shape_err}")
 
     return errors
 
@@ -356,10 +416,16 @@ def validate(
     result = ValidationResult()
     props = doc.document_properties
 
-    # Load schema for this document
-    schema = _get_schema_for_document(doc)
+    # Load schema for this document. "Not found" ⇒ no schema declared, valid
+    # by default; "found but unloadable" ⇒ fail closed so a corrupt schema
+    # cannot silently wave the document through.
+    try:
+        schema = _get_schema_for_document(doc)
+    except SchemaLoadError as exc:
+        result.is_valid = False
+        result.errors_this = [f"schema failed to load: {exc}"]
+        return result
     if schema is None:
-        # No schema found — can't validate
         return result
 
     class_name = schema.get("classname", "")
@@ -373,7 +439,12 @@ def validate(
     # 2. Superclass validation
     superclasses = schema.get("superclasses", [])
     for sc_name in superclasses:
-        sc_schema = _load_schema(sc_name)
+        try:
+            sc_schema = _load_schema(sc_name)
+        except SchemaLoadError as exc:
+            result.errors_super[sc_name] = [f"schema failed to load: {exc}"]
+            result.is_valid = False
+            continue
         if sc_schema is None:
             result.errors_super[sc_name] = [f'Schema for superclass "{sc_name}" not found']
             result.is_valid = False

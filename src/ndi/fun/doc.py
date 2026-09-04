@@ -132,7 +132,10 @@ def makeSpeciesStrainSex(
         try:
             from ndi.ontology import lookup
 
-            ont_id, name = lookup(Species)
+            # `*_` is how a caller asks for MATLAB's first two of six
+            # outputs: MATLAB permits requesting fewer outputs than are
+            # declared, Python unpacking demands an exact count.
+            ont_id, name, *_ = lookup(Species)
         except Exception:
             ont_id, name = Species, Species
 
@@ -166,7 +169,7 @@ def makeSpeciesStrainSex(
             try:
                 from ndi.ontology import lookup
 
-                ont_id, name = lookup(Strain)
+                ont_id, name, *_ = lookup(Strain)
             except Exception:
                 ont_id, name = Strain, Strain
 
@@ -195,7 +198,7 @@ def makeSpeciesStrainSex(
             try:
                 from ndi.ontology import lookup
 
-                ont_id, name = lookup(pato_id)
+                ont_id, name, *_ = lookup(pato_id)
             except Exception:
                 ont_id, name = pato_id, BiologicalSex
         else:

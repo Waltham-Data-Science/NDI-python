@@ -21,7 +21,7 @@ import pytest
 from ndi.query import ndi_query
 from ndi.session.dir import ndi_session_dir
 from ndi.util import compareSessionSummary, sessionSummary
-from tests.symmetry.conftest import SOURCE_TYPES, SYMMETRY_BASE
+from tests.symmetry.conftest import SOURCE_TYPES, SYMMETRY_BASE, missing_artifact
 
 
 @pytest.fixture(params=SOURCE_TYPES)
@@ -45,7 +45,7 @@ class TestIngestionIntan:
     def _open_session(self, source_type):
         artifact_dir = self._artifact_dir(source_type)
         if not artifact_dir.exists():
-            pytest.skip(
+            missing_artifact(
                 f"Artifact directory from {source_type} does not exist. "
                 f"Run the corresponding makeArtifacts suite first."
             )
@@ -57,7 +57,7 @@ class TestIngestionIntan:
 
         summary_path = artifact_dir / "sessionSummary.json"
         if not summary_path.exists():
-            pytest.skip(f"sessionSummary.json not found in {source_type} artifact directory.")
+            missing_artifact(f"sessionSummary.json not found in {source_type} artifact directory.")
 
         expected_summary = json.loads(summary_path.read_text(encoding="utf-8"))
         actual_summary = sessionSummary(session)
@@ -88,7 +88,7 @@ class TestIngestionIntan:
 
         json_docs_dir = artifact_dir / "jsonDocuments"
         if not json_docs_dir.exists():
-            pytest.skip(f"jsonDocuments directory not found in {source_type}.")
+            missing_artifact(f"jsonDocuments directory not found in {source_type}.")
 
         json_files = list(json_docs_dir.glob("*.json"))
 

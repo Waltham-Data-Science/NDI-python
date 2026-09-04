@@ -27,19 +27,24 @@ _REGISTRY: dict[str, type] | None = None
 
 def _build_registry() -> dict[str, type]:
     """Build the class registry by importing all known NDI classes."""
+    from .daq.reader.image.ndr import ndi_daq_reader_image_ndr
     from .daq.reader.mfdaq.blackrock import ndi_daq_reader_mfdaq_blackrock
     from .daq.reader.mfdaq.cedspike2 import ndi_daq_reader_mfdaq_cedspike2
     from .daq.reader.mfdaq.intan import ndi_daq_reader_mfdaq_intan
     from .daq.reader.mfdaq.ndr import ndi_daq_reader_mfdaq_ndr
     from .daq.reader.mfdaq.spikegadgets import ndi_daq_reader_mfdaq_spikegadgets
     from .daq.system import ndi_daq_system
+    from .daq.system_image import ndi_daq_system_image
     from .element import ndi_element
+    from .element.ensemble import ndi_element_ensemble
+    from .element_timeseries import ndi_element_timeseries
     from .file.navigator import ndi_file_navigator
     from .file.navigator.epochdir import ndi_file_navigator_epochdir
     from .file.navigator.rhd_series import ndi_file_navigator_rhd_series
     from .file.navigator.rhd_series_epochdir import (
         ndi_file_navigator_rhd_series_epochdir,
     )
+    from .neuron import ndi_neuron
     from .probe import ndi_probe
     from .probe.timeseries import ndi_probe_timeseries
     from .probe.timeseries_mfdaq import ndi_probe_timeseries_mfdaq
@@ -59,12 +64,23 @@ def _build_registry() -> dict[str, type]:
     from .setup.daq.reader.mfdaq.stimulus.vhlabvisspike2 import (
         ndi_setup_daq_reader_mfdaq_stimulus_vhlabvisspike2,
     )
+    from .setup.file.navigator.vhprairie2p import ndi_setup_file_navigator_vhPrairie2p
 
     registry: dict[str, type] = {}
 
     # Elements / probes (keyed by ndi_element_class() return value)
+    #
+    # ndi_element_timeseries and ndi_neuron MUST be present or a document whose
+    # element.ndi_element_class is "ndi.element.timeseries"/"ndi.neuron" cannot
+    # be reconstructed -- MATLAB stores class(obj), so those are exactly the
+    # names a MATLAB-written timeseries element or neuron carries, and
+    # ndi_session_base._document_to_object raises on a name it cannot resolve
+    # (issue #133).
     for cls in (
         ndi_element,
+        ndi_element_ensemble,
+        ndi_element_timeseries,
+        ndi_neuron,
         ndi_probe,
         ndi_probe_timeseries,
         ndi_probe_timeseries_mfdaq,
@@ -79,6 +95,7 @@ def _build_registry() -> dict[str, type]:
         ndi_daq_reader_mfdaq_cedspike2,
         ndi_daq_reader_mfdaq_ndr,
         ndi_daq_reader_mfdaq_spikegadgets,
+        ndi_daq_reader_image_ndr,
         ndi_setup_daq_reader_mfdaq_stimulus_vhlabvisspike2,
         ndi_setup_daq_reader_mfdaq_stimulus_nielsenvisintan,
         ndi_setup_daq_reader_mfdaq_stimulus_nielsenvisneuropixelsglx,
@@ -87,8 +104,9 @@ def _build_registry() -> dict[str, type]:
     ):
         registry[cls.NDI_DAQREADER_CLASS] = cls
 
-    # DAQ system
+    # DAQ systems
     registry[ndi_daq_system.NDI_DAQSYSTEM_CLASS] = ndi_daq_system
+    registry[ndi_daq_system_image.NDI_DAQSYSTEM_CLASS] = ndi_daq_system_image
 
     # File navigators
     registry[ndi_file_navigator.NDI_FILENAVIGATOR_CLASS] = ndi_file_navigator
@@ -96,6 +114,9 @@ def _build_registry() -> dict[str, type]:
     registry[ndi_file_navigator_rhd_series.NDI_FILENAVIGATOR_CLASS] = ndi_file_navigator_rhd_series
     registry[ndi_file_navigator_rhd_series_epochdir.NDI_FILENAVIGATOR_CLASS] = (
         ndi_file_navigator_rhd_series_epochdir
+    )
+    registry[ndi_setup_file_navigator_vhPrairie2p.NDI_FILENAVIGATOR_CLASS] = (
+        ndi_setup_file_navigator_vhPrairie2p
     )
     # Custom lab-specific navigators mapped to epochdir until dedicated classes exist
     registry["ndi.setup.file.navigator.vhlab_np_epochdir"] = ndi_file_navigator_epochdir

@@ -274,9 +274,14 @@ classes:
   - name: markgarbage
     type: class
     matlab_path: "src/ndi/+ndi/+app/markgarbage.m"
+    matlab_last_sync_hash: "0e2caa0"
     python_path: "ndi/app/markgarbage.py"
     python_class: "ndi_app_markgarbage"
     inherits: "ndi.app"
+    decision_log: >
+      identifyvalidintervals ported and markvalidinterval's stored fields
+      corrected, 2026-09-02, as dependencies of
+      ndi.app.stimulus.tuning_response.compute_stimulus_response_scalar.
 
     methods:
       - name: markgarbage
@@ -316,6 +321,16 @@ classes:
           DISCREPANCY FIXED: MATLAB returns b (logical). Python was
           returning None. Updated Python to return bool.
 
+          SECOND FIX, 2026-09-02: the two time references are now stored as
+          the structs the valid_interval document schema defines --
+          timeref_structt0 and timeref_structt1, each naming the referent,
+          its class, the clock, the epoch and the time, as MATLAB's
+          ndi_timereference_struct() does. Python previously wrote
+          timeref_t0/timeref_t1 holding str(timeref): fields the schema does
+          not define, holding text that no time can be projected through. A
+          marking written that way was unreadable by identifyvalidintervals
+          AND by NDI-matlab, so no interval it named was ever honoured.
+
       - name: savevalidinterval
         input_arguments:
           - name: ndi_epochset_obj
@@ -331,6 +346,16 @@ classes:
         decision_log: >
           DISCREPANCY FIXED: MATLAB returns b (logical). Python was
           returning None. Updated Python to return bool.
+
+          SECOND FIX, 2026-09-02: the two time references are now stored as
+          the structs the valid_interval document schema defines --
+          timeref_structt0 and timeref_structt1, each naming the referent,
+          its class, the clock, the epoch and the time, as MATLAB's
+          ndi_timereference_struct() does. Python previously wrote
+          timeref_t0/timeref_t1 holding str(timeref): fields the schema does
+          not define, holding text that no time can be projected through. A
+          marking written that way was unreadable by identifyvalidintervals
+          AND by NDI-matlab, so no interval it named was ever honoured.
 
       - name: clearvalidinterval
         input_arguments:
@@ -376,8 +401,18 @@ classes:
             type_matlab: "cell array"
             type_python: "list[tuple[float, float]]"
         decision_log: >
-          DISCREPANCY FIXED: Method was missing from Python entirely.
-          Added stub implementation.
+          PORTED, 2026-09-02 (was a stub raising NotImplementedError).
+          Each stored region is projected into the query's referent and
+          clock through the session syncgraph and the projections are
+          unioned with vlt.math.interval_add, as MATLAB does. A region that
+          cannot be projected, or that lands in another epoch, adds NO
+          restriction -- it is not evidence that the data here is bad, only
+          that the marking says nothing about here -- so the fall-through
+          for "nothing projected" is the whole baseline [(t0, t1)], not an
+          empty list. MATLAB's ndi.time.timereference(session, struct)
+          overload is spelled ndi_time_timereference.from_struct here, via
+          the private _timeref_from_struct, which returns None rather than
+          raising for a struct nothing can be rebuilt from.
 
   # =========================================================================
   # ndi.app.spikeextractor
@@ -667,6 +702,7 @@ classes:
   - name: oridirtuning
     type: class
     matlab_path: "src/ndi/+ndi/+app/oridirtuning.m"
+    matlab_last_sync_hash: "b7102250"
     python_path: "ndi/app/oridirtuning.py"
     python_class: "ndi_app_oridirtuning"
     inherits: "ndi.app & ndi.app.appdoc"
@@ -696,7 +732,11 @@ classes:
         output_arguments:
           - name: tuning_doc
             type_python: "list[ndi_document]"
-        decision_log: "Exact match."
+        decision_log: >
+          Implemented. Searches the element's stimulus_response_scalar
+          documents, keeps the ones whose stimulus set varies only in angle,
+          and adds a stimulus_tuningcurve appdoc for each. Responses from
+          other stimulus sets are skipped rather than erroring, as in MATLAB.
 
       - name: calculate_tuning_curve
         input_arguments:
@@ -729,7 +769,28 @@ classes:
         output_arguments:
           - name: oriprops
             type_python: "list[ndi_document]"
-        decision_log: "Exact match."
+        decision_log: >
+          Implemented. Finds the element's angle-varying responses, then the
+          tuning curves computed from each, and adds an
+          orientation_direction_tuning appdoc per curve.
+
+          The indices themselves come from vlt.neuro.vision.oridir.index
+          (oridir_vectorindexes, oridir_fitindexes) and the two ANOVA
+          p-values from vhlib.response_stats.neural_response_significance --
+          none of that arithmetic is reimplemented here, mirroring
+          NDI-matlab, which calls both toolboxes directly. Reaching those
+          needed VH-Lab/vhlab-toolbox-python#24 (import bug) and
+          VH-Lab/vhlab-library-python#8 and #10 (the port, and packaging so
+          it can be depended on); all three landed.
+
+          DIVERGENCE WORTH KNOWING: MATLAB builds two response structs
+          (oridirtuning.m:155-165) that differ in `ind` -- the significance
+          test gets the RAW individual responses against the blank, the
+          indices get the control-SUBTRACTED ones. Python does the same. The
+          shared helper tuningcurvedoc2vhlabrespstruct is deliberately NOT
+          used, because MATLAB's version of it returns the raw individuals
+          while the Python port returns the subtracted ones, so it matches
+          neither caller cleanly.
 
       - name: calculate_oridir_indexes
         input_arguments:

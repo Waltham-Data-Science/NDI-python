@@ -1046,15 +1046,41 @@ not_applicable:
       Not ported to Python.
 
   # =========================================================================
-  # ndi.data namespace — MATLAB-only
+  # ndi.data namespace
   # =========================================================================
   - name: data.evaluate_fitcurve
     matlab_path: "+ndi/+data/evaluate_fitcurve.m"
-    status: not_applicable
+    matlab_last_sync_hash: "76b0673"
+    python_path: "ndi/data.py"
+    status: implemented
     decision_log: >
-      MATLAB utility for evaluating fitted curves from
-      ndi.data fitting results. Python equivalent uses
-      scipy.optimize curve fitting directly; no wrapper needed.
+      Ported (issue #78 tranche a). Reachable as ndi.data.evaluate_fitcurve at
+      its MATLAB mirror path -- +ndi/+data/ becomes ndi/data.py. Reads
+      fit_equation, fit_parameters, fit_parameter_names,
+      fit_independent_variable_names and fit_dependent_variable_names from a
+      fitcurve document and evaluates the equation at the supplied
+      independent-variable values. Errors on the same three cases MATLAB
+      errors on: more than one independent variable, more than one dependent
+      variable, and parameter-name/value length mismatch. Tests in
+      tests/test_data_evaluate_fitcurve.py.
+
+      DELIBERATE DIVERGENCE FROM MATLAB: MATLAB runs the stored equation
+      through eval(); Python parses it into an AST and walks that AST against
+      an allow-list (numeric constants, the declared names, arithmetic, a
+      short list of numpy functions). A fitcurve document is data and can
+      arrive from a shared or cloud dataset, so treating its equation as
+      executable code was refused; the trade-off is that an equation MATLAB
+      would run may be refused here, and the error names what was refused so
+      a legitimate equation can be supported by widening the list rather than
+      by loosening the walker. TestSandboxRefusesEscapes pins this.
+
+      NOTE: A second implementation exists at ndi.fun.data.evaluate_fitcurve.
+      It uses a different (Python-invented) document schema
+      (fit_variable_names, fit_parameter_values) and a restricted eval, not
+      an AST walker. It predates this port and stays for backward
+      compatibility with tests/test_phase1_gaps.py; ndi.data.evaluate_fitcurve
+      is the canonical mirror-path entry. Consolidation onto one
+      implementation is its own follow-up.
 
   # =========================================================================
   # ndi.setup namespace — MATLAB lab configurations

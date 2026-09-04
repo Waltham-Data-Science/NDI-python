@@ -25,7 +25,7 @@ import pytest
 from ndi.dataset import Dataset
 from ndi.query import Query
 from ndi.util import compareDatasetSummary, datasetSummary
-from tests.symmetry.conftest import SOURCE_TYPES, SYMMETRY_BASE
+from tests.symmetry.conftest import SOURCE_TYPES, SYMMETRY_BASE, missing_artifact
 
 
 @pytest.fixture(params=SOURCE_TYPES)
@@ -45,7 +45,7 @@ class TestBuildDataset:
     def _open_dataset(self, source_type):
         artifact_dir = self._artifact_dir(source_type)
         if not artifact_dir.exists():
-            pytest.skip(
+            missing_artifact(
                 f"Artifact directory from {source_type} does not exist. "
                 f"Run the corresponding makeArtifacts suite first."
             )
@@ -59,7 +59,7 @@ class TestBuildDataset:
 
         summary_path = artifact_dir / "datasetSummary.json"
         if not summary_path.exists():
-            pytest.skip(f"datasetSummary.json not found in {source_type} artifact directory.")
+            missing_artifact(f"datasetSummary.json not found in {source_type} artifact directory.")
 
         expected = json.loads(summary_path.read_text(encoding="utf-8"))
         actual = datasetSummary(dataset)
@@ -82,7 +82,7 @@ class TestBuildDataset:
 
         json_docs_dir = artifact_dir / "jsonDocuments"
         if not json_docs_dir.exists():
-            pytest.skip(f"jsonDocuments directory not found in {source_type}.")
+            missing_artifact(f"jsonDocuments directory not found in {source_type}.")
 
         json_files = list(json_docs_dir.glob("**/*.json"))
 

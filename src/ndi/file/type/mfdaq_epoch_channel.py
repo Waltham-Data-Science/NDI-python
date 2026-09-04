@@ -5,6 +5,12 @@ Provides the ndi_file_type_mfdaq__epoch__channel dataclass describing channel in
 for multi-function DAQ recordings.
 
 MATLAB equivalent: src/ndi/+ndi/+file/+type/mfdaq_epoch_channel.m
+
+CROSS-LANGUAGE NAMING
+Methods mirroring MATLAB keep MATLAB's exact name and also carry a
+snake_case alias bound to the same function -- one method under two names,
+so neither a ported MATLAB script nor idiomatic Python has to remember which
+spelling a given method happens to have.
 """
 
 from __future__ import annotations
@@ -165,6 +171,9 @@ class ndi_file_type_mfdaq__epoch__channel:
             )
         return self
 
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    read_from_file = readFromFile
+
     def writeToFile(self, filename: str) -> tuple[bool, str]:
         """
         Write channel information to a JSON file.
@@ -185,6 +194,9 @@ class ndi_file_type_mfdaq__epoch__channel:
             return True, ""
         except Exception as e:
             return False, str(e)
+
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    write_to_file = writeToFile
 
     @staticmethod
     def channelgroupdecoding(

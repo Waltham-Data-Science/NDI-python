@@ -393,15 +393,13 @@ def epoch(
         except Exception:
             continue
 
-        # Mixture info for this epoch
+        # Mixture info for this epoch, from EVERY bath applied in it -- MATLAB
+        # vstacks them all and dedupes; taking only the first would drop the
+        # second drug of a two-bath epoch.
         sbs = sb_by_epoch.get(epoch_id, [])
-        mixture_name = ""
-        mixture_ont = ""
-        if sbs:
-            loc = sbs[0].get("location", {})
-            if isinstance(loc, dict):
-                mixture_name = loc.get("name", "")
-                mixture_ont = loc.get("ontologyNode", "")
+        mixture_name, mixture_ont = _mixture_columns(
+            [sb.get("mixture_table", "") for sb in sbs if isinstance(sb, dict)]
+        )
 
         # Approach info for this epoch
         approaches = approach_by_epoch.get(epoch_id, [])
@@ -537,7 +535,13 @@ def treatment(
     _require_pandas()
     from ndi.query import ndi_query
 
-    docs = session.database_search(ndi_query("").isa("treatment"))
+    # treatment_drug is a sibling class of treatment, not a subclass, so a
+    # query for "treatment" alone never returns one -- and treatment_drug is
+    # where mixture_table lives. Without it the drug columns below could not
+    # exist at all, which is half of why they did not (issue #138).
+    docs = session.database_search(
+        ndi_query("").isa("treatment") | ndi_query("").isa("treatment_drug")
+    )
     rows: list[dict[str, Any]] = []
     doc_ids: list[str] = []
     dependency_ids: list[str] = []
@@ -550,6 +554,11 @@ def treatment(
         row = {"id": doc_id}
         if isinstance(treat, dict):
             row.update(treat)
+
+        drug = props.get("treatment_drug", {})
+        if isinstance(drug, dict) and drug:
+            row.update(_drug_treatment_row(drug))
+
         rows.append(row)
         doc_ids.append(doc_id)
 
@@ -568,12 +577,142 @@ def treatment(
 
     table = pd.DataFrame(rows) if rows else pd.DataFrame()
 
-    if hideMixtureTable:
-        mixture_cols = [c for c in table.columns if "Mixture" in c or "mixture" in c]
-        if mixture_cols:
-            table = table.drop(columns=mixture_cols)
+    # MATLAB drops only the RAW table column; the three derived columns are
+    # produced either way (treatment.m:110-118 computes them before testing
+    # the flag). Dropping every column with "Mixture" in its name -- which is
+    # what this did -- threw away the expansion as well as the source.
+    if hideMixtureTable and "DrugTreatmentMixtureTable" in table.columns:
+        table = table.drop(columns=["DrugTreatmentMixtureTable"])
 
     return table, doc_ids, dependency_ids
+
+
+def _drug_treatment_row(drug: dict[str, Any]) -> dict[str, Any]:
+    """One treatment_drug document's fields, under MATLAB's column names.
+
+    MATLAB equivalent: the ``treatment_drug`` branch of
+    ``ndi.fun.docTable.treatment`` -- the ``drugTreatmentFieldsOld`` ->
+    ``drugTreatmentFields`` rename (treatment.m:58-63), plus the mixture
+    expansion at treatment.m:110.
+
+    The expansion is three columns derived from the stored table:
+    ``DrugTreatmentMixtureName``, ``...Quantity`` (value and unit, as MATLAB
+    composes it with ``%g``), and ``...Ontology``. MATLAB writes them
+    UNCONDITIONALLY -- ``hideMixtureTable`` governs only whether the raw
+    table column survives alongside them.
+
+    DIVERGENCE, deliberate: MATLAB assigns the mixture columns straight from
+    the parsed table, which fits a table row only when the mixture has ONE
+    compound. Real mixtures have several -- ``mixtureStr2mixtureTable``
+    builds one row per compound of a string like ``'saline,3*TTX'``. Rather
+    than mirror an assignment that cannot represent them, the compounds are
+    comma-joined into a single cell, which is both what the sibling
+    ``docTable/epoch`` does with the same data (``join(mixtures.name,',')``)
+    and what this function's own header promises: "strings become
+    comma-separated lists".
+    """
+    from ..database_fun import readtablechar
+
+    renames = {
+        "location_name": "DrugTreatmentLocationName",
+        "location_ontologyName": "DrugTreatmentLocationOntology",
+        "location_ontologyNode": "DrugTreatmentLocationOntology",
+        "mixture_table": "DrugTreatmentMixtureTable",
+        "administration_onset_time": "DrugTreatmentOnsetTime",
+        "administration_offset_time": "DrugTreatmentOffsetTime",
+        "administration_duration": "DrugTreatmentDuration",
+    }
+
+    row: dict[str, Any] = {}
+    for key, value in drug.items():
+        if isinstance(value, str):
+            value = value.strip()
+        # MATLAB skips a field that is empty or NaN rather than carrying a
+        # blank column through the vstack.
+        if value is None or value == "" or (isinstance(value, float) and value != value):
+            continue
+        row[renames.get(key, key)] = value
+
+    text = drug.get("mixture_table", "")
+    if isinstance(text, str) and text.strip():
+        try:
+            table = readtablechar(text, ".txt", Delimiter=",")
+        except Exception:  # noqa: BLE001 - an unreadable mixture expands to nothing
+            return row
+
+        names = [str(v) for v in table.get("name", [])]
+        nodes = [str(v) for v in table.get("ontologyName", [])]
+        values = list(table.get("value", []))
+        units = [str(u) for u in table.get("unitName", [])]
+        # MATLAB uses unitName{1} for every row -- one unit for the mixture,
+        # not one per compound -- so a mixture is quoted in its own unit.
+        unit = units[0] if units else ""
+
+        row["DrugTreatmentMixtureName"] = ",".join(names)
+        row["DrugTreatmentMixtureOntology"] = ",".join(nodes)
+        row["DrugTreatmentMixtureQuantity"] = ",".join(
+            f"{_matlab_g(v)} {unit}".strip() for v in values
+        )
+
+    return row
+
+
+def _matlab_g(value: Any) -> str:
+    """A number as MATLAB's ``%g`` writes it.
+
+    ``compose("%g %s", ...)`` is what puts the quantity in the table, and
+    Python's ``%g`` agrees with it on the cases that occur here -- 2 rather
+    than 2.0, 0.0001 rather than 1e-04 only above the exponent threshold.
+    A value that is not a number is passed through as its own text.
+    """
+    try:
+        return f"{float(value):g}"
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _mixture_columns(mixture_tables: list[str]) -> tuple[str, str]:
+    """The compound names and ontology nodes named by stimulus_bath mixtures.
+
+    MATLAB equivalent: the mixture half of ``ndi.fun.docTable.epoch`` --
+    ``vstack`` every bath's ``mixture_table``, ``unique(...,'stable')`` the
+    result, then ``join(...,',')`` the name and ontologyName columns.
+
+    A bath's mixture is a DELIMITED TABLE stored as a string, one row per
+    compound, with columns ontologyName, name, value, ontologyUnit, unitName.
+    It is NOT ``stimulus_bath.location``, which names where the bath was
+    applied; reading the location into a column called MixtureName is the bug
+    this replaces (issue #138), and it was silent because a location name is
+    a perfectly plausible-looking string to find there.
+
+    Returns:
+        ``(names, ontology_nodes)``, each a comma-joined string in first-seen
+        order, empty when no bath carries a readable mixture table.
+    """
+    from ..database_fun import readtablechar
+
+    names: list[str] = []
+    nodes: list[str] = []
+    for text in mixture_tables:
+        if not isinstance(text, str) or not text.strip():
+            continue
+        try:
+            table = readtablechar(text, ".txt", Delimiter=",")
+        except Exception:  # noqa: BLE001 - an unparseable mixture names no compound
+            continue
+        row_names = [str(v) for v in table.get("name", [])]
+        row_nodes = [str(v) for v in table.get("ontologyName", [])]
+        # Pad so a table missing one column still contributes the other, and
+        # the two outputs stay row-aligned.
+        for i in range(max(len(row_names), len(row_nodes))):
+            name = row_names[i] if i < len(row_names) else ""
+            node = row_nodes[i] if i < len(row_nodes) else ""
+            if (name, node) in zip(names, nodes):
+                continue  # unique(...,'stable')
+            names.append(name)
+            nodes.append(node)
+
+    return ",".join(names), ",".join(nodes)
 
 
 def _get_depends_on(props: dict, name: str) -> str:

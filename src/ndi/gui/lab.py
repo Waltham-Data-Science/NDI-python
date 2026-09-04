@@ -5,6 +5,12 @@ Mirrors MATLAB: ndi.gui.ndi_gui_Lab
 Provides a graphical canvas (QGraphicsScene) where subjects, probes,
 and DAQ devices are displayed as draggable icons.  Connections between
 them are rendered as wire paths.
+
+CROSS-LANGUAGE NAMING
+Methods mirroring MATLAB keep MATLAB's exact name and also carry a
+snake_case alias bound to the same function -- one method under two names,
+so neither a ported MATLAB script nor idiomatic Python has to remember which
+spelling a given method happens to have.
 """
 
 from __future__ import annotations
@@ -92,12 +98,18 @@ class ndi_gui_Lab:
             self.subjects.append(icon)
         self._rebuild_connects()
 
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    add_subject = addSubject
+
     def addProbe(self, prob: list[Any]) -> None:
         """Add probe icons (green) to the view."""
         for p in prob:
             icon = ndi_gui_Icon(self, len(self.probes), p, 6, 6, 2, 3, (0.0, 0.6, 0.0))
             self.probes.append(icon)
         self._rebuild_connects()
+
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    add_probe = addProbe
 
     def addDAQ(self, daq: list[Any]) -> None:
         """Add DAQ icons (orange) to the view."""
@@ -106,10 +118,16 @@ class ndi_gui_Lab:
             self.DAQs.append(icon)
         self._rebuild_connects()
 
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    add_daq = addDAQ
+
     def editCallback(self) -> None:
         """Toggle edit mode."""
         self.editable = not self.editable
         self.grid()
+
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    edit_callback = editCallback
 
     def grid(self) -> None:
         """Show or hide the background grid."""
@@ -164,6 +182,9 @@ class ndi_gui_Lab:
     def setZoom(self, z: float) -> None:
         """Zoom the view by factor *z*."""
         self.window.scale(1.0 / z, 1.0 / z)
+
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    set_zoom = setZoom
 
     def move(self, scene_x: float, scene_y: float) -> None:
         """Handle mouse-move for drag operations.
@@ -237,6 +258,9 @@ class ndi_gui_Lab:
                     line2 = self.scene.addLine(x1, mid_y, x2, mid_y, pen)
                     line3 = self.scene.addLine(x2, mid_y, x2, y2, pen)
                     self._wires.extend([line1, line2, line3])
+
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    update_connections = updateConnections
 
     def cut(self, src: Any) -> None:
         """Remove a connection wire (edit mode only)."""

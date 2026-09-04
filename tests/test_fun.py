@@ -563,43 +563,101 @@ class TestFindMixtureName:
 
 
 class TestStimulusTemporalFrequency:
-    """Tests for stimulus.stimulustemporalfrequency."""
+    """Tests for stimulus.stimulustemporalfrequency.
 
-    def test_basic_rule(self, tmp_path):
+    These now run against the SHIPPED rules file
+    (``ndi_common/stimulus/ndi_stimulusparameters2temporalfrequency.json``,
+    the same file NDI-matlab reads) rather than a hand-made one. The earlier
+    tests wrote their own config using key names -- ``parameterName``,
+    ``multiplier``, ``adder`` -- that the shipped file does not use, so they
+    passed while the function returned (None, "") for every real stimulus:
+    the config it looked for did not exist, and its keys would not have been
+    read if it had. A stimulus with no temporal frequency gets no F1 or F2
+    response computed, so that silence cost the F1 and F2 halves of
+    ndi.app.stimulus.tuning_response.
+    """
+
+    def test_a_direct_frequency_parameter(self):
+        from ndi.fun.stimulus import stimulustemporalfrequency
+
+        assert stimulustemporalfrequency({"tFrequency": 4.0, "angle": 30}) == (4.0, "tFrequency")
+
+    def test_the_other_spelling_of_it(self):
+        from ndi.fun.stimulus import stimulustemporalfrequency
+
+        tf, name = stimulustemporalfrequency({"temporalFrequency": 2.5})
+        assert (tf, name) == (2.5, "temporalFrequency")
+
+    def test_a_period_in_frames_needs_the_refresh_rate(self):
+        """t_period is a period in FRAMES, so the frequency is
+        refreshRate / period -- 60 Hz over 15 frames is 4 Hz."""
+        from ndi.fun.stimulus import stimulustemporalfrequency
+
+        tf, name = stimulustemporalfrequency({"t_period": 15, "refreshRate": 60.0})
+        assert tf == pytest.approx(4.0)
+        assert name == "t_period"
+
+    def test_a_stimulus_with_no_frequency_parameter(self):
+        from ndi.fun.stimulus import stimulustemporalfrequency
+
+        assert stimulustemporalfrequency({"angle": 30, "isblank": 0}) == (None, "")
+
+    def test_a_non_numeric_value_is_not_a_frequency(self):
+        from ndi.fun.stimulus import stimulustemporalfrequency
+
+        assert stimulustemporalfrequency({"tFrequency": "two"}) == (None, "")
+
+    def test_a_period_rule_missing_its_multiplier_parameter_is_skipped(self):
+        """MATLAB errors here. Skipping to the next rule instead means one
+        malformed stimulus in a set does not cost the frequencies of the
+        rest -- and the caller still learns there was none."""
+        from ndi.fun.stimulus import stimulustemporalfrequency
+
+        assert stimulustemporalfrequency({"t_period": 15}) == (None, "")
+
+    def test_a_custom_config_uses_the_same_key_names(self, tmp_path):
         from ndi.fun.stimulus import stimulustemporalfrequency
 
         rules = [
-            {"parameterName": "tFrequency", "multiplier": 1.0, "adder": 0.0, "isPeriod": False},
+            {
+                "parameter_name": "myFreq",
+                "temporalFrequencyMultiplier": 2.0,
+                "temporalFrequencyAdder": 1.0,
+                "isPeriod": False,
+                "parameterMultiplier": "",
+            }
         ]
-        f = tmp_path / "rules.json"
-        f.write_text(json.dumps(rules))
+        config = tmp_path / "rules.json"
+        config.write_text(json.dumps(rules))
 
-        tf, name = stimulustemporalfrequency({"tFrequency": 4.0}, config_path=str(f))
-        assert tf == 4.0
-        assert name == "tFrequency"
+        tf, name = stimulustemporalfrequency({"myFreq": 3.0}, config_path=str(config))
+        assert tf == pytest.approx(7.0)  # adder + multiplier * value
+        assert name == "myFreq"
 
-    def test_period_inversion(self, tmp_path):
+    def test_the_first_matching_rule_wins(self, tmp_path):
         from ndi.fun.stimulus import stimulustemporalfrequency
 
         rules = [
-            {"parameterName": "period", "multiplier": 1.0, "adder": 0.0, "isPeriod": True},
+            {
+                "parameter_name": "second",
+                "temporalFrequencyMultiplier": 1.0,
+                "temporalFrequencyAdder": 0.0,
+                "isPeriod": False,
+                "parameterMultiplier": "",
+            },
+            {
+                "parameter_name": "first",
+                "temporalFrequencyMultiplier": 1.0,
+                "temporalFrequencyAdder": 0.0,
+                "isPeriod": False,
+                "parameterMultiplier": "",
+            },
         ]
-        f = tmp_path / "rules.json"
-        f.write_text(json.dumps(rules))
+        config = tmp_path / "rules.json"
+        config.write_text(json.dumps(rules))
 
-        tf, name = stimulustemporalfrequency({"period": 0.5}, config_path=str(f))
-        assert tf == pytest.approx(2.0)
-
-    def test_no_match(self, tmp_path):
-        from ndi.fun.stimulus import stimulustemporalfrequency
-
-        rules = [{"parameterName": "tFrequency", "multiplier": 1.0, "adder": 0.0}]
-        f = tmp_path / "rules.json"
-        f.write_text(json.dumps(rules))
-
-        tf, name = stimulustemporalfrequency({"other": 5.0}, config_path=str(f))
-        assert tf is None
-        assert name == ""
+        tf, name = stimulustemporalfrequency({"first": 1.0, "second": 9.0}, config_path=str(config))
+        assert (tf, name) == (9.0, "second")
 
 
 # ===========================================================================

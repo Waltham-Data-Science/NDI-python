@@ -24,6 +24,27 @@ from ..util.classname import ndi_matlab_classname
 logger = logging.getLogger(__name__)
 
 
+def _element_doc_id(document: Any) -> str:
+    """The base.id of a document, for a log line, without ever raising."""
+    doc_id = getattr(document, "id", None)
+    if doc_id:
+        return str(doc_id)
+    props = getattr(document, "document_properties", None)
+    if isinstance(props, dict):
+        return str(props.get("base", {}).get("id", "<unknown id>"))
+    return "<unknown id>"
+
+
+def _element_doc_class(document: Any) -> str:
+    """The stored element.ndi_element_class, for a log line, without raising."""
+    props = getattr(document, "document_properties", None)
+    if isinstance(props, dict):
+        element = props.get("element", {})
+        if isinstance(element, dict):
+            return str(element.get("ndi_element_class", ""))
+    return ""
+
+
 def empty_id() -> str:
     """
     Produce the empty session ID.
@@ -38,6 +59,29 @@ def empty_id() -> str:
     base_id = ido.id
     # Replace all non-underscore characters with '0'
     return "".join("0" if c != "_" else "_" for c in base_id)
+
+
+def _binary_handle(file_path):
+    """Open a binary document file with MATLAB's attribute name on it.
+
+    MATLAB's ``database_openbinarydoc`` returns an ``ndi.database.binarydoc``
+    carrying ``fullpathfilename`` -- session.m uses it itself, as the key
+    for its autoclose listeners. Python returned a bare file object, so
+    code written against the documented MATLAB API broke here even though
+    the information was present the whole time under a different name
+    (``.name``).
+
+    The returned object is still an ordinary file object, so every existing
+    caller is unaffected; it simply also answers to the MATLAB name.
+
+    Not yet symmetric: MATLAB takes an ``autoClose`` option implemented
+    with object-destruction listeners. The Python idiom would be a context
+    manager rather than a listener, which is a design decision rather than
+    an attribute, so it is left for its own change.
+    """
+    fh = open(file_path, "rb")
+    fh.fullpathfilename = str(file_path)
+    return fh
 
 
 class ndi_session(ABC):
@@ -63,6 +107,16 @@ class ndi_session(ABC):
         >>> session = ndi_session_dir('/path/to/experiment')
         >>> session.daqsystem_add(my_daq)
         >>> docs = session.database_search(ndi_query('element.type') == 'probe')
+
+    CROSS-LANGUAGE NAMING
+    Methods that mirror MATLAB keep MATLAB's exact name, and each also has a
+    snake_case alias bound to the same function -- ``isIngestedInDataset`` and
+    ``is_ingested_in_dataset`` are one method under two names. Neither
+    audience should have to remember which spelling a given method happens to
+    carry: a script ported from MATLAB keeps working, and Python code can read
+    idiomatically. ``is_fully_ingested`` is the one method whose Python name
+    differs in more than case, so MATLAB's ``isIngested`` is aliased onto it.
+
     """
 
     def __init__(self, reference: str):
@@ -267,15 +321,21 @@ class ndi_session(ABC):
         # Search database
         dev_docs = self.database_search(q)
 
-        # Convert to ndi_daq_system objects
+        # Convert to ndi_daq_system objects.
+        #
+        # Failures are NOT swallowed. MATLAB's ndi.session/daqsystem_load calls
+        # ndi_document2ndi_object in a bare loop, so a document naming a class
+        # that cannot be constructed raises there; catching it here was a silent
+        # divergence. It also hid real gaps: a DAQ system whose class is missing
+        # from this port simply vanished from the returned list, so the only
+        # symptom was a session that reported fewer DAQ systems than it stored
+        # -- which is how the absent image/imageseries path (#71) stayed
+        # invisible behind a count mismatch instead of naming itself.
         dev = []
         for doc in dev_docs:
-            try:
-                daq = self._document_to_object(doc)
-                if daq is not None:
-                    dev.append(daq)
-            except Exception:
-                pass
+            daq = self._document_to_object(doc)
+            if daq is not None:
+                dev.append(daq)
 
         if len(dev) == 0:
             return None
@@ -336,44 +396,7 @@ class ndi_session(ABC):
 
             self._database.add(doc)
 
-            # Ingest binary files: copy from original location to binary dir
-            self._ingest_binary_files(doc)
-
         return self
-
-    def _ingest_binary_files(self, doc: ndi_document) -> None:
-        """Copy binary file attachments into the database's binary directory.
-
-        For each file location with ``ingest=True``, the source file is
-        copied to ``<binary_dir>/<doc.id>_<filename>`` so that
-        ``database_openbinarydoc`` can find it.
-        """
-        import shutil
-
-        if self._database is None:
-            return
-        props = doc.document_properties
-        files = props.get("files", {})
-        if not isinstance(files, dict):
-            return
-        for fi in files.get("file_info", []):
-            name = fi.get("name", "")
-            if not name:
-                continue
-            for loc in fi.get("locations", []):
-                if not loc.get("ingest", False):
-                    continue
-                source = loc.get("location", "")
-                if not source:
-                    continue
-                from pathlib import Path
-
-                src_path = Path(source)
-                if not src_path.exists():
-                    continue
-                dest_path = self._database.get_binary_path(doc, name)
-                dest_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(str(src_path), str(dest_path))
 
     def database_rm(
         self,
@@ -500,19 +523,21 @@ class ndi_session(ABC):
         if doc is None:
             raise FileNotFoundError(f"ndi_document {doc_id} not found")
 
-        file_path = self._database.get_binary_path(doc, filename)
-        if not file_path.exists():
-            # Attempt on-demand fetch from cloud via ndic:// protocol
-            if self._try_cloud_fetch(doc, filename, file_path):
-                return open(file_path, "rb")
+        # DID resolves the location and retrieves a remote one through NDI's
+        # handler, exactly as NDI-matlab's do_openbinarydoc does. It raises
+        # FileAccessError -- a FileNotFoundError -- when nothing is reachable,
+        # naming the locations it tried, so no existence check is needed here.
+        try:
+            file_path = self._database.open_binary(doc_id, filename)
+        except FileNotFoundError as exc:
             raise FileNotFoundError(
                 f"Binary file '{filename}' not found for document {doc_id}. "
                 f"If this is a cloud dataset, ensure NDI_CLOUD_USERNAME and "
                 f"NDI_CLOUD_PASSWORD environment variables are set, or pass "
-                f"a cloud_client to the session/dataset."
-            )
+                f"a cloud_client to the session/dataset. ({exc})"
+            ) from exc
 
-        return open(file_path, "rb")
+        return _binary_handle(file_path)
 
     def database_existbinarydoc(
         self,
@@ -537,8 +562,7 @@ class ndi_session(ABC):
         if doc is None:
             return False, None
 
-        file_path = self._database.get_binary_path(doc, filename)
-        return file_path.exists(), file_path
+        return self._database.exist_binary(doc_id, filename)
 
     def database_closebinarydoc(self, file_obj: Any) -> None:
         """
@@ -549,87 +573,6 @@ class ndi_session(ABC):
         """
         if hasattr(file_obj, "close"):
             file_obj.close()
-
-    def _try_cloud_fetch(
-        self,
-        doc: ndi_document,
-        filename: str,
-        target_path: Path,
-    ) -> bool:
-        """Attempt to fetch a binary file from NDI Cloud via ndic:// protocol.
-
-        Scans the document's file_info for an ``ndic://`` location matching
-        *filename* and downloads the file on demand.
-
-        Args:
-            doc: The document that owns the file.
-            filename: Name of the binary file to fetch.
-            target_path: Local path where the file should be saved.
-
-        Returns:
-            True if the file was fetched successfully, False otherwise.
-        """
-        try:
-            from ..cloud.filehandler import NDIC_SCHEME, fetch_cloud_file
-        except ImportError:
-            return False
-
-        props = doc.document_properties
-        files = props.get("files", {})
-        if not isinstance(files, dict):
-            return False
-
-        file_info = files.get("file_info")
-        if file_info is None:
-            return False
-
-        # Normalise to list
-        if isinstance(file_info, dict):
-            file_info = [file_info]
-        if not isinstance(file_info, list):
-            return False
-
-        for fi in file_info:
-            if not isinstance(fi, dict):
-                continue
-            if fi.get("name", "") != filename:
-                continue
-
-            locations = fi.get("locations")
-            if locations is None:
-                continue
-            if isinstance(locations, dict):
-                locations = [locations]
-            if not isinstance(locations, list):
-                continue
-
-            for loc in locations:
-                if not isinstance(loc, dict):
-                    continue
-                location = loc.get("location", "")
-                if not location.startswith(NDIC_SCHEME):
-                    continue
-
-                try:
-                    return fetch_cloud_file(
-                        location,
-                        target_path,
-                        client=self._cloud_client,
-                    )
-                except Exception as exc:
-                    logger.debug(
-                        "Cloud fetch failed for %s: %s",
-                        location,
-                        exc,
-                        exc_info=True,
-                    )
-                    return False
-
-        return False
-
-    # =========================================================================
-    # ndi_time_syncgraph Methods
-    # =========================================================================
 
     def syncgraph_addrule(self, rule: ndi_time_syncrule) -> ndi_session:
         """
@@ -668,25 +611,67 @@ class ndi_session(ABC):
         if self._syncgraph is None or self._database is None:
             return
 
-        # Remove old syncgraph docs
         old_docs = self.database_search(
             ndi_query("").isa("syncgraph") & (ndi_query("base.session_id") == self.id())
         )
-        for doc in old_docs:
-            self._database.remove(doc)
-
-        # Remove old syncrule docs
         old_rules = self.database_search(
             ndi_query("").isa("syncrule") & (ndi_query("base.session_id") == self.id())
         )
-        for doc in old_rules:
+
+        # Rebuild the syncgraph so the documents about to be written carry a
+        # fresh id, as NDI-matlab's update_syncgraph_in_db does:
+        #
+        #     newsyncgraph = ndi.time.syncgraph(ndi_session_obj);
+        #     for i=1:numel(...rules), newsyncgraph = newsyncgraph.addrule(...)
+        #
+        # This is not cosmetic. DID retires the id of a document removed from
+        # its last branch and refuses to add it again (DID-matlab#55 and the
+        # DID-python port), so re-adding the syncgraph under the id just
+        # removed above raises. A new object means a new id.
+        rebuilt = ndi_time_syncgraph(self)
+        for rule in self._syncgraph.rules:
+            rebuilt.add_rule(rule)
+        self._syncgraph = rebuilt
+
+        # That covers the syncgraph and nothing else. The syncrules are not
+        # rebuilt: add_rule appends the object it is handed without cloning it,
+        # and syncrule.new_document() uses that object's id. Removing every
+        # syncrule document and re-adding documents built from the rules that
+        # survived would hand DID ids it has just retired, so the second update
+        # of a syncgraph that keeps a rule would raise. Touch only the
+        # difference instead -- remove the documents of rules that are actually
+        # gone, add the documents of rules that are actually new, and leave the
+        # survivors where they are. NDI-matlab#898 / NDI-python#67; the choice
+        # among the options there was made in NDI-matlab, which this mirrors.
+        rule_ids = {rule.id for rule in self._syncgraph.rules}
+        stored_rule_ids = {doc.id for doc in old_rules}
+        stale_rule_docs = [doc for doc in old_rules if doc.id not in rule_ids]
+
+        # Delete before adding, matching MATLAB: there the removal of a syncrule
+        # document cascades to whatever depends on it, which would include the
+        # syncgraph document being written.
+        for doc in old_docs:
+            self._database.remove(doc)
+        for doc in stale_rule_docs:
             self._database.remove(doc)
 
-        # Add new documents
-        new_docs = self._syncgraph.new_document()
-        for doc in new_docs:
-            doc = doc.set_session_id(self.id())
-            self._database.add(doc)
+        # new_document() returns the syncgraph document first and then one
+        # document per rule, each carrying that rule's id.
+        generated = self._syncgraph.new_document()
+        if not generated:
+            return
+        docs_to_add = [generated[0]] + [
+            doc for doc in generated[1:] if doc.id not in stored_rule_ids
+        ]
+
+        # Add the whole set in one call, as MATLAB's database_add(newdocs)
+        # does. The syncgraph depends on its rules -- adding one at a time
+        # validates the syncgraph against a batch that does not yet contain
+        # them, which DID rejects as a dangling dependency now that enumerated
+        # names like "syncrule_id_1" have their values checked (DID-python#41).
+        new_docs = [doc.set_session_id(self.id()) for doc in docs_to_add]
+        if new_docs:
+            self._database.add_many(new_docs)
 
     # =========================================================================
     # Ingest Methods
@@ -775,6 +760,9 @@ class ndi_session(ABC):
                     return False
         return True
 
+    #: MATLAB's name for this method, which Python renamed to say *fully*.
+    isIngested = is_fully_ingested
+
     def isIngestedInDataset(self) -> bool:
         """
         Check if the session is ingested in a dataset.
@@ -806,6 +794,9 @@ class ndi_session(ABC):
                 return True
 
         return False
+
+    #: Snake-case alias; same method, see the class note on naming.
+    is_ingested_in_dataset = isIngestedInDataset
 
     # =========================================================================
     # ndi_probe and ndi_element Methods
@@ -850,15 +841,16 @@ class ndi_session(ABC):
             ndi_query("element.ndi_element_class").contains("probe")
         )
 
-        # Convert existing docs to probe objects
+        # Convert existing docs to probe objects. Failures raise, as in
+        # daqsystem_load above and as in MATLAB, whose getprobes builds each
+        # stored probe with a bare ndi_document2ndi_object call. Swallowing
+        # here silently reported a session as having fewer stored probes than
+        # it does, and would then re-create the ones it failed to load.
         existing_probes = []
         for doc in existing_docs:
-            try:
-                obj = self._document_to_object(doc)
-                if obj is not None:
-                    existing_probes.append(obj)
-            except Exception:
-                pass
+            obj = self._document_to_object(doc)
+            if obj is not None:
+                existing_probes.append(obj)
 
         # Create new probe objects for those not in database
         probes = []
@@ -951,10 +943,23 @@ class ndi_session(ABC):
         for doc in docs:
             try:
                 obj = self._document_to_object(doc)
-                if obj is not None:
-                    elements.append(obj)
-            except Exception:
-                pass
+            except Exception:  # noqa: BLE001 - one bad document must not cost the others
+                # Silence here is what kept issue #133 invisible: "ndi.neuron"
+                # was in no class registry, so every MATLAB-written neuron
+                # raised on reconstruction and this handler dropped it. A user
+                # asking a MATLAB-written session for its neurons got [] and no
+                # reason. Skipping still beats failing the whole call over one
+                # document, but it no longer happens quietly.
+                logger.warning(
+                    "getelements: dropping element document %s (element.ndi_element_class=%r); "
+                    "it could not be reconstructed",
+                    _element_doc_id(doc),
+                    _element_doc_class(doc),
+                    exc_info=True,
+                )
+                continue
+            if obj is not None:
+                elements.append(obj)
 
         return elements
 
@@ -1113,24 +1118,52 @@ class ndi_session(ABC):
             if isinstance(props, dict):
                 daq_class_name = props.get("daqsystem", {}).get("ndi_daqsystem_class", "")
 
-            # Check for mfdaq in the class name, or default to mfdaq
-            # if class name is missing (most DAQ systems are MFDAQ)
+            # Default to mfdaq when the class name is missing: most DAQ
+            # systems are MFDAQ, and older documents omit it.
             if "mfdaq" in daq_class_name or not daq_class_name:
                 from ..daq.system_mfdaq import ndi_daq_system_mfdaq
 
                 return ndi_daq_system_mfdaq(session=self, document=document)
 
-            from ..daq.system import ndi_daq_system
-
-            return ndi_daq_system(session=self, document=document)
+            # Otherwise use the registered class for this name. Falling
+            # straight through to the generic ndi_daq_system, as this used to,
+            # silently downgraded every non-mfdaq system to the base class --
+            # so a document naming e.g. ndi.daq.system.image was built as a
+            # plain DAQ system and nothing said so.
+            daq_cls = get_class(daq_class_name)
+            if daq_cls is None:
+                raise ValueError(
+                    f"Unknown DAQ system class: {daq_class_name!r}. "
+                    "Register it in ndi.class_registry."
+                )
+            return daq_cls(session=self, document=document)
 
         if document.doc_isa("element"):
             props = document.document_properties
-            ndi_class = props.get("element", {}).get("ndi_element_class", "")
+            element = props.get("element", {}) if isinstance(props, dict) else {}
+            ndi_class = element.get("ndi_element_class", "")
             cls = get_class(ndi_class)
             if cls is None:
                 raise ValueError(
                     f"Unknown element class: {ndi_class!r}. " f"Register it in ndi.class_registry."
+                )
+            if ndi_class == "ndi.element" and element.get("type", "") == "neuron":
+                # A neuron labelled "ndi.element" was written by a version of
+                # NDI-python from before issue #133: ndi_neuron did not
+                # override ndi_element_class(), so it stored the base class
+                # name. The label is not rewritten here -- guessing a class
+                # from element.type would diverge from MATLAB, which builds
+                # feval(stored class name) and nothing else -- so the document
+                # still loads as a plain ndi_element, without readtimeseries.
+                # Saying so is the difference between stale data a user can
+                # act on and data that is silently the wrong kind.
+                logger.warning(
+                    "Element document %s has element.type 'neuron' but "
+                    "element.ndi_element_class 'ndi.element'; it was probably written by "
+                    "NDI-python before the ndi_neuron class-name fix (issue #133). It loads "
+                    "as a plain ndi_element and has no readtimeseries. Rewrite the document "
+                    "with an ndi_neuron to restore it.",
+                    _element_doc_id(document),
                 )
             return cls(session=self, document=document)
 

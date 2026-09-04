@@ -4,6 +4,12 @@ Mirrors MATLAB: ndi.gui.component.internal.ndi_gui_component_internal_AsynchProg
 
 Extends :class:`ndi_gui_component_internal_ProgressTracker` with the ability to serialise progress
 state to a JSON file, enabling cross-process monitoring.
+
+CROSS-LANGUAGE NAMING
+Methods mirroring MATLAB keep MATLAB's exact name and also carry a
+snake_case alias bound to the same function -- one method under two names,
+so neither a ported MATLAB script nor idiomatic Python has to remember which
+spelling a given method happens to have.
 """
 
 from __future__ import annotations
@@ -11,7 +17,7 @@ from __future__ import annotations
 import json
 import time
 
-from ndi.gui.component.internal.ndi_gui_component_internal_ProgressTracker import (
+from ndi.gui.component.internal.ProgressTracker import (
     ndi_gui_component_internal_ProgressTracker,
 )
 
@@ -57,6 +63,9 @@ class ndi_gui_component_internal_AsynchProgressTracker(ndi_gui_component_interna
             self._dumpToFile()
             self._fire_progress_updated()
 
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    update_progress = updateProgress
+
     def _dumpToFile(self) -> None:
         """Serialise current state to :attr:`DumpFilePath` as JSON."""
         if self.DumpFilePath is None:
@@ -85,3 +94,6 @@ class ndi_gui_component_internal_AsynchProgressTracker(ndi_gui_component_interna
         """
         with open(filepath) as fh:
             return json.load(fh)
+
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    get_asynch_task_progress = getAsynchTaskProgress

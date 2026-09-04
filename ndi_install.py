@@ -49,11 +49,43 @@ DEPENDENCIES = [
         "ndi_common": True,
         "description": "NDI calculator and visualization document definitions",
     },
+    {
+        "name": "Pyraview",
+        "repo": "https://github.com/VH-Lab/Pyraview.git",
+        "branch": "main",
+        # pip-installed rather than added to the path: the package carries a
+        # compiled library, so it has to be built and installed, not imported
+        # from a checkout. The clone is still what --update pulls.
+        "python_path": "",
+        "pip_install": True,
+        "description": "Multi-resolution signal pyramids (not on PyPI; builds a C++ library)",
+    },
 ]
 
 DEFAULT_TOOLS_DIR = Path.home() / ".ndi" / "tools"
 
 PTH_FILENAME = "ndi-deps.pth"
+
+# Seconds allowed for a subprocess that talks to the NETWORK: a git clone, a
+# git pull, or the editable install (which resolves six git-URL dependencies
+# from pyproject.toml, so pip clones as well as downloads).
+#
+# It was 120, which was not enough. The editable install alone takes ~80 s on
+# a healthy GitHub runner, so a slow clone crossed the line often enough to
+# fail CI at random -- in one run, on one commit, test (3.10) installed in
+# 80 s while test (3.11) and test (3.12) both timed out. The failure was
+# especially unhelpful because it happened during install, so no test ran and
+# the job looked like a test failure. See NDI-python#165.
+#
+# The point of a bound here is to stop a genuinely hung command from wedging
+# a job forever, not to police how fast a network is; the CI job's own
+# timeout is the real backstop. So this is generous on purpose.
+NETWORK_TIMEOUT = 600
+
+# Seconds allowed for a purely LOCAL subprocess -- git status, git stash.
+# These touch the working tree and nothing else, so they stay tight: a local
+# git command that takes half a minute is stuck, not slow.
+LOCAL_TIMEOUT = 30
 
 # Additional pip dependencies not covered by pyproject.toml's [project.optional-dependencies].
 PIP_DEPS = [
@@ -175,7 +207,7 @@ def git_clone(repo_url: str, target_dir: Path, branch: str) -> bool:
         ],
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=NETWORK_TIMEOUT,
     )
     if result.returncode != 0:
         fail(f"git clone failed: {result.stderr.strip()}")
@@ -189,7 +221,7 @@ def git_has_changes(repo_dir: Path) -> bool:
         ["git", "-C", str(repo_dir), "status", "--porcelain"],
         capture_output=True,
         text=True,
-        timeout=10,
+        timeout=LOCAL_TIMEOUT,
     )
     return bool(result.stdout.strip())
 
@@ -205,7 +237,7 @@ def git_update(repo_dir: Path) -> bool:
             ["git", "-C", str(repo_dir), "stash"],
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=LOCAL_TIMEOUT,
         )
         if result.returncode == 0:
             stashed = True
@@ -218,7 +250,7 @@ def git_update(repo_dir: Path) -> bool:
         ["git", "-C", str(repo_dir), "pull", "--ff-only"],
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=NETWORK_TIMEOUT,
     )
     if result.returncode != 0:
         warn(f"git pull failed: {result.stderr.strip()}")
@@ -228,7 +260,7 @@ def git_update(repo_dir: Path) -> bool:
                 ["git", "-C", str(repo_dir), "stash", "pop"],
                 capture_output=True,
                 text=True,
-                timeout=30,
+                timeout=LOCAL_TIMEOUT,
             )
         return False
 
@@ -241,7 +273,7 @@ def git_update(repo_dir: Path) -> bool:
             ["git", "-C", str(repo_dir), "stash", "pop"],
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=LOCAL_TIMEOUT,
         )
         if pop_result.returncode != 0:
             warn("Could not restore stashed changes (may need manual merge)")
@@ -263,6 +295,44 @@ def clone_or_update(name: str, repo_url: str, target_dir: Path, branch: str, upd
         info(f"Cloning {name}...")
         target_dir.parent.mkdir(parents=True, exist_ok=True)
         return git_clone(repo_url, target_dir, branch)
+
+
+# ---------------------------------------------------------------------------
+# Compiled dependencies
+# ---------------------------------------------------------------------------
+
+
+def pip_install_dependency(name: str, repo_dir: Path) -> bool:
+    """Install a cloned dependency that has to be built rather than imported.
+
+    Pyraview is a C++ core with a ctypes binding: the Python package cannot
+    import until it can load libpyraview. Its own build (scikit-build-core
+    driving CMake) compiles the library into the installed package, so
+    installing the checkout is all that is needed -- and is why this one is
+    pip-installed instead of being added to ndi-deps.pth like the others.
+
+    It is not on PyPI, which is why it is cloned here at all rather than
+    named in pyproject.toml; a direct git URL there would install the same
+    thing but could never be published to an index.
+    """
+    info(f"Building and installing {name}...")
+    # Not NETWORK_TIMEOUT: this one COMPILES a C++ library rather than merely
+    # fetching, so its cost is the machine's, not the network's, and half an
+    # hour is the bound that suits it.
+    result = subprocess.run(
+        [sys.executable, "-m", "pip", "install", str(repo_dir)],
+        capture_output=True,
+        text=True,
+        timeout=1800,
+    )
+    if result.returncode != 0:
+        fail(f"{name}: pip install failed")
+        detail(result.stderr.strip()[-2000:])
+        warn("  This build needs a C++ compiler and CMake.")
+        return False
+
+    detail(result.stdout.strip()[-500:])
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -374,7 +444,7 @@ def pip_install(packages: list[str], extra_args: list[str] | None = None) -> boo
     """Run pip install with the given packages."""
     cmd = [sys.executable, "-m", "pip", "install", "--quiet"] + (extra_args or []) + packages
     detail(f"pip install {' '.join(packages[:3])}{'...' if len(packages) > 3 else ''}")
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=NETWORK_TIMEOUT)
     if result.returncode != 0:
         # Show stderr but filter out the common "already satisfied" noise
         err = result.stderr.strip()
@@ -407,7 +477,7 @@ def install_ndi_and_deps(ndi_root: Path, include_dev: bool = False) -> bool:
         ],
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=NETWORK_TIMEOUT,
         cwd=str(ndi_root),
     )
     if result.returncode != 0:
@@ -446,6 +516,7 @@ def validate() -> tuple[int, int]:
         ("DID (did.implementations.sqlitedb)", "did.implementations.sqlitedb"),
         ("DID (did.datastructures)", "did.datastructures"),
         ("vhlab-toolbox (vlt)", "vlt"),
+        ("pyraview (signal pyramids)", "pyraview"),
         ("numpy", "numpy"),
         ("networkx", "networkx"),
         ("jsonschema", "jsonschema"),
@@ -574,6 +645,8 @@ def main() -> int:
     for dep in DEPENDENCIES:
         target = tools_dir / dep["name"]
         ok = clone_or_update(dep["name"], dep["repo"], target, dep["branch"], args.update)
+        if ok and dep.get("pip_install"):
+            ok = pip_install_dependency(dep["name"], target)
         if not ok:
             all_cloned = False
 
@@ -626,7 +699,12 @@ def main() -> int:
         return 1
 
     if not install_ndi_and_deps(ndi_root, include_dev=args.dev):
-        warn("Some packages may not have installed correctly")
+        # Only reachable when `pip install -e .` itself failed, or a required
+        # pip dependency did. Either way NDI is not installed, so this cannot
+        # be a warning: three CI workflows run this script and would carry on
+        # against a half-installed tree, failing later somewhere less obvious.
+        fail("Installation failed: see the pip errors above")
+        return 1
 
     # Copy document definitions from external dependencies
     install_ndi_common_docs(tools_dir, ndi_root)
@@ -643,13 +721,12 @@ def main() -> int:
 
         passed, total = validate()
 
-        heading("Installation Complete")
+        heading("Installation Complete" if passed == total else "Installation Incomplete")
         if passed == total:
             print(f"\n  All {total} checks passed. NDI-python is ready to use.")
         else:
             print(f"\n  {passed}/{total} checks passed.")
-            if passed < total:
-                print("  Some checks failed — see above for details.")
+            print("  Some checks failed — see above for details.")
 
         print("\n  Next steps:")
         print("    python -m ndi check          # Re-run validation anytime")
@@ -657,7 +734,14 @@ def main() -> int:
         print("    python tutorials/tutorial_67f723d574f5f79c6062389d.py  # Run a tutorial")
         print()
 
-    return 0 if not args.no_validate else 0
+        if passed != total:
+            # `python -m ndi check` runs these same checks and already exits
+            # 1 when any fails (ndi/check.py). The installer printed the same
+            # failures and exited 0, so `python ndi_install.py && <next step>`
+            # ran the next step against a broken install.
+            return 1
+
+    return 0
 
 
 if __name__ == "__main__":

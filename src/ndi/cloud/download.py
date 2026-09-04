@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import warnings
 from collections.abc import Callable
 from pathlib import Path
@@ -19,6 +20,52 @@ if TYPE_CHECKING:
     from .client import CloudClient
 
 logger = logging.getLogger(__name__)
+
+
+def safeLocalFilename(file_uid: str) -> tuple[str, bool]:
+    """Reduce a server-supplied file uid to a filename safe to join locally.
+
+    MATLAB equivalent: ndi.cloud.download.internal.safeLocalFilename
+
+    Values like ``file_uid`` and a document's ``generic_file.filename``
+    arrive verbatim from the cloud API and are used to build a local
+    destination path.  A value such as ``'../../../.config/startup.py'``
+    would let a downloaded dataset write outside the target folder.
+
+    This drops every directory component, keeping only the last one, so
+    the result can be joined onto a caller-controlled folder.
+
+    Args:
+        file_uid: The server-supplied name or uid.
+
+    Returns:
+        ``(safe_filename, is_safe)``.  *is_safe* is False -- and
+        *safe_filename* is ``""`` -- when the value yields nothing usable
+        (``""``, ``"."`` or ``".."``); callers must skip those rather
+        than substitute a name of their own.
+
+    Callers should still assert containment of the joined path as defense
+    in depth, which is what :func:`_contained_path` does.
+    """
+    last = re.split(r"[\\/]", str(file_uid))[-1]
+    if not last or last in (".", ".."):
+        return "", False
+    return last, True
+
+
+def _contained_path(target_dir: Path, filename: str) -> Path | None:
+    """``target_dir / filename``, or None if that escapes *target_dir*.
+
+    :func:`safeLocalFilename` already removes directory components, so
+    this second check should never be the one that fires.  It is here
+    because the cost of being wrong about that is a write outside the
+    dataset folder, and the cost of the check is one ``resolve()``.
+    """
+    base = Path(target_dir).resolve()
+    candidate = (base / filename).resolve()
+    if candidate == base or base not in candidate.parents:
+        return None
+    return candidate
 
 
 def _download_chunk_zip(
@@ -115,8 +162,11 @@ def downloadDocumentCollection(
 
     from .api import documents as docs_api
 
+    trail: list[str] = []
+
     def _log(msg: str) -> None:
         logger.info(msg)
+        trail.append(msg)
         if progress:
             progress(msg)
 
@@ -142,6 +192,7 @@ def downloadDocumentCollection(
         chunk_ids = doc_ids[start:end]
 
         _log(f"  Processing chunk {i + 1} of {num_chunks} " f"({len(chunk_ids)} documents)...")
+        before = len(all_documents)
 
         # Get presigned URL for this chunk
         try:
@@ -158,13 +209,43 @@ def downloadDocumentCollection(
         try:
             chunk_docs = _download_chunk_zip(url, timeout, retry_interval)
             all_documents.extend(chunk_docs)
-            _log(f"  Chunk {i + 1}: extracted {len(chunk_docs)} documents")
+            # asked-for vs got, per chunk: the only place a shortfall can be
+            # attributed to a particular chunk rather than noticed in a total.
+            shortfall = len(chunk_ids) - (len(all_documents) - before)
+            note = f"  ({shortfall} SHORT)" if shortfall else ""
+            _log(f"  Chunk {i + 1}: asked {len(chunk_ids)}, " f"extracted {len(chunk_docs)}{note}")
         except TimeoutError as exc:
             _log(f"  Chunk {i + 1}: {exc}")
         except Exception as exc:
             _log(f"  Chunk {i + 1}: extraction failed: {exc}")
 
     _log(f"Downloaded {len(all_documents)} documents total")
+
+    # Every failure above is logged and skipped, so a chunk that times out or
+    # fails to extract silently shortens the result. Nothing downstream checks,
+    # and a partial set does not look broken -- it looks like a dataset whose
+    # documents refer to documents that do not exist, which is what a caller
+    # eventually reports, a long way from here.
+    #
+    # Compared by count, not by id: doc_ids are the cloud's own identifiers
+    # (24-hex ObjectIds from the listing endpoint), while a downloaded
+    # document's base.id is an NDI id (33 chars, underscore-separated). They
+    # are different id spaces and there is no mapping between them here, so
+    # matching one against the other reports every document as missing.
+    from .diagnostics import document_set_report
+
+    report = document_set_report(all_documents)
+    _log(report)
+
+    if len(all_documents) != len(doc_ids):
+        raise RuntimeError(
+            f"Document download is incomplete: asked for {len(doc_ids)} "
+            f"documents, {len(all_documents)} came back "
+            f"({len(doc_ids) - len(all_documents)} short). A partial set "
+            f"would otherwise surface later as documents depending on "
+            f"documents that were never downloaded.\n\n" + "\n".join(trail)
+        )
+
     return all_documents
 
 
@@ -196,6 +277,16 @@ def downloadFilesForDocument(
     if not file_uid:
         return downloaded
 
+    # The uid is server-supplied, so it names the local file only after
+    # safeLocalFilename has stripped any directory components from it.
+    # Decided before the API call: a file that cannot be written anywhere
+    # is not worth fetching a download URL for.
+    safe_name, is_safe = safeLocalFilename(file_uid)
+    out_path = _contained_path(target_dir, safe_name) if is_safe else None
+    if out_path is None:
+        logger.warning("Refusing unusable file uid %r for dataset %s", file_uid, dataset_id)
+        return downloaded
+
     # Get download URL via file details endpoint
     from .api import files as files_api
 
@@ -211,7 +302,6 @@ def downloadFilesForDocument(
     # Download with streaming
     resp = requests.get(url, timeout=120, stream=True)
     if resp.status_code == 200:
-        out_path = target_dir / file_uid
         with open(out_path, "wb") as fh:
             for chunk in resp.iter_content(chunk_size=8192):
                 fh.write(chunk)
@@ -398,6 +488,14 @@ def downloadGenericFiles(
                     else:  # "original"
                         filename = f"{name_part}{ext_part}"
 
+                    # name_part comes from the document's own
+                    # generic_file.filename, which the server supplies --
+                    # so "../../startup.py" reaches here as a filename.
+                    filename, is_safe = safeLocalFilename(filename)
+                    if not is_safe:
+                        logger.warning("Skipping file with unusable name (UID: %s)", uid)
+                        continue
+
                     download_list.append({"uid": uid, "filename": filename})
 
         if not download_list:
@@ -412,7 +510,10 @@ def downloadGenericFiles(
         for i, item in enumerate(download_list):
             uid = item["uid"]
             filename = item["filename"]
-            target_path = target / filename
+            target_path = _contained_path(target, filename)
+            if target_path is None:
+                logger.warning("Refusing unsafe filename %r (UID: %s)", filename, uid)
+                continue
 
             if verbose:
                 print(f"  [{i + 1}/{len(download_list)}] Downloading {filename} (UID: {uid})...")

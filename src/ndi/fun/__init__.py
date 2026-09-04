@@ -9,9 +9,20 @@ and probe utilities.
 
 from __future__ import annotations
 
-from . import probe  # noqa: F401 — make ndi.fun.probe accessible
+from . import (
+    calc,  # noqa: F401 — make ndi.fun.calc accessible
+    ensemble,  # noqa: F401 — make ndi.fun.ensemble accessible
+    export,  # noqa: F401 — make ndi.fun.export accessible
+    file,  # noqa: F401 — make ndi.fun.file accessible
+    probe,  # noqa: F401 — make ndi.fun.probe accessible
+    stimulus,  # noqa: F401 — make ndi.fun.stimulus accessible
+    text,  # noqa: F401 — make ndi.fun.text accessible
+)
+from .plot import plot_extracellular_spikeshapes
+from .text import parse_text, parseText
 from .utils import (
     channelname2prefixnumber,
+    identifier,
     name2variable_name,
     name2variableName,
     pseudorandomint,
@@ -20,8 +31,12 @@ from .utils import (
 
 __all__ = [
     "channelname2prefixnumber",
+    "identifier",
+    "plot_extracellular_spikeshapes",
     "name2variableName",
     "name2variable_name",
+    "parseText",
+    "parse_text",
     "probe",
     "pseudorandomint",
     "timestamp",

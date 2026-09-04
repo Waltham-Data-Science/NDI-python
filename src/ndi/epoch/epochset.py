@@ -16,6 +16,7 @@ import pydantic
 from pydantic import Field
 
 from ..time import ndi_time_clocktype
+from ..time.timemapping import ndi_time_timemapping
 
 
 class ndi_epoch_epochset(ABC):
@@ -51,6 +52,10 @@ class ndi_epoch_epochset(ABC):
         """Initialize epoch set with empty cache."""
         self._epochtable_cache: list[dict[str, Any]] | None = None
         self._epochtable_hash: str | None = None
+        self._epochgraph_cache: (
+            tuple[np.ndarray, list[list[ndi_time_timemapping | None]]] | None
+        ) = None
+        self._epochgraph_cache_hash: str | None = None
 
     @abstractmethod
     def buildepochtable(self) -> list[dict[str, Any]]:
@@ -235,32 +240,17 @@ class ndi_epoch_epochset(ABC):
 
         raise ValueError(f"ndi_epoch_epoch ID not found: {epoch_id}")
 
-    def matchedepochtable(
-        self,
-        epoch_number: int | None = None,
-        epoch_id: str | None = None,
-    ) -> list[dict[str, Any]]:
+    @pydantic.validate_call
+    def matchedepochtable(self, hashvalue: str) -> bool:
+        """Check whether the cached epoch table's hash matches ``hashvalue``.
+
+        MATLAB equivalent: ``ndi.epoch.epochset.matchedepochtable`` — a
+        cache-validity predicate used by ``cached_epochgraph`` to detect a
+        stale epoch graph. Returns False when nothing has been cached yet.
         """
-        Get epoch table entries matching criteria.
-
-        Args:
-            epoch_number: Match by epoch number (None = any)
-            epoch_id: Match by epoch ID (None = any)
-
-        Returns:
-            List of matching epoch table entries
-        """
-        et, _ = self.epochtable()
-        matches = []
-
-        for entry in et:
-            if epoch_number is not None and entry.get("epoch_number") != epoch_number:
-                continue
-            if epoch_id is not None and entry.get("epoch_id") != epoch_id:
-                continue
-            matches.append(entry)
-
-        return matches
+        if self._epochtable_cache is None:
+            return False
+        return self._epochtable_hash == hashvalue
 
     @pydantic.validate_call
     def epochtableentry(self, epoch_number: Annotated[int, Field(ge=1)]) -> dict[str, Any]:
@@ -282,48 +272,111 @@ class ndi_epoch_epochset(ABC):
 
         return et[epoch_number - 1]
 
-    def epochgraph(self) -> list[dict[str, Any]]:
-        """
-        Build epoch graph nodes for time synchronization.
+    def epochnodes(self) -> list[dict[str, Any]]:
+        """Return one epoch node per (epoch, clocktype) pair.
 
-        Creates a list of graph nodes, one for each (epoch, clock) pair.
-        This is used by ndi_time_syncgraph for time conversion.
-
-        Returns:
-            List of epoch graph nodes with fields:
-            - epoch_id: ndi_epoch_epoch identifier
-            - epochset: Reference to this ndi_epoch_epochset
-            - clock: ndi_time_clocktype for this node
-            - t0: Start time
-            - t1: End time
+        MATLAB equivalent: ``ndi.epoch.epochset.epochnodes``. An epoch node
+        carries the same fields as an epoch table entry (minus
+        ``epoch_number``) but pinned to a single ``epoch_clock`` and its
+        matching ``t0_t1`` pair, with ``objectname``/``objectclass``
+        identifying the owning epoch set. Subclasses (``ndi.daq.system``,
+        ``ndi.file.navigator``) may override with a specialised builder;
+        this abstract-class version is what ``buildepochgraph`` consumes.
         """
         et, _ = self.epochtable()
-        nodes = []
+        nodes: list[dict[str, Any]] = []
+        objectname = self.epochsetname()
+        objectclass = type(self).__name__
 
         for entry in et:
-            epoch_id = entry.get("epoch_id", "")
             clocks = entry.get("epoch_clock", [])
             t0t1_list = entry.get("t0_t1", [])
-
-            # Create one node per clock type
             for i, clock in enumerate(clocks):
-                t0, t1 = t0t1_list[i] if i < len(t0t1_list) else (np.nan, np.nan)
-                nodes.append(
-                    {
-                        "epoch_id": epoch_id,
-                        "epochset": self,
-                        "clock": clock,
-                        "t0": t0,
-                        "t1": t1,
-                    }
-                )
+                t0_t1 = t0t1_list[i] if i < len(t0t1_list) else (np.nan, np.nan)
+                node = {k: v for k, v in entry.items() if k != "epoch_number"}
+                node["epoch_clock"] = clock
+                node["t0_t1"] = t0_t1
+                node["objectname"] = objectname
+                node["objectclass"] = objectclass
+                nodes.append(node)
 
         return nodes
 
+    def epochgraph(
+        self,
+    ) -> tuple[np.ndarray, list[list[ndi_time_timemapping | None]]]:
+        """Return the (cost, mapping) graph over this object's epoch nodes.
+
+        MATLAB equivalent: ``ndi.epoch.epochset.epochgraph``. ``cost`` is an
+        MxM matrix (M = number of epoch nodes) where ``cost[i, j]`` is the
+        cost of mapping from node i's (epoch, clocktype) to node j's, and
+        ``mapping[i][j]`` is the ``ndi_time_timemapping`` that performs the
+        conversion (or None where no edge exists). Result is cached and
+        invalidated by ``resetepochtable`` or by a changed epoch-table hash.
+        """
+        _, current_hash = self.epochtable()
+        if self._epochgraph_cache is not None and self._epochgraph_cache_hash == current_hash:
+            return self._epochgraph_cache
+
+        self._epochgraph_cache = self.buildepochgraph()
+        self._epochgraph_cache_hash = current_hash
+        return self._epochgraph_cache
+
+    def buildepochgraph(
+        self,
+    ) -> tuple[np.ndarray, list[list[ndi_time_timemapping | None]]]:
+        """Compute the epoch graph from scratch.
+
+        MATLAB equivalent: ``ndi.epoch.epochset.buildepochgraph``. Links
+        nodes sharing (epoch_id, epoch_session_id) with the linear rescaling
+        implied by their ``t0_t1`` ranges, and delegates cross-clock edges
+        to ``ndi_time_clocktype.epochgraph_edge``. Subclasses that know
+        richer inter-epoch relationships (e.g. ``ndi.daq.system``) may
+        override, typically by calling ``super().buildepochgraph()`` first
+        and layering additional edges on the returned matrices.
+        """
+        nodes = self.epochnodes()
+        n = len(nodes)
+        cost = np.full((n, n), np.inf)
+        mapping: list[list[ndi_time_timemapping | None]] = [[None] * n for _ in range(n)]
+
+        trivial = ndi_time_timemapping([1.0, 0.0])
+
+        for i in range(n):
+            for j in range(n):
+                if i == j:
+                    cost[i, j] = 1.0
+                    mapping[i][j] = trivial
+                    continue
+
+                ni, nj = nodes[i], nodes[j]
+                same_epoch = ni.get("epoch_id") == nj.get("epoch_id") and ni.get(
+                    "epoch_session_id"
+                ) == nj.get("epoch_session_id")
+                if same_epoch:
+                    ti0, ti1 = ni["t0_t1"]
+                    tj0, tj1 = nj["t0_t1"]
+                    di = ti1 - ti0
+                    if di == 0:
+                        continue
+                    m = (tj1 - tj0) / di
+                    b = tj0 - m * ti0
+                    cost[i, j] = 1.0
+                    mapping[i][j] = ndi_time_timemapping([m, b])
+                else:
+                    c, mp = ni["epoch_clock"].epochgraph_edge(nj["epoch_clock"])
+                    if not np.isinf(c):
+                        cost[i, j] = c
+                        mapping[i][j] = mp
+
+        return cost, mapping
+
     def resetepochtable(self) -> None:
-        """Reset (clear) the epoch table cache.
+        """Reset (clear) the epoch table and epoch graph caches.
 
         MATLAB equivalent: ndi.epoch.epochset.resetepochtable
         """
         self._epochtable_cache = None
         self._epochtable_hash = None
+        self._epochgraph_cache = None
+        self._epochgraph_cache_hash = None

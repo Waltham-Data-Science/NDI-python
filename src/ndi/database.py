@@ -25,6 +25,25 @@ from .document import ndi_document
 from .query import ndi_query
 
 
+def _cloud_file_handler(dest_path, source_path):
+    """DID's ``custom_file_handler``, wired to NDI's cloud retrieval.
+
+    DID downloads nothing itself; a downstream package supplies retrieval.
+    NDI-matlab passes ``@download_file_from_cloud`` to both ``add_docs`` and
+    ``open_doc`` in didsqlite.m, and this is the same handler.
+
+    Imported lazily and tolerant of failure: the cloud extra may be absent,
+    and a session that never touches a remote location must not require it.
+    DID reports a handler that produced no file as a retrieval failure naming
+    the location, which is a better error than an ImportError from here.
+    """
+    try:
+        from .cloud.filehandler import download_file_from_cloud
+    except ImportError:
+        return
+    download_file_from_cloud(dest_path, source_path)
+
+
 class SQLiteDriver:
     """SQLite database driver using DID-python's SQLiteDB.
 
@@ -52,10 +71,31 @@ class SQLiteDriver:
         # Initialize SQLiteDB
         self._db = SQLiteDB(str(db_path))
 
-        # Create branch if it doesn't exist
+        # Create the branch, but only where it can be created as a root.
+        #
+        # DID's add_branch reads an empty or omitted parent as "the current
+        # branch", not "no parent" (DID-python#51, matching MATLAB's isempty,
+        # which covers both [] and ''). A root is made only when there is no
+        # current branch. With no branches at all there cannot be one, so
+        # omitting the parent here is structurally a root -- as NDI-matlab's
+        # didsqlite.m gets it from the same isempty(bid) guard.
+        #
+        # The previous "" argument happened to work only because did.database
+        # initialises current_branch_id to empty and never restores it from
+        # the file; that is DID's implementation detail, not a guarantee this
+        # constructor can make.
         existing_branches = self._db.all_branch_ids()
-        if branch_id not in existing_branches:
-            self._db.add_branch(branch_id, "")  # Empty string for root branch
+        if not existing_branches:
+            self._db.add_branch(branch_id)
+        elif branch_id not in existing_branches:
+            # Creating it now would attach it to whatever the current branch
+            # happens to be, so name the problem instead. get_doc_ids on a
+            # branch that does not exist raises in current DID, so leaving it
+            # missing only defers the failure to a less informative place.
+            raise ValueError(
+                f"The DID database at {db_path} has branches "
+                f"{sorted(existing_branches)} but not {branch_id!r}."
+            )
 
     def add(self, document: dict) -> None:
         """Add a document to the database."""
@@ -70,7 +110,7 @@ class SQLiteDriver:
 
         # Create DID ndi_document and add (DID-python now populates doc_data)
         did_doc = self._DIDDocument(document)
-        self._db.add_docs([did_doc], self._branch_id)
+        self._db.add_docs([did_doc], self._branch_id, custom_file_handler=_cloud_file_handler)
 
     def bulk_add(self, documents: list[dict]) -> tuple[int, int]:
         """Add many documents at once, bypassing per-doc duplicate checks.
@@ -91,25 +131,35 @@ class SQLiteDriver:
                 continue
 
             did_doc = self._DIDDocument(doc)
-            self._db.add_docs([did_doc], self._branch_id)
+            self._db.add_docs([did_doc], self._branch_id, custom_file_handler=_cloud_file_handler)
             existing_ids.add(doc_id)
             added += 1
 
         return added, skipped
 
-    def update(self, document: dict) -> None:
-        """Update an existing document."""
-        doc_id = document.get("base", {}).get("id", "")
+    def open_binary(self, doc_id: str, filename: str) -> str:
+        """Resolve a document's file to a local path, retrieving it if needed.
 
-        # Check if document exists
-        existing_ids = self._db.get_doc_ids(self._branch_id)
-        if doc_id not in existing_ids:
-            raise FileNotFoundError(f"ndi_document {doc_id} not found")
+        Delegates to DID's ``open_doc``, which serves a local location
+        directly and hands a remote one to ``custom_file_handler``. Mirrors
+        NDI-matlab's ``didsqlite/do_openbinarydoc``.
 
-        # Remove old and add new (DID handles doc_data cleanup and repopulation)
-        self._db.remove_docs([doc_id], self._branch_id)
-        did_doc = self._DIDDocument(document)
-        self._db.add_docs([did_doc], self._branch_id)
+        Returns the path rather than DID's file object: NDI's public
+        ``database_openbinarydoc`` contract is an ordinary Python file object
+        carrying ``fullpathfilename``, and DID's ``Fileobj`` is neither. The
+        path is what both need.
+        """
+        handle = self._db.open_doc(doc_id, filename, custom_file_handler=_cloud_file_handler)
+        return handle.fullpathfilename
+
+    def exist_binary(self, doc_id: str, filename: str) -> tuple[bool, str | None]:
+        """Is this document's file on disk, and where?
+
+        Delegates to DID's ``exist_doc``, the port of MATLAB's
+        ``check_exist_doc``. True exactly when ``open_binary`` would succeed
+        without needing to retrieve anything.
+        """
+        return self._db.exist_doc(doc_id, filename)
 
     def delete_by_id(self, doc_id: str) -> bool:
         """Delete a document by ID."""
@@ -188,11 +238,6 @@ class ndi_database:
         db_path = db_dir / "did-sqlite.sqlite"
         self._driver = SQLiteDriver(db_path, **backend_kwargs)
 
-        # Binary/files directory for file attachments
-        # Named "files" for compatibility with NDI-MATLAB
-        self._binary_dir = self.session_path / db_name / "files"
-        self._binary_dir.mkdir(parents=True, exist_ok=True)
-
     @property
     def database_path(self) -> Path:
         """Path to the SQLite database file."""
@@ -200,8 +245,20 @@ class ndi_database:
 
     @property
     def binary_path(self) -> Path:
-        """Path where binary files are stored."""
-        return self._binary_dir
+        """Directory DID keeps ingested files in.
+
+        NDI used to keep its own directory beside the database and name files
+        ``{doc_id}_{filename}``. Files are DID's now, as they already were in
+        NDI-matlab, so this reports DID's location rather than a second one.
+        """
+        # Reaching into DID for a private name, deliberately and with a
+        # caveat: DID-matlab exposes this as a public FileDir property on
+        # sqlitedb, and DID-python has only _file_dir(). Duplicating the rule
+        # here ("files/ beside the database file") would put DID's storage
+        # layout in two places, which is the mistake this whole change
+        # removes. The asymmetry belongs in DID-python's bridge; until it is
+        # closed, this is the single point that breaks if DID renames it.
+        return Path(self._driver._db._file_dir())
 
     # === CRUD Operations ===
 
@@ -226,7 +283,8 @@ class ndi_database:
         except FileExistsError as exc:
             raise ValueError(
                 f"ndi_document with ID {document.id} already exists. "
-                f"Use update() or add_or_replace()."
+                f"Documents are immutable once added; remove it first, or "
+                f"give the new document its own id."
             ) from exc
         return document
 
@@ -270,53 +328,6 @@ class ndi_database:
         """
         doc_id = document.id if isinstance(document, ndi_document) else document
         return self._driver.delete_by_id(doc_id)
-
-    def update(self, document: ndi_document) -> ndi_document:
-        """Update an existing document.
-
-        Args:
-            document: The ndi_document with updated properties.
-
-        Returns:
-            The updated document.
-
-        Raises:
-            ValueError: If document doesn't exist.
-
-        Example:
-            doc = db.read('abc123')
-            doc = doc.setproperties(**{'base.name': 'new_name'})
-            db.update(doc)
-        """
-        try:
-            self._driver.update(document.document_properties)
-        except FileNotFoundError as exc:
-            raise ValueError(
-                f"ndi_document with ID {document.id} not found. " f"Use add() for new documents."
-            ) from exc
-        return document
-
-    def add_or_replace(self, document: ndi_document) -> ndi_document:
-        """Add or replace a document.
-
-        If document exists, replaces it. Otherwise, adds it.
-
-        Args:
-            document: The ndi_document to add or replace.
-
-        Returns:
-            The document.
-
-        Example:
-            db.add_or_replace(doc)
-        """
-        existing = self._driver.find_by_id(document.id)
-        if existing:
-            self._driver.update(document.document_properties)
-        else:
-            self._driver.add(document.document_properties)
-
-        return document
 
     # === ndi_query Operations ===
 
@@ -450,13 +461,31 @@ class ndi_database:
         Returns:
             List of added Documents.
 
+        Adds the whole list in a single ``did.database.add_docs`` call, as
+        MATLAB does. Validation checks each dependency against the ids already
+        stored *plus the ids in this batch*, so a set of documents that refer
+        to one another only validates when it is offered together -- added one
+        at a time, anything referring to a document later in the list looks
+        like a dangling reference.
+
         Note:
-            Stops on first error. Use add() individually for error handling.
+            Atomic: nothing is added if any document fails validation.
         """
-        added = []
+        did_docs = []
         for doc in documents:
-            added.append(self.add(doc))
-        return added
+            props = doc.document_properties if hasattr(doc, "document_properties") else doc
+            doc_id = props.get("base", {}).get("id", "")
+            if not doc_id:
+                raise ValueError("ndi_document must have a base.id")
+            did_docs.append(self._driver._DIDDocument(props))
+
+        if did_docs:
+            self._driver._db.add_docs(
+                did_docs,
+                self._driver._branch_id,
+                custom_file_handler=_cloud_file_handler,
+            )
+        return list(documents)
 
     def remove_many(
         self, query: ndi_query | None = None, documents: list[ndi_document] | None = None
@@ -492,17 +521,27 @@ class ndi_database:
 
     # === File Management ===
 
-    def get_binary_path(self, document: ndi_document, file_name: str) -> Path:
-        """Get the path where a document's binary file should be stored.
+    def open_binary(self, doc_or_id: ndi_document | str, file_name: str) -> Path:
+        """Resolve a document's file to a local path, retrieving it if needed.
 
-        Args:
-            document: The document that owns the file.
-            file_name: Name of the file.
+        Replaces ``get_binary_path``, which composed a path in NDI's own store
+        and told the caller nothing about whether a file was there. DID owns
+        the mapping from (document, filename) to a location now, so ask it.
 
-        Returns:
-            Path to store the binary file.
+        Raises:
+            FileNotFoundError: subclassed by DID's FileAccessError, when no
+                location can be reached.
         """
-        return self._binary_dir / f"{document.id}_{file_name}"
+        doc_id = doc_or_id.id if isinstance(doc_or_id, ndi_document) else doc_or_id
+        return Path(self._driver.open_binary(doc_id, file_name))
+
+    def exist_binary(
+        self, doc_or_id: ndi_document | str, file_name: str
+    ) -> tuple[bool, Path | None]:
+        """Is this document's file on disk, and where?"""
+        doc_id = doc_or_id.id if isinstance(doc_or_id, ndi_document) else doc_or_id
+        found, path = self._driver.exist_binary(doc_id, file_name)
+        return found, (Path(path) if path else None)
 
     def __repr__(self) -> str:
         return f"ndi_database('{self.session_path}')"

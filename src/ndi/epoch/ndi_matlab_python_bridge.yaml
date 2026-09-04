@@ -76,7 +76,7 @@ functions:
 
   - name: parse_devicestring
     type: function
-    matlab_path: "+ndi/+epoch/epochprobemap_daqsystem.m (inline)"
+    matlab_path: "+ndi/+epoch/epochprobemap_daqsystem.m"
     matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/epoch/epochprobemap.py"
     input_arguments:
@@ -92,7 +92,7 @@ functions:
 
   - name: build_devicestring
     type: function
-    matlab_path: "+ndi/+epoch/epochprobemap_daqsystem.m (inline)"
+    matlab_path: "+ndi/+epoch/epochprobemap_daqsystem.m"
     matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/epoch/epochprobemap.py"
     input_arguments:
@@ -229,18 +229,22 @@ classes:
 
       - name: matchedepochtable
         input_arguments:
-          - name: epoch_number
-            type_matlab: "integer (optional)"
-            type_python: "int | None"
-            default: "None"
-          - name: epoch_id
-            type_matlab: "char (optional)"
-            type_python: "str | None"
-            default: "None"
+          - name: hashvalue
+            type_matlab: "char"
+            type_python: "str"
         output_arguments:
-          - name: et
-            type_python: "list[dict[str, Any]]"
-        decision_log: "Exact match."
+          - name: b
+            type_matlab: "logical"
+            type_python: "bool"
+        decision_log: >
+          INTERFACE UPDATE (issue #139, 2026-09): brought back into
+          semantic parity with MATLAB. Predicate answering "does this hash
+          still match the cached epoch table?" — used by
+          ``cached_epochgraph`` to decide whether the cached graph is
+          fresh. The prior Python signature took (epoch_number, epoch_id)
+          and returned a filtered epoch table; that behaviour had no
+          callers and was removed rather than renamed. Callers wanting a
+          filtered lookup can iterate ``epochtable()`` directly.
 
       - name: epochtableentry
         input_arguments:
@@ -254,24 +258,73 @@ classes:
           Semantic Parity: epoch_number is 1-indexed (user concept).
           Internally maps to 0-based index.
 
-      - name: epochgraph
+      - name: epochnodes
         input_arguments: []
         output_arguments:
           - name: nodes
+            type_matlab: "struct array"
             type_python: "list[dict[str, Any]]"
-        decision_log: "Exact match."
+        decision_log: >
+          INTERFACE UPDATE (issue #139, 2026-09): the abstract-class
+          ``epochnodes`` was previously present only on subclasses
+          (``ndi.daq.system``, ``ndi.file.navigator``). Base-class version
+          added so ``buildepochgraph`` has a canonical node source. One
+          node per (epoch, clocktype) pair; each carries the epoch-table
+          fields (minus ``epoch_number``) plus ``objectname`` and
+          ``objectclass``. The MATLAB signature's optional second
+          ``underlyingnodes`` output is not ported (no Python caller).
+
+      - name: epochgraph
+        input_arguments: []
+        output_arguments:
+          - name: cost
+            type_matlab: "MxM double"
+            type_python: "numpy.ndarray"
+          - name: mapping
+            type_matlab: "MxM cell of ndi.time.timemapping"
+            type_python: "list[list[ndi_time_timemapping | None]]"
+        decision_log: >
+          INTERFACE UPDATE (issue #139, 2026-09): brought back into
+          semantic parity with MATLAB. Returns the cost matrix and
+          per-edge time mappings over this object's epoch nodes; result is
+          cached and invalidated when the epoch-table hash changes. The
+          prior Python signature returned a flat list of (epoch, clock)
+          nodes; that shape had zero callers and now lives on
+          ``epochnodes`` where it belongs — ``syncgraph`` already assumed
+          MATLAB's ``(cost, mapping)`` here (``syncgraph.py:284``).
+
+      - name: buildepochgraph
+        input_arguments: []
+        output_arguments:
+          - name: cost
+            type_matlab: "MxM double"
+            type_python: "numpy.ndarray"
+          - name: mapping
+            type_matlab: "MxM cell of ndi.time.timemapping"
+            type_python: "list[list[ndi_time_timemapping | None]]"
+        decision_log: >
+          INTERFACE UPDATE (issue #139, 2026-09). Default implementation
+          links nodes sharing (epoch_id, epoch_session_id) with a linear
+          rescale between their ``t0_t1`` ranges and delegates cross-clock
+          edges to ``ndi_time_clocktype.epochgraph_edge``. Subclasses
+          override to add richer inter-epoch relationships (see the
+          MATLAB developer note on ``dev_local_time`` <-> ``utc``).
 
       - name: resetepochtable
         input_arguments: []
         output_arguments: []
-        decision_log: "Exact match. Clears the epoch table cache."
+        decision_log: >
+          Exact match. Clears the epoch table cache; in Python this also
+          clears the epoch graph cache, which is invalidated by any
+          epoch-table change.
 
   # =========================================================================
   # ndi.epoch.epoch  (immutable data class)
   # =========================================================================
   - name: epoch
     type: class
-    matlab_path: "+ndi/+epoch/epoch.m"
+    matlab_path: "+ndi/epoch.m"
+    matlab_last_sync_hash: "0e2caa09"
     python_path: "ndi/epoch/epoch.py"
     python_class: "ndi_epoch_epoch"
 
@@ -583,3 +636,55 @@ classes:
           - name: epm_list
             type_python: "list[ndi_epoch_epochprobemap__daqsystem]"
         decision_log: "MATLAB is a static method. Python uses classmethod."
+
+# =========================================================================
+# Not-yet-ported MATLAB functions and classes
+# =========================================================================
+not_yet_ported:
+
+  - name: param
+    matlab_path: "+ndi/+epoch/+epochset/param.m"
+    matlab_last_sync_hash: "e94c2b2f"
+    status: not_applicable
+    decision_log: >
+      MATLAB's ndi.epoch.epochset.param is an abstract layer between
+      ndi.epoch.epochset and the two classes that need epoch parameters:
+      ndi.file.navigator and ndi.daq.system (the syncrules inherit it
+      through those). It carries two groups of methods -- the
+      epochprobemap group (epochprobemapfilename, verifyepochprobemap,
+      getepochprobemap, setepochprobemap) and the epoch-tag group
+      (epochtagfilename, getepochtag, setepochtag, addepochtag,
+      removeepochtag).
+      Python does not have the intermediate class: the epochprobemap
+      methods live directly on the classes that need them --
+      ndi_file_navigator.epochprobemapfilename / getepochprobemap and
+      ndi_daq_system.getepochprobemap / verifyepochprobemap. With two
+      concrete subclasses and no third on the horizon, a shared abstract
+      base buys an indirection rather than reuse, so the layer is
+      deliberately collapsed. Same reasoning as ndi.cloud.sync's SyncIndex,
+      recorded in src/ndi/cloud/sync/.
+      One half is NOT merely relocated, and this is the honest part of the
+      entry: the epoch-TAG methods have no Python implementation anywhere.
+      Nothing in the port reads or writes epoch tags. That is a genuine
+      gap rather than a structural choice, and it lands whenever a caller
+      needs tags.
+
+  - name: epochNodeName
+    matlab_path: "+ndi/+epoch/+fun/epochNodeName.m"
+    matlab_last_sync_hash: "0e2caa09"
+    status: not_yet_ported
+    decision_log: >
+      Builds the display name for an epochnode: "objectname; epochStr",
+      where a full-form epoch_id (epoch_ plus 16 alphanumerics, an
+      underscore, 16 more) is shortened to its last four characters and any
+      other id is used whole, with "probe: " abbreviated to "p:" and
+      "element: " to "e:".
+      Presentation only -- it names nodes for a reader, and nothing in the
+      port computes over the result. Python has no caller yet: the epoch
+      functions module (ndi/epoch/functions.py) has epochrange and
+      findepochnode, both of which are used, and no display layer that
+      needs node labels. It belongs with whichever GUI first shows an
+      epoch graph. Worth porting exactly when it lands: the four-character
+      abbreviation makes two nodes look identical when their ids differ
+      only earlier in the string, so a reimplementation that "improves"
+      the rule would disagree with MATLAB's labels on the same data.

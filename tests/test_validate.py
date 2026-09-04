@@ -16,6 +16,7 @@ from ndi.validate import (
     ValidationResult,
     _check_did_uid_params,
     _check_integer_params,
+    _check_matrix_shape,
     _get_schema_for_document,
     _is_timestamp,
     _load_schema,
@@ -261,6 +262,81 @@ class TestCheckDidUidParams:
 # ===========================================================================
 # Schema loading
 # ===========================================================================
+
+
+class TestCheckMatrixShape:
+    """Matrix-invariant checks: rectangularity and non-null empties.
+
+    Declared dimensions (schema ``parameters`` like ``[2, NaN]``) are
+    deliberately not enforced yet -- see the note in _check_matrix_shape
+    and ndi-python issue #96.
+    """
+
+    def test_empty_list_is_ok(self):
+        """The prescribed empty form: [], not null."""
+        assert _check_matrix_shape([]) is None
+
+    def test_flat_1d_matrix_is_ok(self):
+        """A 1-D matrix has no inner rows to compare."""
+        assert _check_matrix_shape([1.0, 2.0, 3.0]) is None
+
+    def test_rectangular_2d_matrix_is_ok(self):
+        assert _check_matrix_shape([[1, 2, 3], [4, 5, 6]]) is None
+
+    def test_ragged_2d_matrix_is_rejected(self):
+        err = _check_matrix_shape([[1, 2, 3], [4, 5]])
+        assert err is not None
+        assert "row 1" in err
+        assert "rectangular" in err
+
+    def test_row_that_is_not_a_list_is_rejected(self):
+        err = _check_matrix_shape([[1, 2], 3])
+        assert err is not None
+        assert "row 1" in err
+
+    def test_non_list_input_defers_to_type_check(self):
+        """Non-list values are caught by the type validator, not here."""
+        assert _check_matrix_shape("not a matrix") is None
+        assert _check_matrix_shape(42) is None
+        assert _check_matrix_shape(None) is None
+
+
+class TestValidateMatrixInvariant:
+    """The matrix invariant surfaces through _validate_properties too."""
+
+    @pytest.fixture
+    def schema_with_matrix(self):
+        return {
+            "classname": "geom",
+            "superclasses": [],
+            "depends_on": [],
+            "geom": [
+                {"name": "coords", "type": "matrix", "parameters": ""},
+            ],
+        }
+
+    def test_null_matrix_is_rejected(self, schema_with_matrix):
+        """null in place of a matrix must be caught: schema says [], not null."""
+        errors = _validate_properties({"geom": {"coords": None}}, "geom", schema_with_matrix)
+        assert any("matrix field must be []" in e for e in errors)
+
+    def test_empty_matrix_is_accepted(self, schema_with_matrix):
+        errors = _validate_properties({"geom": {"coords": []}}, "geom", schema_with_matrix)
+        assert errors == []
+
+    def test_rectangular_matrix_is_accepted(self, schema_with_matrix):
+        errors = _validate_properties(
+            {"geom": {"coords": [[1.0, 2.0], [3.0, 4.0]]}}, "geom", schema_with_matrix
+        )
+        assert errors == []
+
+    def test_ragged_matrix_is_rejected(self, schema_with_matrix):
+        errors = _validate_properties(
+            {"geom": {"coords": [[1.0, 2.0, 3.0], [4.0, 5.0]]}},
+            "geom",
+            schema_with_matrix,
+        )
+        assert any("rectangular" in e for e in errors)
 
 
 class TestSchemaLoading:

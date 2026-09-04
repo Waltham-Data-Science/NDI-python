@@ -34,6 +34,15 @@ class ndi_session_dir(ndi_session):
 
         # Access session data
         >>> probes = session.getprobes()
+
+    CROSS-LANGUAGE NAMING
+    Methods that mirror MATLAB keep MATLAB's exact name, and each also has a
+    snake_case alias bound to the same function -- ``isIngestedInDataset`` and
+    ``is_ingested_in_dataset`` are one method under two names. Neither
+    audience should have to remember which spelling a given method happens to
+    carry: a script ported from MATLAB keeps working, and Python code can read
+    idiomatically.
+
     """
 
     def __init__(
@@ -150,6 +159,10 @@ class ndi_session_dir(ndi_session):
         # Write reference files
         self._write_reference_files()
 
+        # Record what this directory holds, so MATLAB (and a file-open dialog)
+        # can tell a session from a dataset without opening it. See #73.
+        self.updateObjectTypeMarker()
+
     def _ndi_pathname(self) -> Path:
         """
         Get the path to the .ndi directory.
@@ -172,6 +185,111 @@ class ndi_session_dir(ndi_session):
 
         unique_ref_file = ndi_dir / "unique_reference.txt"
         unique_ref_file.write_text(self._identifier)
+
+    # =========================================================================
+    # Object-type marker
+    #
+    # MATLAB records what a directory holds in a small file inside .ndi so the
+    # type can be told cheaply -- by a file-open dialog, say -- without fully
+    # instantiating the object. NDI-python never wrote it, so MATLAB reading a
+    # Python-generated directory got 'unknown' where it expected 'dataset'
+    # (issue #73).
+    # =========================================================================
+
+    @staticmethod
+    def objecttypemarkerfilename() -> str:
+        """Filename of the .ndi object-type marker.
+
+        MATLAB equivalent: ``ndi.session.dir.objecttypemarkerfilename()``.
+        """
+        return "ndi_object_type.txt"
+
+    def setObjectTypeMarker(self, typestr: str) -> None:  # noqa: N802 (MATLAB mirror)
+        """Write the .ndi object-type marker directly, unconditionally.
+
+        Use this to force a directory's recorded type; ``ndi_dataset_dir``
+        uses it to mark its directory as a dataset. Most callers should use
+        :meth:`updateObjectTypeMarker`, which chooses the type safely.
+
+        MATLAB equivalent: ``ndi.session.dir/setObjectTypeMarker``.
+        """
+        if typestr not in ("session", "dataset"):
+            raise ValueError(f"typestr must be 'session' or 'dataset'; got {typestr!r}.")
+        markerfile = self._ndi_pathname() / self.objecttypemarkerfilename()
+        markerfile.write_text(typestr)
+
+    #: Snake-case alias; same method, see the class note on naming.
+    set_object_type_marker = setObjectTypeMarker
+
+    def updateObjectTypeMarker(self) -> None:  # noqa: N802 (MATLAB mirror)
+        """Write or refresh the .ndi object-type marker.
+
+        A directory already marked as a dataset is never downgraded, and one
+        that holds dataset bookkeeping documents is marked as a dataset. That
+        matters because ``ndi_dataset_dir`` keeps an underlying session at the
+        same path, and ingesting a session into a dataset builds a temporary
+        session there -- without the guard, either would relabel a dataset
+        directory as a plain session.
+
+        An empty dataset has no bookkeeping documents yet, so it is marked
+        'session' here and corrected by the ``ndi_dataset_dir`` constructor.
+
+        MATLAB equivalent: ``ndi.session.dir/updateObjectTypeMarker``.
+        """
+        markerfile = self._ndi_pathname() / self.objecttypemarkerfilename()
+        if markerfile.is_file():
+            existing = markerfile.read_text().strip().lower()
+            if existing == "dataset":
+                return  # never downgrade a directory already known to be a dataset
+
+        # Datasets store 'session_in_a_dataset' (current) or
+        # 'dataset_session_info' (legacy) bookkeeping; standalone sessions
+        # never do.
+        is_dataset = False
+        try:
+            from ..query import ndi_query
+
+            docs = self.database_search(ndi_query("").isa("session_in_a_dataset"))
+            if not docs:
+                docs = self.database_search(ndi_query("").isa("dataset_session_info"))
+            is_dataset = bool(docs)
+        except Exception:
+            # A directory whose database cannot be searched yet is not a
+            # reason to fail construction; it is simply not known to be a
+            # dataset, which is what 'session' records.
+            is_dataset = False
+
+        self.setObjectTypeMarker("dataset" if is_dataset else "session")
+
+    #: Snake-case alias; same method, see the class note on naming.
+    update_object_type_marker = updateObjectTypeMarker
+
+    @staticmethod
+    def directorytype(path: str | Path) -> str:
+        """Determine the NDI object type in a directory without opening it.
+
+        Returns one of:
+
+        ``'session'``
+            The directory holds a standalone session.
+        ``'dataset'``
+            The directory holds a dataset.
+        ``'unknown'``
+            An NDI directory created before object-type markers existed, or
+            whose marker is unreadable. Open it once to record its type.
+        ``'none'``
+            Not an NDI session or dataset directory.
+
+        MATLAB equivalent: ``ndi.session.dir.directorytype``.
+        """
+        path = Path(path)
+        if not ndi_session_dir.exists(path):
+            return "none"
+        markerfile = path / ".ndi" / ndi_session_dir.objecttypemarkerfilename()
+        if markerfile.is_file():
+            t = markerfile.read_text().strip().lower()
+            return t if t in ("session", "dataset") else "unknown"
+        return "unknown"
 
     def getpath(self) -> Path:
         """
@@ -231,6 +349,9 @@ class ndi_session_dir(ndi_session):
             return None
 
         return self
+
+    #: Snake-case alias; same method, see the class note on naming.
+    delete_session_data_structures = deleteSessionDataStructures
 
     @staticmethod
     def exists(path: str | Path) -> bool:

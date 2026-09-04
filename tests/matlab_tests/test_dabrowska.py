@@ -30,6 +30,7 @@ MATLAB tutorial steps tested:
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -68,11 +69,20 @@ EXPECTED_TYPE_COUNTS = {
 
 
 @pytest.fixture(scope="session")
-def dabrowska_dataset():
-    """Load the Dabrowska dataset from SQLite."""
+def dabrowska_dataset(tmp_path_factory):
+    """Load the Dabrowska dataset from SQLite.
+
+    Copies the shared corpus into a session-scoped temp directory before
+    opening: constructing an ndi_dataset runs ``repairDatasetSessionInfo``
+    on legacy documents (see issue #99), which writes to and deletes
+    documents from the tree it opens. Opening ``DABROWSKA_PATH`` directly
+    would mutate the shared corpus.
+    """
     import ndi.dataset
 
-    return ndi.dataset.ndi_dataset(DABROWSKA_PATH)
+    corpus_copy = tmp_path_factory.mktemp("dabrowska_corpus") / "dabrowska"
+    shutil.copytree(DABROWSKA_PATH, corpus_copy, symlinks=True)
+    return ndi.dataset.ndi_dataset(corpus_copy)
 
 
 @pytest.fixture(scope="session")

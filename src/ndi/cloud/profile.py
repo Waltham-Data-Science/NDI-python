@@ -164,20 +164,47 @@ def _safe_field(name: str) -> str:
 
 
 def _detect_backend() -> _BackendName:
-    try:
-        import keyring  # noqa: F401
-    except ImportError:
+    """Which secrets backend is usable here.
+
+    Each probe catches more than ImportError, because "installed" and
+    "usable" are different: a partially-built native extension (a
+    ``cryptography`` whose ``_rust`` module cannot load, say) raises
+    something else entirely -- pyo3 raises a PanicException, which is not
+    even an Exception subclass, so no ordinary caller downstream could
+    defend against it. Letting that escape takes down everything that
+    touches the profile store, including the GUI editor, when the
+    documented behaviour is to fall back to the in-memory backend.
+
+    KeyboardInterrupt and SystemExit are re-raised: those are the user
+    asking to stop, not a backend being unavailable.
+    """
+
+    def _usable(import_it) -> bool:
         try:
-            from cryptography.hazmat.primitives.ciphers import Cipher  # noqa: F401
-        except ImportError:
-            logger.warning(
-                "Neither 'keyring' nor 'cryptography' is installed; "
-                "ndi.cloud.profile will fall back to the in-memory backend "
-                "which does NOT persist secrets to disk."
-            )
-            return "memory"
+            import_it()
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except BaseException as exc:  # noqa: BLE001 - see the docstring
+            logger.debug("secrets backend probe failed: %s", exc)
+            return False
+        return True
+
+    def _keyring() -> None:
+        import keyring  # noqa: F401
+
+    def _cryptography() -> None:
+        from cryptography.hazmat.primitives.ciphers import Cipher  # noqa: F401
+
+    if _usable(_keyring):
+        return "keyring"
+    if _usable(_cryptography):
         return "aes"
-    return "keyring"
+    logger.warning(
+        "Neither 'keyring' nor 'cryptography' is usable; "
+        "ndi.cloud.profile will fall back to the in-memory backend "
+        "which does NOT persist secrets to disk."
+    )
+    return "memory"
 
 
 # ---------------------------------------------------------------------------
@@ -248,11 +275,36 @@ class _ProfileSingleton:
 
     # ------------- lookup -------------
 
-    def _find_index(self, uid: str) -> int:
+    def _find_index(self, key: str) -> int:
+        """Resolve *key* to a profile index.
+
+        *key* may be a UID (exact match), a Nickname (exact match), or an
+        Email (case-insensitive exact match), tried in that order. UID wins
+        outright; among nickname/email matches an ambiguous result raises
+        rather than silently picking one.
+        """
         for i, p in enumerate(self.profiles):
-            if p.UID == uid:
+            if p.UID == key:
                 return i
-        raise KeyError(f'Unknown profile UID "{uid}".')
+        by_nickname = [i for i, p in enumerate(self.profiles) if p.Nickname == key]
+        if len(by_nickname) == 1:
+            return by_nickname[0]
+        if len(by_nickname) > 1:
+            candidates = ", ".join(self.profiles[i].UID for i in by_nickname)
+            raise KeyError(
+                f'Nickname "{key}" matches multiple profiles ({candidates}); '
+                f"use the UID to disambiguate."
+            )
+        by_email = [i for i, p in enumerate(self.profiles) if p.Email.lower() == key.lower()]
+        if len(by_email) == 1:
+            return by_email[0]
+        if len(by_email) > 1:
+            candidates = ", ".join(self.profiles[i].UID for i in by_email)
+            raise KeyError(
+                f'Email "{key}" matches multiple profiles ({candidates}); '
+                f"use the UID to disambiguate."
+            )
+        raise KeyError(f'Unknown profile "{key}" (not a UID, Nickname, or Email).')
 
     # ------------- secrets backend -------------
 
@@ -325,10 +377,10 @@ def list_profiles() -> list[ProfileEntry]:
     return list(_get_singleton().profiles)
 
 
-def get(uid: str) -> ProfileEntry:
-    """Return the profile entry for *uid*."""
+def get(key: str) -> ProfileEntry:
+    """Return the profile entry for *key* (UID, Nickname, or Email)."""
     obj = _get_singleton()
-    return obj.profiles[obj._find_index(uid)]
+    return obj.profiles[obj._find_index(key)]
 
 
 def add(nickname: str, email: str, password: str) -> str:
@@ -349,10 +401,11 @@ def add(nickname: str, email: str, password: str) -> str:
     return uid
 
 
-def remove(uid: str) -> None:
-    """Delete a profile and its stored secret."""
+def remove(key: str) -> None:
+    """Delete the profile identified by *key* (UID, Nickname, or Email) and its stored secret."""
     obj = _get_singleton()
-    idx = obj._find_index(uid)
+    idx = obj._find_index(key)
+    uid = obj.profiles[idx].UID
     secret_key = obj.profiles[idx].PasswordSecret
     obj._remove_secret(secret_key)
     del obj.profiles[idx]
@@ -374,11 +427,13 @@ def get_current() -> ProfileEntry | None:
         return None
 
 
-def set_current(uid: str) -> None:
-    """Set the current profile for this session (in memory only)."""
+def set_current(key: str) -> None:
+    """Set the current profile for this session (in memory only).
+
+    *key* may be a UID, Nickname, or Email; the resolved UID is stored.
+    """
     obj = _get_singleton()
-    obj._find_index(uid)  # validates existence
-    obj.current_uid = uid
+    obj.current_uid = obj.profiles[obj._find_index(key)].UID
 
 
 def get_default() -> ProfileEntry | None:
@@ -392,11 +447,10 @@ def get_default() -> ProfileEntry | None:
         return None
 
 
-def set_default(uid: str) -> None:
-    """Persist *uid* as the default profile."""
+def set_default(key: str) -> None:
+    """Persist the profile identified by *key* (UID, Nickname, or Email) as the default."""
     obj = _get_singleton()
-    obj._find_index(uid)
-    obj.default_uid = uid
+    obj.default_uid = obj.profiles[obj._find_index(key)].UID
     obj._save_to_disk()
 
 
@@ -407,50 +461,51 @@ def clear_default() -> None:
     obj._save_to_disk()
 
 
-def get_password(uid: str) -> str:
-    """Retrieve the stored password for *uid*."""
+def get_password(key: str) -> str:
+    """Retrieve the stored password for the profile identified by *key*."""
     obj = _get_singleton()
-    idx = obj._find_index(uid)
+    idx = obj._find_index(key)
     return obj._get_secret(obj.profiles[idx].PasswordSecret)
 
 
-def set_password(uid: str, password: str) -> None:
-    """Update a profile's stored password."""
+def set_password(key: str, password: str) -> None:
+    """Update the stored password for the profile identified by *key*."""
     obj = _get_singleton()
-    idx = obj._find_index(uid)
+    idx = obj._find_index(key)
     obj._set_secret(obj.profiles[idx].PasswordSecret, password)
 
 
-def get_stage(uid: str) -> str:
-    """Return the profile's Stage."""
+def get_stage(key: str) -> str:
+    """Return the Stage of the profile identified by *key*."""
     obj = _get_singleton()
-    return obj.profiles[obj._find_index(uid)].Stage
+    return obj.profiles[obj._find_index(key)].Stage
 
 
-def set_stage(uid: str, stage: str) -> None:
-    """Set the profile's Stage to ``'prod'`` or ``'dev'``."""
+def set_stage(key: str, stage: str) -> None:
+    """Set the Stage of the profile identified by *key* to ``'prod'`` or ``'dev'``."""
     if stage not in ("prod", "dev"):
         raise ValueError("stage must be 'prod' or 'dev'")
     obj = _get_singleton()
-    idx = obj._find_index(uid)
+    idx = obj._find_index(key)
     obj.profiles[idx].Stage = stage
     obj._save_to_disk()
 
 
-def switch_profile(uid: str) -> None:
-    """Make *uid* the active profile and reconfigure env vars.
+def switch_profile(key: str) -> None:
+    """Make the profile identified by *key* active and reconfigure env vars.
 
-    Calls :func:`ndi.cloud.logout`, then sets:
+    *key* may be a UID, a Nickname, or an Email — whichever unambiguously
+    identifies a saved profile. Calls :func:`ndi.cloud.logout`, then sets:
 
         CLOUD_API_ENVIRONMENT -> profile.Stage
         NDI_CLOUD_USERNAME    -> profile.Email
-        NDI_CLOUD_PASSWORD    -> get_password(uid)
+        NDI_CLOUD_PASSWORD    -> get_password(key)
 
-    Marks *uid* as the current profile (in memory only -- does not
-    change the persisted default).
+    Marks the resolved profile as the current profile (in memory only --
+    does not change the persisted default).
     """
     obj = _get_singleton()
-    prof = obj.profiles[obj._find_index(uid)]
+    prof = obj.profiles[obj._find_index(key)]
     try:
         from .auth import logout
 
@@ -461,7 +516,7 @@ def switch_profile(uid: str) -> None:
     os.environ["CLOUD_API_ENVIRONMENT"] = prof.Stage
     os.environ["NDI_CLOUD_USERNAME"] = prof.Email
     os.environ["NDI_CLOUD_PASSWORD"] = obj._get_secret(prof.PasswordSecret)
-    obj.current_uid = uid
+    obj.current_uid = prof.UID
 
 
 def filename() -> Path:

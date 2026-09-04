@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import functools
 import json
+import random
 import re
+import time
 from typing import Any
 from urllib.parse import quote as _url_quote
 
@@ -142,6 +144,40 @@ class CloudClient:
 
     DEFAULT_TIMEOUT = 120  # seconds
 
+    # ------------------------------------------------------------------
+    # Retry policy
+    #
+    # The API sits behind an API Gateway whose Lambda cap is 29 s. Exceeding
+    # it surfaces as a 504 rather than a slow success, which on large
+    # documents is routine rather than exceptional -- and a repeat of an
+    # idempotent request usually succeeds once the backend catches up.
+    # Without this, one transient gateway error anywhere in a long
+    # multi-document sync failed that call and the operation above it.
+    # ------------------------------------------------------------------
+
+    #: Transient gateway/server statuses worth repeating.
+    RETRY_STATUSES = frozenset({502, 503, 504})
+
+    #: Methods safe to repeat. POST is excluded because most POST routes
+    #: create resources, so a repeat could duplicate them -- a correctness
+    #: constraint, not a tuning knob. A POST route that really is idempotent
+    #: should be opted in explicitly and individually, never by widening
+    #: this set.
+    RETRY_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "PUT", "DELETE"})
+
+    #: TOTAL attempts, not retries: 3 means one try and two repeats. Named
+    #: for what it counts -- the reference implementation called this
+    #: MAX_RETRIES while its own loop used it as an attempt ceiling, so the
+    #: name said one thing and the code did another.
+    MAX_ATTEMPTS = 3
+
+    #: Base for the exponential backoff, in seconds.
+    RETRY_BACKOFF = 0.5
+
+    #: Ceiling for a single wait, in seconds, so a raised MAX_ATTEMPTS
+    #: cannot turn into an unbounded stall.
+    RETRY_BACKOFF_CAP = 8.0
+
     def __init__(self, config: CloudConfig):
         self.config = config
         try:
@@ -241,20 +277,47 @@ class CloudClient:
         if self.config.token:
             headers["Authorization"] = f"Bearer {self.config.token}"
 
-        try:
-            resp = self._session.request(
-                method,
-                url,
-                params=params,
-                json=json,
-                data=data,
-                headers=headers,
-                timeout=timeout or self.DEFAULT_TIMEOUT,
-            )
-        except _requests.RequestException as exc:
-            raise CloudAPIError(f"Request failed: {exc}") from exc
+        # A dropped connection or a read timeout on an idempotent request is
+        # as transient as a 503, so both are repeated. The other
+        # RequestException kinds are not: a malformed URL or a redirect loop
+        # will fail identically every time, and repeating it only delays the
+        # report.
+        transient_exceptions = (_requests.ConnectionError, _requests.Timeout)
+        retryable = method.upper() in self.RETRY_METHODS
 
-        parsed = self._handle_response(resp)
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                resp = self._session.request(
+                    method,
+                    url,
+                    params=params,
+                    json=json,
+                    data=data,
+                    headers=headers,
+                    timeout=timeout or self.DEFAULT_TIMEOUT,
+                )
+            except _requests.RequestException as exc:
+                if (
+                    retryable
+                    and isinstance(exc, transient_exceptions)
+                    and attempt < self.MAX_ATTEMPTS
+                ):
+                    time.sleep(self._retry_delay(attempt))
+                    continue
+                raise CloudAPIError(f"Request failed{self._attempt_note(attempt)}: {exc}") from exc
+
+            if (
+                retryable
+                and resp.status_code in self.RETRY_STATUSES
+                and attempt < self.MAX_ATTEMPTS
+            ):
+                time.sleep(self._retry_delay(attempt))
+                continue
+            break
+
+        parsed = self._handle_response(resp, attempts=attempt)
         return APIResponse(
             parsed,
             success=True,
@@ -266,8 +329,42 @@ class CloudClient:
             http_response=resp,
         )
 
-    def _handle_response(self, resp: Any) -> Any:
-        """Map HTTP responses to return values or exceptions."""
+    def _retry_delay(self, attempt: int) -> float:
+        """Seconds to wait after ATTEMPT before repeating the request.
+
+        Exponential with full jitter: the ceiling doubles per attempt up to
+        :attr:`RETRY_BACKOFF_CAP`, and the actual wait is drawn uniformly
+        from zero to that ceiling.
+
+        The jitter is the point, not a decoration. A gateway that has just
+        recovered is hit by every client that was waiting on it, and a fixed
+        (or fixed-linear) backoff synchronises them into a second thundering
+        herd that can knock it straight back down. Spreading the waits is
+        what keeps the repeats from becoming the next outage.
+        """
+        ceiling = min(self.RETRY_BACKOFF * (2 ** (attempt - 1)), self.RETRY_BACKOFF_CAP)
+        return random.uniform(0.0, ceiling)
+
+    @staticmethod
+    def _attempt_note(attempts: int) -> str:
+        """ " after N attempts", or nothing when there was only one.
+
+        A failure that survived the whole retry budget reads differently
+        from one that never got a second chance -- it is the difference
+        between a slow route and an outage -- and the exception is usually
+        all a log line keeps.
+        """
+        return f" after {attempts} attempts" if attempts > 1 else ""
+
+    def _handle_response(self, resp: Any, attempts: int = 1) -> Any:
+        """Map HTTP responses to return values or exceptions.
+
+        Args:
+            resp: The response to interpret.
+            attempts: How many attempts produced it, used only to say so in
+                the error message. Defaults to 1 so a direct call reads the
+                same as it always has.
+        """
         status = resp.status_code
 
         # Auth errors
@@ -289,8 +386,15 @@ class CloudClient:
                 body = resp.json()
             except Exception:
                 pass
+            # The server's own explanation belongs in str(exc), not only in
+            # .response_body: a caller that prints the exception (or a log
+            # line that captures it) would otherwise report "API error
+            # (HTTP 400)" for a failure the server described precisely --
+            # e.g. MATLAB_LICENSE_REQUIRED from POST /compute/start.
+            from .internal import formatApiError
+
             raise CloudAPIError(
-                f"API error (HTTP {status})",
+                f"API error ({formatApiError(resp)}){self._attempt_note(attempts)}",
                 status_code=status,
                 response_body=body,
             )

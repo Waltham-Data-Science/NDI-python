@@ -255,9 +255,9 @@ def uploadToNDICloud(
     try:
         if verbose:
             print("Loading documents...")
-        all_docs = (
-            dataset.database_search(ndi_query("")) if hasattr(dataset, "database_search") else []
-        )
+        # isa("base"), matching uploadToNDICloud.m:20. A bare ndi_query("")
+        # matches nothing, which uploaded no documents at all.
+        all_docs = dataset.database_search(ndi_query("").isa("base"))
 
         if verbose:
             print("Getting list of previously uploaded documents...")
@@ -324,12 +324,14 @@ def scanForUpload(
 
     from .internal import listRemoteDocumentIds
 
-    try:
-        all_docs = (
-            dataset.database_search(ndi_query("")) if hasattr(dataset, "database_search") else []
-        )
-    except Exception:
-        all_docs = []
+    # MATLAB's caller searches with ndi.query('','isa','base') and hands the
+    # documents in (uploadToNDICloud.m:20). A bare ndi_query("") matches NO
+    # documents, so this returned an empty manifest for every dataset -- the
+    # same defect fixed in ndi.cloud.orchestration.
+    #
+    # Not wrapped: an unreadable database is not an empty dataset, and a
+    # manifest of nothing must not be the reported outcome of failing to look.
+    all_docs = dataset.database_search(ndi_query("").isa("base"))
 
     remote_ids = {}
     if dataset_id:
