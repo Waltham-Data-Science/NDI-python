@@ -1,0 +1,103 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/gui/app/genepyramid/
+# The Primary Contract for ndi.gui.app.genepyramid.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# PYTHON-ONLY PACKAGE, recorded rather than left to be discovered.
+#
+# napari has no MATLAB counterpart, so unlike the rest of ndi.gui.app there
+# is nothing here to mirror and nothing MATLAB should grow to match. MATLAB
+# reads the same documents through ndi.fun.doc.gene, which IS mirrored; what
+# differs is only the surface that draws them. The project rule that MATLAB
+# leads still holds -- it just does not reach a viewer that only one
+# language has a toolkit for.
+#
+# Every coordinate decision lives in multiscale.py and is unit tested
+# headlessly. viewer.py is the napari call and is deliberately thin, so the
+# part that can be wrong is the part a machine without a display can check.
+# =========================================================================
+functions:
+
+  - name: levelArrays
+    matlab_path: null
+    python_path: "ndi/gui/app/genepyramid/multiscale.py"
+    input_arguments:
+      - name: session
+        type_python: "Any"
+      - name: pyr_doc
+        type_python: "Any"
+      - name: gene_rows
+        type_python: "ArrayLike | None"
+      - name: density
+        type_python: "bool"
+    output_arguments:
+      - name: arrays
+        type_python: "list[dask.array.Array]"
+    decision_log: >
+      Python-only. One lazy dask array per level, finest first, blocks
+      being tiles. gene_rows is ZERO-BASED, matching ndi.fun.doc_gene.
+      Tile PATHS are resolved eagerly and the blocks read plain files: NDI's
+      database is SQLite, whose connections are not usable from another
+      thread, and both dask and napari drive loading on a thread pool. A
+      block that called database_openbinarydoc failed with "ndi_document ...
+      not found" under the threaded scheduler only, passing under the
+      synchronous one. Only metadata is eager; the bytes stay lazy. A
+      cloud-backed session that fetches on open would pay at build time
+      instead, which is a real limit of this approach.
+
+  - name: worldTransform
+    matlab_path: null
+    python_path: "ndi/gui/app/genepyramid/multiscale.py"
+    output_arguments:
+      - name: scale
+        type_python: "tuple[float, float]"
+      - name: translate
+        type_python: "tuple[float, float]"
+    decision_log: >
+      Python-only. Returns (row, column) = (y, x), napari's axis order, in
+      the pyramid's pixel_size_units. scale is the size of one FINEST-level
+      bin because napari applies the layer scale to level 0 and derives the
+      coarser levels from shape ratios; translate is the pyramid origin in
+      world units. Returned rather than applied so the placement can be
+      asserted headlessly.
+
+  - name: sourceToWorld
+    matlab_path: null
+    python_path: "ndi/gui/app/genepyramid/multiscale.py"
+    decision_log: >
+      Python-only. Converts SOURCE coordinates -- the frame cell centroids
+      and contours arrive in -- to the world frame the image layer is
+      placed in, swapping axes because source x is the column axis. It does
+      NOT subtract the origin: the layer's translate already carries it, and
+      applying it twice is the specific mistake this exists to prevent.
+
+  - name: layerSpec
+    matlab_path: null
+    python_path: "ndi/gui/app/genepyramid/multiscale.py"
+    decision_log: >
+      Python-only. The keyword arguments napari's add_image takes, returned
+      rather than applied so a caller can override any of them and so the
+      placement is testable without a display.
+
+  - name: require_napari
+    matlab_path: null
+    python_path: "ndi/gui/app/genepyramid/viewer.py"
+    decision_log: >
+      Python-only. Mirrors ndi.gui._qt_helpers.require_qt: napari is an
+      extra, not a runtime dependency, so a headless install does not pull
+      in Qt and OpenGL, and a missing toolkit surfaces as a sentence naming
+      the extra rather than a traceback from deep inside.
+
+  - name: openPyramid
+    matlab_path: null
+    python_path: "ndi/gui/app/genepyramid/viewer.py"
+    decision_log: >
+      Python-only. Opens the pyramid, and optionally cell centroids given
+      in SOURCE coordinates, which are routed through sourceToWorld rather
+      than passed straight in. show=False returns the viewer without
+      blocking, which is what a test or a caller composing further layers
+      wants.

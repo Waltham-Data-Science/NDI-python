@@ -250,6 +250,7 @@ def _unpack(raw: bytes) -> dict[str, Any]:
 # exportRegion}.m and its private/storeDoc.m.
 # =========================================================================
 
+import itertools
 import os
 import tempfile
 
@@ -280,6 +281,9 @@ def _blank(document_type: str, **properties):
         return ndi_document(f"data/{document_type}", **properties)
 
 
+_STAGE_COUNTER = itertools.count()
+
+
 def _store_doc(session, doc, file_names, file_paths):
     """Attach files to a document and add it to the database.
 
@@ -295,12 +299,59 @@ def _store_doc(session, doc, file_names, file_paths):
             f"file_names and file_paths must be the same length, got "
             f"{len(file_names)} and {len(file_paths)}"
         )
-    for name, path in zip(file_names, file_paths):
-        if not os.path.isfile(path):
-            raise FileNotFoundError(f"file {path!r} for document entry {name!r} does not exist")
-        doc = doc.add_file(name, path)
-    session.database_add(doc)
+    staged = []
+    try:
+        for name, path in zip(file_names, file_paths):
+            if not os.path.isfile(path):
+                raise FileNotFoundError(f"file {path!r} for document entry {name!r} does not exist")
+            path = _stage_inside_database(session, path, staged)
+            doc = doc.add_file(name, path)
+        session.database_add(doc)
+    finally:
+        # The database has copied what it wanted by now; the staging copy
+        # is ours to remove whether or not the add succeeded.
+        for tmp in staged:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
     return doc
+
+
+def _stage_inside_database(session, path, staged):
+    """Copy *path* under the session's .ndi directory if it is outside it.
+
+    DID-python refuses to ingest a source that resolves outside the
+    database directory (DID-python issue #58), and every maker in this
+    module builds its payload in the system temp directory first, because
+    a tile or a gene list is written before there is a document to attach
+    it to. Staging here rather than at each of those four sites is why
+    _store_doc exists: this is the "one correction rather than several"
+    its docstring promises.
+
+    A path already inside the database is passed through untouched, so
+    this costs nothing once a caller stages its own files.
+    """
+    import shutil
+
+    getpath = getattr(session, "getpath", None)
+    if getpath is None:
+        return path  # not a directory-backed session
+    try:
+        dbdir = os.path.realpath(os.path.join(str(getpath()), ".ndi"))
+    except Exception:  # noqa: BLE001 - any session that cannot
+        return path  # name a directory keeps the old path
+
+    real = os.path.realpath(path)
+    if os.path.commonpath([real, dbdir]) == dbdir:
+        return path  # already inside; nothing to do
+
+    stage = os.path.join(dbdir, "staging")
+    os.makedirs(stage, exist_ok=True)
+    dest = os.path.join(stage, f"{next(_STAGE_COUNTER)}_{os.path.basename(real)}")
+    shutil.copyfile(real, dest)
+    staged.append(dest)
+    return dest
 
 
 def makeGeneList(
