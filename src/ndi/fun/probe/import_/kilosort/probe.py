@@ -52,7 +52,7 @@ import numpy as np
 
 from .. import epoch_map as epoch_map_module
 from .binary_info import binaryinfo
-from .get_info import DEFAULT_QUALITY_LABELS, kilosort_directory
+from .get_info import DEFAULT_QUALITY_LABELS, _session_path, kilosort_directory
 from .labels import labels as read_labels
 from .mean_waveform import meanwaveform
 from .prompt_raw_binary import promptrawbinary
@@ -144,6 +144,15 @@ def probe(  # noqa: PLR0912, PLR0915 - one function in MATLAB, kept as one here
     prefix = "[dry run] " if dryRun else ""
 
     # --- 1. locate the curated output -------------------------------------
+    # MATLAB (post-1b99d29) resolves the probe's folder through
+    # ndi.fun.file.elementDirectory, so ``elestr`` is the platform-safe
+    # folder name -- and stores THAT in kilosort_clusters.kilosort_directory,
+    # so a document written on one platform names the same folder on another.
+    # ``elementstring()`` alone would put ``ctx | 1`` in the doc field while
+    # the folder on disk is ``ctx_-_1``.
+    from ....file import elementDirectory
+
+    _, probe_dir_name, _ = elementDirectory(Path(_session_path(session)) / kilosort_dir, probe_obj)
     kdir = Path(
         kilosort_directory(
             session,
@@ -153,7 +162,6 @@ def probe(  # noqa: PLR0912, PLR0915 - one function in MATLAB, kept as one here
             noSubFolder=noSubFolder,
         )
     )
-    element_string = str(probe_obj.elementstring())
     if not kdir.is_dir():
         raise FileNotFoundError(
             f"Kilosort directory not found: {kdir}. Was the data exported with "
@@ -166,7 +174,7 @@ def probe(  # noqa: PLR0912, PLR0915 - one function in MATLAB, kept as one here
             f"Expected curated files spike_times.npy and spike_clusters.npy in {kdir}."
         )
     if report:
-        print(f"{prefix}Importing kilosort results for probe {element_string} from {kdir}.")
+        print(f"{prefix}Importing kilosort results for probe {probe_dir_name} from {kdir}.")
 
     # --- 2. idempotency ----------------------------------------------------
     from .....query import ndi_query
@@ -339,7 +347,7 @@ def probe(  # noqa: PLR0912, PLR0915 - one function in MATLAB, kept as one here
             app=app_struct,
             **{
                 "base.session_id": session.id(),
-                "kilosort_clusters.kilosort_directory": f"{kilosort_dir}/{element_string}",
+                "kilosort_clusters.kilosort_directory": f"{kilosort_dir}/{probe_dir_name}",
                 "kilosort_clusters.curated_output_MD5_checksum": md5_value,
             },
         )
@@ -474,10 +482,10 @@ def probe(  # noqa: PLR0912, PLR0915 - one function in MATLAB, kept as one here
         if dryRun:
             print(
                 f"{prefix}Done. Would import {n_imported} neuron(s) for probe "
-                f"{element_string}. No changes were made to the database."
+                f"{probe_dir_name}. No changes were made to the database."
             )
         else:
-            print(f"Done. Imported {n_imported} neuron(s) for probe {element_string}.")
+            print(f"Done. Imported {n_imported} neuron(s) for probe {probe_dir_name}.")
     return n_imported
 
 

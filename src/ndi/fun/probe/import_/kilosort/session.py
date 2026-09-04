@@ -16,7 +16,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from .get_info import DEFAULT_QUALITY_LABELS, kilosort_directory
+from .get_info import DEFAULT_QUALITY_LABELS, _session_path, kilosort_directory
 from .probe import DEFAULT_QUALITY_VALUES
 from .probe import probe as import_probe
 
@@ -49,8 +49,14 @@ def session(
     if verbose:
         print(f"Found {len(probes)} probe(s) of type '{NTRODE_TYPE}'.")
 
+    # Match MATLAB (post-1b99d29): name each probe in messages by its
+    # platform-safe folder name, so the log line and the folder on disk
+    # agree even for probes whose elementstring contains ``|``.
+    from ....file import elementDirectory
+
     total = 0
     for probe_obj in probes:
+        _, probe_dir_name, _ = elementDirectory(Path(_session_path(S)) / kilosort_dir, probe_obj)
         kdir = Path(
             kilosort_directory(
                 S, probe_obj, kilosort_dir=kilosort_dir, subdir=subdir, noSubFolder=noSubFolder
@@ -58,8 +64,7 @@ def session(
         )
         if not kdir.is_dir() or not (kdir / "spike_times.npy").is_file():
             warnings.warn(
-                f"Skipping probe {probe_obj.elementstring()}: no kilosort output found "
-                f"in {kdir}.",
+                f"Skipping probe {probe_dir_name}: no kilosort output found " f"in {kdir}.",
                 stacklevel=2,
             )
             continue
