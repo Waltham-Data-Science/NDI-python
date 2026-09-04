@@ -54,6 +54,7 @@ __all__ = [
     "new_vhlspikewaveformfile",
     "add_vhlspikewaveformfile",
     "read_vhlspikewaveformfile",
+    "write_vhlspikewaveformfile",
     "newvhlspikewaveformfile",
     "addvhlspikewaveformfile",
     "readvhlspikewaveformfile",
@@ -368,6 +369,27 @@ def read_vhlspikewaveformfile(
     finally:
         if opened:
             fid.close()
+
+
+def write_vhlspikewaveformfile(
+    filename: FileArg,
+    waveforms: np.ndarray,
+    parameters: Any,
+) -> None:
+    """Write header + spike waveforms to a ``.vsw`` file in one call.
+
+    Convenience wrapper: writes the fixed 512-byte header with
+    :func:`new_vhlspikewaveformfile` and appends every waveform with
+    :func:`add_vhlspikewaveformfile`. ``parameters`` may pass ``samplerate``
+    instead of ``samplingrate`` — a common alias in the extractor.
+    """
+    if isinstance(parameters, dict):
+        params = dict(parameters)
+        if "samplingrate" not in params and "samplerate" in params:
+            params["samplingrate"] = params["samplerate"]
+        parameters = params
+    new_vhlspikewaveformfile(filename, parameters)
+    add_vhlspikewaveformfile(filename, waveforms)
 
 
 # ---------------------------------------------------------------------------

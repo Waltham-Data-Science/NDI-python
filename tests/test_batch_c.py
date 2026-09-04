@@ -163,25 +163,26 @@ class TestSpikeExtractor:
         assert "apps/spikeextractor/spikewaves" in app.doc_document_types
 
     def test_default_extraction_parameters(self):
+        # Fields mirror apps/spikeextractor/spike_extraction_parameters.json,
+        # which is what the doc actually validates against.
         params = ndi_app_spikeextractor.default_extraction_parameters()
-        assert "filter" in params
-        assert "threshold" in params
-        assert "timing" in params
-        assert params["filter"]["type"] == "cheby1"
-        assert params["threshold"]["method"] == "std"
-        assert params["threshold"]["parameter"] == -4.0
-        assert params["timing"]["pre_samples"] == 10
+        assert params["filter_type"] == "cheby1high"
+        assert params["threshold_method"] == "standard_deviation"
+        assert params["threshold_parameter"] == -4
+        assert params["threshold_sign"] == -1
+        assert params["filter_order"] == 4
 
-    def test_extract_raises(self):
+    def test_extract_needs_extraction_parameters_document(self):
+        # No session -> no way to find the required extraction_parameters doc.
         app = ndi_app_spikeextractor()
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(ValueError, match="spike_extraction_parameters"):
             app.extract(SimpleNamespace())
 
     def test_isvalid_struct_valid(self):
         app = ndi_app_spikeextractor()
         b, errormsg = app.isvalid_appdoc_struct(
             "extraction_parameters",
-            {"filter": {}, "threshold": {}},
+            ndi_app_spikeextractor.default_extraction_parameters(),
         )
         assert b is True
         assert errormsg == ""
@@ -190,10 +191,10 @@ class TestSpikeExtractor:
         app = ndi_app_spikeextractor()
         b, errormsg = app.isvalid_appdoc_struct(
             "extraction_parameters",
-            {"filter": {}},  # missing threshold
+            {"filter_type": "cheby1high"},  # missing most required fields
         )
         assert b is False
-        assert "filter" in errormsg or "threshold" in errormsg
+        assert "missing fields" in errormsg
 
     def test_isvalid_struct_other_type(self):
         app = ndi_app_spikeextractor()
@@ -202,13 +203,18 @@ class TestSpikeExtractor:
 
     def test_find_appdoc_no_session(self):
         app = ndi_app_spikeextractor()
-        assert app.find_appdoc("extraction_parameters") == []
+        # find_appdoc requires a name arg for extraction_parameters.
+        assert app.find_appdoc("extraction_parameters", "default") == []
 
     def test_struct2doc(self):
         from ndi.document import ndi_document
 
         app = ndi_app_spikeextractor()
-        doc = app.struct2doc("extraction_parameters", {"filter": {}, "threshold": {}})
+        doc = app.struct2doc(
+            "extraction_parameters",
+            ndi_app_spikeextractor.default_extraction_parameters(),
+            "default",
+        )
         assert isinstance(doc, ndi_document)
 
     def test_repr(self):
@@ -244,50 +250,55 @@ class TestSpikeSorter:
         assert "apps/spikesorter/spike_clusters" in app.doc_document_types
 
     def test_default_sorting_parameters(self):
+        # MATLAB parity: graphical_mode default is 1 (interactive), the
+        # non-graphical path is opt-in.
         params = ndi_app_spikesorter.default_sorting_parameters()
-        assert params["graphical_mode"] is False
-        assert params["num_pca_features"] == 4
-        assert params["interpolation"] == 2
-        assert params["min_clusters"] == 1
-        assert params["max_clusters"] == 5
+        assert params["graphical_mode"] == 1
+        assert params["num_pca_features"] == 10
+        assert params["interpolation"] == 3
+        assert params["min_clusters"] == 3
+        assert params["max_clusters"] == 10
 
-    def test_spike_sort_raises(self):
+    def test_spike_sort_without_session_raises(self):
         app = ndi_app_spikesorter()
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(RuntimeError, match="requires a session"):
             app.spike_sort(SimpleNamespace())
 
-    def test_clusters2neurons_raises(self):
+    def test_clusters2neurons_without_session_raises(self):
         app = ndi_app_spikesorter()
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(RuntimeError, match="requires a session"):
             app.clusters2neurons(SimpleNamespace())
 
     def test_isvalid_struct_valid(self):
         app = ndi_app_spikesorter()
         b, errormsg = app.isvalid_appdoc_struct(
             "sorting_parameters",
-            {"num_pca_features": 4},
+            ndi_app_spikesorter.default_sorting_parameters(),
         )
         assert b is True
         assert errormsg == ""
 
     def test_isvalid_struct_invalid(self):
         app = ndi_app_spikesorter()
-        b, errormsg = app.isvalid_appdoc_struct(
-            "sorting_parameters",
-            {"interpolation": 2},  # missing num_pca_features
-        )
+        # Missing every field; the vlt-style error names the first one absent.
+        b, errormsg = app.isvalid_appdoc_struct("sorting_parameters", {})
         assert b is False
-        assert "num_pca_features" in errormsg
+        assert "'graphical_mode' not present." in errormsg
 
     def test_find_appdoc_no_session(self):
         app = ndi_app_spikesorter()
-        assert app.find_appdoc("sorting_parameters") == []
+        # find_appdoc requires a name arg for sorting_parameters.
+        assert app.find_appdoc("sorting_parameters", "default") == []
 
     def test_struct2doc(self):
         from ndi.document import ndi_document
 
         app = ndi_app_spikesorter()
-        doc = app.struct2doc("sorting_parameters", {"num_pca_features": 4})
+        doc = app.struct2doc(
+            "sorting_parameters",
+            ndi_app_spikesorter.default_sorting_parameters(),
+            "default",
+        )
         assert isinstance(doc, ndi_document)
 
     def test_repr(self):

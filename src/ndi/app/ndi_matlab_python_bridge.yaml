@@ -441,16 +441,17 @@ classes:
         input_arguments:
           - name: extraction_doc
             type_matlab: "ndi.document"
-            type_python: "ndi_document"
+            type_python: "ndi_document | dict"
           - name: sample_rate
             type_matlab: "double"
             type_python: "float"
         output_arguments:
           - name: filterstruct
-            type_python: "dict[str, Any]"
+            type_python: "dict[str, Any] | None"
         decision_log: >
-          DISCREPANCY FIXED: Method was missing from Python.
-          Added stub implementation.
+          Ported from catchup/ndi-python-2026-08 (issue #135). Full
+          scipy.signal.cheby1 high-pass design; 'none' returns None
+          (MATLAB returns []).
 
       - name: filter
         input_arguments:
@@ -459,13 +460,13 @@ classes:
             type_python: "numpy.ndarray"
           - name: filterstruct
             type_matlab: "struct"
-            type_python: "dict[str, Any]"
+            type_python: "dict[str, Any] | None"
         output_arguments:
           - name: data_out
             type_python: "numpy.ndarray"
         decision_log: >
-          DISCREPANCY FIXED: Method was missing from Python.
-          Added stub that requires scipy.signal.
+          Ported from catchup/ndi-python-2026-08 (issue #135). Zero-phase
+          scipy.signal.filtfilt over the sample axis; None passes through.
 
       - name: extract
         input_arguments:
@@ -488,10 +489,14 @@ classes:
             type_matlab: "double array (optional)"
             type_python: "Any | None"
             default: "None"
-        output_arguments: []
+        output_arguments:
+          - name: created_docs
+            type_python: "list[ndi_document]"
         decision_log: >
-          MATLAB returns void. Python had return type list[ndi_document]
-          which was incorrect. Fixed to return None.
+          Ported from catchup/ndi-python-2026-08 (issue #135). MATLAB
+          writes spikewaves documents as a side effect; the Python port
+          also returns the created documents (empty list when no session
+          is configured) as a caller convenience.
 
       - name: struct2doc
         input_arguments:
@@ -542,8 +547,9 @@ classes:
           - name: data
             type_python: "Any"
         decision_log: >
-          DISCREPANCY FIXED: Method was missing from Python.
-          Added stub.
+          Ported from catchup/ndi-python-2026-08 (issue #135). For
+          'spikewaves' returns (waveforms, waveparameters, spiketimes,
+          spikewaves_doc) decoded from the attached .vsw and spiketimes.bin.
 
   # =========================================================================
   # ndi.app.spikesorter
@@ -577,8 +583,9 @@ classes:
           - name: sorting_parameters_struct
             type_python: "dict[str, Any]"
         decision_log: >
-          DISCREPANCY FIXED: Method was missing from Python.
-          Added implementation that validates and fills defaults.
+          Ported from catchup/ndi-python-2026-08 (issue #135). Clamps
+          'interpolation' to [1, 10] as MATLAB does; missing field
+          raises ValueError.
 
       - name: loadwaveforms
         input_arguments:
@@ -603,8 +610,9 @@ classes:
           - name: waveform_docs
             type_python: "list[ndi_document]"
         decision_log: >
-          DISCREPANCY FIXED: Method was missing from Python.
-          Added stub. Returns 6-tuple matching MATLAB.
+          Ported from catchup/ndi-python-2026-08 (issue #135). Reads
+          spikewaves documents directly from the database and decodes
+          the attached spikewaves.vsw + spiketimes.bin binaries.
 
       - name: spike_sort
         input_arguments:
@@ -626,7 +634,13 @@ classes:
         output_arguments:
           - name: spike_cluster_doc
             type_python: "list[ndi_document]"
-        decision_log: "Exact match."
+        decision_log: >
+          Ported from catchup/ndi-python-2026-08 (issue #135). Automatic
+          path uses ndi.util.klustakwik (klustakwik2, optional dep) in
+          place of MATLAB's external classic-KlustaKwik binary; results
+          are in the same family but not bit-identical. graphical_mode=1
+          raises NotImplementedError pointing at issue #97 until the
+          spikesorter GUI lands here.
 
       - name: clusters2neurons
         input_arguments:
@@ -645,10 +659,17 @@ classes:
             type_matlab: "logical"
             type_python: "bool"
             default: "False"
-        output_arguments: []
+        output_arguments:
+          - name: neuron_docs
+            type_python: "list[ndi_document]"
         decision_log: >
-          MATLAB returns void. Python had return type list[Any]
-          which was incorrect. Fixed to return None.
+          Ported from catchup/ndi-python-2026-08 (issue #135). Emits an
+          ndi.neuron element (via ndi_element_timeseries.addMultiple
+          with element_class='ndi.neuron') plus a neuron_extracellular
+          document and per-epoch spike trains for each cluster whose
+          qualitylabel is Excellent/Good/Multi-unit; returns the
+          neuron_extracellular docs. Depends on issue #133 (now landed
+          via PR #143) for neurons to round-trip correctly.
 
       - name: struct2doc
         input_arguments:
@@ -693,8 +714,9 @@ classes:
           - name: data
             type_python: "Any"
         decision_log: >
-          DISCREPANCY FIXED: Method was missing from Python.
-          Added stub.
+          Ported from catchup/ndi-python-2026-08 (issue #135). For
+          'spike_clusters' returns (clusterids, spike_clusters_doc) with
+          clusterids decoded from the spike_cluster.bin uint16 file.
 
   # =========================================================================
   # ndi.app.oridirtuning
