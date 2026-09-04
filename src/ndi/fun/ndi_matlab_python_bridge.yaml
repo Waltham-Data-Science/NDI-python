@@ -2,8 +2,8 @@
 # The Primary Contract for the ndi.fun namespace.
 #
 # Covers: utils.py, name_utils.py, data.py, dataset.py, doc.py,
-#         doc_table.py, epoch.py, file.py, plot.py, session.py,
-#         stimulus.py, table.py
+#         doc_table.py, doc_gene.py, doc_gene_export.py, epoch.py,
+#         file.py, plot.py, session.py, stimulus.py, table.py
 
 project_metadata:
   bridge_version: "1.1"
@@ -1882,6 +1882,266 @@ functions:
 # =========================================================================
 # Not ported / Not applicable
 # =========================================================================
+
+# =========================================================================
+# Functions — doc_gene.py
+# MATLAB: +ndi/+fun/+doc/+gene/*.m
+#
+# The gene package mirrors a MATLAB PACKAGE rather than loose functions, so
+# ndi.fun.doc.gene.<f> becomes ndi.fun.doc_gene.<f>, following the
+# +ndi/+fun/+docTable -> ndi/fun/doc_table precedent already in this file.
+#
+# Two conventions run through the whole module and are not repeated on
+# every entry:
+#   * Gene rows and gene indices are ZERO-BASED on both sides. They are
+#     written into a binary read by both languages, and shifting them on
+#     one side only is the likeliest way for the two to diverge. This is
+#     the indexing_policy's "0-based for internal data".
+#   * MATLAB name-value option names are preserved verbatim (a caller types
+#     'binSizes'), while positional argument names take Python style. The
+#     option name is part of the calling convention; the positional name is
+#     not.
+# =========================================================================
+
+  - name: readTileFile
+    matlab_path: "+ndi/+fun/+doc/+gene/readTileFile.m"
+    matlab_last_sync_hash: "6636493c"
+    python_path: "ndi/fun/doc_gene.py"
+    input_arguments:
+      - name: source
+        type_matlab: "char"
+        type_python: "str | IO[bytes] | bytes"
+    output_arguments:
+      - name: tile
+        type_python: "dict[str, Any]"
+    decision_log: >
+      MATLAB takes a filename. Python also accepts an open file object or
+      raw bytes, because the caller often already holds the handle from
+      database_openbinarydoc and writing it to a temporary file only to
+      read it back would be worse. A filename still works, so the MATLAB
+      call translates unchanged. Verified against conformance_tile.bin,
+      the same fixture NDI-matlab's TestTileFormat asserts on, so both
+      implementations agree on one artifact rather than pairwise.
+
+  - name: writeTileFile
+    matlab_path: "+ndi/+fun/+doc/+gene/writeTileFile.m"
+    matlab_last_sync_hash: "2714eeda"
+    python_path: "ndi/fun/doc_gene.py"
+    input_arguments:
+      - name: filename
+        type_python: "str"
+      - name: x
+        type_python: "ArrayLike"
+      - name: y
+        type_python: "ArrayLike"
+      - name: gene_index
+        type_python: "ArrayLike"
+      - name: count
+        type_python: "ArrayLike"
+    decision_log: >
+      Exact match. gene_index is zero-based on both sides; see the module
+      note above.
+
+  - name: renderTile
+    matlab_path: "+ndi/+fun/+doc/+gene/renderTile.m"
+    matlab_last_sync_hash: "9f1f122e"
+    python_path: "ndi/fun/doc_gene.py"
+    input_arguments:
+      - name: tile
+        type_python: "dict[str, Any]"
+      - name: genes
+        type_python: "ArrayLike | None"
+      - name: tile_height
+        type_python: "int"
+      - name: tile_width
+        type_python: "int"
+      - name: binSize
+        type_python: "int"
+    output_arguments:
+      - name: img
+        type_python: "np.ndarray"
+    decision_log: >
+      Semantic Parity: genes are ZERO-BASED geneList rows, matching the
+      binary they index into; conversion to 1-based happens inside, at the
+      point of use. Python additionally accepts a boolean mask for genes,
+      which lets a caller that already computed one skip an isin() over
+      every tile; a row-index array behaves identically in both languages.
+
+  - name: makeGeneList
+    matlab_path: "+ndi/+fun/+doc/+gene/makeGeneList.m"
+    matlab_last_sync_hash: "83562678"
+    python_path: "ndi/fun/doc_gene.py"
+    decision_log: >
+      Exact match. Name-value options (genomeAssembly, geneIdNamespace)
+      keep their MATLAB spelling.
+
+  - name: makePyramid
+    matlab_path: "+ndi/+fun/+doc/+gene/makePyramid.m"
+    matlab_last_sync_hash: "8fff9ff6"
+    python_path: "ndi/fun/doc_gene.py"
+    decision_log: >
+      Exact match. Options keep their MATLAB spelling (binSizes, grid,
+      basePixelSize, subjectID). subjectID is REQUIRED on both sides: the
+      pyramid document declares subject_id mustbenotempty, because a
+      section is measured from an animal and NDI records that on the
+      measurement rather than leaving it to be inferred.
+
+  - name: readViewport
+    matlab_path: "+ndi/+fun/+doc/+gene/readViewport.m"
+    matlab_last_sync_hash: "73830fc6"
+    python_path: "ndi/fun/doc_gene.py"
+    input_arguments:
+      - name: bin_size
+        type_python: "int"
+      - name: rect
+        type_python: "tuple[int, int, int, int] | None"
+      - name: gene_rows
+        type_python: "ArrayLike | None"
+      - name: density
+        type_python: "bool"
+    decision_log: >
+      rect is in the pixels OF ONE LEVEL, zero-based and relative to that
+      level's upper-left, on both sides -- an internal frame, so
+      zero-based per the indexing_policy. MATLAB's 'density' name-value
+      becomes a Python keyword of the same name. See readViewportBase for
+      the source-coordinate entry point.
+
+  - name: exportRegion
+    matlab_path: "+ndi/+fun/+doc/+gene/exportRegion.m"
+    matlab_last_sync_hash: "96f10959"
+    python_path: "ndi/fun/doc_gene.py"
+    decision_log: "Exact match. Returns raw counts, never density."
+
+  - name: levelTable
+    matlab_path: "+ndi/+fun/+doc/+gene/levelTable.m"
+    matlab_last_sync_hash: "0bfc9f0b"
+    python_path: "ndi/fun/doc_gene.py"
+    input_arguments:
+      - name: session
+        type_python: "Any"
+      - name: pyr_doc
+        type_python: "Any"
+    output_arguments:
+      - name: levels
+        type_matlab: "table"
+        type_python: "list[dict[str, Any]]"
+      - name: frame
+        type_python: "dict[str, Any]"
+    decision_log: >
+      DIVERGENCE in return shape, deliberate. MATLAB returns ONE table and
+      hangs the shared frame (origin, extent, base pixel size, index order)
+      on Properties.UserData. Python has no table type carrying metadata
+      that a caller would expect to find, and reaching for a DataFrame
+      would make pandas a dependency of reading a document, so the two
+      halves are returned as a pair instead. Field names are the MATLAB
+      ones, so the two read alike. Levels come back finest first in both,
+      which is the order a multiscale viewer wants and makes levels[0]
+      mean the finest rather than an arbitrary one.
+
+  - name: chooseLevel
+    matlab_path: "+ndi/+fun/+doc/+gene/chooseLevel.m"
+    matlab_last_sync_hash: "fb395b41"
+    python_path: "ndi/fun/doc_gene.py"
+    input_arguments:
+      - name: levels
+        type_matlab: "table"
+        type_python: "list[dict[str, Any]]"
+      - name: rect_source
+        type_python: "tuple[float, float, float, float]"
+      - name: target_pixels
+        type_python: "float"
+    output_arguments:
+      - name: bin_size
+        type_python: "int"
+      - name: info
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Takes the level collection each language's levelTable returns, so the
+      divergence above does not spread. rect_source is in SOURCE
+      coordinates -- the acquisition frame, not an index -- so the
+      1-based/0-based question does not arise. Missing the target returns
+      the finest level with info.metTarget false rather than raising, on
+      both sides: asking for more detail than the data holds is a
+      legitimate request with a definite answer.
+
+  - name: readViewportBase
+    matlab_path: "+ndi/+fun/+doc/+gene/readViewportBase.m"
+    matlab_last_sync_hash: "033c8331"
+    python_path: "ndi/fun/doc_gene.py"
+    input_arguments:
+      - name: bin_size
+        type_python: "int"
+      - name: rect_source
+        type_python: "tuple[float, float, float, float] | None"
+      - name: gene_rows
+        type_python: "ArrayLike | None"
+      - name: density
+        type_python: "bool"
+    output_arguments:
+      - name: img
+        type_python: "np.ndarray"
+      - name: info
+        type_python: "dict[str, Any]"
+    decision_log: >
+      rect_source is in SOURCE coordinates, the frame the data was acquired
+      in and the one cell centroids and contours also use -- unlike
+      readViewport, whose rect is in one level's pixels. The rounding is
+      identical in both languages and is the part that matters: the low
+      edge floors and the high edge ceils, so the result covers the request
+      rather than clipping it, and info.rectSourceCovered reports what
+      actually came back. A rectangle wholly off the pyramid returns an
+      empty image rather than raising, because a viewer pans off the edge
+      routinely.
+
+  - name: storeDoc
+    matlab_path: "+ndi/+fun/+doc/+gene/private/storeDoc.m"
+    python_path: "ndi/fun/doc_gene.py"
+    python_name: "_store_doc"
+    decision_log: >
+      MATLAB keeps this in the package's private/ folder, which makes it
+      reachable only from the gene functions; Python marks the same
+      non-public status with a leading underscore, so the name differs by
+      convention rather than by choice. Every maker routes document
+      creation through it, which is why it is recorded here rather than
+      treated as an implementation detail: if the two ever disagree about
+      how a document enters the database, they disagree everywhere at once.
+
+# =========================================================================
+# Functions — doc_gene_export.py
+#
+# PYTHON-ONLY, and recorded as such rather than left to be discovered. This
+# project's rule is that MATLAB leads; these three have no MATLAB
+# counterpart today. They exist because the export path was needed to
+# verify the pyramid against the reference builder: a GEF written from
+# documents rebuilds byte-identical tiles, which is what proves the
+# document round trip rather than only the codec. If MATLAB gains them, the
+# names and argument order here are what it should mirror.
+# =========================================================================
+
+  - name: readGeneList
+    matlab_path: null
+    python_path: "ndi/fun/doc_gene_export.py"
+    decision_log: >
+      Python-only. Reads a geneList document's genes.tsv back into ids and
+      names. MATLAB reads the same file inline where it needs it; if that
+      is ever factored out, this is the shape to match.
+
+  - name: exportGef
+    matlab_path: null
+    python_path: "ndi/fun/doc_gene_export.py"
+    decision_log: >
+      Python-only. Writes a pyramid level back out as a Stereo-seq GEF.
+      Used to prove the round trip: the exported GEF rebuilds tiles that
+      are byte-identical to the originals through the reference builder.
+
+  - name: exportHdf5
+    matlab_path: null
+    python_path: "ndi/fun/doc_gene_export.py"
+    decision_log: >
+      Python-only. Writes a pyramid level as a plain HDF5 with both
+      coordinate frames recorded, for tools that read neither GEF nor the
+      NDI tile format.
+
 not_applicable:
 
   - name: avi2mp4

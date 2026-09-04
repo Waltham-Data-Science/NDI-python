@@ -826,3 +826,266 @@ def exportRegion(session, pyr_doc, bin_size, rect=None):
 
     M = sparse.csr_matrix((vals, (rows_idx, cols_idx)), shape=(n_px, n_genes), dtype=np.int64)
     return M, np.array(coords, np.int64).reshape(-1, 2)
+
+
+__all__ += ["levelTable", "chooseLevel", "readViewportBase"]
+
+
+def levelTable(session, pyr_doc) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """The pyramid's level ladder, finest first, plus the frame they share.
+
+    MATLAB equivalent: ``ndi.fun.doc.gene.levelTable``
+
+    A pyramid's ladder is split across two document types: the ladder,
+    grid, origin and base pixel size live on the
+    ``spatialGeneExpressionPyramid`` document, while each level's pixel
+    dimensions, tile size and stored-tile count live on its own
+    ``spatialGeneExpressionTiles`` document. Until now only the private
+    :func:`_find_level` reached across them, so anything wanting to set up
+    a viewer had to re-derive the join. This is that join, once.
+
+    Levels come back finest first, the order a multiscale viewer wants a
+    ladder in, so ``levels[0]`` means the finest rather than an arbitrary
+    one.
+
+    Args:
+        session: an ndi.session or ndi.dataset holding the documents.
+        pyr_doc: a spatialGeneExpressionPyramid document.
+
+    Returns:
+        ``(levels, frame)``. *levels* is a list of dicts, one per level,
+        sorted by ascending ``binSize``, with keys ``binSize``,
+        ``levelHeight``, ``levelWidth``, ``tileHeight``, ``tileWidth``,
+        ``tileRows``, ``tileColumns``, ``nTilesStored``, ``nTilesGrid``,
+        ``pixelSizeX``, ``pixelSizeY``, ``tileDocId``. *frame* carries what
+        every level shares: ``originX``, ``originY``, ``extentX``,
+        ``extentY``, ``basePixelSizeX``, ``basePixelSizeY``,
+        ``pixelSizeUnits``, ``indexOrder``, ``originCorner``.
+
+    Note:
+        MATLAB returns one table whose ``Properties.UserData`` carries the
+        frame. Python has no table type with attached metadata that a
+        caller would expect, so the two halves are returned as a pair
+        rather than smuggled onto a DataFrame -- which would also make
+        pandas a dependency of reading a document. The field names are the
+        MATLAB ones so the two read alike.
+
+    Raises:
+        ValueError: if the pyramid has no tiles documents at all.
+    """
+    p = pyr_doc.document_properties["spatialGeneExpressionPyramid"]
+
+    q = ndi_query("").isa("spatialGeneExpressionTiles") & ndi_query("").depends_on(
+        "spatialGeneExpressionPyramid_id", pyr_doc.id
+    )
+    docs = session.database_search(q)
+    if not docs:
+        raise ValueError(f"pyramid {pyr_doc.id} has no spatialGeneExpressionTiles documents")
+
+    tile_rows = int(p["tile_rows"])
+    tile_columns = int(p["tile_columns"])
+
+    levels = []
+    for d in docs:
+        lv = d.document_properties["spatialGeneExpressionTiles"]
+        # dimension_size is [height, width, nGenes] in the document's YXG
+        # order; only the first two are geometry.
+        levels.append(
+            {
+                "binSize": int(lv["bin_size"]),
+                "levelHeight": int(lv["dimension_size"][0]),
+                "levelWidth": int(lv["dimension_size"][1]),
+                "tileHeight": int(lv["tile_size_y_bins"]),
+                "tileWidth": int(lv["tile_size_x_bins"]),
+                "tileRows": tile_rows,
+                "tileColumns": tile_columns,
+                "nTilesStored": int(lv["n_tiles_stored"]),
+                "nTilesGrid": tile_rows * tile_columns,
+                "pixelSizeX": float(lv["pixel_size_x"]),
+                "pixelSizeY": float(lv["pixel_size_y"]),
+                "tileDocId": d.id,
+            }
+        )
+
+    levels.sort(key=lambda r: r["binSize"])  # finest first
+
+    frame = {
+        "originX": float(p["origin_x"]),
+        "originY": float(p["origin_y"]),
+        "extentX": int(p["extent_x"]),
+        "extentY": int(p["extent_y"]),
+        "basePixelSizeX": float(p["base_pixel_size_x"]),
+        "basePixelSizeY": float(p["base_pixel_size_y"]),
+        "pixelSizeUnits": p["pixel_size_units"],
+        "indexOrder": p["index_order"],
+        "originCorner": p["origin_corner"],
+    }
+    return levels, frame
+
+
+def chooseLevel(levels, rect_source, target_pixels) -> tuple[int, dict[str, Any]]:
+    """The coarsest level that still resolves a rectangle.
+
+    MATLAB equivalent: ``ndi.fun.doc.gene.chooseLevel``
+
+    Reading a finer level than the display can show costs ``binSize ** 2``
+    more tiles for pixels that are then thrown away; reading a coarser one
+    loses detail the display could have shown.
+
+    NOT NEEDED FOR NAPARI. napari's multiscale interface takes the whole
+    ladder and picks a level itself from the shape ratios, so a napari
+    viewer should hand it every level rather than choose one. This is for
+    the callers that render a single image: a figure, a thumbnail, an
+    export, a tile server.
+
+    Args:
+        levels: the list from :func:`levelTable`, finest first.
+        rect_source: ``(x0, y0, width, height)`` in SOURCE coordinates --
+            the GEF's own x/y frame, the one cell centroids also use.
+        target_pixels: how many pixels the longer side should span, at
+            least.
+
+    Returns:
+        ``(bin_size, info)``. *info* has ``renderedWidth``,
+        ``renderedHeight``, ``longSide``, and ``metTarget``, which is False
+        when even the finest level falls short. Asking for more detail than
+        the data holds is a legitimate request with a definite answer, so
+        the finest level is returned rather than raising; a caller that
+        scales its display off the result needs to know it happened.
+
+    Raises:
+        ValueError: if the rectangle has non-positive width or height.
+    """
+    w = float(rect_source[2])
+    h = float(rect_source[3])
+    if w <= 0 or h <= 0:
+        raise ValueError(f"rect_source must have positive width and height; got {w} by {h}")
+
+    long_side = [max(w, h) / r["binSize"] for r in levels]
+
+    # levels is finest first, so long_side descends; the LAST entry still
+    # meeting the target is the coarsest acceptable level.
+    ok = None
+    for i, ls in enumerate(long_side):
+        if ls >= target_pixels:
+            ok = i
+    met_target = ok is not None
+    if ok is None:
+        ok = 0  # finest level; cannot do better
+
+    bin_size = levels[ok]["binSize"]
+    info = {
+        "renderedWidth": w / bin_size,
+        "renderedHeight": h / bin_size,
+        "longSide": long_side[ok],
+        "metTarget": met_target,
+    }
+    return bin_size, info
+
+
+def readViewportBase(session, pyr_doc, bin_size, rect_source=None, gene_rows=None, density=True):
+    """Render a rectangle given in SOURCE coordinates.
+
+    MATLAB equivalent: ``ndi.fun.doc.gene.readViewportBase``
+
+    :func:`readViewport` takes its rectangle in the pixels of one level,
+    zero-based and relative to that level's upper-left. That is the right
+    frame for the tile arithmetic and the wrong frame for a caller, who has
+    a rectangle in the source coordinates the data was acquired in -- the
+    same frame cell centroids and contours use. The conversion subtracts
+    the pyramid origin and divides by the bin size, with the rounding going
+    outward so the result never returns less than was asked for.
+
+    Because a level's bins do not generally align with the requested edges,
+    what comes back usually covers slightly MORE.
+    ``info["rectSourceCovered"]`` reports exactly what, so a caller can
+    place the image without re-deriving the rounding.
+
+    Args:
+        session: an ndi.session or ndi.dataset.
+        pyr_doc: a spatialGeneExpressionPyramid document.
+        bin_size: which level to read; must be one of the pyramid's.
+        rect_source: ``(x0, y0, width, height)`` in SOURCE coordinates.
+            None means the pyramid's whole extent.
+        gene_rows: ZERO-BASED geneList rows to include, or None for all.
+        density: divide by ``bin_size ** 2``. See :func:`readViewport`.
+
+    Returns:
+        ``(img, info)``. *info* is what :func:`readViewport` returns plus
+        ``rectLevel``, ``rectSourceCovered``, ``originX`` and ``originY``.
+
+    Raises:
+        ValueError: for a malformed or empty rectangle, or an unknown level.
+    """
+    p = pyr_doc.document_properties["spatialGeneExpressionPyramid"]
+
+    if rect_source is None:
+        rect_source = (
+            float(p["origin_x"]),
+            float(p["origin_y"]),
+            int(p["extent_x"]),
+            int(p["extent_y"]),
+        )
+    if len(rect_source) != 4:
+        raise ValueError(
+            f"rect_source must be (x0, y0, width, height) or None; "
+            f"got {len(rect_source)} elements"
+        )
+    if rect_source[2] <= 0 or rect_source[3] <= 0:
+        raise ValueError(
+            f"rect_source must have positive width and height; "
+            f"got {rect_source[2]} by {rect_source[3]}"
+        )
+
+    levels, frame = levelTable(session, pyr_doc)
+    match = [r for r in levels if r["binSize"] == int(bin_size)]
+    if not match:
+        raise ValueError(
+            f"this pyramid has no level with bin_size {bin_size}; "
+            f"it has {[r['binSize'] for r in levels]}"
+        )
+    lh = match[0]["levelHeight"]
+    lw = match[0]["levelWidth"]
+
+    b = int(bin_size)
+    bx0 = rect_source[0] - frame["originX"]
+    by0 = rect_source[1] - frame["originY"]
+    # Low edge floors, high edge ceils, so the result covers the request
+    # rather than clipping it.
+    lx0 = int(np.floor(bx0 / b))
+    ly0 = int(np.floor(by0 / b))
+    lx1 = int(np.ceil((bx0 + rect_source[2]) / b))  # exclusive
+    ly1 = int(np.ceil((by0 + rect_source[3]) / b))
+
+    # A request wholly outside the pyramid is a legitimate viewport -- a
+    # viewer pans off the edge routinely -- but must not become a negative
+    # or zero-sized read.
+    lx0 = max(lx0, 0)
+    ly0 = max(ly0, 0)
+    lx1 = min(lx1, lw)
+    ly1 = min(ly1, lh)
+    w_level = max(lx1 - lx0, 0)
+    h_level = max(ly1 - ly0, 0)
+    rect_level = (lx0, ly0, w_level, h_level)
+
+    if w_level == 0 or h_level == 0:
+        img = np.zeros((h_level, w_level), float)
+        info = {
+            "tilesRead": 0,
+            "tilesEmpty": 0,
+            "binSize": b,
+            "levelSize": (lh, lw),
+        }
+    else:
+        img, info = readViewport(session, pyr_doc, b, rect_level, gene_rows, density=density)
+
+    info["rectLevel"] = rect_level
+    info["rectSourceCovered"] = (
+        lx0 * b + frame["originX"],
+        ly0 * b + frame["originY"],
+        w_level * b,
+        h_level * b,
+    )
+    info["originX"] = frame["originX"]
+    info["originY"] = frame["originY"]
+    return img, info
