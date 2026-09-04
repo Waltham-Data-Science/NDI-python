@@ -118,9 +118,14 @@ class ndi_file_navigator_epochdir(ndi_file_navigator):
         subdirs = sorted([d for d in base.iterdir() if d.is_dir() and not d.name.startswith(".")])
 
         for subdir in subdirs:
-            matched = self._match_files_in_dir(subdir, patterns)
-            if matched:
-                groups.append(sorted(matched))
+            per_pattern = self._match_files_in_dir(subdir, patterns)
+            # Require every declared pattern to match at least one file
+            # (parity with MATLAB ndi.file.navigator.epochdir /
+            # findfilegroups). A directory that satisfies only a subset
+            # of declared patterns is not an epoch.
+            if all(per_pattern):
+                merged = sorted({path for hits in per_pattern for path in hits})
+                groups.append(merged)
 
         return groups
 
@@ -128,43 +133,47 @@ class ndi_file_navigator_epochdir(ndi_file_navigator):
         self,
         directory: Path,
         patterns: list[str],
-    ) -> list[str]:
+    ) -> list[list[str]]:
         """
-        Find files matching patterns in a single directory.
+        Find files matching each pattern in a single directory.
+
+        Returns one list of matches per input pattern (same order),
+        so callers can require every pattern to have at least one hit
+        before accepting the directory as an epoch.
 
         Args:
             directory: Directory to search
             patterns: File patterns to match
 
         Returns:
-            List of matched file paths
+            List of per-pattern match lists; each inner list is the
+            files in `directory` matching the corresponding pattern.
         """
         import fnmatch
         import re
 
         from ...util.matlab_regex import matlab_to_python_regex
 
-        matched = []
+        per_pattern: list[list[str]] = [[] for _ in patterns]
         try:
             files = [f for f in directory.iterdir() if f.is_file()]
         except PermissionError:
-            return []
+            return per_pattern
 
         for f in files:
             if f.name.startswith("."):
                 continue
-            for pattern in patterns:
+            for i, pattern in enumerate(patterns):
                 if fnmatch.fnmatch(f.name, pattern):
-                    matched.append(str(f))
-                    break
+                    per_pattern[i].append(str(f))
+                    continue
                 try:
                     if re.search(matlab_to_python_regex(pattern), f.name):
-                        matched.append(str(f))
-                        break
+                        per_pattern[i].append(str(f))
                 except re.error:
                     pass
 
-        return matched
+        return per_pattern
 
     def __repr__(self) -> str:
         n_patterns = len(self._fileparameters.get("filematch", []))

@@ -403,13 +403,23 @@ classes:
           Exact match. Passes all arguments to parent constructor.
 
       - name: selectfilegroups_disk
+        matlab_last_sync_hash: "e782ead"
         input_arguments: []
         output_arguments:
           - name: epochfiles_disk
             type_python: "list[list[str]]"
         decision_log: >
-          Exact match. Override scans subdirectories
-          (one directory = one epoch).
+          DISCREPANCY FIXED (issue #100 item 1, 2026-09-04):
+          A subdirectory now qualifies as an epoch only when EVERY
+          declared filematch pattern matches at least one file in it,
+          matching MATLAB's semantics. MATLAB's epochdir delegates to
+          findfilegroups, which treats each element of the filematch
+          cell array as a required pattern; the Python port previously
+          accepted a subdirectory on ANY match, producing phantom
+          epochs generically (the same defect MATLAB fixed lab-by-lab
+          for vhlab). Behavior change: sessions that today enumerate
+          directories with only a partial match will stop enumerating
+          them, which is the correct behavior but user-visible.
 
       - name: epochid
         input_arguments:
