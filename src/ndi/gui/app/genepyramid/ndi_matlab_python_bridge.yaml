@@ -101,3 +101,39 @@ functions:
       than passed straight in. show=False returns the viewer without
       blocking, which is what a test or a caller composing further layers
       wants.
+
+  - name: main
+    matlab_path: null
+    python_path: "ndi/gui/app/genepyramid/cli.py"
+    input_arguments:
+      - name: argv
+        type_python: "list[str] | None"
+    output_arguments:
+      - name: status
+        type_python: "int"
+    decision_log: >
+      Python-only. The napariViewGEF command line, reachable three ways
+      that are all this function: the installed console script, "python -m
+      ndi napari", and the shell wrapper that scrubs MATLAB's environment
+      before exec. Takes argv so a test can drive it; returns a status
+      rather than calling sys.exit, for the same reason.
+      --report and --list do their work without a display deliberately,
+      so the argument handling, pyramid lookup and gene resolution have a
+      path CI can exercise; only the viewing itself needs napari.
+
+  - name: build_parser
+    matlab_path: null
+    python_path: "ndi/gui/app/genepyramid/cli.py"
+    decision_log: >
+      Python-only. Separated from main so the parser can be inspected in a
+      test without running anything.
+
+  - name: _resolve_genes
+    matlab_path: null
+    python_path: "ndi/gui/app/genepyramid/cli.py"
+    decision_log: >
+      Python-only. Symbols or accessions to ZERO-BASED rows, matching
+      ndi.fun.doc_gene's convention. Every match is kept, not the first:
+      real annotations repeat symbols -- the opossum list repeats 5,531 of
+      them -- and keeping only one would silently show part of a gene's
+      signal.

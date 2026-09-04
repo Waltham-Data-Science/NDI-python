@@ -121,6 +121,9 @@ all = [
 
 [project.scripts]
 ndi = "ndi.__main__:main"
+# pip generates this with the venv's absolute interpreter in its shebang, so
+# a symlink from /usr/local/bin works with no activation and no PYTHONPATH.
+napariViewGEF = "ndi.gui.app.genepyramid.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/Waltham-Data-Science/NDI-python"
