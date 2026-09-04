@@ -2148,6 +2148,57 @@ functions:
       how they quietly diverge. MATLAB has no directory path to serve, so
       it keeps the parsing inline.
 
+  - name: makeCells
+    matlab_path: "+ndi/+fun/+doc/+gene/makeCells.m"
+    matlab_last_sync_hash: "28f35474"
+    python_path: "ndi/fun/doc_gene.py"
+    decision_log: >
+      Writes cells.tsv, optionally contours.bin, and stores the document.
+      cell_index is written explicitly and is ZERO-BASED on both sides: it
+      is the key contours.bin and every cellTypeLabels document reference,
+      so a reader must never have to infer it from row order.
+      cellID is kept as TEXT rather than a number, because these are
+      commonly 14-digit identifiers that lose precision as a double or a
+      float and then no longer match the source file they came from.
+      subjectID is OPTIONAL here, unlike makePyramid where it is required:
+      the pyramid this depends on already carries one.
+      MATLAB takes extra columns as a table, Python as a dict of columns --
+      the same divergence and reason as levelTable and readCells.
+
+  - name: writeContourFile
+    matlab_path: "+ndi/+fun/+doc/+gene/writeContourFile.m"
+    matlab_last_sync_hash: "2311e503"
+    python_path: "ndi/fun/doc_gene.py"
+    decision_log: >
+      contour_format_version 1, little-endian, ragged form with an offset
+      array. Both languages write ONLY the ragged form even when every cell
+      has the same vertex count: the fixed-width form the spec also allows
+      saves n_cells+1 offsets and cannot represent a later ragged edit, and
+      readContourFile accepts both anyway.
+      An empty polygon is written as zero vertices rather than dropped, so
+      row i of cells.tsv stays row i here; dropping it would shift every
+      later cell's contour onto the wrong cell silently.
+      The vertex RANGE is checked, not assumed. int16 holds +/-32767, ample
+      for centroid-relative vertices and not for absolute source
+      coordinates on a large chip; those would wrap silently, so a value
+      that does not fit is an error naming the offending vertex and
+      pointing at contour_reference.
+
+  - name: readContourFile
+    matlab_path: "+ndi/+fun/+doc/+gene/readContourFile.m"
+    matlab_last_sync_hash: "5f7b4a0d"
+    python_path: "ndi/fun/doc_gene.py"
+    decision_log: >
+      Accepts BOTH the ragged and the fixed-width form, the latter
+      signalled by a positive n_vertices_per_cell. Neither language writes
+      the fixed form, but a file may come from another writer, so both read
+      it; there is a test on hand-built bytes for that path precisely
+      because nothing here produces it.
+      vertexType and offsetType are arguments rather than constants because
+      they are document FIELDS -- data_type_vertex and data_type_offset --
+      so a level can widen without a format version change, exactly as the
+      tile format does.
+
 # =========================================================================
 # Functions — doc_gene_export.py
 #

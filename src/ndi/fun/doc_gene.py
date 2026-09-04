@@ -1203,3 +1203,288 @@ def _parse_cells_tsv(text: str, where: str = "cells.tsv"):
                 # quietly becomes another.
                 out[h] = vals
     return out, {}
+
+
+__all__ += ["writeContourFile", "readContourFile", "makeCells"]
+
+#: contours.bin defaults; both are document FIELDS so a level can widen
+#: without a format version change.
+_CONTOUR_VERTEX_TYPE = "int16"
+_CONTOUR_OFFSET_TYPE = "uint32"
+
+
+def writeContourFile(
+    filename, polys, vertexType=_CONTOUR_VERTEX_TYPE, offsetType=_CONTOUR_OFFSET_TYPE
+) -> dict[str, Any]:
+    """Write cell boundary polygons as ``contours.bin``.
+
+    MATLAB equivalent: ``ndi.fun.doc.gene.writeContourFile``
+
+    The contour_format_version 1 layout::
+
+        n_cells           offsetType   1
+        n_vertices_total  offsetType   1
+        offset            offsetType   n_cells + 1
+        vx                vertexType   n_vertices_total
+        vy                vertexType   n_vertices_total
+
+    Cell *i* has vertices ``offset[i]:offset[i+1]``. The polygon closes
+    implicitly; the first vertex is not repeated, so a caller that closed
+    its ring must not pass the duplicate.
+
+    Always writes the RAGGED form even when every cell has the same
+    vertex count. The fixed-width form the spec also allows saves
+    ``n_cells + 1`` offsets and cannot represent a later ragged edit;
+    :func:`readContourFile` accepts both, so other writers' files read.
+
+    Args:
+        polys: one entry per cell, each an ``(N, 2)`` array of ``[x, y]``.
+            An empty entry is a cell with no contour and is written as
+            zero vertices rather than dropped, so row *i* of cells.tsv
+            stays row *i* here.
+
+    Raises:
+        ValueError: if a polygon is not (N, 2), or if a vertex does not
+            fit the stored type. int16 holds +/-32767, ample for
+            centroid-relative vertices and NOT ample for absolute source
+            coordinates on a chip 20,000 bins across; those would wrap
+            silently and put boundaries in the wrong place.
+    """
+    counts = []
+    for i, p in enumerate(polys):
+        a = np.asarray(p) if p is not None and len(p) else np.zeros((0, 2))
+        if a.size and a.ndim != 2 or (a.size and a.shape[1] != 2):
+            raise ValueError(f"polygon {i} must be (N, 2) [x y]; got shape {a.shape}")
+        counts.append(a.shape[0] if a.size else 0)
+
+    info_v = np.iinfo(vertexType)
+    stacked = [np.asarray(p, float) for p in polys if p is not None and len(p)]
+    if stacked:
+        allv = np.vstack(stacked)
+        bad = np.flatnonzero((allv > info_v.max).any(1) | (allv < info_v.min).any(1))
+        if bad.size:
+            v = allv[bad[0]]
+            raise ValueError(
+                f"a vertex ({v[0]:g}, {v[1]:g}) does not fit in {vertexType} "
+                f"({info_v.min}..{info_v.max}). Contours stored relative to "
+                f"their centroid fit easily; ABSOLUTE source coordinates on a "
+                f"chip this size do not, and would wrap silently. Check "
+                f"contour_reference."
+            )
+
+    offsets = np.concatenate([[0], np.cumsum(counts)]).astype(offsetType)
+    total = int(offsets[-1])
+    vx = np.zeros(total, vertexType)
+    vy = np.zeros(total, vertexType)
+    for i, p in enumerate(polys):
+        if not counts[i]:
+            continue
+        a = np.asarray(p)
+        vx[offsets[i] : offsets[i + 1]] = a[:, 0]
+        vy[offsets[i] : offsets[i + 1]] = a[:, 1]
+
+    ot = np.dtype(offsetType).newbyteorder("<")
+    vt = np.dtype(vertexType).newbyteorder("<")
+    with open(filename, "wb") as fh:
+        fh.write(np.array([len(polys)], ot).tobytes())
+        fh.write(np.array([total], ot).tobytes())
+        fh.write(offsets.astype(ot).tobytes())
+        fh.write(vx.astype(vt).tobytes())
+        fh.write(vy.astype(vt).tobytes())
+
+    return {
+        "nCells": len(polys),
+        "nVerticesTotal": total,
+        "vertexType": vertexType,
+        "offsetType": offsetType,
+        "nVerticesPerCell": 0,
+    }
+
+
+def readContourFile(
+    filename,
+    nVerticesPerCell: int = 0,
+    vertexType=_CONTOUR_VERTEX_TYPE,
+    offsetType=_CONTOUR_OFFSET_TYPE,
+):
+    """Read cell boundary polygons from ``contours.bin``.
+
+    MATLAB equivalent: ``ndi.fun.doc.gene.readContourFile``
+
+    BOTH FORMS ARE ACCEPTED. The ragged form carries an offset array; the
+    fixed-width form, which the document signals through a positive
+    ``n_vertices_per_cell``, carries none and packs vertex *j* of cell
+    *i* at ``i * K + j``. :func:`writeContourFile` emits only the ragged
+    form, but a file may come from another writer.
+
+    Args:
+        nVerticesPerCell: pass the document's field; 0 means ragged.
+        vertexType, offsetType: pass the document's ``data_type_vertex``
+            and ``data_type_offset``. They are fields rather than
+            constants so a level can widen without a format version bump.
+
+    Returns:
+        ``(polys, info)`` -- one ``(N, 2)`` array per cell, and a dict.
+    """
+    ot = np.dtype(offsetType).newbyteorder("<")
+    vt = np.dtype(vertexType).newbyteorder("<")
+    raw = open(filename, "rb").read() if isinstance(filename, (str, bytes)) else filename.read()
+
+    pos = 0
+    hdr = np.frombuffer(raw, ot, count=2, offset=pos)
+    n, total = int(hdr[0]), int(hdr[1])
+    pos += 2 * ot.itemsize
+
+    if nVerticesPerCell > 0:
+        offsets = np.arange(n + 1, dtype=np.int64) * nVerticesPerCell
+        if int(offsets[-1]) != total:
+            raise ValueError(
+                f"n_vertices_per_cell is {nVerticesPerCell} and there are {n} "
+                f"cells, implying {int(offsets[-1])} vertices, but the file "
+                f"says {total}"
+            )
+    else:
+        offsets = np.frombuffer(raw, ot, count=n + 1, offset=pos).astype(np.int64)
+        pos += (n + 1) * ot.itemsize
+
+    need = 2 * total * vt.itemsize
+    if len(raw) - pos < need:
+        raise ValueError(
+            f"file claims {total} vertices, needing {need} more bytes, but "
+            f"only {len(raw) - pos} remain"
+        )
+    vx = np.frombuffer(raw, vt, count=total, offset=pos)
+    vy = np.frombuffer(raw, vt, count=total, offset=pos + total * vt.itemsize)
+
+    polys = [
+        np.stack([vx[offsets[i] : offsets[i + 1]], vy[offsets[i] : offsets[i + 1]]], 1)
+        for i in range(n)
+    ]
+    info = {
+        "nCells": n,
+        "nVerticesTotal": total,
+        "vertexType": vertexType,
+        "offsetType": offsetType,
+        "nVerticesPerCell": nVerticesPerCell,
+    }
+    return polys, info
+
+
+def makeCells(
+    session,
+    cellID,
+    x,
+    y,
+    pyr_doc,
+    label: str = "",
+    segmentationMethod: str = "",
+    segmentationDilation: float = 0,
+    coordinateUnits: str = "source",
+    subjectID: str = "",
+    extra: dict[str, Any] | None = None,
+    contours=None,
+    contourReference: str = "centroid",
+):
+    """Create a spatialGeneExpressionCells document.
+
+    MATLAB equivalent: ``ndi.fun.doc.gene.makeCells``
+
+    Writes ``cells.tsv``, optionally ``contours.bin``, and enters the
+    document in the database. One row per segmented cell, in the same
+    coordinate frame as the pyramid it depends on.
+
+    Args:
+        cellID: identifier from the source file, one per cell. Kept as
+            TEXT: these are commonly 14-digit numbers that lose precision
+            as floats and then no longer match the file they came from.
+        x, y: centroids, in the frame named by *coordinateUnits*.
+        pyr_doc: the pyramid these cells belong to. A cell table is
+            meaningless without the frame it is in, so the dependency is
+            required rather than optional.
+        segmentationMethod: how cells were segmented, with version. Worth
+            stating plainly: Stereo-seq CellBin segments NUCLEI and
+            dilates outward, so a "cell" is a nucleus plus a margin, not
+            a measured cell body.
+        subjectID: optional here, because the pyramid already carries
+            one -- unlike :func:`makePyramid`, where it is required.
+        extra: further per-cell columns, written after the required four
+            with their own names. The spec names area, dnb_count,
+            total_counts and n_genes, but writers differ and
+            :func:`readCells` matches by header, so a caller's own names
+            survive.
+        contours: one ``(N, 2)`` vertex array per cell, or None. None
+            writes no contours.bin and leaves ``contours_present`` at 0.
+        contourReference: whether contour vertices are relative to their
+            cell's centroid or absolute. This decides whether they fit in
+            int16; :func:`writeContourFile` checks and refuses rather
+            than wrapping.
+
+    Returns:
+        The stored spatialGeneExpressionCells document.
+    """
+    cell_id = [str(v) for v in cellID]
+    xs = np.asarray(x, float).ravel()
+    ys = np.asarray(y, float).ravel()
+    n = len(cell_id)
+    if len(xs) != n or len(ys) != n:
+        raise ValueError(
+            f"cellID, x and y must be the same length; got {n}, {len(xs)} and {len(ys)}"
+        )
+    extra = extra or {}
+    for k, v in extra.items():
+        if len(v) != n:
+            raise ValueError(f"extra column {k!r} has {len(v)} rows but there are {n} cells")
+    if contours is not None and len(contours) != n:
+        raise ValueError(f"contours has {len(contours)} entries but there are {n} cells")
+
+    # cell_index is the 0-BASED row number and is the key contours.bin and
+    # every cellTypeLabels document reference. Written explicitly rather
+    # than left implicit, so a reader never infers it from row order.
+    fd, tsv_path = tempfile.mkstemp(suffix=".tsv")
+    with os.fdopen(fd, "w") as fh:
+        fh.write("\t".join(["cell_index", "cell_id", "x", "y", *extra.keys()]) + "\n")
+        for i in range(n):
+            row = [str(i), cell_id[i], f"{xs[i]:g}", f"{ys[i]:g}"]
+            row += [
+                (f"{v:g}" if isinstance(v, (int, float, np.number)) else str(v))
+                for v in (extra[k][i] for k in extra)
+            ]
+            fh.write("\t".join(row) + "\n")
+
+    file_names, file_paths = ["cells.tsv"], [tsv_path]
+
+    contours_present = 0
+    if contours is not None and len(contours):
+        fd2, cb_path = tempfile.mkstemp(suffix=".bin")
+        os.close(fd2)
+        writeContourFile(cb_path, contours)
+        file_names.append("contours.bin")
+        file_paths.append(cb_path)
+        contours_present = 1
+
+    doc = (
+        _blank(
+            "spatialGeneExpressionCells",
+            spatialGeneExpressionCells={
+                "label": label,
+                "n_cells": n,
+                "segmentation_method": segmentationMethod,
+                "segmentation_dilation": segmentationDilation,
+                "coordinate_units": coordinateUnits,
+                "contours_present": contours_present,
+                "contour_reference": contourReference,
+                "n_vertices_per_cell": 0,
+                "data_type_vertex": _CONTOUR_VERTEX_TYPE,
+                "data_type_offset": _CONTOUR_OFFSET_TYPE,
+                "contour_format_version": 1,
+            },
+        )
+        + session.newdocument()
+    )
+    doc = doc.set_dependency_value(
+        "spatialGeneExpressionPyramid_id", pyr_doc.id, error_if_not_found=False
+    )
+    if subjectID:
+        doc = doc.set_dependency_value("subject_id", subjectID, error_if_not_found=False)
+
+    return _store_doc(session, doc, file_names, file_paths)
