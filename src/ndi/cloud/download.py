@@ -68,6 +68,39 @@ def _contained_path(target_dir: Path, filename: str) -> Path | None:
     return candidate
 
 
+#: Fail a bulk-download ZIP whose total uncompressed bytes exceed the total
+#: compressed bytes by more than this factor. Bulk-download payloads are JSON
+#: documents -- text, so real ratios sit around 5-15x. Zip bombs need
+#: thousands-to-one to be worth crafting, so a ceiling this far above expected
+#: catches bombs by orders of magnitude without touching real data. The
+#: alternative shapes (member-count cap, per-member size cap, total size cap)
+#: all trip on legitimate datasets: real NDI datasets can have thousands of
+#: per-epoch documents or multi-GB recording binaries.
+_ZIP_MAX_RATIO = 100
+
+
+def _check_zip_ratio(zf: Any) -> None:
+    """Pre-flight: reject a ZIP whose declared expansion ratio is implausible.
+
+    Reads ``file_size`` / ``compress_size`` off ``infolist()`` without
+    extracting a byte, so a bomb is refused before it can allocate memory.
+    """
+    total_uncompressed = 0
+    total_compressed = 0
+    for info in zf.infolist():
+        total_uncompressed += info.file_size
+        total_compressed += info.compress_size
+    if total_compressed == 0:
+        return
+    ratio = total_uncompressed / total_compressed
+    if ratio > _ZIP_MAX_RATIO:
+        raise ValueError(
+            f"Refusing bulk-download ZIP with implausible compression ratio "
+            f"{ratio:.1f}x (uncompressed {total_uncompressed} B / compressed "
+            f"{total_compressed} B); ceiling is {_ZIP_MAX_RATIO}x."
+        )
+
+
 def _download_chunk_zip(
     url: str,
     timeout: float = 20.0,
@@ -89,6 +122,8 @@ def _download_chunk_zip(
 
     Raises:
         TimeoutError: If the ZIP is not ready within *timeout* seconds.
+        ValueError: If the ZIP's declared compression ratio exceeds
+            :data:`_ZIP_MAX_RATIO`.
     """
     import io
     import time
@@ -105,6 +140,7 @@ def _download_chunk_zip(
             if resp.status_code == 200:
                 # ZIP is ready — extract documents
                 zf = zipfile.ZipFile(io.BytesIO(resp.content))
+                _check_zip_ratio(zf)
                 all_docs: list[dict[str, Any]] = []
                 for name in zf.namelist():
                     if name.endswith(".json"):
