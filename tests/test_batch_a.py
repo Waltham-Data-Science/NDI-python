@@ -613,6 +613,104 @@ class TestEpochDirNavigator:
         assert "ndi_file_navigator_epochdir" in repr(nav)
 
 
+class TestEpochDirNavigatorAllMatch:
+    """
+    Regression tests for issue #100 (item 1): epochdir must require
+    EVERY declared filematch pattern to match at least one file in a
+    subdirectory before that subdirectory is accepted as an epoch.
+
+    MATLAB's ndi.file.navigator.epochdir delegates to findfilegroups,
+    which requires all declared patterns to be present; Python's base
+    navigator historically accepted a subdirectory on ANY match,
+    producing phantom epochs.
+    """
+
+    @staticmethod
+    def _mock_session(path):
+        class ndi_session_mock:
+            def getpath(self):
+                return str(path)
+
+        return ndi_session_mock()
+
+    def test_all_patterns_match_dir_is_epoch(self, tmp_path):
+        from ndi.file.navigator.epochdir import ndi_file_navigator_epochdir
+
+        (tmp_path / "trial_001").mkdir()
+        (tmp_path / "trial_001" / "data.rhd").write_text("x")
+        (tmp_path / "trial_001" / "stim.stim").write_text("x")
+
+        nav = ndi_file_navigator_epochdir(
+            session=self._mock_session(tmp_path),
+            fileparameters=["*.rhd", "*.stim"],
+        )
+        groups = nav.selectfilegroups_disk()
+        assert len(groups) == 1
+        files = groups[0]
+        assert any(f.endswith("data.rhd") for f in files)
+        assert any(f.endswith("stim.stim") for f in files)
+
+    def test_missing_one_pattern_excludes_dir(self, tmp_path):
+        from ndi.file.navigator.epochdir import ndi_file_navigator_epochdir
+
+        # trial_001 has both required patterns → epoch
+        (tmp_path / "trial_001").mkdir()
+        (tmp_path / "trial_001" / "data.rhd").write_text("x")
+        (tmp_path / "trial_001" / "stim.stim").write_text("x")
+        # trial_002 has only *.rhd, missing *.stim → NOT an epoch
+        (tmp_path / "trial_002").mkdir()
+        (tmp_path / "trial_002" / "data.rhd").write_text("x")
+        # trial_003 has only *.stim, missing *.rhd → NOT an epoch
+        (tmp_path / "trial_003").mkdir()
+        (tmp_path / "trial_003" / "stim.stim").write_text("x")
+
+        nav = ndi_file_navigator_epochdir(
+            session=self._mock_session(tmp_path),
+            fileparameters=["*.rhd", "*.stim"],
+        )
+        groups = nav.selectfilegroups_disk()
+        assert len(groups) == 1, (
+            f"expected only trial_001 to qualify (both patterns matched); "
+            f"got {len(groups)} groups: {groups}"
+        )
+        assert any("trial_001" in f for f in groups[0])
+
+    def test_three_patterns_all_required(self, tmp_path):
+        from ndi.file.navigator.epochdir import ndi_file_navigator_epochdir
+
+        (tmp_path / "full").mkdir()
+        (tmp_path / "full" / "a.rhd").write_text("x")
+        (tmp_path / "full" / "b.stim").write_text("x")
+        (tmp_path / "full" / "c.meta").write_text("x")
+        (tmp_path / "partial").mkdir()
+        (tmp_path / "partial" / "a.rhd").write_text("x")
+        (tmp_path / "partial" / "b.stim").write_text("x")
+        # partial is missing *.meta → excluded
+
+        nav = ndi_file_navigator_epochdir(
+            session=self._mock_session(tmp_path),
+            fileparameters=["*.rhd", "*.stim", "*.meta"],
+        )
+        groups = nav.selectfilegroups_disk()
+        assert len(groups) == 1
+        assert any("full" in f for f in groups[0])
+
+    def test_single_pattern_unchanged(self, tmp_path):
+        from ndi.file.navigator.epochdir import ndi_file_navigator_epochdir
+
+        (tmp_path / "trial_001").mkdir()
+        (tmp_path / "trial_001" / "data.rhd").write_text("x")
+        (tmp_path / "trial_002").mkdir()
+        (tmp_path / "trial_002" / "data.rhd").write_text("x")
+
+        nav = ndi_file_navigator_epochdir(
+            session=self._mock_session(tmp_path),
+            fileparameters="*.rhd",
+        )
+        groups = nav.selectfilegroups_disk()
+        assert len(groups) == 2
+
+
 # ============================================================================
 # ndi_probe_timeseries Tests
 # ============================================================================
