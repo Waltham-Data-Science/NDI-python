@@ -49,6 +49,17 @@ def build_parser() -> argparse.ArgumentParser:
         "Off by default because binning sums, so without the divisor the "
         "brightness jumps every time the viewer switches level.",
     )
+    p.add_argument(
+        "--cells",
+        nargs="?",
+        const="auto",
+        default="",
+        metavar="DIR_OR_DOCID",
+        help="overlay segmented cell centroids. With no value, finds the "
+        "spatialGeneExpressionCells document belonging to this pyramid. "
+        "Otherwise a document id, or a directory holding cells.tsv as "
+        "extract_cells.py writes it.",
+    )
     p.add_argument("--list", action="store_true", help="list the pyramids and exit")
     p.add_argument(
         "--report",
@@ -74,6 +85,61 @@ def _describe(doc) -> str:
     p = doc.document_properties["spatialGeneExpressionPyramid"]
     label = p.get("label") or "(no label)"
     return f"  {doc.id}  {label}  {p['extent_x']} x {p['extent_y']} bins"
+
+
+def _resolve_cells(session, pyr_doc, spec: str):
+    """Cell centroids in SOURCE coordinates, from a document or a directory.
+
+    Both routes go through the same parser, because the Cells document's
+    file list is exactly ``cells.tsv`` and ``contours.bin`` -- the same
+    names extract_cells.py writes -- and reading a directory by different
+    rules than a document is how the two quietly diverge.
+
+    Returns ``(cells, info)`` or ``(None, None)`` when nothing was asked
+    for.
+    """
+    import os
+
+    from ndi.fun.doc_gene import _parse_cells_tsv, readCells
+    from ndi.query import ndi_query
+
+    if not spec:
+        return None, None
+
+    if spec != "auto" and os.path.isdir(spec):
+        path = os.path.join(spec, "cells.tsv")
+        if not os.path.isfile(path):
+            raise SystemExit(
+                f"{spec} has no cells.tsv. --cells wants an extract_cells.py "
+                f"OUTPUT directory, a document id, or no value at all to "
+                f"find the pyramid's own cells document."
+            )
+        with open(path, encoding="utf-8") as fh:
+            cols, info = _parse_cells_tsv(fh.read(), spec)
+        info["source"] = spec
+        return cols, info
+
+    docs = session.database_search(
+        ndi_query("").isa("spatialGeneExpressionCells")
+        & ndi_query("").depends_on("spatialGeneExpressionPyramid_id", pyr_doc.id)
+    )
+    if spec != "auto":
+        docs = [d for d in docs if d.id == spec]
+        if not docs:
+            raise SystemExit(f"no spatialGeneExpressionCells {spec} belonging to this pyramid")
+    if not docs:
+        raise SystemExit(
+            "this pyramid has no spatialGeneExpressionCells document. Pass a "
+            "directory of extracted cells, or a document id."
+        )
+    if len(docs) > 1:
+        raise SystemExit(
+            f"this pyramid has {len(docs)} cells documents; name one:\n"
+            + "\n".join(f"  {d.id}" for d in docs)
+        )
+    cols, info = readCells(session, docs[0])
+    info["source"] = docs[0].id
+    return cols, info
 
 
 def _resolve_genes(session, pyr_doc, spec: str):
@@ -136,6 +202,7 @@ def main(argv=None) -> int:
         return 1
 
     gene_rows = _resolve_genes(session, pyr, args.genes)
+    cells, cells_info = _resolve_cells(session, pyr, args.cells)
     density = not args.no_density
 
     if args.report:
@@ -152,6 +219,13 @@ def main(argv=None) -> int:
         )
         if gene_rows is not None:
             print(f"  genes   {len(gene_rows)} of the list selected")
+        if cells is not None:
+            n = len(cells["cell_index"])
+            print(f"  cells   {n} centroids from {cells_info.get('source')}")
+            if cells_info.get("segmentationMethod"):
+                print(f"          segmented by {cells_info['segmentationMethod']}")
+            if cells_info.get("contoursPresent"):
+                print("          contours present but not read; centroids only")
         print(f"  {'bin':>5} {'height':>8} {'width':>8} {'tiles':>12}")
         for lv in levels:
             print(
@@ -162,7 +236,10 @@ def main(argv=None) -> int:
 
     from .viewer import openPyramid
 
-    openPyramid(session, pyr, gene_rows=gene_rows, density=density)
+    overlay = None
+    if cells is not None:
+        overlay = {"x": cells["x"], "y": cells["y"]}
+    openPyramid(session, pyr, gene_rows=gene_rows, density=density, cells=overlay)
     return 0
 
 

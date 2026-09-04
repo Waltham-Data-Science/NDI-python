@@ -253,6 +253,7 @@ def _unpack(raw: bytes) -> dict[str, Any]:
 import itertools
 import os
 import tempfile
+import warnings
 
 from ..document import ndi_document
 from ..query import ndi_query
@@ -1140,3 +1141,116 @@ def readViewportBase(session, pyr_doc, bin_size, rect_source=None, gene_rows=Non
     info["originX"] = frame["originX"]
     info["originY"] = frame["originY"]
     return img, info
+
+
+__all__ += ["readCells"]
+
+#: cells.tsv columns a reader can rely on; the rest vary by writer.
+_CELL_REQUIRED = ("cell_index", "cell_id", "x", "y")
+
+
+def readCells(session, cells_doc) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Read the cell table of a spatialGeneExpressionCells document.
+
+    MATLAB equivalent: ``ndi.fun.doc.gene.readCells``
+
+    Columns are taken BY HEADER NAME, not by position. The specification
+    names them cell_index, cell_id, x, y, area, dnb_count, total_counts,
+    n_genes, but only the first four are required and writers differ on
+    the rest: the extraction spike that produced the first opossum cells
+    wrote ``dnbCount`` and ``n_genes_by_counts`` where the spec says
+    ``dnb_count`` and ``n_genes``. Reading by position would have
+    silently mapped one measurement onto another's name.
+
+    CONTOURS ARE NOT READ HERE. ``contours.bin`` holds the boundary
+    polygons and needs its own reader; this returns centroids, which is
+    what a viewer needs to place cells. ``info["contoursPresent"]`` says
+    whether there is more to read.
+
+    What a "cell" is: Stereo-seq CellBin segments NUCLEI from the stain
+    image and dilates outward, so a row here is a nucleus plus a margin
+    rather than a measured cell body. ``info["segmentationMethod"]``
+    records which method produced it.
+
+    Args:
+        session: an ndi.session or ndi.dataset holding the document.
+        cells_doc: a spatialGeneExpressionCells document.
+
+    Returns:
+        ``(columns, info)``. *columns* maps header name to a list or
+        array, always including ``cell_index``, ``cell_id``, ``x`` and
+        ``y``; x and y are the centroid in SOURCE coordinates, the frame
+        a viewer must transform before drawing. *info* carries nCells,
+        coordinateUnits, contoursPresent, contourReference and
+        segmentationMethod, read from the document rather than assumed.
+
+    Raises:
+        ValueError: if cells.tsv has no header or lacks a required column.
+    """
+    c = cells_doc.document_properties["spatialGeneExpressionCells"]
+
+    fh = session.database_openbinarydoc(cells_doc, "cells.tsv")
+    try:
+        text = fh.read().decode("utf-8")
+    finally:
+        session.database_closebinarydoc(fh)
+
+    columns, info = _parse_cells_tsv(text, cells_doc.id)
+    info.update(
+        {
+            "nCells": int(c["n_cells"]),
+            "coordinateUnits": c["coordinate_units"],
+            "contoursPresent": bool(c["contours_present"]),
+            "contourReference": c["contour_reference"],
+            "segmentationMethod": c["segmentation_method"],
+        }
+    )
+    n_rows = len(columns["cell_index"])
+    if n_rows != int(c["n_cells"]):
+        warnings.warn(
+            f"cells.tsv holds {n_rows} rows but the document says n_cells "
+            f"is {c['n_cells']}. The file is what was read.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    return columns, info
+
+
+def _parse_cells_tsv(text: str, where: str = "cells.tsv"):
+    """Parse a cells.tsv body. Separate so a directory of extracted cells
+    can be read with the same rules as a document's copy."""
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        raise ValueError(f"cells.tsv in {where} has no header row")
+
+    header = lines[0].split("\t")
+    missing = [c for c in _CELL_REQUIRED if c not in header]
+    if missing:
+        raise ValueError(
+            f"cells.tsv is missing required column(s): {', '.join(missing)}. "
+            f"It has: {', '.join(header)}"
+        )
+
+    cols: dict[str, list] = {h: [] for h in header}
+    for line in lines[1:]:
+        f = line.split("\t")
+        if len(f) < len(header):
+            f = f + [""] * (len(header) - len(f))
+        for h, v in zip(header, f):
+            cols[h].append(v)
+
+    out: dict[str, Any] = {}
+    for h, vals in cols.items():
+        if h == "cell_id":
+            out[h] = vals  # an identifier, never a number
+        elif h in ("cell_index",):
+            out[h] = np.array([int(float(v)) for v in vals], np.int64)
+        else:
+            try:
+                out[h] = np.array([float(v) if v != "" else np.nan for v in vals])
+            except ValueError:
+                # Keep the writer's own column rather than dropping it;
+                # renaming or discarding a column is how one measurement
+                # quietly becomes another.
+                out[h] = vals
+    return out, {}

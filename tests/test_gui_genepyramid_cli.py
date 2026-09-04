@@ -127,3 +127,81 @@ def test_genes_accepts_accessions(one_pyramid, capsys):
 def test_an_unknown_gene_names_itself(one_pyramid):
     with pytest.raises(SystemExit, match="NOT_A_GENE"):
         main([one_pyramid, "--genes", "NOT_A_GENE", "--report"])
+
+
+# ------------------------------------------------------------------ cells
+
+CELLS_TSV = (
+    "cell_index\tcell_id\tx\ty\tdnbCount\tn_genes_by_counts\n"
+    "0\t10093173156650\t1002\t2003\t96\t187\n"
+    "1\t10093173156651\t1030\t2010\t42\t101\n"
+)
+
+
+def _write_cells_dir(path, text=CELLS_TSV):
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "cells.tsv").write_text(text)
+    return str(path)
+
+
+def test_cells_from_a_directory(one_pyramid, tmp_path, capsys):
+    d = _write_cells_dir(tmp_path / "cellsdir")
+    assert main([one_pyramid, "--cells", d, "--report"]) == 0
+    out = capsys.readouterr().out
+    assert "2 centroids" in out
+
+
+def test_cells_keeps_the_writers_own_column_names(tmp_path):
+    """extract_cells.py writes dnbCount and n_genes_by_counts where the
+    spec says dnb_count and n_genes. Reading by position would silently
+    map one measurement onto another's name."""
+    from ndi.fun.doc_gene import _parse_cells_tsv
+
+    cols, _ = _parse_cells_tsv(CELLS_TSV)
+    assert "dnbCount" in cols and "n_genes_by_counts" in cols
+    assert "dnb_count" not in cols
+
+
+def test_cells_centroids_are_source_coordinates(tmp_path):
+    from ndi.fun.doc_gene import _parse_cells_tsv
+
+    cols, _ = _parse_cells_tsv(CELLS_TSV)
+    # The fixture's pyramid origin is (1000, 2000); these are absolute,
+    # not origin-relative, and a viewer must transform them.
+    assert list(cols["x"]) == [1002.0, 1030.0]
+    assert list(cols["y"]) == [2003.0, 2010.0]
+
+
+def test_cell_id_is_never_parsed_as_a_number(tmp_path):
+    """A 14-digit id would lose precision as a float and stop matching
+    the source file it came from."""
+    from ndi.fun.doc_gene import _parse_cells_tsv
+
+    cols, _ = _parse_cells_tsv(CELLS_TSV)
+    assert cols["cell_id"] == ["10093173156650", "10093173156651"]
+
+
+def test_a_missing_required_column_names_it(tmp_path):
+    from ndi.fun.doc_gene import _parse_cells_tsv
+
+    with pytest.raises(ValueError, match="cell_id"):
+        _parse_cells_tsv("cell_index\tx\ty\n0\t1\t2\n")
+
+
+def test_a_directory_without_cells_tsv_says_what_it_wants(one_pyramid, tmp_path):
+    empty = tmp_path / "notcells"
+    empty.mkdir(parents=True, exist_ok=True)
+    with pytest.raises(SystemExit, match="extract_cells.py"):
+        main([one_pyramid, "--cells", str(empty), "--report"])
+
+
+def test_auto_cells_with_no_document_says_so(one_pyramid):
+    """Nothing writes a cells document yet, so this is the path a caller
+    hits today; it must name the alternative rather than traceback."""
+    with pytest.raises(SystemExit, match="no spatialGeneExpressionCells"):
+        main([one_pyramid, "--cells", "--report"])
+
+
+def test_no_cells_flag_means_no_overlay(one_pyramid, capsys):
+    assert main([one_pyramid, "--report"]) == 0
+    assert "centroids" not in capsys.readouterr().out

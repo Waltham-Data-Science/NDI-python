@@ -2106,6 +2106,43 @@ functions:
       treated as an implementation detail: if the two ever disagree about
       how a document enters the database, they disagree everywhere at once.
 
+  - name: readCells
+    matlab_path: "+ndi/+fun/+doc/+gene/readCells.m"
+    matlab_last_sync_hash: "c0572a2e"
+    python_path: "ndi/fun/doc_gene.py"
+    output_arguments:
+      - name: columns
+        type_matlab: "table"
+        type_python: "dict[str, Any]"
+      - name: info
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Columns are read BY HEADER NAME on both sides, not by position. The
+      spec names cell_index, cell_id, x, y, area, dnb_count, total_counts,
+      n_genes, but only the first four are required and writers differ on
+      the rest: the extraction spike that produced the first opossum cells
+      wrote dnbCount and n_genes_by_counts. Reading by position would have
+      silently mapped one measurement onto another's name, so both
+      implementations keep the writer's own column names.
+      cell_id stays TEXT in both. A 14-digit identifier loses precision as
+      a double and stops matching the source file it came from.
+      MATLAB returns a table; Python returns a dict of arrays, the same
+      divergence and the same reason as levelTable -- a DataFrame would
+      make pandas a dependency of reading a document.
+      Contours are NOT read: contours.bin needs its own reader, and
+      info.contoursPresent says whether there is more.
+
+  - name: _parse_cells_tsv
+    matlab_path: null
+    python_path: "ndi/fun/doc_gene.py"
+    decision_log: >
+      Python-only helper, split out so a DIRECTORY of extracted cells is
+      parsed by exactly the same rules as a document's copy. The Cells
+      document's file list is cells.tsv and contours.bin -- the same names
+      extract_cells.py writes -- and reading the two by different rules is
+      how they quietly diverge. MATLAB has no directory path to serve, so
+      it keeps the parsing inline.
+
 # =========================================================================
 # Functions — doc_gene_export.py
 #

@@ -187,3 +187,95 @@ def test_base_viewport_conserves_counts(pyramid):
     S, pyr = pyramid
     img, _ = readViewportBase(S, pyr, 1, None, None, density=False)
     assert img.sum() == pytest.approx(sum(COUNTS))
+
+
+# ------------------------------------------------------------- readCells
+
+
+CELLS_TSV = (
+    "cell_index\tcell_id\tx\ty\tarea\n"
+    "0\t10093173156650\t1002\t2003\t118\n"
+    "1\t10093173156651\t1030\t2010\t95\n"
+)
+
+
+@pytest.fixture
+def cells_doc(pyramid, tmp_path):
+    """A spatialGeneExpressionCells document, built by hand.
+
+    Nothing writes one yet -- there is no maker in either language -- so
+    the reader is proved against a document assembled the way a maker
+    would, rather than left untested until one exists.
+    """
+    import os
+
+    from ndi.fun.doc_gene import _store_doc
+
+    S, pyr = pyramid
+    path = tmp_path / "cells.tsv"
+    path.write_text(CELLS_TSV)
+
+    doc = S.newdocument(
+        "data/spatialGeneExpressionCells",
+        **{
+            "spatialGeneExpressionCells.n_cells": 2,
+            "spatialGeneExpressionCells.coordinate_units": "source",
+            "spatialGeneExpressionCells.contours_present": 0,
+            "spatialGeneExpressionCells.segmentation_method": "CellBin 1.0",
+            "spatialGeneExpressionCells.label": "test cells",
+        },
+    )
+    doc = doc.set_dependency_value(
+        "spatialGeneExpressionPyramid_id", pyr.id, error_if_not_found=False
+    )
+    doc = _store_doc(S, doc, ["cells.tsv"], [str(path)])
+    assert os.path.isfile(path)
+    return S, doc
+
+
+def test_read_cells_returns_centroids_and_info(cells_doc):
+    from ndi.fun.doc_gene import readCells
+
+    S, doc = cells_doc
+    cols, info = readCells(S, doc)
+    assert list(cols["x"]) == [1002.0, 1030.0]
+    assert list(cols["y"]) == [2003.0, 2010.0]
+    assert info["nCells"] == 2
+    assert info["segmentationMethod"] == "CellBin 1.0"
+    assert info["contoursPresent"] is False
+
+
+def test_read_cells_keeps_the_id_as_text(cells_doc):
+    """A 14-digit id would lose precision as a float and stop matching the
+    source file it came from."""
+    from ndi.fun.doc_gene import readCells
+
+    S, doc = cells_doc
+    cols, _ = readCells(S, doc)
+    assert cols["cell_id"] == ["10093173156650", "10093173156651"]
+
+
+def test_read_cells_warns_when_the_count_disagrees(pyramid, tmp_path):
+    """The file is what was read; the document's n_cells is a claim about
+    it, and a disagreement is worth saying out loud rather than trusting
+    either silently."""
+    from ndi.fun.doc_gene import _store_doc, readCells
+
+    S, pyr = pyramid
+    path = tmp_path / "wrongcount.tsv"
+    path.write_text(CELLS_TSV)
+    doc = S.newdocument(
+        "data/spatialGeneExpressionCells",
+        **{
+            "spatialGeneExpressionCells.n_cells": 99,  # a lie
+            "spatialGeneExpressionCells.coordinate_units": "source",
+            "spatialGeneExpressionCells.contours_present": 0,
+        },
+    )
+    doc = doc.set_dependency_value(
+        "spatialGeneExpressionPyramid_id", pyr.id, error_if_not_found=False
+    )
+    doc = _store_doc(S, doc, ["cells.tsv"], [str(path)])
+    with pytest.warns(RuntimeWarning, match="n_cells"):
+        cols, _ = readCells(S, doc)
+    assert len(cols["cell_index"]) == 2

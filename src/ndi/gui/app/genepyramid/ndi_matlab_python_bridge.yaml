@@ -137,3 +137,14 @@ functions:
       real annotations repeat symbols -- the opossum list repeats 5,531 of
       them -- and keeping only one would silently show part of a gene's
       signal.
+
+  - name: _resolve_cells
+    matlab_path: null
+    python_path: "ndi/gui/app/genepyramid/cli.py"
+    decision_log: >
+      Python-only. Resolves --cells to centroids from either a
+      spatialGeneExpressionCells document or an extract_cells.py output
+      directory, both through ndi.fun.doc_gene's one parser. With no value
+      it finds the pyramid's own cells document; several such documents
+      are listed rather than guessed at, for the same reason several
+      pyramids are.
