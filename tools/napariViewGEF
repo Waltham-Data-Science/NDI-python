@@ -3,16 +3,27 @@
 #
 # MATLAB prepends its bundled libraries to LD_LIBRARY_PATH on Linux and
 # system() children inherit it, so Qt and numpy can load MATLAB's
-# libstdc++ instead of the OS copies. MATLAB stashes the pre-MATLAB value
-# in MW_ORIG_LD_LIBRARY_PATH; restore that rather than blanking the
-# variable, so an HPC module or conda environment keeps the paths it meant
-# to set. Same problem ndi.common.systemCurlEnvPrefix solves for curl.
+# libstdc++ instead of the OS copies. Same problem
+# ndi.common.systemCurlEnvPrefix solves for curl.
 #
-# Gated on NDI_FROM_MATLAB rather than on MW_ORIG_LD_LIBRARY_PATH being
-# present: on macOS MATLAB sets no MW_ORIG_* at all (measured), so
-# presence is not a reliable detector. The MATLAB-side launcher sets the
-# flag; it is one call site, and it does not depend on MATLAB internals
-# that vary by platform.
+# MEASURED, both platforms, rather than assumed:
+#   macOS  -- MATLAB sets no MW_* except MW_DESKTOP_IGNORE_STDIN, and
+#             leaves LD/DYLD empty. Nothing to protect against.
+#   Linux  -- MATLAB prepends nine of its own directories, including
+#             sys/os/glnxa64 (libstdc++) and sys/opengl/lib/glnxa64.
+#             Contamination is real; numpy and PyQt5 imported fine anyway
+#             under R2026a on Ubuntu 24.04, so this is insurance, not a
+#             fix for a known break. NOT covered: OpenGL, which napari
+#             needs through vispy and which is exactly what that first
+#             path entry shadows. Test that by running napari itself on
+#             the machine, not in CI, where GL is llvmpipe under Xvfb.
+#
+# MW_ORIG_LD_LIBRARY_PATH is unset on BOTH platforms, so it cannot serve
+# as a MATLAB detector and the restore below falls back to blanking --
+# which is what systemCurlEnvPrefix ends up doing too, despite its
+# docstring describing the restore as the primary path. Hence the gate is
+# NDI_FROM_MATLAB, set by the MATLAB-side launcher: one call site, and no
+# dependence on MATLAB internals that vary by platform.
 if [ -n "${NDI_FROM_MATLAB:-}" ]; then
     LD_LIBRARY_PATH="${MW_ORIG_LD_LIBRARY_PATH-}"; export LD_LIBRARY_PATH
     DYLD_LIBRARY_PATH="${MW_ORIG_DYLD_LIBRARY_PATH-}"; export DYLD_LIBRARY_PATH
