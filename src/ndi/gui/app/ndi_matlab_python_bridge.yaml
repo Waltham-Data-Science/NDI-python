@@ -1469,21 +1469,252 @@ classes:
           NOT PORTED, and not needed: it converts a logical to MATLAB's
           'on'/'off' Enable strings, and Qt's setEnabled takes the bool.
 
-  # -----------------------------------------------------------------------
-  # NOT YET PORTED: the other apps that adopt the interface
-  # -----------------------------------------------------------------------
-  #   kiasort, pipelineEditor
-  #
-  # Both are windows over something Python cannot reach: KIASORT is a MATLAB
-  # toolbox (its IMPORT side is ported -- see ndi.fun.probe.import_.kiasort
-  # -- but the app's two buttons are Run and Curate, which drive the toolbox
-  # itself), and ndi.cpipeline is not ported. vhNDISpikeSorter was the same
-  # shape and landed anyway, because MATLAB writes it as an availability
-  # check that explains itself when the sorter is absent, so the port can be
-  # honest about the absence rather than hide it. Nothing here needs
-  # revisiting when the last two land: an app reaches the navigator's Apps
-  # menu by subclassing SessionApp, and by nothing else. See
-  # Waltham-Data-Science/NDI-python#122.
+  - name: kiasort
+    type: class
+    matlab_path: "+ndi/+gui/+app/kiasort.m"
+    matlab_last_sync_hash: "0203294"
+    python_path: "ndi/gui/app/kiasort.py"
+    python_class: "kiasort"
+    inherits: "ndi.gui.app.sessionApp"
+
+    properties:
+      - name: Name
+        type_matlab: "string (Constant)"
+        type_python: "ClassVar[str]"
+        decision_log: >
+          "Kiasort", VERBATIM from MATLAB, as is the class name
+          (PYTHON_PORTING_GUIDE section 2). The class name starts lowercase
+          because the .m file does; a PascalCase alias Kiasort is bound to
+          the same class for callers who would rather not write it.
+      - name: Category
+        type_matlab: "string (Constant)"
+        type_python: "ClassVar[str]"
+        decision_log: >
+          "Spike Sorters", verbatim: the submenu title the navigator draws.
+          Shared with vhNDISpikeSorter.
+      - name: "kiasort_dir, binaryFileName, subdir"
+        type_matlab: "char (private, defaulted)"
+        type_python: "str constructor keyword"
+        decision_log: >
+          Ported. MATLAB defaults 'kiasort', 'kiasort.bin', 'kiasort_output'
+          are the module-level DEFAULT_KIASORT_DIR / DEFAULT_BINARY_NAME /
+          DEFAULT_SUBDIR and the constructor accepts overrides, so a
+          non-default export layout stays a single-callsite change and the
+          rules can be tested against a fixture path.
+      - name: "ProbeList, RunButton, CurateButton, StatusLabel, ConfigChecks, ConfigNums"
+        type_matlab: "handle (private)"
+        type_python: "attributes on the instance"
+        decision_log: >
+          Ported. MATLAB's uilistbox, uibutton, uilabel and containers.Map of
+          uicheckbox/uieditfield handles become a QListWidget, two
+          QPushButtons, a QLabel, and two dict[str, QWidget]s -- checkboxes
+          keyed by MATLAB's cfg field name (verbatim: those keys reach
+          ndi.fun.probe.import_.kiasort.run as cfg_overrides), and numeric
+          fields the same. QCheckBox for booleans; QSpinBox for integer
+          fields and QDoubleSpinBox for float fields (integer flag from
+          NUM_OPTIONS).
+      - name: probes
+        type_matlab: "cell (private)"
+        type_python: "list on the instance"
+        decision_log: >
+          Ported. Loaded from session.getprobes(type='n-trode') in
+          load_probes(), which try/catches as MATLAB does so that a session
+          that cannot list its probes still opens the window.
+
+    methods:
+      - name: kiasort
+        kind: constructor
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+        decision_log: >
+          Ported. Python adds keyword-only position, kiasort_dir,
+          binary_file_name, subdir and build arguments; build=False
+          constructs the app with no window -- probes are loaded, statuses
+          read -- which is what lets every model decision be tested with no
+          display.
+      - name: build
+        kind: private
+        python_name: build
+        decision_log: >
+          Ported. MATLAB's uifigure/uigridlayout become a QWidget with box
+          and grid layouts, in the same seven rows and with the NDI Cloud
+          colours from ndi.gui.cloudColors. Config checkboxes and numeric
+          fields are laid out from the module-level CHECK_OPTIONS and
+          NUM_OPTIONS tables, which mirror MATLAB's inline defs / numDefs.
+      - name: loadProbes
+        kind: private
+        python_name: load_probes
+        output_arguments:
+          - name: probes
+            type_python: "list[Any]"
+        decision_log: >
+          Ported. Python returns the list rather than only setting it, so a
+          test can assert without reaching into the instance. try/catches as
+          MATLAB does; a session that cannot list its probes still opens
+          the app, with an empty listbox.
+      - name: probeStatus
+        kind: private
+        python_name: probe_status
+        input_arguments:
+          - name: probe
+            type_matlab: "ndi.probe.timeseries"
+            type_python: "Any"
+        output_arguments:
+          - name: status
+            type_matlab: "struct"
+            type_python: "ndi.fun.probe.import_.kiasort.status.Status | None"
+        decision_log: >
+          Ported as a thin delegate to ndi.fun.probe.import_.kiasort.status,
+          so the app itself owns no answer about what 'exported' means.
+          Returns None on any failure (a broken export layout, say), which
+          every consumer treats as 'nothing known yet' rather than being
+          surprised by an exception mid-refresh.
+      - name: refreshProbeList
+        kind: private
+        python_name: refresh_probe_list
+        output_arguments:
+          - name: labels
+            type_python: "list[str]"
+        decision_log: >
+          Ported. Python returns the list of rendered labels so the render
+          rule can be asserted without reaching into the widget. Selection
+          preserved when the row it names still exists, as MATLAB does.
+      - name: updateButtonState
+        kind: private
+        python_name: update_button_state
+        output_arguments:
+          - name: enabled
+            type_python: "tuple[bool, bool] (run, curate)"
+        decision_log: >
+          Ported. Python also RETURNS the (run, curate) pair, again so the
+          rule can be asserted without reaching into the widgets. Uses the
+          module-level can_run / can_curate so both the widget and the
+          model-side tests read the same predicate.
+      - name: selectedProbe
+        kind: private
+        python_name: selected_probe
+        output_arguments:
+          - name: probe
+            type_python: "Any | None"
+        decision_log: >
+          Ported. Split into selected_index / selected_probe /
+          selected_status so each is testable on its own; the composite
+          MATLAB method reads the widget for the index and the cached probe
+          list for the object, which Python replicates.
+      - name: configOverrides
+        kind: private
+        python_name: config_overrides
+        output_arguments:
+          - name: cfg
+            type_matlab: "struct"
+            type_python: "dict[str, Any]"
+        decision_log: >
+          Ported. The dict is built by the module-level
+          config_overrides_from(checks, nums), which the tests call with
+          plain dicts so the shape can be checked without any widgets. Keys
+          keep MATLAB's cfg spelling verbatim: they cross the API boundary
+          into the KIASORT backend as-is.
+      - name: runSelected
+        kind: private
+        python_name: run_selected
+        decision_log: >
+          Ported in SHAPE rather than in effect, since
+          ndi.fun.probe.import_.kiasort.run raises NotImplementedError on
+          Python -- KIASORT is a MATLAB toolbox and its Python import is
+          unported. The button stays enabled by pipeline state so the state
+          machine reads the same as MATLAB; on press, the backend's
+          NotImplementedError message is shown in an alert (its text names
+          the way forward: sort in MATLAB, then import with
+          ndi.fun.probe.import_.kiasort.probe -- which IS ported). A stack
+          trace would leave the user hunting an installation bug for
+          something that is not an installation problem.
+      - name: curateSelected
+        kind: private
+        python_name: curate_selected
+        decision_log: >
+          Ported in the same shape as run_selected, and for the same reason:
+          ndi.fun.probe.import_.kiasort.curate raises NotImplementedError on
+          Python, and the alert quotes its message. A lab that grows a
+          Python drop-in of either backend function gets a working button
+          with no change here.
+      - name: setBusy
+        kind: private
+        python_name: _set_busy
+        decision_log: >
+          Ported. Private on Python (underscore prefix) since it is a widget
+          state helper, not a model rule.
+      - name: onOff
+        kind: "local function"
+        decision_log: >
+          NOT PORTED, and not needed: it converts a logical to MATLAB's
+          'on'/'off' Enable strings, and Qt's setEnabled takes the bool.
+
+  - name: pipelineEditor
+    type: class
+    matlab_path: "+ndi/+gui/+app/pipelineEditor.m"
+    matlab_last_sync_hash: "0203294"
+    python_path: "ndi/gui/app/pipeline_editor.py"
+    python_class: "pipelineEditor"
+    inherits: "ndi.gui.app.sessionApp"
+
+    properties:
+      - name: Name
+        type_matlab: "string (Constant)"
+        type_python: "ClassVar[str]"
+        decision_log: >
+          "Pipeline Editor", VERBATIM from MATLAB. The class name is
+          lowercase because the .m file is; PipelineEditor is the PascalCase
+          alias.
+
+    methods:
+      - name: pipelineEditor
+        kind: constructor
+        input_arguments:
+          - name: session
+            type_matlab: "ndi.session"
+            type_python: "Any"
+        decision_log: >
+          Ported IN SHAPE rather than in effect. MATLAB's constructor calls
+          ndi.cpipeline.edit('command','new','session',SESSION) directly --
+          the editor builds and owns its own window and there is no shell
+          on MATLAB. On Python ndi.cpipeline is not ported yet, so calling
+          it in the constructor would kill the app before it exists.
+
+          Instead the app follows vhNDISpikeSorter's shape: a small window
+          with an availability check and a disabled button, which upgrades
+          itself to a working launcher the day ndi.cpipeline lands with no
+          change here. The unavailable message says what is actually true
+          (not ported yet, run it from MATLAB) rather than telling a user
+          to install a package that does not exist. build=False constructs
+          the model alone for the tests.
+      - name: isAvailable
+        kind: private
+        python_name: is_available
+        output_arguments:
+          - name: tf
+            type_python: "bool"
+        decision_log: >
+          Python only (MATLAB just calls ndi.cpipeline.edit directly).
+          Resolves ndi.cpipeline.edit at runtime; every resolution failure
+          collapses to False (module absent, module raises on import,
+          function missing, name not callable), for the reasons documented
+          on vhNDISpikeSorter.is_available.
+      - name: openEditor
+        kind: private
+        python_name: open_editor
+        output_arguments:
+          - name: result
+            type_python: "Any (whatever the editor returns)"
+        decision_log: >
+          Python only. MATLAB opens the editor in the constructor;
+          separating construction from the call here means the app opens
+          whether or not the editor is importable, and the failure of a
+          later port of ndi.cpipeline gets reported in a dialog rather than
+          taking the app down. Keeps MATLAB's keywords (command="new",
+          session=SESSION) so the day a Python ndi.cpipeline.edit exists
+          the same call reaches it.
 
 # =========================================================================
 # Module-level helpers (Python only)
