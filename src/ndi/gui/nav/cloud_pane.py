@@ -139,9 +139,7 @@ class CloudPane(NavPane):
 
         dialog = self._open_progress_dialog(title)
         try:
-            report = pane.check_all_cloud_status(
-                lambda f, m: self._progress(f, m, dialog)
-            )
+            report = pane.check_all_cloud_status(lambda f, m: self._progress(f, m, dialog))
         except Exception as exc:  # noqa: BLE001 - reported, not swallowed
             self._close_progress_dialog(dialog)
             self._alert(str(exc), title, success=False)
@@ -216,9 +214,7 @@ class CloudPane(NavPane):
             return None
         parent = getattr(self.navigator, "figure", None)
         try:
-            dialog = QtWidgets.QProgressDialog(
-                "Checking NDI Cloud status...", "", 0, 100, parent
-            )
+            dialog = QtWidgets.QProgressDialog("Checking NDI Cloud status...", "", 0, 100, parent)
         except Exception:  # noqa: BLE001 - no display, no Qt app
             return None
         # No cancel button: mirroring MATLAB's Cancelable=false, and the
@@ -239,9 +235,7 @@ class CloudPane(NavPane):
         dialog.reset()
         dialog.close()
 
-    def _progress(
-        self, fraction: float, message: str, dialog: Any = None
-    ) -> None:
+    def _progress(self, fraction: float, message: str, dialog: Any = None) -> None:
         """Progress callback for the bulk check.
 
         Advances the shared ``QProgressDialog`` in place. Kept processing

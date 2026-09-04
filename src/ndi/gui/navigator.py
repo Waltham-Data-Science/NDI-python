@@ -449,7 +449,7 @@ class Navigator:
     # discovery of open navigators
     # ------------------------------------------------------------------
     @staticmethod
-    def find_open() -> list["Navigator"]:
+    def find_open() -> list[Navigator]:
         """Return open Navigator instances, newest last.
 
         Mirrors MATLAB's ``ndi.gui.navigator.findOpen``. Searches the running
@@ -485,7 +485,7 @@ class Navigator:
         return f"Navigator(panes={len(self.panes)}, height={self.figure_height:g})"
 
 
-def _NavigatorWidget(navigator: "Navigator") -> Any:
+def _NavigatorWidget(navigator: Navigator) -> Any:
     """Build a QWidget subclass whose events dispatch to NAVIGATOR.
 
     Defined as a factory rather than at module scope so this module keeps
@@ -499,7 +499,7 @@ def _NavigatorWidget(navigator: "Navigator") -> Any:
     from PySide6 import QtWidgets
 
     class _Widget(QtWidgets.QWidget):
-        def __init__(self, nav: "Navigator"):
+        def __init__(self, nav: Navigator):
             super().__init__()
             self._nav = nav
 
