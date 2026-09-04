@@ -72,6 +72,14 @@ dependencies = [
 gui = [
     "PySide6>=6.5",
 ]
+# napari, and the dask it drives the tile ladder through. An EXTRA for the
+# same reason gui is: a headless install should not pull in Qt and OpenGL.
+# ndi.gui.app.genepyramid.viewer imports through require_napari(), so the
+# failure mode for a missing toolkit is a sentence naming this extra.
+napari = [
+    "napari[all]>=0.4.19",
+    "dask[array]>=2023.1",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
@@ -113,6 +121,9 @@ all = [
 
 [project.scripts]
 ndi = "ndi.__main__:main"
+# pip generates this with the venv's absolute interpreter in its shebang, so
+# a symlink from /usr/local/bin works with no activation and no PYTHONPATH.
+napariViewGEF = "ndi.gui.app.genepyramid.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/Waltham-Data-Science/NDI-python"

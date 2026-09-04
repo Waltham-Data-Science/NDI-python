@@ -18,6 +18,7 @@ def main() -> int:
         print("Commands:")
         print("  check     Validate NDI installation")
         print("  version   Show version information")
+        print("  napari    View a spatial gene expression pyramid")
         return 0
 
     command = sys.argv[1]
@@ -28,6 +29,10 @@ def main() -> int:
         from ndi.check import main as check_main
 
         return check_main()
+    elif command == "napari":
+        from ndi.gui.app.genepyramid.cli import main as napari_main
+
+        return napari_main()
     elif command == "version":
         from ndi import version
 
