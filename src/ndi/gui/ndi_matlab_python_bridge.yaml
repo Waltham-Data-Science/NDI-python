@@ -669,3 +669,14 @@ ported_late:
       (ndi.calc, recorded in src/ndi/calc/) but no pipeline document and
       no editor over it, so there is nothing for the app to edit yet.
       It lands after a pipeline representation does, not before.
+
+  - name: jrclust
+    matlab_path: "+ndi/+gui/+app/jrclust.m"
+    status: not_yet_ported
+    decision_log: >
+      The JRCLUST spike-sorting app. Same class of gap as kiasort and
+      vhNDISpikeSorter above: the underlying sorter is a MATLAB package
+      with no Python distribution, and ndi.fun.probe.import.jrclust is
+      recorded not_yet_ported in src/ndi/fun/probe/ for that reason.
+      Lands after JRCLUST itself is reachable from Python, not before.
+      Noted in #204.

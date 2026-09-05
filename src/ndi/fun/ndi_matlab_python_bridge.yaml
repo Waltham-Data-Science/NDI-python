@@ -2423,3 +2423,31 @@ not_applicable:
     matlab_path: "+ndi/+fun/syslog.m"
     status: not_applicable
     decision_log: "MATLAB logging utility. Python uses standard logging."
+
+  - name: export.gmcSorter
+    matlab_path: "+ndi/+fun/+export/gmcSorter.m"
+    status: not_yet_ported
+    decision_log: >
+      Not ported yet. Exports a probe's raw voltage in GMC_Sorter's expected
+      layout. Writing a raw file format is portable work in principle -- not
+      not_applicable -- but no Python caller drives GMC_Sorter today, so the
+      trio (gmcSorter, gmcSorterWrite, writeGmcSidecars) is deferred as a
+      group. Lands when the spike-sorting roadmap wants Python to feed
+      GMC_Sorter, in the same shape ndi.fun.probe.export.binary already uses
+      for Kilosort and KIASORT. Noted in #204.
+
+  - name: export.gmcSorterWrite
+    matlab_path: "+ndi/+fun/+export/gmcSorterWrite.m"
+    status: not_yet_ported
+    decision_log: >
+      Not ported yet. Writes an in-memory voltage buffer to GMC_Sorter's
+      'dat_t_s' raw format. Same status and reason as export.gmcSorter:
+      portable work, no current Python caller. Noted in #204.
+
+  - name: export.writeGmcSidecars
+    matlab_path: "+ndi/+fun/+export/writeGmcSidecars.m"
+    status: not_yet_ported
+    decision_log: >
+      Not ported yet. Writes GMC_Sorter's channel map, metadata and driver
+      files beside the raw file that gmcSorter/gmcSorterWrite produce. Same
+      status and reason as export.gmcSorter. Noted in #204.
