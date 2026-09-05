@@ -88,6 +88,16 @@ jobs:
           NDI_BRIDGE_CHECK_STRICT: "1"
         run: pytest tests/test_matlab_bridge_completeness.py -v --tb=short
 
+      - name: Check ndi_common sync with NDI-matlab
+        working-directory: NDI-python
+        env:
+          # Both repos are checked out above, so an absent MATLAB tree
+          # means the checkout step broke. Fail instead of skipping --
+          # same reasoning as NDI_BRIDGE_CHECK_STRICT above (see #77).
+          NDI_COMMON_SYNC_STRICT: "1"
+          NDI_MATLAB_PATH: ${{ github.workspace }}/NDI-matlab
+        run: pytest tests/test_ndi_common_matlab_sync.py -v --tb=short
+
   test:
     runs-on: ubuntu-latest
     strategy:

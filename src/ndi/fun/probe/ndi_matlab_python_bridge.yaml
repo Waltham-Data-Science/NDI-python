@@ -856,3 +856,30 @@ functions:
       arithmetic is right for its own indexing and the times agree, which is
       what has to be true. This is the same divergence import_/kilosort/probe
       already documented inline.
+
+  - name: import.jrclust
+    type: package
+    matlab_path: "+ndi/+fun/+probe/+import/+jrclust/"
+    status: not_yet_ported
+    decision_log: >
+      Not ported yet. All fourteen MATLAB files under +jrclust are recorded
+      here as one entry, matching how import.kiasort is recorded above: the
+      package is one decision, not fourteen. JRCLUST is a MATLAB spike sorter
+      with no Python distribution, so the wrappers that drive it (run.m,
+      curate.m, traces.m, editParameters.m, install.m, requireprm.m) have
+      nothing to call from Python, and the surrounding file work (paths.m,
+      readprm.m, results.m, epochbounds.m, splitspikes.m, probe.m,
+      removeOld.m) has no Python caller until someone wants to ingest a
+      JRCLUST sort MATLAB produced. Deferred until the spike-sorting roadmap
+      answers that question; the split between the two groups is left for
+      whoever picks it up, in the same shape as +kiasort. Noted in #204.
+
+  - name: export.jrclust
+    type: function
+    matlab_path: "+ndi/+fun/+probe/+export/jrclust.m"
+    status: not_yet_ported
+    decision_log: >
+      Not ported yet. Writes a JRCLUST .prm file for a probe. Left deferred
+      alongside the +jrclust importer package: the export half only earns its
+      keep once Python has a reason to run JRCLUST or ingest its results, and
+      today it does not. Noted in #204.
