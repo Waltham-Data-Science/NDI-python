@@ -27,6 +27,7 @@ rather than leaving each caller to rebuild it.
 
 from __future__ import annotations
 
+import os
 import threading
 from typing import Any
 
@@ -96,6 +97,7 @@ class _TileFetcher:
         self._local = threading.local()
         self._pool = None
         self._lock = threading.Lock()
+        self._paths: dict[tuple[str, str], str] = {}
 
     @staticmethod
     def _reopener(session):
@@ -156,7 +158,40 @@ class _TileFetcher:
         The handle is closed before the path is returned, and the file
         outlives the handle -- which is what lets the caller read it with a
         plain file reader, as the eager version did.
+
+        A RESOLVED PATH IS REMEMBERED, and this is worth more than saving a
+        round trip. DID names a cached file by its immutable uid, so the
+        path for a tile cannot change meaning: the file is either still
+        there or gone, never different. Once it is known, a hit is one
+        stat() -- which any thread may do, because the filesystem has no
+        opinion about which thread opened the session. So a re-render after
+        a gene toggle or a band change never reaches the fetch threads at
+        all, where before every block went through the queue to be told
+        what it already knew.
+
+        The file CAN disappear, which is why the memo is checked rather
+        than trusted, and why a read that fails behind a passing check
+        falls back to fetching once more (see _readable).
         """
+        key = (getattr(doc, "id", str(doc)), filename)
+        known = self._paths.get(key)
+        if known is not None and os.path.exists(known):
+            return known
+        path = self._fetch(doc, filename)
+        # A plain dict assignment; the GIL makes it atomic, and two threads
+        # racing the same tile resolve it to the same path anyway.
+        self._paths[key] = path
+        return path
+
+    def forget(self, doc, filename) -> None:
+        """Drop a memoised path, so the next call fetches it again.
+
+        For the narrow race the memo cannot rule out: the file passed
+        os.path.exists and was evicted before it could be read.
+        """
+        self._paths.pop((getattr(doc, "id", str(doc)), filename), None)
+
+    def _fetch(self, doc, filename) -> str:
         if threading.get_ident() == self._owner:
             return self._resolve(doc, filename)
         pool = self._ensurePool()
@@ -281,13 +316,17 @@ def levelArrays(session, pyr_doc, gene_rows=None, density: bool = True) -> list[
             name = f"tile.bin_{r * _cols + c}"
             if name not in _stored:
                 return np.zeros((_th, _tw), np.float32)  # missing tile costs nothing
-            return renderTile(
-                readTileFile(_fetch.tilePath(_doc, name)),
-                gene_rows,
-                _th,
-                _tw,
-                binSize=_scale,
-            )
+            try:
+                tile = readTileFile(_fetch.tilePath(_doc, name))
+            except OSError:
+                # The memoised path passed os.path.exists and then went
+                # away -- a cache eviction between the check and the read.
+                # Narrow, but the whole point of memoising is that this is
+                # the only way it can be wrong, so it is handled rather
+                # than left to surface as a corrupt-looking tile.
+                _fetch.forget(_doc, name)
+                tile = readTileFile(_fetch.tilePath(_doc, name))
+            return renderTile(tile, gene_rows, _th, _tw, binSize=_scale)
 
         grid = [
             [

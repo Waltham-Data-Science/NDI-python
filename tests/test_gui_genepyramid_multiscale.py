@@ -166,12 +166,18 @@ def test_only_the_touched_tiles_are_fetched(pyramid):
 
     session_base.ndi_session.database_openbinarydoc = spy
     try:
-        arrays = levelArrays(S, pyr)
+        # A LADDER EACH. Resolved paths are memoised per fetcher, so
+        # measuring both from one ladder would charge the whole level only
+        # for the tiles the corner had not already seen and compare two
+        # different things.
+        corner_arrays = levelArrays(S, pyr)
         opens.clear()
-        arrays[0][:4, :4].compute(scheduler="threads")
+        corner_arrays[0][:4, :4].compute(scheduler="threads")
         corner = len(opens)
+
+        whole_arrays = levelArrays(S, pyr)
         opens.clear()
-        arrays[0].compute(scheduler="threads")
+        whole_arrays[0].compute(scheduler="threads")
         whole = len(opens)
     finally:
         session_base.ndi_session.database_openbinarydoc = real
@@ -181,6 +187,40 @@ def test_only_the_touched_tiles_are_fetched(pyramid):
         f"a corner cost {corner} fetches and the whole level {whole}: the "
         f"ladder is fetching more than the window asked for"
     )
+
+
+@needs_dask
+def test_a_resolved_tile_is_not_looked_up_twice(pyramid):
+    """Re-rendering must not re-ask where a tile already is.
+
+    DID names a cached file by its immutable uid, so a resolved path
+    cannot change meaning -- the file is either still there or gone, never
+    different. That makes the second render a stat() rather than a trip
+    through the fetch threads, which is what a gene toggle or a band
+    change does over and over.
+    """
+    S, pyr = pyramid
+    from ndi.session import session_base
+
+    opens = []
+    real = session_base.ndi_session.database_openbinarydoc
+
+    def spy(self, doc, fn):
+        opens.append(fn)
+        return real(self, doc, fn)
+
+    session_base.ndi_session.database_openbinarydoc = spy
+    try:
+        arrays = levelArrays(S, pyr)
+        first = np.asarray(arrays[0].compute(scheduler="threads"))
+        assert opens, "the first render must resolve its tiles"
+        opens.clear()
+        second = np.asarray(arrays[0].compute(scheduler="threads"))
+    finally:
+        session_base.ndi_session.database_openbinarydoc = real
+
+    assert opens == [], f"re-rendering re-opened {len(opens)} tiles"
+    np.testing.assert_array_equal(first, second)
 
 
 @needs_dask
