@@ -111,6 +111,7 @@ def test_opening_the_ladder_reads_no_tile_bytes(pyramid, monkeypatch):
     assert reads, "computing a block must actually read a tile"
 
 
+@needs_dask
 def test_opening_the_ladder_opens_no_binary_documents(pyramid, monkeypatch):
     """The one that measures what a cloud session is actually billed for.
 
