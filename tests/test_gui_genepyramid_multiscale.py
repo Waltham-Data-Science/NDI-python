@@ -97,9 +97,7 @@ def test_levels_are_cropped_to_their_true_size(pyramid):
 
 @needs_dask
 def test_opening_the_ladder_reads_no_tile_bytes(pyramid, monkeypatch):
-    """A 4.9 GB pyramid must open instantly. Tile PATHS are resolved when
-    the ladder is built -- see the note in multiscale.py about worker
-    threads -- but no tile bytes may be read until something is drawn."""
+    """A 4.9 GB pyramid must open instantly: nothing is read until drawn."""
     S, pyr = pyramid
     from ndi.gui.app.genepyramid import multiscale as ms
 
@@ -111,6 +109,119 @@ def test_opening_the_ladder_reads_no_tile_bytes(pyramid, monkeypatch):
     assert reads == [], f"building the ladder decoded {len(reads)} tiles"
     arrays[0][:4, :4].compute()
     assert reads, "computing a block must actually read a tile"
+
+
+@needs_dask
+def test_opening_the_ladder_opens_no_binary_documents(pyramid, monkeypatch):
+    """The one that measures what a cloud session is actually billed for.
+
+    This test's sibling above watches readTileFile -- the DECODE -- and it
+    passed for a version of levelArrays that opened every tile of every
+    level while building the ladder. On a directory-backed session that
+    was free path resolution and the two look identical. On a cloud-backed
+    one they are worlds apart: database_openbinarydoc RETRIEVES a remote
+    file, so resolving a path and downloading it are the same call, and
+    opening a viewer downloaded the entire pyramid before drawing
+    anything. The blocks being lazy never helped, because the cost was
+    already paid by the time dask chose which blocks it wanted.
+
+    So this watches the FETCH, and it is the assertion that has teeth.
+    """
+    S, pyr = pyramid
+    from ndi.session import session_base
+
+    opens = []
+    real = session_base.ndi_session.database_openbinarydoc
+    monkeypatch.setattr(
+        session_base.ndi_session,
+        "database_openbinarydoc",
+        lambda self, doc, fn: opens.append(fn) or real(self, doc, fn),
+    )
+
+    arrays = levelArrays(S, pyr)
+    assert opens == [], (
+        f"building the ladder opened {len(opens)} binary documents; on a "
+        f"cloud session that is {len(opens)} downloads before a single pixel"
+    )
+    arrays[0][:4, :4].compute(scheduler="synchronous")
+    assert opens, "computing a block must actually open its tile"
+
+
+@needs_dask
+def test_only_the_touched_tiles_are_fetched(pyramid):
+    """Laziness is per TILE, not merely per level.
+
+    A viewer pans; it must pay for the tiles under the window and no
+    others. Level 0 of the fixture is a 2x2 grid, so one corner block is
+    strictly fewer fetches than the whole level.
+    """
+    S, pyr = pyramid
+    from ndi.session import session_base
+
+    opens = []
+    real = session_base.ndi_session.database_openbinarydoc
+
+    def spy(self, doc, fn):
+        opens.append(fn)
+        return real(self, doc, fn)
+
+    session_base.ndi_session.database_openbinarydoc = spy
+    try:
+        # A LADDER EACH. Resolved paths are memoised per fetcher, so
+        # measuring both from one ladder would charge the whole level only
+        # for the tiles the corner had not already seen and compare two
+        # different things.
+        corner_arrays = levelArrays(S, pyr)
+        opens.clear()
+        corner_arrays[0][:4, :4].compute(scheduler="threads")
+        corner = len(opens)
+
+        whole_arrays = levelArrays(S, pyr)
+        opens.clear()
+        whole_arrays[0].compute(scheduler="threads")
+        whole = len(opens)
+    finally:
+        session_base.ndi_session.database_openbinarydoc = real
+
+    assert corner >= 1, "the corner must fetch its own tile"
+    assert corner < whole, (
+        f"a corner cost {corner} fetches and the whole level {whole}: the "
+        f"ladder is fetching more than the window asked for"
+    )
+
+
+@needs_dask
+def test_a_resolved_tile_is_not_looked_up_twice(pyramid):
+    """Re-rendering must not re-ask where a tile already is.
+
+    DID names a cached file by its immutable uid, so a resolved path
+    cannot change meaning -- the file is either still there or gone, never
+    different. That makes the second render a stat() rather than a trip
+    through the fetch threads, which is what a gene toggle or a band
+    change does over and over.
+    """
+    S, pyr = pyramid
+    from ndi.session import session_base
+
+    opens = []
+    real = session_base.ndi_session.database_openbinarydoc
+
+    def spy(self, doc, fn):
+        opens.append(fn)
+        return real(self, doc, fn)
+
+    session_base.ndi_session.database_openbinarydoc = spy
+    try:
+        arrays = levelArrays(S, pyr)
+        first = np.asarray(arrays[0].compute(scheduler="threads"))
+        assert opens, "the first render must resolve its tiles"
+        opens.clear()
+        second = np.asarray(arrays[0].compute(scheduler="threads"))
+    finally:
+        session_base.ndi_session.database_openbinarydoc = real
+
+    assert opens == [], f"re-rendering re-opened {len(opens)} tiles"
+    np.testing.assert_array_equal(first, second)
 
 
 @needs_dask

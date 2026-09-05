@@ -2011,6 +2011,35 @@ functions:
       becomes a Python keyword of the same name. See readViewportBase for
       the source-coordinate entry point.
 
+  - name: tilePath
+    matlab_path: "+ndi/+fun/+doc/+gene/tilePath.m"
+    matlab_last_sync_hash: "e217f367"
+    python_path: "ndi/gui/app/genepyramid/multiscale.py"
+    status: ported
+    decision_log: >
+      Resolves one of a document's binary files to a local path, fetching
+      it if remote, and REMEMBERS the answer so a repeat is one existence
+      check. Safe to remember because the database names a cached file by
+      its immutable uid: the path for a given document and filename cannot
+      change meaning, so the file is either still there or gone, never
+      different. It is checked rather than trusted, because it can go.
+
+      THE TWO PORTS DIFFER IN SHAPE, deliberately, and this is the entry
+      that records why. MATLAB has a plain function holding a persistent
+      map, because readViewport and exportRegion are functions with no
+      object to hang state on. Python has _TileFetcher.tilePath, a method,
+      because the Python side needed a class regardless: dask runs blocks
+      on a thread pool and NDI's database may only be used from the thread
+      that opened it, so fetches are marshalled to threads that own a
+      session each. MATLAB has no such constraint here -- neither reader
+      is driven by a pool -- so it needs no equivalent of that machinery
+      and would be worse for carrying it.
+
+      The memo is the half that IS common, and it is the half worth
+      keeping in step: same key (document id AND filename, so two tiles of
+      one level cannot collide), same existence check, same
+      fetch-again-on-miss.
+
   - name: exportRegion
     matlab_path: "+ndi/+fun/+doc/+gene/exportRegion.m"
     matlab_last_sync_hash: "96f10959"

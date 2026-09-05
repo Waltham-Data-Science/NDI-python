@@ -680,3 +680,28 @@ ported_late:
       recorded not_yet_ported in src/ndi/fun/probe/ for that reason.
       Lands after JRCLUST itself is reachable from Python, not before.
       Noted in #204.
+
+  - name: GeneIngest
+    matlab_path: "+ndi/+gui/+app/GeneIngest.m"
+    matlab_last_sync_hash: "9e956f76"
+    status: not_yet_ported
+    decision_log: >
+      Lists the spatial gene expression pyramids in a session and adds or
+      removes one, from the navigator's per-session Apps menu.
+
+      Python has the READING half of this already -- ndi.gui.app.genepyramid
+      builds the multiscale ladder and drives napari -- and the WRITING half
+      as plain functions, in ndi.fun.doc_gene (makeGeneList, makePyramid,
+      makeCells, makeCellTypeLabels). What it has no equivalent of is the
+      thing this class actually is: a session app, discovered by
+      ndi.gui.app.sessionApp.list and launched from the navigator. There is
+      no navigator in Python and no app framework for one to live in, so
+      there is nothing for a port to plug into.
+
+      Worth porting the part that is NOT the window, if this is revisited.
+      The static methods carry the decisions -- ingestPlan validates a
+      request before the multi-minute read, contourFindings and
+      labelFindings turn a reader's inferences into something a human can
+      check, deletionPlan enumerates the cascade -- and none of them touch
+      a figure. That is the half with judgement in it; the dialogs around
+      it are the easy half and are toolkit-specific anyway.
