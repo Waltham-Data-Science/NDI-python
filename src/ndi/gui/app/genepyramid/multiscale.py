@@ -27,6 +27,7 @@ rather than leaving each caller to rebuild it.
 
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 import numpy as np
@@ -46,6 +47,137 @@ def _require_dask():
             f"with:  pip install 'ndi[napari]'\n(Original error: {e})"
         ) from e
     return dask, da
+
+
+class _TileFetcher:
+    """Fetches tile bytes on threads that own their own session handle.
+
+    PASSING THE SESSION INTO A BLOCK IS NOT THE PROBLEM. The object crosses
+    a thread boundary fine. Its SQLite connection does not: NDI's database
+    belongs to the thread that opened it, and dask runs blocks on a thread
+    pool -- which is also how napari drives multiscale loading. A lock does
+    not help, because the obstacle is thread IDENTITY, not concurrency.
+
+    What makes that dangerous rather than merely broken is the shape of the
+    failure. Raw sqlite3 raises ProgrammingError naming both thread ids,
+    which would be an easy fix. But did's read path catches it and returns
+    None, and session_base reads None as "no such document" -- so the error
+    is ``ndi_document <id> not found`` for a document that is present, and
+    only under the threaded scheduler. The synchronous one passes.
+
+    SO WHY NOT A SESSION PER DASK WORKER? Because opening a real session
+    takes SECONDS, not milliseconds, and napari's pool is sized to the
+    machine. That would put a session build in front of the first tile
+    each pool thread touches. Instead this is a small server: dedicated
+    threads own a session each, every fetch is a request to one of them,
+    and the cost is paid ``workers`` times for the life of the viewer.
+
+    ``workers`` DEFAULTS TO 1 -- one session, opened once, exactly as if a
+    separate process held it. Raising it buys overlap, since a cloud fetch
+    is latency rather than CPU and two outstanding requests take about as
+    long as one; it costs another whole session per worker, which is the
+    expensive thing here. Raise it only if panning is visibly
+    fetch-bound, and call ``warm()`` either way.
+
+    A SEPARATE PROCESS would be the same architecture with an IPC hop
+    added. It is not obviously worth it: what crosses the boundary is a
+    PATH, not tile bytes, and the fetch is I/O so the GIL is released
+    anyway. The reason to reach for one is if a cloud-backed session turns
+    out to share global state that per-session isolation does not fix --
+    untested here, and the seam for it is this class alone: swap the
+    executor and ``levelArrays`` does not change.
+    """
+
+    def __init__(self, session, workers: int = 1):
+        self._session = session
+        self._owner = threading.get_ident()
+        self._reopen = self._reopener(session)
+        self._workers = max(1, int(workers))
+        self._local = threading.local()
+        self._pool = None
+        self._lock = threading.Lock()
+
+    @staticmethod
+    def _reopener(session):
+        """How to build another handle on the same data, or None if unknown.
+
+        Only a path-backed session is reopened. Anything holding a live
+        client or credentials is left alone rather than duplicated on a
+        guess: reopening one could re-authenticate per thread, which is
+        worse than the serialization it would buy.
+        """
+        path = getattr(session, "path", None)
+        if path is None:
+            return None
+        cls = type(session)
+        return lambda: cls(path)
+
+    def _initThread(self):
+        self._local.session = self._reopen()
+
+    def _ensurePool(self):
+        if self._pool is not None or self._reopen is None:
+            return self._pool
+        with self._lock:
+            if self._pool is None:
+                from concurrent.futures import ThreadPoolExecutor
+
+                self._pool = ThreadPoolExecutor(
+                    max_workers=self._workers,
+                    thread_name_prefix="ndi-tile",
+                    initializer=self._initThread,
+                )
+        return self._pool
+
+    def warm(self) -> None:
+        """Build the session handles now, off the calling thread.
+
+        Optional, and worth calling right after the viewer window appears:
+        it moves the one-off session cost into the moment the user is
+        looking at an empty canvas rather than into the first pan.
+        """
+        pool = self._ensurePool()
+        if pool is None:
+            return
+        for f in [pool.submit(lambda: None) for _ in range(self._workers)]:
+            f.result()
+
+    def _resolve(self, doc, filename) -> str:
+        s = getattr(self._local, "session", None) or self._session
+        fh = s.database_openbinarydoc(doc, filename)
+        try:
+            return fh.fullpathfilename
+        finally:
+            s.database_closebinarydoc(fh)
+
+    def tilePath(self, doc, filename) -> str:
+        """Resolve one binary file to a local path, fetching it if remote.
+
+        The handle is closed before the path is returned, and the file
+        outlives the handle -- which is what lets the caller read it with a
+        plain file reader, as the eager version did.
+        """
+        if threading.get_ident() == self._owner:
+            return self._resolve(doc, filename)
+        pool = self._ensurePool()
+        if pool is None:
+            # No way to build a second handle for this session type. There
+            # is nothing safe to do from here, so say what is wrong rather
+            # than letting did turn it into "document not found".
+            raise RuntimeError(
+                f"Cannot fetch {filename!r} from thread "
+                f"{threading.current_thread().name}: this session cannot be "
+                f"reopened for another thread, and NDI's database may only "
+                f"be used from the thread that opened it. Compute the ladder "
+                f"with dask's synchronous scheduler, or pass a session that "
+                f"exposes a path."
+            )
+        return pool.submit(self._resolve, doc, filename).result()
+
+    def close(self) -> None:
+        if self._pool is not None:
+            self._pool.shutdown(wait=False)
+            self._pool = None
 
 
 def worldTransform(session, pyr_doc) -> tuple[tuple[float, float], tuple[float, float]]:
@@ -110,6 +242,7 @@ def levelArrays(session, pyr_doc, gene_rows=None, density: bool = True) -> list[
     """
     dask, da = _require_dask()
     levels, _frame = levelTable(session, pyr_doc)
+    fetcher = _TileFetcher(session)
 
     from ....fun.doc_gene import _find_level
 
@@ -124,41 +257,37 @@ def levelArrays(session, pyr_doc, gene_rows=None, density: bool = True) -> list[
         stored = set(tile_doc.current_file_list())
         scale = b if density else 1
 
-        # Resolve every tile's PATH now, on this thread, and let the blocks
-        # read plain files.
-        #
-        # The blocks must not touch the session. NDI's database is SQLite,
-        # whose connections are not usable from another thread, and dask
-        # runs blocks on a thread pool by default -- which is also how
-        # napari drives multiscale loading. A block that called
-        # database_openbinarydoc therefore failed with "ndi_document ... not
-        # found", the database returning nothing rather than raising, and
-        # only under the threaded scheduler: the synchronous one passed.
-        # That is the worst shape a bug can have before a live demo, so the
-        # blocks are pure by construction instead.
-        #
-        # Only metadata is eager. The bytes -- the expensive part -- stay
-        # lazy. On a directory-backed session this is path resolution and
-        # costs nothing; a cloud-backed session that fetches on open would
-        # pay here instead, which is a real limit of this approach and the
-        # reason it is written down.
-        paths = {}
-        for r in range(rows):
-            for c in range(cols):
-                name = f"tile.bin_{r * cols + c}"
-                if name not in stored:
-                    continue
-                fh = session.database_openbinarydoc(tile_doc, name)
-                try:
-                    paths[(r, c)] = fh.fullpathfilename
-                finally:
-                    session.database_closebinarydoc(fh)
-
-        def block(r, c, _paths=paths, _th=th, _tw=tw, _scale=scale):
-            path = _paths.get((r, c))
-            if path is None:
-                return np.zeros((_th, _tw), np.float32)
-            return renderTile(readTileFile(path), gene_rows, _th, _tw, binSize=_scale)
+        # NOTHING IS FETCHED HERE. current_file_list() says which tiles
+        # exist, which is document metadata already in hand, and the block
+        # opens its own tile when dask asks for it. The eager version
+        # resolved every tile of every level up front, which on a
+        # directory-backed session is free path resolution but on a
+        # cloud-backed one DOWNLOADS THE WHOLE PYRAMID before anything is
+        # drawn -- database_openbinarydoc retrieves a remote file, so
+        # "resolve the path" and "fetch the bytes" are the same call.
+        # The block being lazy never helped, because the cost was already
+        # paid by the time dask chose its blocks.
+        def block(
+            r,
+            c,
+            _fetch=fetcher,
+            _doc=tile_doc,
+            _cols=cols,
+            _stored=stored,
+            _th=th,
+            _tw=tw,
+            _scale=scale,
+        ):
+            name = f"tile.bin_{r * _cols + c}"
+            if name not in _stored:
+                return np.zeros((_th, _tw), np.float32)  # missing tile costs nothing
+            return renderTile(
+                readTileFile(_fetch.tilePath(_doc, name)),
+                gene_rows,
+                _th,
+                _tw,
+                binSize=_scale,
+            )
 
         grid = [
             [
