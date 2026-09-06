@@ -2011,6 +2011,91 @@ functions:
       becomes a Python keyword of the same name. See readViewportBase for
       the source-coordinate entry point.
 
+  - name: fromGEF
+    matlab_path: "+ndi/+fun/+doc/+gene/fromGEF.m"
+    matlab_last_sync_hash: "6ae50870"
+    status: not_yet_ported
+    decision_log: >
+      Reads a Stereo-seq .gef with ndr.format.stereoseq.readGEF and turns
+      it into a geneList, a spatialGeneExpressionPyramid and one
+      spatialGeneExpressionTiles per level -- the whole file-to-database
+      path in one call.
+
+      PORTABLE, AND WORTH PORTING. Every piece it needs already exists on
+      the Python side: ndr.format.stereoseq.readGEF is mirrored, and
+      doc_gene has makeGeneList and makePyramid. What is missing is only
+      the function that puts them in order, which is the same reason the
+      MATLAB side got it -- the sequence previously existed only inside a
+      GUI class, so nothing headless could import a section.
+
+      One detail a port must not lose: the reader's resolution attribute
+      is in NANOMETRES and base_pixel_size is in micrometres. SAW's usual
+      500 nm becomes 0.5, which is also makePyramid's own default, so a
+      missing conversion looks exactly like the default and has its own
+      test on the MATLAB side.
+
+  - name: fromCellBin
+    matlab_path: "+ndi/+fun/+doc/+gene/fromCellBin.m"
+    matlab_last_sync_hash: "6ae50870"
+    status: not_yet_ported
+    decision_log: >
+      Reads a SAW cellbin .h5ad with ndr.format.stereoseq.readCellBin and
+      builds a spatialGeneExpressionCells document plus one cellTypeLabels
+      per labeling the caller asked for.
+
+      THE READ-ONCE DISCIPLINE IS THE PART TO PORT, not the convenience.
+      readCellBin returns cells in file order and labels in file order,
+      and the ONLY thing tying a label array to a cell table is that they
+      came from the same pass. Two passes that disagreed about row order
+      would produce labels that are still entirely valid and entirely
+      wrong, on cells that are all real. A port that fetches labels in a
+      separate call reintroduces exactly that, and no test of either half
+      would catch it.
+
+      Labelings are asked for, never inferred: a cellbin carries
+      transferred atlas calls and unsupervised clusterings side by side,
+      the file does not say which is which, and reading a cluster index as
+      a cell type is a scientific error rather than a display bug.
+
+  - name: makeSourceFile
+    matlab_path: "+ndi/+fun/+doc/+gene/makeSourceFile.m"
+    matlab_last_sync_hash: "6ae50870"
+    status: not_yet_ported
+    decision_log: >
+      Creates the generic_file document that spatialGeneExpressionTiles
+      and spatialGeneExpressionCells point at through their source_file_id
+      dependency. Both classes have declared that dependency since they
+      were written and nothing populated it, so a pyramid could not say
+      which .gef it came from; this is the missing half.
+
+      It DESCRIBES rather than attaches, by default: a SAW .gef is ~9.4 GB
+      and ingesting a copy alongside the pyramid derived from it would
+      roughly double the storage to hold bytes the pyramid already
+      summarises. The checksum is the identifying field -- two SAW runs of
+      one chip produce files with the same name and different contents --
+      and skipping it leaves the field empty rather than filled with
+      something that would later read as a real hash.
+
+      A port depends on Python having a generic_file document and an MD5
+      helper; check both before porting rather than assuming, since the
+      MATLAB side leans on ndi.fun.file.MD5 shelling out to md5sum.
+
+  - name: readNotes
+    matlab_path: "+ndi/+fun/+doc/+gene/readNotes.m"
+    matlab_last_sync_hash: "6ae50870"
+    status: not_yet_ported
+    decision_log: >
+      Turns an ndr.format.stereoseq reader's meta into the things a caller
+      should be told AFTER a full read: counts clamped at the ceiling,
+      where the extent came from, SAW's own per-gene totals, and genes
+      left behind by maxGenes.
+
+      They are reported rather than raised because none of them makes the
+      pyramid wrong and all of them change what it means. They cannot be
+      part of a pre-flight check either, which is why this is separate
+      from the plan validation: every one of them needs every record to
+      have been read.
+
   - name: tilePath
     matlab_path: "+ndi/+fun/+doc/+gene/tilePath.m"
     matlab_last_sync_hash: "e217f367"
