@@ -603,6 +603,7 @@ functions:
     matlab_path: "+ndi/+cloud/+api/+documents/getBulkUploadURL.m"
     matlab_last_sync_hash: "9b75c0fe"
     python_path: "ndi/cloud/api/documents.py"
+    python_qualified: "ndi.cloud.api.documents.getBulkUploadURL"
     input_arguments:
       - name: dataset_id
         type_matlab: "string"
@@ -613,7 +614,11 @@ functions:
     output_arguments:
       - name: url
         type_python: "str"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match. One of TWO entries for this MATLAB file: Python exposes
+      the bulk-upload URL from both api.documents and api.files, so each
+      port is recorded separately and told apart by python_qualified. See
+      the api.files entry below.
 
   - name: getBulkDownloadURL
     matlab_path: "+ndi/+cloud/+api/+documents/getBulkDownloadURL.m"
