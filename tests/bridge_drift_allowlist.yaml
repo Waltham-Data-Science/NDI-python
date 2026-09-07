@@ -1,0 +1,463 @@
+# Bridge drift burn-down list -- every line here is an IOU, not a rule.
+#
+# tests/test_matlab_bridge_hashes.py gates two things: no bridge entry may
+# drift from NDI-matlab, and every entry naming a matlab_path must carry a
+# matlab_last_sync_hash. Both were newly enforced per NDI-python#211, and the
+# entries below already violated them on the day the gate went up.
+#
+# THE GATE IS ON FOR EVERYTHING ELSE. An entry not listed here fails
+# immediately, so no NEW unexamined drift can enter. This file is the
+# pre-existing debt, enumerated so it can be counted and burnt down rather
+# than sitting invisible -- which is how 60 entries drifted unnoticed in the
+# first place (#191).
+#
+# TO BURN ONE DOWN: read what MATLAB actually changed,
+#     git -C ../NDI-matlab log <matlab_last_sync_hash>..HEAD -- src/ndi/<matlab_path>
+#     git -C ../NDI-matlab diff <matlab_last_sync_hash>..HEAD -- src/ndi/<matlab_path>
+# then either port the behavioural change and bump the hash, or -- if nothing
+# on the Python side must follow -- just bump it. A regular port needs no
+# decision_log for this; see section 7 of the bridge spec. Then DELETE the
+# line from this file. A shrinking file is the progress metric.
+#
+# THIS FILE CANNOT ROT. TestTheAllowlistOnlyShrinks fails if a listed entry no
+# longer drifts, so a fixed entry MUST be removed here in the same PR. The
+# list can only shrink; nothing can be added to it without a deliberate edit
+# that a reviewer sees.
+#
+# START WITH THE `signature` ONES. Those are MATLAB commits that changed a
+# function signature or arguments block, so the recorded input/output contract
+# may now be wrong -- that is where a stale hash is most likely hiding a real
+# defect rather than bookkeeping.
+
+# ---------------------------------------------------------------------------
+# drifted: 60  (signature 18, body 40, comments-only 2)
+# ---------------------------------------------------------------------------
+drifted:
+
+  # --- signature ---
+  - name: profile
+    matlab_path: "+ndi/+cloud/profile.m"  # 8 commit(s) since
+  - name: dir
+    matlab_path: "+ndi/+session/dir.m"  # 6 commit(s) since
+  - name: dir
+    matlab_path: "+ndi/+dataset/dir.m"  # 5 commit(s) since
+  - name: session
+    matlab_path: "+ndi/session.m"  # 5 commit(s) since
+  - name: database
+    matlab_path: "+ndi/database.m"  # 3 commit(s) since
+  - name: updateFileInfoForLocalFiles
+    matlab_path: "+ndi/+cloud/+sync/+internal/updateFileInfoForLocalFiles.m"  # 3 commit(s) since
+  - name: dataset
+    matlab_path: "+ndi/dataset.m"  # 2 commit(s) since
+  - name: setup.lab
+    matlab_path: "+ndi/+setup/lab.m"  # 2 commit(s) since
+  - name: RayoLabStims
+    matlab_path: "+ndi/+daq/+metadatareader/RayoLabStims.m"  # 1 commit(s) since
+  - name: advanceSession
+    matlab_path: "+ndi/+cloud/+api/+compute/advanceSession.m"  # 1 commit(s) since
+  - name: clocktype
+    matlab_path: "+ndi/+time/clocktype.m"  # 1 commit(s) since
+  - name: ndi_document2ndi_object
+    matlab_path: "+ndi/+database/+fun/ndi_document2ndi_object.m"  # 1 commit(s) since
+  - name: ndiquery
+    matlab_path: "+ndi/+cloud/+api/+documents/ndiquery.m"  # 1 commit(s) since
+  - name: ndiqueryAll
+    matlab_path: "+ndi/+cloud/+api/+documents/ndiqueryAll.m"  # 1 commit(s) since
+  - name: sessiontable
+    matlab_path: "+ndi/+session/sessiontable.m"  # 1 commit(s) since
+  - name: setup.rayolab
+    matlab_path: "+ndi/+setup/rayolab.m"  # 1 commit(s) since
+  - name: startSession
+    matlab_path: "+ndi/+cloud/+api/+compute/startSession.m"  # 1 commit(s) since
+  - name: stimulator
+    matlab_path: "+ndi/+probe/+timeseries/stimulator.m"  # 1 commit(s) since
+
+  # --- body ---
+  - name: url
+    matlab_path: "+ndi/+cloud/+api/url.m"  # 11 commit(s) since
+  - name: downloadGenericFiles
+    matlab_path: "+ndi/+cloud/+download/downloadGenericFiles.m"  # 5 commit(s) since
+  - name: extract_doc_files
+    matlab_path: "+ndi/+database/+fun/extract_docs_files.m"  # 5 commit(s) since
+  - name: downloadDocumentCollection
+    matlab_path: "+ndi/+cloud/+download/downloadDocumentCollection.m"  # 4 commit(s) since
+  - name: commonTriggersOverlappingEpochs
+    matlab_path: "+ndi/+time/+syncrule/commonTriggersOverlappingEpochs.m"  # 3 commit(s) since
+  - name: getFile
+    matlab_path: "+ndi/+cloud/+api/+files/getFile.m"  # 3 commit(s) since
+  - name: preferences
+    matlab_path: "+ndi/preferences.m"  # 3 commit(s) since
+  - name: uploadDataset
+    matlab_path: "+ndi/+cloud/uploadDataset.m"  # 3 commit(s) since
+  - name: zipForUpload
+    matlab_path: "+ndi/+cloud/+upload/zipForUpload.m"  # 3 commit(s) since
+  - name: downloadDatasetFiles
+    matlab_path: "+ndi/+cloud/+download/downloadDatasetFiles.m"  # 2 commit(s) since
+  - name: downloadNdiDocuments
+    matlab_path: "+ndi/+cloud/+sync/+internal/downloadNdiDocuments.m"  # 2 commit(s) since
+  - name: downloadNew
+    matlab_path: "+ndi/+cloud/+sync/downloadNew.m"  # 2 commit(s) since
+  - name: element
+    matlab_path: "+ndi/element.m"  # 2 commit(s) since
+  - name: exportRegion
+    matlab_path: "+ndi/+fun/+doc/+gene/exportRegion.m"  # 2 commit(s) since
+  - name: mirrorFromRemote
+    matlab_path: "+ndi/+cloud/+sync/mirrorFromRemote.m"  # 2 commit(s) since
+  - name: mirrorToRemote
+    matlab_path: "+ndi/+cloud/+sync/mirrorToRemote.m"  # 2 commit(s) since
+  - name: readViewport
+    matlab_path: "+ndi/+fun/+doc/+gene/readViewport.m"  # 2 commit(s) since
+  - name: syncgraph
+    matlab_path: "+ndi/+time/syncgraph.m"  # 2 commit(s) since
+  - name: twoWaySync
+    matlab_path: "+ndi/+cloud/+sync/twoWaySync.m"  # 2 commit(s) since
+  - name: uploadDocumentCollection
+    matlab_path: "+ndi/+cloud/+upload/uploadDocumentCollection.m"  # 2 commit(s) since
+  - name: uploadNew
+    matlab_path: "+ndi/+cloud/+sync/uploadNew.m"  # 2 commit(s) since
+  - name: uploadSingleFile
+    matlab_path: "+ndi/+cloud/uploadSingleFile.m"  # 2 commit(s) since
+  - name: NielsenLabStims
+    matlab_path: "+ndi/+daq/+metadatareader/NielsenLabStims.m"  # 1 commit(s) since
+  - name: SyncMode
+    matlab_path: "+ndi/+cloud/+sync/+enum/SyncMode.m"  # 1 commit(s) since
+  - name: cedspike2
+    matlab_path: "+ndi/+daq/+reader/+mfdaq/cedspike2.m"  # 1 commit(s) since
+  - name: copydocfile2temp
+    matlab_path: "+ndi/+database/+fun/copydocfile2temp.m"  # 1 commit(s) since
+  - name: filesNotYetUploaded
+    matlab_path: "+ndi/+cloud/+sync/+internal/filesNotYetUploaded.m"  # 1 commit(s) since
+  - name: find_ingested_docs
+    matlab_path: "+ndi/+database/+fun/find_ingested_docs.m"  # 1 commit(s) since
+  - name: helloMatlab
+    matlab_path: "+ndi/+cloud/helloMatlab.m"  # 1 commit(s) since
+  - name: makeCellTypeLabels
+    matlab_path: "+ndi/+fun/+doc/+gene/makeCellTypeLabels.m"  # 1 commit(s) since
+  - name: makeCells
+    matlab_path: "+ndi/+fun/+doc/+gene/makeCells.m"  # 1 commit(s) since
+  - name: makePyramid
+    matlab_path: "+ndi/+fun/+doc/+gene/makePyramid.m"  # 1 commit(s) since
+  - name: mfdaq_reader
+    matlab_path: "+ndi/+daq/+reader/mfdaq.m"  # 1 commit(s) since
+  - name: navigator_rhd_series
+    matlab_path: "+ndi/+file/+navigator/rhd_series.m"  # 1 commit(s) since
+  - name: navigator_rhd_series_epochdir
+    matlab_path: "+ndi/+file/+navigator/rhd_series_epochdir.m"  # 1 commit(s) since
+  - name: ndi_common_PathConstants
+    matlab_path: "+ndi/+common/PathConstants.m"  # 1 commit(s) since
+  - name: newDataset
+    matlab_path: "+ndi/+cloud/+upload/newDataset.m"  # 1 commit(s) since
+  - name: system_mfdaq
+    matlab_path: "+ndi/+daq/+system/mfdaq.m"  # 1 commit(s) since
+  - name: tuning_response
+    matlab_path: "+ndi/+app/+stimulus/tuning_response.m"  # 1 commit(s) since
+  - name: updateDIDConstants
+    matlab_path: "+ndi/+common/PathConstants.m"  # 1 commit(s) since
+
+  # --- comments-only ---
+  - name: listFiles
+    matlab_path: "+ndi/+cloud/+api/+files/listFiles.m"  # 1 commit(s) since
+  - name: me
+    matlab_path: "+ndi/+cloud/+api/+users/me.m"  # 1 commit(s) since
+
+# ---------------------------------------------------------------------------
+# no_hash: 146
+#
+# An entry with a matlab_path and no matlab_last_sync_hash can never show
+# drift, so it claims its port is current forever and no check can contradict
+# it. Determine the commit each was examined against and record it -- or, if
+# nobody knows, examine the file now and record today's commit for it.
+# ---------------------------------------------------------------------------
+no_hash:
+  - name: appdoc
+    matlab_path: "+ndi/+app/appdoc.m"
+  - name: spikeextractor
+    matlab_path: "+ndi/+app/spikeextractor.m"
+  - name: spikesorter
+    matlab_path: "+ndi/+app/spikesorter.m"
+  - name: simple
+    matlab_path: "+ndi/+calc/+example/simple.m"
+  - name: tuningcurve
+    matlab_path: "+ndi/+calc/+stimulus/tuningcurve.m"
+  - name: tuning_fit
+    matlab_path: "+ndi/+calc/tuning_fit.m"
+  - name: SyncIndex
+    matlab_path: "+ndi/+cloud/+sync/+internal/+index/"
+  - name: evaluate_fitcurve
+    matlab_path: "+ndi/+data/evaluate_fitcurve.m (in a different namespace)"
+  - name: createGenBankControlledVocabulary
+    matlab_path: "+ndi/+database/+fun/createGenBankControlledVocabulary.m"
+  - name: createNIFbrainareas
+    matlab_path: "+ndi/+database/+fun/createNIFbrainareas.m"
+  - name: create_new_database
+    matlab_path: "+ndi/+database/+fun/create_new_database.m"
+  - name: databasehierarchyinit
+    matlab_path: "+ndi/+database/+fun/databasehierarchyinit.m"
+  - name: dataset_metadata
+    matlab_path: "+ndi/+database/+fun/dataset_metadata.m"
+  - name: openMINDSobj2ndi_document
+    matlab_path: "+ndi/+database/+fun/openMINDSobj2ndi_document.m"
+  - name: openMINDSobj2struct
+    matlab_path: "+ndi/+database/+fun/openMINDSobj2struct.m"
+  - name: plotinteractivedocgraph
+    matlab_path: "+ndi/+database/+fun/plotinteractivedocgraph.m"
+  - name: projectvardef
+    matlab_path: "+ndi/+database/+fun/projectvardef.m"
+  - name: readGenBankNames
+    matlab_path: "+ndi/+database/+fun/readGenBankNames.m"
+  - name: readGenBankNodes
+    matlab_path: "+ndi/+database/+fun/readGenBankNodes.m"
+  - name: readtablechar
+    matlab_path: "+ndi/+database/+fun/readtablechar.m"
+  - name: writetablechar
+    matlab_path: "+ndi/+database/+fun/writetablechar.m"
+  - name: docs
+    matlab_path: "+ndi/+docs/"
+  - name: navigator_epochdir
+    matlab_path: "+ndi/+file/+navigator/epochdir.m"
+  - name: mfdaq_epoch_channel
+    matlab_path: "+ndi/+file/+type/mfdaq_epoch_channel.m"
+  - name: navigator
+    matlab_path: "+ndi/+file/navigator.m"
+  - name: pfilemirror
+    matlab_path: "+ndi/+file/pfilemirror.m"
+  - name: mat2ngrid
+    matlab_path: "+ndi/+fun/+data/mat2ngrid.m"
+  - name: readImageStack
+    matlab_path: "+ndi/+fun/+data/readImageStack.m"
+  - name: readngrid
+    matlab_path: "+ndi/+fun/+data/readngrid.m"
+  - name: writengrid
+    matlab_path: "+ndi/+fun/+data/writengrid.m"
+  - name: diff (dataset)
+    matlab_path: "+ndi/+fun/+dataset/diff.m"
+  - name: storeDoc
+    matlab_path: "+ndi/+fun/+doc/+gene/private/storeDoc.m"
+  - name: probeLocations4probes
+    matlab_path: "+ndi/+fun/+doc/+probe/probeLocations4probes.m"
+  - name: makeSpeciesStrainSex
+    matlab_path: "+ndi/+fun/+doc/+subject/makeSpeciesStrainSex.m"
+  - name: allTypes
+    matlab_path: "+ndi/+fun/+doc/allTypes.m"
+  - name: diff (doc)
+    matlab_path: "+ndi/+fun/+doc/diff.m"
+  - name: findFuid
+    matlab_path: "+ndi/+fun/+doc/findFuid.m"
+  - name: getDocTypes
+    matlab_path: "+ndi/+fun/+doc/getDocTypes.m"
+  - name: ontologyTableRowDoc2Table
+    matlab_path: "+ndi/+fun/+doc/ontologyTableRowDoc2Table.m"
+  - name: ontologyTableRowVars
+    matlab_path: "+ndi/+fun/+doc/ontologyTableRowVars.m"
+  - name: t0_t1cell2array
+    matlab_path: "+ndi/+fun/+doc/t0_t1cell2array.m"
+  - name: docCellArray2Table
+    matlab_path: "+ndi/+fun/+docTable/docCellArray2Table.m"
+  - name: element (docTable)
+    matlab_path: "+ndi/+fun/+docTable/element.m"
+  - name: epoch (docTable)
+    matlab_path: "+ndi/+fun/+docTable/epoch.m"
+  - name: openminds (docTable)
+    matlab_path: "+ndi/+fun/+docTable/openminds.m"
+  - name: probe (docTable)
+    matlab_path: "+ndi/+fun/+docTable/probe.m"
+  - name: subject (docTable)
+    matlab_path: "+ndi/+fun/+docTable/subject.m"
+  - name: subjectBasic
+    matlab_path: "+ndi/+fun/+docTable/subject.m"
+  - name: treatment (docTable)
+    matlab_path: "+ndi/+fun/+docTable/treatment.m"
+  - name: epochid2element
+    matlab_path: "+ndi/+fun/+epoch/epochid2element.m"
+  - name: filename2epochid
+    matlab_path: "+ndi/+fun/+epoch/filename2epochid.m"
+  - name: export.gmcSorter
+    matlab_path: "+ndi/+fun/+export/gmcSorter.m"
+  - name: export.gmcSorterWrite
+    matlab_path: "+ndi/+fun/+export/gmcSorterWrite.m"
+  - name: export.writeGmcSidecars
+    matlab_path: "+ndi/+fun/+export/writeGmcSidecars.m"
+  - name: MD5
+    matlab_path: "+ndi/+fun/+file/MD5.m"
+  - name: dateCreated
+    matlab_path: "+ndi/+fun/+file/dateCreated.m"
+  - name: dateUpdated
+    matlab_path: "+ndi/+fun/+file/dateUpdated.m"
+  - name: bar3
+    matlab_path: "+ndi/+fun/+plot/bar3.m"
+  - name: multichan
+    matlab_path: "+ndi/+fun/+plot/multichan.m"
+  - name: stimulusTimeseries
+    matlab_path: "+ndi/+fun/+plot/stimulusTimeseries.m"
+  - name: export.jrclust
+    matlab_path: "+ndi/+fun/+probe/+export/jrclust.m"
+  - name: import.jrclust
+    matlab_path: "+ndi/+fun/+probe/+import/+jrclust/"
+  - name: location
+    matlab_path: "+ndi/+fun/+probe/location.m"
+  - name: diff (session)
+    matlab_path: "+ndi/+fun/+session/diff.m"
+  - name: f0_f1_responses
+    matlab_path: "+ndi/+fun/+stimulus/f0_f1_responses.m"
+  - name: findMixtureName
+    matlab_path: "+ndi/+fun/+stimulus/findMixtureName.m"
+  - name: tuning_curve_to_response_type
+    matlab_path: "+ndi/+fun/+stimulus/tuning_curve_to_response_type.m"
+  - name: identifyMatchingRows
+    matlab_path: "+ndi/+fun/+table/identifyMatchingRows.m"
+  - name: identifyValidRows
+    matlab_path: "+ndi/+fun/+table/identifyValidRows.m"
+  - name: join
+    matlab_path: "+ndi/+fun/+table/join.m"
+  - name: moveColumnsLeft
+    matlab_path: "+ndi/+fun/+table/moveColumnsLeft.m"
+  - name: vstack
+    matlab_path: "+ndi/+fun/+table/vstack.m"
+  - name: assertAddonOnPath
+    matlab_path: "+ndi/+fun/assertAddonOnPath.m"
+  - name: channelname2prefixnumber
+    matlab_path: "+ndi/+fun/channelname2prefixnumber.m"
+  - name: check_Matlab_toolboxes
+    matlab_path: "+ndi/+fun/check_Matlab_toolboxes.m"
+  - name: console
+    matlab_path: "+ndi/+fun/console.m"
+  - name: convertoldnsd2ndi
+    matlab_path: "+ndi/+fun/convertoldnsd2ndi.m"
+  - name: debuglog
+    matlab_path: "+ndi/+fun/debuglog.m"
+  - name: errlog
+    matlab_path: "+ndi/+fun/errlog.m"
+  - name: find_calc_directories
+    matlab_path: "+ndi/+fun/find_calc_directories.m"
+  - name: name2variableName
+    matlab_path: "+ndi/+fun/name2variableName.m"
+  - name: name2variableName (PascalCase variant)
+    matlab_path: "+ndi/+fun/name2variableName.m"
+  - name: pseudorandomint
+    matlab_path: "+ndi/+fun/pseudorandomint.m"
+  - name: run_Linux_checks
+    matlab_path: "+ndi/+fun/run_Linux_checks.m"
+  - name: stimulustemporalfrequency
+    matlab_path: "+ndi/+fun/stimulustemporalfrequency.m"
+  - name: syslog
+    matlab_path: "+ndi/+fun/syslog.m"
+  - name: timestamp
+    matlab_path: "+ndi/+fun/timestamp.m"
+  - name: jrclust
+    matlab_path: "+ndi/+gui/+app/jrclust.m"
+  - name: ndi_gui_component_abstract_ProgressMonitor
+    matlab_path: "+ndi/+gui/+component/+abstract/ProgressMonitor.m"
+  - name: ndi_gui_component_internal_event_MessageUpdatedEventData
+    matlab_path: "+ndi/+gui/+component/+internal/+event/MessageUpdatedEventData.m"
+  - name: ndi_gui_component_internal_event_ProgressUpdatedEventData
+    matlab_path: "+ndi/+gui/+component/+internal/+event/ProgressUpdatedEventData.m"
+  - name: ndi_gui_component_internal_AsynchProgressTracker
+    matlab_path: "+ndi/+gui/+component/+internal/AsynchProgressTracker.m"
+  - name: ndi_gui_component_internal_ProgressTracker
+    matlab_path: "+ndi/+gui/+component/+internal/ProgressTracker.m"
+  - name: ndi_gui_component_CommandWindowProgressMonitor
+    matlab_path: "+ndi/+gui/+component/CommandWindowProgressMonitor.m"
+  - name: ndi_gui_component_NDIProgressBar
+    matlab_path: "+ndi/+gui/+component/NDIProgressBar.m"
+  - name: ndi_gui_component_ProgressBarWindow
+    matlab_path: "+ndi/+gui/+component/ProgressBarWindow.m"
+  - name: centerFigure
+    matlab_path: "+ndi/+gui/+utility/centerFigure.m"
+  - name: ndi_gui_Data
+    matlab_path: "+ndi/+gui/Data.m"
+  - name: ndi_gui_Icon
+    matlab_path: "+ndi/+gui/Icon.m"
+  - name: ndi_gui_Lab
+    matlab_path: "+ndi/+gui/Lab.m"
+  - name: ndi_gui_docViewer
+    matlab_path: "+ndi/+gui/docViewer.m"
+  - name: gui
+    matlab_path: "+ndi/+gui/gui.m"
+  - name: gui_v2
+    matlab_path: "+ndi/+gui/gui_v2.m"
+  - name: preferencesEditor
+    matlab_path: "+ndi/+gui/preferencesEditor.m"
+  - name: clear
+    matlab_path: "+ndi/+mock/+fun/clear.m"
+  - name: stimulus_presentation
+    matlab_path: "+ndi/+mock/+fun/stimulus_presentation.m"
+  - name: stimulus_response
+    matlab_path: "+ndi/+mock/+fun/stimulus_response.m"
+  - name: subject_stimulator_neuron
+    matlab_path: "+ndi/+mock/+fun/subject_stimulator_neuron.m"
+  - name: ctest
+    matlab_path: "+ndi/+mock/ctest.m"
+  - name: setup
+    matlab_path: "+ndi/+setup/"
+  - name: +openminds sub-package
+    matlab_path: "+ndi/+util/+openminds/"
+  - name: choosefile
+    matlab_path: "+ndi/+util/choosefile.m"
+  - name: choosefileordir
+    matlab_path: "+ndi/+util/choosefileordir.m"
+  - name: compareDatasetSummary
+    matlab_path: "+ndi/+util/compareDatasetSummary.m"
+  - name: compareSessionSummary
+    matlab_path: "+ndi/+util/compareSessionSummary.m"
+  - name: datasetSummary
+    matlab_path: "+ndi/+util/datasetSummary.m"
+  - name: datestamp2datetime
+    matlab_path: "+ndi/+util/datestamp2datetime.m"
+  - name: downsampleTimeseries
+    matlab_path: "+ndi/+util/downsampleTimeseries.m"
+  - name: getHexDiffFromFileObj
+    matlab_path: "+ndi/+util/getHexDiffFromFileObj.m"
+  - name: hexDiff
+    matlab_path: "+ndi/+util/hexDiff.m"
+  - name: hexDiffBytes
+    matlab_path: "+ndi/+util/hexDiffBytes.m"
+  - name: hexDump
+    matlab_path: "+ndi/+util/hexDump.m"
+  - name: rehydrateJSONNanNull
+    matlab_path: "+ndi/+util/rehydrateJSONNanNull.m"
+  - name: sessionSummary
+    matlab_path: "+ndi/+util/sessionSummary.m"
+  - name: toolboxdir
+    matlab_path: "+ndi/+util/toolboxdir.m"
+  - name: unwrapTableCellContent
+    matlab_path: "+ndi/+util/unwrapTableCellContent.m"
+  - name: mustBeCellArrayOfClass
+    matlab_path: "+ndi/+validators/mustBeCellArrayOfClass.m"
+  - name: mustBeCellArrayOfNdiSessions
+    matlab_path: "+ndi/+validators/mustBeCellArrayOfNdiSessions.m"
+  - name: mustBeCellArrayOfNonEmptyCharacterArrays
+    matlab_path: "+ndi/+validators/mustBeCellArrayOfNonEmptyCharacterArrays.m"
+  - name: mustBeClassnameOfType
+    matlab_path: "+ndi/+validators/mustBeClassnameOfType.m"
+  - name: mustBeEpochInput
+    matlab_path: "+ndi/+validators/mustBeEpochInput.m"
+  - name: mustBeID
+    matlab_path: "+ndi/+validators/mustBeID.m"
+  - name: mustBeNumericClass
+    matlab_path: "+ndi/+validators/mustBeNumericClass.m"
+  - name: mustBeTextLike
+    matlab_path: "+ndi/+validators/mustBeTextLike.m"
+  - name: mustHaveFields
+    matlab_path: "+ndi/+validators/mustHaveFields.m"
+  - name: mustHaveRequiredColumns
+    matlab_path: "+ndi/+validators/mustHaveRequiredColumns.m"
+  - name: mustMatchRegex
+    matlab_path: "+ndi/+validators/mustMatchRegex.m"
+  - name: app
+    matlab_path: "+ndi/app.m"
+  - name: cpipeline
+    matlab_path: "+ndi/cpipeline.m"
+  - name: document
+    matlab_path: "+ndi/document.m"
+  - name: documentservice
+    matlab_path: "+ndi/documentservice.m"
+  - name: filesep
+    matlab_path: "+ndi/filesep.m"
+  - name: ido
+    matlab_path: "+ndi/ido.m"
+  - name: query
+    matlab_path: "+ndi/query.m"
+  - name: toolboxdir
+    matlab_path: "+ndi/toolboxdir.m"
+  - name: version
+    matlab_path: "+ndi/version.m"
