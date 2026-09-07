@@ -2199,6 +2199,84 @@ functions:
       so a level can widen without a format version change, exactly as the
       tile format does.
 
+  # =======================================================================
+  # +ndi/+fun/+doc/+gene -- spatial-transcriptomics ingest additions
+  #
+  # A group of five MATLAB functions that lift the .gef / .h5ad ingest
+  # path out of ndi.gui.app.GeneIngest so a script, a batch importer or a
+  # Python caller can drive it without opening the GUI (VH-Lab/NDI-matlab
+  # PR #933). None of the five has a Python counterpart yet:
+  # ndi.gui.app.GeneIngest itself is not ported either (see the entry in
+  # src/ndi/gui/app/ndi_matlab_python_bridge.yaml), and the ingest path
+  # only becomes reachable from Python once the GUI class or a
+  # non-interactive equivalent lands. The tile / cell / pyramid readers
+  # and writers around them are ported (readTileFile, readCells,
+  # writeContourFile, ...), so these five join them when the ingest
+  # boundary is drawn on the Python side. Deferred as a group rather than
+  # a file at a time because they call each other -- fromGEF makes the
+  # source file, tilePath resolves the tile it produces, and readNotes
+  # reports what the reader could not verify up front.
+  # =======================================================================
+
+  - name: fromCellBin
+    matlab_path: "+ndi/+fun/+doc/+gene/fromCellBin.m"
+    matlab_last_sync_hash: "6ae5087"
+    status: not_yet_ported
+    decision_log: >
+      MATLAB reads a SAW cellbin .h5ad with
+      ndr.format.stereoseq.readCellBin and turns it into a
+      spatialGeneExpressionCells plus one cellTypeLabels document per
+      requested labeling, positioned against a pyramid document. Reads
+      the file exactly once so cells and label arrays cannot disagree
+      about row order. Ports as a group with the other four entries
+      under this heading; no current Python caller.
+
+  - name: fromGEF
+    matlab_path: "+ndi/+fun/+doc/+gene/fromGEF.m"
+    matlab_last_sync_hash: "a178e46"
+    status: not_yet_ported
+    decision_log: >
+      MATLAB reads a Stereo-seq .gef with ndr.format.stereoseq.readGEF
+      and produces the geneList, spatialGeneExpressionPyramid and one
+      spatialGeneExpressionTiles per level -- the whole .gef-to-database
+      path in one call. Ports with the other four entries under this
+      heading.
+
+  - name: makeSourceFile
+    matlab_path: "+ndi/+fun/+doc/+gene/makeSourceFile.m"
+    matlab_last_sync_hash: "6ae5087"
+    status: not_yet_ported
+    decision_log: >
+      MATLAB creates the generic_file document that the spatial gene
+      expression documents' source_file_id dependency points at, so a
+      pyramid can name the .gef it was built from. Describes by default
+      (name + checksum + dates), attaches only when attachFile=true.
+      Ports with the other four entries under this heading.
+
+  - name: readNotes
+    matlab_path: "+ndi/+fun/+doc/+gene/readNotes.m"
+    matlab_last_sync_hash: "6ae5087"
+    status: not_yet_ported
+    decision_log: >
+      MATLAB post-flight helper: turns the reader meta from
+      ndr.format.stereoseq into a cellstr of things a caller should be
+      told after the fact (counts hitting ceilings, extents from
+      attributes rather than records, tables trimmed by maxGenes).
+      Ports with the other four entries under this heading; nothing in
+      Python asks for these notes yet.
+
+  - name: tilePath
+    matlab_path: "+ndi/+fun/+doc/+gene/tilePath.m"
+    matlab_last_sync_hash: "b9972ab"
+    status: not_yet_ported
+    decision_log: >
+      MATLAB helper that resolves and memoizes the local path of a
+      document's binary file, fetching it if remote. Safe to memoize
+      because the database keys by immutable uid. No current Python
+      caller: readTileFile already accepts an open file object or bytes,
+      so path resolution has not been the bottleneck the memo answers.
+      Ports with the other four entries under this heading.
+
 # =========================================================================
 # Functions — doc_gene_export.py
 #
