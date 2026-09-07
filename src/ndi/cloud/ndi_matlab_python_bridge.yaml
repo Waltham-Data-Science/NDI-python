@@ -862,52 +862,33 @@ functions:
     decision_log: "Exact match."
 
   - name: uploadToNDICloud
-    matlab_path: "+ndi/+cloud/+upload/uploadToNDICloud.m"
-    matlab_last_sync_hash: "80092b7c"
-    python_path: "ndi/cloud/upload.py"
-    input_arguments:
-      - name: dataset
-        type_matlab: "ndi.session"
-        type_python: "Any"
-      - name: dataset_id
-        type_matlab: "char"
-        type_python: "str"
-      - name: verbose
-        type_matlab: "logical"
-        type_python: "bool"
-        default: "True"
-      - name: client
-        type_python: "CloudClient | None"
-        default: "None"
-    output_arguments:
-      - name: success
-        type_python: "bool"
-      - name: message
-        type_python: "str"
-    decision_log: "Exact match."
+    matlab_path: "N/A"
+    matlab_last_sync_hash: "120aabf6"
+    status: not_applicable
+    decision_log: >
+      Retired on both sides. MATLAB removed the function in
+      VH-Lab/NDI-matlab#965 (commit 120aabf6), which rerouted
+      +cloud/+upload/newDataset through +cloud/uploadDataset; Python
+      followed suit in the same commit that records this entry
+      (upload.py's ndi.cloud.upload.uploadToNDICloud is gone).
+      orchestration.newDataset already delegated to uploadDataset, so
+      no caller in this codebase needed the shim. Recorded rather than
+      deleted so the retirement is not silently invisible; matlab_path
+      is "N/A" per the stale-path guard.
 
   - name: scanForUpload
-    matlab_path: "+ndi/+cloud/+upload/scanForUpload.m"
-    matlab_last_sync_hash: "092aab34"
-    python_path: "ndi/cloud/upload.py"
-    input_arguments:
-      - name: dataset
-        type_matlab: "ndi.dataset"
-        type_python: "Any"
-      - name: dataset_id
-        type_matlab: "string"
-        type_python: "str"
-      - name: client
-        type_python: "CloudClient | None"
-        default: "None"
-    output_arguments:
-      - name: docs_to_upload
-        type_python: "list[dict]"
-      - name: files_to_upload
-        type_python: "list[dict]"
-      - name: upload_size
-        type_python: "float"
-    decision_log: "Exact match."
+    matlab_path: "N/A"
+    matlab_last_sync_hash: "120aabf6"
+    status: not_applicable
+    decision_log: >
+      Retired on both sides. MATLAB removed the function in
+      VH-Lab/NDI-matlab#965 alongside uploadToNDICloud; the only
+      remaining Python caller was uploadToNDICloud itself, so it went
+      with it in the same commit that records this entry. Its
+      regression suite -- tests/test_cloud_upload_manifest.py, whose
+      whole subject was the two shims' empty-manifest bug -- was
+      removed with the code. matlab_path is "N/A" per the stale-path
+      guard.
 
   # --- filehandler.py functions ---
   - name: updateFileInfoForRemoteFiles
@@ -1265,6 +1246,69 @@ functions:
 # Not-yet-ported MATLAB functions
 # =============================================================================
 not_yet_ported:
+
+  # =======================================================================
+  # +ndi/+cloud/+download/+internal -- internals of the download loop
+  #
+  # Three MATLAB helpers extracted from downloadDocumentCollection and
+  # downloadGenericFiles so their per-record shape can be unit-tested
+  # without a live dataset (NDI-matlab#962, #963, #970). Python's cloud
+  # download path is in cloud/download.py and does not currently mirror
+  # these boundaries -- the whole loop is one function -- so recording
+  # them as not_yet_ported is the honest status. They land as a group
+  # with the batch-presign work referenced by
+  # +sync/+internal/reconstructSeriesIngestLocations and by the
+  # signed-URL-set family in the api YAML (issue #206), because none of
+  # them is useful on its own.
+  # =======================================================================
+
+  - name: assertSingleArchiveEntry
+    matlab_path: "+ndi/+cloud/+download/+internal/assertSingleArchiveEntry.m"
+    matlab_last_sync_hash: "c1121e6"
+    status: not_yet_ported
+    decision_log: >
+      MATLAB guard extracted from downloadDocumentCollection: refuses a
+      chunk archive that is not exactly one file, so a server that ever
+      split a chunk across archives fails loudly rather than silently
+      dropping documents (NDI-matlab#945 shape). Python's chunk-handling
+      is in download.py and has no equivalent explicit guard yet.
+
+  - name: batchSignedUrlLookup
+    matlab_path: "+ndi/+cloud/+download/+internal/batchSignedUrlLookup.m"
+    matlab_last_sync_hash: "5804cd80"
+    status: not_yet_ported
+    decision_log: >
+      MATLAB per-document signed-URL cache used by the batch-presign path
+      (NDI-matlab#952, #962, #968). Turns one-call-per-uid into one call
+      per (dataset, document, series) scope, with a fallback to
+      getFileDetails and a negative cache for failed scopes. Depends on
+      the signed-URL-set API family recorded as not_yet_ported in the api
+      YAML (issue #206) and ports with it.
+
+  - name: buildGenericFileDownloadList
+    matlab_path: "+ndi/+cloud/+download/+internal/buildGenericFileDownloadList.m"
+    matlab_last_sync_hash: "65aeeeb"
+    status: not_yet_ported
+    decision_log: >
+      MATLAB helper extracted from downloadGenericFiles: flattens
+      generic_file documents into a per-file record (uid, filename,
+      documentId) so the download loop can key one getSignedURLSet call
+      per document via the batch presign cache (NDI-matlab#962). Ports
+      with batchSignedUrlLookup above.
+
+  - name: reconstructSeriesIngestLocations
+    matlab_path: "+ndi/+cloud/+sync/+internal/reconstructSeriesIngestLocations.m"
+    matlab_last_sync_hash: "cd3c116"
+    status: not_yet_ported
+    decision_log: >
+      MATLAB helper for SyncFiles=true downloads: rebuilds a file
+      series' ingest_locations from the downloaded manifest so
+      DID-matlab#185's MembersNotLocatable guard is satisfied on the
+      following add_docs, even though the cloud strips
+      ingest_locations before storing. Every reconstructed entry is
+      ingest=0 / delete_original=0. Python's sync layer does not
+      currently drive add_docs the way MATLAB does, so nothing calls a
+      port yet. Recorded here beside the other +sync/+internal entries.
 
   - name: dropDuplicateDocsFromJsonDecode
     matlab_path: "+ndi/+cloud/+internal/dropDuplicateDocsFromJsonDecode.m"
