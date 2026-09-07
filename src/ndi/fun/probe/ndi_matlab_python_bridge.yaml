@@ -533,29 +533,6 @@ functions:
       elementDirectory legacy fallback for how documents written before this
       change are still located).
 
-  - name: import.kiasort
-    type: package
-    matlab_path: "+ndi/+fun/+probe/+import/+kiasort/"
-    matlab_last_sync_hash: "1b99d29a"
-    status: not_yet_ported
-    decision_log: >
-      Not ported: all twelve MATLAB files under +kiasort, recorded here as
-      one entry because the package is one decision, not twelve. KIASORT is
-      a DIFFERENT spike sorter from Kilosort, and the resemblance of the two
-      names is a hazard rather than a convenience: +kiasort/probe.m,
-      session.m, status.m and getInfo.m have the same names as +kilosort
-      files and do different things. The port is blocked on the external
-      kiasort toolbox having no Python distribution
-      (Waltham-Data-Science/NDI-python#122); until it does, an importer here
-      would have nothing to import from.
-      Python names KIASORT only on the EXPORT side, and does that fully:
-      export.binary defaults to kiasort/kiasort.bin, geometry.toKilosortMap
-      and writeKilosortMap build the channel map KIASORT's load_channel_map
-      reads, and ndi.gui.app.electrode_data_export offers KIASORT beside
-      Kilosort. So the outbound half of the loop works; reading a KIASORT
-      run's results back in is the missing half.
-      ndi/fun/probe/import_/__init__.py says the same thing in the code.
-
   - name: geometry.listLibrary
     type: function
     matlab_path: "+ndi/+fun/+probe/+geometry/listLibrary.m"

@@ -632,44 +632,6 @@ ported_late:
       and an alias would be a third name for one value. That exemption is
       itself tested, in TestCloudColorsIsExemptForAReason.
 
-  - name: kiasort
-    matlab_path: "+ndi/+gui/+app/kiasort.m"
-    matlab_last_sync_hash: "0e2caa09"
-    status: not_yet_ported
-    decision_log: >
-      The KIASORT spike-sorting app. Blocked on the same thing as the
-      import package: KIASORT is a MATLAB sorter, and
-      ndi.fun.probe.import.kiasort is recorded not_yet_ported in
-      src/ndi/fun/ for that reason. Python already names KIASORT as an
-      export TARGET (ndi.gui.app.electrode_data_export offers it
-      alongside Kilosort, writing kiasort/kiasort.bin), so the export
-      half of the loop works; what is missing is running the sorter and
-      importing its results, neither of which Python can do without a
-      Python KIASORT. ndi.gui.app.ensemble_maker's module docstring
-      already says so.
-
-  - name: vhNDISpikeSorter
-    matlab_path: "+ndi/+gui/+app/vhNDISpikeSorter.m"
-    matlab_last_sync_hash: "0e2caa09"
-    status: not_yet_ported
-    decision_log: >
-      The VH Lab manual spike-sorting app: a curation GUI for accepting,
-      splitting and merging clusters. Same class of gap as kiasort --
-      an interactive sorter with no Python implementation behind it --
-      and the two are named together in ensemble_maker's docstring as the
-      pair blocking that app's sorter menu.
-
-  - name: pipelineEditor
-    matlab_path: "+ndi/+gui/+app/pipelineEditor.m"
-    matlab_last_sync_hash: "5088f2ae"
-    status: not_yet_ported
-    decision_log: >
-      Edits an analysis pipeline: the ordered list of calculators to run
-      over a session. Python has the calculator layer underneath
-      (ndi.calc, recorded in src/ndi/calc/) but no pipeline document and
-      no editor over it, so there is nothing for the app to edit yet.
-      It lands after a pipeline representation does, not before.
-
   - name: jrclust
     matlab_path: "+ndi/+gui/+app/jrclust.m"
     status: not_yet_ported
