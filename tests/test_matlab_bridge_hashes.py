@@ -57,7 +57,7 @@ ignore the check.
 AND EVERY ENTRY NAMING A matlab_path MUST CARRY A HASH. One without a hash
 can never drift, so it claims its port is current forever and no check can
 contradict it -- the same false assurance as a stale hash, but silent rather
-than red. 147 entries were in that state when the gate went up.
+than red. 146 entries were in that state when the gate went up.
 
 Neither check imposes a ``decision_log`` obligation. That field explains a
 DIVERGENCE, and a regular port has none; re-examining one against a newer

@@ -282,10 +282,31 @@ project_metadata:
 # contradict it -- the same false assurance as a stale hash, but silent rather
 # than red. 146 entries were in that state when the gate went up.
 #
-# THE CHECK NEEDS A NON-SHALLOW MATLAB CHECKOUT. A shallow clone holds only the
-# tip commit, so every recorded hash resolves to nothing and the whole bridge
-# looks broken. CI uses `fetch-depth: 0`, and the test fails loudly on a
-# shallow tree rather than emitting one false failure per entry.
+# HOW IT IS ENFORCED, AND HOW THAT GOES WRONG QUIETLY. NDR-python and
+# DID-python wire up the same two checks, and both have a way of passing
+# while checking nothing at all -- so the wiring is part of the rule here,
+# not an implementation detail left to each repo.
+#
+#   * THE TWO CHECKS GATE IN DIFFERENT PLACES, because they need different
+#     things. Drift compares against NDI-matlab, so it can only gate in the
+#     one job that checks NDI-matlab out. The hash-presence check reads only
+#     this repo, so it gates in EVERY test job -- which is what makes an
+#     entry with no hash impossible to land, including through a job that
+#     has no MATLAB tree.
+#   * A CHECK NO JOB NAMES RUNS NOWHERE. The bridge job invokes test files
+#     by name (`pytest tests/test_matlab_bridge_hashes.py`), so adding a
+#     file to the repo does not add it to CI: nothing collects it and the
+#     build is green. Adding a check means adding its step too, and reading
+#     the job log to confirm the count it collected.
+#   * A CHECK WITH NO MATLAB TREE SKIPS ITSELF. Absent the tree the drift
+#     check skips, which is right for a local run and useless in CI. The
+#     workflow sets NDI_BRIDGE_CHECK_STRICT=1 after checking NDI-matlab out,
+#     so a workflow that stops providing the tree fails instead of quietly
+#     passing (#77).
+#   * IT NEEDS A NON-SHALLOW CHECKOUT. A shallow clone holds only the tip
+#     commit, so every recorded hash resolves to nothing and the whole
+#     bridge looks broken. CI uses `fetch-depth: 0`, and the test asserts a
+#     non-shallow tree rather than emitting one false failure per entry.
 #
 # THE BURN-DOWN. The gate went up over pre-existing debt: 60 drifted entries
 # and 146 with no hash, enumerated in tests/bridge_drift_allowlist.yaml. Every
