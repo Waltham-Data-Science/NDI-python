@@ -2011,6 +2011,35 @@ functions:
       becomes a Python keyword of the same name. See readViewportBase for
       the source-coordinate entry point.
 
+  - name: tilePath
+    matlab_path: "+ndi/+fun/+doc/+gene/tilePath.m"
+    matlab_last_sync_hash: "b9972ab"
+    python_path: "ndi/gui/app/genepyramid/multiscale.py"
+    status: ported
+    decision_log: >
+      Resolves one of a document's binary files to a local path, fetching
+      it if remote, and REMEMBERS the answer so a repeat is one existence
+      check. Safe to remember because the database names a cached file by
+      its immutable uid: the path for a given document and filename cannot
+      change meaning, so the file is either still there or gone, never
+      different. It is checked rather than trusted, because it can go.
+
+      THE TWO PORTS DIFFER IN SHAPE, deliberately, and this is the entry
+      that records why. MATLAB has a plain function holding a persistent
+      map, because readViewport and exportRegion are functions with no
+      object to hang state on. Python has _TileFetcher.tilePath, a method,
+      because the Python side needed a class regardless: dask runs blocks
+      on a thread pool and NDI's database may only be used from the thread
+      that opened it, so fetches are marshalled to threads that own a
+      session each. MATLAB has no such constraint here -- neither reader
+      is driven by a pool -- so it needs no equivalent of that machinery
+      and would be worse for carrying it.
+
+      The memo is the half that IS common, and it is the half worth
+      keeping in step: same key (document id AND filename, so two tiles of
+      one level cannot collide), same existence check, same
+      fetch-again-on-miss.
+
   - name: exportRegion
     matlab_path: "+ndi/+fun/+doc/+gene/exportRegion.m"
     matlab_last_sync_hash: "96f10959"
@@ -2202,20 +2231,25 @@ functions:
   # =======================================================================
   # +ndi/+fun/+doc/+gene -- spatial-transcriptomics ingest additions
   #
-  # A group of five MATLAB functions that lift the .gef / .h5ad ingest
-  # path out of ndi.gui.app.GeneIngest so a script, a batch importer or a
-  # Python caller can drive it without opening the GUI (VH-Lab/NDI-matlab
-  # PR #933). None of the five has a Python counterpart yet:
+  # A group of MATLAB functions that lift the .gef / .h5ad ingest path out
+  # of ndi.gui.app.GeneIngest so a script, a batch importer or a Python
+  # caller can drive it without opening the GUI (VH-Lab/NDI-matlab
+  # PR #933). The four recorded here have no Python counterpart yet:
   # ndi.gui.app.GeneIngest itself is not ported either (see the entry in
   # src/ndi/gui/app/ndi_matlab_python_bridge.yaml), and the ingest path
   # only becomes reachable from Python once the GUI class or a
   # non-interactive equivalent lands. The tile / cell / pyramid readers
   # and writers around them are ported (readTileFile, readCells,
-  # writeContourFile, ...), so these five join them when the ingest
+  # writeContourFile, ...), so these four join them when the ingest
   # boundary is drawn on the Python side. Deferred as a group rather than
   # a file at a time because they call each other -- fromGEF makes the
-  # source file, tilePath resolves the tile it produces, and readNotes
-  # reports what the reader could not verify up front.
+  # source file and readNotes reports what the reader could not verify up
+  # front.
+  #
+  # tilePath came over with this group in MATLAB but is recorded ABOVE,
+  # with the ported doc_gene entries, because the lazy tile fetcher does
+  # have a Python counterpart now (_TileFetcher.tilePath); its entry
+  # records why the two ports differ in shape.
   # =======================================================================
 
   - name: fromCellBin
@@ -2228,7 +2262,7 @@ functions:
       spatialGeneExpressionCells plus one cellTypeLabels document per
       requested labeling, positioned against a pyramid document. Reads
       the file exactly once so cells and label arrays cannot disagree
-      about row order. Ports as a group with the other four entries
+      about row order. Ports as a group with the other three entries
       under this heading; no current Python caller.
 
   - name: fromGEF
@@ -2239,7 +2273,7 @@ functions:
       MATLAB reads a Stereo-seq .gef with ndr.format.stereoseq.readGEF
       and produces the geneList, spatialGeneExpressionPyramid and one
       spatialGeneExpressionTiles per level -- the whole .gef-to-database
-      path in one call. Ports with the other four entries under this
+      path in one call. Ports with the other three entries under this
       heading.
 
   - name: makeSourceFile
@@ -2251,7 +2285,7 @@ functions:
       expression documents' source_file_id dependency points at, so a
       pyramid can name the .gef it was built from. Describes by default
       (name + checksum + dates), attaches only when attachFile=true.
-      Ports with the other four entries under this heading.
+      Ports with the other three entries under this heading.
 
   - name: readNotes
     matlab_path: "+ndi/+fun/+doc/+gene/readNotes.m"
@@ -2262,20 +2296,8 @@ functions:
       ndr.format.stereoseq into a cellstr of things a caller should be
       told after the fact (counts hitting ceilings, extents from
       attributes rather than records, tables trimmed by maxGenes).
-      Ports with the other four entries under this heading; nothing in
+      Ports with the other three entries under this heading; nothing in
       Python asks for these notes yet.
-
-  - name: tilePath
-    matlab_path: "+ndi/+fun/+doc/+gene/tilePath.m"
-    matlab_last_sync_hash: "b9972ab"
-    status: not_yet_ported
-    decision_log: >
-      MATLAB helper that resolves and memoizes the local path of a
-      document's binary file, fetching it if remote. Safe to memoize
-      because the database keys by immutable uid. No current Python
-      caller: readTileFile already accepts an open file object or bytes,
-      so path resolution has not been the bottleneck the memo answers.
-      Ports with the other four entries under this heading.
 
 # =========================================================================
 # Functions — doc_gene_export.py
