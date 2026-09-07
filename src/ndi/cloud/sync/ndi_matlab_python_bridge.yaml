@@ -361,7 +361,7 @@ not_yet_ported:
   - name: deleteRemoteDocuments
     matlab_path: "+ndi/+cloud/+sync/+internal/deleteRemoteDocuments.m"
     matlab_last_sync_hash: "1498b2ea"
-    status: ported_elsewhere
+    status: ported_differently
     decision_log: >
       MATLAB internal for removing remote documents during mirror operations.
       Python sync operations handle this inline via API calls.
@@ -369,7 +369,7 @@ not_yet_ported:
   - name: createSyncIndexStruct
     matlab_path: "+ndi/+cloud/+sync/+internal/+index/createSyncIndexStruct.m"
     matlab_last_sync_hash: "fe64a9f5"
-    status: ported_elsewhere
+    status: ported_differently
     decision_log: >
       MATLAB struct constructor. Python uses SyncIndex dataclass
       with default field values instead.
@@ -377,7 +377,7 @@ not_yet_ported:
   - name: getIndexFilepath
     matlab_path: "+ndi/+cloud/+sync/+internal/+index/getIndexFilepath.m"
     matlab_last_sync_hash: "fe64a9f5"
-    status: ported_elsewhere
+    status: ported_differently
     decision_log: >
       MATLAB path resolver. Python handles this inside
       SyncIndex.read() and SyncIndex.write() methods.

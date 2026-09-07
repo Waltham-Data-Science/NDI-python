@@ -476,7 +476,7 @@ class TestOneMatlabFileIsRecordedOnce:
     * ``+ndi/+fun/+probe/+import/+kiasort/`` was ``not_yet_ported`` beside
       an entry describing nine of its twelve files as ported.
     * ``selectCloudDataset`` and ``LoginDialog`` were a gap in one entry and
-      ``ported_elsewhere`` in another.
+      ``ported_differently`` in another.
 
     Each time the stale copy was the one a reader might hit first. The bridge
     is the answer to "is this ported?", so two answers is worse than none.

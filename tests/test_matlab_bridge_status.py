@@ -15,11 +15,18 @@ stopped meaning one thing each:
   the wrong answer for the first group.
 * ``not_yet_ported`` mixed deliberate deferral, blocked-on-an-external-
   toolbox, and genuinely undecided. At least one entry under it
-  (``getUploadedDocumentIds``) actually meant ``ported_elsewhere``.
+  (``getUploadedDocumentIds``) actually meant ``ported_differently``.
 
 ``implemented`` was a synonym for the ported default and ``does_not_exist``
 a one-off for ``retired``. The vocabulary is now five values, defined in
 section 6 of ``docs/developer_notes/ndi_matlab_python_bridge.yaml``.
+
+``ported_differently`` was briefly spelled ``ported_elsewhere``; NDR-python#21
+renamed it across all three ports, on the grounds that "elsewhere" names a
+place ``python_path`` already gives, while most such entries never moved at
+all -- a library does the job, or the design differs. It stays in
+:data:`RETIRED_SPELLINGS` so the old name gets a targeted message rather than
+a bare "not in the vocabulary".
 
 WHY THE DOCS ARE CHECKED TOO, and not just the data. The previous rule in
 this file family -- ``matlab_last_sync_hash`` -- was written in three
@@ -46,15 +53,21 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 #: is already ported, which is how ~460 entries spell it. Writing it out is
 #: allowed where an entry benefits from saying so, so the value is legal
 #: without being required.
-ALLOWED = frozenset({"ported", "ported_elsewhere", "matlab_only", "porting_deferred", "retired"})
+ALLOWED = frozenset({"ported", "ported_differently", "matlab_only", "porting_deferred", "retired"})
 
 #: Values that were in use before the vocabulary was settled. Named rather
 #: than merely absent so the failure can say what to use instead.
 RETIRED_SPELLINGS = {
-    "not_yet_ported": "porting_deferred, or ported_elsewhere if Python already does it another way",
-    "not_applicable": "matlab_only, ported_elsewhere or retired -- it meant all three",
+    "not_yet_ported": "porting_deferred, or ported_differently if Python already does it another way",
+    "not_applicable": "matlab_only, ported_differently or retired -- it meant all three",
     "implemented": "nothing: drop the status, a python_path already means ported",
     "does_not_exist": "retired",
+    # Renamed rather than repurposed, so it earns its own message: a reader who
+    # writes the old name means exactly the right thing and deserves better
+    # than "not in the vocabulary". (NDR-python#21)
+    "ported_elsewhere": "ported_differently -- same meaning, renamed because "
+    "'elsewhere' names a place that python_path already gives, while the manner "
+    "of the port is what a reader cannot get from any other field",
 }
 
 SPEC = REPO_ROOT / "docs" / "developer_notes" / "ndi_matlab_python_bridge.yaml"

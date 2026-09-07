@@ -1033,7 +1033,7 @@ not_applicable:
 
   - name: toolboxdir
     matlab_path: "+ndi/toolboxdir.m"
-    status: ported_elsewhere
+    status: ported_differently
     decision_log: >
       MATLAB-specific path resolution. Python uses
       ndi.common.ndi_common_PathConstants.

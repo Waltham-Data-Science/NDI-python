@@ -913,7 +913,7 @@ not_yet_ported:
   - name: timeseries
     matlab_path: "+ndi/+time/timeseries.m"
     matlab_last_sync_hash: "0e2caa09"
-    status: ported_elsewhere
+    status: ported_differently
     decision_log: >
       MATLAB's ndi.time.timeseries is an abstract mixin: it declares
       readtimeseries / samplerate / times2samples / samples2times and the

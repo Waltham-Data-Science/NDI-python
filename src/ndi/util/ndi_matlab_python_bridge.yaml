@@ -504,14 +504,14 @@ not_applicable:
 
   - name: toolboxdir
     matlab_path: "+ndi/+util/toolboxdir.m"
-    status: ported_elsewhere
+    status: ported_differently
     decision_log: >
       MATLAB-specific path resolution using mfilename('fullpath').
       Python uses ndi.common.ndi_common_PathConstants instead.
 
   - name: "+openminds sub-package"
     matlab_path: "+ndi/+util/+openminds/"
-    status: ported_elsewhere
+    status: ported_differently
     decision_log: >
       MATLAB sub-package with find_instance_name.m and
       find_techniques_names.m. Ported to ndi.openminds_convert

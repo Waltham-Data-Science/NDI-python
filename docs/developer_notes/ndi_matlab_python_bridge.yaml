@@ -117,7 +117,7 @@ project_metadata:
 # =============================================================================
 # 6. The status vocabulary -- THE NORMATIVE LIST
 # =============================================================================
-# VALUES: ported, ported_elsewhere, matlab_only, porting_deferred, retired
+# VALUES: ported, ported_differently, matlab_only, porting_deferred, retired
 #
 # That line is parsed by tests/test_matlab_bridge_status.py and compared
 # against the set the code enforces, so this document and the check cannot
@@ -145,11 +145,18 @@ project_metadata:
 # but it is never required. `implemented` was a synonym and is gone.
 #
 # -----------------------------------------------------------------------------
-# ported_elsewhere -- Python CAN do it, just not 1:1
+# ported_differently -- Python CAN do it, just not 1:1
 # -----------------------------------------------------------------------------
 # The capability exists IN THIS REPOSITORY, under a different name, folded into
-# a class, or handled by different machinery. The decision_log must say where,
-# and a python_path should point at it.
+# a class, or handled by different machinery. The decision_log must say how, and
+# a python_path should point at it.
+#
+# NAMED FOR THE MANNER, NOT THE PLACE, and that is deliberate (NDR-python#21).
+# The earlier spelling was `ported_elsewhere`, but "elsewhere" names a PLACE and
+# python_path already answers where. What a reader cannot recover from any other
+# field is HOW the port differs -- and for most of these entries nothing moved
+# at all: a library does the job (numcodecs.Blosc for decompressBlosc), or the
+# design is simply different. "Differently" is the part worth a word.
 #   ndi.cloud.api.call        -> CloudClient._request()
 #   createSyncIndexStruct     -> the SyncIndex dataclass
 #   openMINDSobj2struct       -> ndi/openminds_convert.py
@@ -166,10 +173,10 @@ project_metadata:
 #   debuglog / syslog    MATLAB has no logging module; Python's stdlib does
 #   systemCurlEnvPrefix  resets LD_LIBRARY_PATH that MATLAB itself polluted
 #   choosefile           a MATLAB GUI dialog
-# THE LINE AGAINST ported_elsewhere: does the replacement live in this repo
-# (ported_elsewhere), or does the Python language and its standard library make
+# THE LINE AGAINST ported_differently: does the replacement live in this repo
+# (ported_differently), or does the Python language and its standard library make
 # the function unnecessary (matlab_only)? "Use tempfile" is matlab_only;
-# "use our SyncIndex class" is ported_elsewhere.
+# "use our SyncIndex class" is ported_differently.
 #
 # -----------------------------------------------------------------------------
 # porting_deferred -- no counterpart yet, and we know it
@@ -199,7 +206,7 @@ project_metadata:
 # 1. Is there no MATLAB function at all?              -> retired
 # 2. Can a Python caller do this today?
 #      yes, same name and shape                       -> (no status) + python_path
-#      yes, somewhere else in this repo               -> ported_elsewhere
+#      yes, but not as a 1:1 mirror                   -> ported_differently
 # 3. Could there ever be a Python counterpart?
 #      no, the need is MATLAB's own                   -> matlab_only
 #      yes, nobody has written it                     -> porting_deferred

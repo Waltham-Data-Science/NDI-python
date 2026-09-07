@@ -2450,7 +2450,7 @@ not_applicable:
 
   - name: find_calc_directories
     matlab_path: "+ndi/+fun/find_calc_directories.m"
-    status: ported_elsewhere
+    status: ported_differently
     decision_log: >
       Not applicable. Finds NDIcalc-*-matlab calculator toolboxes by going
       three directories up from ndi.toolboxdir and globbing the siblings --

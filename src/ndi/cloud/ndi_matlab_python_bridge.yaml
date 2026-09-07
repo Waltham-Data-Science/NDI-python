@@ -1319,7 +1319,7 @@ not_yet_ported:
   - name: getUploadedDocumentIds
     matlab_path: "+ndi/+cloud/+internal/getUploadedDocumentIds.m"
     matlab_last_sync_hash: "092aab34"
-    status: ported_elsewhere
+    status: ported_differently
     decision_log: >
       MATLAB internal. Python uses listRemoteDocumentIds instead
       which serves the same purpose.
@@ -1372,7 +1372,7 @@ not_yet_ported:
   - name: zip_documents_for_upload
     matlab_path: "+ndi/+cloud/+upload/+internal/zip_documents_for_upload.m"
     matlab_last_sync_hash: "c6aef552"
-    status: ported_elsewhere
+    status: ported_differently
     decision_log: >
       MATLAB internal helper. Python uses zipForUpload which handles
       this internally with zipfile module.
@@ -1387,7 +1387,7 @@ not_yet_ported:
   - name: selectCloudDataset
     matlab_path: "+ndi/+cloud/+ui/+dialog/selectCloudDataset.m"
     matlab_last_sync_hash: "b7102250"
-    status: ported_elsewhere
+    status: ported_differently
     python_path: "ndi/gui/nav/datasets_pane.py"
     decision_log: >
       MATLAB opens a modal picker over ndi.cloud.api.datasets.getPublished
@@ -1405,7 +1405,7 @@ not_yet_ported:
   - name: LoginDialog
     matlab_path: "+ndi/+cloud/+ui/+dialog/LoginDialog.mlapp"
     matlab_last_sync_hash: "b7102250"
-    status: ported_elsewhere
+    status: ported_differently
     python_path: "ndi/gui/profile_editor.py"
     decision_log: >
       MATLAB App Designer credential prompt, the UI behind uilogin (recorded

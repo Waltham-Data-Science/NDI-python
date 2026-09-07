@@ -1324,7 +1324,7 @@ not_yet_ported:
   - name: call
     matlab_path: "+ndi/+cloud/+api/call.m"
     matlab_last_sync_hash: "9b75c0fe"
-    status: ported_elsewhere
+    status: ported_differently
     decision_log: >
       MATLAB generic HTTP dispatcher. Python uses CloudClient._request()
       which serves the same purpose.
@@ -1332,7 +1332,7 @@ not_yet_ported:
   - name: url
     matlab_path: "+ndi/+cloud/+api/url.m"
     matlab_last_sync_hash: "f9112a14"
-    status: ported_elsewhere
+    status: ported_differently
     decision_log: >
       MATLAB URL builder. Python uses CloudClient._build_url()
       which serves the same purpose.
@@ -1340,7 +1340,7 @@ not_yet_ported:
   - name: documentCount
     matlab_path: "+ndi/+cloud/+api/+documents/documentCount.m"
     matlab_last_sync_hash: "9b75c0fe"
-    status: ported_elsewhere
+    status: ported_differently
     decision_log: >
       MATLAB duplicate/alias for countDocuments. Python uses countDocuments
       which is the canonical name.
