@@ -47,6 +47,11 @@ Every sub-package contains a file named `ndi_matlab_python_bridge.yaml`.
 - **Counting:** Any user-facing concept (Epochs, Channels, Trials) uses 1-based counting in Python to match MATLAB.
 - **Internal Access:** Use 0-based indexing for internal Python data structures (lists, NumPy arrays).
 - **Formatting:** Code must pass `black` and `ruff check --fix` before completion.
+- **Layered Dependencies: use `did` and `ndr`, do not reimplement them.** NDI sits on top of two sibling ports, both hard dependencies in `pyproject.toml`, and a port that needs what they provide goes *through* them rather than growing a parallel implementation:
+  - **`did` — documents, queries, the database.** `ndi.query` inherits `did.query.Query`; `ndi_document` wraps `did.document.Document`; the backend is `did.implementations.sqlitedb.SQLiteDB`. If MATLAB reaches `did.*`, the Python port reaches `did` too. Do not write new document storage, query evaluation or database code here.
+  - **`ndr` — acquisition file formats.** `ndr.format.intan`, `ndr.format.ced`, and the rest. If MATLAB reads a device file through `ndr.*`, so does the port. Do not add a format reader to this repo.
+
+  The mirror runs one layer down as well: when the behaviour you need is missing or wrong, the fix usually belongs in DID-python or NDR-python, not in a workaround here. Record it as `ported_differently` with a `decision_log` only when NDI genuinely does the thing another way — never to paper over a gap in a dependency.
 
 ## 5. CI Lint & Test Commands
 
