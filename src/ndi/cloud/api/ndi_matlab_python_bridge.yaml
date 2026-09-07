@@ -1339,3 +1339,88 @@ not_yet_ported:
     decision_log: >
       MATLAB duplicate/alias for countDocuments. Python uses countDocuments
       which is the canonical name.
+
+  # =======================================================================
+  # +ndi/+cloud/+api/+files -- signed-URL-set family
+  #
+  # A coherent group of six MATLAB functions added by NDI-matlab's
+  # signed-URL-set work (PRs #967, #969, #970 and preceding). Together they
+  # cover the /signed-url-set (paged) and /signed-url-set-jobs (async)
+  # routes the cloud exposes for bulk pre-signed downloads:
+  #
+  #   getSignedURLSet       - one page of a document's UID -> signed URL map
+  #   getSignedURLSetAll    - walk every page and merge into a single map
+  #   createSignedURLSetJob - POST /signed-url-set-jobs; server builds the
+  #                           full map, gzips it, hands back a job id
+  #   getSignedURLSetJob    - poll one job's state
+  #   waitForSignedURLSetJob- poll with exponential backoff until terminal
+  #   getSignedURLSetResult - GET + parse the blob a ready job produced
+  #
+  # This is what fetching a 28,000-member file-series document over the
+  # cloud requires (VH-Lab/NDI-matlab#952) -- one API call per document
+  # instead of one per member. Python currently has no signed-URL-set
+  # support at all (grep -r "signed_url_set\|SignedURLSet" src/ndi/ is
+  # empty), so the honest status for all six is not_yet_ported. Recorded
+  # together with one shared decision_log because there is no case-by-case
+  # judgement to make: the family lands as a unit or not at all.
+  #
+  # Filed as Waltham-Data-Science/ndi-python#206.
+  # =======================================================================
+
+  - name: createSignedURLSetJob
+    matlab_path: "+ndi/+cloud/+api/+files/createSignedURLSetJob.m"
+    matlab_last_sync_hash: "5804cd80"
+    status: not_yet_ported
+    decision_log: >
+      Part of the signed-URL-set family (#206). Python has no
+      signed-URL-set support yet, so createSignedURLSetJob has no Python
+      counterpart. Ports as a unit with the other five entries under this
+      heading; see the shared note above.
+
+  - name: getSignedURLSet
+    matlab_path: "+ndi/+cloud/+api/+files/getSignedURLSet.m"
+    matlab_last_sync_hash: "5804cd80"
+    status: not_yet_ported
+    decision_log: >
+      Part of the signed-URL-set family (#206). One page of a document's
+      UID -> signed URL map, via GET /signed-url-set. Python has no
+      counterpart; ports as a unit, see the shared note above.
+
+  - name: getSignedURLSetAll
+    matlab_path: "+ndi/+cloud/+api/+files/getSignedURLSetAll.m"
+    matlab_last_sync_hash: "5804cd80"
+    status: not_yet_ported
+    decision_log: >
+      Part of the signed-URL-set family (#206). Walks getSignedURLSet
+      cursors and merges every page into one map. Python has no
+      counterpart; ports as a unit, see the shared note above.
+
+  - name: getSignedURLSetJob
+    matlab_path: "+ndi/+cloud/+api/+files/getSignedURLSetJob.m"
+    matlab_last_sync_hash: "cd11b198"
+    status: not_yet_ported
+    decision_log: >
+      Part of the signed-URL-set family (#206). Poll one signed-URL-set
+      job's state via GET /signed-url-set-jobs/{jobId}. Python has no
+      counterpart; ports as a unit, see the shared note above.
+
+  - name: getSignedURLSetResult
+    matlab_path: "+ndi/+cloud/+api/+files/getSignedURLSetResult.m"
+    matlab_last_sync_hash: "4b5c0478"
+    status: not_yet_ported
+    decision_log: >
+      Part of the signed-URL-set family (#206). Downloads and parses the
+      gzipped blob a ready job produced (a UID -> signed URL map plus
+      count and generation timestamp). Python has no counterpart; ports
+      as a unit, see the shared note above.
+
+  - name: waitForSignedURLSetJob
+    matlab_path: "+ndi/+cloud/+api/+files/waitForSignedURLSetJob.m"
+    matlab_last_sync_hash: "cd11b198"
+    status: not_yet_ported
+    decision_log: >
+      Part of the signed-URL-set family (#206). Polls
+      getSignedURLSetJob with exponentially growing intervals until the
+      job reaches a terminal state ('ready' or 'failed') or the overall
+      timeout elapses. Python has no counterpart; ports as a unit, see
+      the shared note above.

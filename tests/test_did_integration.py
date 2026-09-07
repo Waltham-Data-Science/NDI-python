@@ -181,6 +181,8 @@ KNOWN_UNVALIDATABLE_DEFINITIONS = {
     # schema in both.
     "data/pyraview": "DID:Database:ValidationFieldMatrix",
     "demoNDI": "DID:Database:ValidationFieldInteger",
+    "demoNDISeries": "DID:Database:ValidationFieldInteger",
+    "demoNDISeriesMixed": "DID:Database:ValidationFieldInteger",
     "epochclocktimes": "DID:Database:ValidationFieldMatrix",
     "mock/demoNDIMock": "DID:Database:ValidationFieldInteger",
     "session_in_a_dataset": "DID:Database:ValidationFieldDouble",
