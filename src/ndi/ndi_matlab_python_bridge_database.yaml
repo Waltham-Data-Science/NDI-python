@@ -17,7 +17,7 @@ classes:
   - name: database
     type: class
     matlab_path: "+ndi/database.m"
-    matlab_last_sync_hash: "ad81fd7a"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database.py"
     python_class: "ndi_database"
 
@@ -313,7 +313,7 @@ functions:
   - name: open_database
     type: function
     matlab_path: "+ndi/+database/+fun/opendatabase.m"
-    matlab_last_sync_hash: "0d40859f"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database.py"
     python_name: "open_database"
     input_arguments:

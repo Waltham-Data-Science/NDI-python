@@ -58,6 +58,10 @@ jobs:
           # records, so check that branch when it exists.
           ref: ${{ github.head_ref || github.ref_name }}
           path: NDI-matlab
+          # Full history: the sync-hash check resolves recorded commits with
+          # `git cat-file -t`, and the default shallow clone has only HEAD --
+          # every commit hash would come back "missing".
+          fetch-depth: 0
         continue-on-error: true
         id: matlab_checkout_branch
 
@@ -68,6 +72,8 @@ jobs:
           repository: VH-Lab/NDI-matlab
           ref: main
           path: NDI-matlab
+          # See the note on the step above.
+          fetch-depth: 0
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -87,6 +93,15 @@ jobs:
           # a check that could not run must not report a pass (see #77).
           NDI_BRIDGE_CHECK_STRICT: "1"
         run: pytest tests/test_matlab_bridge_completeness.py -v --tb=short
+
+      - name: Check bridge sync hashes are commits
+        working-directory: NDI-python
+        env:
+          # Same reasoning as the step above: this job checks NDI-matlab out,
+          # so an absent tree is a broken checkout rather than a local
+          # developer without one. Fail rather than skip (#77).
+          NDI_BRIDGE_CHECK_STRICT: "1"
+        run: pytest tests/test_matlab_bridge_hashes.py -v --tb=short
 
       - name: Check ndi_common sync with NDI-matlab
         working-directory: NDI-python

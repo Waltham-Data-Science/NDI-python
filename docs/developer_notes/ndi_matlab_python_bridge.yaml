@@ -28,9 +28,13 @@ project_metadata:
 # 1. Check:  Does the function/class exist in the YAML?
 # 2. Add/Update: If it is missing or the MATLAB signature has changed,
 #    update the YAML first.
-# 3. Record Hash: Store the short git hash of the MATLAB .m file being
-#    ported in the `matlab_last_sync_hash` field. Obtain the hash with:
+# 3. Record Hash: Store, in `matlab_last_sync_hash`, the short hash of a
+#    COMMIT in NDI-matlab that your examination was made against:
 #      git log -1 --format="%h" -- <path-to-matlab-file>
+#    It MUST be a commit, never a blob. `git hash-object <file>` returns the
+#    hash of the file's CONTENTS and is useless here -- the freshness check
+#    walks history (git log <hash>..HEAD -- <path>), and a blob is not a
+#    point in history to walk from. A test rejects anything but a commit.
 # 4. Notify: The agent MUST explicitly tell the user:
 #    "I have updated the ndi_matlab_python_bridge.yaml to include
 #    [Function Name]. Please review the interface contract."
@@ -40,11 +44,12 @@ project_metadata:
 # =============================================================================
 # The `matlab_last_sync_hash` field enables efficient change detection:
 #
-# 1. For each entry, compare `matlab_last_sync_hash` against the current
-#    HEAD hash of the corresponding MATLAB .m file:
-#      git log -1 --format="%h" -- <matlab_path>
-# 2. If the hashes differ, the MATLAB file has changed since the last sync
-#    and the Python port may need to be updated.
+# 1. For each entry, ask git whether the file has moved since that commit:
+#      git log <matlab_last_sync_hash>..HEAD -- <matlab_path>
+# 2. Empty output means the file has not changed since somebody looked at
+#    it. Any output lists exactly the commits to review, which is why this
+#    field holds a commit rather than a content hash: a blob can only say
+#    "different", while a commit says what changed and how much.
 # 3. After re-syncing, update `matlab_last_sync_hash` to the new hash and
 #    record the sync date in `decision_log`.
 
@@ -94,8 +99,11 @@ project_metadata:
 # Field                | Rule
 # ---------------------|----------------------------------------------------------
 # name                 | Strict Match. Case-sensitive match to the MATLAB .m file.
-# matlab_last_sync_hash| The short git hash of the MATLAB .m file at the time it
-#                      | was last examined/ported. Used to detect upstream changes.
+# matlab_last_sync_hash| Short hash of a COMMIT in NDI-matlab that the entry was
+#                      | last examined against -- the file's own last-touching
+#                      | commit, or a repo-wide commit for a batch sync. Both are
+#                      | points in history. NEVER a blob hash (git hash-object):
+#                      | enforced by tests/test_matlab_bridge_hashes.py.
 # input_arguments      | Used to generate Pydantic @validate_call.
 # output_arguments     | Defines the order of the Return Tuple.
 # type_python          | Use Python 3.10+ syntax (e.g., str | int).
