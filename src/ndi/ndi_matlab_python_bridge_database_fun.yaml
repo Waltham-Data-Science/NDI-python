@@ -14,7 +14,7 @@ functions:
   - name: findallantecedents
     type: function
     matlab_path: "+ndi/+database/+fun/findallantecedents.m"
-    matlab_last_sync_hash: "25cd329a"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     input_arguments:
       - name: E
@@ -40,7 +40,7 @@ functions:
   - name: findalldependencies
     type: function
     matlab_path: "+ndi/+database/+fun/findalldependencies.m"
-    matlab_last_sync_hash: "738739e2"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     input_arguments:
       - name: E
@@ -61,7 +61,7 @@ functions:
   - name: docs_from_ids
     type: function
     matlab_path: "+ndi/+database/+fun/docs_from_ids.m"
-    matlab_last_sync_hash: "c44ecb1b"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     input_arguments:
       - name: D_or_S
@@ -79,7 +79,7 @@ functions:
   - name: docs2graph
     type: function
     matlab_path: "+ndi/+database/+fun/docs2graph.m"
-    matlab_last_sync_hash: "2e056a3a"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     input_arguments:
       - name: ndi_document_obj
@@ -110,7 +110,7 @@ functions:
   - name: find_ingested_docs
     type: function
     matlab_path: "+ndi/+database/+fun/find_ingested_docs.m"
-    matlab_last_sync_hash: "59381b77"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     input_arguments:
       - name: S
@@ -125,7 +125,7 @@ functions:
   - name: finddocs_elementEpochType
     type: function
     matlab_path: "+ndi/+database/+fun/finddocs_elementEpochType.m"
-    matlab_last_sync_hash: "43051900"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     python_name: "finddocs_elementEpochType"
     input_arguments:
@@ -153,7 +153,7 @@ functions:
   - name: ndi_document2ndi_object
     type: function
     matlab_path: "+ndi/+database/+fun/ndi_document2ndi_object.m"
-    matlab_last_sync_hash: "62f7fa5e"
+    matlab_last_sync_hash: "bcc6b4e14"
     python_path: "ndi/database_fun.py"
     input_arguments:
       - name: ndi_document_obj
@@ -175,7 +175,7 @@ functions:
   - name: copy_session_to_dataset
     type: function
     matlab_path: "+ndi/+database/+fun/copy_session_to_dataset.m"
-    matlab_last_sync_hash: "c58397b5"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     input_arguments:
       - name: ndi_session_obj
@@ -201,7 +201,7 @@ functions:
   - name: finddocs_missing_dependencies
     type: function
     matlab_path: "+ndi/+database/+fun/finddocs_missing_dependencies.m"
-    matlab_last_sync_hash: "6372fef5"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     input_arguments:
       - name: E
@@ -222,7 +222,7 @@ functions:
   - name: write_presentation_time_structure
     type: function
     matlab_path: "+ndi/+database/+fun/write_presentation_time_structure.m"
-    matlab_last_sync_hash: "12cb5d54"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     input_arguments:
       - name: filename
@@ -237,7 +237,7 @@ functions:
   - name: read_presentation_time_structure
     type: function
     matlab_path: "+ndi/+database/+fun/read_presentation_time_structure.m"
-    matlab_last_sync_hash: "31718f35"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     input_arguments:
       - name: filename
@@ -271,7 +271,7 @@ functions:
   - name: database2json
     type: function
     matlab_path: "+ndi/+database/+fun/database2json.m"
-    matlab_last_sync_hash: "ff445350"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     python_name: "database2json"
     input_arguments:
@@ -294,7 +294,7 @@ functions:
   - name: copydocfile2temp
     type: function
     matlab_path: "+ndi/+database/+fun/copydocfile2temp.m"
-    matlab_last_sync_hash: "6db763c9"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     python_name: "copydocfile2temp"
     input_arguments:
@@ -325,7 +325,7 @@ functions:
   - name: extract_doc_files
     type: function
     matlab_path: "+ndi/+database/+fun/extract_docs_files.m"
-    matlab_last_sync_hash: "9dc96e22"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     python_name: "extract_doc_files"
     input_arguments:
@@ -453,7 +453,10 @@ not_applicable:
 
   - name: readtablechar
     matlab_path: "+ndi/+database/+fun/readtablechar.m"
-    matlab_last_sync_hash: "234c356"
+    # matlab_last_sync_hash intentionally absent: the value recorded here was
+    # "234c356", which resolves to no object in NDI-matlab and could not be
+    # recovered. An absent hash claims nothing; a wrong one claims something
+    # false. Needs a re-sync against the current file. See NDI-python#191.
     python_path: "ndi/database_fun.py"
     python_name: readtablechar
     input_arguments:
@@ -495,7 +498,10 @@ not_applicable:
 
   - name: writetablechar
     matlab_path: "+ndi/+database/+fun/writetablechar.m"
-    matlab_last_sync_hash: "234c356"
+    # matlab_last_sync_hash intentionally absent: the value recorded here was
+    # "234c356", which resolves to no object in NDI-matlab and could not be
+    # recovered. An absent hash claims nothing; a wrong one claims something
+    # false. Needs a re-sync against the current file. See NDI-python#191.
     python_path: "ndi/database_fun.py"
     python_name: writetablechar
     input_arguments:

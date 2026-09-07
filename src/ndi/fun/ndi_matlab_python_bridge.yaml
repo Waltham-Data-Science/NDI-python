@@ -556,7 +556,10 @@ functions:
     output_arguments:
       - name: table
         type_python: "pd.DataFrame"
-    matlab_last_sync_hash: "234c356"
+    # matlab_last_sync_hash intentionally absent: the value recorded here was
+    # "234c356", which resolves to no object in NDI-matlab and could not be
+    # recovered. An absent hash claims nothing; a wrong one claims something
+    # false. Needs a re-sync against the current file. See NDI-python#191.
     decision_log: >
       Creates a summary table of epoch-related documents with columns:
       EpochNumber, EpochDocumentIdentifier, ProbeDocumentIdentifier,
@@ -659,7 +662,10 @@ functions:
       - name: dependency_ids
         type_matlab: "dependencyIDs"
         type_python: "list[str]"
-    matlab_last_sync_hash: "234c356"
+    # matlab_last_sync_hash intentionally absent: the value recorded here was
+    # "234c356", which resolves to no object in NDI-matlab and could not be
+    # recovered. An absent hash claims nothing; a wrong one claims something
+    # false. Needs a re-sync against the current file. See NDI-python#191.
     decision_log: >
       Returns MATLAB's 3 outputs (table, doc_ids, dependency_ids), and the
       options depends_on, errorIfEmpty, depends_on_docs and hideMixtureTable.
@@ -1910,7 +1916,7 @@ functions:
 
   - name: readTileFile
     matlab_path: "+ndi/+fun/+doc/+gene/readTileFile.m"
-    matlab_last_sync_hash: "6636493c"
+    matlab_last_sync_hash: "f5d4baaec"
     python_path: "ndi/fun/doc_gene.py"
     input_arguments:
       - name: source
@@ -1930,7 +1936,7 @@ functions:
 
   - name: writeTileFile
     matlab_path: "+ndi/+fun/+doc/+gene/writeTileFile.m"
-    matlab_last_sync_hash: "2714eeda"
+    matlab_last_sync_hash: "f5d4baaec"
     python_path: "ndi/fun/doc_gene.py"
     input_arguments:
       - name: filename
@@ -1949,7 +1955,7 @@ functions:
 
   - name: renderTile
     matlab_path: "+ndi/+fun/+doc/+gene/renderTile.m"
-    matlab_last_sync_hash: "9f1f122e"
+    matlab_last_sync_hash: "f5d4baaec"
     python_path: "ndi/fun/doc_gene.py"
     input_arguments:
       - name: tile
@@ -1974,7 +1980,7 @@ functions:
 
   - name: makeGeneList
     matlab_path: "+ndi/+fun/+doc/+gene/makeGeneList.m"
-    matlab_last_sync_hash: "83562678"
+    matlab_last_sync_hash: "c32e1ace2"
     python_path: "ndi/fun/doc_gene.py"
     decision_log: >
       Exact match. Name-value options (genomeAssembly, geneIdNamespace)
@@ -1982,7 +1988,7 @@ functions:
 
   - name: makePyramid
     matlab_path: "+ndi/+fun/+doc/+gene/makePyramid.m"
-    matlab_last_sync_hash: "8fff9ff6"
+    matlab_last_sync_hash: "261816e8d"
     python_path: "ndi/fun/doc_gene.py"
     decision_log: >
       Exact match. Options keep their MATLAB spelling (binSizes, grid,
@@ -1993,7 +1999,7 @@ functions:
 
   - name: readViewport
     matlab_path: "+ndi/+fun/+doc/+gene/readViewport.m"
-    matlab_last_sync_hash: "73830fc6"
+    matlab_last_sync_hash: "c32e1ace2"
     python_path: "ndi/fun/doc_gene.py"
     input_arguments:
       - name: bin_size
@@ -2042,13 +2048,13 @@ functions:
 
   - name: exportRegion
     matlab_path: "+ndi/+fun/+doc/+gene/exportRegion.m"
-    matlab_last_sync_hash: "96f10959"
+    matlab_last_sync_hash: "c32e1ace2"
     python_path: "ndi/fun/doc_gene.py"
     decision_log: "Exact match. Returns raw counts, never density."
 
   - name: levelTable
     matlab_path: "+ndi/+fun/+doc/+gene/levelTable.m"
-    matlab_last_sync_hash: "0bfc9f0b"
+    matlab_last_sync_hash: "02403a034"
     python_path: "ndi/fun/doc_gene.py"
     input_arguments:
       - name: session
@@ -2074,7 +2080,7 @@ functions:
 
   - name: chooseLevel
     matlab_path: "+ndi/+fun/+doc/+gene/chooseLevel.m"
-    matlab_last_sync_hash: "fb395b41"
+    matlab_last_sync_hash: "02403a034"
     python_path: "ndi/fun/doc_gene.py"
     input_arguments:
       - name: levels
@@ -2100,7 +2106,7 @@ functions:
 
   - name: readViewportBase
     matlab_path: "+ndi/+fun/+doc/+gene/readViewportBase.m"
-    matlab_last_sync_hash: "033c8331"
+    matlab_last_sync_hash: "02403a034"
     python_path: "ndi/fun/doc_gene.py"
     input_arguments:
       - name: bin_size
@@ -2142,7 +2148,7 @@ functions:
 
   - name: readCells
     matlab_path: "+ndi/+fun/+doc/+gene/readCells.m"
-    matlab_last_sync_hash: "c0572a2e"
+    matlab_last_sync_hash: "cd2dcfad6"
     python_path: "ndi/fun/doc_gene.py"
     output_arguments:
       - name: columns
@@ -2179,7 +2185,7 @@ functions:
 
   - name: makeCells
     matlab_path: "+ndi/+fun/+doc/+gene/makeCells.m"
-    matlab_last_sync_hash: "28f35474"
+    matlab_last_sync_hash: "1ddb60032"
     python_path: "ndi/fun/doc_gene.py"
     decision_log: >
       Writes cells.tsv, optionally contours.bin, and stores the document.
@@ -2196,7 +2202,7 @@ functions:
 
   - name: writeContourFile
     matlab_path: "+ndi/+fun/+doc/+gene/writeContourFile.m"
-    matlab_last_sync_hash: "2311e503"
+    matlab_last_sync_hash: "1ddb60032"
     python_path: "ndi/fun/doc_gene.py"
     decision_log: >
       contour_format_version 1, little-endian, ragged form with an offset
@@ -2215,7 +2221,7 @@ functions:
 
   - name: readContourFile
     matlab_path: "+ndi/+fun/+doc/+gene/readContourFile.m"
-    matlab_last_sync_hash: "5f7b4a0d"
+    matlab_last_sync_hash: "1ddb60032"
     python_path: "ndi/fun/doc_gene.py"
     decision_log: >
       Accepts BOTH the ragged and the fixed-width form, the latter
@@ -2311,7 +2317,7 @@ functions:
 # names and argument order here are what it should mirror.
   - name: makeCellTypeLabels
     matlab_path: "+ndi/+fun/+doc/+gene/makeCellTypeLabels.m"
-    matlab_last_sync_hash: "3d90a187"
+    matlab_last_sync_hash: "e2c66eaf1"
     python_path: "ndi/fun/doc_gene.py"
     decision_log: >
       Writes labels.tsv and stores a cellTypeLabels document depending on

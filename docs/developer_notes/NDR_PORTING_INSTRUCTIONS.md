@@ -419,7 +419,7 @@ NDR-python is a faithful Python port of NDR-matlab (Neuroscience Data Reader).
 
 1. Check the bridge YAML in the target package.
 2. If the function is missing, add it based on the MATLAB source.
-3. Record the MATLAB git hash in `matlab_last_sync_hash`.
+3. Record the MATLAB **commit** hash in `matlab_last_sync_hash` — `git log -1 --format="%h" -- <path>`. Never a blob hash from `git hash-object`; see PYTHON_PORTING_GUIDE.md §3.
 4. Implement the Python code.
 5. Run `black` and `ruff check --fix` before committing.
 6. Run `pytest` to verify.
