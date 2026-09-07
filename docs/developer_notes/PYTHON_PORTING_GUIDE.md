@@ -32,6 +32,8 @@ To port or update a function, agents must follow these steps:
 
    Either kind of commit is acceptable: the file'''s own last-touching commit (what the command above gives), or a repo-wide commit such as NDI-matlab `HEAD` when you examined a batch of files together. Both are points in history, so both let the check ask "has this file moved since?"
 4. **Implement:** Write the Python code to satisfy the `input_arguments` and `output_arguments` defined in the YAML.
+
+   If you are NOT porting it, the entry needs a `status` and a `decision_log` instead. The five permitted values, what each claims, and how to choose between them are defined in section 6 of `docs/developer_notes/ndi_matlab_python_bridge.yaml` — that is the normative list, and this guide deliberately does not repeat it.
 5. **Log & Notify:** Record the sync date in the YAML's `decision_log` (e.g., `"Synchronized with MATLAB main as of 2026-03-12."`). ndi_document any intentional divergences. Explicitly tell the user what changes were made to the bridge file so they can review the contract.
 
 ## 4. Input Validation: Pydantic is Mandatory

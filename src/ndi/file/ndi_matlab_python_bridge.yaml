@@ -630,7 +630,7 @@ not_yet_ported:
   - name: temp_name
     matlab_path: "+ndi/+file/temp_name.m"
     matlab_last_sync_hash: "0e2caa09"
-    status: not_applicable
+    status: matlab_only
     decision_log: >
       Returns a unique temporary filename under
       ndi.common.PathConstants.TempFolder, named by a fresh ndi.ido id.
@@ -652,7 +652,7 @@ not_yet_ported:
   - name: temp_fid
     matlab_path: "+ndi/+file/temp_fid.m"
     matlab_last_sync_hash: "0e2caa09"
-    status: not_applicable
+    status: matlab_only
     decision_log: >
       Opens the temp_name() file for writing in little-endian byte order
       and returns [fid, fname], erroring if the open fails. Both halves are

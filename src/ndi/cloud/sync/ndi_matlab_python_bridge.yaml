@@ -355,13 +355,13 @@ not_yet_ported:
   - name: Constants
     matlab_path: "+ndi/+cloud/+sync/+internal/Constants.m"
     matlab_last_sync_hash: "fe64a9f5"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: "MATLAB sync constants class. Values may be inlined in Python."
 
   - name: deleteRemoteDocuments
     matlab_path: "+ndi/+cloud/+sync/+internal/deleteRemoteDocuments.m"
     matlab_last_sync_hash: "1498b2ea"
-    status: not_yet_ported
+    status: ported_elsewhere
     decision_log: >
       MATLAB internal for removing remote documents during mirror operations.
       Python sync operations handle this inline via API calls.
@@ -369,7 +369,7 @@ not_yet_ported:
   - name: createSyncIndexStruct
     matlab_path: "+ndi/+cloud/+sync/+internal/+index/createSyncIndexStruct.m"
     matlab_last_sync_hash: "fe64a9f5"
-    status: not_applicable
+    status: ported_elsewhere
     decision_log: >
       MATLAB struct constructor. Python uses SyncIndex dataclass
       with default field values instead.
@@ -377,7 +377,7 @@ not_yet_ported:
   - name: getIndexFilepath
     matlab_path: "+ndi/+cloud/+sync/+internal/+index/getIndexFilepath.m"
     matlab_last_sync_hash: "fe64a9f5"
-    status: not_applicable
+    status: ported_elsewhere
     decision_log: >
       MATLAB path resolver. Python handles this inside
       SyncIndex.read() and SyncIndex.write() methods.
@@ -385,7 +385,7 @@ not_yet_ported:
   - name: uploadedDocumentIds
     matlab_path: "+ndi/+cloud/+sync/+internal/uploadedDocumentIds.m"
     matlab_last_sync_hash: "29546720"
-    status: not_applicable
+    status: matlab_only
     decision_log: >
       MATLAB needs this because uploadDocumentCollection reports a
       manifest of INTENDED ids alongside a parallel per-entry status

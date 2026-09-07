@@ -864,7 +864,7 @@ functions:
   - name: uploadToNDICloud
     matlab_path: "N/A"
     matlab_last_sync_hash: "120aabf6"
-    status: not_applicable
+    status: retired
     decision_log: >
       Retired on both sides. MATLAB removed the function in
       VH-Lab/NDI-matlab#965 (commit 120aabf6), which rerouted
@@ -879,7 +879,7 @@ functions:
   - name: scanForUpload
     matlab_path: "N/A"
     matlab_last_sync_hash: "120aabf6"
-    status: not_applicable
+    status: retired
     decision_log: >
       Retired on both sides. MATLAB removed the function in
       VH-Lab/NDI-matlab#965 alongside uploadToNDICloud; the only
@@ -1265,7 +1265,7 @@ not_yet_ported:
   - name: assertSingleArchiveEntry
     matlab_path: "+ndi/+cloud/+download/+internal/assertSingleArchiveEntry.m"
     matlab_last_sync_hash: "c1121e6"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       MATLAB guard extracted from downloadDocumentCollection: refuses a
       chunk archive that is not exactly one file, so a server that ever
@@ -1276,7 +1276,7 @@ not_yet_ported:
   - name: batchSignedUrlLookup
     matlab_path: "+ndi/+cloud/+download/+internal/batchSignedUrlLookup.m"
     matlab_last_sync_hash: "5804cd80"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       MATLAB per-document signed-URL cache used by the batch-presign path
       (NDI-matlab#952, #962, #968). Turns one-call-per-uid into one call
@@ -1288,7 +1288,7 @@ not_yet_ported:
   - name: buildGenericFileDownloadList
     matlab_path: "+ndi/+cloud/+download/+internal/buildGenericFileDownloadList.m"
     matlab_last_sync_hash: "65aeeeb"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       MATLAB helper extracted from downloadGenericFiles: flattens
       generic_file documents into a per-file record (uid, filename,
@@ -1299,7 +1299,7 @@ not_yet_ported:
   - name: reconstructSeriesIngestLocations
     matlab_path: "+ndi/+cloud/+sync/+internal/reconstructSeriesIngestLocations.m"
     matlab_last_sync_hash: "cd3c116"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       MATLAB helper for SyncFiles=true downloads: rebuilds a file
       series' ingest_locations from the downloaded manifest so
@@ -1313,13 +1313,13 @@ not_yet_ported:
   - name: dropDuplicateDocsFromJsonDecode
     matlab_path: "+ndi/+cloud/+internal/dropDuplicateDocsFromJsonDecode.m"
     matlab_last_sync_hash: "fbf6d337"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: "MATLAB internal utility. May not be needed in Python."
 
   - name: getUploadedDocumentIds
     matlab_path: "+ndi/+cloud/+internal/getUploadedDocumentIds.m"
     matlab_last_sync_hash: "092aab34"
-    status: not_yet_ported
+    status: ported_elsewhere
     decision_log: >
       MATLAB internal. Python uses listRemoteDocumentIds instead
       which serves the same purpose.
@@ -1327,13 +1327,13 @@ not_yet_ported:
   - name: getUploadedFileIds
     matlab_path: "+ndi/+cloud/+internal/getUploadedFileIds.m"
     matlab_last_sync_hash: "7ab96514"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: "MATLAB internal for file upload tracking."
 
   - name: getWeboptionsWithAuthHeader
     matlab_path: "+ndi/+cloud/+internal/getWeboptionsWithAuthHeader.m"
     matlab_last_sync_hash: "7ab96514"
-    status: not_applicable
+    status: matlab_only
     decision_log: >
       MATLAB-specific HTTP configuration. Python uses CloudClient
       with requests.ndi_session which handles auth headers internally.
@@ -1341,18 +1341,18 @@ not_yet_ported:
   - name: createCloudMetadataStruct
     matlab_path: "+ndi/+cloud/+utility/createCloudMetadataStruct.m"
     matlab_last_sync_hash: "80092b7c"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: "MATLAB utility for metadata struct creation."
 
   - name: mustBeValidMetadata
     matlab_path: "+ndi/+cloud/+utility/mustBeValidMetadata.m"
     matlab_last_sync_hash: "fe64a9f5"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: "MATLAB validation function for metadata."
 
   - name: authenticateOriginal
     matlab_path: "N/A"
-    status: not_applicable
+    status: retired
     decision_log: >
       Deprecated MATLAB function, since removed from NDI-matlab. Not needed
       in Python. matlab_path is N/A rather than the deleted
@@ -1362,7 +1362,7 @@ not_yet_ported:
   - name: uilogin
     matlab_path: "+ndi/+cloud/uilogin.m"
     matlab_last_sync_hash: "80092b7c"
-    status: not_applicable
+    status: matlab_only
     decision_log: >
       MATLAB GUI login. No Python equivalent; testLogin() in Python
       simply returns False when env credentials are absent (since a
@@ -1372,7 +1372,7 @@ not_yet_ported:
   - name: zip_documents_for_upload
     matlab_path: "+ndi/+cloud/+upload/+internal/zip_documents_for_upload.m"
     matlab_last_sync_hash: "c6aef552"
-    status: not_applicable
+    status: ported_elsewhere
     decision_log: >
       MATLAB internal helper. Python uses zipForUpload which handles
       this internally with zipfile module.
@@ -1417,7 +1417,7 @@ not_yet_ported:
   - name: selectOrganization
     matlab_path: "+ndi/+cloud/+ui/+dialog/selectOrganization.m"
     matlab_last_sync_hash: "56e2669c"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       The interactive counterpart to the "use the first organization"
       behavior that Python already has in
@@ -1431,7 +1431,7 @@ not_yet_ported:
   - name: organizationLabels
     matlab_path: "+ndi/+cloud/+ui/+dialog/organizationLabels.m"
     matlab_last_sync_hash: "56e2669c"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       Pure helper for selectOrganization: turns parallel name/id lists into
       unique display labels, falling back to the id when a name is empty and
@@ -1444,7 +1444,7 @@ not_yet_ported:
   - name: DatasetUploadMonitor
     matlab_path: "+ndi/+cloud/+ui/DatasetUploadMonitor.mlapp"
     matlab_last_sync_hash: "b7102250"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       MATLAB App Designer window showing per-document and per-file progress
       during a cloud upload. Python has the progress components it would be

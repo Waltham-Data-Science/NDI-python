@@ -220,13 +220,13 @@ not_yet_ported:
   - name: createDatabaseMetadata
     matlab_path: "+ndi/+cloud/+admin/+crossref/createDatabaseMetadata.m"
     matlab_last_sync_hash: "fe64a9f5"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: "MATLAB function to create NDI Cloud database-level metadata for Crossref."
 
   - name: createDoiBatchHeadElement
     matlab_path: "+ndi/+cloud/+admin/+crossref/createDoiBatchHeadElement.m"
     matlab_last_sync_hash: "fe64a9f5"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       MATLAB helper for creating the XML head element in DOI batch submissions.
       May be inlined within createDoiBatchSubmission in Python.

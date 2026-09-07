@@ -634,7 +634,7 @@ ported_late:
 
   - name: jrclust
     matlab_path: "+ndi/+gui/+app/jrclust.m"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       The JRCLUST spike-sorting app. Same class of gap as kiasort and
       vhNDISpikeSorter above: the underlying sorter is a MATLAB package
@@ -646,7 +646,7 @@ ported_late:
   - name: GeneIngest
     matlab_path: "+ndi/+gui/+app/GeneIngest.m"
     matlab_last_sync_hash: "eae346a"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       MATLAB App Designer window that lists, adds and removes spatial
       transcriptomics pyramids in a session, and drives the .gef /
