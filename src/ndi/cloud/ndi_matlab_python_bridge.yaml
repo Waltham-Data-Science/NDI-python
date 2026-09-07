@@ -864,64 +864,31 @@ functions:
   - name: uploadToNDICloud
     matlab_path: "N/A"
     matlab_last_sync_hash: "120aabf6"
-    python_path: "ndi/cloud/upload.py"
-    input_arguments:
-      - name: dataset
-        type_matlab: "ndi.session"
-        type_python: "Any"
-      - name: dataset_id
-        type_matlab: "char"
-        type_python: "str"
-      - name: verbose
-        type_matlab: "logical"
-        type_python: "bool"
-        default: "True"
-      - name: client
-        type_python: "CloudClient | None"
-        default: "None"
-    output_arguments:
-      - name: success
-        type_python: "bool"
-      - name: message
-        type_python: "str"
+    status: not_applicable
     decision_log: >
-      MATLAB removed this in VH-Lab/NDI-matlab#965 (commit 120aabf695),
-      which retired uploadToNDICloud and made newDataset delegate to
-      uploadDataset. The Python implementation still exists as a legacy
-      shim -- upload.py:228 -- and is called by newDataset. Bringing
-      Python fully in line means routing newDataset through
-      orchestration.uploadDataset the same way and removing the shim;
-      that is a follow-up rather than a bridge YAML change, and is
-      recorded here so the retirement is not silently invisible to the
-      Python side. matlab_path is "N/A" per the stale-path guard.
+      Retired on both sides. MATLAB removed the function in
+      VH-Lab/NDI-matlab#965 (commit 120aabf6), which rerouted
+      +cloud/+upload/newDataset through +cloud/uploadDataset; Python
+      followed suit in the same commit that records this entry
+      (upload.py's ndi.cloud.upload.uploadToNDICloud is gone).
+      orchestration.newDataset already delegated to uploadDataset, so
+      no caller in this codebase needed the shim. Recorded rather than
+      deleted so the retirement is not silently invisible; matlab_path
+      is "N/A" per the stale-path guard.
 
   - name: scanForUpload
     matlab_path: "N/A"
     matlab_last_sync_hash: "120aabf6"
-    python_path: "ndi/cloud/upload.py"
-    input_arguments:
-      - name: dataset
-        type_matlab: "ndi.dataset"
-        type_python: "Any"
-      - name: dataset_id
-        type_matlab: "string"
-        type_python: "str"
-      - name: client
-        type_python: "CloudClient | None"
-        default: "None"
-    output_arguments:
-      - name: docs_to_upload
-        type_python: "list[dict]"
-      - name: files_to_upload
-        type_python: "list[dict]"
-      - name: upload_size
-        type_python: "float"
+    status: not_applicable
     decision_log: >
-      MATLAB removed this in VH-Lab/NDI-matlab#965 (commit 120aabf695)
-      alongside uploadToNDICloud. The Python implementation still exists
-      as an internal helper -- upload.py:310 -- because uploadToNDICloud
-      here still calls it. It follows uploadToNDICloud when that shim is
-      retired. matlab_path is "N/A" per the stale-path guard.
+      Retired on both sides. MATLAB removed the function in
+      VH-Lab/NDI-matlab#965 alongside uploadToNDICloud; the only
+      remaining Python caller was uploadToNDICloud itself, so it went
+      with it in the same commit that records this entry. Its
+      regression suite -- tests/test_cloud_upload_manifest.py, whose
+      whole subject was the two shims' empty-manifest bug -- was
+      removed with the code. matlab_path is "N/A" per the stale-path
+      guard.
 
   # --- filehandler.py functions ---
   - name: updateFileInfoForRemoteFiles

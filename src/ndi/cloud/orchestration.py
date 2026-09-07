@@ -5,7 +5,7 @@ Public functions accept an optional ``client`` keyword argument.  When
 omitted, a client is created automatically from environment variables.
 
 MATLAB equivalents: downloadDataset.m, uploadDataset.m, syncDataset.m,
-    helloMatlab.m, +upload/newDataset.m, +upload/scanForUpload.m
+    helloMatlab.m, +upload/newDataset.m
 """
 
 from __future__ import annotations
@@ -813,9 +813,6 @@ def helloMatlab(
 
         time.sleep(poll_interval_seconds)
 
-
-# Re-export from upload module (MATLAB: ndi.cloud.upload.scanForUpload)
-from .upload import scanForUpload  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # Private sync helpers
