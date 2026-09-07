@@ -645,7 +645,7 @@ not_yet_ported:
   - name: param
     matlab_path: "+ndi/+epoch/+epochset/param.m"
     matlab_last_sync_hash: "e94c2b2f"
-    status: not_applicable
+    status: ported_differently
     decision_log: >
       MATLAB's ndi.epoch.epochset.param is an abstract layer between
       ndi.epoch.epochset and the two classes that need epoch parameters:
@@ -672,7 +672,7 @@ not_yet_ported:
   - name: epochNodeName
     matlab_path: "+ndi/+epoch/+fun/epochNodeName.m"
     matlab_last_sync_hash: "0e2caa09"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       Builds the display name for an epochnode: "objectname; epochStr",
       where a full-form epoch_id (epoch_ plus 16 alphanumerics, an

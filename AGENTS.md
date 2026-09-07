@@ -14,6 +14,9 @@ Before proposing, writing, or refactoring any code, you MUST read the following 
 2. **Universal Principles:** `docs/developer_notes/ndi_xlang_principles.md`
    - Focus: High-level logic rules (e.g., 0-vs-1 indexing, Semantic Parity for scientific counting, and NumPy usage).
 
+3. **Bridge Field Reference:** `docs/developer_notes/ndi_matlab_python_bridge.yaml`
+   - Focus: What every field in a bridge entry means, and the NORMATIVE `status` vocabulary (its section 6). This is the single source of truth for those rules; nothing else restates them.
+
 ## 3. The Local Contract: The Bridge File
 
 Every sub-package contains a file named `ndi_matlab_python_bridge.yaml`.
@@ -24,6 +27,19 @@ Every sub-package contains a file named `ndi_matlab_python_bridge.yaml`.
   2. Add the new entry to the `ndi_matlab_python_bridge.yaml`.
   3. **Notify the User:** You must state: "INTERFACE UPDATE: I have modified the bridge contract for [Function Name] to reflect the MATLAB source."
 - **Rule 3: Strict Naming.** You are forbidden from "Pythonizing" names (e.g., changing `ListAllDocuments` to `list_all_documents`) unless the bridge file explicitly instructs you to do so in the `decision_log`.
+- **Rule 4: Say Which Kind Of "Not Ported".** An entry with no Python counterpart carries a `status` and a `decision_log`. There are exactly five values, and picking the wrong one misleads the next reader:
+
+  | status | means |
+  |---|---|
+  | *(absent)* + a `python_path` | ported: a 1:1 counterpart under the mirrored name. The normal case — writing `ported` out is allowed but never required. |
+  | `ported_differently` | Python CAN do it, just not 1:1 — different name, folded into a class, a library that does the job. Say how. |
+  | `matlab_only` | Python needs nothing, by design: the function works around MATLAB itself (no `parfor`, no logging module, cannot read `.npy`). |
+  | `porting_deferred` | portable work nobody has done yet. Say why not now, or what blocks it. |
+  | `retired` | there is no MATLAB function to port — removed upstream, or never existed. A tombstone. |
+
+  The distinction that matters most is `ported_differently` vs the rest: it is the only one that answers **yes** to "can I do this from Python?". Definitions, worked examples and a decision procedure are in section 6 of `docs/developer_notes/ndi_matlab_python_bridge.yaml`. Enforced by `tests/test_matlab_bridge_status.py`.
+
+  Do not invent a sixth value. `not_yet_ported`, `not_applicable`, `implemented` and `does_not_exist` were retired: the first two each meant several incompatible things at once. `ported_elsewhere` was renamed to `ported_differently` (NDR-python#21) — same meaning, but it names the manner rather than a place `python_path` already gives.
 
 ## 4. Technical Constraints
 

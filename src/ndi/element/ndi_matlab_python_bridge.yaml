@@ -464,7 +464,7 @@ not_yet_ported:
   - name: image
     matlab_path: "+ndi/+element/image.m"
     matlab_last_sync_hash: "2e6f3c35"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       The imaging counterpart of ndi.element.timeseries: exposes
       readframes / readimages, returning frames with each frame's time
@@ -480,7 +480,7 @@ not_yet_ported:
   - name: oneepoch_bkup
     matlab_path: "+ndi/+element/oneepoch_bkup.m"
     matlab_last_sync_hash: "0e2caa09"
-    status: not_applicable
+    status: matlab_only
     decision_log: >
       A superseded copy of oneepoch.m, sitting beside the live one in the
       MATLAB tree (the _bkup suffix is the whole story). oneepoch itself IS

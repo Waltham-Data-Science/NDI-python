@@ -2233,7 +2233,7 @@ functions:
   - name: fromCellBin
     matlab_path: "+ndi/+fun/+doc/+gene/fromCellBin.m"
     matlab_last_sync_hash: "6ae5087"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       MATLAB reads a SAW cellbin .h5ad with
       ndr.format.stereoseq.readCellBin and turns it into a
@@ -2246,7 +2246,7 @@ functions:
   - name: fromGEF
     matlab_path: "+ndi/+fun/+doc/+gene/fromGEF.m"
     matlab_last_sync_hash: "a178e46"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       MATLAB reads a Stereo-seq .gef with ndr.format.stereoseq.readGEF
       and produces the geneList, spatialGeneExpressionPyramid and one
@@ -2257,7 +2257,7 @@ functions:
   - name: makeSourceFile
     matlab_path: "+ndi/+fun/+doc/+gene/makeSourceFile.m"
     matlab_last_sync_hash: "6ae5087"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       MATLAB creates the generic_file document that the spatial gene
       expression documents' source_file_id dependency points at, so a
@@ -2268,7 +2268,7 @@ functions:
   - name: readNotes
     matlab_path: "+ndi/+fun/+doc/+gene/readNotes.m"
     matlab_last_sync_hash: "6ae5087"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       MATLAB post-flight helper: turns the reader meta from
       ndr.format.stereoseq into a cellstr of things a caller should be
@@ -2368,7 +2368,7 @@ not_applicable:
   - name: avi2mp4
     matlab_path: "+ndi/+fun/+data/avi2mp4.m"
     matlab_last_sync_hash: "0e2caa09"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       Not ported. Batch-compresses .avi to H.264 .mp4 by shelling out to
       FFmpeg; nothing in it is NDI-specific beyond the recursive search, and
@@ -2380,7 +2380,7 @@ not_applicable:
   - name: prism2csv
     matlab_path: "+ndi/+fun/+data/prism2csv.m"
     matlab_last_sync_hash: "0e2caa09"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       Not ported. Converts GraphPad Prism files to CSV by invoking an R
       script that ships beside the .m file. Porting it means either shipping
@@ -2391,7 +2391,7 @@ not_applicable:
   - name: parallelWorkers
     matlab_path: "+ndi/+fun/parallelWorkers.m"
     matlab_last_sync_hash: "9a9150e7"
-    status: not_applicable
+    status: matlab_only
     decision_log: >
       Not applicable. Returns the worker limit to pass as the second
       argument of a MATLAB `parfor`, reading the Parallel.OpenPoolIfNone and
@@ -2404,7 +2404,7 @@ not_applicable:
 
   - name: assertAddonOnPath
     matlab_path: "+ndi/+fun/assertAddonOnPath.m"
-    status: not_applicable
+    status: matlab_only
     decision_log: >
       Not applicable. Asks MATLAB's `ver` whether a named add-on is
       installed and errors naming what required it. Python states its
@@ -2414,7 +2414,7 @@ not_applicable:
 
   - name: check_Matlab_toolboxes
     matlab_path: "+ndi/+fun/check_Matlab_toolboxes.m"
-    status: not_applicable
+    status: matlab_only
     decision_log: >
       Not applicable, for the same reason as assertAddonOnPath: it reads
       ndi_common/requirements/ndi-matlab-toolboxes.json and warns about
@@ -2424,7 +2424,7 @@ not_applicable:
 
   - name: console
     matlab_path: "+ndi/+fun/console.m"
-    status: not_applicable
+    status: matlab_only
     decision_log: >
       Not applicable. Opens a macOS Terminal window tailing a log file, so
       a long MATLAB run can be watched from outside the MATLAB console; the
@@ -2435,22 +2435,22 @@ not_applicable:
 
   - name: convertoldnsd2ndi
     matlab_path: "+ndi/+fun/convertoldnsd2ndi.m"
-    status: not_applicable
+    status: matlab_only
     decision_log: "Legacy NSD-to-NDI migration tool. MATLAB-specific."
 
   - name: debuglog
     matlab_path: "+ndi/+fun/debuglog.m"
-    status: not_applicable
+    status: matlab_only
     decision_log: "MATLAB logging utility. Python uses standard logging."
 
   - name: errlog
     matlab_path: "+ndi/+fun/errlog.m"
-    status: not_applicable
+    status: matlab_only
     decision_log: "MATLAB logging utility. Python uses standard logging."
 
   - name: find_calc_directories
     matlab_path: "+ndi/+fun/find_calc_directories.m"
-    status: not_applicable
+    status: ported_differently
     decision_log: >
       Not applicable. Finds NDIcalc-*-matlab calculator toolboxes by going
       three directories up from ndi.toolboxdir and globbing the siblings --
@@ -2463,7 +2463,7 @@ not_applicable:
   - name: plot_extracellular_spikeshapes
     matlab_path: "+ndi/+fun/plot_extracellular_spikeshapes.m"
     matlab_last_sync_hash: "960fff8"
-    status: implemented
+    status: ported
     python_path: "ndi/fun/plot.py"
     decision_log: >
       Ported (issue #78 tranche a). Defined in ndi/fun/plot.py and re-exported
@@ -2489,7 +2489,7 @@ not_applicable:
 
   - name: run_Linux_checks
     matlab_path: "+ndi/+fun/run_Linux_checks.m"
-    status: not_applicable
+    status: matlab_only
     decision_log: >
       Not applicable. Warns about the known Linux incompatibilities of the
       MATLAB RUNTIME (it branches on computer('arch') returning GLNXA64).
@@ -2499,12 +2499,12 @@ not_applicable:
 
   - name: syslog
     matlab_path: "+ndi/+fun/syslog.m"
-    status: not_applicable
+    status: matlab_only
     decision_log: "MATLAB logging utility. Python uses standard logging."
 
   - name: export.gmcSorter
     matlab_path: "+ndi/+fun/+export/gmcSorter.m"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       Not ported yet. Exports a probe's raw voltage in GMC_Sorter's expected
       layout. Writing a raw file format is portable work in principle -- not
@@ -2516,7 +2516,7 @@ not_applicable:
 
   - name: export.gmcSorterWrite
     matlab_path: "+ndi/+fun/+export/gmcSorterWrite.m"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       Not ported yet. Writes an in-memory voltage buffer to GMC_Sorter's
       'dat_t_s' raw format. Same status and reason as export.gmcSorter:
@@ -2524,7 +2524,7 @@ not_applicable:
 
   - name: export.writeGmcSidecars
     matlab_path: "+ndi/+fun/+export/writeGmcSidecars.m"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       Not ported yet. Writes GMC_Sorter's channel map, metadata and driver
       files beside the raw file that gmcSorter/gmcSorterWrite produce. Same

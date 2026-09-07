@@ -689,7 +689,7 @@ functions:
   - name: geometry.fromKilosortMap
     matlab_path: "+ndi/+fun/+probe/+geometry/fromKilosortMap.m"
     matlab_last_sync_hash: "0e2caa09"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       Not ported. The inverse of geometry.toKilosortMap, which IS ported:
       reads a Kilosort/KIASORT channel map (a .mat file or a struct with
@@ -704,7 +704,7 @@ functions:
   - name: geometry.fromProbeInterface
     matlab_path: "+ndi/+fun/+probe/+geometry/fromProbeInterface.m"
     matlab_last_sync_hash: "0e2caa09"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       Not ported. Converts a ProbeInterface JSON probe (the SpikeInterface
       community format) into an NDI electrode-layout struct plus a
@@ -718,7 +718,7 @@ functions:
   - name: geometry.writeLibrary
     matlab_path: "+ndi/+fun/+probe/+geometry/writeLibrary.m"
     matlab_last_sync_hash: "0e2caa09"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       Not ported. Writes a layout as ndi_common/probe/geometry/group/model
       .json so it ships with NDI and is found by listLibrary. This is a
@@ -837,7 +837,7 @@ functions:
   - name: import.jrclust
     type: package
     matlab_path: "+ndi/+fun/+probe/+import/+jrclust/"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       Not ported yet. All fourteen MATLAB files under +jrclust are recorded
       here as one entry, matching how import.kiasort is recorded above: the
@@ -854,7 +854,7 @@ functions:
   - name: export.jrclust
     type: function
     matlab_path: "+ndi/+fun/+probe/+export/jrclust.m"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       Not ported yet. Writes a JRCLUST .prm file for a probe. Left deferred
       alongside the +jrclust importer package: the export half only earns its

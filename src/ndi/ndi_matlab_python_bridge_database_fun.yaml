@@ -357,7 +357,7 @@ not_applicable:
 
   - name: createGenBankControlledVocabulary
     matlab_path: "+ndi/+database/+fun/createGenBankControlledVocabulary.m"
-    status: not_applicable
+    status: matlab_only
     decision_log: >
       MATLAB utility for creating a controlled vocabulary from GenBank
       taxonomy data. Bioinformatics-specific helper for populating
@@ -366,7 +366,7 @@ not_applicable:
 
   - name: readGenBankNames
     matlab_path: "+ndi/+database/+fun/readGenBankNames.m"
-    status: not_applicable
+    status: matlab_only
     decision_log: >
       MATLAB utility for reading GenBank taxonomy names from flat files.
       Bioinformatics-specific parser. Python users can use BioPython
@@ -374,7 +374,7 @@ not_applicable:
 
   - name: readGenBankNodes
     matlab_path: "+ndi/+database/+fun/readGenBankNodes.m"
-    status: not_applicable
+    status: matlab_only
     decision_log: >
       MATLAB utility for reading GenBank taxonomy node hierarchy from
       flat files. Bioinformatics-specific parser. Python users can use
@@ -382,7 +382,7 @@ not_applicable:
 
   - name: createNIFbrainareas
     matlab_path: "+ndi/+database/+fun/createNIFbrainareas.m"
-    status: not_applicable
+    status: matlab_only
     decision_log: >
       MATLAB utility for creating NIF (Neuroscience Information
       Framework) brain area vocabulary entries. One-time data import
@@ -391,7 +391,7 @@ not_applicable:
 
   - name: create_new_database
     matlab_path: "+ndi/+database/+fun/create_new_database.m"
-    status: not_applicable
+    status: ported_differently
     decision_log: >
       MATLAB factory for instantiating a new database based on the
       database hierarchy preferences. In Python, this functionality is
@@ -400,7 +400,7 @@ not_applicable:
 
   - name: databasehierarchyinit
     matlab_path: "+ndi/+database/+fun/databasehierarchyinit.m"
-    status: not_applicable
+    status: ported_differently
     decision_log: >
       MATLAB function for initializing the database implementation
       hierarchy (preference list of database backends). In Python, the
@@ -410,7 +410,7 @@ not_applicable:
 
   - name: dataset_metadata
     matlab_path: "+ndi/+database/+fun/dataset_metadata.m"
-    status: not_applicable
+    status: ported_differently
     decision_log: >
       MATLAB utility for reading/writing dataset metadata structures.
       In Python, dataset metadata is handled natively via dict/JSON
@@ -418,7 +418,7 @@ not_applicable:
 
   - name: openMINDSobj2ndi_document
     matlab_path: "+ndi/+database/+fun/openMINDSobj2ndi_document.m"
-    status: not_applicable
+    status: ported_differently
     decision_log: >
       MATLAB function for converting openMINDS objects to NDI documents.
       In Python, this functionality is handled by the dedicated
@@ -427,7 +427,7 @@ not_applicable:
 
   - name: openMINDSobj2struct
     matlab_path: "+ndi/+database/+fun/openMINDSobj2struct.m"
-    status: not_applicable
+    status: ported_differently
     decision_log: >
       MATLAB function for converting openMINDS objects to MATLAB structs.
       In Python, openMINDS objects are naturally represented as dicts.
@@ -435,7 +435,7 @@ not_applicable:
 
   - name: plotinteractivedocgraph
     matlab_path: "+ndi/+database/+fun/plotinteractivedocgraph.m"
-    status: not_applicable
+    status: matlab_only
     decision_log: >
       MATLAB interactive GUI for visualizing document dependency graphs.
       Uses MATLAB-specific figure/axes/callback infrastructure. Python
@@ -444,7 +444,7 @@ not_applicable:
 
   - name: projectvardef
     matlab_path: "+ndi/+database/+fun/projectvardef.m"
-    status: not_applicable
+    status: matlab_only
     decision_log: >
       MATLAB utility for defining project-level variable definitions
       used in the MATLAB workspace/project system. No equivalent

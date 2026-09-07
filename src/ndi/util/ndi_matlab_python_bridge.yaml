@@ -467,7 +467,7 @@ not_applicable:
   - name: readNPY
     matlab_path: "+ndi/+util/readNPY.m"
     matlab_last_sync_hash: "0e2caa09"
-    status: not_applicable
+    status: matlab_only
     decision_log: >
       A dependency-free .npy reader MATLAB needs because it cannot read
       NumPy's own format. Python reads it with numpy.load, which is where
@@ -479,7 +479,7 @@ not_applicable:
   - name: ListDialog
     matlab_path: "+ndi/+util/ListDialog.m"
     matlab_last_sync_hash: "46672187"
-    status: not_yet_ported
+    status: matlab_only
     decision_log: >
       A modal list picker replacing MATLAB's LISTDLG, whose font size is
       fixed and tiny; styled in the NDI Cloud colours. Its MATLAB callers
@@ -494,24 +494,24 @@ not_applicable:
       recorded on selectOrganization, not here.
   - name: choosefile
     matlab_path: "+ndi/+util/choosefile.m"
-    status: not_applicable
+    status: matlab_only
     decision_log: "MATLAB GUI dialog (inputdlg). No Python equivalent needed."
 
   - name: choosefileordir
     matlab_path: "+ndi/+util/choosefileordir.m"
-    status: not_applicable
+    status: matlab_only
     decision_log: "MATLAB GUI dialog. No Python equivalent needed."
 
   - name: toolboxdir
     matlab_path: "+ndi/+util/toolboxdir.m"
-    status: not_applicable
+    status: ported_differently
     decision_log: >
       MATLAB-specific path resolution using mfilename('fullpath').
       Python uses ndi.common.ndi_common_PathConstants instead.
 
   - name: "+openminds sub-package"
     matlab_path: "+ndi/+util/+openminds/"
-    status: ported_elsewhere
+    status: ported_differently
     decision_log: >
       MATLAB sub-package with find_instance_name.m and
       find_techniques_names.m. Ported to ndi.openminds_convert

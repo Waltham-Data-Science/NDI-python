@@ -1017,7 +1017,7 @@ not_applicable:
 
   - name: OBJECT
     matlab_path: "N/A"
-    status: does_not_exist
+    status: retired
     decision_log: >
       ndi.OBJECT does not exist in either MATLAB or Python.
       The "base object" pattern is factored into ndi.ido (identity)
@@ -1026,21 +1026,21 @@ not_applicable:
 
   - name: filesep
     matlab_path: "+ndi/filesep.m"
-    status: not_applicable
+    status: matlab_only
     decision_log: >
       MATLAB utility returning '/' for cross-platform path
       consistency. Python uses pathlib/os.sep natively.
 
   - name: toolboxdir
     matlab_path: "+ndi/toolboxdir.m"
-    status: not_applicable
+    status: ported_differently
     decision_log: >
       MATLAB-specific path resolution. Python uses
       ndi.common.ndi_common_PathConstants.
 
   - name: cpipeline
     matlab_path: "+ndi/cpipeline.m"
-    status: not_applicable
+    status: porting_deferred
     decision_log: >
       MATLAB calculation pipeline registry with GUI editing.
       Not ported to Python.
@@ -1052,7 +1052,7 @@ not_applicable:
     matlab_path: "+ndi/+data/evaluate_fitcurve.m"
     matlab_last_sync_hash: "76b0673"
     python_path: "ndi/data.py"
-    status: implemented
+    status: ported
     decision_log: >
       Ported (issue #78 tranche a). Reachable as ndi.data.evaluate_fitcurve at
       its MATLAB mirror path -- +ndi/+data/ becomes ndi/data.py. Reads
@@ -1088,7 +1088,7 @@ not_applicable:
   - name: setup
     matlab_path: "+ndi/+setup/"
     python_path: "ndi/setup/"
-    status: implemented
+    status: ported
     decision_log: >
       Python equivalent of MATLAB lab setup wizards. The ndi.setup.lab()
       function reads DAQ system JSON configs from ndi_common/daq_systems/
@@ -1101,7 +1101,7 @@ not_applicable:
   # =========================================================================
   - name: docs
     matlab_path: "+ndi/+docs/"
-    status: not_applicable
+    status: matlab_only
     decision_log: >
       MATLAB documentation generation utilities (all_documents2markdown,
       build, calcbuild, concatenateFiles, docfun, document2markdown,

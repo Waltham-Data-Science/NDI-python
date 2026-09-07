@@ -104,9 +104,113 @@ project_metadata:
 #                      | commit, or a repo-wide commit for a batch sync. Both are
 #                      | points in history. NEVER a blob hash (git hash-object):
 #                      | enforced by tests/test_matlab_bridge_hashes.py.
+# status               | One of the five values in section 6 below, or ABSENT.
+#                      | Absent + a python_path is the normal case and means
+#                      | ported. Enforced by tests/test_matlab_bridge_status.py.
 # input_arguments      | Used to generate Pydantic @validate_call.
 # output_arguments     | Defines the order of the Return Tuple.
 # type_python          | Use Python 3.10+ syntax (e.g., str | int).
 # decision_log         | Mandatory for any divergence. Should include the sync
 #                      | date (e.g., "Synchronized with MATLAB main as of
 #                      | 2026-03-12.").
+
+# =============================================================================
+# 6. The status vocabulary -- THE NORMATIVE LIST
+# =============================================================================
+# VALUES: ported, ported_differently, matlab_only, porting_deferred, retired
+#
+# That line is parsed by tests/test_matlab_bridge_status.py and compared
+# against the set the code enforces, so this document and the check cannot
+# drift apart -- adding a value in one place without the other fails CI.
+#
+# This section is the single source of truth for `status:`. Other documents
+# point here; they must not restate it. (The one rule that WAS restated in
+# three places -- matlab_last_sync_hash -- is how the prose came to contradict
+# the command printed beside it, which put 35 blob hashes in the tree.)
+#
+# The question every entry answers is: CAN I DO THIS FROM PYTHON, AND IF NOT,
+# WILL I EVER BE ABLE TO? A status that does not answer that is not worth
+# having, which is why the old `not_applicable` was retired: it was used for
+# three incompatible claims at once, and ~15 of its 48 entries meant "Python
+# does this another way" -- the OPPOSITE of what a reader concluded from the
+# label.
+#
+# -----------------------------------------------------------------------------
+# (no status) + a python_path -- PORTED, the normal case
+# -----------------------------------------------------------------------------
+# A 1:1 counterpart exists under the mirrored name. This is ~460 entries, so it
+# is spelled by absence rather than by repeating a word on every one of them.
+# Writing `status: ported` explicitly is allowed where an entry benefits from
+# saying so out loud (a port whose shape differs enough to need a decision_log),
+# but it is never required. `implemented` was a synonym and is gone.
+#
+# -----------------------------------------------------------------------------
+# ported_differently -- Python CAN do it, just not 1:1
+# -----------------------------------------------------------------------------
+# The capability exists IN THIS REPOSITORY, under a different name, folded into
+# a class, or handled by different machinery. The decision_log must say how, and
+# a python_path should point at it.
+#
+# NAMED FOR THE MANNER, NOT THE PLACE, and that is deliberate (NDR-python#21).
+# The earlier spelling was `ported_elsewhere`, but "elsewhere" names a PLACE and
+# python_path already answers where. What a reader cannot recover from any other
+# field is HOW the port differs -- and for most of these entries nothing moved
+# at all: a library does the job (numcodecs.Blosc for decompressBlosc), or the
+# design is simply different. "Differently" is the part worth a word.
+#   ndi.cloud.api.call        -> CloudClient._request()
+#   createSyncIndexStruct     -> the SyncIndex dataclass
+#   openMINDSobj2struct       -> ndi/openminds_convert.py
+# Use this whenever a reader asking "can I do this from Python?" should hear
+# YES. That is the distinction the old vocabulary destroyed.
+#
+# -----------------------------------------------------------------------------
+# matlab_only -- Python needs nothing, by design
+# -----------------------------------------------------------------------------
+# The MATLAB function exists to work around MATLAB itself, or names a concept
+# Python does not have. There is no counterpart and there should never be one.
+#   readNPY              MATLAB cannot read NumPy's format; numpy.load can
+#   parallelWorkers      computes an argument for `parfor`; Python has no parfor
+#   debuglog / syslog    MATLAB has no logging module; Python's stdlib does
+#   systemCurlEnvPrefix  resets LD_LIBRARY_PATH that MATLAB itself polluted
+#   choosefile           a MATLAB GUI dialog
+# THE LINE AGAINST ported_differently: does the replacement live in this repo
+# (ported_differently), or does the Python language and its standard library make
+# the function unnecessary (matlab_only)? "Use tempfile" is matlab_only;
+# "use our SyncIndex class" is ported_differently.
+#
+# -----------------------------------------------------------------------------
+# porting_deferred -- no counterpart yet, and we know it
+# -----------------------------------------------------------------------------
+# Portable work that has not been done. The decision_log must say why not now:
+# no caller needs it, it ports as a group with its siblings, or it is blocked on
+# something outside this repo. Blocked-ness is recorded in the log rather than
+# as its own status, because it goes stale -- three ndi.gui.app entries were
+# marked blocked on external toolboxes and were then ported around the blocker.
+# Replaces `not_yet_ported`, which never distinguished "deferred" from
+# "declined" and was read as both.
+#
+# -----------------------------------------------------------------------------
+# retired -- there is no MATLAB function to port
+# -----------------------------------------------------------------------------
+# It was removed upstream, or it never existed despite an entry appearing to
+# describe it. The entry is a TOMBSTONE: it stays so the decision is not
+# re-litigated by the next reader who notices the absence. Set matlab_path to
+# "N/A" for a deleted file so the stale-path guard stays satisfied.
+#   uploadToNDICloud   removed in VH-Lab/NDI-matlab#965
+#   ndi.OBJECT         never existed on either side
+# Replaces `does_not_exist`.
+#
+# -----------------------------------------------------------------------------
+# CHOOSING BETWEEN THEM
+# -----------------------------------------------------------------------------
+# 1. Is there no MATLAB function at all?              -> retired
+# 2. Can a Python caller do this today?
+#      yes, same name and shape                       -> (no status) + python_path
+#      yes, but not as a 1:1 mirror                   -> ported_differently
+# 3. Could there ever be a Python counterpart?
+#      no, the need is MATLAB's own                   -> matlab_only
+#      yes, nobody has written it                     -> porting_deferred
+#
+# Every one of these except the ported default requires a decision_log; that is
+# enforced separately by TestTheDeferralsSayWhy in
+# tests/test_matlab_bridge_completeness.py.

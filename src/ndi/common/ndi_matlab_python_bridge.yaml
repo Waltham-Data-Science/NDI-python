@@ -176,7 +176,7 @@ not_yet_ported:
   - name: systemCurlEnvPrefix
     matlab_path: "+ndi/+common/systemCurlEnvPrefix.m"
     matlab_last_sync_hash: "74db0c8c"
-    status: not_applicable
+    status: matlab_only
     decision_log: >
       Returns a shell prefix that resets LD_LIBRARY_PATH so a curl launched
       with SYSTEM() loads the OS libraries rather than the ones MATLAB
