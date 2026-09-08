@@ -203,11 +203,23 @@ def _isolate_did_file_cache(tmp_path_factory):
         return
 
     cache_dir = tmp_path_factory.mktemp("did-file-cache")
-    original_path = did_common.PathConstants._file_cache_path
-    did_common.PathConstants._file_cache_path = str(cache_dir)
+
+    # DID exposes DID_FILE_CACHE_PATH as the supported override; use it
+    # rather than reaching into PathConstants._file_cache_path.
+    env_var = getattr(did_common.PathConstants, "FILE_CACHE_ENV", None)
+    if env_var is None:  # older DID without the env-var override
+        env_var = "DID_FILE_CACHE_PATH"
+
+    previous = os.environ.get(env_var)
+    os.environ[env_var] = str(cache_dir)
+    # get_cache() memoizes its handle; drop it so the next caller picks up
+    # the redirected path.
     did_common._cached_cache = None
     try:
         yield cache_dir
     finally:
-        did_common.PathConstants._file_cache_path = original_path
+        if previous is None:
+            os.environ.pop(env_var, None)
+        else:
+            os.environ[env_var] = previous
         did_common._cached_cache = None
