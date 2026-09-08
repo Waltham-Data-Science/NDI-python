@@ -150,21 +150,5 @@ no_hash:
     matlab_path: "+ndi/+fun/+stimulus/tuning_curve_to_response_type.m"
   - name: stimulustemporalfrequency
     matlab_path: "+ndi/+fun/stimulustemporalfrequency.m"
-  - name: centerFigure
-    matlab_path: "+ndi/+gui/+utility/centerFigure.m"
-  - name: ndi_gui_Data
-    matlab_path: "+ndi/+gui/Data.m"
-  - name: ndi_gui_Icon
-    matlab_path: "+ndi/+gui/Icon.m"
-  - name: ndi_gui_Lab
-    matlab_path: "+ndi/+gui/Lab.m"
-  - name: ndi_gui_docViewer
-    matlab_path: "+ndi/+gui/docViewer.m"
-  - name: gui
-    matlab_path: "+ndi/+gui/gui.m"
-  - name: gui_v2
-    matlab_path: "+ndi/+gui/gui_v2.m"
-  - name: preferencesEditor
-    matlab_path: "+ndi/+gui/preferencesEditor.m"
   - name: setup
     matlab_path: "+ndi/+setup/"

@@ -18,6 +18,7 @@ import json
 from typing import Any
 
 from ndi.gui._qt_helpers import get_or_create_app, require_qt
+from ndi.gui.data import document_columns
 
 try:
     from PySide6 import QtCore, QtWidgets
@@ -42,7 +43,7 @@ class ndi_gui_docViewer:
         self.docs: list[Any] = []
 
         self.fig = QtWidgets.QMainWindow()
-        self.fig.setWindowTitle("ndi_document Viewer")
+        self.fig.setWindowTitle("Document Viewer")
         self.fig.resize(900, 600)
 
         central = QtWidgets.QWidget()
@@ -130,16 +131,11 @@ class ndi_gui_docViewer:
         """Populate the viewer from a list of NDI documents."""
         self.docs = docs
         for doc in docs:
-            dp = doc.document_properties
-            dp_dict = dp if isinstance(dp, dict) else dp.__dict__
-            nd = dp_dict.get("ndi_document", dp_dict)
-            name = nd.get("name", "") if isinstance(nd, dict) else getattr(nd, "name", "")
-            doc_id = nd.get("id", "") if isinstance(nd, dict) else getattr(nd, "id", "")
-            doc_type = nd.get("type", "") if isinstance(nd, dict) else getattr(nd, "type", "")
-            datestamp = (
-                nd.get("datestamp", "") if isinstance(nd, dict) else getattr(nd, "datestamp", "")
-            )
-            self.fullTable.append([str(name), str(doc_id), str(doc_type), str(datestamp)])
+            # Same legacy-schema problem as ndi.gui.data: MATLAB reads these
+            # four out of document_properties.ndi_document, a field a
+            # document built today does not have.
+            name, doc_id, doc_type, datestamp = document_columns(doc.document_properties)
+            self.fullTable.append([name, doc_id, doc_type, datestamp])
 
         self.fullDocuments = list(docs)
         self.tempTable = list(self.fullTable)
@@ -370,15 +366,12 @@ class ndi_gui_docViewer:
                         dep.get("value", "") if isinstance(dep, dict) else getattr(dep, "value", "")
                     )
                     for k, fd2 in enumerate(self.fullDocuments):
-                        dp2 = fd2.document_properties
-                        nd2 = (
-                            dp2.get("ndi_document", dp2)
-                            if isinstance(dp2, dict)
-                            else getattr(dp2, "ndi_document", dp2)
-                        )
-                        base_id = (
-                            nd2.get("id", "") if isinstance(nd2, dict) else getattr(nd2, "id", "")
-                        )
+                        # The dependency graph matched on the same missing
+                        # legacy id, so every document's id read as '' and the
+                        # graph came out with no edges at all -- or, when two
+                        # documents both read '', with edges between the wrong
+                        # pair.
+                        _, base_id, _, _ = document_columns(fd2.document_properties)
                         if base_id == dep_val:
                             edges.append((i, k))
 
