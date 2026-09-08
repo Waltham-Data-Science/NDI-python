@@ -117,6 +117,106 @@ class TestAFailedWaitDoesNotStopTheSync:
         assert "did not settle" not in caplog.text
 
 
+class TestTheWaitCannotSwallowTheClock:
+    """The regression that made this whole boundary unaffordable.
+
+    ``waitForAllBulkUploads`` polls until no bulk-upload job is active, and
+    treats a failed poll as "still active, let the timeout govern". That is
+    right for a blip partway through a real wait. It was applied to the very
+    first poll too -- so a deployment where the listing never works at all
+    (no bulk-upload service, an endpoint that 404s, credentials that do not
+    reach it) sat out the entire 300s deadline, learned nothing, and did it
+    again on the next call.
+
+    Wiring the wait into all five sync entry points turned that into 300s
+    per sync operation. It did not show up locally, where no cloud client
+    can be built and the call raises immediately; it showed up in CI, where
+    credentials exist and the poll loop is actually entered.
+    """
+
+    def test_a_first_poll_failure_returns_at_once(self):
+        """Nothing has been observed, so the error is not evidence of
+        activity -- it is evidence the wait cannot be performed."""
+        import time as time_module
+
+        from ndi.cloud.api import files as files_api
+
+        def unavailable(*a, **k):
+            raise RuntimeError("404 /files/bulk")
+
+        slept: list[float] = []
+        with (
+            patch.object(files_api, "listActiveBulkUploads", unavailable),
+            patch.object(time_module, "sleep", lambda s: slept.append(s)),
+        ):
+            result = files_api.waitForAllBulkUploads(DATASET_ID, client=object())
+
+        assert result["state"] == "unavailable"
+        assert "404" in result["error"]
+        assert slept == [], "an unavailable endpoint must not be polled again"
+
+    def test_a_blip_after_a_good_poll_is_still_ridden_out(self):
+        """The forgiving behaviour is kept where it was earned: one failed
+        poll mid-wait must not abandon a real extraction."""
+        import time as time_module
+
+        from ndi.cloud.api import files as files_api
+
+        calls = {"n": 0}
+
+        def flaky(*a, **k):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return {"jobs": [{"id": "j1", "state": "extracting"}]}
+            if calls["n"] == 2:
+                raise RuntimeError("transient 502")
+            return {"jobs": [{"id": "j1", "state": "complete"}]}
+
+        with (
+            patch.object(files_api, "listActiveBulkUploads", flaky),
+            patch.object(time_module, "sleep", lambda s: None),
+        ):
+            result = files_api.waitForAllBulkUploads(DATASET_ID, client=object())
+
+        assert result["state"] == "complete"
+        assert calls["n"] == 3
+
+    def test_the_sync_boundary_caps_its_own_deadline(self):
+        """300s is the right budget for "finish this extraction"; it is the
+        wrong budget for a boundary every sync crosses on every call."""
+        from ndi.cloud.sync import operations
+
+        seen: dict = {}
+
+        def record(dataset_id, **kwargs):
+            seen.update(kwargs)
+            return {"state": "complete", "jobs": [], "elapsed": 0.0}
+
+        with patch("ndi.cloud.api.files.waitForAllBulkUploads", record):
+            operations._settle_bulk_uploads(DATASET_ID, SyncOptions(), client=object())
+
+        assert seen["timeout"] == operations._SETTLE_TIMEOUT
+        assert operations._SETTLE_TIMEOUT <= 60
+
+    def test_an_unavailable_service_does_not_warn_on_every_sync(self, tmp_path, caplog):
+        """A deployment without the endpoint is not a sync problem, and a
+        warning per call would train everyone to ignore the log."""
+        from ndi.cloud.sync import operations
+
+        def unavailable(dataset_id, **kwargs):
+            return {"state": "unavailable", "jobs": [], "elapsed": 0.0, "error": "404"}
+
+        with (
+            patch("ndi.cloud.api.files.waitForAllBulkUploads", unavailable),
+            patch("ndi.cloud.internal.listRemoteDocumentIds", lambda *a, **k: {}),
+            caplog.at_level("WARNING", logger="ndi.cloud.sync.operations"),
+        ):
+            report = operations.uploadNew(str(tmp_path), DATASET_ID, SyncOptions())
+
+        assert report["mode"] == "upload_new"
+        assert caplog.text == ""
+
+
 class TestAFileListedButNotUploadedIsRequeued:
     """``filesNotYetUploaded`` must read the ``uploaded`` flag, not just the uid.
 

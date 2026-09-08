@@ -158,6 +158,13 @@ def downloadNdiDocuments(
 # ---------------------------------------------------------------------------
 
 
+#: How long a sync entry point will wait for in-flight bulk uploads before
+#: inventorying remote state. Deliberately far below
+#: waitForAllBulkUploads' own 300s default: this is a boundary crossed on
+#: every call, most of the time with nothing outstanding.
+_SETTLE_TIMEOUT = 30.0
+
+
 def _settle_bulk_uploads(
     cloud_dataset_id: str,
     options: SyncOptions,
@@ -188,17 +195,36 @@ def _settle_bulk_uploads(
     The inventory that follows is then merely as stale as it was before
     this existed, and refusing to sync at all would be a worse answer than
     proceeding with a warning.
+
+    THE DEADLINE IS THE CALLER'S, NOT THE WAIT'S. waitForAllBulkUploads
+    defaults to 300s, which is the right budget for "an extraction really is
+    in flight and I want it finished". It is the wrong budget for a boundary
+    every sync entry point crosses on every call, including the many that
+    have no bulk upload outstanding at all. ``_SETTLE_TIMEOUT`` caps what a
+    sync will spend here; a genuinely long extraction is then reported as a
+    stale inventory rather than silently held.
     """
     if options.dry_run:
         return
     from ..api import files as files_api
 
     try:
-        result = files_api.waitForAllBulkUploads(cloud_dataset_id, client=client)
+        result = files_api.waitForAllBulkUploads(
+            cloud_dataset_id, timeout=_SETTLE_TIMEOUT, client=client
+        )
     except Exception as exc:  # noqa: BLE001 - a wait that fails must not stop the sync
         logger.warning("Could not wait for bulk uploads on %s: %s", cloud_dataset_id, exc)
         return
     state = (result or {}).get("state")
+    if state == "unavailable":
+        # No bulk-upload service to wait on. Not a sync problem, and not
+        # something to warn about on every single call.
+        logger.debug(
+            "No bulk-upload status available for %s (%s); proceeding.",
+            cloud_dataset_id,
+            (result or {}).get("error", ""),
+        )
+        return
     if state and state != "complete":
         logger.warning(
             "Bulk uploads on %s did not settle (state=%s after %.1fs); the remote "
