@@ -103,11 +103,7 @@ drifted:
     matlab_path: "+ndi/+cloud/+api/+users/me.m"  # 1 commit(s) since
 
 # ---------------------------------------------------------------------------
-<<<<<<< HEAD
-# no_hash: 138
-=======
-# no_hash: 123
->>>>>>> origin/main
+# no_hash: 115
 #
 # An entry with a matlab_path and no matlab_last_sync_hash can never show
 # drift, so it claims its port is current forever and no check can contradict
@@ -311,13 +307,6 @@ no_hash:
     matlab_path: "+ndi/+util/datasetSummary.m"
   - name: sessionSummary
     matlab_path: "+ndi/+util/sessionSummary.m"
-<<<<<<< HEAD
-  - name: toolboxdir
-    matlab_path: "+ndi/+util/toolboxdir.m"
-=======
-  - name: unwrapTableCellContent
-    matlab_path: "+ndi/+util/unwrapTableCellContent.m"
->>>>>>> origin/main
   - name: mustBeCellArrayOfClass
     matlab_path: "+ndi/+validators/mustBeCellArrayOfClass.m"
   - name: mustBeCellArrayOfNdiSessions
