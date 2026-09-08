@@ -1034,24 +1034,38 @@ not_applicable:
 
   - name: filesep
     matlab_path: "+ndi/filesep.m"
+    matlab_last_sync_hash: "fe64a9f53"
     status: matlab_only
     decision_log: >
       MATLAB utility returning '/' for cross-platform path
       consistency. Python uses pathlib/os.sep natively.
 
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Still returns the literal '/'. Nothing to port.
+
   - name: toolboxdir
     matlab_path: "+ndi/toolboxdir.m"
+    matlab_last_sync_hash: "fe64a9f53"
     status: ported_differently
     decision_log: >
       MATLAB-specific path resolution. Python uses
       ndi.common.ndi_common_PathConstants.
 
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Still fileparts(fileparts(mfilename('fullpath'))). Nothing to port.
+
   - name: cpipeline
     matlab_path: "+ndi/cpipeline.m"
+    matlab_last_sync_hash: "27739a74c"
     status: porting_deferred
     decision_log: >
       MATLAB calculation pipeline registry with GUI editing.
       Not ported to Python.
+
+      Confirmed against NDI-matlab 27739a74c, the file's last-touching commit,
+      which added a Calculator Type column to the editor table -- a change to
+      the GUI that is the reason this is deferred in the first place. Nothing
+      to port.
 
   # =========================================================================
   # ndi.data namespace
@@ -1109,8 +1123,14 @@ not_applicable:
   # =========================================================================
   - name: docs
     matlab_path: "+ndi/+docs/"
+    matlab_last_sync_hash: "c2bd3af62"
     status: matlab_only
     decision_log: >
       MATLAB documentation generation utilities (all_documents2markdown,
       build, calcbuild, concatenateFiles, docfun, document2markdown,
       schemastructure2docstructure). Python uses Sphinx/mkdocs instead.
+
+      Confirmed against NDI-matlab c2bd3af62, the package's last-touching
+      commit (a calcbuild crash fix for a missing
+      documentation_structure.mat). The package still holds exactly the seven
+      files named above. Nothing to port: Python's docs are built by mkdocs.

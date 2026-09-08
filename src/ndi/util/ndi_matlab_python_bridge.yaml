@@ -14,6 +14,7 @@ functions:
   - name: datestamp2datetime
     type: function
     matlab_path: "+ndi/+util/datestamp2datetime.m"
+    matlab_last_sync_hash: "436528796"
     python_path: "ndi/util/datestamp2datetime.py"
     input_arguments:
       - name: datestampStr
@@ -26,9 +27,25 @@ functions:
       Exact match. Converts an NDI datestamp string (ISO 8601 with
       milliseconds and timezone offset) to a Python datetime object in UTC.
 
+      Examined against NDI-matlab 436528796, the commit that added the file,
+      and this one did NOT hold in two ways. MATLAB parses with InputFormat
+      yyyy-MM-dd'T'HH:mm:ss.SSSXXX and TimeZone UTC, so the offset is part of
+      the format. (1) The port handed the string straight to
+      datetime.fromisoformat, which did not accept a trailing 'Z' until Python
+      3.11 -- so the repo's OWN datestamp format, what ndi.common.timestamp
+      writes and what the ndi_common documents carry
+      ('2018-12-05T18:36:47.241Z'), raised ValueError on Python 3.10, which
+      this project supports and CI runs. A 'Z' is now normalised before
+      parsing. (2) A datestamp with no offset was accepted and passed to
+      astimezone, which reads a NAIVE datetime as LOCAL SYSTEM time: the same
+      input became 17:00Z in New York and 03:00Z in Tokyo, silently. MATLAB's
+      XXX-anchored format simply fails to parse such a string, and so does
+      this now. Covered by tests/test_util_hex_and_time.py.
+
   - name: downsampleTimeseries
     type: function
     matlab_path: "+ndi/+util/downsampleTimeseries.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/util/downsampleTimeseries.py"
     input_arguments:
       - name: t_in
@@ -52,9 +69,20 @@ functions:
       data unchanged. NOTE: MATLAB also accepts datetime vectors for
       t_in; Python only accepts np.ndarray.
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit
+      (the src/ layout move; unchanged since). The 4th-order Chebyshev Type I
+      design at 0.8 dB, the fs > 2*LP test, filtfilt, the 1/(2*LP) output grid
+      and the no-op-plus-warning branch all match. Two divergences, both
+      deliberate: MATLAB also accepts a datetime t_in (handled with
+      seconds(dt)), where the port takes numeric seconds only; and MATLAB's
+      interp1 yields NaN outside the input range where np.interp clamps, which
+      the output grid never reaches. A docstring had picked up a mechanical
+      Data -> ndi_gui_Data rename; restored.
+
   - name: getHexDiffFromFileObj
     type: function
     matlab_path: "+ndi/+util/getHexDiffFromFileObj.m"
+    matlab_last_sync_hash: "57ae0da0d"
     python_path: "ndi/util/getHexDiffFromFileObj.py"
     input_arguments:
       - name: file_obj1
@@ -77,9 +105,32 @@ functions:
       Returns (True, '') if identical, or (False, hex_diff_string)
       for first mismatched chunk.
 
+      Examined against NDI-matlab 57ae0da0d, the file's last-touching commit,
+      and this one did NOT hold. (1) The port could not be called at all: its
+      file-object parameters were annotated typing.IO[bytes], which under
+      @pydantic.validate_call becomes isinstance(value, IO) -- False for
+      io.BytesIO and for the BufferedReader open(path,'rb') returns, so every
+      invocation raised ValidationError before the body ran. Replaced with a
+      runtime-checkable Protocol asking for read/seek/tell, which is the
+      question that was meant. (2) MATLAB installs two onCleanup objects that
+      rewind both files however the function exits ('ensure rewind after we
+      are done'); the port dropped them, leaving both objects at EOF. Restored
+      with try/finally. SEPARATELY, AND NOT FIXED HERE: hexDiffBytes uses
+      StartOffset as both the printed address and an index into the arrays it
+      is given, while this function passes ONE chunk plus the absolute file
+      offset. So when the first differing chunk is not the first chunk, the
+      loop range is empty and diff_output comes back '' even though
+      are_identical is false -- where the MATLAB help promises 'a hex diff of
+      the first mismatched chunk'. MATLAB does exactly the same; this is an
+      upstream bug, not a porting one, and diverging would break the
+      correspondence this file records. Pinned by
+      tests/test_util_hex_and_time.py::TestGetHexDiffFromFileObj so the shared
+      behaviour is at least visible.
+
   - name: hexDiff
     type: function
     matlab_path: "+ndi/+util/hexDiff.m"
+    matlab_last_sync_hash: "4f4a650ad"
     python_path: "ndi/util/hexDiff.py"
     input_arguments:
       - name: filename1
@@ -102,9 +153,15 @@ functions:
       lines where they differ. Output is printed to console (no return value).
       MATLAB default for StopByte is Inf; Python uses None (semantically equivalent).
 
+      Examined against NDI-matlab 4f4a650ad, the file's last-touching commit
+      ('hextools'). Range validation, the inclusive StartByte:16:StopByte
+      walk, the 140-dash rules, the two-part header and the 'Files are
+      identical in the specified range.' line all match. Nothing to port.
+
   - name: hexDiffBytes
     type: function
     matlab_path: "+ndi/+util/hexDiffBytes.m"
+    matlab_last_sync_hash: "cd25a6566"
     python_path: "ndi/util/hexDiffBytes.py"
     input_arguments:
       - name: data1
@@ -125,9 +182,18 @@ functions:
       hex diff string showing only differing 16-byte lines. Returns
       empty string if identical.
 
+      Examined against NDI-matlab cd25a6566, the commit that added the file.
+      Chunk loop, comparison and formatting match, including getChunkString's
+      padding of both the hex and the ASCII field to 16 slots so the two sides
+      stay aligned, and the empty-string return that getHexDiffFromFileObj
+      depends on. The StartOffset double meaning described on
+      getHexDiffFromFileObj lives here; it is MATLAB's and is reproduced
+      deliberately.
+
   - name: hexDump
     type: function
     matlab_path: "+ndi/+util/hexDump.m"
+    matlab_last_sync_hash: "4f4a650ad"
     python_path: "ndi/util/hexDump.py"
     input_arguments:
       - name: filename
@@ -147,9 +213,19 @@ functions:
       and ASCII content. Output is printed to console (no return value).
       MATLAB default for StopByte is Inf; Python uses None (semantically equivalent).
 
+      Examined against NDI-matlab 4f4a650ad, the file's last-touching commit
+      ('hextools'). Empty-file path, the StartByte/StopByte validation and the
+      AdjustedStopByte warning, the 77-dash rules and the 16-byte lines all
+      match. ONE COSMETIC DIVERGENCE, left as it is: MATLAB's inline printer
+      writes only numel(chunk) ASCII characters, so a short final line ends
+      '|abc|', while the port reuses hexDiffBytes' getChunkString equivalent
+      and pads to '|abc |'. Display only -- this function returns nothing --
+      and the padded form is what the diff functions already print.
+
   - name: rehydrateJSONNanNull
     type: function
     matlab_path: "+ndi/+util/rehydrateJSONNanNull.m"
+    matlab_last_sync_hash: "54dbf963d"
     python_path: "ndi/util/rehydrateJSONNanNull.py"
     input_arguments:
       - name: jsonText
@@ -173,6 +249,16 @@ functions:
     decision_log: >
       Exact match. Replaces NDI sentinel strings for NaN, Infinity,
       and -Infinity in JSON text with Python-compatible representations.
+
+      Examined against NDI-matlab 54dbf963d, the file's last-touching commit.
+      Same three sentinels, same replacements, same overrides. MATLAB does
+      them in ONE pass (replace with cell arrays) where the port applies three
+      sequential str.replace calls. With the defaults the two are identical --
+      no sentinel is a substring of another, and no replacement output ('NaN',
+      'Infinity', '-Infinity') can create one -- and both callers in
+      src/ndi/cloud/ use the defaults. Left as it is rather than rewritten,
+      and noted here because a caller passing OVERLAPPING custom sentinels
+      would see the two diverge.
 
   - name: sessionSummary
     type: function
@@ -260,6 +346,7 @@ functions:
   - name: unwrapTableCellContent
     type: function
     matlab_path: "+ndi/+util/unwrapTableCellContent.m"
+    matlab_last_sync_hash: "236cc24e4"
     python_path: "ndi/util/unwrapTableCellContent.py"
     input_arguments:
       - name: cellValue
@@ -272,6 +359,14 @@ functions:
       Exact match. Recursively unwraps nested lists (up to 10 levels)
       to retrieve the innermost value. Returns float('nan') if the
       value is None or an empty list (matching MATLAB's NaN for empty cells).
+
+      Examined against NDI-matlab 236cc24e4, the file's last-touching commit.
+      The 10-level unwrap limit, NaN for an empty cell or an empty [], and the
+      explicit preservation of an empty char ('' survives where [] becomes
+      NaN) all match, with a Python list standing in for a cell array. MATLAB
+      additionally casts a string scalar to char on the way out, which has no
+      Python counterpart since str is already the one text type. Nothing to
+      port.
 
 # =========================================================================
 # Not ported / Not applicable
@@ -494,25 +589,49 @@ not_applicable:
       recorded on selectOrganization, not here.
   - name: choosefile
     matlab_path: "+ndi/+util/choosefile.m"
+    matlab_last_sync_hash: "fe64a9f53"
     status: matlab_only
-    decision_log: "MATLAB GUI dialog (inputdlg). No Python equivalent needed."
+    decision_log: >
+      MATLAB GUI dialog (inputdlg). No Python equivalent needed.
+
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Still inputdlg for the name and questdlg for the overwrite prompt,
+      looping until a free name is given. Nothing to port.
 
   - name: choosefileordir
     matlab_path: "+ndi/+util/choosefileordir.m"
+    matlab_last_sync_hash: "fe64a9f53"
     status: matlab_only
-    decision_log: "MATLAB GUI dialog. No Python equivalent needed."
+    decision_log: >
+      MATLAB GUI dialog. No Python equivalent needed.
+
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Same inputdlg/questdlg loop as choosefile, additionally squashing
+      non-alphanumeric characters to underscores and testing isfolder as well
+      as isfile. Nothing to port.
 
   - name: toolboxdir
     matlab_path: "+ndi/+util/toolboxdir.m"
+    matlab_last_sync_hash: "fe64a9f53"
     status: ported_differently
     decision_log: >
       MATLAB-specific path resolution using mfilename('fullpath').
       Python uses ndi.common.ndi_common_PathConstants instead.
 
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Still five lines splitting mfilename("fullpath") and rejoining all but
+      the last three parts. Nothing to port.
+
   - name: "+openminds sub-package"
     matlab_path: "+ndi/+util/+openminds/"
+    matlab_last_sync_hash: "fe64a9f53"
     status: ported_differently
     decision_log: >
       MATLAB sub-package with find_instance_name.m and
       find_techniques_names.m. Ported to ndi.openminds_convert
       module in Python (different namespace).
+
+      Confirmed against NDI-matlab fe64a9f53, the package's last-touching
+      commit. It still holds exactly find_instance_name.m and
+      find_techniques_names.m, the two files this entry accounts for. Nothing
+      to port.

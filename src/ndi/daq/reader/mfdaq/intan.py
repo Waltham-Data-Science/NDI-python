@@ -298,7 +298,16 @@ class ndi_daq_reader_mfdaq_intan(ndi_daq_reader_mfdaq):
         sr = header["frequency_parameters"]["amplifier_sample_rate"]
         if sr == 0:
             return [(np.nan, np.nan)]
-        blockinfo, _, _, num_data_blocks = Intan_RHD2000_blockinfo(filepath, header)
+        # NDR-python grew a fifth return value here (VH-Lab/NDR-python#26,
+        # "Read a multi-file Intan recording as one continuous stream"):
+        # file_blocks, the per-file block counts, length 1 in single-file
+        # mode and length N in multi-file. num_data_blocks is now summed
+        # across every file, which is what this computation already wants.
+        # Unpacked by slicing rather than by position so that a further
+        # return value upstream widens the total rather than breaking the
+        # call -- this repo installs ndr from git main, so an arity change
+        # there reaches CI the moment it merges, as this one did.
+        blockinfo, _, _, num_data_blocks = Intan_RHD2000_blockinfo(filepath, header)[:4]
         total_samples = blockinfo["samples_per_block"] * num_data_blocks
         if total_samples == 0:
             return [(np.nan, np.nan)]
