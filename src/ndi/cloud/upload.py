@@ -10,6 +10,7 @@ MATLAB equivalents: +ndi/+cloud/+upload/*.m, uploadSingleFile.m
 from __future__ import annotations
 
 import json
+import logging
 import tempfile
 import zipfile
 from pathlib import Path
@@ -19,6 +20,8 @@ from .client import _auto_client
 
 if TYPE_CHECKING:
     from .client import CloudClient
+
+logger = logging.getLogger(__name__)
 
 
 def uploadDocumentCollection(
@@ -59,8 +62,18 @@ def uploadDocumentCollection(
             filtered = [d for d in documents if d.get("ndiId", d.get("id", "")) not in existing_ids]
             report["skipped"] = len(documents) - len(filtered)
             documents = filtered
-        except Exception:
-            pass  # proceed with all
+        except Exception as exc:
+            # Proceeding with all of them is the safe fallback -- the remote
+            # rejects a duplicate, it does not corrupt anything. But a bare
+            # pass here means a listing call that has stopped working looks
+            # exactly like a dataset with nothing on the remote yet: every
+            # run re-uploads everything and nothing ever says why.
+            logger.warning(
+                "Could not list existing remote documents (%s); "
+                "uploading all %d documents without the only_missing filter",
+                exc,
+                len(documents),
+            )
 
     if not documents:
         return report

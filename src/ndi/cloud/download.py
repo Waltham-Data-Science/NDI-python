@@ -571,6 +571,13 @@ def downloadGenericFiles(
                     if not name_part:
                         name_part, ext_part = os.path.splitext(fi.get("name", ""))
 
+                    # A generic_file that was a directory is stored zipped, and
+                    # a directory name carries no extension -- so the file
+                    # arrives named for the folder with nothing to say it is an
+                    # archive. The stored location does say so.
+                    if not ext_part and ".zip" in str(locations[0].get("location", "")):
+                        ext_part = ".zip"
+
                     if naming_strategy == "id":
                         filename = f"{doc_id}{ext_part}"
                     elif naming_strategy == "id_original":

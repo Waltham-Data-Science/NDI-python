@@ -183,6 +183,10 @@ def getFile(
 ) -> bool:
     """Download a file from a presigned URL.
 
+    ``target_path`` is overwritten if it already exists, without warning and
+    without a backup. Callers that must not clobber an existing file have to
+    check for it themselves.
+
     MATLAB equivalent: +cloud/+api/+files/getFile.m
     """
     import logging

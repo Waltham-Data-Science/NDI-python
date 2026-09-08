@@ -137,6 +137,19 @@ def downloadNdiDocuments(
         if ndi_to_api.get(ndi_id, ndi_id) not in downloaded_api_ids
     ]
 
+    # A short answer -- ask for 50 documents, get 47 -- is the shape silent
+    # cloud pagination produces, and it is not an exception: the call
+    # succeeds and the caller gets a shorter list. The callers keep the
+    # missing IDs out of the sync index so they stay outstanding, but
+    # nothing has so far said the loss happened at all.
+    if failed:
+        logger.warning(
+            "Requested %d documents from the cloud and received %d; missing: %s",
+            len(ids_to_download),
+            len(ids_to_download) - len(failed),
+            ", ".join(sorted(failed)[:10]) + ("..." if len(failed) > 10 else ""),
+        )
+
     return docs, failed
 
 
