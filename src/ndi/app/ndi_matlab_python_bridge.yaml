@@ -17,9 +17,16 @@ classes:
   - name: app
     type: class
     matlab_path: "src/ndi/+ndi/app.m"
+    matlab_last_sync_hash: "8533e9f89"
     python_path: "ndi/app/__init__.py"
     python_class: "ndi_app"
     inherits: "ndi.documentservice"
+    decision_log: >
+      Examined against NDI-matlab 8533e9f89, the file's last-touching commit.
+      The whole surface is present: the constructor taking (session, name) and
+      defaulting name to 'generic', the two protected-set properties, and all
+      four methods -- varappname, version_url, newdocument, searchquery.
+      Nothing to port.
 
     properties:
       - name: session
