@@ -133,14 +133,14 @@ class TestSyncAndMirror:
     def _patch_op(self, monkeypatch, name, result):
         import ndi.cloud.sync as sync_module
 
-        def op(path, cloud_id):
+        def op(dataset, cloud_id):
             if isinstance(result, Exception):
                 raise result
             return result
 
         monkeypatch.setattr(sync_module, name, op, raising=False)
 
-    def _patch_resolve(self, monkeypatch, value=("/data/ds", "cid")):
+    def _patch_resolve(self, monkeypatch, value="cid"):
         monkeypatch.setattr(dc, "resolve_cloud_target", lambda ds: value)
 
     def test_each_sync_mode_calls_its_function(self, monkeypatch):
@@ -259,11 +259,13 @@ class TestMirrorPrompt:
 
 
 class TestResolveCloudTarget:
-    def test_returns_path_and_id(self, monkeypatch):
+    def test_returns_the_cloud_id(self, monkeypatch):
+        """It resolves the id only. The sync functions take the dataset
+        itself now (NDI-python#232), so there is no path to hand them."""
         import ndi.cloud.internal as internal
 
         monkeypatch.setattr(internal, "getCloudDatasetIdForLocalDataset", lambda ds: ("cid", {}))
-        assert dc.resolve_cloud_target(FakeDataset(path="/data/ds")) == ("/data/ds", "cid")
+        assert dc.resolve_cloud_target(FakeDataset(path="/data/ds")) == "cid"
 
     def test_an_empty_id_is_an_actionable_message(self, monkeypatch):
         import ndi.cloud.internal as internal

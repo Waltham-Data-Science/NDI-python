@@ -26,6 +26,8 @@ import pytest
 
 from ndi.cloud.sync.mode import SyncOptions
 
+from .conftest import FakeDataset
+
 ENTRY_POINTS = ["uploadNew", "downloadNew", "mirrorToRemote", "mirrorFromRemote", "twoWaySync"]
 
 DATASET_ID = "65a1b2c3d4e5f60718293a4b"
@@ -56,7 +58,7 @@ def calls(tmp_path):
             patch("ndi.cloud.api.files.waitForAllBulkUploads", fake_wait),
             patch("ndi.cloud.internal.listRemoteDocumentIds", lambda *a, **k: {}),
         ):
-            getattr(operations, name)(str(tmp_path), DATASET_ID, options)
+            getattr(operations, name)(FakeDataset(tmp_path), DATASET_ID, options)
         return recorded
 
     return run
@@ -88,7 +90,7 @@ class TestAFailedWaitDoesNotStopTheSync:
             patch("ndi.cloud.api.files.waitForAllBulkUploads", wait),
             patch("ndi.cloud.internal.listRemoteDocumentIds", lambda *a, **k: {}),
         ):
-            return operations.uploadNew(str(tmp_path), DATASET_ID, SyncOptions())
+            return operations.uploadNew(FakeDataset(tmp_path), DATASET_ID, SyncOptions())
 
     def test_a_raising_wait_is_logged_and_survived(self, tmp_path, caplog):
         def boom(dataset_id, **kwargs):
@@ -211,7 +213,7 @@ class TestTheWaitCannotSwallowTheClock:
             patch("ndi.cloud.internal.listRemoteDocumentIds", lambda *a, **k: {}),
             caplog.at_level("WARNING", logger="ndi.cloud.sync.operations"),
         ):
-            report = operations.uploadNew(str(tmp_path), DATASET_ID, SyncOptions())
+            report = operations.uploadNew(FakeDataset(tmp_path), DATASET_ID, SyncOptions())
 
         assert report["mode"] == "upload_new"
         assert caplog.text == ""

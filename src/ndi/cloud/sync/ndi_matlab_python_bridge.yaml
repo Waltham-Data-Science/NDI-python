@@ -154,6 +154,15 @@ functions:
       in mirrorToRemote (commit 8b6351c). uploadNew itself uploads no binaries at
       all and posts an ndiId rather than the document body -- a structural gap
       these commits expose but do not cause, tracked as #232.
+      2026-09-08: signature changed to take an ndi.dataset, matching MATLAB's
+      uploadNew(ndiDataset, syncOptions), and the cloud id is now optional -- an empty one
+      is resolved from the dataset's dataset_remote document as MATLAB does. This
+      side previously took (dataset_path, cloud_dataset_id) and worked from the
+      sync index's id lists alone, which made the port's central claim false:
+      with only ids there is no document content to send, so every upload posted
+      {"ndiId": id} -- a document with no base, no document_class and no
+      properties. The call succeeded, the remote listed the id, and no later run
+      resent it because a live listing showed it present. NDI-python#232.
 
   - name: downloadNew
     matlab_path: "+ndi/+cloud/+sync/downloadNew.m"
@@ -186,6 +195,15 @@ functions:
       The index half of that was already ported (a document not landed on disk
       enters neither list); what was added now is the warning, so a short download
       is visible without reading report['failed'] (commit 21a4e4b on this branch).
+      2026-09-08: signature changed to take an ndi.dataset, matching MATLAB's
+      downloadNew(ndiDataset, syncOptions), and the cloud id is now optional -- an empty one
+      is resolved from the dataset's dataset_remote document as MATLAB does. This
+      side previously took (dataset_path, cloud_dataset_id) and worked from the
+      sync index's id lists alone, which made the port's central claim false:
+      with only ids there is no document content to send, so every upload posted
+      {"ndiId": id} -- a document with no base, no document_class and no
+      properties. The call succeeded, the remote listed the id, and no later run
+      resent it because a live listing showed it present. NDI-python#232.
 
   - name: mirrorToRemote
     matlab_path: "+ndi/+cloud/+sync/mirrorToRemote.m"
@@ -219,6 +237,15 @@ functions:
       upload failed is withheld from the recorded remote state and named in
       report['failed'] (commit 8b6351c on this branch). What this function still
       posts is an ndiId rather than the document body -- see #232.
+      2026-09-08: signature changed to take an ndi.dataset, matching MATLAB's
+      mirrorToRemote(ndiDataset, syncOptions), and the cloud id is now optional -- an empty one
+      is resolved from the dataset's dataset_remote document as MATLAB does. This
+      side previously took (dataset_path, cloud_dataset_id) and worked from the
+      sync index's id lists alone, which made the port's central claim false:
+      with only ids there is no document content to send, so every upload posted
+      {"ndiId": id} -- a document with no base, no document_class and no
+      properties. The call succeeded, the remote listed the id, and no later run
+      resent it because a live listing showed it present. NDI-python#232.
 
   - name: mirrorFromRemote
     matlab_path: "+ndi/+cloud/+sync/mirrorFromRemote.m"
@@ -250,6 +277,15 @@ functions:
       that matters -- the next run computes to_download as remote minus local, so
       a failed download recorded as local would never be retried. The warning was
       added with it (commit 21a4e4b on this branch).
+      2026-09-08: signature changed to take an ndi.dataset, matching MATLAB's
+      mirrorFromRemote(ndiDataset, syncOptions), and the cloud id is now optional -- an empty one
+      is resolved from the dataset's dataset_remote document as MATLAB does. This
+      side previously took (dataset_path, cloud_dataset_id) and worked from the
+      sync index's id lists alone, which made the port's central claim false:
+      with only ids there is no document content to send, so every upload posted
+      {"ndiId": id} -- a document with no base, no document_class and no
+      properties. The call succeeded, the remote listed the id, and no later run
+      resent it because a live listing showed it present. NDI-python#232.
 
   - name: twoWaySync
     matlab_path: "+ndi/+cloud/+sync/twoWaySync.m"
@@ -282,6 +318,15 @@ functions:
       that is why a document whose binary failed is now withheld from
       remote_doc_ids_last_sync (commit 8b6351c on this branch). Like the other
       upload modes it posts an ndiId rather than the document body -- see #232.
+      2026-09-08: signature changed to take an ndi.dataset, matching MATLAB's
+      twoWaySync(ndiDataset, syncOptions), and the cloud id is now optional -- an empty one
+      is resolved from the dataset's dataset_remote document as MATLAB does. This
+      side previously took (dataset_path, cloud_dataset_id) and worked from the
+      sync index's id lists alone, which made the port's central claim false:
+      with only ids there is no document content to send, so every upload posted
+      {"ndiId": id} -- a document with no base, no document_class and no
+      properties. The call succeeded, the remote listed the id, and no later run
+      resent it because a live listing showed it present. NDI-python#232.
 
   - name: validate
     matlab_path: "+ndi/+cloud/+sync/validate.m"

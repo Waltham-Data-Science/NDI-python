@@ -76,3 +76,97 @@ def pytest_runtest_makereport(item, call):
         "unrunnable.\n\n"
         f"Original skip reason: {report.longrepr}"
     )
+
+
+# ---------------------------------------------------------------------------
+# A local dataset the sync tests can hand to ndi.cloud.sync
+#
+# The sync operations take an ``ndi.dataset`` rather than a path
+# (NDI-python#232), because only a dataset can answer "what are my
+# documents" -- the question an upload has to ask. This is the smallest
+# thing that answers it: a path for the sync index, and a
+# ``database_search`` returning documents the test chose.
+#
+# It deliberately holds document PROPERTIES rather than ids. A fake that
+# only knew ids could not have caught the bug #232 describes, because the
+# whole bug was that ids are all the old code had.
+# ---------------------------------------------------------------------------
+
+import pytest as _pytest
+
+
+class FakeDocument:
+    """Just enough of ndi.document: it has ``document_properties``."""
+
+    def __init__(self, properties):
+        self.document_properties = dict(properties)
+
+    @property
+    def id(self):
+        return self.document_properties.get("base", {}).get("id", "")
+
+
+class FakeDataset:
+    """A local dataset backed by a directory and a list of documents."""
+
+    def __init__(self, path, documents=()):
+        self._path = str(path)
+        self.documents = [d if isinstance(d, FakeDocument) else FakeDocument(d) for d in documents]
+
+    # -- what the sync operations use -------------------------------------
+    def getpath(self):
+        return self._path
+
+    def database_search(self, query=None):
+        return list(self.documents)
+
+    def database_add(self, document):
+        """Ingest downloaded documents, as ndi.dataset.database_add does.
+
+        A download that never reaches the database is not local, so without
+        this the next sync fetches it again -- which is exactly what the
+        real datasets do too.
+        """
+        incoming = document if isinstance(document, list) else [document]
+        have = {d.id for d in self.documents}
+        for doc in incoming:
+            props = getattr(doc, "document_properties", doc)
+            wrapped = FakeDocument(props) if not isinstance(doc, FakeDocument) else doc
+            if wrapped.id and wrapped.id not in have:
+                self.documents.append(wrapped)
+                have.add(wrapped.id)
+        return self
+
+    # -- convenience for tests --------------------------------------------
+    @property
+    def ids(self):
+        return [d.id for d in self.documents]
+
+    def add(self, doc_id, **extra):
+        props = {
+            "base": {"id": doc_id, "session_id": "s1"},
+            "document_class": {"class_name": "base"},
+        }
+        props.update(extra)
+        self.documents.append(FakeDocument(props))
+        return self
+
+    def remove(self, doc_id):
+        self.documents = [d for d in self.documents if d.id != doc_id]
+        return self
+
+
+def make_document(doc_id, **extra):
+    """A document properties dict with the fields an upload actually sends."""
+    props = {
+        "base": {"id": doc_id, "session_id": "s1", "name": doc_id},
+        "document_class": {"class_name": "base", "property_list_name": "base"},
+    }
+    props.update(extra)
+    return props
+
+
+@_pytest.fixture
+def fake_dataset(tmp_path):
+    """A :class:`FakeDataset` rooted at ``tmp_path`` with no documents yet."""
+    return FakeDataset(tmp_path)
