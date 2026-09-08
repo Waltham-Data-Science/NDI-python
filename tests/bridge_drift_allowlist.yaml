@@ -88,7 +88,9 @@ drifted:
   # --- comments-only ---
 
 # ---------------------------------------------------------------------------
-# no_hash: 83
+# no_hash: the entries below are the count -- the number is deliberately
+# not repeated here, so that concurrent burn-down PRs do not all collide
+# on one line of prose.
 #
 # An entry with a matlab_path and no matlab_last_sync_hash can never show
 # drift, so it claims its port is current forever and no check can contradict
