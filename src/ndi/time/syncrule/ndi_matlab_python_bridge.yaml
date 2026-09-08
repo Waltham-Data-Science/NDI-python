@@ -170,15 +170,23 @@ classes:
     matlab_path: "+ndi/+time/+syncrule/commonTriggersOverlappingEpochs.m"
     matlab_last_sync_hash: "8736980ca"
     decision_log: >
-      NOT PORTED, and it is a real gap rather than a no-op. NDI-matlab
-      8736980ca stops a trigger-count mismatch from being fatal: it logs the
-      counts and the two epoch ids, then falls back to
-      ndi.time.fun.syncTriggerTrains to align trains of unequal length. Python
-      raises ValueError("Trigger count mismatch") instead, so a synchronisation
-      MATLAB now completes is refused here -- and a missing pulse, which is
-      what the fallback exists for, is ordinary in real recordings. Porting it
-      means porting syncTriggerTrains, a train-alignment algorithm this repo
-      does not have; that is its own piece of work, not a hash bump. The
+      PORTED in NDI-python#223. NDI-matlab 8736980ca stopped a trigger-count
+      mismatch from being fatal: it logs the counts and the two epoch ids,
+      then falls back to ndi.time.fun.syncTriggerTrains to align trains of
+      unequal length. Python used to raise ValueError("Trigger count
+      mismatch") instead, refusing a synchronisation MATLAB completes -- and a
+      missing pulse, which is what the fallback exists for, is ordinary in
+      real recordings, so the refusal fired on the normal case and surfaced as
+      an exception during epoch-graph construction. apply() now branches the
+      same way MATLAB does: equal counts take the least-squares path
+      (_sync_triggers), unequal counts log and fall back to
+      _sync_trigger_trains, the port of syncTriggerTrains recorded under
+      time_fun in src/ndi/time/ndi_matlab_python_bridge.yaml.
+      THE LOG LINE IS PART OF THE PORT, not decoration. It names both counts
+      and both epoch ids, because the fallback answers from imperfectly
+      matched trains: what a caller gets instead of the old exception is a
+      mapping whose quality depends on how well the trains align, and a
+      silent fallback would hide the recording problem that caused it. The
       earlier commits in this range only revert and re-comment the map_coeffs
       order, which Python already has right.
     python_path: "ndi/time/syncrule/common_triggers_overlapping_epochs.py"
@@ -261,8 +269,12 @@ classes:
           accepts daqsystem_a as third argument. Checks embedded
           file overlap (grandparent/parent matching), expands
           epoch group iteratively, reads triggers from all
-          overlapping epochs, and computes linear mapping via
-          least-squares (vlt.time.syncTriggers equivalent).
+          overlapping epochs, and computes a linear mapping:
+          least-squares (vlt.time.syncTriggers equivalent) when
+          the two trigger counts are equal, otherwise a logged
+          fallback to _sync_trigger_trains
+          (ndi.time.fun.syncTriggerTrains equivalent), which
+          aligns trains of unequal length.
           Checks for cached syncrule_mapping documents in the
           database before computing. Returns (None, None) if
           no embedded overlap or names/clocks do not match.
