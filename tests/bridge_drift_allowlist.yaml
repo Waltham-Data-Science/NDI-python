@@ -103,11 +103,7 @@ drifted:
     matlab_path: "+ndi/+cloud/+api/+users/me.m"  # 1 commit(s) since
 
 # ---------------------------------------------------------------------------
-<<<<<<< HEAD
-# no_hash: 138
-=======
-# no_hash: 123
->>>>>>> origin/main
+# no_hash: 115
 #
 # An entry with a matlab_path and no matlab_last_sync_hash can never show
 # drift, so it claims its port is current forever and no check can contradict
@@ -259,27 +255,6 @@ no_hash:
     matlab_path: "+ndi/+fun/stimulustemporalfrequency.m"
   - name: timestamp
     matlab_path: "+ndi/+fun/timestamp.m"
-<<<<<<< HEAD
-  - name: jrclust
-    matlab_path: "+ndi/+gui/+app/jrclust.m"
-=======
-  - name: ndi_gui_component_abstract_ProgressMonitor
-    matlab_path: "+ndi/+gui/+component/+abstract/ProgressMonitor.m"
-  - name: ndi_gui_component_internal_event_MessageUpdatedEventData
-    matlab_path: "+ndi/+gui/+component/+internal/+event/MessageUpdatedEventData.m"
-  - name: ndi_gui_component_internal_event_ProgressUpdatedEventData
-    matlab_path: "+ndi/+gui/+component/+internal/+event/ProgressUpdatedEventData.m"
-  - name: ndi_gui_component_internal_AsynchProgressTracker
-    matlab_path: "+ndi/+gui/+component/+internal/AsynchProgressTracker.m"
-  - name: ndi_gui_component_internal_ProgressTracker
-    matlab_path: "+ndi/+gui/+component/+internal/ProgressTracker.m"
-  - name: ndi_gui_component_CommandWindowProgressMonitor
-    matlab_path: "+ndi/+gui/+component/CommandWindowProgressMonitor.m"
-  - name: ndi_gui_component_NDIProgressBar
-    matlab_path: "+ndi/+gui/+component/NDIProgressBar.m"
-  - name: ndi_gui_component_ProgressBarWindow
-    matlab_path: "+ndi/+gui/+component/ProgressBarWindow.m"
->>>>>>> origin/main
   - name: centerFigure
     matlab_path: "+ndi/+gui/+utility/centerFigure.m"
   - name: ndi_gui_Data
