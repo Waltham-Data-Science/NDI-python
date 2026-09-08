@@ -176,6 +176,18 @@ functions:
       actually landed and advances over exactly that, so a retry re-sends only
       what is still missing. A caller mistake -- a path where a dataset belongs --
       still raises rather than becoming success=false.
+      Correction to the note above: the sync-index divergence it described is
+      gone. An upload failure -- documents or binaries -- now aborts before the
+      index is written, matching MATLAB exactly: uploadNew returns early with
+      "sync index not updated" (8c31a8f28), and mirrorToRemote and twoWaySync
+      raise NDI:Cloud:Sync:UploadIncomplete so every later phase is skipped
+      (29546720b). In mirrorToRemote that includes the remote deletions, which
+      matters on its own -- deleting the remote's copies while the local ones have
+      not all arrived is how a half-finished mirror loses documents. A failed
+      remote deletion still does NOT abort, because MATLAB's deleteRemoteDocuments
+      warns and returns rather than throwing; nor does a short download. Selection
+      runs against a live remote listing rather than the index, so skipping the
+      index write costs no retries.
 
   - name: downloadNew
     matlab_path: "+ndi/+cloud/+sync/downloadNew.m"
@@ -230,6 +242,10 @@ functions:
       actually landed and advances over exactly that, so a retry re-sends only
       what is still missing. A caller mistake -- a path where a dataset belongs --
       still raises rather than becoming success=false.
+      Correction to the note above: these two have no upload phase, so the abort
+      rule added for the upload modes does not reach them. A short download warns
+      and still writes the index over what actually landed, exactly as MATLAB
+      does -- only the success flag is stricter here.
 
   - name: mirrorToRemote
     matlab_path: "+ndi/+cloud/+sync/mirrorToRemote.m"
@@ -285,6 +301,18 @@ functions:
       actually landed and advances over exactly that, so a retry re-sends only
       what is still missing. A caller mistake -- a path where a dataset belongs --
       still raises rather than becoming success=false.
+      Correction to the note above: the sync-index divergence it described is
+      gone. An upload failure -- documents or binaries -- now aborts before the
+      index is written, matching MATLAB exactly: uploadNew returns early with
+      "sync index not updated" (8c31a8f28), and mirrorToRemote and twoWaySync
+      raise NDI:Cloud:Sync:UploadIncomplete so every later phase is skipped
+      (29546720b). In mirrorToRemote that includes the remote deletions, which
+      matters on its own -- deleting the remote's copies while the local ones have
+      not all arrived is how a half-finished mirror loses documents. A failed
+      remote deletion still does NOT abort, because MATLAB's deleteRemoteDocuments
+      warns and returns rather than throwing; nor does a short download. Selection
+      runs against a live remote listing rather than the index, so skipping the
+      index write costs no retries.
 
   - name: mirrorFromRemote
     matlab_path: "+ndi/+cloud/+sync/mirrorFromRemote.m"
@@ -338,6 +366,10 @@ functions:
       actually landed and advances over exactly that, so a retry re-sends only
       what is still missing. A caller mistake -- a path where a dataset belongs --
       still raises rather than becoming success=false.
+      Correction to the note above: these two have no upload phase, so the abort
+      rule added for the upload modes does not reach them. A short download warns
+      and still writes the index over what actually landed, exactly as MATLAB
+      does -- only the success flag is stricter here.
 
   - name: twoWaySync
     matlab_path: "+ndi/+cloud/+sync/twoWaySync.m"
@@ -392,6 +424,18 @@ functions:
       actually landed and advances over exactly that, so a retry re-sends only
       what is still missing. A caller mistake -- a path where a dataset belongs --
       still raises rather than becoming success=false.
+      Correction to the note above: the sync-index divergence it described is
+      gone. An upload failure -- documents or binaries -- now aborts before the
+      index is written, matching MATLAB exactly: uploadNew returns early with
+      "sync index not updated" (8c31a8f28), and mirrorToRemote and twoWaySync
+      raise NDI:Cloud:Sync:UploadIncomplete so every later phase is skipped
+      (29546720b). In mirrorToRemote that includes the remote deletions, which
+      matters on its own -- deleting the remote's copies while the local ones have
+      not all arrived is how a half-finished mirror loses documents. A failed
+      remote deletion still does NOT abort, because MATLAB's deleteRemoteDocuments
+      warns and returns rather than throwing; nor does a short download. Selection
+      runs against a live remote listing rather than the index, so skipping the
+      index write costs no retries.
 
   - name: validate
     matlab_path: "+ndi/+cloud/+sync/validate.m"

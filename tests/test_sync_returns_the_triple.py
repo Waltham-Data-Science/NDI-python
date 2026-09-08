@@ -99,7 +99,7 @@ class TestAPartialUploadIsNotASuccess:
         monkeypatch.setattr(docs_api, "addDocument", add)
 
     @pytest.mark.parametrize("operation", ["uploadNew", "mirrorToRemote", "twoWaySync"])
-    def test_success_is_false_and_the_message_names_it(
+    def test_success_is_false_and_the_message_says_the_index_was_not_updated(
         self, tmp_path, monkeypatch, one_document_fails, operation
     ):
         _remote(monkeypatch, [])
@@ -108,22 +108,49 @@ class TestAPartialUploadIsNotASuccess:
         success, message, report = getattr(ops, operation)(ds, CLOUD_ID, SyncOptions(verbose=False))
 
         assert success is False
-        assert "bad" in message
-        assert "1 document(s) did not transfer" in message
+        assert "sync index not updated" in message
+        assert report["failed"] == ["bad"]
         # The report still says what DID move -- a partial result is not no result.
         assert report["uploaded_document_ids"] == ["good"]
 
-    def test_the_index_still_records_what_landed(self, tmp_path, monkeypatch, one_document_fails):
-        """MATLAB aborts and leaves the index un-advanced. Recording what
-        actually transferred means the retry sends only what is missing --
-        success=false and a truthful index are not in tension."""
+    @pytest.mark.parametrize("operation", ["uploadNew", "mirrorToRemote", "twoWaySync"])
+    def test_the_index_is_not_written(self, tmp_path, monkeypatch, one_document_fails, operation):
+        """MATLAB aborts before its index write: uploadNew returns early with
+        "sync index not updated", and the two mirrors raise
+        NDI:Cloud:Sync:UploadIncomplete so every later phase is skipped."""
         _remote(monkeypatch, [])
+        seed = SyncIndex()
+        seed.update(["seeded"], ["seeded"])
+        seed.write(tmp_path)
         ds = FakeDataset(tmp_path, [make_document("good"), make_document("bad")])
 
-        success, _msg, _report = ops.uploadNew(ds, CLOUD_ID, SyncOptions(verbose=False))
+        success, _msg, _report = getattr(ops, operation)(ds, CLOUD_ID, SyncOptions(verbose=False))
 
         assert success is False
-        assert SyncIndex.read(tmp_path).remote_doc_ids_last_sync == ["good"]
+        after = SyncIndex.read(tmp_path)
+        assert after.local_doc_ids_last_sync == ["seeded"]
+        assert after.remote_doc_ids_last_sync == ["seeded"]
+
+    def test_the_remote_deletions_are_skipped_too(self, tmp_path, monkeypatch, one_document_fails):
+        """mirrorToRemote's deletions come after its upload in MATLAB, so the
+        raise skips them. Deleting the remote's copies while the local ones
+        have not all arrived is how a half-finished mirror loses documents
+        outright."""
+        from ndi.cloud.api import documents as docs_api
+
+        _remote(monkeypatch, ["remote-only"])
+        deleted: list[str] = []
+        monkeypatch.setattr(
+            docs_api,
+            "deleteDocument",
+            lambda cid, api_id, **k: (deleted.append(api_id), {"ok": True})[1],
+        )
+        ds = FakeDataset(tmp_path, [make_document("good"), make_document("bad")])
+
+        success, _msg, _report = ops.mirrorToRemote(ds, CLOUD_ID, SyncOptions(verbose=False))
+
+        assert success is False
+        assert deleted == []
 
 
 class TestAPartialDownloadIsNotASuccessEither:

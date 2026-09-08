@@ -20,6 +20,12 @@ The binary half did not. ``mirrorToRemote`` uploaded files inside a
 ``uploadFilesForDatasetDocuments`` does not raise on a per-file failure, it
 returns a count, so the except clause could not see the ordinary case at
 all. The documents went into the index as synced regardless.
+
+Since NDI-python#232 the answer is MATLAB's rather than a milder version of
+it: a binary failure ABORTS before the index is written, the way MATLAB's
+uploadNew returns early with "Sync index not updated". Withholding just the
+affected documents would also have been safe; aborting is what MATLAB does,
+and it is the stronger of the two.
 """
 
 from __future__ import annotations
@@ -141,19 +147,25 @@ class TestTheFileReportNamesTheDocuments:
 
 
 class TestMirrorToRemoteWithholdsThem:
-    def test_a_document_whose_binary_failed_is_not_in_the_index(
+    def test_a_document_whose_binary_failed_stops_the_index_write(
         self, monkeypatch, tmp_path, empty_remote, documents_upload
     ):
+        """MATLAB's uploadNew returns early on a binary failure with "Sync
+        index not updated" (NDI-matlab 8c31a8f28), so the run records
+        nothing. Either way the documents whose data did not arrive are not
+        claimed as synced -- this is the stronger of the two."""
         ds = _dataset(tmp_path, ["a", "b"])
         _binaries(monkeypatch, {"b"})
 
-        _ok, _msg, report = ops.mirrorToRemote(
+        success, message, report = ops.mirrorToRemote(
             ds, CLOUD_ID, SyncOptions(sync_files=True), client=_Client()
         )
 
+        assert success is False
+        assert "sync index not updated" in message
         assert sorted(report["uploaded_document_ids"]) == ["a", "b"]
         assert report["failed"] == ["b"]
-        assert set(SyncIndex.read(tmp_path).remote_doc_ids_last_sync) == {"a"}
+        assert SyncIndex.read(tmp_path).remote_doc_ids_last_sync == []
 
     def test_a_clean_run_records_both(self, monkeypatch, tmp_path, empty_remote, documents_upload):
         ds = _dataset(tmp_path, ["a", "b"])

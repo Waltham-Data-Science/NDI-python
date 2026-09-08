@@ -393,12 +393,25 @@ def _upload_binaries(
 # detail has the report, and one that checks only the flag is not told a
 # partial sync was complete.
 #
-# WHAT IT DOES NOT CHANGE. MATLAB aborts on a failed upload, leaving the
-# index un-advanced. These record what actually landed and advance the index
-# over exactly that -- so a retry re-sends only the documents still missing,
-# rather than redoing the whole mirror. success=false and a truthful index
-# are not in tension; the flag reports the outcome, the index reports the
-# state.
+# WHAT ABORTS, AND WHAT ONLY REPORTS. An UPLOAD failure stops the run before
+# the sync index is written, exactly as MATLAB does -- uploadNew returns
+# early with "sync index not updated", mirrorToRemote and twoWaySync raise
+# NDI:Cloud:Sync:UploadIncomplete and let their handler catch it, so every
+# later phase is skipped. In mirrorToRemote that includes the remote
+# deletions, which matters on its own: deleting the remote's copies while
+# the local ones have not all arrived is how a half-finished mirror loses
+# documents outright.
+#
+# Nothing else aborts, again matching MATLAB. A failed remote deletion warns
+# and continues (deleteRemoteDocuments warns and returns rather than
+# throwing), and a short download warns and continues; both still write the
+# index, over what actually landed, so the next run retries only what is
+# still missing. Those cases do set success=false here -- the flag is
+# stricter than MATLAB's, the index behaviour is not.
+#
+# So success=false does NOT imply the index was untouched. It means the run
+# did not do everything it set out to; whether it got far enough to record
+# anything is the abort rule above.
 # ---------------------------------------------------------------------------
 
 
@@ -420,6 +433,23 @@ def _outcome(report: dict[str, Any]) -> tuple[bool, str, dict[str, Any]]:
     if unsaved:
         parts.append(f"{len(unsaved)} downloaded document(s) could not be saved")
     return False, "; ".join(parts), report
+
+
+def _aborted(report: dict[str, Any], message: str) -> tuple[bool, str, dict[str, Any]]:
+    """A failure that stops the run BEFORE the sync index is written.
+
+    MATLAB does this on an upload failure and only there: uploadNew returns
+    early with "sync index not updated", and mirrorToRemote / twoWaySync
+    raise ``NDI:Cloud:Sync:UploadIncomplete``, which their handler catches --
+    so the remaining phases, the index write among them, never run
+    (NDI-matlab 8c31a8f28 and 29546720b).
+
+    A failed remote DELETION does not abort: MATLAB's deleteRemoteDocuments
+    warns and returns. Nor does a short download. Those still write the
+    index, over what actually landed.
+    """
+    logger.warning("%s: %s", report.get("mode", "sync"), message)
+    return False, message, report
 
 
 def _failed_outcome(
@@ -580,6 +610,10 @@ def uploadNew(
 
         to_send = [documents[i] for i in sorted(new_ids)]
         uploaded, failed = _upload_documents(cloud_dataset_id, to_send, client=client)
+        report["uploaded_document_ids"] = uploaded
+        if failed:
+            report["failed"] = sorted(failed)
+            return _aborted(report, "Document upload failed; sync index not updated.")
 
         # Binaries only for documents whose metadata actually landed. Sending a
         # file for a document the remote does not have would orphan it.
@@ -589,20 +623,18 @@ def uploadNew(
             options,
             client=client,
         )
-
-        report["uploaded_document_ids"] = uploaded
-        report["failed"] = sorted(set(failed) | binaries_failed)
+        if binaries_failed:
+            report["failed"] = sorted(binaries_failed)
+            return _aborted(
+                report,
+                f"Binary upload failed for {len(binaries_failed)} document(s); "
+                "sync index not updated.",
+            )
 
         if options.verbose and uploaded:
             logger.info("uploadNew: uploaded %d documents", len(uploaded))
 
-        # The remote is what it held plus what actually arrived whole. A document
-        # whose binaries failed is withheld, so the index never claims a sync
-        # that left the data behind.
-        index.update(
-            sorted(local_ids),
-            sorted((remote_id_set | set(uploaded)) - binaries_failed),
-        )
+        index.update(sorted(local_ids), sorted(remote_id_set | set(uploaded)))
         index.write(ds_path)
     except Exception as exc:  # noqa: BLE001 - reported through the triple
         return _failed_outcome("upload_new", exc, report)
@@ -740,7 +772,18 @@ def mirrorToRemote(
             cloud_dataset_id, [documents[i] for i in sorted(to_upload)], client=client
         )
         report["uploaded_document_ids"] = uploaded
-        failed: list[str] = list(failed_ids)
+        # MATLAB raises NDI:Cloud:Sync:UploadIncomplete here, which skips its
+        # remaining phases -- the remote deletions among them. Deleting the
+        # remote's copies while the local ones have not all arrived is how a
+        # half-finished mirror loses documents outright.
+        if failed_ids:
+            report["failed"] = sorted(failed_ids)
+            return _aborted(
+                report,
+                f"Upload to remote did not fully succeed: {len(uploaded)} of "
+                f"{len(to_upload)} document(s) uploaded; sync index not updated.",
+            )
+        failed: list[str] = []
 
         for doc_id in sorted(to_delete):
             api_id = remote_ids.get(doc_id, doc_id)
@@ -757,8 +800,18 @@ def mirrorToRemote(
             options,
             client=client,
         )
+        if binaries_failed:
+            report["failed"] = sorted(set(failed) | binaries_failed)
+            return _aborted(
+                report,
+                f"Binary upload failed for {len(binaries_failed)} document(s); "
+                "sync index not updated.",
+            )
 
-        report["failed"] = sorted(set(failed) | binaries_failed)
+        # A failed remote deletion does NOT abort: MATLAB's
+        # deleteRemoteDocuments warns and returns, so the index is still
+        # written -- over what actually happened.
+        report["failed"] = sorted(failed)
 
         if options.verbose:
             logger.info(
@@ -767,14 +820,10 @@ def mirrorToRemote(
                 len(report["deleted_remote_document_ids"]),
             )
 
-        # The remote is what it held, plus what we actually uploaded, minus what
-        # we actually deleted -- not a blanket "remote now equals local", which
-        # would silently absorb every failed upload and every failed deletion.
-        final_remote = (
-            (remote_id_set | set(uploaded))
-            - set(report["deleted_remote_document_ids"])
-            - binaries_failed
-        )
+        # The remote is what it held, plus what we uploaded, minus what we
+        # actually deleted -- not a blanket "remote now equals local", which
+        # would silently absorb every failed deletion.
+        final_remote = (remote_id_set | set(uploaded)) - set(report["deleted_remote_document_ids"])
         index.update(sorted(local_ids), sorted(final_remote))
         index.write(ds_path)
     except Exception as exc:  # noqa: BLE001 - reported through the triple
@@ -999,7 +1048,15 @@ def twoWaySync(
             cloud_dataset_id, [documents[i] for i in sorted(to_upload)], client=client
         )
         report["uploaded_document_ids"] = uploaded
-        failed.extend(upload_failed)
+        # MATLAB raises NDI:Cloud:Sync:UploadIncomplete here, skipping its
+        # download phase and its index write.
+        if upload_failed:
+            report["failed"] = sorted(set(failed) | set(upload_failed))
+            return _aborted(
+                report,
+                f"Upload to remote did not fully succeed: {len(uploaded)} of "
+                f"{len(to_upload)} document(s) uploaded; sync index not updated.",
+            )
 
         binaries_failed = _upload_binaries(
             cloud_dataset_id,
@@ -1007,7 +1064,13 @@ def twoWaySync(
             options,
             client=client,
         )
-        failed.extend(sorted(binaries_failed))
+        if binaries_failed:
+            report["failed"] = sorted(set(failed) | binaries_failed)
+            return _aborted(
+                report,
+                f"Binary upload failed for {len(binaries_failed)} document(s); "
+                "sync index not updated.",
+            )
 
         # 4. Download remote-only docs
         docs, dl_failed = downloadNdiDocuments(
@@ -1040,7 +1103,6 @@ def twoWaySync(
             (current_remote | set(uploaded))
             - set(report["deleted_remote_document_ids"])
             - not_obtained
-            - binaries_failed
         )
         index.update(sorted(final_local), sorted(final_remote))
         index.write(ds_path)

@@ -153,18 +153,24 @@ class TestMirrorToRemote:
         for name in ("addDocument", "deleteDocument"):
             monkeypatch.setattr(docs_api, name, getattr(FakeDocsApi, name))
 
-    def test_a_failed_upload_is_not_recorded_as_remote(self, tmp_path, monkeypatch):
+    def test_a_failed_upload_leaves_the_index_untouched(self, tmp_path, monkeypatch):
+        """MATLAB raises NDI:Cloud:Sync:UploadIncomplete on a partial upload,
+        so its Phase 4 index write never runs (NDI-matlab 29546720b). The
+        next run works it out from a live remote listing anyway, so nothing
+        is lost by not recording a run that did not finish."""
         ds = _seed(tmp_path, ["ok-1", "broken-1"], [])
         _fake_remote(monkeypatch, [])
         self._uploads_that_fail(monkeypatch, succeed=["ok-1"])
 
-        _ok, _msg, report = ops.mirrorToRemote(ds, "cloud-1", SyncOptions(verbose=False))
+        success, message, report = ops.mirrorToRemote(ds, "cloud-1", SyncOptions(verbose=False))
+        assert success is False
+        assert "sync index not updated" in message
         assert report["uploaded_document_ids"] == ["ok-1"]
         assert report["failed"] == ["broken-1"]
 
         idx = SyncIndex.read(tmp_path)
-        assert idx.remote_doc_ids_last_sync == ["ok-1"]
         assert sorted(idx.local_doc_ids_last_sync) == ["broken-1", "ok-1"]
+        assert idx.remote_doc_ids_last_sync == []
 
     def test_a_failed_remote_deletion_stays_on_the_remote_side(self, tmp_path, monkeypatch):
         """The document is still up there. Forgetting it means the next run
