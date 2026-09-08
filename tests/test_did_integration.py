@@ -16,7 +16,7 @@ consequences are pinned here:
 from __future__ import annotations
 
 import warnings
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
@@ -240,7 +240,10 @@ def _bundled_document_types():
         document_class = raw.get("document_class")
         if not isinstance(document_class, dict) or not document_class.get("validation"):
             continue
-        yield str(path.relative_to(root)).replace(".json", ""), path
+        # KNOWN_UNVALIDATABLE_DEFINITIONS is stored in POSIX form, so the
+        # discovered relative path is normalised to match on Windows too.
+        rel_posix = PurePosixPath(*path.relative_to(root).parts).as_posix()
+        yield rel_posix.removesuffix(".json"), path
 
 
 def _structural_failure(doc_type):
@@ -287,7 +290,9 @@ class TestBundledDefinitions:
         unparseable = []
         still_bad = set()
         for path in sorted(root.rglob("*.json")):
-            relative = str(path.relative_to(root))
+            # KNOWN_BAD_UPSTREAM_JSON is stored in POSIX form, so the
+            # discovered relative path is normalised to match on Windows too.
+            relative = PurePosixPath(*path.relative_to(root).parts).as_posix()
             try:
                 _loads_as_matlab_reads(path.read_text())
             except ValueError as exc:
