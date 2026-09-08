@@ -88,7 +88,7 @@ drifted:
   # --- comments-only ---
 
 # ---------------------------------------------------------------------------
-# no_hash: 92
+# no_hash: 87
 #
 # An entry with a matlab_path and no matlab_last_sync_hash can never show
 # drift, so it claims its port is current forever and no check can contradict
@@ -148,12 +148,6 @@ no_hash:
     matlab_path: "+ndi/+file/pfilemirror.m"
   - name: diff (dataset)
     matlab_path: "+ndi/+fun/+dataset/diff.m"
-  - name: storeDoc
-    matlab_path: "+ndi/+fun/+doc/+gene/private/storeDoc.m"
-  - name: probeLocations4probes
-    matlab_path: "+ndi/+fun/+doc/+probe/probeLocations4probes.m"
-  - name: makeSpeciesStrainSex
-    matlab_path: "+ndi/+fun/+doc/+subject/makeSpeciesStrainSex.m"
   - name: allTypes
     matlab_path: "+ndi/+fun/+doc/allTypes.m"
   - name: diff (doc)
@@ -184,8 +178,6 @@ no_hash:
     matlab_path: "+ndi/+fun/+docTable/subject.m"
   - name: treatment (docTable)
     matlab_path: "+ndi/+fun/+docTable/treatment.m"
-  - name: epochid2element
-    matlab_path: "+ndi/+fun/+epoch/epochid2element.m"
   - name: filename2epochid
     matlab_path: "+ndi/+fun/+epoch/filename2epochid.m"
   - name: MD5
@@ -200,8 +192,6 @@ no_hash:
     matlab_path: "+ndi/+fun/+plot/multichan.m"
   - name: stimulusTimeseries
     matlab_path: "+ndi/+fun/+plot/stimulusTimeseries.m"
-  - name: location
-    matlab_path: "+ndi/+fun/+probe/location.m"
   - name: diff (session)
     matlab_path: "+ndi/+fun/+session/diff.m"
   - name: f0_f1_responses

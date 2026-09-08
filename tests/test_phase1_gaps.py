@@ -690,34 +690,51 @@ class TestDocHelpers:
         om = docs[0].document_properties.get("openminds", {})
         assert "Species" in om.get("openminds_type", "")
 
-    def test_probe_locations_for_probes(self):
-        """probeLocations4probes creates real probe_location Documents."""
+    def test_probe_locations_for_probes(self, monkeypatch):
+        """probeLocations4probes creates real probe_location Documents.
+
+        The third argument is a list of ONTOLOGY LOOKUP STRINGS, as MATLAB
+        takes; this used to pass dicts, which reached the lookup, raised,
+        and were swallowed by an `except Exception: pass` that then wrote
+        the dict itself into probe_location.name.
+        """
+        from types import SimpleNamespace
+
         from ndi.document import ndi_document
         from ndi.fun.doc import probeLocations4probes
+
+        terms = {
+            "UBERON:0000411": SimpleNamespace(id="0000411", name="V1", prefix="UBERON"),
+            "UBERON:0002436": SimpleNamespace(id="UBERON:0002436", name="LGN", prefix="UBERON"),
+        }
+        monkeypatch.setattr("ndi.ontology.lookup", lambda s: terms[s])
 
         session = MagicMock()
         session.id.return_value = "sess_1"
 
         probe1 = MagicMock()
-        probe1.document_properties = {"base": {"id": "probe_1"}}
+        probe1.id = "probe_1"
         probe2 = MagicMock()
-        probe2.document_properties = {"base": {"id": "probe_2"}}
-
-        locations = [
-            {"name": "V1", "ontology": "ncbi:123"},
-            {"name": "LGN"},
-        ]
+        probe2.id = "probe_2"
 
         docs = probeLocations4probes(
             session,
             [probe1, probe2],
-            locations,
+            ["UBERON:0000411", "UBERON:0002436"],
         )
         assert len(docs) == 2
         for doc in docs:
             assert isinstance(doc, ndi_document)
             props = doc.document_properties
             assert props.get("document_class", {}).get("class_name") == "probe_location"
+
+        # The schema field is ontology_name, and MATLAB writes prefix:id
+        # unless the id already carries the prefix.
+        assert docs[0].document_properties["probe_location"] == {
+            "ontology_name": "UBERON:0000411",
+            "name": "V1",
+        }
+        assert docs[1].document_properties["probe_location"]["ontology_name"] == "UBERON:0002436"
 
 
 # =========================================================================

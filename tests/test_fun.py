@@ -386,49 +386,65 @@ class TestDocFindFuid:
 class TestEpochId2ndi_element:
     """Tests for epoch.epochid2element."""
 
+    # These used to build documents carrying an `element.epoch_table` field
+    # and a `document_class.class_list`. Neither exists in any NDI document
+    # schema, and nothing writes them, so the tests pinned a fictional shape
+    # while the function returned nothing for real data. It now asks the
+    # ELEMENT for its epochtable(), as MATLAB does.
+
+    @staticmethod
+    def _element(epoch_ids):
+        element = MagicMock()
+        element.epochtable.return_value = ([{"epoch_id": e} for e in epoch_ids], "")
+        return element
+
     def test_basic(self):
         from ndi.fun.epoch import epochid2element
 
-        doc = MagicMock()
-        doc.document_properties = {
-            "document_class": {"class_list": [{"class_name": "element"}]},
-            "element": {
-                "name": "probe1",
-                "epoch_table": [
-                    {"epoch_id": "epoch_001"},
-                    {"epoch_id": "epoch_002"},
-                ],
-            },
-        }
+        element = self._element(["epoch_001", "epoch_002"])
         session = MagicMock()
-        session.database_search.return_value = [doc]
+        session.getelements.return_value = [element]
 
         result = epochid2element(session, ["epoch_001"])
-        assert len(result["epoch_001"]) == 1
+        assert result["epoch_001"] == [element]
 
     def test_case_insensitive(self):
         from ndi.fun.epoch import epochid2element
 
-        doc = MagicMock()
-        doc.document_properties = {
-            "document_class": {"class_list": [{"class_name": "element"}]},
-            "element": {
-                "epoch_table": [{"epoch_id": "Epoch_001"}],
-            },
-        }
+        element = self._element(["Epoch_001"])
         session = MagicMock()
-        session.database_search.return_value = [doc]
+        session.getelements.return_value = [element]
 
         result = epochid2element(session, ["epoch_001"])
-        assert len(result["epoch_001"]) == 1
+        assert result["epoch_001"] == [element]
 
     def test_not_found(self):
+        import warnings
+
         from ndi.fun.epoch import epochid2element
 
         session = MagicMock()
-        session.database_search.return_value = []
-        result = epochid2element(session, ["nonexistent"])
+        session.getelements.return_value = []
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = epochid2element(session, ["nonexistent"])
         assert result["nonexistent"] == []
+        # MATLAB warns rather than returning an empty answer silently.
+        assert any("nonexistent" in str(w.message) for w in caught)
+
+    def test_the_type_filter_reaches_getelements(self):
+        from ndi.fun.epoch import epochid2element
+
+        session = MagicMock()
+        session.getelements.return_value = []
+        with pytest.warns(UserWarning):
+            epochid2element(session, ["e"], element_name="probe1", element_type="spikes")
+        # The filter used to be applied against document_class.class_list, a
+        # key element documents do not have, so every element was skipped
+        # whenever a type was given.
+        session.getelements.assert_called_once_with(
+            **{"element.name": "probe1", "element.type": "spikes"}
+        )
 
 
 class TestFilename2EpochId:
