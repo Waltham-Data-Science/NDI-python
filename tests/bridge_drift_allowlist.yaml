@@ -66,15 +66,18 @@ drifted:
     matlab_path: "+ndi/+cloud/+sync/+internal/downloadNdiDocuments.m"  # 1 commit(s) since (#215)
 
 # ---------------------------------------------------------------------------
-# no_hash: the entries below are the count -- the number is deliberately
-# not repeated here, so that concurrent burn-down PRs do not all collide
-# on one line of prose.
+# no_hash: EMPTY. Every entry that names a matlab_path now carries a
+# matlab_last_sync_hash, and each one was recorded by someone who read that
+# MATLAB file against its Python counterpart and wrote down what they found.
 #
 # An entry with a matlab_path and no matlab_last_sync_hash can never show
 # drift, so it claims its port is current forever and no check can contradict
-# it. Determine the commit each was examined against and record it -- or, if
-# nobody knows, examine the file now and record today's commit for it.
+# it. That was true of 92 entries when this section went up (#211).
+#
+# Nothing may be added back. test_every_matlab_path_entry_carries_a_hash
+# fails immediately for a new hashless entry, and TestAHashChangeIsJustified
+# requires that recording a hash without touching the entry's python_path
+# files also change that entry's decision_log, naming the commit -- so the
+# cheap path of bumping a hash to silence the gate is closed.
 # ---------------------------------------------------------------------------
-no_hash:
-  - name: SyncIndex
-    matlab_path: "+ndi/+cloud/+sync/+internal/+index/"
+no_hash: []
