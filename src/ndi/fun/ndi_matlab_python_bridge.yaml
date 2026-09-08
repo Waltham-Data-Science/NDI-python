@@ -1320,6 +1320,7 @@ functions:
   - name: identifyMatchingRows
     type: function
     matlab_path: "+ndi/+fun/+table/identifyMatchingRows.m"
+    matlab_last_sync_hash: "227088a01"
     python_path: "ndi/fun/table.py"
     input_arguments:
       - name: df
@@ -1348,9 +1349,30 @@ functions:
       matching MATLAB option names. Removed legacy 'mode' positional
       parameter.
 
+      Examined against NDI-matlab 227088a01, the file's last-touching commit,
+      and this one did NOT hold in three ways, all now fixed. (1) THE SILENT
+      ONE: the port chose string-vs-numeric matching from the COLUMN's dtype,
+      where MATLAB chooses from the MATCH VALUE's type (ischar(matchVal) /
+      isnumeric(matchVal) -- it never inspects the column). Against an
+      object-dtype column of numbers, which pandas produces routinely from
+      mixed data, numericMatch='gt' took the string path and returned the rows
+      EQUAL to the threshold instead of those above it. No error, just the
+      wrong rows. (2) The multi-value form MATLAB's own help documents,
+      identifyMatchingRows(T,'col',{{'a','b','c'}}), raised "Lengths must
+      match to compare": MATLAB ORs the alternatives for one column, the port
+      compared the Series against the whole list. (3) A column not in the
+      table raised KeyError, where MATLAB warns
+      identifyMatchingRows:ColumnNotFound and sets the whole index false. Also
+      adds string_match / numeric_match as snake_case spellings, per this
+      project's cross-language naming convention;
+      tests/matlab_tests/test_jess_haley.py already called them that way and
+      would have failed with TypeError had a module-level dataset skip not
+      been hiding it. Covered by tests/test_fun_table.py.
+
   - name: identifyValidRows
     type: function
     matlab_path: "+ndi/+fun/+table/identifyValidRows.m"
+    matlab_last_sync_hash: "a642da55f"
     python_path: "ndi/fun/table.py"
     input_arguments:
       - name: df
@@ -1373,9 +1395,32 @@ functions:
       matching MATLAB argument names. Python default for invalidValues
       is None (matches MATLAB NaN semantic).
 
+      Examined against NDI-matlab a642da55f, the file's last-touching commit,
+      and this one did NOT hold. Passing NaN as invalidValues returned EVERY
+      row valid: the port compared with `df[col] != invalidValues`, and NaN
+      never equals itself, so the test was True even on the NaN rows -- the
+      exact opposite of what was asked. MATLAB gives NaN and NaT their own
+      branches (isnumeric && isnan, isdatetime && isnat) for precisely this
+      reason, and {NaN} is its DEFAULT invalidValues, so it is the value a
+      caller is most likely to pass explicitly. Fixed, with a missing column
+      now warning as MATLAB's identifyValidRows:InvalidVariableName does
+      rather than being skipped in silence. TWO DIVERGENCES LEFT AS THEY ARE.
+      With no checkVariables MATLAB returns true(height,1) immediately --
+      every row valid, no filtering -- where this port checks EVERY column, so
+      `identifyValidRows(df)` can return far fewer rows here than there. That
+      behaviour is asserted by
+      tests/test_phase1_gaps.py::test_identify_valid_rows and matches the
+      port's own `columns=` idiom, so it is a deliberate API choice rather
+      than a slip -- but it is a real difference and a caller moving between
+      the two languages must know it. And MATLAB accepts one invalidValue PER
+      checkVariable (broadcasting a scalar, erroring
+      identifyValidRows:VariableValueMismatch on a length mismatch) where this
+      takes a single sentinel for all columns.
+
   - name: join
     type: function
     matlab_path: "+ndi/+fun/+table/join.m"
+    matlab_last_sync_hash: "b33d8ce64"
     python_path: "ndi/fun/table.py"
     python_qualified: "ndi.fun.table.join"
     input_arguments:
@@ -1395,9 +1440,25 @@ functions:
       as keys. Performs inner merge on common columns. MATLAB option
       name is uniqueVariables; Python uses unique_variables.
 
+      Examined against NDI-matlab b33d8ce64, the file's last-touching commit.
+      The inner join over common columns, and the uniqueVariables aggregation
+      that collapses each group's other columns, both match; MATLAB's explicit
+      re-sort by ileft is unnecessary here because pandas merge already
+      preserves the left frame's order. ONE DIVERGENCE RECORDED RATHER THAN
+      CHANGED: when two tables share NO columns, MATLAB's innerjoin errors,
+      while this port falls back to pd.concat and stacks them VERTICALLY -- a
+      different operation returned silently, with NaN filling both blocks.
+      Whether that fallback is wanted is a caller-facing decision rather than
+      a porting slip, so it is written down here rather than removed. MATLAB
+      also errors join:InvalidUniqueVariables for a uniqueVariable absent from
+      the combined table, where a pandas groupby raises KeyError -- same
+      refusal, different exception -- and rejects an empty tables list via
+      mustBeNonempty, where this returns an empty frame.
+
   - name: moveColumnsLeft
     type: function
     matlab_path: "+ndi/+fun/+table/moveColumnsLeft.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/table.py"
     input_arguments:
       - name: df
@@ -1412,9 +1473,19 @@ functions:
     decision_log: >
       Exact match. Moves specified columns to the left of the DataFrame.
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit
+      (the src/ layout move; unchanged since). Behaviour matches: the named
+      columns move to the front keeping the order they were given, and the
+      rest keep their relative order. MATLAB reaches that with two movevars
+      calls (to the end, then before the new first variable); the port
+      reorders directly, which is the same result. One divergence: MATLAB's
+      movevars errors on a column name the table does not have, where this
+      filters it out silently. Nothing to port.
+
   - name: vstack
     type: function
     matlab_path: "+ndi/+fun/+table/vstack.m"
+    matlab_last_sync_hash: "b1d8a6f6c"
     python_path: "ndi/fun/table.py"
     input_arguments:
       - name: tables
@@ -1428,6 +1499,18 @@ functions:
       Exact match. Vertically stacks DataFrames with dissimilar
       columns. Discovers union of all column names and fills missing
       with NaN.
+
+      Examined against NDI-matlab b1d8a6f6c, the file's last-touching commit.
+      pd.concat(..., sort=False) already does what MATLAB's 236 lines achieve:
+      the union of columns in first-encounter order, with missing cells
+      filled. Most of that length is MATLAB working around table limitations
+      pandas does not have -- typed empty prototypes per variable, and
+      multi-column variables, which have no pandas counterpart. Divergences,
+      none behavioural enough to change: MATLAB errors
+      vstack:InvalidCellContent for a non-table element and requires a
+      non-empty cell array, where this leaves both to pandas or returns an
+      empty frame; and MATLAB returns a single input table untouched where
+      concat resets the index. Nothing to port.
 
 # =========================================================================
 # Functions — ensemble.py, ensemble_db.py

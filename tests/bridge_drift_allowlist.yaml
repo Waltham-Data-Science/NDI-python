@@ -88,7 +88,9 @@ drifted:
   # --- comments-only ---
 
 # ---------------------------------------------------------------------------
-# no_hash: 92
+# no_hash: the entries below are the count -- the number is deliberately
+# not repeated here, so that concurrent burn-down PRs do not all collide
+# on one line of prose.
 #
 # An entry with a matlab_path and no matlab_last_sync_hash can never show
 # drift, so it claims its port is current forever and no check can contradict
@@ -210,16 +212,6 @@ no_hash:
     matlab_path: "+ndi/+fun/+stimulus/findMixtureName.m"
   - name: tuning_curve_to_response_type
     matlab_path: "+ndi/+fun/+stimulus/tuning_curve_to_response_type.m"
-  - name: identifyMatchingRows
-    matlab_path: "+ndi/+fun/+table/identifyMatchingRows.m"
-  - name: identifyValidRows
-    matlab_path: "+ndi/+fun/+table/identifyValidRows.m"
-  - name: join
-    matlab_path: "+ndi/+fun/+table/join.m"
-  - name: moveColumnsLeft
-    matlab_path: "+ndi/+fun/+table/moveColumnsLeft.m"
-  - name: vstack
-    matlab_path: "+ndi/+fun/+table/vstack.m"
   - name: channelname2prefixnumber
     matlab_path: "+ndi/+fun/channelname2prefixnumber.m"
   - name: name2variableName
