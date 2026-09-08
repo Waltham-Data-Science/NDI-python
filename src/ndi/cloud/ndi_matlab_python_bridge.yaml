@@ -1162,7 +1162,17 @@ functions:
         type_python: "list[str]"
     decision_log: >
       MATLAB places this in +sync/+internal. Python places it in
-      internal.py. Exact name match.
+      internal.py. Exact name match. Two parity defects fixed without a
+      hash move (the MATLAB side did not change): the return is
+      first-seen order now, matching unique(...,'stable') -- a set made
+      it depend on Python's string hashing, so the same input gave a
+      different download order per run -- and file_info/locations are
+      normalised from MATLAB's one-element-struct-as-bare-object
+      encoding, which was iterated as dict KEYS and skipped, hiding the
+      only file of every single-file document. It also had no callers
+      until now; downloadFilesForDocument enumerated a top-level
+      file_uid instead and so downloaded nothing for an ordinary
+      document.
 
   - name: filesNotYetUploaded
     matlab_path: "+ndi/+cloud/+sync/+internal/filesNotYetUploaded.m"

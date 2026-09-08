@@ -148,29 +148,58 @@ def listLocalDocuments(dataset: Any) -> tuple[list[Any], list[str]]:
     return docs, ids
 
 
+def _as_list(value: Any) -> list[Any]:
+    """A ``file_info`` or ``locations`` field as a list, whatever arrived.
+
+    MATLAB's jsonencode writes a one-element struct array as a bare object,
+    so a document with exactly one file comes back with ``file_info`` as a
+    dict rather than a list of one. Iterating that dict yields its KEYS --
+    strings -- which are then skipped as "not a dict", so the document's
+    only file is silently invisible. filehandler.py normalises the same two
+    fields for the same reason.
+    """
+    if isinstance(value, dict):
+        return [value]
+    if isinstance(value, list):
+        return value
+    return []
+
+
 def getFileUidsFromDocuments(documents: list[Any]) -> list[str]:
     """Extract unique file UIDs from a list of documents.
 
     MATLAB equivalent: +sync/+internal/getFileUidsFromDocuments.m
+
+    Walks ``files.file_info(j).locations(k).uid`` -- every location of every
+    file -- because that is where a document records what it has. The
+    top-level ``file_uid`` is accepted as well: some cloud payloads carry
+    one, and it costs nothing to keep.
+
+    ORDER IS FIRST-SEEN, not arbitrary. MATLAB returns
+    ``unique(..., 'stable')``, and a set here made the order depend on
+    Python's string hashing -- so the download order, the log, and any
+    report built from it differed between runs of the same input for no
+    reason. Deduplicated with a dict, which preserves insertion order.
     """
-    uids: set[str] = set()
+    uids: dict[str, None] = {}
     for doc in documents:
         props = doc.document_properties if hasattr(doc, "document_properties") else doc
         if not isinstance(props, dict):
             continue
-        # Check files.file_info
-        files = props.get("files", {})
+        files = props.get("files")
         if isinstance(files, dict):
-            for fi in files.get("file_info", []):
-                if isinstance(fi, dict):
-                    for loc in fi.get("locations", []):
-                        uid = loc.get("uid", "")
-                        if uid:
-                            uids.add(uid)
-        # Also check top-level file_uid
-        fuid = props.get("file_uid", "")
+            for fi in _as_list(files.get("file_info")):
+                if not isinstance(fi, dict):
+                    continue
+                for loc in _as_list(fi.get("locations")):
+                    if not isinstance(loc, dict):
+                        continue
+                    uid = str(loc.get("uid", "") or "")
+                    if uid:
+                        uids[uid] = None
+        fuid = str(props.get("file_uid", "") or "")
         if fuid:
-            uids.add(fuid)
+            uids[fuid] = None
     return list(uids)
 
 
