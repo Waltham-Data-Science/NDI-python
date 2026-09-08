@@ -909,7 +909,7 @@ functions:
 
   - name: updateFileInfoForLocalFiles
     matlab_path: "+ndi/+cloud/+sync/+internal/updateFileInfoForLocalFiles.m"
-    matlab_last_sync_hash: "fe64a9f5"
+    matlab_last_sync_hash: "504c5bcf4"
     python_path: "ndi/cloud/filehandler.py"
     input_arguments:
       - name: doc_props
@@ -922,6 +922,19 @@ functions:
     decision_log: >
       MATLAB places this in +sync/+internal. Python places it in
       filehandler.py. Exact name match. Mutates doc_props in-place.
+      The shapes differ: MATLAB calls document.reset_file_info() and
+      rebuilds, Python edits the properties dict where it stands. So
+      MATLAB's #945 fix -- carrying files.series_info across the reset that
+      would otherwise drop it -- has nothing to fix here; there is no reset.
+      NOT PORTED, and larger than this entry: MATLAB's cloudDatasetId
+      argument (045c0eef4, 504c5bcf4) reconstructs a downloaded series'
+      ingest_locations and keeps the manifest's ndic:// reference beside the
+      local copy, so a member of a 28,000-member series left on the cloud
+      can still be resolved. Python has no file-series support in the cloud
+      path at all -- nothing here reads files.series_info, file_series or
+      n_present -- so there is no partial fix to make; the port of series
+      themselves has to come first. Recorded here rather than left implied
+      by a bumped hash.
 
   - name: parse_ndic_uri
     matlab_path: "N/A"
@@ -1131,7 +1144,7 @@ functions:
   # --- profile.py (singleton manager for cloud login profiles) ---
   - name: profile
     matlab_path: "+ndi/+cloud/profile.m"
-    matlab_last_sync_hash: "2566fe4d"
+    matlab_last_sync_hash: "921a02244"
     python_path: "ndi/cloud/profile.py"
     functions:
       - matlab: "ndi.cloud.profile.list()"

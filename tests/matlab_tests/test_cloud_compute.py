@@ -56,9 +56,43 @@ class TestCompute:
         client = MagicMock()
         client.post.return_value = {"sessionId": "session-abc-123"}
 
-        result = startSession("hello-world-v1", client=client)
+        result = startSession("hello-world-v1", "", client=client)
         assert result["sessionId"] == "session-abc-123"
         client.post.assert_called_once()
+
+    def test_startSession_sends_the_organization_id(self):
+        """MATLAB threads organizationId into the start body (#936).
+
+        The backend refuses the POST with HTTP 400 "Organization ID is
+        required (user has multiple)" when the caller belongs to more than
+        one organization, so a port that drops the field works only for
+        single-organization users.
+        """
+        from ndi.cloud.api.compute import startSession
+
+        client = MagicMock()
+        client.post.return_value = {"sessionId": "session-abc-123"}
+
+        startSession("hello-world-v1", "org-42", client=client)
+
+        _, kwargs = client.post.call_args
+        assert kwargs["json"]["organizationId"] == "org-42"
+
+    def test_startSession_omits_an_empty_organization_id(self):
+        """Empty means "not supplied", which is not the same request.
+
+        MATLAB's StartSession leaves the field out rather than sending "",
+        so the backend still picks the organization for a single-org caller.
+        """
+        from ndi.cloud.api.compute import startSession
+
+        client = MagicMock()
+        client.post.return_value = {"sessionId": "session-abc-123"}
+
+        startSession("hello-world-v1", "", client=client)
+
+        _, kwargs = client.post.call_args
+        assert "organizationId" not in kwargs["json"]
 
     def test_getSessionStatus_mocked(self):
         """getSessionStatus returns status dict (mocked)."""
@@ -167,7 +201,7 @@ class TestCompute:
 
         # 1. Start session
         try:
-            result = startSession("hello-world-v1", client=client)
+            result = startSession("hello-world-v1", "", client=client)
         except Exception as exc:
             if "does not have permission" in str(exc):
                 pytest.skip(f"User lacks compute permissions: {exc}")
@@ -242,7 +276,7 @@ class TestZombie:
 
         # Start returns session ID
         client.post.return_value = {"sessionId": "zombie-session-1"}
-        result = startSession("zombie-test-v1", client=client)
+        result = startSession("zombie-test-v1", "", client=client)
         assert result["sessionId"] == "zombie-session-1"
 
         # Status returns RUNNING, then COMPLETED
@@ -283,7 +317,7 @@ class TestZombie:
 
         # 1. Start pipeline
         try:
-            result = startSession("zombie-test-v1", client=client)
+            result = startSession("zombie-test-v1", "", client=client)
         except Exception as exc:
             if "does not have permission" in str(exc):
                 pytest.skip(f"User lacks compute permissions: {exc}")

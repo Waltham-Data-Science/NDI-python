@@ -75,6 +75,59 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
         """Return ``'ndi.probe.timeseries.stimulator'``."""
         return "ndi.probe.timeseries.stimulator"
 
+    @staticmethod
+    def pair_on_off(times, signs):
+        """Pair stimulus on/off events, NaN-filling the orphans.
+
+        MATLAB equivalent: ``ndi.probe.timeseries.stimulator.pairOnOff``.
+
+        Args:
+            times: Event times.
+            signs: Marker values: > 0 is a stim-on, < 0 a stim-off.
+
+        Returns:
+            ``(on, off)`` -- two equal-length arrays of paired times.
+
+        Events are walked in time order and each stim-on is paired with the
+        next stim-off. A stim-on with no following off gets ``off = nan``,
+        and a stim-off with no preceding on gets ``on = nan``, so a read
+        window that clips a stimulus at either end still returns something
+        usable (NDI-matlab#248).
+
+        Selecting the on-times and the off-times separately, as this used to
+        do, gives two arrays of different lengths whenever the window clips
+        an interval -- and then nothing says which on belongs to which off.
+        The callers papered over that with length guards that silently drop
+        the pairing.
+        """
+        times = np.asarray(times, dtype=float).ravel()
+        signs = np.sign(np.asarray(signs, dtype=float).ravel())
+        if times.size == 0:
+            return np.array([]), np.array([])
+
+        order = np.argsort(times, kind="stable")
+        times = times[order]
+        signs = signs[order]
+
+        n = signs.size
+        on = np.full(n, np.nan)
+        off = np.full(n, np.nan)
+        p = 0
+        k = 0
+        while k < n:
+            if signs[k] > 0:
+                on[p] = times[k]
+                if k + 1 < n and signs[k + 1] < 0:
+                    off[p] = times[k + 1]
+                    k += 2
+                else:
+                    k += 1
+            else:
+                off[p] = times[k]
+                k += 1
+            p += 1
+        return on[:p], off[:p]
+
     def readtimeseriesepoch(
         self,
         epoch: int | str,
@@ -246,10 +299,7 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
                         if ed_i.size > 0:
                             vals = ed_i.ravel() if ed_i.ndim == 1 else ed_i[:, 0]
                             t_vals = ts_i.ravel() if ts_i.ndim == 1 else ts_i[:, 0]
-                            on_mask = vals > 0
-                            off_mask = vals == -1
-                            t["stimon"] = t_vals[on_mask]
-                            t["stimoff"] = t_vals[off_mask]
+                            t["stimon"], t["stimoff"] = self.pair_on_off(t_vals, vals)
                         else:
                             t["stimon"] = np.array([])
                             t["stimoff"] = np.array([])
@@ -274,17 +324,12 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
                         if ed_i.size > 0:
                             vals = ed_i.ravel() if ed_i.ndim == 1 else ed_i[:, 0]
                             t_vals = ts_i.ravel() if ts_i.ndim == 1 else ts_i[:, 0]
-                            on_ = t_vals[vals > 0]
-                            off_ = t_vals[vals == -1]
-                            openclose = np.full((max(len(on_), len(off_)), 2), np.nan)
-                            if len(on_) > 0:
-                                openclose[: len(on_), 0] = on_
-                            if len(off_) > 0:
-                                openclose[: len(off_), 1] = off_
-                                # If no stimoff from mk1, use mk3 off times
-                                if "stimoff" not in t or len(t["stimoff"]) == 0:
-                                    t["stimoff"] = off_
-                            t["stimopenclose"] = openclose
+                            open_, close_ = self.pair_on_off(t_vals, vals)
+                            t["stimopenclose"] = np.column_stack([open_, close_])
+                            # If mk1 gave no stimoff, the open/close channel's
+                            # close times are the best available.
+                            if "stimoff" not in t or len(t["stimoff"]) == 0:
+                                t["stimoff"] = close_
                         else:
                             t["stimopenclose"] = np.array([]).reshape(0, 2)
                     else:
@@ -328,16 +373,13 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
                         vals = ed_i.ravel() if ed_i.ndim == 1 else ed_i[:, 0]
                         t_vals = ts_i.ravel() if ts_i.ndim == 1 else ts_i[:, 0]
 
-                        on_mask = vals > 0
-                        off_mask = vals == -1
-
-                        t["stimon"] = np.concatenate([t["stimon"], t_vals[on_mask]])
-                        t["stimoff"] = np.concatenate([t["stimoff"], t_vals[off_mask]])
-                        n_on = int(np.sum(vals == 1))
+                        on_i, off_i = self.pair_on_off(t_vals, vals)
+                        t["stimon"] = np.concatenate([t["stimon"], on_i])
+                        t["stimoff"] = np.concatenate([t["stimoff"], off_i])
                         data["stimid"] = np.concatenate(
                             [
                                 data["stimid"],
-                                np.full(n_on, counter, dtype=int),
+                                np.full(len(on_i), counter, dtype=int),
                             ]
                         )
 
@@ -353,9 +395,15 @@ class ndi_probe_timeseries_stimulator(ndi_probe_timeseries):
                     if i < len(timestamps_list):
                         event_data_list.append(np.asarray(timestamps_list[i]))
 
-            # Sort by stimon time
+            # Sort by stimon time. A NaN on-time is a stimulus that began
+            # before the window, so sort it by its off-time to keep it in
+            # temporal order rather than letting NaN sort to the end.
             if len(t["stimon"]) > 0:
-                order = np.argsort(t["stimon"])
+                sort_key = np.array(t["stimon"], dtype=float)
+                nan_on = np.isnan(sort_key)
+                if nan_on.any() and len(t["stimoff"]) == len(sort_key):
+                    sort_key[nan_on] = np.asarray(t["stimoff"], dtype=float)[nan_on]
+                order = np.argsort(sort_key, kind="stable")
                 t["stimon"] = t["stimon"][order]
                 t["stimoff"] = (
                     t["stimoff"][order] if len(t["stimoff"]) == len(order) else t["stimoff"]
