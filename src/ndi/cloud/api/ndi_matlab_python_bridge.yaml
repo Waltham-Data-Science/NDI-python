@@ -664,7 +664,7 @@ functions:
 
   - name: ndiquery
     matlab_path: "+ndi/+cloud/+api/+documents/ndiquery.m"
-    matlab_last_sync_hash: "17af9080"
+    matlab_last_sync_hash: "88c0fb904"
     python_path: "ndi/cloud/api/documents.py"
     input_arguments:
       - name: scope
@@ -689,7 +689,7 @@ functions:
 
   - name: ndiqueryAll
     matlab_path: "+ndi/+cloud/+api/+documents/ndiqueryAll.m"
-    matlab_last_sync_hash: "17af9080"
+    matlab_last_sync_hash: "88c0fb904"
     python_path: "ndi/cloud/api/documents.py"
     input_arguments:
       - name: scope
@@ -1218,12 +1218,15 @@ functions:
   # --- compute.py ---
   - name: startSession
     matlab_path: "+ndi/+cloud/+api/+compute/startSession.m"
-    matlab_last_sync_hash: "c5718fde"
+    matlab_last_sync_hash: "fd226f6d1"
     python_path: "ndi/cloud/api/compute.py"
     input_arguments:
       - name: pipeline_id
         type_matlab: "char"
         type_python: "NonEmptyStr"
+      - name: organization_id
+        type_matlab: "string"
+        type_python: "str"
       - name: input_params
         type_matlab: "struct"
         type_python: "dict[str, Any] | None"
@@ -1273,7 +1276,7 @@ functions:
 
   - name: advanceSession
     matlab_path: "+ndi/+cloud/+api/+compute/advanceSession.m"
-    matlab_last_sync_hash: "c5718fde"
+    matlab_last_sync_hash: "bf1fe244a"
     python_path: "ndi/cloud/api/compute.py"
     input_arguments:
       - name: session_id

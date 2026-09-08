@@ -19,10 +19,14 @@ Example:
     doc = db.read(doc_id)
 """
 
+import logging
 from pathlib import Path
+from typing import Literal
 
 from .document import ndi_document
 from .query import ndi_query
+
+logger = logging.getLogger(__name__)
 
 
 def _cloud_file_handler(dest_path, source_path):
@@ -313,21 +317,42 @@ class ndi_database:
 
         return doc
 
-    def remove(self, document: ndi_document | str) -> bool:
+    def remove(
+        self,
+        document: ndi_document | str,
+        on_missing: Literal["ignore", "warn", "error"] = "ignore",
+    ) -> bool:
         """Remove a document from the database.
 
         Args:
             document: The ndi_document or document ID to remove.
+            on_missing: What to do when the id is not in the database.
+                ``"ignore"`` (the default) treats an already-deleted
+                document as success -- the caller wanted it gone either
+                way. ``"warn"`` logs it; ``"error"`` raises. Mirrors
+                MATLAB's ``OnMissing`` name-value argument.
 
         Returns:
             True if removed, False if not found.
 
+        Raises:
+            KeyError: if the document is absent and ``on_missing="error"``.
+
         Example:
             db.remove(doc)
             db.remove('abc123')
+            db.remove('abc123', on_missing="error")
         """
+        if on_missing not in ("ignore", "warn", "error"):
+            raise ValueError(f"on_missing must be 'ignore', 'warn' or 'error', not {on_missing!r}")
         doc_id = document.id if isinstance(document, ndi_document) else document
-        return self._driver.delete_by_id(doc_id)
+        removed = self._driver.delete_by_id(doc_id)
+        if not removed:
+            if on_missing == "error":
+                raise KeyError(f"No document with id {doc_id!r} to remove")
+            if on_missing == "warn":
+                logger.warning("No document with id %r to remove", doc_id)
+        return removed
 
     # === ndi_query Operations ===
 
@@ -488,13 +513,19 @@ class ndi_database:
         return list(documents)
 
     def remove_many(
-        self, query: ndi_query | None = None, documents: list[ndi_document] | None = None
+        self,
+        query: ndi_query | None = None,
+        documents: list[ndi_document] | None = None,
+        on_missing: Literal["ignore", "warn", "error"] = "ignore",
     ) -> int:
         """Remove multiple documents.
 
         Args:
             query: ndi_query to select documents to remove.
             documents: Explicit list of documents to remove.
+            on_missing: Applied to each id, as in :meth:`remove`. MATLAB's
+                ``remove`` takes a cell array and passes ``OnMissing``
+                down to each removal the same way.
 
         Returns:
             Number of documents removed.
@@ -515,7 +546,7 @@ class ndi_database:
 
         count = 0
         for doc_id in to_remove:
-            if self.remove(doc_id):
+            if self.remove(doc_id, on_missing=on_missing):
                 count += 1
         return count
 

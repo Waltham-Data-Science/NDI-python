@@ -58,6 +58,10 @@ def lab(session, lab_name: str, force_update: bool = False) -> None:
     - Optionally a ``daq/daqmetadatareader`` document
     - A ``daq/daqsystem`` document linking them together
 
+    A DAQ system that the session already has is not added again, matching
+    MATLAB ``+setup/+daq/addDaqSystems``; pass ``force_update=True`` to
+    replace it with the current definition.
+
     Also installs the default ``ndi.time.syncrule.filematch`` rule (with
     ``number_fullpath_matches = 2``, mirroring MATLAB ``+setup/lab.m``) into
     the session's syncgraph, followed by any lab-specific sync rules defined
@@ -71,12 +75,29 @@ def lab(session, lab_name: str, force_update: bool = False) -> None:
         Name of the lab directory under ``ndi_common/daq_systems/``
         (e.g. ``"vhlab"``, ``"marderlab"``, ``"kjnielsenlab"``).
     force_update : bool
-        Passed through to ``ndi.setup.sync.add_sync_rules``.
+        If False (the default), a DAQ system already in the session is left
+        as it is -- re-running this is then a no-op rather than a second
+        copy. If True, any existing DAQ system of the same name is removed
+        and re-created from the current definition, which is how a session
+        picks up an edited config. Also passed to
+        ``ndi.setup.sync.add_sync_rules``.
     """
     configs = _find_daq_configs(lab_name)
 
     for config in configs:
         name = config["Name"]
+
+        # MATLAB +setup/+daq/addDaqSystems: skip a DAQ system that is
+        # already here, or -- with force -- remove it first and install the
+        # current definition in its place.
+        existing = session.daqsystem_load(name=name)
+        if existing and force_update:
+            for daq in existing if isinstance(existing, list) else [existing]:
+                session.daqsystem_rm(daq)
+            existing = None
+        if existing:
+            continue
+
         file_params = config.get("FileParameters", [])
         epm_class = config.get("EpochProbeMapClass", "ndi.epoch.epochprobemap_daqsystem")
         epm_file_params = config.get("EpochProbeMapFileParameters", "")

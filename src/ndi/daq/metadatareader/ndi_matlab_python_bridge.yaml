@@ -315,7 +315,7 @@ classes:
   - name: RayoLabStims
     type: class
     matlab_path: "+ndi/+daq/+metadatareader/RayoLabStims.m"
-    matlab_last_sync_hash: "2566fe4d"
+    matlab_last_sync_hash: "a05a0a80a"
     python_path: "ndi/daq/metadatareader/rayolab_stims.py"
     python_class: "ndi_daq_metadatareader_RayoLabStims"
     inherits: "ndi.daq.metadatareader"

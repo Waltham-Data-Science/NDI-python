@@ -17,7 +17,7 @@ classes:
   - name: clocktype
     type: class
     matlab_path: "+ndi/+time/clocktype.m"
-    matlab_last_sync_hash: "821b5af5"
+    matlab_last_sync_hash: "5210c69db"
     python_path: "ndi/time/clocktype.py"
     python_class: "ndi_time_clocktype"
 

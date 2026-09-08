@@ -88,6 +88,45 @@ class TestSecretsFilePermissions:
         assert self._mode(d) == 0o700
 
 
+class TestTheProfileFileIsAlsoOwnerOnly:
+    """MATLAB 921a02244 restricts the profiles file, not just the secrets one.
+
+    It carries account emails and UIDs rather than credentials, so it is the
+    less sensitive of the two -- but it sat at the umask default beside a
+    0600 secrets file in a 0700 directory, and there is no reason for the
+    weaker mode to be the one that wins. MATLAB's ``restrictToOwner`` covers
+    both files; this is the Python counterpart.
+    """
+
+    pytestmark = pytest.mark.skipif(sys.platform.startswith("win"), reason="POSIX mode bits only")
+
+    def _mode(self, path):
+        return stat.S_IMODE(os.stat(path).st_mode)
+
+    def test_saving_a_profile_writes_an_owner_only_file(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("NDI_PREFDIR", str(tmp_path))
+        profile_mod.reload()
+        profile_mod.use_backend("memory")
+        profile_mod.reset()
+        try:
+            profile_mod.add("lab-primary", "me@lab.org", "pw-lab")
+            target = profile_mod.filename()
+            assert target.is_file()
+            assert self._mode(target) == 0o600
+        finally:
+            profile_mod.reset()
+
+    def test_a_file_left_at_a_wider_mode_is_tightened(self, tmp_path):
+        target = tmp_path / "profiles.json"
+        target.write_text("{}")
+        os.chmod(target, 0o644)
+
+        profile_mod._write_owner_only(target, '{"Profiles": []}')
+
+        assert self._mode(target) == 0o600
+        assert target.read_text() == '{"Profiles": []}'
+
+
 # ---------------------------------------------------------------------------
 # #187.4 -- auth exceptions do not carry resp.text
 # ---------------------------------------------------------------------------
