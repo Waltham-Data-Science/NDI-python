@@ -1,10 +1,15 @@
-"""Dock panels: pick a gene, choose density or counts, filter cell types.
+"""Dock panels: choose density or counts, filter cell types, pick genes.
 
 Built with qtpy directly rather than magicgui, to match the widgets the
-FICTURE viewer in the bscholl project already uses -- a type-ahead
-combobox over the gene list, radio buttons for the two display modes, and
-one checkbox per cell class. Those are the shapes people here already
-know, and a different idiom for the same job is a cost with no return.
+FICTURE viewer in the bscholl project already uses -- a filterable list
+with a checkbox per entry, and radio buttons for the two display modes.
+Those are the shapes people here already know, and a different idiom for
+the same job is a cost with no return.
+
+PANEL ORDER, top to bottom on the right: the display mode, then the cell
+types, then the genes. The first two are short and are read once; the
+gene list is long and is scrolled, so putting it last keeps the others
+on screen.
 
 Everything Qt is imported inside the functions. This module is imported
 by :mod:`viewer`, which a headless caller may import to compose layers by
@@ -15,31 +20,76 @@ from __future__ import annotations
 
 from typing import Any
 
-__all__ = ["addGenePanel", "addDisplayPanel", "addCellTypePanel", "addAllPanels"]
+__all__ = [
+    "geneIndex",
+    "labelPartition",
+    "addGenePanel",
+    "addDisplayPanel",
+    "addCellTypePanel",
+    "addAllPanels",
+]
 
 
 # --------------------------------------------------------------- genes
 
 
+def geneIndex(ids, names) -> dict:
+    """Collapse a gene list to ONE ENTRY PER SYMBOL.
+
+    Real annotations name the same gene on several rows -- this opossum
+    list repeats 324 symbols in its first 2,000 -- because a symbol can
+    carry several accessions: transcript variants, a duplicated model, a
+    scaffold copy. The rows are separate columns of the pyramid, so a
+    picker that offered one item per ROW listed the same gene many times
+    over and left the user to guess which was the gene.
+
+    Every row a symbol names is kept, and callers sum them: taking the
+    first would show part of the gene's signal and look like the whole.
+
+    Args:
+        ids: accessions, one per gene row, in zero-based row order.
+        names: symbols, same length. A blank falls back to the accession.
+
+    Returns:
+        A dict, sorted case-insensitively by symbol, mapping symbol to
+        ``{"rows": [...], "accessions": [...]}``.
+    """
+    by: dict[str, dict] = {}
+    for row, (acc, nm) in enumerate(zip(ids, names)):
+        acc = str(acc or "").strip()
+        symbol = str(nm or "").strip() or acc or f"row {row}"
+        entry = by.setdefault(symbol, {"rows": [], "accessions": []})
+        entry["rows"].append(row)
+        if acc and acc not in entry["accessions"]:
+            entry["accessions"].append(acc)
+    return dict(sorted(by.items(), key=lambda kv: kv[0].lower()))
+
+
+# Distinct colours rather than one map applied to everything: the layers
+# blend additively, so two genes in the same colormap make one picture
+# that neither of them is.
+_GENE_COLORMAPS = ("magenta", "green", "cyan", "yellow", "red", "blue")
+
+
 def addGenePanel(viewer, session, pyr_doc) -> Any:
-    """Type-ahead combobox over the gene list, and an Add button.
+    """A filterable list of gene symbols, one checkbox each.
 
-    ADDS A LAYER PER GENE rather than replacing the base image, which is
-    what makes two genes comparable: they land as separate additive
-    layers and the base stays put underneath. Adding the same gene twice
-    replaces its own layer instead of stacking duplicates.
+    Ticking a symbol ADDS ITS OWN LAYER rather than replacing the base
+    image, which is what makes two genes comparable: they land as
+    separate additive layers in different colours and the base stays put
+    underneath. Unticking removes that layer again, and removing the
+    layer in napari's own list unticks the box, so the two never disagree.
 
-    A symbol can name SEVERAL rows -- real annotations repeat them, and
-    this opossum list repeats 324 of the first 2,000 -- so every matching
-    row is summed into the layer. Taking the first would silently show
-    part of a gene's signal.
+    Variants are already combined by :func:`geneIndex`; every row a
+    symbol names is summed into its layer.
     """
     from qtpy.QtCore import Qt
     from qtpy.QtWidgets import (
-        QComboBox,
-        QCompleter,
         QHBoxLayout,
         QLabel,
+        QLineEdit,
+        QListWidget,
+        QListWidgetItem,
         QPushButton,
         QVBoxLayout,
         QWidget,
@@ -49,64 +99,151 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
     from .multiscale import layerSpec
 
     ids, names = readGeneList(session, pyr_doc)
-
-    # Symbol first because that is what people type; the accession is kept
-    # alongside so an unnamed or duplicated symbol is still selectable.
-    display, lookup = [], {}
-    for row, (acc, nm) in enumerate(zip(ids, names)):
-        text = f"{nm} ({acc})" if nm and nm != acc else str(acc)
-        display.append(text)
-        lookup.setdefault(text, []).append(row)
-        for key in (nm, acc):
-            if key:
-                lookup.setdefault(str(key), []).append(row)
+    index = geneIndex(ids, names)
+    n_variants = sum(1 for e in index.values() if len(e["rows"]) > 1)
 
     box = QWidget()
     outer = QVBoxLayout(box)
-    outer.addWidget(QLabel(f"Add gene  ({len(ids):,} in this pyramid)"))
+    head = f"{len(index):,} genes"
+    if n_variants:
+        head += f"  ({n_variants:,} with variants, summed)"
+    outer.addWidget(QLabel(head))
 
-    combo = QComboBox()
-    combo.setEditable(True)
-    combo.addItems(display)
-    completer = QCompleter(display, combo)
-    completer.setCaseSensitivity(Qt.CaseInsensitive)
-    completer.setFilterMode(Qt.MatchContains)
-    combo.setCompleter(completer)
+    search = QLineEdit()
+    search.setPlaceholderText("filter by symbol or accession")
+    outer.addWidget(search)
 
-    add = QPushButton("Add")
+    listw = QListWidget()
+    items: dict[str, Any] = {}
+    # Thirty thousand items go in as one batch: each add would otherwise
+    # relayout the list.
+    listw.setUpdatesEnabled(False)
+    for symbol, entry in index.items():
+        rows, accs = entry["rows"], entry["accessions"]
+        text = symbol if len(rows) == 1 else f"{symbol}  ({len(rows)} variants)"
+        item = QListWidgetItem(text)
+        item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+        item.setCheckState(Qt.Unchecked)
+        item.setData(Qt.UserRole, symbol)
+        # Accessions are searchable too: a symbol is what people usually
+        # type, but not everything here has one.
+        item.setData(Qt.UserRole + 1, " ".join([symbol] + accs).lower())
+        item.setToolTip(
+            f"{symbol}\n{len(rows)} pyramid column(s): {', '.join(accs) or '(no accession)'}"
+        )
+        listw.addItem(item)
+        items[symbol] = item
+    listw.setUpdatesEnabled(True)
+    outer.addWidget(listw, stretch=1)
+
     status = QLabel("")
     status.setWordWrap(True)
 
-    def _on_add():
-        text = combo.currentText().strip()
-        if not text:
-            return
-        rows = lookup.get(text)
-        if not rows:
-            status.setText(f"'{text}' is not in this gene list")
-            return
-        name = f"gene: {text}"
+    clear = QPushButton("Remove all gene layers")
+    row = QHBoxLayout()
+    row.addStretch()
+    row.addWidget(clear)
+    outer.addLayout(row)
+    outer.addWidget(status)
+
+    state = {"busy": False, "colour": 0}
+
+    def _shown() -> int:
+        return sum(1 for it in items.values() if it.checkState() == Qt.Checked)
+
+    def _report(extra: str = ""):
+        n = _shown()
+        status.setText(f"{n} gene layer(s) shown" + (f" -- {extra}" if extra else ""))
+
+    def _filter(text: str):
+        needle = text.strip().lower()
+        listw.setUpdatesEnabled(False)
+        try:
+            for it in items.values():
+                it.setHidden(bool(needle) and needle not in it.data(Qt.UserRole + 1))
+        finally:
+            listw.setUpdatesEnabled(True)
+
+    search.textChanged.connect(_filter)
+
+    def _add(symbol: str):
+        name = f"gene: {symbol}"
         if name in viewer.layers:
-            del viewer.layers[name]
-        spec = layerSpec(session, pyr_doc, sorted(set(rows)), True, name)
-        layer = viewer.add_image(**spec, colormap="viridis", blending="additive")
+            return
+        rows = index[symbol]["rows"]
+        spec = layerSpec(session, pyr_doc, rows, True, name)
+        cmap = _GENE_COLORMAPS[state["colour"] % len(_GENE_COLORMAPS)]
+        state["colour"] += 1
+        try:
+            layer = viewer.add_image(**spec, colormap=cmap, blending="additive")
+        except Exception:
+            # An unknown colormap must not cost the layer.
+            layer = viewer.add_image(**spec, blending="additive")
         try:
             layer.reset_contrast_limits()
         except Exception:
             pass
-        extra = f" ({len(rows)} rows summed)" if len(rows) > 1 else ""
-        status.setText(f"added {name}{extra}")
+        extra = f"{symbol}: {len(rows)} variants summed" if len(rows) > 1 else ""
+        _report(extra)
 
-    add.clicked.connect(_on_add)
+    def _remove(symbol: str):
+        name = f"gene: {symbol}"
+        if name in viewer.layers:
+            del viewer.layers[name]
+        _report()
 
-    row = QHBoxLayout()
-    row.addWidget(combo, stretch=1)
-    row.addWidget(add)
-    outer.addLayout(row)
-    outer.addWidget(status)
-    outer.addStretch()
+    def _on_item_changed(item):
+        if state["busy"]:
+            return
+        state["busy"] = True
+        try:
+            symbol = item.data(Qt.UserRole)
+            if item.checkState() == Qt.Checked:
+                _add(symbol)
+            else:
+                _remove(symbol)
+        except Exception as e:
+            status.setText(f"failed: {e}")
+        finally:
+            state["busy"] = False
 
-    viewer.window.add_dock_widget(box, name="Add gene", area="right")
+    listw.itemChanged.connect(_on_item_changed)
+
+    def _on_clear():
+        state["busy"] = True
+        try:
+            for symbol, it in items.items():
+                if it.checkState() == Qt.Checked:
+                    it.setCheckState(Qt.Unchecked)
+                    _remove(symbol)
+        finally:
+            state["busy"] = False
+        _report()
+
+    clear.clicked.connect(_on_clear)
+
+    def _on_layer_removed(event):
+        """A layer closed in napari's own list unticks its box."""
+        name = getattr(getattr(event, "value", None), "name", "")
+        if not str(name).startswith("gene: "):
+            return
+        item = items.get(str(name)[len("gene: ") :])
+        if item is None or item.checkState() != Qt.Checked:
+            return
+        was, state["busy"] = state["busy"], True
+        try:
+            item.setCheckState(Qt.Unchecked)
+        finally:
+            state["busy"] = was
+        _report()
+
+    try:
+        viewer.layers.events.removed.connect(_on_layer_removed)
+    except Exception:  # pragma: no cover - depends on the napari build
+        pass
+
+    _report()
+    viewer.window.add_dock_widget(box, name="Genes", area="right")
     return box
 
 
@@ -187,6 +324,24 @@ def _currentRows(image_layer):
 # ---------------------------------------------------------- cell types
 
 
+def labelPartition(labels) -> frozenset:
+    """The GROUPING a labeling induces, with the class names discarded.
+
+    Two labelings that partition the cells identically and differ only in
+    what the groups are called carry the same information, and showing
+    both invites the reader to treat one as corroborating the other. That
+    happens for a real reason: a subclass call transferred onto clusters
+    is a RENAMING of those clusters, one name per cluster, so it agrees
+    with the clustering by construction.
+
+    Comparing names would miss this; comparing memberships catches it.
+    """
+    groups: dict[Any, list] = {}
+    for i, v in enumerate(labels):
+        groups.setdefault(v, []).append(i)
+    return frozenset(frozenset(g) for g in groups.values())
+
+
 def addCellTypePanel(viewer, session, cells_doc, points_layer, shapes_layer=None) -> Any:
     """One checkbox per class, per labeling, over the cell layers.
 
@@ -194,6 +349,12 @@ def addCellTypePanel(viewer, session, cells_doc, points_layer, shapes_layer=None
     call and one or more clusterings -- so each becomes its own group
     rather than being merged. They are not interchangeable: a clustering
     carries no biological identity.
+
+    A labeling that groups the cells EXACTLY as an earlier one does is
+    named and then skipped, not drawn twice; see :func:`labelPartition`.
+    Supervised calls are considered first, so when a clustering and the
+    subclass call transferred onto it agree, it is the one carrying
+    biological names that stays.
 
     Hiding works by ALPHA, not by removing points. The row order of the
     points layer is the row order of cells.tsv and of every labels.tsv
@@ -227,8 +388,31 @@ def addCellTypePanel(viewer, session, cells_doc, points_layer, shapes_layer=None
     if not labelings:
         return None
 
+    # Supervised first, so a redundant pair keeps the named call.
+    labelings.sort(key=lambda t: (bool(t[1]["isUnsupervised"]), t[1]["labelName"] or ""))
+
+    kept, redundant, seen = [], [], {}
+    for labels, info in labelings:
+        key = labelPartition(labels)
+        first = seen.get(key)
+        if first is None:
+            seen[key] = info["labelName"] or "(unnamed)"
+            kept.append((labels, info))
+        else:
+            redundant.append((info["labelName"] or "(unnamed)", first))
+
     box = QWidget()
     outer = QVBoxLayout(box)
+
+    for name, first in redundant:
+        msg = (
+            f"{name} groups the cells exactly as {first} does, differing only "
+            f"in what the groups are called, so it is not shown separately."
+        )
+        print(f"[genepyramid] {msg}")
+        note = QLabel(msg)
+        note.setWordWrap(True)
+        outer.addWidget(note)
 
     n_points = len(points_layer.data)
     # visible[i] is False when ANY ticked-off class covers cell i, so two
@@ -256,7 +440,7 @@ def addCellTypePanel(viewer, session, cells_doc, points_layer, shapes_layer=None
             except Exception:
                 pass
 
-    for labels, info in labelings:
+    for labels, info in kept:
         kind = "clustering" if info["isUnsupervised"] else "cell type call"
         title = QLabel(f"{info['labelName'] or '(unnamed)'} -- {kind}")
         outer.addWidget(title)
@@ -304,6 +488,10 @@ def addAllPanels(
 ):
     """Every panel the session supports, skipping what it has no data for.
 
+    Added in the order they should read down the right-hand side: the
+    display mode, the cell types, then the genes. napari stacks docks in
+    the order they arrive, so this order is the layout.
+
     A missing Qt costs the panels rather than the picture: the viewer is
     already on screen by the time this runs, and taking it down over a
     convenience would be worse than doing without.
@@ -321,8 +509,8 @@ def addAllPanels(
         return {}
 
     made = {}
-    made["genes"] = addGenePanel(viewer, session, pyr_doc)
     made["display"] = addDisplayPanel(viewer, session, pyr_doc, image_layer, density)
     if cells_doc is not None and points_layer is not None:
         made["cellTypes"] = addCellTypePanel(viewer, session, cells_doc, points_layer, shapes_layer)
+    made["genes"] = addGenePanel(viewer, session, pyr_doc)
     return made
