@@ -14,6 +14,7 @@ functions:
   - name: gui
     type: function
     matlab_path: "+ndi/+gui/gui.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/gui/gui.py"
     input_arguments:
       - name: ndi_session_obj
@@ -27,9 +28,36 @@ functions:
       PySide6 QMainWindow with equivalent layout.
       Synchronized with MATLAB main as of 2026-03-13.
 
+      Read against NDI-matlab fe64a9f53, the file's last-touching commit.
+      CONTEXT FOR EVERY ENTRY IN THIS FILE: PySide6 is an optional extra and
+      ndi_install.py installs .[dev,tutorials], so CI has no Qt and every
+      Qt-dependent test in this package skips on every job. Nothing here is
+      exercised anywhere. What could be checked was checked by pulling the
+      plain-Python parts out where they were entangled with widgets, which is
+      the split ndi.gui.nav and ndi.gui.preferences_editor already make. The
+      layout matches section for section, and in one respect the port is AHEAD
+      of MATLAB: MATLAB's UpdateDAQList builds its name list inside a loop
+      whose two lines are both commented out, so the DAQ-Readers list is
+      always empty there and populated here. The Probes/Things and Cache lists
+      are empty on BOTH sides -- nothing in either language ever fills them.
+      MATLAB's View, +, -, Delete and Clear buttons have no case in the
+      command switch, so clicking them does nothing; omitting them here loses
+      no behaviour. TWO REAL DIFFERENCES. MATLAB looks for an existing window
+      tagged 'ndi.gui.gui' and raises that one after refreshing rather than
+      opening a second; this builds a new window per call and blocks in
+      app.exec(). And three panel headings read 'ndi_cache', 'ndi_database'
+      and 'ndi_document Properties' -- a mechanical rename of class names that
+      leaked into user-visible text, where MATLAB says Cache, Database and
+      Document Properties. Fixed, and pinned by a guard in
+      tests/test_gui_against_matlab.py that walks the whole package for
+      internal identifiers in display strings. The document query is
+      ndi_query.all() (isa base) against MATLAB's regexp on
+      document_class.class_name; both match every document.
+
   - name: gui_v2
     type: function
     matlab_path: "+ndi/+gui/gui_v2.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/gui/gui_v2.py"
     input_arguments:
       - name: ndi_session_obj
@@ -45,10 +73,39 @@ functions:
       PySide6 with QGraphicsScene for the lab view.
       Synchronized with MATLAB main as of 2026-03-13.
 
+      Read against NDI-matlab fe64a9f53, the file's last-touching commit.
+      CONTEXT FOR EVERY ENTRY IN THIS FILE: PySide6 is an optional extra and
+      ndi_install.py installs .[dev,tutorials], so CI has no Qt and every
+      Qt-dependent test in this package skips on every job. Nothing here is
+      exercised anywhere. What could be checked was checked by pulling the
+      plain-Python parts out where they were entangled with widgets, which is
+      the split ndi.gui.nav and ndi.gui.preferences_editor already make. THE
+      DATABASE VIEW WAS EMPTY ON EVERY SESSION. The document query was built
+      with the operator spelled 'regex', which ndi_query rejects with a
+      ValueError, and the call sat inside a bare `except Exception` that
+      turned the rejection into an empty document list. MATLAB's operator is
+      regexp. Fixed, and the query is now built OUTSIDE the try so a bad
+      operator raises instead of looking like a session with no documents. THE
+      CONNECTIONS WERE NEVER DRAWN. After adding the icons MATLAB loops over
+      the probes calling lab.connect four times each -- subject, probe, probe,
+      DAQ -- which the two-click connect() turns into a subject->probe and a
+      probe->DAQ edge. None of that was ported, so the Experiment View drew
+      icons and nothing between them, which is the half of that view that says
+      what is wired to what. Ported, with the probe-to-device lookup and the
+      findobj equivalent as module-level functions so both are tested without
+      Qt. Noted while porting: MATLAB's own loop indexes et(i) with the outer
+      PROBE counter while looping over k, and reads DEV after the loop has
+      ended, so only one device is ever reached; taking the first epoch's
+      device is the same result without the slip. The window title read
+      'Neuroscience ndi_gui_Data Interface' and the second tab 'ndi_database
+      View' -- the same mechanical rename as in ndi.gui.gui. MATLAB says
+      'Neuroscience Data Interface' and 'Database View'. Fixed.
+
 
   - name: preferencesEditor
     type: function
     matlab_path: "+ndi/+gui/preferencesEditor.m"
+    matlab_last_sync_hash: "80ea2081b"
     python_path: "ndi/gui/preferences_editor.py"
     python_name: "preferences_editor"
     input_arguments:
@@ -89,6 +146,24 @@ functions:
       (e) MATLAB's alias `preferencesEditor` is exported alongside the
       snake_case `preferences_editor`.
       Synchronized with MATLAB main as of 2026-09-01.
+
+      Read against NDI-matlab 80ea2081b, the file's last-touching commit.
+      CONTEXT FOR EVERY ENTRY IN THIS FILE: PySide6 is an optional extra and
+      ndi_install.py installs .[dev,tutorials], so CI has no Qt and every
+      Qt-dependent test in this package skips on every job. Nothing here is
+      exercised anywhere. What could be checked was checked by pulling the
+      plain-Python parts out where they were entangled with widgets, which is
+      the split ndi.gui.nav and ndi.gui.preferences_editor already make.
+      Confirmed, and it is the one entry in this file whose record was already
+      right. 80ea2081b is 'Apply NDI Cloud colour scheme to profile and
+      preferences windows', and the port has that scheme: off-white root, navy
+      header bar with white bold 'NDI Preferences', white scrollable right
+      panel, and the light-blue-on-navy accent on Revert / Apply / Save. The
+      three-tier structure matches (tree, one row per preference, button row),
+      each item's Description is wired as the tooltip on both the label and
+      the widget as MATLAB does, and edits stay pending behind the '*' marker
+      until Apply or Save. The five deviations already recorded (a) to (e) all
+      still hold as written.
 # =========================================================================
 # Classes
 # =========================================================================
@@ -97,9 +172,32 @@ classes:
   - name: ndi_gui_Data
     type: class
     matlab_path: "+ndi/+gui/Data.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/gui/data.py"
     python_class: "ndi_gui_Data"
     inherits: "handle"
+    decision_log: >
+      Read against NDI-matlab fe64a9f53, the file's last-touching commit.
+      CONTEXT FOR EVERY ENTRY IN THIS FILE: PySide6 is an optional extra and
+      ndi_install.py installs .[dev,tutorials], so CI has no Qt and every
+      Qt-dependent test in this package skips on every job. Nothing here is
+      exercised anywhere. What could be checked was checked by pulling the
+      plain-Python parts out where they were entangled with widgets, which is
+      the split ndi.gui.nav and ndi.gui.preferences_editor already make. EVERY
+      ROW OF THE TABLE HAD FOUR EMPTY COLUMNS. MATLAB reads name, id, type and
+      datestamp out of document_properties.ndi_document -- the LEGACY schema.
+      A document built today has no such field: its name, id and datestamp are
+      under base, and there is no type at all. The port followed MATLAB and
+      fell back to the top level of document_properties, where none of the
+      four exist either, so the Database View listed its documents with every
+      cell blank. Now reads base, keeping the legacy field first for a
+      document old enough to have one, and showing document_class.class_name
+      for type -- which is what ndi.gui.gui already displays as a document's
+      kind. Pulled out as document_columns() so it is tested without Qt.
+      MATLAB IS STALE HERE TOO and will fail the same way on a modern
+      document; that is worth reporting upstream rather than only fixing on
+      this side. The filter (contains / begins with / ends with over a chosen
+      column) matches.
 
     properties:
       - name: fullDocuments
@@ -187,9 +285,30 @@ classes:
   - name: ndi_gui_Icon
     type: class
     matlab_path: "+ndi/+gui/Icon.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/gui/icon.py"
     python_class: "ndi_gui_Icon"
     inherits: "handle"
+    decision_log: >
+      Read against NDI-matlab fe64a9f53, the file's last-touching commit.
+      CONTEXT FOR EVERY ENTRY IN THIS FILE: PySide6 is an optional extra and
+      ndi_install.py installs .[dev,tutorials], so CI has no Qt and every
+      Qt-dependent test in this package skips on every job. Nothing here is
+      exercised anywhere. What could be checked was checked by pulling the
+      plain-Python parts out where they were entangled with widgets, which is
+      the split ndi.gui.nav and ndi.gui.preferences_editor already make. Holds
+      on everything that has a Python counterpart: the same eight constructor
+      arguments, the same 8*len+hShift placement, the same tag numbering, the
+      same rectangle-plus-terminal drawing, and the same rule that an orange
+      (DAQ) icon starts inactive with its terminal hidden. TWO DIFFERENCES
+      RECORDED RATHER THAN CHANGED. MATLAB loads default.png out of +ndi/+gui
+      and flips it; the port draws a grey placeholder rectangle -- and
+      default.png ships in this package's directory too, unused. That is a
+      one-line change but it is Qt-only code in a package CI never runs, so it
+      is named here rather than written blind. And MATLAB binds ButtonDownFcn
+      on the image (to iconCallback) and on the terminal (to connect); the
+      port binds nothing. See the Lab entry -- that is where the consequence
+      is.
 
     properties:
       - name: elem
@@ -271,9 +390,41 @@ classes:
   - name: ndi_gui_Lab
     type: class
     matlab_path: "+ndi/+gui/Lab.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/gui/lab.py"
     python_class: "ndi_gui_Lab"
     inherits: "handle"
+    decision_log: >
+      Read against NDI-matlab fe64a9f53, the file's last-touching commit.
+      CONTEXT FOR EVERY ENTRY IN THIS FILE: PySide6 is an optional extra and
+      ndi_install.py installs .[dev,tutorials], so CI has no Qt and every
+      Qt-dependent test in this package skips on every job. Nothing here is
+      exercised anywhere. What could be checked was checked by pulling the
+      plain-Python parts out where they were entangled with widgets, which is
+      the split ndi.gui.nav and ndi.gui.preferences_editor already make. THE
+      EXPERIMENT VIEW DOES NOT RESPOND TO THE MOUSE, and that is the substance
+      of this entry. MATLAB has iconCallback bound to each icon's image,
+      connect bound to each terminal, WindowButtonMotionFcn bound to Lab.move
+      and WindowButtonUpFcn (in gui_v2) calling lab.details on whatever was
+      being dragged. The port has move(), details(), connect() and cut() but
+      NOTHING SETS self.drag and nothing routes a click to an icon -- so
+      dragging never starts, clicking an icon never opens its details, and
+      connections cannot be made by hand. PORTED HERE: symbol(), which had no
+      counterpart at all. It is the state machine that keeps a connection
+      type-correct -- clicking a SUBJECT marks only the probes as valid
+      targets, clicking a PROBE marks only the DAQs, and a second click on the
+      same icon puts everything back -- and without it nothing would stop a
+      subject being wired straight to a DAQ. Written as a module-level
+      set_activation() so the transitions are tested without Qt, with
+      Lab.symbol as the one-line method MATLAB has. buttons() also now colours
+      each terminal by its active state (white, green, red) as MATLAB does; it
+      only toggled visibility, so even the state it did track was invisible.
+      NOT PORTED, deliberately: the Qt mouse routing itself -- a scene
+      mousePressEvent that hit-tests icons and terminals, sets drag/dragPt,
+      and calls symbol() then connect(). It is perhaps sixty lines of event
+      code that neither this container nor CI can execute, and writing it
+      unexecuted is how a plausible-looking wrong answer gets committed. The
+      state machine it needs is now here and tested.
 
     properties:
       - name: editable
@@ -406,9 +557,29 @@ classes:
   - name: ndi_gui_docViewer
     type: class
     matlab_path: "+ndi/+gui/docViewer.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/gui/docViewer.py"
     python_class: "ndi_gui_docViewer"
     inherits: "handle"
+    decision_log: >
+      Read against NDI-matlab fe64a9f53, the file's last-touching commit.
+      CONTEXT FOR EVERY ENTRY IN THIS FILE: PySide6 is an optional extra and
+      ndi_install.py installs .[dev,tutorials], so CI has no Qt and every
+      Qt-dependent test in this package skips on every job. Nothing here is
+      exercised anywhere. What could be checked was checked by pulling the
+      plain-Python parts out where they were entangled with widgets, which is
+      the split ndi.gui.nav and ndi.gui.preferences_editor already make. The
+      same legacy-schema read as ndi_gui_Data, in two places, and the second
+      one is worse. addDoc filled the four columns from
+      document_properties.ndi_document, so every row was blank. And the
+      DEPENDENCY GRAPH matched depends_on values against that same missing id,
+      so every document's id compared as '' -- which means either no edges at
+      all or, where two documents both read '', an edge between the wrong
+      pair. Both now go through document_columns(). The window title read
+      'ndi_document Viewer' against MATLAB's 'Document Viewer'; fixed. The
+      rest -- the four search controls, filterHelper, searchID, contentSearch,
+      searchFieldName, clearView, restore, graph and subgraph -- is present
+      and matches.
 
     properties:
       - name: fullDocuments

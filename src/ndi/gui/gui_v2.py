@@ -31,6 +31,73 @@ def gui_v2(ndi_session_obj: Any) -> None:
     app.exec()
 
 
+def all_documents_query() -> Any:
+    """The query gui_v2 uses to fetch every document in the session.
+
+    MATLAB's is ``{'base.id','(.*)'}``.  This was built with the operator
+    spelled ``'regex'``, which ndi_query rejects -- and the call sat inside a
+    bare ``except Exception``, so the ValueError was swallowed and the
+    Database View came up EMPTY on every session.  Built outside the try
+    below, so a bad operator raises here rather than looking like a session
+    with no documents.
+    """
+    from ndi.query import ndi_query
+
+    return ndi_query("base.id", "regexp", "(.*)", "")
+
+
+def icon_for(icons: list[Any], element: Any) -> Any:
+    """MATLAB's ``findobj(list, 'elem', X)``.
+
+    A subject icon is built from the ``database_search`` RESULT for one
+    subject id, so its ``elem`` is a list holding one document; a subject is
+    therefore looked up by id as well as by identity.
+    """
+    if element is None:
+        return None
+    for icon in icons:
+        elem = getattr(icon, "elem", None)
+        if elem is element:
+            return icon
+        if isinstance(elem, list) and len(elem) == 1:
+            doc = elem[0]
+            if doc is element:
+                return icon
+            if isinstance(element, str) and getattr(doc, "id", None) == element:
+                return icon
+        elif not isinstance(elem, list):
+            try:
+                if elem == element:
+                    return icon
+            except Exception:
+                pass
+    return None
+
+
+def probe_daq_pairs(probes: list[Any]) -> list[tuple[Any, Any]]:
+    """Pair each probe with the DAQ system its first epoch was recorded on.
+
+    MATLAB walks the probe's epochtable calling ``getchanneldevinfo`` and
+    connects the probe to ``DEV{1}``.  Its own loop indexes ``et(i)`` with the
+    outer probe counter while looping over ``k``, and uses ``DEV`` after the
+    loop has ended, so only one device is ever reached; taking the first
+    epoch's device is the same result without copying the indexing slip.
+
+    A probe with no epochs, or one whose epoch names no device, is skipped
+    rather than being connected to nothing.
+    """
+    pairs: list[tuple[Any, Any]] = []
+    for probe in probes:
+        try:
+            info = probe.getchanneldevinfo(1)
+        except Exception:
+            continue
+        daq = info.get("daqsystem") if isinstance(info, dict) else None
+        if daq is not None:
+            pairs.append((probe, daq))
+    return pairs
+
+
 def _build_v2_window(session: Any) -> Any:
     """Construct the enhanced GUI window."""
     from PySide6 import QtWidgets
@@ -42,7 +109,7 @@ def _build_v2_window(session: Any) -> Any:
             super().__init__()
             self._session = session
 
-            self.setWindowTitle("Neuroscience ndi_gui_Data Interface")
+            self.setWindowTitle("Neuroscience Data Interface")
             screen = QtWidgets.QApplication.primaryScreen()
             geom = screen.availableGeometry()
             self.resize(geom.width() // 2, geom.height() // 2)
@@ -59,7 +126,7 @@ def _build_v2_window(session: Any) -> Any:
             # ndi_database View (ndi_gui_Data)
             self._data_widget = QtWidgets.QWidget()
             self._init_data_tab()
-            self._tabs.addTab(self._data_widget, "ndi_database View")
+            self._tabs.addTab(self._data_widget, "Database View")
 
             # Load data from session
             self._load_session()
@@ -114,10 +181,9 @@ def _build_v2_window(session: Any) -> Any:
             except Exception:
                 elements = []
 
+            query = all_documents_query()
             try:
-                from ndi.query import ndi_query
-
-                docs = s.database_search(ndi_query("base.id", "regex", "(.*)", ""))
+                docs = s.database_search(query)
             except Exception:
                 docs = []
             if not isinstance(docs, list):
@@ -170,5 +236,30 @@ def _build_v2_window(session: Any) -> Any:
             # Populate ndi_gui_Data view
             if docs:
                 self._data.addDoc(docs)
+
+            self._wire_connections(probes)
+
+        def _wire_connections(self, probes: list[Any]) -> None:
+            """Draw subject -> probe -> DAQ wires, as MATLAB does.
+
+            MATLAB calls lab.connect four times per probe -- subject, probe,
+            probe, DAQ -- which the two-click connect() turns into two edges.
+            None of it was ported, so the Experiment View drew the icons and
+            no connections at all, which is the half of that view that says
+            what is wired to what.
+            """
+            for probe in probes:
+                subject_icon = icon_for(self._lab.subjects, getattr(probe, "subject_id", None))
+                probe_icon = icon_for(self._lab.probes, probe)
+                if subject_icon is not None and probe_icon is not None:
+                    self._lab.connect(subject_icon)
+                    self._lab.connect(probe_icon)
+
+            for probe, daq in probe_daq_pairs(probes):
+                probe_icon = icon_for(self._lab.probes, probe)
+                daq_icon = icon_for(self._lab.DAQs, daq)
+                if probe_icon is not None and daq_icon is not None:
+                    self._lab.connect(probe_icon)
+                    self._lab.connect(daq_icon)
 
     return _NDIV2Window(session)

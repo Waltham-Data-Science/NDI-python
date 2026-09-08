@@ -88,7 +88,7 @@ drifted:
   # --- comments-only ---
 
 # ---------------------------------------------------------------------------
-# no_hash: 92
+# no_hash: 84
 #
 # An entry with a matlab_path and no matlab_last_sync_hash can never show
 # drift, so it claims its port is current forever and no check can contradict
@@ -232,22 +232,6 @@ no_hash:
     matlab_path: "+ndi/+fun/stimulustemporalfrequency.m"
   - name: timestamp
     matlab_path: "+ndi/+fun/timestamp.m"
-  - name: centerFigure
-    matlab_path: "+ndi/+gui/+utility/centerFigure.m"
-  - name: ndi_gui_Data
-    matlab_path: "+ndi/+gui/Data.m"
-  - name: ndi_gui_Icon
-    matlab_path: "+ndi/+gui/Icon.m"
-  - name: ndi_gui_Lab
-    matlab_path: "+ndi/+gui/Lab.m"
-  - name: ndi_gui_docViewer
-    matlab_path: "+ndi/+gui/docViewer.m"
-  - name: gui
-    matlab_path: "+ndi/+gui/gui.m"
-  - name: gui_v2
-    matlab_path: "+ndi/+gui/gui_v2.m"
-  - name: preferencesEditor
-    matlab_path: "+ndi/+gui/preferencesEditor.m"
   - name: clear
     matlab_path: "+ndi/+mock/+fun/clear.m"
   - name: stimulus_presentation
