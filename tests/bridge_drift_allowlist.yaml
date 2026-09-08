@@ -102,21 +102,15 @@ no_hash:
     matlab_path: "+ndi/+app/spikeextractor.m"
   - name: spikesorter
     matlab_path: "+ndi/+app/spikesorter.m"
-  - name: simple
-    matlab_path: "+ndi/+calc/+example/simple.m"
   - name: tuningcurve
     matlab_path: "+ndi/+calc/+stimulus/tuningcurve.m"
   - name: tuning_fit
     matlab_path: "+ndi/+calc/tuning_fit.m"
   - name: SyncIndex
     matlab_path: "+ndi/+cloud/+sync/+internal/+index/"
-  - name: evaluate_fitcurve
-    matlab_path: "+ndi/+data/evaluate_fitcurve.m (in a different namespace)"
   - name: navigator
     matlab_path: "+ndi/+file/navigator.m"
   - name: diff (dataset)
     matlab_path: "+ndi/+fun/+dataset/diff.m"
   - name: diff (session)
     matlab_path: "+ndi/+fun/+session/diff.m"
-  - name: setup
-    matlab_path: "+ndi/+setup/"
