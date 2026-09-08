@@ -221,7 +221,7 @@ classes:
   - name: NielsenLabStims
     type: class
     matlab_path: "+ndi/+daq/+metadatareader/NielsenLabStims.m"
-    matlab_last_sync_hash: "fe64a9f5"
+    matlab_last_sync_hash: "f037e2086"
     python_path: "ndi/daq/metadatareader/nielsenlab_stims.py"
     python_class: "ndi_daq_metadatareader_NielsenLabStims"
     inherits: "ndi.daq.metadatareader"
