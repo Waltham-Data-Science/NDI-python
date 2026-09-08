@@ -166,15 +166,5 @@ no_hash:
     matlab_path: "+ndi/+gui/gui_v2.m"
   - name: preferencesEditor
     matlab_path: "+ndi/+gui/preferencesEditor.m"
-  - name: clear
-    matlab_path: "+ndi/+mock/+fun/clear.m"
-  - name: stimulus_presentation
-    matlab_path: "+ndi/+mock/+fun/stimulus_presentation.m"
-  - name: stimulus_response
-    matlab_path: "+ndi/+mock/+fun/stimulus_response.m"
-  - name: subject_stimulator_neuron
-    matlab_path: "+ndi/+mock/+fun/subject_stimulator_neuron.m"
-  - name: ctest
-    matlab_path: "+ndi/+mock/ctest.m"
   - name: setup
     matlab_path: "+ndi/+setup/"

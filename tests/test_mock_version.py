@@ -56,13 +56,25 @@ class TestVersion:
 
 
 class TestSubjectStimulatorNeuron:
-    """Tests for subject_stimulator_neuron."""
+    """Tests for subject_stimulator_neuron.
+
+    A real session on a temporary directory rather than a MagicMock: the
+    function now checks the database before drawing a reference and adds the
+    subject document to it, neither of which a MagicMock can answer for.
+    """
+
+    @staticmethod
+    def _session():
+        import tempfile
+
+        from ndi.session.dir import ndi_session_dir
+
+        return ndi_session_dir("testref", tempfile.mkdtemp())
 
     def test_creates_three_docs(self):
         from ndi.mock import subject_stimulator_neuron
 
-        session = MagicMock()
-        result = subject_stimulator_neuron(session)
+        result = subject_stimulator_neuron(self._session())
         assert "subject" in result
         assert "stimulator" in result
         assert "spikes" in result
@@ -70,17 +82,18 @@ class TestSubjectStimulatorNeuron:
     def test_subject_name_format(self):
         from ndi.mock import subject_stimulator_neuron
 
-        session = MagicMock()
-        result = subject_stimulator_neuron(session)
+        result = subject_stimulator_neuron(self._session())
         assert "mock" in result["subject_name"]
         assert "@nosuchlab.org" in result["subject_name"]
 
     def test_ref_num_range(self):
         from ndi.mock import subject_stimulator_neuron
 
-        session = MagicMock()
-        result = subject_stimulator_neuron(session)
-        assert 20000 <= result["ref_num"] <= 20999
+        # MATLAB draws referenceMin + randi(referenceSpan) = 20001..80000.
+        # This used to be 20000 + randint(0, 999) with no collision check --
+        # the exact defect MATLAB's pickFreeReference was written to fix.
+        result = subject_stimulator_neuron(self._session())
+        assert 20001 <= result["ref_num"] <= 80000
 
 
 # ===========================================================================
@@ -233,8 +246,10 @@ class TestCalculatorTest:
         from ndi.mock import ndi_mock_ctest
 
         ct = ndi_mock_ctest()
-        assert ct.mock_expected_filename(1) == "mock.1.json"
-        assert ct.mock_comparison_filename(3) == "mock.3.compare.json"
+        # MATLAB returns the FULL path, not the bare name.
+        assert ct.mock_expected_filename(1).name == "mock.1.json"
+        assert ct.mock_comparison_filename(3).name == "mock.3.compare.json"
+        assert ct.mock_expected_filename(1).parent == ct.mock_path()
 
     def test_write_and_load(self, tmp_path):
         from ndi.mock import ndi_mock_ctest
