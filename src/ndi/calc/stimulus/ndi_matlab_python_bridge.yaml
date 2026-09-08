@@ -72,7 +72,25 @@ classes:
         output_arguments:
           - name: doc
             type_python: "list[ndi_document]"
-        decision_log: "Exact match."
+        decision_log: >
+          STUB -- NOT AN EXACT MATCH. MATLAB's calculate errors if
+          input_parameters or depends_on is missing, looks up the
+          stimulus_response_scalar document named by the
+          stimulus_response_scalar_id dependency and errors unless exactly one
+          comes back, splits independent_label and independent_parameter on
+          commas and errors if their counts differ, then walks
+          parameters.input_parameters.selection applying seven operations --
+          hasnumericvalue, hasnumericvalue>, hasnumericvalue<, NumberAtLeast,
+          'best' (through best_value and the named best_algorithm), 'greatest',
+          and 'varies' -- returning NO document at all when a constraint is
+          not met, and only then builds the tuning curve. The Python port
+          creates a tuningcurve_calc document whose independent_variable,
+          response_mean and response_stderr are empty lists, sets the session
+          id and the first dependency, and returns it. No stimulus response
+          is looked up, no selection constraint is applied, no curve is
+          computed, and a document always comes back -- including for inputs
+          MATLAB would decline. See the class-level decision_log for the
+          reason this was recorded rather than written.
 
       - name: default_search_for_input_parameters
         input_arguments: []
