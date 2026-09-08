@@ -130,7 +130,7 @@ def fetch_cloud_file(
     *,
     ndi_document_id: str = "",
     series_name: str = "",
-    batch_lookup: "BatchSignedUrlLookup | None" = None,
+    batch_lookup: BatchSignedUrlLookup | None = None,
 ) -> bool:
     """Download a cloud file on demand.
 

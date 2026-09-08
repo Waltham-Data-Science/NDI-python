@@ -26,8 +26,9 @@ import logging
 import threading
 import time
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .client import CloudClient
@@ -103,7 +104,7 @@ def _default_signer(
     document_id: str,
     *,
     file_series: str = "",
-    client: "CloudClient | None" = None,
+    client: CloudClient | None = None,
 ) -> tuple[bool, dict[str, Any]]:
     """Fetch the whole scope through the paged getSignedURLSetAll call.
 
@@ -170,7 +171,7 @@ class BatchSignedUrlLookup:
         series_name: str,
         uid: str,
         *,
-        client: "CloudClient | None" = None,
+        client: CloudClient | None = None,
     ) -> str:
         """Return the pre-signed URL for one uid, or ``""`` if none.
 
@@ -273,7 +274,7 @@ class BatchSignedUrlLookup:
         series_name: str,
         uid: str,
         *,
-        client: "CloudClient | None",
+        client: CloudClient | None,
     ) -> _CacheEntry | None:
         """Populate the cache for one scope. None on any failure."""
         failure_reason = ""
