@@ -97,8 +97,44 @@ classes:
   - name: appdoc
     type: class
     matlab_path: "src/ndi/+ndi/+app/appdoc.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/app/appdoc.py"
     python_class: "ndi_app_appdoc"
+    decision_log: >
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      This is the base every NDI app's document handling sits on, so each of
+      these was inherited by every app. (1) REPLACEIFDIFFERENT KEPT DOCUMENTS
+      MATLAB REPLACES. MATLAB replaces unless it was told to check AND there
+      is EXACTLY ONE existing document equal to what was asked for -- its
+      comment is explicit that more than one "must be different". The port
+      looped over every existing document and returned as soon as ANY of them
+      matched, so a database holding three versions, one of which happened to
+      match, kept all three. (2) A FAILED REMOVAL WAS SWALLOWED AND THEN
+      WRITTEN BESIDE. MATLAB clears through clear_appdoc and errors -- 'Could
+      not delete existing X document(s).' -- if it returns false. The port
+      removed documents inline under `except Exception: pass` and carried on
+      to add the replacement, so a database that refused the deletion ended up
+      with both. clear_appdoc had the same swallow AND returned true
+      regardless, which is what made its return value useless to the caller
+      that reads it. (3) appdoc_struct WAS NOT RESOLVED. MATLAB accepts an
+      empty value (use the defaults), an ndi.document (convert it back through
+      doc2struct), or a struct, and errors on anything else. Only the empty
+      case was handled, so a caller who passed the document they had just
+      found had it written straight into struct2doc as if it were parameters,
+      and a number or a list went the same way in silence. (4)
+      appdoc_description had no counterpart at all, so a caller following
+      MATLAB met an AttributeError. Added on the base class, listing the
+      declared types; MATLAB's subclasses override it with their own tables,
+      and the two Python subclasses now inherit the generic one. All four
+      ported, with the ERROR message now naming the count and the type as
+      MATLAB's does, and an unknown action refused rather than quietly falling
+      through to a plain add. Covered by
+      tests/test_app_appdoc_against_matlab.py. NOT PORTED, and MATLAB should
+      probably fix it rather than this: its char branch reads
+      `vlt.file.loadStructArray(appdoc_strut)` -- note the misspelling -- so
+      passing a FILENAME, which the branch exists for, always lands in the
+      catch and reports a file-reading failure. There is no point mirroring a
+      path that cannot work; a filename is simply not accepted here.
 
     properties:
       - name: doc_types

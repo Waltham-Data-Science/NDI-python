@@ -88,7 +88,7 @@ drifted:
   # --- comments-only ---
 
 # ---------------------------------------------------------------------------
-# no_hash: 92
+# no_hash: 91
 #
 # An entry with a matlab_path and no matlab_last_sync_hash can never show
 # drift, so it claims its port is current forever and no check can contradict
@@ -96,8 +96,6 @@ drifted:
 # nobody knows, examine the file now and record today's commit for it.
 # ---------------------------------------------------------------------------
 no_hash:
-  - name: appdoc
-    matlab_path: "+ndi/+app/appdoc.m"
   - name: spikeextractor
     matlab_path: "+ndi/+app/spikeextractor.m"
   - name: spikesorter

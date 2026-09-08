@@ -256,7 +256,9 @@ class TestAppDocAddAppdoc:
                 return [ndi_document("base")]
 
         ad = FakeAppDoc()
-        with pytest.raises(RuntimeError, match="already exists"):
+        # MATLAB's message names the count: "N document(s) of application
+        # document type X already exist."
+        with pytest.raises(RuntimeError, match="already exist"):
             ad.add_appdoc("test_type", doc_exists_action=DocExistsAction.ERROR)
 
     def test_add_appdoc_no_action_returns_existing(self):
