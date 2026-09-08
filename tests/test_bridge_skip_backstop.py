@@ -11,6 +11,7 @@ must be free to skip, and it does not read the NDI-matlab tree.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -47,6 +48,20 @@ def _run(tmp_path: Path, filename: str, strict: bool) -> subprocess.CompletedPro
         "PYTHONPATH": str(REPO_ROOT),
         "HOME": str(tmp_path),
     }
+    if sys.platform == "win32":
+        # Windows needs SystemRoot in the child's environment for Winsock
+        # (and thus asyncio's ``_overlapped``) to initialize -- without it,
+        # ``import asyncio`` in the subprocess fails with WinError 10106
+        # (WSAEPROVIDERFAILEDINIT) the moment any imported module touches
+        # asyncio. That surfaces here as the zarr pytest-plugin failing
+        # at collection time, because its top-level ``import zarr`` pulls
+        # in ``zarr.api.asynchronous`` which imports asyncio; the parent
+        # pytest inherits SystemRoot and runs fine. See #277 and
+        # https://bugs.python.org/issue20614. TEMP/TMP go with it so
+        # ``tempfile`` in the child does not fall back to a broken path.
+        for var in ("SystemRoot", "SystemDrive", "TEMP", "TMP"):
+            if var in os.environ:
+                env[var] = os.environ[var]
     if strict:
         env[STRICT_ENV_VAR] = "1"
     return subprocess.run(
