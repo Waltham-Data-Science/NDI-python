@@ -853,6 +853,12 @@ functions:
       `except Exception: pass`, where a listing call that had stopped working was
       indistinguishable from an empty remote. Now logged (commit 21a4e4b on this
       branch).
+      2026-09-08: manifest ids are now resolved by ndi.cloud.upload.document_id,
+      which reads ndiId, then base.id, then id. Reading only the first two meant a
+      document enumerated from a dataset -- which carries base.id and neither of
+      the others -- resolved to "", so the manifest came back as a list of empty
+      strings and no caller could tell which documents had landed. Found wiring
+      the sync path to send real documents (NDI-python#232).
 
   - name: zipForUpload
     matlab_path: "+ndi/+cloud/+upload/zipForUpload.m"

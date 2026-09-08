@@ -20,11 +20,15 @@ The binary half did not. ``mirrorToRemote`` uploaded files inside a
 ``uploadFilesForDatasetDocuments`` does not raise on a per-file failure, it
 returns a count, so the except clause could not see the ordinary case at
 all. The documents went into the index as synced regardless.
+
+Since NDI-python#232 the answer is MATLAB's rather than a milder version of
+it: a binary failure ABORTS before the index is written, the way MATLAB's
+uploadNew returns early with "Sync index not updated". Withholding just the
+affected documents would also have been safe; aborting is what MATLAB does,
+and it is the stronger of the two.
 """
 
 from __future__ import annotations
-
-import json
 
 import pytest
 
@@ -33,6 +37,8 @@ import ndi.cloud.sync.operations as ops
 import ndi.cloud.upload as upload
 from ndi.cloud.sync.index import SyncIndex
 from ndi.cloud.sync.mode import SyncOptions
+
+from .conftest import FakeDataset, make_document
 
 CLOUD_ID = "65a1b2c3d4e5f60718293a4b"
 
@@ -46,25 +52,21 @@ class _Client:
 
 
 def _dataset(tmp_path, doc_ids):
-    """A dataset directory whose index and document files agree."""
-    doc_dir = tmp_path / ".ndi" / "documents"
-    doc_dir.mkdir(parents=True)
+    """A dataset holding documents that each carry one binary on disk."""
+    documents = []
     for doc_id in doc_ids:
-        (doc_dir / f"{doc_id}.json").write_text(
-            json.dumps(
-                {
-                    "ndiId": doc_id,
-                    "base": {"id": doc_id},
-                    "file_uid": f"uid-{doc_id}",
-                    "file_path": str(tmp_path / f"{doc_id}.bin"),
-                }
+        (tmp_path / f"{doc_id}.bin").write_bytes(b"data")
+        documents.append(
+            make_document(
+                doc_id,
+                file_uid=f"uid-{doc_id}",
+                file_path=str(tmp_path / f"{doc_id}.bin"),
             )
         )
-        (tmp_path / f"{doc_id}.bin").write_bytes(b"data")
     index = SyncIndex.read(tmp_path)
     index.update(list(doc_ids), [])
     index.write(tmp_path)
-    return tmp_path
+    return FakeDataset(tmp_path, documents)
 
 
 @pytest.fixture(autouse=True)
@@ -145,30 +147,36 @@ class TestTheFileReportNamesTheDocuments:
 
 
 class TestMirrorToRemoteWithholdsThem:
-    def test_a_document_whose_binary_failed_is_not_in_the_index(
+    def test_a_document_whose_binary_failed_stops_the_index_write(
         self, monkeypatch, tmp_path, empty_remote, documents_upload
     ):
+        """MATLAB's uploadNew returns early on a binary failure with "Sync
+        index not updated" (NDI-matlab 8c31a8f28), so the run records
+        nothing. Either way the documents whose data did not arrive are not
+        claimed as synced -- this is the stronger of the two."""
         ds = _dataset(tmp_path, ["a", "b"])
         _binaries(monkeypatch, {"b"})
 
-        report = ops.mirrorToRemote(
-            str(ds), CLOUD_ID, SyncOptions(sync_files=True), client=_Client()
+        success, message, report = ops.mirrorToRemote(
+            ds, CLOUD_ID, SyncOptions(sync_files=True), client=_Client()
         )
 
+        assert success is False
+        assert "sync index not updated" in message
         assert sorted(report["uploaded_document_ids"]) == ["a", "b"]
         assert report["failed"] == ["b"]
-        assert set(SyncIndex.read(ds).remote_doc_ids_last_sync) == {"a"}
+        assert SyncIndex.read(tmp_path).remote_doc_ids_last_sync == []
 
     def test_a_clean_run_records_both(self, monkeypatch, tmp_path, empty_remote, documents_upload):
         ds = _dataset(tmp_path, ["a", "b"])
         _binaries(monkeypatch, set())
 
-        report = ops.mirrorToRemote(
-            str(ds), CLOUD_ID, SyncOptions(sync_files=True), client=_Client()
+        _ok, _msg, report = ops.mirrorToRemote(
+            ds, CLOUD_ID, SyncOptions(sync_files=True), client=_Client()
         )
 
         assert report["failed"] == []
-        assert set(SyncIndex.read(ds).remote_doc_ids_last_sync) == {"a", "b"}
+        assert set(SyncIndex.read(tmp_path).remote_doc_ids_last_sync) == {"a", "b"}
 
     def test_the_whole_file_pass_falling_over_withholds_everything(
         self, monkeypatch, tmp_path, empty_remote, documents_upload
@@ -182,12 +190,12 @@ class TestMirrorToRemoteWithholdsThem:
 
         monkeypatch.setattr(upload, "uploadFilesForDatasetDocuments", _boom)
 
-        report = ops.mirrorToRemote(
-            str(ds), CLOUD_ID, SyncOptions(sync_files=True), client=_Client()
+        _ok, _msg, report = ops.mirrorToRemote(
+            ds, CLOUD_ID, SyncOptions(sync_files=True), client=_Client()
         )
 
         assert sorted(report["failed"]) == ["a", "b"]
-        assert SyncIndex.read(ds).remote_doc_ids_last_sync == []
+        assert SyncIndex.read(tmp_path).remote_doc_ids_last_sync == []
 
     def test_the_failure_is_logged_with_its_document_ids(
         self, monkeypatch, tmp_path, empty_remote, documents_upload, caplog
@@ -195,7 +203,7 @@ class TestMirrorToRemoteWithholdsThem:
         ds = _dataset(tmp_path, ["a", "b"])
         _binaries(monkeypatch, {"b"})
         with caplog.at_level("WARNING", logger="ndi.cloud.sync.operations"):
-            ops.mirrorToRemote(str(ds), CLOUD_ID, SyncOptions(sync_files=True), client=_Client())
+            ops.mirrorToRemote(ds, CLOUD_ID, SyncOptions(sync_files=True), client=_Client())
         assert "without" in caplog.text
         assert "b" in caplog.text
 
@@ -207,9 +215,9 @@ class TestMirrorToRemoteWithholdsThem:
         ds = _dataset(tmp_path, ["a", "b"])
         _binaries(monkeypatch, {"a", "b"})
 
-        report = ops.mirrorToRemote(
-            str(ds), CLOUD_ID, SyncOptions(sync_files=False), client=_Client()
+        _ok, _msg, report = ops.mirrorToRemote(
+            ds, CLOUD_ID, SyncOptions(sync_files=False), client=_Client()
         )
 
         assert report["failed"] == []
-        assert set(SyncIndex.read(ds).remote_doc_ids_last_sync) == {"a", "b"}
+        assert set(SyncIndex.read(tmp_path).remote_doc_ids_last_sync) == {"a", "b"}

@@ -10,11 +10,20 @@ ID came back -- so a document arriving with a good ``_id`` but a blank
 report said "1 new document" and accounted for it nowhere.
 """
 
+import pytest
+
 import ndi.cloud.download as download_module
 import ndi.cloud.internal as internal
 import ndi.cloud.sync.operations as ops
 from ndi.cloud.sync.index import SyncIndex
 from ndi.cloud.sync.mode import SyncOptions
+
+from .conftest import FakeDataset
+
+
+@pytest.fixture(autouse=True)
+def _no_bulk_settling(monkeypatch):
+    monkeypatch.setattr(ops, "_settle_bulk_uploads", lambda *a, **k: None)
 
 
 def _remote(monkeypatch, ndi_to_api):
@@ -84,10 +93,11 @@ class TestTheDocumentIsNoLongerLostEndToEnd:
     def test_downloadnew_now_saves_the_document_it_used_to_drop(self, tmp_path, monkeypatch):
         """The exact reproduction from the issue: valid _id, blank ndiId."""
         SyncIndex().write(tmp_path)
+        ds = FakeDataset(tmp_path)
         _remote(monkeypatch, {"doc-A": "api-A"})
         _collection_returns(monkeypatch, [{"_id": "api-A", "ndiId": "", "payload": "data"}])
 
-        report = ops.downloadNew(str(tmp_path), "cloud-1", SyncOptions(verbose=False))
+        _ok, _msg, report = ops.downloadNew(ds, "cloud-1", SyncOptions(verbose=False))
 
         assert report["new_count"] == 1
         assert report["downloaded_document_ids"] == ["doc-A"]
@@ -100,10 +110,11 @@ class TestTheDocumentIsNoLongerLostEndToEnd:
         """Nothing maps it back to a requested ID, so it cannot be saved --
         but the report must say so rather than claiming a clean run."""
         SyncIndex().write(tmp_path)
+        ds = FakeDataset(tmp_path)
         _remote(monkeypatch, {"doc-A": "api-A"})
         _collection_returns(monkeypatch, [{"payload": "no identifiers at all"}])
 
-        report = ops.downloadNew(str(tmp_path), "cloud-1", SyncOptions(verbose=False))
+        _ok, _msg, report = ops.downloadNew(ds, "cloud-1", SyncOptions(verbose=False))
 
         assert report["downloaded_document_ids"] == []
         assert report["failed"] == ["doc-A"]  # its api id never came back
@@ -115,8 +126,9 @@ class TestTheDocumentIsNoLongerLostEndToEnd:
 
     def test_every_download_mode_exposes_the_key(self, tmp_path, monkeypatch):
         SyncIndex().write(tmp_path)
+        ds = FakeDataset(tmp_path)
         _remote(monkeypatch, {"doc-A": "api-A"})
         _collection_returns(monkeypatch, [{"_id": "api-A", "ndiId": "doc-A"}])
         for fn in (ops.downloadNew, ops.mirrorFromRemote, ops.twoWaySync):
-            report = fn(str(tmp_path), "cloud-1", SyncOptions(verbose=False))
+            _ok, _msg, report = fn(ds, "cloud-1", SyncOptions(verbose=False))
             assert "unsaved_documents" in report, fn.__name__
