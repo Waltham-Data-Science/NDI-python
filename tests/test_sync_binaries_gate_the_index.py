@@ -113,9 +113,7 @@ class TestTheFileReportNamesTheDocuments:
         ]
         (tmp_path / "a").write_bytes(b"x")
         (tmp_path / "b").write_bytes(b"x")
-        report = upload.uploadFilesForDatasetDocuments(
-            "org-1", CLOUD_ID, docs, client=_Client()
-        )
+        report = upload.uploadFilesForDatasetDocuments("org-1", CLOUD_ID, docs, client=_Client())
         assert report["uploaded"] == 1
         assert report["failed"] == 1
         assert report["failed_document_ids"] == ["b"]
@@ -161,9 +159,7 @@ class TestMirrorToRemoteWithholdsThem:
         assert report["failed"] == ["b"]
         assert set(SyncIndex.read(ds).remote_doc_ids_last_sync) == {"a"}
 
-    def test_a_clean_run_records_both(
-        self, monkeypatch, tmp_path, empty_remote, documents_upload
-    ):
+    def test_a_clean_run_records_both(self, monkeypatch, tmp_path, empty_remote, documents_upload):
         ds = _dataset(tmp_path, ["a", "b"])
         _binaries(monkeypatch, set())
 

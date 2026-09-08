@@ -24,68 +24,46 @@
 # list can only shrink; nothing can be added to it without a deliberate edit
 # that a reviewer sees.
 #
-# ONLY THE +cloud CLUSTER IS LEFT. The signature group is done, and so are
-# the body entries outside +ndi/+cloud/ and the 2 comments-only ones. What
-# remains moved together in MATLAB -- bulk uploads and waitForAllBulkUploads,
-# curl instead of websave, signed-URL sets, and the sync pipeline reporting
-# failures it used to bury -- so it wants reading as one change rather than
-# eighteen.
+# THE DRIFT BURN-DOWN IS DONE, BAR ONE. It ran 60 -> 1 in four passes: the 18
+# signature entries (#214), the 16 body entries under src/ndi (#220), the 8
+# non-cloud body entries and the 2 comments-only ones (#224), and the 18 of
+# the +ndi/+cloud/ cluster, which moved together in MATLAB -- bulk uploads
+# and waitForAllBulkUploads, curl instead of websave, signed-URL sets, and
+# the sync pipeline reporting failures it used to bury -- so they were read
+# as one change rather than eighteen.
 #
-# THE `signature` GROUP IS DONE. Those 18 were MATLAB commits that changed a
-# function signature or arguments block -- where a stale hash was most likely
-# hiding a real defect rather than bookkeeping, which is why they went first.
-# Six of them were: startSession had dropped a now-required organizationId,
-# a dataset-scoped query was unreachable from Python, setup.lab duplicated
-# every DAQ system on a second run, session.database_rm ignored the flag it
-# was passed and deleted some documents twice, database.remove had no
-# OnMissing, and the profiles file sat at the umask default beside a 0600
-# secrets file. What remains below is body and comment changes, where a bump
-# after reading the diff is the usual outcome.
+# WHAT IT FOUND. Roughly one entry in three was hiding a real defect, not
+# bookkeeping. The signature pass alone: startSession had dropped a
+# now-required organizationId, a dataset-scoped query was unreachable from
+# Python, setup.lab duplicated every DAQ system on a second run,
+# session.database_rm ignored the flag it was passed and deleted some
+# documents twice, database.remove had no OnMissing, and the profiles file
+# sat at the umask default beside a 0600 secrets file. The cloud pass:
+# waitForAllBulkUploads was ported but never called, so a sync could list the
+# remote mid-extraction; a file the cloud listed but never received was never
+# re-queued; a document archive with nothing to read in it returned an empty
+# list; a transfer URL was never checked for https; a zipped folder
+# downloaded with no extension; and a document whose binary failed to upload
+# was recorded as synced. Each is in the decision_log of its entry.
+#
+# THE POINT BEING: an entry whose hash is stale is not a formality. Read the
+# diff before bumping.
 
 # ---------------------------------------------------------------------------
-# drifted: 18  (all of them the +cloud upload/download/sync cluster)
+# drifted: 1
+#
+# The +cloud cluster is done. One entry stays, and it is a real unported
+# change rather than bookkeeping: NDI-matlab cd3c11673 reconstructs a file
+# series' ingest_locations when a dataset comes down from the cloud, and this
+# side has no file-series support in the cloud path at all. That is NDI-python
+# #215, which is being worked separately. Bumping the hash would claim the
+# entry is current when the gap is exactly what the drift is pointing at, so
+# it stays listed until #215 lands.
 # ---------------------------------------------------------------------------
 drifted:
 
-  # --- body ---
-  - name: url
-    matlab_path: "+ndi/+cloud/+api/url.m"  # 11 commit(s) since
-  - name: downloadGenericFiles
-    matlab_path: "+ndi/+cloud/+download/downloadGenericFiles.m"  # 5 commit(s) since
-  - name: downloadDocumentCollection
-    matlab_path: "+ndi/+cloud/+download/downloadDocumentCollection.m"  # 4 commit(s) since
-  - name: getFile
-    matlab_path: "+ndi/+cloud/+api/+files/getFile.m"  # 3 commit(s) since
-  - name: uploadDataset
-    matlab_path: "+ndi/+cloud/uploadDataset.m"  # 3 commit(s) since
-  - name: zipForUpload
-    matlab_path: "+ndi/+cloud/+upload/zipForUpload.m"  # 3 commit(s) since
-  - name: downloadDatasetFiles
-    matlab_path: "+ndi/+cloud/+download/downloadDatasetFiles.m"  # 2 commit(s) since
   - name: downloadNdiDocuments
-    matlab_path: "+ndi/+cloud/+sync/+internal/downloadNdiDocuments.m"  # 2 commit(s) since
-  - name: downloadNew
-    matlab_path: "+ndi/+cloud/+sync/downloadNew.m"  # 2 commit(s) since
-  - name: mirrorFromRemote
-    matlab_path: "+ndi/+cloud/+sync/mirrorFromRemote.m"  # 2 commit(s) since
-  - name: mirrorToRemote
-    matlab_path: "+ndi/+cloud/+sync/mirrorToRemote.m"  # 2 commit(s) since
-  - name: twoWaySync
-    matlab_path: "+ndi/+cloud/+sync/twoWaySync.m"  # 2 commit(s) since
-  - name: uploadDocumentCollection
-    matlab_path: "+ndi/+cloud/+upload/uploadDocumentCollection.m"  # 2 commit(s) since
-  - name: uploadNew
-    matlab_path: "+ndi/+cloud/+sync/uploadNew.m"  # 2 commit(s) since
-  - name: uploadSingleFile
-    matlab_path: "+ndi/+cloud/uploadSingleFile.m"  # 2 commit(s) since
-  - name: filesNotYetUploaded
-    matlab_path: "+ndi/+cloud/+sync/+internal/filesNotYetUploaded.m"  # 1 commit(s) since
-  - name: helloMatlab
-    matlab_path: "+ndi/+cloud/helloMatlab.m"  # 1 commit(s) since
-  - name: newDataset
-    matlab_path: "+ndi/+cloud/+upload/newDataset.m"  # 1 commit(s) since
-
-  # --- comments-only ---
+    matlab_path: "+ndi/+cloud/+sync/+internal/downloadNdiDocuments.m"  # 1 commit(s) since (#215)
 
 # ---------------------------------------------------------------------------
 # no_hash: 92

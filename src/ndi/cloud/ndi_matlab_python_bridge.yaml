@@ -410,7 +410,7 @@ functions:
 
   - name: uploadDataset
     matlab_path: "+ndi/+cloud/uploadDataset.m"
-    matlab_last_sync_hash: "629d9bad"
+    matlab_last_sync_hash: "abc6ad2a2"
     python_path: "ndi/cloud/orchestration.py"
     input_arguments:
       - name: dataset
@@ -451,6 +451,17 @@ functions:
       The dataset is asked by duck typing rather than isinstance, so a
       caller passing a stand-in for the dataset is not blocked by a method
       it never claimed to have.
+      2026-09-08: examined against abc6ad2a2 (was 629d9bad). Three commits, none
+      needing a change here. 3cde88c87 adds the ingestion gate at the top of
+      uploadDataset; orchestration.uploadDataset already has it and already
+      returns (False, "", message) rather than raising. abc6ad2a2 fixes that
+      gate's early return, which in MATLAB left cloudDatasetId unassigned and so
+      raised "Output argument not assigned" instead of returning the message it
+      had just written -- a MATLAB output-contract bug with no Python shape, since
+      the tuple is constructed at the return. 9a0465b38 routes a failed
+      createDataset through a new formatApiError helper that tolerates an empty
+      response body; this side already has ndi.cloud.internal.formatApiError
+      (internal.py:381) and already uses it (client.py:394).
 
   - name: syncDataset
     matlab_path: "+ndi/+cloud/syncDataset.m"
@@ -485,7 +496,7 @@ functions:
 
   - name: helloMatlab
     matlab_path: "+ndi/+cloud/helloMatlab.m"
-    matlab_last_sync_hash: "0e2caa09"
+    matlab_last_sync_hash: "fd226f6d1"
     python_path: "ndi/cloud/orchestration.py"
     input_arguments:
       - name: timeout_seconds
@@ -521,6 +532,10 @@ functions:
       four outputs unpack in order -- success, sessionId, statusMessage,
       sessionDoc -- while still reading as result.statusMessage in Python.
       The output NAMES keep MATLAB's spelling per Rule 3.
+      2026-09-08: examined against fd226f6d1 (was 0e2caa09). One commit, threading
+      organizationId through startSession. Already ported: startSession takes
+      organization_id and omits the field when it is empty, and helloMatlab
+      threads it (both landed in the signature burn-down, #214).
 
       Three differences from the MATLAB source, all forced by the Python
       client:
@@ -543,7 +558,7 @@ functions:
 
   - name: newDataset
     matlab_path: "+ndi/+cloud/+upload/newDataset.m"
-    matlab_last_sync_hash: "80092b7c"
+    matlab_last_sync_hash: "ab4c040c8"
     python_path: "ndi/cloud/orchestration.py"
     input_arguments:
       - name: dataset
@@ -562,6 +577,11 @@ functions:
     decision_log: >
       MATLAB places this in +upload; Python places it in orchestration.py
       as a high-level convenience. Name exact match.
+      2026-09-08: examined against ab4c040c8 (was 80092b7c). One commit, retiring
+      uploadToNDICloud and scanForUpload and making newDataset a wrapper over
+      uploadDataset. Already matched here: both functions were removed in the
+      port of NDI-matlab#965, and orchestration.newDataset already delegates to
+      uploadDataset. See the note left in cloud/upload.py where they stood.
 
   - name: load_dataset_from_json_dir
     matlab_path: "N/A"
@@ -589,7 +609,7 @@ functions:
   # --- download.py functions ---
   - name: downloadDocumentCollection
     matlab_path: "+ndi/+cloud/+download/downloadDocumentCollection.m"
-    matlab_last_sync_hash: "fbf6d337"
+    matlab_last_sync_hash: "e1a641f0b"
     python_path: "ndi/cloud/download.py"
     input_arguments:
       - name: dataset_id
@@ -618,7 +638,20 @@ functions:
     output_arguments:
       - name: documents
         type_python: "list[dict[str, Any]]"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match.
+      2026-09-08: examined against e1a641f0b (was fbf6d337). Four commits.
+      91b851b57 (curl instead of websave) does not port. f48f2efc6 refuses an
+      archive that is not exactly one file, because MATLAB read unzippedFiles{1}
+      and ignored the rest -- a chunk the server split came back short with no
+      error. This side already reads every .json entry, so the split case was
+      never lossy here and "exactly one" would give up behaviour MATLAB does not
+      have; what did port is the other half, an archive with no JSON at all
+      returning [] indistinguishably from an empty chunk. Now
+      UnexpectedDocumentArchive, raised so it escapes the poll loop rather than
+      being retried to a TimeoutError naming the wrong cause (commit 5f36a94 on
+      this branch). c078eba99 and e1a641f0b are MATLAB test-reach work for that
+      check.
 
   - name: downloadFilesForDocument
     matlab_path: "N/A"
@@ -640,7 +673,7 @@ functions:
 
   - name: downloadDatasetFiles
     matlab_path: "+ndi/+cloud/+download/downloadDatasetFiles.m"
-    matlab_last_sync_hash: "211a705e"
+    matlab_last_sync_hash: "ac2df649e"
     python_path: "ndi/cloud/download.py"
     input_arguments:
       - name: dataset_id
@@ -661,6 +694,12 @@ functions:
     decision_log: >
       MATLAB takes (cloudDatasetId, targetFolder, fileUuids, options).
       Python takes (dataset_id, documents, target_dir). Exact name match.
+      2026-09-08: examined against ac2df649e (was 211a705e). Two commits.
+      57aa9d7da (curl instead of websave) does not port. ac2df649e sanitises a
+      server-supplied file uid before using it as a path component, since
+      "../../x" reaches the download as a filename; this side already refuses one,
+      through safeLocalFilename and _contained_path, so the fix is present rather
+      than needed.
 
   - name: jsons2documents
     matlab_path: "N/A"
@@ -683,7 +722,7 @@ functions:
 
   - name: downloadGenericFiles
     matlab_path: "+ndi/+cloud/+download/downloadGenericFiles.m"
-    matlab_last_sync_hash: "cafbfe74"
+    matlab_last_sync_hash: "65aeeeb23"
     python_path: "ndi/cloud/download.py"
     input_arguments:
       - name: ndi_dataset
@@ -717,7 +756,22 @@ functions:
         type_python: "str"
       - name: report
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match.
+      2026-09-08: examined against 65aeeeb23 (was cafbfe74). Five commits.
+      0d32073fc ported: a generic_file that was a directory is stored zipped, and
+      a directory name has no extension, so the download was named after the
+      folder with nothing to say it is an archive. The stored location knows, and
+      was not being read. a8a4e5379 (curl instead of websave) does not port --
+      this side transfers through requests. afeb4abba hardens MATLAB's error
+      message when getFileDetails fails, reading answer.error before
+      answer.message; here the failure surfaces as an exception or an absent
+      downloadUrl, both already logged and skipped per file. 2c06166fc routes the
+      per-file lookups through batchSignedUrlLookup and 65aeeeb23 extracts the
+      list builder so that could be covered offline; Python has no
+      batchSignedUrlLookup at all, which is a performance gap recorded on that
+      entry, and the extraction is a MATLAB testability refactor with nothing to
+      mirror.
 
   - name: safeLocalFilename
     matlab_path: "+ndi/+cloud/+download/+internal/safeLocalFilename.m"
@@ -764,7 +818,7 @@ functions:
   # --- upload.py functions ---
   - name: uploadDocumentCollection
     matlab_path: "+ndi/+cloud/+upload/uploadDocumentCollection.m"
-    matlab_last_sync_hash: "f3d00bad"
+    matlab_last_sync_hash: "e96801dee"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
       - name: dataset_id
@@ -786,11 +840,23 @@ functions:
     output_arguments:
       - name: result
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match.
+      2026-09-08: examined against e96801dee (was f3d00bad). Two commits.
+      29546720b makes the caller read the ok flag this function returns rather
+      than assuming success; the report here already carries status and errors,
+      and the sync callers already act on them. e96801dee fixes an unqualified
+      jsonencodenan call on MATLAB's serial upload path -- a package-resolution
+      mistake Python cannot make. What did port is the reason its commit message
+      gives for the bug surviving: a catch that recorded a failure and discarded
+      the exception. The same shape was here, in the only_missing listing's
+      `except Exception: pass`, where a listing call that had stopped working was
+      indistinguishable from an empty remote. Now logged (commit 21a4e4b on this
+      branch).
 
   - name: zipForUpload
     matlab_path: "+ndi/+cloud/+upload/zipForUpload.m"
-    matlab_last_sync_hash: "97ead30b"
+    matlab_last_sync_hash: "8c31a8f28"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
       - name: documents
@@ -807,7 +873,20 @@ functions:
         type_python: "Path"
       - name: doc_ids
         type_python: "list[str]"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match.
+      2026-09-08: examined against 8c31a8f28 (was 97ead30b). Three commits, none
+      of which lands in this function, because the two sides zip different things:
+      MATLAB's zipForUpload batches binary files off disk, while this one
+      serialises document JSON. a42d77162 takes each entry's file_path instead of
+      rebuilding it as base_dir/uid; the equivalent code here is
+      uploadFilesForDatasetDocuments, which already reads the document's own
+      file_path. d9213ccb7 is the bulk-upload status work, recorded on
+      uploadSingleFile. 8c31a8f28 makes a file missing from disk a batch failure
+      rather than a silent skip; the same requirement -- a document whose binary
+      did not upload must not be recorded as synced -- is now enforced on this
+      side where the binaries are actually sent, in uploadFilesForDatasetDocuments
+      and mirrorToRemote (commit 8b6351c on this branch).
 
   - name: uploadFilesForDatasetDocuments
     matlab_path: "+ndi/+cloud/+sync/+internal/uploadFilesForDatasetDocuments.m"
@@ -835,7 +914,7 @@ functions:
 
   - name: uploadSingleFile
     matlab_path: "+ndi/+cloud/uploadSingleFile.m"
-    matlab_last_sync_hash: "7026d493"
+    matlab_last_sync_hash: "d9213ccb7"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
       - name: dataset_id
@@ -859,7 +938,15 @@ functions:
         type_python: "bool"
       - name: error_message
         type_python: "str"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match.
+      2026-09-08: examined against d9213ccb7 (was 7026d493). Two commits.
+      39ac4cabe forwards useCurl through the bulk branch and does not port.
+      d9213ccb7 adds the bulk-upload status API and a waitForCompletion option on
+      putFiles; both are present here (api.files.getBulkUploadStatus,
+      waitForBulkUpload, and putFiles' wait_for_completion), and the sync side now
+      settles outstanding bulk uploads before it lists the remote (commit 73b89fd
+      on this branch).
 
   - name: uploadToNDICloud
     matlab_path: "N/A"
@@ -1060,7 +1147,7 @@ functions:
 
   - name: filesNotYetUploaded
     matlab_path: "+ndi/+cloud/+sync/+internal/filesNotYetUploaded.m"
-    matlab_last_sync_hash: "92369e08"
+    matlab_last_sync_hash: "8c31a8f28"
     python_path: "ndi/cloud/internal.py"
     input_arguments:
       - name: file_manifest
@@ -1078,6 +1165,12 @@ functions:
     decision_log: >
       MATLAB places this in +sync/+internal. Python places it in
       internal.py. Exact name match.
+      2026-09-08: examined against 8c31a8f28 (was 92369e08). One commit, and it
+      ported: a remote file entry with no `uploaded` field was being treated as
+      already uploaded, so a file the cloud had listed but never received was
+      never re-queued. Now missing entry, uploaded: false, and a missing
+      `uploaded` field all queue the file, the last of them with a warning
+      (commit e3f1b8c on this branch).
 
   - name: validateSync
     matlab_path: "N/A"

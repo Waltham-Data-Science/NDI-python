@@ -7,11 +7,6 @@ left with a result that looks complete and is not.
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
-import pytest
-
 
 class _Doc:
     def __init__(self, props):
@@ -204,7 +199,7 @@ class TestAFailedRemoteListingExplainsItself:
             raise RuntimeError("403 from /documents")
 
         with caplog.at_level("WARNING", logger="ndi.cloud.upload"):
-            report = self._upload(monkeypatch, _boom)
+            self._upload(monkeypatch, _boom)
         assert "403 from /documents" in caplog.text
         assert "only_missing" in caplog.text
 
