@@ -103,7 +103,7 @@ drifted:
     matlab_path: "+ndi/+cloud/+api/+users/me.m"  # 1 commit(s) since
 
 # ---------------------------------------------------------------------------
-# no_hash: 115
+# no_hash: 104
 #
 # An entry with a matlab_path and no matlab_last_sync_hash can never show
 # drift, so it claims its port is current forever and no check can contradict
@@ -307,28 +307,6 @@ no_hash:
     matlab_path: "+ndi/+util/datasetSummary.m"
   - name: sessionSummary
     matlab_path: "+ndi/+util/sessionSummary.m"
-  - name: mustBeCellArrayOfClass
-    matlab_path: "+ndi/+validators/mustBeCellArrayOfClass.m"
-  - name: mustBeCellArrayOfNdiSessions
-    matlab_path: "+ndi/+validators/mustBeCellArrayOfNdiSessions.m"
-  - name: mustBeCellArrayOfNonEmptyCharacterArrays
-    matlab_path: "+ndi/+validators/mustBeCellArrayOfNonEmptyCharacterArrays.m"
-  - name: mustBeClassnameOfType
-    matlab_path: "+ndi/+validators/mustBeClassnameOfType.m"
-  - name: mustBeEpochInput
-    matlab_path: "+ndi/+validators/mustBeEpochInput.m"
-  - name: mustBeID
-    matlab_path: "+ndi/+validators/mustBeID.m"
-  - name: mustBeNumericClass
-    matlab_path: "+ndi/+validators/mustBeNumericClass.m"
-  - name: mustBeTextLike
-    matlab_path: "+ndi/+validators/mustBeTextLike.m"
-  - name: mustHaveFields
-    matlab_path: "+ndi/+validators/mustHaveFields.m"
-  - name: mustHaveRequiredColumns
-    matlab_path: "+ndi/+validators/mustHaveRequiredColumns.m"
-  - name: mustMatchRegex
-    matlab_path: "+ndi/+validators/mustMatchRegex.m"
   - name: app
     matlab_path: "+ndi/app.m"
   - name: document
