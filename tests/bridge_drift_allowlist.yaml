@@ -255,22 +255,6 @@ no_hash:
     matlab_path: "+ndi/+fun/stimulustemporalfrequency.m"
   - name: timestamp
     matlab_path: "+ndi/+fun/timestamp.m"
-  - name: ndi_gui_component_abstract_ProgressMonitor
-    matlab_path: "+ndi/+gui/+component/+abstract/ProgressMonitor.m"
-  - name: ndi_gui_component_internal_event_MessageUpdatedEventData
-    matlab_path: "+ndi/+gui/+component/+internal/+event/MessageUpdatedEventData.m"
-  - name: ndi_gui_component_internal_event_ProgressUpdatedEventData
-    matlab_path: "+ndi/+gui/+component/+internal/+event/ProgressUpdatedEventData.m"
-  - name: ndi_gui_component_internal_AsynchProgressTracker
-    matlab_path: "+ndi/+gui/+component/+internal/AsynchProgressTracker.m"
-  - name: ndi_gui_component_internal_ProgressTracker
-    matlab_path: "+ndi/+gui/+component/+internal/ProgressTracker.m"
-  - name: ndi_gui_component_CommandWindowProgressMonitor
-    matlab_path: "+ndi/+gui/+component/CommandWindowProgressMonitor.m"
-  - name: ndi_gui_component_NDIProgressBar
-    matlab_path: "+ndi/+gui/+component/NDIProgressBar.m"
-  - name: ndi_gui_component_ProgressBarWindow
-    matlab_path: "+ndi/+gui/+component/ProgressBarWindow.m"
   - name: centerFigure
     matlab_path: "+ndi/+gui/+utility/centerFigure.m"
   - name: ndi_gui_Data
