@@ -189,7 +189,14 @@ classes:
   - name: cedspike2
     type: class
     matlab_path: "+ndi/+daq/+reader/+mfdaq/cedspike2.m"
-    matlab_last_sync_hash: "fe64a9f5"
+    matlab_last_sync_hash: "ca2d556aa"
+    decision_log: >
+      NDI-matlab ca2d556aa routed every CED read through ndr.format.ced so
+      64-bit son64/.smrx files dispatch to sonpipe, replacing the bare
+      read_CED_SOMSMR_* and SONChannelInfo calls. Nothing to port: this reader
+      has always gone through NDR-python's read_SOMSMR_header /
+      read_SOMSMR_datafile / read_SOMSMR_sampleinterval and has always listed
+      .smrx beside .smr. MATLAB caught up.
     python_path: "ndi/daq/reader/mfdaq/cedspike2.py"
     python_class: "ndi_daq_reader_mfdaq_cedspike2"
     inherits: "ndi.daq.reader.mfdaq_reader"

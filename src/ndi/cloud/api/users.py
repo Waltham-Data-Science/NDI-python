@@ -41,7 +41,17 @@ def createUser(
 def me(*, client: _Client = None) -> dict[str, Any]:
     """GET /users/me -- Get the authenticated user's profile.
 
-    The response includes the user's organization memberships.
+    The response includes ``organizations``: a list of dicts with ``id``,
+    ``name`` and ``canUploadDataset``. That list is where a caller finds
+    the organization id :func:`ndi.cloud.api.compute.startSession` needs --
+    the backend refuses a start for anyone in more than one organization
+    without it.
+
+    MATLAB's ``ndi.cloud.api.users.me`` additionally derives parallel
+    ``organizationID`` / ``organizationName`` /
+    ``organizationCanUploadDataset`` arrays from that list, which is a
+    MATLAB idiom for reaching into an array of structs; the list of dicts
+    is the same information in the shape Python already has.
     """
     return client.get("/users/me")
 
