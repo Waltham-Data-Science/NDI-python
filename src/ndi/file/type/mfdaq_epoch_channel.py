@@ -20,6 +20,39 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+#: MATLAB folds these three channel types into one synthetic type before
+#: assigning groups, so they share a group counter and a data class.
+EVENTMARKTEXT = "eventmarktext"
+EVENTMARKTEXT_TYPES = ("event", "marker", "text")
+
+#: MATLAB's per-type defaults for how many channels go in one storage group.
+CHANNELS_PER_GROUP = {
+    "analog_in": 400,
+    "analog_out": 400,
+    "auxiliary_in": 400,
+    "auxiliary_out": 400,
+    "digital_in": 512,
+    "digital_out": 512,
+    EVENTMARKTEXT: 100000,
+    "time": 100000,
+}
+
+#: A type MATLAB has no group size for gets one group; MATLAB would error on
+#: its `eval`, which is not a better answer.
+DEFAULT_CHANNELS_PER_GROUP = 100000
+
+#: MATLAB's per-type data classes.
+TYPE_DATACLASS = {
+    "analog_in": "ephys",
+    "analog_out": "ephys",
+    "auxiliary_in": "ephys",
+    "auxiliary_out": "ephys",
+    "digital_in": "digital",
+    "digital_out": "digital",
+    EVENTMARKTEXT: "eventmarktext",
+    "time": "time",
+}
+
 
 @dataclass
 class ChannelInfo:
@@ -105,23 +138,92 @@ class ndi_file_type_mfdaq__epoch__channel:
         **kwargs: Any,
     ) -> ndi_file_type_mfdaq__epoch__channel:
         """
-        Create/set channel properties from a structure.
+        Derive channel properties from a channel structure.
 
         MATLAB equivalent: ndi.file.type.mfdaq_epoch_channel/create_properties
 
+        The caller supplies ``name``, ``type``, ``time_channel``,
+        ``sample_rate``, ``offset`` and ``scale``.  This DERIVES the other
+        three -- ``number`` from the channel name, ``group`` from that number
+        and the per-type group size, and ``dataclass`` from the type -- and
+        returns the channels sorted by type and then by channel number.
+
+        It previously copied the input through unchanged, so ``number``,
+        ``group`` and ``dataclass`` were whatever the caller had supplied, or
+        the dataclass defaults of 0, 0 and ''.  ``channelgroupdecoding``
+        reads ``group``, so segmented storage built this way decoded every
+        channel into group 0.
+
         Args:
-            channel_structure: List of channel dicts or ChannelInfo objects
-            **kwargs: Additional keyword arguments (reserved for future use)
+            channel_structure: List of channel dicts or ChannelInfo objects.
+            **kwargs: Per-type group sizes and data classes, as MATLAB's
+                name/value pairs: ``analog_in_channels_per_group`` (400),
+                ``analog_out_channels_per_group`` (400),
+                ``auxiliary_in_channels_per_group`` (400),
+                ``auxiliary_out_channels_per_group`` (400),
+                ``digital_in_channels_per_group`` (512),
+                ``digital_out_channels_per_group`` (512),
+                ``eventmarktext_channels_per_group`` (100000),
+                ``time_channels_per_group`` (100000), and the matching
+                ``*_dataclass`` names.
 
         Returns:
             Self for chaining
         """
-        self.channel_information = []
-        for item in channel_structure:
-            if isinstance(item, ChannelInfo):
-                self.channel_information.append(item)
-            elif isinstance(item, dict):
-                self.channel_information.append(ChannelInfo.from_dict(item))
+        from ndi.fun.utils import channelname2prefixnumber
+
+        channels = [
+            item if isinstance(item, ChannelInfo) else ChannelInfo.from_dict(item)
+            for item in channel_structure
+        ]
+
+        group_sizes = dict(CHANNELS_PER_GROUP)
+        dataclasses = dict(TYPE_DATACLASS)
+        for key, value in kwargs.items():
+            if key.endswith("_channels_per_group"):
+                group_sizes[key[: -len("_channels_per_group")]] = value
+            elif key.endswith("_dataclass"):
+                dataclasses[key[: -len("_dataclass")]] = value
+
+        # MATLAB folds event, marker and text into one synthetic type before
+        # grouping, so they share a group counter and a dataclass.
+        types_available = sorted({ch.type for ch in channels} - set(EVENTMARKTEXT_TYPES))
+        if any(ch.type in EVENTMARKTEXT_TYPES for ch in channels):
+            types_available.append(EVENTMARKTEXT)
+
+        information: list[ChannelInfo] = []
+        for type_name in types_available:
+            if type_name == EVENTMARKTEXT:
+                members = [ch for ch in channels if ch.type in EVENTMARKTEXT_TYPES]
+            else:
+                members = [ch for ch in channels if ch.type == type_name]
+
+            numbered = []
+            for ch in members:
+                _, number = channelname2prefixnumber(ch.name)
+                numbered.append((number, ch))
+            numbered.sort(key=lambda pair: pair[0])
+
+            per_group = group_sizes.get(type_name, DEFAULT_CHANNELS_PER_GROUP)
+            data_class = dataclasses.get(type_name, "")
+
+            for number, ch in numbered:
+                information.append(
+                    ChannelInfo(
+                        name=ch.name,
+                        type=ch.type,
+                        time_channel=ch.time_channel,
+                        sample_rate=ch.sample_rate,
+                        offset=ch.offset,
+                        scale=ch.scale,
+                        number=number,
+                        # MATLAB: 1 + floor(number / channels_per_group).
+                        group=1 + number // per_group,
+                        dataclass=data_class,
+                    )
+                )
+
+        self.channel_information = information
         return self
 
     def readFromFile(self, filename: str) -> ndi_file_type_mfdaq__epoch__channel:

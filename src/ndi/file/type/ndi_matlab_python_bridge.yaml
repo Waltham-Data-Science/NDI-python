@@ -17,9 +17,37 @@ classes:
   - name: mfdaq_epoch_channel
     type: class
     matlab_path: "+ndi/+file/+type/mfdaq_epoch_channel.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/file/type/mfdaq_epoch_channel.py"
     python_class: "ndi_file_type_mfdaq__epoch__channel"
     inherits: ""
+    decision_log: >
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit,
+      and CREATE_PROPERTIES DERIVED NOTHING. MATLAB's whole job there is to
+      compute the three fields a caller does not supply: number, from the
+      channel name through ndi.fun.channelname2prefixnumber; group, as 1 +
+      floor(number / channels_per_group) with per-type sizes (400 for the four
+      analog and auxiliary types, 512 for the two digital ones, 100000 for
+      time and for the synthetic 'eventmarktext' type that event, marker and
+      text are folded into); and dataclass, per type. It also sorts by type
+      and then by channel number, and takes name/value overrides for all eight
+      group sizes. The port copied its input through ChannelInfo.from_dict and
+      returned, so every channel came out with number 0, group 0 and an empty
+      dataclass, and its **kwargs were documented as "reserved for future
+      use". THE TWO HALVES DID NOT COMPOSE: channelgroupdecoding looks
+      channels up by number, so on properties built this way it raised
+      'Channel number 0 found multiple times in record' for any request at
+      all. Ported in full, with the group sizes and dataclasses as module
+      constants and the overrides honoured. Covered by
+      tests/test_file_type_mfdaq_channel_properties.py. ONE PLACE THE PORT IS
+      AHEAD OF MATLAB, left as it is: MATLAB's channelgroupdecoding writes
+      `group_loc = ismember(groups, ci(index).group); if isempty(group_loc)`,
+      and isempty of a logical array is false whenever groups is non-empty --
+      so after the first channel it never opens a second group, and then
+      indexes with a logical array. The port's group bookkeeping is correct.
+      readFromFile and writeToFile match in intent; the port reads both JSON
+      and MATLAB's tab-delimited struct-array format, and MATLAB's writeToFile
+      returns [b, errmsg] as the port does.
 
     properties:
       - name: channel_information
