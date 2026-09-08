@@ -22,6 +22,7 @@ The Qt tests skip without PySide6, as elsewhere in this package.
 from __future__ import annotations
 
 import os
+import sys
 
 import numpy as np
 import pytest
@@ -159,6 +160,10 @@ class TestExportedSorters:
         app = _app(FakeSession(tmp_path, [FakeProbe()]))
         assert app.exported_sorters(app.probes[0]) == ["KIASORT"]
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="Windows filesystems forbid '|' in filenames; legacy folder is unreachable",
+    )
     def test_a_legacy_folders_export_still_counts(self, tmp_path):
         """Data written by an older NDI lives under 'ctx_|_1'. Missing it
         would offer to re-export what is already there."""
