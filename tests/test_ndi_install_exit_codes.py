@@ -57,6 +57,13 @@ def _run(module, argv: list[str], **overrides) -> tuple[int, str]:
     defaults = {
         "check_prerequisites": lambda: [],
         "clone_or_update": lambda *a, **k: True,
+        # Step 2 calls this immediately after clone_or_update, for every
+        # dependency with pip_install set. Leaving it unstubbed shelled out to
+        # a REAL pip install: green in CI, where there is a network and a
+        # writable site-packages, and red anywhere else -- so three cases
+        # failed for a reason that had nothing to do with what they assert.
+        # See NDI-python#267.
+        "pip_install_dependency": lambda *a, **k: True,
         "get_site_packages": lambda: Path("/tmp"),
         "write_pth_file": lambda *a, **k: Path("/tmp/ndi-test.pth"),
         "find_ndi_root": lambda: REPO_ROOT,
@@ -144,3 +151,24 @@ class TestInstallerExitCodes:
     def test_failed_clone_still_exits_nonzero(self, installer):
         code, _ = _run(installer, [], clone_or_update=lambda *a, **k: False)
         assert code == 1
+
+    def test_failed_dependency_pip_install_exits_nonzero(self, installer):
+        """The path the stub added in #267 would otherwise hide.
+
+        Step 2 treats a failed pip install of a dependency exactly as it
+        treats a failed clone -- all_cloned goes false and main returns 1.
+        Nothing covered that, which is part of why the unstubbed call went
+        unnoticed for so long.
+        """
+        code, out = _run(
+            installer,
+            ["--no-validate"],
+            pip_install_dependency=lambda *a, **k: False,
+            # Stubbed so that a REGRESSION stays cheap. If step 2 ever stops
+            # returning 1 here, main() falls through to the later steps; with
+            # these unstubbed that means a real network install on the way to
+            # a failing assert -- the thing #267 was about.
+            install_ndi_and_deps=lambda *a, **k: True,
+        )
+        assert code == 1
+        assert "Some dependencies could not be cloned" in out

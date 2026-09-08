@@ -72,7 +72,17 @@ classes:
         output_arguments:
           - name: doc
             type_python: "list[ndi_document]"
-        decision_log: "Exact match."
+        decision_log: >
+          NOT an exact match -- THIS IS A STUB, and the record said the
+          opposite. See this class's decision_log for what MATLAB's calculate
+          does and what the port does instead; in short, no stimulus response
+          is looked up, no selection constraint is applied, no curve is
+          computed, and a well-formed but empty tuningcurve_calc document is
+          returned for EVERY input, including inputs MATLAB declines by
+          returning no document at all. The class was moved to
+          porting_deferred when this was found (NDI-python#211), but this
+          method's own log still read "Exact match." and so still contradicted
+          the entry above it. Tracked as NDI-python#269.
 
       - name: default_search_for_input_parameters
         input_arguments: []
