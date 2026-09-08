@@ -168,7 +168,19 @@ classes:
   - name: commonTriggersOverlappingEpochs
     type: class
     matlab_path: "+ndi/+time/+syncrule/commonTriggersOverlappingEpochs.m"
-    matlab_last_sync_hash: "ca27911b"
+    matlab_last_sync_hash: "8736980ca"
+    decision_log: >
+      NOT PORTED, and it is a real gap rather than a no-op. NDI-matlab
+      8736980ca stops a trigger-count mismatch from being fatal: it logs the
+      counts and the two epoch ids, then falls back to
+      ndi.time.fun.syncTriggerTrains to align trains of unequal length. Python
+      raises ValueError("Trigger count mismatch") instead, so a synchronisation
+      MATLAB now completes is refused here -- and a missing pulse, which is
+      what the fallback exists for, is ordinary in real recordings. Porting it
+      means porting syncTriggerTrains, a train-alignment algorithm this repo
+      does not have; that is its own piece of work, not a hash bump. The
+      earlier commits in this range only revert and re-comment the map_coeffs
+      order, which Python already has right.
     python_path: "ndi/time/syncrule/common_triggers_overlapping_epochs.py"
     python_class: "ndi_time_syncrule_commonTriggersOverlappingEpochs"
     inherits: "ndi.time.syncrule"
