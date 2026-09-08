@@ -186,5 +186,3 @@ no_hash:
     matlab_path: "+ndi/+util/datasetSummary.m"
   - name: sessionSummary
     matlab_path: "+ndi/+util/sessionSummary.m"
-  - name: document
-    matlab_path: "+ndi/document.m"
