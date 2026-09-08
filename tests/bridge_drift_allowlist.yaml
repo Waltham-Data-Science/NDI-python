@@ -24,13 +24,16 @@
 # list can only shrink; nothing can be added to it without a deliberate edit
 # that a reviewer sees.
 #
-# THE DRIFT BURN-DOWN IS DONE, BAR ONE. It ran 60 -> 1 in four passes: the 18
+# THE DRIFT BURN-DOWN IS DONE. It ran 60 -> 0 in five passes: the 18
 # signature entries (#214), the 16 body entries under src/ndi (#220), the 8
 # non-cloud body entries and the 2 comments-only ones (#224), and the 18 of
 # the +ndi/+cloud/ cluster, which moved together in MATLAB -- bulk uploads
 # and waitForAllBulkUploads, curl instead of websave, signed-URL sets, and
 # the sync pipeline reporting failures it used to bury -- so they were read
-# as one change rather than eighteen.
+# as one change rather than eighteen. The last, downloadNdiDocuments, was
+# held open on purpose until #215 gave the cloud path file-series support,
+# because bumping its hash would have claimed the entry was current when
+# that missing support was exactly what its drift pointed at.
 #
 # WHAT IT FOUND. Roughly one entry in three was hiding a real defect, not
 # bookkeeping. The signature pass alone: startSession had dropped a
@@ -50,20 +53,14 @@
 # diff before bumping.
 
 # ---------------------------------------------------------------------------
-# drifted: 1
+# drifted: EMPTY. No bridge entry is behind its MATLAB counterpart.
 #
-# The +cloud cluster is done. One entry stays, and it is a real unported
-# change rather than bookkeeping: NDI-matlab cd3c11673 reconstructs a file
-# series' ingest_locations when a dataset comes down from the cloud, and this
-# side has no file-series support in the cloud path at all. That is NDI-python
-# #215, which is being worked separately. Bumping the hash would claim the
-# entry is current when the gap is exactly what the drift is pointing at, so
-# it stays listed until #215 lands.
+# Nothing may be added back. An entry that drifts and is not listed here
+# fails test_no_entry_has_drifted immediately, and TestTheAllowlistOnlyShrinks
+# fails if a listed entry no longer drifts -- so this file cannot be used to
+# park a new problem, and a fixed entry must be delisted in the same PR.
 # ---------------------------------------------------------------------------
-drifted:
-
-  - name: downloadNdiDocuments
-    matlab_path: "+ndi/+cloud/+sync/+internal/downloadNdiDocuments.m"  # 1 commit(s) since (#215)
+drifted: []
 
 # ---------------------------------------------------------------------------
 # no_hash: EMPTY. Every entry that names a matlab_path now carries a

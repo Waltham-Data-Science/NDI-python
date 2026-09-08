@@ -597,7 +597,7 @@ functions:
 
   - name: downloadNdiDocuments
     matlab_path: "+ndi/+cloud/+sync/+internal/downloadNdiDocuments.m"
-    matlab_last_sync_hash: "211a705e"
+    matlab_last_sync_hash: "cd3c11673"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: cloud_dataset_id
@@ -616,8 +616,39 @@ functions:
       - name: failed_ids
         type_python: "list[str]"
     decision_log: >
-      MATLAB places this in +sync/+internal. Python places it in
-      operations.py. Exact name match.
+      MATLAB places this in +sync/+internal; Python places it in
+      operations.py. Examined against NDI-matlab cd3c11673, clearing the two
+      commits that had accumulated since 211a705e. This entry was the last one
+      in the drift allowlist, held deliberately because the second of those
+      changes had no Python counterpart at all.
+      (1) NDI-matlab 7efa0a8a0 added a warning for a PARTIAL download -- ask
+      for 50 documents, receive 47 -- which is what silent cloud pagination
+      produces and which previously passed through without a word. Already
+      ported: downloadNdiDocuments logs it, computed from which requested api
+      ids came back rather than from a count. MATLAB additionally guards on
+      isDownloadAllRequest, its empty-string "download everything" mode; there
+      is no such mode here (an empty ids_to_download returns early), so the
+      guard has no counterpart and needs none. MATLAB raises a warning with
+      identifier NDI:cloud:sync:PartialDownload where this logs at warning
+      level; left as is, the callers already keep the missing ids out of the
+      sync index either way.
+      (2) NDI-matlab cd3c11673 (#958) threaded cloudDatasetId into
+      updateFileInfoForLocalFiles so reconstructSeriesIngestLocations can
+      build the ndic:// locations of a downloaded series. This is the gap that
+      was NDI-python#215 and it is now closed: reconstructSeriesIngestLocations
+      and updateFileInfoForLocalFiles both exist in ndi/cloud/filehandler.py,
+      and the cloud id is threaded at the call site.
+      STRUCTURAL DIVERGENCE, recorded rather than changed: MATLAB builds the
+      documentUpdateFcn inside downloadNdiDocuments, so the id is threaded
+      there. Here downloadNdiDocuments only fetches, and the rewrite happens in
+      ndi.cloud.orchestration.downloadDataset. Same behaviour, different seam.
+      That seam is why the threading was untested -- cloud_dataset_id is an
+      optional third argument and every test called
+      updateFileInfoForLocalFiles directly, so dropping it at the call site
+      broke nothing any test could see while a downloaded series silently lost
+      its manifest reference. Now pinned by
+      TestTheCloudDatasetIdReachesTheRewrite in
+      tests/test_cloud_download_ordering.py.
 
 # =============================================================================
 # Not-yet-ported MATLAB functions
