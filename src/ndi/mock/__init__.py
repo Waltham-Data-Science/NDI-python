@@ -367,14 +367,49 @@ class ndi_mock_ctest:
         self,
         expected: Any,
         actual: Any,
-    ) -> tuple[bool, str]:
+        scope: str = "",
+        docCompare: Any = None,
+    ) -> tuple[bool, Any]:
         """Compare expected vs actual calculator output.
+
+        MATLAB equivalent: ``compare_mock_docs(expected_doc, actual_doc,
+        scope, docCompare)``. When ``scope`` is ``'highSNR'`` and
+        ``docCompare`` is a :class:`~ndi.doc_comparison.DocComparison`
+        instance, comparison uses the recorded per-field tolerances --
+        which is what MATLAB does. Otherwise this falls through to the
+        exact-equality comparison, matching MATLAB's abstract-class
+        default outside ``highSNR``.
 
         Override in subclasses.
 
+        Args:
+            expected: The stored expected calculator output.
+            actual: The freshly computed calculator output.
+            scope: ``'highSNR'`` or ``'lowSNR'`` (empty means: don't
+                consult ``docCompare``).
+            docCompare: A :class:`~ndi.doc_comparison.DocComparison`
+                object carrying per-field tolerance rules, typically
+                loaded from ``mock.N.compare.json`` via
+                :meth:`load_mock_comparison`.
+
         Returns:
-            Tuple of ``(match, report_string)``.
+            Tuple of ``(match, report)``. ``report`` is a string for
+            exact-comparison results and the list of per-field result
+            dicts returned by :meth:`DocComparison.compare` when a
+            tolerance-based comparison was used, so ``reportSummary`` can
+            name the fields that failed.
         """
+        from ndi.doc_comparison import DocComparison
+
+        if (
+            scope.lower() == "highsnr"
+            and isinstance(docCompare, DocComparison)
+        ):
+            result = docCompare.compare(actual, expected)
+            failures = [r for r in result.get("results", []) if not r.get("passed")]
+            report = [{"name": r["field"], **r} for r in failures]
+            return bool(result["equal"]), report
+
         from ndi.fun.doc import diff
 
         result = diff(expected, actual)
@@ -486,35 +521,114 @@ class ndi_mock_ctest:
     ) -> dict[str, Any]:
         """Run calculator tests and return comparison results.
 
+        MATLAB equivalent: ``[b, reports, b_expected, doc_output,
+        doc_expected_output] = test(...)``. The tolerance rules stored in
+        ``mock.N.compare.json`` are loaded via :meth:`load_mock_comparison`
+        and passed through to :meth:`compare_mock_docs`, so a calculator
+        whose answer is within its own recorded tolerance passes here as
+        it does in MATLAB.
+
+        Args:
+            scope: ``'highSNR'`` or ``'lowSNR'``.
+            number_of_tests: Number of self-tests to run.
+
         Returns:
-            Dict with ``'passed'`` (bool), ``'results'`` (list of tuples).
+            Dict with keys:
+
+            - ``passed``: overall pass/fail (all diagonal ``b_actual``
+              entries must be ``True``).
+            - ``results``: legacy list of ``(match, report)`` tuples,
+              one per test, mirroring the diagonal of ``b_actual``.
+            - ``b_actual``: N-by-N matrix (list of lists) where
+              ``b_actual[i][j]`` is the result of comparing the stored
+              expected output for test ``j`` against the calculator's
+              actual output for test ``i``. ``None`` marks a test that
+              did not run.
+            - ``b_expected``: N-by-N matrix comparing stored expected
+              outputs against each other -- a control for whether two
+              tests were even distinguishable to start with.
+            - ``reports``: matching N-by-N matrix of per-cell reports.
+            - ``doc_output``: list of actual outputs, one per test.
+            - ``doc_expected_output``: list of stored expected outputs.
         """
-        results: list[tuple[bool, str]] = []
-        for i in range(1, number_of_tests + 1):
-            mock_data = self.generate_mock_docs(scope, i)
+        n = number_of_tests
+        doc_output: list[Any] = [None] * n
+        doc_expected_output: list[Any] = [None] * n
+        docComparisons: list[Any] = [None] * n
+        run_errors: list[str | None] = [None] * n
+
+        for i in range(n):
+            docComparisons[i] = self.load_mock_comparison(i + 1)
+
+        for i in range(n):
+            mock_data = self.generate_mock_docs(scope, i + 1)
             expected = mock_data.get("expected_output")
             if expected is None:
-                expected = self.load_mock_expected_output(i)
+                expected = self.load_mock_expected_output(i + 1)
+            doc_expected_output[i] = expected
+
             if expected is None:
-                results.append((False, f"No expected output for test {i}"))
+                run_errors[i] = f"No expected output for test {i + 1}"
                 continue
 
-            # Run calculator if available
-            if self.calculator is not None and hasattr(self.calculator, "run"):
-                try:
-                    actual = self.calculator.run(mock_data.get("input_docs", []))
-                except Exception as e:
-                    results.append((False, f"ndi_calculator error: {e}"))
-                    continue
+            if self.calculator is None or not hasattr(self.calculator, "run"):
+                run_errors[i] = "No calculator configured"
+                continue
+
+            try:
+                doc_output[i] = self.calculator.run(mock_data.get("input_docs", []))
+            except Exception as e:
+                run_errors[i] = f"ndi_calculator error: {e}"
+
+        b_actual: list[list[bool | None]] = [[None] * n for _ in range(n)]
+        b_expected: list[list[bool | None]] = [[None] * n for _ in range(n)]
+        reports: list[list[Any]] = [[""] * n for _ in range(n)]
+
+        for i in range(n):
+            for j in range(n):
+                if doc_output[i] is None or doc_expected_output[j] is None:
+                    b_actual[i][j] = None
+                    reports[i][j] = run_errors[i] or "Test not run"
+                else:
+                    match, report = self.compare_mock_docs(
+                        doc_expected_output[j],
+                        doc_output[i],
+                        scope,
+                        docComparisons[j],
+                    )
+                    b_actual[i][j] = bool(match)
+                    reports[i][j] = report
+
+                if doc_expected_output[i] is None or doc_expected_output[j] is None:
+                    b_expected[i][j] = None
+                else:
+                    match_e, _ = self.compare_mock_docs(
+                        doc_expected_output[i],
+                        doc_expected_output[j],
+                        scope,
+                        docComparisons[j],
+                    )
+                    b_expected[i][j] = bool(match_e)
+
+        legacy: list[tuple[bool, Any]] = []
+        for i in range(n):
+            diag = b_actual[i][i]
+            if diag is None:
+                legacy.append((False, reports[i][i]))
             else:
-                results.append((False, "No calculator configured"))
-                continue
+                legacy.append((bool(diag), reports[i][i]))
 
-            match, report = self.compare_mock_docs(expected, actual)
-            results.append((match, report))
+        all_passed = bool(legacy) and all(r[0] for r in legacy)
 
-        all_passed = all(r[0] for r in results) if results else False
-        return {"passed": all_passed, "results": results}
+        return {
+            "passed": all_passed,
+            "results": legacy,
+            "b_actual": b_actual,
+            "b_expected": b_expected,
+            "reports": reports,
+            "doc_output": doc_output,
+            "doc_expected_output": doc_expected_output,
+        }
 
 
 __all__ = [
