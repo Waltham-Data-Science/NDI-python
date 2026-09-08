@@ -145,6 +145,57 @@ def downloadNdiDocuments(
 # ---------------------------------------------------------------------------
 
 
+def _settle_bulk_uploads(
+    cloud_dataset_id: str,
+    options: SyncOptions,
+    *,
+    client: Any = None,
+) -> None:
+    """Wait for in-flight bulk uploads before inventorying remote state.
+
+    MATLAB counterpart: NDI-matlab c425cd115 wires
+    ``ndi.cloud.api.files.waitForAllBulkUploads`` into all five sync entry
+    points, right after the dataset id is resolved and before the first
+    remote-state inventory.
+
+    THE RACE. A bulk upload lands as a zip that a server-side worker then
+    extracts. Until it finishes, ``listFiles`` can report ``uploaded=true``
+    -- the zip arrived -- while the per-file objects do not exist yet. A
+    sync that inventories in that window builds its whole plan on a picture
+    that is about to change, and the failures that follow look like
+    intermittent cloud flakiness rather than a race.
+
+    :func:`~ndi.cloud.api.files.waitForAllBulkUploads` was ported with a
+    docstring saying callers should do exactly this; nothing did.
+
+    Skipped under ``dry_run``: a dry run inventories to report, changes
+    nothing, and should not block on someone else's upload.
+
+    A wait that times out or reports failed jobs is logged, not raised.
+    The inventory that follows is then merely as stale as it was before
+    this existed, and refusing to sync at all would be a worse answer than
+    proceeding with a warning.
+    """
+    if options.dry_run:
+        return
+    from ..api import files as files_api
+
+    try:
+        result = files_api.waitForAllBulkUploads(cloud_dataset_id, client=client)
+    except Exception as exc:  # noqa: BLE001 - a wait that fails must not stop the sync
+        logger.warning("Could not wait for bulk uploads on %s: %s", cloud_dataset_id, exc)
+        return
+    state = (result or {}).get("state")
+    if state and state != "complete":
+        logger.warning(
+            "Bulk uploads on %s did not settle (state=%s after %.1fs); the remote "
+            "inventory that follows may be incomplete.",
+            cloud_dataset_id,
+            state,
+            (result or {}).get("elapsed", float("nan")),
+        )
+
+
 def uploadNew(
     dataset_path: str,
     cloud_dataset_id: str,
@@ -163,6 +214,8 @@ def uploadNew(
     options = options or SyncOptions()
     ds_path = Path(dataset_path)
     index = SyncIndex.read(ds_path)
+
+    _settle_bulk_uploads(cloud_dataset_id, options, client=client)
 
     # Get remote doc IDs
     remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
@@ -218,6 +271,8 @@ def downloadNew(
     options = options or SyncOptions()
     ds_path = Path(dataset_path)
     index = SyncIndex.read(ds_path)
+
+    _settle_bulk_uploads(cloud_dataset_id, options, client=client)
 
     remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
     remote_id_set = set(remote_ids.keys())
@@ -276,6 +331,8 @@ def mirrorToRemote(
     options = options or SyncOptions()
     ds_path = Path(dataset_path)
     index = SyncIndex.read(ds_path)
+
+    _settle_bulk_uploads(cloud_dataset_id, options, client=client)
 
     remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
     remote_id_set = set(remote_ids.keys())
@@ -368,6 +425,8 @@ def mirrorFromRemote(
     ds_path = Path(dataset_path)
     index = SyncIndex.read(ds_path)
 
+    _settle_bulk_uploads(cloud_dataset_id, options, client=client)
+
     remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
     remote_id_set = set(remote_ids.keys())
     local_ids = set(index.local_doc_ids_last_sync)
@@ -441,6 +500,8 @@ def twoWaySync(
     options = options or SyncOptions()
     ds_path = Path(dataset_path)
     index = SyncIndex.read(ds_path)
+
+    _settle_bulk_uploads(cloud_dataset_id, options, client=client)
 
     # Current state
     remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
