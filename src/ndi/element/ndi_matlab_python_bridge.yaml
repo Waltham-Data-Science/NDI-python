@@ -153,7 +153,7 @@ classes:
   - name: element
     type: class
     matlab_path: "+ndi/element.m"
-    matlab_last_sync_hash: "c0de73f0"
+    matlab_last_sync_hash: "1b99d29a0"
     python_path: "ndi/element/__init__.py"
     python_class: "ndi_element"
     inherits: "ndi.ido, ndi.epoch.epochset, ndi.documentservice"

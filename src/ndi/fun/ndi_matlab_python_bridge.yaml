@@ -1960,7 +1960,7 @@ functions:
 
   - name: makePyramid
     matlab_path: "+ndi/+fun/+doc/+gene/makePyramid.m"
-    matlab_last_sync_hash: "261816e8d"
+    matlab_last_sync_hash: "6ae508708"
     python_path: "ndi/fun/doc_gene.py"
     decision_log: >
       Exact match. Options keep their MATLAB spelling (binSizes, grid,
@@ -1971,7 +1971,7 @@ functions:
 
   - name: readViewport
     matlab_path: "+ndi/+fun/+doc/+gene/readViewport.m"
-    matlab_last_sync_hash: "c32e1ace2"
+    matlab_last_sync_hash: "b9972abf1"
     python_path: "ndi/fun/doc_gene.py"
     input_arguments:
       - name: bin_size
@@ -1988,6 +1988,12 @@ functions:
       zero-based per the indexing_policy. MATLAB's 'density' name-value
       becomes a Python keyword of the same name. See readViewportBase for
       the source-coordinate entry point.
+      NOT PORTED, deliberately -- same NDI-matlab change (b9972abf1 /
+      e217f367a) and the same reasoning as exportRegion: MATLAB now reads
+      tiles through ndi.fun.doc.gene.tilePath's memo; this module opens the
+      binary document each time. Python's memo exists on _TileFetcher, whose
+      class shape is a recorded threading decision, and these free functions
+      cannot reach it. Performance only; the tiles read are the same.
 
   - name: tilePath
     matlab_path: "+ndi/+fun/+doc/+gene/tilePath.m"
@@ -2020,9 +2026,21 @@ functions:
 
   - name: exportRegion
     matlab_path: "+ndi/+fun/+doc/+gene/exportRegion.m"
-    matlab_last_sync_hash: "c32e1ace2"
+    matlab_last_sync_hash: "b9972abf1"
     python_path: "ndi/fun/doc_gene.py"
-    decision_log: "Exact match. Returns raw counts, never density."
+    decision_log: >
+      Exact match. Returns raw counts, never density.
+      NOT PORTED, deliberately. NDI-matlab b9972abf1 / e217f367a route tile
+      reads through ndi.fun.doc.gene.tilePath, so a caller reading overlapping
+      rectangles pays an isfile check instead of a document read and a
+      location resolve each time. Python HAS that memo -- _TileFetcher.tilePath
+      in ndi/gui/app/genepyramid/multiscale.py -- but this module's free
+      functions cannot reach it, and the tilePath entry records WHY the shapes
+      differ: the Python memo lives on a class because dask runs blocks on a
+      thread pool and the database may only be used from one thread. Wiring
+      these functions to it, or giving them a second cache, is a design change
+      against that reasoning rather than a port. It is a performance
+      divergence only: the same tiles are read, just not remembered.
 
   - name: levelTable
     matlab_path: "+ndi/+fun/+doc/+gene/levelTable.m"
@@ -2157,7 +2175,7 @@ functions:
 
   - name: makeCells
     matlab_path: "+ndi/+fun/+doc/+gene/makeCells.m"
-    matlab_last_sync_hash: "1ddb60032"
+    matlab_last_sync_hash: "6ae508708"
     python_path: "ndi/fun/doc_gene.py"
     decision_log: >
       Writes cells.tsv, optionally contours.bin, and stores the document.
@@ -2289,11 +2307,16 @@ functions:
 # names and argument order here are what it should mirror.
   - name: makeCellTypeLabels
     matlab_path: "+ndi/+fun/+doc/+gene/makeCellTypeLabels.m"
-    matlab_last_sync_hash: "e2c66eaf1"
+    matlab_last_sync_hash: "46a01c077"
     python_path: "ndi/fun/doc_gene.py"
     decision_log: >
       Writes labels.tsv and stores a cellTypeLabels document depending on
       the spatialGeneExpressionCells document it labels.
+      NDI-matlab 46a01c077 moved its empty-labels check ahead of the
+      length check, so passing no labels is reported as that rather than as a
+      length mismatch. Its commit says the two ports ordering these
+      differently would itself be a divergence. Nothing to port: Python
+      already checks empty first.
 
       LABELS ARE THEIR OWN DOCUMENT rather than a column of cells.tsv
       because one segmentation routinely carries several competing
