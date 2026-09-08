@@ -103,12 +103,24 @@ class ndi_daq_metadatareader_NielsenLabStims(ndi_daq_metadatareader):
         if not Path(filepath).is_file():
             return []
 
-        mat_data = loadmat(filepath, squeeze_me=True, struct_as_record=True)
+        # Name the file in anything that goes wrong. Ingestion walks many
+        # epochs and the parsing below sees only a loaded structure, so
+        # without the path the failing analyzer file cannot be identified
+        # from the error alone. MATLAB does the same by re-throwing with
+        # the path appended and the original exception as the cause
+        # (ndi.setup.stimulus.kjnielsenlab.extractStimulusParametersFromFile,
+        # f037e2086).
+        try:
+            mat_data = loadmat(filepath, squeeze_me=True, struct_as_record=True)
 
-        if "Analyzer" not in mat_data:
-            return []
+            if "Analyzer" not in mat_data:
+                return []
 
-        return self.extract_stimulus_parameters(mat_data["Analyzer"])
+            return self.extract_stimulus_parameters(mat_data["Analyzer"])
+        except Exception as exc:
+            raise type(exc)(f"{exc} (while reading {filepath})").with_traceback(
+                exc.__traceback__
+            ) from exc
 
     @staticmethod
     def extract_stimulus_parameters(

@@ -17,7 +17,7 @@ classes:
   - name: SyncMode
     type: enum
     matlab_path: "+ndi/+cloud/+sync/+enum/SyncMode.m"
-    matlab_last_sync_hash: "fe64a9f5"
+    matlab_last_sync_hash: "42f930762"
     python_path: "ndi/cloud/sync/mode.py"
     python_class: "SyncMode"
     members:
@@ -35,6 +35,11 @@ classes:
       MATLAB uses PascalCase enum values (DownloadNew, UploadNew, etc).
       Python uses UPPER_SNAKE for enum members (DOWNLOAD_NEW) with
       lowercase string values matching MATLAB's string representation.
+      NDI-matlab 42f930762 fixed a dispatch that could never work: it called
+      syncOptions.nvpairs(), a method SyncOptions does not have, and passed the
+      result unexpanded. Nothing to port: Python's SyncMode is a plain Enum of
+      mode names with no Function property and no dispatch of its own; the
+      caller selects the operation.
 
   - name: SyncOptions
     type: dataclass
