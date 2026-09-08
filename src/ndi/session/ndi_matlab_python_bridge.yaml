@@ -398,6 +398,16 @@ classes:
     python_path: "ndi/session/dir.py"
     python_class: "ndi_session_dir"
     inherits: "ndi.session"
+    decision_log: >
+      Six NDI-matlab commits up to 26d0638bf: the .ndi object-type marker
+      and updateObjectTypeMarker/setObjectTypeMarker, directorytype
+      returning 'none' rather than '' for a non-NDI directory, the
+      three-input constructor documented rather than hidden, and
+      mksqlite(0,'close') before rmdir. Nothing to port: Python already has
+      the marker, both setters and the 'none' return (NDI-python#73), and
+      the mksqlite close is a Windows file-locking problem -- an open
+      SQLite handle blocks the rmdir there -- that does not arise in
+      Python, where DID owns the connection.
 
     properties:
       - name: path
@@ -504,6 +514,14 @@ classes:
     matlab_last_sync_hash: "8ad41d0b3"
     python_path: "ndi/session/sessiontable.py"
     python_class: "ndi_session_sessiontable"
+    decision_log: >
+      NDI-matlab 8ad41d0b3 landed the session table in ~/.ndi/ and added a
+      one-time migration from its own legacy location,
+      userpath/Preferences/NDI. Nothing to port: Python already writes to
+      ~/.ndi/local_sessiontable.txt and already migrates, from ITS legacy
+      location, ~/.ndi/preferences/. Each side migrates from its own
+      history into the destination the two now share; MATLAB's legacy path
+      is a MATLAB path Python never wrote to.
 
     methods:
       - name: sessiontable

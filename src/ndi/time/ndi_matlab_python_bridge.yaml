@@ -20,6 +20,12 @@ classes:
     matlab_last_sync_hash: "5210c69db"
     python_path: "ndi/time/clocktype.py"
     python_class: "ndi_time_clocktype"
+    decision_log: >
+      NDI-matlab 5210c69db repaired a typo: ne()'s second argument was
+      declared ndi_cock_obj_b while the body read ndi_clocktype_obj_b, so
+      every ~= errored on an undefined variable, and the fix also switched
+      the comparison to strcmp. Nothing to port: Python's clocktype is an
+      Enum, so != comes from Enum identity and the bug never existed here.
 
     properties:
       - name: UTC

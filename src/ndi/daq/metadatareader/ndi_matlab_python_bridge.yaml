@@ -319,6 +319,13 @@ classes:
     python_path: "ndi/daq/metadatareader/rayolab_stims.py"
     python_class: "ndi_daq_metadatareader_RayoLabStims"
     inherits: "ndi.daq.metadatareader"
+    decision_log: >
+      NDI-matlab a05a0a80a added a readmetadata override so the reader no
+      longer needs a file matching its tab_separated_file_parameter before
+      it will return the constant {stimid: 1} -- the base class would
+      otherwise insist on one. Nothing to port: Python already overrides
+      readmetadata itself rather than only readmetadatafromfile, so it has
+      never consulted the pattern.
 
     methods:
       - name: RayoLabStims
