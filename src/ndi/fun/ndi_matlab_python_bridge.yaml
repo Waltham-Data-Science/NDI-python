@@ -1960,7 +1960,7 @@ functions:
 
   - name: makePyramid
     matlab_path: "+ndi/+fun/+doc/+gene/makePyramid.m"
-    matlab_last_sync_hash: "261816e8d"
+    matlab_last_sync_hash: "6ae508708"
     python_path: "ndi/fun/doc_gene.py"
     decision_log: >
       Exact match. Options keep their MATLAB spelling (binSizes, grid,
@@ -1971,7 +1971,7 @@ functions:
 
   - name: readViewport
     matlab_path: "+ndi/+fun/+doc/+gene/readViewport.m"
-    matlab_last_sync_hash: "c32e1ace2"
+    matlab_last_sync_hash: "b9972abf1"
     python_path: "ndi/fun/doc_gene.py"
     input_arguments:
       - name: bin_size
@@ -1988,6 +1988,12 @@ functions:
       zero-based per the indexing_policy. MATLAB's 'density' name-value
       becomes a Python keyword of the same name. See readViewportBase for
       the source-coordinate entry point.
+      NOT PORTED, deliberately -- same NDI-matlab change (b9972abf1 /
+      e217f367a) and the same reasoning as exportRegion: MATLAB now reads
+      tiles through ndi.fun.doc.gene.tilePath's memo; this module opens the
+      binary document each time. Python's memo exists on _TileFetcher, whose
+      class shape is a recorded threading decision, and these free functions
+      cannot reach it. Performance only; the tiles read are the same.
 
   - name: tilePath
     matlab_path: "+ndi/+fun/+doc/+gene/tilePath.m"
@@ -2020,9 +2026,21 @@ functions:
 
   - name: exportRegion
     matlab_path: "+ndi/+fun/+doc/+gene/exportRegion.m"
-    matlab_last_sync_hash: "c32e1ace2"
+    matlab_last_sync_hash: "b9972abf1"
     python_path: "ndi/fun/doc_gene.py"
-    decision_log: "Exact match. Returns raw counts, never density."
+    decision_log: >
+      Exact match. Returns raw counts, never density.
+      NOT PORTED, deliberately. NDI-matlab b9972abf1 / e217f367a route tile
+      reads through ndi.fun.doc.gene.tilePath, so a caller reading overlapping
+      rectangles pays an isfile check instead of a document read and a
+      location resolve each time. Python HAS that memo -- _TileFetcher.tilePath
+      in ndi/gui/app/genepyramid/multiscale.py -- but this module's free
+      functions cannot reach it, and the tilePath entry records WHY the shapes
+      differ: the Python memo lives on a class because dask runs blocks on a
+      thread pool and the database may only be used from one thread. Wiring
+      these functions to it, or giving them a second cache, is a design change
+      against that reasoning rather than a port. It is a performance
+      divergence only: the same tiles are read, just not remembered.
 
   - name: levelTable
     matlab_path: "+ndi/+fun/+doc/+gene/levelTable.m"
@@ -2157,7 +2175,7 @@ functions:
 
   - name: makeCells
     matlab_path: "+ndi/+fun/+doc/+gene/makeCells.m"
-    matlab_last_sync_hash: "1ddb60032"
+    matlab_last_sync_hash: "6ae508708"
     python_path: "ndi/fun/doc_gene.py"
     decision_log: >
       Writes cells.tsv, optionally contours.bin, and stores the document.
@@ -2289,11 +2307,16 @@ functions:
 # names and argument order here are what it should mirror.
   - name: makeCellTypeLabels
     matlab_path: "+ndi/+fun/+doc/+gene/makeCellTypeLabels.m"
-    matlab_last_sync_hash: "e2c66eaf1"
+    matlab_last_sync_hash: "46a01c077"
     python_path: "ndi/fun/doc_gene.py"
     decision_log: >
       Writes labels.tsv and stores a cellTypeLabels document depending on
       the spatialGeneExpressionCells document it labels.
+      NDI-matlab 46a01c077 moved its empty-labels check ahead of the
+      length check, so passing no labels is reported as that rather than as a
+      length mismatch. Its commit says the two ports ordering these
+      differently would itself be a divergence. Nothing to port: Python
+      already checks empty first.
 
       LABELS ARE THEIR OWN DOCUMENT rather than a column of cells.tsv
       because one segmentation routinely carries several competing
@@ -2404,6 +2427,7 @@ not_applicable:
 
   - name: assertAddonOnPath
     matlab_path: "+ndi/+fun/assertAddonOnPath.m"
+    matlab_last_sync_hash: "fe64a9f53"
     status: matlab_only
     decision_log: >
       Not applicable. Asks MATLAB's `ver` whether a named add-on is
@@ -2412,8 +2436,15 @@ not_applicable:
       them, so the check happens before any code runs and there is nothing
       left for a runtime assertion to catch.
 
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit
+      (the src/ layout move; the file has not changed since). It still asks
+      `ver` for the installed add-ons, reads the required list from
+      ndi_common/requirements/ndi-matlab-addons.json and errors naming what
+      required them. Nothing on the Python side to follow.
+
   - name: check_Matlab_toolboxes
     matlab_path: "+ndi/+fun/check_Matlab_toolboxes.m"
+    matlab_last_sync_hash: "7d953875f"
     status: matlab_only
     decision_log: >
       Not applicable, for the same reason as assertAddonOnPath: it reads
@@ -2422,8 +2453,16 @@ not_applicable:
       (Signal Processing Toolbox, and so on); Python's equivalent list is
       pyproject.toml's dependencies, enforced by the installer.
 
+      Confirmed against NDI-matlab 7d953875f ("Improve toolbox check with
+      consolidated missing warning"), the file's last-touching commit. That
+      change consolidated the per-toolbox warnings into one; the function
+      still reads ndi-matlab-toolboxes.json and warns about MATLAB products
+      `ver` does not list, which is the part with no Python meaning. Nothing
+      to port.
+
   - name: console
     matlab_path: "+ndi/+fun/console.m"
+    matlab_last_sync_hash: "fe64a9f53"
     status: matlab_only
     decision_log: >
       Not applicable. Opens a macOS Terminal window tailing a log file, so
@@ -2433,32 +2472,64 @@ not_applicable:
       logging goes through the standard logging module, which the user
       configures rather than a helper spawning a window.
 
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Still macOS-only, still builds an AppleScript that tells Terminal to
+      `tail -f` the file and runs it through osascript. Nothing to port.
+
   - name: convertoldnsd2ndi
     matlab_path: "+ndi/+fun/convertoldnsd2ndi.m"
+    matlab_last_sync_hash: "86379c7de"
     status: matlab_only
-    decision_log: "Legacy NSD-to-NDI migration tool. MATLAB-specific."
+    decision_log: >
+      Legacy NSD-to-NDI migration tool. MATLAB-specific.
+
+      Confirmed against NDI-matlab 86379c7de, the file's last-touching commit,
+      which quotes PATHNAME into the shell commands and rejects a path
+      containing a double quote. That hardening has no Python side to follow:
+      there is no Python port of this deprecated NSD-to-NDI renamer, and none
+      is wanted.
 
   - name: debuglog
     matlab_path: "+ndi/+fun/debuglog.m"
+    matlab_last_sync_hash: "fe64a9f53"
     status: matlab_only
-    decision_log: "MATLAB logging utility. Python uses standard logging."
+    decision_log: >
+      MATLAB logging utility. Python uses standard logging.
+
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Still a three-line wrapper handing ndi.common.getLogger's debug_logfile
+      to ndi.fun.console, so it inherits console's macOS-only limitation.
+      Nothing to port.
 
   - name: errlog
     matlab_path: "+ndi/+fun/errlog.m"
+    matlab_last_sync_hash: "fe64a9f53"
     status: matlab_only
-    decision_log: "MATLAB logging utility. Python uses standard logging."
+    decision_log: >
+      MATLAB logging utility. Python uses standard logging.
+
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Still a three-line wrapper handing ndi.common.getLogger's error_logfile
+      to ndi.fun.console. Nothing to port.
 
   - name: find_calc_directories
     matlab_path: "+ndi/+fun/find_calc_directories.m"
+    matlab_last_sync_hash: "5b9e08493"
     status: ported_differently
     decision_log: >
-      Not applicable. Finds NDIcalc-*-matlab calculator toolboxes by going
+      Not applicable. Finds NDIcalc*-matlab calculator toolboxes by going
       three directories up from ndi.toolboxdir and globbing the siblings --
       a search that only works because MATLAB toolboxes are installed side
       by side. Python calculators are found through the ndi.calc package
       and the class registry (ndi/class_registry.py), which is an import
       question rather than a filesystem one; a third-party calculator
       distributed as its own package is discovered by being importable.
+
+      Confirmed against NDI-matlab 5b9e08493, the file's last-touching commit.
+      Still resolves a base path three directories up from ndi.toolboxdir and
+      globs the siblings, wrapped in a try/catch that warns and returns {}.
+      Nothing to port: the Python answer is still importability, not the
+      filesystem.
 
   - name: plot_extracellular_spikeshapes
     matlab_path: "+ndi/+fun/plot_extracellular_spikeshapes.m"
@@ -2489,21 +2560,32 @@ not_applicable:
 
   - name: run_Linux_checks
     matlab_path: "+ndi/+fun/run_Linux_checks.m"
+    matlab_last_sync_hash: "fe64a9f53"
     status: matlab_only
     decision_log: >
-      Not applicable. Warns about the known Linux incompatibilities of the
-      MATLAB RUNTIME (it branches on computer('arch') returning GLNXA64).
-      The problems it warns about are MATLAB's, not NDI's; CPython on Linux
-      has none of them, and this project's own CI runs on Linux, which is a
-      stronger check than a warning.
+      Not applicable. The hook for warning about Linux incompatibilities of
+      the MATLAB RUNTIME (it branches on computer('arch') returning GLNXA64).
+      As of fe64a9f53 the branch body is empty -- its own comment says the
+      one problem it carried "was fixed by no longer requiring Simulink" --
+      so the function warns about nothing today. Either way the problems are
+      MATLAB's, not NDI's; CPython on Linux has none of them, and this
+      project's own CI runs on Linux, which is a stronger check than a
+      warning.
 
   - name: syslog
     matlab_path: "+ndi/+fun/syslog.m"
+    matlab_last_sync_hash: "fe64a9f53"
     status: matlab_only
-    decision_log: "MATLAB logging utility. Python uses standard logging."
+    decision_log: >
+      MATLAB logging utility. Python uses standard logging.
+
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Still a three-line wrapper handing ndi.common.getLogger's system_logfile
+      to ndi.fun.console. Nothing to port.
 
   - name: export.gmcSorter
     matlab_path: "+ndi/+fun/+export/gmcSorter.m"
+    matlab_last_sync_hash: "c8fa652e8"
     status: porting_deferred
     decision_log: >
       Not ported yet. Exports a probe's raw voltage in GMC_Sorter's expected
@@ -2514,18 +2596,33 @@ not_applicable:
       GMC_Sorter, in the same shape ndi.fun.probe.export.binary already uses
       for Kilosort and KIASORT. Noted in #204.
 
+      Confirmed against NDI-matlab c8fa652e8, the file's last-touching commit,
+      which only removes a stale onCleanup NASGU suppression -- no behavioural
+      change. The deferral stands: still no Python caller driving GMC_Sorter.
+
   - name: export.gmcSorterWrite
     matlab_path: "+ndi/+fun/+export/gmcSorterWrite.m"
+    matlab_last_sync_hash: "cad1bae2f"
     status: porting_deferred
     decision_log: >
       Not ported yet. Writes an in-memory voltage buffer to GMC_Sorter's
       'dat_t_s' raw format. Same status and reason as export.gmcSorter:
       portable work, no current Python caller. Noted in #204.
 
+      Confirmed against NDI-matlab cad1bae2f, the file's last-touching commit,
+      which retargeted the exporter at GMC_Sorter Version 4. Nothing to port
+      while the deferral holds; when it is lifted, Version 4's per-shank
+      ch_order is the shape to follow.
+
   - name: export.writeGmcSidecars
     matlab_path: "+ndi/+fun/+export/writeGmcSidecars.m"
+    matlab_last_sync_hash: "cad1bae2f"
     status: porting_deferred
     decision_log: >
       Not ported yet. Writes GMC_Sorter's channel map, metadata and driver
       files beside the raw file that gmcSorter/gmcSorterWrite produce. Same
       status and reason as export.gmcSorter. Noted in #204.
+
+      Confirmed against NDI-matlab cad1bae2f, the file's last-touching commit
+      (the same Version 4 retarget as gmcSorterWrite: the generated driver now
+      runs one extract_spike_features pass per shank). Deferral unchanged.
