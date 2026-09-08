@@ -879,6 +879,14 @@ time_fun:
       numpy's is half-to-even, which would bucket an interval landing exactly
       on .5 differently and silently fail to match a fingerprint. Python uses
       an explicit _matlab_round.
+      ONE MATLAB DEFECT MIRRORED ON PURPOSE, reported upstream as
+      VH-Lab/NDI-matlab#975: a candidate offset's rough shift is anchored at
+      pulse 1 rather than at the fingerprint that produced the offset, so a
+      pulse dropped within the first fingerprintSize intervals yields nan for
+      an alignment that should be found. Mirrored rather than silently
+      corrected, because the bridge's claim is correspondence with MATLAB, not
+      improvement on it; test_a_drop_inside_the_lead_in_refuses pins it and
+      says what to change when upstream fixes it.
       NOT THIS ENTRY, but adjacent and easy to confuse: _sync_triggers in the
       same file is the equal-length least-squares path, modelling
       vlt.time.syncTriggers (a different repo, so no entry here). It still

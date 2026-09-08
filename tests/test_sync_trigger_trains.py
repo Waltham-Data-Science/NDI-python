@@ -133,6 +133,11 @@ class TestSyncTriggerTrains:
         precedes it and the zero-offset hypothesis is never seeded, so the only
         surviving candidate anchors on the wrong pulse and fails validation.
         The result is nan -- a refusal, not a wrong mapping.
+
+        Reported upstream as VH-Lab/NDI-matlab#975. This mirrors the current
+        MATLAB behaviour deliberately; if that issue is fixed, this test is the
+        one that must change, and it should then EXPECT the mapping rather than
+        the nan.
         """
         t1 = make_train()
         t2 = np.delete(SHIFT + SCALE * t1, 5)
