@@ -741,18 +741,48 @@ def extract_doc_files(
     session: Any,
     target_path: str | None = None,
 ) -> tuple[list[Any], str]:
-    """Extract all documents and their binary files to a directory.
+    """Extract a copy of all documents and their files to a directory.
 
     MATLAB equivalent: ndi.database.fun.extract_doc_files
+
+    Every file is copied to ``target_path/<uid>`` under the uid the source
+    database knows it by, and each returned document's file_info is rebuilt
+    to name its copy. That is what makes the extract STORABLE somewhere else
+    -- ``ndi.dataset.copySessionToDataset`` is the caller this exists for --
+    rather than a pile of bytes with nothing pointing at it.
+
+    FILE SERIES. A series' manifest is an ordinary document file and is
+    copied like one. The MEMBERS are copied too, which ``current_file_list``
+    does not cover: it returns the manifest name only, deliberately, so that
+    a 28,000-member series does not materialise 28,000 names. The members are
+    enumerated from the series record instead and fetched by their
+    ``NAME_<i>`` names, which resolve through the manifest
+    (DID-matlab#173, #183). An absent slot is normal -- a sparse series is
+    the case the mechanism exists for.
+
+    Each copied member is recorded in the extracted document's
+    ``ingest_locations`` UNDER ITS ORIGINAL UID. That is what lets the copy
+    be stored elsewhere: DID refuses a document declaring present members
+    while recording no location for any of them (DID-matlab#185), and
+    ingestion writes each member to ``FileDir/<uid>`` from this record -- so
+    reusing the uid keeps the copied manifest, which names its members by
+    uid, correct in the new store.
 
     Args:
         session: An NDI session or dataset.
         target_path: Directory to write files. If None, creates a temp dir.
 
     Returns:
-        Tuple of ``(documents, target_path)``.
+        Tuple of ``(documents, target_path)``. The documents are the ones
+        the search returned, with their file_info rebuilt to point at the
+        copies.
+
+    Raises:
+        OSError: If a file cannot be copied. Every copy made so far is
+            removed first, as MATLAB does: a half-written extract is worse
+            than none, and the usual cause is a full disk.
     """
-    import json
+    import shutil
     import tempfile
     from pathlib import Path
 
@@ -765,41 +795,159 @@ def extract_doc_files(
     out.mkdir(parents=True, exist_ok=True)
 
     docs = session.database_search(ndi_query("").isa("base"))
+    files_i_made: list[Path] = []
+
+    def copy_in(source: str | Path, uid: str) -> Path:
+        """Copy one file to out/<uid>, unwinding the whole extract on failure."""
+        destination = out / uid
+        try:
+            shutil.copyfile(source, destination)
+        except OSError:
+            for made in files_i_made:
+                try:
+                    made.unlink()
+                except OSError:
+                    pass
+            raise
+        files_i_made.append(destination)
+        return destination
 
     for doc in docs:
-        props = doc.document_properties if hasattr(doc, "document_properties") else doc
-        if not isinstance(props, dict):
+        # has_files() rather than "does it declare a files section": the
+        # latter is true for a document that declares files and has added
+        # none, and there is nothing to do for one.
+        if not (hasattr(doc, "has_files") and doc.has_files()):
             continue
 
+        props = doc.document_properties
         doc_id = props.get("base", {}).get("id", "")
         if not doc_id:
             continue
 
-        # Write JSON
-        doc_dir = out / doc_id
-        doc_dir.mkdir(parents=True, exist_ok=True)
+        series_info = _extract_series_record(props)
 
-        with open(doc_dir / "document.json", "w") as f:
-            json.dump(props, f, indent=2, default=str)
+        # Read the file list BEFORE clearing file_info, which is where it
+        # comes from. MATLAB captures it before its reset for the same
+        # reason; clearing first leaves nothing to copy and produces an
+        # extract of no files at all, silently.
+        #
+        # current_file_list already names a series' MANIFEST -- it is an
+        # ordinary file_info entry -- and deliberately does not name its
+        # members, which are handled below.
+        file_names = list(doc.current_file_list())
 
-        # Copy binary files
-        files_info = props.get("files", {})
-        if isinstance(files_info, dict):
-            file_list = files_info.get("file_list", [])
-            for fname in file_list:
-                if not fname:
-                    continue
-                try:
-                    fobj = session.database_openbinarydoc(doc, fname)
-                    data = fobj.read()
-                    if hasattr(fobj, "close"):
-                        fobj.close()
-                    with open(doc_dir / fname, "wb") as bf:
-                        bf.write(data)
-                except Exception:
-                    pass
+        # Rebuild file_info rather than appending to it: add_file adds a
+        # SECOND location to a name that already has one, so without this
+        # every extracted document would name both its copy and the source
+        # database's path.
+        #
+        # Only file_info is cleared. MATLAB calls reset_file_info, which
+        # clears files.series_info with it, and carries the series record
+        # across by hand (NDI-matlab#946). Nothing to carry here: the record
+        # is left where it stands and survives on its own.
+        props["files"]["file_info"] = []
+
+        for filename in file_names:
+            handle = session.database_openbinarydoc(doc, filename)
+            try:
+                source = getattr(handle, "fullpathfilename", None)
+            finally:
+                session.database_closebinarydoc(handle)
+            if not source:
+                continue
+            # fileparts, as MATLAB does: an ingested file is named by its
+            # uid with no extension, and stripping one guards against a
+            # retrieval that handed back a suffixed scratch copy.
+            uid = Path(source).stem
+            doc.add_file(filename, str(copy_in(source, uid)))
+
+        if series_info:
+            _copy_series_members(session, doc, doc_id, series_info, copy_in)
+            doc.setproperties(**{"files.series_info": series_info})
 
     return docs, target_path
+
+
+def _extract_series_record(props: dict) -> list[dict]:
+    """This document's files.series_info, with no path into the source.
+
+    ``ingest_locations`` names where the members sit in the SOURCE session
+    and means nothing in the target path, so it is emptied with the same
+    call the database makes on the way into storage. That makes this a no-op
+    for every document a search returns today; it is here because an
+    extract's output gets stored somewhere else, and a copy destined for
+    another store should carry no path into the one it came from.
+
+    Everything else travels: name, count, n_present and source_root describe
+    the SERIES rather than where its bytes are, and the manifest listing the
+    members is copied verbatim beside them.
+    """
+    files = props.get("files")
+    if not isinstance(files, dict) or not files.get("series_info"):
+        return []
+    try:
+        from did.document import Document
+    except ImportError:  # pragma: no cover - did is a hard dependency
+        return []
+
+    stripped = Document.strip_series_ingest_locations(props)
+    series_info = stripped.get("files", {}).get("series_info") or []
+    if isinstance(series_info, dict):
+        series_info = [series_info]
+    return [entry for entry in series_info if isinstance(entry, dict)]
+
+
+def _copy_series_members(
+    session: Any,
+    doc: Any,
+    doc_id: str,
+    series_info: list[dict],
+    copy_in: Any,
+) -> None:
+    """Copy every present member of every series, recording each by uid.
+
+    Walks the slots the series record declares and asks for each by its
+    ``NAME_<i>`` name, which resolves through the manifest. Uses
+    ``database_existbinarydoc`` rather than opening: an absent slot is
+    normal, and a sparse series is the case the mechanism exists for.
+    """
+    from pathlib import Path
+
+    for entry in series_info:
+        name = str(entry.get("name", "") or "")
+        if not name:
+            continue
+        try:
+            slot_count = int(entry.get("count", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+
+        members: list[dict] = []
+        for index in range(1, slot_count + 1):
+            exists, member_path = session.database_existbinarydoc(doc_id, f"{name}_{index}")
+            if not exists or not member_path:
+                continue
+            # Keep the ORIGINAL uid: ingestion writes the member to
+            # FileDir/<uid> from this record, and the manifest just copied
+            # names its members by uid, so a fresh uid would leave the
+            # copy's manifest pointing at nothing.
+            member_uid = Path(member_path).stem
+            destination = copy_in(member_path, member_uid)
+            members.append(
+                {
+                    "index": index,
+                    "uid": member_uid,
+                    "location": str(destination),
+                    "location_type": "file",
+                    "ingest": 1,
+                    # These are our copies in target_path, and the caller
+                    # was promised the files would be there.
+                    "delete_original": 0,
+                    "parameters": "",
+                }
+            )
+
+        entry["ingest_locations"] = members
 
 
 # =========================================================================

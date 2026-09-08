@@ -361,15 +361,29 @@ functions:
       Note: the MATLAB .m file is named extract_docs_files.m but the
       function inside is named extract_doc_files. Using the function
       name. Synchronized 2026-03-13.
-      NOT PORTED, and it is the file-series gap rather than a no-op. Five
-      NDI-matlab commits up to a36e261c4 teach the extract to carry
-      files.series_info across the file reset (#946), to copy a series' MEMBERS
-      and not just its manifest, and to refuse a dataset copy of a populated
-      series it cannot store rather than storing it wrong. Python has no
-      file-series support anywhere in this path -- nothing reads
-      files.series_info, file_series or n_present -- so there is no partial fix
-      to make here; a series simply cannot arrive. Tracked as NDI-python#215,
-      which is where the port of series themselves belongs.
+      PORTED PROPERLY for NDI-python#215; this entry used to say the file
+      series gap could not be closed because Python had no series support
+      anywhere in the path. It has since (#256-#259), so the five NDI-matlab
+      commits up to a36e261c4 are ported here: a series' MEMBERS are copied
+      and not just its manifest, each under its ORIGINAL uid, and recorded
+      in the extracted document's ingest_locations -- which is what lets the
+      copy be stored elsewhere, since DID refuses a document declaring
+      present members while recording no location for any of them
+      (DID-matlab#185) and ingestion writes each member to FileDir/<uid>
+      from that record.
+      MATLAB's #946 fix -- carrying files.series_info across reset_file_info
+      -- has no counterpart: Python clears files.file_info alone rather than
+      calling a reset, so the per-series record survives on its own. Same
+      asymmetry, same reason, as updateFileInfoForLocalFiles.
+      THE OUTPUT LAYOUT CHANGED to match MATLAB: files are copied to
+      target_path/<uid>, flat, and each returned document's file_info is
+      rebuilt to name its copy. Python previously wrote
+      target_path/<doc_id>/document.json with the files beside it and never
+      touched the documents, so nothing pointed at the copies and the
+      extract could not be added to another database -- which is the one
+      thing ndi.dataset.copySessionToDataset needs it for. It also walked
+      files.file_list, the class DECLARATION, rather than
+      current_file_list(), what the document actually has.
 
 # =========================================================================
 # Not Applicable — MATLAB functions intentionally not ported to Python
