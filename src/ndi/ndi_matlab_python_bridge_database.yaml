@@ -17,7 +17,7 @@ classes:
   - name: database
     type: class
     matlab_path: "+ndi/database.m"
-    matlab_last_sync_hash: "fe64a9f53"
+    matlab_last_sync_hash: "d3c556e89"
     python_path: "ndi/database.py"
     python_class: "ndi_database"
 

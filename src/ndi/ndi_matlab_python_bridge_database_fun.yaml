@@ -153,7 +153,7 @@ functions:
   - name: ndi_document2ndi_object
     type: function
     matlab_path: "+ndi/+database/+fun/ndi_document2ndi_object.m"
-    matlab_last_sync_hash: "bcc6b4e14"
+    matlab_last_sync_hash: "e94c2b2f5"
     python_path: "ndi/database_fun.py"
     input_arguments:
       - name: ndi_document_obj
@@ -167,10 +167,18 @@ functions:
         type_matlab: "ndi object"
         type_python: "Any | None"
     decision_log: >
-      MATLAB uses eval-based class resolution from document_class fields.
-      Python uses a hardcoded class_map. Both look up from document_class.class_name.
-      Python returns None on failure; MATLAB throws error.
-      Synchronized 2026-03-13.
+      MATLAB reads a class name out of the document and constructs it;
+      Python resolves document_class.class_name through a fixed class_map and
+      can only build what that map names. Both look up from
+      document_class.class_name. Python returns None on failure; MATLAB
+      throws.
+      MATLAB e94c2b2f5 replaced its eval with feval behind
+      ndi.validators.mustBeClassnameOfType, checking the named class by
+      lineage because the name arrives in an untrusted payload (a dataset
+      downloaded from the cloud). Python needs no counterpart: a name from
+      the document is never constructed, only matched against the map, so
+      there is nothing for a hostile value to reach. The narrower thing
+      Python's map can rebuild is a separate, pre-existing gap.
 
   - name: copy_session_to_dataset
     type: function
