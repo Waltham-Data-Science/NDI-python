@@ -114,32 +114,6 @@ no_hash:
     matlab_path: "+ndi/+cloud/+sync/+internal/+index/"
   - name: evaluate_fitcurve
     matlab_path: "+ndi/+data/evaluate_fitcurve.m (in a different namespace)"
-  - name: createGenBankControlledVocabulary
-    matlab_path: "+ndi/+database/+fun/createGenBankControlledVocabulary.m"
-  - name: createNIFbrainareas
-    matlab_path: "+ndi/+database/+fun/createNIFbrainareas.m"
-  - name: create_new_database
-    matlab_path: "+ndi/+database/+fun/create_new_database.m"
-  - name: databasehierarchyinit
-    matlab_path: "+ndi/+database/+fun/databasehierarchyinit.m"
-  - name: dataset_metadata
-    matlab_path: "+ndi/+database/+fun/dataset_metadata.m"
-  - name: openMINDSobj2ndi_document
-    matlab_path: "+ndi/+database/+fun/openMINDSobj2ndi_document.m"
-  - name: openMINDSobj2struct
-    matlab_path: "+ndi/+database/+fun/openMINDSobj2struct.m"
-  - name: plotinteractivedocgraph
-    matlab_path: "+ndi/+database/+fun/plotinteractivedocgraph.m"
-  - name: projectvardef
-    matlab_path: "+ndi/+database/+fun/projectvardef.m"
-  - name: readGenBankNames
-    matlab_path: "+ndi/+database/+fun/readGenBankNames.m"
-  - name: readGenBankNodes
-    matlab_path: "+ndi/+database/+fun/readGenBankNodes.m"
-  - name: readtablechar
-    matlab_path: "+ndi/+database/+fun/readtablechar.m"
-  - name: writetablechar
-    matlab_path: "+ndi/+database/+fun/writetablechar.m"
   - name: navigator_epochdir
     matlab_path: "+ndi/+file/+navigator/epochdir.m"
   - name: mfdaq_epoch_channel
