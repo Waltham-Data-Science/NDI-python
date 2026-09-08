@@ -20,6 +20,7 @@ functions:
   - name: channelname2prefixnumber
     type: function
     matlab_path: "+ndi/+fun/channelname2prefixnumber.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/utils.py"
     input_arguments:
       - name: channelname
@@ -34,9 +35,16 @@ functions:
       Exact match. Parses a channel name into prefix and number
       (e.g. 'ai5' -> ('ai', 5)).
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Holds: split at the first digit, strip whitespace from the prefix, parse
+      the rest as the number, and refuse both a name with no digits and one
+      that starts with a digit. MATLAB raises plain errors where the port
+      raises ValueError with the same two conditions.
+
   - name: name2variableName
     type: function
     matlab_path: "+ndi/+fun/name2variableName.m"
+    matlab_last_sync_hash: "b33d8ce64"
     python_path: "ndi/fun/utils.py"
     input_arguments:
       - name: name
@@ -52,9 +60,34 @@ functions:
       starts with digit. A PascalCase variant also exists in
       ndi/fun/name_utils.py (Python-only convenience).
 
+      Examined against NDI-matlab b33d8ce64, the file's last-touching commit,
+      AND THIS RECORD AND THE NEXT ONE ARE SWAPPED. This entry called the
+      utils.py implementation an "Exact match" and "the canonical
+      MATLAB-matching implementation". It is not. MATLAB replaces ':' and '-'
+      with '_' BEFORE the general cleanup, capitalises the first letter of
+      every word while KEEPING THE REST OF THE WORD AS IT WAS (the lowercasing
+      is commented out in the source), joins to PascalCase, and prepends
+      'var_' when the result does not start with a letter. utils.py does none
+      of those four: it lets ':' and '-' become word separators, lowercases
+      the first word, uses str.capitalize() which lowercases the rest of each
+      word, and prepends 'x'. On the same inputs: 'NCBITaxon:10116' gives
+      'ncbitaxon10116' here against MATLAB's 'NCBITaxon_10116';
+      'spatial_frequency' gives 'spatial_frequency' against
+      'Spatial_frequency'; '2 photon' gives 'x2Photon' against 'var_2Photon'.
+      The faithful implementation is the one in ndi/fun/name_utils.py,
+      recorded below as a "Python-only convenience". IT MATTERS BEYOND
+      BOOKKEEPING: ndi.fun exports THIS one, and +docTable/element.m builds
+      its metadata column names with ndi.fun.name2variableName -- so whoever
+      ports that aggregation (still missing, see the element entry) would get
+      different column names using the exported function. No production code
+      calls either today, and two tests assert the camelCase behaviour, so
+      which one ndi.fun should export is left to a maintainer rather than
+      swapped here.
+
   - name: pseudorandomint
     type: function
     matlab_path: "+ndi/+fun/pseudorandomint.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/utils.py"
     input_arguments: []
     output_arguments:
@@ -65,9 +98,20 @@ functions:
       plus random component: seconds since 2022-06-01 * 1000 +
       random(1..1000).
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      MATLAB is t_offset*1000 + randi(1000) - 1, and its own comment spells it
+      out: "random number between 1 and 1000, -1". The port dropped the -1,
+      shifting every value by one against the MATLAB and putting the random
+      part in [1,1000] rather than [0,999]. Restored. One divergence left:
+      MATLAB measures its offset from local midnight on 2022-06-01 using
+      `now`, where the port uses UTC for both ends, so the two disagree by the
+      local UTC offset; each is self-consistent and the value is only ever
+      compared with itself.
+
   - name: timestamp
     type: function
     matlab_path: "+ndi/+fun/timestamp.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/utils.py"
     input_arguments: []
     output_arguments:
@@ -77,6 +121,21 @@ functions:
       Exact match. Returns current UTC timestamp string. Handles
       leap-second artefact by clamping second=60 to 59.999.
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit,
+      and this one did NOT hold. MATLAB is
+      char(datetime('now','TimeZone','UTCLeapSeconds')), a format that ends in
+      a ZONE DESIGNATOR. The port emitted '2026-09-08T02:25:18.707' with no Z
+      -- and that is the one shape ndi.util.datestamp2datetime refuses, so two
+      functions in this same package did not compose. It also disagreed with
+      ndi.common.timestamp, which does emit the Z and is what ndi_document
+      stamps documents with; every datestamp under ndi_common/ carries one.
+      Fixed, and the two tests that asserted the 23-character no-Z shape were
+      updated -- they encoded the defect. Its leap-second guard was also wrong
+      in a way that would only show if it fired: `ts.replace(':60.',
+      ':59.999')` leaves the old fraction appended ('...:59.999123'), where
+      MATLAB rewrites the six characters before the Z. Now replaces the
+      seconds field itself.
+
   # =========================================================================
   # Functions — name_utils.py (Python-only variant)
   # =========================================================================
@@ -84,6 +143,7 @@ functions:
   - name: name2variableName (PascalCase variant)
     type: function
     matlab_path: "+ndi/+fun/name2variableName.m"
+    matlab_last_sync_hash: "b33d8ce64"
     python_path: "ndi/fun/name_utils.py"
     input_arguments:
       - name: name
@@ -97,6 +157,18 @@ functions:
       MATLAB-matching implementation is in utils.py. This variant uses a
       slightly different algorithm (Replace ':', '-' with '_', prepend
       'var_' if starts with non-letter) and is provided as a convenience.
+
+      Examined against NDI-matlab b33d8ce64, the file's last-touching commit,
+      AND THIS IS THE FAITHFUL PORT, not a "Python-only PascalCase variant...
+      provided as a convenience". What this record calls a "slightly different
+      algorithm (Replace ':', '-' with '_', prepend 'var_' if starts with
+      non-letter)" is precisely MATLAB's algorithm, and it agrees with MATLAB
+      on every case tried: 'orientation direction tuning' ->
+      'OrientationDirectionTuning', 'spatial_frequency' ->
+      'Spatial_frequency', 'a:b' -> 'A_b', 'NCBITaxon:10116' ->
+      'NCBITaxon_10116', '2 photon' -> 'var_2Photon'. The entry above, which
+      claims to be the canonical match, is the one that diverges. See it for
+      the consequences.
 
   # =========================================================================
   # Functions — data.py
@@ -828,6 +900,7 @@ functions:
   - name: filename2epochid
     type: function
     matlab_path: "+ndi/+fun/+epoch/filename2epochid.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/epoch.py"
     input_arguments:
       - name: session
@@ -842,6 +915,16 @@ functions:
     decision_log: >
       Exact match. Maps filenames to their epoch IDs by searching
       DAQ epoch tables.
+
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Two divergences, both structural rather than wrong. MATLAB returns a
+      cell array the same size as the filename input, one entry per filename;
+      the port returns a dict keyed by filename, which is the same information
+      in the shape a Python caller indexes. And MATLAB reads the LIVE
+      epochtable of each loaded daqsystem (session.daqsystem_load, then
+      dev{d}.epochtable) where the port reads daqsystem.epoch_table out of the
+      stored daq_system documents -- the same table when the documents are
+      current, and stale when they are not.
 
   - name: t0_t1cell2array
     type: function
@@ -873,6 +956,7 @@ functions:
   - name: MD5
     type: function
     matlab_path: "+ndi/+fun/+file/MD5.m"
+    matlab_last_sync_hash: "c413ebf36"
     python_path: "ndi/fun/file.py"
     input_arguments:
       - name: file_path
@@ -885,9 +969,17 @@ functions:
       Exact match. Computes MD5 checksum of a file. Returns
       32-character lowercase hex digest.
 
+      Examined against NDI-matlab c413ebf36, the file's last-touching commit.
+      Same result by a better route: MATLAB shells out per platform (CertUtil
+      on Windows, md5 on macOS, md5sum on Linux) and parses the output, where
+      the port uses hashlib and reads the file in 8 KiB chunks. Both return
+      the 32-character lowercase digest and both refuse a missing file.
+      Nothing to port.
+
   - name: dateCreated
     type: function
     matlab_path: "+ndi/+fun/+file/dateCreated.m"
+    matlab_last_sync_hash: "5e97cdeaf"
     python_path: "ndi/fun/file.py"
     input_arguments:
       - name: file_path
@@ -902,9 +994,23 @@ functions:
       st_birthtime on macOS, falls back to st_ctime elsewhere.
       Returns UTC datetime or None if unavailable.
 
+      Examined against NDI-matlab 5e97cdeaf, the file's last-touching commit,
+      and THE TWO DISAGREE ON LINUX. MATLAB asks `stat -c %w` for the birth
+      time and returns NaT when the filesystem does not record one, which is
+      most Linux filesystems -- its documented contract is "NaT if the date
+      cannot be determined". The port falls back to st_ctime, the
+      metadata-CHANGE time, and returns it as if it were the creation date;
+      its own docstring says "Linux: metadata change". So MATLAB says "I do
+      not know" and this returns a plausible wrong answer. Not changed here:
+      tests/test_fun.py::test_date_created asserts a non-None result, which on
+      Linux would then fail while still passing on macOS, and whether
+      best-effort or honest-unknown is wanted is a product decision. macOS
+      agrees on both sides via st_birthtime.
+
   - name: dateUpdated
     type: function
     matlab_path: "+ndi/+fun/+file/dateUpdated.m"
+    matlab_last_sync_hash: "5e97cdeaf"
     python_path: "ndi/fun/file.py"
     input_arguments:
       - name: file_path
@@ -917,6 +1023,14 @@ functions:
     decision_log: >
       Exact match. Gets the last modification date of a file.
       Returns UTC datetime or None if file doesn't exist.
+
+      Examined against NDI-matlab 5e97cdeaf, the file's last-touching commit.
+      Same instant, different representation: MATLAB converts dir().datenum
+      with 'ConvertFrom','datenum', giving a datetime with NO timezone --
+      local time -- where the port returns a UTC-aware datetime from st_mtime.
+      A caller comparing the two must attach a zone to MATLAB's. MATLAB also
+      special-cases a folder by taking the '.' entry of its listing; stat
+      needs no such workaround. Nothing to port.
 
   - name: pathSafeName
     type: function

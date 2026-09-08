@@ -199,8 +199,10 @@ class TestTimestamp:
         ts = timestamp()
         assert isinstance(ts, str)
         assert len(ts) > 0
-        # Should match pattern: YYYY-MM-DDTHH:MM:SS.mmm
-        pattern = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}$"
+        # MATLAB is char(datetime('now','TimeZone','UTCLeapSeconds')), whose
+        # format ends in Z. This pattern required NO zone designator, which
+        # is the one format ndi.util.datestamp2datetime rejects.
+        pattern = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$"
         assert re.match(pattern, ts), f"Timestamp '{ts}' does not match expected format"
 
     def test_timestamp_starts_with_year(self):
