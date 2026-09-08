@@ -88,7 +88,7 @@ drifted:
   # --- comments-only ---
 
 # ---------------------------------------------------------------------------
-# no_hash: 92
+# no_hash: 88
 #
 # An entry with a matlab_path and no matlab_last_sync_hash can never show
 # drift, so it claims its port is current forever and no check can contradict
@@ -170,20 +170,12 @@ no_hash:
     matlab_path: "+ndi/+fun/+doc/t0_t1cell2array.m"
   - name: docCellArray2Table
     matlab_path: "+ndi/+fun/+docTable/docCellArray2Table.m"
-  - name: element (docTable)
-    matlab_path: "+ndi/+fun/+docTable/element.m"
-  - name: epoch (docTable)
-    matlab_path: "+ndi/+fun/+docTable/epoch.m"
-  - name: openminds (docTable)
-    matlab_path: "+ndi/+fun/+docTable/openminds.m"
   - name: probe (docTable)
     matlab_path: "+ndi/+fun/+docTable/probe.m"
   - name: subject (docTable)
     matlab_path: "+ndi/+fun/+docTable/subject.m"
   - name: subjectBasic
     matlab_path: "+ndi/+fun/+docTable/subject.m"
-  - name: treatment (docTable)
-    matlab_path: "+ndi/+fun/+docTable/treatment.m"
   - name: epochid2element
     matlab_path: "+ndi/+fun/+epoch/epochid2element.m"
   - name: filename2epochid
