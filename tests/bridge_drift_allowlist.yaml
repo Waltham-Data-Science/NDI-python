@@ -114,14 +114,8 @@ no_hash:
     matlab_path: "+ndi/+cloud/+sync/+internal/+index/"
   - name: evaluate_fitcurve
     matlab_path: "+ndi/+data/evaluate_fitcurve.m (in a different namespace)"
-  - name: navigator_epochdir
-    matlab_path: "+ndi/+file/+navigator/epochdir.m"
-  - name: mfdaq_epoch_channel
-    matlab_path: "+ndi/+file/+type/mfdaq_epoch_channel.m"
   - name: navigator
     matlab_path: "+ndi/+file/navigator.m"
-  - name: pfilemirror
-    matlab_path: "+ndi/+file/pfilemirror.m"
   - name: diff (dataset)
     matlab_path: "+ndi/+fun/+dataset/diff.m"
   - name: storeDoc
