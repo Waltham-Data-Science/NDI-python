@@ -488,6 +488,10 @@ class TestTuningCurveToResponseType:
 
         tc_doc = MagicMock()
         tc_doc.document_properties = {"depends_on": []}
+        # The lookup now calls dependency_value by name, as MATLAB does; a
+        # bare MagicMock answers every call with a truthy mock, which is not
+        # what "this document has no dependencies" looks like.
+        tc_doc.dependency_value.return_value = None
         session = MagicMock()
         rt, doc = tuning_curve_to_response_type(session, tc_doc)
         assert rt == ""
