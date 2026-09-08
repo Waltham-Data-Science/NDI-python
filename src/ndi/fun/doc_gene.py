@@ -1620,3 +1620,92 @@ def _cells_doc_count(cells_doc):
     except Exception:
         pass
     return None
+
+
+def readContours(session, cells_doc):
+    """Boundary polygons for a cells document, in SOURCE coordinates.
+
+    The document-level companion to :func:`readContourFile`, which parses
+    the bytes. This adds the two things a caller needs and the file does
+    not carry: it finds ``contours.bin`` in the document, and it applies
+    ``contour_reference``.
+
+    THAT SECOND PART IS THE POINT. Vertices are usually stored RELATIVE to
+    their cell's centroid -- that is what makes them fit in int16, and
+    :func:`writeContourFile` refuses absolute coordinates that would wrap
+    -- so a caller that draws :func:`readContourFile`'s output directly
+    puts every outline in a small cluster near the origin. That is a
+    picture of nothing, drawn without an error. Here the centroid is added
+    back, so what comes out is always in the same frame as the centroids
+    from :func:`readCells` and as the pyramid itself.
+
+    Args:
+        session: an ndi.session or ndi.dataset holding the document.
+        cells_doc: a spatialGeneExpressionCells document.
+
+    Returns:
+        ``(polys, info)``. *polys* is one ``(N, 2)`` array of ``[x, y]``
+        per cell in cell_index order; a cell with no usable boundary gets
+        a ``(0, 2)`` array rather than being dropped, so row i here is
+        row i of cells.tsv. *info* is :func:`readContourFile`'s, plus
+        ``contourReference`` and ``nEmpty``.
+
+    Raises:
+        ValueError: if the document was written without contours, if the
+            reference is not one this understands, or if there are not as
+            many centroids as cells to place them on.
+    """
+    c = cells_doc.document_properties["spatialGeneExpressionCells"]
+    if not bool(c.get("contours_present")):
+        raise ValueError(
+            f"spatialGeneExpressionCells {cells_doc.id} has contours_present "
+            f"0: this cell table was written without boundaries. Re-ingest "
+            f"the cellbin with contours to get them."
+        )
+
+    reference = c.get("contour_reference") or "centroid"
+    if reference not in ("centroid", "absolute"):
+        raise ValueError(f"contour_reference is {reference!r}; expected 'centroid' or 'absolute'.")
+
+    fh = session.database_openbinarydoc(cells_doc, "contours.bin")
+    try:
+        # The dtypes are document FIELDS, not constants, so they are passed
+        # through rather than assumed -- the same reason readContourFile
+        # takes them as arguments.
+        polys, info = readContourFile(
+            fh,
+            nVerticesPerCell=int(c.get("n_vertices_per_cell") or 0),
+            vertexType=c.get("data_type_vertex") or _CONTOUR_VERTEX_TYPE,
+            offsetType=c.get("data_type_offset") or _CONTOUR_OFFSET_TYPE,
+        )
+    finally:
+        session.database_closebinarydoc(fh)
+
+    if reference == "centroid":
+        cols, _info = readCells(session, cells_doc)
+        cx = np.asarray(cols["x"], dtype=float)
+        cy = np.asarray(cols["y"], dtype=float)
+        if len(cx) != info["nCells"]:
+            raise ValueError(
+                f"contours.bin holds {info['nCells']} cells but cells.tsv "
+                f"holds {len(cx)} rows. Centroid-relative vertices cannot be "
+                f"placed without a centroid each."
+            )
+        placed = []
+        for i, poly in enumerate(polys):
+            if len(poly) == 0:
+                placed.append(np.zeros((0, 2), dtype=float))
+                continue
+            placed.append(
+                np.column_stack(
+                    [poly[:, 0].astype(float) + cx[i], poly[:, 1].astype(float) + cy[i]]
+                )
+            )
+        polys = placed
+    else:
+        polys = [np.asarray(p, dtype=float).reshape(-1, 2) for p in polys]
+
+    info = dict(info)
+    info["contourReference"] = reference
+    info["nEmpty"] = sum(1 for p in polys if len(p) == 0)
+    return polys, info

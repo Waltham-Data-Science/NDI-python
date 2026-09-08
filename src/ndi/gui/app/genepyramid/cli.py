@@ -60,6 +60,25 @@ def build_parser() -> argparse.ArgumentParser:
         "Otherwise a document id, or a directory holding cells.tsv as "
         "extract_cells.py writes it.",
     )
+    p.add_argument(
+        "--outlines",
+        action="store_true",
+        help="draw cell boundary polygons, not just centroids. Needs "
+        "--cells and a cells document whose contours_present is 1.",
+    )
+    p.add_argument(
+        "--name",
+        default="",
+        metavar="TEXT",
+        help="name for the image layer. Default is the pyramid's label, "
+        "which the ingest usually took from the file, so it names the "
+        "SECTION rather than what is being shown.",
+    )
+    p.add_argument(
+        "--no-controls",
+        action="store_true",
+        help="do not dock the gene / density panel",
+    )
     p.add_argument("--list", action="store_true", help="list the pyramids and exit")
     p.add_argument(
         "--report",
@@ -142,6 +161,62 @@ def _resolve_cells(session, pyr_doc, spec: str):
     return cols, info
 
 
+def _resolve_outlines(session, pyr_doc, spec: str, cells_info):
+    """Boundary polygons for the cells document --cells resolved.
+
+    Returns None after printing why, so main can exit 1. A directory of
+    extracted cells is refused rather than half-supported: contours.bin
+    is read out of the DOCUMENT, and pretending otherwise would fail
+    later with a message about a missing file rather than about the
+    thing the caller actually asked for.
+    """
+    import os
+
+    from ndi.fun.doc_gene import readContours
+    from ndi.query import ndi_query
+
+    if spec != "auto" and os.path.isdir(spec):
+        print(
+            "--outlines reads contours.bin from the cells DOCUMENT, and "
+            f"{spec} is a directory. Drop the path from --cells to use the "
+            "pyramid's own cells document.",
+            file=sys.stderr,
+        )
+        return None
+
+    if cells_info is not None and not cells_info.get("contoursPresent"):
+        print(
+            "this cells document has contours_present 0: it was written "
+            "without boundaries, so there is nothing to draw. Re-ingest the "
+            "cellbin with contours.",
+            file=sys.stderr,
+        )
+        return None
+
+    docs = session.database_search(
+        ndi_query("").isa("spatialGeneExpressionCells")
+        & ndi_query("").depends_on("spatialGeneExpressionPyramid_id", pyr_doc.id)
+    )
+    if spec != "auto":
+        docs = [d for d in docs if d.id == spec]
+    if len(docs) != 1:
+        print(f"expected one cells document for --outlines, found {len(docs)}", file=sys.stderr)
+        return None
+
+    try:
+        polys, info = readContours(session, docs[0])
+    except Exception as e:
+        print(f"could not read contours: {e}", file=sys.stderr)
+        return None
+
+    drawn = sum(1 for p in polys if len(p))
+    print(
+        f"[outlines] {drawn} of {info['nCells']} cells have a boundary "
+        f"({info['contourReference']}-referenced, {info['nVerticesTotal']} vertices)"
+    )
+    return polys
+
+
 def _resolve_genes(session, pyr_doc, spec: str):
     """Gene symbols or accessions to ZERO-BASED rows.
 
@@ -201,6 +276,15 @@ def main(argv=None) -> int:
             print(_describe(d), file=sys.stderr)
         return 1
 
+    if args.outlines and not args.cells:
+        print(
+            "--outlines needs --cells: the boundaries live on the cells "
+            "document, and centroid-relative vertices need the centroids "
+            "to be placed at all.",
+            file=sys.stderr,
+        )
+        return 1
+
     gene_rows = _resolve_genes(session, pyr, args.genes)
     cells, cells_info = _resolve_cells(session, pyr, args.cells)
     density = not args.no_density
@@ -225,7 +309,12 @@ def main(argv=None) -> int:
             if cells_info.get("segmentationMethod"):
                 print(f"          segmented by {cells_info['segmentationMethod']}")
             if cells_info.get("contoursPresent"):
-                print("          contours present but not read; centroids only")
+                print(
+                    f"          contours present ({cells_info.get('contourReference')}"
+                    f"-referenced); --outlines draws them"
+                )
+            else:
+                print("          no contours in this document; centroids only")
         print(f"  {'bin':>5} {'height':>8} {'width':>8} {'tiles':>12}")
         for lv in levels:
             print(
@@ -239,7 +328,23 @@ def main(argv=None) -> int:
     overlay = None
     if cells is not None:
         overlay = {"x": cells["x"], "y": cells["y"]}
-    openPyramid(session, pyr, gene_rows=gene_rows, density=density, cells=overlay)
+
+    polys = None
+    if args.outlines:
+        polys = _resolve_outlines(session, pyr, args.cells, cells_info)
+        if polys is None:
+            return 1
+
+    openPyramid(
+        session,
+        pyr,
+        gene_rows=gene_rows,
+        density=density,
+        cells=overlay,
+        outlines=polys,
+        controls=not args.no_controls,
+        name=args.name or None,
+    )
     return 0
 
 

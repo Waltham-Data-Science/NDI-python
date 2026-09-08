@@ -39,6 +39,9 @@ def openPyramid(
     gene_rows=None,
     density: bool = True,
     cells: dict[str, Any] | None = None,
+    outlines=None,
+    controls: bool = True,
+    name: str | None = None,
     show: bool = True,
 ):
     """Open a spatial gene expression pyramid in napari.
@@ -56,6 +59,20 @@ def openPyramid(
             straight in, because the image layer carries the origin in
             its translate and centroids that skip that transform land
             somewhere plausible and wrong.
+        outlines: optional list of ``(N, 2)`` ``[x, y]`` vertex arrays in
+            SOURCE coordinates, as :func:`~ndi.fun.doc_gene.readContours`
+            returns them, drawn as a Shapes layer. Routed through
+            :func:`~.multiscale.sourceToWorld` for the same reason
+            centroids are. Empty polygons are dropped: napari treats a
+            zero-vertex shape as malformed rather than as nothing.
+        controls: dock a small panel for choosing genes and switching
+            between density and raw counts. Without it both are fixed at
+            launch, since this viewer holds no other state. Silently
+            skipped when magicgui is unavailable -- the panel is a
+            convenience and its absence must not stop the picture.
+        name: image layer name. Defaults to the pyramid's label, which is
+            whatever the ingest recorded -- often the file stem, which
+            names the section rather than what is being shown.
         show: call ``napari.run()``. False returns the viewer without
             blocking, which is what a test or a caller composing several
             layers wants.
@@ -66,7 +83,25 @@ def openPyramid(
     napari = require_napari()
 
     viewer = napari.Viewer()
-    viewer.add_image(**layerSpec(session, pyr_doc, gene_rows, density))
+    image = viewer.add_image(**layerSpec(session, pyr_doc, gene_rows, density, name))
+
+    if outlines is not None:
+        keep = [p for p in outlines if len(p)]
+        if keep:
+            paths = []
+            for p in keep:
+                row, col = sourceToWorld(session, pyr_doc, p[:, 0], p[:, 1])
+                paths.append(list(zip(row, col)))
+            # shape_type polygon closes the ring itself, which matches the
+            # format: writeContourFile does not repeat the first vertex.
+            viewer.add_shapes(
+                paths,
+                shape_type="polygon",
+                name="cell outlines",
+                face_color="transparent",
+                edge_color="cyan",
+                edge_width=1,
+            )
 
     if cells is not None:
         row, col = sourceToWorld(session, pyr_doc, cells["x"], cells["y"])
@@ -77,6 +112,11 @@ def openPyramid(
             face_color=cells.get("face_color", "red"),
             border_width=0,
         )
+
+    if controls:
+        from .controls import addControls
+
+        addControls(viewer, session, pyr_doc, image, density)
 
     if show:
         napari.run()
