@@ -14,6 +14,7 @@ functions:
   - name: subject_stimulator_neuron
     type: function
     matlab_path: "src/ndi/+ndi/+mock/+fun/subject_stimulator_neuron.m"
+    matlab_last_sync_hash: "0d3dff8c5"
     python_path: "ndi/mock/__init__.py"
     input_arguments:
       - name: ndi_session_obj
@@ -29,9 +30,39 @@ functions:
       keys: subject, stimulator, spikes, subject_name, ref_num.
       Key names differ slightly but semantics match.
 
+      Examined against NDI-matlab 0d3dff8c5, the file's last-touching commit,
+      and "Exact match ... Key names differ slightly but semantics match" was
+      wrong on the substance, not the names. MATLAB creates an ndi.subject,
+      takes its newdocument(), and calls S.database_add on it, then builds two
+      ndi.element.timeseries OBJECTS against that subject id. The port built
+      three loose ndi.documents with _set_nested_property and never showed the
+      session any of them, so nothing a caller did with the result could be
+      found again -- and the two elements were documents rather than element
+      objects, with no reference and no subject dependency at all. AND IT
+      STILL CARRIED THE COLLISION BUG MATLAB WROTE pickFreeReference TO FIX.
+      MATLAB draws referenceMin + randi(60000), CHECKS the session for that
+      subject and for both elements at that reference, and retries up to 100
+      times before erroring; its comment spells out why -- an element is
+      identified by name, type and reference, so two mocks at one reference
+      are ONE element, the second call adds a second epoch named 'mockepoch'
+      to it, and reading that epoch then fails. The port was still `20000 +
+      randint(0, 999)` with no check: the span of 1000 MATLAB's comment says
+      "collides about one time in five over 22 draws". Both are ported. ONE
+      DIVERGENCE THAT COULD NOT BE PORTED: MATLAB names the elements 'mock
+      stimulator' and 'mock spikes', with a space. Python's ndi_element
+      REFUSES a name containing whitespace -- a rule MATLAB's ndi.element does
+      not have anywhere -- so the names here are 'mock_stimulator' and
+      'mock_spikes', exported as MOCK_STIMULATOR_NAME and MOCK_SPIKES_NAME.
+      That rule belongs to the element entry rather than this one, and it is
+      worth a look: it is pinned by three tests and recorded nowhere, MATLAB's
+      own mock helper violates it, and it applies only when constructing an
+      element -- the load-from-document path returns before the check, so a
+      MATLAB element with a space in its name still reads back fine.
+
   - name: stimulus_presentation
     type: function
     matlab_path: "src/ndi/+ndi/+mock/+fun/stimulus_presentation.m"
+    matlab_last_sync_hash: "63043f393"
     python_path: "ndi/mock/__init__.py"
     input_arguments:
       - name: S
@@ -90,9 +121,38 @@ functions:
       also accepts a stim_duration_min parameter (default 0.2) that
       Python lacks.
 
+      Examined against NDI-matlab 63043f393, the file's last-touching commit.
+      The recorded "SIGNIFICANT DIVERGENCE" is real and the decision to keep a
+      standalone data generator stands, but the record understated it: the
+      only MATLAB extra it named was stim_duration_min. What MATLAB actually
+      does that this does not: (1) it takes a session and a
+      stimulus_element_id, builds a real 'stimulus_presentation' ndi.document,
+      sets the stimulus_element_id dependency, and attaches a
+      presentation_time.bin file written by
+      ndi.database.fun.write_presentation_time_structure; (2) its spike times
+      are the POINT of the function -- it picks floor or ceil of R*duration,
+      whichever lands closer to the requested rate, and SHRINKS the stimulus
+      duration (bounded below by stim_duration_min) so the rate comes out
+      right, then places the spikes with linspace inside the stimulus; this
+      places int(rate*duration) spikes at uniform random offsets, so the rate
+      a caller recovers is not the rate they asked for; (3) MATLAB's first
+      stimulus opens at 1*(stim_duration + interstimulus_interval), not at 0;
+      (4) MATLAB has a RandomSeed option, defaulting to 'shuffle', drawing
+      trial noise from a PRIVATE stream so that generating a mock does not
+      disturb the caller's random numbers. ONE THING WAS PORTED, because it is
+      not about documents: MATLAB reads a NaN in X as a CONTROL (blank)
+      stimulus and writes isblank=1 in place of the variable. A NaN used to
+      land in the parameters as a NaN value, so nothing downstream could tell
+      a blank apart from a stimulus whose value was missing. Also noted for
+      whoever reads the MATLAB: its own help table says stim_duration (2) and
+      interstimulus_interval (3), but the arguments block sets 10 and 5. The
+      help is stale; the values recorded here are the arguments block's.
+
   - name: stimulus_response
     type: function
+    status: porting_deferred
     matlab_path: "src/ndi/+ndi/+mock/+fun/stimulus_response.m"
+    matlab_last_sync_hash: "63043f393"
     python_path: "ndi/mock/__init__.py"
     input_arguments:
       - name: S
@@ -140,9 +200,29 @@ functions:
       tuning curve) all added to the session database. Python stub
       returns a dict with the same keys.
 
+      Examined against NDI-matlab 63043f393, the file's last-touching commit,
+      AND THE STATUS IS CHANGED FROM PORTED TO porting_deferred, because
+      "DISCREPANCY FIXED ... Added stub implementation" left the entry
+      asserting a port that does not exist. MATLAB runs a whole pipeline: make
+      the mocks, clear the session cache, build the stimulus presentation
+      document and add it, load the presentation times through
+      ndi.app.stimulus.decoder, add a 'mockepoch' to the spikes element
+      carrying the spike times and a blank one to the stimulator, label the
+      control stimuli and compute the stimulus responses with
+      ndi.app.stimulus.tuning_response, then run ndi.calc.stimulus.tuningcurve
+      once per response document -- and returns a FLAT LIST of all of those
+      documents. The Python function returns a dict in which control_stimulus,
+      stimulus_response and tuning_curve are literally None, so three of its
+      seven advertised outputs are absent; the record's claim that it "returns
+      a dict with the same keys" is not true either, since MATLAB returns an
+      unkeyed list. Nothing is invented here: the missing half needs the
+      decoder, the tuning_response app and the tuningcurve calculator wired
+      together, which is a feature to build rather than a hash to move.
+
   - name: clear
     type: function
     matlab_path: "src/ndi/+ndi/+mock/+fun/clear.m"
+    matlab_last_sync_hash: "bd61ab3b6"
     python_path: "ndi/mock/__init__.py"
     python_name: "clear_mock_docs"
     input_arguments:
@@ -157,6 +237,20 @@ functions:
       conflict with built-in 'clear'. This is documented in the
       bridge decision_log as an allowed Pythonization.
 
+      Examined against NDI-matlab bd61ab3b6, the file's last-touching commit.
+      MATLAB is two statements: search for subjects whose local_identifier
+      contains 'mock', then database_rm them. The port had the same query
+      wrapped in a try/except whose fallback path itself ended in `except
+      Exception: pass`, so a session whose database_rm failed reported success
+      and left every mock document in place -- exactly the state this function
+      exists to prevent, and the state that makes the next
+      subject_stimulator_neuron run out of free references. The swallowing is
+      removed; errors reach the caller as they do in MATLAB. Returning None
+      rather than a count, and the name clear_mock_docs, are the previously
+      recorded Pythonizations and still hold. One difference kept
+      deliberately: MATLAB calls database_rm even on an empty result, where
+      this skips the call.
+
 # =========================================================================
 # Classes
 # =========================================================================
@@ -168,8 +262,41 @@ classes:
   - name: ctest
     type: class
     matlab_path: "src/ndi/+ndi/+mock/ctest.m"
+    matlab_last_sync_hash: "0bdc0ac79"
     python_path: "ndi/mock/__init__.py"
     python_class: "ndi_mock_ctest"
+    decision_log: >
+      Examined against NDI-matlab 0bdc0ac79, the file's last-touching commit.
+      Six of MATLAB's methods had no counterpart, and the ones that did looked
+      in the wrong place. PORTED: calc_path (MATLAB's is which(class(obj)) --
+      the ctest SUBCLASS's own file -- where mock_path here reached for the
+      CALCULATOR's calc_path instead); mock_path, now
+      calc_path()/mock/<classname>/ as MATLAB has it, where the class-name
+      directory was missing and, with no calculator, the whole path fell back
+      to a bare relative 'mock' resolved against whatever the working
+      directory happened to be; mock_expected_filename and
+      mock_comparison_filename, which MATLAB returns as FULL paths and which
+      returned bare names here; load_mock_comparison, whose absence meant the
+      stored per-field tolerances -- the entire reason mock.N.compare.json
+      exists, and ndi/doc_comparison.py is already the port of the object it
+      holds -- were never read; clean_mock_docs, whose MATLAB body is empty
+      but whose absence turned a no-op call into an AttributeError; and the
+      static reportSummary. NOT PORTED, recorded rather than invented.
+      compare_mock_docs takes (expected, actual, scope, docCompare) in MATLAB
+      and applies the loaded tolerances; here it takes two documents and
+      compares them EXACTLY through ndi.fun.doc.diff, so a calculator whose
+      answer is correct to within its own stated tolerance still fails. test
+      returns [b, reports, b_expected, doc_output, doc_expected_output] in
+      MATLAB against a dict of 'passed' and 'results' here, and MATLAB's
+      b_expected/doc_expected_output half -- running the calculator against
+      the stored EXPECTED inputs as a control -- has no counterpart at all.
+      plot and verifyTestResults (the MATLAB-unittest bridge) are also
+      missing. Two smaller differences left alone: load_mock_expected_output
+      errors on a missing file in MATLAB and returns None here, and returns an
+      ndi.document there against a raw dict here; and
+      write_mock_expected_output errors on an existing file in MATLAB -- "It
+      must be deleted manually to ensure programmer really wants to overwrite
+      it" -- where this returns False, which a caller can ignore.
 
     methods:
       - name: ctest
