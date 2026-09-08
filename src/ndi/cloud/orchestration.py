@@ -142,7 +142,11 @@ def downloadDataset(
         if verbose:
             print(f'  Files downloaded: {report["downloaded"]}, failed: {report["failed"]}')
         for dj in doc_jsons:
-            updateFileInfoForLocalFiles(dj, str(staging))
+            # cloud_dataset_id is threaded through so a downloaded series
+            # keeps its manifest's ndic:// reference and gets its
+            # ingest_locations rebuilt -- without which DID refuses the
+            # document outright. Mirrors NDI-matlab#958.
+            updateFileInfoForLocalFiles(dj, str(staging), cloud_dataset_id)
 
     # Convert to ndi_document objects and create ndi_dataset with them.
     # Mirrors MATLAB: ndi.dataset.dir([], datasetFolder, ndiDocuments)

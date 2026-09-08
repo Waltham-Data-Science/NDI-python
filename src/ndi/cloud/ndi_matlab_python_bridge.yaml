@@ -1012,7 +1012,29 @@ functions:
     decision_log: >
       MATLAB places this in +sync/+internal. Python places it in
       filehandler.py. Exact name match. Mutates doc_props in-place.
-
+      The shapes differ: MATLAB calls document.reset_file_info() and
+      rebuilds, Python edits the properties dict where it stands. So
+      MATLAB's #945 fix -- carrying files.series_info across the reset that
+      would otherwise drop it -- has nothing to fix here; there is no reset,
+      and the per-series record survives on its own.
+      SERIES ARE PORTED NOW (NDI-python#215; this entry used to say they
+      were not). cloudDatasetId is the third argument on both sides, and
+      with it a downloaded series gets the two things it needs to be
+      readable: the manifest keeps the ndic:// reference it came from as a
+      second location beside the local copy (504c5bcf4, NDI-matlab#966),
+      so DID can hand that location to the file handler with a member's uid
+      in the context; and files.series_info(:).ingest_locations are rebuilt
+      from the downloaded manifest by reconstructSeriesIngestLocations
+      (cd3c11673, NDI-matlab#958), without which DID refuses the document
+      outright. The representation itself is DID's -- files.series_info,
+      file_series and n_present are read through did.document, not
+      reimplemented here, per AGENTS.md section 4.
+      Python builds the manifest's second location record directly rather
+      than through ndi.document.add_file, because this works on a properties
+      DICT: the whole download pipeline mutates dicts in place, as
+      updateFileInfoForRemoteFiles does, and converting to a document would
+      deep-copy and lose the mutation. The record shape is pinned to
+      add_file's by test_cloud_series_reconstruction.py.
   - name: updateFileInfoForLocalFiles
     matlab_path: "+ndi/+cloud/+sync/+internal/updateFileInfoForLocalFiles.m"
     matlab_last_sync_hash: "504c5bcf4"
@@ -1024,6 +1046,10 @@ functions:
       - name: file_directory
         type_matlab: "char"
         type_python: "str"
+      - name: cloud_dataset_id
+        type_matlab: "string"
+        type_python: "str"
+        default: '""'
     output_arguments: []
     decision_log: >
       MATLAB places this in +sync/+internal. Python places it in
@@ -1434,16 +1460,40 @@ not_yet_ported:
   - name: reconstructSeriesIngestLocations
     matlab_path: "+ndi/+cloud/+sync/+internal/reconstructSeriesIngestLocations.m"
     matlab_last_sync_hash: "cd3c116"
-    status: porting_deferred
+    python_path: "ndi/cloud/filehandler.py"
+    input_arguments:
+      - name: doc_props
+        type_matlab: "struct (seriesInfo and fileInfo passed separately)"
+        type_python: "dict"
+      - name: file_directory
+        type_matlab: "string"
+        type_python: "str"
+      - name: cloud_dataset_id
+        type_matlab: "string"
+        type_python: "str"
+    output_arguments: []
     decision_log: >
-      MATLAB helper for SyncFiles=true downloads: rebuilds a file
-      series' ingest_locations from the downloaded manifest so
-      DID-matlab#185's MembersNotLocatable guard is satisfied on the
-      following add_docs, even though the cloud strips
-      ingest_locations before storing. Every reconstructed entry is
-      ingest=0 / delete_original=0. Python's sync layer does not
-      currently drive add_docs the way MATLAB does, so nothing calls a
-      port yet. Recorded here beside the other +sync/+internal entries.
+      PORTED for NDI-python#215; this entry previously said nothing called
+      a port yet, which stopped being true once downloadDataset began
+      rewriting file_info before the add (NDI-python#258).
+      MATLAB helper for SyncFiles=true downloads: rebuilds a file series'
+      ingest_locations from the downloaded manifest so DID-matlab#185's
+      MembersNotLocatable guard is satisfied on the following add_docs,
+      even though storage strips ingest_locations. Every reconstructed
+      entry is ingest=0 / delete_original=0 -- satisfying the guard, not
+      pulling 28,000 members down at add time.
+      SHAPE DIFFERS: MATLAB takes seriesInfo and fileInfo as separate
+      arguments and returns the updated seriesInfo; Python takes the whole
+      properties dict and mutates it in place, matching
+      updateFileInfoForLocalFiles beside it and the rest of the download
+      pipeline. Same six fields per entry (index, uid, location,
+      location_type, ingest, delete_original) and the same one-based slot
+      index. A series whose manifest is missing or unreadable is left alone
+      so the guard fires -- the right signal when the download was
+      incomplete -- but Python logs a warning where MATLAB's catch is
+      silent, since a short download is otherwise indistinguishable from a
+      smaller dataset. The manifest is read with
+      did.file.read_series_manifest rather than any reader of NDI's own.
 
   - name: dropDuplicateDocsFromJsonDecode
     matlab_path: "+ndi/+cloud/+internal/dropDuplicateDocsFromJsonDecode.m"
