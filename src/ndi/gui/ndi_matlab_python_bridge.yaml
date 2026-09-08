@@ -644,6 +644,11 @@ ported_late:
       Lands after JRCLUST itself is reachable from Python, not before.
       Noted in #204.
 
+      Confirmed against NDI-matlab 0e8556233, the file's last-touching commit,
+      which changed how the app reads a probe's pipeline stage (real JRCLUST
+      stage markers rather than field presence). The deferral is unchanged:
+      JRCLUST itself is still not reachable from Python.
+
   - name: GeneIngest
     matlab_path: "+ndi/+gui/+app/GeneIngest.m"
     matlab_last_sync_hash: "eae346a"

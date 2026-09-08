@@ -852,6 +852,11 @@ functions:
       answers that question; the split between the two groups is left for
       whoever picks it up, in the same shape as +kiasort. Noted in #204.
 
+      Confirmed against NDI-matlab 0e8556233, the package's last-touching
+      commit, which made the pipeline read JRCLUST's real stage markers
+      instead of inferring them from field presence -- the behaviour status.m
+      reports. Nothing to port while the deferral holds.
+
   - name: export.jrclust
     type: function
     matlab_path: "+ndi/+fun/+probe/+export/jrclust.m"
@@ -862,3 +867,8 @@ functions:
       alongside the +jrclust importer package: the export half only earns its
       keep once Python has a reason to run JRCLUST or ingest its results, and
       today it does not. Noted in #204.
+
+      Confirmed against NDI-matlab a3765c9e5, the file's last-touching commit
+      and the one that introduced the whole JRCLUST pipeline. Still writes a
+      .prm file at [S.path]/.JRCLUST/[element string]/jrclust.prm. Deferral
+      unchanged: Python still has no reason to run JRCLUST.

@@ -2413,6 +2413,12 @@ not_applicable:
       them, so the check happens before any code runs and there is nothing
       left for a runtime assertion to catch.
 
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit
+      (the src/ layout move; the file has not changed since). It still asks
+      `ver` for the installed add-ons, reads the required list from
+      ndi_common/requirements/ndi-matlab-addons.json and errors naming what
+      required them. Nothing on the Python side to follow.
+
   - name: check_Matlab_toolboxes
     matlab_path: "+ndi/+fun/check_Matlab_toolboxes.m"
     matlab_last_sync_hash: "7d953875f"
@@ -2423,6 +2429,13 @@ not_applicable:
       MATLAB toolboxes `ver` does not list. The file names MATLAB products
       (Signal Processing Toolbox, and so on); Python's equivalent list is
       pyproject.toml's dependencies, enforced by the installer.
+
+      Confirmed against NDI-matlab 7d953875f ("Improve toolbox check with
+      consolidated missing warning"), the file's last-touching commit. That
+      change consolidated the per-toolbox warnings into one; the function
+      still reads ndi-matlab-toolboxes.json and warns about MATLAB products
+      `ver` does not list, which is the part with no Python meaning. Nothing
+      to port.
 
   - name: console
     matlab_path: "+ndi/+fun/console.m"
@@ -2436,36 +2449,64 @@ not_applicable:
       logging goes through the standard logging module, which the user
       configures rather than a helper spawning a window.
 
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Still macOS-only, still builds an AppleScript that tells Terminal to
+      `tail -f` the file and runs it through osascript. Nothing to port.
+
   - name: convertoldnsd2ndi
     matlab_path: "+ndi/+fun/convertoldnsd2ndi.m"
     matlab_last_sync_hash: "86379c7de"
     status: matlab_only
-    decision_log: "Legacy NSD-to-NDI migration tool. MATLAB-specific."
+    decision_log: >
+      Legacy NSD-to-NDI migration tool. MATLAB-specific.
+
+      Confirmed against NDI-matlab 86379c7de, the file's last-touching commit,
+      which quotes PATHNAME into the shell commands and rejects a path
+      containing a double quote. That hardening has no Python side to follow:
+      there is no Python port of this deprecated NSD-to-NDI renamer, and none
+      is wanted.
 
   - name: debuglog
     matlab_path: "+ndi/+fun/debuglog.m"
     matlab_last_sync_hash: "fe64a9f53"
     status: matlab_only
-    decision_log: "MATLAB logging utility. Python uses standard logging."
+    decision_log: >
+      MATLAB logging utility. Python uses standard logging.
+
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Still a three-line wrapper handing ndi.common.getLogger's debug_logfile
+      to ndi.fun.console, so it inherits console's macOS-only limitation.
+      Nothing to port.
 
   - name: errlog
     matlab_path: "+ndi/+fun/errlog.m"
     matlab_last_sync_hash: "fe64a9f53"
     status: matlab_only
-    decision_log: "MATLAB logging utility. Python uses standard logging."
+    decision_log: >
+      MATLAB logging utility. Python uses standard logging.
+
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Still a three-line wrapper handing ndi.common.getLogger's error_logfile
+      to ndi.fun.console. Nothing to port.
 
   - name: find_calc_directories
     matlab_path: "+ndi/+fun/find_calc_directories.m"
     matlab_last_sync_hash: "5b9e08493"
     status: ported_differently
     decision_log: >
-      Not applicable. Finds NDIcalc-*-matlab calculator toolboxes by going
+      Not applicable. Finds NDIcalc*-matlab calculator toolboxes by going
       three directories up from ndi.toolboxdir and globbing the siblings --
       a search that only works because MATLAB toolboxes are installed side
       by side. Python calculators are found through the ndi.calc package
       and the class registry (ndi/class_registry.py), which is an import
       question rather than a filesystem one; a third-party calculator
       distributed as its own package is discovered by being importable.
+
+      Confirmed against NDI-matlab 5b9e08493, the file's last-touching commit.
+      Still resolves a base path three directories up from ndi.toolboxdir and
+      globs the siblings, wrapped in a try/catch that warns and returns {}.
+      Nothing to port: the Python answer is still importability, not the
+      filesystem.
 
   - name: plot_extracellular_spikeshapes
     matlab_path: "+ndi/+fun/plot_extracellular_spikeshapes.m"
@@ -2512,7 +2553,12 @@ not_applicable:
     matlab_path: "+ndi/+fun/syslog.m"
     matlab_last_sync_hash: "fe64a9f53"
     status: matlab_only
-    decision_log: "MATLAB logging utility. Python uses standard logging."
+    decision_log: >
+      MATLAB logging utility. Python uses standard logging.
+
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Still a three-line wrapper handing ndi.common.getLogger's system_logfile
+      to ndi.fun.console. Nothing to port.
 
   - name: export.gmcSorter
     matlab_path: "+ndi/+fun/+export/gmcSorter.m"
@@ -2527,6 +2573,10 @@ not_applicable:
       GMC_Sorter, in the same shape ndi.fun.probe.export.binary already uses
       for Kilosort and KIASORT. Noted in #204.
 
+      Confirmed against NDI-matlab c8fa652e8, the file's last-touching commit,
+      which only removes a stale onCleanup NASGU suppression -- no behavioural
+      change. The deferral stands: still no Python caller driving GMC_Sorter.
+
   - name: export.gmcSorterWrite
     matlab_path: "+ndi/+fun/+export/gmcSorterWrite.m"
     matlab_last_sync_hash: "cad1bae2f"
@@ -2536,6 +2586,11 @@ not_applicable:
       'dat_t_s' raw format. Same status and reason as export.gmcSorter:
       portable work, no current Python caller. Noted in #204.
 
+      Confirmed against NDI-matlab cad1bae2f, the file's last-touching commit,
+      which retargeted the exporter at GMC_Sorter Version 4. Nothing to port
+      while the deferral holds; when it is lifted, Version 4's per-shank
+      ch_order is the shape to follow.
+
   - name: export.writeGmcSidecars
     matlab_path: "+ndi/+fun/+export/writeGmcSidecars.m"
     matlab_last_sync_hash: "cad1bae2f"
@@ -2544,3 +2599,7 @@ not_applicable:
       Not ported yet. Writes GMC_Sorter's channel map, metadata and driver
       files beside the raw file that gmcSorter/gmcSorterWrite produce. Same
       status and reason as export.gmcSorter. Noted in #204.
+
+      Confirmed against NDI-matlab cad1bae2f, the file's last-touching commit
+      (the same Version 4 retarget as gmcSorterWrite: the generated driver now
+      runs one extract_spike_features pass per shank). Deferral unchanged.
