@@ -871,7 +871,7 @@ functions:
 
   - name: listFiles
     matlab_path: "+ndi/+cloud/+api/+files/listFiles.m"
-    matlab_last_sync_hash: "8b9e4dfa"
+    matlab_last_sync_hash: "be2f79334"
     python_path: "ndi/cloud/api/files.py"
     input_arguments:
       - name: dataset_id
@@ -883,7 +883,12 @@ functions:
     output_arguments:
       - name: result
         type_python: "APIResponse"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match.
+      NDI-matlab be2f79334 is documentation only: it drops isRaw from the
+      ANSWER field list, the server having stopped returning it. Nothing to
+      port -- this passes the file records through as the API returns them and
+      never named isRaw.
 
   - name: getFileDetails
     matlab_path: "+ndi/+cloud/+api/+files/getFileDetails.m"
@@ -1079,7 +1084,7 @@ functions:
 
   - name: me
     matlab_path: "+ndi/+cloud/+api/+users/me.m"
-    matlab_last_sync_hash: "f0c2597f"
+    matlab_last_sync_hash: "f2b91923f"
     python_path: "ndi/cloud/api/users.py"
     input_arguments:
       - name: client
@@ -1088,7 +1093,18 @@ functions:
     output_arguments:
       - name: user
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match.
+      NDI-matlab f2b91923f is documentation only: it writes out the fields
+      /users/me returns, including the organizations array and the parallel
+      organizationID / organizationName / organizationCanUploadDataset
+      convenience arrays its implementation class derives from it. Nothing to
+      port. Those parallel arrays are a MATLAB idiom for reaching into an array
+      of structs; Python returns the response as it stands, so
+      me()["organizations"] is already a list of dicts with id, name and
+      canUploadDataset -- the same information in the shape the language
+      already has. That list is where a caller finds the organization id that
+      cloud.api.compute.startSession now requires.
 
   - name: GetUser
     matlab_path: "+ndi/+cloud/+api/+users/GetUser.m"

@@ -24,11 +24,12 @@
 # list can only shrink; nothing can be added to it without a deliberate edit
 # that a reviewer sees.
 #
-# THE `signature` GROUP IS DONE, AND 16 OF THE 40 `body` ONES WITH IT.
-# What is left below is the +cloud upload/download/sync cluster, which moved
-# together (bulk uploads, curl instead of websave, signed-URL sets) and wants
-# reading together, plus preferences, cedspike2, the two mfdaq readers,
-# extract_docs_files, element/tuning_response and the 2 comments-only.
+# ONLY THE +cloud CLUSTER IS LEFT. The signature group is done, and so are
+# the body entries outside +ndi/+cloud/ and the 2 comments-only ones. What
+# remains moved together in MATLAB -- bulk uploads and waitForAllBulkUploads,
+# curl instead of websave, signed-URL sets, and the sync pipeline reporting
+# failures it used to bury -- so it wants reading as one change rather than
+# eighteen.
 #
 # THE `signature` GROUP IS DONE. Those 18 were MATLAB commits that changed a
 # function signature or arguments block -- where a stale hash was most likely
@@ -42,7 +43,7 @@
 # after reading the diff is the usual outcome.
 
 # ---------------------------------------------------------------------------
-# drifted: 26  (body 24, comments-only 2)
+# drifted: 18  (all of them the +cloud upload/download/sync cluster)
 # ---------------------------------------------------------------------------
 drifted:
 
@@ -51,14 +52,10 @@ drifted:
     matlab_path: "+ndi/+cloud/+api/url.m"  # 11 commit(s) since
   - name: downloadGenericFiles
     matlab_path: "+ndi/+cloud/+download/downloadGenericFiles.m"  # 5 commit(s) since
-  - name: extract_doc_files
-    matlab_path: "+ndi/+database/+fun/extract_docs_files.m"  # 5 commit(s) since
   - name: downloadDocumentCollection
     matlab_path: "+ndi/+cloud/+download/downloadDocumentCollection.m"  # 4 commit(s) since
   - name: getFile
     matlab_path: "+ndi/+cloud/+api/+files/getFile.m"  # 3 commit(s) since
-  - name: preferences
-    matlab_path: "+ndi/preferences.m"  # 3 commit(s) since
   - name: uploadDataset
     matlab_path: "+ndi/+cloud/uploadDataset.m"  # 3 commit(s) since
   - name: zipForUpload
@@ -81,26 +78,14 @@ drifted:
     matlab_path: "+ndi/+cloud/+sync/uploadNew.m"  # 2 commit(s) since
   - name: uploadSingleFile
     matlab_path: "+ndi/+cloud/uploadSingleFile.m"  # 2 commit(s) since
-  - name: cedspike2
-    matlab_path: "+ndi/+daq/+reader/+mfdaq/cedspike2.m"  # 1 commit(s) since
   - name: filesNotYetUploaded
     matlab_path: "+ndi/+cloud/+sync/+internal/filesNotYetUploaded.m"  # 1 commit(s) since
   - name: helloMatlab
     matlab_path: "+ndi/+cloud/helloMatlab.m"  # 1 commit(s) since
-  - name: mfdaq_reader
-    matlab_path: "+ndi/+daq/+reader/mfdaq.m"  # 1 commit(s) since
   - name: newDataset
     matlab_path: "+ndi/+cloud/+upload/newDataset.m"  # 1 commit(s) since
-  - name: system_mfdaq
-    matlab_path: "+ndi/+daq/+system/mfdaq.m"  # 1 commit(s) since
-  - name: tuning_response
-    matlab_path: "+ndi/+app/+stimulus/tuning_response.m"  # 1 commit(s) since
 
   # --- comments-only ---
-  - name: listFiles
-    matlab_path: "+ndi/+cloud/+api/+files/listFiles.m"  # 1 commit(s) since
-  - name: me
-    matlab_path: "+ndi/+cloud/+api/+users/me.m"  # 1 commit(s) since
 
 # ---------------------------------------------------------------------------
 # no_hash: 146

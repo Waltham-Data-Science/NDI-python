@@ -1001,7 +1001,7 @@ classes:
   - name: preferences
     type: class
     matlab_path: "+ndi/preferences.m"
-    matlab_last_sync_hash: "9061865d"
+    matlab_last_sync_hash: "9a9150e7c"
     python_path: "ndi/preferences.py"
     python_class: "Preferences"
     inherits: ""
@@ -1009,6 +1009,14 @@ classes:
     decision_log: >
       matlab and python both persist to ~/.ndi/NDI_Preferences.json on
       all platforms (synchronized 2026-05-11).
+      NDI-matlab 9a9150e7c and the two commits before it add preference items:
+      GUI/Navigator/SessionAppPackages, which this port already has, and three
+      Parallel items (OpenPoolIfNone, UseDefaultNumberOfWorkers,
+      NumberOfWorkers). The Parallel three are not ported and should not be:
+      they govern MATLAB's parpool, where each worker is a separate MATLAB
+      process, so a pool nobody asked for costs start-up time and a multiple of
+      MATLAB's memory. Python has no parpool and no NDI code that would read
+      them; a preference nothing consults is worse than an absent one.
 
 # =========================================================================
 # Not ported / Not applicable
