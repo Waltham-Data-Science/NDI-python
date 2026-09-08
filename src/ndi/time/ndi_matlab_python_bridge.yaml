@@ -832,7 +832,7 @@ time_fun:
     matlab_path: "+ndi/+time/+fun/syncTriggerTrains.m"
     matlab_last_sync_hash: "0e2caa09"
     python_path: "ndi/time/syncrule/common_triggers_overlapping_epochs.py"
-    python_qualified: "_sync_triggers"
+    python_qualified: "_sync_trigger_trains"
     input_arguments:
       - name: t1
         type_matlab: "double vector"
@@ -840,29 +840,50 @@ time_fun:
       - name: t2
         type_matlab: "double vector"
         type_python: "np.ndarray"
+      - name: options.alignmentTolerance
+        type_matlab: "double"
+        type_python: "float"
+        default: "0.005"
+      - name: options.minMatchRate
+        type_matlab: "double"
+        type_python: "float"
+        default: "0.8"
+      - name: options.fingerprintSize
+        type_matlab: "double"
+        type_python: "int"
+        default: "5"
     output_arguments:
       - name: shift
         type_python: "float"
       - name: scale
         type_python: "float"
     decision_log: >
-      MATLAB keeps this as a free function in +time/+fun because two
+      PORTED in NDI-python#223, which closed the gap this entry used to
+      record. MATLAB keeps this as a free function in +time/+fun because two
       syncrules could use it; Python has one caller, so it lives as the
-      private _sync_triggers beside it. That part is only placement.
-      DIVERGENCE, and the reason this entry is worth reading: the two are
-      not the same algorithm. MATLAB's is 169 lines of drift-tolerant
-      inter-pulse-interval hashing -- it finds candidate alignments by
-      quantized IPI, validates each against a window that widens to absorb
-      200ppm+ clock drift over long files, PERMITS EXACTLY ONE MISSING
-      PULSE, and raises when more than one distinct alignment validates.
-      Python's is a least-squares polyfit that requires len(t1) == len(t2)
-      and raises "Trigger count mismatch" otherwise.
-      So Python fails precisely where MATLAB was engineered to succeed: a
-      single dropped pulse, which the MATLAB header calls out as the case
-      it exists for. Two devices that MATLAB can align, Python refuses to.
-      Recorded rather than fixed here: porting the real algorithm is its
-      own change with its own tests, and it needs cross-language cases to
-      prove the two agree on the same pulse trains.
+      private _sync_trigger_trains beside it, with runRobustGlobalSync as
+      _run_robust_global_sync. That is placement only -- the algorithm is
+      followed step for step: quantized inter-pulse-interval fingerprints
+      seed candidate offsets, each offset is validated across the whole
+      shorter train against a window that widens with distance from the seed
+      to absorb 200ppm+ drift, at most one unmatched pulse is permitted, and
+      the surviving hypotheses are ranked by match rate.
+      THREE BEHAVIOURS A CALLER MUST NOT LOSE, all preserved: it returns
+      (nan, nan) rather than a guess when nothing validates; it raises on a
+      genuinely ambiguous alignment (SyncAmbiguityError, carrying MATLAB's
+      'ndi:time:sync:ambiguous' identifier) rather than picking one; and the
+      "at most one missed pulse" budget counts pulses of the SHORTER train
+      with no partner in the longer one, so drops from the longer train are
+      unbounded. tests/test_sync_trigger_trains.py pins all three.
+      ONE DETAIL WORTH THE LINE: MATLAB's round() is half-away-from-zero and
+      numpy's is half-to-even, which would bucket an interval landing exactly
+      on .5 differently and silently fail to match a fingerprint. Python uses
+      an explicit _matlab_round.
+      NOT THIS ENTRY, but adjacent and easy to confuse: _sync_triggers in the
+      same file is the equal-length least-squares path, modelling
+      vlt.time.syncTriggers (a different repo, so no entry here). It still
+      raises on a count mismatch; commonTriggersOverlappingEpochs chooses
+      between the two.
 
   - name: syncRandomTriggers
     matlab_path: "+ndi/+time/+fun/syncRandomTriggers.m"
