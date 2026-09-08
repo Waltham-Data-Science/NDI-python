@@ -506,3 +506,121 @@ class TestRewriteWithRealDocs:
                         ndic_count += 1
 
         assert ndic_count >= 60
+
+
+# ---------------------------------------------------------------------------
+# Series members: which uid the handler is really being asked for
+# ---------------------------------------------------------------------------
+
+
+class TestSeriesMemberContext:
+    """A series member is fetched by ITS uid, not by its manifest's.
+
+    A file series keeps its members on the cloud deliberately -- opening a
+    dataset must not drag down a 28,000-member series -- and a member has no
+    location of its own. DID resolves one by handing the MANIFEST's location
+    to the handler with the member's uid in the context (DID-matlab#188), so
+    the context is the only thing saying which file is wanted.
+
+    A handler that ignores it downloads the manifest again and stores it
+    under the member's uid. DID refuses that when it can compare sizes
+    (``HandlerReturnedManifest``) and cannot when the manifest's size is
+    unreadable, in which case every later read of that member returns the
+    manifest instead -- quietly. These tests are the reason NDI-python#215
+    exists; they fail against a two-argument handler.
+    """
+
+    MANIFEST_URI = "ndic://ds_test/MANIFESTUID"
+    MEMBER_UID = "MEMBERUID0000000000000000000000001"
+
+    def _fetch_uri(self, tmp_path, context):
+        """The URI the handler actually asked fetch_cloud_file for."""
+        from ndi.cloud.filehandler import download_file_from_cloud
+
+        dest = tmp_path / "member.bin"
+        with patch("ndi.cloud.filehandler.fetch_cloud_file") as mock_fetch:
+            download_file_from_cloud(dest, self.MANIFEST_URI, context)
+        mock_fetch.assert_called_once()
+        return mock_fetch.call_args[0][0]
+
+    def test_member_is_fetched_by_its_own_uid(self, tmp_path):
+        """seriesName marks a member fetch; the context uid names the file."""
+        uri = self._fetch_uri(
+            tmp_path,
+            {
+                "documentId": "doc_1",
+                "filename": "stack_7",
+                "seriesName": "stack",
+                "uid": self.MEMBER_UID,
+                "mode": "open",
+            },
+        )
+        assert uri == f"ndic://ds_test/{self.MEMBER_UID}"
+        assert "MANIFESTUID" not in uri, "fetched the manifest, not the member"
+
+    def test_ordinary_file_ignores_the_context_uid(self, tmp_path):
+        """Without seriesName the source_path's uid is the right one.
+
+        Deliberately not "prefer context.uid whenever present": DID passes a
+        uid for ordinary files too, and there it is the files-table row
+        rather than what the ndic:// reference names. Preferring it would
+        redirect every ordinary fetch to the wrong object.
+        """
+        uri = self._fetch_uri(
+            tmp_path,
+            {
+                "documentId": "doc_1",
+                "filename": "data.bin",
+                "uid": "SOME_FILES_TABLE_ROW_UID",
+                "mode": "open",
+            },
+        )
+        assert uri == self.MANIFEST_URI
+
+    def test_no_context_is_the_two_argument_behaviour(self, tmp_path):
+        """A two-argument caller still works, unchanged."""
+        assert self._fetch_uri(tmp_path, None) == self.MANIFEST_URI
+
+    def test_a_member_with_no_uid_falls_back(self, tmp_path):
+        """seriesName but no uid: nothing to redirect to, so do not.
+
+        The context is DID's to define. A key that is missing or empty means
+        "not a member fetch", never an exception from in here.
+        """
+        uri = self._fetch_uri(tmp_path, {"seriesName": "stack", "uid": ""})
+        assert uri == self.MANIFEST_URI
+
+    def test_a_non_dict_context_is_survivable(self, tmp_path):
+        assert self._fetch_uri(tmp_path, "not a dict") == self.MANIFEST_URI
+
+    def test_did_actually_dispatches_the_context_to_ndis_handler(self, tmp_path):
+        """The contract test: DID must CHOOSE the three-argument form.
+
+        DID counts the handler's positional parameters and calls the
+        two-argument form for anything with fewer than three -- silently. So
+        a handler can read the context perfectly and never be given one.
+        This asserts against DID's own dispatcher rather than a
+        reimplementation of its rule, because the rule is DID's to change.
+        """
+        from did.implementations.sqlitedb import SQLiteDB
+
+        from ndi.database import _cloud_file_handler
+
+        seen = {}
+
+        def fake_download(dest_path, source_path, context=None, *, client=None):
+            seen["context"] = context
+
+        with patch("ndi.cloud.filehandler.download_file_from_cloud", fake_download):
+            SQLiteDB._dispatch_custom_file_handler(
+                _cloud_file_handler,
+                str(tmp_path / "dest.bin"),
+                self.MANIFEST_URI,
+                {"seriesName": "stack", "uid": self.MEMBER_UID},
+            )
+
+        assert seen["context"] is not None, (
+            "DID dispatched the two-argument form: NDI's handler declares "
+            "too few positional parameters to be given the context"
+        )
+        assert seen["context"]["uid"] == self.MEMBER_UID
