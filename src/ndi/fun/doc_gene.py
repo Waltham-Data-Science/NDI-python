@@ -356,7 +356,10 @@ def makeGeneList(
     n_dup = sum(1 for v in seen.values() if v > 1)
 
     fd, tsv_path = tempfile.mkstemp(suffix=".tsv")
-    with os.fdopen(fd, "w") as fh:
+    # newline="" so Python does not translate "\n" to "\r\n" on Windows.
+    # The file is read back as raw bytes by database_openbinarydoc, and a
+    # trailing "\r" would land on the last field of every row.
+    with os.fdopen(fd, "w", newline="") as fh:
         fh.write("gene_index\tgene_id\tgene_name\n")
         for i in range(n):
             # gene_index is written explicitly and is ZERO-BASED, matching
@@ -677,7 +680,7 @@ def _write_gene_totals(gene_index, count, n_genes):
     ).astype(np.int64)
     npx = np.bincount(np.asarray(gene_index, np.int64), minlength=n_genes).astype(np.int64)
     fd, path = tempfile.mkstemp(suffix=".tsv")
-    with os.fdopen(fd, "w") as fh:
+    with os.fdopen(fd, "w", newline="") as fh:
         fh.write("gene_index\ttotal_counts\tn_records\n")
         for i in range(n_genes):
             fh.write(f"{i}\t{int(tot[i])}\t{int(npx[i])}\n")
@@ -1446,7 +1449,7 @@ def makeCells(
     # every cellTypeLabels document reference. Written explicitly rather
     # than left implicit, so a reader never infers it from row order.
     fd, tsv_path = tempfile.mkstemp(suffix=".tsv")
-    with os.fdopen(fd, "w") as fh:
+    with os.fdopen(fd, "w", newline="") as fh:
         fh.write("\t".join(["cell_index", "cell_id", "x", "y", *extra.keys()]) + "\n")
         for i in range(n):
             row = [str(i), cell_id[i], f"{xs[i]:g}", f"{ys[i]:g}"]
@@ -1582,7 +1585,7 @@ def makeCellTypeLabels(
         )
 
     fd, tsv_path = tempfile.mkstemp(suffix=".tsv")
-    with os.fdopen(fd, "w") as fh:
+    with os.fdopen(fd, "w", newline="") as fh:
         # cell_index is the 0-BASED row of cells.tsv, written explicitly for
         # the same reason it is there: never inferred from row order.
         fh.write("cell_index\tlabel\n")
