@@ -158,6 +158,10 @@ def _resolve_cells(session, pyr_doc, spec: str):
         )
     cols, info = readCells(session, docs[0])
     info["source"] = docs[0].id
+    # The document itself, not just its id: the cell-type panel needs it to
+    # find the cellTypeLabels that depend on it, and re-querying by id in
+    # the viewer would be the same search done twice.
+    info["document"] = docs[0]
     return cols, info
 
 
@@ -342,6 +346,7 @@ def main(argv=None) -> int:
         density=density,
         cells=overlay,
         outlines=polys,
+        cells_doc=(cells_info or {}).get("document"),
         controls=not args.no_controls,
         name=args.name or None,
     )

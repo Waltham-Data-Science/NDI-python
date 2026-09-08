@@ -1709,3 +1709,83 @@ def readContours(session, cells_doc):
     info["contourReference"] = reference
     info["nEmpty"] = sum(1 for p in polys if len(p) == 0)
     return polys, info
+
+
+def readCellTypeLabels(session, labels_doc):
+    """Read ``labels.tsv`` -- one class name per cell.
+
+    The counterpart to :func:`makeCellTypeLabels`, which had no reader.
+
+    ROW ORDER IS THE CONTRACT with cells.tsv, and cell_index is written
+    explicitly rather than inferred, so this returns labels placed BY
+    cell_index rather than in file order. A file that arrived reordered
+    would otherwise give every cell its neighbour's type -- valid-looking
+    and wrong, which is the same failure the writer refuses to create.
+
+    An unlabelled cell is the empty string, not a missing row: a labeling
+    that covers part of the table is normal, and dropping those rows would
+    shift the rest.
+
+    Args:
+        session: an ndi.session or ndi.dataset holding the document.
+        labels_doc: a cellTypeLabels document.
+
+    Returns:
+        ``(labels, info)``. *labels* is a list of str, one per cell, in
+        cell_index order. *info* carries labelName, isUnsupervised,
+        categories (sorted, blanks excluded), nUnlabeled and nCells.
+    """
+    c = labels_doc.document_properties["cellTypeLabels"]
+
+    fh = session.database_openbinarydoc(labels_doc, "labels.tsv")
+    try:
+        text = fh.read().decode("utf-8")
+    finally:
+        session.database_closebinarydoc(fh)
+
+    rows = [ln for ln in text.splitlines() if ln.strip()]
+    if not rows:
+        raise ValueError(f"labels.tsv of {labels_doc.id} is empty.")
+    header = rows[0].split("\t")
+    try:
+        i_idx = header.index("cell_index")
+        i_lab = header.index("label")
+    except ValueError as e:
+        raise ValueError(
+            f"labels.tsv of {labels_doc.id} has header {header!r}; expected "
+            f"cell_index and label."
+        ) from e
+
+    n = int(c.get("n_cells") or (len(rows) - 1))
+    labels = [""] * n
+    for ln in rows[1:]:
+        parts = ln.split("\t")
+        idx = int(parts[i_idx])
+        if 0 <= idx < n:
+            labels[idx] = parts[i_lab] if i_lab < len(parts) else ""
+
+    info = {
+        "labelName": c.get("label_name", ""),
+        "isUnsupervised": bool(c.get("is_unsupervised")),
+        "taxonomyLevel": c.get("taxonomy_level", ""),
+        "assignmentMethod": c.get("assignment_method", ""),
+        "nCells": n,
+        "nUnlabeled": sum(1 for v in labels if not v.strip()),
+        "categories": sorted({v for v in labels if v.strip()}),
+    }
+    return labels, info
+
+
+def findCellTypeLabels(session, cells_doc):
+    """Every cellTypeLabels document belonging to a cells document.
+
+    Returned rather than merged: a cellbin routinely carries a transferred
+    atlas call AND one or more unsupervised clusterings, and they are not
+    interchangeable, so a caller picks.
+    """
+    from ..query import ndi_query
+
+    return session.database_search(
+        ndi_query("").isa("cellTypeLabels")
+        & ndi_query("").depends_on("cells_document_id", cells_doc.id)
+    )

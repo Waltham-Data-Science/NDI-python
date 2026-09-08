@@ -40,6 +40,7 @@ def openPyramid(
     density: bool = True,
     cells: dict[str, Any] | None = None,
     outlines=None,
+    cells_doc=None,
     controls: bool = True,
     name: str | None = None,
     show: bool = True,
@@ -65,11 +66,16 @@ def openPyramid(
             :func:`~.multiscale.sourceToWorld` for the same reason
             centroids are. Empty polygons are dropped: napari treats a
             zero-vertex shape as malformed rather than as nothing.
-        controls: dock a small panel for choosing genes and switching
-            between density and raw counts. Without it both are fixed at
-            launch, since this viewer holds no other state. Silently
-            skipped when magicgui is unavailable -- the panel is a
-            convenience and its absence must not stop the picture.
+        cells_doc: the spatialGeneExpressionCells document the overlay
+            came from. Only needed for the cell-type panel, which reads
+            the cellTypeLabels documents that depend on it -- the cells
+            themselves arrive as plain arrays and carry no way back to
+            their own document.
+        controls: dock the gene, display and cell-type panels. Without
+            them the gene selection and the density choice are fixed at
+            launch, since this viewer holds no other state. Skipped with
+            a note when Qt is unavailable -- they are conveniences and
+            their absence must not stop the picture.
         name: image layer name. Defaults to the pyramid's label, which is
             whatever the ingest recorded -- often the file stem, which
             names the section rather than what is being shown.
@@ -85,6 +91,7 @@ def openPyramid(
     viewer = napari.Viewer()
     image = viewer.add_image(**layerSpec(session, pyr_doc, gene_rows, density, name))
 
+    shapes = None
     if outlines is not None:
         keep = [p for p in outlines if len(p)]
         if keep:
@@ -94,7 +101,7 @@ def openPyramid(
                 paths.append(list(zip(row, col)))
             # shape_type polygon closes the ring itself, which matches the
             # format: writeContourFile does not repeat the first vertex.
-            viewer.add_shapes(
+            shapes = viewer.add_shapes(
                 paths,
                 shape_type="polygon",
                 name="cell outlines",
@@ -103,9 +110,10 @@ def openPyramid(
                 edge_width=1,
             )
 
+    points = None
     if cells is not None:
         row, col = sourceToWorld(session, pyr_doc, cells["x"], cells["y"])
-        viewer.add_points(
+        points = viewer.add_points(
             list(zip(row, col)),
             name="cell centroids",
             size=cells.get("size", 8),
@@ -114,9 +122,23 @@ def openPyramid(
         )
 
     if controls:
-        from .controls import addControls
+        from .controls import addAllPanels
 
-        addControls(viewer, session, pyr_doc, image, density)
+        # Remembered on the layer so the display panel can rebuild the
+        # ladder with the SAME gene selection when it switches between
+        # density and counts; recomputing with all genes would silently
+        # widen what is being shown.
+        image._ndi_gene_rows = gene_rows
+        addAllPanels(
+            viewer,
+            session,
+            pyr_doc,
+            image,
+            density,
+            cells_doc=cells_doc,
+            points_layer=points,
+            shapes_layer=shapes,
+        )
 
     if show:
         napari.run()
