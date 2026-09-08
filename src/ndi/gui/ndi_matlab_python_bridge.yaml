@@ -681,19 +681,26 @@ ported_late:
       Lands after JRCLUST itself is reachable from Python, not before.
       Noted in #204.
 
-  - name: GeneIngest
-    matlab_path: "+ndi/+gui/+app/GeneIngest.m"
-    matlab_last_sync_hash: "eae346a"
+  - name: GEFManager
+    matlab_path: "+ndi/+gui/+app/GEFManager.m"
+    matlab_last_sync_hash: "8edda6d"
     status: not_yet_ported
     decision_log: >
-      MATLAB App Designer window that lists, adds and removes spatial
-      transcriptomics pyramids in a session, and drives the .gef /
-      cellbin .h5ad ingest path with a confirm step between file choice
-      and the write. Added in VH-Lab/NDI-matlab PR #933 alongside the
-      +fun/+doc/+gene entry points (fromGEF, fromCellBin, makeSourceFile,
-      readNotes, tilePath) that this app calls, all recorded
-      not_yet_ported in src/ndi/fun/. Python has the pyramid readers and
-      writers (ndi.fun.doc_gene) but no session-scoped ingest UI over
-      them; the app is the natural place for one and lands with a
-      non-interactive or navigator-integrated equivalent. Interactive
-      viewing is separately napari's, through NDI-python.
+      MATLAB App Designer window that lists, views, adds and removes
+      spatial transcriptomics pyramids in a session, and drives the .gef
+      / cellbin .h5ad ingest path with a confirm step between file choice
+      and the write. Added in VH-Lab/NDI-matlab PR #933 as GeneIngest and
+      renamed there in PR #977, which also gave it a View button. Named
+      alongside the +fun/+doc/+gene entry points (fromGEF, fromCellBin,
+      makeSourceFile, readNotes, tilePath) that this app calls, all
+      recorded not_yet_ported in src/ndi/fun/. Python has the pyramid
+      readers and writers (ndi.fun.doc_gene) but no session-scoped ingest
+      UI over them; the app is the natural place for one and lands with a
+      non-interactive or navigator-integrated equivalent.
+      ONE PART OF IT IS ALREADY PORTED, in the other direction. View
+      draws nothing in MATLAB: it builds a command line for the napari
+      viewer in THIS package -- ndi.gui.app.genepyramid.cli, the
+      napariViewGEF console script -- and runs it. So what stays unported
+      is the ingest and the listing; the viewing the MATLAB app offers is
+      this side's, reached across a process boundary rather than
+      reimplemented.

@@ -2203,10 +2203,10 @@ functions:
   # +ndi/+fun/+doc/+gene -- spatial-transcriptomics ingest additions
   #
   # A group of five MATLAB functions that lift the .gef / .h5ad ingest
-  # path out of ndi.gui.app.GeneIngest so a script, a batch importer or a
+  # path out of ndi.gui.app.GEFManager so a script, a batch importer or a
   # Python caller can drive it without opening the GUI (VH-Lab/NDI-matlab
   # PR #933). None of the five has a Python counterpart yet:
-  # ndi.gui.app.GeneIngest itself is not ported either (see the entry in
+  # ndi.gui.app.GEFManager itself is not ported either (see the entry in
   # src/ndi/gui/app/ndi_matlab_python_bridge.yaml), and the ingest path
   # only becomes reachable from Python once the GUI class or a
   # non-interactive equivalent lands. The tile / cell / pyramid readers
