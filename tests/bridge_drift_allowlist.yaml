@@ -178,11 +178,3 @@ no_hash:
     matlab_path: "+ndi/+mock/ctest.m"
   - name: setup
     matlab_path: "+ndi/+setup/"
-  - name: compareDatasetSummary
-    matlab_path: "+ndi/+util/compareDatasetSummary.m"
-  - name: compareSessionSummary
-    matlab_path: "+ndi/+util/compareSessionSummary.m"
-  - name: datasetSummary
-    matlab_path: "+ndi/+util/datasetSummary.m"
-  - name: sessionSummary
-    matlab_path: "+ndi/+util/sessionSummary.m"

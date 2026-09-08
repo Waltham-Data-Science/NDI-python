@@ -9,9 +9,54 @@ returns a list of human-readable difference strings.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 from typing import Any
+
+
+def _serialization_key(item: Any) -> str:
+    """MATLAB's sortCellBySerialization key: the string itself, else JSON."""
+    if isinstance(item, str):
+        return item
+    try:
+        return json.dumps(item, sort_keys=True)
+    except (TypeError, ValueError):
+        return repr(item)
+
+
+def _sorted_by_serialization(values: list[Any]) -> list[Any]:
+    """Sort a list the way MATLAB sorts a cell or struct array before comparing.
+
+    ``compareSessionSummary`` sorts EVERY cell array and struct array by each
+    element's serialization, so its comparison is order-independent for every
+    field.  Sorting only the three fields that were special-cased here left
+    the rest order-dependent, which is how the Python side could report a
+    difference the MATLAB side would not.
+    """
+    try:
+        return sorted(values, key=_serialization_key)
+    except TypeError:  # pragma: no cover -- unorderable keys cannot occur
+        return values
+
+
+def _is_empty(value: Any) -> bool:
+    """MATLAB's isempty: '' and [] and {} are all empty, 0 is not.
+
+    The empty STRING was missing here, so a field that was '' on one side and
+    [] on the other -- exactly the "JSON decode empty array vs empty cell
+    array issue" MATLAB comments on -- was reported as a difference.
+    """
+    if value is None:
+        return True
+    return isinstance(value, (str, list, dict, tuple)) and len(value) == 0
+
+
+def _equaln(a: Any, b: Any) -> bool:
+    """MATLAB's isequaln: like ==, but NaN equals NaN."""
+    if isinstance(a, float) and isinstance(b, float) and math.isnan(a) and math.isnan(b):
+        return True
+    return a == b
 
 
 def compareSessionSummary(
@@ -68,9 +113,7 @@ def compareSessionSummary(
                 val2 = [v for v in val2 if v not in excludeFiles]
 
         # Handle empty values
-        _empty1 = val1 is None or (isinstance(val1, (list, dict)) and len(val1) == 0)
-        _empty2 = val2 is None or (isinstance(val2, (list, dict)) and len(val2) == 0)
-        if _empty1 and _empty2:
+        if _is_empty(val1) and _is_empty(val2):
             continue
 
         # Unwrap single-element lists for comparison
@@ -87,31 +130,14 @@ def compareSessionSummary(
                 )
                 continue
 
-            # For DAQ system lists, sort by name so order doesn't matter.
-            # daqSystemNames and daqSystemDetails are parallel arrays keyed
-            # by daqSystemNames; sort both sides consistently.
-            if field == "daqSystemNames":
-                val1 = sorted(val1)
-                val2 = sorted(val2)
-            elif field == "daqSystemDetails":
-                # Sort details by their paired name from the parent summary
-                names1 = summary1.get("daqSystemNames", [])
-                names2 = summary2.get("daqSystemNames", [])
-                if len(names1) == len(val1):
-                    val1 = [d for _, d in sorted(zip(names1, val1))]
-                if len(names2) == len(val2):
-                    val2 = [d for _, d in sorted(zip(names2, val2))]
-            elif field == "probes":
-                # Sort probes by name so order doesn't matter.
-                # The database may return probes in different order on
-                # re-open or across languages.
-                def _probe_sort_key(p: Any) -> str:
-                    if isinstance(p, dict):
-                        return p.get("name", "")
-                    return str(p)
-
-                val1 = sorted(val1, key=_probe_sort_key)
-                val2 = sorted(val2, key=_probe_sort_key)
+            # MATLAB sorts EVERY cell and struct array by serialization
+            # before comparing element by element, so no field's comparison
+            # depends on order. Only daqSystemNames, daqSystemDetails and
+            # probes were sorted here, which left every other list -- the
+            # epochNodes lists inside daqSystemDetails among them -- able to
+            # report a difference MATLAB would not.
+            val1 = _sorted_by_serialization(val1)
+            val2 = _sorted_by_serialization(val2)
 
             for j, (item1, item2) in enumerate(zip(val1, val2)):
                 if isinstance(item1, str) and isinstance(item2, str):
@@ -128,7 +154,7 @@ def compareSessionSummary(
                     for s in sub:
                         report.append(f"Field {field}[{j}] struct diff: {s}")
                 else:
-                    if item1 != item2:
+                    if not _equaln(item1, item2):
                         report.append(f"Field {field}[{j}] differs in content")
 
         elif isinstance(val1, dict) and isinstance(val2, dict):
@@ -149,11 +175,12 @@ def compareSessionSummary(
         else:
             is_same = False
             if isinstance(val1, (int, float)) and isinstance(val2, (int, float)):
-                is_same = val1 == val2
+                # MATLAB uses isequaln here, which holds NaN equal to NaN.
+                is_same = _equaln(val1, val2)
             elif isinstance(val1, bool) and isinstance(val2, bool):
                 is_same = val1 == val2
             else:
-                is_same = val1 == val2
+                is_same = _equaln(val1, val2)
 
                 # Fallback: compare JSON representations
                 if not is_same:

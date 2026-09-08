@@ -263,6 +263,7 @@ functions:
   - name: sessionSummary
     type: function
     matlab_path: "+ndi/+util/sessionSummary.m"
+    matlab_last_sync_hash: "958697071"
     python_path: "ndi/util/session_summary.py"
     input_arguments:
       - name: session_obj
@@ -275,9 +276,22 @@ functions:
       Exact match. Creates a summary dict of an ndi.session object
       for symmetry testing.
 
+      Examined against NDI-matlab 958697071, the file's last-touching commit.
+      This one holds. Same seven fields in the same order -- reference,
+      sessionId, files, filesInDotNDI, daqSystemNames, daqSystemDetails,
+      probes -- the same four keys per daq system, the same try/catch around
+      each epochnodes() call, and the same four keys per probe. Two deliberate
+      compensations worth knowing. MATLAB's dir() returns entries already
+      sorted and drops '.' and '..'; os.listdir returns them in filesystem
+      order and never includes those two, so the port sorts. And the port
+      sorts daqSystemNames/daqSystemDetails by name where MATLAB keeps
+      daqsystem_load order -- harmless, because compareSessionSummary sorts
+      every array before comparing it on both sides. Nothing to port.
+
   - name: compareSessionSummary
     type: function
     matlab_path: "+ndi/+util/compareSessionSummary.m"
+    matlab_last_sync_hash: "3c1a1d0e8"
     python_path: "ndi/util/compare_session_summary.py"
     input_arguments:
       - name: summary1
@@ -291,9 +305,12 @@ functions:
         type_python: "list[str] | None"
         default: "None"
       - name: excludeFields
-        type_matlab: "cell array of char"
         type_python: "list[str] | None"
         default: "None"
+        decision_log: >
+          Python-only. MATLAB's arguments block declares excludeFiles and
+          nothing else; giving this a type_matlab claimed a MATLAB parameter
+          that does not exist.
     output_arguments:
       - name: report
         type_python: "list[str]"
@@ -301,14 +318,49 @@ functions:
       Exact match. Compares two session summaries and returns a list
       of difference strings. Empty list means summaries match.
 
+      Examined against NDI-matlab 3c1a1d0e8, the file's last-touching commit,
+      and "Exact match" did not hold. Three differences changed the ANSWER,
+      not the wording, and all three are now ported. (1) MATLAB sorts EVERY
+      cell array and struct array by each element's serialization before
+      comparing element by element -- sortCellBySerialization and
+      sortStructArrayBySerialization -- so no field's comparison depends on
+      order. The port sorted exactly three fields by name (daqSystemNames,
+      daqSystemDetails, probes) and compared every other list positionally, so
+      a reordered list anywhere else, the epochNodes lists inside
+      daqSystemDetails included, was reported as a difference that MATLAB
+      would not report. (2) MATLAB skips a pair when both sides are empty, and
+      its isempty covers the empty CHAR as well as [] and {} -- that is the
+      "JSON decode empty array vs empty cell array issue" its own comment
+      names. The port's empty test covered None, list and dict but not the
+      empty string, so '' against [] was reported. (3) MATLAB compares with
+      isequaln, which holds NaN equal to NaN; the port used ==, so two
+      summaries carrying the same NaN differed. TWO DIFFERENCES DELIBERATELY
+      LEFT. excludeFields is PYTHON-ONLY: MATLAB's arguments block declares
+      excludeFiles and nothing else, and the record above wrongly gave it a
+      type_matlab. It is not dead weight --
+      tests/symmetry/read_artifacts/session/ passes epochNodes_filenavigator
+      and epochNodes_daqsystem through it because those carry machine-specific
+      paths -- so it stays, now recorded as the extension it is. And the
+      report strings index differently: MATLAB writes 'Field files{1}'
+      (1-based, braces, because it is indexing a cell array) where this writes
+      'Field files[0]'. Left alone on purpose: 0-based is what a reader of the
+      Python list needs, and nothing parses these strings. One MATLAB quirk
+      also not copied: excludeFiles is applied with setdiff, which sorts AND
+      de-duplicates, so a repeated filename would survive here and not there.
+
   - name: datasetSummary
     type: function
     matlab_path: "+ndi/+util/datasetSummary.m"
+    matlab_last_sync_hash: "e37f4c660"
     python_path: "ndi/util/dataset_summary.py"
     input_arguments:
       - name: dataset_obj
         type_matlab: "ndi.dataset.Dataset"
         type_python: "Any"
+      - name: includeDocumentCounts
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "False"
     output_arguments:
       - name: summary
         type_python: "dict[str, Any]"
@@ -316,9 +368,22 @@ functions:
       Exact match. Creates a summary dict of an ndi.dataset.Dataset
       object for symmetry testing.
 
+      Examined against NDI-matlab e37f4c660, the file's last-touching commit,
+      and the four base fields match -- numSessions, references, sessionIds,
+      and one sessionSummary per session opened by id. MATLAB'S FIFTH FIELD
+      WAS MISSING. It takes includeDocumentCounts (default false) and, when
+      set, counts the documents in each session with
+      ndi.query('base.id','regexp','(.*)') and adds documentCounts, one
+      {sessionId, count} per session. The port had no such parameter and could
+      not produce the field, so a MATLAB summary built with the option
+      compared against a Python one reported documentCounts as present in one
+      summary and not the other -- and its counterpart in
+      compareDatasetSummary had nothing to compare. Ported.
+
   - name: compareDatasetSummary
     type: function
     matlab_path: "+ndi/+util/compareDatasetSummary.m"
+    matlab_last_sync_hash: "e37f4c660"
     python_path: "ndi/util/compare_dataset_summary.py"
     input_arguments:
       - name: summary1
@@ -332,9 +397,12 @@ functions:
         type_python: "list[str] | None"
         default: "None"
       - name: excludeFields
-        type_matlab: "cell array of char"
         type_python: "list[str] | None"
         default: "None"
+        decision_log: >
+          Python-only. MATLAB's arguments block declares excludeFiles and
+          nothing else; giving this a type_matlab claimed a MATLAB parameter
+          that does not exist.
     output_arguments:
       - name: report
         type_python: "list[str]"
@@ -342,6 +410,28 @@ functions:
       Exact match. Compares two dataset summaries and returns a list
       of difference strings. Delegates session-level comparison to
       compareSessionSummary.
+
+      Examined against NDI-matlab e37f4c660, the file's last-touching commit,
+      and "Exact match" did not hold in four ways. (1) MATLAB RETURNS EARLY
+      twice -- after a numSessions mismatch ("no point continuing if session
+      counts differ") and after a sessionIds mismatch ("can't match sessions
+      if IDs differ"). The port carried on, so the one line that mattered
+      arrived buried under every consequential difference behind it. (2) A
+      summary with NO numSessions field read as zero sessions through
+      .get('numSessions', 0), so it compared EQUAL to a genuinely empty
+      dataset; MATLAB reports 'numSessions field is missing from one summary'
+      and stops. (3) MATLAB finds each session summary by the sessionId INSIDE
+      it, on both sides (findSessionSummaryBySessionId). The port zipped
+      sessionIds against sessionSummaries positionally, assuming the two lists
+      are parallel and identically ordered -- exactly the assumption MATLAB's
+      search exists to avoid -- so summaries in any other order were compared
+      against the wrong session and every field of both looked wrong. (4)
+      MATLAB's step 5, the documentCounts comparison, had no Python
+      counterpart at all. All four are ported, together with MATLAB's
+      ensureCell/ensureCellStr tolerance for a bare value where jsondecode
+      would have unwrapped a one-element array. Covered by
+      tests/test_util_summary_comparison.py. The excludeFields note on
+      compareSessionSummary applies here too.
 
   - name: unwrapTableCellContent
     type: function
