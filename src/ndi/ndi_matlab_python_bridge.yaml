@@ -553,28 +553,45 @@ classes:
       # --- Serialization ---
       - name: write
         input_arguments:
-          - name: filename
+          - name: filePrefix
             type_matlab: "char"
             type_python: "str"
           - name: indent
             type_python: "int"
             default: "2"
+          - name: writeLocalFiles
+            type_matlab: "options.writeLocalFiles (logical, default false)"
+            type_python: "bool"
+            default: "False"
+          - name: session
+            type_matlab: "options.session (ndi.session, default empty)"
+            type_python: "Any"
+            default: "None"
         output_arguments: []
         decision_log: >
-          "Exact match" overstates it against NDI-matlab 00155f885. MATLAB's
-          first argument is a FILE PREFIX and it writes [FILEPREFIX '.json'];
-          the port treats it as the complete filename and writes it
-          verbatim, so MATLAB code ported literally -- doc.write('mydoc') --
-          leaves an extension-less file. MATLAB also takes two name/value
-          options the port does not have: writeLocalFiles, which writes each
-          associated file next to the JSON as [FILEPREFIX '_' FILENAME], and
-          session, which reads those files through
-          database_openbinarydoc rather than copying the recorded local
-          location. NOT CHANGED HERE: every caller in this tree passes a
-          full '.json' path, so appending an extension would rename their
-          output, and which contract the Python signature should keep is a
-          public-API decision rather than a porting one. Recorded so the
-          next reader meets it before their file lands in the wrong place.
+          RESOLVED against NDI-matlab 00155f885, and followed MATLAB per the
+          maintainer's decision (2026-09-08); the previous entry recorded this
+          divergence and deliberately left it. The first argument is a file
+          PREFIX -- MATLAB writes [FILEPREFIX '.json'] and names each
+          associated file [FILEPREFIX '_' FILENAME], so it identifies a SET of
+          files, not one -- where the port treated it as the complete
+          filename. USER-VISIBLE: a caller passing 'doc.json' now writes
+          doc.json.json, which is what MATLAB does with the same argument.
+          writeLocalFiles and session were not ported at all, so a document's
+          files were never written alongside; both are here now, including
+          MATLAB's rule that without a session it copies the first location
+          whose location_type is 'file' and WARNS rather than raising when
+          there is none. The JSON itself also diverged: MATLAB encodes with
+          'ConvertInfAndNaN', true, which writes null, where json.dump writes
+          the bare tokens NaN and Infinity -- not JSON, so a document carrying
+          an unmeasured value produced a file Python could read back and a
+          conforming parser could not. Python keeps indent (MATLAB's
+          PrettyPrint is not adjustable) and still creates missing parent
+          directories, which MATLAB does not; that cannot change where the
+          file lands, only whether the call succeeds. MATLAB's own
+          DocumentWriteTest is three cases and only testWriteJSON had a Python
+          counterpart; testWriteLocalFiles and testWriteSessionFiles now do
+          too.
 
       - name: setproperties
         input_arguments:

@@ -12,6 +12,8 @@ Important Rules for Creating Documents:
 """
 
 import json
+import math
+import shutil
 import warnings
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -36,6 +38,23 @@ from .ido import ndi_ido
 #: MATLAB reads this out of ``ndi.common.PathConstants.CommonFolder/config``
 #: to shorten ``to_table`` column names.
 _TABLE_ABBREVIATION_FILE = "ndi_document2table_abbreviations.json"
+
+
+def _json_safe(value: Any) -> Any:
+    """Replace NaN and Inf with None, as MATLAB's ConvertInfAndNaN does.
+
+    ``jsonencode(..., 'ConvertInfAndNaN', true)`` writes ``null`` for both.
+    Python's ``json.dump`` writes the bare tokens ``NaN`` and ``Infinity``
+    instead, which are not JSON -- a document carrying an unmeasured value
+    produced a file that ``json.load`` accepts but no other reader has to.
+    """
+    if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
+        return None
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    return value
 
 
 def _is_struct_array(value: Any) -> bool:
@@ -593,17 +612,75 @@ class ndi_document:
         all_classes = [self.doc_class()] + self.doc_superclass()
         return document_class in all_classes
 
-    def write(self, filename: str, indent: int = 2) -> None:
-        """Write document to a JSON file.
+    def write(
+        self,
+        filePrefix: str,
+        indent: int = 2,
+        *,
+        writeLocalFiles: bool = False,
+        session: Any = None,
+    ) -> None:
+        """Write the document properties to ``filePrefix + '.json'``.
+
+        MATLAB equivalent: ``ndi.document/write``
+
+        NOTE THE ARGUMENT IS A PREFIX, NOT A FILENAME. MATLAB writes
+        ``[FILEPREFIX '.json']`` and names each associated file
+        ``[FILEPREFIX '_' FILENAME]``, so the prefix identifies a SET of
+        files, not one. Passing ``'doc.json'`` writes ``doc.json.json``.
 
         Args:
-            filename: Path to write the JSON file.
-            indent: Indentation level for pretty printing.
+            filePrefix: Path prefix. ``'.json'`` is appended.
+            indent: Indentation for pretty printing. Python-only; MATLAB's
+                PrettyPrint is not adjustable.
+            writeLocalFiles: If True, also write each associated file as
+                ``filePrefix + '_' + name``.
+            session: If given, read the associated files through this
+                session's database rather than copying them from the
+                locations recorded in the document.
         """
+        json_path = Path(f"{filePrefix}.json")
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(json_path, "w") as f:
+            json.dump(_json_safe(self._document_properties), f, indent=indent)
 
-        Path(filename).parent.mkdir(parents=True, exist_ok=True)
-        with open(filename, "w") as f:
-            json.dump(self._document_properties, f, indent=indent)
+        if writeLocalFiles:
+            self._write_local_files(filePrefix, session)
+
+    def _write_local_files(self, filePrefix: str, session: Any) -> None:
+        """Write each associated file beside the JSON, as MATLAB's write does.
+
+        With a session, the bytes come from the database. Without one,
+        MATLAB copies the first location whose ``location_type`` is 'file'
+        -- a URL or ndicloud location is not something it can copy -- and
+        warns, rather than raising, when there is no such location.
+        """
+        file_info = self._document_properties.get("files", {}).get("file_info", [])
+        if not isinstance(file_info, list):
+            return
+
+        for entry in file_info:
+            name = entry.get("name", "")
+            target = Path(f"{filePrefix}_{name}")
+
+            if session is not None:
+                handle = session.database_openbinarydoc(self, name)
+                try:
+                    target.write_bytes(handle.read())
+                finally:
+                    session.database_closebinarydoc(handle)
+                continue
+
+            for loc in entry.get("locations", []):
+                if str(loc.get("location_type", "")).lower() == "file":
+                    shutil.copyfile(loc.get("location", ""), target)
+                    break
+            else:
+                warnings.warn(
+                    f"Could not find local file location for {name}",
+                    UserWarning,
+                    stacklevel=2,
+                )
 
     def remove_dependency_value_n(
         self,

@@ -261,7 +261,7 @@ class TestDocumentWrite:
         doc = ndi_document(props)
 
         output_file = tmp_path / "test_output.json"
-        doc.write(str(output_file))
+        doc.write(str(tmp_path / "test_output"))  # MATLAB takes a prefix
 
         assert output_file.exists(), "JSON file should be created"
 
@@ -275,7 +275,7 @@ class TestDocumentWrite:
         original_id = doc.id
 
         output_file = tmp_path / "test_id.json"
-        doc.write(str(output_file))
+        doc.write(str(tmp_path / "test_id"))
 
         data = json.loads(output_file.read_text())
         assert data["base"]["id"] == original_id

@@ -20,16 +20,16 @@ class TestDocumentWrite:
         from ndi.document import ndi_document
 
         doc = ndi_document("base", **{"base.name": "test_write"})
-        filepath = str(tmp_path / "doc.json")
-        doc.write(filepath)
-        assert os.path.exists(filepath)
+        # MATLAB's write takes a PREFIX and appends '.json'.
+        doc.write(str(tmp_path / "doc"))
+        assert os.path.exists(str(tmp_path / "doc.json"))
 
     def test_write_valid_json(self, tmp_path):
         from ndi.document import ndi_document
 
         doc = ndi_document("base", **{"base.name": "test_write"})
         filepath = str(tmp_path / "doc.json")
-        doc.write(filepath)
+        doc.write(str(tmp_path / "doc"))
         with open(filepath) as f:
             data = json.load(f)
         assert data["base"]["name"] == "test_write"
@@ -38,16 +38,15 @@ class TestDocumentWrite:
         from ndi.document import ndi_document
 
         doc = ndi_document("base")
-        filepath = str(tmp_path / "sub" / "dir" / "doc.json")
-        doc.write(filepath)
-        assert os.path.exists(filepath)
+        doc.write(str(tmp_path / "sub" / "dir" / "doc"))
+        assert os.path.exists(str(tmp_path / "sub" / "dir" / "doc.json"))
 
     def test_write_roundtrip(self, tmp_path):
         from ndi.document import ndi_document
 
         doc = ndi_document("base", **{"base.name": "roundtrip"})
         filepath = str(tmp_path / "doc.json")
-        doc.write(filepath)
+        doc.write(str(tmp_path / "doc"))
 
         with open(filepath) as f:
             data = json.load(f)
@@ -60,7 +59,7 @@ class TestDocumentWrite:
 
         doc = ndi_document("base")
         filepath = str(tmp_path / "doc.json")
-        doc.write(filepath, indent=4)
+        doc.write(str(tmp_path / "doc"), indent=4)
         with open(filepath) as f:
             content = f.read()
         # 4-space indent should produce wider indentation
