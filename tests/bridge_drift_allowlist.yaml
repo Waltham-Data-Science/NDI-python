@@ -88,7 +88,7 @@ drifted:
   # --- comments-only ---
 
 # ---------------------------------------------------------------------------
-# no_hash: 92
+# no_hash: 91
 #
 # An entry with a matlab_path and no matlab_last_sync_hash can never show
 # drift, so it claims its port is current forever and no check can contradict
@@ -142,8 +142,6 @@ no_hash:
     matlab_path: "+ndi/+file/+navigator/epochdir.m"
   - name: mfdaq_epoch_channel
     matlab_path: "+ndi/+file/+type/mfdaq_epoch_channel.m"
-  - name: navigator
-    matlab_path: "+ndi/+file/navigator.m"
   - name: pfilemirror
     matlab_path: "+ndi/+file/pfilemirror.m"
   - name: diff (dataset)

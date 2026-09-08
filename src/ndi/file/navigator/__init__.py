@@ -381,6 +381,44 @@ class ndi_file_navigator(ndi_ido):
         self._epochprobemap_fileparameters = self._normalize_fileparameters(parameters)
         return self
 
+    # ------------------------------------------------------------------
+    # Cache
+    #
+    # MATLAB's getcache/get_cached_value/add_cached_value had no Python
+    # counterpart, so the memo they exist to hold -- "this navigator has
+    # never had an ingested epoch" -- was never kept and the database was
+    # asked again on every epoch lookup.
+    # ------------------------------------------------------------------
+
+    def getcache(self) -> tuple[Any | None, str | None]:
+        """Return the session's cache and this navigator's key in it.
+
+        MATLAB equivalent: ``ndi.file.navigator/getcache``. Returns
+        ``(None, None)`` when there is no session to cache against.
+        """
+        session = self.session
+        cache = getattr(session, "cache", None) if session is not None else None
+        if cache is None:
+            return None, None
+        return cache, f"filenavigator_{self.id}"
+
+    def get_cached_value(self, name: str, type: str) -> Any | None:
+        """Read one cached value, or None when it is not there."""
+        cache, object_key = self.getcache()
+        if cache is None or not object_key:
+            return None
+        entry = cache.lookup(f"{object_key}_{name}", type)
+        if entry is None:
+            return None
+        return entry.data
+
+    def add_cached_value(self, name: str, type: str, value: Any) -> None:
+        """Store one cached value at MATLAB's higher-than-normal priority."""
+        cache, object_key = self.getcache()
+        if cache is None or not object_key:
+            return
+        cache.add(f"{object_key}_{name}", type, value, priority=1)
+
     def selectfilegroups(self) -> tuple[list[list[str]], list[Any | None]]:
         """
         Select groups of files that comprise epochs.
@@ -393,8 +431,28 @@ class ndi_file_navigator(ndi_ido):
         # Get files from disk
         disk_epochs = self.selectfilegroups_disk()
 
-        # Check for ingested epochs
+        # Check for ingested epochs.
+        #
+        # MATLAB remembers, per navigator, whether this session has EVER had
+        # an ingested epoch, and skips the database query entirely once the
+        # answer has been no. Without that memo the query runs on every call
+        # -- and selectfilegroups is called for every epoch lookup.
+        has_ingested = self.get_cached_value("has_ingested_epoch", "logical")
+        if has_ingested is False:
+            return disk_epochs, [None] * len(disk_epochs)
+
         ingested_epochs = self.find_ingested_documents()
+
+        # The memo is written only when there was not one already. The cache
+        # APPENDS and lookup() returns the FIRST match, on both sides, so a
+        # second value for the same key can never be read -- MATLAB writes
+        # one on every call regardless, which is an entry that cannot be
+        # looked up. The consequence both languages share: once "no ingested
+        # epochs" is recorded, ingesting one does not change the answer until
+        # the session's cache is cleared, which is why ndi.mock's
+        # stimulus_response calls S.cache.clear() before it builds anything.
+        if has_ingested is None:
+            self.add_cached_value("has_ingested_epoch", "logical", bool(ingested_epochs))
 
         if not ingested_epochs:
             return disk_epochs, [None] * len(disk_epochs)
@@ -409,8 +467,16 @@ class ndi_file_navigator(ndi_ido):
         # Get epoch IDs for ingested epochs
         ingested_ids = [e["epoch_id"] for e in ingested_epochs]
 
-        # Combine unique epoch IDs
-        all_ids = list(dict.fromkeys(ingested_ids + disk_ids))
+        # Combine unique epoch IDs.
+        #
+        # MATLAB's unique() SORTS, and it iterates the sorted result, so the
+        # epoch ORDER -- and therefore every epoch NUMBER, which is a 1-based
+        # index into this list and is what a caller passes to getepochfiles
+        # or readtimeseries -- is alphabetical by epoch_id. dict.fromkeys
+        # preserves first-appearance order instead, putting every ingested
+        # epoch before every disk one, so the two languages numbered the same
+        # session's epochs differently whenever it held both.
+        all_ids = sorted(set(ingested_ids + disk_ids))
 
         epochfiles = []
         epochprobemaps = []

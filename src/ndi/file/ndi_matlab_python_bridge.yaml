@@ -60,9 +60,47 @@ classes:
   - name: navigator
     type: class
     matlab_path: "+ndi/+file/navigator.m"
+    matlab_last_sync_hash: "e94c2b2f5"
     python_path: "ndi/file/navigator/__init__.py"
     python_class: "ndi_file_navigator"
     inherits: "ndi.ido, ndi.epoch.epochset.param, ndi.documentservice, ndi.database.ingestion_help"
+    decision_log: >
+      Examined against NDI-matlab e94c2b2f5, the file's last-touching commit.
+      Every one of MATLAB's methods has a Python counterpart except four, and
+      buildepochtable is one of them only in name -- Python builds the table
+      inside epochtable(). The other three are the cache, and they were
+      missing outright. Two findings, both in selectfilegroups. (1) THE TWO
+      LANGUAGES NUMBERED THE SAME SESSION'S EPOCHS DIFFERENTLY. When a session
+      holds ingested epochs as well as epochs on disk, MATLAB combines the two
+      id lists with unique(), WHICH SORTS, and iterates the sorted result --
+      so the epoch order, and therefore every epoch NUMBER, is alphabetical by
+      epoch_id. Epoch numbers are what a caller passes to getepochfiles and
+      readtimeseries. The port used dict.fromkeys, which preserves
+      first-appearance order, putting every ingested epoch before every disk
+      one. Now sorted. The disk-only case is untouched on both sides: MATLAB
+      returns before the unique(), so the disk order stands. (2) THE
+      INGESTED-EPOCH MEMO WAS NEVER KEPT. MATLAB has getcache,
+      get_cached_value and add_cached_value, and uses them to remember, per
+      navigator, whether this session has EVER had an ingested epoch; once the
+      answer has been no it skips the epochfiles_ingested database query
+      entirely. selectfilegroups is called for every epoch lookup, so the port
+      was running that query over and over. All three ported, keyed as MATLAB
+      keys them ('filenavigator_' + id) and stored at MATLAB's
+      higher-than-normal priority. ONE DELIBERATE DIFFERENCE IN THE PORT, and
+      a MATLAB wart worth knowing. The cache APPENDS and lookup() returns the
+      FIRST match -- on both sides -- so a second value written for the same
+      key can never be read. MATLAB writes the memo on every call regardless,
+      which appends an entry nothing can look up; this writes it only when
+      there was not one already. The observable behaviour is identical, and
+      both languages share the consequence: once 'no ingested epochs' is
+      recorded, ingesting one does not change the answer until the session's
+      cache is cleared. That is why ndi.mock.fun.stimulus_response calls
+      S.cache.clear() before it builds anything, and it is pinned here by a
+      test rather than left to be rediscovered. ALSO NOTED, not changed:
+      MATLAB validates the probemap class with
+      ndi.validators.mustBeClassnameOfType and constructs it with feval, where
+      the port carries the stored epochprobemap through as data. Covered by
+      tests/test_file_navigator_against_matlab.py.
 
     properties:
       - name: session
