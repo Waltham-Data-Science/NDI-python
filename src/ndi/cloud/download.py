@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, Any
 
 from ndi.util import rehydrateJSONNanNull
 
+from .api._validators import assert_safe_transfer_url
+
 if TYPE_CHECKING:
     from .client import CloudClient
 
@@ -130,6 +132,12 @@ def _download_chunk_zip(
     import zipfile
 
     import requests
+
+    # The zip URL is server-supplied too, so it gets the same check as a
+    # per-file download URL. Raised rather than warned here: this function
+    # returns the documents themselves, so there is no partial result to
+    # fall back to.
+    assert_safe_transfer_url(url, what="bulk download URL")
 
     t0 = time.time()
     last_exc: Exception | None = None
@@ -333,6 +341,11 @@ def downloadFilesForDocument(
 
     url = details.get("downloadUrl", "") if hasattr(details, "get") else ""
     if not url:
+        return downloaded
+    try:
+        assert_safe_transfer_url(url, what="download URL")
+    except ValueError as exc:
+        logger.warning("Refusing download URL for %s: %s", file_uid, exc)
         return downloaded
 
     # Download with streaming
@@ -559,6 +572,11 @@ def downloadGenericFiles(
                 url = details.get("downloadUrl", "") if hasattr(details, "get") else ""
                 if not url:
                     logger.warning("No download URL for file %s (UID: %s)", filename, uid)
+                    continue
+                try:
+                    assert_safe_transfer_url(url, what="download URL")
+                except ValueError as exc:
+                    logger.warning("Refusing download URL for %s (UID: %s): %s", filename, uid, exc)
                     continue
 
                 resp = _requests.get(url, timeout=300, stream=True)

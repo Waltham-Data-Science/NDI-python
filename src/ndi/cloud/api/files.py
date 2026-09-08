@@ -17,7 +17,13 @@ from typing import Annotated, Any, Literal
 from pydantic import SkipValidation, validate_call
 
 from ..client import APIResponse, CloudClient, _auto_client
-from ._validators import VALIDATE_CONFIG, CloudId, FilePath, NonEmptyStr
+from ._validators import (
+    VALIDATE_CONFIG,
+    CloudId,
+    FilePath,
+    NonEmptyStr,
+    assert_safe_transfer_url,
+)
 
 _Client = Annotated[CloudClient | None, SkipValidation()]
 
@@ -109,6 +115,7 @@ def putFiles(
 
     from ..exceptions import CloudUploadError
 
+    assert_safe_transfer_url(url, what="upload URL")
     file_path = Path(file_path)
     with open(file_path, "rb") as fh:
         resp = requests.put(
@@ -155,6 +162,7 @@ def putFileBytes(
 
     from ..exceptions import CloudUploadError
 
+    assert_safe_transfer_url(url, what="upload URL")
     resp = requests.put(
         url,
         data=data,
@@ -183,6 +191,7 @@ def getFile(
 
     logger = logging.getLogger(__name__)
 
+    assert_safe_transfer_url(url, what="download URL")
     target_path = Path(target_path)
     target_path.parent.mkdir(parents=True, exist_ok=True)
 
