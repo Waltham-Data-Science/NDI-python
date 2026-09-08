@@ -85,7 +85,10 @@ def test_labelings_of_different_lengths_are_refused():
 # ------------------------------------------------------ selectLabelings
 
 
-def test_the_named_call_is_what_survives_a_redundant_pair():
+def test_a_redundant_pair_is_reported_but_both_are_kept():
+    """Dropping one was wrong twice: below the threshold it did nothing
+    and the reader still saw two, and above it the labeling vanished
+    with no way back. The panel names the pair and offers a switch."""
     n = 200
     leiden = ["0"] * (n // 2) + ["1"] * (n // 2)
     subclass = ["Pvalb"] * (n // 2) + ["Sst"] * (n // 2)
@@ -94,13 +97,14 @@ def test_the_named_call_is_what_survives_a_redundant_pair():
         (subclass, _info("subclass_nn_column")),
     ]
     kept, redundant, missing = controls.selectLabelings(found)
-    assert [i["labelName"] for _lb, i in kept] == ["subclass_nn_column"]
+    # Supervised first, so the pair is measured against the named call.
+    assert [i["labelName"] for _lb, i in kept] == ["subclass_nn_column", "leiden"]
     assert redundant[0][0] == "leiden"
     assert redundant[0][1] == "subclass_nn_column"
     assert missing == []
 
 
-def test_two_labelings_that_really_differ_are_both_kept():
+def test_two_labelings_that_really_differ_raise_no_note():
     a = ["x"] * 50 + ["y"] * 50
     b = ["p", "q"] * 50
     found = [(a, _info("a")), (b, _info("b"))]

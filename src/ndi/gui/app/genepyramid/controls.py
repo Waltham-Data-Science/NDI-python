@@ -761,14 +761,20 @@ def selectLabelings(found, wanted=None):
     typo that silently showed everything would look like the flag not
     working.
 
-    Without it, supervised calls are considered first and any later
-    labeling that agrees with a kept one above :data:`REDUNDANT_AT` is
-    set aside, so the labeling carrying biological names is the one that
-    stays.
+    Without it, everything found is kept and the redundancy is REPORTED
+    rather than acted on. Dropping one automatically was wrong twice
+    over: below the threshold it did nothing and the reader still saw
+    two, and above it the labeling vanished with no way to bring it
+    back. Naming the pair and letting the reader switch one off is the
+    same information with the decision left where it belongs.
+
+    Supervised calls are ordered first, so a redundant pair is measured
+    against the labeling that carries biological names rather than
+    against a cluster index.
 
     Returns:
         ``(kept, redundant, missing)``. *redundant* holds
-        ``(name, kept_name, forward, reverse)``, the two agreements
+        ``(name, other_name, forward, reverse)``, the two agreements
         measured in both directions so the note can quote a number.
     """
     found = sorted(found, key=lambda t: (bool(t[1]["isUnsupervised"]), t[1]["labelName"] or ""))
@@ -782,17 +788,13 @@ def selectLabelings(found, wanted=None):
     kept, redundant = [], []
     for labels, info in found:
         name = info["labelName"] or "(unnamed)"
-        dup = None
         for kept_labels, kept_info in kept:
             forward = labelAgreement(labels, kept_labels)
             reverse = labelAgreement(kept_labels, labels)
             if max(forward, reverse) >= REDUNDANT_AT:
-                dup = (name, kept_info["labelName"] or "(unnamed)", forward, reverse)
+                redundant.append((name, kept_info["labelName"] or "(unnamed)", forward, reverse))
                 break
-        if dup is None:
-            kept.append((labels, info))
-        else:
-            redundant.append(dup)
+        kept.append((labels, info))
     return kept, redundant, []
 
 
@@ -806,10 +808,17 @@ def addCellTypePanel(
     rather than being merged. They are not interchangeable: a clustering
     carries no biological identity.
 
-    A labeling that says the same thing as one already shown is named
-    and then set aside rather than drawn twice; see
-    :func:`selectLabelings`. Pass *labelings* -- a list of label names --
-    to choose outright instead, in which case nothing is collapsed.
+    ONE ROW EACH, with the classes behind a toggle. A cellbin carries a
+    couple of labelings with dozens of classes between them, and listing
+    every class of every one fills the dock before anyone has asked to
+    see them.
+
+    The row's own checkbox switches the whole labeling off, which drops
+    its contribution to the filter rather than hiding the cells it
+    named: an unwanted second opinion should stop having an opinion.
+    Everything starts on, and a labeling that says the same thing as
+    another is NAMED rather than removed, so the reader is told which
+    one to untick instead of finding one of them gone.
 
     Hiding works by ALPHA, not by removing points. The row order of the
     points layer is the row order of cells.tsv and of every labels.tsv
@@ -818,7 +827,9 @@ def addCellTypePanel(
     """
     from qtpy.QtWidgets import (
         QCheckBox,
+        QHBoxLayout,
         QLabel,
+        QPushButton,
         QScrollArea,
         QVBoxLayout,
         QWidget,
@@ -854,11 +865,13 @@ def addCellTypePanel(
         w.setWordWrap(True)
         outer.addWidget(w)
 
+    # Named, not acted on: it says WHICH of the two to switch off.
+    agrees = {}
     for name, other, forward, reverse in redundant:
+        agrees[name] = (other, max(forward, reverse))
         _note(
-            f"{name} and {other} agree about {100 * max(forward, reverse):.1f}% "
-            f"of cells -- one grouping under two sets of names -- so only "
-            f"{other} is shown. Use --labels to choose for yourself."
+            f"{name} agrees with {other} on {100 * max(forward, reverse):.1f}% "
+            f"of cells -- untick one of them."
         )
     if missing:
         have = ", ".join((i["labelName"] or "(unnamed)") for _lb, i in found)
@@ -867,15 +880,18 @@ def addCellTypePanel(
         _note("no labelings to show.")
 
     n_points = len(points_layer.data)
-    # visible[i] is False when ANY ticked-off class covers cell i, so two
-    # labelings filter jointly rather than the last one clicked winning.
+    # visible[i] is False when ANY ticked-off class of a labeling that is
+    # still switched ON covers cell i, so two labelings filter jointly
+    # rather than the last one clicked winning.
     hidden_by = {}
+    switched_off = set()
 
     def _refresh():
         hide = np.zeros(n_points, dtype=bool)
-        for mask in hidden_by.values():
-            if mask is not None:
-                hide |= mask
+        for (label_name, _category), mask in hidden_by.items():
+            if mask is None or label_name in switched_off:
+                continue
+            hide |= mask
         for layer in (points_layer, shapes_layer):
             if layer is None:
                 continue
@@ -893,13 +909,28 @@ def addCellTypePanel(
                 pass
 
     for labels, info in kept:
+        name = info["labelName"] or "(unnamed)"
         kind = "clustering" if info["isUnsupervised"] else "cell type call"
-        title = QLabel(f"{info['labelName'] or '(unnamed)'} -- {kind}")
-        outer.addWidget(title)
+
+        # ONE ROW PER LABELING, and the classes are behind it. A cellbin
+        # carries a couple of labelings with dozens of classes between
+        # them, and listing every class of every one of them fills the
+        # dock with checkboxes nobody asked to see yet.
+        head = QHBoxLayout()
+        master = QCheckBox(f"{name}  ({len(info['categories'])} {kind})")
+        master.setChecked(True)
+        tip = [f"{name} -- {kind}, {len(info['categories'])} classes"]
         if info["nUnlabeled"]:
-            note = QLabel(f"  {info['nUnlabeled']:,} cells unlabelled by this")
-            note.setWordWrap(True)
-            outer.addWidget(note)
+            tip.append(f"{info['nUnlabeled']:,} cells are unlabelled by this")
+        if name in agrees:
+            other, share = agrees[name]
+            tip.append(f"agrees with {other} on {100 * share:.1f}% of cells")
+        master.setToolTip("\n".join(tip))
+        expand = QPushButton("classes \u25b8")
+        expand.setFlat(True)
+        head.addWidget(master, stretch=1)
+        head.addWidget(expand)
+        outer.addLayout(head)
 
         arr = np.asarray(labels, dtype=object)
         inner = QWidget()
@@ -908,7 +939,7 @@ def addCellTypePanel(
             mask = arr == category
             cb = QCheckBox(f"{category}  ({int(mask.sum()):,})")
             cb.setChecked(True)
-            key = (info["labelName"], category)
+            key = (name, category)
 
             def _toggled(on, key=key, mask=mask):
                 hidden_by[key] = None if on else mask[:n_points]
@@ -919,7 +950,33 @@ def addCellTypePanel(
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(inner)
+        scroll.setMaximumHeight(180)
+        scroll.setVisible(False)
         outer.addWidget(scroll)
+
+        def _onExpand(*_, scroll=scroll, expand=expand):
+            shown = not scroll.isVisible()
+            scroll.setVisible(shown)
+            expand.setText("classes \u25be" if shown else "classes \u25b8")
+
+        def _onMaster(on, name=name, scroll=scroll, expand=expand):
+            # Switching a labeling OFF drops its whole contribution to the
+            # filter rather than hiding its cells: an unwanted second
+            # opinion should stop having an opinion, not start hiding
+            # everything it named.
+            if on:
+                switched_off.discard(name)
+            else:
+                switched_off.add(name)
+                scroll.setVisible(False)
+                expand.setText("classes \u25b8")
+            expand.setEnabled(on)
+            _refresh()
+
+        expand.clicked.connect(_onExpand)
+        master.toggled.connect(_onMaster)
+
+    outer.addStretch()
 
     viewer.window.add_dock_widget(box, name="Cell types", area="right")
     return box

@@ -79,10 +79,10 @@ def build_parser() -> argparse.ArgumentParser:
         default="",
         metavar="A,B",
         help="which cell type labelings to show, by name; 'none' shows no "
-        "labeling panel. Default lets the panel decide, which means two "
-        "labelings that say the same thing about the section -- a subclass "
-        "call and the clustering it was transferred onto -- are shown once "
-        "and the panel says which it kept.",
+        "labeling panel. Default shows every one the cells document has, "
+        "each with its own switch, and names any pair that says the same "
+        "thing about the section -- a subclass call and the clustering it "
+        "was transferred onto -- so you can switch one off.",
     )
     p.add_argument(
         "--no-controls",
