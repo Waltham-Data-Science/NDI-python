@@ -8,6 +8,7 @@ MATLAB equivalents: +ndi/+cloud/+internal/*.m,
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 logger = logging.getLogger(__name__)
@@ -146,6 +147,19 @@ def listLocalDocuments(dataset: Any) -> tuple[list[Any], list[str]]:
         if isinstance(p, dict):
             ids.append(p.get("base", {}).get("id", ""))
     return docs, ids
+
+
+#: Where a sync stages downloaded binaries before the database ingests them.
+#: Relative to the dataset folder, mirroring
+#: ``ndi.cloud.sync.internal.Constants.FileSyncLocation``.
+#:
+#: TEMPORARY, and deliberately NOT DID's file store. DID ingests a file by
+#: copying it from the location a document records into ``FileDir/<uid>`` and
+#: then deleting the original, so staging is what gives the ingest something
+#: to copy FROM. Downloading straight into ``FileDir`` skips ingestion
+#: altogether: the bytes are findable by uid, but no files-table row is
+#: written and the document's file_info still points at the cloud.
+FILE_SYNC_LOCATION = Path("download") / "files"
 
 
 def _as_list(value: Any) -> list[Any]:

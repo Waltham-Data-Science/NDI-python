@@ -24,6 +24,25 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _remove_empty_staging(staging: Path) -> None:
+    """Remove the staging tree, if ingestion emptied it.
+
+    Only when empty. A file still sitting there did not get ingested -- it
+    failed to download, or its document never reached the database -- and
+    deleting it would turn a recoverable partial sync into a lost one.
+    """
+    if not staging.is_dir():
+        return
+    try:
+        staging.rmdir()
+        parent = staging.parent
+        if parent != staging and not any(parent.iterdir()):
+            parent.rmdir()
+    except OSError:
+        # Not empty, or not ours to remove. Either way, leave it.
+        pass
+
+
 @_auto_client
 def downloadDataset(
     cloud_dataset_id: str,
@@ -83,13 +102,47 @@ def downloadDataset(
 
     set_report = document_set_report(doc_jsons)
 
-    # When not syncing files, rewrite file_info locations to ndic:// URIs
-    # so binary files can be fetched on demand later.
-    if not sync_files:
-        from .filehandler import updateFileInfoForRemoteFiles
+    # FILES BEFORE DOCUMENTS. MATLAB's downloadNdiDocuments downloads the
+    # binaries, rewrites each document's file_info to name the downloaded
+    # copies, and only then calls database_add -- so DID ingests the files as
+    # part of adding the documents that refer to them.
+    #
+    # This ran the other way round: add first, then download into
+    # target/.ndi/files, which is DID's own FileDir. That skips ingestion
+    # entirely. The bytes are findable, because cached_path_for_uid looks in
+    # FileDir by uid, but no files-table row is written and every document's
+    # file_info still points at the cloud -- and updateFileInfoForLocalFiles,
+    # the function whose whole job is that rewrite, had no callers at all.
+    #
+    # The order also has to be this way round for file series: DID refuses a
+    # document whose series declares present members while recording no way
+    # to locate them, and the record that answers it is rebuilt from the
+    # downloaded manifest. There is no moment to do that in if the add has
+    # already happened. See NDI-python#215.
+    from .filehandler import updateFileInfoForLocalFiles, updateFileInfoForRemoteFiles
+    from .internal import FILE_SYNC_LOCATION
 
+    # Every location becomes a working ndic:// reference first, whether or
+    # not files are being synced.
+    #
+    # A DEVIATION FROM MATLAB, deliberately: MATLAB does one rewrite or the
+    # other, and on a file that did not download it warns and leaves the
+    # file out of the rebuilt document entirely. Doing the remote rewrite
+    # first and letting the local one overwrite what actually arrived means
+    # a file that failed to download keeps a reference that still resolves,
+    # on demand, through the handler -- rather than being lost, or left
+    # pointing at whatever the cloud's own copy of the location said. A
+    # short download should degrade to a slower read, not a missing file.
+    for dj in doc_jsons:
+        updateFileInfoForRemoteFiles(dj, cloud_dataset_id)
+
+    staging = target / FILE_SYNC_LOCATION
+    if sync_files and doc_jsons:
+        report = downloadDatasetFiles(cloud_dataset_id, doc_jsons, staging, client=client)
+        if verbose:
+            print(f'  Files downloaded: {report["downloaded"]}, failed: {report["failed"]}')
         for dj in doc_jsons:
-            updateFileInfoForRemoteFiles(dj, cloud_dataset_id)
+            updateFileInfoForLocalFiles(dj, str(staging))
 
     # Convert to ndi_document objects and create ndi_dataset with them.
     # Mirrors MATLAB: ndi.dataset.dir([], datasetFolder, ndiDocuments)
@@ -97,6 +150,11 @@ def downloadDataset(
 
     documents = jsons2documents(doc_jsons)
     dataset = ndi_dataset_dir("", target, documents=documents)
+
+    # The staging copies are DID's now -- updateFileInfoForLocalFiles marks
+    # them delete_original, so ingestion moved them. Clear the empty tree it
+    # left behind; MATLAB carries a "Todo: Ensure proper cleanup" here.
+    _remove_empty_staging(staging)
 
     # Create remote link document if not already present
     from ndi.query import ndi_query
@@ -116,13 +174,6 @@ def downloadDataset(
 
     # Store cloud client for on-demand file fetching
     dataset.cloud_client = client
-
-    # Optionally download files
-    if sync_files and doc_jsons:
-        file_dir = target / ".ndi" / "files"
-        report = downloadDatasetFiles(cloud_dataset_id, doc_jsons, file_dir, client=client)
-        if verbose:
-            print(f'  Files downloaded: {report["downloaded"]}, failed: {report["failed"]}')
 
     # Verify every downloaded document made it into the local database.
     # The local dataset may have *more* documents (e.g. session and
