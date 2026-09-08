@@ -110,7 +110,7 @@ functions:
   - name: find_ingested_docs
     type: function
     matlab_path: "+ndi/+database/+fun/find_ingested_docs.m"
-    matlab_last_sync_hash: "fe64a9f53"
+    matlab_last_sync_hash: "831a3fbef"
     python_path: "ndi/database_fun.py"
     input_arguments:
       - name: S
@@ -302,7 +302,7 @@ functions:
   - name: copydocfile2temp
     type: function
     matlab_path: "+ndi/+database/+fun/copydocfile2temp.m"
-    matlab_last_sync_hash: "fe64a9f53"
+    matlab_last_sync_hash: "f46b6bc03"
     python_path: "ndi/database_fun.py"
     python_name: "copydocfile2temp"
     input_arguments:
@@ -329,6 +329,10 @@ functions:
     decision_log: >
       RENAMED from copy_doc_file_to_temp to copydocfile2temp to match MATLAB.
       Synchronized 2026-03-13.
+      NDI-matlab f46b6bc03 changed fread(Inf) to fread(Inf,'uint8') because
+      MATLAB's default precision corrupted binary payloads. Nothing to port:
+      database_openbinarydoc returns a file opened 'rb' and this reads it with
+      read(), so there is no precision to get wrong.
 
   - name: extract_doc_files
     type: function

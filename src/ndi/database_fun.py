@@ -251,6 +251,11 @@ def find_ingested_docs(session_or_dataset: Any) -> list[Any]:
         ndi_query("").isa("daqreader_mfdaq_epochdata_ingested")
         | ndi_query("").isa("daqmetadatareader_epochdata_ingested")
         | ndi_query("").isa("epochfiles_ingested")
+        # Image series ingest their epoch data under their own class
+        # (NDI-matlab 831a3fbef, issue #823). Without it an ingested
+        # imageseries session reports as not ingested, which is the kind of
+        # wrong answer that reads as "nothing to do" rather than as an error.
+        | ndi_query("").isa("daqreader_image_epochdata_ingested")
     )
 
     try:

@@ -587,7 +587,16 @@ classes:
   - name: syncgraph
     type: class
     matlab_path: "+ndi/+time/syncgraph.m"
-    matlab_last_sync_hash: "dde9edf9"
+    matlab_last_sync_hash: "d06ef9cd5"
+    decision_log: >
+      NDI-matlab d06ef9cd5 and 2377c0679 repaired three MATLAB-only defects.
+      Two were dead on arrival: removerule called setdiff(1:n),index -- the
+      paren in the wrong place -- and the daqsystem node removal called
+      setdiff with one argument, so it always errored and the method never
+      ran. The third replaced == on a cell array of clocktypes with cellfun.
+      Nothing to port: Python's remove_rule deletes from a list, and an
+      epochnode carries a single clocktype rather than a cell array, so
+      neither shape exists here.
     python_path: "ndi/time/syncgraph.py"
     python_class: "ndi_time_syncgraph"
     inherits: "ndi.ido"

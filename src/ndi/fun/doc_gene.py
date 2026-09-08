@@ -1381,6 +1381,7 @@ def makeCells(
     segmentationDilation: float = 0,
     coordinateUnits: str = "source",
     subjectID: str = "",
+    sourceFileID: str = "",
     extra: dict[str, Any] | None = None,
     contours=None,
     contourReference: str = "centroid",
@@ -1407,6 +1408,10 @@ def makeCells(
             a measured cell body.
         subjectID: optional here, because the pyramid already carries
             one -- unlike :func:`makePyramid`, where it is required.
+        sourceFileID: id of the ``generic_file`` document describing the
+            file these cells were segmented from. The class has carried a
+            ``source_file_id`` dependency since it was written and nothing
+            populated it (NDI-matlab 6ae508708).
         extra: further per-cell columns, written after the required four
             with their own names. The spec names area, dnb_count,
             total_counts and n_genes, but writers differ and
@@ -1486,6 +1491,8 @@ def makeCells(
     )
     if subjectID:
         doc = doc.set_dependency_value("subject_id", subjectID, error_if_not_found=False)
+    if sourceFileID:
+        doc = doc.set_dependency_value("source_file_id", sourceFileID, error_if_not_found=False)
 
     return _store_doc(session, doc, file_names, file_paths)
 

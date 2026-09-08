@@ -589,25 +589,49 @@ not_applicable:
       recorded on selectOrganization, not here.
   - name: choosefile
     matlab_path: "+ndi/+util/choosefile.m"
+    matlab_last_sync_hash: "fe64a9f53"
     status: matlab_only
-    decision_log: "MATLAB GUI dialog (inputdlg). No Python equivalent needed."
+    decision_log: >
+      MATLAB GUI dialog (inputdlg). No Python equivalent needed.
+
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Still inputdlg for the name and questdlg for the overwrite prompt,
+      looping until a free name is given. Nothing to port.
 
   - name: choosefileordir
     matlab_path: "+ndi/+util/choosefileordir.m"
+    matlab_last_sync_hash: "fe64a9f53"
     status: matlab_only
-    decision_log: "MATLAB GUI dialog. No Python equivalent needed."
+    decision_log: >
+      MATLAB GUI dialog. No Python equivalent needed.
+
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Same inputdlg/questdlg loop as choosefile, additionally squashing
+      non-alphanumeric characters to underscores and testing isfolder as well
+      as isfile. Nothing to port.
 
   - name: toolboxdir
     matlab_path: "+ndi/+util/toolboxdir.m"
+    matlab_last_sync_hash: "fe64a9f53"
     status: ported_differently
     decision_log: >
       MATLAB-specific path resolution using mfilename('fullpath').
       Python uses ndi.common.ndi_common_PathConstants instead.
 
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Still five lines splitting mfilename("fullpath") and rejoining all but
+      the last three parts. Nothing to port.
+
   - name: "+openminds sub-package"
     matlab_path: "+ndi/+util/+openminds/"
+    matlab_last_sync_hash: "fe64a9f53"
     status: ported_differently
     decision_log: >
       MATLAB sub-package with find_instance_name.m and
       find_techniques_names.m. Ported to ndi.openminds_convert
       module in Python (different namespace).
+
+      Confirmed against NDI-matlab fe64a9f53, the package's last-touching
+      commit. It still holds exactly find_instance_name.m and
+      find_techniques_names.m, the two files this entry accounts for. Nothing
+      to port.

@@ -445,7 +445,13 @@ classes:
   - name: navigator_rhd_series
     type: class
     matlab_path: "+ndi/+file/+navigator/rhd_series.m"
-    matlab_last_sync_hash: "2566fe4d"
+    matlab_last_sync_hash: "75901cf65"
+    decision_log: >
+      NDI-matlab 75901cf65 added removehiddenfilegroups to
+      selectfilegroups_disk so macOS AppleDouble ('._') shadow files stop
+      forming phantom epochs. Nothing to port: _group_directory already drops
+      every name beginning with '.' as it lists the directory, so the shadow
+      files never reach a group here.
     python_path: "ndi/file/navigator/rhd_series.py"
     python_class: "ndi_file_navigator_rhd_series"
     inherits: "ndi.file.navigator"
@@ -567,7 +573,11 @@ classes:
   - name: navigator_rhd_series_epochdir
     type: class
     matlab_path: "+ndi/+file/+navigator/rhd_series_epochdir.m"
-    matlab_last_sync_hash: "2566fe4d"
+    matlab_last_sync_hash: "75901cf65"
+    decision_log: >
+      NDI-matlab 75901cf65, as for rhd_series: hidden and AppleDouble files are
+      filtered before grouping. Nothing to port for the same reason -- names
+      beginning with '.' are dropped while the directory is listed.
     python_path: "ndi/file/navigator/rhd_series_epochdir.py"
     python_class: "ndi_file_navigator_rhd_series_epochdir"
     inherits: "ndi.file.navigator.epochdir"
