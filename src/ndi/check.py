@@ -178,7 +178,14 @@ def run_checks() -> tuple[list[tuple[str, bool, str]], int, int]:
         from ndi.query import ndi_query
         from ndi.session.dir import ndi_session_dir
 
-        with tempfile.TemporaryDirectory() as tmp:
+        # ``ignore_cleanup_errors=True`` (Python 3.10+): ndi_session_dir has
+        # no public close hook, so DID-python's SQLiteDB still holds an open
+        # handle to ``.ndi/did-sqlite.sqlite`` when this block exits. On
+        # Windows that locks the file, and ``TemporaryDirectory.__exit__``
+        # then raises ``NotADirectoryError`` from rmtree -- turning a
+        # smoke test that already passed into a false failure. Matches the
+        # ``shutil.rmtree(..., ignore_errors=True)`` in ndi_session_mock.
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             session_dir = Path(tmp) / "ndi_check_session"
             session_dir.mkdir()
             session = ndi_session_dir("ndi_check", session_dir)
