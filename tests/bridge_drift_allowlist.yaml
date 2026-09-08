@@ -98,10 +98,6 @@ drifted:
 # nobody knows, examine the file now and record today's commit for it.
 # ---------------------------------------------------------------------------
 no_hash:
-  - name: spikeextractor
-    matlab_path: "+ndi/+app/spikeextractor.m"
-  - name: spikesorter
-    matlab_path: "+ndi/+app/spikesorter.m"
   - name: SyncIndex
     matlab_path: "+ndi/+cloud/+sync/+internal/+index/"
   - name: diff (dataset)
