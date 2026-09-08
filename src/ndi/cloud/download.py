@@ -81,6 +81,15 @@ def _contained_path(target_dir: Path, filename: str) -> Path | None:
 _ZIP_MAX_RATIO = 100
 
 
+class UnexpectedDocumentArchive(ValueError):
+    """A document archive arrived in a shape nothing can read.
+
+    Distinct from the transient "the zip is not ready yet" the poll loop
+    exists for: retrying this one burns the whole timeout and then reports
+    a ``TimeoutError``, which names the symptom rather than the cause.
+    """
+
+
 def _check_zip_ratio(zf: Any) -> None:
     """Pre-flight: reject a ZIP whose declared expansion ratio is implausible.
 
@@ -150,14 +159,46 @@ def _download_chunk_zip(
                 zf = zipfile.ZipFile(io.BytesIO(resp.content))
                 _check_zip_ratio(zf)
                 all_docs: list[dict[str, Any]] = []
-                for name in zf.namelist():
-                    if name.endswith(".json"):
-                        raw_text = zf.read(name).decode("utf-8")
-                        raw_text = rehydrateJSONNanNull(raw_text)
-                        data = json.loads(raw_text)
-                        docs = data if isinstance(data, list) else [data]
-                        all_docs.extend(docs)
+                entries = zf.namelist()
+                json_entries = [name for name in entries if name.endswith(".json")]
+                # An archive with nothing to read is a server-side change, not
+                # an empty chunk: refuse it rather than returning short.
+                # NDI-matlab f48f2efc6 refuses any archive that is not exactly
+                # one file, for the same reason -- a download that quietly
+                # comes back with fewer documents than were asked for is the
+                # silent-loss shape that cost an afternoon in NDI-matlab#945.
+                #
+                # This does NOT adopt the "exactly one" rule. Reading every
+                # JSON entry, which is what happens below, already handles a
+                # chunk the server chose to split across files; refusing it
+                # would give up behaviour this side has and MATLAB does not.
+                if not json_entries:
+                    raise UnexpectedDocumentArchive(
+                        "The document archive holds no .json entry "
+                        f"(found: {', '.join(entries) or 'nothing'}). Returning no "
+                        "documents would look like an empty chunk, so this refuses "
+                        "rather than coming back short."
+                    )
+                ignored = sorted(set(entries) - set(json_entries))
+                if ignored:
+                    logger.warning(
+                        "Ignoring %d non-JSON entr%s in the document archive: %s",
+                        len(ignored),
+                        "y" if len(ignored) == 1 else "ies",
+                        ", ".join(ignored),
+                    )
+                for name in json_entries:
+                    raw_text = zf.read(name).decode("utf-8")
+                    raw_text = rehydrateJSONNanNull(raw_text)
+                    data = json.loads(raw_text)
+                    docs = data if isinstance(data, list) else [data]
+                    all_docs.extend(docs)
                 return all_docs
+        except UnexpectedDocumentArchive:
+            # Not a "not ready yet" condition. Retrying burns the whole
+            # timeout and then reports a TimeoutError, which names the
+            # symptom instead of the cause.
+            raise
         except Exception as exc:
             last_exc = exc
 

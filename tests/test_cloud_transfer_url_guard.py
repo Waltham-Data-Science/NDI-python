@@ -118,3 +118,87 @@ class TestTheCallSitesUseIt:
 
         with pytest.raises(ValueError, match="bulk download URL"):
             download._download_chunk_zip("http://evil/bundle.zip", timeout=1)
+
+
+class TestAnArchiveWithNothingToReadIsRefused:
+    """MATLAB counterpart: ``downloadDocumentCollection.m``, NDI-matlab ``f48f2efc6``.
+
+    MATLAB took ``unzippedFiles{1}`` and ignored the rest, so a chunk the
+    server split across files would come back short with no error --
+    the silent-loss shape of NDI-matlab#945. Its fix refuses any archive
+    that is not exactly one file.
+
+    This side already read EVERY ``.json`` entry, so the split-chunk case
+    was never lossy here and adopting "exactly one" would give up
+    behaviour MATLAB does not have. What it did share was the other half:
+    an archive with no JSON at all returned ``[]``, which is
+    indistinguishable from an empty chunk.
+    """
+
+    @staticmethod
+    def _archive(names_to_bytes):
+        import io
+        import zipfile
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            for name, payload in names_to_bytes.items():
+                zf.writestr(name, payload)
+        return buf.getvalue()
+
+    def _fetch(self, archive_bytes, monkeypatch):
+        import requests
+
+        import ndi.cloud.download as download
+
+        class _Resp:
+            status_code = 200
+            content = archive_bytes
+
+        monkeypatch.setattr(requests, "get", lambda *a, **k: _Resp())
+        return download._download_chunk_zip("https://host/chunk.zip", timeout=5)
+
+    def test_documents_from_several_json_entries_all_arrive(self, monkeypatch):
+        """The case MATLAB refuses and this reads."""
+        archive = self._archive(
+            {
+                "part1.json": '[{"id": "a"}]',
+                "part2.json": '[{"id": "b"}]',
+            }
+        )
+        got = self._fetch(archive, monkeypatch)
+        assert sorted(d["id"] for d in got) == ["a", "b"]
+
+    def test_an_archive_with_no_json_is_refused(self, monkeypatch):
+        from ndi.cloud.download import UnexpectedDocumentArchive
+
+        archive = self._archive({"README.txt": "nothing here"})
+        with pytest.raises(UnexpectedDocumentArchive, match="no .json entry"):
+            self._fetch(archive, monkeypatch)
+
+    def test_an_empty_archive_is_refused(self, monkeypatch):
+        from ndi.cloud.download import UnexpectedDocumentArchive
+
+        with pytest.raises(UnexpectedDocumentArchive, match="no .json entry"):
+            self._fetch(self._archive({}), monkeypatch)
+
+    def test_it_refuses_immediately_rather_than_polling_to_a_timeout(self, monkeypatch):
+        """The poll loop is for "the zip is not ready yet". Retrying a
+        malformed archive burns the whole timeout and then reports a
+        TimeoutError, which names the symptom instead of the cause."""
+        import time as time_module
+
+        from ndi.cloud.download import UnexpectedDocumentArchive
+
+        slept: list[float] = []
+        monkeypatch.setattr(time_module, "sleep", lambda s: slept.append(s))
+        with pytest.raises(UnexpectedDocumentArchive):
+            self._fetch(self._archive({"README.txt": "x"}), monkeypatch)
+        assert slept == []
+
+    def test_a_non_json_entry_alongside_is_logged_not_dropped_silently(self, monkeypatch, caplog):
+        archive = self._archive({"docs.json": '[{"id": "a"}]', "notes.txt": "hi"})
+        with caplog.at_level("WARNING", logger="ndi.cloud.download"):
+            got = self._fetch(archive, monkeypatch)
+        assert [d["id"] for d in got] == ["a"]
+        assert "notes.txt" in caplog.text
