@@ -111,6 +111,24 @@ class ndi_gui_component_internal_ProgressTracker:
     #: Snake-case alias for MATLAB's name; one method under two names.
     update_progress = updateProgress
 
+    def updateMessage(self, newMessage: str) -> None:
+        """Raise MessageUpdated carrying *newMessage*.
+
+        MATLAB counterpart: ``ProgressTracker.updateMessage``, which is the
+        ONLY place MATLAB notifies MessageUpdated. It was not ported, which
+        left the whole message channel dead on this side: ProgressMonitor
+        registers ``_on_message`` on :attr:`on_message_updated` and
+        MessageUpdatedEventData exists, but nothing could ever fire them --
+        ``_fire_message_updated`` had no caller anywhere in the tree.
+
+        Like MATLAB's, this notifies without storing: the tracker's own
+        :attr:`Message` stays the rendered TemplateMessage.
+        """
+        self._fire_message_updated(newMessage)
+
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    update_message = updateMessage
+
     def setCompleted(self) -> None:
         """Mark the task as finished and notify listeners."""
         self.IsFinished = True
@@ -134,22 +152,39 @@ class ndi_gui_component_internal_ProgressTracker:
             ndi_gui_component_internal_event_ProgressUpdatedEventData,
         )
 
-        evt = ndi_gui_component_internal_event_ProgressUpdatedEventData(self.PercentageComplete)
+        # All three, as MATLAB's two notify sites pass them. The event is a
+        # snapshot: a listener reading the tracker instead sees its state when
+        # it looks, which differs once a notification is deferred.
+        evt = ndi_gui_component_internal_event_ProgressUpdatedEventData(
+            self.PercentageComplete, self.CurrentStep, self.TotalSteps
+        )
         for cb in self.on_progress_updated:
             cb(self, evt)
 
-    def _fire_message_updated(self) -> None:
+    def _fire_message_updated(self, message: str | None = None) -> None:
         from ndi.gui.component.internal.event import (
             ndi_gui_component_internal_event_MessageUpdatedEventData,
         )
 
-        evt = ndi_gui_component_internal_event_MessageUpdatedEventData(self.Message)
+        evt = ndi_gui_component_internal_event_MessageUpdatedEventData(
+            self.Message if message is None else message
+        )
         for cb in self.on_message_updated:
             cb(self, evt)
 
     def _fire_task_completed(self) -> None:
+        # MATLAB raises TaskCompleted with the SAME ProgressUpdatedEventData
+        # it raises ProgressUpdated with, so a completion listener sees the
+        # final step counts rather than having to go back to the tracker.
+        from ndi.gui.component.internal.event import (
+            ndi_gui_component_internal_event_ProgressUpdatedEventData,
+        )
+
+        evt = ndi_gui_component_internal_event_ProgressUpdatedEventData(
+            self.PercentageComplete, self.CurrentStep, self.TotalSteps
+        )
         for cb in self.on_task_completed:
-            cb(self)
+            cb(self, evt)
 
     # -- Template rendering -----------------------------------------------
 
