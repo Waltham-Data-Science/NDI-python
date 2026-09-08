@@ -126,23 +126,9 @@ no_hash:
     matlab_path: "+ndi/+fun/+doc/+subject/makeSpeciesStrainSex.m"
   - name: epochid2element
     matlab_path: "+ndi/+fun/+epoch/epochid2element.m"
-  - name: bar3
-    matlab_path: "+ndi/+fun/+plot/bar3.m"
-  - name: multichan
-    matlab_path: "+ndi/+fun/+plot/multichan.m"
-  - name: stimulusTimeseries
-    matlab_path: "+ndi/+fun/+plot/stimulusTimeseries.m"
   - name: location
     matlab_path: "+ndi/+fun/+probe/location.m"
   - name: diff (session)
     matlab_path: "+ndi/+fun/+session/diff.m"
-  - name: f0_f1_responses
-    matlab_path: "+ndi/+fun/+stimulus/f0_f1_responses.m"
-  - name: findMixtureName
-    matlab_path: "+ndi/+fun/+stimulus/findMixtureName.m"
-  - name: tuning_curve_to_response_type
-    matlab_path: "+ndi/+fun/+stimulus/tuning_curve_to_response_type.m"
-  - name: stimulustemporalfrequency
-    matlab_path: "+ndi/+fun/stimulustemporalfrequency.m"
   - name: setup
     matlab_path: "+ndi/+setup/"

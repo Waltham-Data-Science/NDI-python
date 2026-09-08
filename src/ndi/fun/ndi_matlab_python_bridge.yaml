@@ -1347,6 +1347,7 @@ functions:
   - name: bar3
     type: function
     matlab_path: "+ndi/+fun/+plot/bar3.m"
+    matlab_last_sync_hash: "97459ba8a"
     python_path: "ndi/fun/plot.py"
     input_arguments:
       - name: data_table
@@ -1365,9 +1366,26 @@ functions:
       Exact match. Creates a 3-way grouped bar chart from table data.
       grouping_variables must have exactly 3 elements.
 
+      Examined against NDI-matlab 97459ba8a, the file's last-touching commit,
+      AND IT COULD NOT RUN AT ALL. plt.cm.get_cmap was REMOVED in matplotlib
+      3.9, so the colour lookup raised AttributeError on every call under any
+      current install; plt.get_cmap is the supported spelling and has been
+      since 3.5. Fixed. Two smaller divergences fixed alongside. Categories
+      were sorted with key=str, so numeric grouping values ordered 10 before 2
+      where MATLAB's unique on a table column sorts in the column's own order
+      -- now sorted naturally, falling back to str only for genuinely mixed
+      types. And bar heights used np.nanmean where MATLAB uses mean(), which
+      PROPAGATES NaN: a group holding one missing value quietly reported the
+      mean of the rest instead of showing no bar. The rest holds -- the
+      subplot per first variable, the x position (j-1)*(n3+1)+k, the tick
+      positions, the legend on the last subplot. MATLAB's palette is lines(N)
+      and this uses tab10; both are "a distinct colour per inner group", which
+      is what MATLAB's comment asks for.
+
   - name: multichan
     type: function
     matlab_path: "+ndi/+fun/+plot/multichan.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/plot.py"
     input_arguments:
       - name: data
@@ -1386,9 +1404,18 @@ functions:
     decision_log: >
       Exact match. Plots multiple channels of data with vertical spacing.
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Seventeen lines and they match: one line per column of data, offset by
+      (i-1)*space in MATLAB's 1-based loop and i*space in Python's 0-based one
+      -- the same offsets -- in the same grey [0.7 0.7 0.7], returning one
+      handle per channel. The port also reshapes a 1-D input to a single
+      column, which MATLAB's size(data,2) already treats as one channel.
+      Nothing to port.
+
   - name: stimulusTimeseries
     type: function
     matlab_path: "+ndi/+fun/+plot/stimulusTimeseries.m"
+    matlab_last_sync_hash: "0b39ad6c6"
     python_path: "ndi/fun/plot.py"
     input_arguments:
       - name: stimulus_probe
@@ -1449,6 +1476,17 @@ functions:
       Exact match. Python kwargs now use MATLAB option names: FontSize,
       FontWeight, FontColor, HorizontalAlignment, textycoord.
 
+      Examined against NDI-matlab 0b39ad6c6, the file's last-touching commit.
+      Holds. The whole option set is present with the same defaults --
+      linewidth 2, black line and text, FontSize 12, 'normal' weight, 'center'
+      alignment, textycoord defaulting to y+1 -- the same four outputs come
+      back, and the same refusal when the time structure carries no
+      stimon/stimoff. ONE STRUCTURAL DIFFERENCE, and it is unavoidable: MATLAB
+      assembles a name/value list and hands the drawing to
+      vlt.neuro.stimulus.plot_stimulus_timeseries, which has no Python
+      counterpart, so the port draws the bars and the labels itself. Nothing
+      to port.
+
   # =========================================================================
   # Functions — session.py
   # MATLAB: +ndi/+fun/+session/diff.m
@@ -1497,6 +1535,7 @@ functions:
   - name: tuning_curve_to_response_type
     type: function
     matlab_path: "+ndi/+fun/+stimulus/tuning_curve_to_response_type.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/stimulus.py"
     input_arguments:
       - name: session
@@ -1519,9 +1558,24 @@ functions:
       Exact match for the 2-arg form. Python adds an optional
       response_index parameter not present in MATLAB.
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      The two-step shape was right -- follow stimulus_response_scalar_id to
+      finish, or stimulus_tuningcurve_id to recurse -- but two details were
+      not. MATLAB looks each dependency up BY NAME through dependency_value;
+      the port matched the name as a SUBSTRING ('stimulus_response_scalar' in
+      dep_name), so a numbered variant such as stimulus_response_scalar_id_2
+      matched too, and it took whichever came first in the depends_on list
+      rather than the one named. That is the same defect the docTable
+      openminds entry had. And MATLAB ERRORS when the dependent document does
+      not resolve to exactly one, or when response_type is missing from it;
+      the port returned ('', None) and moved on, so a database that cannot
+      resolve a dependency it declares looked like a document that has none.
+      Both ported.
+
   - name: f0_f1_responses
     type: function
     matlab_path: "+ndi/+fun/+stimulus/f0_f1_responses.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/stimulus.py"
     input_arguments:
       - name: session
@@ -1551,9 +1605,35 @@ functions:
       Exact match. Python now returns 4 separate outputs matching
       MATLAB: (f0, f1, f0_tuningcurve_doc, f1_tuningcurve_doc).
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit,
+      AND THE POINT OF THE FUNCTION WAS MISSING. F0 and F1 live in SEPARATE
+      stimulus_tuningcurve documents. MATLAB, given either one, finds the
+      other: it queries the stimulus_response_scalar documents on the same
+      element_id, the same stimulator_epochid and element_epochid, and the
+      OPPOSITE response_type; then the tuning curves depending on any of
+      those; then the one whose independent_variable_label matches. It reads
+      both curves through tuning_response.tuningcurvedoc2vhlabrespstruct and
+      returns both values at ONE stimulus index -- chosen, when the caller
+      gives none, as the location of the larger of the two peaks. The port did
+      none of that. It read one value out of the document it was handed and
+      returned None for the other, so one of the pair was always absent and
+      the two could never be compared -- which is the entire reason the
+      function exists. It also read stimulus_tuningcurve.responses directly
+      rather than the curve, and returned None where MATLAB returns NaN.
+      Ported in full, against the existing Python
+      tuningcurvedoc2vhlabrespstruct; covered by
+      tests/test_fun_plot_stimulus_against_matlab.py. TWO MATLAB QUIRKS NOT
+      COPIED. Its first switch matches lower(rt) against 'f1' while the second
+      matches rt against 'F1', so a lower-case 'f1' passes the first and falls
+      through the second, leaving f0_tuning_curve unset; the port compares
+      case-insensitively throughout. And after warning about too many matches
+      MATLAB truncates to one and then tests for more than one again, which
+      cannot fire.
+
   - name: findMixtureName
     type: function
     matlab_path: "+ndi/+fun/+stimulus/findMixtureName.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/stimulus.py"
     input_arguments:
       - name: dictionary_path
@@ -1570,9 +1650,31 @@ functions:
       Exact match. Matches mixture against a JSON mixture dictionary.
       Returns list of matching entry names from the dictionary.
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit,
+      and THE MATCHING RULE WAS THE WRONG ONE. MATLAB is all(entryMatch) where
+      each entryMatch(j) = any(mixtureMatch): every component of a dictionary
+      entry must find SOME element of the mixture that matches it on all five
+      fields. The mixture may hold more. The port required len(entry) ==
+      len(mixture), skipping anything else outright, then paired the two lists
+      sorted by name and compared them one to one -- so an entry that is a
+      subset of the mixture never matched, and two components sharing a name
+      paired arbitrarily. Worse, `if not isinstance(entry_components, list):
+      continue` meant a ONE-COMPONENT entry could never match at all:
+      jsondecode gives MATLAB a scalar struct there, which it wraps, while
+      json.load gives a dict, which this skipped. And every field was compared
+      as a STRING, so 1 and 1.0 -- a JSON integer and a JSON float for the
+      same quantity -- were different. All ported. ONE PLACE MORE PERMISSIVE
+      THAN MATLAB, deliberately: numeric TEXT is accepted on either side of
+      the value comparison. MATLAB's eq('0.9', 0.9) compares char codes and
+      returns a 1x3 logical, which the following && rejects, so MATLAB errors
+      on that input rather than defining an answer -- and a mixture read out
+      of a table or a CSV carries its values as text. There was an existing
+      test asserting that a string value matches its number; it still passes.
+
   - name: stimulustemporalfrequency
     type: function
     matlab_path: "+ndi/+fun/stimulustemporalfrequency.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/stimulus.py"
     input_arguments:
       - name: stimulus_parameters
@@ -1612,6 +1714,23 @@ functions:
       that rule and tries the next, so one malformed stimulus in a set does
       not cost the frequencies of the rest; the caller still gets
       (None, "") when nothing matches.
+
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit.
+      This one was already examined and repaired -- the docstring records that
+      it used to read a file name and rule keys that do not exist, and
+      returned (None, '') for every stimulus ever passed to it -- and the
+      repair holds against MATLAB: the same shipped
+      ndi_common/stimulus/ndi_stimulusparameters2temporalfrequency.json, the
+      same five rule keys, the same adder + multiplier * value, the same 1/x
+      when isPeriod, the same optional parameterMultiplier lookup, rules tried
+      in file order with the first match winning. Verified live: the shipped
+      file has three rules and a tFrequency of 4.0 comes back as 4.0. ONE
+      DELIBERATE DIVERGENCE, already documented in the function: MATLAB ERRORS
+      on a malformed rule, a non-numeric value, a zero period or a missing
+      multiplier parameter, where the port skips that rule and tries the next,
+      so one bad entry does not cost a stimulus set every frequency in it. The
+      port also takes an optional config_path that MATLAB has no counterpart
+      for. Nothing further to port.
 
   - name: stimulus_tuningcurve_log
     type: function
