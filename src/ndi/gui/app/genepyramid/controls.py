@@ -22,6 +22,7 @@ from typing import Any
 
 __all__ = [
     "geneIndex",
+    "abundanceBand",
     "labelAgreement",
     "selectLabelings",
     "addGenePanel",
@@ -66,10 +67,116 @@ def geneIndex(ids, names) -> dict:
     return dict(sorted(by.items(), key=lambda kv: kv[0].lower()))
 
 
+def abundanceBand(totals, lo: float = 0.0, hi: float = 100.0):
+    """Which entries fall in a percentile band OF THE READS.
+
+    NOT a percentile of the list, and the difference is the whole point.
+    Rank least to most abundant and accumulate the totals; an entry's
+    position is where its own reads sit in that cumulative sweep. So
+    ``lo=90`` keeps the handful of genes that between them carry the top
+    10% OF ALL READS. Ranking by list position instead would keep 10% of
+    the genes, which in a real section is a completely different and much
+    larger set: expression is heavy-tailed, and a few hundred genes out
+    of thirty thousand carry most of the signal.
+
+    An entry occupies an INTERVAL of that sweep -- the mass before it to
+    the mass after -- and sits at the interval's midpoint. Using either
+    endpoint would let one dominant gene straddle a cut and be kept or
+    dropped on the strength of its own bulk.
+
+    TIES SHARE ONE MIDPOINT, computed over the whole tied group.
+    Otherwise ties break on sort order, which is arbitrary, and two genes
+    with identical totals land on opposite sides of the same threshold.
+    It matters most at the bottom, where thousands of genes tie near zero.
+
+    A consequence that looks like a bug the first time: an entry whose
+    own reads are a large share of the total cannot be removed by a small
+    top cut. One gene carrying 30% of all reads has the interval
+    [70, 100] and the midpoint 85, so ``hi=99`` keeps it -- correctly,
+    since dropping it would remove 30% of the reads, not 1%. *info*
+    reports that gene's share and the cut that would drop it, so a panel
+    can say so rather than appear inert.
+
+    Args:
+        totals: reads per entry, array-like.
+        lo, hi: band edges in percent.
+
+    Returns:
+        ``(keep, info)``. *keep* is a boolean array over *totals*.
+    """
+    import numpy as np
+
+    tot = np.asarray(totals, dtype=np.float64).ravel()
+    n = len(tot)
+    grand = float(tot.sum())
+    if n == 0 or grand <= 0:
+        return np.ones(n, bool), {"available": False, "nTotal": n}
+
+    loudest = int(np.argmax(tot))
+    top_share = float(tot[loudest] / grand * 100.0)
+    info = {
+        "available": True,
+        "nTotal": n,
+        "lo": float(lo),
+        "hi": float(hi),
+        "topRow": loudest,
+        "topShare": top_share,
+        # Where the loudest entry sits, so a panel can name the cut that
+        # would actually drop it. Its interval is [100 - share, 100].
+        "topMid": 100.0 - top_share / 2.0,
+    }
+    if lo <= 0.0 and hi >= 100.0:
+        return (
+            np.ones(n, bool),
+            {**info, "nKept": n, "pctReads": 100.0, "droppedTop": []},
+        )
+
+    order = np.argsort(tot, kind="stable")
+    srt = tot[order]
+    cum = np.cumsum(srt)
+    before = cum - srt
+    start = np.flatnonzero(np.r_[True, srt[1:] != srt[:-1]])
+    stop = np.r_[start[1:], n] - 1
+    group_mid = (before[start] + cum[stop]) / 2.0 / grand * 100.0
+    mid = np.repeat(group_mid, np.r_[start[1:], n] - start)
+
+    in_band = (mid >= lo) & (mid <= hi)
+    keep = np.zeros(n, bool)
+    keep[order[in_band]] = True
+
+    # Which loud entries the top cut removed. At hi=99 that is a handful
+    # of names, and naming them is the useful feedback -- "you just
+    # dropped MBP" rather than "1,204 genes hidden".
+    dropped = []
+    if hi < 100.0:
+        for i in order[::-1][:40]:
+            if not keep[i]:
+                dropped.append(int(i))
+            if len(dropped) == 8:
+                break
+    return keep, {
+        **info,
+        "nKept": int(keep.sum()),
+        "pctReads": float(tot[keep].sum() / grand * 100.0) if keep.any() else 0.0,
+        "droppedTop": dropped,
+    }
+
+
 # Distinct colours rather than one map applied to everything: the layers
 # blend additively, so two genes in the same colormap make one picture
 # that neither of them is.
 _GENE_COLORMAPS = ("magenta", "green", "cyan", "yellow", "red", "blue")
+
+
+# The useful band settings are not obvious from a bare slider and are
+# nearly the same on every section, so they are offered as presets.
+_BAND_PRESETS = (
+    ("all", 0.0, 100.0),
+    ("drop top 1%", 0.0, 99.0),
+    ("drop top 5%", 0.0, 95.0),
+    ("middle 5-95%", 5.0, 95.0),
+    ("top 10% only", 90.0, 100.0),
+)
 
 
 def addGenePanel(viewer, session, pyr_doc) -> Any:
@@ -82,10 +189,19 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
     layer in napari's own list unticks the box, so the two never disagree.
 
     Variants are already combined by :func:`geneIndex`; every row a
-    symbol names is summed into its layer.
+    symbol names is summed into its layer, and its counts are the sum
+    over those rows too.
+
+    TWO FILTERS, applied together. The text box answers "where is this
+    gene"; the abundance band answers "which genes carry the signal".
+    They compose, because narrowing to the loud genes and then searching
+    within them is the normal way to use both.
     """
-    from qtpy.QtCore import Qt
+    import numpy as np
+    from qtpy.QtCore import Qt, QTimer
     from qtpy.QtWidgets import (
+        QDoubleSpinBox,
+        QFormLayout,
         QHBoxLayout,
         QLabel,
         QLineEdit,
@@ -96,12 +212,31 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
         QWidget,
     )
 
-    from ....fun.doc_gene_export import readGeneList
+    from ....fun.doc_gene_export import readGeneList, readGeneTotals
     from .multiscale import layerSpec
 
     ids, names = readGeneList(session, pyr_doc)
     index = geneIndex(ids, names)
     n_variants = sum(1 for e in index.values() if len(e["rows"]) > 1)
+
+    # Counts per SYMBOL, summed over its variant rows -- the same rows the
+    # layer sums, so the number in the list is the number the picture is
+    # drawn from.
+    totals, _records = readGeneTotals(session, pyr_doc)
+    if totals is not None and len(totals) != len(ids):
+        # Indexing a short totals array by gene row would either raise or,
+        # worse, put one gene's reads on another. Neither is worth risking
+        # for a column.
+        print(
+            f"[genepyramid] gene_totals.tsv has {len(totals)} rows but the "
+            f"gene list has {len(ids)}; counts and the abundance band are "
+            f"omitted rather than guessed."
+        )
+        totals = None
+    if totals is None:
+        symbol_totals = None
+    else:
+        symbol_totals = np.array([int(totals[e["rows"]].sum()) for e in index.values()], np.int64)
 
     box = QWidget()
     outer = QVBoxLayout(box)
@@ -119,9 +254,13 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
     # Thirty thousand items go in as one batch: each add would otherwise
     # relayout the list.
     listw.setUpdatesEnabled(False)
-    for symbol, entry in index.items():
+    for i, (symbol, entry) in enumerate(index.items()):
         rows, accs = entry["rows"], entry["accessions"]
-        text = symbol if len(rows) == 1 else f"{symbol}  ({len(rows)} variants)"
+        text = symbol
+        if symbol_totals is not None:
+            text += f"  \u2014  {int(symbol_totals[i]):,}"
+        if len(rows) > 1:
+            text += f"  ({len(rows)} variants)"
         item = QListWidgetItem(text)
         item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
         item.setCheckState(Qt.Unchecked)
@@ -129,17 +268,71 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
         # Accessions are searchable too: a symbol is what people usually
         # type, but not everything here has one.
         item.setData(Qt.UserRole + 1, " ".join([symbol] + accs).lower())
-        item.setToolTip(
-            f"{symbol}\n{len(rows)} pyramid column(s): {', '.join(accs) or '(no accession)'}"
-        )
+        tip = [
+            symbol,
+            f"{len(rows)} pyramid column(s): {', '.join(accs) or '(no accession)'}",
+        ]
+        if totals is not None:
+            # By ROW, not zipped against the accessions: duplicates are
+            # dropped from that list, so position there is not position
+            # here and pairing them would attach the wrong number.
+            tip.append("counts per column: " + ", ".join(f"{int(totals[r]):,}" for r in rows))
+        item.setToolTip("\n".join(tip))
         listw.addItem(item)
         items[symbol] = item
     listw.setUpdatesEnabled(True)
+
+    state = {"busy": False, "colour": 0, "keep": None}
+
+    # ---- the abundance band ------------------------------------------
+    band_readout = QLabel()
+    band_readout.setWordWrap(True)
+    if symbol_totals is None:
+        band_readout.setText(
+            "This pyramid has no gene_totals.tsv, so abundance is unknown "
+            "and the band cannot be applied. Counts are omitted above for "
+            "the same reason."
+        )
+        outer.addWidget(band_readout)
+        slider = lo_box = hi_box = None
+    else:
+        outer.addWidget(QLabel("Abundance band (percentile of total reads)"))
+        slider = lo_box = hi_box = None
+        try:
+            # napari depends on superqt, so the two-handle widget is
+            # normally there. Still optional: the spin boxes below are
+            # fully functional, and a missing optional import should not
+            # cost the control.
+            from superqt import QLabeledDoubleRangeSlider
+
+            slider = QLabeledDoubleRangeSlider(Qt.Horizontal)
+            slider.setRange(0.0, 100.0)
+            slider.setValue((0.0, 100.0))
+            slider.setDecimals(1)
+            outer.addWidget(slider)
+        except Exception as e:  # pragma: no cover - depends on the install
+            print(f"[genepyramid] no superqt range slider ({e}); using spin boxes")
+            form = QFormLayout()
+            lo_box = QDoubleSpinBox(minimum=0.0, maximum=100.0, decimals=1, singleStep=0.5)
+            hi_box = QDoubleSpinBox(minimum=0.0, maximum=100.0, decimals=1, singleStep=0.5)
+            hi_box.setValue(100.0)
+            form.addRow("low %", lo_box)
+            form.addRow("high %", hi_box)
+            outer.addLayout(form)
+
+        presets = QHBoxLayout()
+        for label, a, b in _BAND_PRESETS:
+            btn = QPushButton(label)
+            btn.setFlat(True)
+            btn.clicked.connect(lambda _=False, a=a, b=b: _setBand(a, b))
+            presets.addWidget(btn)
+        outer.addLayout(presets)
+        outer.addWidget(band_readout)
+
     outer.addWidget(listw, stretch=1)
 
     status = QLabel("")
     status.setWordWrap(True)
-
     clear = QPushButton("Remove all gene layers")
     row = QHBoxLayout()
     row.addStretch()
@@ -147,7 +340,72 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
     outer.addLayout(row)
     outer.addWidget(status)
 
-    state = {"busy": False, "colour": 0}
+    # ---- filtering ----------------------------------------------------
+
+    def _band():
+        if slider is not None:
+            v = slider.value()
+            return float(v[0]), float(v[1])
+        if lo_box is not None:
+            lo, hi = lo_box.value(), hi_box.value()
+            # Keep the handles ordered rather than rejecting the edit: a
+            # user dragging the low box past the high one means to move
+            # the band, and a silent no-op reads as a broken widget.
+            return (hi, lo) if lo > hi else (lo, hi)
+        return 0.0, 100.0
+
+    def _setBand(lo, hi):
+        if slider is not None:
+            slider.blockSignals(True)
+            slider.setValue((lo, hi))
+            slider.blockSignals(False)
+        elif lo_box is not None:
+            for w, v in ((lo_box, lo), (hi_box, hi)):
+                w.blockSignals(True)
+                w.setValue(v)
+                w.blockSignals(False)
+        _applyBand()
+
+    def _applyBand():
+        if symbol_totals is None:
+            state["keep"] = None
+            _refilter()
+            return
+        lo, hi = _band()
+        keep, info = abundanceBand(symbol_totals, lo, hi)
+        state["keep"] = keep
+        band_readout.setText(_bandText(info, list(index)))
+        _refilter()
+
+    def _refilter():
+        needle = search.text().strip().lower()
+        keep = state["keep"]
+        listw.setUpdatesEnabled(False)
+        try:
+            for i, item in enumerate(items.values()):
+                ok = True if keep is None else bool(keep[i])
+                if ok and needle:
+                    ok = needle in item.data(Qt.UserRole + 1)
+                item.setHidden(not ok)
+        finally:
+            listw.setUpdatesEnabled(True)
+
+    # A slider emits continuously while dragged and the band is arithmetic
+    # over thirty thousand entries plus a pass over the list, so it is
+    # applied once the handle settles rather than on every tick.
+    debounce = QTimer(box)
+    debounce.setSingleShot(True)
+    debounce.setInterval(180)
+    debounce.timeout.connect(_applyBand)
+    if slider is not None:
+        slider.valueChanged.connect(lambda *_: debounce.start())
+    elif lo_box is not None:
+        lo_box.valueChanged.connect(lambda *_: debounce.start())
+        hi_box.valueChanged.connect(lambda *_: debounce.start())
+
+    search.textChanged.connect(lambda *_: _refilter())
+
+    # ---- layers -------------------------------------------------------
 
     def _shown() -> int:
         return sum(1 for it in items.values() if it.checkState() == Qt.Checked)
@@ -155,17 +413,6 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
     def _report(extra: str = ""):
         n = _shown()
         status.setText(f"{n} gene layer(s) shown" + (f" -- {extra}" if extra else ""))
-
-    def _filter(text: str):
-        needle = text.strip().lower()
-        listw.setUpdatesEnabled(False)
-        try:
-            for it in items.values():
-                it.setHidden(bool(needle) and needle not in it.data(Qt.UserRole + 1))
-        finally:
-            listw.setUpdatesEnabled(True)
-
-    search.textChanged.connect(_filter)
 
     def _add(symbol: str):
         name = f"gene: {symbol}"
@@ -243,9 +490,43 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
     except Exception:  # pragma: no cover - depends on the napari build
         pass
 
+    _applyBand()
     _report()
     viewer.window.add_dock_widget(box, name="Genes", area="right")
     return box
+
+
+def _bandText(info, symbols) -> str:
+    """What the band actually selected, in words.
+
+    A percentile band is not self-explanatory: 5-95% sounds like it keeps
+    most genes and in fact keeps a small minority, since the bottom 5% of
+    READS is spread over many thousands of barely detected ones. Showing
+    both numbers, and naming what the top cut removed, is what makes the
+    control readable.
+    """
+    if not info.get("available"):
+        return "no abundance information for this pyramid."
+    parts = [
+        f"{info['nKept']:,} of {info['nTotal']:,} genes  ·  "
+        f"{info['pctReads']:.1f}% of all reads"
+    ]
+    dropped = info.get("droppedTop") or []
+    if dropped:
+        parts.append("dropped from the top: " + ", ".join(symbols[i] for i in dropped))
+    # The confusing case: a top cut that removes nothing because one gene
+    # is too large to fit inside it. Say why, and say what cut would work,
+    # rather than letting the control look broken.
+    elif info["hi"] < 100.0 and info.get("topShare"):
+        parts.append(
+            f"nothing dropped at the top: {symbols[info['topRow']]} alone is "
+            f"{info['topShare']:.1f}% of all reads, so no gene fits in the top "
+            f"{100 - info['hi']:.1f}%. Set the high edge below "
+            f"{info['topMid']:.1f} to drop it."
+        )
+    if info["nKept"] == 0:
+        parts.append("empty band -- nothing listed.")
+    return "\n".join(parts)
 
 
 # ------------------------------------------------------------- display

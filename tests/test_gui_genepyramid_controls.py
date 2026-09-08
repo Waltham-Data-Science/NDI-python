@@ -130,3 +130,63 @@ def test_an_empty_selection_shows_nothing_rather_than_everything():
     found = [(["a", "b"], _info("real"))]
     kept, _redundant, missing = controls.selectLabelings(found, [])
     assert kept == [] and missing == []
+
+
+# -------------------------------------------------------- abundanceBand
+
+
+def test_the_full_band_keeps_everything():
+    keep, info = controls.abundanceBand([1, 2, 3], 0.0, 100.0)
+    assert keep.all()
+    assert info["nKept"] == 3
+    assert info["pctReads"] == 100.0
+    assert info["droppedTop"] == []
+
+
+def test_the_band_is_a_percentile_of_READS_not_of_the_list():
+    """The distinction is the whole point of the control."""
+    # 900 genes with one read each, 10 with a hundred. The top half of
+    # the READS is those 10 genes -- barely 1% of the list.
+    totals = [1] * 900 + [100] * 10
+    keep, info = controls.abundanceBand(totals, 50.0, 100.0)
+    assert info["nKept"] == 10
+    assert keep[900:].all() and not keep[:900].any()
+    assert round(info["pctReads"], 1) == 52.6
+
+
+def test_dropping_the_top_names_what_it_dropped():
+    # The loud gene's interval is [19.8, 100], so its midpoint is 59.9
+    # and only a cut below that reaches it.
+    totals = [1] * 99 + [400]
+    _keep, info = controls.abundanceBand(totals, 0.0, 50.0)
+    assert info["droppedTop"] == [99]
+
+
+def test_a_gene_too_loud_for_a_small_top_cut_survives_it():
+    """Looks like a bug the first time; it is arithmetic, and reported."""
+    totals = [10] * 70 + [300]
+    keep, info = controls.abundanceBand(totals, 0.0, 99.0)
+    assert keep[-1]
+    assert info["droppedTop"] == []
+    assert info["topShare"] == 30.0
+    # The cut that WOULD drop it: its interval is [70, 100], midpoint 85.
+    assert info["topMid"] == 85.0
+
+
+def test_ties_land_on_the_same_side_of_a_cut():
+    """Otherwise identical totals split on sort order, which is arbitrary."""
+    totals = [5] * 10 + [1000]
+    keep, _info = controls.abundanceBand(totals, 0.0, 50.0)
+    assert len({bool(v) for v in keep[:10]}) == 1
+
+
+def test_a_pyramid_with_no_reads_is_not_filtered_into_nothing():
+    keep, info = controls.abundanceBand([0, 0, 0], 10.0, 90.0)
+    assert keep.all()
+    assert info["available"] is False
+
+
+def test_an_empty_list_is_handled_rather_than_dividing_by_zero():
+    keep, info = controls.abundanceBand([], 0.0, 100.0)
+    assert len(keep) == 0
+    assert info["available"] is False
