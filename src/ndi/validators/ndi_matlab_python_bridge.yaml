@@ -47,6 +47,7 @@ functions:
   - name: mustBeCellArrayOfClass
     type: function
     matlab_path: "+ndi/+validators/mustBeCellArrayOfClass.m"
+    matlab_last_sync_hash: "6754608e9"
     python_path: "ndi/validators/mustBeCellArrayOfClass.py"
     input_arguments:
       - name: c
@@ -61,9 +62,17 @@ functions:
       the class object itself. Raises TypeError if any element is not
       an instance of className.
 
+      Examined against NDI-matlab 6754608e9, the commit that added the file
+      (alongside buildmultipleepochtables). Logic matches: reject a non-cell,
+      then reject the first element failing isa. className is a class OBJECT
+      here rather than a name string, as noted above. The failure message had
+      lost MATLAB's "Element %d" wording to a mechanical element ->
+      ndi_element rename; restored.
+
   - name: mustBeCellArrayOfNdiSessions
     type: function
     matlab_path: "+ndi/+validators/mustBeCellArrayOfNdiSessions.m"
+    matlab_last_sync_hash: "236cc24e4"
     python_path: "ndi/validators/mustBeCellArrayOfNdiSessions.py"
     input_arguments:
       - name: value
@@ -75,9 +84,16 @@ functions:
       Uses lazy import to avoid circular imports. Raises TypeError
       if validation fails.
 
+      Examined against NDI-matlab 236cc24e4, the file's last-touching commit.
+      Logic matches, with ndi.session.dir reading as ndi_session_dir per the
+      class naming convention; MATLAB's explicit isempty guard is redundant in
+      Python, where the loop simply does not run. Same "Element %d" wording
+      restored as in mustBeCellArrayOfClass.
+
   - name: mustBeCellArrayOfNonEmptyCharacterArrays
     type: function
     matlab_path: "+ndi/+validators/mustBeCellArrayOfNonEmptyCharacterArrays.m"
+    matlab_last_sync_hash: "236cc24e4"
     python_path: "ndi/validators/mustBeCellArrayOfNonEmptyCharacterArrays.py"
     input_arguments:
       - name: value
@@ -89,9 +105,16 @@ functions:
       Raises TypeError if any element is not a string, ValueError
       if any element is empty.
 
+      Examined against NDI-matlab 236cc24e4, the file's last-touching commit.
+      Logic matches. MATLAB raises one error for both halves of the test; the
+      port splits them into TypeError (not text) and ValueError (empty), which
+      is the Python convention and rejects exactly the same inputs. Same
+      "Element %d" wording restored.
+
   - name: mustBeClassnameOfType
     type: function
     matlab_path: "+ndi/+validators/mustBeClassnameOfType.m"
+    matlab_last_sync_hash: "2f8faaf30"
     python_path: "ndi/validators/mustBeClassnameOfType.py"
     input_arguments:
       - name: classname
@@ -106,9 +129,17 @@ functions:
       checks issubclass against requiredType. Raises ValueError if
       the class cannot be found or does not inherit from requiredType.
 
+      Examined against NDI-matlab 2f8faaf30, the commit that added the file.
+      Behaviour matches: resolve the named class, fail if it does not exist,
+      fail if it is not the required type or a descendant. MATLAB walks
+      meta.class.SuperclassList and treats an exact name match as success;
+      issubclass is reflexive in the same way. The requiredType-as-object
+      divergence is already recorded above. Nothing to port.
+
   - name: mustBeEpochInput
     type: function
     matlab_path: "+ndi/+validators/mustBeEpochInput.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/validators/mustBeEpochInput.py"
     input_arguments:
       - name: v
@@ -120,9 +151,18 @@ functions:
       a positive integer (>= 1). Raises TypeError if type is wrong,
       ValueError if value is invalid.
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit
+      (the src/ layout move; unchanged since). Accepts text or a positive
+      integer scalar and rejects everything else, as MATLAB's mustBeTextScalar
+      / mustBeInteger+mustBePositive pair does. The port additionally excludes
+      bool, which MATLAB's double path would not see. Its two messages had
+      picked up a mechanical epoch -> ndi_epoch_epoch rename ("ndi_epoch_epoch
+      input string must not be empty"); restored.
+
   - name: mustBeID
     type: function
     matlab_path: "+ndi/+validators/mustBeID.m"
+    matlab_last_sync_hash: "236cc24e4"
     python_path: "ndi/validators/mustBeID.py"
     input_arguments:
       - name: inputArg
@@ -134,9 +174,21 @@ functions:
       characters — 16 alphanumeric, underscore at position 17, then
       16 more alphanumeric. Regex: ^[A-Za-z0-9]{16}_[A-Za-z0-9]{16}$.
 
+      Examined against NDI-matlab 236cc24e4, the file's last-touching commit,
+      and this one did NOT hold. MATLAB rejects any character outside (A-Z,
+      a-z, 0-9) at positions 1-16 and 18-33, naming the first offender. The
+      port matched the format with an ASCII regex but reported the offending
+      character with str.isalnum(), which is Unicode-aware: for an ID holding
+      a non-ASCII letter or digit the regex failed, the reporting loop found
+      nothing to blame, and the function returned None -- silently ACCEPTING
+      an ID it had just rejected. The reporting test now uses the same ASCII
+      rule the pattern enforces, so the branch cannot fall through. Regression
+      covered by tests/test_validators_module.py::TestMustBeID.
+
   - name: mustBeNumericClass
     type: function
     matlab_path: "+ndi/+validators/mustBeNumericClass.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/validators/mustBeNumericClass.py"
     input_arguments:
       - name: className
@@ -149,9 +201,16 @@ functions:
       int16, int32, int64, single, double, logical, float32, float64,
       bool. Raises ValueError if not.
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      The port accepts all eleven names MATLAB enumerates -- uint8/16/32/64,
+      int8/16/32/64, single, double, logical -- each now asserted individually
+      in tests/test_validators_module.py, plus the NumPy spellings recorded
+      above. Nothing to port.
+
   - name: mustBeTextLike
     type: function
     matlab_path: "+ndi/+validators/mustBeTextLike.m"
+    matlab_last_sync_hash: "236cc24e4"
     python_path: "ndi/validators/mustBeTextLike.py"
     input_arguments:
       - name: value
@@ -162,9 +221,15 @@ functions:
       Exact match. Accepted forms: a str, or a list/tuple where every
       element is a str. Raises TypeError otherwise.
 
+      Examined against NDI-matlab 236cc24e4, the file's last-touching commit.
+      Accepts a string, or a sequence whose every element is a string, and
+      rejects everything else -- the same three cases MATLAB admits (char,
+      string scalar, cell array of text). Nothing to port.
+
   - name: mustHaveFields
     type: function
     matlab_path: "+ndi/+validators/mustHaveFields.m"
+    matlab_last_sync_hash: "57993cb21"
     python_path: "ndi/validators/mustHaveFields.py"
     input_arguments:
       - name: s
@@ -179,9 +244,16 @@ functions:
       has all required keys. Raises TypeError if s is not a dict,
       ValueError if any keys are missing.
 
+      Examined against NDI-matlab 57993cb21, the commit that added the file
+      while refactoring ndi.calculator onto arguments blocks. Same test, same
+      message shape; the port lists the missing keys in the caller's order
+      where MATLAB's setdiff sorts them, which is not observable behaviour.
+      Nothing to port.
+
   - name: mustHaveRequiredColumns
     type: function
     matlab_path: "+ndi/+validators/mustHaveRequiredColumns.m"
+    matlab_last_sync_hash: "236cc24e4"
     python_path: "ndi/validators/mustHaveRequiredColumns.py"
     input_arguments:
       - name: t
@@ -196,9 +268,15 @@ functions:
       contains all required columns. Raises TypeError if t is not a
       DataFrame, ValueError if any columns are missing.
 
+      Examined against NDI-matlab 236cc24e4, the file's last-touching commit.
+      Same test against DataFrame columns, and the port keeps MATLAB's
+      convenience of accepting a single bare column name as well as a list.
+      Nothing to port.
+
   - name: mustMatchRegex
     type: function
     matlab_path: "+ndi/+validators/mustMatchRegex.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/validators/mustMatchRegex.py"
     input_arguments:
       - name: value
@@ -212,3 +290,10 @@ functions:
       Exact match. Pattern is anchored (must match the entire string)
       using re.fullmatch(). Raises TypeError if value or pattern is
       not a string, ValueError if value does not match pattern.
+
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      MATLAB anchors the caller's pattern as ^(pattern)$ before matching;
+      re.fullmatch is the same whole-string test, and both ends are now
+      asserted in tests/test_validators_module.py. MATLAB additionally names
+      the variable via inputname(1), which has no Python equivalent and does
+      not change what is accepted. Nothing to port.
