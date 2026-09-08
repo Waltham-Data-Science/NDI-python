@@ -14,7 +14,7 @@ classes:
   - name: dataset
     type: class
     matlab_path: "+ndi/dataset.m"
-    matlab_last_sync_hash: "41ef50f"
+    matlab_last_sync_hash: "9bf6e3fee"
     python_path: "ndi/dataset/_dataset.py"
     python_class: "ndi_dataset"
 
@@ -30,6 +30,24 @@ classes:
         type_python: "list[dict[str, Any]]"
         access: "protected"
         decision_log: "Stored as _session_info in Python."
+
+      - name: BinaryDocSessions
+        type_matlab: "containers.Map"
+        type_python: "N/A"
+        status: matlab_only
+        decision_log: >
+          No Python counterpart, and none is wanted. MATLAB added this map
+          (5dc385b6f, NDI-matlab#509) so database_closebinarydoc can route a
+          close back to the session that opened the handle: there, close
+          reaches into that session's database driver and autoclose listener
+          map, so sending it to the dataset's internal session leaked the
+          linked session's DID lock. Python's
+          session.database_closebinarydoc consults no session state at all --
+          it calls close() on the file object -- so which session it is
+          reached through makes no difference, and a map recording the owner
+          would guard against nothing. database_openbinarydoc does still
+          dispatch to the owning session, since the open must read from that
+          session's store.
 
       - name: session_array
         type_matlab: "struct array"
@@ -351,7 +369,7 @@ classes:
   - name: dir
     type: class
     matlab_path: "+ndi/+dataset/dir.m"
-    matlab_last_sync_hash: "7512bcb0"
+    matlab_last_sync_hash: "26d0638bf"
     python_path: "ndi/dataset/_dataset.py"
     python_class: "ndi_dataset_dir"
     inherits: "ndi.dataset"

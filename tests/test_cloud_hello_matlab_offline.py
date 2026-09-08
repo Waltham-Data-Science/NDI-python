@@ -68,10 +68,11 @@ def compute(monkeypatch):
     ``polls`` is a list of documents returned one per call, so a test can
     describe a pipeline that runs for a while and then finishes.
     """
-    box = types.SimpleNamespace(started=[], polls=[], start_result=None)
+    box = types.SimpleNamespace(started=[], organizations=[], polls=[], start_result=None)
 
-    def startSession(pipeline_id, input_params=None, *, client=None):  # noqa: N802
+    def startSession(pipeline_id, organization_id, input_params=None, *, client=None):  # noqa: N802
         box.started.append(pipeline_id)
+        box.organizations.append(organization_id)
         if isinstance(box.start_result, Exception):
             raise box.start_result
         return box.start_result

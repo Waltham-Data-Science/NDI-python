@@ -1,5 +1,6 @@
 """Tests for ndi.database module."""
 
+import logging
 import shutil
 import tempfile
 from pathlib import Path
@@ -380,3 +381,37 @@ class TestDatabaseRemoveMany:
         count = db.remove_many(query=query)
         assert count == 2
         assert db.numdocs() == 1
+
+
+class TestRemoveOnMissing:
+    """``remove`` says what to do about an id that is not there.
+
+    MATLAB counterpart: ``+ndi/database.m``, whose ``remove`` gained an
+    ``OnMissing`` name-value argument ('ignore' | 'warn' | 'error'). The
+    default is 'ignore', which is what Python already did -- deleting an
+    already-deleted document is what the caller wanted either way. The
+    other two were unreachable from Python.
+    """
+
+    def _db(self, tmp_path):
+        return ndi_database(str(tmp_path / "db"))
+
+    def test_ignore_is_the_default_and_returns_false(self, tmp_path):
+        db = self._db(tmp_path)
+        assert db.remove("no-such-id") is False
+
+    def test_error_raises_for_a_missing_id(self, tmp_path):
+        db = self._db(tmp_path)
+        with pytest.raises(KeyError):
+            db.remove("no-such-id", on_missing="error")
+
+    def test_warn_logs_and_still_returns_false(self, tmp_path, caplog):
+        db = self._db(tmp_path)
+        with caplog.at_level(logging.WARNING, logger="ndi.database"):
+            assert db.remove("no-such-id", on_missing="warn") is False
+        assert "no-such-id" in caplog.text
+
+    def test_an_unknown_policy_is_rejected(self, tmp_path):
+        db = self._db(tmp_path)
+        with pytest.raises(ValueError, match="on_missing"):
+            db.remove("no-such-id", on_missing="explode")
