@@ -220,7 +220,8 @@ functions:
 
   - name: evaluate_fitcurve
     type: function
-    matlab_path: "+ndi/+data/evaluate_fitcurve.m (in a different namespace)"
+    matlab_path: "+ndi/+data/evaluate_fitcurve.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/data.py"
     input_arguments:
       - name: fitcurve_doc
@@ -254,6 +255,22 @@ functions:
       This entry stays for backward compatibility with tests/test_phase1_gaps.py
       and any caller already importing from ndi.fun.data. New code should
       import from ndi.data.
+
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit,
+      and the record above holds in full -- this really is a Python-invented
+      variant reading fit_variable_names and fit_parameter_values, where
+      MATLAB reads fit_independent_variable_names,
+      fit_dependent_variable_names and fit_parameters, and the canonical
+      mirror entry ndi.data.evaluate_fitcurve is the one that matches. WHAT
+      WAS WRONG WAS THE PATH ITSELF. matlab_path read
+      '+ndi/+data/evaluate_fitcurve.m (in a different namespace)' -- the note
+      was written INSIDE the path string, so it resolved to no file at all,
+      which is why the drift gate could never hash this entry and why it sat
+      in the allowlist. The note belongs in this log, where it already was;
+      the path is now the real one, so the entry is gated on the same MATLAB
+      source as its canonical sibling and a change there flags both records
+      rather than one. The sibling carries 76b0673 for the same file, which is
+      equally current -- no commit has touched it since either.
 
   - name: readImageStack
     type: function

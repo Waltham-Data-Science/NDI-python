@@ -1109,6 +1109,7 @@ not_applicable:
   # =========================================================================
   - name: setup
     matlab_path: "+ndi/+setup/"
+    matlab_last_sync_hash: "03c79fa48"
     python_path: "ndi/setup/"
     status: ported
     decision_log: >
@@ -1117,6 +1118,30 @@ not_applicable:
       and creates the corresponding documents in a session. Per-lab
       wrappers (e.g. ndi.setup.rayolab) call lab() with a fixed name.
       Usage: ndi.setup.lab(session, "vhlab"); ndi.setup.rayolab(session).
+
+      Examined against NDI-matlab 03c79fa48, the last commit touching anything
+      under +ndi/+setup/, and TWO THINGS THE RECORD IMPLIED WERE THERE WERE
+      NOT. (1) FIVE OF SIX PER-LAB WRAPPERS WERE MISSING. The record says
+      "Per-lab wrappers (e.g. ndi.setup.rayolab) call lab() with a fixed
+      name"; MATLAB has six -- angeluccilab, dbkatzlab, marderlab, rayolab,
+      vhlab, yangyangwang -- and only rayolab existed here, so
+      ndi.setup.vhlab(session), the call every MATLAB example for that lab
+      uses, raised AttributeError. All five added, each a thin wrapper naming
+      its own lab, and each verified to have a daq_systems directory to load.
+      The six are exported as LAB_WRAPPERS. (2) labNames HAD NO COUNTERPART.
+      MATLAB's ndi.setup.labNames lists the labs installed under
+      ndi_common/daq_systems, sorted, dropping hidden directories, returning
+      empty when there are none -- so there was no way to ask which labs a
+      given install knows about. Ported. Ten lab directories ship on BOTH
+      sides, so labNames returns ten while only six have a named wrapper; that
+      is MATLAB's arrangement too, and lab(session, name) reaches the other
+      four. ONE DIVERGENCE RECORDED RATHER THAN CHANGED: MATLAB's lab is
+      lab(labName, ref, dirname) and CREATES and returns an ndi.session.dir;
+      the Python lab is lab(session, lab_name) and returns None, taking a
+      session the caller already made. The arguments are in a different order
+      and play different roles, and the usage line in this record has always
+      said so. Changing the signature now would break every caller for a
+      cosmetic gain.
 
   # =========================================================================
   # ndi.docs namespace — MATLAB documentation generation

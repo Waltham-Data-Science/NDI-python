@@ -88,7 +88,7 @@ drifted:
   # --- comments-only ---
 
 # ---------------------------------------------------------------------------
-# no_hash: 92
+# no_hash: 89
 #
 # An entry with a matlab_path and no matlab_last_sync_hash can never show
 # drift, so it claims its port is current forever and no check can contradict
@@ -102,16 +102,12 @@ no_hash:
     matlab_path: "+ndi/+app/spikeextractor.m"
   - name: spikesorter
     matlab_path: "+ndi/+app/spikesorter.m"
-  - name: simple
-    matlab_path: "+ndi/+calc/+example/simple.m"
   - name: tuningcurve
     matlab_path: "+ndi/+calc/+stimulus/tuningcurve.m"
   - name: tuning_fit
     matlab_path: "+ndi/+calc/tuning_fit.m"
   - name: SyncIndex
     matlab_path: "+ndi/+cloud/+sync/+internal/+index/"
-  - name: evaluate_fitcurve
-    matlab_path: "+ndi/+data/evaluate_fitcurve.m (in a different namespace)"
   - name: createGenBankControlledVocabulary
     matlab_path: "+ndi/+database/+fun/createGenBankControlledVocabulary.m"
   - name: createNIFbrainareas
@@ -258,8 +254,6 @@ no_hash:
     matlab_path: "+ndi/+mock/+fun/subject_stimulator_neuron.m"
   - name: ctest
     matlab_path: "+ndi/+mock/ctest.m"
-  - name: setup
-    matlab_path: "+ndi/+setup/"
   - name: compareDatasetSummary
     matlab_path: "+ndi/+util/compareDatasetSummary.m"
   - name: compareSessionSummary
