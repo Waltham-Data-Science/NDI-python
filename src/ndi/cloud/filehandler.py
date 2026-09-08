@@ -277,22 +277,64 @@ def updateFileInfoForLocalFiles(
 rewrite_file_info_for_cloud = updateFileInfoForRemoteFiles
 
 
+def series_member_uid(context: object) -> str:
+    """The uid DID is really asking for, or ``""`` for an ordinary file.
+
+    WHICH UID IS BEING ASKED FOR. On an ordinary file, ``source_path`` names
+    it and its uid is the one in the ``ndic://`` reference. On a SERIES
+    MEMBER it is not: a member has no location of its own, so DID passes the
+    series MANIFEST's location as ``source_path`` and names the member in the
+    context (DID-matlab#188).
+
+    ``seriesName`` is what marks a call as a member fetch, and taking the
+    uid on that condition rather than on "context carries a uid" is
+    deliberate -- DID passes a ``uid`` for ordinary files too, where it is
+    the files-table row rather than what the ``ndic://`` reference names.
+    NDI-matlab's ``didsqlite.m`` states the same rule for the same reason.
+
+    Reads defensively. The context is DID's to define and DID-matlab#186 is
+    recent, so a missing key means "not a member", never an exception.
+    """
+    if not isinstance(context, dict):
+        return ""
+    if not str(context.get("seriesName", "") or ""):
+        return ""
+    return str(context.get("uid", "") or "")
+
+
 def download_file_from_cloud(
     dest_path: str | Path,
     source_path: str,
+    context: dict | None = None,
+    *,
     client: CloudClient | None = None,
 ) -> None:
     """Retrieve a remote file for DID, satisfying its ``custom_file_handler``.
 
     DID downloads nothing itself, in either language. Both ``add_docs`` and
-    ``open_doc`` take a ``custom_file_handler(dest_path, source_path)`` that a
-    downstream package supplies; this is NDI's, and the counterpart of the
+    ``open_doc`` take a ``custom_file_handler`` that a downstream package
+    supplies; this is NDI's, and the counterpart of the
     ``@download_file_from_cloud`` handle NDI-matlab's ``didsqlite.m`` passes to
     ``add_docs`` and ``open_doc``.
 
     Note the argument order. DID calls ``handler(dest_path, source_path)`` --
     destination first -- while :func:`fetch_cloud_file` takes the URI first.
     This wrapper exists mostly to get that the right way round in one place.
+
+    THE CONTEXT. DID dispatches with a third argument, a per-call dict
+    carrying ``documentId``, ``filename``, ``uid``, ``mode`` and -- for a
+    series member -- ``seriesName`` (DID-matlab#186, #188). It decides
+    between the two- and three-argument forms by counting the handler's
+    positional parameters, so a handler that declares only two is quietly
+    called without the context and never learns which member it is being
+    asked for. It would then fetch the MANIFEST a second time and store it
+    under the member's uid, which DID refuses with
+    ``DID:SQLITEDB:FileSeries:HandlerReturnedManifest`` -- and, where that
+    guard cannot read the manifest's size to compare, does not refuse, so
+    every later read of that member returns the manifest instead.
+
+    ``client`` is keyword-only for the same counting rule: as a third
+    positional parameter it would have absorbed the context DID passes.
 
     A location that is not an ``ndic://`` URI is left alone: DID only calls
     this for locations it has already decided are remote, and a scheme NDI
@@ -301,7 +343,9 @@ def download_file_from_cloud(
 
     Args:
         dest_path: Where DID expects the file to exist when this returns.
-        source_path: The remote location recorded for the file.
+        source_path: The remote location recorded for the file. For a series
+            member this is the MANIFEST's location, not the member's.
+        context: DID's per-call context, or None when called two-argument.
         client: Authenticated client; falls back to the ambient one.
 
     Raises:
@@ -310,4 +354,14 @@ def download_file_from_cloud(
     """
     if not str(source_path).startswith(NDIC_SCHEME):
         return
-    fetch_cloud_file(str(source_path), dest_path, client=client)
+
+    uri = str(source_path)
+    member_uid = series_member_uid(context)
+    if member_uid:
+        # Same dataset, the member's uid in place of the manifest's. Built
+        # rather than parsed out of any location, because the member has no
+        # location to parse.
+        dataset_id, _manifest_uid = parse_ndic_uri(uri)
+        uri = f"{NDIC_SCHEME}{dataset_id}/{member_uid}"
+
+    fetch_cloud_file(uri, dest_path, client=client)

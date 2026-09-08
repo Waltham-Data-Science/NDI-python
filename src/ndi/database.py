@@ -29,12 +29,20 @@ from .query import ndi_query
 logger = logging.getLogger(__name__)
 
 
-def _cloud_file_handler(dest_path, source_path):
+def _cloud_file_handler(dest_path, source_path, context=None):
     """DID's ``custom_file_handler``, wired to NDI's cloud retrieval.
 
     DID downloads nothing itself; a downstream package supplies retrieval.
     NDI-matlab passes ``@download_file_from_cloud`` to both ``add_docs`` and
     ``open_doc`` in didsqlite.m, and this is the same handler.
+
+    THREE PARAMETERS, NOT TWO. This function is what DID actually receives,
+    so its signature -- not the one it delegates to -- is what DID counts
+    when choosing between ``handler(dest, source)`` and
+    ``handler(dest, source, context)``. Declaring two here means the context
+    is dropped before ``download_file_from_cloud`` can read it, and a series
+    member is then fetched as its own manifest. See that function for what
+    the context carries and why it matters.
 
     Imported lazily and tolerant of failure: the cloud extra may be absent,
     and a session that never touches a remote location must not require it.
@@ -45,7 +53,7 @@ def _cloud_file_handler(dest_path, source_path):
         from .cloud.filehandler import download_file_from_cloud
     except ImportError:
         return
-    download_file_from_cloud(dest_path, source_path)
+    download_file_from_cloud(dest_path, source_path, context)
 
 
 class SQLiteDriver:
