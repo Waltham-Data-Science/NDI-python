@@ -688,63 +688,87 @@ class TestStimulusTemporalFrequency:
 # ===========================================================================
 
 
-class TestSessionDiff:
-    """Tests for session.diff."""
+class _DiffDoc:
+    """A document with the accessors both diff functions use."""
 
-    def _make_doc(self, doc_id, extra=None):
-        d = MagicMock()
-        props = {"base": {"id": doc_id, "session_id": "s1"}}
+    def __init__(self, doc_id, session_id="s1", extra=None):
+        self.id = doc_id
+        self.session_id = session_id
+        self.document_properties = {"base": {"id": doc_id, "session_id": session_id}}
         if extra:
-            props.update(extra)
-        d.document_properties = props
-        return d
+            self.document_properties.update(extra)
+
+    def current_file_list(self):
+        return []
+
+    def get_fuid(self, filename):
+        return ""
+
+
+class _DiffStore:
+    def __init__(self, docs):
+        self._docs = docs
+
+    def database_search(self, query):
+        return list(self._docs)
+
+
+class TestSessionDiff:
+    """Tests for session.diff -- MATLAB's report field names.
+
+    See tests/test_fun_session_dataset_diff_against_matlab.py for the full
+    comparison against +ndi/+fun/+session/diff.m, including the file half.
+    """
 
     def test_equal_sessions(self):
         from ndi.fun.session import diff
 
-        d1 = self._make_doc("doc1", {"name": "test"})
-        s1 = MagicMock()
-        s1.database_search.return_value = [d1]
-        d2 = self._make_doc("doc1", {"name": "test"})
-        d2.document_properties["base"]["session_id"] = "s2"
-        s2 = MagicMock()
-        s2.database_search.return_value = [d2]
+        d1 = _DiffDoc("doc1", "s1", {"name": "test"})
+        d2 = _DiffDoc("doc1", "s2", {"name": "test"})
 
-        result = diff(s1, s2)
+        result = diff(_DiffStore([d1]), _DiffStore([d2]), verbose=False)
         assert result["equal"] is True
+        assert result["mismatchedDocuments"] == []
 
     def test_different_documents(self):
         from ndi.fun.session import diff
 
-        s1 = MagicMock()
-        s1.database_search.return_value = [self._make_doc("doc1")]
-        s2 = MagicMock()
-        s2.database_search.return_value = [self._make_doc("doc2")]
-
-        result = diff(s1, s2)
+        result = diff(
+            _DiffStore([_DiffDoc("doc1")]),
+            _DiffStore([_DiffDoc("doc2")]),
+            verbose=False,
+        )
         assert result["equal"] is False
-        assert "doc1" in result["only_in_s1"]
-        assert "doc2" in result["only_in_s2"]
+        assert "doc1" in result["documentsInAOnly"]
+        assert "doc2" in result["documentsInBOnly"]
 
 
 class TestDatasetDiff:
-    """Tests for dataset.diff."""
+    """Tests for dataset.diff.
 
-    def test_delegates_to_session(self):
+    It does NOT delegate to session.diff: MATLAB searches the datasets
+    themselves so member sessions' documents are included.
+    """
+
+    def test_it_searches_the_datasets_themselves(self):
         from ndi.fun.dataset import diff
 
-        s1 = MagicMock()
-        s1.database_search.return_value = []
-        s2 = MagicMock()
-        s2.database_search.return_value = []
-        d1 = MagicMock()
-        d1.session = s1
-        d2 = MagicMock()
-        d2.session = s2
+        class _DiffDataset(_DiffStore):
+            def __init__(self, docs):
+                super().__init__(docs)
+                self.session = "a session that must not be used"
 
-        result = diff(d1, d2)
-        assert "equal" in result
-        assert "session_diff" in result
+            def id(self):
+                return "D"
+
+        result = diff(_DiffDataset([]), _DiffDataset([]), verbose=False)
+        assert result["equal"] is True
+        assert set(result) >= {
+            "documentsInAOnly",
+            "documentsInBOnly",
+            "mismatchedDocuments",
+            "fileDifferences",
+        }
 
 
 # ===========================================================================
