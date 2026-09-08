@@ -634,6 +634,7 @@ ported_late:
 
   - name: jrclust
     matlab_path: "+ndi/+gui/+app/jrclust.m"
+    matlab_last_sync_hash: "0e8556233"
     status: porting_deferred
     decision_log: >
       The JRCLUST spike-sorting app. Same class of gap as kiasort and

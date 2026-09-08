@@ -1026,6 +1026,7 @@ not_applicable:
 
   - name: filesep
     matlab_path: "+ndi/filesep.m"
+    matlab_last_sync_hash: "fe64a9f53"
     status: matlab_only
     decision_log: >
       MATLAB utility returning '/' for cross-platform path
@@ -1033,6 +1034,7 @@ not_applicable:
 
   - name: toolboxdir
     matlab_path: "+ndi/toolboxdir.m"
+    matlab_last_sync_hash: "fe64a9f53"
     status: ported_differently
     decision_log: >
       MATLAB-specific path resolution. Python uses
@@ -1040,6 +1042,7 @@ not_applicable:
 
   - name: cpipeline
     matlab_path: "+ndi/cpipeline.m"
+    matlab_last_sync_hash: "27739a74c"
     status: porting_deferred
     decision_log: >
       MATLAB calculation pipeline registry with GUI editing.
@@ -1101,6 +1104,7 @@ not_applicable:
   # =========================================================================
   - name: docs
     matlab_path: "+ndi/+docs/"
+    matlab_last_sync_hash: "c2bd3af62"
     status: matlab_only
     decision_log: >
       MATLAB documentation generation utilities (all_documents2markdown,

@@ -2404,6 +2404,7 @@ not_applicable:
 
   - name: assertAddonOnPath
     matlab_path: "+ndi/+fun/assertAddonOnPath.m"
+    matlab_last_sync_hash: "fe64a9f53"
     status: matlab_only
     decision_log: >
       Not applicable. Asks MATLAB's `ver` whether a named add-on is
@@ -2414,6 +2415,7 @@ not_applicable:
 
   - name: check_Matlab_toolboxes
     matlab_path: "+ndi/+fun/check_Matlab_toolboxes.m"
+    matlab_last_sync_hash: "7d953875f"
     status: matlab_only
     decision_log: >
       Not applicable, for the same reason as assertAddonOnPath: it reads
@@ -2424,6 +2426,7 @@ not_applicable:
 
   - name: console
     matlab_path: "+ndi/+fun/console.m"
+    matlab_last_sync_hash: "fe64a9f53"
     status: matlab_only
     decision_log: >
       Not applicable. Opens a macOS Terminal window tailing a log file, so
@@ -2435,21 +2438,25 @@ not_applicable:
 
   - name: convertoldnsd2ndi
     matlab_path: "+ndi/+fun/convertoldnsd2ndi.m"
+    matlab_last_sync_hash: "86379c7de"
     status: matlab_only
     decision_log: "Legacy NSD-to-NDI migration tool. MATLAB-specific."
 
   - name: debuglog
     matlab_path: "+ndi/+fun/debuglog.m"
+    matlab_last_sync_hash: "fe64a9f53"
     status: matlab_only
     decision_log: "MATLAB logging utility. Python uses standard logging."
 
   - name: errlog
     matlab_path: "+ndi/+fun/errlog.m"
+    matlab_last_sync_hash: "fe64a9f53"
     status: matlab_only
     decision_log: "MATLAB logging utility. Python uses standard logging."
 
   - name: find_calc_directories
     matlab_path: "+ndi/+fun/find_calc_directories.m"
+    matlab_last_sync_hash: "5b9e08493"
     status: ported_differently
     decision_log: >
       Not applicable. Finds NDIcalc-*-matlab calculator toolboxes by going
@@ -2489,21 +2496,27 @@ not_applicable:
 
   - name: run_Linux_checks
     matlab_path: "+ndi/+fun/run_Linux_checks.m"
+    matlab_last_sync_hash: "fe64a9f53"
     status: matlab_only
     decision_log: >
-      Not applicable. Warns about the known Linux incompatibilities of the
-      MATLAB RUNTIME (it branches on computer('arch') returning GLNXA64).
-      The problems it warns about are MATLAB's, not NDI's; CPython on Linux
-      has none of them, and this project's own CI runs on Linux, which is a
-      stronger check than a warning.
+      Not applicable. The hook for warning about Linux incompatibilities of
+      the MATLAB RUNTIME (it branches on computer('arch') returning GLNXA64).
+      As of fe64a9f53 the branch body is empty -- its own comment says the
+      one problem it carried "was fixed by no longer requiring Simulink" --
+      so the function warns about nothing today. Either way the problems are
+      MATLAB's, not NDI's; CPython on Linux has none of them, and this
+      project's own CI runs on Linux, which is a stronger check than a
+      warning.
 
   - name: syslog
     matlab_path: "+ndi/+fun/syslog.m"
+    matlab_last_sync_hash: "fe64a9f53"
     status: matlab_only
     decision_log: "MATLAB logging utility. Python uses standard logging."
 
   - name: export.gmcSorter
     matlab_path: "+ndi/+fun/+export/gmcSorter.m"
+    matlab_last_sync_hash: "c8fa652e8"
     status: porting_deferred
     decision_log: >
       Not ported yet. Exports a probe's raw voltage in GMC_Sorter's expected
@@ -2516,6 +2529,7 @@ not_applicable:
 
   - name: export.gmcSorterWrite
     matlab_path: "+ndi/+fun/+export/gmcSorterWrite.m"
+    matlab_last_sync_hash: "cad1bae2f"
     status: porting_deferred
     decision_log: >
       Not ported yet. Writes an in-memory voltage buffer to GMC_Sorter's
@@ -2524,6 +2538,7 @@ not_applicable:
 
   - name: export.writeGmcSidecars
     matlab_path: "+ndi/+fun/+export/writeGmcSidecars.m"
+    matlab_last_sync_hash: "cad1bae2f"
     status: porting_deferred
     decision_log: >
       Not ported yet. Writes GMC_Sorter's channel map, metadata and driver
