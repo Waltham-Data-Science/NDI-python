@@ -115,3 +115,59 @@ class TestAFailedWaitDoesNotStopTheSync:
         with caplog.at_level("WARNING", logger="ndi.cloud.sync.operations"):
             self._run_with(tmp_path, complete)
         assert "did not settle" not in caplog.text
+
+
+class TestAFileListedButNotUploadedIsRequeued:
+    """``filesNotYetUploaded`` must read the ``uploaded`` flag, not just the uid.
+
+    MATLAB counterpart: ``+cloud/+sync/+internal/filesNotYetUploaded.m``,
+    hardened in NDI-matlab ``8c31a8f28`` (NDI-matlab#805).
+
+    The cloud records a file when its upload is REGISTERED; ``uploaded`` is
+    what says the transfer finished. Matching on the uid alone -- which is
+    what this did -- treats a registered-but-unsent file as done, so the
+    document is recorded as synced while its binary is not there.
+    Downstream consumers 404, and nothing re-queues the file because the
+    sync index says it is finished.
+    """
+
+    def _split(self, manifest, remote):
+        from unittest.mock import MagicMock, patch
+
+        from ndi.cloud import internal
+
+        listing = MagicMock()
+        listing.data = remote
+        with patch("ndi.cloud.api.files.listFiles", lambda *a, **k: listing):
+            return internal.filesNotYetUploaded(manifest, "65a1b2c3d4e5f60718293a4b")
+
+    def test_an_unlisted_file_needs_uploading(self):
+        got = self._split([{"uid": "a"}], [])
+        assert [f["uid"] for f in got] == ["a"]
+
+    def test_a_listed_and_uploaded_file_is_done(self):
+        got = self._split([{"uid": "a"}], [{"uid": "a", "uploaded": True}])
+        assert got == []
+
+    def test_a_listed_but_unsent_file_is_requeued(self):
+        """The bug: present in the listing, bytes never arrived."""
+        got = self._split([{"uid": "a"}], [{"uid": "a", "uploaded": False}])
+        assert [f["uid"] for f in got] == ["a"]
+
+    def test_an_entry_with_no_uploaded_field_is_requeued(self, caplog):
+        """Status unconfirmable. A needless re-upload costs bandwidth; a
+        wrongly skipped one costs the binary."""
+        with caplog.at_level("WARNING", logger="ndi.cloud.internal"):
+            got = self._split([{"uid": "a"}], [{"uid": "a"}])
+        assert [f["uid"] for f in got] == ["a"]
+        assert "lacks an 'uploaded' field" in caplog.text
+
+    def test_a_mixed_manifest_splits_correctly(self):
+        manifest = [{"uid": "done"}, {"uid": "unsent"}, {"uid": "absent"}, {"uid": "unknown"}]
+        remote = [
+            {"uid": "done", "uploaded": True},
+            {"uid": "unsent", "uploaded": False},
+            {"uid": "unknown"},
+        ]
+        got = [f["uid"] for f in self._split(manifest, remote)]
+        assert got == ["unsent", "absent", "unknown"]
