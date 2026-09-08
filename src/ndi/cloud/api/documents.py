@@ -352,7 +352,10 @@ def ndiquery(
     MATLAB equivalent: +cloud/+api/+documents/ndiquery.m
 
     Args:
-        scope: One of ``'public'``, ``'private'``, ``'all'``.
+        scope: ``'public'``, ``'private'``, ``'all'``, or a comma-separated
+            list of 24-character hex dataset ObjectIds. Naming datasets
+            returns only documents from those the user has access to;
+            inaccessible ids are dropped by the server without an error.
         search_structure: ndi_query object, search structure dict, or list.
             Accepts :class:`~ndi.query.ndi_query` objects (auto-converted),
             raw dicts, or lists of either.
@@ -382,6 +385,12 @@ def ndiqueryAll(
     """Auto-paginate through all ndiquery results.
 
     MATLAB equivalent: +cloud/+api/+documents/ndiqueryAll.m
+
+    Args:
+        scope: As :func:`ndiquery` -- a keyword or a dataset-id list.
+        search_structure: ndi_query object, search structure dict, or list.
+        page_size: Results per page.
+        client: Authenticated cloud client (auto-created if omitted).
     """
     search_structure = _coerce_search_structure(search_structure)
     all_docs: list[dict[str, Any]] = []

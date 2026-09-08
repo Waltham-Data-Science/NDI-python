@@ -695,6 +695,7 @@ def helloMatlab(
     timeout_seconds: float = 1200.0,
     poll_interval_seconds: float = 10.0,
     verbose: bool = True,
+    organization_id: str = "",
     client: CloudClient | None = None,
 ) -> HelloMatlabResult:
     """Check that this user's MATLAB BYOL registration works on NDI Cloud.
@@ -714,6 +715,10 @@ def helloMatlab(
             stage's own failure be the one reported.
         poll_interval_seconds: Seconds between status polls.
         verbose: Print one line per status *change* (not per poll).
+        organization_id: The organization that owns the compute session.
+            Required by the backend whenever the caller belongs to more
+            than one organization; a single-organization caller may leave
+            it empty (VH-Lab/NDI-matlab#936).
         client: Authenticated cloud client (auto-created if omitted, which
             is what performs the ``ndi.cloud.authenticate()`` step MATLAB
             does explicitly).
@@ -745,7 +750,7 @@ def helloMatlab(
         print(f"helloMatlab: starting pipeline {HELLO_MATLAB_PIPELINE_ID} ...")
 
     try:
-        answer = compute_api.startSession(HELLO_MATLAB_PIPELINE_ID, client=client)
+        answer = compute_api.startSession(HELLO_MATLAB_PIPELINE_ID, organization_id, client=client)
     except CloudError as exc:
         message = _start_failure_message(exc)
         if verbose:

@@ -423,7 +423,7 @@ classes:
   - name: stimulator
     type: class
     matlab_path: "+ndi/+probe/+timeseries/stimulator.m"
-    matlab_last_sync_hash: "209d46b3"
+    matlab_last_sync_hash: "f1e2ff8c9"
     python_path: "ndi/probe/timeseries_stimulator.py"
     python_class: "ndi_probe_timeseries_stimulator"
     inherits: "ndi.probe.timeseries"

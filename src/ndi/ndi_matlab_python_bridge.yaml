@@ -47,7 +47,7 @@ functions:
   - name: setup.lab
     type: function
     matlab_path: "+ndi/+setup/lab.m"
-    matlab_last_sync_hash: "2566fe4d"
+    matlab_last_sync_hash: "68431eb38"
     python_path: "ndi/setup/lab.py"
     input_arguments:
       - name: labName
@@ -73,7 +73,7 @@ functions:
   - name: setup.rayolab
     type: function
     matlab_path: "+ndi/+setup/rayolab.m"
-    matlab_last_sync_hash: "2566fe4d"
+    matlab_last_sync_hash: "ffe310085"
     python_path: "ndi/setup/rayolab.py"
     input_arguments:
       - name: ref
