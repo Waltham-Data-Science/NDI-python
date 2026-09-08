@@ -26,6 +26,44 @@ except ImportError:
     pass
 
 
+def document_columns(document_properties: Any) -> tuple[str, str, str, str]:
+    """Return the (name, id, type, datestamp) shown for one document.
+
+    MATLAB reads these out of ``document_properties.ndi_document``, which is
+    the LEGACY schema: a document built today has no such field, and its
+    name, id and datestamp live under ``base``.  The port followed MATLAB and
+    fell back to the top level of ``document_properties``, where none of the
+    four exist either, so every row of the table came out with four empty
+    columns.
+
+    The legacy field is still read first, for a document old enough to have
+    one.  ``type`` has no modern counterpart under ``base``, so it falls back
+    to ``document_class.class_name`` -- which is what ``ndi.gui.gui`` already
+    shows as a document's kind.
+    """
+    dp = (
+        document_properties
+        if isinstance(document_properties, dict)
+        else getattr(document_properties, "__dict__", {})
+    )
+
+    legacy = dp.get("ndi_document")
+    base = legacy if isinstance(legacy, dict) else dp.get("base")
+    if not isinstance(base, dict):
+        base = {}
+
+    doc_class = dp.get("document_class")
+    if not isinstance(doc_class, dict):
+        doc_class = {}
+
+    return (
+        str(base.get("name", "")),
+        str(base.get("id", "")),
+        str(base.get("type", "") or doc_class.get("class_name", "")),
+        str(base.get("datestamp", "")),
+    )
+
+
 class ndi_gui_Data:
     """ndi_database view widget showing a searchable document table.
 
@@ -102,19 +140,24 @@ class ndi_gui_Data:
         Parameters
         ----------
         docs : list
-            Each element is expected to have ``document_properties``
-            with ``ndi_document.{name, id, type, datestamp}`` fields.
+            Each element is expected to have ``document_properties``.
+            Name, id and datestamp come from ``base``; the type column
+            shows ``document_class.class_name``.
+
+        Notes
+        -----
+        MATLAB reads these four out of ``document_properties.ndi_document``,
+        which is the LEGACY schema -- a document built today has no such
+        field, and its name, id and datestamp live under ``base``.  This
+        followed MATLAB and fell back to the top level of
+        ``document_properties``, where none of the four exist either, so
+        every row of the table came out with four empty columns.  The legacy
+        field is still read first, for a document old enough to have one.
         """
         for doc in docs:
             self.fullDocuments.append(doc)
             dp = doc.document_properties
-            nd = dp.get("ndi_document", dp)
-            name = nd.get("name", "") if isinstance(nd, dict) else getattr(nd, "name", "")
-            doc_id = nd.get("id", "") if isinstance(nd, dict) else getattr(nd, "id", "")
-            doc_type = nd.get("type", "") if isinstance(nd, dict) else getattr(nd, "type", "")
-            datestamp = (
-                nd.get("datestamp", "") if isinstance(nd, dict) else getattr(nd, "datestamp", "")
-            )
+            name, doc_id, doc_type, datestamp = document_columns(dp)
             json_details = json.dumps(
                 dp if isinstance(dp, dict) else dp.__dict__,
                 indent=2,

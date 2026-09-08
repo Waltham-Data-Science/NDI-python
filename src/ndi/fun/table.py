@@ -10,6 +10,7 @@ and reshaping tabular data produced by NDI document conversions.
 
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 try:
@@ -33,6 +34,8 @@ def identifyMatchingRows(
     *,
     stringMatch: str = "identical",
     numericMatch: str = "eq",
+    string_match: str | None = None,
+    numeric_match: str | None = None,
 ) -> pd.Series:
     """Identify rows in a DataFrame matching the given criteria.
 
@@ -52,6 +55,14 @@ def identifyMatchingRows(
         Boolean Series indicating matching rows.
     """
     _require_pandas()
+
+    # Snake-case spellings of the two options, per this project's
+    # cross-language naming convention. tests/matlab_tests/test_jess_haley.py
+    # already calls them this way.
+    if string_match is not None:
+        stringMatch = string_match
+    if numeric_match is not None:
+        numericMatch = numeric_match
 
     # Allow passing match mode as positional argument
     if match_mode is not None:
@@ -73,38 +84,88 @@ def identifyMatchingRows(
     mask = pd.Series(True, index=df.index)
 
     for col_name, val in zip(columns, values):
+        if col_name not in df.columns:
+            # MATLAB warns identifyMatchingRows:ColumnNotFound and sets the
+            # whole index false -- "no rows can match based on this
+            # criterion". Indexing df here raised KeyError instead.
+            warnings.warn(
+                f'Column "{col_name}" not found in the table. Skipping this '
+                "column for matching.",
+                stacklevel=2,
+            )
+            return pd.Series(False, index=df.index)
+
         col = df[col_name]
 
-        # Determine effective mode based on column dtype
-        if col.dtype == object or pd.api.types.is_string_dtype(col):
-            effective_mode = stringMatch.lower()
-        else:
-            effective_mode = numericMatch.lower()
+        # MATLAB ORs the alternatives for one column, which is how its own
+        # help spells a multi-value match:
+        #     identifyMatchingRows(dataTable, 'column1', {{'a','b','c'}})
+        # Comparing a Series against the list raised "Lengths must match".
+        alternatives = list(val) if isinstance(val, (list, tuple, set)) else [val]
 
-        if effective_mode == "identical":
-            col_match = col == val
-        elif effective_mode == "ignorecase":
-            col_match = col.astype(str).str.lower() == str(val).lower()
-        elif effective_mode == "contains":
-            col_match = col.astype(str).str.contains(str(val), case=True, na=False)
-        elif effective_mode == "eq":
-            col_match = col == val
-        elif effective_mode == "ne":
-            col_match = col != val
-        elif effective_mode == "lt":
-            col_match = col < val
-        elif effective_mode == "le":
-            col_match = col <= val
-        elif effective_mode == "gt":
-            col_match = col > val
-        elif effective_mode == "ge":
-            col_match = col >= val
-        else:
-            raise ValueError(f"Unknown match mode: '{effective_mode}'")
+        col_match = pd.Series(False, index=df.index)
+        for one in alternatives:
+            col_match = col_match | _match_one(col, one, stringMatch, numericMatch)
 
         mask = mask & col_match
 
     return mask
+
+
+def _match_one(col: pd.Series, val: Any, stringMatch: str, numericMatch: str) -> pd.Series:
+    """One column against one match value.
+
+    THE MODE IS CHOSEN BY THE MATCH VALUE'S TYPE, not the column's dtype.
+    That is what MATLAB does -- it branches on ``ischar(matchVal) ||
+    isstring(matchVal)`` and ``isnumeric(matchVal) || isdatetime(matchVal)``,
+    never on the column. Choosing by dtype instead silently used the STRING
+    mode for a numeric match against an object-dtype column, which pandas
+    produces routinely from mixed data: asking for ``numericMatch='gt'``
+    against 2 returned the rows equal to 2 rather than those above it. No
+    error, just the wrong rows.
+    """
+    if isinstance(val, str):
+        mode = stringMatch.lower()
+        if mode == "ignorecase":
+            return col.astype(str).str.lower() == val.lower()
+        if mode == "contains":
+            return col.astype(str).str.contains(val, case=True, na=False, regex=False)
+        return col.astype(str) == val
+
+    if isinstance(val, bool) or not isinstance(val, (int, float, complex, pd.Timestamp)):
+        # MATLAB's final else: exact equality for logicals, categoricals and
+        # anything else it does not recognise.
+        return col == val
+
+    mode = numericMatch.lower()
+    numeric = pd.to_numeric(col, errors="coerce") if col.dtype == object else col
+    if mode == "ne":
+        return numeric != val
+    if mode == "lt":
+        return numeric < val
+    if mode == "le":
+        return numeric <= val
+    if mode == "gt":
+        return numeric > val
+    if mode == "ge":
+        return numeric >= val
+    if mode == "eq":
+        return numeric == val
+    raise ValueError(f"Unknown numeric match mode: '{mode}'")
+
+
+def _is_nan_sentinel(value: Any) -> bool:
+    """Is *value* the NaN/NaT sentinel, which cannot be compared with ``!=``?
+
+    MATLAB tests ``isnumeric(v) && isnan(v)`` and ``isdatetime(v) && isnat(v)``
+    in two dedicated branches for the same reason.
+    """
+    if value is None:
+        return True
+    try:
+        return bool(pd.isna(value))
+    except (TypeError, ValueError):
+        return False
 
 
 def identifyValidRows(
@@ -136,11 +197,25 @@ def identifyValidRows(
     mask = pd.Series(True, index=df.index)
     for col in cols:
         if col not in df.columns:
+            # MATLAB warns identifyValidRows:InvalidVariableName here and
+            # skips; say so rather than dropping the name in silence.
+            warnings.warn(
+                f'Variable "{col}" provided in checkVariables not found in the '
+                "table. Skipping check.",
+                stacklevel=2,
+            )
             continue
-        if invalidValues is not None:
-            mask = mask & (df[col] != invalidValues)
-        else:
+        if invalidValues is None:
             mask = mask & df[col].notna()
+        elif _is_nan_sentinel(invalidValues):
+            # NaN never equals itself, so `df[col] != nan` is True even on the
+            # NaN rows and every row came back valid -- the exact opposite of
+            # what was asked. MATLAB special-cases this branch for the same
+            # reason, and {NaN} is its DEFAULT invalidValues, so it is the
+            # value a caller is most likely to pass explicitly.
+            mask = mask & df[col].notna()
+        else:
+            mask = mask & (df[col] != invalidValues)
 
     return mask
 

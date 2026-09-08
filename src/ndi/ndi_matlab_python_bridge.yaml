@@ -30,6 +30,7 @@ functions:
   - name: version
     type: function
     matlab_path: "+ndi/version.m"
+    matlab_last_sync_hash: "8533e9f89"
     python_path: "ndi/__init__.py"
     input_arguments: []
     output_arguments:
@@ -43,6 +44,15 @@ functions:
       Exact match. Returns 2-tuple (version_string, url).
       MATLAB uses git describe; Python does the same with subprocess
       fallback to __version__. Synchronized 2026-03-13.
+
+      Examined against NDI-matlab 8533e9f89, the file's last-touching commit.
+      Same two outputs and the same fallback structure: ask git for the
+      version of the checkout this file lives in, and fall back when there is
+      no git. Each necessarily reports its OWN distribution -- MATLAB returns
+      the NDI-matlab URL and vlt.git.git_repo_version, the port returns the
+      NDI-python URL and `git describe --always --dirty`, falling back to the
+      packaged __version__ where MATLAB falls back to the unexpanded
+      '$Format:%H$' placeholder. Nothing to port.
 
   - name: setup.lab
     type: function
@@ -106,6 +116,7 @@ classes:
   - name: ido
     type: class
     matlab_path: "+ndi/ido.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/ido.py"
     python_class: "ndi_ido"
     inherits: "did.ido"
@@ -168,12 +179,22 @@ classes:
       Thin wrapper over did.ido. Python ndi_ido class provides the same
       unique ID generation. Synchronized 2026-03-13.
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      MATLAB's ndi.ido is an empty subclass of did.ido -- it adds nothing but
+      the name -- so the contract to check is the one its help states: a
+      hexadecimal identifier built from the current date/time and a random
+      number, sorting alphabetically in creation order. The port builds 16 hex
+      digits of microsecond time, an underscore, and 16 random hex digits,
+      which satisfies both that and the 33-character shape
+      ndi.validators.mustBeID enforces. Nothing to port.
+
   # =========================================================================
   # ndi.documentservice - ndi_document Interface Mixin
   # =========================================================================
   - name: documentservice
     type: class
     matlab_path: "+ndi/documentservice.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/documentservice.py"
     python_class: "ndi_documentservice"
     inherits: ""
@@ -237,15 +258,27 @@ classes:
       can be stored as a document inherits from this.
       Synchronized 2026-03-13.
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Same two methods, newdocument and searchquery, and the same intent --
+      MATLAB's own comment calls it "just an abstract class". The mechanism
+      differs and is worth knowing: MATLAB's base methods are CONCRETE and
+      return empty, so a subclass that overrides neither still instantiates
+      and works, where the port marks both @abstractmethod on an ABC, so such
+      a subclass raises TypeError at construction. Python enforces what MATLAB
+      only documents. Harmless today -- all ten subclasses in this tree
+      implement both -- and recorded because a future subclass would meet the
+      difference immediately.
+
   # =========================================================================
   # ndi.document - ndi_document Model
   # =========================================================================
   - name: document
     type: class
     matlab_path: "+ndi/document.m"
+    matlab_last_sync_hash: "00155f885"
     python_path: "ndi/document.py"
     python_class: "ndi_document"
-    inherits: ""
+    inherits: "did.document"
 
     properties:
       - name: document_properties
@@ -290,7 +323,31 @@ classes:
         output_arguments:
           - name: uid
             type_python: "str"
-        decision_log: "Exact match. Alias for id()."
+        decision_log: >
+          "Exact match. Alias for id()." was not true against
+          NDI-matlab 00155f885: there was no doc_unique_id on the Python
+          class at all, so ported MATLAB code got an AttributeError rather
+          than the id. MATLAB keeps the method and warns
+          'depricated..use ID() instead' on every call. Added, raising the
+          same flag as a DeprecationWarning.
+
+      - name: get_fuid
+        input_arguments:
+          - name: filename
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: fuid
+            type_python: "str"
+        decision_log: >
+          NOT PREVIOUSLY RECORDED AND NOT PREVIOUSLY PORTED. MATLAB
+          00155f885 defines get_fuid, and it is the lookup
+          ndi.fun.doc.findFuid and both the session and dataset diff
+          functions use to decide whether two documents point at the same
+          stored file -- so its absence blocked those ports rather than
+          merely leaving a gap. Returns the uid of the FIRST location of
+          the named file, and '' when the document has no files, does not
+          declare the name, or has not had it added. Ported.
 
       # --- ndi_session ---
       - name: set_session_id
@@ -504,8 +561,20 @@ classes:
             default: "2"
         output_arguments: []
         decision_log: >
-          Exact match. Writes document to JSON file.
-          Python adds indent parameter. Synchronized 2026-03-13.
+          "Exact match" overstates it against NDI-matlab 00155f885. MATLAB's
+          first argument is a FILE PREFIX and it writes [FILEPREFIX '.json'];
+          the port treats it as the complete filename and writes it
+          verbatim, so MATLAB code ported literally -- doc.write('mydoc') --
+          leaves an extension-less file. MATLAB also takes two name/value
+          options the port does not have: writeLocalFiles, which writes each
+          associated file next to the JSON as [FILEPREFIX '_' FILENAME], and
+          session, which reads those files through
+          database_openbinarydoc rather than copying the recorded local
+          location. NOT CHANGED HERE: every caller in this tree passes a
+          full '.json' path, so appending an extension would rename their
+          output, and which contract the Python signature should keep is a
+          public-API decision rather than a porting one. Recorded so the
+          next reader meets it before their file lands in the wrong place.
 
       - name: setproperties
         input_arguments:
@@ -542,9 +611,25 @@ classes:
             type_matlab: "table"
             type_python: "pd.DataFrame"
         decision_log: >
-          Exact match. Converts document to tabular form.
-          MATLAB returns table; Python returns pandas DataFrame.
-          Synchronized 2026-03-13.
+          "Exact match" did not hold against NDI-matlab 00155f885, in three
+          separate ways, each of which changed COLUMN NAMES -- the one thing
+          a caller joins two tables on. (1) MATLAB passes an abbreviation
+          list to vlt.data.flattenstruct2table, read from
+          ndi_common/config/ndi_document2table_abbreviations.json, and
+          strrep's each pair over the flattened names in FILE ORDER:
+          orientation_direction_tuning becomes oridir, tuning_curve becomes
+          TC, and eight more. That file ships in this repository too; it was
+          simply never read, so every abbreviated field's column was named
+          differently in the two languages. (2) MATLAB removes depends_on
+          and files with rmfield, which reaches the TOP LEVEL ONLY; the port
+          skipped those two names at EVERY depth, silently deleting any
+          same-named field nested inside another property. (3) A property
+          holding a list of records is a struct array in MATLAB, and
+          flattenstruct2table gives it one column per sub-field
+          (document_class.superclasses.definition) holding every record's
+          value; the port emitted one column holding the raw list
+          (document_class.superclasses). All three are fixed and covered by
+          tests/test_document_to_table_and_fuid.py.
 
       - name: to_dict
         input_arguments: []
@@ -639,13 +724,51 @@ classes:
           - name: definition
             type_python: "dict"
         decision_log: >
-          Exact match. Reads a blank document definition from
-          JSON schema. Recursively merges superclass properties.
-          Synchronized 2026-03-13.
+          The merge holds against NDI-matlab 00155f885 -- superclass labels,
+          depends_on and files.file_list are unioned and de-duplicated on
+          both sides. Two differences that are not defects but that a reader
+          should know. MATLAB's argument is named jsonfilelocationstring and
+          is a definition LOCATION such as $NDIDOCUMENTPATH/element.json;
+          the Python argument is a bare type name, with a recursive search
+          of the document tree behind it, and it accepts a relative path
+          too. And MATLAB MEMOISES: a persistent containers.Map keyed on the
+          location string, cleared by the sentinel call
+          ndi.document.readblankdefinition('--clear-cache'). The port
+          re-reads and re-merges every time, which for a deep hierarchy
+          means re-globbing the tree once per superclass per document. That
+          is a speed difference rather than a behavioural one, and the
+          sentinel has nothing to clear here, so neither is ported.
 
     decision_log: >
       Core document class. Both languages use JSON schema-based
       document definitions. Synchronized 2026-03-13.
+
+
+      Examined method by method against NDI-matlab 00155f885, the file's
+      last-touching commit, and it did not hold. Four of the per-method
+      records above are now corrected rather than re-dated: to_table named
+      its columns differently in three ways, write means a file PREFIX in
+      MATLAB and a filename here, doc_unique_id was recorded as an "exact
+      match" for a method that did not exist, and get_fuid was not recorded
+      at all. to_table, doc_unique_id and get_fuid are ported; see each.
+      The class-level record also said inherits: "" where MATLAB is
+      classdef document < did.document -- and the file carries a comment
+      explaining that the subclassing is deliberate and why the constructor
+      resolves the definition itself before calling did.document's struct
+      path. Corrected to did.document. Python's ndi_document remains a
+      standalone class that re-implements did.document's surface, which is
+      the same arrangement ndi_ido already has.
+
+
+      Two constructor details that DO hold and are worth writing down.
+      MATLAB calls reset_file_info() after building from a definition, so
+      files.file_info exists before add_file; the port creates it lazily
+      inside add_file instead, and both refuse a name that is not in
+      files.file_list. And the port additionally normalises depends_on,
+      files.file_info and document_class.superclasses from a bare dict to a
+      one-element list, which is the shape MATLAB's jsonencode produces for
+      a single element -- MATLAB needs no such step because jsondecode
+      makes it a 1x1 struct that its own code indexes identically.
 
   # =========================================================================
   # ndi.query - ndi_database ndi_query
@@ -653,6 +776,7 @@ classes:
   - name: query
     type: class
     matlab_path: "+ndi/query.m"
+    matlab_last_sync_hash: "1f2f4ace4"
     python_path: "ndi/query.py"
     python_class: "ndi_query"
     inherits: "did.query"
@@ -995,6 +1119,19 @@ classes:
       none(), from_search() for MATLAB parity.
       Synchronized 2026-03-13.
 
+      Examined against NDI-matlab 1f2f4ace4, the file's last-touching commit.
+      The operator vocabulary matches and then some. MATLAB validates the
+      operation with mustBeMember against a fixed list -- exact_string,
+      contains_string, exact_number, lessthan(eq), greaterthan(eq), hasfield,
+      hasanysubfield_contains_string, hasmember, isa, depends_on, regexp, or,
+      and each of those negated with a leading '~'. The port validates too,
+      through did.query, which carries the same set plus
+      hasanysubfield_exact_string, and it implements the '~' negation. A first
+      reading of NDI's own Python source suggests
+      hasanysubfield_contains_string is missing because it is not spelled
+      there; it is not -- it comes from did.query, which is also where
+      MATLAB's 'isa' expands to it. Nothing to port.
+
   # =========================================================================
   # ndi.preferences - Singleton user-preferences store
   # =========================================================================
@@ -1109,6 +1246,7 @@ not_applicable:
   # =========================================================================
   - name: setup
     matlab_path: "+ndi/+setup/"
+    matlab_last_sync_hash: "03c79fa48"
     python_path: "ndi/setup/"
     status: ported
     decision_log: >
@@ -1117,6 +1255,30 @@ not_applicable:
       and creates the corresponding documents in a session. Per-lab
       wrappers (e.g. ndi.setup.rayolab) call lab() with a fixed name.
       Usage: ndi.setup.lab(session, "vhlab"); ndi.setup.rayolab(session).
+
+      Examined against NDI-matlab 03c79fa48, the last commit touching anything
+      under +ndi/+setup/, and TWO THINGS THE RECORD IMPLIED WERE THERE WERE
+      NOT. (1) FIVE OF SIX PER-LAB WRAPPERS WERE MISSING. The record says
+      "Per-lab wrappers (e.g. ndi.setup.rayolab) call lab() with a fixed
+      name"; MATLAB has six -- angeluccilab, dbkatzlab, marderlab, rayolab,
+      vhlab, yangyangwang -- and only rayolab existed here, so
+      ndi.setup.vhlab(session), the call every MATLAB example for that lab
+      uses, raised AttributeError. All five added, each a thin wrapper naming
+      its own lab, and each verified to have a daq_systems directory to load.
+      The six are exported as LAB_WRAPPERS. (2) labNames HAD NO COUNTERPART.
+      MATLAB's ndi.setup.labNames lists the labs installed under
+      ndi_common/daq_systems, sorted, dropping hidden directories, returning
+      empty when there are none -- so there was no way to ask which labs a
+      given install knows about. Ported. Ten lab directories ship on BOTH
+      sides, so labNames returns ten while only six have a named wrapper; that
+      is MATLAB's arrangement too, and lab(session, name) reaches the other
+      four. ONE DIVERGENCE RECORDED RATHER THAN CHANGED: MATLAB's lab is
+      lab(labName, ref, dirname) and CREATES and returns an ndi.session.dir;
+      the Python lab is lab(session, lab_name) and returns None, taking a
+      session the caller already made. The arguments are in a different order
+      and play different roles, and the usage line in this record has always
+      said so. Changing the signature now would break every caller for a
+      cosmetic gain.
 
   # =========================================================================
   # ndi.docs namespace — MATLAB documentation generation

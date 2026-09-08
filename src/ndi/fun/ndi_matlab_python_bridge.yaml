@@ -20,6 +20,7 @@ functions:
   - name: channelname2prefixnumber
     type: function
     matlab_path: "+ndi/+fun/channelname2prefixnumber.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/utils.py"
     input_arguments:
       - name: channelname
@@ -34,9 +35,16 @@ functions:
       Exact match. Parses a channel name into prefix and number
       (e.g. 'ai5' -> ('ai', 5)).
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Holds: split at the first digit, strip whitespace from the prefix, parse
+      the rest as the number, and refuse both a name with no digits and one
+      that starts with a digit. MATLAB raises plain errors where the port
+      raises ValueError with the same two conditions.
+
   - name: name2variableName
     type: function
     matlab_path: "+ndi/+fun/name2variableName.m"
+    matlab_last_sync_hash: "b33d8ce64"
     python_path: "ndi/fun/utils.py"
     input_arguments:
       - name: name
@@ -52,9 +60,34 @@ functions:
       starts with digit. A PascalCase variant also exists in
       ndi/fun/name_utils.py (Python-only convenience).
 
+      Examined against NDI-matlab b33d8ce64, the file's last-touching commit,
+      AND THIS RECORD AND THE NEXT ONE ARE SWAPPED. This entry called the
+      utils.py implementation an "Exact match" and "the canonical
+      MATLAB-matching implementation". It is not. MATLAB replaces ':' and '-'
+      with '_' BEFORE the general cleanup, capitalises the first letter of
+      every word while KEEPING THE REST OF THE WORD AS IT WAS (the lowercasing
+      is commented out in the source), joins to PascalCase, and prepends
+      'var_' when the result does not start with a letter. utils.py does none
+      of those four: it lets ':' and '-' become word separators, lowercases
+      the first word, uses str.capitalize() which lowercases the rest of each
+      word, and prepends 'x'. On the same inputs: 'NCBITaxon:10116' gives
+      'ncbitaxon10116' here against MATLAB's 'NCBITaxon_10116';
+      'spatial_frequency' gives 'spatial_frequency' against
+      'Spatial_frequency'; '2 photon' gives 'x2Photon' against 'var_2Photon'.
+      The faithful implementation is the one in ndi/fun/name_utils.py,
+      recorded below as a "Python-only convenience". IT MATTERS BEYOND
+      BOOKKEEPING: ndi.fun exports THIS one, and +docTable/element.m builds
+      its metadata column names with ndi.fun.name2variableName -- so whoever
+      ports that aggregation (still missing, see the element entry) would get
+      different column names using the exported function. No production code
+      calls either today, and two tests assert the camelCase behaviour, so
+      which one ndi.fun should export is left to a maintainer rather than
+      swapped here.
+
   - name: pseudorandomint
     type: function
     matlab_path: "+ndi/+fun/pseudorandomint.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/utils.py"
     input_arguments: []
     output_arguments:
@@ -65,9 +98,20 @@ functions:
       plus random component: seconds since 2022-06-01 * 1000 +
       random(1..1000).
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      MATLAB is t_offset*1000 + randi(1000) - 1, and its own comment spells it
+      out: "random number between 1 and 1000, -1". The port dropped the -1,
+      shifting every value by one against the MATLAB and putting the random
+      part in [1,1000] rather than [0,999]. Restored. One divergence left:
+      MATLAB measures its offset from local midnight on 2022-06-01 using
+      `now`, where the port uses UTC for both ends, so the two disagree by the
+      local UTC offset; each is self-consistent and the value is only ever
+      compared with itself.
+
   - name: timestamp
     type: function
     matlab_path: "+ndi/+fun/timestamp.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/utils.py"
     input_arguments: []
     output_arguments:
@@ -77,6 +121,21 @@ functions:
       Exact match. Returns current UTC timestamp string. Handles
       leap-second artefact by clamping second=60 to 59.999.
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit,
+      and this one did NOT hold. MATLAB is
+      char(datetime('now','TimeZone','UTCLeapSeconds')), a format that ends in
+      a ZONE DESIGNATOR. The port emitted '2026-09-08T02:25:18.707' with no Z
+      -- and that is the one shape ndi.util.datestamp2datetime refuses, so two
+      functions in this same package did not compose. It also disagreed with
+      ndi.common.timestamp, which does emit the Z and is what ndi_document
+      stamps documents with; every datestamp under ndi_common/ carries one.
+      Fixed, and the two tests that asserted the 23-character no-Z shape were
+      updated -- they encoded the defect. Its leap-second guard was also wrong
+      in a way that would only show if it fired: `ts.replace(':60.',
+      ':59.999')` leaves the old fraction appended ('...:59.999123'), where
+      MATLAB rewrites the six characters before the Z. Now replaces the
+      seconds field itself.
+
   # =========================================================================
   # Functions — name_utils.py (Python-only variant)
   # =========================================================================
@@ -84,6 +143,7 @@ functions:
   - name: name2variableName (PascalCase variant)
     type: function
     matlab_path: "+ndi/+fun/name2variableName.m"
+    matlab_last_sync_hash: "b33d8ce64"
     python_path: "ndi/fun/name_utils.py"
     input_arguments:
       - name: name
@@ -97,6 +157,18 @@ functions:
       MATLAB-matching implementation is in utils.py. This variant uses a
       slightly different algorithm (Replace ':', '-' with '_', prepend
       'var_' if starts with non-letter) and is provided as a convenience.
+
+      Examined against NDI-matlab b33d8ce64, the file's last-touching commit,
+      AND THIS IS THE FAITHFUL PORT, not a "Python-only PascalCase variant...
+      provided as a convenience". What this record calls a "slightly different
+      algorithm (Replace ':', '-' with '_', prepend 'var_' if starts with
+      non-letter)" is precisely MATLAB's algorithm, and it agrees with MATLAB
+      on every case tried: 'orientation direction tuning' ->
+      'OrientationDirectionTuning', 'spatial_frequency' ->
+      'Spatial_frequency', 'a:b' -> 'A_b', 'NCBITaxon:10116' ->
+      'NCBITaxon_10116', '2 photon' -> 'var_2Photon'. The entry above, which
+      claims to be the canonical match, is the one that diverges. See it for
+      the consequences.
 
   # =========================================================================
   # Functions — data.py
@@ -220,7 +292,8 @@ functions:
 
   - name: evaluate_fitcurve
     type: function
-    matlab_path: "+ndi/+data/evaluate_fitcurve.m (in a different namespace)"
+    matlab_path: "+ndi/+data/evaluate_fitcurve.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/data.py"
     input_arguments:
       - name: fitcurve_doc
@@ -254,6 +327,22 @@ functions:
       This entry stays for backward compatibility with tests/test_phase1_gaps.py
       and any caller already importing from ndi.fun.data. New code should
       import from ndi.data.
+
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit,
+      and the record above holds in full -- this really is a Python-invented
+      variant reading fit_variable_names and fit_parameter_values, where
+      MATLAB reads fit_independent_variable_names,
+      fit_dependent_variable_names and fit_parameters, and the canonical
+      mirror entry ndi.data.evaluate_fitcurve is the one that matches. WHAT
+      WAS WRONG WAS THE PATH ITSELF. matlab_path read
+      '+ndi/+data/evaluate_fitcurve.m (in a different namespace)' -- the note
+      was written INSIDE the path string, so it resolved to no file at all,
+      which is why the drift gate could never hash this entry and why it sat
+      in the allowlist. The note belongs in this log, where it already was;
+      the path is now the real one, so the entry is gated on the same MATLAB
+      source as its canonical sibling and a change there flags both records
+      rather than one. The sibling carries 76b0673 for the same file, which is
+      equally current -- no commit has touched it since either.
 
   - name: readImageStack
     type: function
@@ -349,6 +438,7 @@ functions:
   - name: allTypes
     type: function
     matlab_path: "+ndi/+fun/+doc/allTypes.m"
+    matlab_last_sync_hash: "f57144891"
     python_path: "ndi/fun/doc.py"
     input_arguments: []
     output_arguments:
@@ -358,9 +448,19 @@ functions:
       Exact match. Returns all known NDI document types by scanning
       schema JSON files.
 
+      Examined against NDI-matlab f57144891, the file's last-touching commit.
+      Same shape: scan the document folder and the calculator document paths
+      for .json files, take each file's stem, skip dotfiles, unique and sort.
+      Returns the same 101 type names here. One latent divergence: the port
+      additionally strips a trailing '_schema' from the stem, which MATLAB
+      does not -- today no file under database_documents is named that way, so
+      nothing differs, but a future *_schema.json would be reported under two
+      different names by the two languages.
+
   - name: findFuid
     type: function
     matlab_path: "+ndi/+fun/+doc/findFuid.m"
+    matlab_last_sync_hash: "321d54fde"
     python_path: "ndi/fun/doc.py"
     input_arguments:
       - name: session
@@ -378,9 +478,21 @@ functions:
       Exact match. Searches session for a document containing a file
       with the given UID. Returns (document, filename) or (None, '').
 
+      Examined against NDI-matlab 321d54fde, the file's last-touching commit.
+      Same search and the same early return on the first match, returning
+      (doc, filename) and (empty, '') when nothing matches. Two differences in
+      how the search is spelled, neither changing the result: MATLAB queries
+      base.id with the regexp '(.*)' where the port uses isa('base') -- both
+      select every document; and MATLAB asks the document for
+      current_file_list and get_fuid where the port walks
+      files.file_info[].locations[].uid directly, so it matches on ANY
+      location's uid for a file rather than the document's canonical one.
+      Nothing to port.
+
   - name: makeSpeciesStrainSex
     type: function
     matlab_path: "+ndi/+fun/+doc/+subject/makeSpeciesStrainSex.m"
+    matlab_last_sync_hash: "b33d8ce64"
     python_path: "ndi/fun/doc.py"
     input_arguments:
       - name: session
@@ -415,9 +527,36 @@ functions:
       BiologicalSex, AddToSession. NOTE: MATLAB also returns a second
       output openMindsObj which Python does not yet return.
 
+      Examined against NDI-matlab b33d8ce64, the file's last-touching commit.
+      The three-step shape is right and the PATO map for biological sex
+      matches, but four things did not hold. (1) A STRAIN LOST ITS ONTOLOGY
+      IDENTIFIER. MATLAB builds openminds.core.research.Strain with
+      'ontologyIdentifier', ID; the port passed only name and species, so a
+      strain document came back as a bare name with nothing to resolve it.
+      Ported. (2) A FAILED LOOKUP FABRICATED AN IDENTIFIER. The fallback was
+      `ont_id, name = Species, Species`, so a species that did not resolve
+      became a document named after the raw input AND claiming that same text
+      as its preferredOntologyIdentifier. The identifier is now simply absent,
+      and the failure is warned about. DELIBERATELY MORE PERMISSIVE THAN
+      MATLAB, which warns and creates nothing at all: a caller holding a plain
+      species name still gets a document, it just does not carry a false
+      identifier. Two existing tests pass plain names ('Mus musculus',
+      'Rattus') and still pass. (3) BiologicalSex accepted ANY string, where
+      MATLAB's mustBeMember allows only male, female, hermaphrodite and
+      notDetectable -- so a typo became a document. Now rejected, with the
+      four terms exported as BIOLOGICAL_SEX_TERMS. notDetectable also builds
+      with a name and NO preferredOntologyIdentifier, as MATLAB does, rather
+      than an empty one. (4) AddToSession added documents one at a time inside
+      `except Exception: pass`. One call now, errors reaching the caller.
+      Noted in passing, and belonging to openminds_convert rather than here:
+      the Python serialisation spells openMINDS fields snake_case
+      (preferred_ontology_identifier, ontology_identifiers) where MATLAB's are
+      camelCase.
+
   - name: probeLocations4probes
     type: function
     matlab_path: "+ndi/+fun/+doc/+probe/probeLocations4probes.m"
+    matlab_last_sync_hash: "911df48b4"
     python_path: "ndi/fun/doc.py"
     input_arguments:
       - name: session
@@ -441,9 +580,30 @@ functions:
       (list of strings), matching MATLAB. Option name is doAdd with
       default True, matching MATLAB.
 
+      Examined against NDI-matlab 911df48b4, the file's last-touching commit,
+      AND IT WROTE THE WRONG FIELD. probe_location.json declares exactly two
+      properties, ontology_name and name; the port wrote
+      probe_location.ontology, a field the schema does not have, and left
+      ontology_name empty -- so the term went where nothing reads it and the
+      declared field stayed blank. It also stored the ontology id raw, where
+      MATLAB builds prefix:id unless the id already carries the prefix. Both
+      fixed. THREE MORE, all fixed. MATLAB ERRORS when the probe count and the
+      lookup-string count differ; the port used zip(), which silently
+      truncates, so a caller who miscounted got documents for some probes and
+      no word about the rest. MATLAB WARNS AND SKIPS a probe whose term does
+      not resolve; the port caught every exception and fell back to using the
+      lookup STRING as the location name, writing a document that asserts a
+      location nobody resolved. And doAdd added the documents one at a time
+      inside `except Exception: pass`, so a database that refused them
+      reported success -- MATLAB adds them in one call and lets the error out.
+      One widening: the function now accepts a probe OBJECT as well as a probe
+      document, since MATLAB's argument is an ndi.probe and reads
+      current_probe.id().
+
   - name: diff (doc)
     type: function
     matlab_path: "+ndi/+fun/+doc/diff.m"
+    matlab_last_sync_hash: "c60307963"
     python_path: "ndi/fun/doc.py"
     python_qualified: "ndi.fun.doc.diff"
     input_arguments:
@@ -484,9 +644,34 @@ functions:
       returns 2 separate outputs [are_equal, report]; Python returns
       1 dict with 'equal' and 'details' keys (structural difference).
 
+      Examined against NDI-matlab c60307963, the file's last-touching commit,
+      and STEP 5 WAS MISSING ENTIRELY. MATLAB's diff compares the documents'
+      binary files when checkFiles is true: union of both file lists,
+      presence, then size, then content through
+      ndi.util.getHexDiffFromFileObj, with each file wrapped in a try/catch
+      that records the error. None of it was ported -- and checkFiles,
+      session1 and session2 were all accepted as parameters and none of the
+      three was ever read. So diff(a, b, checkFiles=True) returned {'equal':
+      True} for documents whose files differ, and MATLAB's guard ("If
+      checkFiles is true, session1 and session2 must be provided") never fired
+      either. A difference-finder answering "equal" for a comparison it did
+      not run is the failure this bridge exists to catch. Ported, through the
+      same getHexDiffFromFileObj MATLAB uses -- this is that helper's only
+      caller on either side, which is why nothing noticed it was itself
+      unusable until #219. Covered by tests/test_fun_doc_diff_files.py. THREE
+      DIVERGENCES RECORDED, NOT CHANGED. MATLAB pops `files` out of the
+      property comparison entirely and checks only files.file_list when
+      checkFileList is true, where this port compares the whole `files`
+      subtree and treats file_info as the order-independent list -- so it
+      compares MORE, and on a different field. MATLAB's ignoreFields honours
+      only one or two dot-separated parts and silently ignores anything
+      deeper; this handles arbitrary depth. And MATLAB returns [are_equal,
+      report] where this returns {'equal', 'details'}.
+
   - name: ontologyTableRowVars
     type: function
     matlab_path: "+ndi/+fun/+doc/ontologyTableRowVars.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/doc.py"
     input_arguments:
       - name: session
@@ -503,9 +688,22 @@ functions:
       Exact match. Returns all unique ontologyTableRow variable names
       in a session.
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Same job -- split the comma-separated names/variableNames/ ontologyNodes
+      of every ontologyTableRow document, keep the first occurrence of each
+      name, return the three lists sorted and aligned. THE PORT FIXES A BUG
+      MATLAB STILL HAS: MATLAB only refreshes nameCellArray inside `if
+      ~isempty(...names)`, but concatenates it unconditionally, so a document
+      with empty names makes it re-append the PREVIOUS document's names (and
+      errors outright if the first document is the empty one). The port skips
+      such a document. One further difference: the port strips whitespace
+      around each comma-separated token where MATLAB's strsplit does not, so '
+      a' and 'a' are one name here and two there.
+
   - name: getDocTypes
     type: function
     matlab_path: "+ndi/+fun/+doc/getDocTypes.m"
+    matlab_last_sync_hash: "b33d8ce64"
     python_path: "ndi/fun/doc.py"
     input_arguments:
       - name: session
@@ -520,6 +718,18 @@ functions:
       Exact match. Finds all unique document types and their counts
       in a session.
 
+      Examined against NDI-matlab b33d8ce64, the file's last-touching commit.
+      Matches, including the output ORDER -- MATLAB declares [docTypes,
+      docCounts] while assigning groupcounts' outputs the other way round
+      ([docCounts, docTypes] = groupcounts(...)), which is correct because
+      groupcounts returns counts first, and the port returns (types, counts)
+      to match. Both read the class from
+      document_properties.document_class.class_name (MATLAB via ndi.document's
+      doc_class method) and both sort the types. One divergence: the port
+      falls back to the literal 'unknown' for a document missing that field
+      and skips anything whose properties are not a mapping, where MATLAB
+      would error.
+
   # =========================================================================
   # Functions — doc_table.py
   # MATLAB: +ndi/+fun/+docTable/*.m, +ndi/+fun/+doc/ontologyTableRowDoc2Table.m
@@ -528,6 +738,7 @@ functions:
   - name: ontologyTableRowDoc2Table
     type: function
     matlab_path: "+ndi/+fun/+doc/ontologyTableRowDoc2Table.m"
+    matlab_last_sync_hash: "21059769a"
     python_path: "ndi/fun/doc_table.py"
     input_arguments:
       - name: documents
@@ -556,9 +767,15 @@ functions:
       dependencyIDs) matching MATLAB. MATLAB source is in +doc/;
       Python places it in doc_table.py.
 
+      Examined against NDI-matlab 21059769a, the file's last-touching commit.
+      Reads the ontologyTableRow document's comma-separated header fields and
+      its value rows into a table, which the port builds as a DataFrame in
+      ndi/fun/doc_table.py. Nothing on the Python side to follow.
+
   - name: docCellArray2Table
     type: function
     matlab_path: "+ndi/+fun/+docTable/docCellArray2Table.m"
+    matlab_last_sync_hash: "fa67d45d0"
     python_path: "ndi/fun/doc_table.py"
     input_arguments:
       - name: documents
@@ -571,9 +788,32 @@ functions:
       Exact match. Converts a list of NDI documents to a DataFrame.
       Each document contributes one row.
 
+      Examined against NDI-matlab fa67d45d0, the file's last-touching commit,
+      and this one did NOT hold. MATLAB does not flatten anything itself -- it
+      calls ndi.document/to_table on each document and vstacks the results,
+      and to_table drops depends_on and files, gives each dependency its own
+      depends_on_NAME column, and flattens the rest with dot notation TO ANY
+      DEPTH. The port flattened document_properties inline, ONE level deep,
+      keeping both fields MATLAB removes. On the same document the two
+      produced different columns outright: the port gave base.id, base.name,
+      depends_on, element.type, files.file_list where MATLAB gives base.id,
+      base.name, depends_on_subject_id, element.type.nested -- a raw
+      depends_on column and a files.* column that should not be there, no
+      depends_on_* column that should, and a nested value left unflattened.
+      Now uses the document's own to_table when it returns a frame, and
+      otherwise applies the same rules. Covered by
+      tests/test_fun_doc_table.py. ONE GAP RECORDED, NOT FIXED HERE: MATLAB's
+      to_table also abbreviates column names through
+      ndi_common/config/ndi_document2table_abbreviations.json
+      (orientation_direction_tuning -> oridir, and nine more). That file IS
+      present in this repo's ndi_common, but ndi.document.to_table never reads
+      it, so every abbreviated field's column is named differently in the two
+      languages. That belongs to the ndi.document entry rather than this one.
+
   - name: element (docTable)
     type: function
     matlab_path: "+ndi/+fun/+docTable/element.m"
+    matlab_last_sync_hash: "068c7af06"
     python_path: "ndi/fun/doc_table.py"
     python_qualified: "ndi.fun.doc_table.element"
     input_arguments:
@@ -586,9 +826,27 @@ functions:
     decision_log: >
       Exact match. Creates a summary table of element documents.
 
+      Examined against NDI-matlab 068c7af06, the file's last-touching commit,
+      and this port is a STUB relative to it. MATLAB pre-allocates five base
+      fields -- subject_id, element_id, element_name, element_type,
+      element_reference -- and then does the substantial half: it discovers
+      every element/probe/metadata document type by scanning the document
+      folder for .json files, queries each, matches them to each element by
+      the element_id dependency, and adds one column per (metadata type, value
+      type) holding the comma-joined unique values, finally dropping all-empty
+      columns. The port emitted four columns named id, name, reference and
+      type -- so NOT ONE column name matched -- omitted subject_id entirely,
+      and has none of the metadata aggregation. The five base columns are now
+      named and populated as MATLAB names them, including subject_id from the
+      dependency. THE METADATA AGGREGATION IS STILL NOT PORTED. It is most of
+      the function and it needs a populated session to get right; recorded
+      here rather than invented, because a plausible-looking wrong column set
+      is what this entry already had.
+
   - name: subjectBasic
     type: function
     matlab_path: "+ndi/+fun/+docTable/subject.m"
+    matlab_last_sync_hash: "c242a07f8"
     python_path: "ndi/fun/doc_table.py"
     python_qualified: "ndi.fun.doc_table.subjectBasic"
     input_arguments:
@@ -601,9 +859,22 @@ functions:
     decision_log: >
       Exact match. Creates a basic summary table of subject documents.
 
+      Examined against NDI-matlab c242a07f8, the file's last-touching commit.
+      THIS IS NOT A PORT OF subject.m; it is a lightweight Python-only helper
+      recorded against the same MATLAB file as the full port above. It returns
+      three columns named id, local_identifier and description, where MATLAB
+      returns SessionIdentifier, SubjectDocumentIdentifier and
+      SubjectLocalIdentifier plus everything joined from the openminds and
+      treatment documents -- different names, a different column set, and none
+      of the joins. The faithful counterpart is the `subject` entry; this one
+      is a convenience for callers that want the bare subject list without the
+      expense of the openminds query. Recorded here so the two entries
+      pointing at one MATLAB file are not mistaken for duplicates.
+
   - name: probe (docTable)
     type: function
     matlab_path: "+ndi/+fun/+docTable/probe.m"
+    matlab_last_sync_hash: "bbb4d88ec"
     python_path: "ndi/fun/doc_table.py"
     python_qualified: "ndi.fun.doc_table.probe"
     input_arguments:
@@ -619,9 +890,19 @@ functions:
       ProbeName, ProbeType, ProbeReference, ProbeLocationName,
       ProbeLocationOntology, CellTypeName, CellTypeOntology.
 
+      Examined against NDI-matlab bbb4d88ec, the file's last-touching commit.
+      The column contract matches exactly, all nine and in MATLAB's order:
+      SubjectDocumentIdentifier, ProbeDocumentIdentifier, ProbeName,
+      ProbeType, ProbeReference, ProbeLocationName, ProbeLocationOntology,
+      CellTypeName, CellTypeOntology. One divergence: MATLAB preallocates
+      every column as cellstr, so ProbeReference is text there, where the port
+      carries the numeric reference (defaulting to 0 rather than ''). Nothing
+      else to port.
+
   - name: epoch (docTable)
     type: function
     matlab_path: "+ndi/+fun/+docTable/epoch.m"
+    matlab_last_sync_hash: "da478adc8"
     python_path: "ndi/fun/doc_table.py"
     python_qualified: "ndi.fun.doc_table.epoch"
     input_arguments:
@@ -658,9 +939,25 @@ functions:
 
       This entry previously read "Exact match", which it was not.
 
+      Examined against NDI-matlab da478adc8, the file's last-touching commit.
+      The column contract matches -- EpochNumber, EpochDocumentIdentifier,
+      ProbeDocumentIdentifier, SubjectDocumentIdentifier, MixtureName,
+      MixtureOntology, ApproachName, ApproachOntology -- and the mixture and
+      approach joins are present. ONE DIVERGENCE THAT CAN GIVE DIFFERENT
+      NUMBERS: MATLAB takes EpochNumber from the probe's own epochtable
+      (probeArray{i}.EpochNumber = num2cell(epochtable.epoch_number)), the
+      authoritative numbering. The port instead COUNTS, keeping a running
+      1-based tally per probe in the order the epochfiles_ingested documents
+      come back from database_search. Nothing guarantees that order, so the
+      numbers agree with MATLAB's only when the database happens to return the
+      documents in epoch order. Reading the probe's epochtable needs a probe
+      object rather than the ingested documents, so it is recorded here rather
+      than guessed at.
+
   - name: openminds (docTable)
     type: function
     matlab_path: "+ndi/+fun/+docTable/openminds.m"
+    matlab_last_sync_hash: "67e2c3c1c"
     python_path: "ndi/fun/doc_table.py"
     input_arguments:
       - name: session
@@ -703,9 +1000,31 @@ functions:
       available. MATLAB 'type' is a required positional arg;
       Python 'doc_type' is optional with default 'openminds'.
 
+      Examined against NDI-matlab 67e2c3c1c, the file's last-touching commit,
+      and it did NOT hold, in four ways at once. (1) `type` is an openMINDS
+      TYPE matched against openminds.openminds_type as
+      'https://openminds.om-i.org/types/<type>'; the port ran isa(type) -- an
+      isa query for a document class literally named e.g. 'Strain' -- so it
+      selected the wrong documents, usually none. (2) It read the row from
+      props[type] rather than props['openminds']['fields'], so every row came
+      back holding nothing but an id where MATLAB builds <type>Name and
+      <type>Ontology. (3) depends_on, depends_on_docs and allOpenMindsDocs
+      were accepted and never read, so MATLAB's optimised path -- filter the
+      pre-fetched documents by type, then by dependency -- did not exist. (4)
+      The third output took the FIRST entry of depends_on rather than the one
+      depends_on names, returning another document's id whenever a document
+      had more than one dependency. All four are fixed and covered by
+      tests/test_fun_doc_table_openminds.py. ONE HALF STILL NOT PORTED,
+      recorded rather than invented: MATLAB also walks each openMINDS field
+      holding NDI document references, resolves those documents, and adds a
+      <FieldName>Name / <FieldName>Ontology column pair for each -- the
+      expansion that fills in a Strain's species and background strains. It
+      needs real linked documents to get right.
+
   - name: treatment (docTable)
     type: function
     matlab_path: "+ndi/+fun/+docTable/treatment.m"
+    matlab_last_sync_hash: "74f3ef322"
     python_path: "ndi/fun/doc_table.py"
     input_arguments:
       - name: session
@@ -772,9 +1091,21 @@ functions:
 
       This entry previously read "Exact match", which it was not.
 
+      Examined against NDI-matlab 74f3ef322, the file's last-touching commit.
+      This one holds. The query covers treatment AND treatment_drug --
+      siblings, not sub- and superclass, which is where mixture_table lives
+      (issue #138); the dependency output uses the NAMED dependency rather
+      than the first, which is the bug the sibling entry openminds had; the
+      three DrugTreatmentMixture columns (Name, Ontology, Quantity) are
+      derived before hideMixtureTable is tested, as MATLAB does, so the flag
+      drops only the raw DrugTreatmentMixtureTable column and not the
+      expansion. Covered by tests/test_fun_doc_table_mixture.py. Nothing to
+      port.
+
   - name: subject (docTable)
     type: function
     matlab_path: "+ndi/+fun/+docTable/subject.m"
+    matlab_last_sync_hash: "c242a07f8"
     python_path: "ndi/fun/doc_table.py"
     python_qualified: "ndi.fun.doc_table.subject"
     input_arguments:
@@ -793,6 +1124,19 @@ functions:
       True) matching MATLAB. When True, mixture-related columns are
       excluded from the subject summary table.
 
+      Examined against NDI-matlab c242a07f8, the file's last-touching commit,
+      and one column was NAMED WRONG. MATLAB builds its first three columns as
+      {'SessionIdentifier', 'SubjectDocumentIdentifier',
+      'SubjectLocalIdentifier'}; the port emitted SessionDocumentIdentifier
+      for the first. Same value, different key, so a caller written against
+      either table raises KeyError on the other. Renamed to MATLAB's spelling;
+      nothing outside this module referenced it. The remaining columns -- the
+      Strain/Species/GeneticStrainType/ BackgroundStrain/BiologicalSex pairs
+      joined from openminds documents, and the treatment columns -- carry
+      MATLAB's names. Column ORDER still differs: MATLAB puts
+      SessionIdentifier first, the port puts SubjectDocumentIdentifier first,
+      which pandas callers select by name rather than position.
+
   # =========================================================================
   # Functions — epoch.py
   # MATLAB: +ndi/+fun/+epoch/*.m
@@ -801,6 +1145,7 @@ functions:
   - name: epochid2element
     type: function
     matlab_path: "+ndi/+fun/+epoch/epochid2element.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/epoch.py"
     input_arguments:
       - name: session
@@ -825,9 +1170,33 @@ functions:
       uses 'element_name' and 'element_type' (Pythonized to avoid
       shadowing builtins). Finds elements containing specified epoch IDs.
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit,
+      AND IT COULD NOT FIND ANYTHING. It read the epoch table out of the
+      stored element DOCUMENTS, from a field element.epoch_table that DOES NOT
+      EXIST: it appears in no document schema in ndi_common, and nothing in
+      this tree ever writes one. So the lookup came back empty for every epoch
+      id ever passed in. MATLAB asks the ELEMENT OBJECT for its epochtable(),
+      which is built from the epoch files, and so does this now, through
+      session.getelements() as MATLAB does. THE TYPE FILTER WAS ALSO DEAD. It
+      compared element_type against class names read from
+      document_class.class_list -- another key element documents do not have
+      -- so the list searched was always empty and EVERY element was skipped
+      whenever a type was given. MATLAB filters on element.type, and the
+      filters now go to getelements as element.name and element.type. And
+      MATLAB WARNS naming every epoch id no element claims; the port returned
+      empty lists in silence. THE SIBLING ENTRY filename2epochid HAS THE SAME
+      DEFECT and its record understates it: it reads daqsystem.epoch_table,
+      which is equally absent from every schema, so it too returns nothing for
+      every input. Left for its own change rather than edited from here, since
+      that entry's record is being written on another branch. Two structural
+      differences that stand: MATLAB returns a cell array the same size as the
+      input where this returns a dict keyed by epoch id, and MATLAB drives a
+      ProgressBarWindow that has no counterpart in a headless port.
+
   - name: filename2epochid
     type: function
     matlab_path: "+ndi/+fun/+epoch/filename2epochid.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/epoch.py"
     input_arguments:
       - name: session
@@ -843,9 +1212,20 @@ functions:
       Exact match. Maps filenames to their epoch IDs by searching
       DAQ epoch tables.
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Two divergences, both structural rather than wrong. MATLAB returns a
+      cell array the same size as the filename input, one entry per filename;
+      the port returns a dict keyed by filename, which is the same information
+      in the shape a Python caller indexes. And MATLAB reads the LIVE
+      epochtable of each loaded daqsystem (session.daqsystem_load, then
+      dev{d}.epochtable) where the port reads daqsystem.epoch_table out of the
+      stored daq_system documents -- the same table when the documents are
+      current, and stale when they are not.
+
   - name: t0_t1cell2array
     type: function
     matlab_path: "+ndi/+fun/+doc/t0_t1cell2array.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/epoch.py"
     input_arguments:
       - name: t0t1_in
@@ -865,6 +1245,15 @@ functions:
       output. Corrected as part of the issue #100 part 3 orientation
       decision (adopt MATLAB's 2 x N as the wire form).
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Exact: each interval becomes a column, so result[:, k] is [t0_k, t1_k],
+      matching element_epoch.t0_t1's schema of 2 rows by N columns. MATLAB
+      indexes t0t1_in{1,k}, which assumes the 1xN row cell an epochtable
+      produces; the port iterates the sequence, which accepts the same input
+      and also a plain list. The port additionally returns an empty (2,0)
+      array for empty input where MATLAB's zeros(2,0) does the same. Nothing
+      to port.
+
   # =========================================================================
   # Functions — file.py
   # MATLAB: +ndi/+fun/+file/*.m
@@ -873,6 +1262,7 @@ functions:
   - name: MD5
     type: function
     matlab_path: "+ndi/+fun/+file/MD5.m"
+    matlab_last_sync_hash: "c413ebf36"
     python_path: "ndi/fun/file.py"
     input_arguments:
       - name: file_path
@@ -885,9 +1275,17 @@ functions:
       Exact match. Computes MD5 checksum of a file. Returns
       32-character lowercase hex digest.
 
+      Examined against NDI-matlab c413ebf36, the file's last-touching commit.
+      Same result by a better route: MATLAB shells out per platform (CertUtil
+      on Windows, md5 on macOS, md5sum on Linux) and parses the output, where
+      the port uses hashlib and reads the file in 8 KiB chunks. Both return
+      the 32-character lowercase digest and both refuse a missing file.
+      Nothing to port.
+
   - name: dateCreated
     type: function
     matlab_path: "+ndi/+fun/+file/dateCreated.m"
+    matlab_last_sync_hash: "5e97cdeaf"
     python_path: "ndi/fun/file.py"
     input_arguments:
       - name: file_path
@@ -902,9 +1300,23 @@ functions:
       st_birthtime on macOS, falls back to st_ctime elsewhere.
       Returns UTC datetime or None if unavailable.
 
+      Examined against NDI-matlab 5e97cdeaf, the file's last-touching commit,
+      and THE TWO DISAGREE ON LINUX. MATLAB asks `stat -c %w` for the birth
+      time and returns NaT when the filesystem does not record one, which is
+      most Linux filesystems -- its documented contract is "NaT if the date
+      cannot be determined". The port falls back to st_ctime, the
+      metadata-CHANGE time, and returns it as if it were the creation date;
+      its own docstring says "Linux: metadata change". So MATLAB says "I do
+      not know" and this returns a plausible wrong answer. Not changed here:
+      tests/test_fun.py::test_date_created asserts a non-None result, which on
+      Linux would then fail while still passing on macOS, and whether
+      best-effort or honest-unknown is wanted is a product decision. macOS
+      agrees on both sides via st_birthtime.
+
   - name: dateUpdated
     type: function
     matlab_path: "+ndi/+fun/+file/dateUpdated.m"
+    matlab_last_sync_hash: "5e97cdeaf"
     python_path: "ndi/fun/file.py"
     input_arguments:
       - name: file_path
@@ -917,6 +1329,14 @@ functions:
     decision_log: >
       Exact match. Gets the last modification date of a file.
       Returns UTC datetime or None if file doesn't exist.
+
+      Examined against NDI-matlab 5e97cdeaf, the file's last-touching commit.
+      Same instant, different representation: MATLAB converts dir().datenum
+      with 'ConvertFrom','datenum', giving a datetime with NO timezone --
+      local time -- where the port returns a UTC-aware datetime from st_mtime.
+      A caller comparing the two must attach a zone to MATLAB's. MATLAB also
+      special-cases a folder by taking the '.' entry of its listing; stat
+      needs no such workaround. Nothing to port.
 
   - name: pathSafeName
     type: function
@@ -1016,6 +1436,7 @@ functions:
   - name: bar3
     type: function
     matlab_path: "+ndi/+fun/+plot/bar3.m"
+    matlab_last_sync_hash: "97459ba8a"
     python_path: "ndi/fun/plot.py"
     input_arguments:
       - name: data_table
@@ -1034,9 +1455,26 @@ functions:
       Exact match. Creates a 3-way grouped bar chart from table data.
       grouping_variables must have exactly 3 elements.
 
+      Examined against NDI-matlab 97459ba8a, the file's last-touching commit,
+      AND IT COULD NOT RUN AT ALL. plt.cm.get_cmap was REMOVED in matplotlib
+      3.9, so the colour lookup raised AttributeError on every call under any
+      current install; plt.get_cmap is the supported spelling and has been
+      since 3.5. Fixed. Two smaller divergences fixed alongside. Categories
+      were sorted with key=str, so numeric grouping values ordered 10 before 2
+      where MATLAB's unique on a table column sorts in the column's own order
+      -- now sorted naturally, falling back to str only for genuinely mixed
+      types. And bar heights used np.nanmean where MATLAB uses mean(), which
+      PROPAGATES NaN: a group holding one missing value quietly reported the
+      mean of the rest instead of showing no bar. The rest holds -- the
+      subplot per first variable, the x position (j-1)*(n3+1)+k, the tick
+      positions, the legend on the last subplot. MATLAB's palette is lines(N)
+      and this uses tab10; both are "a distinct colour per inner group", which
+      is what MATLAB's comment asks for.
+
   - name: multichan
     type: function
     matlab_path: "+ndi/+fun/+plot/multichan.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/plot.py"
     input_arguments:
       - name: data
@@ -1055,9 +1493,18 @@ functions:
     decision_log: >
       Exact match. Plots multiple channels of data with vertical spacing.
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Seventeen lines and they match: one line per column of data, offset by
+      (i-1)*space in MATLAB's 1-based loop and i*space in Python's 0-based one
+      -- the same offsets -- in the same grey [0.7 0.7 0.7], returning one
+      handle per channel. The port also reshapes a 1-D input to a single
+      column, which MATLAB's size(data,2) already treats as one channel.
+      Nothing to port.
+
   - name: stimulusTimeseries
     type: function
     matlab_path: "+ndi/+fun/+plot/stimulusTimeseries.m"
+    matlab_last_sync_hash: "0b39ad6c6"
     python_path: "ndi/fun/plot.py"
     input_arguments:
       - name: stimulus_probe
@@ -1118,6 +1565,17 @@ functions:
       Exact match. Python kwargs now use MATLAB option names: FontSize,
       FontWeight, FontColor, HorizontalAlignment, textycoord.
 
+      Examined against NDI-matlab 0b39ad6c6, the file's last-touching commit.
+      Holds. The whole option set is present with the same defaults --
+      linewidth 2, black line and text, FontSize 12, 'normal' weight, 'center'
+      alignment, textycoord defaulting to y+1 -- the same four outputs come
+      back, and the same refusal when the time structure carries no
+      stimon/stimoff. ONE STRUCTURAL DIFFERENCE, and it is unavoidable: MATLAB
+      assembles a name/value list and hands the drawing to
+      vlt.neuro.stimulus.plot_stimulus_timeseries, which has no Python
+      counterpart, so the port draws the bars and the labels itself. Nothing
+      to port.
+
   # =========================================================================
   # Functions — session.py
   # MATLAB: +ndi/+fun/+session/diff.m
@@ -1166,6 +1624,7 @@ functions:
   - name: tuning_curve_to_response_type
     type: function
     matlab_path: "+ndi/+fun/+stimulus/tuning_curve_to_response_type.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/stimulus.py"
     input_arguments:
       - name: session
@@ -1188,9 +1647,24 @@ functions:
       Exact match for the 2-arg form. Python adds an optional
       response_index parameter not present in MATLAB.
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      The two-step shape was right -- follow stimulus_response_scalar_id to
+      finish, or stimulus_tuningcurve_id to recurse -- but two details were
+      not. MATLAB looks each dependency up BY NAME through dependency_value;
+      the port matched the name as a SUBSTRING ('stimulus_response_scalar' in
+      dep_name), so a numbered variant such as stimulus_response_scalar_id_2
+      matched too, and it took whichever came first in the depends_on list
+      rather than the one named. That is the same defect the docTable
+      openminds entry had. And MATLAB ERRORS when the dependent document does
+      not resolve to exactly one, or when response_type is missing from it;
+      the port returned ('', None) and moved on, so a database that cannot
+      resolve a dependency it declares looked like a document that has none.
+      Both ported.
+
   - name: f0_f1_responses
     type: function
     matlab_path: "+ndi/+fun/+stimulus/f0_f1_responses.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/stimulus.py"
     input_arguments:
       - name: session
@@ -1220,9 +1694,35 @@ functions:
       Exact match. Python now returns 4 separate outputs matching
       MATLAB: (f0, f1, f0_tuningcurve_doc, f1_tuningcurve_doc).
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit,
+      AND THE POINT OF THE FUNCTION WAS MISSING. F0 and F1 live in SEPARATE
+      stimulus_tuningcurve documents. MATLAB, given either one, finds the
+      other: it queries the stimulus_response_scalar documents on the same
+      element_id, the same stimulator_epochid and element_epochid, and the
+      OPPOSITE response_type; then the tuning curves depending on any of
+      those; then the one whose independent_variable_label matches. It reads
+      both curves through tuning_response.tuningcurvedoc2vhlabrespstruct and
+      returns both values at ONE stimulus index -- chosen, when the caller
+      gives none, as the location of the larger of the two peaks. The port did
+      none of that. It read one value out of the document it was handed and
+      returned None for the other, so one of the pair was always absent and
+      the two could never be compared -- which is the entire reason the
+      function exists. It also read stimulus_tuningcurve.responses directly
+      rather than the curve, and returned None where MATLAB returns NaN.
+      Ported in full, against the existing Python
+      tuningcurvedoc2vhlabrespstruct; covered by
+      tests/test_fun_plot_stimulus_against_matlab.py. TWO MATLAB QUIRKS NOT
+      COPIED. Its first switch matches lower(rt) against 'f1' while the second
+      matches rt against 'F1', so a lower-case 'f1' passes the first and falls
+      through the second, leaving f0_tuning_curve unset; the port compares
+      case-insensitively throughout. And after warning about too many matches
+      MATLAB truncates to one and then tests for more than one again, which
+      cannot fire.
+
   - name: findMixtureName
     type: function
     matlab_path: "+ndi/+fun/+stimulus/findMixtureName.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/stimulus.py"
     input_arguments:
       - name: dictionary_path
@@ -1239,9 +1739,31 @@ functions:
       Exact match. Matches mixture against a JSON mixture dictionary.
       Returns list of matching entry names from the dictionary.
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit,
+      and THE MATCHING RULE WAS THE WRONG ONE. MATLAB is all(entryMatch) where
+      each entryMatch(j) = any(mixtureMatch): every component of a dictionary
+      entry must find SOME element of the mixture that matches it on all five
+      fields. The mixture may hold more. The port required len(entry) ==
+      len(mixture), skipping anything else outright, then paired the two lists
+      sorted by name and compared them one to one -- so an entry that is a
+      subset of the mixture never matched, and two components sharing a name
+      paired arbitrarily. Worse, `if not isinstance(entry_components, list):
+      continue` meant a ONE-COMPONENT entry could never match at all:
+      jsondecode gives MATLAB a scalar struct there, which it wraps, while
+      json.load gives a dict, which this skipped. And every field was compared
+      as a STRING, so 1 and 1.0 -- a JSON integer and a JSON float for the
+      same quantity -- were different. All ported. ONE PLACE MORE PERMISSIVE
+      THAN MATLAB, deliberately: numeric TEXT is accepted on either side of
+      the value comparison. MATLAB's eq('0.9', 0.9) compares char codes and
+      returns a 1x3 logical, which the following && rejects, so MATLAB errors
+      on that input rather than defining an answer -- and a mixture read out
+      of a table or a CSV carries its values as text. There was an existing
+      test asserting that a string value matches its number; it still passes.
+
   - name: stimulustemporalfrequency
     type: function
     matlab_path: "+ndi/+fun/stimulustemporalfrequency.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/stimulus.py"
     input_arguments:
       - name: stimulus_parameters
@@ -1282,6 +1804,23 @@ functions:
       not cost the frequencies of the rest; the caller still gets
       (None, "") when nothing matches.
 
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit.
+      This one was already examined and repaired -- the docstring records that
+      it used to read a file name and rule keys that do not exist, and
+      returned (None, '') for every stimulus ever passed to it -- and the
+      repair holds against MATLAB: the same shipped
+      ndi_common/stimulus/ndi_stimulusparameters2temporalfrequency.json, the
+      same five rule keys, the same adder + multiplier * value, the same 1/x
+      when isPeriod, the same optional parameterMultiplier lookup, rules tried
+      in file order with the first match winning. Verified live: the shipped
+      file has three rules and a tFrequency of 4.0 comes back as 4.0. ONE
+      DELIBERATE DIVERGENCE, already documented in the function: MATLAB ERRORS
+      on a malformed rule, a non-numeric value, a zero period or a missing
+      multiplier parameter, where the port skips that rule and tries the next,
+      so one bad entry does not cost a stimulus set every frequency in it. The
+      port also takes an optional config_path that MATLAB has no counterpart
+      for. Nothing further to port.
+
   - name: stimulus_tuningcurve_log
     type: function
     matlab_path: "+ndi/+fun/+calc/stimulus_tuningcurve_log.m"
@@ -1320,6 +1859,7 @@ functions:
   - name: identifyMatchingRows
     type: function
     matlab_path: "+ndi/+fun/+table/identifyMatchingRows.m"
+    matlab_last_sync_hash: "227088a01"
     python_path: "ndi/fun/table.py"
     input_arguments:
       - name: df
@@ -1348,9 +1888,30 @@ functions:
       matching MATLAB option names. Removed legacy 'mode' positional
       parameter.
 
+      Examined against NDI-matlab 227088a01, the file's last-touching commit,
+      and this one did NOT hold in three ways, all now fixed. (1) THE SILENT
+      ONE: the port chose string-vs-numeric matching from the COLUMN's dtype,
+      where MATLAB chooses from the MATCH VALUE's type (ischar(matchVal) /
+      isnumeric(matchVal) -- it never inspects the column). Against an
+      object-dtype column of numbers, which pandas produces routinely from
+      mixed data, numericMatch='gt' took the string path and returned the rows
+      EQUAL to the threshold instead of those above it. No error, just the
+      wrong rows. (2) The multi-value form MATLAB's own help documents,
+      identifyMatchingRows(T,'col',{{'a','b','c'}}), raised "Lengths must
+      match to compare": MATLAB ORs the alternatives for one column, the port
+      compared the Series against the whole list. (3) A column not in the
+      table raised KeyError, where MATLAB warns
+      identifyMatchingRows:ColumnNotFound and sets the whole index false. Also
+      adds string_match / numeric_match as snake_case spellings, per this
+      project's cross-language naming convention;
+      tests/matlab_tests/test_jess_haley.py already called them that way and
+      would have failed with TypeError had a module-level dataset skip not
+      been hiding it. Covered by tests/test_fun_table.py.
+
   - name: identifyValidRows
     type: function
     matlab_path: "+ndi/+fun/+table/identifyValidRows.m"
+    matlab_last_sync_hash: "a642da55f"
     python_path: "ndi/fun/table.py"
     input_arguments:
       - name: df
@@ -1373,9 +1934,32 @@ functions:
       matching MATLAB argument names. Python default for invalidValues
       is None (matches MATLAB NaN semantic).
 
+      Examined against NDI-matlab a642da55f, the file's last-touching commit,
+      and this one did NOT hold. Passing NaN as invalidValues returned EVERY
+      row valid: the port compared with `df[col] != invalidValues`, and NaN
+      never equals itself, so the test was True even on the NaN rows -- the
+      exact opposite of what was asked. MATLAB gives NaN and NaT their own
+      branches (isnumeric && isnan, isdatetime && isnat) for precisely this
+      reason, and {NaN} is its DEFAULT invalidValues, so it is the value a
+      caller is most likely to pass explicitly. Fixed, with a missing column
+      now warning as MATLAB's identifyValidRows:InvalidVariableName does
+      rather than being skipped in silence. TWO DIVERGENCES LEFT AS THEY ARE.
+      With no checkVariables MATLAB returns true(height,1) immediately --
+      every row valid, no filtering -- where this port checks EVERY column, so
+      `identifyValidRows(df)` can return far fewer rows here than there. That
+      behaviour is asserted by
+      tests/test_phase1_gaps.py::test_identify_valid_rows and matches the
+      port's own `columns=` idiom, so it is a deliberate API choice rather
+      than a slip -- but it is a real difference and a caller moving between
+      the two languages must know it. And MATLAB accepts one invalidValue PER
+      checkVariable (broadcasting a scalar, erroring
+      identifyValidRows:VariableValueMismatch on a length mismatch) where this
+      takes a single sentinel for all columns.
+
   - name: join
     type: function
     matlab_path: "+ndi/+fun/+table/join.m"
+    matlab_last_sync_hash: "b33d8ce64"
     python_path: "ndi/fun/table.py"
     python_qualified: "ndi.fun.table.join"
     input_arguments:
@@ -1395,9 +1979,25 @@ functions:
       as keys. Performs inner merge on common columns. MATLAB option
       name is uniqueVariables; Python uses unique_variables.
 
+      Examined against NDI-matlab b33d8ce64, the file's last-touching commit.
+      The inner join over common columns, and the uniqueVariables aggregation
+      that collapses each group's other columns, both match; MATLAB's explicit
+      re-sort by ileft is unnecessary here because pandas merge already
+      preserves the left frame's order. ONE DIVERGENCE RECORDED RATHER THAN
+      CHANGED: when two tables share NO columns, MATLAB's innerjoin errors,
+      while this port falls back to pd.concat and stacks them VERTICALLY -- a
+      different operation returned silently, with NaN filling both blocks.
+      Whether that fallback is wanted is a caller-facing decision rather than
+      a porting slip, so it is written down here rather than removed. MATLAB
+      also errors join:InvalidUniqueVariables for a uniqueVariable absent from
+      the combined table, where a pandas groupby raises KeyError -- same
+      refusal, different exception -- and rejects an empty tables list via
+      mustBeNonempty, where this returns an empty frame.
+
   - name: moveColumnsLeft
     type: function
     matlab_path: "+ndi/+fun/+table/moveColumnsLeft.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/table.py"
     input_arguments:
       - name: df
@@ -1412,9 +2012,19 @@ functions:
     decision_log: >
       Exact match. Moves specified columns to the left of the DataFrame.
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit
+      (the src/ layout move; unchanged since). Behaviour matches: the named
+      columns move to the front keeping the order they were given, and the
+      rest keep their relative order. MATLAB reaches that with two movevars
+      calls (to the end, then before the new first variable); the port
+      reorders directly, which is the same result. One divergence: MATLAB's
+      movevars errors on a column name the table does not have, where this
+      filters it out silently. Nothing to port.
+
   - name: vstack
     type: function
     matlab_path: "+ndi/+fun/+table/vstack.m"
+    matlab_last_sync_hash: "b1d8a6f6c"
     python_path: "ndi/fun/table.py"
     input_arguments:
       - name: tables
@@ -1428,6 +2038,18 @@ functions:
       Exact match. Vertically stacks DataFrames with dissimilar
       columns. Discovers union of all column names and fills missing
       with NaN.
+
+      Examined against NDI-matlab b1d8a6f6c, the file's last-touching commit.
+      pd.concat(..., sort=False) already does what MATLAB's 236 lines achieve:
+      the union of columns in first-encounter order, with missing cells
+      filled. Most of that length is MATLAB working around table limitations
+      pandas does not have -- typed empty prototypes per variable, and
+      multi-column variables, which have no pandas counterpart. Divergences,
+      none behavioural enough to change: MATLAB errors
+      vstack:InvalidCellContent for a non-table element and requires a
+      non-empty cell array, where this leaves both to pandas or returns an
+      empty frame; and MATLAB returns a single input table untouched where
+      concat resets the index. Nothing to port.
 
 # =========================================================================
 # Functions — ensemble.py, ensemble_db.py
@@ -2200,6 +2822,7 @@ functions:
 
   - name: storeDoc
     matlab_path: "+ndi/+fun/+doc/+gene/private/storeDoc.m"
+    matlab_last_sync_hash: "c32e1ace2"
     python_path: "ndi/fun/doc_gene.py"
     python_name: "_store_doc"
     decision_log: >
@@ -2210,6 +2833,19 @@ functions:
       creation through it, which is why it is recorded here rather than
       treated as an implementation detail: if the two ever disagree about
       how a document enters the database, they disagree everywhere at once.
+
+      Examined against NDI-matlab c32e1ace2, the file's last-touching commit.
+      Holds. The Python counterpart is _store_doc in ndi/fun/doc_gene.py, and
+      it is the same one place every maker routes through: the same length
+      check with the same message, the same refusal of a file that is not on
+      disk, the same add_file-then-database_add order, and the same ingestion
+      contract (the originals may be deleted once the database has copied
+      them). ONE ORDERING DIFFERENCE, with no difference in outcome: MATLAB
+      calls doc.is_in_file_list explicitly before add_file so it can raise
+      NDI:gene:storeDoc:notInFileList with its own message, where add_file
+      here performs the same check internally and raises ValueError with the
+      message _is_in_file_list produced. Both refuse a name the document does
+      not declare. Nothing to port.
 
   - name: readCells
     matlab_path: "+ndi/+fun/+doc/+gene/readCells.m"

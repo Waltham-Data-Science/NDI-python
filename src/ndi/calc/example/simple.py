@@ -54,12 +54,24 @@ class ndi_calc_example_simple(ndi_calculator):
         """
         from ...document import ndi_document
 
-        input_params = parameters.get("input_parameters", {})
+        # MATLAB validates with ndi.validators.mustHaveFields(parameters,
+        # {'input_parameters','depends_on'}) and then reads
+        # input_parameters.answer directly, so a missing field is an error
+        # there. Here every read was a .get() with a default, so
+        # calculate({}) produced a perfectly well-formed document asserting
+        # that the answer is 0.
+        missing = [f for f in ("input_parameters", "depends_on") if f not in parameters]
+        if missing:
+            raise ValueError(f"parameters must have fields {missing}.")
+
+        input_params = parameters["input_parameters"]
+        if "answer" not in input_params:
+            raise ValueError("parameters.input_parameters must have field 'answer'.")
 
         # Build the simple_calc content
         simple_calc_data = {
             "input_parameters": input_params,
-            "answer": input_params.get("answer", 0),
+            "answer": input_params["answer"],
         }
 
         # Create document using full schema path

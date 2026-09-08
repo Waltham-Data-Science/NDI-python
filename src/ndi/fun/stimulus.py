@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import math
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -34,42 +35,34 @@ def tuning_curve_to_response_type(
     """
     from ndi.query import ndi_query
 
-    props = doc.document_properties if hasattr(doc, "document_properties") else doc
-    if not isinstance(props, dict):
-        return "", None
-
-    depends = props.get("depends_on", [])
-
-    # Look for stimulus_response_scalar dependency
-    for dep in depends:
-        if not isinstance(dep, dict):
+    # MATLAB checks these two dependencies BY NAME, in this order, and acts
+    # differently on each: the scalar finishes the lookup, the tuning curve
+    # recurses. Matching the name as a SUBSTRING, as this did, also matched
+    # numbered variants such as stimulus_response_scalar_id_2 and took
+    # whichever came first in the list rather than the one named.
+    for dependency_name, action in (
+        ("stimulus_response_scalar_id", "finish"),
+        ("stimulus_tuningcurve_id", "recursive"),
+    ):
+        value = _dependency_value(doc, dependency_name)
+        if not value:
             continue
-        dep_name = dep.get("name", "")
-        dep_value = dep.get("value", "")
-        if "stimulus_response_scalar" in dep_name and dep_value:
-            results = session.database_search(ndi_query("base.id") == dep_value)
-            if results:
-                scalar_doc = results[0]
-                sp = (
-                    scalar_doc.document_properties
-                    if hasattr(scalar_doc, "document_properties")
-                    else scalar_doc
-                )
-                if isinstance(sp, dict):
-                    rt = sp.get("stimulus_response_scalar", {}).get("response_type", "")
-                    if rt:
-                        return rt, scalar_doc
 
-    # Look for stimulus_tuningcurve dependency (recurse)
-    for dep in depends:
-        if not isinstance(dep, dict):
-            continue
-        dep_name = dep.get("name", "")
-        dep_value = dep.get("value", "")
-        if "stimulus_tuningcurve" in dep_name and dep_value:
-            results = session.database_search(ndi_query("base.id") == dep_value)
-            if results:
-                return tuning_curve_to_response_type(session, results[0])
+        found = session.database_search(ndi_query("base.id", "exact_string", value))
+        # MATLAB errors here rather than moving on; a database that cannot
+        # resolve a dependency it declares is not a document without one.
+        if len(found) != 1:
+            raise ValueError(f"Could not find dependent doc {value}.")
+
+        if action == "recursive":
+            return tuning_curve_to_response_type(session, found[0])
+
+        response_type = (
+            _properties(found[0]).get("stimulus_response_scalar", {}).get("response_type")
+        )
+        if not response_type:
+            raise ValueError("Could not find field 'response_type' in document.")
+        return response_type, found[0]
 
     return "", None
 
@@ -78,46 +71,266 @@ def f0_f1_responses(
     session: Any,
     doc: Any,
     response_index: int | None = None,
-) -> tuple[Any, Any, Any | None, Any | None]:
-    """Extract F0 and F1 responses for a tuning curve.
+) -> tuple[float, float, Any | None, Any | None]:
+    """Get the F0 and F1 responses for a tuning curve document.
 
     MATLAB equivalent: ndi.fun.stimulus.f0_f1_responses
 
+    The point of this function is that F0 and F1 live in SEPARATE tuning
+    curve documents. Given either one, it finds the other -- same element,
+    same stimulator and element epochs, opposite response type, matching
+    independent variable -- and reads both at the same stimulus index.
+
+    The previous implementation never looked the partner up. It read one
+    value out of the document it was handed and returned ``None`` for the
+    other, so one of ``f0``/``f1`` was always absent and the pair could
+    never be compared, which is the entire purpose.
+
     Args:
         session: NDI session instance.
-        doc: A tuning curve document.
-        response_index: Stimulus index (0-based). If None, uses max response.
+        doc: A ``stimulus_tuningcurve`` document, or one with a
+            ``stimulus_tuningcurve_id`` dependency.
+        response_index: Stimulus index (0-based here; MATLAB's is 1-based).
+            If None, the index of the larger of the two peak responses is
+            used, as MATLAB does.
 
     Returns:
-        Tuple of ``(f0, f1, f0_tuningcurve_doc, f1_tuningcurve_doc)``
-        where *f0* and *f1* are the response values (or None), and
-        *f0_tuningcurve_doc* and *f1_tuningcurve_doc* are the
-        corresponding tuning curve documents (or None).
+        Tuple of ``(f0, f1, f0_tuningcurve_doc, f1_tuningcurve_doc)``.
+        The two values are ``nan`` and the two documents ``None`` when no
+        partner curve exists, matching MATLAB's initial values.
+
+    Raises:
+        ValueError: If *doc* is neither a tuning curve nor carries a
+            ``stimulus_tuningcurve_id``, if the response type is neither
+            mean nor F1, or if no partner curve is found.
     """
+    import numpy as np
+
+    from ndi.app.stimulus.tuning_response import ndi_app_stimulus_tuning__response
+    from ndi.query import ndi_query
+
     response_type, scalar_doc = tuning_curve_to_response_type(session, doc)
 
-    props = doc.document_properties if hasattr(doc, "document_properties") else doc
-    if not isinstance(props, dict):
-        return None, None, None, None
-
-    tc_data = props.get("stimulus_tuningcurve", {})
-    responses = tc_data.get("responses", [])
-
-    if not responses:
-        return None, None, None, None
-
-    if response_index is not None and 0 <= response_index < len(responses):
-        val = responses[response_index]
+    # Pass 1: find the tuning curve associated with the document we were given.
+    if _doc_isa(doc, "stimulus_tuningcurve"):
+        tc_doc = doc
     else:
-        # Use max
-        val = max(responses) if responses else None
+        dependency = _dependency_value(doc, "stimulus_tuningcurve_id")
+        if not dependency:
+            raise ValueError(
+                "doc is not a stimulus_tuningcurve and has no "
+                "'stimulus_tuningcurve_id' dependency."
+            )
+        found = session.database_search(ndi_query("base.id", "exact_string", dependency))
+        if len(found) != 1:
+            raise ValueError(f"Could not find dependent doc {dependency}.")
+        tc_doc = found[0]
 
-    f0 = val if response_type == "mean" else None
-    f1 = val if response_type == "F1" else None
-    f0_doc = doc if response_type == "mean" else None
-    f1_doc = doc if response_type == "F1" else None
+    normalized = str(response_type).lower()
+    if normalized == "mean":
+        f0_curve_doc, f1_curve_doc = tc_doc, None
+        target_response_type = "F1"
+    elif normalized == "f1":
+        f0_curve_doc, f1_curve_doc = None, tc_doc
+        target_response_type = "mean"
+    else:
+        raise ValueError(f"Unknown response type (expected mean or F1): {response_type}")
 
-    return f0, f1, f0_doc, f1_doc
+    partner = _find_partner_tuning_curve(session, tc_doc, scalar_doc, target_response_type)
+    if partner is None:
+        return float("nan"), float("nan"), None, None
+
+    if f0_curve_doc is None:
+        f0_curve_doc = partner
+    else:
+        f1_curve_doc = partner
+
+    to_struct = ndi_app_stimulus_tuning__response.tuningcurvedoc2vhlabrespstruct
+    resp_f0 = to_struct(f0_curve_doc)
+    resp_f1 = to_struct(f1_curve_doc)
+
+    # Row 1 (MATLAB's row 2) of `curve` is the mean response.
+    curve_f0 = np.asarray(resp_f0["curve"])[1]
+    curve_f1 = np.asarray(resp_f1["curve"])[1]
+
+    if response_index is None:
+        peak_f0, at_f0 = float(np.nanmax(curve_f0)), int(np.nanargmax(curve_f0))
+        peak_f1, at_f1 = float(np.nanmax(curve_f1)), int(np.nanargmax(curve_f1))
+        response_index = at_f0 if peak_f0 > peak_f1 else at_f1
+
+    return (
+        float(curve_f0[response_index]),
+        float(curve_f1[response_index]),
+        f0_curve_doc,
+        f1_curve_doc,
+    )
+
+
+def _find_partner_tuning_curve(
+    session: Any,
+    tc_doc: Any,
+    scalar_doc: Any,
+    target_response_type: str,
+) -> Any | None:
+    """The tuning curve of the opposite response type, or None.
+
+    MATLAB's search: stimulus_response_scalar documents on the same element,
+    the same stimulator and element epochs, and the target response type;
+    then the stimulus_tuningcurve documents depending on any of those; then
+    the one whose independent_variable_label matches.
+    """
+    from ndi.query import ndi_query
+
+    scalar_properties = _properties(scalar_doc)
+    stimulus_response = scalar_properties.get("stimulus_response", {})
+    if not isinstance(stimulus_response, dict):
+        return None
+
+    element_id = _dependency_value(tc_doc, "element_id")
+
+    candidates = session.database_search(
+        ndi_query("", "depends_on", "element_id", element_id)
+        & ndi_query("", "isa", "stimulus_response_scalar")
+        & ndi_query(
+            "stimulus_response.stimulator_epochid",
+            "exact_string",
+            stimulus_response.get("stimulator_epochid", ""),
+        )
+        & ndi_query(
+            "stimulus_response.element_epochid",
+            "exact_string",
+            stimulus_response.get("element_epochid", ""),
+        )
+        & ndi_query(
+            "stimulus_response_scalar.response_type",
+            "exact_string",
+            target_response_type,
+        )
+    )
+    if not candidates:
+        return None
+
+    depends_query = None
+    for candidate in candidates:
+        one = ndi_query("", "depends_on", "stimulus_response_scalar_id", _doc_id(candidate))
+        depends_query = one if depends_query is None else (depends_query | one)
+
+    tc_candidates = session.database_search(
+        depends_query & ndi_query("", "isa", "stimulus_tuningcurve")
+    )
+
+    wanted = _properties(tc_doc).get("stimulus_tuningcurve", {}).get("independent_variable_label")
+    matches = [
+        c
+        for c in tc_candidates
+        if _properties(c).get("stimulus_tuningcurve", {}).get("independent_variable_label")
+        == wanted
+    ]
+
+    if not matches:
+        raise ValueError(f"No corresponding {target_response_type} found.")
+    if len(matches) > 1:
+        warnings.warn(
+            f"Too many {target_response_type} found ({len(matches)}).",
+            stacklevel=2,
+        )
+    return matches[0]
+
+
+def _properties(doc: Any) -> dict[str, Any]:
+    props = getattr(doc, "document_properties", doc)
+    return props if isinstance(props, dict) else {}
+
+
+def _doc_id(doc: Any) -> str:
+    doc_id = getattr(doc, "id", None)
+    if callable(doc_id):
+        doc_id = doc_id()
+    if doc_id:
+        return str(doc_id)
+    return str(_properties(doc).get("base", {}).get("id", ""))
+
+
+def _doc_isa(doc: Any, document_class: str) -> bool:
+    checker = getattr(doc, "doc_isa", None)
+    if callable(checker):
+        return bool(checker(document_class))
+    return document_class in _properties(doc)
+
+
+def _dependency_value(doc: Any, name: str) -> str:
+    getter = getattr(doc, "dependency_value", None)
+    if callable(getter):
+        try:
+            return getter(name, error_if_not_found=False) or ""
+        except TypeError:
+            pass
+    for dep in _properties(doc).get("depends_on", []) or []:
+        if isinstance(dep, dict) and dep.get("name") == name:
+            return str(dep.get("value", ""))
+    return ""
+
+
+#: The five fields findMixtureName compares, in MATLAB's order.
+MIXTURE_COMPARE_FIELDS = ("ontologyName", "name", "value", "ontologyUnit", "unitName")
+
+
+def _as_component_list(value: Any) -> list[dict[str, Any]]:
+    """Normalise a mixture or dictionary entry to a list of components.
+
+    MATLAB accepts a scalar struct, a struct array or a table, and wraps a
+    scalar for uniform iteration. jsondecode turns a lone JSON object into a
+    scalar struct, so a one-component dictionary entry arrives here as a
+    plain dict -- which the previous implementation skipped outright with
+    ``if not isinstance(entry_components, list): continue``, so no
+    single-component entry could ever match.
+    """
+    if isinstance(value, dict):
+        return [value]
+    if isinstance(value, list):
+        return [v for v in value if isinstance(v, dict)]
+    return []
+
+
+def _as_number(value: Any) -> float | None:
+    """The value as a float, or None if it is not a number or numeric text."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _values_match(a: Any, b: Any) -> bool:
+    """MATLAB compares the four text fields with strcmp and value with eq().
+
+    Comparing every field as a STRING, as this used to, made 1 and 1.0
+    different -- the difference between a JSON integer and a JSON float for
+    the same quantity.
+
+    Numeric TEXT is also accepted on either side, which is deliberately more
+    permissive than MATLAB: eq('0.9', 0.9) there compares char codes and
+    returns a 1x3 logical, which the following && rejects outright, so
+    MATLAB errors on that input rather than defining an answer. A mixture
+    read out of a table or a CSV carries its values as text, and refusing it
+    would be a worse answer than accepting it.
+    """
+    if isinstance(a, bool) or isinstance(b, bool):
+        return a == b
+    number_a, number_b = _as_number(a), _as_number(b)
+    if number_a is not None and number_b is not None:
+        return number_a == number_b
+    return a == b
+
+
+def _components_match(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    """True when two mixture components agree on all five compared fields."""
+    return all(_values_match(a.get(f), b.get(f)) for f in MIXTURE_COMPARE_FIELDS)
 
 
 def findMixtureName(
@@ -146,29 +359,20 @@ def findMixtureName(
     if not isinstance(dictionary, dict):
         return []
 
+    mixture_components = _as_component_list(mixture)
+
     matches: list[str] = []
-    compare_fields = ["ontologyName", "name", "value", "ontologyUnit", "unitName"]
-
     for entry_name, entry_components in dictionary.items():
-        if not isinstance(entry_components, list):
+        components = _as_component_list(entry_components)
+        if not components:
             continue
-        if len(entry_components) != len(mixture):
-            continue
-
-        # Sort both by name for order-independent comparison
-        sorted_entry = sorted(entry_components, key=lambda x: x.get("name", ""))
-        sorted_mix = sorted(mixture, key=lambda x: x.get("name", ""))
-
-        all_match = True
-        for ec, mc in zip(sorted_entry, sorted_mix):
-            for field in compare_fields:
-                if str(ec.get(field, "")) != str(mc.get(field, "")):
-                    all_match = False
-                    break
-            if not all_match:
-                break
-
-        if all_match:
+        # MATLAB: all(entryMatch) where entryMatch(j) = any(mixtureMatch).
+        # Every component of the dictionary entry must find SOME element of
+        # the mixture that matches it on all five fields.
+        if all(
+            any(_components_match(component, element) for element in mixture_components)
+            for component in components
+        ):
             matches.append(entry_name)
 
     return matches

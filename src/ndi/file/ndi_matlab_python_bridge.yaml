@@ -14,6 +14,7 @@ functions:
   - name: pfilemirror
     type: function
     matlab_path: "+ndi/+file/pfilemirror.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/file/pfilemirror.py"
     input_arguments:
       - name: m_path
@@ -23,10 +24,12 @@ functions:
         type_matlab: "(1,:) char"
         type_python: "str"
       - name: CopyNonMFiles
+        python_name: "copy_non_py_files"
         type_matlab: "(1,1) logical"
         type_python: "bool"
         default: "False"
       - name: CopyHiddenFiles
+        python_name: "copy_hidden_files"
         type_matlab: "(1,1) logical"
         type_python: "bool"
         default: "False"
@@ -35,9 +38,16 @@ functions:
         type_python: "bool"
         default: "True"
       - name: dryRun
+        python_name: "dry_run"
         type_matlab: "(1,1) logical"
         type_python: "bool"
         default: "False"
+      - name: compile_pyc
+        type_python: "bool"
+        default: "False"
+        decision_log: >
+          Python-only, and it is where the DEFAULT behaviour parts from
+          MATLAB: MATLAB always p-codes, this copies unless asked to compile.
     output_arguments:
       - name: b
         type_python: "bool"
@@ -47,6 +57,24 @@ functions:
       Parameter names preserved from MATLAB: CopyNonMFiles maps
       to copy_non_py_files semantically. Python adds compile_pyc
       option not in MATLAB. Synchronized 2026-03-13.
+
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      The adaptation holds -- p-code has no Python counterpart, so the port
+      mirrors .py files and can compile to .pyc -- and the recursion, the .git
+      and hidden-file skips, and the CopyNonMFiles/verbose/dryRun behaviour
+      all match. FOUR DIFFERENCES WORTH KNOWING, none of them a defect on its
+      own. (1) MATLAB ALWAYS p-codes; the port's equivalent, compile_pyc,
+      defaults to FALSE, so the default behaviour is a plain copy where
+      MATLAB's is a compile. (2) MATLAB creates the destination folder LAZILY,
+      only when it first has something to put in it, where the port creates it
+      up front -- so an empty source directory leaves nothing behind in MATLAB
+      and an empty directory here. (3) MATLAB's mustBeFolder RAISES on a
+      source that is not a directory; the port prints and returns False, which
+      a caller who ignores the return value will not notice. (4) The recorded
+      input_arguments give MATLAB's spellings -- CopyNonMFiles,
+      CopyHiddenFiles, dryRun -- but the Python keywords are
+      copy_non_py_files, copy_hidden_files, dry_run, plus compile_pyc; the
+      record now says so. Nothing to port.
 
 # =========================================================================
 # Classes
@@ -60,9 +88,47 @@ classes:
   - name: navigator
     type: class
     matlab_path: "+ndi/+file/navigator.m"
+    matlab_last_sync_hash: "e94c2b2f5"
     python_path: "ndi/file/navigator/__init__.py"
     python_class: "ndi_file_navigator"
     inherits: "ndi.ido, ndi.epoch.epochset.param, ndi.documentservice, ndi.database.ingestion_help"
+    decision_log: >
+      Examined against NDI-matlab e94c2b2f5, the file's last-touching commit.
+      Every one of MATLAB's methods has a Python counterpart except four, and
+      buildepochtable is one of them only in name -- Python builds the table
+      inside epochtable(). The other three are the cache, and they were
+      missing outright. Two findings, both in selectfilegroups. (1) THE TWO
+      LANGUAGES NUMBERED THE SAME SESSION'S EPOCHS DIFFERENTLY. When a session
+      holds ingested epochs as well as epochs on disk, MATLAB combines the two
+      id lists with unique(), WHICH SORTS, and iterates the sorted result --
+      so the epoch order, and therefore every epoch NUMBER, is alphabetical by
+      epoch_id. Epoch numbers are what a caller passes to getepochfiles and
+      readtimeseries. The port used dict.fromkeys, which preserves
+      first-appearance order, putting every ingested epoch before every disk
+      one. Now sorted. The disk-only case is untouched on both sides: MATLAB
+      returns before the unique(), so the disk order stands. (2) THE
+      INGESTED-EPOCH MEMO WAS NEVER KEPT. MATLAB has getcache,
+      get_cached_value and add_cached_value, and uses them to remember, per
+      navigator, whether this session has EVER had an ingested epoch; once the
+      answer has been no it skips the epochfiles_ingested database query
+      entirely. selectfilegroups is called for every epoch lookup, so the port
+      was running that query over and over. All three ported, keyed as MATLAB
+      keys them ('filenavigator_' + id) and stored at MATLAB's
+      higher-than-normal priority. ONE DELIBERATE DIFFERENCE IN THE PORT, and
+      a MATLAB wart worth knowing. The cache APPENDS and lookup() returns the
+      FIRST match -- on both sides -- so a second value written for the same
+      key can never be read. MATLAB writes the memo on every call regardless,
+      which appends an entry nothing can look up; this writes it only when
+      there was not one already. The observable behaviour is identical, and
+      both languages share the consequence: once 'no ingested epochs' is
+      recorded, ingesting one does not change the answer until the session's
+      cache is cleared. That is why ndi.mock.fun.stimulus_response calls
+      S.cache.clear() before it builds anything, and it is pinned here by a
+      test rather than left to be rediscovered. ALSO NOTED, not changed:
+      MATLAB validates the probemap class with
+      ndi.validators.mustBeClassnameOfType and constructs it with feval, where
+      the port carries the stored epochprobemap through as data. Covered by
+      tests/test_file_navigator_against_matlab.py.
 
     properties:
       - name: session
@@ -383,11 +449,38 @@ classes:
   - name: navigator_epochdir
     type: class
     matlab_path: "+ndi/+file/+navigator/epochdir.m"
+    matlab_last_sync_hash: "75901cf65"
     python_path: "ndi/file/navigator/epochdir.py"
     python_class: "ndi_file_navigator_epochdir"
     inherits: "ndi.file.navigator"
 
     properties: []
+    decision_log: >
+      Examined against NDI-matlab 75901cf65, the file's last-touching commit,
+      AND THE TWO LANGUAGES GIVE DIFFERENT EPOCH IDS FOR THE SAME DATA. This
+      is the finding, and it is recorded rather than changed because fixing it
+      renames every epoch in every stored session. MATLAB's epochdir overrides
+      epochid for one reason, and its own help spells the contract out: each
+      epoch is its own subdirectory and THE EPOCH IDENTIFIER IS THE NAME OF
+      THAT SUBDIRECTORY -- for mysession/t00001/mydata.dat the id is 't00001'.
+      Two lines of fileparts, and no file is read or written. The port instead
+      looks for an epoch-id file, and failing that builds 'epoch_' +
+      md5(dirname + filematch)[:16] AND WRITES IT to a hidden sidecar. On the
+      same tree: MATLAB says 't00001', this says 'epoch_db4fad249950447b' and
+      leaves a '.mydata.dat.<hash>.epochid.ndi' file behind. The sidecar is
+      already known about downstream --
+      tests/symmetry/read_artifacts/session/test_build_session.py filters
+      '.epochid.ndi' out of both summaries with the comment "Python may create
+      .epochid.ndi files as a side effect" -- so the symptom has been worked
+      around while the cause sat here. The record above claims "DISCREPANCY
+      FIXED: MATLAB epochdir overrides epochid to generate IDs from directory
+      names ... Added to match MATLAB"; it does not match. Epoch ids appear in
+      stored documents, so changing the scheme is a migration, not a port --
+      it needs a maintainer's decision and probably a reader that accepts
+      both. selectfilegroups_disk holds: depth-1 subdirectories, every
+      declared filematch pattern required (the fix recorded there is real and
+      still correct), and hidden and AppleDouble names dropped as
+      ndi.util.removehiddenfilegroups does.
 
     methods:
       - name: epochdir

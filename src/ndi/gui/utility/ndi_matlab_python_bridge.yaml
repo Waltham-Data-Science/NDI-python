@@ -14,6 +14,7 @@ functions:
   - name: centerFigure
     type: function
     matlab_path: "+ndi/+gui/+utility/centerFigure.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/gui/utility/centerFigure.py"
     input_arguments:
       - name: figureHandle
@@ -33,3 +34,19 @@ functions:
       widget/position. MATLAB uses setpixelposition; Python uses
       QWidget.move with screen geometry calculation.
       Synchronized with MATLAB main as of 2026-03-13.
+
+      Read against NDI-matlab fe64a9f53, the file's last-touching commit.
+      CONTEXT FOR EVERY ENTRY IN THIS FILE: PySide6 is an optional extra and
+      ndi_install.py installs .[dev,tutorials], so CI has no Qt and every
+      Qt-dependent test in this package skips on every job. Nothing here is
+      exercised anywhere. What could be checked was checked by pulling the
+      plain-Python parts out where they were entangled with widgets, which is
+      the split ndi.gui.nav and ndi.gui.preferences_editor already make. This
+      one holds. Same reference resolution -- an explicit rectangle, another
+      window's geometry, or the screen -- and the same centring arithmetic.
+      Two differences that matter only at the margins: MATLAB asks
+      get(0,'ScreenSize') for the WHOLE screen where this uses
+      availableGeometry(), which excludes the taskbar or dock; and MATLAB's
+      figure coordinates run from the BOTTOM left while Qt's run from the top
+      left, so a positive vertical offset moves the window up there and down
+      here. Nothing to port.

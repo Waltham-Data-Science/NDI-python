@@ -30,6 +30,58 @@ except ImportError:
 _UNIT = ndi_gui_Icon._UNIT
 
 
+#: MATLAB's terminal colours, indexed by an icon's `active` state.
+#: 1 -> white (connectable), 2 -> green (a valid target for the click in
+#: progress), 3 -> red (the icon the connection is coming FROM).
+ACTIVE_TERMINAL_COLORS = {1: (1.0, 1.0, 1.0), 2: (0.0, 1.0, 0.0), 3: (1.0, 0.0, 0.0)}
+
+_SUBJECT_COLOR = (0.2, 0.4, 1.0)
+_PROBE_COLOR = (0.0, 0.6, 0.0)
+
+
+def set_activation(subjects: list[Any], probes: list[Any], daqs: list[Any], src: Any) -> None:
+    """Set every icon's `active` state for a click on `src`.
+
+    MATLAB's ``Lab.symbol``, which had no Python counterpart at all.  It is
+    what keeps a connection type-correct: clicking a SUBJECT marks only the
+    probes as valid targets, clicking a PROBE marks only the DAQs, and a
+    second click on the same icon puts everything back.  Without it the
+    terminals never change state, so nothing stops a subject being wired
+    straight to a DAQ, or to another subject.
+
+    Mutates the icons in place, exactly as MATLAB does.
+    """
+    color = getattr(src, "c", None)
+
+    if color == _SUBJECT_COLOR:
+        if getattr(src, "active", 1) == 1:
+            for icon in subjects:
+                icon.active = 0
+            for icon in probes:
+                icon.active = 2
+            src.active = 3
+        else:
+            for icon in subjects + probes:
+                icon.active = 1
+    elif color == _PROBE_COLOR:
+        if getattr(src, "active", 1) == 1:
+            for icon in subjects + probes:
+                icon.active = 0
+            for icon in daqs:
+                icon.active = 2
+            src.active = 3
+        else:
+            for icon in subjects + probes:
+                icon.active = 1
+            for icon in daqs:
+                icon.active = 0
+    else:
+        for icon in subjects + probes:
+            icon.active = 1
+        for icon in daqs:
+            icon.active = 0
+
+
 class ndi_gui_Lab:
     """Experiment / lab view widget.
 
@@ -278,6 +330,14 @@ class ndi_gui_Lab:
             except (ValueError, IndexError):
                 pass
 
+    def symbol(self, src: Any) -> None:
+        """Re-mark which terminals are connectable after a click on `src`.
+
+        MATLAB equivalent: ``Lab.symbol``.  See :func:`set_activation`.
+        """
+        set_activation(self.subjects, self.probes, self.DAQs, src)
+        self.buttons()
+
     def buttons(self) -> None:
         """Update terminal button visibility and colour based on active state."""
         for icon in self.subjects + self.probes + self.DAQs:
@@ -285,6 +345,13 @@ class ndi_gui_Lab:
                 icon.term.setVisible(False)
             else:
                 icon.term.setVisible(True)
+                # MATLAB colours the terminal by the active state too --
+                # white, green, red -- which is the only cue telling a user
+                # which terminals the connection in progress may land on.
+                rgb = ACTIVE_TERMINAL_COLORS.get(icon.active)
+                if rgb is not None:
+                    r, g, b = (int(c * 255) for c in rgb)
+                    icon.term.setBrush(QtGui.QBrush(QtGui.QColor(r, g, b)))
 
     # -- Private ----------------------------------------------------------
 

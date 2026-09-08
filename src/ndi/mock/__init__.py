@@ -11,12 +11,83 @@ presentations, and responses for calculator testing.
 
 from __future__ import annotations
 
+import inspect
 import json
+import math
 import random
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+#: The mock element names.  MATLAB uses 'mock stimulator' and 'mock spikes';
+#: ndi_element refuses a name containing whitespace, a rule MATLAB's
+#: ndi.element does not have, so the underscore forms stand in for them here.
+MOCK_STIMULATOR_NAME = "mock_stimulator"
+MOCK_SPIKES_NAME = "mock_spikes"
+
+#: pickFreeReference's search space. MATLAB draws referenceMin + randi(span),
+#: so the lowest value it can return is referenceMin + 1.
+_REFERENCE_MIN = 20000
+_REFERENCE_SPAN = 60000
+_REFERENCE_MAX_ATTEMPTS = 100
+
+
+def _mock_reference_in_use(session: Any, ref_num: int) -> bool:
+    """Does this session already hold a mock at this reference?
+
+    Checks the subject as well as the two elements, because the subject name
+    carries the number too and a leftover subject would produce a second mock
+    subject with the same name.
+    """
+    from ndi.query import ndi_query
+
+    subject_query = ndi_query(
+        "subject.local_identifier", "exact_string", f"mock{ref_num}@nosuchlab.org"
+    )
+    if session.database_search(subject_query):
+        return True
+
+    for element_name in (MOCK_STIMULATOR_NAME, MOCK_SPIKES_NAME):
+        element_query = ndi_query("element.name", "exact_string", element_name) & ndi_query(
+            "element.reference", "exact_number", ref_num
+        )
+        if session.database_search(element_query):
+            return True
+
+    return False
+
+
+def _pick_free_reference(session: Any) -> int:
+    """A mock reference number not already used in this session.
+
+    An element is identified by its name, type and reference, so two mock
+    elements drawn with the same reference are ONE element.  The second call
+    then adds a second epoch named 'mockepoch' to it, and reading that epoch
+    fails: the epoch table has two entries where the caller expects one.  That
+    is what happens when several mocks are made in a session without clearing
+    in between, as when a calculator regenerates all of its stored self-test
+    expectations in one go.
+
+    The number used to be drawn from a span of 1000 with no check at all,
+    which collides about one time in five over 22 draws.  Drawing is still
+    random rather than sequential, so routines running in parallel on separate
+    sessions do not march in step; the check is what makes it safe.
+
+    Raises:
+        RuntimeError: If no free reference is found in 100 attempts.
+    """
+    for _attempt in range(_REFERENCE_MAX_ATTEMPTS):
+        candidate = _REFERENCE_MIN + random.randint(1, _REFERENCE_SPAN)
+        if not _mock_reference_in_use(session, candidate):
+            return candidate
+
+    raise RuntimeError(
+        f"Could not find an unused mock reference number in "
+        f"{_REFERENCE_MAX_ATTEMPTS} attempts, over the range "
+        f"{_REFERENCE_MIN + 1} to {_REFERENCE_MIN + _REFERENCE_SPAN}. The session "
+        f"appears to be full of mock documents; ndi.mock.clear_mock_docs removes them."
+    )
 
 
 def subject_stimulator_neuron(
@@ -26,36 +97,53 @@ def subject_stimulator_neuron(
 
     MATLAB equivalent: ndi.mock.fun.subject_stimulator_neuron
 
+    The subject document is ADDED to the session's database and both elements
+    are built against it, exactly as MATLAB does.  The previous version built
+    three loose documents that the session never saw, so nothing a caller did
+    with them could be found again.
+
     Args:
         session: An NDI session instance.
 
     Returns:
-        Dict with ``'subject'``, ``'stimulator'``, ``'spikes'`` keys
-        containing document/element objects.
+        Dict with ``'subject'`` (the added subject document), ``'stimulator'``
+        and ``'spikes'`` (``ndi_element_timeseries`` objects), plus
+        ``'subject_name'`` and ``'ref_num'``.
     """
-    from ndi.document import ndi_document
+    from ndi.element_timeseries import ndi_element_timeseries
+    from ndi.subject import ndi_subject
 
-    ref_num = 20000 + random.randint(0, 999)
+    ref_num = _pick_free_reference(session)
     subject_name = f"mock{ref_num}@nosuchlab.org"
 
-    # Create subject document
-    subject_doc = ndi_document("subject")
-    subject_doc._set_nested_property("subject.local_identifier", subject_name)
+    mock_subject = ndi_subject(subject_name, "A mock subject for testing purposes")
+    subject_doc = mock_subject.newdocument()
+    session.database_add(subject_doc)
 
-    # Create stimulator element document
-    stim_doc = ndi_document("element")
-    stim_doc._set_nested_property("element.name", f"mock_stimulator_{ref_num}")
-    stim_doc._set_nested_property("element.type", "stimulator")
+    stimulator = ndi_element_timeseries(
+        session=session,
+        name=MOCK_STIMULATOR_NAME,
+        reference=ref_num,
+        type="stimulator",
+        underlying_element=None,
+        direct=False,
+        subject_id=subject_doc.id,
+    )
 
-    # Create spiking neuron element document
-    spikes_doc = ndi_document("element")
-    spikes_doc._set_nested_property("element.name", f"mock_spikes_{ref_num}")
-    spikes_doc._set_nested_property("element.type", "spikes")
+    spikes = ndi_element_timeseries(
+        session=session,
+        name=MOCK_SPIKES_NAME,
+        reference=ref_num,
+        type="spikes",
+        underlying_element=None,
+        direct=False,
+        subject_id=subject_doc.id,
+    )
 
     return {
         "subject": subject_doc,
-        "stimulator": stim_doc,
-        "spikes": spikes_doc,
+        "stimulator": stimulator,
+        "spikes": spikes,
         "subject_name": subject_name,
         "ref_num": ref_num,
     }
@@ -112,12 +200,22 @@ def stimulus_presentation(
                     if st < offset:
                         spike_times.append(st)
 
-            # Build parameters dict for this stimulus
+            # Build parameters dict for this stimulus.  MATLAB reads a NaN
+            # in X as a CONTROL (blank) stimulus and writes isblank=1 in
+            # place of the variable, which is how ndi.app.stimulus later
+            # finds the control stimuli.  A NaN passed here used to land in
+            # the parameters as a NaN value, so nothing downstream could
+            # tell a blank from a stimulus whose value happened to be
+            # missing.
             params: dict[str, Any] = {}
             if i < len(param_values):
                 for j, var_name in enumerate(independent_variables):
                     if j < len(param_values[i]):
-                        params[var_name] = param_values[i][j]
+                        value = param_values[i][j]
+                        if isinstance(value, float) and math.isnan(value):
+                            params["isblank"] = 1
+                        else:
+                            params[var_name] = value
 
             presentations.append(
                 {
@@ -225,27 +323,14 @@ def clear_mock_docs(session: Any) -> None:
     """
     from ndi.query import ndi_query
 
-    try:
-        docs = session.database_search(
-            ndi_query("subject.local_identifier", "contains_string", "mock")
-        )
-        if docs:
-            session.database_rm(docs)
-    except Exception:
-        # Fallback: search and remove individually
-        try:
-            docs = session.database_search(ndi_query("").isa("subject"))
-            for doc in docs:
-                props = doc.document_properties if hasattr(doc, "document_properties") else doc
-                if isinstance(props, dict):
-                    local_id = props.get("subject", {}).get("local_identifier", "")
-                    if "mock" in local_id.lower():
-                        try:
-                            session.database_rm(doc)
-                        except Exception:
-                            pass
-        except Exception:
-            pass
+    # MATLAB is two lines: search, then remove.  This had a try/except around
+    # the whole thing with a fallback that itself ended in `except Exception:
+    # pass`, so a session whose database_rm failed reported success and left
+    # every mock document in place -- the failure mode this function exists to
+    # prevent.  Errors now reach the caller, as they do in MATLAB.
+    docs = session.database_search(ndi_query("subject.local_identifier", "contains_string", "mock"))
+    if docs:
+        session.database_rm(docs)
 
 
 class ndi_mock_ctest:
@@ -295,23 +380,85 @@ class ndi_mock_ctest:
         result = diff(expected, actual)
         return result["equal"], "\n".join(result["details"])
 
+    def calc_path(self) -> Path:
+        """Return the directory this ctest class is defined in.
+
+        MATLAB is ``which(class(ctest_obj))`` followed by ``fileparts``, so it
+        is the SUBCLASS's own file, not the calculator's.  There was no
+        counterpart here at all, and ``mock_path`` reached for the
+        calculator's ``calc_path`` instead.
+        """
+        return Path(inspect.getfile(type(self))).resolve().parent
+
     def mock_path(self) -> Path:
-        """Return path to mock example output directory."""
-        if self.calculator is not None and hasattr(self.calculator, "calc_path"):
-            return Path(self.calculator.calc_path()) / "mock"
-        return Path("mock")
+        """Return path to mock example output directory.
 
-    def mock_expected_filename(self, number: int) -> str:
-        """Return filename for Nth expected output."""
-        return f"mock.{number}.json"
+        MATLAB: ``calc_path()/mock/<classname>/``.  The class-name directory
+        was missing here, and when there was no calculator the path fell back
+        to a bare ``Path('mock')`` -- relative to whatever the working
+        directory happened to be.
+        """
+        return self.calc_path() / "mock" / type(self).__name__
 
-    def mock_comparison_filename(self, number: int) -> str:
-        """Return filename for Nth comparison rules."""
-        return f"mock.{number}.compare.json"
+    def mock_expected_filename(self, number: int) -> Path:
+        """Return the full path of the Nth expected output.
+
+        MATLAB returns ``mock_path()`` joined with the name; this returned the
+        bare ``mock.N.json``, so a caller who used the method on its own --
+        rather than re-joining it with mock_path as load/write did here -- got
+        a name relative to the working directory.
+        """
+        return self.mock_path() / f"mock.{number}.json"
+
+    def mock_comparison_filename(self, number: int) -> Path:
+        """Return the full path of the Nth comparison rules file."""
+        return self.mock_path() / f"mock.{number}.compare.json"
+
+    def load_mock_comparison(self, number: int) -> Any | None:
+        """Load the Nth stored comparison rules, or None if there are none.
+
+        MATLAB equivalent: ``load_mock_comparison``.  Not ported before, so
+        the stored per-field tolerances were never read and
+        :meth:`compare_mock_docs` could only compare documents exactly.
+        """
+        from ndi.doc_comparison import DocComparison
+
+        path = self.mock_comparison_filename(number)
+        if not path.is_file():
+            return None
+        return DocComparison.from_json(path.read_text())
+
+    def clean_mock_docs(self) -> None:
+        """Remove mock/test documents.
+
+        MATLAB's body is empty -- the method exists so a subclass can
+        override it -- and so is this one.  It is here because a caller
+        following MATLAB got an AttributeError instead of a no-op.
+        """
+
+    @staticmethod
+    def reportSummary(report: Any) -> str:
+        """Render a comparison report as a short sentence.
+
+        MATLAB equivalent: the static ``ndi.mock.ctest.reportSummary``.
+        Returns a LEADING-SPACE sentence, or ``''`` when there is nothing to
+        say, so it can be appended to a message directly.
+        """
+        if not report:
+            return ""
+        if isinstance(report, str):
+            return " " + report
+        if isinstance(report, dict) and "name" in report:
+            return f" Out of tolerance: {report['name']}."
+        if isinstance(report, (list, tuple)) and all(
+            isinstance(r, dict) and "name" in r for r in report
+        ):
+            return " Out of tolerance: " + ", ".join(r["name"] for r in report) + "."
+        return ""
 
     def load_mock_expected_output(self, number: int) -> dict | None:
         """Load expected output from file."""
-        p = self.mock_path() / self.mock_expected_filename(number)
+        p = self.mock_expected_filename(number)
         if p.exists():
             with open(p) as f:
                 return json.load(f)
@@ -323,7 +470,7 @@ class ndi_mock_ctest:
         Returns:
             True on success, False if file already exists.
         """
-        p = self.mock_path() / self.mock_expected_filename(number)
+        p = self.mock_expected_filename(number)
         if p.exists():
             return False
         p.parent.mkdir(parents=True, exist_ok=True)

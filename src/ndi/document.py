@@ -33,6 +33,15 @@ except ImportError:
 from .common import ndi_common_PathConstants, timestamp
 from .ido import ndi_ido
 
+#: MATLAB reads this out of ``ndi.common.PathConstants.CommonFolder/config``
+#: to shorten ``to_table`` column names.
+_TABLE_ABBREVIATION_FILE = "ndi_document2table_abbreviations.json"
+
+
+def _is_struct_array(value: Any) -> bool:
+    """True for a non-empty list of dicts -- MATLAB's struct array."""
+    return isinstance(value, list) and bool(value) and all(isinstance(e, dict) for e in value)
+
 
 def _definition_to_doc_type(definition: str) -> str:
     """Turn a superclass ``definition`` path into a document type name.
@@ -357,6 +366,36 @@ class ndi_document:
 
         return True, "", None
 
+    def get_fuid(self, filename: str) -> str:
+        """Return the file UID recorded for ``filename``, or ``''``.
+
+        MATLAB equivalent: ``ndi.document/get_fuid``.  It is what
+        ``ndi.fun.doc.findFuid`` and the session/dataset ``diff`` functions
+        use to decide whether two documents point at the same stored file,
+        so a missing one made those comparisons impossible to port.
+
+        A file may have several locations; MATLAB returns the uid of the
+        first, and so does this.
+
+        Args:
+            filename: The file record name to look up.
+
+        Returns:
+            The uid string, or ``''`` when the document has no files, does
+            not declare this name, or has not had it added yet.
+        """
+        if not self.has_files():
+            return ""
+
+        b, _, fi_index = self._is_in_file_list(filename)
+        if not b or fi_index is None:
+            return ""
+
+        locations = self._document_properties["files"]["file_info"][fi_index].get("locations", [])
+        if not locations:
+            return ""
+        return locations[0].get("uid", "")
+
     def current_file_list(self) -> list[str]:
         """Return list of files currently associated with this document.
 
@@ -488,6 +527,24 @@ class ndi_document:
         return self.set_dependency_value(new_name, value, error_if_not_found=False)
 
     # === ndi_document Class Information ===
+
+    def doc_unique_id(self) -> str:
+        """Deprecated alias for :attr:`id`.
+
+        MATLAB keeps ``doc_unique_id`` and warns
+        ``'depricated..use ID() instead'`` on every call; this raises the
+        same flag as a :class:`DeprecationWarning` so ported MATLAB code
+        finds the method rather than an ``AttributeError``.
+
+        Returns:
+            The document's ``base.id``.
+        """
+        warnings.warn(
+            "ndi_document.doc_unique_id() is deprecated; use .id instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.id
 
     def doc_class(self) -> str:
         """Get the document class type.
@@ -642,8 +699,42 @@ class ndi_document:
 
     # === Conversion ===
 
+    @staticmethod
+    def _table_abbreviations() -> list[tuple[str, str]]:
+        """Read the column-name abbreviations MATLAB's ``to_table`` applies.
+
+        ``ndi_common/config/ndi_document2table_abbreviations.json`` is a list
+        of ``[from, to]`` pairs -- ``orientation_direction_tuning`` becomes
+        ``oridir``, ``significance`` becomes ``sig``, and so on.  The file
+        ships in this repository too; it was simply never read here.
+
+        Returns:
+            The pairs in file order.  Order matters: the replacements are
+            substring replacements applied in sequence, and
+            ``orientation_direction_tuning`` must be shortened before the
+            later ``orientation`` pair can reach what is left.
+        """
+        path = ndi_common_PathConstants.COMMON_FOLDER / "config" / _TABLE_ABBREVIATION_FILE
+        if not path.is_file():
+            return []
+        try:
+            with open(path) as f:
+                pairs = json.load(f)
+        except (OSError, ValueError):
+            return []
+        return [
+            (str(pair[0]), str(pair[1]))
+            for pair in pairs
+            if isinstance(pair, (list, tuple)) and len(pair) == 2
+        ]
+
     def to_table(self) -> "pd.DataFrame":
-        """Convert document to a pandas DataFrame.
+        """Convert document to a single-row pandas DataFrame.
+
+        Mirrors MATLAB's ``ndi.document/to_table``: one
+        ``depends_on_<name>`` column per dependency, then the remaining
+        properties flattened with ``.`` between levels and the abbreviations
+        above applied to the resulting names.
 
         Returns:
             DataFrame with document properties as columns.
@@ -654,25 +745,53 @@ class ndi_document:
         if not HAS_PANDAS:
             raise ImportError("pandas is required for to_table()")
 
-        data = {}
+        data: dict[str, Any] = {}
 
         # Add dependencies
         names, deps = self.dependency()
         for dep in deps:
             data[f"depends_on_{dep['name']}"] = dep["value"]
 
-        # Flatten properties (excluding files and depends_on)
+        # MATLAB drops 'depends_on' and 'files' with rmfield, which reaches
+        # the TOP LEVEL ONLY.  Skipping those two names at every depth, as
+        # this did, silently deleted any same-named field nested inside
+        # another property.
+        properties = {
+            key: value
+            for key, value in self._document_properties.items()
+            if key not in ("depends_on", "files")
+        }
+
+        flat: dict[str, Any] = {}
+
         def flatten(obj, prefix=""):
             for key, value in obj.items():
-                if key in ["depends_on", "files"]:
-                    continue
-                full_key = f"{prefix}{key}" if prefix else key
+                full_key = f"{prefix}{key}"
                 if isinstance(value, dict):
                     flatten(value, f"{full_key}.")
+                elif _is_struct_array(value):
+                    # vlt.data.flattenstruct2table's struct-array case: a
+                    # list of records becomes one column per sub-field
+                    # holding every record's value, rather than one column
+                    # holding the raw list.  A one-element list is a scalar
+                    # struct in MATLAB and recurses normally.
+                    if len(value) == 1:
+                        flatten(value[0], f"{full_key}.")
+                    else:
+                        for sub_key in value[0]:
+                            flat[f"{full_key}.{sub_key}"] = [
+                                record.get(sub_key) for record in value
+                            ]
                 else:
-                    data[full_key] = value
+                    flat[full_key] = value
 
-        flatten(self._document_properties)
+        flatten(properties)
+
+        abbreviations = self._table_abbreviations()
+        for name, value in flat.items():
+            for old, new in abbreviations:
+                name = name.replace(old, new)
+            data[name] = value
 
         return pd.DataFrame([data])
 

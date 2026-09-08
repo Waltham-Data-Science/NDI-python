@@ -385,25 +385,12 @@ class TestTableJoinAndFilter:
                 break
         assert joined, "No pair of OTR tables could be joined on common columns"
 
-    def test_identifyMatchingRows_string_contains(self):
-        """String 'contains' matching works on DataFrame."""
-        import pandas as pd
-
-        from ndi.fun.table import identifyMatchingRows
-
-        df = pd.DataFrame({"name": ["apple", "banana", "cherry", "APPLE pie"]})
-        mask = identifyMatchingRows(df, "name", "apple", string_match="contains")
-        assert mask.sum() == 1  # case-sensitive: only 'apple'
-
-    def test_identifyMatchingRows_numeric(self):
-        """Numeric comparison matching."""
-        import pandas as pd
-
-        from ndi.fun.table import identifyMatchingRows
-
-        df = pd.DataFrame({"value": [10, 20, 30, 40]})
-        mask = identifyMatchingRows(df, "value", 25, numeric_match="gt")
-        assert mask.sum() == 2  # 30 and 40
+    # test_identifyMatchingRows_string_contains and
+    # test_identifyMatchingRows_numeric now live in tests/test_fun_table.py.
+    # Neither needs this dataset -- each builds its own small DataFrame -- so
+    # this file's module-level skipif hid them for no reason, and both would
+    # have failed if they ran: they pass string_match= / numeric_match=, which
+    # the function did not accept until those aliases were added.
 
 
 # ===========================================================================
