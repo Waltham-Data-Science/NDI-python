@@ -104,8 +104,6 @@ no_hash:
     matlab_path: "+ndi/+app/spikesorter.m"
   - name: SyncIndex
     matlab_path: "+ndi/+cloud/+sync/+internal/+index/"
-  - name: navigator
-    matlab_path: "+ndi/+file/navigator.m"
   - name: diff (dataset)
     matlab_path: "+ndi/+fun/+dataset/diff.m"
   - name: diff (session)
