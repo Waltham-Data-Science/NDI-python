@@ -334,33 +334,25 @@ def downloadDocumentCollection(
     return all_documents
 
 
-def downloadFilesForDocument(
+def _downloadOneFile(
     dataset_id: str,
-    document: dict[str, Any],
+    file_uid: str,
     target_dir: Path,
     *,
     client: CloudClient | None = None,
-) -> list[Path]:
-    """Download associated binary files for a single document.
+) -> Path | None:
+    """Fetch one uid into ``target_dir``; None (with a warning) on failure.
 
-    Args:
-        dataset_id: Cloud dataset ID.
-        document: ndi_document dict (must include ``file_uid``).
-        target_dir: Directory to save downloaded files.
-        client: Authenticated cloud client (auto-created if omitted).
+    Split out of downloadFilesForDocument so a document with several files
+    can fetch them all: every early return here used to end the whole
+    document's download.
 
-    Returns:
-        List of paths to downloaded files.
+    A failure warns rather than raises. One unreachable file should not
+    abandon the rest of a dataset, and the caller counts what came back --
+    but it must be SAID, because a silently short download looks exactly
+    like a dataset that had fewer files.
     """
     import requests
-
-    target_dir = Path(target_dir)
-    target_dir.mkdir(parents=True, exist_ok=True)
-
-    downloaded: list[Path] = []
-    file_uid = document.get("file_uid", "")
-    if not file_uid:
-        return downloaded
 
     # The uid is server-supplied, so it names the local file only after
     # safeLocalFilename has stripped any directory components from it.
@@ -370,33 +362,79 @@ def downloadFilesForDocument(
     out_path = _contained_path(target_dir, safe_name) if is_safe else None
     if out_path is None:
         logger.warning("Refusing unusable file uid %r for dataset %s", file_uid, dataset_id)
-        return downloaded
+        return None
 
     # Get download URL via file details endpoint
     from .api import files as files_api
 
     try:
         details = files_api.getFileDetails(dataset_id, file_uid, client=client)
-    except Exception:
-        return downloaded
+    except Exception as exc:  # noqa: BLE001 - reported as a warning
+        logger.warning("No file details for %s in dataset %s: %s", file_uid, dataset_id, exc)
+        return None
 
     url = details.get("downloadUrl", "") if hasattr(details, "get") else ""
     if not url:
-        return downloaded
+        logger.warning("No downloadUrl for %s in dataset %s", file_uid, dataset_id)
+        return None
     try:
         assert_safe_transfer_url(url, what="download URL")
     except ValueError as exc:
         logger.warning("Refusing download URL for %s: %s", file_uid, exc)
-        return downloaded
+        return None
 
     # Download with streaming
     resp = requests.get(url, timeout=120, stream=True)
-    if resp.status_code == 200:
-        with open(out_path, "wb") as fh:
-            for chunk in resp.iter_content(chunk_size=8192):
-                fh.write(chunk)
-        downloaded.append(out_path)
+    if resp.status_code != 200:
+        logger.warning(
+            "Download of %s from dataset %s returned HTTP %s",
+            file_uid,
+            dataset_id,
+            resp.status_code,
+        )
+        return None
+    with open(out_path, "wb") as fh:
+        for chunk in resp.iter_content(chunk_size=8192):
+            fh.write(chunk)
+    return out_path
 
+
+def downloadFilesForDocument(
+    dataset_id: str,
+    document: dict[str, Any],
+    target_dir: Path,
+    *,
+    client: CloudClient | None = None,
+) -> list[Path]:
+    """Download every binary file a document records.
+
+    EVERY file. This read a single top-level ``document["file_uid"]`` and
+    returned empty when there was none -- which is the ordinary case, since
+    a document records its files in ``files.file_info(j).locations(k).uid``.
+    So a normal document downloaded nothing at all, and a document with two
+    files could never have fetched more than one. MATLAB has enumerated
+    them properly all along, in getFileUidsFromDocuments.
+
+    Args:
+        dataset_id: Cloud dataset ID.
+        document: ndi_document dict, or an ndi_document.
+        target_dir: Directory to save downloaded files.
+        client: Authenticated cloud client (auto-created if omitted).
+
+    Returns:
+        List of paths to downloaded files, in the order the document
+        records them.
+    """
+    from .internal import getFileUidsFromDocuments
+
+    target_dir = Path(target_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    downloaded: list[Path] = []
+    for file_uid in getFileUidsFromDocuments([document]):
+        path = _downloadOneFile(dataset_id, file_uid, target_dir, client=client)
+        if path is not None:
+            downloaded.append(path)
     return downloaded
 
 
@@ -414,18 +452,28 @@ def downloadDatasetFiles(
     Returns:
         Report with ``downloaded``, ``failed`` counts.
     """
+    from .internal import getFileUidsFromDocuments
+
     target_dir = Path(target_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
 
     report: dict[str, Any] = {"downloaded": 0, "failed": 0, "errors": []}
 
     for doc in documents:
+        # Counted in FILES, not documents. "failed" was the number of
+        # documents whose download raised -- and per-file failures do not
+        # raise, they warn -- so a document that fetched none of its four
+        # files still reported zero failures. A caller reading this report
+        # to decide whether the download was complete was told yes.
+        wanted = len(getFileUidsFromDocuments([doc]))
         try:
             paths = downloadFilesForDocument(dataset_id, doc, target_dir, client=client)
-            report["downloaded"] += len(paths)
-        except Exception as exc:
-            report["failed"] += 1
+        except Exception as exc:  # noqa: BLE001 - one document must not end the pass
+            report["failed"] += wanted
             report["errors"].append(str(exc))
+            continue
+        report["downloaded"] += len(paths)
+        report["failed"] += wanted - len(paths)
 
     return report
 
