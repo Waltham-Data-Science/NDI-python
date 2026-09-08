@@ -103,6 +103,15 @@ jobs:
           NDI_BRIDGE_CHECK_STRICT: "1"
         run: pytest tests/test_matlab_bridge_hashes.py -v --tb=short
 
+      - name: Check every python_path resolves
+        working-directory: NDI-python
+        env:
+          # Reads only this repo, so it needs no MATLAB tree -- but it is
+          # named here as well as running in the matrix, because a check no
+          # job names runs nowhere (section 7).
+          NDI_BRIDGE_CHECK_STRICT: "1"
+        run: pytest tests/test_matlab_bridge_python_paths.py -v --tb=short
+
       - name: Check ndi_common sync with NDI-matlab
         working-directory: NDI-python
         env:
