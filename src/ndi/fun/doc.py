@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import math
+import warnings
 from typing import Any
 
 
@@ -76,6 +77,16 @@ def findFuid(session: Any, fuid: str) -> tuple[Any | None, str]:
     return None, ""
 
 
+#: MATLAB's mustBeMember list, with the PATO term for each.
+#: 'notDetectable' has no PATO id, so its document carries only a name.
+BIOLOGICAL_SEX_TERMS = {
+    "male": "PATO:0000384",
+    "female": "PATO:0000383",
+    "hermaphrodite": "PATO:0001340",
+    "notDetectable": "",
+}
+
+
 def makeSpeciesStrainSex(
     session: Any,
     subjectID: str,
@@ -136,20 +147,31 @@ def makeSpeciesStrainSex(
             # outputs: MATLAB permits requesting fewer outputs than are
             # declared, Python unpacking demands an exact count.
             ont_id, name, *_ = lookup(Species)
-        except Exception:
-            ont_id, name = Species, Species
+        except Exception as exc:
+            # MATLAB warns and creates nothing at all. This keeps the object
+            # with the caller's text as its NAME but WITHOUT an ontology
+            # identifier, which is the part that matters: the old fallback
+            # was (Species, Species), so the preferredOntologyIdentifier
+            # became the name -- a species asserted to be identified by
+            # 'Mus musculus' in whatever ontology. Deliberately more
+            # permissive than MATLAB, so that a caller who has a plain
+            # species name still gets a document, and warned about either
+            # way.
+            warnings.warn(
+                f"Could not look up ontology term for species {Species!r}: {exc}",
+                stacklevel=2,
+            )
+            ont_id, name = None, Species
 
         try:
             from openminds.latest.controlled_terms import Species as OMSpecies
 
-            species_obj = OMSpecies(
-                name=name,
-                preferred_ontology_identifier=ont_id,
-            )
+            species_kwargs: dict[str, Any] = {"name": name}
+            if ont_id:
+                species_kwargs["preferred_ontology_identifier"] = ont_id
+            species_obj = OMSpecies(**species_kwargs)
             openminds_objects.append(species_obj)
         except ImportError:
-            import warnings
-
             warnings.warn(
                 "openminds package not installed; cannot create Species document",
                 stacklevel=2,
@@ -158,8 +180,6 @@ def makeSpeciesStrainSex(
     # 2. Handle Strain (requires species)
     if Strain:
         if species_obj is None:
-            import warnings
-
             warnings.warn(
                 "Cannot create a Strain document without a valid Species. "
                 "Please provide the 'Species' option.",
@@ -170,17 +190,26 @@ def makeSpeciesStrainSex(
                 from ndi.ontology import lookup
 
                 ont_id, name, *_ = lookup(Strain)
-            except Exception:
-                ont_id, name = Strain, Strain
+            except Exception as exc:
+                warnings.warn(
+                    f"Could not look up ontology term for strain {Strain!r}: {exc}",
+                    stacklevel=2,
+                )
+                ont_id, name = None, Strain
 
             try:
                 from openminds.latest.core import Strain as OMStrain
 
-                strain_obj = OMStrain(name=name, species=[species_obj])
+                # MATLAB passes 'ontologyIdentifier', ID. Leaving it off
+                # dropped the strain's identifier entirely, so a strain came
+                # back as a bare name with nothing to resolve it.
+                strain_obj = OMStrain(
+                    name=name,
+                    species=[species_obj],
+                    ontology_identifiers=[ont_id] if ont_id else None,
+                )
                 openminds_objects.append(strain_obj)
             except ImportError:
-                import warnings
-
                 warnings.warn(
                     "openminds package not installed; cannot create Strain document",
                     stacklevel=2,
@@ -188,30 +217,40 @@ def makeSpeciesStrainSex(
 
     # 3. Handle Biological Sex
     if BiologicalSex:
-        _sex_ontology = {
-            "male": "PATO:0000384",
-            "female": "PATO:0000383",
-            "hermaphrodite": "PATO:0001340",
-        }
-        pato_id = _sex_ontology.get(BiologicalSex.lower(), "")
+        # MATLAB's mustBeMember rejects anything outside these four; this
+        # accepted any string and quietly made a BiologicalSex document out
+        # of it.
+        if BiologicalSex not in BIOLOGICAL_SEX_TERMS:
+            raise ValueError(
+                f"BiologicalSex must be one of {sorted(BIOLOGICAL_SEX_TERMS)}; "
+                f"got {BiologicalSex!r}."
+            )
+
+        pato_id = BIOLOGICAL_SEX_TERMS[BiologicalSex]
+        ont_id, name = None, BiologicalSex
         if pato_id:
             try:
                 from ndi.ontology import lookup
 
                 ont_id, name, *_ = lookup(pato_id)
-            except Exception:
-                ont_id, name = pato_id, BiologicalSex
-        else:
-            ont_id, name = "", BiologicalSex
+            except Exception as exc:
+                warnings.warn(
+                    f"Could not look up ontology term {pato_id!r} for "
+                    f"biological sex {BiologicalSex!r}: {exc}",
+                    stacklevel=2,
+                )
+                ont_id, name = None, BiologicalSex
 
         try:
             from openminds.latest.controlled_terms import BiologicalSex as OMSex
 
-            sex_obj = OMSex(name=name, preferred_ontology_identifier=ont_id)
-            openminds_objects.append(sex_obj)
+            # MATLAB builds notDetectable with a name and NO
+            # preferredOntologyIdentifier, rather than an empty one.
+            sex_kwargs: dict[str, Any] = {"name": name}
+            if ont_id:
+                sex_kwargs["preferred_ontology_identifier"] = ont_id
+            openminds_objects.append(OMSex(**sex_kwargs))
         except ImportError:
-            import warnings
-
             warnings.warn(
                 "openminds package not installed; cannot create BiologicalSex document",
                 stacklevel=2,
@@ -228,26 +267,23 @@ def makeSpeciesStrainSex(
                 subject_id,
             )
         except Exception:
-            import warnings
-
             warnings.warn(
                 "Failed to convert openMINDS objects to NDI documents",
                 stacklevel=2,
             )
 
-    if AddToSession:
-        for d in docs:
-            try:
-                session.database_add(d)
-            except Exception:
-                pass
+    if AddToSession and docs:
+        # One call, as MATLAB makes, and errors reach the caller: adding
+        # under `except Exception: pass` reported success for documents that
+        # never entered the database.
+        session.database_add(docs)
 
     return docs
 
 
 def probeLocations4probes(
     session: Any,
-    probe_docs: list[Any],
+    probes: list[Any],
     ontology_lookup_strings: list[str],
     *,
     doAdd: bool = True,
@@ -258,53 +294,104 @@ def probeLocations4probes(
 
     Args:
         session: NDI session instance.
-        probe_docs: List of probe documents.
+        probes: List of probe objects or probe documents.
         ontology_lookup_strings: List of ontology lookup strings, one per
-            probe. Each string is looked up to resolve a location name
-            and ontology identifier.
-        doAdd: If True (default), add documents to the session database.
+            probe, e.g. ``'UBERON:0000411'``. Must be the same length as
+            *probes*.
+        doAdd: If True (default), add the documents to the session database.
 
     Returns:
-        List of created probe_location documents.
+        List of created probe_location documents. A probe whose lookup
+        string does not resolve is warned about and skipped, as MATLAB
+        does, so the list can be shorter than *probes*.
+
+    Raises:
+        ValueError: If the two lists are different lengths.
     """
     from ndi.document import ndi_document
 
-    docs: list[Any] = []
-    for probe_doc, lookup_str in zip(probe_docs, ontology_lookup_strings):
-        probe_id = probe_doc.document_properties.get("base", {}).get("id", "")
-        doc = ndi_document("probe/probe_location")
-        doc = doc.set_session_id(session.id())
+    if len(probes) != len(ontology_lookup_strings):
+        # zip() silently truncated to the shorter list, so a caller who
+        # miscounted got location documents for some of their probes and no
+        # word about the rest.
+        raise ValueError(
+            f"The number of probes ({len(probes)}) must match the number of "
+            f"ontology_lookup_strings ({len(ontology_lookup_strings)})."
+        )
 
-        # Resolve ontology lookup string to name and ontology ID
-        loc_name = lookup_str
-        loc_ontology = ""
+    docs: list[Any] = []
+    for probe, lookup_str in zip(probes, ontology_lookup_strings):
         try:
             from ndi.ontology import lookup
 
             result = lookup(lookup_str)
-            if result:
-                loc_name = getattr(result, "name", lookup_str) or lookup_str
-                loc_ontology = getattr(result, "id", "") or ""
-        except Exception:
-            pass
-
-        doc._set_nested_property("probe_location.name", loc_name)
-        if loc_ontology:
-            doc._set_nested_property(
-                "probe_location.ontology",
-                loc_ontology,
+            ontology_name = _prefixed_ontology_id(result)
+            location_name = result.name
+        except Exception as exc:
+            # MATLAB warns and SKIPS. Falling back to the lookup string as
+            # the name, as this did, wrote a document asserting a location
+            # that was never resolved.
+            warnings.warn(
+                f"Could not look up ontology term {lookup_str!r}. "
+                f"Skipping probe {_probe_string(probe)}. Error: {exc}",
+                stacklevel=2,
             )
-        doc = doc.set_dependency_value("probe_id", probe_id)
+            continue
+
+        doc = ndi_document("probe/probe_location")
+        doc = doc.set_session_id(session.id())
+        doc = doc.setproperties(
+            **{
+                # The schema declares probe_location.ontology_name; writing
+                # 'ontology' put the term in a field nothing reads and left
+                # the declared one empty.
+                "probe_location.ontology_name": ontology_name,
+                "probe_location.name": location_name,
+            }
+        )
+        doc = doc.set_dependency_value("probe_id", _probe_id(probe))
         docs.append(doc)
 
-    if doAdd:
-        for d in docs:
-            try:
-                session.database_add(d)
-            except Exception:
-                pass
+    if doAdd and docs:
+        # One call, as MATLAB makes; and errors are not swallowed -- adding
+        # under an `except Exception: pass` reported success for documents
+        # that never reached the database.
+        session.database_add(docs)
 
     return docs
+
+
+def _prefixed_ontology_id(result: Any) -> str:
+    """MATLAB: prefix:id, unless the id already carries the prefix."""
+    identifier = str(getattr(result, "id", "") or "")
+    prefix = str(getattr(result, "prefix", "") or "")
+    if prefix and not identifier.startswith(f"{prefix}:"):
+        return f"{prefix}:{identifier}"
+    return identifier
+
+
+def _probe_id(probe: Any) -> str:
+    """The probe's id, whether it is a probe object or a probe document."""
+    identifier = getattr(probe, "id", None)
+    if callable(identifier):
+        identifier = identifier()
+    if identifier:
+        return str(identifier)
+    properties = getattr(probe, "document_properties", None)
+    if isinstance(properties, dict):
+        return str(properties.get("base", {}).get("id", ""))
+    return ""
+
+
+def _probe_string(probe: Any) -> str:
+    """MATLAB names the skipped probe with probestring(); fall back to id."""
+    probestring = getattr(probe, "probestring", None)
+    if callable(probestring):
+        try:
+            return str(probestring())
+        except Exception:
+            pass
+    return _probe_id(probe)
 
 
 def diff(

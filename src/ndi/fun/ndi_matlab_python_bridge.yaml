@@ -475,6 +475,7 @@ functions:
   - name: makeSpeciesStrainSex
     type: function
     matlab_path: "+ndi/+fun/+doc/+subject/makeSpeciesStrainSex.m"
+    matlab_last_sync_hash: "b33d8ce64"
     python_path: "ndi/fun/doc.py"
     input_arguments:
       - name: session
@@ -509,9 +510,36 @@ functions:
       BiologicalSex, AddToSession. NOTE: MATLAB also returns a second
       output openMindsObj which Python does not yet return.
 
+      Examined against NDI-matlab b33d8ce64, the file's last-touching commit.
+      The three-step shape is right and the PATO map for biological sex
+      matches, but four things did not hold. (1) A STRAIN LOST ITS ONTOLOGY
+      IDENTIFIER. MATLAB builds openminds.core.research.Strain with
+      'ontologyIdentifier', ID; the port passed only name and species, so a
+      strain document came back as a bare name with nothing to resolve it.
+      Ported. (2) A FAILED LOOKUP FABRICATED AN IDENTIFIER. The fallback was
+      `ont_id, name = Species, Species`, so a species that did not resolve
+      became a document named after the raw input AND claiming that same text
+      as its preferredOntologyIdentifier. The identifier is now simply absent,
+      and the failure is warned about. DELIBERATELY MORE PERMISSIVE THAN
+      MATLAB, which warns and creates nothing at all: a caller holding a plain
+      species name still gets a document, it just does not carry a false
+      identifier. Two existing tests pass plain names ('Mus musculus',
+      'Rattus') and still pass. (3) BiologicalSex accepted ANY string, where
+      MATLAB's mustBeMember allows only male, female, hermaphrodite and
+      notDetectable -- so a typo became a document. Now rejected, with the
+      four terms exported as BIOLOGICAL_SEX_TERMS. notDetectable also builds
+      with a name and NO preferredOntologyIdentifier, as MATLAB does, rather
+      than an empty one. (4) AddToSession added documents one at a time inside
+      `except Exception: pass`. One call now, errors reaching the caller.
+      Noted in passing, and belonging to openminds_convert rather than here:
+      the Python serialisation spells openMINDS fields snake_case
+      (preferred_ontology_identifier, ontology_identifiers) where MATLAB's are
+      camelCase.
+
   - name: probeLocations4probes
     type: function
     matlab_path: "+ndi/+fun/+doc/+probe/probeLocations4probes.m"
+    matlab_last_sync_hash: "911df48b4"
     python_path: "ndi/fun/doc.py"
     input_arguments:
       - name: session
@@ -534,6 +562,26 @@ functions:
       Exact match. Python 3rd arg is now ontology_lookup_strings
       (list of strings), matching MATLAB. Option name is doAdd with
       default True, matching MATLAB.
+
+      Examined against NDI-matlab 911df48b4, the file's last-touching commit,
+      AND IT WROTE THE WRONG FIELD. probe_location.json declares exactly two
+      properties, ontology_name and name; the port wrote
+      probe_location.ontology, a field the schema does not have, and left
+      ontology_name empty -- so the term went where nothing reads it and the
+      declared field stayed blank. It also stored the ontology id raw, where
+      MATLAB builds prefix:id unless the id already carries the prefix. Both
+      fixed. THREE MORE, all fixed. MATLAB ERRORS when the probe count and the
+      lookup-string count differ; the port used zip(), which silently
+      truncates, so a caller who miscounted got documents for some probes and
+      no word about the rest. MATLAB WARNS AND SKIPS a probe whose term does
+      not resolve; the port caught every exception and fell back to using the
+      lookup STRING as the location name, writing a document that asserts a
+      location nobody resolved. And doAdd added the documents one at a time
+      inside `except Exception: pass`, so a database that refused them
+      reported success -- MATLAB adds them in one call and lets the error out.
+      One widening: the function now accepts a probe OBJECT as well as a probe
+      document, since MATLAB's argument is an ndi.probe and reads
+      current_probe.id().
 
   - name: diff (doc)
     type: function
@@ -1080,6 +1128,7 @@ functions:
   - name: epochid2element
     type: function
     matlab_path: "+ndi/+fun/+epoch/epochid2element.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/epoch.py"
     input_arguments:
       - name: session
@@ -1103,6 +1152,29 @@ functions:
       Exact match. MATLAB option names are 'name' and 'type'; Python
       uses 'element_name' and 'element_type' (Pythonized to avoid
       shadowing builtins). Finds elements containing specified epoch IDs.
+
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit,
+      AND IT COULD NOT FIND ANYTHING. It read the epoch table out of the
+      stored element DOCUMENTS, from a field element.epoch_table that DOES NOT
+      EXIST: it appears in no document schema in ndi_common, and nothing in
+      this tree ever writes one. So the lookup came back empty for every epoch
+      id ever passed in. MATLAB asks the ELEMENT OBJECT for its epochtable(),
+      which is built from the epoch files, and so does this now, through
+      session.getelements() as MATLAB does. THE TYPE FILTER WAS ALSO DEAD. It
+      compared element_type against class names read from
+      document_class.class_list -- another key element documents do not have
+      -- so the list searched was always empty and EVERY element was skipped
+      whenever a type was given. MATLAB filters on element.type, and the
+      filters now go to getelements as element.name and element.type. And
+      MATLAB WARNS naming every epoch id no element claims; the port returned
+      empty lists in silence. THE SIBLING ENTRY filename2epochid HAS THE SAME
+      DEFECT and its record understates it: it reads daqsystem.epoch_table,
+      which is equally absent from every schema, so it too returns nothing for
+      every input. Left for its own change rather than edited from here, since
+      that entry's record is being written on another branch. Two structural
+      differences that stand: MATLAB returns a cell array the same size as the
+      input where this returns a dict keyed by epoch id, and MATLAB drives a
+      ProgressBarWindow that has no counterpart in a headless port.
 
   - name: filename2epochid
     type: function
@@ -2733,6 +2805,7 @@ functions:
 
   - name: storeDoc
     matlab_path: "+ndi/+fun/+doc/+gene/private/storeDoc.m"
+    matlab_last_sync_hash: "c32e1ace2"
     python_path: "ndi/fun/doc_gene.py"
     python_name: "_store_doc"
     decision_log: >
@@ -2743,6 +2816,19 @@ functions:
       creation through it, which is why it is recorded here rather than
       treated as an implementation detail: if the two ever disagree about
       how a document enters the database, they disagree everywhere at once.
+
+      Examined against NDI-matlab c32e1ace2, the file's last-touching commit.
+      Holds. The Python counterpart is _store_doc in ndi/fun/doc_gene.py, and
+      it is the same one place every maker routes through: the same length
+      check with the same message, the same refusal of a file that is not on
+      disk, the same add_file-then-database_add order, and the same ingestion
+      contract (the originals may be deleted once the database has copied
+      them). ONE ORDERING DIFFERENCE, with no difference in outcome: MATLAB
+      calls doc.is_in_file_list explicitly before add_file so it can raise
+      NDI:gene:storeDoc:notInFileList with its own message, where add_file
+      here performs the same check internally and raises ValueError with the
+      message _is_in_file_list produced. Both refuse a name the document does
+      not declare. Nothing to port.
 
   - name: readCells
     matlab_path: "+ndi/+fun/+doc/+gene/readCells.m"

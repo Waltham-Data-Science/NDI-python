@@ -104,6 +104,7 @@ functions:
   - name: location
     type: function
     matlab_path: "+ndi/+fun/+probe/location.m"
+    matlab_last_sync_hash: "9e3de46de"
     python_path: "ndi/fun/probe/location.py"
     input_arguments:
       - name: session
@@ -122,6 +123,20 @@ functions:
       for an NDI element. Traverses underlying_element dependency
       tree until ndi_probe object is found. element can be an
       ndi.element.ndi_element object or string identifier.
+
+      Examined against NDI-matlab 9e3de46de, the file's last-touching commit.
+      The port holds -- resolve a string id through ndi_document2ndi_object,
+      walk down underlying_element to the probe, then query depends_on
+      probe_id AND isa probe_location -- and IT IS AHEAD OF MATLAB ON ONE
+      POINT, which is worth reporting upstream. MATLAB's descent loop reads
+      the ORIGINAL element every time: `while
+      ~isa(current_element,'ndi.probe'); current_element =
+      e.underlying_element; ...` -- note e, not current_element. For a chain
+      deeper than one level that assigns the same object forever and the
+      function HANGS; it only terminates when the first underlying element is
+      either the probe or empty. The port walks `current`, which is what the
+      loop was written to do. Nothing to port here; the fix belongs in
+      NDI-matlab.
 
 # =========================================================================
 # ndi.fun.probe.export  (MATLAB +ndi/+fun/+probe/+export/)

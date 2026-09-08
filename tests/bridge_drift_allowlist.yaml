@@ -118,16 +118,6 @@ no_hash:
     matlab_path: "+ndi/+file/navigator.m"
   - name: diff (dataset)
     matlab_path: "+ndi/+fun/+dataset/diff.m"
-  - name: storeDoc
-    matlab_path: "+ndi/+fun/+doc/+gene/private/storeDoc.m"
-  - name: probeLocations4probes
-    matlab_path: "+ndi/+fun/+doc/+probe/probeLocations4probes.m"
-  - name: makeSpeciesStrainSex
-    matlab_path: "+ndi/+fun/+doc/+subject/makeSpeciesStrainSex.m"
-  - name: epochid2element
-    matlab_path: "+ndi/+fun/+epoch/epochid2element.m"
-  - name: location
-    matlab_path: "+ndi/+fun/+probe/location.m"
   - name: diff (session)
     matlab_path: "+ndi/+fun/+session/diff.m"
   - name: setup
