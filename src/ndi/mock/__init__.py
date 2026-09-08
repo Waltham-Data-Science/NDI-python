@@ -401,10 +401,7 @@ class ndi_mock_ctest:
         """
         from ndi.doc_comparison import DocComparison
 
-        if (
-            scope.lower() == "highsnr"
-            and isinstance(docCompare, DocComparison)
-        ):
+        if scope.lower() == "highsnr" and isinstance(docCompare, DocComparison):
             result = docCompare.compare(actual, expected)
             failures = [r for r in result.get("results", []) if not r.get("passed")]
             report = [{"name": r["field"], **r} for r in failures]
