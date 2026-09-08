@@ -852,7 +852,7 @@ functions:
 
   - name: getFile
     matlab_path: "+ndi/+cloud/+api/+files/getFile.m"
-    matlab_last_sync_hash: "6aac0c72"
+    matlab_last_sync_hash: "605416a26"
     python_path: "ndi/cloud/api/files.py"
     input_arguments:
       - name: url
@@ -867,7 +867,20 @@ functions:
     output_arguments:
       - name: success
         type_python: "bool"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match.
+      2026-09-08: examined against 605416a26 (was 6aac0c72). Three commits.
+      3ac36ce2d defaults useCurl to true and does not port: MATLAB shells out to
+      curl because websave mishandles some signed URLs, while this side transfers
+      through requests and has no second mechanism to choose between. 605416a26
+      validates the URL and path before building that curl command; its
+      shell-injection half likewise has no counterpart here (no shell, no
+      interpolation), but its other half did -- the URL must be https with a real
+      host, or a signed URL's own query-string credential travels in plaintext
+      along with the file. Ported as assert_safe_transfer_url, called at every
+      transfer site (commit 59cfce5 on this branch). 11d041ff5 is a documentation
+      commit on both sides: the docstring now says target_path is overwritten
+      without warning.
 
   - name: listFiles
     matlab_path: "+ndi/+cloud/+api/+files/listFiles.m"
@@ -1350,11 +1363,24 @@ not_yet_ported:
 
   - name: url
     matlab_path: "+ndi/+cloud/+api/url.m"
-    matlab_last_sync_hash: "f9112a14"
+    matlab_last_sync_hash: "5804cd80d"
     status: ported_differently
     decision_log: >
       MATLAB URL builder. Python uses CloudClient._build_url()
       which serves the same purpose.
+      2026-09-08: examined against 5804cd80d (was f9112a14). Eleven commits, every
+      one of them a row added to MATLAB's url() route table: documentClassCounts,
+      documents.bulkFetch, the MATLAB BYOL license routes, the bulk-upload status
+      route, compute finalize renamed to advance, and the signed-URL-set routes
+      (cd11b1982, 683fde855, 4b5c0478d, 5804cd80d). None of them reaches this
+      entry, because Python has no route table to add a row to --
+      CloudClient._build_url() interpolates the route each api function names at
+      its own call site, which is what status ported_differently records. The
+      endpoints themselves are tracked where they are used: the license routes are
+      in api/users.py, documentClassCounts and bulkFetch in api/documents.py, the
+      bulk-upload status in api/files.py, /advance is what compute.advanceSession
+      already posts to, and the signed-URL-set gap is recorded on
+      batchSignedUrlLookup and downloadGenericFiles.
 
   - name: documentCount
     matlab_path: "+ndi/+cloud/+api/+documents/documentCount.m"

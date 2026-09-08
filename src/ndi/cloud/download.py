@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, Any
 
 from ndi.util import rehydrateJSONNanNull
 
+from .api._validators import assert_safe_transfer_url
+
 if TYPE_CHECKING:
     from .client import CloudClient
 
@@ -79,6 +81,15 @@ def _contained_path(target_dir: Path, filename: str) -> Path | None:
 _ZIP_MAX_RATIO = 100
 
 
+class UnexpectedDocumentArchive(ValueError):
+    """A document archive arrived in a shape nothing can read.
+
+    Distinct from the transient "the zip is not ready yet" the poll loop
+    exists for: retrying this one burns the whole timeout and then reports
+    a ``TimeoutError``, which names the symptom rather than the cause.
+    """
+
+
 def _check_zip_ratio(zf: Any) -> None:
     """Pre-flight: reject a ZIP whose declared expansion ratio is implausible.
 
@@ -131,6 +142,12 @@ def _download_chunk_zip(
 
     import requests
 
+    # The zip URL is server-supplied too, so it gets the same check as a
+    # per-file download URL. Raised rather than warned here: this function
+    # returns the documents themselves, so there is no partial result to
+    # fall back to.
+    assert_safe_transfer_url(url, what="bulk download URL")
+
     t0 = time.time()
     last_exc: Exception | None = None
 
@@ -142,14 +159,46 @@ def _download_chunk_zip(
                 zf = zipfile.ZipFile(io.BytesIO(resp.content))
                 _check_zip_ratio(zf)
                 all_docs: list[dict[str, Any]] = []
-                for name in zf.namelist():
-                    if name.endswith(".json"):
-                        raw_text = zf.read(name).decode("utf-8")
-                        raw_text = rehydrateJSONNanNull(raw_text)
-                        data = json.loads(raw_text)
-                        docs = data if isinstance(data, list) else [data]
-                        all_docs.extend(docs)
+                entries = zf.namelist()
+                json_entries = [name for name in entries if name.endswith(".json")]
+                # An archive with nothing to read is a server-side change, not
+                # an empty chunk: refuse it rather than returning short.
+                # NDI-matlab f48f2efc6 refuses any archive that is not exactly
+                # one file, for the same reason -- a download that quietly
+                # comes back with fewer documents than were asked for is the
+                # silent-loss shape that cost an afternoon in NDI-matlab#945.
+                #
+                # This does NOT adopt the "exactly one" rule. Reading every
+                # JSON entry, which is what happens below, already handles a
+                # chunk the server chose to split across files; refusing it
+                # would give up behaviour this side has and MATLAB does not.
+                if not json_entries:
+                    raise UnexpectedDocumentArchive(
+                        "The document archive holds no .json entry "
+                        f"(found: {', '.join(entries) or 'nothing'}). Returning no "
+                        "documents would look like an empty chunk, so this refuses "
+                        "rather than coming back short."
+                    )
+                ignored = sorted(set(entries) - set(json_entries))
+                if ignored:
+                    logger.warning(
+                        "Ignoring %d non-JSON entr%s in the document archive: %s",
+                        len(ignored),
+                        "y" if len(ignored) == 1 else "ies",
+                        ", ".join(ignored),
+                    )
+                for name in json_entries:
+                    raw_text = zf.read(name).decode("utf-8")
+                    raw_text = rehydrateJSONNanNull(raw_text)
+                    data = json.loads(raw_text)
+                    docs = data if isinstance(data, list) else [data]
+                    all_docs.extend(docs)
                 return all_docs
+        except UnexpectedDocumentArchive:
+            # Not a "not ready yet" condition. Retrying burns the whole
+            # timeout and then reports a TimeoutError, which names the
+            # symptom instead of the cause.
+            raise
         except Exception as exc:
             last_exc = exc
 
@@ -334,6 +383,11 @@ def downloadFilesForDocument(
     url = details.get("downloadUrl", "") if hasattr(details, "get") else ""
     if not url:
         return downloaded
+    try:
+        assert_safe_transfer_url(url, what="download URL")
+    except ValueError as exc:
+        logger.warning("Refusing download URL for %s: %s", file_uid, exc)
+        return downloaded
 
     # Download with streaming
     resp = requests.get(url, timeout=120, stream=True)
@@ -517,6 +571,13 @@ def downloadGenericFiles(
                     if not name_part:
                         name_part, ext_part = os.path.splitext(fi.get("name", ""))
 
+                    # A generic_file that was a directory is stored zipped, and
+                    # a directory name carries no extension -- so the file
+                    # arrives named for the folder with nothing to say it is an
+                    # archive. The stored location does say so.
+                    if not ext_part and ".zip" in str(locations[0].get("location", "")):
+                        ext_part = ".zip"
+
                     if naming_strategy == "id":
                         filename = f"{doc_id}{ext_part}"
                     elif naming_strategy == "id_original":
@@ -559,6 +620,11 @@ def downloadGenericFiles(
                 url = details.get("downloadUrl", "") if hasattr(details, "get") else ""
                 if not url:
                     logger.warning("No download URL for file %s (UID: %s)", filename, uid)
+                    continue
+                try:
+                    assert_safe_transfer_url(url, what="download URL")
+                except ValueError as exc:
+                    logger.warning("Refusing download URL for %s (UID: %s): %s", filename, uid, exc)
                     continue
 
                 resp = _requests.get(url, timeout=300, stream=True)

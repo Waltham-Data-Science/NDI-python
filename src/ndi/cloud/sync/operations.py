@@ -137,12 +137,102 @@ def downloadNdiDocuments(
         if ndi_to_api.get(ndi_id, ndi_id) not in downloaded_api_ids
     ]
 
+    # A short answer -- ask for 50 documents, get 47 -- is the shape silent
+    # cloud pagination produces, and it is not an exception: the call
+    # succeeds and the caller gets a shorter list. The callers keep the
+    # missing IDs out of the sync index so they stay outstanding, but
+    # nothing has so far said the loss happened at all.
+    if failed:
+        logger.warning(
+            "Requested %d documents from the cloud and received %d; missing: %s",
+            len(ids_to_download),
+            len(ids_to_download) - len(failed),
+            ", ".join(sorted(failed)[:10]) + ("..." if len(failed) > 10 else ""),
+        )
+
     return docs, failed
 
 
 # ---------------------------------------------------------------------------
 # Public sync operations
 # ---------------------------------------------------------------------------
+
+
+#: How long a sync entry point will wait for in-flight bulk uploads before
+#: inventorying remote state. Deliberately far below
+#: waitForAllBulkUploads' own 300s default: this is a boundary crossed on
+#: every call, most of the time with nothing outstanding.
+_SETTLE_TIMEOUT = 30.0
+
+
+def _settle_bulk_uploads(
+    cloud_dataset_id: str,
+    options: SyncOptions,
+    *,
+    client: Any = None,
+) -> None:
+    """Wait for in-flight bulk uploads before inventorying remote state.
+
+    MATLAB counterpart: NDI-matlab c425cd115 wires
+    ``ndi.cloud.api.files.waitForAllBulkUploads`` into all five sync entry
+    points, right after the dataset id is resolved and before the first
+    remote-state inventory.
+
+    THE RACE. A bulk upload lands as a zip that a server-side worker then
+    extracts. Until it finishes, ``listFiles`` can report ``uploaded=true``
+    -- the zip arrived -- while the per-file objects do not exist yet. A
+    sync that inventories in that window builds its whole plan on a picture
+    that is about to change, and the failures that follow look like
+    intermittent cloud flakiness rather than a race.
+
+    :func:`~ndi.cloud.api.files.waitForAllBulkUploads` was ported with a
+    docstring saying callers should do exactly this; nothing did.
+
+    Skipped under ``dry_run``: a dry run inventories to report, changes
+    nothing, and should not block on someone else's upload.
+
+    A wait that times out or reports failed jobs is logged, not raised.
+    The inventory that follows is then merely as stale as it was before
+    this existed, and refusing to sync at all would be a worse answer than
+    proceeding with a warning.
+
+    THE DEADLINE IS THE CALLER'S, NOT THE WAIT'S. waitForAllBulkUploads
+    defaults to 300s, which is the right budget for "an extraction really is
+    in flight and I want it finished". It is the wrong budget for a boundary
+    every sync entry point crosses on every call, including the many that
+    have no bulk upload outstanding at all. ``_SETTLE_TIMEOUT`` caps what a
+    sync will spend here; a genuinely long extraction is then reported as a
+    stale inventory rather than silently held.
+    """
+    if options.dry_run:
+        return
+    from ..api import files as files_api
+
+    try:
+        result = files_api.waitForAllBulkUploads(
+            cloud_dataset_id, timeout=_SETTLE_TIMEOUT, client=client
+        )
+    except Exception as exc:  # noqa: BLE001 - a wait that fails must not stop the sync
+        logger.warning("Could not wait for bulk uploads on %s: %s", cloud_dataset_id, exc)
+        return
+    state = (result or {}).get("state")
+    if state == "unavailable":
+        # No bulk-upload service to wait on. Not a sync problem, and not
+        # something to warn about on every single call.
+        logger.debug(
+            "No bulk-upload status available for %s (%s); proceeding.",
+            cloud_dataset_id,
+            (result or {}).get("error", ""),
+        )
+        return
+    if state and state != "complete":
+        logger.warning(
+            "Bulk uploads on %s did not settle (state=%s after %.1fs); the remote "
+            "inventory that follows may be incomplete.",
+            cloud_dataset_id,
+            state,
+            (result or {}).get("elapsed", float("nan")),
+        )
 
 
 def uploadNew(
@@ -163,6 +253,8 @@ def uploadNew(
     options = options or SyncOptions()
     ds_path = Path(dataset_path)
     index = SyncIndex.read(ds_path)
+
+    _settle_bulk_uploads(cloud_dataset_id, options, client=client)
 
     # Get remote doc IDs
     remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
@@ -218,6 +310,8 @@ def downloadNew(
     options = options or SyncOptions()
     ds_path = Path(dataset_path)
     index = SyncIndex.read(ds_path)
+
+    _settle_bulk_uploads(cloud_dataset_id, options, client=client)
 
     remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
     remote_id_set = set(remote_ids.keys())
@@ -277,6 +371,8 @@ def mirrorToRemote(
     ds_path = Path(dataset_path)
     index = SyncIndex.read(ds_path)
 
+    _settle_bulk_uploads(cloud_dataset_id, options, client=client)
+
     remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
     remote_id_set = set(remote_ids.keys())
     local_ids = set(index.local_doc_ids_last_sync)
@@ -319,7 +415,19 @@ def mirrorToRemote(
             logger.warning("mirrorToRemote: failed to delete %s: %s", doc_id, exc)
             failed.append(doc_id)
 
-    # Upload associated files if requested
+    # Upload associated files if requested.
+    #
+    # A document whose binary did not upload must not be recorded as synced:
+    # the remote then holds the metadata and none of the data, and a reader
+    # gets a 404 (NDI-matlab#805). uploadFilesForDatasetDocuments does not
+    # raise on a per-file failure -- it reports one -- so catching the
+    # exception was never going to see the common case.
+    #
+    # The retry itself comes from filesNotYetUploaded, which re-queues on the
+    # remote's own `uploaded` flag. What the index owes is only the truth:
+    # twoWaySync reads remote_doc_ids_last_sync as settled remote state, and a
+    # document listed there is one it will not think to send again.
+    binaries_failed: set[str] = set()
     if options.sync_files and report["uploaded_document_ids"]:
         try:
             from ..upload import uploadFilesForDatasetDocuments
@@ -331,22 +439,35 @@ def mirrorToRemote(
                 if doc_file.exists():
                     doc_dicts.append(json.loads(doc_file.read_text(encoding="utf-8")))
             if doc_dicts:
-                uploadFilesForDatasetDocuments(
+                file_report = uploadFilesForDatasetDocuments(
                     client.config.org_id,
                     cloud_dataset_id,
                     doc_dicts,
                     client=client,
                 )
+                binaries_failed = set(file_report.get("failed_document_ids", []))
+                if binaries_failed:
+                    logger.warning(
+                        "mirrorToRemote: %d document(s) reached the remote without "
+                        "their binaries; not recording them as synced: %s",
+                        len(binaries_failed),
+                        ", ".join(sorted(binaries_failed)),
+                    )
         except Exception as exc:
+            # The whole file pass fell over -- nothing here can be trusted to
+            # have uploaded, so none of these documents is synced.
             logger.warning("mirrorToRemote: file upload failed: %s", exc)
+            binaries_failed = set(report["uploaded_document_ids"])
 
-    report["failed"] = failed
+    report["failed"] = failed + sorted(binaries_failed)
 
     # The remote is what it held, plus what we actually uploaded, minus what
     # we actually deleted -- not a blanket "remote now equals local", which
     # would silently absorb every failed upload and every failed deletion.
-    final_remote = (remote_id_set | set(report["uploaded_document_ids"])) - set(
-        report["deleted_remote_document_ids"]
+    final_remote = (
+        (remote_id_set | set(report["uploaded_document_ids"]))
+        - set(report["deleted_remote_document_ids"])
+        - binaries_failed
     )
     index.update(list(local_ids), list(final_remote))
     index.write(ds_path)
@@ -367,6 +488,8 @@ def mirrorFromRemote(
     options = options or SyncOptions()
     ds_path = Path(dataset_path)
     index = SyncIndex.read(ds_path)
+
+    _settle_bulk_uploads(cloud_dataset_id, options, client=client)
 
     remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
     remote_id_set = set(remote_ids.keys())
@@ -441,6 +564,8 @@ def twoWaySync(
     options = options or SyncOptions()
     ds_path = Path(dataset_path)
     index = SyncIndex.read(ds_path)
+
+    _settle_bulk_uploads(cloud_dataset_id, options, client=client)
 
     # Current state
     remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)

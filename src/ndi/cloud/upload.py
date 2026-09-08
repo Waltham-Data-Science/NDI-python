@@ -10,6 +10,7 @@ MATLAB equivalents: +ndi/+cloud/+upload/*.m, uploadSingleFile.m
 from __future__ import annotations
 
 import json
+import logging
 import tempfile
 import zipfile
 from pathlib import Path
@@ -19,6 +20,8 @@ from .client import _auto_client
 
 if TYPE_CHECKING:
     from .client import CloudClient
+
+logger = logging.getLogger(__name__)
 
 
 def uploadDocumentCollection(
@@ -59,8 +62,18 @@ def uploadDocumentCollection(
             filtered = [d for d in documents if d.get("ndiId", d.get("id", "")) not in existing_ids]
             report["skipped"] = len(documents) - len(filtered)
             documents = filtered
-        except Exception:
-            pass  # proceed with all
+        except Exception as exc:
+            # Proceeding with all of them is the safe fallback -- the remote
+            # rejects a duplicate, it does not corrupt anything. But a bare
+            # pass here means a listing call that has stopped working looks
+            # exactly like a dataset with nothing on the remote yet: every
+            # run re-uploads everything and nothing ever says why.
+            logger.warning(
+                "Could not list existing remote documents (%s); "
+                "uploading all %d documents without the only_missing filter",
+                exc,
+                len(documents),
+            )
 
     if not documents:
         return report
@@ -147,6 +160,11 @@ def uploadFilesForDatasetDocuments(
         "uploaded": 0,
         "failed": 0,
         "errors": [],
+        # Which documents own the binaries that did not make it. A count
+        # cannot be acted on: the caller has to know which documents to
+        # keep out of the sync index, or it records them as synced with
+        # their binaries missing from the remote (NDI-matlab#805).
+        "failed_document_ids": [],
     }
 
     for doc in documents:
@@ -154,6 +172,7 @@ def uploadFilesForDatasetDocuments(
         file_path = doc.get("file_path", "")
         if not file_uid or not file_path:
             continue
+        doc_id = doc.get("ndiId") or doc.get("base", {}).get("id", "") or doc.get("id", "")
         try:
             url = files_api.getFileUploadURL(org_id, dataset_id, file_uid, client=client)
             files_api.putFiles(url, file_path)
@@ -161,6 +180,8 @@ def uploadFilesForDatasetDocuments(
         except Exception as exc:
             report["failed"] += 1
             report["errors"].append(str(exc))
+            if doc_id:
+                report["failed_document_ids"].append(doc_id)
 
     return report
 

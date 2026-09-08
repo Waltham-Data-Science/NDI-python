@@ -121,7 +121,7 @@ functions:
 
   - name: uploadNew
     matlab_path: "+ndi/+cloud/+sync/uploadNew.m"
-    matlab_last_sync_hash: "c372693a"
+    matlab_last_sync_hash: "8c31a8f28"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: dataset_path
@@ -140,11 +140,24 @@ functions:
     output_arguments:
       - name: result
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match.
+      2026-09-08: examined against 8c31a8f28 (was c372693a). Two commits.
+      c425cd115 adds waitForAllBulkUploads and wires it into the sync pipeline,
+      replacing fixed pauses; the wrapper existed here but nothing called it, so a
+      sync could list the remote while the server was still extracting an upload
+      and conclude documents were missing. Now settled before the first listing in
+      all five entry points (commit 73b89fd on this branch). 8c31a8f28 stops the
+      sync index recording documents whose binaries failed to upload: this side
+      already records only the IDs whose addDocument returned, so a failed
+      metadata upload never enters the index, and the binary half is now enforced
+      in mirrorToRemote (commit 8b6351c). uploadNew itself uploads no binaries at
+      all and posts an ndiId rather than the document body -- a structural gap
+      these commits expose but do not cause, tracked as #232.
 
   - name: downloadNew
     matlab_path: "+ndi/+cloud/+sync/downloadNew.m"
-    matlab_last_sync_hash: "c372693a"
+    matlab_last_sync_hash: "7efa0a8a0"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: dataset_path
@@ -163,11 +176,20 @@ functions:
     output_arguments:
       - name: result
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match.
+      2026-09-08: examined against 7efa0a8a0 (was c372693a). Two commits.
+      c425cd115 is the bulk-upload settling, ported (see uploadNew). 7efa0a8a0
+      stops the sync index burying a short download -- ask for 50 documents, get
+      47, and downloadNew wrote the full remote list into the index anyway, so the
+      three that never arrived were recorded as synced and never requested again.
+      The index half of that was already ported (a document not landed on disk
+      enters neither list); what was added now is the warning, so a short download
+      is visible without reading report['failed'] (commit 21a4e4b on this branch).
 
   - name: mirrorToRemote
     matlab_path: "+ndi/+cloud/+sync/mirrorToRemote.m"
-    matlab_last_sync_hash: "c372693a"
+    matlab_last_sync_hash: "29546720b"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: dataset_path
@@ -186,11 +208,21 @@ functions:
     output_arguments:
       - name: result
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match.
+      2026-09-08: examined against 29546720b (was c372693a). Two commits.
+      c425cd115 is the bulk-upload settling, ported (see uploadNew). 29546720b
+      stops sync reporting success when uploads failed; the report here already
+      distinguishes what uploaded from what did not, and the index already records
+      only what actually happened rather than a blanket "remote now equals local".
+      The binary pass was the exception, and is fixed here: a document whose file
+      upload failed is withheld from the recorded remote state and named in
+      report['failed'] (commit 8b6351c on this branch). What this function still
+      posts is an ndiId rather than the document body -- see #232.
 
   - name: mirrorFromRemote
     matlab_path: "+ndi/+cloud/+sync/mirrorFromRemote.m"
-    matlab_last_sync_hash: "c372693a"
+    matlab_last_sync_hash: "7efa0a8a0"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: dataset_path
@@ -209,11 +241,19 @@ functions:
     output_arguments:
       - name: result
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match.
+      2026-09-08: examined against 7efa0a8a0 (was c372693a). Two commits.
+      c425cd115 is the bulk-upload settling, ported (see uploadNew). 7efa0a8a0 is
+      the short-download fix: this side already excludes a document that did not
+      land from both sides of the index, which for mirrorFromRemote is the half
+      that matters -- the next run computes to_download as remote minus local, so
+      a failed download recorded as local would never be retried. The warning was
+      added with it (commit 21a4e4b on this branch).
 
   - name: twoWaySync
     matlab_path: "+ndi/+cloud/+sync/twoWaySync.m"
-    matlab_last_sync_hash: "c372693a"
+    matlab_last_sync_hash: "29546720b"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: dataset_path
@@ -232,7 +272,16 @@ functions:
     output_arguments:
       - name: result
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match.
+      2026-09-08: examined against 29546720b (was c372693a). Two commits.
+      c425cd115 is the bulk-upload settling, ported (see uploadNew). 29546720b
+      stops sync reporting success when uploads failed, which this side already
+      did not do. twoWaySync is the function that reads the index as settled
+      state, so the honesty of the other modes' index writes is what protects it;
+      that is why a document whose binary failed is now withheld from
+      remote_doc_ids_last_sync (commit 8b6351c on this branch). Like the other
+      upload modes it posts an ndiId rather than the document body -- see #232.
 
   - name: validate
     matlab_path: "+ndi/+cloud/+sync/validate.m"
