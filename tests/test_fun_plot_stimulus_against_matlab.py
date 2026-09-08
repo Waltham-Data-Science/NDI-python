@@ -49,10 +49,14 @@ class TestBar3Runs:
         # AttributeError on any current install.
         assert bar3(frame, ["Region", "Quarter", "Product"], "Sales") is not None
 
-    def test_the_removed_api_is_not_used(self):
+    def test_the_supported_colormap_api_is_available(self):
+        # plt.cm.get_cmap was removed in matplotlib 3.9; plt.get_cmap is the
+        # spelling that works on every version this project supports. This
+        # asserts the API bar3 now uses, not the absence of the old one --
+        # older matplotlib still has both, and a test that fails on an older
+        # matplotlib is testing the environment rather than the code.
         import matplotlib.pyplot as plt
 
-        assert not hasattr(plt.cm, "get_cmap")  # gone since 3.9
         assert callable(plt.get_cmap)
 
     def test_one_subplot_per_first_variable(self, frame):
