@@ -337,27 +337,26 @@ class TestExtractDocsFiles:
             root = Path(tmpdir)
             session_dir = root / "sess"
             session_dir.mkdir()
-            session = ndi_session_dir("exp", session_dir)
+            with ndi_session_dir("exp", session_dir) as session:
+                payload = root / "payload.bin"
+                payload.write_bytes(b"hello")
+                props = ndi_document("demoNDI").document_properties
+                props["base"]["session_id"] = session.id()
+                props["demoNDI"]["value"] = 1
+                session.database_add(ndi_document(props).add_file("filename1.ext", str(payload)))
 
-            payload = root / "payload.bin"
-            payload.write_bytes(b"hello")
-            props = ndi_document("demoNDI").document_properties
-            props["base"]["session_id"] = session.id()
-            props["demoNDI"]["value"] = 1
-            session.database_add(ndi_document(props).add_file("filename1.ext", str(payload)))
+                out = root / "out"
+                docs, path = extract_doc_files(session, str(out))
 
-            out = root / "out"
-            docs, path = extract_doc_files(session, str(out))
-
-            assert path == str(out)
-            copies = [p for p in out.iterdir() if p.is_file()]
-            assert [p.read_bytes() for p in copies] == [b"hello"]
-            assert any(
-                d.document_properties.get("files", {}).get("file_info")
-                and d.document_properties["files"]["file_info"][0]["locations"][0]["location"]
-                == str(copies[0])
-                for d in docs
-            ), "no document names its copy"
+                assert path == str(out)
+                copies = [p for p in out.iterdir() if p.is_file()]
+                assert [p.read_bytes() for p in copies] == [b"hello"]
+                assert any(
+                    d.document_properties.get("files", {}).get("file_info")
+                    and d.document_properties["files"]["file_info"][0]["locations"][0]["location"]
+                    == str(copies[0])
+                    for d in docs
+                ), "no document names its copy"
 
     def test_creates_temp_dir_if_none(self):
         from ndi.database_fun import extract_doc_files

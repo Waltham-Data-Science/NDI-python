@@ -83,8 +83,8 @@ class TestLookupResultReachesTheDocument:
         from ndi.session.dir import ndi_session_dir
 
         with tempfile.TemporaryDirectory() as d:
-            session = ndi_session_dir("ref", d)
-            with patch("ndi.ontology.lookup", side_effect=RuntimeError("no network")):
-                docs = makeSpeciesStrainSex(session, "subj-2", Species="Mus musculus")
+            with ndi_session_dir("ref", d) as session:
+                with patch("ndi.ontology.lookup", side_effect=RuntimeError("no network")):
+                    docs = makeSpeciesStrainSex(session, "subj-2", Species="Mus musculus")
 
         assert "Mus musculus" in repr([doc.document_properties for doc in docs])
