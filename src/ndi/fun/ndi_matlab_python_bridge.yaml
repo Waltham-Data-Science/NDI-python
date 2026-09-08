@@ -400,6 +400,7 @@ functions:
   - name: diff (dataset)
     type: function
     matlab_path: "+ndi/+fun/+dataset/diff.m"
+    matlab_last_sync_hash: "be168b479"
     python_path: "ndi/fun/dataset.py"
     python_qualified: "ndi.fun.dataset.diff"
     input_arguments:
@@ -426,9 +427,24 @@ functions:
         type_matlab: "report (struct)"
         type_python: "dict[str, Any]"
     decision_log: >
-      Exact match. Python now has verbose and recheckFileReport options
-      matching MATLAB. Python also has exclude_fields (not in MATLAB)
-      as a convenience for field exclusion.
+      NOT an exact match, and the record saying so was wrong. Examined against
+      NDI-matlab be168b479, the commit that finished get_fuid and so made this
+      function's file comparison expressible here at all. Three divergences,
+      all ported: (1) the port delegated to ndi.fun.session.diff on
+      dataset.session, where MATLAB searches the DATASET, so documents owned by
+      member sessions were never compared and their files -- which MATLAB opens
+      via open_session(session_id) -- were never opened; (2) MATLAB compares
+      dataset documents with isequaln on document_properties minus files, not
+      through ndi.fun.doc.diff, which asks a different question; (3) the entire
+      file half was missing, so two datasets whose documents pointed at
+      different stored bytes were reported equal. recheckFileReport was
+      accepted and never read; it now short-circuits to the named files as
+      MATLAB does. Report fields are MATLAB's: documentsInAOnly,
+      documentsInBOnly, mismatchedDocuments, fileDifferences. Python-only
+      extras kept: exclude_fields, and equal/common_count (MATLAB computes the
+      latter and prints it but does not return it). MATLAB's recheck branch
+      queries the legacy 'ndi_document.id' field here where the session variant
+      uses 'base.id'; this uses 'base.id' in both, which is the live field name.
 
   # =========================================================================
   # Functions — doc.py
@@ -1584,6 +1600,7 @@ functions:
   - name: diff (session)
     type: function
     matlab_path: "+ndi/+fun/+session/diff.m"
+    matlab_last_sync_hash: "be168b479"
     python_path: "ndi/fun/session.py"
     python_qualified: "ndi.fun.session.diff"
     input_arguments:
@@ -1610,10 +1627,26 @@ functions:
         type_matlab: "report (struct)"
         type_python: "dict[str, Any]"
     decision_log: >
-      Exact match. Python now has verbose and recheckFileReport options
-      matching MATLAB. Python also has exclude_fields (not in MATLAB)
-      as a convenience for field exclusion.
-      Default exclude_fields: ['base.session_id'].
+      NOT an exact match, and the record saying so was wrong. Examined against
+      NDI-matlab be168b479, which finished get_fuid -- the accessor this
+      function needs to decide whether two documents name the same stored
+      file. MATLAB's help says the comparison "includes both the documents and
+      the files"; only the document half was ported. The file loop -- union
+      both current_file_list()s, resolve each name through get_fuid, report a
+      missing one as 'not present' without opening it, size and hexdiff the
+      rest through ndi.util.getHexDiffFromFileObj -- is now present, so two
+      sessions whose documents point at different bytes no longer compare
+      equal. recheckFileReport was accepted and never read, so asking for a
+      targeted re-check silently ran a full comparison; it now returns from the
+      recheck branch as MATLAB does. The document query was ndi_query('').isa
+      ('base') against MATLAB's ndi.query('base.id','regexp','(.*)') -- a
+      different question -- and doc.diff was called without checkFileList,
+      which MATLAB passes explicitly. Report fields are MATLAB's:
+      documentsInAOnly, documentsInBOnly, mismatchedDocuments (id/mismatch),
+      fileDifferences (MATLAB's 13 fields, NaN for an unmeasured size).
+      Python-only extras kept: exclude_fields (default ['base.session_id'],
+      which MATLAB hard-codes), plus equal and common_count. MATLAB's own
+      diffTest.testMismatchedFiles had no Python counterpart; it does now.
 
   # =========================================================================
   # Functions — stimulus.py

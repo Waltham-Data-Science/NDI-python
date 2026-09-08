@@ -78,7 +78,3 @@ drifted:
 no_hash:
   - name: SyncIndex
     matlab_path: "+ndi/+cloud/+sync/+internal/+index/"
-  - name: diff (dataset)
-    matlab_path: "+ndi/+fun/+dataset/diff.m"
-  - name: diff (session)
-    matlab_path: "+ndi/+fun/+session/diff.m"
