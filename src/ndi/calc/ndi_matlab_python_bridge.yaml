@@ -16,10 +16,38 @@ classes:
   # =========================================================================
   - name: tuning_fit
     type: class
+    status: porting_deferred
     matlab_path: "src/ndi/+ndi/+calc/tuning_fit.m"
+    matlab_last_sync_hash: "63043f393"
     python_path: "ndi/calc/tuning_fit.py"
     python_class: "ndi_calc_tuning__fit"
     inherits: "ndi.calculator"
+    decision_log: >
+      Examined against NDI-matlab 63043f393, the file's last-touching commit,
+      AND THE STATUS IS CHANGED TO porting_deferred. The abstract constructor
+      and generate_mock_parameters match, and the scope presets are exactly
+      MATLAB's -- highSNR is 5 reps at noise 0.001, lowSNR is 10 reps at noise
+      1. GENERATE_MOCK_DOCS IS A DIFFERENT FUNCTION. MATLAB builds REAL
+      documents: it calls ndi.mock.fun.stimulus_response to make a subject,
+      stimulator, neuron, presentation and responses in the session; narrows
+      the calculator's own default query to that element; runs
+      obj.run('Replace', calcparameters) and ERRORS if the result is not
+      exactly one document; optionally writes that document as the stored
+      expected output; and loads doc_expected_output from disk through
+      load_mock_expected_output for every index. The port builds a dict of
+      synthetic stimulus responses in memory, never touches the database,
+      never runs the calculator through run() -- it calls calculate() directly
+      and swallows any exception into None -- hand-makes doc_expected_output
+      as noiseless values instead of loading the stored ones, and never calls
+      write_mock_expected_output or load_mock_expected_output at all. It also
+      loops over number_of_tests where MATLAB loops over
+      obj.numberOfSelfTests, a property with no Python counterpart. THIS
+      CANNOT BE PORTED UNTIL THE MOCK PIPELINE IS. It is built on
+      ndi.mock.fun.stimulus_response, which is itself recorded as
+      porting_deferred, and on ctest's write/load_mock_expected_output, which
+      now exist but have nothing to store yet. The three want doing together,
+      and the tuningcurve calculator it exists to self-test is deferred for
+      its own reasons.
 
     methods:
       - name: tuning_fit
