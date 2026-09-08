@@ -149,3 +149,59 @@ class TestMakeCellsRecordsItsSourceFile:
         session, pyr, _ = pyramid
         doc = makeCells(session, ["a", "b"], [1, 2], [3, 4], pyr)
         assert not doc.dependency_value("source_file_id")
+
+
+class TestTheBlanksStimulusIdIsRecovered:
+    """MATLAB counterpart: ``+ndi/+app/+stimulus/tuning_response.m`` ae7916628.
+
+    ``control_stimulus_ids`` holds, per trial, WHICH TRIAL is that trial's
+    blank -- a presentation number. The ``control_stimid`` argument
+    downstream wants the id of the blank STIMULUS. Passing the first as the
+    second subtracts whichever stimulus happens to carry the blank's
+    position as its id: right by coincidence for an unshuffled order, a
+    different grating each epoch for a pseudorandom one.
+
+    This port mirrored the bug on purpose while it stood upstream and
+    reported it as VH-Lab/NDI-matlab#912; the module docstring said it
+    would follow whatever landed there. This is that fix.
+    """
+
+    def _recover(self, trials, order):
+        from ndi.app.stimulus.tuning_response import _control_stimulus_ids_from_trials
+
+        return _control_stimulus_ids_from_trials(trials, order)
+
+    def test_a_shuffled_order_no_longer_picks_the_wrong_stimulus(self):
+        """The case that made this wrong rather than merely indirect.
+
+        Trial 3 (1-based) is the blank and presents stimulus 7. The old
+        code passed the trial number 3 through as a stimulus id, so
+        stimulus 3 -- a real grating -- was subtracted as the baseline.
+        """
+        order = [4, 1, 7, 2, 3]
+        assert self._recover([3, 3, 3, 3, 3], order) == [7.0]
+
+    def test_an_unshuffled_order_is_unchanged(self):
+        """Where trial number and stimulus id coincide, nothing moves --
+        which is why the bug survived so long."""
+        order = [1, 2, 3, 4, 5]
+        assert self._recover([3, 3, 3, 3, 3], order) == [3.0]
+
+    def test_several_repetitions_give_one_blank_id(self):
+        """Each repetition has its own control TRIAL, all presenting the
+        same blank STIMULUS -- so the answer is one id, not one per rep."""
+        order = [9, 1, 2, 9, 2, 1]
+        assert self._recover([1, 1, 1, 4, 4, 4], order) == [9.0]
+
+    def test_trials_without_a_control_are_skipped(self):
+        """NaN per trial is a legitimate run with no blank, not an error."""
+        order = [4, 1, 7]
+        assert self._recover([float("nan"), 3, float("nan")], order) == [7.0]
+
+    def test_no_controls_at_all_gives_nothing(self):
+        assert self._recover([float("nan"), float("nan")], [1, 2]) == []
+
+    def test_an_out_of_range_trial_is_ignored_rather_than_raising(self):
+        """A stored index past the end of the order is bad data, but losing
+        the baseline is better than losing the whole computation."""
+        assert self._recover([99], [1, 2, 3]) == []

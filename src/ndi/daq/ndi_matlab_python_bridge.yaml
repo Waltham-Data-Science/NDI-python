@@ -373,7 +373,14 @@ classes:
   - name: mfdaq_reader
     type: class
     matlab_path: "+ndi/+daq/+reader/mfdaq.m"
-    matlab_last_sync_hash: "9e11fbb"
+    matlab_last_sync_hash: "866bee2bd"
+    decision_log: >
+      NDI-matlab 866bee2bd stops the ingest path querying samplerate for
+      event/marker/text channels: they are timestamped events with no scalar
+      rate, and the eventmarktext branch never used the answer. Nothing to
+      port: this port's ingest (ndi.daq.reader_base.ingest_epochfiles) never
+      calls samplerate at all. samplerate here is reached only from
+      times2samples and samples2times, which event channels do not use.
     python_path: "ndi/daq/mfdaq.py"
     python_class: "ndi_daq_reader_mfdaq"
     inherits: "ndi.daq.reader"
@@ -959,7 +966,13 @@ classes:
   - name: system_mfdaq
     type: class
     matlab_path: "+ndi/+daq/+system/mfdaq.m"
-    matlab_last_sync_hash: "9f584d8a"
+    matlab_last_sync_hash: "2157c70fd"
+    decision_log: >
+      NDI-matlab 2157c70fd added the analog event channel types aep, aen, aimp
+      and aimn with threshold support. Nothing to port: all four are already
+      implemented, in ndi/daq/mfdaq.py, including the in-band/out-of-band
+      variants (aimp takes the samples between the thresholds, aimn those
+      outside).
     python_path: "ndi/daq/system_mfdaq.py"
     python_class: "ndi_daq_system_mfdaq"
     inherits: "ndi.daq.system"
