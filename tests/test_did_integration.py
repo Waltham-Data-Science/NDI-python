@@ -124,18 +124,24 @@ class TestValidatedAdd:
 
         with tempfile.TemporaryDirectory() as tmp:
             db = SQLiteDB(str(Path(tmp) / "did.sqlite"))
-            db.add_branch("a", "")
-            props = {
-                "document_class": {"class_name": "base", "superclasses": []},
-                "base": {
-                    "id": ndi_ido().id,
-                    "session_id": "",
-                    "name": "n",
-                    "datestamp": "2026-01-01T00:00:00.000Z",
-                },
-            }
-            with pytest.raises(ValidationError):
-                db.add_docs([Document(props)], "a")
+            try:
+                db.add_branch("a", "")
+                props = {
+                    "document_class": {"class_name": "base", "superclasses": []},
+                    "base": {
+                        "id": ndi_ido().id,
+                        "session_id": "",
+                        "name": "n",
+                        "datestamp": "2026-01-01T00:00:00.000Z",
+                    },
+                }
+                with pytest.raises(ValidationError):
+                    db.add_docs([Document(props)], "a")
+            finally:
+                # Release the SQLite handle before the tempdir exits: on
+                # Windows the open connection keeps a file lock that would
+                # make the ``TemporaryDirectory`` cleanup raise (issue #274).
+                db.close()
 
 
 # ---------------------------------------------------------------------------

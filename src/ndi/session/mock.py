@@ -56,7 +56,13 @@ class ndi_session_mock(ndi_session_dir):
         super().__init__(reference, self._tmpdir)
 
     def close(self) -> None:
-        """Close the session and clean up the temporary directory."""
+        """Close the session and clean up the temporary directory.
+
+        Closes the SQLite handle first: on Windows, an open connection keeps
+        a lock that turns the rmtree below into a silent no-op (with
+        ``ignore_errors=True``) and leaves the tempdir behind (issue #274).
+        """
+        super().close()
         if self._cleanup and Path(self._tmpdir).exists():
             shutil.rmtree(self._tmpdir, ignore_errors=True)
 

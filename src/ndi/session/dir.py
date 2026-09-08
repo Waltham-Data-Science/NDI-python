@@ -357,6 +357,11 @@ class ndi_session_dir(ndi_session):
         passed = are_you_sure
 
         if passed:
+            # Close the SQLite connection before removing its file: on Windows
+            # an open handle keeps a lock that makes shutil.rmtree fail with
+            # WinError 32 (issue #274). NDI-matlab does the same in commit
+            # 71758b8.
+            self.close()
             ndi_dir = self._path / ".ndi"
             if ndi_dir.exists():
                 shutil.rmtree(ndi_dir)
@@ -401,9 +406,30 @@ class ndi_session_dir(ndi_session):
             print("Not erasing session because confirmation not given.")
             return
 
+        # Same lock issue as deleteSessionDataStructures; see #274.
+        session.close()
         ndi_dir = session._path / ".ndi"
         if ndi_dir.exists():
             shutil.rmtree(ndi_dir)
+
+    def close(self) -> None:
+        """Close the session's database, releasing its SQLite file handle.
+
+        Idempotent: safe to call more than once and safe to call before the
+        session's directory is removed. Windows requires the SQLite handle to
+        be released before ``shutil.rmtree`` can remove the containing
+        directory; POSIX tolerates the leak, so nothing else in the session's
+        lifecycle changes (issue #274).
+        """
+        database = getattr(self, "_database", None)
+        if database is not None:
+            database.close()
+
+    def __enter__(self) -> ndi_session_dir:
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
 
     def __eq__(self, other: Any) -> bool:
         """Check equality by ID and path."""

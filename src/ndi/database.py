@@ -210,6 +210,21 @@ class SQLiteDriver:
 
         return [d.document_properties for d in docs if d is not None]
 
+    def close(self) -> None:
+        """Close the underlying DID SQLiteDB, releasing its file handles.
+
+        Idempotent: safe to call more than once. Needed on Windows, where an
+        open SQLite connection keeps a file lock that blocks ``shutil.rmtree``
+        of the containing directory (issue #274). CPython usually closes the
+        connection during garbage collection on POSIX, but that is not
+        guaranteed and does not release the Windows lock in time for a caller
+        that immediately removes the directory.
+        """
+        db = getattr(self, "_db", None)
+        if db is not None:
+            db.close()
+            self._db = None
+
 
 class ndi_database:
     """NDI database interface.
@@ -581,6 +596,17 @@ class ndi_database:
         doc_id = doc_or_id.id if isinstance(doc_or_id, ndi_document) else doc_or_id
         found, path = self._driver.exist_binary(doc_id, file_name)
         return found, (Path(path) if path else None)
+
+    def close(self) -> None:
+        """Close the underlying SQLite driver.
+
+        Idempotent: safe to call more than once. Needed on Windows so that
+        deleting the session's directory does not race the still-open SQLite
+        connection (issue #274).
+        """
+        driver = getattr(self, "_driver", None)
+        if driver is not None:
+            driver.close()
 
     def __repr__(self) -> str:
         return f"ndi_database('{self.session_path}')"
