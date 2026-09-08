@@ -173,6 +173,49 @@ jobs:
           export COVERAGE_CORE
           pytest tests/ -v --tb=short --cov=src/ndi --cov-report=term-missing
 
+  windows-smoke:
+    # Windows import-and-smoke leg (#160). The main `test` job cannot add
+    # Windows as it stands: it injects NDI_CLOUD_USERNAME / NDI_CLOUD_PASSWORD
+    # and runs the destructive live-cloud suite, so a second OS would double
+    # the load on the shared test account for no Windows-specific signal.
+    # This job installs, runs `python -m ndi check`, and then runs the suite
+    # WITHOUT NDI_CLOUD_* in the environment, so the cloud tests skip
+    # themselves via their _has_creds gate. That is enough to catch the two
+    # import-fatal bugs Windows has already shipped (pathSafeName carving
+    # forbidden characters, and `import fcntl` at module scope).
+    name: Windows import and smoke
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install with ndi_install.py
+        run: |
+          python -m pip install --upgrade pip
+          python ndi_install.py --dev --no-validate --verbose
+
+      - name: Validate installation
+        run: python -m ndi check
+
+      - name: Run offline test suite
+        # No NDI_CLOUD_USERNAME / NDI_CLOUD_PASSWORD are set here on purpose:
+        # every cloud test gates on `_has_creds` and skips when they are
+        # absent, so this run stays offline while still importing every
+        # module in `src/ndi` and exercising the local-only tests -- the
+        # cheap first step the issue asks for. No coverage upload: this job
+        # is here to catch import and path bugs on Windows, not to be a
+        # second source of coverage numbers.
+        run: pytest tests/ -v --tb=short
+
   ced-integration:
     name: CED integration (real sonpipe)
     runs-on: ubuntu-latest
