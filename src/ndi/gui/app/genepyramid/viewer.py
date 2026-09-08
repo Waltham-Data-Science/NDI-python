@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from .multiscale import layerSpec, sourceToWorld
+import numpy as np
+
+from .multiscale import layerSpec, sourceToWorld, worldTransform
 
 __all__ = ["require_napari", "openPyramid"]
 
@@ -93,40 +95,60 @@ def openPyramid(
     Returns:
         The napari Viewer.
     """
-    napari = require_napari()
+    from .progress import note, stage
+
+    with stage("importing napari"):
+        napari = require_napari()
 
     viewer = napari.Viewer()
-    image = viewer.add_image(**layerSpec(session, pyr_doc, gene_rows, density, name))
+    # The image ladder is LAZY: layerSpec resolves tile paths and the
+    # level table, and reads no tile bytes. Nothing here is the wait.
+    with stage("building the pyramid ladder (lazy)"):
+        image = viewer.add_image(**layerSpec(session, pyr_doc, gene_rows, density, name))
 
     shapes = None
     if outlines is not None:
         keep = [p for p in outlines if len(p)]
         if keep:
-            paths = []
-            for p in keep:
-                row, col = sourceToWorld(session, pyr_doc, p[:, 0], p[:, 1])
-                paths.append(list(zip(row, col)))
+            # np.column_stack per polygon rather than list(zip(row, col)):
+            # the tuple form built twelve million Python tuples for the
+            # opossum section and cost 13.8s, against 1.6s for this.
+            with stage(f"placing {len(keep):,} outlines"):
+                (sy, sx), _t = worldTransform(session, pyr_doc)
+                paths = [np.column_stack([p[:, 1] * sy, p[:, 0] * sx]) for p in keep]
             # shape_type polygon closes the ring itself, which matches the
             # format: writeContourFile does not repeat the first vertex.
-            shapes = viewer.add_shapes(
-                paths,
-                shape_type="polygon",
-                name="cell outlines",
-                face_color="transparent",
-                edge_color="cyan",
-                edge_width=1,
+            #
+            # THIS IS THE SLOW ONE and nothing here can make it fast:
+            # napari triangulates every polygon as it takes them.
+            note(
+                f"handing {len(keep):,} polygons to napari -- it triangulates "
+                f"each one, so this is the long part of the launch. Drop "
+                f"--outlines to skip it."
             )
+            with stage("napari add_shapes"):
+                shapes = viewer.add_shapes(
+                    paths,
+                    shape_type="polygon",
+                    name="cell outlines",
+                    face_color="transparent",
+                    edge_color="cyan",
+                    edge_width=1,
+                )
 
     points = None
     if cells is not None:
-        row, col = sourceToWorld(session, pyr_doc, cells["x"], cells["y"])
-        points = viewer.add_points(
-            list(zip(row, col)),
-            name="cell centroids",
-            size=cells.get("size", 8),
-            face_color=cells.get("face_color", "red"),
-            border_width=0,
-        )
+        with stage(f"placing {len(cells['x']):,} centroids"):
+            row, col = sourceToWorld(session, pyr_doc, cells["x"], cells["y"])
+            coords = np.column_stack([row, col])
+        with stage("napari add_points"):
+            points = viewer.add_points(
+                coords,
+                name="cell centroids",
+                size=cells.get("size", 8),
+                face_color=cells.get("face_color", "red"),
+                border_width=0,
+            )
 
     if controls:
         from .controls import addAllPanels
@@ -136,17 +158,18 @@ def openPyramid(
         # density and counts; recomputing with all genes would silently
         # widen what is being shown.
         image._ndi_gene_rows = gene_rows
-        addAllPanels(
-            viewer,
-            session,
-            pyr_doc,
-            image,
-            density,
-            cells_doc=cells_doc,
-            points_layer=points,
-            shapes_layer=shapes,
-            labelings=labelings,
-        )
+        with stage("building the control panels"):
+            addAllPanels(
+                viewer,
+                session,
+                pyr_doc,
+                image,
+                density,
+                cells_doc=cells_doc,
+                points_layer=points,
+                shapes_layer=shapes,
+                labelings=labelings,
+            )
 
     if show:
         napari.run()

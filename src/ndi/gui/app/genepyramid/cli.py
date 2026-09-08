@@ -189,7 +189,7 @@ def _resolve_labelings(spec: str):
     return [s.strip() for s in spec.split(",") if s.strip()]
 
 
-def _resolve_outlines(session, pyr_doc, spec: str, cells_info):
+def _resolve_outlines(session, pyr_doc, spec: str, cells_info, cells=None):
     """Boundary polygons for the cells document --cells resolved.
 
     Returns None after printing why, so main can exit 1. A directory of
@@ -232,7 +232,7 @@ def _resolve_outlines(session, pyr_doc, spec: str, cells_info):
         return None
 
     try:
-        polys, info = readContours(session, docs[0])
+        polys, info = readContours(session, docs[0], cells=cells)
     except Exception as e:
         print(f"could not read contours: {e}", file=sys.stderr)
         return None
@@ -278,8 +278,12 @@ def _resolve_genes(session, pyr_doc, spec: str):
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
 
-    session = _open_session(args.session)
-    docs = _pyramids(session)
+    from .progress import stage
+
+    with stage(f"opening the session at {args.session}"):
+        session = _open_session(args.session)
+    with stage("finding the pyramids"):
+        docs = _pyramids(session)
 
     if not docs:
         print(f"no spatialGeneExpressionPyramid in {args.session}", file=sys.stderr)
@@ -314,7 +318,11 @@ def main(argv=None) -> int:
         return 1
 
     gene_rows = _resolve_genes(session, pyr, args.genes)
-    cells, cells_info = _resolve_cells(session, pyr, args.cells)
+    import contextlib
+
+    reading_cells = stage("reading the cell table") if args.cells else contextlib.nullcontext()
+    with reading_cells:
+        cells, cells_info = _resolve_cells(session, pyr, args.cells)
     density = not args.no_density
 
     if args.report:
@@ -359,7 +367,11 @@ def main(argv=None) -> int:
 
     polys = None
     if args.outlines:
-        polys = _resolve_outlines(session, pyr, args.cells, cells_info)
+        with stage("reading the cell boundaries"):
+            # The centroids are handed over rather than re-read: the
+            # boundaries are stored relative to them, and cells.tsv is
+            # the slower of the two files to parse.
+            polys = _resolve_outlines(session, pyr, args.cells, cells_info, cells)
         if polys is None:
             return 1
 

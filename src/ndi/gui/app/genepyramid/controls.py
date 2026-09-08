@@ -256,7 +256,8 @@ def addDisplayPanel(viewer, session, pyr_doc, image_layer, density: bool = True)
 
     Two exclusive states, so radio buttons rather than a checkbox: the
     label then says what each choice IS, instead of naming one and
-    leaving the other implied.
+    leaving the other implied. Why it matters is hover text on the two
+    buttons rather than a paragraph in the panel: it is read once.
 
     Switching only swaps the layer's data. A level is summed over the
     selected genes into a 2D array, so the shape does not change and the
@@ -279,11 +280,16 @@ def addDisplayPanel(viewer, session, pyr_doc, image_layer, density: bool = True)
     group.addButton(r_density)
     group.addButton(r_counts)
 
-    note = QLabel(
-        "Binning sums, so raw counts make a coarse level binSize^2 brighter "
-        "than a fine one and the picture jumps at each level change."
+    # Why the choice exists, as hover text rather than a paragraph: it is
+    # read once and then never again, and a standing explanation of a
+    # two-button control is mostly in the way.
+    why = (
+        "Binning sums, so raw counts make a coarse level binSize^2 brighter\n"
+        "than a fine one and the picture jumps at each level change.\n"
+        "Density divides that out, so one contrast range serves every level."
     )
-    note.setWordWrap(True)
+    for w in (r_density, r_counts):
+        w.setToolTip(why)
 
     status = QLabel("")
     status.setWordWrap(True)
@@ -304,7 +310,6 @@ def addDisplayPanel(viewer, session, pyr_doc, image_layer, density: bool = True)
 
     outer.addWidget(r_density)
     outer.addWidget(r_counts)
-    outer.addWidget(note)
     outer.addWidget(status)
     outer.addStretch()
 

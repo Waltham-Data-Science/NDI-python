@@ -169,3 +169,29 @@ def test_an_unknown_reference_is_refused(centroids):
     raw = _binary([SQUARE])
     with pytest.raises(ValueError, match="expected 'centroid' or 'absolute'"):
         doc_gene.readContours(_Session(raw), _Doc("sideways", n_cells=1))
+
+
+def test_passed_in_centroids_are_used_instead_of_a_second_read(monkeypatch):
+    """cells.tsv is the slower file, and the caller has already parsed it."""
+    reads = []
+    monkeypatch.setattr(doc_gene, "readCells", lambda s, d: (reads.append(1), (CENTROIDS, {}))[1])
+    raw = _binary([SQUARE, EMPTY, TRIANGLE])
+    polys, _ = doc_gene.readContours(_Session(raw), _Doc("centroid"), cells=CENTROIDS)
+    assert reads == []
+    np.testing.assert_allclose(polys[0], [[98, 8], [102, 8], [102, 12], [98, 12]])
+
+
+def test_the_flat_vertex_array_comes_back_for_callers_that_need_it(centroids):
+    """One array plus offsets is what makes placement a single addition."""
+    raw = _binary([SQUARE, EMPTY, TRIANGLE])
+    _polys, info = doc_gene.readContourFile(_FH(raw))
+    assert info["vertices"].shape == (7, 2)
+    np.testing.assert_array_equal(info["offsets"], [0, 4, 4, 7])
+
+
+def test_a_file_with_no_cells_gives_no_polygons(centroids):
+    """np.split of an empty array would otherwise hand back one of them."""
+    raw = _binary([])
+    polys, info = doc_gene.readContourFile(_FH(raw))
+    assert polys == []
+    assert info["nCells"] == 0
