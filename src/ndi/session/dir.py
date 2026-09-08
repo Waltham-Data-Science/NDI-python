@@ -245,13 +245,27 @@ class ndi_session_dir(ndi_session):
         # Datasets store 'session_in_a_dataset' (current) or
         # 'dataset_session_info' (legacy) bookkeeping; standalone sessions
         # never do.
+        #
+        # Searched WITHOUT the session filter, which is a deliberate
+        # divergence from MATLAB's database_search here. Those documents say
+        # "this directory is a dataset"; they do not say "and the session you
+        # happened to open owns me". A downloaded dataset has several
+        # sessions, and opening its directory as a plain session adopts one
+        # of them -- not necessarily the one the bookkeeping document belongs
+        # to. Filtering then finds nothing and records 'session' for a real
+        # dataset. Measured on the symmetry archive 69a8705aa9ab25373cdc6563:
+        # session-filtered finds 0 session_in_a_dataset documents, unfiltered
+        # finds 1. The looser search cannot mislabel a plain session, which
+        # has no such document under any session id.
         is_dataset = False
         try:
             from ..query import ndi_query
 
-            docs = self.database_search(ndi_query("").isa("session_in_a_dataset"))
+            if self._database is None:
+                raise RuntimeError("no database")
+            docs = self._database.search(ndi_query("").isa("session_in_a_dataset"))
             if not docs:
-                docs = self.database_search(ndi_query("").isa("dataset_session_info"))
+                docs = self._database.search(ndi_query("").isa("dataset_session_info"))
             is_dataset = bool(docs)
         except Exception:
             # A directory whose database cannot be searched yet is not a

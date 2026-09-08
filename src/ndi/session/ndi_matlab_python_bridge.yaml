@@ -33,7 +33,7 @@ classes:
   - name: session
     type: class
     matlab_path: "+ndi/session.m"
-    matlab_last_sync_hash: "a97ab7d0"
+    matlab_last_sync_hash: "629787865"
     python_path: "ndi/session/session_base.py"
     python_class: "ndi_session"
 
@@ -394,10 +394,31 @@ classes:
   - name: dir
     type: class
     matlab_path: "+ndi/+session/dir.m"
-    matlab_last_sync_hash: "b640e6ff"
+    matlab_last_sync_hash: "26d0638bf"
     python_path: "ndi/session/dir.py"
     python_class: "ndi_session_dir"
     inherits: "ndi.session"
+    decision_log: >
+      Six NDI-matlab commits up to 26d0638bf: the .ndi object-type marker
+      and updateObjectTypeMarker/setObjectTypeMarker, directorytype
+      returning 'none' rather than '' for a non-NDI directory, the
+      three-input constructor documented rather than hidden, and
+      mksqlite(0,'close') before rmdir. Nothing to port: Python already has
+      the marker, both setters and the 'none' return (NDI-python#73), and
+      the mksqlite close is a Windows file-locking problem -- an open
+      SQLite handle blocks the rmdir there -- that does not arise in
+      Python, where DID owns the connection.
+      ONE DELIBERATE DIVERGENCE in updateObjectTypeMarker: it looks for the
+      dataset bookkeeping documents through the database directly rather
+      than through database_search, which filters on base.session_id.
+      MATLAB filters. Those documents say "this directory is a dataset",
+      not "the session you happened to open owns me", and a downloaded
+      dataset holds several sessions -- on the symmetry archive
+      69a8705aa9ab25373cdc6563 the session-filtered search finds 0 and the
+      unfiltered one finds 1, so filtering records a real dataset as a
+      session. The looser search cannot mislabel a plain session, which
+      holds no such document under any session id. NDI-matlab looks liable
+      to the same miss.
 
     properties:
       - name: path
@@ -501,9 +522,17 @@ classes:
   - name: sessiontable
     type: class
     matlab_path: "+ndi/+session/sessiontable.m"
-    matlab_last_sync_hash: "fe64a9f5"
+    matlab_last_sync_hash: "8ad41d0b3"
     python_path: "ndi/session/sessiontable.py"
     python_class: "ndi_session_sessiontable"
+    decision_log: >
+      NDI-matlab 8ad41d0b3 landed the session table in ~/.ndi/ and added a
+      one-time migration from its own legacy location,
+      userpath/Preferences/NDI. Nothing to port: Python already writes to
+      ~/.ndi/local_sessiontable.txt and already migrates, from ITS legacy
+      location, ~/.ndi/preferences/. Each side migrates from its own
+      history into the destination the two now share; MATLAB's legacy path
+      is a MATLAB path Python never wrote to.
 
     methods:
       - name: sessiontable

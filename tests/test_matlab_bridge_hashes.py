@@ -73,10 +73,12 @@ instead of quietly passing (issue #77).
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
 from tests.test_matlab_bridge_completeness import (
@@ -85,6 +87,12 @@ from tests.test_matlab_bridge_completeness import (
     normalize_matlab_path,
     require_matlab_root,
 )
+
+#: The env var CI sets so a check that could not run fails instead of skipping.
+STRICT_ENV_VAR = "NDI_BRIDGE_CHECK_STRICT"
+
+#: Bases to diff this branch against, in order of preference.
+MERGE_BASE_CANDIDATES = ("origin/main", "origin/master", "main", "master")
 
 
 def matlab_repo() -> Path:
@@ -444,3 +452,194 @@ class TestTheGuardWouldActuallyCatchOne:
             text=True,
         ).stdout.strip()
         assert not_commits(repo, self._bridge(tmp_path, head)) == []
+
+
+# ---------------------------------------------------------------------------
+# A hash that moves with no port has to say why
+# ---------------------------------------------------------------------------
+
+
+def _git(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", "-C", str(REPO_ROOT), *args], capture_output=True, text=True, check=False
+    )
+
+
+def merge_base() -> str | None:
+    """The commit this branch diverged from, or None if git cannot say.
+
+    None on a shallow clone with no base ref, which is why the workflow
+    checks THIS repo out with ``fetch-depth: 0`` -- not just NDI-matlab.
+    """
+    for candidate in MERGE_BASE_CANDIDATES:
+        if _git("rev-parse", "--verify", "--quiet", candidate).returncode != 0:
+            continue
+        result = _git("merge-base", candidate, "HEAD")
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    return None
+
+
+def entries_by_key(data: Any) -> dict[tuple[str, str], dict[str, Any]]:
+    """Entries keyed by ``(name, matlab_path)`` so two revisions compare."""
+    return {
+        (entry.get("name"), matlab_file(entry)): entry for entry in entries_with_a_matlab_path(data)
+    }
+
+
+def python_paths(entry: dict[str, Any]) -> list[str]:
+    """An entry's ``python_path``, as a list -- it may name one or several."""
+    value = entry.get("python_path")
+    if isinstance(value, str):
+        return [value] if value else []
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, str) and item]
+    return []
+
+
+def unjustified_hash_changes(base: str, changed: set[str]) -> list[str]:
+    """Entries whose hash moved with no Python change and no new reason."""
+    offenders: list[str] = []
+    for source in bridge_files():
+        rel = source.relative_to(REPO_ROOT).as_posix()
+        if rel not in changed:
+            continue
+        before = _git("show", f"{base}:{rel}")
+        if before.returncode != 0:
+            continue  # new in this branch; the other guards judge it
+        old_entries = entries_by_key(yaml.safe_load(before.stdout) or {})
+        new_entries = entries_by_key(yaml.safe_load(source.read_text(encoding="utf-8")) or {})
+        for key, entry in new_entries.items():
+            previous = old_entries.get(key)
+            if previous is None:
+                continue  # brand new; judged by the hash-presence rule
+            new_hash = entry.get("matlab_last_sync_hash") or ""
+            old_hash = previous.get("matlab_last_sync_hash") or ""
+            if new_hash == old_hash:
+                continue
+            if any(f"src/{path}" in changed for path in python_paths(entry)):
+                continue  # the port moved with the hash: the ordinary path
+            log = entry.get("decision_log") or ""
+            where = f"{rel}: {key[0]} -> {key[1]}"
+            if log == (previous.get("decision_log") or ""):
+                offenders.append(
+                    f"{where}\n      hash {old_hash or '(none)'} -> {new_hash}, "
+                    "no Python change, decision_log unchanged"
+                )
+            elif new_hash[:7].lower() not in log.lower():
+                offenders.append(
+                    f"{where}\n      decision_log changed but does not name {new_hash}"
+                )
+    return offenders
+
+
+class TestAHashChangeIsJustified:
+    """Moving a ``matlab_last_sync_hash`` without touching Python must say why.
+
+    THE FAILURE THIS CATCHES, and it is not hypothetical. A hash means "I
+    examined this version of this file". Nothing in the drift check can tell
+    that claim from a guess: writing a current-looking hash turns a red build
+    green and leaves a record nothing can afterwards contradict. NDR-python's
+    commit 6377973 added ``matlab_last_sync_hash`` to 20 bridge files in one
+    go, touching no Python at all, asserting 1148 reviews that had not
+    happened -- and an Intan multi-file feature stayed missing behind them
+    (VH-Lab/NDR-python#23).
+
+    WHY PROSE WAS NOT ENOUGH. The drift message used to offer "bump the hash
+    and add a short note" beside "port the change", with nothing verifying the
+    note. To anyone optimising for green that is not a caution, it is
+    permission, and it names the cheapest path. So the escape hatch has to
+    cost something mechanical.
+
+    THE RULE. If a change alters an entry's hash but touches none of that
+    entry's ``python_path`` files, the entry's ``decision_log`` must change in
+    the same diff and must name the commit being accounted for. Porting is the
+    ordinary path and needs nothing extra -- this only bites the "nothing to
+    do here" case, which is a decision and belongs in writing.
+
+    WHAT IT CANNOT DO, said plainly rather than implied: it cannot verify that
+    anybody read the diff. It makes the claim explicit, specific and
+    attributable -- a sentence in the entry, naming a commit, visible in
+    review. That is the honest ceiling. It has one blind spot besides: an
+    entry whose ``python_path`` file is touched for an unrelated reason in the
+    same PR passes without a note. Widening it to prove the edit was *about*
+    that entry is not something a diff can do.
+
+    This reads only this repo, so unlike the drift check it needs no
+    NDI-matlab checkout and runs in every job. Ported from NDR-python#24.
+    """
+
+    def test_a_hash_change_without_a_port_carries_a_reason(self):
+        base = merge_base()
+        if base is None:
+            message = (
+                f"no merge-base against {'/'.join(MERGE_BASE_CANDIDATES)} -- cannot "
+                "tell which entries this change touches. A shallow clone causes "
+                "this; CI checks this repo out with fetch-depth: 0."
+            )
+            if os.environ.get(STRICT_ENV_VAR, "").strip():
+                pytest.fail(
+                    f"{message} ({STRICT_ENV_VAR} is set, so the history was supposed "
+                    "to be there -- skipping would report a check that could not run "
+                    "as one that passed.)"
+                )
+            pytest.skip(message)
+
+        # base against the WORKING TREE, not base..HEAD: the new state of each
+        # entry is read from the working tree, so the file list has to come
+        # from the same place or the two disagree. Identical in CI; locally
+        # this is what makes the check answer for edits not yet committed --
+        # which is when you want to hear about them.
+        changed = {
+            line.strip()
+            for line in _git("diff", "--name-only", base).stdout.splitlines()
+            if line.strip()
+        }
+        if not changed:
+            return  # nothing in this branch to judge
+
+        offenders = unjustified_hash_changes(base, changed)
+        assert not offenders, (
+            f"{len(offenders)} entr{'y' if len(offenders) == 1 else 'ies'} changed a "
+            "matlab_last_sync_hash without porting anything and without saying why:\n  "
+            + "\n  ".join(offenders)
+            + '\n\nA hash means "I examined this version of this file". Moving it with '
+            "no Python change asserts the MATLAB change needed nothing here -- which "
+            "may well be true, but it is a DECISION, and an unrecorded one is "
+            "indistinguishable from nobody having looked.\n\n"
+            "Either port the change, or add to that entry's decision_log a note "
+            "naming the commit and why it is a no-op on the Python side, e.g.\n"
+            "    decision_log: >\n"
+            "      ... NDI-matlab abc1234 renamed a local variable; no behavioural\n"
+            "      change, nothing to port.\n\n"
+            "Section 7 of docs/developer_notes/ndi_matlab_python_bridge.yaml has the "
+            "rule. This guard is ported from VH-Lab/NDR-python#23, where one commit "
+            "made the unwritten claim 1148 times and a feature went missing behind it."
+        )
+
+
+class TestTheJustificationGuardReadsWhatItClaims:
+    """The guard is itself a diff reader, so check it reads the diff.
+
+    A check that silently matched nothing would pass on every branch, which
+    is the failure mode this whole file exists to prevent.
+    """
+
+    def test_it_finds_a_merge_base_in_this_checkout(self):
+        """If this returns None in CI the guard is inert, not passing."""
+        if os.environ.get(STRICT_ENV_VAR, "").strip():
+            assert merge_base() is not None
+
+    def test_python_path_accepts_one_or_several(self):
+        assert python_paths({"python_path": "ndi/session/dir.py"}) == ["ndi/session/dir.py"]
+        assert python_paths({"python_path": ["a.py", "b.py"]}) == ["a.py", "b.py"]
+        assert python_paths({}) == []
+
+    def test_entries_are_keyed_by_name_and_path(self):
+        """Path alone is not a key: class methods share their class's file."""
+        data = yaml.safe_load(
+            "functions:\n"
+            '  - name: parse_devicestring\n    matlab_path: "+ndi/+fun/devicestring.m"\n'
+            '  - name: build_devicestring\n    matlab_path: "+ndi/+fun/devicestring.m"\n'
+        )
+        assert len(entries_by_key(data)) == 2

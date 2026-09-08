@@ -269,6 +269,26 @@ project_metadata:
 # prevent. Where the entry carries a `status`, note a no-op in its
 # `decision_log`.
 #
+# A HASH THAT MOVES WITHOUT A PORT MUST SAY WHY. If a change alters an
+# entry's hash but touches none of that entry's python_path files, that
+# entry's decision_log must change in the same diff and must NAME the commit
+# being accounted for. Porting needs nothing extra; this bites only the
+# "nothing to do here" case, which is a decision and belongs in writing.
+# Enforced by TestAHashChangeIsJustified, which reads only this repo and so
+# runs in every job -- it needs a merge-base, which is why CI checks THIS
+# repo out with fetch-depth: 0 as well as NDI-matlab.
+#
+# WHY THE MECHANISM AND NOT JUST THIS PARAGRAPH. NDR-python#23: one commit
+# (6377973) added matlab_last_sync_hash to 20 bridge files at once, touching
+# no code, asserting 1148 examinations that had not happened -- and an Intan
+# multi-file feature stayed missing behind them. Their finding is the one
+# worth repeating here: telling a reader "the hash does not match" invites
+# them to correct the hash rather than to see that something needs fixing,
+# and naming the cheap path in prose reads as permission rather than caution.
+# So the cheap path has to cost a sentence that a reviewer can see and check.
+# What this CANNOT do is verify that anyone read the diff; it makes the claim
+# explicit, specific and attributable, which is the honest ceiling.
+#
 # A REGULAR PORT NEEDS NO decision_log FOR ANY OF THIS. That field explains a
 # DIVERGENCE, and a regular port has none -- that is what "regular" means.
 # Re-examining one and finding nothing to follow does not create a divergence;
