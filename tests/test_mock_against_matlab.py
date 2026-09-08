@@ -217,3 +217,129 @@ class TestCtestNewMethods:
             ndi_mock_ctest.reportSummary(report)
             == " Out of tolerance: response.mean, response.stderr."
         )
+
+
+class TestCompareMockDocsUsesTolerances:
+    """`compare_mock_docs` must honor the tolerance object MATLAB uses.
+
+    Exact comparison marks a calculator wrong if its answer differs from
+    the stored expectation by so much as a floating-point rounding step.
+    The whole point of the comparison file is that MATLAB compares within
+    a stated tolerance; Python must too.
+    """
+
+    @staticmethod
+    def _docs(expected_mean: float, actual_mean: float):
+        expected = MagicMock()
+        expected.document_properties = {"response": {"mean": expected_mean}}
+        actual = MagicMock()
+        actual.document_properties = {"response": {"mean": actual_mean}}
+        return expected, actual
+
+    def test_close_answer_passes_within_tolerance(self):
+        from ndi.doc_comparison import DocComparison
+
+        dc = DocComparison()
+        dc.add_comparison_parameter("response.mean", "abs_difference", tolerance=0.1)
+
+        ct = ndi_mock_ctest()
+        expected, actual = self._docs(1.0, 1.05)
+        match, report = ct.compare_mock_docs(expected, actual, "highSNR", dc)
+        assert match is True
+        assert report == []
+
+    def test_far_answer_fails_and_report_names_the_field(self):
+        from ndi.doc_comparison import DocComparison
+
+        dc = DocComparison()
+        dc.add_comparison_parameter("response.mean", "abs_difference", tolerance=0.1)
+
+        ct = ndi_mock_ctest()
+        expected, actual = self._docs(1.0, 1.5)
+        match, report = ct.compare_mock_docs(expected, actual, "highSNR", dc)
+        assert match is False
+        assert isinstance(report, list)
+        assert any(item.get("name") == "response.mean" for item in report)
+        # And reportSummary can render it as a leading-space sentence.
+        assert "response.mean" in ndi_mock_ctest.reportSummary(report)
+
+    def test_lowsnr_falls_through_to_exact_comparison(self):
+        """MATLAB only consults docCompare when scope is highSNR."""
+        from ndi.doc_comparison import DocComparison
+
+        dc = DocComparison()
+        dc.add_comparison_parameter("response.mean", "abs_difference", tolerance=0.1)
+
+        ct = ndi_mock_ctest()
+        expected, actual = self._docs(1.0, 1.05)
+        match, _ = ct.compare_mock_docs(expected, actual, "lowSNR", dc)
+        # Exact comparison rejects 1.0 vs 1.05.
+        assert match is False
+
+    def test_no_docCompare_stays_exact(self):
+        ct = ndi_mock_ctest()
+        expected, actual = self._docs(1.0, 1.0)
+        match, _ = ct.compare_mock_docs(expected, actual)
+        assert match is True
+
+    def test_two_argument_call_still_works(self):
+        """The legacy two-arg signature is preserved for callers that
+        never passed scope or a comparison object."""
+        ct = ndi_mock_ctest()
+        expected, actual = self._docs(1.0, 2.0)
+        match, _ = ct.compare_mock_docs(expected, actual)
+        assert match is False
+
+
+class TestCtestTestReturnsControlAndUsesTolerances:
+    """test() must load mock.N.compare.json for each test and pass it to
+    compare_mock_docs, and must also return the expected-vs-expected
+    control matrix that MATLAB returns."""
+
+    def _ctest_with_tolerance(self, tmp_path, tolerance):
+        from ndi.doc_comparison import DocComparison
+
+        def make_doc(mean_value):
+            d = MagicMock()
+            d.document_properties = {"response": {"mean": mean_value}}
+            return d
+
+        class FakeCalculator:
+            def __init__(self, produced_mean):
+                self._mean = produced_mean
+
+            def run(self, input_docs):
+                return make_doc(self._mean)
+
+        class Sub(ndi_mock_ctest):
+            def generate_mock_docs(self, scope="highSNR", number=1):
+                return {"input_docs": [], "expected_output": make_doc(1.0)}
+
+        ct = Sub(calculator=FakeCalculator(produced_mean=1.05))
+        ct.mock_path = lambda: tmp_path
+
+        rules = DocComparison()
+        rules.add_comparison_parameter("response.mean", "abs_difference", tolerance=tolerance)
+        ct.mock_comparison_filename(1).write_text(rules.to_json())
+
+        return ct
+
+    def test_calculator_within_tolerance_now_passes(self, tmp_path):
+        ct = self._ctest_with_tolerance(tmp_path, tolerance=0.1)
+        result = ct.test("highSNR", 1)
+        assert result["passed"] is True
+        assert result["b_actual"] == [[True]]
+
+    def test_calculator_out_of_tolerance_still_fails(self, tmp_path):
+        ct = self._ctest_with_tolerance(tmp_path, tolerance=0.01)
+        result = ct.test("highSNR", 1)
+        assert result["passed"] is False
+        assert result["b_actual"] == [[False]]
+
+    def test_result_has_b_expected_control_matrix(self, tmp_path):
+        ct = self._ctest_with_tolerance(tmp_path, tolerance=0.1)
+        result = ct.test("highSNR", 1)
+        assert "b_expected" in result
+        assert result["b_expected"] == [[True]]
+        assert "doc_output" in result
+        assert "doc_expected_output" in result
