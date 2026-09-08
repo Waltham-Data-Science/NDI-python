@@ -42,6 +42,7 @@ def openPyramid(
     outlines=None,
     cells_doc=None,
     controls: bool = True,
+    labelings=None,
     name: str | None = None,
     show: bool = True,
 ):
@@ -71,6 +72,12 @@ def openPyramid(
             the cellTypeLabels documents that depend on it -- the cells
             themselves arrive as plain arrays and carry no way back to
             their own document.
+        labelings: label names to show in the cell-type panel, or None to
+            let it decide. Two labelings that say the same thing about the
+            section -- a subclass call transferred onto the clustering it
+            was transferred onto -- are otherwise drawn twice, so by
+            default the panel keeps one and says so. Naming them here
+            overrides that entirely.
         controls: dock the gene, display and cell-type panels. Without
             them the gene selection and the density choice are fixed at
             launch, since this viewer holds no other state. Skipped with
@@ -138,6 +145,7 @@ def openPyramid(
             cells_doc=cells_doc,
             points_layer=points,
             shapes_layer=shapes,
+            labelings=labelings,
         )
 
     if show:

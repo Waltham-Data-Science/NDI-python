@@ -75,6 +75,16 @@ def build_parser() -> argparse.ArgumentParser:
         "SECTION rather than what is being shown.",
     )
     p.add_argument(
+        "--labels",
+        default="",
+        metavar="A,B",
+        help="which cell type labelings to show, by name; 'none' shows no "
+        "labeling panel. Default lets the panel decide, which means two "
+        "labelings that say the same thing about the section -- a subclass "
+        "call and the clustering it was transferred onto -- are shown once "
+        "and the panel says which it kept.",
+    )
+    p.add_argument(
         "--no-controls",
         action="store_true",
         help="do not dock the gene / density panel",
@@ -163,6 +173,20 @@ def _resolve_cells(session, pyr_doc, spec: str):
     # the viewer would be the same search done twice.
     info["document"] = docs[0]
     return cols, info
+
+
+def _resolve_labelings(spec: str):
+    """--labels into what openPyramid wants: names, none of them, or None.
+
+    ``none`` is an EMPTY LIST rather than None, because the two mean
+    different things here: no names asked for, against no choice made.
+    """
+    spec = (spec or "").strip()
+    if not spec:
+        return None
+    if spec.lower() == "none":
+        return []
+    return [s.strip() for s in spec.split(",") if s.strip()]
 
 
 def _resolve_outlines(session, pyr_doc, spec: str, cells_info):
@@ -349,6 +373,7 @@ def main(argv=None) -> int:
         cells_doc=(cells_info or {}).get("document"),
         controls=not args.no_controls,
         name=args.name or None,
+        labelings=_resolve_labelings(args.labels),
     )
     return 0
 

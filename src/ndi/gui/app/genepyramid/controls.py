@@ -22,7 +22,8 @@ from typing import Any
 
 __all__ = [
     "geneIndex",
-    "labelPartition",
+    "labelAgreement",
+    "selectLabelings",
     "addGenePanel",
     "addDisplayPanel",
     "addCellTypePanel",
@@ -324,25 +325,100 @@ def _currentRows(image_layer):
 # ---------------------------------------------------------- cell types
 
 
-def labelPartition(labels) -> frozenset:
-    """The GROUPING a labeling induces, with the class names discarded.
+# Two labelings this close say the same thing about the section. The
+# number is reported every time rather than applied silently, so a pair
+# that only nearly agrees is visible as a pair that nearly agrees.
+REDUNDANT_AT = 0.99
 
-    Two labelings that partition the cells identically and differ only in
-    what the groups are called carry the same information, and showing
-    both invites the reader to treat one as corroborating the other. That
-    happens for a real reason: a subclass call transferred onto clusters
-    is a RENAMING of those clusters, one name per cluster, so it agrees
-    with the clustering by construction.
 
-    Comparing names would miss this; comparing memberships catches it.
+def labelAgreement(a, b) -> float:
+    """How completely knowing *a* tells you *b*, as a fraction of cells.
+
+    Exact equality of partitions was too strict for the case it was
+    written for. A subclass call transferred cell by cell onto a
+    clustering agrees with it almost everywhere and disagrees on a
+    handful of boundary cells, which is not a second opinion -- it is the
+    same opinion with noise -- but it is not the same partition either,
+    so an equality test showed both and the reader was back where they
+    started.
+
+    For each group of *a*, the majority *b* value is the one *a* would
+    predict; this returns the fraction of cells that value is right for.
+    1.0 means *a* determines *b* exactly, which is what a per-cluster
+    renaming gives.
+
+    The measure is DIRECTIONAL. A fine clustering determines a coarse
+    call without the reverse holding, so callers test both ways.
     """
-    groups: dict[Any, list] = {}
-    for i, v in enumerate(labels):
-        groups.setdefault(v, []).append(i)
-    return frozenset(frozenset(g) for g in groups.values())
+    a = list(a)
+    b = list(b)
+    if len(a) != len(b):
+        raise ValueError(
+            f"labelings of {len(a)} and {len(b)} cells cannot be compared; "
+            f"they are not labelings of the same cells"
+        )
+    if not a:
+        return 1.0
+    groups: dict[Any, dict] = {}
+    for va, vb in zip(a, b):
+        counts = groups.setdefault(va, {})
+        counts[vb] = counts.get(vb, 0) + 1
+    return sum(max(c.values()) for c in groups.values()) / len(a)
 
 
-def addCellTypePanel(viewer, session, cells_doc, points_layer, shapes_layer=None) -> Any:
+def selectLabelings(found, wanted=None):
+    """Which labelings to draw, and which are the same one twice.
+
+    Pure, so the decision is testable without a display -- it is the part
+    that can be wrong.
+
+    *found* is a list of ``(labels, info)`` as
+    :func:`~ndi.fun.doc_gene.readCellTypeLabels` returns them.
+
+    With *wanted* -- a list of label names -- the caller has chosen, and
+    nothing is collapsed or reordered away from that choice. Names that
+    are not there come back in *missing* rather than being ignored: a
+    typo that silently showed everything would look like the flag not
+    working.
+
+    Without it, supervised calls are considered first and any later
+    labeling that agrees with a kept one above :data:`REDUNDANT_AT` is
+    set aside, so the labeling carrying biological names is the one that
+    stays.
+
+    Returns:
+        ``(kept, redundant, missing)``. *redundant* holds
+        ``(name, kept_name, forward, reverse)``, the two agreements
+        measured in both directions so the note can quote a number.
+    """
+    found = sorted(found, key=lambda t: (bool(t[1]["isUnsupervised"]), t[1]["labelName"] or ""))
+
+    if wanted is not None:
+        want = [str(w).strip() for w in wanted if str(w).strip()]
+        by_name = {(t[1]["labelName"] or ""): t for t in found}
+        kept = [by_name[w] for w in want if w in by_name]
+        return kept, [], [w for w in want if w not in by_name]
+
+    kept, redundant = [], []
+    for labels, info in found:
+        name = info["labelName"] or "(unnamed)"
+        dup = None
+        for kept_labels, kept_info in kept:
+            forward = labelAgreement(labels, kept_labels)
+            reverse = labelAgreement(kept_labels, labels)
+            if max(forward, reverse) >= REDUNDANT_AT:
+                dup = (name, kept_info["labelName"] or "(unnamed)", forward, reverse)
+                break
+        if dup is None:
+            kept.append((labels, info))
+        else:
+            redundant.append(dup)
+    return kept, redundant, []
+
+
+def addCellTypePanel(
+    viewer, session, cells_doc, points_layer, shapes_layer=None, labelings=None
+) -> Any:
     """One checkbox per class, per labeling, over the cell layers.
 
     A cellbin routinely carries several labelings -- a transferred atlas
@@ -350,11 +426,10 @@ def addCellTypePanel(viewer, session, cells_doc, points_layer, shapes_layer=None
     rather than being merged. They are not interchangeable: a clustering
     carries no biological identity.
 
-    A labeling that groups the cells EXACTLY as an earlier one does is
-    named and then skipped, not drawn twice; see :func:`labelPartition`.
-    Supervised calls are considered first, so when a clustering and the
-    subclass call transferred onto it agree, it is the one carrying
-    biological names that stays.
+    A labeling that says the same thing as one already shown is named
+    and then set aside rather than drawn twice; see
+    :func:`selectLabelings`. Pass *labelings* -- a list of label names --
+    to choose outright instead, in which case nothing is collapsed.
 
     Hiding works by ALPHA, not by removing points. The row order of the
     points layer is the row order of cells.tsv and of every labels.tsv
@@ -377,42 +452,39 @@ def addCellTypePanel(viewer, session, cells_doc, points_layer, shapes_layer=None
 
     import numpy as np
 
-    labelings = []
+    found = []
     for d in docs:
         try:
             labels, info = readCellTypeLabels(session, d)
         except Exception as e:
             print(f"[genepyramid] skipping a cellTypeLabels document: {e}")
             continue
-        labelings.append((labels, info))
-    if not labelings:
+        found.append((labels, info))
+    if not found:
         return None
 
-    # Supervised first, so a redundant pair keeps the named call.
-    labelings.sort(key=lambda t: (bool(t[1]["isUnsupervised"]), t[1]["labelName"] or ""))
-
-    kept, redundant, seen = [], [], {}
-    for labels, info in labelings:
-        key = labelPartition(labels)
-        first = seen.get(key)
-        if first is None:
-            seen[key] = info["labelName"] or "(unnamed)"
-            kept.append((labels, info))
-        else:
-            redundant.append((info["labelName"] or "(unnamed)", first))
+    kept, redundant, missing = selectLabelings(found, labelings)
 
     box = QWidget()
     outer = QVBoxLayout(box)
 
-    for name, first in redundant:
-        msg = (
-            f"{name} groups the cells exactly as {first} does, differing only "
-            f"in what the groups are called, so it is not shown separately."
-        )
+    def _note(msg):
         print(f"[genepyramid] {msg}")
-        note = QLabel(msg)
-        note.setWordWrap(True)
-        outer.addWidget(note)
+        w = QLabel(msg)
+        w.setWordWrap(True)
+        outer.addWidget(w)
+
+    for name, other, forward, reverse in redundant:
+        _note(
+            f"{name} and {other} agree about {100 * max(forward, reverse):.1f}% "
+            f"of cells -- one grouping under two sets of names -- so only "
+            f"{other} is shown. Use --labels to choose for yourself."
+        )
+    if missing:
+        have = ", ".join((i["labelName"] or "(unnamed)") for _lb, i in found)
+        _note(f"no labeling named {', '.join(missing)}; this cells document has: {have}")
+    if not kept:
+        _note("no labelings to show.")
 
     n_points = len(points_layer.data)
     # visible[i] is False when ANY ticked-off class covers cell i, so two
@@ -485,6 +557,7 @@ def addAllPanels(
     cells_doc=None,
     points_layer=None,
     shapes_layer=None,
+    labelings=None,
 ):
     """Every panel the session supports, skipping what it has no data for.
 
