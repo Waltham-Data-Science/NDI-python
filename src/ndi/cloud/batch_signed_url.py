@@ -304,9 +304,7 @@ class BatchSignedUrlLookup:
                 failure_reason = _describe_failure(ok, answer)
             self._stats.last_failure_reason = failure_reason
             self._stats.uid_misses += 1
-            self._failed_scopes[cache_key] = _FailureEntry(
-                at=time.monotonic(), uid=uid
-            )
+            self._failed_scopes[cache_key] = _FailureEntry(at=time.monotonic(), uid=uid)
             self._warn_once(cache_key)
             return None
 
@@ -331,9 +329,7 @@ class BatchSignedUrlLookup:
         if cache_key in self._warned:
             return
         self._warned.add(cache_key)
-        why = self._stats.last_failure_reason or (
-            "the batch answered but did not name this uid"
-        )
+        why = self._stats.last_failure_reason or ("the batch answered but did not name this uid")
         message = (
             f'The batch signed-URL lookup did not answer for scope "{cache_key}", '
             "so files there are being resolved one API call at a time. This "
@@ -361,9 +357,7 @@ def _describe_failure(ok: bool, answer: Any) -> str:
     if "files" not in answer:
         fields = ", ".join(str(k) for k in answer.keys())
         return f"the payload has no 'files' field; fields present: {fields}"
-    return (
-        f"'files' arrived as a {type(answer['files']).__name__}, not a dict"
-    )
+    return f"'files' arrived as a {type(answer['files']).__name__}, not a dict"
 
 
 # ---------------------------------------------------------------------------

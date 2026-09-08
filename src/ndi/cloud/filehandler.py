@@ -189,9 +189,7 @@ def fetch_cloud_file(
         if not download_url:
             from .exceptions import CloudError
 
-            raise CloudError(
-                f"No downloadUrl in file details for {ndic_uri}. Response: {details}"
-            )
+            raise CloudError(f"No downloadUrl in file details for {ndic_uri}. Response: {details}")
 
     # Stream download to temp file, then atomic rename
     target = Path(target_path)

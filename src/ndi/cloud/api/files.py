@@ -310,9 +310,7 @@ def getSignedURLSet(
     MATLAB equivalent: +cloud/+api/+files/getSignedURLSet.m
     """
     if id_namespace == "ndi":
-        endpoint = (
-            "/datasets/{datasetId}/ndi-documents/{ndiDocumentId}/signed-url-set"
-        )
+        endpoint = "/datasets/{datasetId}/ndi-documents/{ndiDocumentId}/signed-url-set"
         path_params = {"datasetId": dataset_id, "ndiDocumentId": document_id}
     else:
         endpoint = "/datasets/{datasetId}/documents/{documentId}/signed-url-set"

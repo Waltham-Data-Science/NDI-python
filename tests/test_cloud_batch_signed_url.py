@@ -18,7 +18,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # BatchSignedUrlLookup
 # ---------------------------------------------------------------------------
@@ -152,8 +151,7 @@ class TestBatchLookupFallback:
         for uid in [f"u_{i}" for i in range(10)]:
             lookup.lookup("ds1", "doc1", "series", uid)
         assert len(signer.calls) == 1, (
-            f"Failure suppression is missing: signer was called "
-            f"{len(signer.calls)} times."
+            f"Failure suppression is missing: signer was called " f"{len(signer.calls)} times."
         )
         stats = lookup.stats()
         assert stats.uid_hits == 0
@@ -457,7 +455,5 @@ class TestGetSignedURLSetAll:
 
         with patch("ndi.cloud.api.files.getSignedURLSet", side_effect=unique_cursor):
             with pytest.raises(files_api.SignedURLSetMaxPagesReached) as exc:
-                files_api.getSignedURLSetAll(
-                    "ds1", "doc1", max_pages=3, client=MagicMock()
-                )
+                files_api.getSignedURLSetAll("ds1", "doc1", max_pages=3, client=MagicMock())
         assert exc.value.merged["pages"] == 3
