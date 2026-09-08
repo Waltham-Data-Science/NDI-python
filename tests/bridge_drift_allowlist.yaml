@@ -156,20 +156,12 @@ no_hash:
     matlab_path: "+ndi/+fun/+doc/+probe/probeLocations4probes.m"
   - name: makeSpeciesStrainSex
     matlab_path: "+ndi/+fun/+doc/+subject/makeSpeciesStrainSex.m"
-  - name: docCellArray2Table
-    matlab_path: "+ndi/+fun/+docTable/docCellArray2Table.m"
   - name: element (docTable)
     matlab_path: "+ndi/+fun/+docTable/element.m"
   - name: epoch (docTable)
     matlab_path: "+ndi/+fun/+docTable/epoch.m"
   - name: openminds (docTable)
     matlab_path: "+ndi/+fun/+docTable/openminds.m"
-  - name: probe (docTable)
-    matlab_path: "+ndi/+fun/+docTable/probe.m"
-  - name: subject (docTable)
-    matlab_path: "+ndi/+fun/+docTable/subject.m"
-  - name: subjectBasic
-    matlab_path: "+ndi/+fun/+docTable/subject.m"
   - name: treatment (docTable)
     matlab_path: "+ndi/+fun/+docTable/treatment.m"
   - name: epochid2element

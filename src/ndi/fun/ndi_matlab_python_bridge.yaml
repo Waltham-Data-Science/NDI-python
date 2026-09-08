@@ -638,6 +638,7 @@ functions:
   - name: docCellArray2Table
     type: function
     matlab_path: "+ndi/+fun/+docTable/docCellArray2Table.m"
+    matlab_last_sync_hash: "fa67d45d0"
     python_path: "ndi/fun/doc_table.py"
     input_arguments:
       - name: documents
@@ -649,6 +650,28 @@ functions:
     decision_log: >
       Exact match. Converts a list of NDI documents to a DataFrame.
       Each document contributes one row.
+
+      Examined against NDI-matlab fa67d45d0, the file's last-touching commit,
+      and this one did NOT hold. MATLAB does not flatten anything itself -- it
+      calls ndi.document/to_table on each document and vstacks the results,
+      and to_table drops depends_on and files, gives each dependency its own
+      depends_on_NAME column, and flattens the rest with dot notation TO ANY
+      DEPTH. The port flattened document_properties inline, ONE level deep,
+      keeping both fields MATLAB removes. On the same document the two
+      produced different columns outright: the port gave base.id, base.name,
+      depends_on, element.type, files.file_list where MATLAB gives base.id,
+      base.name, depends_on_subject_id, element.type.nested -- a raw
+      depends_on column and a files.* column that should not be there, no
+      depends_on_* column that should, and a nested value left unflattened.
+      Now uses the document's own to_table when it returns a frame, and
+      otherwise applies the same rules. Covered by
+      tests/test_fun_doc_table.py. ONE GAP RECORDED, NOT FIXED HERE: MATLAB's
+      to_table also abbreviates column names through
+      ndi_common/config/ndi_document2table_abbreviations.json
+      (orientation_direction_tuning -> oridir, and nine more). That file IS
+      present in this repo's ndi_common, but ndi.document.to_table never reads
+      it, so every abbreviated field's column is named differently in the two
+      languages. That belongs to the ndi.document entry rather than this one.
 
   - name: element (docTable)
     type: function
@@ -668,6 +691,7 @@ functions:
   - name: subjectBasic
     type: function
     matlab_path: "+ndi/+fun/+docTable/subject.m"
+    matlab_last_sync_hash: "c242a07f8"
     python_path: "ndi/fun/doc_table.py"
     python_qualified: "ndi.fun.doc_table.subjectBasic"
     input_arguments:
@@ -680,9 +704,22 @@ functions:
     decision_log: >
       Exact match. Creates a basic summary table of subject documents.
 
+      Examined against NDI-matlab c242a07f8, the file's last-touching commit.
+      THIS IS NOT A PORT OF subject.m; it is a lightweight Python-only helper
+      recorded against the same MATLAB file as the full port above. It returns
+      three columns named id, local_identifier and description, where MATLAB
+      returns SessionIdentifier, SubjectDocumentIdentifier and
+      SubjectLocalIdentifier plus everything joined from the openminds and
+      treatment documents -- different names, a different column set, and none
+      of the joins. The faithful counterpart is the `subject` entry; this one
+      is a convenience for callers that want the bare subject list without the
+      expense of the openminds query. Recorded here so the two entries
+      pointing at one MATLAB file are not mistaken for duplicates.
+
   - name: probe (docTable)
     type: function
     matlab_path: "+ndi/+fun/+docTable/probe.m"
+    matlab_last_sync_hash: "bbb4d88ec"
     python_path: "ndi/fun/doc_table.py"
     python_qualified: "ndi.fun.doc_table.probe"
     input_arguments:
@@ -697,6 +734,15 @@ functions:
       columns: SubjectDocumentIdentifier, ProbeDocumentIdentifier,
       ProbeName, ProbeType, ProbeReference, ProbeLocationName,
       ProbeLocationOntology, CellTypeName, CellTypeOntology.
+
+      Examined against NDI-matlab bbb4d88ec, the file's last-touching commit.
+      The column contract matches exactly, all nine and in MATLAB's order:
+      SubjectDocumentIdentifier, ProbeDocumentIdentifier, ProbeName,
+      ProbeType, ProbeReference, ProbeLocationName, ProbeLocationOntology,
+      CellTypeName, CellTypeOntology. One divergence: MATLAB preallocates
+      every column as cellstr, so ProbeReference is text there, where the port
+      carries the numeric reference (defaulting to 0 rather than ''). Nothing
+      else to port.
 
   - name: epoch (docTable)
     type: function
@@ -854,6 +900,7 @@ functions:
   - name: subject (docTable)
     type: function
     matlab_path: "+ndi/+fun/+docTable/subject.m"
+    matlab_last_sync_hash: "c242a07f8"
     python_path: "ndi/fun/doc_table.py"
     python_qualified: "ndi.fun.doc_table.subject"
     input_arguments:
@@ -871,6 +918,19 @@ functions:
       Exact match. Python now has hideMixtureTable option (default
       True) matching MATLAB. When True, mixture-related columns are
       excluded from the subject summary table.
+
+      Examined against NDI-matlab c242a07f8, the file's last-touching commit,
+      and one column was NAMED WRONG. MATLAB builds its first three columns as
+      {'SessionIdentifier', 'SubjectDocumentIdentifier',
+      'SubjectLocalIdentifier'}; the port emitted SessionDocumentIdentifier
+      for the first. Same value, different key, so a caller written against
+      either table raises KeyError on the other. Renamed to MATLAB's spelling;
+      nothing outside this module referenced it. The remaining columns -- the
+      Strain/Species/GeneticStrainType/ BackgroundStrain/BiologicalSex pairs
+      joined from openminds documents, and the treatment columns -- carry
+      MATLAB's names. Column ORDER still differs: MATLAB puts
+      SessionIdentifier first, the port puts SubjectDocumentIdentifier first,
+      which pandas callers select by name rather than position.
 
   # =========================================================================
   # Functions — epoch.py
