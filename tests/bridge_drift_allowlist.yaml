@@ -88,7 +88,7 @@ drifted:
   # --- comments-only ---
 
 # ---------------------------------------------------------------------------
-# no_hash: 92
+# no_hash: 85
 #
 # An entry with a matlab_path and no matlab_last_sync_hash can never show
 # drift, so it claims its port is current forever and no check can contradict
@@ -154,20 +154,6 @@ no_hash:
     matlab_path: "+ndi/+fun/+doc/+probe/probeLocations4probes.m"
   - name: makeSpeciesStrainSex
     matlab_path: "+ndi/+fun/+doc/+subject/makeSpeciesStrainSex.m"
-  - name: allTypes
-    matlab_path: "+ndi/+fun/+doc/allTypes.m"
-  - name: diff (doc)
-    matlab_path: "+ndi/+fun/+doc/diff.m"
-  - name: findFuid
-    matlab_path: "+ndi/+fun/+doc/findFuid.m"
-  - name: getDocTypes
-    matlab_path: "+ndi/+fun/+doc/getDocTypes.m"
-  - name: ontologyTableRowDoc2Table
-    matlab_path: "+ndi/+fun/+doc/ontologyTableRowDoc2Table.m"
-  - name: ontologyTableRowVars
-    matlab_path: "+ndi/+fun/+doc/ontologyTableRowVars.m"
-  - name: t0_t1cell2array
-    matlab_path: "+ndi/+fun/+doc/t0_t1cell2array.m"
   - name: docCellArray2Table
     matlab_path: "+ndi/+fun/+docTable/docCellArray2Table.m"
   - name: element (docTable)

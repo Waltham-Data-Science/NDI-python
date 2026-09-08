@@ -399,13 +399,81 @@ def diff(
     # Skip file list comparison unless requested
     if not checkFileList:
         _exclude_fields.append("files")
-    elif not checkFiles:
-        # checkFileList is True but checkFiles is False:
-        # compare file_info metadata but not actual file contents
-        pass
 
     _compare(p1, p2)
+
+    if checkFiles:
+        _compare_file_contents(doc1, doc2, session1, session2, details)
+
     return {"equal": len(details) == 0, "details": details}
+
+
+def _compare_file_contents(
+    doc1: Any,
+    doc2: Any,
+    session1: Any,
+    session2: Any,
+    details: list[str],
+) -> None:
+    """Step 5 of MATLAB's ``ndi.fun.doc.diff``: compare the binary files.
+
+    THIS WAS NOT PORTED, AND ITS ABSENCE WAS SILENT. ``checkFiles`` was
+    accepted, ``session1`` and ``session2`` were accepted, and none of the
+    three was ever read -- so ``diff(a, b, checkFiles=True)`` reported the
+    documents equal without comparing a single byte, and MATLAB's guard
+    ("If checkFiles is true, session1 and session2 must be provided") never
+    fired either. A difference-finder that answers "equal" for a comparison
+    it did not run is the exact failure the bridge exists to catch.
+
+    Mirrors MATLAB: union of both file lists, presence checked first, then
+    size, then content through :func:`ndi.util.getHexDiffFromFileObj` -- the
+    same helper MATLAB uses here, and this is its only caller on either side.
+    Each file is compared inside a try/except that records the error as a
+    detail rather than raising, as MATLAB's own try/catch does.
+    """
+    from ndi.util import getHexDiffFromFileObj
+
+    if session1 is None or session2 is None:
+        raise ValueError("If checkFiles is true, session1 and session2 must be provided.")
+
+    list1 = list(doc1.current_file_list()) if hasattr(doc1, "current_file_list") else []
+    list2 = list(doc2.current_file_list()) if hasattr(doc2, "current_file_list") else []
+    set1, set2 = set(list1), set(list2)
+
+    for fname in sorted(set1 | set2):
+        in1, in2 = fname in set1, fname in set2
+        if in1 != in2:
+            present, absent = ("doc1", "doc2") if in1 else ("doc2", "doc1")
+            details.append(f"File {fname} present in {present} but not {absent}.")
+            continue  # cannot compare content if not in both
+
+        handle1 = handle2 = None
+        try:
+            handle1 = session1.database_openbinarydoc(doc1, fname)
+            handle2 = session2.database_openbinarydoc(doc2, fname)
+
+            handle1.seek(0, 2)
+            size1 = handle1.tell()
+            handle1.seek(0)
+            handle2.seek(0, 2)
+            size2 = handle2.tell()
+            handle2.seek(0)
+
+            if size1 != size2:
+                details.append(f"File {fname} size mismatch: {size1} vs {size2}.")
+            else:
+                identical, _ = getHexDiffFromFileObj(handle1, handle2)
+                if not identical:
+                    details.append(f"File {fname} content mismatch.")
+        except Exception as exc:  # noqa: BLE001 -- MATLAB catches and reports too
+            details.append(f"Error comparing file {fname}: {exc}")
+        finally:
+            for session, handle in ((session1, handle1), (session2, handle2)):
+                if handle is not None and hasattr(session, "database_closebinarydoc"):
+                    try:
+                        session.database_closebinarydoc(handle)
+                    except Exception:  # noqa: BLE001
+                        pass
 
 
 def ontologyTableRowVars(
