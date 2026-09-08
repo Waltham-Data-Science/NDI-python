@@ -132,14 +132,6 @@ no_hash:
     matlab_path: "+ndi/+fun/+doc/+subject/makeSpeciesStrainSex.m"
   - name: epochid2element
     matlab_path: "+ndi/+fun/+epoch/epochid2element.m"
-  - name: filename2epochid
-    matlab_path: "+ndi/+fun/+epoch/filename2epochid.m"
-  - name: MD5
-    matlab_path: "+ndi/+fun/+file/MD5.m"
-  - name: dateCreated
-    matlab_path: "+ndi/+fun/+file/dateCreated.m"
-  - name: dateUpdated
-    matlab_path: "+ndi/+fun/+file/dateUpdated.m"
   - name: bar3
     matlab_path: "+ndi/+fun/+plot/bar3.m"
   - name: multichan
@@ -156,18 +148,8 @@ no_hash:
     matlab_path: "+ndi/+fun/+stimulus/findMixtureName.m"
   - name: tuning_curve_to_response_type
     matlab_path: "+ndi/+fun/+stimulus/tuning_curve_to_response_type.m"
-  - name: channelname2prefixnumber
-    matlab_path: "+ndi/+fun/channelname2prefixnumber.m"
-  - name: name2variableName
-    matlab_path: "+ndi/+fun/name2variableName.m"
-  - name: name2variableName (PascalCase variant)
-    matlab_path: "+ndi/+fun/name2variableName.m"
-  - name: pseudorandomint
-    matlab_path: "+ndi/+fun/pseudorandomint.m"
   - name: stimulustemporalfrequency
     matlab_path: "+ndi/+fun/stimulustemporalfrequency.m"
-  - name: timestamp
-    matlab_path: "+ndi/+fun/timestamp.m"
   - name: centerFigure
     matlab_path: "+ndi/+gui/+utility/centerFigure.m"
   - name: ndi_gui_Data

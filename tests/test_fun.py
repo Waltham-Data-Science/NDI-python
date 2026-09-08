@@ -105,9 +105,12 @@ class TestTimestamp:
         from ndi.fun.utils import timestamp
 
         ts = timestamp()
-        # Should be ISO-like: YYYY-MM-DDTHH:MM:SS.mmm
+        # ISO-like with the zone designator MATLAB's UTCLeapSeconds format
+        # carries: YYYY-MM-DDTHH:MM:SS.mmmZ. This asserted 23 characters and
+        # no Z, which is the format ndi.util.datestamp2datetime refuses.
         assert "T" in ts
-        assert len(ts) == 23  # 2026-02-06T12:34:56.789
+        assert ts.endswith("Z")
+        assert len(ts) == 24  # 2026-02-06T12:34:56.789Z
 
     def test_recent(self):
         from ndi.fun.utils import timestamp
