@@ -367,11 +367,16 @@ classes:
         decision_log: >
           Exact match. Extended signature vs ndi_time_syncrule_filematch/ndi_time_syncrule_filefind:
           accepts daqsystem_a as third argument. Reads random
-          pulse trigger events from each epoch, uses
-          inter-pulse-interval cross-correlation to align
-          sequences (ndi.time.fun.syncRandomTriggers equivalent),
-          then computes a linear time mapping. Checks for cached
+          pulse trigger events from each epoch, calls
+          _sync_random_triggers (the port of
+          ndi.time.fun.syncRandomTriggers -- hash the longer
+          recording's interval fingerprints, probe the shorter
+          in randomized order, secondary-pulse-check each hit),
+          then computes a linear time mapping. On no match the
+          helper returns (nan, nan) and this method raises
+          ValueError("Could not find random pulse match.") when
+          errorOnFailure=True, or returns (None, None) when
+          errorOnFailure=False. Checks for cached
           syncrule_mapping documents in the database before
           computing. Returns (None, None) if names/clocks do
-          not match. Raises RuntimeError on failure if
-          errorOnFailure=True.
+          not match.

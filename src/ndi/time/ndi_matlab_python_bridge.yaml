@@ -905,6 +905,14 @@ time_fun:
       - name: t2
         type_matlab: "double vector"
         type_python: "np.ndarray"
+      - name: alignmentTolerance
+        type_matlab: "double"
+        type_python: "float"
+        default: "0.002"
+      - name: fingerprintSize
+        type_matlab: "double"
+        type_python: "int"
+        default: "4"
     output_arguments:
       - name: shift
         type_python: "float"
@@ -912,17 +920,39 @@ time_fun:
         type_python: "float"
     decision_log: >
       Same placement story as syncTriggerTrains: a free function in MATLAB,
-      a private helper beside its one caller in Python.
-      DIVERGENCE, smaller than its neighbour but real. Both find an offset
-      from inter-event intervals and then fit, so they agree in shape.
-      MATLAB builds a hash map of interval fingerprints from the longer
-      recording and probes it in randomized order, then validates the
-      candidate with a secondary pulse check and RAISES if the match is
-      ambiguous. Python cross-correlates the normalized IPI sequences and
-      takes the argmax, which always yields an answer -- an ambiguous
-      alignment produces a confident wrong one rather than an error.
-      The failure mode differs even where the result usually agrees, so a
-      caller cannot treat a Python answer as carrying MATLAB's guarantee.
+      a private helper beside its one caller in Python. Both return
+      (shift, scale) such that t1 = shift + scale * t2 -- and note that
+      convention is the OPPOSITE of syncTriggerTrains, which returns the
+      line for t2 in terms of t1; MATLAB's headers document both directions
+      that way and the port preserves each.
+      PORTED 1:1 (NDI-python#249). Hash the longer-duration recording's
+      interval fingerprints, probe the shorter one in randomized order,
+      validate each hit with a secondary pulse check one beyond the
+      fingerprint, and return the first candidate whose secondary check
+      passes. On no match, return (nan, nan) -- the same failure contract
+      MATLAB documents. That NaN is now the failure branch in the caller
+      (random_pulses.apply): errorOnFailure=True turns it into a
+      ValueError("Could not find random pulse match."), matching the
+      behaviour the branch was written to implement.
+      The pre-port helper cross-correlated the normalized IPI sequences and
+      committed to a single argmax lag, so an ambiguous alignment produced
+      a confident wrong answer and no-match surfaced as a "Poor fit
+      quality" ValueError -- neither of those matches MATLAB. That helper
+      is gone.
+      SHARED HELPER: _matlab_round comes from
+      common_triggers_overlapping_epochs.py (the sibling port for
+      syncTriggerTrains, NDI-python#223), because interval quantization
+      needs MATLAB's half-away-from-zero rounding, not numpy's half-to-
+      even. If a third caller shows up, the two-line helper is worth
+      lifting to a shared module.
+      ONE ALGORITHMIC LIMITATION carried over deliberately, pinned by
+      test_periodic_trains_pick_a_candidate_matlab_does_not_disambiguate:
+      unlike syncTriggerTrains, syncRandomTriggers does NOT detect
+      ambiguity. On perfectly periodic data every fingerprint matches
+      every fingerprint AND the secondary pulse check also passes at
+      several offsets, so the algorithm returns the first candidate it
+      trips over, which may be off by a whole pulse period. A caller who
+      needs the ambiguity guarantee should use syncTriggerTrains.
 
   - name: samples2times
     matlab_path: "+ndi/+time/+fun/samples2times.m"
