@@ -106,6 +106,7 @@ functions:
   - name: readngrid
     type: function
     matlab_path: "+ndi/+fun/+data/readngrid.m"
+    matlab_last_sync_hash: "b33d8ce64"
     python_path: "ndi/fun/data.py"
     input_arguments:
       - name: file_path
@@ -124,9 +125,29 @@ functions:
     decision_log: >
       Exact match. Reads n-dimensional binary matrix from file.
 
+      Examined against NDI-matlab b33d8ce64, the file's last-touching commit.
+      The byte layout matches, which is the part that matters for a format the
+      two languages exchange: _TYPE_MAP pins '<' on every numeric type against
+      MATLAB's explicit 'ieee-le', and the reshape uses order='F' against
+      fread's column-major fill. Both are now pinned by
+      tests/test_fun_data_ngrid.py rather than left to a comment. TWO
+      DELIBERATE DIVERGENCES. MATLAB WARNS on an unrecognised dataType and on
+      an element-count mismatch, then carries on and returns whatever fread
+      produced; the port raises ValueError in both cases, so a short or
+      misdescribed file cannot be read as if it were whole. ONE REAL GAP,
+      RECORDED RATHER THAN GUESSED AT: MATLAB special-cases 'ubit1' to skip
+      the warning, and fread('ubit1') reads ONE BIT per element -- eight
+      values to the byte. _TYPE_MAP maps ubit1 to NumPy bool, one BYTE per
+      element, so a logical ngrid written by MATLAB cannot be read here and
+      vice versa. mat2ngrid labels every logical array ubit1, so this is
+      reachable. Fixing it means packing bits, and MATLAB's bit order within a
+      byte is not something to infer without a MATLAB to test against;
+      recorded here for whoever has one.
+
   - name: writengrid
     type: function
     matlab_path: "+ndi/+fun/+data/writengrid.m"
+    matlab_last_sync_hash: "b33d8ce64"
     python_path: "ndi/fun/data.py"
     input_arguments:
       - name: data
@@ -144,9 +165,22 @@ functions:
       Exact match. Writes n-dimensional matrix to binary file
       in little-endian format.
 
+      Examined against NDI-matlab b33d8ce64, the file's last-touching commit.
+      Matches: little-endian by dtype against MATLAB's 'ieee-le', and
+      ravel(order='F') before tofile against fwrite's column-major walk --
+      ndarray.tofile is C-order, so the explicit ravel is what makes the file
+      readable by MATLAB at all. Now covered by
+      tests/test_fun_data_ngrid.py::TestNgridByteLayout, including a direct
+      assertion on the on-disk element order. One divergence: MATLAB warns on
+      an unrecognised dataType and lets fwrite try, where the port raises.
+      Note that MATLAB's own validDataTypes list omits 'ubit1', so MATLAB
+      warns when writing the very type mat2ngrid assigns to logical arrays;
+      the bit-packing gap is recorded on readngrid.
+
   - name: mat2ngrid
     type: function
     matlab_path: "+ndi/+fun/+data/mat2ngrid.m"
+    matlab_last_sync_hash: "b33d8ce64"
     python_path: "ndi/fun/data.py"
     input_arguments:
       - name: data
@@ -164,6 +198,25 @@ functions:
       structure with keys: data_size, data_type, data_dim, coordinates.
       MATLAB uses varargin for optional coordinates; Python uses a
       single list argument.
+
+      Examined against NDI-matlab b33d8ce64, the file's last-touching commit,
+      and one thing did NOT hold. MATLAB ends with `if islogical(x),
+      ngrid.data_type = 'ubit1'; end`, so a logical array is ALWAYS recorded
+      as ubit1. The port reverse-mapped the dtype by scanning _TYPE_MAP, where
+      both 'logical' and 'ubit1' map to the same NumPy dtype, so which name
+      came out was decided by dict order -- 'logical' -- and the two languages
+      disagreed on the recorded data_type of every boolean ngrid. Booleans are
+      now named explicitly, before the scan. TWO DIVERGENCES LEFT AS THEY ARE,
+      both in the default coordinates. MATLAB builds ONE column vector holding
+      every dimension's indices concatenated (1:size(x,i) for each i), from
+      which a reader cannot tell where one axis ends and the next begins
+      without data_dim; the port returns a LIST of per-axis arrays, which is
+      what a Python caller indexes. And those arrays run 0..N-1 where MATLAB's
+      run 1..N, following each language's indexing convention. The
+      list-of-arrays shape is asserted by tests/test_fun.py::TestMat2Ngrid, so
+      it is a deliberate choice rather than an oversight -- it had simply
+      never been written down. A caller comparing coordinates across the two
+      languages must account for both.
 
   - name: evaluate_fitcurve
     type: function
@@ -205,6 +258,7 @@ functions:
   - name: readImageStack
     type: function
     matlab_path: "+ndi/+fun/+data/readImageStack.m"
+    matlab_last_sync_hash: "a695aedff"
     python_path: "ndi/fun/data.py"
     input_arguments:
       - name: session
@@ -227,6 +281,27 @@ functions:
     decision_log: >
       Exact match. Reads an image stack or video from a database
       binary document. Supports formats: tif, png, mp4, ngrid, auto.
+
+      Examined against NDI-matlab a695aedff, the file's last-touching commit,
+      and the port follows MATLAB's HELP TEXT rather than MATLAB's CODE. The
+      help promises an HxWxCxN array 'containing the pixel data for all
+      frames', but the body calls plain imread(file, fmt), which returns the
+      FIRST frame only; nothing in it loops over frames. The port does loop,
+      stacking every frame on the last axis. Section 7's precedent runs the
+      other way -- plot_extracellular_spikeshapes follows the code, 'since
+      that is the observable behaviour' -- so this is flagged rather than
+      quietly kept: reading all frames is almost certainly what was wanted,
+      but MATLAB does not currently do it, and the two disagree today for any
+      multi-frame TIFF. THREE FURTHER DIVERGENCES. For video formats MATLAB
+      returns a VideoReader OBJECT -- a lazy handle, the point of which is not
+      loading the file -- where the port returns decoded array data. MATLAB's
+      second output is imfinfo's per-frame struct array, or get(VideoReader);
+      the port returns a small dict of format/size/mode/num_frames. And the
+      port adds two formats MATLAB has no notion of: 'ngrid', reading raw
+      binary via the document's imageStack_parameters, and 'auto', which
+      sniffs the file header and falls back to ngrid, where MATLAB errors
+      readImageStack:UnsupportedFormat for anything outside imformats and
+      VideoReader's list.
 
   # =========================================================================
   # Functions — dataset.py

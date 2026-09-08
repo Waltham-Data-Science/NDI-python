@@ -108,7 +108,7 @@ classes:
   - name: tuning_response
     type: class
     matlab_path: "src/ndi/+ndi/+app/+stimulus/tuning_response.m"
-    matlab_last_sync_hash: "0e2caa0"
+    matlab_last_sync_hash: "ae7916628"
     python_path: "ndi/app/stimulus/tuning_response.py"
     python_class: "ndi_app_stimulus_tuning__response"
     inherits: "ndi.app"
