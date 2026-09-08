@@ -627,8 +627,16 @@ not_yet_ported:
   - name: Constants
     matlab_path: "+ndi/+cloud/+sync/+internal/Constants.m"
     matlab_last_sync_hash: "fe64a9f5"
-    status: porting_deferred
-    decision_log: "MATLAB sync constants class. Values may be inlined in Python."
+    status: ported_differently
+    python_path: "ndi/cloud/internal.py"
+    decision_log: >
+      MATLAB sync constants class; the earlier entry said "values may be
+      inlined in Python" and none had been. Its one property,
+      FileSyncLocation, is now the module constant FILE_SYNC_LOCATION in
+      internal.py -- a classdef of a single constant has no reason to
+      become a Python class. downloadDataset stages downloaded binaries
+      there before the database ingests them, which is what the MATLAB
+      constant is for. No hash move: the MATLAB side is unchanged.
 
   - name: deleteRemoteDocuments
     matlab_path: "+ndi/+cloud/+sync/+internal/deleteRemoteDocuments.m"
