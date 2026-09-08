@@ -239,3 +239,48 @@ class TestAShortDownloadDegradesRatherThanLosing:
         assert by_uid["UID_ONE"]["location_type"] == "file"
         assert by_uid["UID_TWO"]["location"] == f"ndic://{CLOUD_ID}/UID_TWO"
         assert by_uid["UID_TWO"]["location_type"] == "ndicloud"
+
+
+class TestTheCloudDatasetIdReachesTheRewrite:
+    """NDI-matlab cd3c11673 (#958) threaded cloudDatasetId into the rewrite.
+
+    MATLAB does it inside downloadNdiDocuments, where the documentUpdateFcn
+    is built; here the rewrite lives in orchestration.downloadDataset. Either
+    way the id is what lets a downloaded series keep its manifest's ndic://
+    reference and get its ingest_locations rebuilt -- without which DID
+    refuses the document.
+
+    updateFileInfoForLocalFiles takes cloud_dataset_id as an OPTIONAL third
+    argument, and every existing test called it directly. So dropping the
+    argument at the call site broke nothing any test could see, while a
+    downloaded series lost the reference. This pins the call site.
+    """
+
+    def _spy(self, monkeypatch):
+        seen = []
+        from ndi.cloud import filehandler
+
+        real = filehandler.updateFileInfoForLocalFiles
+
+        def watched(props, directory, cloud_dataset_id=None, *args, **kwargs):
+            seen.append(cloud_dataset_id)
+            return real(props, directory, cloud_dataset_id, *args, **kwargs)
+
+        monkeypatch.setattr(filehandler, "updateFileInfoForLocalFiles", watched)
+        return seen
+
+    def test_the_rewrite_is_given_the_cloud_dataset_id(self, tmp_path, cloud, monkeypatch):
+        seen = self._spy(monkeypatch)
+        _download(tmp_path)
+
+        assert seen, "updateFileInfoForLocalFiles was never called"
+        assert all(got == CLOUD_ID for got in seen), (
+            f"the rewrite was called with {seen!r}; without the cloud dataset id "
+            "a downloaded series cannot keep its manifest's ndic:// reference"
+        )
+
+    def test_it_is_not_called_at_all_without_sync_files(self, tmp_path, cloud, monkeypatch):
+        """MATLAB picks one rewrite or the other on syncOptions.SyncFiles."""
+        seen = self._spy(monkeypatch)
+        _download(tmp_path, sync_files=False)
+        assert seen == []
