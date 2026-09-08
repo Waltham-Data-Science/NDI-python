@@ -201,7 +201,9 @@ class TestCompareDatasetSummary:
             "sessionSummaries": [ss2],
         }
         report = compareDatasetSummary(s1, s2)
-        assert any("sessionSummaries" in r for r in report)
+        # MATLAB prefixes a per-session difference with 'Session <id>: '.
+        # This used to read 'sessionSummaries[<id>]: '.
+        assert any(r.startswith("Session sid1: ") for r in report)
 
     def test_exclude_fields(self):
         s1 = {"numSessions": 1, "references": ["r"], "sessionIds": ["s"], "sessionSummaries": []}
