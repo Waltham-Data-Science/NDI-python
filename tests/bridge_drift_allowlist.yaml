@@ -102,10 +102,6 @@ no_hash:
     matlab_path: "+ndi/+app/spikeextractor.m"
   - name: spikesorter
     matlab_path: "+ndi/+app/spikesorter.m"
-  - name: tuningcurve
-    matlab_path: "+ndi/+calc/+stimulus/tuningcurve.m"
-  - name: tuning_fit
-    matlab_path: "+ndi/+calc/tuning_fit.m"
   - name: SyncIndex
     matlab_path: "+ndi/+cloud/+sync/+internal/+index/"
   - name: navigator
