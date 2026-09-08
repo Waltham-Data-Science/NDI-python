@@ -199,10 +199,25 @@ def test_the_loudest_gene_comes_first():
     assert list(controls.countsOrder([3, 100, 7])) == [1, 2, 0]
 
 
+def test_ascending_puts_the_quietest_first():
+    assert list(controls.countsOrder([3, 100, 7], ascending=True)) == [0, 2, 1]
+
+
 def test_equal_counts_keep_the_order_they_arrived_in():
     """The list arrives alphabetical, and thousands of genes tie at the
     bottom of a real section; an unstable sort would shuffle them."""
     assert list(controls.countsOrder([5, 9, 5, 5, 9])) == [1, 4, 0, 2, 3]
+
+
+def test_ties_stay_alphabetical_in_BOTH_directions():
+    """Reversing the descending order would reverse the ties with it, so
+    the same tied group would read forwards one way and backwards the
+    other. Ascending is its own sort for that reason."""
+    totals = [5, 9, 5, 5, 9]
+    assert list(controls.countsOrder(totals, ascending=True)) == [0, 2, 3, 1, 4]
+    assert list(controls.countsOrder(totals, ascending=True)) != list(
+        reversed(controls.countsOrder(totals))
+    )
 
 
 def test_an_empty_list_sorts_to_nothing():

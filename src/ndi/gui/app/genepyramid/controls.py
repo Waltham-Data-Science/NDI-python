@@ -169,8 +169,8 @@ def abundanceBand(totals, lo: float = 0.0, hi: float = 100.0):
 _GENE_COLORMAPS = ("magenta", "green", "cyan", "yellow", "red", "blue")
 
 
-def countsOrder(totals):
-    """Positions ordered by count, loudest first, ties left alone.
+def countsOrder(totals, ascending: bool = False):
+    """Positions ordered by count, ties left alone.
 
     STABLE, and that is the whole content of this function. The list
     arrives alphabetical, so a stable sort leaves genes with equal counts
@@ -178,26 +178,22 @@ def countsOrder(totals):
     bottom of a real section thousands of them tie, which is precisely
     where an arbitrary order is most annoying to read.
 
+    Sorting ASCENDING is a separate sort rather than the descending one
+    reversed: reversing would reverse the ties too, so the alphabetical
+    order inside each tied group would come back backwards in one
+    direction and forwards in the other.
+
     Args:
         totals: counts per entry, array-like.
+        ascending: quietest first rather than loudest first.
 
     Returns:
         An int array of positions into *totals*.
     """
     import numpy as np
 
-    return np.argsort(-np.asarray(totals), kind="stable")
-
-
-# The useful band settings are not obvious from a bare slider and are
-# nearly the same on every section, so they are offered as presets.
-_BAND_PRESETS = (
-    ("all", 0.0, 100.0),
-    ("drop top 1%", 0.0, 99.0),
-    ("drop top 5%", 0.0, 95.0),
-    ("middle 5-95%", 5.0, 95.0),
-    ("top 10% only", 90.0, 100.0),
-)
+    t = np.asarray(totals)
+    return np.argsort(t if ascending else -t, kind="stable")
 
 
 def addGenePanel(viewer, session, pyr_doc) -> Any:
@@ -225,9 +221,7 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
     import numpy as np
     from qtpy.QtCore import Qt, QTimer
     from qtpy.QtWidgets import (
-        QComboBox,
         QDoubleSpinBox,
-        QFormLayout,
         QHBoxLayout,
         QLabel,
         QLineEdit,
@@ -266,22 +260,40 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
 
     box = QWidget()
     outer = QVBoxLayout(box)
-    head = f"{len(index):,} genes"
+    base_head = f"{len(index):,} genes"
     if n_variants:
-        head += f"  ({n_variants:,} with variants, summed)"
-    outer.addWidget(QLabel(head))
+        base_head += f"  ({n_variants:,} with variants, summed)"
+    header = QLabel(base_head)
+
+    def _headText(info=None) -> str:
+        # The band's own count lives here rather than in a line of its
+        # own: it is the same fact the header already states, narrowed.
+        if not info or not info.get("available") or info["nKept"] == info["nTotal"]:
+            return base_head
+        return (
+            f"{info['nKept']:,} of {info['nTotal']:,} genes  ·  "
+            f"{info['pctReads']:.1f}% of reads"
+        )
+
+    outer.addWidget(header)
 
     search = QLineEdit()
     search.setPlaceholderText("filter by symbol or accession")
     outer.addWidget(search)
 
+    # Column headers, not a menu: two buttons that read like a table's
+    # header row and behave like one -- click to sort by that column,
+    # click again to reverse it. Four orders, which is what looking at a
+    # ranked list actually needs; a menu would have listed all four and
+    # made the reader pick the wording rather than the direction.
     sort_row = QHBoxLayout()
-    sort_row.addWidget(QLabel("Sort"))
-    sort_box = QComboBox()
-    sort_box.addItem("name (A-Z)")
-    if symbol_totals is not None:
-        sort_box.addItem("counts (high to low)")
-    sort_row.addWidget(sort_box, stretch=1)
+    name_btn = QPushButton("Gene")
+    count_btn = QPushButton("Counts")
+    for b in (name_btn, count_btn):
+        b.setFlat(True)
+        sort_row.addWidget(b)
+    count_btn.setEnabled(symbol_totals is not None)
+    sort_row.addStretch()
     outer.addLayout(sort_row)
 
     listw = QListWidget()
@@ -350,28 +362,52 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
             state["busy"] = was
         _refilter()
 
-    def _onSort(*_):
-        if sort_box.currentIndex() == 1 and symbol_totals is not None:
-            order = countsOrder(symbol_totals)
+    # (column, ascending). Names start A-Z; counts, when asked for, start
+    # loudest-first, because that is the question a counts column is
+    # being clicked to answer.
+    sort_state = {"by": "name", "asc": True}
+
+    def _sortBy(column: str):
+        if sort_state["by"] == column:
+            sort_state["asc"] = not sort_state["asc"]
         else:
-            order = range(len(symbols))  # geneIndex already sorted by name
+            sort_state["by"] = column
+            sort_state["asc"] = column == "name"
+        _resort()
+
+    def _resort():
+        by, asc = sort_state["by"], sort_state["asc"]
+        if by == "counts" and symbol_totals is not None:
+            order = countsOrder(symbol_totals, ascending=asc)
+        else:
+            # geneIndex already sorted by name, and symbols are unique, so
+            # Z-A is that order backwards -- no tie to preserve.
+            order = range(len(symbols)) if asc else range(len(symbols) - 1, -1, -1)
+        arrow = " \u25b2" if asc else " \u25bc"
+        name_btn.setText("Gene" + (arrow if by == "name" else ""))
+        count_btn.setText("Counts" + (arrow if by == "counts" else ""))
         _populate(order)
 
-    sort_box.currentIndexChanged.connect(_onSort)
+    name_btn.clicked.connect(lambda *_: _sortBy("name"))
+    count_btn.clicked.connect(lambda *_: _sortBy("counts"))
 
     # ---- the abundance band ------------------------------------------
-    band_readout = QLabel()
-    band_readout.setWordWrap(True)
+    # ONE ROW. What the band is and what it just did are hover text on the
+    # slider rather than a paragraph under it: the explanation is read
+    # once and the panel is read every time, and the list underneath is
+    # what the space is for.
     if symbol_totals is None:
-        band_readout.setText(
-            "This pyramid has no gene_totals.tsv, so abundance is unknown "
-            "and the band cannot be applied. Counts are omitted above for "
-            "the same reason."
+        note = QLabel("no gene_totals.tsv: no counts, no band")
+        note.setToolTip(
+            "This pyramid was written without gene_totals.tsv, so per-gene "
+            "abundance is unknown. The counts column and the abundance "
+            "band are both omitted rather than invented."
         )
-        outer.addWidget(band_readout)
+        outer.addWidget(note)
         slider = lo_box = hi_box = None
     else:
-        outer.addWidget(QLabel("Abundance band (percentile of total reads)"))
+        band_row = QHBoxLayout()
+        band_row.addWidget(QLabel("Abundance band"))
         slider = lo_box = hi_box = None
         try:
             # napari depends on superqt, so the two-handle widget is
@@ -384,25 +420,15 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
             slider.setRange(0.0, 100.0)
             slider.setValue((0.0, 100.0))
             slider.setDecimals(1)
-            outer.addWidget(slider)
+            band_row.addWidget(slider, stretch=1)
         except Exception as e:  # pragma: no cover - depends on the install
             print(f"[genepyramid] no superqt range slider ({e}); using spin boxes")
-            form = QFormLayout()
             lo_box = QDoubleSpinBox(minimum=0.0, maximum=100.0, decimals=1, singleStep=0.5)
             hi_box = QDoubleSpinBox(minimum=0.0, maximum=100.0, decimals=1, singleStep=0.5)
             hi_box.setValue(100.0)
-            form.addRow("low %", lo_box)
-            form.addRow("high %", hi_box)
-            outer.addLayout(form)
-
-        presets = QHBoxLayout()
-        for label, a, b in _BAND_PRESETS:
-            btn = QPushButton(label)
-            btn.setFlat(True)
-            btn.clicked.connect(lambda _=False, a=a, b=b: _setBand(a, b))
-            presets.addWidget(btn)
-        outer.addLayout(presets)
-        outer.addWidget(band_readout)
+            band_row.addWidget(lo_box)
+            band_row.addWidget(hi_box)
+        outer.addLayout(band_row)
 
     outer.addWidget(listw, stretch=1)
 
@@ -429,18 +455,6 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
             return (hi, lo) if lo > hi else (lo, hi)
         return 0.0, 100.0
 
-    def _setBand(lo, hi):
-        if slider is not None:
-            slider.blockSignals(True)
-            slider.setValue((lo, hi))
-            slider.blockSignals(False)
-        elif lo_box is not None:
-            for w, v in ((lo_box, lo), (hi_box, hi)):
-                w.blockSignals(True)
-                w.setValue(v)
-                w.blockSignals(False)
-        _applyBand()
-
     def _applyBand():
         if symbol_totals is None:
             state["keep"] = None
@@ -449,7 +463,10 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
         lo, hi = _band()
         keep, info = abundanceBand(symbol_totals, lo, hi)
         state["keep"] = keep
-        band_readout.setText(_bandText(info, list(index)))
+        for w in (slider, lo_box, hi_box):
+            if w is not None:
+                w.setToolTip(_bandText(info, symbols))
+        header.setText(_headText(info))
         _refilter()
 
     def _refilter():
@@ -566,7 +583,7 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
     except Exception:  # pragma: no cover - depends on the napari build
         pass
 
-    _populate(range(len(symbols)))
+    _resort()
     _applyBand()
     _report()
     viewer.window.add_dock_widget(box, name="Genes", area="right")
