@@ -1243,6 +1243,16 @@ class ndi_dataset_dir(ndi_dataset):
         if reference is not None:
             ref = reference
 
+        if documents is None or not documents:
+            # A plain session directory is not a dataset. Without this, opening
+            # one as a dataset succeeds -- it falls back to the session's own
+            # document -- and then setObjectTypeMarker below relabels the
+            # directory 'dataset', so the mistake is written to disk and the
+            # next open inherits it. MATLAB guards both of its public forms the
+            # same way; the hidden documents= form builds a new dataset from a
+            # download and is exempt there too.
+            self._must_not_be_session(self._path)
+
         self._path.mkdir(parents=True, exist_ok=True)
 
         # Track documents that failed to add (list of (doc_id, reason) tuples).
@@ -1317,6 +1327,74 @@ class ndi_dataset_dir(ndi_dataset):
         # Also discovers sessions from session-type documents (for
         # datasets that don't yet have session_in_a_dataset tracking).
         self._ensure_session_tracking()
+
+    @staticmethod
+    def _must_not_be_session(path: Path) -> None:
+        """Raise if *path* holds a standalone session rather than a dataset.
+
+        MATLAB equivalent: ``ndi.dataset.dir.mustNotBeSession``.
+
+        Reads the fast on-disk marker rather than opening the directory:
+
+        ``'dataset'``
+            Allowed -- this is one.
+        ``'none'``
+            Allowed -- not an NDI directory yet, so a dataset can be made here.
+        ``'session'``
+            Rejected.
+        ``'unknown'``
+            A legacy NDI directory whose type was never recorded. A *marked*
+            session would be caught, but an unmarked one would slip through and
+            be mislabelled, so the directory is investigated first: opening it
+            once as a session runs ``updateObjectTypeMarker``, which looks for
+            the dataset bookkeeping documents (``session_in_a_dataset``, or the
+            legacy ``dataset_session_info``) and records what it finds. The
+            recorded type is then re-read.
+
+        Fundamental limitation, the same one MATLAB documents: an empty dataset
+        stores no bookkeeping documents, so on disk it is indistinguishable
+        from a plain session. An empty *legacy* dataset -- made empty before
+        markers existed and not opened since -- is therefore recorded as a
+        session and rejected here; open it once with
+        :class:`~ndi.session.dir.ndi_session_dir` to record its type. Empty
+        datasets made since are marked 'dataset' at construction and are
+        unaffected.
+
+        Raises:
+            ValueError: if the directory holds a session.
+        """
+        from ..session.dir import ndi_session_dir
+
+        directory_type = ndi_session_dir.directorytype(path)
+        if directory_type == "unknown":
+            # Migrate the marker by opening it once, then re-read. If it cannot
+            # be opened to be investigated, stay lenient and allow it.
+            try:
+                ndi_session_dir(path)
+                directory_type = ndi_session_dir.directorytype(path)
+            except Exception:
+                directory_type = "unknown"
+        if directory_type == "session":
+            raise ValueError(
+                f"The directory '{path}' holds an ndi.session, not an ndi.dataset. "
+                "Open it with ndi.session.dir instead."
+            )
+
+    @staticmethod
+    def exists(path: str | Path) -> bool:
+        """Is there an ndi_dataset at *path*?
+
+        MATLAB equivalent: ``ndi.dataset.dir.exists``.
+
+        Determined from the marker that
+        :meth:`~ndi.session.dir.ndi_session_dir.directorytype` reads, so the
+        directory is not opened. False for a plain session, for a non-NDI
+        directory, and for a legacy NDI directory whose type has not been
+        recorded yet -- open such a directory once to record it.
+        """
+        from ..session.dir import ndi_session_dir
+
+        return ndi_session_dir.directorytype(path) == "dataset"
 
     def _discover_correct_session(self, initial_reference: str) -> None:
         """Find the correct session ID and reference from database documents.

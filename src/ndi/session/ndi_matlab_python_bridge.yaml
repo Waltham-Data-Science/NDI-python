@@ -394,7 +394,7 @@ classes:
   - name: dir
     type: class
     matlab_path: "+ndi/+session/dir.m"
-    matlab_last_sync_hash: "b640e6ff"
+    matlab_last_sync_hash: "26d0638bf"
     python_path: "ndi/session/dir.py"
     python_class: "ndi_session_dir"
     inherits: "ndi.session"

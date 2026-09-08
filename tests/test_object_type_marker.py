@@ -141,3 +141,78 @@ class TestSetObjectTypeMarker:
         s = ndi_session_dir("sess", str(tmp_path))
         with pytest.raises(ValueError, match="session.*dataset"):
             s.setObjectTypeMarker("elephant")
+
+
+class TestASessionDirectoryIsNotADataset:
+    """MATLAB counterpart: ``ndi.dataset.dir.mustNotBeSession``.
+
+    Opening a plain session as a dataset used to succeed -- it falls back to
+    the session's own document -- and the constructor then wrote 'dataset'
+    into the marker, so the mistake was persisted and the next open
+    inherited it. The guard reads the marker instead of opening anything.
+    """
+
+    def test_opening_a_session_as_a_dataset_is_refused(self, tmp_path):
+        root = tmp_path / "plain_session"
+        root.mkdir()
+        ndi_session_dir("a_session", root)
+
+        with pytest.raises(ValueError, match="holds an ndi.session"):
+            ndi_dataset_dir(str(root))
+
+    def test_the_two_argument_form_is_guarded_too(self, tmp_path):
+        root = tmp_path / "plain_session_two_arg"
+        root.mkdir()
+        ndi_session_dir("a_session", root)
+
+        with pytest.raises(ValueError, match="holds an ndi.session"):
+            ndi_dataset_dir("some_reference", str(root))
+
+    def test_the_refusal_does_not_relabel_the_directory(self, tmp_path):
+        """The damage the guard exists to prevent: a persisted wrong type."""
+        root = tmp_path / "still_a_session"
+        root.mkdir()
+        ndi_session_dir("a_session", root)
+
+        with pytest.raises(ValueError):
+            ndi_dataset_dir(str(root))
+
+        assert _marker_path(root).read_text().strip() == "session"
+        assert ndi_session_dir.directorytype(root) == "session"
+
+    def test_an_empty_directory_is_still_allowed(self, tmp_path):
+        """'none' means a dataset can be created here."""
+        root = tmp_path / "brand_new"
+        root.mkdir()
+        dataset = ndi_dataset_dir("new_dataset", str(root))
+        assert dataset is not None
+        assert ndi_session_dir.directorytype(root) == "dataset"
+
+    def test_an_existing_dataset_still_opens(self, tmp_path):
+        root = tmp_path / "real_dataset"
+        root.mkdir()
+        ndi_dataset_dir("real_dataset", str(root))
+
+        reopened = ndi_dataset_dir(str(root))
+        assert reopened is not None
+
+
+class TestDatasetExists:
+    """MATLAB counterpart: ``ndi.dataset.dir.exists``."""
+
+    def test_true_for_a_dataset(self, tmp_path):
+        root = tmp_path / "exists_dataset"
+        root.mkdir()
+        ndi_dataset_dir("exists_dataset", str(root))
+        assert ndi_dataset_dir.exists(root) is True
+
+    def test_false_for_a_session(self, tmp_path):
+        root = tmp_path / "exists_session"
+        root.mkdir()
+        ndi_session_dir("exists_session", root)
+        assert ndi_dataset_dir.exists(root) is False
+
+    def test_false_for_a_directory_that_is_neither(self, tmp_path):
+        root = tmp_path / "exists_nothing"
+        root.mkdir()
+        assert ndi_dataset_dir.exists(root) is False
