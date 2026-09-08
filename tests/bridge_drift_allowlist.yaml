@@ -103,7 +103,7 @@ drifted:
     matlab_path: "+ndi/+cloud/+api/+users/me.m"  # 1 commit(s) since
 
 # ---------------------------------------------------------------------------
-# no_hash: 123
+# no_hash: 119
 #
 # An entry with a matlab_path and no matlab_last_sync_hash can never show
 # drift, so it claims its port is current forever and no check can contradict
@@ -161,14 +161,6 @@ no_hash:
     matlab_path: "+ndi/+file/navigator.m"
   - name: pfilemirror
     matlab_path: "+ndi/+file/pfilemirror.m"
-  - name: mat2ngrid
-    matlab_path: "+ndi/+fun/+data/mat2ngrid.m"
-  - name: readImageStack
-    matlab_path: "+ndi/+fun/+data/readImageStack.m"
-  - name: readngrid
-    matlab_path: "+ndi/+fun/+data/readngrid.m"
-  - name: writengrid
-    matlab_path: "+ndi/+fun/+data/writengrid.m"
   - name: diff (dataset)
     matlab_path: "+ndi/+fun/+dataset/diff.m"
   - name: storeDoc

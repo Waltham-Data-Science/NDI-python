@@ -116,12 +116,23 @@ def mat2ngrid(
     """
     arr = np.asarray(data)
 
-    # Reverse-map dtype to type name
-    type_name = "double"
-    for name, dt in _TYPE_MAP.items():
-        if arr.dtype == dt:
-            type_name = name
-            break
+    # Reverse-map dtype to type name.
+    #
+    # Booleans are named FIRST and explicitly. MATLAB's mat2ngrid ends with
+    # `if islogical(x), ngrid.data_type = 'ubit1'; end`, so a logical array
+    # is always recorded as ubit1 there. Falling through to the loop below
+    # gives "logical" instead, because _TYPE_MAP lists that key before
+    # "ubit1" and both map to the same dtype -- so the recorded data_type of
+    # a boolean ngrid disagreed across the two languages purely by dict
+    # order.
+    if arr.dtype == np.dtype("bool"):
+        type_name = "ubit1"
+    else:
+        type_name = "double"
+        for name, dt in _TYPE_MAP.items():
+            if arr.dtype == dt:
+                type_name = name
+                break
 
     # Default coordinates: 0..N-1 per dimension
     if coordinates is None:
