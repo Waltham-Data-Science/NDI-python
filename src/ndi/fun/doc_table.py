@@ -144,23 +144,72 @@ def docCellArray2Table(
     """
     _require_pandas()
 
+    frames: list[pd.DataFrame] = []
     rows: list[dict[str, Any]] = []
+
     for doc in documents:
+        # MATLAB is `cellfun(@(doc) doc.to_table(), ...)` then vstack, so use
+        # the document's own to_table when it really gives a frame.
+        table = getattr(doc, "to_table", None)
+        if callable(table):
+            try:
+                built = table()
+            except Exception:  # noqa: BLE001 -- fall back to the properties
+                built = None
+            if isinstance(built, pd.DataFrame):
+                frames.append(built)
+                continue
+
         props = doc.document_properties if hasattr(doc, "document_properties") else doc
         if not isinstance(props, dict):
             continue
+        rows.append(_document_row(props))
 
-        row: dict[str, Any] = {}
-        # Flatten top-level sections
-        for section, data in props.items():
-            if isinstance(data, dict):
-                for key, val in data.items():
-                    row[f"{section}.{key}"] = val
+    if rows:
+        frames.append(pd.DataFrame(rows))
+    if not frames:
+        return pd.DataFrame()
+    # ndi.fun.table.vstack: union of columns, first-encounter order.
+    return pd.concat(frames, ignore_index=True, sort=False)
+
+
+def _document_row(props: dict[str, Any]) -> dict[str, Any]:
+    """One document's properties as a flat row, the way ``to_table`` does it.
+
+    MATLAB's docCellArray2Table does not flatten anything itself -- it calls
+    ``ndi.document/to_table``, which drops ``depends_on`` and ``files``, gives
+    each dependency its own ``depends_on_NAME`` column, and flattens the rest
+    with dot notation TO ANY DEPTH.
+
+    This port flattened ``document_properties`` inline instead, one level
+    deep, keeping both of the fields MATLAB removes. On the same document the
+    two produced different columns entirely:
+
+        port      base.id, base.name, depends_on, element.type, files.file_list
+        to_table  base.id, base.name, depends_on_subject_id, element.type.nested
+
+    -- a raw ``depends_on`` column and a ``files.*`` column that should not be
+    there, no ``depends_on_*`` column that should, and a nested value left
+    unflattened.
+    """
+    row: dict[str, Any] = {}
+
+    for entry in props.get("depends_on") or []:
+        if isinstance(entry, dict) and "name" in entry:
+            row[f"depends_on_{entry['name']}"] = entry.get("value")
+
+    def flatten(obj: dict[str, Any], prefix: str = "") -> None:
+        for key, value in obj.items():
+            if not prefix and key in ("depends_on", "files"):
+                continue
+            full = f"{prefix}{key}" if prefix else key
+            if isinstance(value, dict):
+                flatten(value, f"{full}.")
             else:
-                row[section] = data
-        rows.append(row)
+                row[full] = value
 
-    return pd.DataFrame(rows) if rows else pd.DataFrame()
+    flatten(props)
+    return row
 
 
 def element(
@@ -749,7 +798,7 @@ def subject(
 
     Returns:
         DataFrame with columns: SubjectDocumentIdentifier,
-        SessionDocumentIdentifier, SubjectLocalIdentifier,
+        SessionIdentifier, SubjectLocalIdentifier,
         StrainName, StrainOntology, GeneticStrainTypeName,
         SpeciesName, SpeciesOntology, BackgroundStrainName,
         BackgroundStrainOntology, BiologicalSexName, BiologicalSexOntology,
@@ -771,7 +820,8 @@ def subject(
         if sid:
             subject_info[sid] = {
                 "SubjectDocumentIdentifier": sid,
-                "SessionDocumentIdentifier": base.get("session_id", ""),
+                # MATLAB names this column SessionIdentifier.
+                "SessionIdentifier": base.get("session_id", ""),
                 "SubjectLocalIdentifier": subj.get("local_identifier", ""),
             }
 
@@ -968,7 +1018,7 @@ def subject(
     # Column order: fixed metadata first, then dynamic treatment columns
     fixed_cols = [
         "SubjectDocumentIdentifier",
-        "SessionDocumentIdentifier",
+        "SessionIdentifier",
         "SubjectLocalIdentifier",
         "StrainName",
         "StrainOntology",
