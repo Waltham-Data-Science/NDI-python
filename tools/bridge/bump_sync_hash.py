@@ -117,9 +117,7 @@ def bump(name: str, matlab_path: str, new_hash: str) -> list[tuple[Path, str, st
                 )
             k = hashes[0]
             old = re.search(r'matlab_last_sync_hash:\s*"([0-9a-f]+)"', lines[k]).group(1)
-            out[k] = re.sub(
-                r'(matlab_last_sync_hash:\s*)"[0-9a-f]+"', rf'\1"{new_hash}"', lines[k]
-            )
+            out[k] = re.sub(r'(matlab_last_sync_hash:\s*)"[0-9a-f]+"', rf'\1"{new_hash}"', lines[k])
             edited.append((path, old, new_hash))
         if out != lines:
             path.write_text("\n".join(out))
