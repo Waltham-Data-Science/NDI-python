@@ -887,6 +887,19 @@ functions:
       did not upload must not be recorded as synced -- is now enforced on this
       side where the binaries are actually sent, in uploadFilesForDatasetDocuments
       and mirrorToRemote (commit 8b6351c on this branch).
+      NOTE, found by sweeping for the defect class that produced the
+      waitForAllBulkUploads bug on this branch: this Python zipForUpload is
+      DEAD. It is defined once, exported nowhere, and called by nothing in
+      src -- only tests reach it. The entry says "Exact match", and no check
+      we have can contradict that: the function exists, its tests pass, and
+      nothing notices it has no caller. MATLAB's has one
+      (+sync/+internal/uploadFilesForDatasetDocuments batches binaries into
+      zips for bulk upload), and the Python counterpart of that caller
+      uploads file by file instead. So this is not one port with no caller;
+      it is a function that zips the wrong thing plus a missing batched
+      binary path. Neither is a correctness bug -- per-file upload works,
+      just without the batching -- so it is recorded here rather than fixed,
+      alongside the thinness of the same upload path tracked in #232.
 
   - name: uploadFilesForDatasetDocuments
     matlab_path: "+ndi/+cloud/+sync/+internal/uploadFilesForDatasetDocuments.m"
