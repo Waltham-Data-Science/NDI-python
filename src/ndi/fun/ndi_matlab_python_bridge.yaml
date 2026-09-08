@@ -676,6 +676,7 @@ functions:
   - name: element (docTable)
     type: function
     matlab_path: "+ndi/+fun/+docTable/element.m"
+    matlab_last_sync_hash: "068c7af06"
     python_path: "ndi/fun/doc_table.py"
     python_qualified: "ndi.fun.doc_table.element"
     input_arguments:
@@ -687,6 +688,23 @@ functions:
         type_python: "pd.DataFrame"
     decision_log: >
       Exact match. Creates a summary table of element documents.
+
+      Examined against NDI-matlab 068c7af06, the file's last-touching commit,
+      and this port is a STUB relative to it. MATLAB pre-allocates five base
+      fields -- subject_id, element_id, element_name, element_type,
+      element_reference -- and then does the substantial half: it discovers
+      every element/probe/metadata document type by scanning the document
+      folder for .json files, queries each, matches them to each element by
+      the element_id dependency, and adds one column per (metadata type, value
+      type) holding the comma-joined unique values, finally dropping all-empty
+      columns. The port emitted four columns named id, name, reference and
+      type -- so NOT ONE column name matched -- omitted subject_id entirely,
+      and has none of the metadata aggregation. The five base columns are now
+      named and populated as MATLAB names them, including subject_id from the
+      dependency. THE METADATA AGGREGATION IS STILL NOT PORTED. It is most of
+      the function and it needs a populated session to get right; recorded
+      here rather than invented, because a plausible-looking wrong column set
+      is what this entry already had.
 
   - name: subjectBasic
     type: function
@@ -747,6 +765,7 @@ functions:
   - name: epoch (docTable)
     type: function
     matlab_path: "+ndi/+fun/+docTable/epoch.m"
+    matlab_last_sync_hash: "da478adc8"
     python_path: "ndi/fun/doc_table.py"
     python_qualified: "ndi.fun.doc_table.epoch"
     input_arguments:
@@ -783,9 +802,25 @@ functions:
 
       This entry previously read "Exact match", which it was not.
 
+      Examined against NDI-matlab da478adc8, the file's last-touching commit.
+      The column contract matches -- EpochNumber, EpochDocumentIdentifier,
+      ProbeDocumentIdentifier, SubjectDocumentIdentifier, MixtureName,
+      MixtureOntology, ApproachName, ApproachOntology -- and the mixture and
+      approach joins are present. ONE DIVERGENCE THAT CAN GIVE DIFFERENT
+      NUMBERS: MATLAB takes EpochNumber from the probe's own epochtable
+      (probeArray{i}.EpochNumber = num2cell(epochtable.epoch_number)), the
+      authoritative numbering. The port instead COUNTS, keeping a running
+      1-based tally per probe in the order the epochfiles_ingested documents
+      come back from database_search. Nothing guarantees that order, so the
+      numbers agree with MATLAB's only when the database happens to return the
+      documents in epoch order. Reading the probe's epochtable needs a probe
+      object rather than the ingested documents, so it is recorded here rather
+      than guessed at.
+
   - name: openminds (docTable)
     type: function
     matlab_path: "+ndi/+fun/+docTable/openminds.m"
+    matlab_last_sync_hash: "67e2c3c1c"
     python_path: "ndi/fun/doc_table.py"
     input_arguments:
       - name: session
@@ -828,9 +863,31 @@ functions:
       available. MATLAB 'type' is a required positional arg;
       Python 'doc_type' is optional with default 'openminds'.
 
+      Examined against NDI-matlab 67e2c3c1c, the file's last-touching commit,
+      and it did NOT hold, in four ways at once. (1) `type` is an openMINDS
+      TYPE matched against openminds.openminds_type as
+      'https://openminds.om-i.org/types/<type>'; the port ran isa(type) -- an
+      isa query for a document class literally named e.g. 'Strain' -- so it
+      selected the wrong documents, usually none. (2) It read the row from
+      props[type] rather than props['openminds']['fields'], so every row came
+      back holding nothing but an id where MATLAB builds <type>Name and
+      <type>Ontology. (3) depends_on, depends_on_docs and allOpenMindsDocs
+      were accepted and never read, so MATLAB's optimised path -- filter the
+      pre-fetched documents by type, then by dependency -- did not exist. (4)
+      The third output took the FIRST entry of depends_on rather than the one
+      depends_on names, returning another document's id whenever a document
+      had more than one dependency. All four are fixed and covered by
+      tests/test_fun_doc_table_openminds.py. ONE HALF STILL NOT PORTED,
+      recorded rather than invented: MATLAB also walks each openMINDS field
+      holding NDI document references, resolves those documents, and adds a
+      <FieldName>Name / <FieldName>Ontology column pair for each -- the
+      expansion that fills in a Strain's species and background strains. It
+      needs real linked documents to get right.
+
   - name: treatment (docTable)
     type: function
     matlab_path: "+ndi/+fun/+docTable/treatment.m"
+    matlab_last_sync_hash: "74f3ef322"
     python_path: "ndi/fun/doc_table.py"
     input_arguments:
       - name: session
@@ -896,6 +953,17 @@ functions:
       and doing it silently would have changed the table's shape.
 
       This entry previously read "Exact match", which it was not.
+
+      Examined against NDI-matlab 74f3ef322, the file's last-touching commit.
+      This one holds. The query covers treatment AND treatment_drug --
+      siblings, not sub- and superclass, which is where mixture_table lives
+      (issue #138); the dependency output uses the NAMED dependency rather
+      than the first, which is the bug the sibling entry openminds had; the
+      three DrugTreatmentMixture columns (Name, Ontology, Quantity) are
+      derived before hideMixtureTable is tested, as MATLAB does, so the flag
+      drops only the raw DrugTreatmentMixtureTable column and not the
+      expansion. Covered by tests/test_fun_doc_table_mixture.py. Nothing to
+      port.
 
   - name: subject (docTable)
     type: function
