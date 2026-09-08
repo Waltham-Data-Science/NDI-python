@@ -260,6 +260,185 @@ def getFileDetails(
     )
 
 
+# ---------------------------------------------------------------------------
+# Signed-URL-set family
+#
+# The cloud exposes a "signed-URL-set" route that returns a document's uid ->
+# pre-signed URL map in one call, cursor-paginated. NDI's own callers hold NDI
+# document ids (data.base.id), so the ndi-documents route is the one to use;
+# the by-_id route exists for callers who hold the mongo _id.
+#
+# For an ordinary document that references a handful of files, calling
+# getFileDetails per uid is fine. For a file series with many members --
+# 28,000 in the lightsheet-pyramid case that motivates this -- that becomes
+# one API round trip per member. See NDI-python#262 and NDI-matlab#952.
+# ---------------------------------------------------------------------------
+
+
+@_auto_client
+@validate_call(config=VALIDATE_CONFIG)
+def getSignedURLSet(
+    dataset_id: CloudId,
+    document_id: NonEmptyStr,
+    *,
+    limit: int = 500,
+    cursor: str = "",
+    file_series: str = "",
+    id_namespace: Literal["cloud", "ndi"] = "cloud",
+    client: _Client = None,
+) -> dict[str, Any]:
+    """GET one page of a document's uid -> signed URL map.
+
+    Returns a dict with fields ``datasetId``, ``documentId``, ``totalCount``,
+    ``pageCount``, optionally ``nextCursor``, ``expiresAt``, and ``files``
+    (a dict mapping file uid to pre-signed download URL, in uid-sorted order).
+
+    Args:
+        dataset_id: The cloud dataset id.
+        document_id: The document id. Namespace controlled by *id_namespace*.
+        limit: Per-page limit. Server default 500, cap 1000.
+        cursor: Opaque cursor from a prior response's ``nextCursor``.
+        file_series: If set, restrict the set to one file series' members.
+            A document holding a dual pyramid references several series; a
+            viewer wants the level it is showing, not all of them.
+        id_namespace: ``"cloud"`` (default) sends the mongo ``_id`` to the
+            by-_id route; ``"ndi"`` sends ``data.base.id`` to the
+            ndi-documents route. NDI's own callers hold NDI ids and must
+            pass ``"ndi"``; passing one as ``"cloud"`` is a 404. See
+            NDI-matlab#968.
+
+    MATLAB equivalent: +cloud/+api/+files/getSignedURLSet.m
+    """
+    if id_namespace == "ndi":
+        endpoint = (
+            "/datasets/{datasetId}/ndi-documents/{ndiDocumentId}/signed-url-set"
+        )
+        path_params = {"datasetId": dataset_id, "ndiDocumentId": document_id}
+    else:
+        endpoint = "/datasets/{datasetId}/documents/{documentId}/signed-url-set"
+        path_params = {"datasetId": dataset_id, "documentId": document_id}
+
+    params: dict[str, Any] = {"limit": limit}
+    if cursor:
+        params["cursor"] = cursor
+    if file_series:
+        params["fileSeries"] = file_series
+
+    return client.get(endpoint, params=params, **path_params)
+
+
+class SignedURLSetCursorDidNotAdvance(RuntimeError):
+    """The server handed back the same cursor it was given.
+
+    Following it would page in place until ``max_pages`` for no gain. Named
+    so a caller can distinguish "the server is looping" from an ordinary
+    transport error.
+    """
+
+
+class SignedURLSetMaxPagesReached(RuntimeError):
+    """Ran off *max_pages* without a terminating page.
+
+    The partial result is attached as ``.merged`` for inspection.
+    """
+
+    def __init__(self, merged: dict[str, Any]):
+        super().__init__(
+            f"getSignedURLSetAll gave up after {merged.get('pages', 0)} pages "
+            "without a terminating page"
+        )
+        self.merged = merged
+
+
+@_auto_client
+@validate_call(config=VALIDATE_CONFIG)
+def getSignedURLSetAll(
+    dataset_id: CloudId,
+    document_id: NonEmptyStr,
+    *,
+    limit: int = 500,
+    max_pages: int = 1000,
+    file_series: str = "",
+    id_namespace: Literal["cloud", "ndi"] = "cloud",
+    client: _Client = None,
+) -> dict[str, Any]:
+    """Walk every page of a document's signed URL set and merge them.
+
+    Calls :func:`getSignedURLSet` repeatedly, following ``nextCursor`` until
+    the server signals no more pages, and merges the per-page ``files`` maps
+    into a single dict.
+
+    For a document that references a few thousand files this is fine; for the
+    much larger lightsheet / spatial-transcriptomics case, the async job
+    family (``createSignedURLSetJob`` + ``waitForSignedURLSetJob``) is
+    preferred and is tracked separately in the bridge YAML.
+
+    Args:
+        dataset_id: The cloud dataset id.
+        document_id: The document id.
+        limit: Per-page limit forwarded to :func:`getSignedURLSet`.
+        max_pages: Safety cap. Raises :class:`SignedURLSetMaxPagesReached`
+            if hit.
+        file_series: If set, restrict the walk to one file series' members.
+        id_namespace: See :func:`getSignedURLSet`.
+
+    Returns:
+        Merged dict with ``datasetId``, ``documentId``, ``files``
+        (uid -> URL), ``pageCount`` (total uids across pages), ``pages``
+        (number of HTTP calls), ``totalCount`` (server-reported total),
+        and ``expiresAt`` (from the last page carrying it).
+
+    Raises:
+        SignedURLSetCursorDidNotAdvance: If the server returned a cursor
+            equal to the one it was given.
+        SignedURLSetMaxPagesReached: If the walk hit *max_pages*.
+
+    MATLAB equivalent: +cloud/+api/+files/getSignedURLSetAll.m
+    """
+    merged: dict[str, Any] = {
+        "datasetId": dataset_id,
+        "documentId": document_id,
+        "files": {},
+        "pageCount": 0,
+        "totalCount": 0,
+        "pages": 0,
+    }
+    cursor = ""
+    for _ in range(max_pages):
+        page = getSignedURLSet(
+            dataset_id,
+            document_id,
+            limit=limit,
+            cursor=cursor,
+            file_series=file_series,
+            id_namespace=id_namespace,
+            client=client,
+        )
+        files = page.get("files", {}) if hasattr(page, "get") else {}
+        if isinstance(files, dict):
+            merged["files"].update(files)
+            merged["pageCount"] += len(files)
+        total = page.get("totalCount") if hasattr(page, "get") else None
+        if isinstance(total, int):
+            merged["totalCount"] = total
+        expires_at = page.get("expiresAt") if hasattr(page, "get") else None
+        if expires_at:
+            merged["expiresAt"] = expires_at
+        merged["pages"] += 1
+
+        next_cursor = page.get("nextCursor", "") if hasattr(page, "get") else ""
+        if not next_cursor:
+            return merged
+        if next_cursor == cursor:
+            raise SignedURLSetCursorDidNotAdvance(
+                f"The signed URL set cursor did not advance after page "
+                f"{merged['pages']}. Refusing to page in place."
+            )
+        cursor = next_cursor
+
+    raise SignedURLSetMaxPagesReached(merged)
+
+
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
 def getFileCollectionUploadURL(

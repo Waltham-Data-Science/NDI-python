@@ -1436,15 +1436,36 @@ not_yet_ported:
 
   - name: batchSignedUrlLookup
     matlab_path: "+ndi/+cloud/+download/+internal/batchSignedUrlLookup.m"
+    python_path: "ndi/cloud/batch_signed_url.py"
     matlab_last_sync_hash: "5804cd80"
-    status: porting_deferred
+    status: ported
     decision_log: >
-      MATLAB per-document signed-URL cache used by the batch-presign path
-      (NDI-matlab#952, #962, #968). Turns one-call-per-uid into one call
-      per (dataset, document, series) scope, with a fallback to
-      getFileDetails and a negative cache for failed scopes. Depends on
-      the signed-URL-set API family recorded as not_yet_ported in the api
-      YAML (issue #206) and ports with it.
+      PORTED for NDI-python#262. Turns one-call-per-uid into one call per
+      (dataset, document, series) scope, with a fallback to getFileDetails
+      and a short-lived negative cache for failed scopes -- same shape as
+      MATLAB, same reasons (NDI-matlab#952, #962, #968). Departures from
+      the MATLAB implementation:
+
+      - Structured as a class (BatchSignedUrlLookup) with a module-level
+        default instance rather than a function with persistent state,
+        because Python has no persistent-variable primitive and a class
+        makes the per-test seam explicit.
+      - Reentrant lock around cache mutation and fetch, because DID's
+        download handlers can be called from multiple threads and a lock
+        keeps concurrent misses on the same scope from stampeding the
+        endpoint. MATLAB's cache is single-threaded by construction.
+      - Warns via warnings.warn (with a logger.info mirror) rather than
+        MATLAB's warning() with an id. Same once-per-scope contract, same
+        reasoning.
+      - The negative cache is checked BEFORE fetching the scope and lifts
+        the failure entry on TTL expiry; MATLAB does the same but with a
+        containers.Map and a datetime check. Same suppression rule: the
+        NEXT uid in a sweep is suppressed, a caller re-asking for the
+        same uid gets a fresh attempt.
+
+      Skips the async job path (createSignedURLSetJob +
+      waitForSignedURLSetJob) since the batch helper does not use it;
+      those remain porting_deferred in the api YAML.
 
   - name: buildGenericFileDownloadList
     matlab_path: "+ndi/+cloud/+download/+internal/buildGenericFileDownloadList.m"

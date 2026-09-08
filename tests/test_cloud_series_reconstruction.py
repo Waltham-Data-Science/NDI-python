@@ -353,8 +353,9 @@ class TestThroughARealDatabase:
 
         asked = {}
 
-        def fake_fetch(uri, target, client=None):
+        def fake_fetch(uri, target, client=None, **kwargs):
             asked["uri"] = uri
+            asked["kwargs"] = kwargs
             Path(target).write_bytes(MEMBER_BYTES)
             return True
 
