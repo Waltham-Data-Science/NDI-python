@@ -214,6 +214,16 @@ jobs:
         # cheap first step the issue asks for. No coverage upload: this job
         # is here to catch import and path bugs on Windows, not to be a
         # second source of coverage numbers.
+        env:
+          # The MATLAB BYOL license guard in `tests/_matlab_license_guard.py`
+          # fatal-checks this env var at MODULE IMPORT time -- before the
+          # `_has_creds` skip gate can decide to skip the destructive tests
+          # -- so its absence turns two test files into collection errors
+          # even when no cloud credentials are set. Mirror the linux `test`
+          # job's value: "false" says the account has no registered license
+          # and destructive tests may run, and without NDI_CLOUD_USERNAME
+          # they will still skip through `_has_creds` and never fire.
+          NDI_CLOUD_TEST_USER_HAS_MATLAB_LICENSE: "false"
         run: pytest tests/ -v --tb=short
 
   ced-integration:
