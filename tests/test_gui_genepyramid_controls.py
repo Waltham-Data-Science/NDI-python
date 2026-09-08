@@ -190,3 +190,20 @@ def test_an_empty_list_is_handled_rather_than_dividing_by_zero():
     keep, info = controls.abundanceBand([], 0.0, 100.0)
     assert len(keep) == 0
     assert info["available"] is False
+
+
+# ---------------------------------------------------------- countsOrder
+
+
+def test_the_loudest_gene_comes_first():
+    assert list(controls.countsOrder([3, 100, 7])) == [1, 2, 0]
+
+
+def test_equal_counts_keep_the_order_they_arrived_in():
+    """The list arrives alphabetical, and thousands of genes tie at the
+    bottom of a real section; an unstable sort would shuffle them."""
+    assert list(controls.countsOrder([5, 9, 5, 5, 9])) == [1, 4, 0, 2, 3]
+
+
+def test_an_empty_list_sorts_to_nothing():
+    assert list(controls.countsOrder([])) == []

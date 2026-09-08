@@ -23,6 +23,7 @@ from typing import Any
 __all__ = [
     "geneIndex",
     "abundanceBand",
+    "countsOrder",
     "labelAgreement",
     "selectLabelings",
     "addGenePanel",
@@ -168,6 +169,26 @@ def abundanceBand(totals, lo: float = 0.0, hi: float = 100.0):
 _GENE_COLORMAPS = ("magenta", "green", "cyan", "yellow", "red", "blue")
 
 
+def countsOrder(totals):
+    """Positions ordered by count, loudest first, ties left alone.
+
+    STABLE, and that is the whole content of this function. The list
+    arrives alphabetical, so a stable sort leaves genes with equal counts
+    in alphabetical order instead of an arbitrary one -- and at the
+    bottom of a real section thousands of them tie, which is precisely
+    where an arbitrary order is most annoying to read.
+
+    Args:
+        totals: counts per entry, array-like.
+
+    Returns:
+        An int array of positions into *totals*.
+    """
+    import numpy as np
+
+    return np.argsort(-np.asarray(totals), kind="stable")
+
+
 # The useful band settings are not obvious from a bare slider and are
 # nearly the same on every section, so they are offered as presets.
 _BAND_PRESETS = (
@@ -195,11 +216,16 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
     TWO FILTERS, applied together. The text box answers "where is this
     gene"; the abundance band answers "which genes carry the signal".
     They compose, because narrowing to the loud genes and then searching
-    within them is the normal way to use both.
+    within them is the normal way to use both. Sorting is separate from
+    both and survives them: alphabetical to find a gene you can name, by
+    counts to see which ones there are -- which is what the band leaves
+    you wanting, since a few hundred loud genes in alphabetical order
+    still hide their own ranking.
     """
     import numpy as np
     from qtpy.QtCore import Qt, QTimer
     from qtpy.QtWidgets import (
+        QComboBox,
         QDoubleSpinBox,
         QFormLayout,
         QHBoxLayout,
@@ -249,13 +275,24 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
     search.setPlaceholderText("filter by symbol or accession")
     outer.addWidget(search)
 
+    sort_row = QHBoxLayout()
+    sort_row.addWidget(QLabel("Sort"))
+    sort_box = QComboBox()
+    sort_box.addItem("name (A-Z)")
+    if symbol_totals is not None:
+        sort_box.addItem("counts (high to low)")
+    sort_row.addWidget(sort_box, stretch=1)
+    outer.addLayout(sort_row)
+
     listw = QListWidget()
     items: dict[str, Any] = {}
-    # Thirty thousand items go in as one batch: each add would otherwise
-    # relayout the list.
-    listw.setUpdatesEnabled(False)
-    for i, (symbol, entry) in enumerate(index.items()):
-        rows, accs = entry["rows"], entry["accessions"]
+    symbols = list(index)
+    entries = list(index.values())
+    state = {"busy": False, "colour": 0, "keep": None}
+
+    def _makeItem(i: int):
+        symbol = symbols[i]
+        rows, accs = entries[i]["rows"], entries[i]["accessions"]
         text = symbol
         if symbol_totals is not None:
             text += f"  \u2014  {int(symbol_totals[i]):,}"
@@ -268,6 +305,10 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
         # Accessions are searchable too: a symbol is what people usually
         # type, but not everything here has one.
         item.setData(Qt.UserRole + 1, " ".join([symbol] + accs).lower())
+        # The symbol's ORIGINAL position, carried on the item so that the
+        # abundance mask -- computed once, in that order -- is still
+        # readable after the list has been re-sorted into another one.
+        item.setData(Qt.UserRole + 2, i)
         tip = [
             symbol,
             f"{len(rows)} pyramid column(s): {', '.join(accs) or '(no accession)'}",
@@ -278,11 +319,45 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
             # here and pairing them would attach the wrong number.
             tip.append("counts per column: " + ", ".join(f"{int(totals[r]):,}" for r in rows))
         item.setToolTip("\n".join(tip))
-        listw.addItem(item)
-        items[symbol] = item
-    listw.setUpdatesEnabled(True)
+        return item
 
-    state = {"busy": False, "colour": 0, "keep": None}
+    def _populate(order):
+        """Fill the list in ORDER, a sequence of original positions.
+
+        Rebuilt rather than reordered in place. Moving thirty thousand
+        items one at a time is quadratic, and sorting them through a
+        Python comparison is no cheaper than making them again -- while
+        this is the same single batched pass the panel already pays once.
+
+        THE TICKS COME BACK FROM THE LAYERS, not from remembered state:
+        the drawn layers are what a tick means, so reading them is what
+        stops the boxes and the picture from disagreeing after a sort.
+        """
+        was, state["busy"] = state["busy"], True
+        listw.setUpdatesEnabled(False)
+        try:
+            listw.clear()
+            items.clear()
+            for i in order:
+                item = _makeItem(int(i))
+                symbol = symbols[int(i)]
+                if f"gene: {symbol}" in viewer.layers:
+                    item.setCheckState(Qt.Checked)
+                listw.addItem(item)
+                items[symbol] = item
+        finally:
+            listw.setUpdatesEnabled(True)
+            state["busy"] = was
+        _refilter()
+
+    def _onSort(*_):
+        if sort_box.currentIndex() == 1 and symbol_totals is not None:
+            order = countsOrder(symbol_totals)
+        else:
+            order = range(len(symbols))  # geneIndex already sorted by name
+        _populate(order)
+
+    sort_box.currentIndexChanged.connect(_onSort)
 
     # ---- the abundance band ------------------------------------------
     band_readout = QLabel()
@@ -382,7 +457,8 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
         keep = state["keep"]
         listw.setUpdatesEnabled(False)
         try:
-            for i, item in enumerate(items.values()):
+            for item in items.values():
+                i = item.data(Qt.UserRole + 2)
                 ok = True if keep is None else bool(keep[i])
                 if ok and needle:
                     ok = needle in item.data(Qt.UserRole + 1)
@@ -490,6 +566,7 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
     except Exception:  # pragma: no cover - depends on the napari build
         pass
 
+    _populate(range(len(symbols)))
     _applyBand()
     _report()
     viewer.window.add_dock_widget(box, name="Genes", area="right")
