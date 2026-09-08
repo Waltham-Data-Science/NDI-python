@@ -68,7 +68,26 @@ classes:
   - name: SyncIndex
     type: dataclass
     matlab_path: "+ndi/+cloud/+sync/+internal/+index/"
+    matlab_last_sync_hash: "fe4c4e79c"
     python_path: "ndi/cloud/sync/index.py"
+    decision_log: >
+      Examined against NDI-matlab fe4c4e79c, the commit that made the write
+      atomic. The atomic write itself was already ported and matches. What did
+      not: .ndi/sync/index.json lives INSIDE the dataset, so it is an
+      interchange format between the two languages, and the two languages used
+      different key names for it. MATLAB's createSyncIndexStruct writes
+      localDocumentIdsLastSync / remoteDocumentIdsLastSync /
+      lastSyncTimestamp; Python wrote local_doc_ids_last_sync /
+      remote_doc_ids_last_sync / last_sync_timestamp. Neither could read the
+      other's index, and neither reports a bad read -- SyncIndex.read fell back
+      to [] for every unrecognised key, so a MATLAB-written index came back
+      EMPTY and indistinguishable from never-synced. That is the state
+      writeSyncIndex's own comment warns about. With it, uploadNew uploads
+      nothing, downloadNew and mirrorFromRemote re-download the whole remote,
+      twoWaySync sees everything as new, and mirrorToRemote computes
+      remote - local and DELETES THE WHOLE REMOTE. Python now writes MATLAB's
+      keys and reads both, so an index already on disk from an older
+      NDI-python still loads and is migrated on the next write.
     python_class: "SyncIndex"
     properties:
       - name: local_doc_ids_last_sync
@@ -78,6 +97,32 @@ classes:
       - name: last_sync_timestamp
         type_python: "str"
     methods:
+      - name: index_filepath
+        kind: function
+        matlab_equivalent: "getIndexFilepath"
+        input_arguments:
+          - name: dataset_path
+            type_python: "Path"
+          - name: mode
+            type_matlab: "string, mustBeMember([\"read\",\"write\"])"
+            type_python: "str"
+            default: "'read'"
+          - name: verbose
+            type_matlab: "options.Verbose (logical, default true)"
+            type_python: "bool"
+            default: "False"
+        output_arguments:
+          - name: index_path
+            type_python: "Path"
+        decision_log: >
+          Newly ported. MATLAB's getIndexFilepath was a named function and
+          Python had inlined the path in read and write, which is how the two
+          drifted apart on whether reading creates the directory: MATLAB
+          creates it only in write mode, so reading a never-synced dataset
+          leaves no trace. Verbose announces the creation, as MATLAB does, and
+          an unrecognised mode is refused rather than treated as read --
+          MATLAB's mustBeMember does the same.
+
       - name: read
         kind: classmethod
         matlab_equivalent: "readSyncIndex"
@@ -88,8 +133,13 @@ classes:
           - name: index
             type_python: "SyncIndex"
         decision_log: >
-          MATLAB has readSyncIndex as standalone function.
-          Python wraps it as a classmethod on SyncIndex dataclass.
+          MATLAB has readSyncIndex as a standalone function; Python wraps it as
+          a classmethod. Now reads MATLAB's key names, falling back to the
+          legacy Python spellings so an index already on disk still loads.
+          MATLAB returns struct.empty for a missing file where Python returns a
+          default-constructed index; callers on both sides treat that as never
+          synced, but Python cannot distinguish "no file" from "empty index".
+          Left as is -- no caller needs the distinction -- and recorded.
 
       - name: write
         matlab_equivalent: "writeSyncIndex"
@@ -98,8 +148,10 @@ classes:
             type_python: "Path"
         output_arguments: []
         decision_log: >
-          MATLAB has writeSyncIndex as standalone function.
-          Python wraps it as an instance method.
+          MATLAB has writeSyncIndex as a standalone function; Python wraps it
+          as an instance method. Both write atomically through a temp file in
+          the destination directory, for the same reason and with the same
+          same-filesystem constraint. Now writes MATLAB's key names.
 
       - name: update
         matlab_equivalent: "updateSyncIndex"
@@ -110,8 +162,20 @@ classes:
             type_python: "list[str]"
         output_arguments: []
         decision_log: >
-          MATLAB has updateSyncIndex as standalone function.
-          Python wraps it as an instance method.
+          NOT the same function, and recorded rather than changed. MATLAB's
+          updateSyncIndex(ndiDataset, cloudDatasetId, indexData) FETCHES the id
+          lists when they are not supplied -- listLocalDocuments and
+          listRemoteDocumentIds -- then builds the struct AND writes it.
+          Python's update is a setter: both lists are required and it does not
+          write. The behaviour is not missing, it is decomposed: every caller
+          in operations.py does read -> work -> update -> write itself, and
+          both list helpers exist in ndi.cloud.internal. Adding a composite
+          nothing calls would be worse than the asymmetry. The timestamp now
+          uses MATLAB's format from createSyncIndexStruct,
+          yyyy-MM-dd'T'HH:mm:ssZZZZ -- local time, second resolution, explicit
+          numeric offset -- where Python wrote UTC isoformat with microseconds.
+          Local time is MATLAB's choice; the offset is written out, so the
+          value stays unambiguous. Nothing on either side parses it.
 
 # =============================================================================
 # Functions — operations.py

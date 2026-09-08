@@ -94,8 +94,9 @@ class TestSyncIndex:
         idx.write(tmp_path)
 
         raw = json.loads((tmp_path / ".ndi" / "sync" / "index.json").read_text())
-        assert len(raw["local_doc_ids_last_sync"]) == 2
-        assert len(raw["remote_doc_ids_last_sync"]) == 3
+        # MATLAB's key names -- the index file is shared with MATLAB.
+        assert len(raw["localDocumentIdsLastSync"]) == 2
+        assert len(raw["remoteDocumentIdsLastSync"]) == 3
 
 
 # ===========================================================================
