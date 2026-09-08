@@ -21,6 +21,7 @@ exactly as ndi.probe.timeseries defines them, 0-based.
 from __future__ import annotations
 
 import os
+import sys
 
 import numpy as np
 import pytest
@@ -630,6 +631,10 @@ class TestGetInfo:
         with pytest.raises(FileNotFoundError, match="Kilosort directory not found"):
             kilosort.getInfo(session, probe)
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="Windows filesystems forbid '|' in filenames; legacy folder is unreachable",
+    )
     def test_the_legacy_folder_name_is_still_found(self, tmp_path):
         """Folders written by older NDI used '|' in the element string."""
         session, probe = _session(tmp_path, "legacy")
