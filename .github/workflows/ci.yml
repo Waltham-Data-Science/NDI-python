@@ -48,6 +48,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: NDI-python
+          # TestAHashChangeIsJustified diffs this branch against its
+          # merge-base, and a shallow clone has no merge-base -- the check
+          # would then skip in the one job that is supposed to run it.
+          fetch-depth: 0
 
       - name: Check out NDI-matlab (matching branch, fall back to main)
         uses: actions/checkout@v4
@@ -122,6 +126,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Same reason as the bridge job: the hash-justification check
+          # needs a merge-base, and it reads only this repo, so it is
+          # supposed to run here too rather than only where NDI-matlab is.
+          fetch-depth: 0
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5

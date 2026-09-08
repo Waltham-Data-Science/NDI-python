@@ -24,53 +24,21 @@
 # list can only shrink; nothing can be added to it without a deliberate edit
 # that a reviewer sees.
 #
-# START WITH THE `signature` ONES. Those are MATLAB commits that changed a
-# function signature or arguments block, so the recorded input/output contract
-# may now be wrong -- that is where a stale hash is most likely hiding a real
-# defect rather than bookkeeping.
+# THE `signature` GROUP IS DONE. Those 18 were MATLAB commits that changed a
+# function signature or arguments block -- where a stale hash was most likely
+# hiding a real defect rather than bookkeeping, which is why they went first.
+# Six of them were: startSession had dropped a now-required organizationId,
+# a dataset-scoped query was unreachable from Python, setup.lab duplicated
+# every DAQ system on a second run, session.database_rm ignored the flag it
+# was passed and deleted some documents twice, database.remove had no
+# OnMissing, and the profiles file sat at the umask default beside a 0600
+# secrets file. What remains below is body and comment changes, where a bump
+# after reading the diff is the usual outcome.
 
 # ---------------------------------------------------------------------------
-# drifted: 60  (signature 18, body 40, comments-only 2)
+# drifted: 42  (body 40, comments-only 2)
 # ---------------------------------------------------------------------------
 drifted:
-
-  # --- signature ---
-  - name: profile
-    matlab_path: "+ndi/+cloud/profile.m"  # 8 commit(s) since
-  - name: dir
-    matlab_path: "+ndi/+session/dir.m"  # 6 commit(s) since
-  - name: dir
-    matlab_path: "+ndi/+dataset/dir.m"  # 5 commit(s) since
-  - name: session
-    matlab_path: "+ndi/session.m"  # 5 commit(s) since
-  - name: database
-    matlab_path: "+ndi/database.m"  # 3 commit(s) since
-  - name: updateFileInfoForLocalFiles
-    matlab_path: "+ndi/+cloud/+sync/+internal/updateFileInfoForLocalFiles.m"  # 3 commit(s) since
-  - name: dataset
-    matlab_path: "+ndi/dataset.m"  # 2 commit(s) since
-  - name: setup.lab
-    matlab_path: "+ndi/+setup/lab.m"  # 2 commit(s) since
-  - name: RayoLabStims
-    matlab_path: "+ndi/+daq/+metadatareader/RayoLabStims.m"  # 1 commit(s) since
-  - name: advanceSession
-    matlab_path: "+ndi/+cloud/+api/+compute/advanceSession.m"  # 1 commit(s) since
-  - name: clocktype
-    matlab_path: "+ndi/+time/clocktype.m"  # 1 commit(s) since
-  - name: ndi_document2ndi_object
-    matlab_path: "+ndi/+database/+fun/ndi_document2ndi_object.m"  # 1 commit(s) since
-  - name: ndiquery
-    matlab_path: "+ndi/+cloud/+api/+documents/ndiquery.m"  # 1 commit(s) since
-  - name: ndiqueryAll
-    matlab_path: "+ndi/+cloud/+api/+documents/ndiqueryAll.m"  # 1 commit(s) since
-  - name: sessiontable
-    matlab_path: "+ndi/+session/sessiontable.m"  # 1 commit(s) since
-  - name: setup.rayolab
-    matlab_path: "+ndi/+setup/rayolab.m"  # 1 commit(s) since
-  - name: startSession
-    matlab_path: "+ndi/+cloud/+api/+compute/startSession.m"  # 1 commit(s) since
-  - name: stimulator
-    matlab_path: "+ndi/+probe/+timeseries/stimulator.m"  # 1 commit(s) since
 
   # --- body ---
   - name: url

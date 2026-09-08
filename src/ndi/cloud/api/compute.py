@@ -23,12 +23,32 @@ _Client = Annotated[CloudClient | None, SkipValidation()]
 @validate_call(config=VALIDATE_CONFIG)
 def startSession(
     pipeline_id: NonEmptyStr,
+    organization_id: str,
     input_params: dict[str, Any] | None = None,
     *,
     client: _Client = None,
 ) -> dict[str, Any]:
-    """POST /compute/start -- Start a new compute session."""
+    """POST /compute/start -- Start a new compute session.
+
+    Args:
+        pipeline_id: The pipeline to start.
+        organization_id: The organization that owns -- and is billed for --
+            the session. The backend requires it whenever the caller belongs
+            to more than one organization, refusing the POST with HTTP 400
+            "Organization ID is required (user has multiple)" otherwise, so
+            it is positional here exactly as in MATLAB rather than an option
+            a caller can forget. Pass ``""`` to leave it out of the request
+            and let the backend decide, which is what a single-organization
+            caller gets (VH-Lab/NDI-matlab#936).
+        input_params: Pipeline input parameters.
+        client: Authenticated cloud client.
+    """
     body: dict[str, Any] = {"pipelineId": pipeline_id}
+    # Empty means "not supplied": MATLAB's StartSession omits the field
+    # rather than sending "", and an empty organizationId is not the same
+    # request as an absent one.
+    if organization_id:
+        body["organizationId"] = organization_id
     if input_params:
         body["inputParameters"] = input_params
     return client.post("/compute/start", json=body)
