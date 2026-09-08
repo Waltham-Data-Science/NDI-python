@@ -17,9 +17,22 @@ classes:
   - name: ndi_gui_component_abstract_ProgressMonitor
     type: class
     matlab_path: "+ndi/+gui/+component/+abstract/ProgressMonitor.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/gui/component/abstract/ProgressMonitor.py"
     python_class: "ndi_gui_component_abstract_ProgressMonitor"
     inherits: "handle (abstract)"
+    decision_log: >
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      The behaviour is present: tracker attach/detach, progress and message
+      handling, completion, and time-remaining estimation (MATLAB's
+      estimateRemainingTime and formatRemainingTime are the private
+      _estimateRemainingTime and _formatDuration here). MATLAB's listener
+      plumbing -- initializeListeners, resetListeners, onProgressTrackerSet,
+      onInitalized and the four on*Updated handlers -- is MATLAB event
+      machinery, replaced by plain callback lists, so it has no counterpart by
+      design. The completion listener now takes the event data alongside the
+      source, matching MATLAB's notify('TaskCompleted', eventData); the
+      argument is optional so an existing one-argument listener still works.
 
     properties:
       - name: Title
@@ -132,9 +145,28 @@ classes:
   - name: ndi_gui_component_internal_ProgressTracker
     type: class
     matlab_path: "+ndi/+gui/+component/+internal/ProgressTracker.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/gui/component/internal/ProgressTracker.py"
     python_class: "ndi_gui_component_internal_ProgressTracker"
     inherits: "handle"
+    decision_log: >
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      The core matches: step counting, the PercentageComplete dependent
+      property, {{Property}} template rendering, the UpdateInterval throttle,
+      reset and setCompleted, and MATLAB's events as callback lists.
+      updateMessage WAS MISSING, and it is the only place MATLAB notifies
+      MessageUpdated -- so the whole message channel was dead here:
+      ProgressMonitor registers a listener on on_message_updated,
+      MessageUpdatedEventData exists, and _fire_message_updated had no caller
+      anywhere in the tree. Ported, notifying without storing as MATLAB does.
+      Both notify sites now pass the full three-field payload. STILL ABSENT,
+      deliberately recorded rather than improvised: setTotalSteps (MATLAB
+      refuses to re-initialise TotalSteps once set, which rests on its
+      NaN-initialised property where this port starts at 0), isComplete,
+      resetProgress, deleteDumpFile, readFromFile, getAsynchTaskProgress
+      (present here as a static on AsynchProgressTracker instead) and
+      initializeAsynchListener. fillTemplateMessage and replacePropertyValue
+      are folded into the private _render_template.
 
     properties:
       - name: CurrentStep
@@ -217,9 +249,20 @@ classes:
   - name: ndi_gui_component_internal_AsynchProgressTracker
     type: class
     matlab_path: "+ndi/+gui/+component/+internal/AsynchProgressTracker.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/gui/component/internal/AsynchProgressTracker.py"
     python_class: "ndi_gui_component_internal_AsynchProgressTracker"
     inherits: "ndi.gui.component.internal.ndi_gui_component_internal_ProgressTracker"
+    decision_log: >
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      The override, the throttled JSON dump and the three dumped properties
+      (CurrentStep, TotalSteps, TemplateMessage) all match. Three deliberate
+      differences: the port guards completion with TotalSteps > 0 so that 0
+      means indeterminate, where MATLAB would finish immediately; it clamps
+      CurrentStep to TotalSteps on finishing, where MATLAB leaves it; and it
+      dumps on the FIRST update, where MATLAB starts its tic on that call and
+      so waits one interval. getAsynchTaskProgress lives here as a static,
+      where MATLAB puts it on ProgressTracker. Nothing further to port.
 
     methods:
       - name: updateProgress
@@ -253,9 +296,21 @@ classes:
   - name: ndi_gui_component_internal_event_ProgressUpdatedEventData
     type: class
     matlab_path: "+ndi/+gui/+component/+internal/+event/ProgressUpdatedEventData.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/gui/component/internal/event/ProgressUpdatedEventData.py"
     python_class: "ndi_gui_component_internal_event_ProgressUpdatedEventData"
     inherits: "event.EventData"
+    decision_log: >
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit,
+      and this one did NOT hold. MATLAB declares three properties --
+      ProgressPercentage, CurrentStep, TotalSteps -- and BOTH of
+      ProgressTracker's notify sites pass all three. The port carried only the
+      percentage, and under a different name (PercentageComplete), so a
+      listener written against the MATLAB API got AttributeError for two of
+      the three and missed the third by spelling. All three are now carried
+      under MATLAB's names, with PercentageComplete kept as a read-only alias
+      so existing callers keep working. Covered by
+      tests/test_gui_progress_events.py.
 
     properties:
       - name: PercentageComplete
@@ -281,9 +336,17 @@ classes:
   - name: ndi_gui_component_internal_event_MessageUpdatedEventData
     type: class
     matlab_path: "+ndi/+gui/+component/+internal/+event/MessageUpdatedEventData.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/gui/component/internal/event/MessageUpdatedEventData.py"
     python_class: "ndi_gui_component_internal_event_MessageUpdatedEventData"
     inherits: "event.EventData"
+    decision_log: >
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit
+      (the src/ layout move; unchanged since). One property, one constructor
+      argument, and the port carries exactly that. Nothing to port. Note that
+      until now nothing could RAISE this event on the Python side: MATLAB
+      notifies MessageUpdated only from ProgressTracker.updateMessage, which
+      was not ported -- see that entry.
 
     properties:
       - name: Message
@@ -309,9 +372,19 @@ classes:
   - name: ndi_gui_component_CommandWindowProgressMonitor
     type: class
     matlab_path: "+ndi/+gui/+component/CommandWindowProgressMonitor.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/gui/component/CommandWindowProgressMonitor.py"
     python_class: "ndi_gui_component_CommandWindowProgressMonitor"
     inherits: "ndi.gui.component.abstract.ndi_gui_component_abstract_ProgressMonitor"
+    decision_log: >
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Behaviour matches: in-place console updating, the indent, the timestamp
+      and the completion message. MATLAB's formatMessage, indentMessage,
+      prependTimestamp, printMessage, printTitleMessage and
+      updateProgressMessage are private helpers folded into one formatter
+      here. ONE COSMETIC DIVERGENCE, left as it is: MATLAB writes the
+      timestamp as sprintf('%s: %s', stamp, message) where this port writes
+      '[stamp] message'. Console text only.
 
     properties:
       - name: IndentSize
@@ -351,9 +424,17 @@ classes:
   - name: ndi_gui_component_NDIProgressBar
     type: class
     matlab_path: "+ndi/+gui/+component/NDIProgressBar.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/gui/component/NDIProgressBar.py"
     python_class: "ndi_gui_component_NDIProgressBar"
     inherits: "ndi.gui.component.abstract.ndi_gui_component_abstract_ProgressMonitor"
+    decision_log: >
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      The observable behaviour -- updateProgressDisplay, updateMessage and
+      finish -- matches. MATLAB's createAxes, createTextBox, drawProgressBar
+      and updateProgressBar draw the bar into a uiaxes by hand; this port is a
+      PySide6 widget, so those have no counterpart by design and the widget is
+      reached through the extra `widget` accessor. Nothing to port.
 
     properties:
       - name: Value
@@ -401,9 +482,28 @@ classes:
   - name: ndi_gui_component_ProgressBarWindow
     type: class
     matlab_path: "+ndi/+gui/+component/ProgressBarWindow.m"
+    matlab_last_sync_hash: "dfa7591cc"
     python_path: "ndi/gui/component/ProgressBarWindow.py"
     python_class: "ndi_gui_component_ProgressBarWindow"
     inherits: "matlab.apps.AppBase"
+    decision_log: >
+      Examined against NDI-matlab dfa7591cc, the file's last-touching commit.
+      The multi-bar window is ported to PySide6 and the bar-management API
+      matches: addBar, updateBar, removeBar, getBarNum, getState,
+      checkComplete, setTimeout and checkTimeout, over a module-level registry
+      standing in for MATLAB's findall. MATLAB's uifigure plumbing --
+      setGraphics, setFigureSize, setFigureTitle, the success/error button
+      icons, tryDock, forceReleaseDocked, bringToFront, handleAppChange,
+      handleButtonPress and deleteIfNoOpenBars -- has no Qt counterpart and is
+      absent by design. ONE BEHAVIOURAL GAP, RECORDED RATHER THAN IMPROVISED:
+      MATLAB's isHeadless / resolveSilentMode / silentModeDefault let it
+      detect that no display is usable (batchStartupOptionUsed, or an empty
+      DISPLAY on Linux) and run SILENTLY instead of building a figure. This
+      port has no equivalent -- require_qt raises ImportError when PySide6 is
+      missing, and nothing checks for a display at all, so a headless caller
+      that does have PySide6 gets a Qt failure where MATLAB degrades quietly.
+      Porting a silent mode is a design decision for a maintainer rather than
+      something to invent while dating a hash.
 
     properties:
       - name: ScreenFrac
