@@ -186,15 +186,5 @@ no_hash:
     matlab_path: "+ndi/+util/datasetSummary.m"
   - name: sessionSummary
     matlab_path: "+ndi/+util/sessionSummary.m"
-  - name: app
-    matlab_path: "+ndi/app.m"
   - name: document
     matlab_path: "+ndi/document.m"
-  - name: documentservice
-    matlab_path: "+ndi/documentservice.m"
-  - name: ido
-    matlab_path: "+ndi/ido.m"
-  - name: query
-    matlab_path: "+ndi/query.m"
-  - name: version
-    matlab_path: "+ndi/version.m"
