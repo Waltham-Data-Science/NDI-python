@@ -138,7 +138,7 @@ def diff(
     Returns:
         The same report shape as :func:`ndi.fun.session.diff`.
     """
-    report = _empty_report()
+    report = _empty_report(self_alias="session_diff")
     resolver1 = _SessionResolver(dataset1)
     resolver2 = _SessionResolver(dataset2)
 

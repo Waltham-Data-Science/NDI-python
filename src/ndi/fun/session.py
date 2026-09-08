@@ -7,12 +7,105 @@ MATLAB equivalent: +ndi/+fun/+session/diff.m
 from __future__ import annotations
 
 import math
+import warnings
 from collections.abc import Callable
 from typing import Any
 
 from .doc import diff as doc_diff
 
 __all__ = ["diff"]
+
+
+class _Report(dict):
+    """The report, still answering the key names it used to return.
+
+    The names became MATLAB's in NDI-python#252, so that a report written in
+    one language reads in the other. That is a break for anyone who read the
+    old ones, and a bare KeyError says nothing about what replaced it -- so
+    the old names still work and say so once, rather than failing mute.
+
+    FutureWarning rather than DeprecationWarning: these are read by analysis
+    scripts, not only by this package's own developers, and DeprecationWarning
+    is hidden by default outside __main__.
+
+    Only ``__getitem__`` and ``get`` accept the old names. Membership and
+    iteration report what the dict actually holds, so ``set(report)`` and
+    ``"only_in_s1" in report`` describe the real, current shape.
+    """
+
+    #: Pure renames.
+    _RENAMED = {
+        "only_in_s1": "documentsInAOnly",
+        "only_in_s2": "documentsInBOnly",
+    }
+
+    def __init__(self, *args: Any, self_alias: str | None = None, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        #: The key under which a report used to nest ITSELF -- 'session_diff'
+        #: on a dataset report, which wrapped the session report it delegated
+        #: to. There is no delegation any more, so it resolves to the report.
+        self._self_alias = self_alias
+
+    def _resolve(self, key: str) -> Any:
+        if key in self._RENAMED:
+            new = self._RENAMED[key]
+            self._warn(key, new)
+            return dict.__getitem__(self, new)
+
+        if key == "mismatches":
+            self._warn(
+                key,
+                "mismatchedDocuments",
+                extra=(
+                    " Entries are {'id', 'mismatch'} where they were "
+                    "{'doc_id', 'details'}; 'details' was a list of strings "
+                    "and 'mismatch' is those strings joined."
+                ),
+            )
+            return [
+                {"doc_id": m["id"], "details": [m["mismatch"]] if m["mismatch"] else []}
+                for m in dict.__getitem__(self, "mismatchedDocuments")
+            ]
+
+        if self._self_alias is not None and key == self._self_alias:
+            self._warn(
+                key,
+                "the report itself",
+                extra=(
+                    " ndi.fun.dataset.diff no longer delegates to "
+                    "ndi.fun.session.diff, so there is no nested report; the "
+                    "fields are on the report directly."
+                ),
+            )
+            return self
+
+        raise KeyError(key)
+
+    @staticmethod
+    def _warn(old: str, new: str, extra: str = "") -> None:
+        warnings.warn(
+            f"{old!r} was renamed to {new!r} in NDI-python#252, to match "
+            f"MATLAB's report.{extra} The old name still works but will be "
+            "removed.",
+            FutureWarning,
+            stacklevel=4,
+        )
+
+    def __missing__(self, key: Any) -> Any:
+        return self._resolve(key)
+
+    def get(self, key: Any, default: Any = None) -> Any:
+        """``get`` does not go through ``__missing__``, so it is routed here.
+
+        Without this a caller's ``report.get('only_in_s1')`` would quietly
+        return None -- the one outcome worse than a KeyError.
+        """
+        if dict.__contains__(self, key):
+            return dict.__getitem__(self, key)
+        try:
+            return self._resolve(key)
+        except KeyError:
+            return default
 
 
 def _sizeless_entry(doc1: Any, doc2: Any, fname: str, fuid1: str, fuid2: str) -> dict[str, Any]:
@@ -165,14 +258,17 @@ def _recheck_entries(report: Any) -> list[dict[str, Any]]:
     return list(report)
 
 
-def _empty_report() -> dict[str, Any]:
-    return {
-        "documentsInAOnly": [],
-        "documentsInBOnly": [],
-        "mismatchedDocuments": [],
-        "fileDifferences": [],
-        "common_count": 0,
-    }
+def _empty_report(self_alias: str | None = None) -> _Report:
+    return _Report(
+        {
+            "documentsInAOnly": [],
+            "documentsInBOnly": [],
+            "mismatchedDocuments": [],
+            "fileDifferences": [],
+            "common_count": 0,
+        },
+        self_alias=self_alias,
+    )
 
 
 def _doc_by_id(container: Any, doc_id: str) -> Any | None:
