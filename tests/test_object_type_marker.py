@@ -216,3 +216,63 @@ class TestDatasetExists:
         root = tmp_path / "exists_nothing"
         root.mkdir()
         assert ndi_dataset_dir.exists(root) is False
+
+
+class TestADatasetIsRecognisedWhateverSessionYouOpen:
+    """The marker must not depend on which session the open happened to adopt.
+
+    ``updateObjectTypeMarker`` looks for the dataset bookkeeping documents
+    (``session_in_a_dataset``, or the legacy ``dataset_session_info``). It
+    used to look through ``session.database_search``, which filters on
+    ``base.session_id == self.id()`` -- and a downloaded dataset holds
+    several sessions, so opening its directory as a plain session adopts one
+    that need not be the one the bookkeeping document belongs to. The
+    document was then invisible and a real dataset was recorded as a
+    session.
+
+    That was harmless while nothing read the marker for a decision. It
+    stopped being harmless when ``mustNotBeSession`` began refusing to open a
+    directory marked 'session': the symmetry archive
+    ``69a8705aa9ab25373cdc6563`` has 0 session-filtered and 1 unfiltered
+    ``session_in_a_dataset`` document, so the dataset became un-openable.
+
+    The looser search cannot mislabel a plain session in the other
+    direction: a session holds no such document under any session id.
+    """
+
+    def test_the_document_is_found_under_another_session_id(self, tmp_path):
+        from ndi.document import ndi_document
+        from ndi.ido import ndi_ido
+        from ndi.query import ndi_query
+
+        root = tmp_path / "borrowed_bookkeeping"
+        root.mkdir()
+        session = ndi_session_dir("a_session", root)
+
+        # A bookkeeping document owned by some OTHER session, which is the
+        # shape a downloaded dataset arrives in.
+        doc = ndi_document(
+            "session_in_a_dataset",
+            **{
+                "session_in_a_dataset.session_id": ndi_ido().id,
+                "session_in_a_dataset.is_linked": 0,
+            },
+        )
+        doc = doc.set_session_id(ndi_ido().id)
+        session._database.add(doc)
+
+        assert session.database_search(ndi_query("").isa("session_in_a_dataset")) == []
+        assert session._database.search(ndi_query("").isa("session_in_a_dataset"))
+
+        session.updateObjectTypeMarker()
+
+        assert _marker_path(root).read_text().strip() == "dataset"
+        assert ndi_session_dir.directorytype(root) == "dataset"
+
+    def test_a_plain_session_is_still_a_session(self, tmp_path):
+        """The looser search must not start calling every session a dataset."""
+        root = tmp_path / "genuinely_a_session"
+        root.mkdir()
+        session = ndi_session_dir("a_session", root)
+        session.updateObjectTypeMarker()
+        assert _marker_path(root).read_text().strip() == "session"

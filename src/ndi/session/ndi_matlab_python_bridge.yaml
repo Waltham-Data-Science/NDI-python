@@ -408,6 +408,17 @@ classes:
       the mksqlite close is a Windows file-locking problem -- an open
       SQLite handle blocks the rmdir there -- that does not arise in
       Python, where DID owns the connection.
+      ONE DELIBERATE DIVERGENCE in updateObjectTypeMarker: it looks for the
+      dataset bookkeeping documents through the database directly rather
+      than through database_search, which filters on base.session_id.
+      MATLAB filters. Those documents say "this directory is a dataset",
+      not "the session you happened to open owns me", and a downloaded
+      dataset holds several sessions -- on the symmetry archive
+      69a8705aa9ab25373cdc6563 the session-filtered search finds 0 and the
+      unfiltered one finds 1, so filtering records a real dataset as a
+      session. The looser search cannot mislabel a plain session, which
+      holds no such document under any session id. NDI-matlab looks liable
+      to the same miss.
 
     properties:
       - name: path
