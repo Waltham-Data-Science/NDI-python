@@ -193,7 +193,14 @@ def fake_dataset(tmp_path):
 
 @_pytest.fixture(autouse=True, scope="session")
 def _isolate_did_file_cache(tmp_path_factory):
-    from did import common as did_common
+    # DID is not installed in every CI job -- the bridge-completeness job
+    # only reads YAML metadata and has no DID runtime dep. Silently no-op in
+    # that case so the fixture stays out of a job it has no work to do in.
+    try:
+        from did import common as did_common
+    except ImportError:
+        yield None
+        return
 
     cache_dir = tmp_path_factory.mktemp("did-file-cache")
     original_path = did_common.PathConstants._file_cache_path
