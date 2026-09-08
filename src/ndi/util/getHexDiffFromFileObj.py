@@ -8,7 +8,7 @@ Compare two file-like objects chunk by chunk for equality.
 
 from __future__ import annotations
 
-from typing import IO, Annotated
+from typing import Annotated, Protocol, runtime_checkable
 
 import pydantic
 from pydantic import ConfigDict
@@ -16,10 +16,30 @@ from pydantic import ConfigDict
 from .hexDiffBytes import hexDiffBytes
 
 
+@runtime_checkable
+class _BinaryStream(Protocol):
+    """What this function actually needs of a file object.
+
+    NOT ``typing.IO[bytes]``. Under ``@pydantic.validate_call`` that
+    annotation compiles to ``isinstance(value, IO)``, and ``typing.IO`` is an
+    ordinary generic class that nothing real subclasses -- neither
+    ``io.BytesIO`` nor the ``BufferedReader`` that ``open(path, "rb")``
+    returns. So EVERY call raised ValidationError before the body ran, and
+    the function could not be invoked at all. A runtime-checkable Protocol
+    asks the question that was meant: does this object read, seek and tell?
+    """
+
+    def read(self, size: int = ..., /) -> bytes: ...
+
+    def seek(self, offset: int, whence: int = ..., /) -> int: ...
+
+    def tell(self) -> int: ...
+
+
 @pydantic.validate_call(config=ConfigDict(arbitrary_types_allowed=True))
 def getHexDiffFromFileObj(
-    file_obj1: IO[bytes],
-    file_obj2: IO[bytes],
+    file_obj1: _BinaryStream,
+    file_obj2: _BinaryStream,
     *,
     chunkSize: Annotated[int, pydantic.Field(gt=0)] = 1024 * 1024,
 ) -> tuple[bool, str]:
@@ -49,30 +69,39 @@ def getHexDiffFromFileObj(
     ValidationError
         If types are wrong or *chunkSize* is not positive.
     """
-    file_obj1.seek(0, 2)
-    size1 = file_obj1.tell()
-    file_obj2.seek(0, 2)
-    size2 = file_obj2.tell()
+    # Both objects are left rewound however this function exits, matching the
+    # two onCleanup objects MATLAB installs ("ensure rewind after we are
+    # done"). Without it a caller that compares two files and then reads one
+    # gets whatever is left after the comparison -- nothing at all in the
+    # identical case, since both are then at EOF.
+    try:
+        file_obj1.seek(0, 2)
+        size1 = file_obj1.tell()
+        file_obj2.seek(0, 2)
+        size2 = file_obj2.tell()
 
-    file_obj1.seek(0)
-    file_obj2.seek(0)
+        file_obj1.seek(0)
+        file_obj2.seek(0)
 
-    if size1 != size2:
-        d1 = file_obj1.read(chunkSize)
-        d2 = file_obj2.read(chunkSize)
-        msg = f"Files have different sizes ({size1} bytes vs {size2} bytes)."
-        if d1 != d2:
-            msg += "\nHexdiff of the start of the files:\n" + hexDiffBytes(d1, d2)
-        return False, msg
+        if size1 != size2:
+            d1 = file_obj1.read(chunkSize)
+            d2 = file_obj2.read(chunkSize)
+            msg = f"Files have different sizes ({size1} bytes vs {size2} bytes)."
+            if d1 != d2:
+                msg += "\nHexdiff of the start of the files:\n" + hexDiffBytes(d1, d2)
+            return False, msg
 
-    offset = 0
-    while True:
-        d1 = file_obj1.read(chunkSize)
-        d2 = file_obj2.read(chunkSize)
-        if not d1 and not d2:
-            break
-        if d1 != d2:
-            return False, hexDiffBytes(d1, d2, StartOffset=offset)
-        offset += len(d1)
+        offset = 0
+        while True:
+            d1 = file_obj1.read(chunkSize)
+            d2 = file_obj2.read(chunkSize)
+            if not d1 and not d2:
+                break
+            if d1 != d2:
+                return False, hexDiffBytes(d1, d2, StartOffset=offset)
+            offset += len(d1)
 
-    return True, ""
+        return True, ""
+    finally:
+        file_obj1.seek(0)
+        file_obj2.seek(0)

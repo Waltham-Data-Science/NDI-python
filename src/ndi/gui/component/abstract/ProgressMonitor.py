@@ -186,5 +186,5 @@ class ndi_gui_component_abstract_ProgressMonitor(ABC):
     def _on_message(self, _src: Any, evt: Any) -> None:
         self.updateMessage(evt.Message)
 
-    def _on_complete(self, _src: Any) -> None:
+    def _on_complete(self, _src: Any, _evt: Any = None) -> None:
         self.finish()
