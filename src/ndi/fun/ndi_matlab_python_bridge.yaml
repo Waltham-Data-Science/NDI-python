@@ -349,6 +349,7 @@ functions:
   - name: allTypes
     type: function
     matlab_path: "+ndi/+fun/+doc/allTypes.m"
+    matlab_last_sync_hash: "f57144891"
     python_path: "ndi/fun/doc.py"
     input_arguments: []
     output_arguments:
@@ -358,9 +359,19 @@ functions:
       Exact match. Returns all known NDI document types by scanning
       schema JSON files.
 
+      Examined against NDI-matlab f57144891, the file's last-touching commit.
+      Same shape: scan the document folder and the calculator document paths
+      for .json files, take each file's stem, skip dotfiles, unique and sort.
+      Returns the same 101 type names here. One latent divergence: the port
+      additionally strips a trailing '_schema' from the stem, which MATLAB
+      does not -- today no file under database_documents is named that way, so
+      nothing differs, but a future *_schema.json would be reported under two
+      different names by the two languages.
+
   - name: findFuid
     type: function
     matlab_path: "+ndi/+fun/+doc/findFuid.m"
+    matlab_last_sync_hash: "321d54fde"
     python_path: "ndi/fun/doc.py"
     input_arguments:
       - name: session
@@ -377,6 +388,17 @@ functions:
     decision_log: >
       Exact match. Searches session for a document containing a file
       with the given UID. Returns (document, filename) or (None, '').
+
+      Examined against NDI-matlab 321d54fde, the file's last-touching commit.
+      Same search and the same early return on the first match, returning
+      (doc, filename) and (empty, '') when nothing matches. Two differences in
+      how the search is spelled, neither changing the result: MATLAB queries
+      base.id with the regexp '(.*)' where the port uses isa('base') -- both
+      select every document; and MATLAB asks the document for
+      current_file_list and get_fuid where the port walks
+      files.file_info[].locations[].uid directly, so it matches on ANY
+      location's uid for a file rather than the document's canonical one.
+      Nothing to port.
 
   - name: makeSpeciesStrainSex
     type: function
@@ -444,6 +466,7 @@ functions:
   - name: diff (doc)
     type: function
     matlab_path: "+ndi/+fun/+doc/diff.m"
+    matlab_last_sync_hash: "c60307963"
     python_path: "ndi/fun/doc.py"
     python_qualified: "ndi.fun.doc.diff"
     input_arguments:
@@ -484,9 +507,34 @@ functions:
       returns 2 separate outputs [are_equal, report]; Python returns
       1 dict with 'equal' and 'details' keys (structural difference).
 
+      Examined against NDI-matlab c60307963, the file's last-touching commit,
+      and STEP 5 WAS MISSING ENTIRELY. MATLAB's diff compares the documents'
+      binary files when checkFiles is true: union of both file lists,
+      presence, then size, then content through
+      ndi.util.getHexDiffFromFileObj, with each file wrapped in a try/catch
+      that records the error. None of it was ported -- and checkFiles,
+      session1 and session2 were all accepted as parameters and none of the
+      three was ever read. So diff(a, b, checkFiles=True) returned {'equal':
+      True} for documents whose files differ, and MATLAB's guard ("If
+      checkFiles is true, session1 and session2 must be provided") never fired
+      either. A difference-finder answering "equal" for a comparison it did
+      not run is the failure this bridge exists to catch. Ported, through the
+      same getHexDiffFromFileObj MATLAB uses -- this is that helper's only
+      caller on either side, which is why nothing noticed it was itself
+      unusable until #219. Covered by tests/test_fun_doc_diff_files.py. THREE
+      DIVERGENCES RECORDED, NOT CHANGED. MATLAB pops `files` out of the
+      property comparison entirely and checks only files.file_list when
+      checkFileList is true, where this port compares the whole `files`
+      subtree and treats file_info as the order-independent list -- so it
+      compares MORE, and on a different field. MATLAB's ignoreFields honours
+      only one or two dot-separated parts and silently ignores anything
+      deeper; this handles arbitrary depth. And MATLAB returns [are_equal,
+      report] where this returns {'equal', 'details'}.
+
   - name: ontologyTableRowVars
     type: function
     matlab_path: "+ndi/+fun/+doc/ontologyTableRowVars.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/doc.py"
     input_arguments:
       - name: session
@@ -503,9 +551,22 @@ functions:
       Exact match. Returns all unique ontologyTableRow variable names
       in a session.
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Same job -- split the comma-separated names/variableNames/ ontologyNodes
+      of every ontologyTableRow document, keep the first occurrence of each
+      name, return the three lists sorted and aligned. THE PORT FIXES A BUG
+      MATLAB STILL HAS: MATLAB only refreshes nameCellArray inside `if
+      ~isempty(...names)`, but concatenates it unconditionally, so a document
+      with empty names makes it re-append the PREVIOUS document's names (and
+      errors outright if the first document is the empty one). The port skips
+      such a document. One further difference: the port strips whitespace
+      around each comma-separated token where MATLAB's strsplit does not, so '
+      a' and 'a' are one name here and two there.
+
   - name: getDocTypes
     type: function
     matlab_path: "+ndi/+fun/+doc/getDocTypes.m"
+    matlab_last_sync_hash: "b33d8ce64"
     python_path: "ndi/fun/doc.py"
     input_arguments:
       - name: session
@@ -520,6 +581,18 @@ functions:
       Exact match. Finds all unique document types and their counts
       in a session.
 
+      Examined against NDI-matlab b33d8ce64, the file's last-touching commit.
+      Matches, including the output ORDER -- MATLAB declares [docTypes,
+      docCounts] while assigning groupcounts' outputs the other way round
+      ([docCounts, docTypes] = groupcounts(...)), which is correct because
+      groupcounts returns counts first, and the port returns (types, counts)
+      to match. Both read the class from
+      document_properties.document_class.class_name (MATLAB via ndi.document's
+      doc_class method) and both sort the types. One divergence: the port
+      falls back to the literal 'unknown' for a document missing that field
+      and skips anything whose properties are not a mapping, where MATLAB
+      would error.
+
   # =========================================================================
   # Functions — doc_table.py
   # MATLAB: +ndi/+fun/+docTable/*.m, +ndi/+fun/+doc/ontologyTableRowDoc2Table.m
@@ -528,6 +601,7 @@ functions:
   - name: ontologyTableRowDoc2Table
     type: function
     matlab_path: "+ndi/+fun/+doc/ontologyTableRowDoc2Table.m"
+    matlab_last_sync_hash: "21059769a"
     python_path: "ndi/fun/doc_table.py"
     input_arguments:
       - name: documents
@@ -555,6 +629,11 @@ functions:
       returns 4 outputs (dataTables, docIDs, sessionIDs,
       dependencyIDs) matching MATLAB. MATLAB source is in +doc/;
       Python places it in doc_table.py.
+
+      Examined against NDI-matlab 21059769a, the file's last-touching commit.
+      Reads the ontologyTableRow document's comma-separated header fields and
+      its value rows into a table, which the port builds as a DataFrame in
+      ndi/fun/doc_table.py. Nothing on the Python side to follow.
 
   - name: docCellArray2Table
     type: function
@@ -846,6 +925,7 @@ functions:
   - name: t0_t1cell2array
     type: function
     matlab_path: "+ndi/+fun/+doc/t0_t1cell2array.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/fun/epoch.py"
     input_arguments:
       - name: t0t1_in
@@ -864,6 +944,15 @@ functions:
       History: earlier versions returned (N, 2) -- the transpose of MATLAB's
       output. Corrected as part of the issue #100 part 3 orientation
       decision (adopt MATLAB's 2 x N as the wire form).
+
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Exact: each interval becomes a column, so result[:, k] is [t0_k, t1_k],
+      matching element_epoch.t0_t1's schema of 2 rows by N columns. MATLAB
+      indexes t0t1_in{1,k}, which assumes the 1xN row cell an epochtable
+      produces; the port iterates the sequence, which accepts the same input
+      and also a plain list. The port additionally returns an empty (2,0)
+      array for empty input where MATLAB's zeros(2,0) does the same. Nothing
+      to port.
 
   # =========================================================================
   # Functions — file.py
