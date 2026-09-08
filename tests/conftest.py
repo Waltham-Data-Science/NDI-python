@@ -170,3 +170,37 @@ def make_document(doc_id, **extra):
 def fake_dataset(tmp_path):
     """A :class:`FakeDataset` rooted at ``tmp_path`` with no documents yet."""
     return FakeDataset(tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# Isolate DID's machine-global file cache for the whole test session.
+#
+# NDI-python#261: DID's file cache lives at ``~/Documents/DID/fileCache/<uid>``
+# -- machine-global and keyed only by uid. A test that uses a constant uid can
+# pass once, warm that cache, and from then on resolve from disk before the
+# code it exists to check is ever consulted -- the retrieval silently stops
+# happening while the test keeps reporting success. It happened in
+# NDI-python#215; a per-test uid convention (see tests/test_cloud_series_
+# reconstruction.py) works but relies on every future author remembering it.
+#
+# This fixture makes the hazard structurally impossible: it points
+# ``did.common.PathConstants._file_cache_path`` at a session-scoped tmp
+# directory and clears the memoized ``FileCache`` handle so the next
+# ``did.common.get_cache()`` picks up the new path. It also stops the suite
+# writing into a developer's home directory on their local runs.
+# ---------------------------------------------------------------------------
+
+
+@_pytest.fixture(autouse=True, scope="session")
+def _isolate_did_file_cache(tmp_path_factory):
+    from did import common as did_common
+
+    cache_dir = tmp_path_factory.mktemp("did-file-cache")
+    original_path = did_common.PathConstants._file_cache_path
+    did_common.PathConstants._file_cache_path = str(cache_dir)
+    did_common._cached_cache = None
+    try:
+        yield cache_dir
+    finally:
+        did_common.PathConstants._file_cache_path = original_path
+        did_common._cached_cache = None
