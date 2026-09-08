@@ -243,9 +243,10 @@ classes:
   - name: document
     type: class
     matlab_path: "+ndi/document.m"
+    matlab_last_sync_hash: "00155f885"
     python_path: "ndi/document.py"
     python_class: "ndi_document"
-    inherits: ""
+    inherits: "did.document"
 
     properties:
       - name: document_properties
@@ -290,7 +291,31 @@ classes:
         output_arguments:
           - name: uid
             type_python: "str"
-        decision_log: "Exact match. Alias for id()."
+        decision_log: >
+          "Exact match. Alias for id()." was not true against
+          NDI-matlab 00155f885: there was no doc_unique_id on the Python
+          class at all, so ported MATLAB code got an AttributeError rather
+          than the id. MATLAB keeps the method and warns
+          'depricated..use ID() instead' on every call. Added, raising the
+          same flag as a DeprecationWarning.
+
+      - name: get_fuid
+        input_arguments:
+          - name: filename
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: fuid
+            type_python: "str"
+        decision_log: >
+          NOT PREVIOUSLY RECORDED AND NOT PREVIOUSLY PORTED. MATLAB
+          00155f885 defines get_fuid, and it is the lookup
+          ndi.fun.doc.findFuid and both the session and dataset diff
+          functions use to decide whether two documents point at the same
+          stored file -- so its absence blocked those ports rather than
+          merely leaving a gap. Returns the uid of the FIRST location of
+          the named file, and '' when the document has no files, does not
+          declare the name, or has not had it added. Ported.
 
       # --- ndi_session ---
       - name: set_session_id
@@ -504,8 +529,20 @@ classes:
             default: "2"
         output_arguments: []
         decision_log: >
-          Exact match. Writes document to JSON file.
-          Python adds indent parameter. Synchronized 2026-03-13.
+          "Exact match" overstates it against NDI-matlab 00155f885. MATLAB's
+          first argument is a FILE PREFIX and it writes [FILEPREFIX '.json'];
+          the port treats it as the complete filename and writes it
+          verbatim, so MATLAB code ported literally -- doc.write('mydoc') --
+          leaves an extension-less file. MATLAB also takes two name/value
+          options the port does not have: writeLocalFiles, which writes each
+          associated file next to the JSON as [FILEPREFIX '_' FILENAME], and
+          session, which reads those files through
+          database_openbinarydoc rather than copying the recorded local
+          location. NOT CHANGED HERE: every caller in this tree passes a
+          full '.json' path, so appending an extension would rename their
+          output, and which contract the Python signature should keep is a
+          public-API decision rather than a porting one. Recorded so the
+          next reader meets it before their file lands in the wrong place.
 
       - name: setproperties
         input_arguments:
@@ -542,9 +579,25 @@ classes:
             type_matlab: "table"
             type_python: "pd.DataFrame"
         decision_log: >
-          Exact match. Converts document to tabular form.
-          MATLAB returns table; Python returns pandas DataFrame.
-          Synchronized 2026-03-13.
+          "Exact match" did not hold against NDI-matlab 00155f885, in three
+          separate ways, each of which changed COLUMN NAMES -- the one thing
+          a caller joins two tables on. (1) MATLAB passes an abbreviation
+          list to vlt.data.flattenstruct2table, read from
+          ndi_common/config/ndi_document2table_abbreviations.json, and
+          strrep's each pair over the flattened names in FILE ORDER:
+          orientation_direction_tuning becomes oridir, tuning_curve becomes
+          TC, and eight more. That file ships in this repository too; it was
+          simply never read, so every abbreviated field's column was named
+          differently in the two languages. (2) MATLAB removes depends_on
+          and files with rmfield, which reaches the TOP LEVEL ONLY; the port
+          skipped those two names at EVERY depth, silently deleting any
+          same-named field nested inside another property. (3) A property
+          holding a list of records is a struct array in MATLAB, and
+          flattenstruct2table gives it one column per sub-field
+          (document_class.superclasses.definition) holding every record's
+          value; the port emitted one column holding the raw list
+          (document_class.superclasses). All three are fixed and covered by
+          tests/test_document_to_table_and_fuid.py.
 
       - name: to_dict
         input_arguments: []
@@ -639,13 +692,51 @@ classes:
           - name: definition
             type_python: "dict"
         decision_log: >
-          Exact match. Reads a blank document definition from
-          JSON schema. Recursively merges superclass properties.
-          Synchronized 2026-03-13.
+          The merge holds against NDI-matlab 00155f885 -- superclass labels,
+          depends_on and files.file_list are unioned and de-duplicated on
+          both sides. Two differences that are not defects but that a reader
+          should know. MATLAB's argument is named jsonfilelocationstring and
+          is a definition LOCATION such as $NDIDOCUMENTPATH/element.json;
+          the Python argument is a bare type name, with a recursive search
+          of the document tree behind it, and it accepts a relative path
+          too. And MATLAB MEMOISES: a persistent containers.Map keyed on the
+          location string, cleared by the sentinel call
+          ndi.document.readblankdefinition('--clear-cache'). The port
+          re-reads and re-merges every time, which for a deep hierarchy
+          means re-globbing the tree once per superclass per document. That
+          is a speed difference rather than a behavioural one, and the
+          sentinel has nothing to clear here, so neither is ported.
 
     decision_log: >
       Core document class. Both languages use JSON schema-based
       document definitions. Synchronized 2026-03-13.
+
+
+      Examined method by method against NDI-matlab 00155f885, the file's
+      last-touching commit, and it did not hold. Four of the per-method
+      records above are now corrected rather than re-dated: to_table named
+      its columns differently in three ways, write means a file PREFIX in
+      MATLAB and a filename here, doc_unique_id was recorded as an "exact
+      match" for a method that did not exist, and get_fuid was not recorded
+      at all. to_table, doc_unique_id and get_fuid are ported; see each.
+      The class-level record also said inherits: "" where MATLAB is
+      classdef document < did.document -- and the file carries a comment
+      explaining that the subclassing is deliberate and why the constructor
+      resolves the definition itself before calling did.document's struct
+      path. Corrected to did.document. Python's ndi_document remains a
+      standalone class that re-implements did.document's surface, which is
+      the same arrangement ndi_ido already has.
+
+
+      Two constructor details that DO hold and are worth writing down.
+      MATLAB calls reset_file_info() after building from a definition, so
+      files.file_info exists before add_file; the port creates it lazily
+      inside add_file instead, and both refuse a name that is not in
+      files.file_list. And the port additionally normalises depends_on,
+      files.file_info and document_class.superclasses from a bare dict to a
+      one-element list, which is the shape MATLAB's jsonencode produces for
+      a single element -- MATLAB needs no such step because jsondecode
+      makes it a 1x1 struct that its own code indexes identically.
 
   # =========================================================================
   # ndi.query - ndi_database ndi_query

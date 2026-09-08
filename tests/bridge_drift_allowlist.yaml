@@ -88,7 +88,7 @@ drifted:
   # --- comments-only ---
 
 # ---------------------------------------------------------------------------
-# no_hash: 92
+# no_hash: 91
 #
 # An entry with a matlab_path and no matlab_last_sync_hash can never show
 # drift, so it claims its port is current forever and no check can contradict
@@ -270,8 +270,6 @@ no_hash:
     matlab_path: "+ndi/+util/sessionSummary.m"
   - name: app
     matlab_path: "+ndi/app.m"
-  - name: document
-    matlab_path: "+ndi/document.m"
   - name: documentservice
     matlab_path: "+ndi/documentservice.m"
   - name: ido
