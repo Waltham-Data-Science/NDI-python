@@ -163,6 +163,19 @@ functions:
       {"ndiId": id} -- a document with no base, no document_class and no
       properties. The call succeeded, the remote listed the id, and no later run
       resent it because a live listing showed it present. NDI-python#232.
+      Also returns MATLAB's (success, errorMessage, report) triple rather than the
+      report alone, so a caller can ask "did it work" without reconstructing the
+      answer from report fields whose names differ per mode. success is false when
+      anything did not transfer, in either direction: NDI-matlab 29546720b made a
+      partial upload a failure rather than a clean mirror ("a scripted pipeline
+      checking only success believed the dataset was mirrored when zero documents
+      transferred"), and the same argument covers a partial download, which MATLAB
+      still reports as success. Stricter than MATLAB for the two download modes,
+      and never wrong. One divergence kept deliberately: MATLAB aborts on a failed
+      upload and leaves the sync index un-advanced, while this records what
+      actually landed and advances over exactly that, so a retry re-sends only
+      what is still missing. A caller mistake -- a path where a dataset belongs --
+      still raises rather than becoming success=false.
 
   - name: downloadNew
     matlab_path: "+ndi/+cloud/+sync/downloadNew.m"
@@ -204,6 +217,19 @@ functions:
       {"ndiId": id} -- a document with no base, no document_class and no
       properties. The call succeeded, the remote listed the id, and no later run
       resent it because a live listing showed it present. NDI-python#232.
+      Also returns MATLAB's (success, errorMessage, report) triple rather than the
+      report alone, so a caller can ask "did it work" without reconstructing the
+      answer from report fields whose names differ per mode. success is false when
+      anything did not transfer, in either direction: NDI-matlab 29546720b made a
+      partial upload a failure rather than a clean mirror ("a scripted pipeline
+      checking only success believed the dataset was mirrored when zero documents
+      transferred"), and the same argument covers a partial download, which MATLAB
+      still reports as success. Stricter than MATLAB for the two download modes,
+      and never wrong. One divergence kept deliberately: MATLAB aborts on a failed
+      upload and leaves the sync index un-advanced, while this records what
+      actually landed and advances over exactly that, so a retry re-sends only
+      what is still missing. A caller mistake -- a path where a dataset belongs --
+      still raises rather than becoming success=false.
 
   - name: mirrorToRemote
     matlab_path: "+ndi/+cloud/+sync/mirrorToRemote.m"
@@ -246,6 +272,19 @@ functions:
       {"ndiId": id} -- a document with no base, no document_class and no
       properties. The call succeeded, the remote listed the id, and no later run
       resent it because a live listing showed it present. NDI-python#232.
+      Also returns MATLAB's (success, errorMessage, report) triple rather than the
+      report alone, so a caller can ask "did it work" without reconstructing the
+      answer from report fields whose names differ per mode. success is false when
+      anything did not transfer, in either direction: NDI-matlab 29546720b made a
+      partial upload a failure rather than a clean mirror ("a scripted pipeline
+      checking only success believed the dataset was mirrored when zero documents
+      transferred"), and the same argument covers a partial download, which MATLAB
+      still reports as success. Stricter than MATLAB for the two download modes,
+      and never wrong. One divergence kept deliberately: MATLAB aborts on a failed
+      upload and leaves the sync index un-advanced, while this records what
+      actually landed and advances over exactly that, so a retry re-sends only
+      what is still missing. A caller mistake -- a path where a dataset belongs --
+      still raises rather than becoming success=false.
 
   - name: mirrorFromRemote
     matlab_path: "+ndi/+cloud/+sync/mirrorFromRemote.m"
@@ -286,6 +325,19 @@ functions:
       {"ndiId": id} -- a document with no base, no document_class and no
       properties. The call succeeded, the remote listed the id, and no later run
       resent it because a live listing showed it present. NDI-python#232.
+      Also returns MATLAB's (success, errorMessage, report) triple rather than the
+      report alone, so a caller can ask "did it work" without reconstructing the
+      answer from report fields whose names differ per mode. success is false when
+      anything did not transfer, in either direction: NDI-matlab 29546720b made a
+      partial upload a failure rather than a clean mirror ("a scripted pipeline
+      checking only success believed the dataset was mirrored when zero documents
+      transferred"), and the same argument covers a partial download, which MATLAB
+      still reports as success. Stricter than MATLAB for the two download modes,
+      and never wrong. One divergence kept deliberately: MATLAB aborts on a failed
+      upload and leaves the sync index un-advanced, while this records what
+      actually landed and advances over exactly that, so a retry re-sends only
+      what is still missing. A caller mistake -- a path where a dataset belongs --
+      still raises rather than becoming success=false.
 
   - name: twoWaySync
     matlab_path: "+ndi/+cloud/+sync/twoWaySync.m"
@@ -327,6 +379,19 @@ functions:
       {"ndiId": id} -- a document with no base, no document_class and no
       properties. The call succeeded, the remote listed the id, and no later run
       resent it because a live listing showed it present. NDI-python#232.
+      Also returns MATLAB's (success, errorMessage, report) triple rather than the
+      report alone, so a caller can ask "did it work" without reconstructing the
+      answer from report fields whose names differ per mode. success is false when
+      anything did not transfer, in either direction: NDI-matlab 29546720b made a
+      partial upload a failure rather than a clean mirror ("a scripted pipeline
+      checking only success believed the dataset was mirrored when zero documents
+      transferred"), and the same argument covers a partial download, which MATLAB
+      still reports as success. Stricter than MATLAB for the two download modes,
+      and never wrong. One divergence kept deliberately: MATLAB aborts on a failed
+      upload and leaves the sync index un-advanced, while this records what
+      actually landed and advances over exactly that, so a retry re-sends only
+      what is still missing. A caller mistake -- a path where a dataset belongs --
+      still raises rather than becoming success=false.
 
   - name: validate
     matlab_path: "+ndi/+cloud/+sync/validate.m"

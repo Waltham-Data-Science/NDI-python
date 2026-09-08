@@ -97,7 +97,7 @@ class TestTheDocumentIsNoLongerLostEndToEnd:
         _remote(monkeypatch, {"doc-A": "api-A"})
         _collection_returns(monkeypatch, [{"_id": "api-A", "ndiId": "", "payload": "data"}])
 
-        report = ops.downloadNew(ds, "cloud-1", SyncOptions(verbose=False))
+        _ok, _msg, report = ops.downloadNew(ds, "cloud-1", SyncOptions(verbose=False))
 
         assert report["new_count"] == 1
         assert report["downloaded_document_ids"] == ["doc-A"]
@@ -114,7 +114,7 @@ class TestTheDocumentIsNoLongerLostEndToEnd:
         _remote(monkeypatch, {"doc-A": "api-A"})
         _collection_returns(monkeypatch, [{"payload": "no identifiers at all"}])
 
-        report = ops.downloadNew(ds, "cloud-1", SyncOptions(verbose=False))
+        _ok, _msg, report = ops.downloadNew(ds, "cloud-1", SyncOptions(verbose=False))
 
         assert report["downloaded_document_ids"] == []
         assert report["failed"] == ["doc-A"]  # its api id never came back
@@ -130,5 +130,5 @@ class TestTheDocumentIsNoLongerLostEndToEnd:
         _remote(monkeypatch, {"doc-A": "api-A"})
         _collection_returns(monkeypatch, [{"_id": "api-A", "ndiId": "doc-A"}])
         for fn in (ops.downloadNew, ops.mirrorFromRemote, ops.twoWaySync):
-            report = fn(ds, "cloud-1", SyncOptions(verbose=False))
+            _ok, _msg, report = fn(ds, "cloud-1", SyncOptions(verbose=False))
             assert "unsaved_documents" in report, fn.__name__

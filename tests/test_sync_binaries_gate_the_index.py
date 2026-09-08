@@ -147,7 +147,9 @@ class TestMirrorToRemoteWithholdsThem:
         ds = _dataset(tmp_path, ["a", "b"])
         _binaries(monkeypatch, {"b"})
 
-        report = ops.mirrorToRemote(ds, CLOUD_ID, SyncOptions(sync_files=True), client=_Client())
+        _ok, _msg, report = ops.mirrorToRemote(
+            ds, CLOUD_ID, SyncOptions(sync_files=True), client=_Client()
+        )
 
         assert sorted(report["uploaded_document_ids"]) == ["a", "b"]
         assert report["failed"] == ["b"]
@@ -157,7 +159,9 @@ class TestMirrorToRemoteWithholdsThem:
         ds = _dataset(tmp_path, ["a", "b"])
         _binaries(monkeypatch, set())
 
-        report = ops.mirrorToRemote(ds, CLOUD_ID, SyncOptions(sync_files=True), client=_Client())
+        _ok, _msg, report = ops.mirrorToRemote(
+            ds, CLOUD_ID, SyncOptions(sync_files=True), client=_Client()
+        )
 
         assert report["failed"] == []
         assert set(SyncIndex.read(tmp_path).remote_doc_ids_last_sync) == {"a", "b"}
@@ -174,7 +178,9 @@ class TestMirrorToRemoteWithholdsThem:
 
         monkeypatch.setattr(upload, "uploadFilesForDatasetDocuments", _boom)
 
-        report = ops.mirrorToRemote(ds, CLOUD_ID, SyncOptions(sync_files=True), client=_Client())
+        _ok, _msg, report = ops.mirrorToRemote(
+            ds, CLOUD_ID, SyncOptions(sync_files=True), client=_Client()
+        )
 
         assert sorted(report["failed"]) == ["a", "b"]
         assert SyncIndex.read(tmp_path).remote_doc_ids_last_sync == []
@@ -197,7 +203,9 @@ class TestMirrorToRemoteWithholdsThem:
         ds = _dataset(tmp_path, ["a", "b"])
         _binaries(monkeypatch, {"a", "b"})
 
-        report = ops.mirrorToRemote(ds, CLOUD_ID, SyncOptions(sync_files=False), client=_Client())
+        _ok, _msg, report = ops.mirrorToRemote(
+            ds, CLOUD_ID, SyncOptions(sync_files=False), client=_Client()
+        )
 
         assert report["failed"] == []
         assert set(SyncIndex.read(tmp_path).remote_doc_ids_last_sync) == {"a", "b"}

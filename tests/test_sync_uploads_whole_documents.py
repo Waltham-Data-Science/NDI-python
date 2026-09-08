@@ -101,7 +101,7 @@ class TestTheDocumentItselfIsSent:
         _remote(monkeypatch, ["have-it"])
         ds = _dataset_with(tmp_path, "have-it", "new-one")
 
-        report = ops.uploadNew(ds, CLOUD_ID, SyncOptions(verbose=False))
+        _ok, _msg, report = ops.uploadNew(ds, CLOUD_ID, SyncOptions(verbose=False))
 
         assert [b["base"]["id"] for b in posted] == ["new-one"]
         assert report["uploaded_document_ids"] == ["new-one"]
@@ -117,7 +117,7 @@ class TestLocalMeansTheDatasetNowConsultsItself:
         _remote(monkeypatch, [])
         ds = _dataset_with(tmp_path, "added-later")
 
-        report = ops.uploadNew(ds, CLOUD_ID, SyncOptions(verbose=False))
+        _ok, _msg, report = ops.uploadNew(ds, CLOUD_ID, SyncOptions(verbose=False))
 
         assert report["uploaded_document_ids"] == ["added-later"]
         assert [b["base"]["id"] for b in posted] == ["added-later"]
@@ -134,7 +134,7 @@ class TestLocalMeansTheDatasetNowConsultsItself:
             "addDocument",
             lambda *a, **k: (_ for _ in ()).throw(RuntimeError("rejected")),
         )
-        first = ops.uploadNew(ds, CLOUD_ID, SyncOptions(verbose=False))
+        _ok, _msg, first = ops.uploadNew(ds, CLOUD_ID, SyncOptions(verbose=False))
         assert first["uploaded_document_ids"] == []
         assert first["failed"] == ["flaky"]
 
@@ -142,7 +142,7 @@ class TestLocalMeansTheDatasetNowConsultsItself:
         monkeypatch.setattr(
             docs_api, "addDocument", lambda cid, doc, **k: (sent.append(doc), {"ok": True})[1]
         )
-        second = ops.uploadNew(ds, CLOUD_ID, SyncOptions(verbose=False))
+        _ok, _msg, second = ops.uploadNew(ds, CLOUD_ID, SyncOptions(verbose=False))
         assert second["uploaded_document_ids"] == ["flaky"]
         assert [d["base"]["id"] for d in sent] == ["flaky"]
 
@@ -185,11 +185,16 @@ class TestTheCloudIdIsResolvedLikeMatlab:
         ops.uploadNew(_dataset_with(tmp_path, "doc-A"), options=SyncOptions(verbose=False))
         assert seen == [CLOUD_ID]
 
-    def test_an_unlinked_dataset_says_so(self, tmp_path, monkeypatch):
-        from ndi.cloud.exceptions import CloudSyncError
-
+    def test_an_unlinked_dataset_is_reported_not_raised(self, tmp_path, monkeypatch):
+        """An unlinked dataset is a state of the data, not a caller mistake,
+        so it comes back through the flag the caller is meant to check.
+        (Passing a path DOES raise -- see TestAPathIsRefusedWithTheReason.)"""
         monkeypatch.setattr(
             internal, "getCloudDatasetIdForLocalDataset", lambda ds, client=None: ("", None)
         )
-        with pytest.raises(CloudSyncError, match="not linked to a cloud dataset"):
-            ops.uploadNew(_dataset_with(tmp_path, "doc-A"), options=SyncOptions(verbose=False))
+        success, message, report = ops.uploadNew(
+            _dataset_with(tmp_path, "doc-A"), options=SyncOptions(verbose=False)
+        )
+        assert success is False
+        assert "not linked to a cloud dataset" in message
+        assert report["mode"] == "upload_new"

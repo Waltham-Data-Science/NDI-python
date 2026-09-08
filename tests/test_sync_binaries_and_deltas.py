@@ -186,7 +186,7 @@ class TestTwoWaySyncLocalDeltasAreLive:
         )
         ds = FakeDataset(tmp_path, [make_document("kept")])
 
-        report = ops.twoWaySync(ds, CLOUD_ID, SyncOptions(verbose=False))
+        _ok, _msg, report = ops.twoWaySync(ds, CLOUD_ID, SyncOptions(verbose=False))
 
         assert report["deleted_remote_document_ids"] == ["removed"]
         assert api == ["removed"]
@@ -203,7 +203,7 @@ class TestTwoWaySyncLocalDeltasAreLive:
         )
         ds = FakeDataset(tmp_path, [make_document("old"), make_document("both")])
 
-        report = ops.twoWaySync(ds, CLOUD_ID, SyncOptions(verbose=False))
+        _ok, _msg, report = ops.twoWaySync(ds, CLOUD_ID, SyncOptions(verbose=False))
 
         assert report["conflicts"] == ["both"]
         assert report["uploaded_document_ids"] == []
@@ -218,7 +218,7 @@ class TestTwoWaySyncLocalDeltasAreLive:
         )
         ds = FakeDataset(tmp_path, [make_document("old"), make_document("mine")])
 
-        report = ops.twoWaySync(ds, CLOUD_ID, SyncOptions(verbose=False))
+        _ok, _msg, report = ops.twoWaySync(ds, CLOUD_ID, SyncOptions(verbose=False))
 
         assert report["uploaded_document_ids"] == ["mine"]
         assert report["deleted_remote_document_ids"] == []

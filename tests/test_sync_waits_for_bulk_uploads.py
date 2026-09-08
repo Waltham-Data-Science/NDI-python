@@ -90,7 +90,10 @@ class TestAFailedWaitDoesNotStopTheSync:
             patch("ndi.cloud.api.files.waitForAllBulkUploads", wait),
             patch("ndi.cloud.internal.listRemoteDocumentIds", lambda *a, **k: {}),
         ):
-            return operations.uploadNew(FakeDataset(tmp_path), DATASET_ID, SyncOptions())
+            _ok, _msg, report = operations.uploadNew(
+                FakeDataset(tmp_path), DATASET_ID, SyncOptions()
+            )
+            return report
 
     def test_a_raising_wait_is_logged_and_survived(self, tmp_path, caplog):
         def boom(dataset_id, **kwargs):
@@ -213,7 +216,9 @@ class TestTheWaitCannotSwallowTheClock:
             patch("ndi.cloud.internal.listRemoteDocumentIds", lambda *a, **k: {}),
             caplog.at_level("WARNING", logger="ndi.cloud.sync.operations"),
         ):
-            report = operations.uploadNew(FakeDataset(tmp_path), DATASET_ID, SyncOptions())
+            _ok, _msg, report = operations.uploadNew(
+                FakeDataset(tmp_path), DATASET_ID, SyncOptions()
+            )
 
         assert report["mode"] == "upload_new"
         assert caplog.text == ""

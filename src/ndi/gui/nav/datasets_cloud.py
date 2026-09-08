@@ -21,13 +21,18 @@ real sync report is summarised correctly whichever layer produced it. See
 its note -- the underlying divergence is a library-level question, not a GUI
 one.
 
-The other one is gone. Python's sync functions used to take a path and a
-resolved cloud id where MATLAB's take a dataset, and this module did that
-conversion. NDI-python#232 moved them to the dataset, because a path cannot
-answer "what are my documents" and every upload built from one sent an id
-with no document body. :func:`resolve_cloud_target` still exists and still
-resolves the id, since checking the link BEFORE running gives the user
-"this dataset is not linked" rather than a stack trace from inside a sync.
+The other two are gone, both via NDI-python#232. Python's sync functions
+used to take a path and a resolved cloud id where MATLAB's take a dataset,
+and this module did that conversion; a path cannot answer "what are my
+documents", so every upload built from one sent an id with no document body.
+They also returned a report alone where MATLAB returns
+``[success, errorMessage, report]``, which left this module inferring the
+outcome from report fields -- so a sync that transferred three of fifty
+documents was announced as a success. It now reads the flag.
+
+:func:`resolve_cloud_target` still exists and still resolves the id, since
+checking the link BEFORE running gives the user "this dataset is not linked"
+rather than a stack trace from inside a sync.
 """
 
 from __future__ import annotations
@@ -249,10 +254,23 @@ def _run_sync(
 
     operation = getattr(sync_module, function_name)
     try:
-        report = operation(dataset, cloud_id)
+        success, message, report = operation(dataset, cloud_id)
     except Exception as exc:  # noqa: BLE001
         return CloudActionResult(
             False, title, f"{failure_verb} did not complete: {exc}", "error", None
+        )
+
+    # A sync that transferred only some of what it set out to is not a
+    # success, and the pane must not report one. The report still comes
+    # back, so the summary can say what DID move alongside the reason.
+    if not success:
+        detail = sync_result_message(report)
+        return CloudActionResult(
+            False,
+            title,
+            f"{failure_verb} did not complete: {message} ({detail})",
+            "error",
+            None,
         )
 
     # No state is reported, matching MATLAB: cloudSync and cloudMirror leave

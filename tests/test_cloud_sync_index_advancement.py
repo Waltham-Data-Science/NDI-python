@@ -68,7 +68,7 @@ class TestDownloadNew:
         _fake_remote(monkeypatch, ["ok-1", "broken-1"])
         _downloads_that_fail(monkeypatch, succeed=["ok-1"])
 
-        report = ops.downloadNew(ds, "cloud-1", SyncOptions(verbose=False))
+        _ok, _msg, report = ops.downloadNew(ds, "cloud-1", SyncOptions(verbose=False))
         assert report["downloaded_document_ids"] == ["ok-1"]
         assert report["failed"] == ["broken-1"]
 
@@ -114,7 +114,7 @@ class TestMirrorFromRemote:
 
         # Second run: the remote is unchanged and the download now works.
         _downloads_that_fail(monkeypatch, succeed=["ok-1", "broken-1"])
-        report = ops.mirrorFromRemote(ds, "cloud-1", SyncOptions(verbose=False))
+        _ok, _msg, report = ops.mirrorFromRemote(ds, "cloud-1", SyncOptions(verbose=False))
         assert report["download_count"] == 1
         assert report["downloaded_document_ids"] == ["broken-1"]
         assert sorted(SyncIndex.read(tmp_path).local_doc_ids_last_sync) == ["broken-1", "ok-1"]
@@ -124,7 +124,7 @@ class TestMirrorFromRemote:
         _fake_remote(monkeypatch, ["stays"])
         _downloads_that_fail(monkeypatch, succeed=[])
 
-        report = ops.mirrorFromRemote(ds, "cloud-1", SyncOptions(verbose=False))
+        _ok, _msg, report = ops.mirrorFromRemote(ds, "cloud-1", SyncOptions(verbose=False))
         assert report["deleted_local_document_ids"] == ["gone"]
         idx = SyncIndex.read(tmp_path)
         assert idx.local_doc_ids_last_sync == ["stays"]
@@ -158,7 +158,7 @@ class TestMirrorToRemote:
         _fake_remote(monkeypatch, [])
         self._uploads_that_fail(monkeypatch, succeed=["ok-1"])
 
-        report = ops.mirrorToRemote(ds, "cloud-1", SyncOptions(verbose=False))
+        _ok, _msg, report = ops.mirrorToRemote(ds, "cloud-1", SyncOptions(verbose=False))
         assert report["uploaded_document_ids"] == ["ok-1"]
         assert report["failed"] == ["broken-1"]
 
@@ -173,7 +173,7 @@ class TestMirrorToRemote:
         _fake_remote(monkeypatch, ["mine", "undeletable"])
         self._uploads_that_fail(monkeypatch, succeed=["mine"])
 
-        report = ops.mirrorToRemote(ds, "cloud-1", SyncOptions(verbose=False))
+        _ok, _msg, report = ops.mirrorToRemote(ds, "cloud-1", SyncOptions(verbose=False))
         assert report["deleted_remote_document_ids"] == []
         assert report["failed"] == ["undeletable"]
         assert sorted(SyncIndex.read(tmp_path).remote_doc_ids_last_sync) == [
@@ -197,7 +197,9 @@ class TestMirrorToRemote:
         monkeypatch.setattr(docs_api, "addDocument", must_not_run)
         monkeypatch.setattr(docs_api, "deleteDocument", must_not_run)
 
-        report = ops.mirrorToRemote(ds, "cloud-1", SyncOptions(dry_run=True, verbose=False))
+        _ok, _msg, report = ops.mirrorToRemote(
+            ds, "cloud-1", SyncOptions(dry_run=True, verbose=False)
+        )
         assert report["dry_run"] is True
         assert report["deleted_remote_document_ids"] == ["remote-only"]
         assert (tmp_path / ".ndi" / "sync" / "index.json").read_text() == before
@@ -209,7 +211,7 @@ class TestTwoWaySync:
         _fake_remote(monkeypatch, ["ok-1", "broken-1"])
         _downloads_that_fail(monkeypatch, succeed=["ok-1"])
 
-        report = ops.twoWaySync(ds, "cloud-1", SyncOptions(verbose=False))
+        _ok, _msg, report = ops.twoWaySync(ds, "cloud-1", SyncOptions(verbose=False))
         assert report["downloaded_document_ids"] == ["ok-1"]
 
         idx = SyncIndex.read(tmp_path)

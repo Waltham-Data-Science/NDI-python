@@ -136,7 +136,10 @@ class TestSyncAndMirror:
         def op(dataset, cloud_id):
             if isinstance(result, Exception):
                 raise result
-            return result
+            # The sync functions return (success, errorMessage, report).
+            if isinstance(result, tuple):
+                return result
+            return True, "", result
 
         monkeypatch.setattr(sync_module, name, op, raising=False)
 
