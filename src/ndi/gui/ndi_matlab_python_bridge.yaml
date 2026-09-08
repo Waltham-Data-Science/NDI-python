@@ -406,7 +406,7 @@ classes:
   - name: ndi_gui_docViewer
     type: class
     matlab_path: "+ndi/+gui/docViewer.m"
-    python_path: "ndi/gui/ndi_gui_docViewer.py"
+    python_path: "ndi/gui/docViewer.py"
     python_class: "ndi_gui_docViewer"
     inherits: "handle"
 
