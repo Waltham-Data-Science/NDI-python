@@ -161,7 +161,7 @@ drifted:
     matlab_path: "+ndi/+cloud/+api/+users/me.m"  # 1 commit(s) since
 
 # ---------------------------------------------------------------------------
-# no_hash: 146
+# no_hash: 138
 #
 # An entry with a matlab_path and no matlab_last_sync_hash can never show
 # drift, so it claims its port is current forever and no check can contradict
@@ -401,26 +401,10 @@ no_hash:
     matlab_path: "+ndi/+util/compareSessionSummary.m"
   - name: datasetSummary
     matlab_path: "+ndi/+util/datasetSummary.m"
-  - name: datestamp2datetime
-    matlab_path: "+ndi/+util/datestamp2datetime.m"
-  - name: downsampleTimeseries
-    matlab_path: "+ndi/+util/downsampleTimeseries.m"
-  - name: getHexDiffFromFileObj
-    matlab_path: "+ndi/+util/getHexDiffFromFileObj.m"
-  - name: hexDiff
-    matlab_path: "+ndi/+util/hexDiff.m"
-  - name: hexDiffBytes
-    matlab_path: "+ndi/+util/hexDiffBytes.m"
-  - name: hexDump
-    matlab_path: "+ndi/+util/hexDump.m"
-  - name: rehydrateJSONNanNull
-    matlab_path: "+ndi/+util/rehydrateJSONNanNull.m"
   - name: sessionSummary
     matlab_path: "+ndi/+util/sessionSummary.m"
   - name: toolboxdir
     matlab_path: "+ndi/+util/toolboxdir.m"
-  - name: unwrapTableCellContent
-    matlab_path: "+ndi/+util/unwrapTableCellContent.m"
   - name: mustBeCellArrayOfClass
     matlab_path: "+ndi/+validators/mustBeCellArrayOfClass.m"
   - name: mustBeCellArrayOfNdiSessions
