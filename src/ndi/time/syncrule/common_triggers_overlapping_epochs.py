@@ -16,8 +16,11 @@ from typing import Any
 
 import numpy as np
 
+from ...common import getLogger
 from ..syncrule_base import ndi_time_syncrule
 from ..timemapping import ndi_time_timemapping
+
+logger = getLogger("ndi")
 
 
 def _parse_channel(ch_str: str) -> tuple[str, int]:
@@ -67,6 +70,181 @@ def _sync_triggers(t1: np.ndarray, t2: np.ndarray) -> tuple[float, float]:
     scale = float(coeffs[0])
     shift = float(coeffs[1])
     return shift, scale
+
+
+class SyncAmbiguityError(RuntimeError):
+    """Two or more distinct global alignments both validate.
+
+    MATLAB counterpart: ``error('ndi:time:sync:ambiguous', ...)`` raised by
+    ``ndi.time.fun.syncTriggerTrains``. The identifier is kept on the class so
+    a caller can match on it the way MATLAB code matches ``ME.identifier``.
+    """
+
+    identifier = "ndi:time:sync:ambiguous"
+
+
+def _matlab_round(x: np.ndarray) -> np.ndarray:
+    """MATLAB's ``round``: half away from zero.
+
+    ``np.round`` is half-to-even, so 2.5 quantizes to 2 there and to 3 in
+    MATLAB. The interval quantizer below rounds a great many values, some of
+    which land exactly on .5, and a bucket chosen differently is a fingerprint
+    that does not match. Worth the two lines.
+    """
+    return np.floor(np.abs(x) + 0.5) * np.sign(x)
+
+
+def _run_robust_global_sync(
+    target: np.ndarray,
+    prober: np.ndarray,
+    alignment_tolerance: float,
+    min_match_rate: float,
+    fingerprint_size: int,
+) -> tuple[float, float]:
+    """Align ``prober`` onto ``target``, returning ``target = shift + scale * prober``.
+
+    Mirrors the local function of the same name in
+    ``+ndi/+time/+fun/syncTriggerTrains.m``.
+
+    Returns (nan, nan) when no hypothesis validates.
+
+    Raises:
+        SyncAmbiguityError: if two distinct alignments both validate strongly.
+    """
+    tol = alignment_tolerance
+    f_size = fingerprint_size
+
+    # 1. Build interval hash map for target. Quantization is 2*tol so that
+    #    clock drift (~200ppm) does not immediately push an inter-pulse
+    #    interval into the neighbouring bucket.
+    q_target = _matlab_round(np.diff(target) / (tol * 2)).astype(np.int64)
+    fingerprints: dict[tuple[int, ...], list[int]] = {}
+    for i in range(len(q_target) - f_size + 1):
+        key = tuple(int(v) for v in q_target[i : i + f_size])
+        fingerprints.setdefault(key, []).append(i)
+
+    # 2. Identify potential hypothesis offsets.
+    q_prober = _matlab_round(np.diff(prober) / (tol * 2)).astype(np.int64)
+    potential_offsets: set[int] = set()
+    for i in range(len(q_prober) - f_size + 1):
+        key = tuple(int(v) for v in q_prober[i : i + f_size])
+        for idx_target in fingerprints.get(key, ()):
+            potential_offsets.add(idx_target - i)
+
+    # 3. Global validation loop. MATLAB iterates the offsets in ascending
+    #    order (its `unique` sorts), and the stable sort in step 4 lets that
+    #    order decide ties, so reproduce it.
+    results: list[tuple[float, float, float]] = []  # (shift, scale, score)
+
+    for offset in sorted(potential_offsets):
+        # Rough starting shift from the seed pulse.
+        idx_p_seed = max(0, -offset)
+        idx_t_seed = idx_p_seed + offset
+        if idx_t_seed >= len(target) or idx_t_seed < 0:
+            continue
+        if idx_p_seed >= len(prober):
+            continue
+        rough_shift = target[idx_t_seed] - prober[idx_p_seed]
+
+        # Validate this offset across the entire prober train: nearest target
+        # pulse for each prober pulse. Done a pulse at a time rather than as
+        # one (prober x target) matrix -- these trains can run to tens of
+        # thousands of pulses and the matrix would not fit.
+        best_idx = np.empty(len(prober), dtype=np.int64)
+        best_val = np.empty(len(prober), dtype=float)
+        for i, p_i in enumerate(prober):
+            deltas = np.abs(target - (p_i + rough_shift))
+            j = int(np.argmin(deltas))
+            best_idx[i] = j
+            best_val[i] = deltas[j]
+
+        # Threshold grows with distance from the seed to accommodate drift.
+        dist_from_seed = np.abs(prober - prober[idx_p_seed])
+        dynamic_tol = np.maximum(tol * 5, dist_from_seed * 0.001)
+        hit = best_val <= dynamic_tol
+
+        matched_p = prober[hit]
+        matched_t = target[best_idx[hit]]
+        missed_count = int(np.count_nonzero(~hit))
+
+        rate = len(matched_p) / len(prober)
+
+        # Accept the hypothesis if the match rate is high and drops are minimal.
+        if rate >= min_match_rate and missed_count <= 1:
+            model = np.polyfit(matched_p, matched_t, 1)
+            results.append((float(model[1]), float(model[0]), float(rate)))
+
+    if not results:
+        return float("nan"), float("nan")
+
+    # Sort by match rate, highest first; stable, as MATLAB's sort is.
+    results.sort(key=lambda r: -r[2])
+
+    # 4. Multi-offset ambiguity check. Identical shifts are not a conflict --
+    #    only genuinely distinct offsets competing at a comparable score are.
+    best_shift = results[0][0]
+    for shift_k, _scale_k, score_k in results[1:]:
+        if abs(shift_k - best_shift) > (tol * 10) and score_k > 0.8 * results[0][2]:
+            raise SyncAmbiguityError(
+                f"Ambiguity: Found {len(results)} distinct global alignments. "
+                "Data is too periodic."
+            )
+
+    return results[0][0], results[0][1]
+
+
+def _sync_trigger_trains(
+    t1: np.ndarray,
+    t2: np.ndarray,
+    alignment_tolerance: float = 0.005,
+    min_match_rate: float = 0.8,
+    fingerprint_size: int = 5,
+) -> tuple[float, float]:
+    """Synchronize two clocks recording a common pulse train, drop-tolerantly.
+
+    MATLAB counterpart: ``ndi.time.fun.syncTriggerTrains``. Returns
+    ``(shift, scale)`` such that ``T2 = shift + scale * T1``.
+
+    Unlike :func:`_sync_triggers` this does not require ``len(t1) == len(t2)``:
+    it seeds candidate alignments from quantized inter-pulse intervals,
+    validates each against a drift-tolerant window, and permits at most one
+    unmatched pulse in the shorter train.
+
+    Args:
+        t1: Pulse onset times (seconds) from device 1.
+        t2: Pulse onset times (seconds) from device 2.
+        alignment_tolerance: Max allowable jitter, in seconds.
+        min_match_rate: Fraction of pulses that must align.
+        fingerprint_size: Number of intervals per hash key.
+
+    Returns:
+        Tuple of (shift, scale). **Both are nan when no alignment validates** --
+        that is MATLAB's behaviour, and callers must check.
+
+    Raises:
+        SyncAmbiguityError: if multiple distinct high-certainty alignments are
+            discovered.
+    """
+    t1 = np.asarray(t1, dtype=float).ravel()
+    t2 = np.asarray(t2, dtype=float).ravel()
+
+    # Minimum pulses required to form a fingerprint.
+    if len(t1) < fingerprint_size or len(t2) < fingerprint_size:
+        return float("nan"), float("nan")
+
+    # _run_robust_global_sync(target, prober) gives target = shift + scale * prober,
+    # and takes the longer recording as the target. We want T2 = shift + scale * T1.
+    if len(t1) >= len(t2):
+        # t1 = s_raw + m_raw * t2  ->  t2 = (1/m_raw) * t1 - s_raw/m_raw
+        s_raw, m_raw = _run_robust_global_sync(
+            t1, t2, alignment_tolerance, min_match_rate, fingerprint_size
+        )
+        if np.isnan(s_raw):
+            return float("nan"), float("nan")
+        return -s_raw / m_raw, 1.0 / m_raw
+
+    # Already in the wanted direction.
+    return _run_robust_global_sync(t2, t1, alignment_tolerance, min_match_rate, fingerprint_size)
 
 
 def _get_underlying_files(epochnode: dict[str, Any]) -> list[str]:
@@ -430,7 +608,23 @@ class ndi_time_syncrule_commonTriggersOverlappingEpochs(ndi_time_syncrule):
             # 6. Compute mapping
             t1_arr = np.sort(np.array(t1_total))
             t2_arr = np.sort(np.array(t2_total))
-            shift, scale = _sync_triggers(t1_arr, t2_arr)
+            if len(t1_arr) == len(t2_arr):
+                shift, scale = _sync_triggers(t1_arr, t2_arr)
+            else:
+                # A dropped or extra pulse is ordinary in a real recording, so
+                # a count mismatch is not fatal -- but it IS worth saying out
+                # loud, because a silent fallback would hide the recording
+                # problem behind a mapping of unknown quality.
+                logger.warning(
+                    "commonTriggersOverlappingEpochs: trigger count mismatch "
+                    "(T1=%d, T2=%d) between epoch_a=%s and epoch_b=%s; "
+                    "using syncTriggerTrains fallback.",
+                    len(t1_arr),
+                    len(t2_arr),
+                    epochnode_a.get("epoch_id", ""),
+                    epochnode_b.get("epoch_id", ""),
+                )
+                shift, scale = _sync_trigger_trains(t1_arr, t2_arr)
 
             if node_a_is_1:
                 # T2 = scale * T1 + shift -> map A(1) to B(2)
