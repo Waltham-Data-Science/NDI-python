@@ -389,7 +389,19 @@ def mirrorToRemote(
             logger.warning("mirrorToRemote: failed to delete %s: %s", doc_id, exc)
             failed.append(doc_id)
 
-    # Upload associated files if requested
+    # Upload associated files if requested.
+    #
+    # A document whose binary did not upload must not be recorded as synced:
+    # the remote then holds the metadata and none of the data, and a reader
+    # gets a 404 (NDI-matlab#805). uploadFilesForDatasetDocuments does not
+    # raise on a per-file failure -- it reports one -- so catching the
+    # exception was never going to see the common case.
+    #
+    # The retry itself comes from filesNotYetUploaded, which re-queues on the
+    # remote's own `uploaded` flag. What the index owes is only the truth:
+    # twoWaySync reads remote_doc_ids_last_sync as settled remote state, and a
+    # document listed there is one it will not think to send again.
+    binaries_failed: set[str] = set()
     if options.sync_files and report["uploaded_document_ids"]:
         try:
             from ..upload import uploadFilesForDatasetDocuments
@@ -401,22 +413,35 @@ def mirrorToRemote(
                 if doc_file.exists():
                     doc_dicts.append(json.loads(doc_file.read_text(encoding="utf-8")))
             if doc_dicts:
-                uploadFilesForDatasetDocuments(
+                file_report = uploadFilesForDatasetDocuments(
                     client.config.org_id,
                     cloud_dataset_id,
                     doc_dicts,
                     client=client,
                 )
+                binaries_failed = set(file_report.get("failed_document_ids", []))
+                if binaries_failed:
+                    logger.warning(
+                        "mirrorToRemote: %d document(s) reached the remote without "
+                        "their binaries; not recording them as synced: %s",
+                        len(binaries_failed),
+                        ", ".join(sorted(binaries_failed)),
+                    )
         except Exception as exc:
+            # The whole file pass fell over -- nothing here can be trusted to
+            # have uploaded, so none of these documents is synced.
             logger.warning("mirrorToRemote: file upload failed: %s", exc)
+            binaries_failed = set(report["uploaded_document_ids"])
 
-    report["failed"] = failed
+    report["failed"] = failed + sorted(binaries_failed)
 
     # The remote is what it held, plus what we actually uploaded, minus what
     # we actually deleted -- not a blanket "remote now equals local", which
     # would silently absorb every failed upload and every failed deletion.
-    final_remote = (remote_id_set | set(report["uploaded_document_ids"])) - set(
-        report["deleted_remote_document_ids"]
+    final_remote = (
+        (remote_id_set | set(report["uploaded_document_ids"]))
+        - set(report["deleted_remote_document_ids"])
+        - binaries_failed
     )
     index.update(list(local_ids), list(final_remote))
     index.write(ds_path)

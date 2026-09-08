@@ -160,6 +160,11 @@ def uploadFilesForDatasetDocuments(
         "uploaded": 0,
         "failed": 0,
         "errors": [],
+        # Which documents own the binaries that did not make it. A count
+        # cannot be acted on: the caller has to know which documents to
+        # keep out of the sync index, or it records them as synced with
+        # their binaries missing from the remote (NDI-matlab#805).
+        "failed_document_ids": [],
     }
 
     for doc in documents:
@@ -167,6 +172,7 @@ def uploadFilesForDatasetDocuments(
         file_path = doc.get("file_path", "")
         if not file_uid or not file_path:
             continue
+        doc_id = doc.get("ndiId") or doc.get("base", {}).get("id", "") or doc.get("id", "")
         try:
             url = files_api.getFileUploadURL(org_id, dataset_id, file_uid, client=client)
             files_api.putFiles(url, file_path)
@@ -174,6 +180,8 @@ def uploadFilesForDatasetDocuments(
         except Exception as exc:
             report["failed"] += 1
             report["errors"].append(str(exc))
+            if doc_id:
+                report["failed_document_ids"].append(doc_id)
 
     return report
 
