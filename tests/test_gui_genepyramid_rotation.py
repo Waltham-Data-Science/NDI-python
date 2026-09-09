@@ -246,3 +246,136 @@ class TestTheStep:
         assert spin.decimals() >= 1
         spin.setValue(12.5)
         assert spin.value() == pytest.approx(12.5)
+
+
+# ------------------------------------------------- layers added later
+
+
+class _Event:
+    def __init__(self, value):
+        self.value = value
+
+
+class _Signal:
+    """Just enough of napari's EventEmitter to connect and emit."""
+
+    def __init__(self):
+        self._slots = []
+
+    def connect(self, fn):
+        self._slots.append(fn)
+
+    def emit(self, event):
+        for fn in self._slots:
+            fn(event)
+
+
+class _LayerList(list):
+    """A layer list that reports insertions, as napari's does."""
+
+    def __init__(self, *layers):
+        super().__init__(layers)
+        self.events = SimpleNamespace(inserted=_Signal())
+
+    def add(self, layer):
+        self.append(layer)
+        self.events.inserted.emit(_Event(layer))
+        return layer
+
+
+class _LiveViewer:
+    def __init__(self, *layers):
+        self.window = _Window()
+        self.camera = SimpleNamespace(center=(0.0, 100.0, 200.0))
+        self.layers = _LayerList(*layers)
+
+
+class TestGeneLayersAddedLater:
+    """The rotation governs past AND future layers.
+
+    Ticking a gene while the section is turned used to add its layer
+    square: the gene then sat beside the anatomy rather than on it, which
+    is a wrong picture rather than an unrotated one. The panel was built
+    with the layers that existed at launch and never asked again.
+    """
+
+    def _panel(self, qt, viewer, angle):
+        from ndi.gui.app.genepyramid.controls import addRotationPanel
+
+        box = addRotationPanel(viewer, list(viewer.layers))
+        spin = box.findChild(qt.QDoubleSpinBox)
+        spin.setValue(angle)
+        spin.editingFinished.emit()
+        return box
+
+    def test_a_layer_added_after_a_rotation_is_turned_too(self, qt):
+        base = SimpleNamespace(affine=None)
+        viewer = _LiveViewer(base)
+        self._panel(qt, viewer, 30.0)
+        assert base.affine is not None
+
+        later = SimpleNamespace(affine=None)
+        viewer.layers.add(later)
+        assert later.affine is not None
+
+    def test_it_gets_the_SAME_matrix_not_an_equal_angle(self, qt):
+        """Two layers rotated by equal angles about different pivots do
+        not line up, and the pivot is re-read between interactions -- so
+        the matrix has to be handed over, not recomputed."""
+        base = SimpleNamespace(affine=None)
+        viewer = _LiveViewer(base)
+        self._panel(qt, viewer, 30.0)
+        # Pan between the rotation and the new layer: a recomputed matrix
+        # would pick up this new centre and land somewhere else.
+        viewer.camera.center = (0.0, 5000.0, 9000.0)
+        later = SimpleNamespace(affine=None)
+        viewer.layers.add(later)
+        assert np.allclose(later.affine, base.affine)
+
+    def test_a_square_picture_leaves_a_new_layer_alone(self, qt):
+        """No rotation in force means nothing to apply, and stamping an
+        identity on every arriving layer would quietly overwrite an affine
+        a caller set for its own reasons."""
+        viewer = _LiveViewer(SimpleNamespace(affine=None))
+        from ndi.gui.app.genepyramid.controls import addRotationPanel
+
+        addRotationPanel(viewer, list(viewer.layers))
+        later = SimpleNamespace(affine="untouched")
+        viewer.layers.add(later)
+        assert later.affine == "untouched"
+
+    def test_a_later_rotation_reaches_the_layers_added_since(self, qt):
+        """The other half: the panel must not keep rotating only its
+        original list once new layers exist."""
+        base = SimpleNamespace(affine=None)
+        viewer = _LiveViewer(base)
+        box = self._panel(qt, viewer, 30.0)
+
+        later = SimpleNamespace(affine=None)
+        viewer.layers.add(later)
+
+        spin = box.findChild(qt.QDoubleSpinBox)
+        spin.setValue(-75.0)
+        spin.editingFinished.emit()
+        assert np.allclose(later.affine, base.affine)
+        assert not np.allclose(later.affine, np.eye(3))
+
+    def test_reset_squares_the_layers_added_since_as_well(self, qt):
+        base = SimpleNamespace(affine=None)
+        viewer = _LiveViewer(base)
+        box = self._panel(qt, viewer, 30.0)
+        later = SimpleNamespace(affine=None)
+        viewer.layers.add(later)
+
+        reset = box.findChild(qt.QPushButton)
+        reset.click()
+        assert np.allclose(later.affine, np.eye(3))
+        assert np.allclose(base.affine, np.eye(3))
+
+    def test_a_viewer_with_no_event_system_still_builds(self, qt):
+        """A headless caller composing layers by hand has no emitter, and
+        a control that raises on construction costs the whole picture."""
+        from ndi.gui.app.genepyramid.controls import addRotationPanel
+
+        plain = _Viewer()
+        assert addRotationPanel(plain, []) is not None

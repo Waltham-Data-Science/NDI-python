@@ -1209,6 +1209,32 @@ def addRotationPanel(viewer, layers) -> Any:
     # place instead of scattering `nonlocal` declarations.
     pivot = [None]
     guard = [False]
+    # The affine currently in force, or None while the picture is square.
+    # Kept rather than recomputed, because a layer added later has to get
+    # THE SAME matrix -- rebuilding it from the angle would use whatever
+    # the view centre is by then, and two layers rotated by equal angles
+    # about different pivots do not line up.
+    current = [None]
+
+    def _layers():
+        """Every layer the rotation governs, as of right now.
+
+        NOT the list this panel was built with. That list is the layers
+        that existed at launch, and a gene ticked afterwards is not in it
+        -- it arrived square while the section around it was turned, which
+        is a picture that is wrong rather than merely unrotated. The
+        viewer's own list is the answer to "what is on screen", so it is
+        what gets asked, with the passed-in layers kept as a seed for
+        anything not registered with the viewer.
+        """
+        seen, out = set(), []
+        for group in (layers or (), getattr(viewer, "layers", ()) or ()):
+            for layer in group:
+                if layer is None or id(layer) in seen:
+                    continue
+                seen.add(id(layer))
+                out.append(layer)
+        return out
 
     def _pivot():
         if pivot[0] is None:
@@ -1217,12 +1243,42 @@ def addRotationPanel(viewer, layers) -> Any:
 
     def _apply(angle):
         try:
-            applyRotation(layers, angle, _pivot())
+            current[0] = applyRotation(_layers(), angle, _pivot())
         except Exception as e:  # noqa: BLE001 - a control never costs the picture
             status.setText(f"failed: {e}")
             status.show()
             return
         status.hide()
+
+    def _onInserted(event=None):
+        """Turn a newly added layer to match the ones already turned.
+
+        Ticking a gene while the section is rotated adds its layer square,
+        and the two then disagree about where the tissue is -- the gene
+        lands beside the anatomy rather than on it. Since the matrix is
+        shared and absolute, catching the layer as it arrives is enough:
+        it gets exactly what everything else has.
+        """
+        a = current[0]
+        if a is None:
+            return
+        layer = getattr(event, "value", None)
+        # Fall back to sweeping the viewer: napari's event carries the new
+        # layer, but a caller that inserts by other means may not, and a
+        # missed layer is the failure this exists to prevent.
+        targets = [layer] if layer is not None else _layers()
+        for target in targets:
+            try:
+                target.affine = a
+            except Exception:  # noqa: BLE001 - a stray entry never costs the rest
+                continue
+
+    # Wrapped: the fakes a headless test builds have no event system, and
+    # neither does a viewer whose layer list is a plain container.
+    try:
+        viewer.layers.events.inserted.connect(_onInserted)
+    except Exception:  # noqa: BLE001 - see above
+        pass
 
     def _sync(angle, source):
         # The slider and the box show the same number, so each has to move
