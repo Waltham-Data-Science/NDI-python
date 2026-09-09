@@ -66,9 +66,7 @@ def levelDocs(session: Any, pyramid_doc: Any, reduction: str | None = None) -> l
     return docs
 
 
-def levelTable(
-    session: Any, pyramid_doc: Any, reduction: str | None = None
-) -> list[dict]:
+def levelTable(session: Any, pyramid_doc: Any, reduction: str | None = None) -> list[dict]:
     """One row per level: level, reduction_function, shape, chunks, voxel_size, id.
 
     Metadata-only. Used by ``napariViewLightsheet --report`` and by

@@ -111,8 +111,7 @@ def _reductions_for(session: Any, pyramid_doc: Any) -> list[str]:
 
     docs = levelDocs(session, pyramid_doc)
     seen = {
-        d.document_properties["lightsheetZarrLevel"].get("reduction_function", "none")
-        for d in docs
+        d.document_properties["lightsheetZarrLevel"].get("reduction_function", "none") for d in docs
     }
     return sorted(seen - {"none"})
 
