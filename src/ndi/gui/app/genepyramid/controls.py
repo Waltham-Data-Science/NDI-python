@@ -2035,8 +2035,9 @@ def buildCloudSignInDialog(parent=None):
             return
         note = "Signed in."
         if save.isChecked():
+            picked = chooser.itemData(chooser.currentIndex())
             try:
-                saveCloudProfile(who, secret)
+                saveCloudProfile(who, secret, uid=(picked[1] if picked else ""))
                 note += " Saved to your NDI profile."
             except Exception as e:  # noqa: BLE001 - the sign-in still worked
                 note += f" (Could not save to the profile: {e})"
@@ -2054,23 +2055,64 @@ def buildCloudSignInDialog(parent=None):
     return dialog, outcome
 
 
-def saveCloudProfile(email: str, password: str) -> None:
+def saveCloudProfile(email: str, password: str, uid: str = "") -> None:
     """Make these the credentials a future session renews itself with.
 
-    Updates the profile that already carries this email rather than
-    adding a second one for it -- someone whose saved password is wrong
-    is trying to CORRECT it, and a duplicate entry would leave the wrong
-    one in place to be picked instead.
+    Updates an existing profile rather than adding a second one for the
+    same email -- someone whose saved password is wrong is trying to
+    CORRECT it, and a duplicate entry would leave the wrong one in place
+    to be picked instead.
+
+    WHICH profile, when several share an email, is the whole difficulty.
+    ONE EMAIL CAN OWN SEVERAL ACCOUNTS: a dev profile and a prod profile
+    under the same address is the normal arrangement here, not a mistake
+    to be tidied. Writing a prod password into the dev entry is silent
+    and wrong, so this never guesses:
+
+      1. *uid* when the caller has one -- the dialog passes the profile
+         the reader actually picked, which settles it outright.
+      2. the CURRENT profile, then the DEFAULT, when either matches the
+         email. Those are the two the rest of NDI would have used.
+      3. a match that is the ONLY one for that email.
+
+    and otherwise raises rather than choosing. An ambiguous save is the
+    one case where doing nothing and saying so beats acting.
+
+    THE DEFAULT IS NOT MOVED for an existing profile. Saving a password
+    is not a request to switch accounts, and silently re-pointing the
+    default is how a dev profile ends up being the one everything
+    afterwards authenticates with. A profile this creates is made the
+    default, because a store that had nothing for this email has no
+    other candidate to displace.
     """
     from ....cloud import profile
 
-    for entry in profile.list_profiles():
-        if str(getattr(entry, "Email", "")).lower() == email.lower():
-            profile.set_password(entry.UID, password)
-            profile.set_default(entry.UID)
-            return
-    uid = profile.add(email.split("@")[0] or "ndi", email, password)
-    profile.set_default(uid)
+    if uid:
+        profile.set_password(uid, password)
+        return
+
+    matches = [
+        e for e in profile.list_profiles() if str(getattr(e, "Email", "")).lower() == email.lower()
+    ]
+    if not matches:
+        fresh = profile.add(email.split("@")[0] or "ndi", email, password)
+        profile.set_default(fresh)
+        return
+
+    if len(matches) > 1:
+        for pick in (profile.get_current(), profile.get_default()):
+            chosen = str(getattr(pick, "UID", "") or "")
+            if chosen and any(chosen == e.UID for e in matches):
+                profile.set_password(chosen, password)
+                return
+        raise ValueError(
+            f"{len(matches)} profiles use {email} and none of them is the "
+            f"current or default one, so there is no way to tell which "
+            f"password this is. Pick the profile in the list above, or set "
+            f"a default with ndi.cloud.profile.set_default(...)."
+        )
+
+    profile.set_password(matches[0].UID, password)
 
 
 def applySolo(layers, current) -> int:

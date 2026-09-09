@@ -109,8 +109,12 @@ class TestSavingToTheProfile:
 
         controls.saveCloudProfile("me@example.com", "pw")
         assert calls["set"] == ("u2", "pw")
-        assert calls["default"] == "u2"
         assert "add" not in calls
+        # The default is NOT moved. Saving a password is not a request to
+        # switch accounts -- and one email can own a dev profile and a
+        # prod one, where re-pointing the default silently changes which
+        # account everything afterwards authenticates as.
+        assert "default" not in calls
 
     def test_the_match_ignores_case(self, monkeypatch):
         calls = {}

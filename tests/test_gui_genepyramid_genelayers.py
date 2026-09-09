@@ -318,7 +318,7 @@ class TestTheSignInDialog:
     def test_the_profile_is_only_written_when_asked(self, qt, dialogOf, monkeypatch):
         saved = []
         monkeypatch.setattr("ndi.cloud.auth.login", lambda *a: None)
-        monkeypatch.setattr(controls, "saveCloudProfile", lambda *a: saved.append(a))
+        monkeypatch.setattr(controls, "saveCloudProfile", lambda *a, **k: saved.append(a))
         dialog, _outcome = dialogOf()
         dialog._ndi_fields["email"].setText("me@example.com")
         dialog._ndi_fields["password"].setText("pw")
@@ -335,7 +335,7 @@ class TestTheSignInDialog:
     def test_a_profile_that_will_not_save_does_not_undo_the_sign_in(
         self, qt, dialogOf, monkeypatch
     ):
-        def boom(*_a):
+        def boom(*_a, **_k):
             raise RuntimeError("no keyring")
 
         monkeypatch.setattr("ndi.cloud.auth.login", lambda *a: None)
@@ -487,3 +487,119 @@ class TestTheCloudLogo:
             lbl.pixmap() and not lbl.pixmap().isNull() for lbl in panel.findChildren(qt.QLabel)
         )
         assert viewer.window.docked
+
+
+class TestSavingWhenOneEmailOwnsSeveralAccounts:
+    """A dev profile and a prod profile under one address is the normal
+    arrangement, not a mistake to be tidied.
+
+    Writing the prod password into the dev entry is silent and wrong,
+    and re-pointing the default at the dev entry while doing it is
+    worse -- everything afterwards would authenticate as the wrong
+    account against the wrong server.
+    """
+
+    def _store(self, monkeypatch, entries, current=None, default=None):
+        calls = {}
+        monkeypatch.setattr("ndi.cloud.profile.list_profiles", lambda: entries)
+        monkeypatch.setattr("ndi.cloud.profile.get_current", lambda: current)
+        monkeypatch.setattr("ndi.cloud.profile.get_default", lambda: default)
+        monkeypatch.setattr(
+            "ndi.cloud.profile.set_password", lambda k, p: calls.setdefault("set", (k, p))
+        )
+        monkeypatch.setattr(
+            "ndi.cloud.profile.set_default", lambda k: calls.setdefault("default", k)
+        )
+
+        def _add(*a):
+            calls["add"] = a
+            return "fresh"
+
+        monkeypatch.setattr("ndi.cloud.profile.add", _add)
+        return calls
+
+    def test_a_named_uid_settles_it_outright(self, monkeypatch):
+        """Which is what the dialog passes: the profile the reader
+        actually picked from the list."""
+        calls = self._store(monkeypatch, [])
+        controls.saveCloudProfile("me@example.com", "pw", uid="u-dev")
+        assert calls["set"] == ("u-dev", "pw")
+        assert "default" not in calls
+
+    def test_the_current_profile_wins_when_two_share_an_email(self, monkeypatch):
+        dev, prod = _Entry("u-dev", "me@example.com"), _Entry("u-prod", "me@example.com")
+        calls = self._store(monkeypatch, [dev, prod], current=prod)
+        controls.saveCloudProfile("me@example.com", "pw")
+        assert calls["set"] == ("u-prod", "pw")
+
+    def test_the_default_wins_when_there_is_no_current(self, monkeypatch):
+        dev, prod = _Entry("u-dev", "me@example.com"), _Entry("u-prod", "me@example.com")
+        calls = self._store(monkeypatch, [dev, prod], default=prod)
+        controls.saveCloudProfile("me@example.com", "pw")
+        assert calls["set"] == ("u-prod", "pw")
+
+    def test_it_refuses_rather_than_guessing(self, monkeypatch):
+        """Doing nothing and saying so beats writing a password into an
+        account the reader did not mean."""
+        dev, prod = _Entry("u-dev", "me@example.com"), _Entry("u-prod", "me@example.com")
+        calls = self._store(monkeypatch, [dev, prod])
+        with pytest.raises(ValueError) as caught:
+            controls.saveCloudProfile("me@example.com", "pw")
+        assert "2 profiles" in str(caught.value)
+        assert calls == {}, "it wrote something despite the ambiguity"
+
+    def test_it_never_writes_into_the_first_it_finds(self, monkeypatch):
+        """The old behaviour, and the reason this class exists: the dev
+        entry happened to be listed first."""
+        dev, prod = _Entry("u-dev", "me@example.com"), _Entry("u-prod", "me@example.com")
+        calls = self._store(monkeypatch, [dev, prod], current=prod)
+        controls.saveCloudProfile("me@example.com", "pw")
+        assert calls["set"][0] != "u-dev"
+
+    def test_one_match_needs_no_steer(self, monkeypatch):
+        only = _Entry("u1", "me@example.com")
+        calls = self._store(monkeypatch, [only])
+        controls.saveCloudProfile("me@example.com", "pw")
+        assert calls["set"] == ("u1", "pw")
+
+    def test_a_brand_new_email_is_added_and_made_default(self, monkeypatch):
+        """A store that had nothing for this email has no other candidate
+        to displace."""
+        calls = self._store(monkeypatch, [_Entry("u-other", "them@example.com")])
+        controls.saveCloudProfile("me@example.com", "pw")
+        assert calls["add"] == ("me", "me@example.com", "pw")
+        assert calls["default"] == "fresh"
+
+    def test_a_current_profile_for_a_different_email_does_not_capture_it(self, monkeypatch):
+        """It has to match the email being saved, or picking "current"
+        would write this password into somebody else's account."""
+        mine = _Entry("u-mine", "me@example.com")
+        theirs = _Entry("u-theirs", "them@example.com")
+        calls = self._store(monkeypatch, [mine], current=theirs)
+        controls.saveCloudProfile("me@example.com", "pw")
+        assert calls["set"] == ("u-mine", "pw")
+
+
+class TestTheDialogNamesTheProfileItSavesTo:
+    def test_a_picked_profile_is_the_one_written(self, qt, dialogOf, monkeypatch):
+        """No guessing needed when the reader chose from the list."""
+        saved = []
+        monkeypatch.setattr("ndi.cloud.auth.login", lambda *a: None)
+        monkeypatch.setattr(controls, "saveCloudProfile", lambda *a, **k: saved.append((a, k)))
+        dialog, _outcome = dialogOf([_Entry("u1", "me@example.com", "work")])
+        dialog._ndi_fields["profile"].setCurrentIndex(1)
+        dialog._ndi_fields["password"].setText("pw")
+        dialog._ndi_fields["save"].setChecked(True)
+        dialog._ndi_accept()
+        assert saved and saved[0][1].get("uid") == "u1"
+
+    def test_typing_them_by_hand_passes_no_uid(self, qt, dialogOf, monkeypatch):
+        saved = []
+        monkeypatch.setattr("ndi.cloud.auth.login", lambda *a: None)
+        monkeypatch.setattr(controls, "saveCloudProfile", lambda *a, **k: saved.append((a, k)))
+        dialog, _outcome = dialogOf()
+        dialog._ndi_fields["email"].setText("me@example.com")
+        dialog._ndi_fields["password"].setText("pw")
+        dialog._ndi_fields["save"].setChecked(True)
+        dialog._ndi_accept()
+        assert saved and saved[0][1].get("uid") == ""
