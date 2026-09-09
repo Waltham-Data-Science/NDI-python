@@ -206,8 +206,95 @@ def _as_profile_list(raw) -> list:
     return []
 
 
+# MATLAB's reserved words, for the last rule of makeValidName. NDI's own
+# secret keys ("NDI Cloud <uid>") can never collide with one, but a port that
+# implements four of five rules is a trap for whoever ports the fifth.
+_MATLAB_KEYWORDS = frozenset(
+    {
+        "break",
+        "case",
+        "catch",
+        "classdef",
+        "continue",
+        "else",
+        "elseif",
+        "end",
+        "for",
+        "function",
+        "global",
+        "if",
+        "otherwise",
+        "parfor",
+        "persistent",
+        "return",
+        "spmd",
+        "switch",
+        "try",
+        "while",
+    }
+)
+
+# MATLAB's namelengthmax.
+_MATLAB_NAMELENGTHMAX = 63
+
+
+def _make_valid_name(name: str) -> str:
+    """Port of MATLAB ``makeValidName(name, 'ReplacementStyle', 'underscore')``.
+
+    NDI-matlab's profile.m runs every secret key through this before using
+    it as a struct field, because that is what reading the secrets file
+    back through ``jsondecode`` requires -- a JSON key has to become a
+    valid MATLAB identifier. Python has no such constraint, but it has to
+    produce the SAME name or it cannot read the file MATLAB wrote.
+
+    The rule that matters, and the one a reasonable guess gets wrong:
+    whitespace is **deleted** and the following letter capitalised, not
+    replaced. So ``"NDI Cloud 41269..."`` becomes ``NDICloud41269...``,
+    not ``NDI_Cloud_41269...``.
+    """
+    if not name:
+        return "x"
+
+    # 1. Whitespace is deleted; the next alphabetic character is capitalised.
+    chars: list[str] = []
+    capitalize_next = False
+    for ch in name:
+        if ch.isspace():
+            capitalize_next = True
+            continue
+        if capitalize_next and ch.isalpha():
+            ch = ch.upper()
+        capitalize_next = False
+        chars.append(ch)
+    out = "".join(chars)
+
+    # 2. Anything left that is not an ASCII alphanumeric or an underscore
+    #    becomes one underscore each (ReplacementStyle 'underscore').
+    out = "".join(c if (c.isascii() and c.isalnum()) or c == "_" else "_" for c in out)
+
+    # 3. A name must begin with a letter.
+    if not out or not (out[0].isascii() and out[0].isalpha()):
+        out = "x" + out
+
+    # 4. A name must not BE a keyword.
+    if out in _MATLAB_KEYWORDS:
+        out += "_"
+
+    # 5. namelengthmax.
+    return out[:_MATLAB_NAMELENGTHMAX]
+
+
 def _safe_field(name: str) -> str:
-    """Map a secret key to a JSON-safe field name."""
+    """Map a secret key to the field name NDI-matlab uses for it."""
+    return _make_valid_name(name)
+
+
+def _legacy_safe_field(name: str) -> str:
+    """The field name THIS module used to write, before the MATLAB port.
+
+    Reads fall back to it so a password saved by an older NDI-python is
+    still found. Nothing writes it any more.
+    """
     return name.replace(" ", "_").replace(":", "_")
 
 
@@ -369,6 +456,9 @@ class _ProfileSingleton:
         elif self.backend == "aes":
             store = _read_secrets_file(self.secrets_filename)
             store[_safe_field(key)] = _aes_encrypt(value)
+            # Drop any entry under the name this module used to write, so a
+            # stale copy of a changed password cannot be read back later.
+            store.pop(_legacy_safe_field(key), None)
             _write_secrets_file(self.secrets_filename, store)
         else:  # memory
             self._memory_store[key] = value
@@ -384,6 +474,10 @@ class _ProfileSingleton:
         if self.backend == "aes":
             store = _read_secrets_file(self.secrets_filename)
             entry = store.get(_safe_field(key))
+            if entry is None:
+                # A password written by an older NDI-python is under the old
+                # name. Still readable; the next write moves it across.
+                entry = store.get(_legacy_safe_field(key))
             if entry is None:
                 raise KeyError(f'No secret stored for "{key}".')
             return _aes_decrypt(entry)
@@ -402,6 +496,7 @@ class _ProfileSingleton:
         elif self.backend == "aes":
             store = _read_secrets_file(self.secrets_filename)
             store.pop(_safe_field(key), None)
+            store.pop(_legacy_safe_field(key), None)
             _write_secrets_file(self.secrets_filename, store)
         else:
             self._memory_store.pop(key, None)
