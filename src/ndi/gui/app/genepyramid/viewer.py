@@ -95,27 +95,37 @@ def openPyramid(
     Returns:
         The napari Viewer.
     """
-    import sys
-
     from .progress import closeLaunchWindow, note, stage
 
     with stage("importing napari"):
         napari = require_napari()
 
     viewer = napari.Viewer()
-    # THE LIGHT THEME. napari defaults to its dark one, which left the
-    # window grey against every other NDI applet -- white bodies under a
-    # navy header. Guarded rather than assumed: theme names are napari's
-    # and could move, and a viewer that opens in the wrong grey is better
-    # than one that does not open.
-    try:
-        viewer.theme = "light"
-    except Exception as e:  # noqa: BLE001 - a colour is never worth the window
-        print(f"[genepyramid] could not set the light theme ({e})", file=sys.stderr)
+    # NAPARI'S OWN THEME IS LEFT ALONE, which means the canvas stays dark.
+    # Setting it to "light" did put the docks on a light ground, but it
+    # took the CANVAS with it -- and a dark canvas is what imaging data is
+    # read against. What was actually wanted was the PANELS on the NDI
+    # Cloud palette, and those are styled individually in
+    # ndi.gui.app.genepyramid.controls.applyCloudStyle, which does not
+    # touch the canvas. Two different surfaces, and only one of them
+    # should be white.
     # The image ladder is LAZY: layerSpec resolves tile paths and the
     # level table, and reads no tile bytes. Nothing here is the wait.
     with stage("building the pyramid ladder (lazy)"):
-        image = viewer.add_image(**layerSpec(session, pyr_doc, gene_rows, density, name))
+        spec = layerSpec(session, pyr_doc, gene_rows, density, name)
+    # SPLIT FROM THE LADDER, because only one of these two is lazy and the
+    # label used to claim both were. Building the ladder reads nothing.
+    # add_image then makes napari's thumbnail, and napari builds that by
+    # materialising the WHOLE COARSEST LEVEL -- Image._post_init calls
+    # refresh, which reaches _level_materializer and computes the dask
+    # array for the thumbnail level. On a real section that is gigabytes
+    # of tiles, and on a downloaded dataset it is gigabytes of fetching.
+    #
+    # It is the longest step of a cold launch and it used to sit behind a
+    # label that said "(lazy)", which is why it read as a hang. Naming it
+    # does not make it fast; it makes it legible.
+    with stage("drawing the overview (napari reads the coarsest level)"):
+        image = viewer.add_image(**spec)
 
     shapes = None
     if outlines is not None:
