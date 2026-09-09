@@ -97,7 +97,7 @@ def openPyramid(
     """
     from .progress import closeLaunchWindow, note, stage
 
-    with stage("importing napari"):
+    with stage("starting napari"):
         napari = require_napari()
 
     viewer = napari.Viewer()
@@ -111,7 +111,7 @@ def openPyramid(
     # should be white.
     # The image ladder is LAZY: layerSpec resolves tile paths and the
     # level table, and reads no tile bytes. Nothing here is the wait.
-    with stage("building the pyramid ladder (lazy)"):
+    with stage("preparing the image levels (read on demand)"):
         spec = layerSpec(session, pyr_doc, gene_rows, density, name)
     # SPLIT FROM THE LADDER, because only one of these two is lazy and the
     # label used to claim both were. Building the ladder reads nothing.
@@ -124,7 +124,7 @@ def openPyramid(
     # It is the longest step of a cold launch and it used to sit behind a
     # label that said "(lazy)", which is why it read as a hang. Naming it
     # does not make it fast; it makes it legible.
-    with stage("drawing the overview (napari reads the coarsest level)"):
+    with stage("drawing the overview (reads the whole lowest-resolution level)"):
         image = viewer.add_image(**spec)
 
     shapes = None
@@ -143,11 +143,11 @@ def openPyramid(
             # THIS IS THE SLOW ONE and nothing here can make it fast:
             # napari triangulates every polygon as it takes them.
             note(
-                f"handing {len(keep):,} polygons to napari -- it triangulates "
-                f"each one, so this is the long part of the launch. Drop "
-                f"--outlines to skip it."
+                f"drawing {len(keep):,} cell outlines. Each one has to be cut "
+                f"into triangles before it can be drawn, which is the long "
+                f"part of the launch. Leave out --outlines to skip it."
             )
-            with stage("napari add_shapes"):
+            with stage("drawing the cell outlines"):
                 shapes = viewer.add_shapes(
                     paths,
                     shape_type="polygon",
@@ -162,7 +162,7 @@ def openPyramid(
         with stage(f"placing {len(cells['x']):,} centroids"):
             row, col = sourceToWorld(session, pyr_doc, cells["x"], cells["y"])
             coords = np.column_stack([row, col])
-        with stage("napari add_points"):
+        with stage("drawing the cell centroids"):
             points = viewer.add_points(
                 coords,
                 name="cell centroids",
