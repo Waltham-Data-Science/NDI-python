@@ -299,6 +299,11 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
     outer.addLayout(sort_row)
 
     listw = QListWidget()
+    # THE LIST IS WHAT THE PANEL IS FOR. Left to its own size hint it came
+    # up four rows tall, wedged between the band above and the blur below,
+    # and finding a gene among 26,444 meant scrolling a porthole. A dock
+    # panel is only as tall as it is asked to be, so it is asked.
+    listw.setMinimumHeight(260)
     items: dict[str, Any] = {}
     symbols = list(index)
     entries = list(index.values())
@@ -394,10 +399,15 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
     count_btn.clicked.connect(lambda *_: _sortBy("counts"))
 
     # ---- the abundance band ------------------------------------------
-    # ONE ROW. What the band is and what it just did are hover text on the
-    # slider rather than a paragraph under it: the explanation is read
-    # once and the panel is read every time, and the list underneath is
-    # what the space is for.
+    # THE SLIDER GETS ITS OWN LINE. Sharing one with the label left it a
+    # stub in a narrow dock -- and this slider carries its own value
+    # labels at each end, so what was left after "Abundance band" was the
+    # numbers and no track between them: unreachable rather than merely
+    # cramped. Same lesson as the rotation slider.
+    #
+    # What the band is and what it just did stay hover text rather than a
+    # paragraph: the explanation is read once and the panel is read every
+    # time, and the list underneath is what the space is for.
     if symbol_totals is None:
         note = QLabel("no gene_totals.tsv: no counts, no band")
         note.setToolTip(
@@ -408,8 +418,8 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
         outer.addWidget(note)
         slider = lo_box = hi_box = None
     else:
+        outer.addWidget(QLabel("Abundance band"))
         band_row = QHBoxLayout()
-        band_row.addWidget(QLabel("Abundance band"))
         slider = lo_box = hi_box = None
         try:
             # napari depends on superqt, so the two-handle widget is
