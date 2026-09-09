@@ -1550,51 +1550,6 @@ def addRotationPanel(viewer, layers) -> Any:
     return box
 
 
-def cloudPaperStyle():
-    """A Qt stylesheet putting a widget on the NDI Cloud palette.
-
-    napari ships a dark theme and its docks inherit it, so the control
-    panels came out grey against every other NDI applet, which are white
-    bodies with a navy header. The palette is not invented here -- it is
-    :mod:`ndi.gui.cloud_colors`, the same triplets ndi.gui.cloudColors
-    holds on the MATLAB side, so the two stay one look rather than two
-    approximations of one.
-    """
-    from ndi.gui.cloud_colors import CloudColors
-
-    c = CloudColors()
-
-    def hexOf(triplet):
-        return "#" + "".join(f"{int(round(v * 255)):02x}" for v in triplet)
-
-    body = hexOf(c.off_white)
-    ink = hexOf(c.dark_blue)
-    edge = hexOf(c.neutral_grey)
-    field = hexOf(c.white)
-    return (
-        f"QWidget {{ background: {body}; color: {ink}; }}"
-        f"QLabel, QCheckBox, QRadioButton {{ background: transparent; color: {ink}; }}"
-        f"QLineEdit, QAbstractItemView, QDoubleSpinBox, QSpinBox "
-        f"{{ background: {field}; color: {ink}; border: 1px solid {edge}; }}"
-        f"QPushButton {{ background: {field}; color: {ink};"
-        f" border: 1px solid {edge}; padding: 3px 8px; }}"
-    )
-
-
-def applyCloudStyle(widget) -> bool:
-    """Put one panel on the cloud palette. False if it would not take.
-
-    Styling is never worth the window, and a Qt build that refuses a
-    stylesheet should cost the colour rather than the panel -- the same
-    trade ndi.gui.app.GEFManager.paper makes on the MATLAB side.
-    """
-    try:
-        widget.setStyleSheet(cloudPaperStyle())
-        return True
-    except Exception:  # noqa: BLE001 - a colour is never worth the panel
-        return False
-
-
 def _importQtWidgets() -> None:
     """Import qtpy.QtWidgets, or raise ImportError.
 
@@ -1656,12 +1611,7 @@ def addAllPanels(
 
     def _build(name, fn):
         try:
-            panel = fn()
-            # Styled here rather than in each builder, so a panel added
-            # later cannot forget and come out grey among white ones.
-            if panel is not None:
-                applyCloudStyle(panel)
-            return panel
+            return fn()
         except Exception as e:  # noqa: BLE001 - a panel is never worth the window
             print(
                 f"[genepyramid] the {name} panel could not be built "
