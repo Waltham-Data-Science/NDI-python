@@ -2690,18 +2690,54 @@ functions:
 
   - name: makePyramid
     matlab_path: "+ndi/+fun/+doc/+gene/makePyramid.m"
-    matlab_last_sync_hash: "6ae508708"
+    matlab_last_sync_hash: "33edeb22"
     python_path: "ndi/fun/doc_gene.py"
     decision_log: >
-      Exact match. Options keep their MATLAB spelling (binSizes, grid,
-      basePixelSize, subjectID). subjectID is REQUIRED on both sides: the
-      pyramid document declares subject_id mustbenotempty, because a
-      section is measured from an animal and NDI records that on the
-      measurement rather than leaving it to be inferred.
+      Options keep their MATLAB spelling (binSizes, grid, basePixelSize,
+      subjectID). subjectID is REQUIRED on both sides: the pyramid
+      document declares subject_id mustbenotempty, because a section is
+      measured from an animal and NDI records that on the measurement
+      rather than leaving it to be inferred.
+
+      PYTHON PORT IS BEHIND MATLAB @ 33edeb22 in three ways, all worth
+      recording because they change the answer, not just the way it is
+      written. When one of these lands on Python it can be lifted out of
+      this note.
+
+      (1) API surface. MATLAB now takes `grid = []` by default and
+      auto-sizes from a histogram-based chooser (`localChooseGrid`)
+      subject to `tileBudgetBytes` (default 50 MB) and `gridRange`
+      (default [3 64]); MATLAB also takes a `progressFcn` handle that
+      pipes per-tile, per-level fractions out to a caller. Python's
+      `make_pyramid` still takes `grid` as a fixed int with no
+      auto-size, and has no tile-budget / grid-range / progress-fcn
+      pass-through. A caller that builds a large pyramid on MATLAB and
+      then rebuilds it on Python with the same call will get a
+      different tile grid, and can OOM where MATLAB does not.
+
+      (2) Tile filenames. MATLAB now writes 1-based `tile.bin_1..N` and
+      stores `tile_index_origin: 1` on the tiles document, using
+      `ndi.fun.doc.gene.tileFileName(lv, t + 1)`. Older pyramids that
+      wrote `tile.bin_0` still read because `tileIndexOrigin` returns 0
+      for a doc with no field. Python still writes `tile.bin_0..N-1`
+      with no origin field; a MATLAB reader of a Python-written pyramid
+      reads it correctly (origin defaults to 0), but a Python reader of
+      a MATLAB-written pyramid will read the wrong tile at every grid
+      cell along a row until the tileFileName / tileIndexOrigin group
+      lands here (bridge entries are currently porting_deferred). Pair
+      this with those helpers when it lifts.
+
+      (3) Memory. MATLAB packs (tile, pixel, gene) into one double sort
+      key with a 2^53 overflow guard, and does a banded per-tile-row
+      sort. Comment in the file quotes 90 GB -> 13 GB on a 7.7e8-record
+      ferret hemisphere. Python has no equivalent yet; large sections
+      will OOM here where they succeed on MATLAB. Optional but worth
+      recording for the reader who wonders why identical code paths
+      diverge on wall time and memory.
 
   - name: readViewport
     matlab_path: "+ndi/+fun/+doc/+gene/readViewport.m"
-    matlab_last_sync_hash: "b9972abf1"
+    matlab_last_sync_hash: "33edeb22"
     python_path: "ndi/fun/doc_gene.py"
     input_arguments:
       - name: bin_size
@@ -2794,7 +2830,7 @@ functions:
 
   - name: exportRegion
     matlab_path: "+ndi/+fun/+doc/+gene/exportRegion.m"
-    matlab_last_sync_hash: "b9972abf1"
+    matlab_last_sync_hash: "33edeb22"
     python_path: "ndi/fun/doc_gene.py"
     decision_log: >
       Exact match. Returns raw counts, never density.
@@ -2957,7 +2993,7 @@ functions:
 
   - name: makeCells
     matlab_path: "+ndi/+fun/+doc/+gene/makeCells.m"
-    matlab_last_sync_hash: "6ae508708"
+    matlab_last_sync_hash: "33edeb22"
     python_path: "ndi/fun/doc_gene.py"
     decision_log: >
       Writes cells.tsv, optionally contours.bin, and stores the document.
@@ -3032,7 +3068,7 @@ functions:
 
   - name: fromCellBin
     matlab_path: "+ndi/+fun/+doc/+gene/fromCellBin.m"
-    matlab_last_sync_hash: "6ae5087"
+    matlab_last_sync_hash: "33edeb22"
     status: porting_deferred
     decision_log: >
       MATLAB reads a SAW cellbin .h5ad with
@@ -3043,9 +3079,15 @@ functions:
       about row order. Ports as a group with the other three entries
       under this heading; no current Python caller.
 
+      Between the pinned hash and 33edeb22 MATLAB only reworded one line
+      of the recordSource docstring (generic_file -> fileReference) to
+      match makeSourceFile's class-switch fix. No behavioral change; the
+      Python port picks up the new class automatically through
+      makeSourceFile whenever this group lifts.
+
   - name: fromGEF
     matlab_path: "+ndi/+fun/+doc/+gene/fromGEF.m"
-    matlab_last_sync_hash: "a178e46"
+    matlab_last_sync_hash: "33edeb22"
     status: porting_deferred
     decision_log: >
       MATLAB reads a Stereo-seq .gef with ndr.format.stereoseq.readGEF
@@ -3054,15 +3096,42 @@ functions:
       path in one call. Ports with the other three entries under this
       heading.
 
+      Between the pinned hash and 33edeb22 MATLAB gained four things
+      the port must carry when it lifts:
+      (a) `grid` defaulted to `[]` (auto-size) instead of a fixed int;
+      (b) two new pass-through options `tileBudgetBytes` (default 50 MB)
+          and `gridRange` (default [3 64]) that reach makePyramid's
+          auto-sizer;
+      (c) `progressFcn` piped through `localSubProgress` so the pyramid
+          reports per-level, per-tile fractions;
+      (d) records passed to makePyramid as `x(:)` in their native dtype
+          (int32/uint16) instead of `double(x(:))` -- saves ~14 GB on a
+          ferret section.
+      Docstring also updated: GeneIngest -> GEFManager, generic_file ->
+      fileReference. The class-switch on makeSourceFile is picked up
+      through makeSourceFile automatically.
+
   - name: makeSourceFile
     matlab_path: "+ndi/+fun/+doc/+gene/makeSourceFile.m"
-    matlab_last_sync_hash: "6ae5087"
+    matlab_last_sync_hash: "33edeb22"
     status: porting_deferred
     decision_log: >
-      MATLAB creates the generic_file document that the spatial gene
+      MATLAB creates the source-file document that the spatial gene
       expression documents' source_file_id dependency points at, so a
-      pyramid can name the .gef it was built from. Describes by default
-      (name + checksum + dates), attaches only when attachFile=true.
+      pyramid can name the .gef it was built from.
+
+      MAIN @ 33edeb22 is a CLASS SWITCH, not a doc tweak, and this is
+      the entry recording it (fix from VH-Lab/NDI-matlab#981):
+        attachFile=false (default) -> `fileReference` document. Fields:
+          filename, originalPath, formatOntology, dateCreated,
+          dateUpdated, fileSize, checksum, checksumAlgorithm.
+        attachFile=true             -> `generic_file` document carrying
+          the file itself via `add_file('generic_file.ext', ...)`.
+      The pinned version always produced `generic_file`; describing
+      without attaching yielded a schema-invalid document that DID's
+      file validation used to accept and now refuses (did-matlab #182).
+      A Python port that expects a `generic_file` back on the default
+      path will need to accept a `fileReference` there instead.
       Ports with the other three entries under this heading.
 
   - name: readNotes

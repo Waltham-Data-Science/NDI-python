@@ -597,9 +597,18 @@ def reload() -> None:
 
 
 def reset() -> None:
-    """Clear the in-memory singleton state.  Does NOT touch disk."""
+    """Clear the in-memory singleton state.  Does NOT touch disk.
+
+    Also resets the secrets backend to the auto-detected one. A test that
+    called :func:`use_backend` (typically to force ``'memory'``) otherwise
+    left the singleton in that mode for the rest of the process, so a
+    later ``set_password`` on a real profile silently wrote to the
+    in-memory dict and looked fine -- until the next process could not
+    find it. Mirrors NDI-matlab @ 33edeb22 which added the same reset.
+    """
     obj = _get_singleton()
     obj.profiles = []
     obj.current_uid = ""
     obj.default_uid = ""
     obj._memory_store = {}
+    obj.backend = _detect_backend()

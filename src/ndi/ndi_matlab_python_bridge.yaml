@@ -1155,7 +1155,7 @@ classes:
   - name: preferences
     type: class
     matlab_path: "+ndi/preferences.m"
-    matlab_last_sync_hash: "9a9150e7c"
+    matlab_last_sync_hash: "33edeb22"
     python_path: "ndi/preferences.py"
     python_class: "Preferences"
     inherits: ""
@@ -1171,6 +1171,16 @@ classes:
       process, so a pool nobody asked for costs start-up time and a multiple of
       MATLAB's memory. Python has no parpool and no NDI code that would read
       them; a preference nothing consults is worse than an absent one.
+
+      MATLAB @ 33edeb22 additionally adds one preference item,
+      `GUI.GEFManager.ViewerLauncher` (default
+      `/usr/local/bin/napariViewGEF`), which points MATLAB's GEFManager
+      at the shell wrapper that scrubs LD_LIBRARY_PATH before starting
+      napari from a MATLAB process. This is a MATLAB-only knob for the
+      same reason: Python launches napari directly (or through the same
+      wrapper as a console script), so there is no MATLAB-to-Python
+      library path to scrub, and a preference nothing consults is worse
+      than an absent one. Not ported.
 
 # =========================================================================
 # Not ported / Not applicable
