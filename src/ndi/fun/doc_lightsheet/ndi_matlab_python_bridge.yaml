@@ -31,35 +31,42 @@ functions:
 
   - name: fromOMEZarr
     matlab_path: "+ndi/+fun/+doc/+lightsheet/fromOMEZarr.m"
-    matlab_last_sync_hash: "5ab84f3"
+    matlab_last_sync_hash: "1af66bb"
     status: porting_deferred
     decision_log: >-
-      MATLAB probes an OME-Zarr store with ndr.format.omezarr.listPyramids
-      and writes ONE lightsheetZarrPyramid document per multiscales
-      entry (typically two: mean, max) and ONE lightsheetZarrLevel
-      document per level. Metadata-only; no chunk bytes copied. Ports
-      with the other five entries under this heading.
+      MATLAB probes an OME-Zarr store with ndr.format.omezarr.listPyramids,
+      writes ONE lightsheetZarrPyramid document (per source volume), and
+      one lightsheetZarrLevel document per unique array path across all
+      multiscales entries. Level 0 is deduped when two entries reference
+      the same NGFF path (typical for mean + max pyramids). Metadata-only;
+      no chunk bytes copied. Ports with the other five entries under this
+      heading.
 
   - name: makePyramid
     matlab_path: "+ndi/+fun/+doc/+lightsheet/makePyramid.m"
-    matlab_last_sync_hash: "8f8af4e"
+    matlab_last_sync_hash: "1af66bb"
     status: porting_deferred
     decision_log: >-
-      The per-multiscales-entry worker fromOMEZarr calls; reusable when
-      the caller already has an ndr.format.omezarr.listPyramids struct.
-      Writes exactly one parent + n_levels child documents. Ports with
-      the other five entries.
+      The worker fromOMEZarr calls; writes one lightsheetZarrPyramid
+      parent (describes the source volume, reduction-agnostic) plus one
+      lightsheetZarrLevel per unique NGFF path across all entries.
+      reduction_function on the level names the reduction ('none' for
+      the shared raw level 0, 'mean' / 'max' / ... for reduced levels).
+      Ports with the other five entries.
 
   - name: makeSourceFile
     matlab_path: "+ndi/+fun/+doc/+lightsheet/makeSourceFile.m"
-    matlab_last_sync_hash: "5ab84f3"
+    matlab_last_sync_hash: "1af66bb"
     status: porting_deferred
     decision_log: >-
-      MATLAB creates the fileReference document the lightsheet
-      documents' source_file_id dependency points at, so a pyramid can
-      name the OME-Zarr store it was built from. Describes rather than
-      attaches (the store is many files; a checksum of the .zattrs is
-      the part worth having). Ports with the other five entries.
+      MATLAB creates the fileReference document the lightsheet documents'
+      source_file_id dependency points at, so a pyramid can name the
+      OME-Zarr store it was built from. Describes rather than attaches by
+      default (the store is a directory tree of many GB; a checksum of
+      .zattrs is the identifying fingerprint). attachFile=true is
+      accepted only for a plain file (creating a generic_file), never a
+      directory. Mirrors +gene/makeSourceFile after issue #981. Ports
+      with the other five entries.
 
   - name: chooseLevel
     matlab_path: "+ndi/+fun/+doc/+lightsheet/chooseLevel.m"
@@ -73,15 +80,18 @@ functions:
 
   - name: levelTable
     matlab_path: "+ndi/+fun/+doc/+lightsheet/levelTable.m"
-    matlab_last_sync_hash: "5ab84f3"
+    matlab_last_sync_hash: "1af66bb"
     status: porting_deferred
     decision_log: >-
-      Joins a lightsheetZarrPyramid and its lightsheetZarrLevel
-      children into one finest-first table, carrying the parent frame
-      in Properties.UserData. Python already has an equivalent inside
+      Joins a lightsheetZarrPyramid and its lightsheetZarrLevel children
+      into one finest-first table, carrying the parent frame in
+      Properties.UserData. Accepts an optional 'reduction' name-value
+      that filters the table to reduction_function in {'none',
+      <reduction>}. Python already has an equivalent inside
       ndi.gui.app.lightsheetZarr.multiscale.levelTable (which returns a
-      list of dicts); the doc-package mirror lands with the other five
-      entries so the surface a script sees matches on both sides.
+      list of dicts and takes the same reduction filter); the
+      doc-package mirror lands with the other five entries so the
+      surface a script sees matches on both sides.
 
   - name: viewCommand
     matlab_path: "+ndi/+fun/+doc/+lightsheet/viewCommand.m"
