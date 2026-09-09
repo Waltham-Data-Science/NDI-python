@@ -249,6 +249,9 @@ def test_the_chosen_labelings_reach_the_cell_type_panel(monkeypatch):
     """--labels was accepted, parsed, threaded through openPyramid, and
     then dropped at the last hop, so it silently did nothing. Nothing
     caught it because every other layer mentioned the argument."""
+    # addAllPanels refuses to build anything without a Qt binding, and CI
+    # installs none. What is under test here is the orchestration, not Qt.
+    monkeypatch.setattr(controls, "_importQtWidgets", lambda: None)
     cells = _Recorder()
     monkeypatch.setattr(controls, "addDisplayPanel", _Recorder())
     monkeypatch.setattr(controls, "addCellTypePanel", cells)
@@ -274,6 +277,9 @@ def test_a_panel_that_throws_does_not_take_the_window_with_it(monkeypatch, capsy
     that raised unwound out of openPyramid before napari.run(), so the
     window appeared and the process exited -- which reads as napari
     opening briefly and closing, with the reason lost."""
+    # addAllPanels refuses to build anything without a Qt binding, and CI
+    # installs none. What is under test here is the orchestration, not Qt.
+    monkeypatch.setattr(controls, "_importQtWidgets", lambda: None)
     genes = _Recorder()
     monkeypatch.setattr(controls, "addDisplayPanel", _Recorder(boom=True))
     monkeypatch.setattr(controls, "addCellTypePanel", _Recorder())
@@ -286,3 +292,28 @@ def test_a_panel_that_throws_does_not_take_the_window_with_it(monkeypatch, capsy
     assert genes.calls, "a failing panel stopped the ones after it"
     err = capsys.readouterr().err
     assert "display" in err and "no such file" in err
+
+
+def test_no_qt_binding_costs_the_panels_and_not_the_picture(monkeypatch, capsys):
+    """A headless-ish install has no Qt binding, and CI is one of them.
+
+    addAllPanels must then build nothing and say so, rather than raising
+    into openPyramid after the viewer is already on screen. The message
+    names what still works, because the image and --genes do.
+    """
+
+    def _no_qt():
+        raise ImportError("No module named 'qtpy.QtWidgets'")
+
+    monkeypatch.setattr(controls, "_importQtWidgets", _no_qt)
+    built = _Recorder()
+    monkeypatch.setattr(controls, "addDisplayPanel", built)
+    monkeypatch.setattr(controls, "addGenePanel", built)
+
+    made = controls.addAllPanels(object(), object(), object(), object(), True)
+
+    assert made == {}
+    assert not built.calls, "no panel should be attempted without a binding"
+    err = capsys.readouterr().err
+    assert "control panels unavailable" in err
+    assert "image is unaffected" in err

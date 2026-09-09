@@ -985,6 +985,20 @@ def addCellTypePanel(
 # ----------------------------------------------------------------- all
 
 
+def _importQtWidgets() -> None:
+    """Import qtpy.QtWidgets, or raise ImportError.
+
+    A named function rather than an inline import inside addAllPanels so a
+    test can stand in for it. What addAllPanels does AROUND the panels --
+    the order they are built in, and that one throwing does not stop the
+    rest or take the window down -- is not about Qt, and a CI job that
+    installs no Qt binding should still hold that behaviour to account.
+    Without this seam those tests passed anywhere a binding happened to be
+    installed and silently asserted nothing anywhere else.
+    """
+    import qtpy.QtWidgets  # noqa: F401
+
+
 def addAllPanels(
     viewer,
     session,
@@ -1021,8 +1035,8 @@ def addAllPanels(
     import traceback
 
     try:
-        import qtpy.QtWidgets  # noqa: F401
-    except ImportError as e:  # pragma: no cover - depends on the install
+        _importQtWidgets()
+    except ImportError as e:
         print(
             f"[genepyramid] control panels unavailable ({e}). The image is "
             f"unaffected; --genes and --no-density still work at launch.",
