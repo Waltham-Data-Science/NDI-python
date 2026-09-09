@@ -31,7 +31,7 @@ functions:
 
   - name: fromOMEZarr
     matlab_path: "+ndi/+fun/+doc/+lightsheet/fromOMEZarr.m"
-    matlab_last_sync_hash: "1af66bb"
+    matlab_last_sync_hash: "c8f3479"
     status: porting_deferred
     decision_log: >-
       MATLAB probes an OME-Zarr store with ndr.format.omezarr.listPyramids,
@@ -39,12 +39,14 @@ functions:
       one lightsheetZarrLevel document per unique array path across all
       multiscales entries. Level 0 is deduped when two entries reference
       the same NGFF path (typical for mean + max pyramids). Metadata-only;
-      no chunk bytes copied. Ports with the other five entries under this
-      heading.
+      no chunk bytes copied. c8f3479 added tileBudgetBytes (default 8 MB
+      uncompressed) and an optional chunks override, forwarded to
+      makePyramid so each level is re-tiled to hit the budget. Ports
+      with the other entries under this heading.
 
   - name: makePyramid
     matlab_path: "+ndi/+fun/+doc/+lightsheet/makePyramid.m"
-    matlab_last_sync_hash: "1af66bb"
+    matlab_last_sync_hash: "c8f3479"
     status: porting_deferred
     decision_log: >-
       The worker fromOMEZarr calls; writes one lightsheetZarrPyramid
@@ -52,7 +54,27 @@ functions:
       lightsheetZarrLevel per unique NGFF path across all entries.
       reduction_function on the level names the reduction ('none' for
       the shared raw level 0, 'mean' / 'max' / ... for reduced levels).
-      Ports with the other five entries.
+      c8f3479 drops the source zarr's chunk shape and re-chooses per
+      level via chooseTileShape to hit tileBudgetBytes (default 8 MB
+      uncompressed, sized for a viewer over an ~200 MB/s link fetching
+      ~4 tiles in parallel per pan gesture). Ports with the other
+      entries.
+
+  - name: chooseTileShape
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/chooseTileShape.m"
+    matlab_last_sync_hash: "c8f3479"
+    status: porting_deferred
+    decision_log: >-
+      Pure function that picks an OME-Zarr chunk shape landing near a
+      byte budget with tiles ISOTROPIC IN WORLD SPACE: each spatial
+      axis gets a chunk length inversely proportional to its voxel
+      size, so a lightsheet volume with 1 um XY and 5 um Z produces
+      pancake tiles rather than voxel cubes. Non-spatial axes (t, c)
+      stay at 1. Across a dyadic pyramid this keeps chunk-in-voxels
+      constant so chunk_grid halves per axis per level and tile count
+      drops by 8x per level for a 3D ladder. Ports with the other
+      entries under this heading; the Python builder that mirrors
+      makePyramid will call it directly.
 
   - name: makeSourceFile
     matlab_path: "+ndi/+fun/+doc/+lightsheet/makeSourceFile.m"
