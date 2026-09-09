@@ -32,9 +32,9 @@ functions:
   - name: LightsheetZarrManager
     matlab_path: "+ndi/+gui/+app/LightsheetZarrManager.m"
     matlab_last_sync_hash: "5ab84f3"
-    status: not_applicable
+    status: matlab_only
     decision_log: >-
-      Not ported: napari is Python-only, so the manager class stays
+      matlab_only: napari is Python-only, so the manager class stays
       MATLAB-only. It is the caller side of the CLI in this package -
       shell-execs /usr/local/bin/napariViewLightsheet (a wrapper that
       scrubs MATLAB's library paths) which then runs
