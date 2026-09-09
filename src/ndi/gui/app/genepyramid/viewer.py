@@ -95,7 +95,7 @@ def openPyramid(
     Returns:
         The napari Viewer.
     """
-    from .progress import note, stage
+    from .progress import closeLaunchWindow, note, stage
 
     with stage("importing napari"):
         napari = require_napari()
@@ -170,6 +170,12 @@ def openPyramid(
                 shapes_layer=shapes,
                 labelings=labelings,
             )
+
+    # The launch window has reported everything it can: the viewer is
+    # built and the panels are on it. Leaving it up past this point would
+    # make a finished launch look stuck, and it would sit over the picture
+    # it exists to get you to.
+    closeLaunchWindow()
 
     if show:
         napari.run()

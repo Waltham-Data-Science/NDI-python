@@ -128,14 +128,13 @@ class TestGetFileReportsBytes(unittest.TestCase):
 
 
 class TestTheRendererStaysOutOfLogs(unittest.TestCase):
-    def test_a_non_tty_gets_no_redrawn_line(self):
-        # A \r-redrawn bar becomes thousands of lines in a CI capture, so
-        # it is suppressed there; the stage timings still say what happened.
-        buf = io.StringIO()  # StringIO.isatty() is False
-        with mock.patch.object(sys, "stderr", buf):
+    def test_off_installs_no_observer_at_all(self):
+        # A \r-redrawn bar becomes thousands of lines in a CI capture.
+        import os
+
+        with mock.patch.dict(os.environ, {"NDI_GENEPYRAMID_PROGRESS": "off"}):
             with progress.cloudFetches("reading"):
                 self.assertIsNone(filehandler._fetch_observer)
-        self.assertEqual(buf.getvalue(), "")
 
     def test_quiet_suppresses_it_too(self):
         import os
@@ -143,6 +142,106 @@ class TestTheRendererStaysOutOfLogs(unittest.TestCase):
         with mock.patch.dict(os.environ, {"NDI_GENEPYRAMID_QUIET": "1"}):
             with progress.cloudFetches("reading"):
                 self.assertIsNone(filehandler._fetch_observer)
+
+    def test_text_mode_does_install_one(self):
+        import os
+
+        with mock.patch.dict(os.environ, {"NDI_GENEPYRAMID_PROGRESS": "text"}):
+            with progress.cloudFetches("reading"):
+                self.assertIsNotNone(filehandler._fetch_observer)
+
+
+class TestTheDisplayGuard(unittest.TestCase):
+    """Qt aborts the PROCESS when it cannot reach a display.
+
+    It does not raise, so try/except around QApplication() catches
+    nothing: without this guard a headless launch would die instead of
+    falling back to text. Found by running the test suite, which took
+    pytest down with it.
+    """
+
+    def test_a_mac_always_has_a_window_server(self):
+        with mock.patch.object(sys, "platform", "darwin"):
+            self.assertTrue(progress._displayLikely())
+
+    def test_windows_too(self):
+        with mock.patch.object(sys, "platform", "win32"):
+            self.assertTrue(progress._displayLikely())
+
+    def test_bare_linux_says_no(self):
+        import os
+
+        with (
+            mock.patch.object(sys, "platform", "linux"),
+            mock.patch.dict(os.environ, {}, clear=True),
+        ):
+            self.assertFalse(progress._displayLikely())
+
+    def test_x11_wayland_or_an_explicit_platform_say_yes(self):
+        import os
+
+        for var in ("DISPLAY", "WAYLAND_DISPLAY", "QT_QPA_PLATFORM"):
+            with (
+                mock.patch.object(sys, "platform", "linux"),
+                mock.patch.dict(os.environ, {var: ":0"}, clear=True),
+            ):
+                self.assertTrue(progress._displayLikely(), var)
+
+
+class TestModePrecedence(unittest.TestCase):
+    def setUp(self):
+        # _mode consults the window, which is a process-wide singleton.
+        self.addCleanup(setattr, progress, "_window", progress._window)
+        self.addCleanup(setattr, progress, "_window_failed", progress._window_failed)
+
+    def _mode_with(self, env):
+        import os
+
+        with mock.patch.dict(os.environ, env, clear=False):
+            return progress._mode()
+
+    def test_the_env_var_wins_over_everything(self):
+        for asked in ("gui", "text", "off"):
+            self.assertEqual(self._mode_with({"NDI_GENEPYRAMID_PROGRESS": asked}), asked)
+
+    def test_quiet_means_off_whatever_else_is_true(self):
+        self.assertEqual(self._mode_with({"NDI_GENEPYRAMID_QUIET": "1"}), "off")
+
+    def test_no_window_and_no_terminal_is_off_not_a_crash(self):
+        import os
+
+        progress._window, progress._window_failed = None, True
+        with (
+            mock.patch.object(sys, "stderr", io.StringIO()),
+            mock.patch.dict(os.environ, {"NDI_GENEPYRAMID_PROGRESS": ""}, clear=False),
+        ):
+            self.assertEqual(progress._mode(), "off")
+
+
+class TestClosingIsAlwaysSafe(unittest.TestCase):
+    def test_closing_when_there_never_was_a_window(self):
+        self.addCleanup(setattr, progress, "_window", progress._window)
+        progress._window = None
+        progress.closeLaunchWindow()  # must not raise
+
+    def test_closing_twice(self):
+        self.addCleanup(setattr, progress, "_window", progress._window)
+        progress._window = None
+        progress.closeLaunchWindow()
+        progress.closeLaunchWindow()
+
+    def test_a_widget_that_throws_on_close_does_not_escape(self):
+        # The viewer is built by this point; a failing indicator must not
+        # take the window with it.
+        self.addCleanup(setattr, progress, "_window", progress._window)
+
+        class _Boom:
+            def close(self):
+                raise RuntimeError("gone")
+
+        progress._window = {"widget": _Boom(), "app": _Boom()}
+        progress.closeLaunchWindow()
+        self.assertIsNone(progress._window)
 
 
 if __name__ == "__main__":
