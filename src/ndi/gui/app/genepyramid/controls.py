@@ -1068,6 +1068,214 @@ def applyRotation(layers, angle_deg, center):
     return a
 
 
+def densityRaster(row, col, max_side: int = 2048):
+    """Bin centroids onto a raster, coarse enough to blur cheaply.
+
+    Points cannot be blurred. napari draws a Points layer as discrete
+    marks, and there is no kernel to widen -- so making sparse cells
+    easier to see means rendering them into an IMAGE and blurring that.
+
+    The raster is deliberately coarse. A ferret section is ~40,000 x
+    59,000 base pixels, and a full-resolution density image would be 2.4
+    billion pixels to hold a few hundred thousand cells. The longest side
+    is capped instead, and the layer carries a matching ``scale`` and
+    ``translate`` so it still lands on top of the cells it was made from.
+
+    Args:
+        row, col: centroid coordinates in WORLD units, as the points layer
+            holds them.
+        max_side: longest raster side in pixels.
+
+    Returns:
+        ``(counts, step, origin)`` -- the 2D histogram, the world units one
+        raster pixel spans, and the ``(row, col)`` world position of its
+        top-left corner.
+    """
+    import numpy as np
+
+    row = np.asarray(row, float).ravel()
+    col = np.asarray(col, float).ravel()
+    if row.size == 0:
+        return np.zeros((1, 1)), 1.0, (0.0, 0.0)
+
+    r0, r1 = float(row.min()), float(row.max())
+    c0, c1 = float(col.min()), float(col.max())
+    # A degenerate extent -- one cell, or a row of them -- still has to
+    # produce a raster with area, or the histogram below has no bins.
+    span = max(r1 - r0, c1 - c0, 1.0)
+    step = span / max_side
+
+    nr = max(int(np.ceil((r1 - r0) / step)) + 1, 1)
+    nc = max(int(np.ceil((c1 - c0) / step)) + 1, 1)
+    ri = np.clip(((row - r0) / step).astype(np.int64), 0, nr - 1)
+    ci = np.clip(((col - c0) / step).astype(np.int64), 0, nc - 1)
+    counts = np.bincount(ri * nc + ci, minlength=nr * nc).reshape(nr, nc)
+    return counts.astype(np.float32), step, (r0, c0)
+
+
+def blurRaster(counts, sigma_world: float, step: float):
+    """Gaussian-blur a density raster with a UNITY kernel.
+
+    Unity meaning the kernel sums to one, so blurring SPREADS the signal
+    rather than adding to it: a cell contributes the same total whatever
+    the width. That is what keeps brightness a separate knob from width --
+    widen the dots and the picture does not also get brighter, so the
+    contrast limits set for one sigma still mean something at another.
+
+    ``mode="constant"`` rather than the default reflect, so mass leaves at
+    the edges instead of being folded back and piling up there. A section
+    is not periodic and its border cells are not doubled.
+
+    Args:
+        counts: raster from :func:`densityRaster`.
+        sigma_world: blur width in WORLD units -- the same units the
+            centroids are in, so the knob means the same thing at every
+            zoom rather than drifting with the raster size.
+        step: world units per raster pixel, from :func:`densityRaster`.
+
+    Returns:
+        The blurred raster. sigma <= 0 returns the input unchanged, which
+        is what "no blur" should cost.
+    """
+    import numpy as np
+    from scipy.ndimage import gaussian_filter
+
+    counts = np.asarray(counts, np.float32)
+    if sigma_world is None or sigma_world <= 0 or step <= 0:
+        return counts
+    return gaussian_filter(counts, sigma=float(sigma_world) / float(step), mode="constant")
+
+
+def addCellBlurPanel(viewer, points_layer, max_side: int = 2048) -> Any:
+    """A width knob for a blurred density image under the cell centroids.
+
+    Sparse centroids are single marks and hard to pick out. This adds a
+    second layer -- the same cells, binned and Gaussian-blurred -- that can
+    be widened until they read as a field rather than dust, with the
+    original points still drawn on top.
+
+    THE LAYER IS BUILT ON FIRST USE, not at launch. Most sessions never
+    touch this, and rasterising several hundred thousand centroids is not
+    worth paying for unasked on a launch that is already the thing people
+    complain about.
+
+    Brightness stays napari's own: the density layer is an ordinary Image
+    layer, so its contrast limits, gamma and colormap are in the layer
+    controls where a reader already looks for them. This knob does width
+    and nothing else, which is why the kernel is unity.
+    """
+    from qtpy.QtCore import Qt
+    from qtpy.QtWidgets import (
+        QCheckBox,
+        QDoubleSpinBox,
+        QHBoxLayout,
+        QLabel,
+        QSlider,
+        QVBoxLayout,
+        QWidget,
+    )
+
+    box = QWidget()
+    outer = QVBoxLayout(box)
+
+    show = QCheckBox("blurred cell density")
+    show.setToolTip(
+        "Bins the centroids and blurs them with a unity Gaussian, so widening\n"
+        "spreads each cell rather than brightening it. Contrast and colormap\n"
+        "stay in the layer controls."
+    )
+    slider = QSlider(Qt.Horizontal)
+    spin = QDoubleSpinBox()
+    spin.setRange(0.0, 500.0)
+    spin.setDecimals(1)
+    spin.setSuffix(" um")
+
+    status = QLabel("")
+    status.setWordWrap(True)
+    status.hide()
+
+    state = {"layer": None, "counts": None, "step": 1.0, "origin": (0.0, 0.0)}
+
+    def _raster():
+        if state["counts"] is None:
+            data = points_layer.data
+            counts, step, origin = densityRaster(data[:, 0], data[:, 1], max_side)
+            state.update(counts=counts, step=step, origin=origin)
+            # The slider is in WORLD units and its useful range depends on
+            # how big the section is, so it is set from the data rather
+            # than guessed: a tenth of the raster is a wide blur anywhere.
+            widest = max(step * max_side / 10.0, 1.0)
+            slider.setRange(0, 100)
+            spin.setRange(0.0, widest)
+            spin.setSingleStep(widest / 100.0)
+        return state["counts"], state["step"], state["origin"]
+
+    def _apply(sigma):
+        try:
+            counts, step, origin = _raster()
+            img = blurRaster(counts, sigma, step)
+            if state["layer"] is None:
+                state["layer"] = viewer.add_image(
+                    img,
+                    name="cell density",
+                    colormap="magma",
+                    blending="additive",
+                    scale=(step, step),
+                    translate=origin,
+                )
+                # Under the points, not over them: the blur is context for
+                # the centroids, not a replacement.
+                viewer.layers.move(len(viewer.layers) - 1, 0)
+            else:
+                state["layer"].data = img
+            state["layer"].visible = show.isChecked()
+            state["layer"].reset_contrast_limits()
+        except Exception as e:  # noqa: BLE001 - a control never costs the picture
+            status.setText(f"failed: {e}")
+            status.show()
+            return
+        status.hide()
+
+    def _sigma():
+        return spin.value()
+
+    guard = [False]
+
+    def _sync(value, source):
+        if guard[0]:
+            return
+        guard[0] = True
+        try:
+            if source is not spin:
+                spin.setValue(spin.maximum() * value / 100.0)
+            if source is not slider and spin.maximum() > 0:
+                slider.setValue(int(round(100.0 * spin.value() / spin.maximum())))
+            if show.isChecked():
+                _apply(_sigma())
+        finally:
+            guard[0] = False
+
+    slider.valueChanged.connect(lambda v: _sync(v, slider))
+    spin.valueChanged.connect(lambda v: _sync(v, spin))
+    show.toggled.connect(lambda on: _apply(_sigma()) if on else _hide())
+
+    def _hide():
+        if state["layer"] is not None:
+            state["layer"].visible = False
+
+    row = QHBoxLayout()
+    row.addWidget(QLabel("width"))
+    row.addWidget(slider, 1)
+    row.addWidget(spin)
+    outer.addWidget(show)
+    outer.addLayout(row)
+    outer.addWidget(status)
+    outer.addStretch()
+
+    viewer.window.add_dock_widget(box, name="Cell density", area="right")
+    return box
+
+
 def addRotationPanel(viewer, layers) -> Any:
     """A slider and a box for turning the whole picture.
 
@@ -1279,5 +1487,6 @@ def addAllPanels(
                 viewer, session, cells_doc, points_layer, shapes_layer, labelings
             ),
         )
+        made["cellDensity"] = _build("cell density", lambda: addCellBlurPanel(viewer, points_layer))
     made["genes"] = _build("genes", lambda: addGenePanel(viewer, session, pyr_doc))
     return made

@@ -257,6 +257,7 @@ def test_the_chosen_labelings_reach_the_cell_type_panel(monkeypatch):
     monkeypatch.setattr(controls, "addCellTypePanel", cells)
     monkeypatch.setattr(controls, "addGenePanel", _Recorder())
     monkeypatch.setattr(controls, "addRotationPanel", _Recorder())
+    monkeypatch.setattr(controls, "addCellBlurPanel", _Recorder())
 
     controls.addAllPanels(
         object(),
@@ -286,6 +287,7 @@ def test_a_panel_that_throws_does_not_take_the_window_with_it(monkeypatch, capsy
     monkeypatch.setattr(controls, "addCellTypePanel", _Recorder())
     monkeypatch.setattr(controls, "addGenePanel", genes)
     monkeypatch.setattr(controls, "addRotationPanel", _Recorder())
+    monkeypatch.setattr(controls, "addCellBlurPanel", _Recorder())
 
     made = controls.addAllPanels(object(), object(), object(), object(), True)
 
@@ -312,6 +314,7 @@ def test_no_qt_binding_costs_the_panels_and_not_the_picture(monkeypatch, capsys)
     monkeypatch.setattr(controls, "addDisplayPanel", built)
     monkeypatch.setattr(controls, "addGenePanel", built)
     monkeypatch.setattr(controls, "addRotationPanel", _Recorder())
+    monkeypatch.setattr(controls, "addCellBlurPanel", _Recorder())
 
     made = controls.addAllPanels(object(), object(), object(), object(), True)
 
@@ -333,6 +336,7 @@ def test_the_rotation_panel_gets_all_three_layers(monkeypatch):
     monkeypatch.setattr(controls, "addCellTypePanel", _Recorder())
     monkeypatch.setattr(controls, "addGenePanel", _Recorder())
     monkeypatch.setattr(controls, "addRotationPanel", rotation)
+    monkeypatch.setattr(controls, "addCellBlurPanel", _Recorder())
 
     image, points, shapes = object(), object(), object()
     controls.addAllPanels(
@@ -360,8 +364,34 @@ def test_a_session_with_no_cells_still_gets_rotation(monkeypatch):
     monkeypatch.setattr(controls, "addCellTypePanel", _Recorder())
     monkeypatch.setattr(controls, "addGenePanel", _Recorder())
     monkeypatch.setattr(controls, "addRotationPanel", rotation)
+    monkeypatch.setattr(controls, "addCellBlurPanel", _Recorder())
 
     made = controls.addAllPanels(object(), object(), object(), object(), True)
     assert made["rotation"] is not None
     args, _kwargs = rotation.calls[0]
     assert args[1][1] is None and args[1][2] is None
+
+
+def test_the_density_panel_is_built_only_where_there_are_cells(monkeypatch):
+    """It rasterises the centroids, so with no points layer there is
+    nothing to rasterise -- and a panel offering to blur nothing is worse
+    than no panel."""
+    monkeypatch.setattr(controls, "_importQtWidgets", lambda: None)
+    density = _Recorder()
+    monkeypatch.setattr(controls, "addDisplayPanel", _Recorder())
+    monkeypatch.setattr(controls, "addCellTypePanel", _Recorder())
+    monkeypatch.setattr(controls, "addGenePanel", _Recorder())
+    monkeypatch.setattr(controls, "addRotationPanel", _Recorder())
+    monkeypatch.setattr(controls, "addCellBlurPanel", density)
+
+    made = controls.addAllPanels(object(), object(), object(), object(), True)
+    assert "cellDensity" not in made
+    assert not density.calls
+
+    points = object()
+    made = controls.addAllPanels(
+        object(), object(), object(), object(), True, cells_doc=object(), points_layer=points
+    )
+    assert made["cellDensity"] is not None
+    args, _kwargs = density.calls[0]
+    assert args[1] is points, "the panel needs the layer it will rasterise"
