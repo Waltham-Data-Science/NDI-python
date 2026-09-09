@@ -43,6 +43,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="comma list of gene symbols or accessions; default is every gene",
     )
     p.add_argument(
+        "--gene-layers",
+        default="",
+        metavar="A:red,B:cyan",
+        help="open these genes as their own additive layers on top of the "
+        "base image, optionally each in a named colormap. Different from "
+        "--genes, which filters the base layer to a subset and leaves one "
+        "picture: this keeps the base and adds a layer per gene, which is "
+        "what makes two genes comparable. A gene with no colour takes the "
+        "next one from the cycle. Colormap names may contain spaces "
+        "(napari ships 'bop orange'), so quote the whole value.",
+    )
+    p.add_argument(
         "--no-density",
         action="store_true",
         help="show raw summed counts rather than counts per base pixel. "
@@ -329,6 +341,19 @@ def _resolve_genes(session, pyr_doc, spec: str):
     return sorted(set(rows))
 
 
+def _resolve_gene_layers(spec: str):
+    """``--gene-layers`` to the pairs the gene panel opens with.
+
+    Parsed here rather than in the panel so a malformed value is a
+    startup error rather than a panel that silently opens fewer layers
+    than were asked for. Whether the SYMBOLS exist is the panel's to
+    answer -- it holds the gene list, and it says so on the panel.
+    """
+    from .controls import parseGeneLayers
+
+    return parseGeneLayers(spec) or None
+
+
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
 
@@ -440,6 +465,7 @@ def main(argv=None) -> int:
         controls=not args.no_controls,
         name=args.name or None,
         labelings=_resolve_labelings(args.labels),
+        gene_layers=_resolve_gene_layers(args.gene_layers),
     )
     return 0
 

@@ -426,9 +426,11 @@ def test_a_failing_cloud_panel_costs_only_itself(monkeypatch, capsys):
     assert "cloud" in capsys.readouterr().err
 
 
-def test_the_appearance_and_tour_panels_are_built_after_the_gene_list(monkeypatch):
-    """Both act on what is ticked in it, and neither means anything
-    before something is."""
+def test_the_gene_list_is_built_last_so_it_sits_at_the_bottom(monkeypatch):
+    """It is the tallest panel by a long way -- 26,444 rows -- and napari
+    gives the leftover height to whatever is furthest down, so anything
+    below it would be squeezed while the list took the room. The two gene
+    controls read above it, which is also the order they are used in."""
     monkeypatch.setattr(controls, "_importQtWidgets", lambda: None)
     order = []
 
@@ -447,8 +449,41 @@ def test_the_appearance_and_tour_panels_are_built_after_the_gene_list(monkeypatc
     monkeypatch.delenv("NDI_CLOUD_TOKEN", raising=False)
 
     made = controls.addAllPanels(object(), object(), object(), object(), True)
-    assert order.index("genes") < order.index("appearance") < order.index("tour")
+    assert order.index("appearance") < order.index("tour") < order.index("genes")
+    assert order[-1] == "genes"
     assert made["appearance"] is not None and made["tour"] is not None
+
+
+def test_the_cloud_panel_sits_above_the_gene_controls(monkeypatch):
+    """It is about the connection, not about the picture, so it reads
+    with the other whole-session controls rather than among the gene
+    ones -- and it must not come between the gene panels and the bottom
+    of the stack, which belongs to the list."""
+    monkeypatch.setattr(controls, "_importQtWidgets", lambda: None)
+    order = []
+
+    def _named(name):
+        def build(*a, **k):
+            order.append(name)
+            return object()
+
+        return build
+
+    for name in (
+        "addDisplayPanel",
+        "addCellTypePanel",
+        "addRotationPanel",
+        "addGenePanel",
+        "addGeneAppearancePanel",
+        "addGeneTourPanel",
+        "addCloudPanel",
+    ):
+        monkeypatch.setattr(controls, name, _named(name))
+    monkeypatch.setenv("NDI_CLOUD_TOKEN", "anything")
+
+    controls.addAllPanels(object(), object(), object(), object(), True)
+    assert order.index("addCloudPanel") < order.index("addGeneAppearancePanel")
+    assert order[-1] == "addGenePanel"
 
 
 def test_the_tour_is_handed_the_appearance_panel(monkeypatch):

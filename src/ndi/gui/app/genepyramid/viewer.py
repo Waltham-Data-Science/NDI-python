@@ -46,6 +46,7 @@ def openPyramid(
     controls: bool = True,
     labelings=None,
     name: str | None = None,
+    gene_layers=None,
     show: bool = True,
 ):
     """Open a spatial gene expression pyramid in napari.
@@ -85,6 +86,12 @@ def openPyramid(
             launch, since this viewer holds no other state. Skipped with
             a note when Qt is unavailable -- they are conveniences and
             their absence must not stop the picture.
+        gene_layers: ``(symbol, colormap)`` pairs to open as their own
+            additive layers on top of the base image, as
+            :func:`~.controls.parseGeneLayers` returns them. A DIFFERENT
+            request from *gene_rows*, which filters the base layer to a
+            subset and leaves one picture; this adds a layer per gene, so
+            the base stays and the genes are comparable against it.
         name: image layer name. Defaults to the pyramid's label, which is
             whatever the ingest recorded -- often the file stem, which
             names the section rather than what is being shown.
@@ -190,6 +197,7 @@ def openPyramid(
                 points_layer=points,
                 shapes_layer=shapes,
                 labelings=labelings,
+                gene_layers=gene_layers,
             )
 
     # The launch window has reported everything it can: the viewer is

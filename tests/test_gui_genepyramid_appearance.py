@@ -282,40 +282,50 @@ def built(qt):
     return build
 
 
-def _spins(qt, box):
-    return box.findChildren(qt.QDoubleSpinBox)
+def _sliders(qt, box):
+    return box.findChildren(qt.QSlider)
+
+
+def _set(qt, box, which, value):
+    """Move one knob, the way a drag does: through its slider."""
+    _sliders(qt, box)[0 if which == "contrast" else 1].setValue(int(round(value * 100)))
 
 
 class TestTheAppearancePanel:
     def test_the_knobs_reach_the_gene_layers(self, qt, built):
         _viewer, _base, genes, panel = built()
-        contrast, gamma = _spins(qt, panel)
-        contrast.setValue(2.0)
-        gamma.setValue(0.4)
+        _set(qt, panel, "contrast", 2.0)
+        _set(qt, panel, "gamma", 0.4)
         assert genes[0].contrast_limits == [0.0, 50.0]
         assert genes[0].gamma == pytest.approx(0.4)
 
     def test_they_do_not_reach_the_base_layer(self, qt, built):
         _viewer, base, _genes, panel = built()
-        contrast, gamma = _spins(qt, panel)
-        contrast.setValue(5.0)
-        gamma.setValue(0.2)
+        _set(qt, panel, "contrast", 5.0)
+        _set(qt, panel, "gamma", 0.2)
         assert base.contrast_limits == [0.0, 500.0]
         assert base.gamma == pytest.approx(1.0)
 
-    def test_the_slider_and_the_box_are_one_control(self, qt, built):
+    def test_the_value_is_shown_beside_the_slider(self, qt, built):
+        """No spin box -- these are dragged, not typed -- but a setting
+        worth writing down still has to be readable."""
         _viewer, _base, genes, panel = built()
-        contrast_spin, _gamma_spin = _spins(qt, panel)
-        contrast_slider = panel.findChildren(qt.QSlider)[0]
-        contrast_slider.setValue(250)
-        assert contrast_spin.value() == pytest.approx(2.5)
+        _sliders(qt, panel)[0].setValue(250)
+        said = " ".join(lbl.text() for lbl in panel.findChildren(qt.QLabel))
+        assert "contrast 2.50" in said
         assert genes[0].contrast_limits == [0.0, 40.0]
+
+    def test_the_panel_is_two_rows_and_no_spin_boxes(self, qt, built):
+        """It is a short panel on purpose: the gene list below it is what
+        the height is for."""
+        _viewer, _base, _genes, panel = built()
+        assert len(_sliders(qt, panel)) == 2
+        assert not panel.findChildren(qt.QDoubleSpinBox)
 
     def test_reset_puts_everything_back(self, qt, built):
         _viewer, _base, genes, panel = built()
-        contrast, gamma = _spins(qt, panel)
-        contrast.setValue(7.0)
-        gamma.setValue(0.3)
+        _set(qt, panel, "contrast", 7.0)
+        _set(qt, panel, "gamma", 0.3)
         panel.findChild(qt.QPushButton).click()
         assert genes[0].contrast_limits == [0.0, 100.0]
         assert genes[0].gamma == pytest.approx(1.0)
@@ -325,9 +335,8 @@ class TestTheAppearancePanel:
         where the knobs put them, and the comparison is broken by the act
         of adding to it."""
         viewer, _base, _genes, panel = built()
-        contrast, gamma = _spins(qt, panel)
-        contrast.setValue(4.0)
-        gamma.setValue(0.5)
+        _set(qt, panel, "contrast", 4.0)
+        _set(qt, panel, "gamma", 0.5)
         later = viewer.layers.add(_Layer("gene: GAD1", (0.0, 200.0)))
         assert later.contrast_limits == [0.0, 50.0]
         assert later.gamma == pytest.approx(0.5)
@@ -339,7 +348,7 @@ class TestTheAppearancePanel:
 
     def test_a_base_layer_added_later_is_still_not_governed(self, qt, built):
         viewer, _base, _genes, panel = built()
-        _spins(qt, panel)[0].setValue(4.0)
+        _set(qt, panel, "contrast", 4.0)
         overlay = viewer.layers.add(_Layer("cell centroids", (0.0, 9.0)))
         assert overlay.contrast_limits == [0.0, 9.0]
 
@@ -348,7 +357,7 @@ class TestTheAppearancePanel:
         its new data rather than from what it looked like the first
         time."""
         viewer, _base, genes, panel = built()
-        _spins(qt, panel)[0].setValue(2.0)
+        _set(qt, panel, "contrast", 2.0)
         viewer.layers.drop(genes[0])
         again = viewer.layers.add(_Layer("gene: SST", (0.0, 60.0)))
         assert again.contrast_limits == [0.0, 30.0]
@@ -356,7 +365,7 @@ class TestTheAppearancePanel:
     def test_it_says_so_when_there_is_nothing_to_govern(self, qt):
         viewer = _Viewer(_Layer("All genes"))
         panel = controls.addGeneAppearancePanel(viewer)
-        _spins(qt, panel)[0].setValue(3.0)
+        _set(qt, panel, "contrast", 3.0)
         said = " ".join(lbl.text() for lbl in panel.findChildren(qt.QLabel))
         assert "No gene layers" in said
         # The viewer owns the dock; a collected one takes the widget with
@@ -472,8 +481,7 @@ class TestTheTour:
         """The two controls have to agree: a tour that departed from 1.0
         would undo the gamma the reader chose, and put it back wrong."""
         _viewer, _base, genes, appearance, panel = tourOf()
-        _contrast, gamma = _spins(qt, appearance)
-        gamma.setValue(0.6)
+        _set(qt, appearance, "gamma", 0.6)
         panel._ndi_toggle()
         assert panel._ndi_tour["base"] == pytest.approx(0.6)
         _advance(panel, 1.0)

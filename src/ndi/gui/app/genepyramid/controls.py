@@ -22,6 +22,7 @@ from typing import Any
 
 __all__ = [
     "geneIndex",
+    "parseGeneLayers",
     "abundanceBand",
     "countsOrder",
     "labelAgreement",
@@ -31,6 +32,9 @@ __all__ = [
     "addCellTypePanel",
     "addAllPanels",
     "addCloudPanel",
+    "cloudSignInDialog",
+    "buildCloudSignInDialog",
+    "cloudProfileChoices",
     "cloudSessionLooksLikely",
     "saveCloudProfile",
     "geneLayers",
@@ -47,6 +51,49 @@ __all__ = [
 
 
 # --------------------------------------------------------------- genes
+
+
+def parseGeneLayers(spec: str):
+    """``"HPCAL1:green,RORB:blue,SST"`` to ``[(symbol, colormap|None), ...]``.
+
+    One layer per gene, each in its own colour, which is a different
+    request from ``--genes``: that one FILTERS the base layer to a
+    subset, leaving one picture. This adds a layer per gene on top of
+    the base, which is what makes two genes comparable.
+
+    THE COLOUR IS OPTIONAL and None means "take the next one from the
+    cycle", so a caller can name the colours that matter and leave the
+    rest. Colormap names may contain spaces -- napari ships ``bop
+    orange``, ``bop blue`` and ``bop purple`` -- so only the ends of each
+    field are trimmed, never the middle.
+
+    A gene named twice is kept once, at its first position: ticking the
+    same box twice adds nothing the second time, and the layer names
+    would collide.
+
+    Args:
+        spec: comma-separated ``SYMBOL`` or ``SYMBOL:COLORMAP`` entries.
+            Empty gives an empty list rather than None -- "no layers
+            asked for" is a fact, not a missing answer.
+
+    Returns:
+        A list of ``(symbol, colormap or None)``, in the order given,
+        which is the order the layers are added and so the order the
+        colour cycle advances.
+    """
+    out, seen = [], set()
+    for entry in str(spec or "").split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        symbol, sep, colour = entry.partition(":")
+        symbol = symbol.strip()
+        if not symbol or symbol in seen:
+            continue
+        seen.add(symbol)
+        colour = colour.strip() if sep else ""
+        out.append((symbol, colour or None))
+    return out
 
 
 def geneIndex(ids, names) -> dict:
@@ -334,7 +381,7 @@ def countsOrder(totals, ascending: bool = False):
     return np.argsort(t if ascending else -t, kind="stable")
 
 
-def addGenePanel(viewer, session, pyr_doc) -> Any:
+def addGenePanel(viewer, session, pyr_doc, initial=None) -> Any:
     """A filterable list of gene symbols, one checkbox each.
 
     Ticking a symbol ADDS ITS OWN LAYER rather than replacing the base
@@ -693,7 +740,7 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
             return data
         return blurLevels(data, _binSizes(), state["sigma"] / basePixelUm(pyr_doc))
 
-    def _add(symbol: str):
+    def _add(symbol: str, colour: str | None = None):
         name = f"gene: {symbol}"
         if name in viewer.layers:
             return
@@ -704,8 +751,16 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
         # already blurred, which would compound and could not be undone.
         state["raw"][name] = spec["data"]
         spec["data"] = _blurred(spec["data"])
-        cmap = _GENE_COLORMAPS[state["colour"] % len(_GENE_COLORMAPS)]
-        state["colour"] += 1
+        # A NAMED COLOUR DOES NOT ADVANCE THE CYCLE. The cycle exists so
+        # that genes ticked by hand come out different from each other;
+        # a caller that named its own colours has already solved that,
+        # and letting those consume cycle positions would make the first
+        # hand-ticked gene's colour depend on how many were preset.
+        if colour:
+            cmap = colour
+        else:
+            cmap = _GENE_COLORMAPS[state["colour"] % len(_GENE_COLORMAPS)]
+            state["colour"] += 1
         try:
             layer = viewer.add_image(**spec, colormap=cmap, blending="additive")
         except Exception:
@@ -742,7 +797,25 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
                 return
         _report()
 
-    blur.valueChanged.connect(_reblur)
+    # DEBOUNCED, and generously. A spin box emits on every keystroke, so
+    # typing "50" asks for a blur at 5 um first -- and re-blurring is a
+    # whole-ladder map_overlap that takes long enough to see, so the
+    # picture visibly redraws at the wrong width before the second digit
+    # lands. 1.5s is past the gap between two digits and short enough not
+    # to feel stuck.
+    #
+    # The band slider above uses the same trick at 180ms; the difference
+    # is that dragging a slider WANTS to be followed, while a number
+    # being typed is not a request until it is finished.
+    blurWait = QTimer(box)
+    blurWait.setSingleShot(True)
+    blurWait.setInterval(1500)
+    blurWait.timeout.connect(_reblur)
+    blur.valueChanged.connect(lambda *_: blurWait.start())
+    # Enter, or clicking away, means the number IS finished -- no reason
+    # to sit out the rest of the wait.
+    blur.editingFinished.connect(lambda *_: (blurWait.stop(), _reblur()))
+    box._ndi_blur_wait = blurWait
 
     def _on_item_changed(item):
         if state["busy"]:
@@ -796,7 +869,33 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
 
     _resort()
     _applyBand()
+
+    # ---- genes asked for at launch ------------------------------------
+    # Ticked through the panel's OWN checkbox, not by calling _add
+    # directly: the box and the layer would otherwise disagree, and
+    # unticking a gene that was never ticked does nothing at all. This
+    # way a preset gene behaves exactly like one the reader ticked.
+    missing = []
+    for symbol, colour in parseGeneLayers("") if initial is None else list(initial):
+        item = items.get(symbol)
+        if item is None:
+            missing.append(symbol)
+            continue
+        was, state["busy"] = state["busy"], True
+        try:
+            item.setCheckState(Qt.Checked)
+        finally:
+            state["busy"] = was
+        _add(symbol, colour)
     _report()
+    if missing:
+        # Named but not in this pyramid's gene list. Said out loud rather
+        # than passed over: a demo that quietly opens four of six layers
+        # looks like the viewer working.
+        #
+        # AFTER _report, not before: _report rewrites this same label, so
+        # the warning set first is the warning nobody sees.
+        status.setText(f"not in this pyramid: {', '.join(missing)}")
     viewer.window.add_dock_widget(box, name="Genes", area="right")
     return box
 
@@ -1601,8 +1700,46 @@ def cloudSessionLooksLikely() -> bool:
     return bool(os.environ.get("NDI_CLOUD_TOKEN"))
 
 
+def cloudProfileChoices():
+    """Saved profiles, as ``(label, email, uid, has_password)`` rows.
+
+    The label is what a chooser shows: the nickname when there is one,
+    else the email, with the email appended either way so two profiles
+    for the same person on different stages can be told apart.
+
+    Never raises. A secrets backend that will not open, a profile file
+    that will not parse -- none of that is a reason a sign-in dialog
+    should fail to appear, since typing the credentials by hand is
+    exactly the fallback it exists to offer.
+    """
+    rows = []
+    try:
+        from ....cloud import profile
+
+        entries = profile.list_profiles()
+    except Exception:  # noqa: BLE001 - see docstring
+        return rows
+    for entry in entries:
+        uid = str(getattr(entry, "UID", "") or "")
+        email = str(getattr(entry, "Email", "") or "")
+        nickname = str(getattr(entry, "Nickname", "") or "")
+        stage = str(getattr(entry, "Stage", "") or "")
+        label = nickname or email or uid
+        if email and label != email:
+            label = f"{label} ({email})"
+        if stage and stage != "prod":
+            label = f"{label} [{stage}]"
+        stored = False
+        try:
+            stored = bool(profile.get_password(uid))
+        except Exception:  # noqa: BLE001 - an unreadable secret is not an error here
+            stored = False
+        rows.append((label, email, uid, stored))
+    return rows
+
+
 def addCloudPanel(viewer) -> Any:
-    """A clock on the cloud token, and a way to renew it in place.
+    """A clock on the cloud token, and a button that renews it.
 
     A VIEWER OUTLIVES ITS TOKEN. Someone reading a section works for
     hours; the token is good for rather less, and it cannot renew itself
@@ -1614,52 +1751,145 @@ def addCloudPanel(viewer) -> Any:
     opening the section again, since the token lives in this process's
     environment and nothing outside it can reach in.
 
-    So: the time left is shown and kept current, and the credentials that
-    renew it can be typed HERE, into the window that needs them. Signing
-    in writes the new token into the environment, which is where every
-    later fetch reads it from -- including the ones on the tile threads,
-    since a fetch builds its client per call rather than holding one.
-
-    THE PASSWORD IS NOT KEPT. It goes to the login call and nothing else:
-    not to a field that stays filled, not to a file, not to the profile
-    unless the reader asks for that explicitly with the checkbox, which
-    exists because credentials saved once and wrong are exactly how
-    someone ends up here.
+    ONE ROW, because that is all it is worth until it matters: a button
+    and the time left. The credentials live behind the button, in a
+    dialog, rather than as three permanently docked fields for something
+    a reader does once a day at most.
     """
-    import os
-
     from qtpy.QtCore import QTimer
-    from qtpy.QtWidgets import (
-        QCheckBox,
-        QFormLayout,
-        QLabel,
-        QLineEdit,
-        QPushButton,
-        QVBoxLayout,
-        QWidget,
-    )
+    from qtpy.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
     from ....cloud import auth
 
     box = QWidget()
     outer = QVBoxLayout(box)
 
+    signin = QPushButton("Sign in...")
+    signin.setToolTip(
+        "Sign in to NDI Cloud, so tiles that are not already downloaded\n"
+        "keep loading. The token lives in this process, so signing in\n"
+        "anywhere else does not reach this window."
+    )
     clock = QLabel("")
     clock.setWordWrap(True)
-    outer.addWidget(clock)
+    row = QHBoxLayout()
+    row.addWidget(signin)
+    row.addWidget(clock, 1)
+    outer.addLayout(row)
+
+    result = QLabel("")
+    result.setWordWrap(True)
+    result.hide()
+    outer.addWidget(result)
+    outer.addStretch()
+
+    def _tick():
+        left = auth.tokenSecondsRemaining()
+        line = auth.tokenStatusLine()
+        # Warned about BEFORE it bites: a reader who sees "12 min left"
+        # can sign in at a convenient moment instead of discovering it
+        # through a tile that will not load.
+        if left is not None and 0 < left < 900:
+            clock.setText(f"{line} -- renew before it runs out.")
+        elif left is not None and left <= 0:
+            clock.setText(f"{line}. Undownloaded tiles will fail until you sign in.")
+        else:
+            clock.setText(line)
+
+    def _open():
+        ok, note = cloudSignInDialog(box)
+        if note:
+            result.setText(note)
+            result.show()
+        elif ok:
+            result.hide()
+        _tick()
+
+    signin.clicked.connect(_open)
+
+    # Parented to the widget, so it stops when the dock goes. A free timer
+    # would keep firing at a deleted label and take the process with it.
+    timer = QTimer(box)
+    timer.setInterval(30_000)
+    timer.timeout.connect(_tick)
+    timer.start()
+    _tick()
+
+    box._ndi_signin = _open
+    viewer.window.add_dock_widget(box, name="NDI Cloud", area="right")
+    return box
+
+
+def cloudSignInDialog(parent=None):
+    """Show the sign-in dialog and sign in. Returns ``(signed_in, note)``.
+
+    The building is :func:`buildCloudSignInDialog`; this is the two
+    lines around it that block. Split so a test can drive the dialog's
+    fields and its Sign in button without an event loop to escape from.
+    """
+    dialog, outcome = buildCloudSignInDialog(parent)
+    runner = getattr(dialog, "exec", None) or getattr(dialog, "exec_", None)
+    runner()
+    return outcome["ok"], outcome["note"]
+
+
+def buildCloudSignInDialog(parent=None):
+    """The sign-in dialog, built but not shown. ``(dialog, outcome)``.
+
+    Behind a button rather than docked, because it is a thing a reader
+    does once a day at most and three permanent fields would say
+    otherwise.
+
+    THE SAVED PROFILES ARE OFFERED FIRST. Someone whose profile works
+    should not be retyping a password to get past an expired token, and
+    someone whose profile does NOT work -- which is how most people
+    arrive here -- can see which one is being used, which is half the
+    diagnosis. Picking one fills the email in; picking one that has a
+    stored password signs in with it directly.
+
+    THE PASSWORD IS NOT KEPT. It goes to the login call and nothing else:
+    not to a field that stays filled, not to a file, and to the profile
+    only when the checkbox asks -- which exists because credentials
+    saved once and wrong are exactly how someone ends up in this dialog.
+    """
+    from qtpy.QtWidgets import (
+        QCheckBox,
+        QComboBox,
+        QDialog,
+        QDialogButtonBox,
+        QFormLayout,
+        QLabel,
+        QLineEdit,
+        QVBoxLayout,
+    )
+
+    from ....cloud import auth
+
+    dialog = QDialog(parent)
+    dialog.setWindowTitle("Sign in to NDI Cloud")
+    outer = QVBoxLayout(dialog)
+
+    why = QLabel(
+        "The token lives in this process, so signing in elsewhere does not " "reach this window."
+    )
+    why.setWordWrap(True)
+    outer.addWidget(why)
+
+    choices = cloudProfileChoices()
+    chooser = QComboBox()
+    chooser.addItem("type them below", None)
+    for label, email, uid, stored in choices:
+        chooser.addItem(f"{label}{' -- password saved' if stored else ''}", (email, uid, stored))
 
     email = QLineEdit()
     email.setPlaceholderText("you@example.com")
-    # Prefilled from the environment only. The profile is deliberately NOT
-    # read for this: someone opening this panel is usually here because
-    # what is saved did not work, and offering it back as the answer is
-    # the least useful thing to show them.
-    email.setText(os.environ.get("NDI_CLOUD_USERNAME", ""))
     password = QLineEdit()
     password.setEchoMode(QLineEdit.Password)
     password.setPlaceholderText("password")
 
     form = QFormLayout()
+    if choices:
+        form.addRow("profile", chooser)
     form.addRow("email", email)
     form.addRow("password", password)
     outer.addLayout(form)
@@ -1672,52 +1902,57 @@ def addCloudPanel(viewer) -> Any:
     )
     outer.addWidget(save)
 
-    signin = QPushButton("Sign in")
-    signin.setDefault(True)
-    outer.addWidget(signin)
+    said = QLabel("")
+    said.setWordWrap(True)
+    said.hide()
+    outer.addWidget(said)
 
-    result = QLabel("")
-    result.setWordWrap(True)
-    result.hide()
-    outer.addWidget(result)
-    outer.addStretch()
+    buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+    buttons.button(QDialogButtonBox.Ok).setText("Sign in")
+    outer.addWidget(buttons)
 
-    def _tick():
-        left = auth.tokenSecondsRemaining()
-        line = auth.tokenStatusLine()
-        # Said in the panel's own terms rather than the library's, and
-        # warned about BEFORE it bites: a reader who sees "12 min left"
-        # can sign in at a convenient moment instead of discovering it
-        # through a tile that will not load.
-        if left is not None and 0 < left < 900:
-            clock.setText(f"NDI Cloud: {line} -- sign in again before it runs out.")
-        elif left is not None and left <= 0:
-            clock.setText(
-                f"NDI Cloud: {line}. Tiles that are not already downloaded "
-                f"will fail to load until you sign in."
-            )
-        else:
-            clock.setText(f"NDI Cloud: {line}")
-
-    def _signin():
-        who, secret = email.text().strip(), password.text()
-        if not who or not secret:
-            result.setText("Both an email and a password are needed.")
-            result.show()
+    def _chose(index):
+        data = chooser.itemData(index)
+        if not data:
             return
-        signin.setEnabled(False)
+        picked_email, _uid, stored = data
+        email.setText(picked_email)
+        # A profile whose password is saved needs nothing typed.
+        password.clear()
+        if not stored:
+            # A profile without a saved password needs the password and
+            # not the email, so the focus goes where the work is.
+            password.setFocus()
+
+    chooser.currentIndexChanged.connect(_chose)
+
+    outcome = {"ok": False, "note": ""}
+
+    def _accept():
+        who, secret = email.text().strip(), password.text()
+        if not secret:
+            # An empty password with a profile picked means "use the one
+            # you have", which is the whole reason to pick a profile.
+            data = chooser.itemData(chooser.currentIndex())
+            if data and data[2]:
+                try:
+                    from ....cloud import profile as _profile
+
+                    secret = _profile.get_password(data[1])
+                except Exception as e:  # noqa: BLE001 - fall through to the message
+                    secret = ""
+                    said.setText(f"Could not read the saved password: {e}")
+        if not who or not secret:
+            said.setText("Both an email and a password are needed.")
+            said.show()
+            return
         try:
             auth.login(who, secret)
         except Exception as e:  # noqa: BLE001 - a bad password is not a crash
-            result.setText(f"Sign-in failed: {e}")
-            result.show()
-            return
-        finally:
-            signin.setEnabled(True)
-            # Cleared whatever happened: a failed attempt is the one most
-            # likely to be a typo, and leaving it visible in a dock is
-            # worse than making it be retyped.
+            said.setText(f"Sign-in failed: {e}")
+            said.show()
             password.clear()
+            return
         note = "Signed in."
         if save.isChecked():
             try:
@@ -1725,23 +1960,18 @@ def addCloudPanel(viewer) -> Any:
                 note += " Saved to your NDI profile."
             except Exception as e:  # noqa: BLE001 - the sign-in still worked
                 note += f" (Could not save to the profile: {e})"
-        result.setText(note)
-        result.show()
-        _tick()
+        outcome.update(ok=True, note=note)
+        password.clear()
+        dialog.accept()
 
-    signin.clicked.connect(_signin)
-    password.returnPressed.connect(_signin)
+    buttons.accepted.connect(_accept)
+    buttons.rejected.connect(dialog.reject)
+    password.returnPressed.connect(_accept)
 
-    # Parented to the widget, so it stops when the dock goes. A free timer
-    # would keep firing at a deleted label and take the process with it.
-    timer = QTimer(box)
-    timer.setInterval(30_000)
-    timer.timeout.connect(_tick)
-    timer.start()
-    _tick()
-
-    viewer.window.add_dock_widget(box, name="NDI Cloud", area="right")
-    return box
+    dialog._ndi_accept = _accept
+    dialog._ndi_fields = {"email": email, "password": password, "save": save, "profile": chooser}
+    dialog._ndi_said = said
+    return dialog, outcome
 
 
 def saveCloudProfile(email: str, password: str) -> None:
@@ -1811,7 +2041,6 @@ def addGeneAppearancePanel(viewer) -> Any:
     """
     from qtpy.QtCore import Qt
     from qtpy.QtWidgets import (
-        QDoubleSpinBox,
         QHBoxLayout,
         QLabel,
         QPushButton,
@@ -1827,19 +2056,18 @@ def addGeneAppearancePanel(viewer) -> Any:
     references: dict[str, tuple[float, float]] = {}
     state = {"contrast": 1.0, "gamma": 1.0}
 
-    def _row(label, lo, hi, value, decimals, step, tip):
-        """A slider under a number, both driving one value.
+    def _row(label, lo, hi, value, tip):
+        """A slider on one row, with its name and value beside it.
 
-        The same shape as the rotation panel, and for the same reason: a
-        dock is narrow, and a slider sharing its row with a spin box is
-        a stub too short to aim with.
+        NO SPIN BOX. Two docks of two rows each was most of the panel
+        stack for two knobs that are dragged rather than typed -- these
+        are "a bit more" and "a bit less" controls, not values anyone
+        needs to enter exactly. The number is still shown, as a label, so
+        a setting worth writing down can be read off.
         """
-        spin = QDoubleSpinBox()
-        spin.setRange(lo, hi)
-        spin.setDecimals(decimals)
-        spin.setSingleStep(step)
-        spin.setValue(value)
-        spin.setToolTip(tip)
+        caption = QLabel(f"{label} {value:.2f}")
+        caption.setMinimumWidth(84)
+        caption.setToolTip(tip)
         slider = QSlider(Qt.Horizontal)
         # Sliders are integers, so the value is carried in hundredths and
         # converted at the boundary. Hundredths because gamma runs from
@@ -1847,13 +2075,11 @@ def addGeneAppearancePanel(viewer) -> Any:
         slider.setRange(int(lo * 100), int(hi * 100))
         slider.setValue(int(value * 100))
         slider.setToolTip(tip)
-        head = QHBoxLayout()
-        head.addWidget(QLabel(label))
-        head.addWidget(spin)
-        head.addStretch()
-        outer.addLayout(head)
-        outer.addWidget(slider)
-        return spin, slider
+        row = QHBoxLayout()
+        row.addWidget(caption)
+        row.addWidget(slider, 1)
+        outer.addLayout(row)
+        return caption, slider
 
     contrast_tip = (
         "Narrows the contrast window of every gene layer about its floor.\n"
@@ -1866,8 +2092,8 @@ def addGeneAppearancePanel(viewer) -> Any:
         "above 1 pushes them down. The base section and the cell layers\n"
         "are not affected."
     )
-    contrast_spin, contrast_slider = _row("contrast", 0.1, 10.0, 1.0, 2, 0.1, contrast_tip)
-    gamma_spin, gamma_slider = _row("gamma", 0.1, 3.0, 1.0, 2, 0.05, gamma_tip)
+    contrast_label, contrast_slider = _row("contrast", 0.1, 10.0, 1.0, contrast_tip)
+    gamma_label, gamma_slider = _row("gamma", 0.1, 3.0, 1.0, gamma_tip)
 
     status = QLabel("")
     status.setWordWrap(True)
@@ -1891,35 +2117,32 @@ def addGeneAppearancePanel(viewer) -> Any:
         applyGeneAppearance(layers, state["contrast"], state["gamma"], references)
         status.hide()
 
-    def _sync(which, value, source):
-        # The slider and the box are one control; setting either emits a
-        # signal that would come straight back here without this.
+    def _sync(which, value, source=None):
+        # Setting a slider emits its own signal, which would come straight
+        # back here; the guard makes one change one change.
         if guard[0]:
             return
         guard[0] = True
         try:
             state[which] = float(value)
-            spin, slider = (
-                (contrast_spin, contrast_slider)
+            label, slider, caption = (
+                (contrast_label, contrast_slider, "contrast")
                 if which == "contrast"
-                else (gamma_spin, gamma_slider)
+                else (gamma_label, gamma_slider, "gamma")
             )
-            if source is not spin:
-                spin.setValue(float(value))
+            label.setText(f"{caption} {float(value):.2f}")
             if source is not slider:
                 slider.setValue(int(round(float(value) * 100)))
             _apply()
         finally:
             guard[0] = False
 
-    contrast_spin.valueChanged.connect(lambda v: _sync("contrast", v, contrast_spin))
     contrast_slider.valueChanged.connect(lambda v: _sync("contrast", v / 100.0, contrast_slider))
-    gamma_spin.valueChanged.connect(lambda v: _sync("gamma", v, gamma_spin))
     gamma_slider.valueChanged.connect(lambda v: _sync("gamma", v / 100.0, gamma_slider))
 
     def _reset():
-        _sync("contrast", 1.0, None)
-        _sync("gamma", 1.0, None)
+        _sync("contrast", 1.0)
+        _sync("gamma", 1.0)
 
     reset.clicked.connect(_reset)
 
@@ -2191,6 +2414,7 @@ def addAllPanels(
     points_layer=None,
     shapes_layer=None,
     labelings=None,
+    gene_layers=None,
 ):
     """Every panel the session supports, skipping what it has no data for.
 
@@ -2256,16 +2480,22 @@ def addAllPanels(
                 viewer, session, cells_doc, points_layer, shapes_layer, labelings
             ),
         )
-    made["genes"] = _build("genes", lambda: addGenePanel(viewer, session, pyr_doc))
-    # Below the gene list, because both act on what is ticked in it and
-    # neither means anything before something is.
+    # Only when there is a token to run out, and up here with the other
+    # whole-session controls rather than among the gene ones: it is about
+    # the connection, not about the picture.
+    if cloudSessionLooksLikely():
+        made["cloud"] = _build("cloud", lambda: addCloudPanel(viewer))
     made["appearance"] = _build("gene appearance", lambda: addGeneAppearancePanel(viewer))
     made["tour"] = _build(
         "gene tour", lambda: addGeneTourPanel(viewer, appearance=made.get("appearance"))
     )
-    # Last, and only when there is a token to run out. It is the panel
-    # nobody needs until they do, so it reads at the bottom rather than
-    # above the controls the session is actually for.
-    if cloudSessionLooksLikely():
-        made["cloud"] = _build("cloud", lambda: addCloudPanel(viewer))
+    # THE GENE LIST IS LAST, so it sits at the bottom of the stack. It is
+    # the tallest panel by a long way -- 26,444 rows -- and napari gives
+    # the leftover height to whatever is furthest down, so anything below
+    # it would be squeezed while the list took the room. The two controls
+    # above it act on what is ticked in it, which is also the order they
+    # are used in.
+    made["genes"] = _build(
+        "genes", lambda: addGenePanel(viewer, session, pyr_doc, initial=gene_layers)
+    )
     return made
