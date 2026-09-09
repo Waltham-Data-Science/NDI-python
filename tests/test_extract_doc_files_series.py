@@ -161,9 +161,12 @@ class TestOrdinaryFiles:
 
     def test_a_document_with_no_files_is_left_alone(self, tmp_path):
         session = _session(tmp_path, "src_session")
-        props = ndi_document("demoNDI").document_properties
+        # A bare base document, not a demoNDI: demoNDI declares filename1.ext
+        # in its file_list, so one with nothing bound is refused at add time
+        # (VH-Lab/DID-python#86) rather than being the fileless document this
+        # test is about.
+        props = ndi_document("base").document_properties
         props["base"]["session_id"] = session.id()
-        props["demoNDI"]["value"] = 1
         session.database_add(ndi_document(props))
         out = tmp_path / "out"
 

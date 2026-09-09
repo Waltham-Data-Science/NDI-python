@@ -204,6 +204,13 @@ class TestNDIDocumentPersistence:
         )
         original_id = doc.id
 
+        # demoNDI declares filename1.ext in its file_list; a document that
+        # declares a required file and binds nothing is refused at add time
+        # (VH-Lab/DID-python#86).
+        payload = session_dir / "persistent_doc.dat"
+        payload.write_text("persistent_doc")
+        doc = doc.add_file("filename1.ext", str(payload))
+
         # Save
         session.database_add(doc)
 
