@@ -226,3 +226,63 @@ def test_ties_stay_alphabetical_in_BOTH_directions():
 
 def test_an_empty_list_sorts_to_nothing():
     assert list(controls.countsOrder([])) == []
+
+
+# ------------------------------------------------------- addAllPanels
+
+
+class _Recorder:
+    """Stands in for a panel builder and remembers how it was called."""
+
+    def __init__(self, boom=False):
+        self.calls = []
+        self.boom = boom
+
+    def __call__(self, *args, **kwargs):
+        self.calls.append((args, kwargs))
+        if self.boom:
+            raise RuntimeError("no such file")
+        return object()
+
+
+def test_the_chosen_labelings_reach_the_cell_type_panel(monkeypatch):
+    """--labels was accepted, parsed, threaded through openPyramid, and
+    then dropped at the last hop, so it silently did nothing. Nothing
+    caught it because every other layer mentioned the argument."""
+    cells = _Recorder()
+    monkeypatch.setattr(controls, "addDisplayPanel", _Recorder())
+    monkeypatch.setattr(controls, "addCellTypePanel", cells)
+    monkeypatch.setattr(controls, "addGenePanel", _Recorder())
+
+    controls.addAllPanels(
+        object(),
+        object(),
+        object(),
+        object(),
+        True,
+        cells_doc=object(),
+        points_layer=object(),
+        labelings=["subclass_nn_column"],
+    )
+    assert cells.calls, "the cell type panel was never built"
+    args, _kwargs = cells.calls[0]
+    assert args[-1] == ["subclass_nn_column"]
+
+
+def test_a_panel_that_throws_does_not_take_the_window_with_it(monkeypatch, capsys):
+    """The viewer is already on screen when the panels are built. A panel
+    that raised unwound out of openPyramid before napari.run(), so the
+    window appeared and the process exited -- which reads as napari
+    opening briefly and closing, with the reason lost."""
+    genes = _Recorder()
+    monkeypatch.setattr(controls, "addDisplayPanel", _Recorder(boom=True))
+    monkeypatch.setattr(controls, "addCellTypePanel", _Recorder())
+    monkeypatch.setattr(controls, "addGenePanel", genes)
+
+    made = controls.addAllPanels(object(), object(), object(), object(), True)
+
+    assert made["display"] is None
+    # The panels after the failing one must still be built.
+    assert genes.calls, "a failing panel stopped the ones after it"
+    err = capsys.readouterr().err
+    assert "display" in err and "no such file" in err

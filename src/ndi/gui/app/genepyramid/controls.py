@@ -1002,15 +1002,27 @@ def addAllPanels(
     display mode, the cell types, then the genes. napari stacks docks in
     the order they arrive, so this order is the layout.
 
-    A missing Qt costs the panels rather than the picture: the viewer is
-    already on screen by the time this runs, and taking it down over a
-    convenience would be worse than doing without.
+    A PANEL MUST NOT COST THE PICTURE. By the time this runs the viewer is
+    on screen and the image layer is drawn; a panel that throws would
+    unwind out of openPyramid before napari.run(), so the window appears
+    and the process exits -- a viewer that "opens briefly and closes",
+    with the reason lost unless someone was watching stderr.
+
+    That is not hypothetical. Each panel reads files out of the database
+    to build itself: genes.tsv and gene_totals.tsv for the genes, one
+    labels.tsv per labeling for the cell types. Those reads can fail for
+    reasons that have nothing to do with the image -- a document whose
+    binary is not local, a cloud-backed session, a file an older ingest
+    never wrote -- and none of them is a reason to refuse to draw the
+    section. So each panel is built independently and a failure costs
+    that panel, named, with its traceback.
     """
+    import sys
+    import traceback
+
     try:
         import qtpy.QtWidgets  # noqa: F401
     except ImportError as e:  # pragma: no cover - depends on the install
-        import sys
-
         print(
             f"[genepyramid] control panels unavailable ({e}). The image is "
             f"unaffected; --genes and --no-density still work at launch.",
@@ -1018,9 +1030,28 @@ def addAllPanels(
         )
         return {}
 
+    def _build(name, fn):
+        try:
+            return fn()
+        except Exception as e:  # noqa: BLE001 - a panel is never worth the window
+            print(
+                f"[genepyramid] the {name} panel could not be built "
+                f"({type(e).__name__}: {e}). The image is unaffected.",
+                file=sys.stderr,
+            )
+            traceback.print_exc()
+            return None
+
     made = {}
-    made["display"] = addDisplayPanel(viewer, session, pyr_doc, image_layer, density)
+    made["display"] = _build(
+        "display", lambda: addDisplayPanel(viewer, session, pyr_doc, image_layer, density)
+    )
     if cells_doc is not None and points_layer is not None:
-        made["cellTypes"] = addCellTypePanel(viewer, session, cells_doc, points_layer, shapes_layer)
-    made["genes"] = addGenePanel(viewer, session, pyr_doc)
+        made["cellTypes"] = _build(
+            "cell types",
+            lambda: addCellTypePanel(
+                viewer, session, cells_doc, points_layer, shapes_layer, labelings
+            ),
+        )
+    made["genes"] = _build("genes", lambda: addGenePanel(viewer, session, pyr_doc))
     return made
