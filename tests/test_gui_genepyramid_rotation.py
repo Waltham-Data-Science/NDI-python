@@ -6,10 +6,12 @@ steps napari offers on the canvas.
 
 Everything worth holding here is testable with no display and no napari:
 the SIGN of the rotation, the PIVOT it turns about, and that every layer
-gets the SAME matrix. The Qt panel around them is not tested -- CI
-installs no Qt binding -- but the three things that could produce a
-visibly wrong picture are.
+gets the SAME matrix. The panel's ARRANGEMENT needs real widgets, so
+those tests build it offscreen and skip where there is no Qt binding
+-- which is CI today.
 """
+
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -133,3 +135,114 @@ class TestTheLayersMoveTogether:
         applyRotation([image], 30.0, (0.0, 0.0))
         applyRotation([image], 30.0, (0.0, 0.0))
         assert np.allclose(image.affine, rotationAffine(30.0, (0.0, 0.0)))
+
+
+# --------------------------------------------------------------- layout
+
+
+@pytest.fixture(scope="module")
+def qt():
+    """A real Qt, drawn to nowhere, or a skip.
+
+    The panel's arrangement is the thing being checked here, and an
+    arrangement is a property of real widgets in a real layout -- stubbing
+    them out would only test the stubs. The offscreen platform gives real
+    widgets with no display, which is what CI has. CI does not install Qt
+    at all today, so this skips there and runs for anyone who does.
+    """
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    widgets = pytest.importorskip("qtpy.QtWidgets")
+    app = widgets.QApplication.instance() or widgets.QApplication([])
+    yield widgets
+    del app
+
+
+class _Window:
+    def __init__(self):
+        self.docked = []
+
+    def add_dock_widget(self, widget, name=None, area=None):
+        self.docked.append((widget, name, area))
+        return widget
+
+
+class _Viewer:
+    def __init__(self):
+        self.window = _Window()
+        self.camera = SimpleNamespace(center=(0.0, 100.0, 200.0))
+
+
+def _rotationPanel(qt):
+    from ndi.gui.app.genepyramid.controls import addRotationPanel
+
+    viewer = _Viewer()
+    return addRotationPanel(viewer, [])
+
+
+def _rows(qt, box):
+    """The panel's top-level layout, as a list of rows.
+
+    Each entry is either a widget or the list of widgets on a nested row,
+    which is exactly the distinction the arrangement turns on.
+    """
+    layout = box.layout()
+    out = []
+    for i in range(layout.count()):
+        item = layout.itemAt(i)
+        if item.widget() is not None:
+            out.append(item.widget())
+        elif item.layout() is not None:
+            sub = item.layout()
+            out.append(
+                [sub.itemAt(j).widget() for j in range(sub.count()) if sub.itemAt(j).widget()]
+            )
+    return out
+
+
+class TestTheArrangement:
+    def test_the_slider_gets_a_row_of_its_own(self, qt):
+        """Sharing a row with the number and the Reset button left it a
+        stub too short to aim with: a dock panel is narrow and those two
+        take a fixed width out of it whatever is left over."""
+        box = _rotationPanel(qt)
+        rows = _rows(qt, box)
+        sliders = [r for r in rows if isinstance(r, qt.QSlider)]
+        assert len(sliders) == 1, "the slider is not a row by itself"
+
+    def test_the_slider_sits_under_the_number(self, qt):
+        """Which is where it was asked for, and reads as belonging to the
+        angle above it rather than as a third control beside it."""
+        box = _rotationPanel(qt)
+        rows = _rows(qt, box)
+        spin_row = next(
+            i
+            for i, r in enumerate(rows)
+            if isinstance(r, list) and any(isinstance(w, qt.QDoubleSpinBox) for w in r)
+        )
+        slider_row = next(i for i, r in enumerate(rows) if isinstance(r, qt.QSlider))
+        assert slider_row > spin_row
+
+    def test_the_number_keeps_the_reset_button_company(self, qt):
+        box = _rotationPanel(qt)
+        rows = _rows(qt, box)
+        row = next(r for r in rows if isinstance(r, list))
+        assert any(isinstance(w, qt.QDoubleSpinBox) for w in row)
+        assert any(isinstance(w, qt.QPushButton) for w in row)
+
+
+class TestTheStep:
+    def test_the_buttons_move_five_degrees(self, qt):
+        """Half a degree took ten clicks to show anything. Five is a turn
+        you can see, and the box still takes a typed 12.5 for finer."""
+        box = _rotationPanel(qt)
+        spin = box.findChild(qt.QDoubleSpinBox)
+        assert spin.singleStep() == pytest.approx(5.0)
+
+    def test_finer_can_still_be_typed(self, qt):
+        box = _rotationPanel(qt)
+        spin = box.findChild(qt.QDoubleSpinBox)
+        assert spin.decimals() >= 1
+        spin.setValue(12.5)
+        assert spin.value() == pytest.approx(12.5)

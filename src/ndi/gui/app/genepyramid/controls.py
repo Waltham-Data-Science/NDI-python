@@ -30,6 +30,8 @@ __all__ = [
     "addDisplayPanel",
     "addCellTypePanel",
     "addAllPanels",
+    "blurLevels",
+    "basePixelUm",
 ]
 
 
@@ -300,7 +302,7 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
     items: dict[str, Any] = {}
     symbols = list(index)
     entries = list(index.values())
-    state = {"busy": False, "colour": 0, "keep": None}
+    state = {"busy": False, "colour": 0, "keep": None, "sigma": 0.0, "raw": {}}
 
     def _makeItem(i: int):
         symbol = symbols[i]
@@ -432,6 +434,28 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
 
     outer.addWidget(listw, stretch=1)
 
+    # ---- blur ---------------------------------------------------------
+    # Gene expression is a handful of counts in scattered single pixels.
+    # Drawn honestly it is dust; blurred it reads as a pattern. On the
+    # GENE layers only -- the base layer is already dense and the cell
+    # layers are not what anyone is squinting at.
+    blur_row = QHBoxLayout()
+    blur_row.addWidget(QLabel("blur"))
+    blur = QDoubleSpinBox()
+    blur.setRange(0.0, 200.0)
+    blur.setDecimals(1)
+    blur.setSingleStep(1.0)
+    blur.setSuffix(" um")
+    blur.setToolTip(
+        "Spreads each gene's counts over its neighbourhood, so a sparse\n"
+        "gene reads as a pattern instead of dust. The width is a DISTANCE,\n"
+        "so it stays the same as you zoom between levels. 0 is off.\n"
+        "Spreading lowers the peak a long way -- the contrast limits are\n"
+        "reset each time so the layer stays visible."
+    )
+    blur_row.addWidget(blur, 1)
+    outer.addLayout(blur_row)
+
     status = QLabel("")
     status.setWordWrap(True)
     clear = QPushButton("Remove all gene layers")
@@ -507,12 +531,33 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
         n = _shown()
         status.setText(f"{n} gene layer(s) shown" + (f" -- {extra}" if extra else ""))
 
+    def _binSizes():
+        # Cached: levelTable reads the level documents, and the blur knob
+        # would otherwise re-read them on every tick of the spin box.
+        if state.get("bins") is None:
+            from ....fun.doc_gene import levelTable
+
+            levels, _f = levelTable(session, pyr_doc)
+            state["bins"] = [lv["binSize"] for lv in levels]
+        return state["bins"]
+
+    def _blurred(data):
+        """The ladder as it should be drawn at the current width."""
+        if not state["sigma"]:
+            return data
+        return blurLevels(data, _binSizes(), state["sigma"] / basePixelUm(pyr_doc))
+
     def _add(symbol: str):
         name = f"gene: {symbol}"
         if name in viewer.layers:
             return
         rows = index[symbol]["rows"]
         spec = layerSpec(session, pyr_doc, rows, True, name)
+        # The UNBLURRED ladder is kept, because the knob is absolute: each
+        # change re-blurs from the original rather than blurring what was
+        # already blurred, which would compound and could not be undone.
+        state["raw"][name] = spec["data"]
+        spec["data"] = _blurred(spec["data"])
         cmap = _GENE_COLORMAPS[state["colour"] % len(_GENE_COLORMAPS)]
         state["colour"] += 1
         try:
@@ -531,7 +576,27 @@ def addGenePanel(viewer, session, pyr_doc) -> Any:
         name = f"gene: {symbol}"
         if name in viewer.layers:
             del viewer.layers[name]
+        state["raw"].pop(name, None)
         _report()
+
+    def _reblur(_value=None):
+        state["sigma"] = float(blur.value())
+        for name, raw in list(state["raw"].items()):
+            if name not in viewer.layers:
+                state["raw"].pop(name, None)
+                continue
+            layer = viewer.layers[name]
+            try:
+                layer.data = _blurred(raw)
+                # Spreading a sparse signal lowers its peak a long way, so
+                # limits set for the unblurred layer would show black.
+                layer.reset_contrast_limits()
+            except Exception as e:  # noqa: BLE001 - a knob never costs a layer
+                status.setText(f"blur failed: {e}")
+                return
+        _report()
+
+    blur.valueChanged.connect(_reblur)
 
     def _on_item_changed(item):
         if state["busy"]:
@@ -1068,366 +1133,6 @@ def applyRotation(layers, angle_deg, center):
     return a
 
 
-def densityRaster(row, col, max_side: int = 1024):
-    """Bin centroids onto a raster, coarse enough to blur cheaply.
-
-    Points cannot be blurred. napari draws a Points layer as discrete
-    marks, and there is no kernel to widen -- so making sparse cells
-    easier to see means rendering them into an IMAGE and blurring that.
-
-    The raster is deliberately coarse, for two reasons. A ferret section
-    is ~40,000 x 59,000 base pixels, so a full-resolution density image
-    would be 2.4 billion pixels to hold a few hundred thousand cells. And
-    the BLUR is redrawn on every change of the width knob, which puts the
-    cap on the interactive path rather than the loading one -- measured,
-    on this raster, with scipy's gaussian_filter:
-
-        1024^2   38 ms at sigma 2px,  126 ms at sigma 20px
-        2048^2  177 ms               442 ms
-        4096^2  757 ms              1815 ms
-
-    1024 is the largest that still redraws inside a slider drag. Binning
-    the points is not what costs -- 400,000 cells histogram in 13 ms, once
-    -- so the cap is about the blur, not the counting.
-
-    The layer carries a matching ``scale`` and ``translate`` so it still
-    lands on top of the cells it was made from.
-
-    Args:
-        row, col: centroid coordinates in WORLD units, as the points layer
-            holds them.
-        max_side: longest raster side in pixels.
-
-    Returns:
-        ``(counts, step, origin)`` -- the 2D histogram, the world units one
-        raster pixel spans, and the ``(row, col)`` world position of its
-        top-left corner.
-    """
-    import numpy as np
-
-    row = np.asarray(row, float).ravel()
-    col = np.asarray(col, float).ravel()
-    if row.size == 0:
-        return np.zeros((1, 1)), 1.0, (0.0, 0.0)
-
-    r0, r1 = float(row.min()), float(row.max())
-    c0, c1 = float(col.min()), float(col.max())
-    # A degenerate extent -- one cell, or a row of them -- still has to
-    # produce a raster with area, or the histogram below has no bins.
-    span = max(r1 - r0, c1 - c0, 1.0)
-    step = span / max_side
-
-    nr = max(int(np.ceil((r1 - r0) / step)) + 1, 1)
-    nc = max(int(np.ceil((c1 - c0) / step)) + 1, 1)
-    ri = np.clip(((row - r0) / step).astype(np.int64), 0, nr - 1)
-    ci = np.clip(((col - c0) / step).astype(np.int64), 0, nc - 1)
-    counts = np.bincount(ri * nc + ci, minlength=nr * nc).reshape(nr, nc)
-    return counts.astype(np.float32), step, (r0, c0)
-
-
-def blurRaster(counts, sigma_world: float, step: float):
-    """Gaussian-blur a density raster with a UNITY kernel.
-
-    Unity meaning the kernel sums to one, so blurring SPREADS the signal
-    rather than adding to it: a cell contributes the same total whatever
-    the width. That is what keeps brightness a separate knob from width --
-    widen the dots and the picture does not also get brighter, so the
-    contrast limits set for one sigma still mean something at another.
-
-    ``mode="constant"`` rather than the default reflect, so mass leaves at
-    the edges instead of being folded back and piling up there. A section
-    is not periodic and its border cells are not doubled.
-
-    Args:
-        counts: raster from :func:`densityRaster`.
-        sigma_world: blur width in WORLD units -- the same units the
-            centroids are in, so the knob means the same thing at every
-            zoom rather than drifting with the raster size.
-        step: world units per raster pixel, from :func:`densityRaster`.
-
-    Returns:
-        The blurred raster. sigma <= 0 returns the input unchanged, which
-        is what "no blur" should cost.
-    """
-    import numpy as np
-    from scipy.ndimage import gaussian_filter
-
-    counts = np.asarray(counts, np.float32)
-    if sigma_world is None or sigma_world <= 0 or step <= 0:
-        return counts
-    return gaussian_filter(counts, sigma=float(sigma_world) / float(step), mode="constant")
-
-
-def viewportBounds(center, zoom, canvas_px):
-    """The visible world rectangle, as ``(r0, r1, c0, c1)``.
-
-    napari's ``camera.zoom`` is canvas PIXELS PER WORLD UNIT, so the
-    visible extent is the canvas size divided by it, centred on
-    ``camera.center``. Qt reports a canvas as ``(width, height)`` while
-    napari axes are ``(row, col)``, so width belongs to the column span
-    and height to the row span -- the one place this is easy to get
-    backwards, and invisible when the window happens to be square.
-
-    Pure arithmetic, separate from the viewer, because it is the part that
-    can be wrong and the part that needs no display to check.
-
-    Args:
-        center: ``camera.center``, ``(z, y, x)`` even in 2D; the last two
-            are read.
-        zoom: ``camera.zoom``.
-        canvas_px: ``(width, height)`` in device pixels.
-    """
-    cy, cx = float(center[-2]), float(center[-1])
-    w_px, h_px = float(canvas_px[0]), float(canvas_px[1])
-    if zoom <= 0:
-        raise ValueError(f"camera zoom must be positive, got {zoom!r}")
-    half_r = (h_px / float(zoom)) / 2.0
-    half_c = (w_px / float(zoom)) / 2.0
-    return (cy - half_r, cy + half_r, cx - half_c, cx + half_c)
-
-
-def canvasSize(viewer):
-    """The canvas size in pixels, or None if this napari will not say.
-
-    Reached through private attributes that have moved between napari
-    versions, so it is tried rather than assumed and the caller falls back
-    to the whole section rather than failing. A blur over the wrong
-    rectangle would be worse than a coarse one over the right rectangle.
-    """
-    for path in (("_qt_viewer",), ("qt_viewer",)):
-        obj = viewer.window
-        try:
-            for name in path:
-                obj = getattr(obj, name)
-            size = obj.canvas.size
-            return (float(size[0]), float(size[1]))
-        except Exception:  # noqa: BLE001 - any miss means "cannot tell"
-            continue
-    return None
-
-
-def addCellBlurPanel(viewer, points_layer, max_side: int = 1024) -> Any:
-    """A width knob for a blurred density image under the cell centroids.
-
-    Sparse centroids are single marks and hard to pick out. This adds a
-    second layer -- the same cells, binned and Gaussian-blurred -- that can
-    be widened until they read as a field rather than dust, with the
-    original points still drawn on top.
-
-    THE LAYER IS BUILT ON FIRST USE, not at launch. Most sessions never
-    touch this, and rasterising several hundred thousand centroids is not
-    worth paying for unasked on a launch that is already the thing people
-    complain about.
-
-    Brightness stays napari's own: the density layer is an ordinary Image
-    layer, so its contrast limits, gamma and colormap are in the layer
-    controls where a reader already looks for them. This knob does width
-    and nothing else, which is why the kernel is unity.
-    """
-    from qtpy.QtCore import Qt, QTimer
-    from qtpy.QtWidgets import (
-        QCheckBox,
-        QDoubleSpinBox,
-        QHBoxLayout,
-        QLabel,
-        QPushButton,
-        QSlider,
-        QVBoxLayout,
-        QWidget,
-    )
-
-    box = QWidget()
-    outer = QVBoxLayout(box)
-
-    show = QCheckBox("blurred cell density")
-    follow = QCheckBox("follow the view")
-    follow.setToolTip(
-        "Re-blurs by itself a moment after you stop moving.\n"
-        "Off by default: the redraw is 38-126 ms, so following every camera\n"
-        "event would stutter through a pan -- hence the pause rather than\n"
-        "live tracking."
-    )
-    here = QPushButton("Re-blur here")
-    here.setToolTip(
-        "Re-bins just what is on screen, at full resolution for this zoom.\n"
-        "The standing raster covers the whole section and goes blocky when\n"
-        "you zoom past it; this trades that for a view that has to be\n"
-        "refreshed after you move."
-    )
-    show.setToolTip(
-        "Bins the centroids and blurs them with a unity Gaussian, so widening\n"
-        "spreads each cell rather than brightening it. Contrast and colormap\n"
-        "stay in the layer controls."
-    )
-    slider = QSlider(Qt.Horizontal)
-    spin = QDoubleSpinBox()
-    spin.setRange(0.0, 500.0)
-    spin.setDecimals(1)
-    spin.setSuffix(" um")
-
-    status = QLabel("")
-    status.setWordWrap(True)
-    status.hide()
-
-    state = {"layer": None, "counts": None, "step": 1.0, "origin": (0.0, 0.0)}
-
-    def _rebin(bounds=None):
-        """Bin the centroids, optionally only those inside BOUNDS.
-
-        Whole-section by default. Restricted to the viewport, the same
-        max_side spans a smaller region, so the raster is finer exactly
-        where it is being looked at -- which is the whole point of the
-        button, and why this is on demand rather than on every camera
-        move: the blur is 38-126 ms and a pan would stutter through it.
-        """
-        import numpy as np
-
-        data = points_layer.data
-        row, col = data[:, 0], data[:, 1]
-        if bounds is not None:
-            r0, r1, c0, c1 = bounds
-            keep = (row >= r0) & (row <= r1) & (col >= c0) & (col <= c1)
-            if not np.any(keep):
-                raise ValueError("no cells in view")
-            row, col = row[keep], col[keep]
-        counts, step, origin = densityRaster(row, col, max_side)
-        state.update(counts=counts, step=step, origin=origin)
-
-    def _raster():
-        if state["counts"] is None:
-            _rebin()
-            # The slider is in WORLD units and its useful range depends on
-            # how big the section is, so it is set from the data rather
-            # than guessed: a tenth of the raster is a wide blur anywhere.
-            widest = max(state["step"] * max_side / 10.0, 1.0)
-            slider.setRange(0, 100)
-            spin.setRange(0.0, widest)
-            spin.setSingleStep(widest / 100.0)
-        return state["counts"], state["step"], state["origin"]
-
-    def _reblurHere():
-        size = canvasSize(viewer)
-        if size is None:
-            status.setText(
-                "this napari will not report its canvas size, so the blur "
-                "stays over the whole section"
-            )
-            status.show()
-            return
-        try:
-            bounds = viewportBounds(viewer.camera.center, viewer.camera.zoom, size)
-            _rebin(bounds)
-        except Exception as e:  # noqa: BLE001 - a control never costs the picture
-            status.setText(f"failed: {e}")
-            status.show()
-            return
-        show.setChecked(True)
-        _apply(_sigma())
-
-    def _apply(sigma):
-        try:
-            counts, step, origin = _raster()
-            img = blurRaster(counts, sigma, step)
-            if state["layer"] is None:
-                state["layer"] = viewer.add_image(
-                    img,
-                    name="cell density",
-                    colormap="magma",
-                    blending="additive",
-                    scale=(step, step),
-                    translate=origin,
-                )
-                # Under the points, not over them: the blur is context for
-                # the centroids, not a replacement.
-                viewer.layers.move(len(viewer.layers) - 1, 0)
-            else:
-                # scale and translate too: a re-blur over the viewport
-                # changes all three, and data alone would leave the image
-                # stretched over the old rectangle.
-                state["layer"].data = img
-                state["layer"].scale = (step, step)
-                state["layer"].translate = origin
-            state["layer"].visible = show.isChecked()
-            state["layer"].reset_contrast_limits()
-        except Exception as e:  # noqa: BLE001 - a control never costs the picture
-            status.setText(f"failed: {e}")
-            status.show()
-            return
-        status.hide()
-
-    def _sigma():
-        return spin.value()
-
-    guard = [False]
-
-    def _sync(value, source):
-        if guard[0]:
-            return
-        guard[0] = True
-        try:
-            if source is not spin:
-                spin.setValue(spin.maximum() * value / 100.0)
-            if source is not slider and spin.maximum() > 0:
-                slider.setValue(int(round(100.0 * spin.value() / spin.maximum())))
-            if show.isChecked():
-                _apply(_sigma())
-        finally:
-            guard[0] = False
-
-    slider.valueChanged.connect(lambda v: _sync(v, slider))
-    spin.valueChanged.connect(lambda v: _sync(v, spin))
-    show.toggled.connect(lambda on: _apply(_sigma()) if on else _hide())
-
-    def _hide():
-        if state["layer"] is not None:
-            state["layer"].visible = False
-
-    row = QHBoxLayout()
-    row.addWidget(QLabel("width"))
-    row.addWidget(slider, 1)
-    row.addWidget(spin)
-    row.addWidget(here)
-    here.clicked.connect(_reblurHere)
-
-    # DEBOUNCED, not live. Camera events fire continuously through a pan
-    # and each redraw is 38-126 ms, so following them directly would
-    # stutter the whole drag. The timer restarts on every event and only
-    # fires once movement has stopped, which is the same moment a hand
-    # would have reached for the button.
-    settle = QTimer(box)
-    settle.setSingleShot(True)
-    settle.setInterval(400)
-    settle.timeout.connect(lambda: _reblurHere() if follow.isChecked() else None)
-
-    def _cameraMoved(_event=None):
-        if follow.isChecked():
-            settle.start()
-
-    def _watchCamera(on):
-        # Connected once and left connected: _cameraMoved checks the box
-        # itself, so toggling cannot leak a second connection, and
-        # disconnecting a napari event is the fiddlier half of the API.
-        if on:
-            _reblurHere()
-
-    for _evt in ("zoom", "center"):
-        try:
-            getattr(viewer.camera.events, _evt).connect(_cameraMoved)
-        except Exception:  # noqa: BLE001 - following is optional, the panel is not
-            follow.setEnabled(False)
-            follow.setToolTip("this napari does not report camera movement")
-
-    follow.toggled.connect(_watchCamera)
-    outer.addWidget(follow)
-    outer.addWidget(show)
-    outer.addLayout(row)
-    outer.addWidget(status)
-    outer.addStretch()
-
-    viewer.window.add_dock_widget(box, name="Cell density", area="right")
-    return box
-
-
 def addRotationPanel(viewer, layers) -> Any:
     """A slider and a box for turning the whole picture.
 
@@ -1466,7 +1171,11 @@ def addRotationPanel(viewer, layers) -> Any:
     spin = QDoubleSpinBox()
     spin.setRange(-180.0, 180.0)
     spin.setDecimals(1)
-    spin.setSingleStep(0.5)
+    # The step is what the box's own - and + buttons move by, and five
+    # degrees is a visible turn -- half a degree took ten clicks to show
+    # anything. Anyone wanting finer than five types the number, which the
+    # one decimal place still accepts.
+    spin.setSingleStep(5.0)
     spin.setSuffix(" deg")
     reset = QPushButton("Reset")
 
@@ -1538,16 +1247,123 @@ def addRotationPanel(viewer, layers) -> Any:
 
     reset.clicked.connect(_reset)
 
+    # TWO ROWS, NOT ONE. Sharing a row with the box and the button left
+    # the slider a stub too short to aim with: a dock panel is narrow, and
+    # the number and the Reset button take a fixed width out of it whatever
+    # is left over. On its own row the slider gets the panel's full width,
+    # which is what makes it draggable.
     row = QHBoxLayout()
-    row.addWidget(slider, 1)
     row.addWidget(spin)
     row.addWidget(reset)
+    row.addStretch()
     outer.addLayout(row)
+    outer.addWidget(slider)
     outer.addWidget(status)
     outer.addStretch()
 
     viewer.window.add_dock_widget(box, name="Rotation", area="right")
     return box
+
+
+def blurLevels(levels, binSizes, sigmaBasePixels: float, truncate: float = 3.0):
+    """Gaussian-blur a multiscale ladder by the same DISTANCE at every level.
+
+    Gene expression is a handful of counts in scattered single pixels.
+    Drawn honestly it is dust, and a reader looking for where a gene is
+    expressed cannot see a pattern in it. Blurring spreads each pixel over
+    its neighbourhood so the pattern reads, at the cost of no longer being
+    able to point at one bin.
+
+    THE WIDTH IS IN BASE PIXELS, NOT LEVEL PIXELS, and that is the whole
+    difficulty. Each level is binned differently, so a fixed number of
+    level-pixels would be a different physical distance on each one -- the
+    blur would visibly change width as the viewer switched levels while
+    zooming, which is precisely what a multiscale ladder exists to avoid.
+    Dividing by the level's bin size makes one setting mean one distance
+    everywhere.
+
+    BLURRED PER BLOCK, WITH A HALO. Levels are dask arrays whose blocks
+    are tiles, and a plain per-block filter would see each tile's edge as
+    the end of the world -- leaving a seam at every tile boundary, in a
+    grid, which reads as an artefact of the data rather than of the
+    drawing. map_overlap gives each block ``truncate * sigma`` of its
+    neighbours to work from, which is exactly the reach of the kernel, so
+    the result matches blurring the level whole.
+
+    The kernel is unity: widening spreads each pixel's counts rather than
+    adding to them, so width and brightness stay separate knobs. Contrast limits will want resetting afterwards
+    all the same -- spreading a sparse signal lowers its peak a long way.
+
+    Args:
+        levels: dask arrays, finest first, as ``layerSpec`` returns.
+        binSizes: each level's bin size in base pixels, same order.
+        sigmaBasePixels: blur width, in BASE pixels. 0 or less returns the
+            ladder untouched, which is what "no blur" should cost.
+        truncate: kernel cutoff in sigmas; also the halo, so the two
+            cannot disagree.
+
+    Returns:
+        A new list of dask arrays. The input is not modified.
+    """
+    import numpy as np
+    from scipy.ndimage import gaussian_filter
+
+    if sigmaBasePixels is None or sigmaBasePixels <= 0:
+        return list(levels)
+
+    out = []
+    for arr, b in zip(levels, binSizes):
+        sigma = float(sigmaBasePixels) / float(b)
+        if sigma <= 0:
+            out.append(arr)
+            continue
+        # +1 so integer truncation can never make the halo shorter than
+        # the kernel's reach, which is the one way a seam gets back in.
+        depth = int(np.ceil(truncate * sigma)) + 1
+        out.append(
+            arr.map_overlap(
+                gaussian_filter,
+                depth=depth,
+                boundary=0,
+                sigma=sigma,
+                truncate=truncate,
+                mode="constant",
+                dtype=arr.dtype,
+            )
+        )
+    return out
+
+
+def basePixelUm(pyr_doc, fallback: float = 0.5) -> float:
+    """One base pixel's physical width, so a blur can be set in microns.
+
+    The blur knob is in micrometres because that is the unit a reader
+    thinks in -- a spread of ten microns means something about tissue,
+    ten base pixels means something about the chip. :func:`blurLevels`
+    works in base pixels, and this is the conversion between them.
+
+    Only the X size is used. A pyramid whose pixels are not square would
+    want an anisotropic sigma, and neither the ladder nor the knob is
+    built for that; Stereo-seq's DNB grid is square, so the case has not
+    arisen. If it does, this is where it would be noticed.
+
+    Args:
+        pyr_doc: a spatialGeneExpressionPyramid document.
+        fallback: used when the document does not say, or says something
+            that is not a positive number. 0.5 um is the Stereo-seq DNB
+            pitch, which is what every pyramid seen so far records. A
+            wrong-but-plausible scale makes the knob mean the wrong
+            distance; a zero would make it divide by zero.
+
+    Returns:
+        Micrometres per base pixel, always positive.
+    """
+    try:
+        p = pyr_doc.document_properties["spatialGeneExpressionPyramid"]
+        um = float(p["base_pixel_size_x"])
+    except Exception:  # noqa: BLE001 - a missing field costs the default, not the knob
+        return float(fallback)
+    return um if um > 0 else float(fallback)
 
 
 def _importQtWidgets() -> None:
@@ -1639,6 +1455,5 @@ def addAllPanels(
                 viewer, session, cells_doc, points_layer, shapes_layer, labelings
             ),
         )
-        made["cellDensity"] = _build("cell density", lambda: addCellBlurPanel(viewer, points_layer))
     made["genes"] = _build("genes", lambda: addGenePanel(viewer, session, pyr_doc))
     return made
