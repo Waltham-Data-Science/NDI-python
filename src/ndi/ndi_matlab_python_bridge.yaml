@@ -1157,7 +1157,7 @@ classes:
     matlab_path: "+ndi/preferences.m"
     matlab_last_sync_hash: "362060795"
     python_path: "ndi/preferences.py"
-    python_class: "Preferences"
+    python_class: "ndi_preferences"
     inherits: ""
 
     decision_log: >
@@ -1171,6 +1171,23 @@ classes:
       process, so a pool nobody asked for costs start-up time and a multiple of
       MATLAB's memory. Python has no parpool and no NDI code that would read
       them; a preference nothing consults is worse than an absent one.
+      NDI-python#295: this entry recorded python_class "Preferences", which is
+      not a class this repo defines -- the class is ndi_preferences -- so the
+      property gate had nothing to compare against and reported nothing wrong.
+      Corrected, and MATLAB's public Items property (SetAccess = private
+      leaves GetAccess public) is now exposed read-only beside the private
+      _items list.
+
+    properties:
+      - name: Items
+        type_matlab: "struct array"
+        type_python: "list[PreferenceItem]"
+        access: "SetAccess=private (GetAccess public by default)"
+        decision_log: >
+          Stored as _items in Python and, since NDI-python#295, also readable
+          as Items. Read-only, matching MATLAB's private setter: items are
+          registered at construction and mutated through the setter methods,
+          never by rebinding the list.
 
 # =========================================================================
 # Not ported / Not applicable

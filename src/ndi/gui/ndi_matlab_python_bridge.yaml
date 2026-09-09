@@ -199,6 +199,14 @@ classes:
       this side. The filter (contains / begins with / ends with over a chosen
       column) matches.
 
+      NDI-python#295: the MATLAB properties this port does not expose under
+      MATLAB's name are enumerated in tests/bridge_property_allowlist.yaml,
+      with a reason each. They are MATLAB graphics handles or MATLAB-drawing
+      settings that a Qt port has nothing to put behind, plus widget
+      attributes spelled in PEP 8. Every MATLAB property that holds a VALUE
+      -- Value, Size, Location, Title, UpdateInterval, Tag, Progress, State --
+      does carry MATLAB's name here and is checked by the property gate.
+
     properties:
       - name: fullDocuments
         type_matlab: "ndi.document[]"
@@ -425,6 +433,14 @@ classes:
       code that neither this container nor CI can execute, and writing it
       unexecuted is how a plausible-looking wrong answer gets committed. The
       state machine it needs is now here and tested.
+
+      NDI-python#295: the MATLAB properties this port does not expose under
+      MATLAB's name are enumerated in tests/bridge_property_allowlist.yaml,
+      with a reason each. They are MATLAB graphics handles or MATLAB-drawing
+      settings that a Qt port has nothing to put behind, plus widget
+      attributes spelled in PEP 8. Every MATLAB property that holds a VALUE
+      -- Value, Size, Location, Title, UpdateInterval, Tag, Progress, State --
+      does carry MATLAB's name here and is checked by the property gate.
 
     properties:
       - name: editable

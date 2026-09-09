@@ -379,7 +379,18 @@ classes:
         type_matlab: "char"
         type_python: "Path"
         access: "GetAccess=public, SetAccess=protected"
-        decision_log: "Stored as _path in Python."
+        decision_log: >
+          Stored as _path in Python, and now ALSO exposed as a read-only
+          public `path` property beside it (NDI-python#295). It was _path
+          only, which broke the reopen-at-your-own-path contract that
+          ndi.session.dir satisfies: ndi.gui.app.genepyramid's tile fetcher
+          builds a per-thread handle from getattr(obj, "path", None), so a
+          dataset returned None and the fetcher had nothing to reopen. That
+          surfaced as "Cannot fetch 'tile.bin_262' from thread
+          ThreadPoolExecutor-1_0" -- a threading error three layers from the
+          missing property, because a private-instead-of-public property
+          raises nothing. The private name is unchanged; the public one is
+          additive.
 
     methods:
       - name: dir

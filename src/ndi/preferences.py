@@ -162,6 +162,21 @@ class ndi_preferences:
         self._register_defaults()
         self._load_from_disk()
 
+    @property
+    def Items(self) -> list[PreferenceItem]:  # noqa: N802 -- mirrors the MATLAB spelling
+        """The registered preference items.
+
+        MATLAB counterpart: ``ndi.preferences``'s ``Items`` property. It is
+        declared ``SetAccess = private``, which leaves ``GetAccess`` at its
+        default of public -- so MATLAB callers read it directly, while this
+        port kept the list as ``_items`` only.
+
+        Read-only, matching that private setter: items are registered by
+        :meth:`_register_defaults` and mutated through the setter methods,
+        not by rebinding the list. See #295.
+        """
+        return self._items
+
     # ------------------------------------------------------------------
     # Default registration
     # ------------------------------------------------------------------
