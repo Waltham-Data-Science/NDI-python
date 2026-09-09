@@ -246,3 +246,90 @@ class TestClosingIsAlwaysSafe(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTheLabelIsActuallyPainted:
+    """The launch window sat on "importing napari" for minutes while the
+    label underneath had moved on several steps.
+
+    setText only QUEUES a repaint, and processEvents services what is
+    queued at that instant -- but the step that follows blocks the thread
+    with no event loop running, so any paint the window needs after that
+    point is never serviced. The window freezes on whichever label was
+    current when the first slow step began. repaint() paints
+    synchronously, before returning, so each label reaches the glass
+    before its step blocks.
+    """
+
+    def _fakeWindow(self):
+        painted = []
+
+        class Widget:
+            def repaint(self):
+                painted.append("widget")
+
+        class App:
+            def processEvents(self):
+                painted.append("events")
+
+        class Label:
+            text = None
+
+            def setText(self, t):
+                self.text = t
+
+        class Bar:
+            def setRange(self, *_a):
+                pass
+
+            def setValue(self, *_a):
+                pass
+
+            def setFormat(self, *_a):
+                pass
+
+        return {
+            "app": App(),
+            "widget": Widget(),
+            "step": Label(),
+            "bar": Bar(),
+        }, painted
+
+    def test_a_stage_paints_before_it_returns(self, monkeypatch):
+        from ndi.gui.app.genepyramid import progress
+
+        win, painted = self._fakeWindow()
+        monkeypatch.setattr(progress, "_launchWindow", lambda: win)
+        progress._guiStage("reading the tiles")
+        assert win["step"].text == "reading the tiles"
+        assert "widget" in painted, "the label must be on the glass, not just queued"
+
+    def test_a_byte_update_paints_too(self, monkeypatch):
+        """A byte count that only lands when the transfer finishes has
+        reported nothing."""
+        from ndi.gui.app.genepyramid import progress
+
+        win, painted = self._fakeWindow()
+        monkeypatch.setattr(progress, "_launchWindow", lambda: win)
+        progress._guiBytes(50, 100)
+        assert "widget" in painted
+
+    def test_a_window_that_will_not_paint_costs_nothing(self, monkeypatch):
+        """Styling and progress are never worth the launch."""
+        from ndi.gui.app.genepyramid import progress
+
+        class Hostile:
+            def repaint(self):
+                raise RuntimeError("no")
+
+        win, _painted = self._fakeWindow()
+        win["widget"] = Hostile()
+        monkeypatch.setattr(progress, "_launchWindow", lambda: win)
+        progress._guiStage("still fine")  # must not raise
+
+    def test_no_window_is_not_an_error(self, monkeypatch):
+        from ndi.gui.app.genepyramid import progress
+
+        monkeypatch.setattr(progress, "_launchWindow", lambda: None)
+        progress._guiStage("headless")
+        progress._guiBytes(1, 2)

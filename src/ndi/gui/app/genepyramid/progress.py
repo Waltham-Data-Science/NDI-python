@@ -270,6 +270,25 @@ def _launchWindow():
 
 
 def _guiStage(label: str) -> None:
+    """Show the step that is about to run, and MAKE SURE IT IS PAINTED.
+
+    setText queues a repaint; processEvents services what is queued NOW.
+    Between them they can still leave the old text on screen, because the
+    step that follows blocks the thread for as long as it takes and no
+    event loop runs meanwhile -- so any paint the window needs after that
+    point (it gets exposed, the compositor asks again, the OS marks the
+    app unresponsive) is never serviced.
+
+    The effect is a window frozen on whichever label was current when the
+    FIRST slow step began, which made a launch that was working look
+    stuck on "importing napari" for minutes while the label underneath
+    had long since moved on.
+
+    repaint() paints synchronously, before returning, so the new label is
+    on the glass before the blocking work starts. It does not animate --
+    nothing can, without an event loop -- but each step is legible while
+    it runs instead of one step being legible for all of them.
+    """
     win = _launchWindow()
     if win is None:
         return
@@ -277,6 +296,7 @@ def _guiStage(label: str) -> None:
         win["step"].setText(label)
         win["bar"].setRange(0, 0)  # unknown length again
         win["app"].processEvents()
+        win["widget"].repaint()
 
 
 def _guiBytes(done: int, total) -> None:
@@ -292,6 +312,9 @@ def _guiBytes(done: int, total) -> None:
             win["bar"].setRange(0, 0)
             win["bar"].setFormat(humanBytes(done))
         win["app"].processEvents()
+        # Synchronous, for the same reason as _guiStage: a byte count that
+        # only lands when the transfer finishes has reported nothing.
+        win["widget"].repaint()
 
 
 def closeLaunchWindow() -> None:
