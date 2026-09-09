@@ -23,6 +23,61 @@ from .exceptions import CloudAuthError
 logger = logging.getLogger(__name__)
 
 
+def tokenSecondsRemaining(token: str = "") -> float | None:
+    """Seconds until the cloud token expires, or None if unreadable.
+
+    Negative when it has already lapsed, which is the interesting case:
+    "expired 20 minutes ago" and "expires in 20 minutes" are the same
+    number with a sign, and a caller showing either wants both.
+
+    None means the token is absent or opaque -- no ``exp`` claim to read.
+    That is not the same as expired, and a caller must not treat it as
+    such: an opaque token is the server's to judge.
+
+    Args:
+        token: the JWT. Defaults to whatever is in the environment, which
+            is where a login leaves it.
+    """
+    token = token or os.environ.get("NDI_CLOUD_TOKEN", "")
+    if not token:
+        return None
+    try:
+        expires = getTokenExpiration(token)
+    except CloudAuthError:
+        return None
+    return (expires - datetime.now(timezone.utc)).total_seconds()
+
+
+def tokenStatusLine(token: str = "") -> str:
+    """One line saying how much life the cloud token has left.
+
+    For a viewer that stays open: a session outlives its token, and the
+    first sign of that is otherwise a file that will not load. Said out
+    loud and kept current, it is a clock instead of a surprise.
+    """
+    left = tokenSecondsRemaining(token)
+    if left is None:
+        return "not signed in" if not (token or os.environ.get("NDI_CLOUD_TOKEN")) else "unknown"
+    if left <= 0:
+        return f"EXPIRED {_roughly(-left)} ago"
+    return f"signed in, {_roughly(left)} left"
+
+
+def _roughly(seconds: float) -> str:
+    """A duration in the largest unit that still says something.
+
+    Seconds matter near zero and are noise at an hour, which is the whole
+    range this is used over.
+    """
+    seconds = max(0.0, float(seconds))
+    if seconds < 90:
+        return f"{int(round(seconds))}s"
+    minutes = seconds / 60.0
+    if minutes < 90:
+        return f"{int(round(minutes))} min"
+    return f"{minutes / 60.0:.1f} hours"
+
+
 def credentialReport() -> str:
     """What this process can and cannot authenticate with, as text.
 

@@ -30,6 +30,9 @@ __all__ = [
     "addDisplayPanel",
     "addCellTypePanel",
     "addAllPanels",
+    "addCloudPanel",
+    "cloudSessionLooksLikely",
+    "saveCloudProfile",
     "blurLevels",
     "basePixelUm",
 ]
@@ -1446,6 +1449,187 @@ def _importQtWidgets() -> None:
     import qtpy.QtWidgets  # noqa: F401
 
 
+def cloudSessionLooksLikely() -> bool:
+    """Is there any reason to show a cloud login in this viewer?
+
+    A token in the environment is the signal, and it is the right one for
+    the same reason the MATLAB launcher uses it: the viewer inherits its
+    parent's environment, so a token there says the process that started
+    this one had been talking to the cloud and expects this one to keep
+    doing so. A purely local pyramid has none, and a login control on a
+    window that needs no login is clutter that also implies the picture
+    might be waiting on something.
+
+    A token that has ALREADY expired still counts -- that is precisely
+    when the panel is wanted.
+    """
+    import os
+
+    return bool(os.environ.get("NDI_CLOUD_TOKEN"))
+
+
+def addCloudPanel(viewer) -> Any:
+    """A clock on the cloud token, and a way to renew it in place.
+
+    A VIEWER OUTLIVES ITS TOKEN. Someone reading a section works for
+    hours; the token is good for rather less, and it cannot renew itself
+    unless credentials happen to be reachable. What running out looks
+    like from here is not a login prompt but MISSING DATA -- tiles
+    already cached keep drawing, and the ones that were never fetched
+    fail one at a time as the reader pans, which reads as a broken
+    pyramid. The remedy used to be quitting, logging in elsewhere, and
+    opening the section again, since the token lives in this process's
+    environment and nothing outside it can reach in.
+
+    So: the time left is shown and kept current, and the credentials that
+    renew it can be typed HERE, into the window that needs them. Signing
+    in writes the new token into the environment, which is where every
+    later fetch reads it from -- including the ones on the tile threads,
+    since a fetch builds its client per call rather than holding one.
+
+    THE PASSWORD IS NOT KEPT. It goes to the login call and nothing else:
+    not to a field that stays filled, not to a file, not to the profile
+    unless the reader asks for that explicitly with the checkbox, which
+    exists because credentials saved once and wrong are exactly how
+    someone ends up here.
+    """
+    import os
+
+    from qtpy.QtCore import QTimer
+    from qtpy.QtWidgets import (
+        QCheckBox,
+        QFormLayout,
+        QLabel,
+        QLineEdit,
+        QPushButton,
+        QVBoxLayout,
+        QWidget,
+    )
+
+    from ....cloud import auth
+
+    box = QWidget()
+    outer = QVBoxLayout(box)
+
+    clock = QLabel("")
+    clock.setWordWrap(True)
+    outer.addWidget(clock)
+
+    email = QLineEdit()
+    email.setPlaceholderText("you@example.com")
+    # Prefilled from the environment only. The profile is deliberately NOT
+    # read for this: someone opening this panel is usually here because
+    # what is saved did not work, and offering it back as the answer is
+    # the least useful thing to show them.
+    email.setText(os.environ.get("NDI_CLOUD_USERNAME", ""))
+    password = QLineEdit()
+    password.setEchoMode(QLineEdit.Password)
+    password.setPlaceholderText("password")
+
+    form = QFormLayout()
+    form.addRow("email", email)
+    form.addRow("password", password)
+    outer.addLayout(form)
+
+    save = QCheckBox("also save these to my NDI profile")
+    save.setToolTip(
+        "Stores the credentials so a future session can renew its own\n"
+        "token without asking. Overwrites what is saved now, which is\n"
+        "the point if what is saved now is wrong."
+    )
+    outer.addWidget(save)
+
+    signin = QPushButton("Sign in")
+    signin.setDefault(True)
+    outer.addWidget(signin)
+
+    result = QLabel("")
+    result.setWordWrap(True)
+    result.hide()
+    outer.addWidget(result)
+    outer.addStretch()
+
+    def _tick():
+        left = auth.tokenSecondsRemaining()
+        line = auth.tokenStatusLine()
+        # Said in the panel's own terms rather than the library's, and
+        # warned about BEFORE it bites: a reader who sees "12 min left"
+        # can sign in at a convenient moment instead of discovering it
+        # through a tile that will not load.
+        if left is not None and 0 < left < 900:
+            clock.setText(f"NDI Cloud: {line} -- sign in again before it runs out.")
+        elif left is not None and left <= 0:
+            clock.setText(
+                f"NDI Cloud: {line}. Tiles that are not already downloaded "
+                f"will fail to load until you sign in."
+            )
+        else:
+            clock.setText(f"NDI Cloud: {line}")
+
+    def _signin():
+        who, secret = email.text().strip(), password.text()
+        if not who or not secret:
+            result.setText("Both an email and a password are needed.")
+            result.show()
+            return
+        signin.setEnabled(False)
+        try:
+            auth.login(who, secret)
+        except Exception as e:  # noqa: BLE001 - a bad password is not a crash
+            result.setText(f"Sign-in failed: {e}")
+            result.show()
+            return
+        finally:
+            signin.setEnabled(True)
+            # Cleared whatever happened: a failed attempt is the one most
+            # likely to be a typo, and leaving it visible in a dock is
+            # worse than making it be retyped.
+            password.clear()
+        note = "Signed in."
+        if save.isChecked():
+            try:
+                saveCloudProfile(who, secret)
+                note += " Saved to your NDI profile."
+            except Exception as e:  # noqa: BLE001 - the sign-in still worked
+                note += f" (Could not save to the profile: {e})"
+        result.setText(note)
+        result.show()
+        _tick()
+
+    signin.clicked.connect(_signin)
+    password.returnPressed.connect(_signin)
+
+    # Parented to the widget, so it stops when the dock goes. A free timer
+    # would keep firing at a deleted label and take the process with it.
+    timer = QTimer(box)
+    timer.setInterval(30_000)
+    timer.timeout.connect(_tick)
+    timer.start()
+    _tick()
+
+    viewer.window.add_dock_widget(box, name="NDI Cloud", area="right")
+    return box
+
+
+def saveCloudProfile(email: str, password: str) -> None:
+    """Make these the credentials a future session renews itself with.
+
+    Updates the profile that already carries this email rather than
+    adding a second one for it -- someone whose saved password is wrong
+    is trying to CORRECT it, and a duplicate entry would leave the wrong
+    one in place to be picked instead.
+    """
+    from ....cloud import profile
+
+    for entry in profile.list_profiles():
+        if str(getattr(entry, "Email", "")).lower() == email.lower():
+            profile.set_password(entry.UID, password)
+            profile.set_default(entry.UID)
+            return
+    uid = profile.add(email.split("@")[0] or "ndi", email, password)
+    profile.set_default(uid)
+
+
 def addAllPanels(
     viewer,
     session,
@@ -1522,4 +1706,9 @@ def addAllPanels(
             ),
         )
     made["genes"] = _build("genes", lambda: addGenePanel(viewer, session, pyr_doc))
+    # Last, and only when there is a token to run out. It is the panel
+    # nobody needs until they do, so it reads at the bottom rather than
+    # above the controls the session is actually for.
+    if cloudSessionLooksLikely():
+        made["cloud"] = _build("cloud", lambda: addCloudPanel(viewer))
     return made

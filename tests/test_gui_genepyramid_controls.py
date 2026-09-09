@@ -365,3 +365,38 @@ def test_a_session_with_no_cells_still_gets_rotation(monkeypatch):
     assert made["rotation"] is not None
     args, _kwargs = rotation.calls[0]
     assert args[1][1] is None and args[1][2] is None
+
+
+def test_the_cloud_panel_is_only_offered_when_there_is_a_token_to_expire(monkeypatch):
+    """A login control on a window that needs no login is clutter, and it
+    implies the picture might be waiting on something. A local pyramid
+    has no cloud token in its environment; a cloud one does."""
+    monkeypatch.setattr(controls, "_importQtWidgets", lambda: None)
+    for name in ("addDisplayPanel", "addCellTypePanel", "addGenePanel", "addRotationPanel"):
+        monkeypatch.setattr(controls, name, _Recorder())
+    cloud = _Recorder()
+    monkeypatch.setattr(controls, "addCloudPanel", cloud)
+
+    monkeypatch.delenv("NDI_CLOUD_TOKEN", raising=False)
+    made = controls.addAllPanels(object(), object(), object(), object(), True)
+    assert "cloud" not in made
+    assert not cloud.calls
+
+    monkeypatch.setenv("NDI_CLOUD_TOKEN", "anything")
+    made = controls.addAllPanels(object(), object(), object(), object(), True)
+    assert cloud.calls, "a cloud session was offered no way to sign back in"
+
+
+def test_a_failing_cloud_panel_costs_only_itself(monkeypatch, capsys):
+    """It is the last panel and the least essential one -- a keyring that
+    will not open must not cost the section."""
+    monkeypatch.setattr(controls, "_importQtWidgets", lambda: None)
+    for name in ("addDisplayPanel", "addCellTypePanel", "addGenePanel", "addRotationPanel"):
+        monkeypatch.setattr(controls, name, _Recorder())
+    monkeypatch.setattr(controls, "addCloudPanel", _Recorder(boom=True))
+    monkeypatch.setenv("NDI_CLOUD_TOKEN", "anything")
+
+    made = controls.addAllPanels(object(), object(), object(), object(), True)
+    assert made["cloud"] is None
+    assert made["genes"] is not None
+    assert "cloud" in capsys.readouterr().err
