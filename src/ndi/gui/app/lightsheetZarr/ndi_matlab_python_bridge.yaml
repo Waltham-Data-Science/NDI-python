@@ -1,0 +1,150 @@
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+functions:
+  - name: build_parser
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/cli.py"
+    output_arguments:
+      - name: parser
+        type_python: argparse.ArgumentParser
+    decision_log: >-
+      argparse surface for the napariViewLightsheet console script. The
+      flag set MUST stay in sync with ndi.fun.doc.lightsheet.viewCommand
+      in NDI-matlab: --pyramid, --reduction, --channel, --level,
+      --no-controls, --name, --list, --report. Kept in a separate
+      function so tests can inspect the parser without invoking main
+      and without importing napari.
+
+  - name: main
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/cli.py"
+    input_arguments:
+      - name: argv
+        type_python: Sequence[str] | None
+    output_arguments:
+      - name: exit_code
+        type_python: int
+    decision_log: >-
+      Console-script entry (declared as `napariViewLightsheet` in
+      [project.scripts]). Handles --list and --report without importing
+      napari or dask so those subcommands stay cheap on a headless box
+      -- napari is loaded only when a viewer is actually opened.
+      Returns an integer exit code so the wrapper can propagate failure.
+
+  - name: _open_session
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/cli.py"
+    decision_log: >-
+      Kept out of multiscale.py so --list and --report do not force a
+      napari import when they load the session. Deferred imports
+      (ndi.session.dir) matter here because a MATLAB-launched Python
+      inherits an ill-fitting LD_LIBRARY_PATH; every module we touch
+      before the first useful line is a candidate for a linker crash.
+
+  - name: _pyramids
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/cli.py"
+    decision_log: >-
+      One place that spells the isa("lightsheetZarrPyramid") query so
+      --list, --report and --pyramid resolution stay consistent.
+
+  - name: _pick_pyramid
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/cli.py"
+    decision_log: >-
+      Refusal-first: a session with two pyramids and no --pyramid does
+      not silently open the first one; it explains the situation and
+      points at --list. That mirrors the pyramid_id-is-required stance
+      in ndi.fun.doc.lightsheet.viewCommand.
+
+  - name: _resolve_reduction
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/cli.py"
+    decision_log: >-
+      --reduction swaps to the sibling pyramid with the same
+      subject_id + source_file_id but a different reduction. NDI
+      documents are immutable so mean/max are separate parents;
+      switching is a pyramid swap, not a doc edit.
+
+  - name: require_napari
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/viewer.py"
+    decision_log: >-
+      Local helper that re-raises napari's ImportError with the
+      `pip install 'ndi[napari]'` hint. Local (not from _qt_helpers)
+      so the failure names the exact extra the current app needs.
+
+  - name: openPyramid
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/viewer.py"
+    decision_log: >-
+      Thin: builds a layer spec via multiscale.layerSpec and adds it to
+      a napari.Viewer. Keeps the reduction/channel/level dock as a
+      no-op in this scaffold; the follow-up PR lands the magicgui
+      panels alongside without changing this signature.
+
+  - name: levelDocs
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/multiscale.py"
+    output_arguments:
+      - name: docs
+        type_python: list
+    decision_log: >-
+      Depends_on query for a pyramid's level children, sorted
+      finest-first. One place that spells the depends_on slot name so
+      levelTable and levelArrays stay in sync.
+
+  - name: levelTable
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/multiscale.py"
+    decision_log: >-
+      Metadata-only rows for --report and for choosing a level without
+      reading chunk bytes. Mirror of the MATLAB
+      ndi.fun.doc.lightsheet.levelTable.
+
+  - name: worldTransform
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/multiscale.py"
+    decision_log: >-
+      Napari applies `scale` and `translate` to the FINEST level of a
+      multiscale layer; coarser levels come out of the level
+      documents' own voxel_size/translation. Returns (scale, translate)
+      as plain lists so the caller can drop napari's Nones in when a
+      pyramid has no coordinate transform.
+
+  - name: levelArrays
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/multiscale.py"
+    output_arguments:
+      - name: arrays
+        type_python: list
+    decision_log: >-
+      One lazy dask array per level, backed by the level's
+      chunk.bin_# file series through the NDI cloud cache. Scaffold in
+      this PR: enumerates levels and reads metadata; the per-chunk
+      reader plus the dask.delayed assembly is the next step.
+
+  - name: layerSpec
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/multiscale.py"
+    output_arguments:
+      - name: spec
+        type_python: dict
+    decision_log: >-
+      Napari-consumable kwargs (`data`, `multiscale`, `name`, `scale`,
+      `translate`) for `viewer.add_image(**spec)`. Split from
+      openPyramid so a headless caller can build the ladder without a
+      display.
+
+  - name: _fetch_chunk
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/multiscale.py"
+    decision_log: >-
+      Reads one chunk file through session.database_openbinarydoc(
+      level_doc, 'chunk.bin_#') and returns raw bytes; the caller
+      decodes per the level's codec/dtype/chunk_order. Signature is
+      fixed so the follow-up dask block can drop it in without
+      changing levelArrays' call sites.

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# napariViewLightsheet - shell wrapper around the ndi.gui.app.lightsheetZarr.cli
+# console script.
+#
+# The MATLAB ndi.gui.app.LightsheetZarrManager shells out to this file at
+# /usr/local/bin/napariViewLightsheet. It exists so MATLAB's library
+# paths (LD_LIBRARY_PATH, DYLD_LIBRARY_PATH, DYLD_FALLBACK_LIBRARY_PATH)
+# do not leak into the Python process it starts -- MATLAB's copies of
+# libtiff, libcurl, etc. crash or subtly misbehave when loaded into a
+# non-MATLAB Python.
+#
+# Install (once, per box):
+#   sudo install -m 0755 scripts/napariViewLightsheet \
+#       /usr/local/bin/napariViewLightsheet
+#
+# Point NAPARI_VIEW_LIGHTSHEET_PYTHON at the interpreter (or venv python)
+# that has `ndi` and `ndi[napari]` installed; defaults to `python3` on
+# PATH.
+
+set -euo pipefail
+
+unset LD_LIBRARY_PATH DYLD_LIBRARY_PATH DYLD_FALLBACK_LIBRARY_PATH
+unset LD_PRELOAD DYLD_INSERT_LIBRARIES
+
+PYTHON_BIN="${NAPARI_VIEW_LIGHTSHEET_PYTHON:-python3}"
+exec "$PYTHON_BIN" -m ndi.gui.app.lightsheetZarr.cli "$@"
