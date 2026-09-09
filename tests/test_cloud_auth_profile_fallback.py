@@ -243,5 +243,133 @@ class TestProfileStage(_NoEnvMixin):
             self.assertEqual(_profile_stage(), "")
 
 
+def _expired_token(ago_seconds: int = 3600) -> str:
+    """A JWT whose exp claim is in the past."""
+
+    def seg(obj):
+        return base64.urlsafe_b64encode(json.dumps(obj).encode()).rstrip(b"=").decode()
+
+    return f"{seg({'alg': 'none'})}.{seg({'exp': int(time.time()) - ago_seconds})}.sig"
+
+
+class TestWhatTheFailureSays(_NoEnvMixin):
+    """Three quite different situations end at the same raise.
+
+    The reader of this message is usually looking at a FAILED FILE FETCH,
+    not at a login: a napari toast on a tile, one per tile, an hour into a
+    session that was working. "No valid token and no credentials
+    available" is equally true of never having logged in and of a token
+    that lapsed while the viewer was open, and those want opposite
+    responses -- so the message has to say which happened.
+    """
+
+    def _raised(self, config):
+        with (
+            mock.patch("ndi.cloud.profile.get_current", return_value=None),
+            mock.patch("ndi.cloud.profile.get_default", return_value=None),
+        ):
+            with self.assertRaises(CloudAuthError) as caught:
+                auth.authenticate(config)
+        return str(caught.exception)
+
+    def test_an_expired_token_is_named_as_expired(self):
+        """The one that reads as missing data if it is not said out loud:
+        the tile is there, the token lapsed."""
+        message = self._raised(CloudConfig(token=_expired_token(), org_id="org-1"))
+        self.assertIn("expired", message.lower())
+        self.assertNotIn("Not logged in", message)
+
+    def test_an_expired_token_says_when(self):
+        message = self._raised(CloudConfig(token=_expired_token(), org_id="org-1"))
+        self.assertIn("UTC", message)
+
+    def test_an_expired_token_says_another_shell_will_not_do(self):
+        """The token lives in os.environ, so logging in elsewhere does not
+        reach a process that is already running. Without that sentence the
+        obvious remedy looks like it did not work."""
+        message = self._raised(CloudConfig(token=_expired_token(), org_id="org-1"))
+        self.assertIn("another shell", message)
+        self.assertIn("start it again", message)
+
+    def test_no_token_at_all_says_so_instead(self):
+        message = self._raised(CloudConfig(token="", org_id=""))
+        self.assertIn("Not logged in", message)
+        self.assertNotIn("expired", message.lower().split("only until")[0])
+
+    def test_a_token_with_no_organization_is_its_own_case(self):
+        """Step 1 wants both. A token that passes the expiry check and is
+        still refused is otherwise indistinguishable from a bad password."""
+        message = self._raised(CloudConfig(token=_unexpired_token(), org_id=""))
+        self.assertIn("organization id", message)
+
+    def test_every_case_says_how_to_stop_it_happening_again(self):
+        """Credentials it can reach are the fix for all three: with them,
+        authenticate renews the token itself and step 1 stops mattering."""
+        for config in (
+            CloudConfig(token="", org_id=""),
+            CloudConfig(token=_expired_token(), org_id="org-1"),
+            CloudConfig(token=_unexpired_token(), org_id=""),
+        ):
+            message = self._raised(config)
+            self.assertIn("NDI_CLOUD_USERNAME", message)
+            self.assertIn("profile", message)
+
+
+class TestTheCredentialReport(_NoEnvMixin):
+    """One line instead of a bisection.
+
+    An authentication failure reaches most people through something else
+    -- a tile that will not load -- and from there it is hard to say where
+    the credentials were meant to come from. The report walks the same
+    three steps authenticate walks and names each.
+    """
+
+    def _report(self, profile_entry=None, password=""):
+        with (
+            mock.patch("ndi.cloud.profile.get_current", return_value=profile_entry),
+            mock.patch("ndi.cloud.profile.get_default", return_value=None),
+            mock.patch("ndi.cloud.profile.get_password", return_value=password),
+        ):
+            return auth.credentialReport()
+
+    def test_it_says_every_step_came_up_empty(self):
+        report = self._report()
+        self.assertIn("token in env   : no", report)
+        self.assertIn("username in env: no", report)
+        self.assertIn("profile        : none usable", report)
+        self.assertIn("FAILED", report)
+
+    def test_an_expired_token_is_reported_with_its_expiry(self):
+        os.environ["NDI_CLOUD_TOKEN"] = _expired_token()
+        report = self._report()
+        self.assertIn("token in env   : yes", report)
+        self.assertIn("EXPIRED", report)
+        self.assertIn("UTC", report)
+
+    def test_a_live_token_reads_as_valid(self):
+        os.environ["NDI_CLOUD_TOKEN"] = _unexpired_token()
+        os.environ["NDI_CLOUD_ORGANIZATION_ID"] = "org-1"
+        report = self._report()
+        self.assertIn("valid", report)
+        self.assertIn("authenticate   : ok", report)
+
+    def test_a_usable_profile_is_named(self):
+        entry = ProfileEntry(UID="u1", Email="a@example.com", Stage="prod")
+        with mock.patch.object(auth, "login", _login_spy()[0]):
+            report = self._report(profile_entry=entry, password="pw")
+        self.assertIn("profile        : a@example.com", report)
+
+    def test_it_never_prints_the_secret(self):
+        """It is meant to be pasted into a chat or an issue."""
+        token = _unexpired_token()
+        os.environ["NDI_CLOUD_TOKEN"] = token
+        os.environ["NDI_CLOUD_ORGANIZATION_ID"] = "org-1"
+        os.environ["NDI_CLOUD_USERNAME"] = "a@example.com"
+        os.environ["NDI_CLOUD_PASSWORD"] = "hunter2"
+        report = self._report()
+        self.assertNotIn(token, report)
+        self.assertNotIn("hunter2", report)
+
+
 if __name__ == "__main__":
     unittest.main()

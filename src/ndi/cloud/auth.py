@@ -22,6 +22,108 @@ from .exceptions import CloudAuthError
 
 logger = logging.getLogger(__name__)
 
+
+def credentialReport() -> str:
+    """What this process can and cannot authenticate with, as text.
+
+    An authentication failure reaches most people through something else
+    -- a tile that will not load, an API call that raises -- and from
+    there it is hard to tell WHERE the credentials were supposed to come
+    from. This walks the same three steps :func:`authenticate` walks and
+    reports each one, so the answer is a line rather than a bisection.
+
+    It answers, in particular, the question that a re-login does not: the
+    token lives in ``os.environ``, so it belongs to ONE PROCESS. Logging
+    in from a shell, or from MATLAB, leaves a separately launched viewer
+    exactly as unauthenticated as it was. Run this IN THE ENVIRONMENT THAT
+    FAILED, not in the one you logged in from.
+
+    Nothing here prints a password or a token; the token is reported as
+    present or absent and by its expiry, never by its value.
+
+    Returns:
+        A short multi-line report, safe to paste.
+    """
+    config = CloudConfig.from_env()
+    lines = [
+        f"api            : {config.api_url}",
+        f"token in env   : {'yes' if os.environ.get('NDI_CLOUD_TOKEN') else 'no'}",
+    ]
+    if config.token:
+        try:
+            expires = getTokenExpiration(config.token)
+            state = "EXPIRED" if isTokenExpired(config.token) else "valid"
+            lines.append(f"token          : {state}, exp {expires:%Y-%m-%d %H:%M UTC}")
+        except CloudAuthError as exc:
+            lines.append(f"token          : unreadable ({exc})")
+    lines.append(f"organization   : {config.org_id or '(none)'}")
+    lines.append(f"username in env: {'yes' if os.environ.get('NDI_CLOUD_USERNAME') else 'no'}")
+    email, password = _profile_credentials()
+    if email and password:
+        lines.append(f"profile        : {email}")
+    else:
+        lines.append("profile        : none usable")
+
+    # The verdict last, because it is what the reader came for, and it is
+    # the only line that can disagree with the ones above -- a credential
+    # that is present but wrong fails here and nowhere else.
+    try:
+        _token, org = authenticate(config)
+    except CloudAuthError as exc:
+        lines.append(f"authenticate   : FAILED -- {exc}")
+    else:
+        lines.append(f"authenticate   : ok (organization {org})")
+    return "\n".join(lines)
+
+
+def _noCredentialsMessage(config: CloudConfig) -> str:
+    """Say WHICH step of :func:`authenticate` came up empty.
+
+    Three quite different situations end at the same raise, and the reader
+    of the message is usually looking at a failed file fetch rather than at
+    a login: a token that expired while the process ran, a token that was
+    never set, or credentials that exist but did not resolve. Naming the
+    one that happened is the difference between "log back in and relaunch"
+    and "you have not set this up".
+
+    The remedy is the same sentence in every case, because it is the one
+    that also prevents the next occurrence: with a username and password
+    reachable, :func:`authenticate` renews an expired token by itself and
+    step 1 stops mattering.
+    """
+    fix = (
+        "Set NDI_CLOUD_USERNAME/NDI_CLOUD_PASSWORD, or save a default cloud "
+        "profile (ndi.cloud.profile.add(...) then set_default(...)), so the "
+        "token can be renewed without you. NDI_CLOUD_TOKEN alone works only "
+        "until it expires."
+    )
+    if not config.token:
+        return f"Not logged in to NDI Cloud: no token, no username/password, no profile. {fix}"
+
+    if isTokenExpired(config.token):
+        when = ""
+        try:
+            when = f" (it expired at {getTokenExpiration(config.token):%Y-%m-%d %H:%M UTC})"
+        except CloudAuthError:
+            when = " (its expiry could not be read, which counts as expired)"
+        # The token is held in os.environ, so a login in another shell does
+        # NOT reach a process that is already running -- which is exactly
+        # the shape of this failure when a viewer has been open a while.
+        return (
+            f"The NDI Cloud token has expired{when}, and there are no "
+            f"credentials to renew it with. A login in another shell will "
+            f"not reach this process: log in and start it again. "
+            f"{fix}"
+        )
+
+    # A token that is neither absent nor expired: step 1 wanted an org id
+    # too, and did not get one.
+    return (
+        "The NDI Cloud token is present and unexpired but carries no "
+        f"organization id, so it cannot be used. {fix}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # JWT helpers (no cryptographic verification — matches MATLAB behaviour)
 # ---------------------------------------------------------------------------
@@ -375,11 +477,14 @@ def authenticate(config: CloudConfig | None = None) -> tuple[str, str]:
         updated = login(email, password, config)
         return updated.token, updated.org_id
 
-    raise CloudAuthError(
-        "No valid token and no credentials available. Set NDI_CLOUD_TOKEN or "
-        "NDI_CLOUD_USERNAME/NDI_CLOUD_PASSWORD, or save a default cloud "
-        "profile (ndi.cloud.profile.add(...) then set_default(...))."
-    )
+    # WHICH OF THE THREE FAILED IS THE WHOLE DIAGNOSIS, and the old message
+    # ran them together. "No valid token and no credentials available" is
+    # true whether you never logged in or logged in two hours ago, and
+    # those want opposite responses -- and it lands where it is least
+    # legible: on a tile fetch, in a napari toast, one per tile, an hour
+    # into a session that was working. An EXPIRED token in particular is
+    # invisible from that sentence, so the tile reads as missing data.
+    raise CloudAuthError(_noCredentialsMessage(config))
 
 
 # ---------------------------------------------------------------------------

@@ -29,6 +29,7 @@ Requires the ``requests`` package.  Install with::
 from .auth import (
     authenticate,
     changePassword,
+    credentialReport,
     isTokenExpired,
     login,
     logout,
@@ -56,6 +57,7 @@ __all__ = [
     "CloudSyncError",
     "CloudUploadError",
     "authenticate",
+    "credentialReport",
     "isTokenExpired",
     "login",
     "logout",
