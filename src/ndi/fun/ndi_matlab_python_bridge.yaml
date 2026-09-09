@@ -2754,6 +2754,44 @@ functions:
       one level cannot collide), same existence check, same
       fetch-again-on-miss.
 
+  - name: tileFileName
+    matlab_path: "+ndi/+fun/+doc/+gene/tileFileName.m"
+    matlab_last_sync_hash: "33edeb22"
+    status: porting_deferred
+    decision_log: >
+      Added on NDI-matlab main in the spatial-genomics merge as one of the
+      three tile-suffix helpers (tileFileName, tileIndexFromName,
+      tileIndexOrigin) that honour DID's one-based file-series convention
+      while keeping older pyramids (that wrote tile.bin_0) readable.
+      Straight port -- returns 'tile.bin_<N>' where N is the zero-based
+      grid index plus the document's tile_index_origin. Deferred as a
+      group with tileIndexFromName / tileIndexOrigin, since none of the
+      current Python readers walk stored names to reconstruct grid
+      coordinates yet; when exportRegion or a Python readViewport lands
+      it will pull all three in together.
+
+  - name: tileIndexFromName
+    matlab_path: "+ndi/+fun/+doc/+gene/tileIndexFromName.m"
+    matlab_last_sync_hash: "33edeb22"
+    status: porting_deferred
+    decision_log: >
+      Inverse of tileFileName: extracts the zero-based grid index from a
+      stored 'tile.bin_<N>' name, subtracting the parent document's
+      tile_index_origin so a suffix written under the one-based convention
+      does not read as one cell along its row. Deferred with tileFileName
+      and tileIndexOrigin.
+
+  - name: tileIndexOrigin
+    matlab_path: "+ndi/+fun/+doc/+gene/tileIndexOrigin.m"
+    matlab_last_sync_hash: "33edeb22"
+    status: porting_deferred
+    decision_log: >
+      Returns 0 or 1 depending on whether the tiles document records a
+      tile_index_origin (new one-based DID convention) or none (older
+      pyramids whose first tile is tile.bin_0). A malformed or absent
+      value reads as 0 so a viewer does not fail part way through a layer.
+      Deferred with tileFileName and tileIndexFromName.
+
   - name: exportRegion
     matlab_path: "+ndi/+fun/+doc/+gene/exportRegion.m"
     matlab_last_sync_hash: "b9972abf1"
