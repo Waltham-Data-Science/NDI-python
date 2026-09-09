@@ -12,7 +12,7 @@ console script and any programmatic viewer both drive. It:
   documents.
 
 Chunk bytes go through the standard NDI cloud-cache path
-``session.database_openbinarydoc(level_doc, \"chunk.bin_#\") ->
+``session.database_openbinarydoc(level_doc, "chunk.bin_#") ->
 .fullpathfilename`` (same idiom as genepyramid.multiscale). That keeps
 lightsheet reads on the same HIPAA-compliant cloud API that the rest of
 the session uses; no separate zarr store or external URL is opened.
@@ -27,7 +27,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 # ---------------------------------------------------------------------------
 # depends_on / doc discovery
 
@@ -40,8 +39,10 @@ def levelDocs(session: Any, pyramid_doc: Any) -> list[Any]:
     """
     from ndi.query import ndi_query
 
-    q = ndi_query("").isa("lightsheetZarrLevel").depends_on(
-        "lightsheetZarrPyramid_id", pyramid_doc.id()
+    q = (
+        ndi_query("")
+        .isa("lightsheetZarrLevel")
+        .depends_on("lightsheetZarrPyramid_id", pyramid_doc.id())
     )
     docs = list(session.database_search(q))
     docs.sort(key=lambda d: int(d.document_properties["lightsheetZarrLevel"]["level"]))
@@ -120,9 +121,7 @@ def levelArrays(
     """
     docs = levelDocs(session, pyramid_doc)
     if not docs:
-        raise ValueError(
-            f"pyramid {pyramid_doc.id()!s} has no lightsheetZarrLevel children."
-        )
+        raise ValueError(f"pyramid {pyramid_doc.id()!s} has no lightsheetZarrLevel children.")
 
     _ = channel  # signature is stable while the chunk fetcher lands
     _ = _fetch_chunk  # keep the private helper reachable for the follow-up

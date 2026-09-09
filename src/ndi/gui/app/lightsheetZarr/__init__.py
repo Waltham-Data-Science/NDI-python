@@ -15,5 +15,6 @@ __all__ = ["levelArrays", "layerSpec", "worldTransform"]
 def __getattr__(name):
     if name in {"levelArrays", "layerSpec", "worldTransform"}:
         from ndi.gui.app.lightsheetZarr import multiscale
+
         return getattr(multiscale, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

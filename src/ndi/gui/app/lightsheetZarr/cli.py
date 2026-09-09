@@ -29,8 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "session",
-        help="Path to the ndi.session.dir on disk (or its cloud-cache "
-        "local mirror).",
+        help="Path to the ndi.session.dir on disk (or its cloud-cache " "local mirror).",
     )
     p.add_argument(
         "--pyramid",
@@ -76,8 +75,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--list",
         action="store_true",
-        help="Enumerate lightsheetZarrPyramid documents in the session "
-        "and exit (no napari).",
+        help="Enumerate lightsheetZarrPyramid documents in the session " "and exit (no napari).",
     )
     p.add_argument(
         "--report",
