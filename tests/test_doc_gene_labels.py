@@ -139,3 +139,72 @@ def test_several_labelings_coexist_on_one_segmentation(cells):
     assert leiden.dependency_value("cells_document_id") == cells_doc.id
     assert _props(atlas)["is_unsupervised"] == 0
     assert _props(leiden)["is_unsupervised"] == 1
+
+
+class _LFH:
+    def __init__(self, text):
+        self._t = text.encode("utf-8")
+
+    def read(self):
+        return self._t
+
+
+class _LDoc:
+    id = "labels-doc"
+
+    def __init__(self, n_cells=4, name="leiden", unsupervised=1):
+        self.document_properties = {
+            "cellTypeLabels": {
+                "label": "",
+                "label_name": name,
+                "taxonomy_level": "",
+                "n_cells": n_cells,
+                "n_categories": 2,
+                "n_unlabeled": 1,
+                "assignment_method": "",
+                "is_unsupervised": unsupervised,
+            }
+        }
+
+
+class _LSession:
+    def __init__(self, text):
+        self.text = text
+
+    def database_openbinarydoc(self, doc, name):
+        assert name == "labels.tsv"
+        return _LFH(self.text)
+
+    def database_closebinarydoc(self, fh):
+        pass
+
+
+def test_labels_are_placed_by_cell_index_not_file_order():
+    """The rows arrive shuffled; every label must still land on its cell."""
+    from ndi.fun.doc_gene import readCellTypeLabels
+
+    text = "cell_index\tlabel\n2\tB\n0\tA\n3\t\n1\tA\n"
+    labels, info = readCellTypeLabels(_LSession(text), _LDoc())
+    assert labels == ["A", "A", "B", ""]
+    assert info["categories"] == ["A", "B"]
+    assert info["nUnlabeled"] == 1
+    assert info["isUnsupervised"] is True
+    assert info["labelName"] == "leiden"
+
+
+def test_an_unlabelled_cell_is_empty_rather_than_dropped():
+    """Dropping it would shift every later cell onto the wrong label."""
+    from ndi.fun.doc_gene import readCellTypeLabels
+
+    text = "cell_index\tlabel\n0\tA\n1\t\n2\tB\n3\tB\n"
+    labels, _ = readCellTypeLabels(_LSession(text), _LDoc())
+    assert len(labels) == 4
+    assert labels[1] == ""
+
+
+def test_a_labels_file_with_the_wrong_header_is_refused():
+    from ndi.fun.doc_gene import readCellTypeLabels
+
+    text = "row\tvalue\n0\tA\n"
+    with pytest.raises(ValueError, match="expected cell_index and label"):
+        readCellTypeLabels(_LSession(text), _LDoc())

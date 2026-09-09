@@ -2690,18 +2690,45 @@ functions:
 
   - name: makePyramid
     matlab_path: "+ndi/+fun/+doc/+gene/makePyramid.m"
-    matlab_last_sync_hash: "6ae508708"
+    matlab_last_sync_hash: "38aa4e8fb"
     python_path: "ndi/fun/doc_gene.py"
     decision_log: >
       Exact match. Options keep their MATLAB spelling (binSizes, grid,
-      basePixelSize, subjectID). subjectID is REQUIRED on both sides: the
-      pyramid document declares subject_id mustbenotempty, because a
-      section is measured from an animal and NDI records that on the
-      measurement rather than leaving it to be inferred.
+      tileBudgetBytes, gridRange, basePixelSize, subjectID). subjectID is
+      REQUIRED on both sides: the pyramid document declares subject_id
+      mustbenotempty, because a section is measured from an animal and NDI
+      records that on the measurement rather than leaving it to be
+      inferred.
+
+      NDI-matlab 38aa4e8fb sized the tile grid from the data and built a level
+      one band of tile rows at a time; both are ported here. grid now
+      defaults to [] / None on both sides, because a grid is a fixed
+      FRACTION of the extent and the 9x9 that gives a mouse section 20 MB
+      tiles gave a real ferret hemisphere 257 MB ones. tileBudgetBytes
+      (50 MB) budgets the BIGGEST tile at the finest level rather than the
+      average one: tissue does not fill its bounding box and the densest
+      tile of a real section ran 2.5x the median. gridRange (3..64) bounds
+      it, the upper bound being a file COUNT limit -- grid**2 files per
+      level, all of them written, stored and uploaded.
+
+      The two languages reached the same place from different sides.
+      Python already sorted on a TILE-MAJOR key, so tile boundaries fell
+      out of the sorted order; MATLAB scanned every record against every
+      grid cell, which a data-sized grid makes untenable, so MATLAB
+      adopted the Python key. Both now also DECODE the tile, the pixel and
+      the gene back out of that key instead of carrying them alongside it,
+      and both build a level one band of tile rows at a time. Neither
+      changes a byte of what is written -- a tile is a contiguous
+      rectangle, so global row-major order inside it IS local row-major
+      order -- which the shared conformance tile still holds them to.
+
+      progressFcn(fraction, text) is on both, silent when not given. The
+      pyramid is the slow half of an ingest (951 s of a 971 s ferret
+      build) and reported only at its ends.
 
   - name: readViewport
     matlab_path: "+ndi/+fun/+doc/+gene/readViewport.m"
-    matlab_last_sync_hash: "b9972abf1"
+    matlab_last_sync_hash: "10687267a"
     python_path: "ndi/fun/doc_gene.py"
     input_arguments:
       - name: bin_size
@@ -2754,9 +2781,57 @@ functions:
       one level cannot collide), same existence check, same
       fetch-again-on-miss.
 
+  - name: tileFileName
+    matlab_path: "+ndi/+fun/+doc/+gene/tileFileName.m"
+    matlab_last_sync_hash: "10687267a"
+    python_path: "ndi/fun/doc_gene.py"
+    input_arguments:
+      - name: tiles_props
+        type_matlab: "struct"
+        type_python: "dict"
+      - name: index
+        type_python: "int"
+    output_arguments:
+      - name: name
+        type_python: "str"
+    decision_log: >
+      Exact match. The tile INDEX is zero-based on both sides -- it is a
+      grid position, and index_order defines it as row*tile_columns +
+      column, so it is internal data per the indexing_policy. The FILE
+      SUFFIX is one-based, because a DID file series names its first
+      member NAME_1 and addFileSeries rejects anything else. The
+      difference between the two is the document's tile_index_origin,
+      which this function adds.
+
+  - name: tileIndexFromName
+    matlab_path: "+ndi/+fun/+doc/+gene/tileIndexFromName.m"
+    matlab_last_sync_hash: "10687267a"
+    python_path: "ndi/fun/doc_gene.py"
+    decision_log: >
+      Exact match; the inverse of tileFileName, for readers that walk a
+      document's stored names and work back to (row, column).
+
+  - name: tileIndexOrigin
+    matlab_path: "+ndi/+fun/+doc/+gene/tileIndexOrigin.m"
+    matlab_last_sync_hash: "10687267a"
+    status: matlab_only
+    decision_log: >
+      Python needs nothing here, by design. The function reads an
+      optional numeric document field with a default, which in MATLAB
+      takes isfield, isnumeric and isscalar guards and so earns a name;
+      in Python it is one dict.get call from the standard library,
+      written inline in tileFileName and tileIndexFromName. That puts it
+      on the matlab_only side of the line rather than
+      ported_differently: the replacement is the language, not something
+      in this repo.
+
+      The BEHAVIOUR is mirrored and tested on both sides -- an absent,
+      empty, non-numeric or non-scalar tile_index_origin reads as 0,
+      which is the legacy zero-based tile naming.
+
   - name: exportRegion
     matlab_path: "+ndi/+fun/+doc/+gene/exportRegion.m"
-    matlab_last_sync_hash: "b9972abf1"
+    matlab_last_sync_hash: "10687267a"
     python_path: "ndi/fun/doc_gene.py"
     decision_log: >
       Exact match. Returns raw counts, never density.
@@ -2919,7 +2994,7 @@ functions:
 
   - name: makeCells
     matlab_path: "+ndi/+fun/+doc/+gene/makeCells.m"
-    matlab_last_sync_hash: "6ae508708"
+    matlab_last_sync_hash: "b589db9bb"
     python_path: "ndi/fun/doc_gene.py"
     decision_log: >
       Writes cells.tsv, optionally contours.bin, and stores the document.
@@ -2971,11 +3046,11 @@ functions:
   # =======================================================================
   # +ndi/+fun/+doc/+gene -- spatial-transcriptomics ingest additions
   #
-  # A group of MATLAB functions that lift the .gef / .h5ad ingest path out
-  # of ndi.gui.app.GeneIngest so a script, a batch importer or a Python
-  # caller can drive it without opening the GUI (VH-Lab/NDI-matlab
-  # PR #933). The four recorded here have no Python counterpart yet:
-  # ndi.gui.app.GeneIngest itself is not ported either (see the entry in
+  # A group of five MATLAB functions that lift the .gef / .h5ad ingest
+  # path out of ndi.gui.app.GEFManager so a script, a batch importer or a
+  # Python caller can drive it without opening the GUI (VH-Lab/NDI-matlab
+  # PR #933). None of the five has a Python counterpart yet:
+  # ndi.gui.app.GEFManager itself is not ported either (see the entry in
   # src/ndi/gui/app/ndi_matlab_python_bridge.yaml), and the ingest path
   # only becomes reachable from Python once the GUI class or a
   # non-interactive equivalent lands. The tile / cell / pyramid readers
@@ -2994,7 +3069,7 @@ functions:
 
   - name: fromCellBin
     matlab_path: "+ndi/+fun/+doc/+gene/fromCellBin.m"
-    matlab_last_sync_hash: "6ae5087"
+    matlab_last_sync_hash: "b589db9bb"
     status: porting_deferred
     decision_log: >
       MATLAB reads a SAW cellbin .h5ad with
@@ -3005,9 +3080,13 @@ functions:
       about row order. Ports as a group with the other three entries
       under this heading; no current Python caller.
 
+      NDI-matlab b589db9bb changed one line of the help text --
+      recordSource now says it creates a fileReference rather than a
+      generic_file, following makeSourceFile. Comment only; no
+      behavioural change, and nothing to port here.
   - name: fromGEF
     matlab_path: "+ndi/+fun/+doc/+gene/fromGEF.m"
-    matlab_last_sync_hash: "a178e46"
+    matlab_last_sync_hash: "38aa4e8fb"
     status: porting_deferred
     decision_log: >
       MATLAB reads a Stereo-seq .gef with ndr.format.stereoseq.readGEF
@@ -3016,16 +3095,38 @@ functions:
       path in one call. Ports with the other three entries under this
       heading.
 
+      NDI-matlab b589db9bb changed three lines of the help text: two
+      naming ndi.gui.app.GeneIngest, which was renamed GEFManager, and
+      one saying recordSource creates a fileReference rather than a
+      generic_file, following makeSourceFile. Comments only; no
+      behavioural change, and nothing to port here.
+
+      NDI-matlab 38aa4e8fb stopped promoting the reader's int32/uint16 records
+      to double before calling makePyramid -- 32 bytes a record held for
+      the whole build where 14 does, 14 GB on a 7.7e8-record section --
+      and hands makePyramid a progressFcn scaled onto the last 30% of its
+      own. Both belong to the deferred port, not to doc_gene.py.
   - name: makeSourceFile
     matlab_path: "+ndi/+fun/+doc/+gene/makeSourceFile.m"
-    matlab_last_sync_hash: "6ae5087"
+    matlab_last_sync_hash: "b589db9bb"
     status: porting_deferred
     decision_log: >
-      MATLAB creates the generic_file document that the spatial gene
-      expression documents' source_file_id dependency points at, so a
-      pyramid can name the .gef it was built from. Describes by default
-      (name + checksum + dates), attaches only when attachFile=true.
-      Ports with the other three entries under this heading.
+      MATLAB creates the document that the spatial gene expression
+      documents' source_file_id dependency points at, so a pyramid can
+      name the .gef it was built from.
+
+      WHICH document changed, in NDI-matlab b589db9bb. Describing a file the
+      database does not hold is now a fileReference -- a new class with no
+      files section at all -- and only attachFile=true produces a
+      generic_file with the bytes attached. The old shape was a
+      generic_file with nothing attached, which is invalid, since
+      generic_file requires generic_file.ext; nothing enforced it until
+      DID-matlab #182 closed a fail-open, at which point adding such a
+      session to a dataset failed at the add rather than at the write
+      that made it.
+
+      Ports with the other three entries under this heading. A Python
+      port must create a fileReference, not a generic_file.
 
   - name: readNotes
     matlab_path: "+ndi/+fun/+doc/+gene/readNotes.m"

@@ -193,8 +193,117 @@ def _write_secrets_file(filename: Path, payload: dict) -> None:
     _write_owner_only(filename, json.dumps(payload, indent=2))
 
 
+def _as_profile_list(raw) -> list:
+    """MATLAB writes ONE profile as an object, not an array of one.
+
+    ``jsonencode`` of a 1x1 struct produces ``{...}`` and of a 1xN struct
+    array produces ``[{...}, ...]``, so NDI-matlab's profiles file has a
+    different shape for its `Profiles` field depending on how many
+    profiles the user has. MATLAB's own reader has normalizeProfiles for
+    exactly this; this is its counterpart.
+
+    Without it, a single-profile file -- which is what every new user
+    has, having just made their first -- was iterated as a list, yielding
+    the dict's KEYS, every one of which failed the isinstance(dict) check
+    and was skipped. The result was zero profiles and no error: the file
+    was found, parsed, and silently read as empty.
+    """
+    if isinstance(raw, dict):
+        return [raw]
+    if isinstance(raw, list):
+        return raw
+    return []
+
+
+# MATLAB's reserved words, for the last rule of makeValidName. NDI's own
+# secret keys ("NDI Cloud <uid>") can never collide with one, but a port that
+# implements four of five rules is a trap for whoever ports the fifth.
+_MATLAB_KEYWORDS = frozenset(
+    {
+        "break",
+        "case",
+        "catch",
+        "classdef",
+        "continue",
+        "else",
+        "elseif",
+        "end",
+        "for",
+        "function",
+        "global",
+        "if",
+        "otherwise",
+        "parfor",
+        "persistent",
+        "return",
+        "spmd",
+        "switch",
+        "try",
+        "while",
+    }
+)
+
+# MATLAB's namelengthmax.
+_MATLAB_NAMELENGTHMAX = 63
+
+
+def _make_valid_name(name: str) -> str:
+    """Port of MATLAB ``makeValidName(name, 'ReplacementStyle', 'underscore')``.
+
+    NDI-matlab's profile.m runs every secret key through this before using
+    it as a struct field, because that is what reading the secrets file
+    back through ``jsondecode`` requires -- a JSON key has to become a
+    valid MATLAB identifier. Python has no such constraint, but it has to
+    produce the SAME name or it cannot read the file MATLAB wrote.
+
+    The rule that matters, and the one a reasonable guess gets wrong:
+    whitespace is **deleted** and the following letter capitalised, not
+    replaced. So ``"NDI Cloud 41269..."`` becomes ``NDICloud41269...``,
+    not ``NDI_Cloud_41269...``.
+    """
+    if not name:
+        return "x"
+
+    # 1. Whitespace is deleted; the next alphabetic character is capitalised.
+    chars: list[str] = []
+    capitalize_next = False
+    for ch in name:
+        if ch.isspace():
+            capitalize_next = True
+            continue
+        if capitalize_next and ch.isalpha():
+            ch = ch.upper()
+        capitalize_next = False
+        chars.append(ch)
+    out = "".join(chars)
+
+    # 2. Anything left that is not an ASCII alphanumeric or an underscore
+    #    becomes one underscore each (ReplacementStyle 'underscore').
+    out = "".join(c if (c.isascii() and c.isalnum()) or c == "_" else "_" for c in out)
+
+    # 3. A name must begin with a letter.
+    if not out or not (out[0].isascii() and out[0].isalpha()):
+        out = "x" + out
+
+    # 4. A name must not BE a keyword.
+    if out in _MATLAB_KEYWORDS:
+        out += "_"
+
+    # 5. namelengthmax.
+    return out[:_MATLAB_NAMELENGTHMAX]
+
+
 def _safe_field(name: str) -> str:
-    """Map a secret key to a JSON-safe field name."""
+    """Map a secret key to the field name NDI-matlab uses for it."""
+    return _make_valid_name(name)
+
+
+def _legacy_safe_field(name: str) -> str:
+    """The field name THIS module used to write, before the MATLAB port.
+
+    Reads fall back to it so a password saved by an older NDI-python is
+    still found. Nothing writes it any more.
+    """
     return name.replace(" ", "_").replace(":", "_")
 
 
@@ -280,7 +389,7 @@ class _ProfileSingleton:
         except (ValueError, OSError) as exc:
             logger.warning("Could not load cloud profiles from %s: %s", self.filename, exc)
             return
-        raw = data.get("Profiles") or []
+        raw = _as_profile_list(data.get("Profiles"))
         self.profiles = []
         for item in raw:
             if not isinstance(item, dict):
@@ -360,6 +469,9 @@ class _ProfileSingleton:
         elif self.backend == "aes":
             store = _read_secrets_file(self.secrets_filename)
             store[_safe_field(key)] = _aes_encrypt(value)
+            # Drop any entry under the name this module used to write, so a
+            # stale copy of a changed password cannot be read back later.
+            store.pop(_legacy_safe_field(key), None)
             _write_secrets_file(self.secrets_filename, store)
         else:  # memory
             self._memory_store[key] = value
@@ -375,6 +487,10 @@ class _ProfileSingleton:
         if self.backend == "aes":
             store = _read_secrets_file(self.secrets_filename)
             entry = store.get(_safe_field(key))
+            if entry is None:
+                # A password written by an older NDI-python is under the old
+                # name. Still readable; the next write moves it across.
+                entry = store.get(_legacy_safe_field(key))
             if entry is None:
                 raise KeyError(f'No secret stored for "{key}".')
             return _aes_decrypt(entry)
@@ -393,6 +509,7 @@ class _ProfileSingleton:
         elif self.backend == "aes":
             store = _read_secrets_file(self.secrets_filename)
             store.pop(_safe_field(key), None)
+            store.pop(_legacy_safe_field(key), None)
             _write_secrets_file(self.secrets_filename, store)
         else:
             self._memory_store.pop(key, None)
@@ -597,9 +714,23 @@ def reload() -> None:
 
 
 def reset() -> None:
-    """Clear the in-memory singleton state.  Does NOT touch disk."""
+    """Clear the in-memory singleton state.  Does NOT touch disk.
+
+    THIS INCLUDES A FORCED BACKEND. :func:`use_backend` is a test hook and
+    the override it sets is in-memory singleton state like any other, so
+    reset returns it to :func:`_detect_backend`.
+
+    Leaving it out let the memory backend outlive the tests that selected
+    it: the singleton lives for the whole process, so a test run left
+    every later :func:`set_password` writing to a dict that is discarded
+    at exit -- with no error, and with :func:`get_password` returning the
+    value it had just stored, so it looked as though the password had
+    been saved. NDI-matlab had the same hole and the same symptom; see
+    ndi.cloud.profile.reset there.
+    """
     obj = _get_singleton()
     obj.profiles = []
     obj.current_uid = ""
     obj.default_uid = ""
     obj._memory_store = {}
+    obj.backend = _detect_backend()

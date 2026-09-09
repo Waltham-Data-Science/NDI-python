@@ -28,9 +28,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from .doc_gene import _find_level, exportRegion, readTileFile
+from .doc_gene import _find_level, exportRegion, readTileFile, tileIndexFromName
 
-__all__ = ["exportGef", "exportHdf5", "readGeneList"]
+__all__ = ["exportGef", "exportHdf5", "readGeneList", "readGeneTotals"]
 
 
 def readGeneList(session, pyr_doc):
@@ -77,6 +77,60 @@ def readGeneList(session, pyr_doc):
     return ids, names
 
 
+def readGeneTotals(session, pyr_doc):
+    """Reads per gene row for THIS pyramid, from ``gene_totals.tsv``.
+
+    Totals belong to the pyramid rather than to the geneList because they
+    are a property of the counts: several datasets may share one gene
+    list, and they do not share its totals.
+
+    OLDER PYRAMIDS DO NOT HAVE THIS FILE. It is returned as None rather
+    than as zeros, because a gene with no reads and a gene whose reads
+    were never recorded are different things and a caller that cannot
+    tell them apart would draw an abundance distribution out of nothing.
+
+    Args:
+        session: an ndi.session or ndi.dataset.
+        pyr_doc: a spatialGeneExpressionPyramid document.
+
+    Returns:
+        ``(totals, nRecords)``, both int64 arrays with one entry per gene
+        row in zero-based order, or ``(None, None)`` when the pyramid
+        carries no totals. *nRecords* is how many stored records the gene
+        appears in, which is not the same as its reads.
+    """
+    try:
+        stored = set(pyr_doc.current_file_list())
+    except Exception:
+        stored = set()
+    if "gene_totals.tsv" not in stored:
+        return None, None
+
+    fh = session.database_openbinarydoc(pyr_doc, "gene_totals.tsv")
+    if fh is None:
+        return None, None
+    try:
+        text = fh.read().decode("utf-8")
+    finally:
+        session.database_closebinarydoc(fh)
+
+    rows = [ln for ln in text.splitlines() if ln.strip()]
+    totals, records = [], []
+    for line in rows[1:]:
+        f = line.split("\t")
+        # gene_index is written explicitly and is zero-based; asserting it
+        # is what stops a reordered file from putting one gene's totals on
+        # another gene, which every later number would inherit silently.
+        if int(f[0]) != len(totals):
+            raise ValueError(
+                f"gene_totals.tsv row {len(totals)} declares gene_index "
+                f"{f[0]}; the file is out of order or not zero-based"
+            )
+        totals.append(int(f[1]))
+        records.append(int(f[2]) if len(f) > 2 else 0)
+    return np.asarray(totals, np.int64), np.asarray(records, np.int64)
+
+
 def _gather(session, pyr_doc, bin_size):
     """Every stored record of one level, in SOURCE coordinates.
 
@@ -92,8 +146,7 @@ def _gather(session, pyr_doc, bin_size):
 
     xs, ys, gs, cs = [], [], [], []
     for name in sorted(tile_doc.current_file_list(), key=lambda s: int(s.rsplit("_", 1)[1])):
-        t_id = int(name.rsplit("_", 1)[1])
-        tr, tc = divmod(t_id, cols)
+        tr, tc = divmod(tileIndexFromName(lv, name), cols)
         fh = session.database_openbinarydoc(tile_doc, name)
         try:
             t = readTileFile(fh)

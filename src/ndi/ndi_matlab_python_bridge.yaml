@@ -1155,7 +1155,7 @@ classes:
   - name: preferences
     type: class
     matlab_path: "+ndi/preferences.m"
-    matlab_last_sync_hash: "9a9150e7c"
+    matlab_last_sync_hash: "362060795"
     python_path: "ndi/preferences.py"
     python_class: "ndi_preferences"
     inherits: ""
