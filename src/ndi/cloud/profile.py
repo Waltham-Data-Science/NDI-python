@@ -184,6 +184,28 @@ def _write_secrets_file(filename: Path, payload: dict) -> None:
         pass
 
 
+def _as_profile_list(raw) -> list:
+    """MATLAB writes ONE profile as an object, not an array of one.
+
+    ``jsonencode`` of a 1x1 struct produces ``{...}`` and of a 1xN struct
+    array produces ``[{...}, ...]``, so NDI-matlab's profiles file has a
+    different shape for its `Profiles` field depending on how many
+    profiles the user has. MATLAB's own reader has normalizeProfiles for
+    exactly this; this is its counterpart.
+
+    Without it, a single-profile file -- which is what every new user
+    has, having just made their first -- was iterated as a list, yielding
+    the dict's KEYS, every one of which failed the isinstance(dict) check
+    and was skipped. The result was zero profiles and no error: the file
+    was found, parsed, and silently read as empty.
+    """
+    if isinstance(raw, dict):
+        return [raw]
+    if isinstance(raw, list):
+        return raw
+    return []
+
+
 def _safe_field(name: str) -> str:
     """Map a secret key to a JSON-safe field name."""
     return name.replace(" ", "_").replace(":", "_")
@@ -271,7 +293,7 @@ class _ProfileSingleton:
         except (ValueError, OSError) as exc:
             logger.warning("Could not load cloud profiles from %s: %s", self.filename, exc)
             return
-        raw = data.get("Profiles") or []
+        raw = _as_profile_list(data.get("Profiles"))
         self.profiles = []
         for item in raw:
             if not isinstance(item, dict):
