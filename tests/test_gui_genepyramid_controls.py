@@ -256,6 +256,7 @@ def test_the_chosen_labelings_reach_the_cell_type_panel(monkeypatch):
     monkeypatch.setattr(controls, "addDisplayPanel", _Recorder())
     monkeypatch.setattr(controls, "addCellTypePanel", cells)
     monkeypatch.setattr(controls, "addGenePanel", _Recorder())
+    monkeypatch.setattr(controls, "addRotationPanel", _Recorder())
 
     controls.addAllPanels(
         object(),
@@ -284,6 +285,7 @@ def test_a_panel_that_throws_does_not_take_the_window_with_it(monkeypatch, capsy
     monkeypatch.setattr(controls, "addDisplayPanel", _Recorder(boom=True))
     monkeypatch.setattr(controls, "addCellTypePanel", _Recorder())
     monkeypatch.setattr(controls, "addGenePanel", genes)
+    monkeypatch.setattr(controls, "addRotationPanel", _Recorder())
 
     made = controls.addAllPanels(object(), object(), object(), object(), True)
 
@@ -309,6 +311,7 @@ def test_no_qt_binding_costs_the_panels_and_not_the_picture(monkeypatch, capsys)
     built = _Recorder()
     monkeypatch.setattr(controls, "addDisplayPanel", built)
     monkeypatch.setattr(controls, "addGenePanel", built)
+    monkeypatch.setattr(controls, "addRotationPanel", _Recorder())
 
     made = controls.addAllPanels(object(), object(), object(), object(), True)
 
@@ -317,3 +320,48 @@ def test_no_qt_binding_costs_the_panels_and_not_the_picture(monkeypatch, capsys)
     err = capsys.readouterr().err
     assert "control panels unavailable" in err
     assert "image is unaffected" in err
+
+
+def test_the_rotation_panel_gets_all_three_layers(monkeypatch):
+    """Rotation turns the section, the centroids and the outlines
+    TOGETHER, so it has to be handed all three. Handing it fewer would
+    leave the cells behind when the image turned -- a wrong picture that
+    still looks like a picture."""
+    monkeypatch.setattr(controls, "_importQtWidgets", lambda: None)
+    rotation = _Recorder()
+    monkeypatch.setattr(controls, "addDisplayPanel", _Recorder())
+    monkeypatch.setattr(controls, "addCellTypePanel", _Recorder())
+    monkeypatch.setattr(controls, "addGenePanel", _Recorder())
+    monkeypatch.setattr(controls, "addRotationPanel", rotation)
+
+    image, points, shapes = object(), object(), object()
+    controls.addAllPanels(
+        object(),
+        object(),
+        object(),
+        image,
+        True,
+        cells_doc=object(),
+        points_layer=points,
+        shapes_layer=shapes,
+    )
+    assert rotation.calls, "the rotation panel was never built"
+    args, _kwargs = rotation.calls[0]
+    assert set(map(id, args[1])) == {id(image), id(shapes), id(points)}
+
+
+def test_a_session_with_no_cells_still_gets_rotation(monkeypatch):
+    """Outlines and centroids are optional. The panel takes None for the
+    ones that are absent rather than being skipped, because the image
+    alone is still worth being able to turn."""
+    monkeypatch.setattr(controls, "_importQtWidgets", lambda: None)
+    rotation = _Recorder()
+    monkeypatch.setattr(controls, "addDisplayPanel", _Recorder())
+    monkeypatch.setattr(controls, "addCellTypePanel", _Recorder())
+    monkeypatch.setattr(controls, "addGenePanel", _Recorder())
+    monkeypatch.setattr(controls, "addRotationPanel", rotation)
+
+    made = controls.addAllPanels(object(), object(), object(), object(), True)
+    assert made["rotation"] is not None
+    args, _kwargs = rotation.calls[0]
+    assert args[1][1] is None and args[1][2] is None

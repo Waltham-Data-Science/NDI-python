@@ -985,6 +985,202 @@ def addCellTypePanel(
 # ----------------------------------------------------------------- all
 
 
+def rotationAffine(angle_deg, center):
+    """A 3x3 homogeneous affine rotating ``(row, col)`` about ``center``.
+
+    Pure, and separate from the panel, because the thing most likely to be
+    wrong here is the SIGN and the PIVOT, and neither needs a display to
+    check.
+
+    napari layer coordinates are ``(row, col)`` with row increasing
+    DOWNWARD -- the pyramid records ``origin_corner: upper-left`` and the
+    viewer honours it. The two sign flips that come from that cancel, so
+    the matrix is the ordinary one and a positive angle turns the section
+    ANTICLOCKWISE on screen. Checked rather than reasoned about: a point
+    to the right of the pivot lands above it at +90 degrees.
+
+    Args:
+        angle_deg: rotation in degrees, positive anticlockwise on screen.
+        center: ``(row, col)`` pivot in WORLD coordinates -- the same space
+            ``viewer.camera.center`` reports, which is what makes "rotate
+            about what I am looking at" expressible.
+
+    Returns:
+        ``numpy.ndarray`` of shape (3, 3), suitable for ``layer.affine``.
+    """
+    import numpy as np
+
+    t = np.deg2rad(float(angle_deg))
+    c, s = np.cos(t), np.sin(t)
+    r = np.array([[c, -s], [s, c]], float)
+    # A = T(center) . R . T(-center), so the offset is center - R @ center:
+    # the pivot is the one point the rotation leaves alone.
+    cy, cx = float(center[0]), float(center[1])
+    offset = np.array([cy, cx]) - r @ np.array([cy, cx])
+    a = np.eye(3)
+    a[:2, :2] = r
+    a[:2, 2] = offset
+    return a
+
+
+def rotationCenter(viewer):
+    """The current view centre as ``(row, col)`` in world coordinates.
+
+    ``viewer.camera.center`` is reported as ``(z, y, x)`` even for 2D data,
+    where z is 0, so the last two entries are the ones that mean anything
+    here. Taking the LAST two rather than indexing 1 and 2 keeps this
+    right if a 2-tuple is ever handed back instead.
+    """
+    c = tuple(float(v) for v in viewer.camera.center)
+    if len(c) < 2:
+        raise ValueError(f"camera centre has no row/column to read: {c!r}")
+    return (c[-2], c[-1])
+
+
+def applyRotation(layers, angle_deg, center):
+    """Put ONE shared affine on every layer, so they turn together.
+
+    napari applies ``affine`` after each layer's own scale and translate,
+    so the same matrix means the same world-space rotation on all of them
+    even though the image ladder, the centroids and the outlines arrive in
+    different units. That is the whole reason this is one matrix rather
+    than a rotation per layer: the section, the cells and their outlines
+    are one picture, and a control that could slide them apart would be a
+    control that can produce a wrong picture.
+
+    ``None`` entries are skipped -- outlines and centroids are optional and
+    a session without them is the normal case, not an error.
+
+    Returns:
+        The affine that was applied.
+    """
+    a = rotationAffine(angle_deg, center)
+    for layer in layers:
+        if layer is None:
+            continue
+        layer.affine = a
+    return a
+
+
+def addRotationPanel(viewer, layers) -> Any:
+    """A slider and a box for turning the whole picture.
+
+    Sections are not mounted square, and a reader lining one up against an
+    atlas plate or a companion section wants an arbitrary angle rather than
+    the 90-degree steps napari offers on the canvas.
+
+    THE PIVOT IS TAKEN WHEN THE INTERACTION STARTS, not on every tick.
+    Rotating the layers does not move the camera, so re-reading the view
+    centre mid-drag would usually give the same answer -- but "usually" is
+    the problem: pan during a drag and the picture would jump as the pivot
+    moved under it. Captured once per interaction, a drag is a drag.
+
+    The angle is ABSOLUTE, not accumulated: every change rebuilds the
+    affine from zero, so the picture cannot drift out of square through
+    repeated small adjustments the way an incremental compose would.
+    """
+    from qtpy.QtCore import Qt
+    from qtpy.QtWidgets import (
+        QDoubleSpinBox,
+        QHBoxLayout,
+        QLabel,
+        QPushButton,
+        QSlider,
+        QVBoxLayout,
+        QWidget,
+    )
+
+    box = QWidget()
+    outer = QVBoxLayout(box)
+    outer.addWidget(QLabel("Rotation"))
+
+    slider = QSlider(Qt.Horizontal)
+    slider.setMinimum(-180)
+    slider.setMaximum(180)
+    slider.setValue(0)
+    spin = QDoubleSpinBox()
+    spin.setRange(-180.0, 180.0)
+    spin.setDecimals(1)
+    spin.setSingleStep(0.5)
+    spin.setSuffix(" deg")
+    reset = QPushButton("Reset")
+
+    why = (
+        "Turns the image, the centroids and the outlines together, about\n"
+        "the centre of the current view. Positive is anticlockwise.\n"
+        "The pivot is taken when you start moving the control, so panning\n"
+        "between adjustments re-centres it."
+    )
+    for w in (slider, spin):
+        w.setToolTip(why)
+
+    status = QLabel("0.0 deg")
+    status.setWordWrap(True)
+
+    # One-element lists rather than nonlocal: these are read and written
+    # from several nested callbacks and a mutable holder keeps them in one
+    # place instead of scattering `nonlocal` declarations.
+    pivot = [None]
+    guard = [False]
+
+    def _pivot():
+        if pivot[0] is None:
+            pivot[0] = rotationCenter(viewer)
+        return pivot[0]
+
+    def _apply(angle):
+        try:
+            applyRotation(layers, angle, _pivot())
+        except Exception as e:  # noqa: BLE001 - a control never costs the picture
+            status.setText(f"failed: {e}")
+            return
+        status.setText(f"{angle:.1f} deg")
+
+    def _sync(angle, source):
+        # The slider and the box show the same number, so each has to move
+        # the other -- and setting a widget's value emits its own signal,
+        # which would come straight back here. The guard makes the pair one
+        # control rather than two that argue.
+        if guard[0]:
+            return
+        guard[0] = True
+        try:
+            if source is not slider:
+                slider.setValue(int(round(angle)))
+            if source is not spin:
+                spin.setValue(float(angle))
+            _apply(float(angle))
+        finally:
+            guard[0] = False
+
+    def _release():
+        # Interaction over: the next one re-reads the view centre.
+        pivot[0] = None
+
+    slider.sliderPressed.connect(lambda: pivot[0] or _pivot())
+    slider.sliderReleased.connect(_release)
+    slider.valueChanged.connect(lambda v: _sync(v, slider))
+    spin.editingFinished.connect(lambda: (_sync(spin.value(), spin), _release()))
+
+    def _reset():
+        pivot[0] = None
+        _sync(0.0, None)
+        pivot[0] = None
+
+    reset.clicked.connect(_reset)
+
+    row = QHBoxLayout()
+    row.addWidget(slider, 1)
+    row.addWidget(spin)
+    row.addWidget(reset)
+    outer.addLayout(row)
+    outer.addWidget(status)
+    outer.addStretch()
+
+    viewer.window.add_dock_widget(box, name="Rotation", area="right")
+    return box
+
+
 def _importQtWidgets() -> None:
     """Import qtpy.QtWidgets, or raise ImportError.
 
@@ -1059,6 +1255,13 @@ def addAllPanels(
     made = {}
     made["display"] = _build(
         "display", lambda: addDisplayPanel(viewer, session, pyr_doc, image_layer, density)
+    )
+    # Rotation sits with the other whole-picture controls, above the ones
+    # that choose WHAT is drawn: it changes how the section is presented,
+    # not which genes or cells are in it.
+    made["rotation"] = _build(
+        "rotation",
+        lambda: addRotationPanel(viewer, [image_layer, shapes_layer, points_layer]),
     )
     if cells_doc is not None and points_layer is not None:
         made["cellTypes"] = _build(
