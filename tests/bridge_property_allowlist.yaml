@@ -1,0 +1,342 @@
+# Public-property burn-down list -- every line here is an IOU, not a rule.
+#
+# tests/test_matlab_bridge_properties.py gates one thing: a property MATLAB
+# declares public (GetAccess public and not Hidden) must be reachable under
+# that name on the Python counterpart the bridge entry points at. The entries
+# below already violated that on the day the gate went up, per NDI-python#295.
+#
+# THE GATE IS ON FOR EVERYTHING ELSE. A gap not listed here fails immediately,
+# so no NEW silently-private property can enter. This file is the pre-existing
+# divergence, enumerated so it can be counted and burnt down rather than
+# sitting invisible -- which is the whole failure mode #295 is about, since a
+# missing public name raises nothing. Callers write
+# `getattr(obj, "path", None)`, take the None branch, and the symptom surfaces
+# somewhere else entirely.
+#
+# WHAT WAS FIXED INSTEAD OF LISTED, in the same PR -- seven properties whose
+# value the Python class already held privately, each now a one-line property
+# beside the private attribute (the attribute was NOT renamed):
+#
+#     ndi_dataset_dir.path            <- _path            the #295 bug itself
+#     ndi_database.path               <- session_path
+#     ndi_preferences.Items           <- _items
+#     ndi_time_clocktype.type         <- Enum .value
+#     ndi_time_timereference.session_ID <- _session_id     differed only in case
+#     ndi_daq_system.daqmetadatareader  <- _daqmetadatareaders
+#     ndi_daq_daqsystemstring.channeltype / .channellist <- channels
+#
+# That is the shape to prefer. Reach for this file only when the value is not
+# there to expose, or when exposing it under MATLAB's name would misrepresent
+# what the Python object is.
+#
+# TO BURN ONE DOWN: add the public name to the Python class -- a property
+# returning the existing private attribute is additive and cannot break a
+# caller -- then DELETE the line from this file. A shrinking file is the
+# progress metric.
+#
+# THIS FILE CANNOT ROT. TestThePropertyAllowlistOnlyShrinks fails if a listed
+# property is now exposed, so a fixed entry MUST be removed here in the same
+# PR. The list can only shrink; nothing can be added without a deliberate edit
+# that a reviewer sees, and every entry must carry a reason -- a bare exemption
+# teaches the next reader nothing, which is the hole #295 was about.
+#
+# WHERE ELSE THIS IS WRITTEN DOWN. Each affected class's entry in its
+# ndi_matlab_python_bridge.yaml carries a decision_log paragraph saying that it
+# diverges and why, and pointing here -- so a reader who starts from the bridge
+# file finds the answer rather than a hole. The per-property reason lives HERE
+# and only here: the gate reads this file, so the two cannot drift apart.
+
+not_exposed:
+
+  # -------------------------------------------------------------------------
+  # Constants classes that chose PEP 8 names.
+  #
+  # These hold no per-instance state to expose: MATLAB declares them
+  # `properties (Constant)` and Python declares the same values as class
+  # attributes in UPPER_SNAKE_CASE. The value is present and correct under a
+  # different spelling, so this is a naming divergence rather than a hole --
+  # but it is a divergence from the repo's "Strict MATLAB Mirror" naming
+  # policy and belongs on the record either way.
+  # -------------------------------------------------------------------------
+  - python_class: CrossrefConstants
+    property: DOIPrefix
+    reason: >
+      Present as DOI_PREFIX. ndi.cloud.admin.crossref.Constants is a
+      Constant-properties bag; the Python port spells its class constants
+      UPPER_SNAKE per PEP 8.
+  - python_class: CrossrefConstants
+    property: DatabaseURL
+    reason: "Present as DATABASE_URL. See CrossrefConstants.DOIPrefix."
+  - python_class: CrossrefConstants
+    property: DatabaseDOI
+    reason: "Present as DATABASE_DOI. See CrossrefConstants.DOIPrefix."
+  - python_class: CrossrefConstants
+    property: DatabaseTitle
+    reason: "Present as DATABASE_TITLE. See CrossrefConstants.DOIPrefix."
+  - python_class: CrossrefConstants
+    property: NDIDatasetBaseURL
+    reason: "Present as DATASET_BASE_URL. See CrossrefConstants.DOIPrefix."
+  - python_class: CrossrefConstants
+    property: DatabaseDescription
+    reason: >
+      Not ported at all, not merely renamed. The Python deposit builder writes
+      the description from the dataset's own metadata rather than a fixed
+      database-level string, so there is no constant to expose.
+  - python_class: CrossrefConstants
+    property: DatabaseOrganization
+    reason: >
+      Not ported at all. Same reason as CrossrefConstants.DatabaseDescription.
+  - python_class: CrossrefConstants
+    property: DatabaseCreationDate
+    reason: >
+      Not ported at all. Same reason as CrossrefConstants.DatabaseDescription.
+
+  # -------------------------------------------------------------------------
+  # ndi.common.PathConstants: a different API shape, not a different spelling.
+  #
+  # MATLAB resolves each path once, at class-load time, into a Constant
+  # property. The Python port resolves lazily through classmethods so a test
+  # or an NDI_ROOT override can move the tree after import -- MATLAB's
+  # Constants cannot be re-evaluated, and this port needs them to be. Exposing
+  # the MATLAB names as class attributes would force eager resolution at
+  # import time and undo that, so the divergence is deliberate and structural.
+  # -------------------------------------------------------------------------
+  - python_class: ndi_common_PathConstants
+    property: RootFolder
+    reason: >
+      Lazily resolved. Python resolves paths through classmethods so an
+      NDI_ROOT override or a test fixture can move the tree after import;
+      MATLAB's Constant properties are fixed at class load.
+  - python_class: ndi_common_PathConstants
+    property: CommonFolder
+    reason: "Lazily resolved. See ndi_common_PathConstants.RootFolder."
+  - python_class: ndi_common_PathConstants
+    property: DocumentFolder
+    reason: "Lazily resolved. See ndi_common_PathConstants.RootFolder."
+  - python_class: ndi_common_PathConstants
+    property: DocumentSchemaFolder
+    reason: "Lazily resolved. See ndi_common_PathConstants.RootFolder."
+  - python_class: ndi_common_PathConstants
+    property: ExampleDataFolder
+    reason: "Lazily resolved. See ndi_common_PathConstants.RootFolder."
+  - python_class: ndi_common_PathConstants
+    property: TempFolder
+    reason: "Lazily resolved. See ndi_common_PathConstants.RootFolder."
+  - python_class: ndi_common_PathConstants
+    property: TestFolder
+    reason: "Lazily resolved. See ndi_common_PathConstants.RootFolder."
+  - python_class: ndi_common_PathConstants
+    property: FileCacheFolder
+    reason: "Lazily resolved. See ndi_common_PathConstants.RootFolder."
+  - python_class: ndi_common_PathConstants
+    property: LogFolder
+    reason: "Lazily resolved. See ndi_common_PathConstants.RootFolder."
+  - python_class: ndi_common_PathConstants
+    property: Preferences
+    reason: "Lazily resolved. See ndi_common_PathConstants.RootFolder."
+  - python_class: ndi_common_PathConstants
+    property: CalcDoc
+    reason: "Lazily resolved. See ndi_common_PathConstants.RootFolder."
+  - python_class: ndi_common_PathConstants
+    property: CalcDocSchema
+    reason: "Lazily resolved. See ndi_common_PathConstants.RootFolder."
+
+  # -------------------------------------------------------------------------
+  # ndi.cloud.sync
+  # -------------------------------------------------------------------------
+  - python_class: SyncOptions
+    property: SyncFiles
+    reason: >
+      Present as sync_files. SyncOptions is a plain dataclass of keyword
+      options that Python callers construct with keyword arguments, so its
+      fields carry PEP 8 names; MATLAB's SetGet mixin requires the CamelCase
+      spelling and Python has no equivalent constraint.
+  - python_class: SyncOptions
+    property: Verbose
+    reason: "Present as verbose. See SyncOptions.SyncFiles."
+  - python_class: SyncOptions
+    property: DryRun
+    reason: "Present as dry_run. See SyncOptions.SyncFiles."
+  - python_class: SyncOptions
+    property: FileUploadStrategy
+    reason: "Present as file_upload_strategy. See SyncOptions.SyncFiles."
+  - python_class: SyncMode
+    property: Function
+    reason: >
+      No counterpart, deliberately. MATLAB binds a function_handle to each
+      enumeration member so SyncMode.execute can dispatch through it. The
+      Python SyncMode is a plain str-valued Enum and dispatch lives in the
+      sync entry point, which keeps the enum importable without pulling in
+      every sync implementation.
+
+  # -------------------------------------------------------------------------
+  # ndi.database
+  # -------------------------------------------------------------------------
+  - python_class: ndi_database
+    property: session_unique_reference
+    reason: >
+      No value to expose. MATLAB's ndi.database carries the session's
+      reference string alongside its path; the Python ndi_database is
+      constructed from a path alone and never learns a reference -- the
+      reference lives on ndi_session, which exposes it publicly. Exposing an
+      always-None attribute here would be worse than its absence, since that
+      is precisely the None branch #295 is about.
+
+  # -------------------------------------------------------------------------
+  # ndi.gui -- MATLAB uicontrol/uifigure handles.
+  #
+  # The Python GUI is Qt (and napari), not MATLAB HG. Where a MATLAB property
+  # holds a VALUE these ports already mirror its name -- Value, Size,
+  # Location, Title, UpdateInterval, Tag, Progress, State all pass this gate
+  # -- and the entries below are the ones that hold a MATLAB graphics handle
+  # or a MATLAB-drawing setting. A Qt port has no handle of that kind to put
+  # behind the name, and a QProgressBar draws its own percent text and border,
+  # so mirroring these names would mean inventing objects to satisfy a check.
+  # -------------------------------------------------------------------------
+  - python_class: ndi_gui_Data
+    property: name
+    reason: >
+      MATLAB uicontrol handle for the detail panel's name text. The Qt port
+      owns the label as a private QLabel (_name_label) and sets its text
+      through its own methods.
+  - python_class: ndi_gui_Data
+    property: info
+    reason: >
+      MATLAB uicontrol handle for the detail panel's info text. See
+      ndi_gui_Data.name.
+  - python_class: ndi_gui_Lab
+    property: panelImage
+    reason: "MATLAB graphics handle; the Qt port owns its own widgets."
+  - python_class: ndi_gui_Lab
+    property: back
+    reason: "MATLAB graphics handle; the Qt port owns its own widgets."
+  - python_class: ndi_gui_Lab
+    property: zIn
+    reason: "MATLAB graphics handle; the Qt port owns its own widgets."
+  - python_class: ndi_gui_Lab
+    property: zOut
+    reason: "MATLAB graphics handle; the Qt port owns its own widgets."
+  - python_class: ndi_gui_Lab
+    property: editBox
+    reason: "MATLAB graphics handle; the Qt port owns its own widgets."
+  - python_class: ndi_gui_Lab
+    property: editTxt
+    reason: "MATLAB graphics handle; the Qt port owns its own widgets."
+  - python_class: ndi_gui_Lab
+    property: wires
+    reason: >
+      Internal drawing state, kept private as _wires because it is the Qt
+      port's own representation rather than MATLAB's line handles.
+  - python_class: ndi_gui_Lab
+    property: row
+    reason: "Internal layout state, kept private as _row. See ndi_gui_Lab.wires."
+  - python_class: ndi_gui_component_abstract_ProgressMonitor
+    property: ProgressTracker
+    reason: >
+      Not held as a property. MATLAB stores the tracker on the monitor and
+      wires listeners to it; the Python monitors subscribe through
+      set_progress_tracker and keep no public handle to the tracker.
+  - python_class: ndi_gui_component_abstract_ProgressMonitor
+    property: RemainingTimeFormat
+    reason: >
+      Not ported. The Python monitors format elapsed and remaining time with a
+      fixed h:mm:ss rendering rather than a caller-settable MATLAB duration
+      format string.
+  - python_class: ndi_gui_component_NDIProgressBar
+    property: Message
+    reason: >
+      Held privately as _message_text and written through updateMessage,
+      because the Qt label is the source of truth once the widget exists;
+      MATLAB re-reads the property on every redraw.
+  - python_class: ndi_gui_component_NDIProgressBar
+    property: ShowPercent
+    reason: >
+      Not ported. QProgressBar draws its own percentage (setTextVisible), so
+      there is no NDI-side toggle to expose.
+  - python_class: ndi_gui_component_NDIProgressBar
+    property: Text
+    reason: >
+      Not ported. MATLAB paints the bar's caption itself into a Textbox; the
+      Qt port lets the widget render its own text.
+  - python_class: ndi_gui_component_NDIProgressBar
+    property: BorderWidth
+    reason: >
+      Not ported. The Qt port sets its border in a stylesheet rather than
+      exposing a width for MATLAB's hand-drawn axes.
+  - python_class: ndi_gui_component_ProgressBarWindow
+    property: Silent
+    reason: >
+      Not ported. MATLAB suppresses the window when it cannot open a figure;
+      the Qt port raises at construction if Qt is unavailable, so there is no
+      silent mode to configure.
+  - python_class: ndi_gui_component_ProgressBarWindow
+    property: ProgressFigure
+    reason: "MATLAB uifigure handle; the Qt port owns its own QWidget."
+  - python_class: ndi_gui_component_ProgressBarWindow
+    property: ProgressGrid
+    reason: "MATLAB uigridlayout handle; the Qt port owns its own layout."
+  - python_class: ndi_gui_component_ProgressBarWindow
+    property: ProgressBars
+    reason: >
+      Kept private as _bars: the list holds Qt widgets rather than MATLAB bar
+      objects, so exposing it under MATLAB's name would hand callers a
+      different kind of thing than they expect.
+
+  # -------------------------------------------------------------------------
+  # ndi.gui.app.spikeSorterImporter -- widget handles, snake_cased.
+  #
+  # Listed one per line rather than waived as a layer, because the value IS
+  # there under a PEP 8 name in every case but waitDlg: this is the port's
+  # naming choice for widget attributes, and enumerating it is what lets it be
+  # counted. The other ten +ndi/+gui/+app classes already pass this gate.
+  # -------------------------------------------------------------------------
+  - python_class: spikeSorterImporter
+    property: fig
+    reason: >
+      Present as figure. The Qt port spells its widget attributes in PEP 8;
+      MATLAB app properties are CamelCase handles.
+  - python_class: spikeSorterImporter
+    property: probeDropdown
+    reason: "Present as probe_dropdown. See spikeSorterImporter.fig."
+  - python_class: spikeSorterImporter
+    property: sessionList
+    reason: "Present as session_list. See spikeSorterImporter.fig."
+  - python_class: spikeSorterImporter
+    property: pipelineList
+    reason: "Present as pipeline_list. See spikeSorterImporter.fig."
+  - python_class: spikeSorterImporter
+    property: tagList
+    reason: "Present as tag_list. See spikeSorterImporter.fig."
+  - python_class: spikeSorterImporter
+    property: overwriteCheckbox
+    reason: "Present as overwrite_checkbox. See spikeSorterImporter.fig."
+  - python_class: spikeSorterImporter
+    property: recalcCheckbox
+    reason: "Present as recalc_checkbox. See spikeSorterImporter.fig."
+  - python_class: spikeSorterImporter
+    property: waveformT0Field
+    reason: "Present as waveform_t0_field. See spikeSorterImporter.fig."
+  - python_class: spikeSorterImporter
+    property: waveformT1Field
+    reason: "Present as waveform_t1_field. See spikeSorterImporter.fig."
+  - python_class: spikeSorterImporter
+    property: pipelineSelector
+    reason: "Present as pipeline_selector. See spikeSorterImporter.fig."
+  - python_class: spikeSorterImporter
+    property: filterCheckbox
+    reason: "Present as filter_checkbox. See spikeSorterImporter.fig."
+  - python_class: spikeSorterImporter
+    property: binaryStatusLabel
+    reason: "Present as binary_status_label. See spikeSorterImporter.fig."
+  - python_class: spikeSorterImporter
+    property: sessionEntries
+    reason: "Present as session_entries. See spikeSorterImporter.fig."
+  - python_class: spikeSorterImporter
+    property: pipelineInfo
+    reason: "Present as pipeline_info. See spikeSorterImporter.fig."
+  - python_class: spikeSorterImporter
+    property: waitDlg
+    reason: >
+      Not ported. MATLAB holds a modal uiprogressdlg handle for the duration
+      of an import; the Qt port drives its progress through the shared
+      progress-monitor components instead of owning a dialog handle.

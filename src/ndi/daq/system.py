@@ -284,6 +284,19 @@ class ndi_daq_system(ndi_ido):
         return self._daqmetadatareaders
 
     @property
+    def daqmetadatareader(self) -> list[Any]:
+        """The metadata readers associated with this DAQ system.
+
+        MATLAB counterpart: ``ndi.daq.system``'s public
+        ``daqmetadatareader`` property -- singular in name, a cell array in
+        content. The other three in that block (``name``, ``filenavigator``,
+        ``daqreader``) already match; this one was reachable only under the
+        pluralised Python name. An alias for :attr:`daqmetadatareaders`,
+        which stays the name the port uses. See #295.
+        """
+        return self._daqmetadatareaders
+
+    @property
     def session(self) -> Any:
         """Get the session from the file navigator."""
         if self._filenavigator is not None:

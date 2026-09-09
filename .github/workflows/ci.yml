@@ -107,6 +107,15 @@ jobs:
           NDI_BRIDGE_CHECK_STRICT: "1"
         run: pytest tests/test_matlab_bridge_hashes.py -v --tb=short
 
+      - name: Check public MATLAB properties are public in Python
+        working-directory: NDI-python
+        env:
+          # Both repos are checked out above, so an absent MATLAB tree means
+          # the checkout step broke. Fail instead of skipping -- a check that
+          # could not run must not report a pass (see #77).
+          NDI_BRIDGE_CHECK_STRICT: "1"
+        run: pytest tests/test_matlab_bridge_properties.py -v --tb=short
+
       - name: Check every python_path resolves
         working-directory: NDI-python
         env:

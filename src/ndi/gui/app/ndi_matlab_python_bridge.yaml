@@ -687,6 +687,14 @@ classes:
       ndi.fun.ensemble reads -- so it is what gives ndi.gui.app.ensembleMaker
       something to build an ensemble from.
 
+      NDI-python#295: the MATLAB properties this port does not expose under
+      MATLAB's name are enumerated in tests/bridge_property_allowlist.yaml,
+      with a reason each. They are MATLAB graphics handles or MATLAB-drawing
+      settings that a Qt port has nothing to put behind, plus widget
+      attributes spelled in PEP 8. Every MATLAB property that holds a VALUE
+      -- Value, Size, Location, Title, UpdateInterval, Tag, Progress, State --
+      does carry MATLAB's name here and is checked by the property gate.
+
     properties:
       - name: Name
         type_matlab: "string (Constant)"

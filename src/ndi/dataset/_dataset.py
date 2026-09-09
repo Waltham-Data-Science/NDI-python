@@ -1328,6 +1328,27 @@ class ndi_dataset_dir(ndi_dataset):
         # datasets that don't yet have session_in_a_dataset tracking).
         self._ensure_session_tracking()
 
+    @property
+    def path(self) -> Path:
+        """The directory this dataset lives in.
+
+        MATLAB counterpart: ``ndi.dataset.dir``'s public ``path`` property
+        (``GetAccess=public, SetAccess=protected``), declared since the class
+        was written.
+
+        Public because callers reopen an object at its own path without
+        knowing which class it is -- ``ndi.gui.app.genepyramid``'s tile
+        fetcher builds a per-thread handle from ``getattr(obj, "path", None)``
+        and ``ndi.session.dir`` answers it. While this was ``_path`` only, a
+        dataset gave that fetcher nothing to reopen, and the failure surfaced
+        three layers away as "Cannot fetch 'tile.bin_262' from thread
+        ThreadPoolExecutor-1_0" rather than as a missing attribute. See #295.
+
+        Read-only, matching MATLAB's protected setter: the path is fixed when
+        the dataset is opened. ``_path`` stays the internal name.
+        """
+        return self._path
+
     @staticmethod
     def _must_not_be_session(path: Path) -> None:
         """Raise if *path* holds a standalone session rather than a dataset.
