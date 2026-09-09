@@ -22,6 +22,7 @@ import pytest
 from ndi.gui.app.genepyramid import controls
 from ndi.gui.app.genepyramid.controls import (
     applyGeneAppearance,
+    applySolo,
     contrastWindow,
     geneLayers,
     geneName,
@@ -32,10 +33,11 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 
 class _Layer:
-    def __init__(self, name, limits=(0.0, 100.0), gamma=1.0):
+    def __init__(self, name, limits=(0.0, 100.0), gamma=1.0, visible=True):
         self.name = name
         self.contrast_limits = list(limits)
         self.gamma = gamma
+        self.visible = visible
 
 
 class _Event:
@@ -498,3 +500,154 @@ class TestTheTour:
         _viewer, _base, _genes, _app, panel = tourOf()
         timers = panel.findChildren(core.QTimer)
         assert timers and all(t.parent() is panel for t in timers)
+
+
+class TestSoloing:
+    def test_it_shows_one_and_hides_the_rest(self):
+        viewer, _base, genes = _section()
+        assert applySolo(geneLayers(viewer), "gene: PVALB") == 3
+        assert [g.visible for g in genes] == [False, True, False]
+
+    def test_none_shows_them_all_again(self):
+        viewer, _base, genes = _section()
+        applySolo(geneLayers(viewer), "gene: PVALB")
+        applySolo(geneLayers(viewer), None)
+        assert all(g.visible for g in genes)
+
+    def test_the_base_layer_is_never_hidden(self):
+        """A lone gene on black has nothing to be read against -- the
+        anatomy underneath is the whole reason the picture means
+        something."""
+        viewer, base, _genes = _section()
+        applySolo(geneLayers(viewer), "gene: SST")
+        assert base.visible
+
+    def test_a_layer_that_refuses_does_not_stop_the_others(self):
+        class _Awkward(_Layer):
+            _armed = False
+
+            def __setattr__(self, name, value):
+                if name == "visible" and self._armed:
+                    raise RuntimeError("no")
+                object.__setattr__(self, name, value)
+
+        viewer, _base, genes = _section()
+        awkward = _Awkward("gene: BAD")
+        awkward._armed = True
+        viewer.layers.append(awkward)
+        assert applySolo(geneLayers(viewer), "gene: SST") == 3
+        assert genes[0].visible and not genes[1].visible
+
+
+class TestTheSoloTour:
+    def test_it_shows_the_genes_one_at_a_time(self, qt, tourOf):
+        viewer, _base, genes, _app, panel = tourOf()
+        panel._ndi_toggle("solo")
+        assert [g.visible for g in genes] == [True, False, False]
+        _advance(panel, 5.0)
+        assert [g.visible for g in genes] == [False, True, False]
+        assert viewer.text_overlay.text == "PVALB"
+        _advance(panel, 5.0)
+        assert [g.visible for g in genes] == [False, False, True]
+
+    def test_the_base_layer_stays_up_throughout(self, qt, tourOf):
+        _viewer, base, _genes, _app, panel = tourOf()
+        panel._ndi_toggle("solo")
+        for _ in range(3):
+            assert base.visible
+            _advance(panel, 5.0)
+        assert base.visible
+
+    def test_it_leaves_the_gammas_alone(self, qt, tourOf):
+        """This mode answers a different question, and moving both at
+        once would make it impossible to say which did what."""
+        _viewer, _base, genes, _app, panel = tourOf()
+        panel._ndi_toggle("solo")
+        _advance(panel, 2.5)
+        assert all(g.gamma == pytest.approx(1.0) for g in genes)
+
+    def test_finishing_shows_every_gene_again(self, qt, tourOf):
+        viewer, _base, genes, _app, panel = tourOf()
+        panel._ndi_toggle("solo")
+        _advance(panel, 16.0)
+        assert all(g.visible for g in genes)
+        assert not panel._ndi_tour["on"]
+        assert not viewer.text_overlay.visible
+
+    def test_stopping_halfway_shows_every_gene_again(self, qt, tourOf):
+        """Five of six genes left hidden is a worse state than the tour
+        started in."""
+        _viewer, _base, genes, _app, panel = tourOf()
+        panel._ndi_toggle("solo")
+        _advance(panel, 7.0)
+        panel._ndi_toggle("solo")
+        assert all(g.visible for g in genes)
+
+    def test_a_gene_hidden_by_hand_stays_hidden_afterwards(self, qt, tourOf):
+        """It restores what WAS, not all-on. A reader who turned a gene
+        off did that on purpose, and a tour is not a request to undo
+        it."""
+        _viewer, _base, genes, _app, panel = tourOf()
+        genes[2].visible = False
+        panel._ndi_toggle("solo")
+        _advance(panel, 16.0)
+        assert genes[0].visible and genes[1].visible
+        assert not genes[2].visible
+
+    def test_a_gene_unticked_mid_tour_is_skipped(self, qt, tourOf):
+        viewer, _base, genes, _app, panel = tourOf()
+        panel._ndi_toggle("solo")
+        _advance(panel, 0.5)
+        viewer.layers.drop(genes[0])
+        _advance(panel, 0.5)
+        assert viewer.text_overlay.text == "PVALB"
+
+    def test_it_says_so_with_nothing_to_tour(self, qt):
+        viewer = _Viewer(_Layer("All genes"))
+        panel = controls.addGeneTourPanel(viewer)
+        panel._ndi_toggle("solo")
+        said = " ".join(lbl.text() for lbl in panel.findChildren(qt.QLabel))
+        assert "No gene layers" in said
+        assert not panel._ndi_tour["on"]
+
+
+class TestTheTwoModesDoNotOverlap:
+    def test_starting_solo_stops_a_running_pulse_and_restores_it(self, qt, tourOf):
+        _viewer, _base, genes, _app, panel = tourOf()
+        panel._ndi_toggle("pulse")
+        _advance(panel, 0.5)
+        assert genes[0].gamma < 0.05
+        panel._ndi_toggle("solo")
+        assert panel._ndi_tour["mode"] == "solo"
+        # The gamma the pulse was mid-sweep on has to be put back before
+        # the other mode takes over, or it stays stranded all tour.
+        assert genes[0].gamma == pytest.approx(1.0)
+
+    def test_starting_pulse_stops_a_running_solo_and_unhides(self, qt, tourOf):
+        _viewer, _base, genes, _app, panel = tourOf()
+        panel._ndi_toggle("solo")
+        assert not genes[1].visible
+        panel._ndi_toggle("pulse")
+        assert panel._ndi_tour["mode"] == "pulse"
+        assert all(g.visible for g in genes)
+
+    def test_clicking_the_running_mode_again_stops_it(self, qt, tourOf):
+        _viewer, _base, _genes, _app, panel = tourOf()
+        panel._ndi_toggle("solo")
+        panel._ndi_toggle("solo")
+        assert not panel._ndi_tour["on"]
+        assert panel._ndi_tour["mode"] == ""
+
+    def test_each_mode_has_its_own_button(self, qt, tourOf):
+        _viewer, _base, _genes, _app, panel = tourOf()
+        labels = [b.text() for b in panel.findChildren(qt.QPushButton)]
+        assert len(labels) == 2
+        assert any("Pulse" in t for t in labels)
+        assert any("one gene at a time" in t for t in labels)
+
+    def test_the_running_mode_s_button_says_stop(self, qt, tourOf):
+        _viewer, _base, _genes, _app, panel = tourOf()
+        panel._ndi_toggle("solo")
+        labels = [b.text() for b in panel.findChildren(qt.QPushButton)]
+        assert "Stop" in labels
+        assert any("Pulse" in t for t in labels)

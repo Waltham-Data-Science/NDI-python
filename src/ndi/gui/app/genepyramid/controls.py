@@ -38,6 +38,7 @@ __all__ = [
     "contrastWindow",
     "pulseGamma",
     "applyGeneAppearance",
+    "applySolo",
     "addGeneAppearancePanel",
     "addGeneTourPanel",
     "blurLevels",
@@ -1755,6 +1756,33 @@ def saveCloudProfile(email: str, password: str) -> None:
     profile.set_default(uid)
 
 
+def applySolo(layers, current) -> int:
+    """Show one gene layer and hide the rest.
+
+    *current* is the layer NAME to show, or None to show them all --
+    which is what restoring looks like when nothing was hidden to begin
+    with.
+
+    The base section and the cell overlays are not in *layers* and so
+    are never hidden. That is the point of showing one gene at a time
+    rather than one layer at a time: the anatomy has to stay under it,
+    or a lone gene floats on black and there is nothing to read it
+    against.
+
+    Returns:
+        How many layers were changed. One that refuses is skipped rather
+        than allowed to stop the rest.
+    """
+    done = 0
+    for layer in layers:
+        try:
+            layer.visible = True if current is None else str(layer.name) == str(current)
+        except Exception:  # noqa: BLE001 - see docstring
+            continue
+        done += 1
+    return done
+
+
 def addGeneAppearancePanel(viewer) -> Any:
     """One contrast and one gamma across every gene layer at once.
 
@@ -1923,22 +1951,37 @@ def addGeneAppearancePanel(viewer) -> Any:
 
 
 def addGeneTourPanel(viewer, appearance=None, interval_ms: int = 50) -> Any:
-    """One button that walks the gene layers, pulsing each in turn.
+    """Two ways of walking the gene layers, five seconds each.
 
     Showing someone six genes means saying which is which, and a legend
     of six colours against a section this dense is a legend nobody can
-    read. So the picture says it instead: one gene at a time is pulsed
-    -- its gamma swept down and back, once a second for five seconds --
-    while its name stands in the corner of the canvas.
+    read. So the picture says it instead, one gene at a time, with its
+    name standing in the corner of the canvas.
 
-    NOTHING BLOCKS. The sweep is a timer stepping a small state machine,
+    TWO MODES, because they answer different questions.
+
+    PULSE leaves every gene on screen and sweeps one gene's gamma down
+    and back, once a second. Everything stays in view, so it answers
+    "where is THIS one, among the others" -- the comparison is the
+    point, and the sweep is the pointer.
+
+    SOLO hides the others outright. It answers "what does this one look
+    like, by itself", which additive blending otherwise makes hard: six
+    layers over each other are a colour nobody can decompose by eye.
+    The base section is NOT hidden, or a lone gene would float on black
+    with nothing to read it against.
+
+    NOTHING BLOCKS. Both are one timer stepping a small state machine,
     not a loop with sleeps in it, so the viewer stays live throughout: a
     tour can be stopped mid-gene, and panning while it runs works.
 
-    WHAT IT TOUCHES IT PUTS BACK. Each layer's gamma is recorded when the
-    tour reaches it and restored when it leaves, so stopping halfway --
-    or closing the window mid-sweep -- cannot leave a gene stuck at a
-    gamma nobody chose.
+    WHAT IT TOUCHES IT PUTS BACK. Gammas for the pulse, visibility for
+    the solo -- recorded when the tour starts and restored when it ends,
+    however it ends. Stopping halfway must not leave a gene stranded at
+    a gamma nobody chose, or leave five of six genes hidden.
+
+    ONE AT A TIME. Starting either mode stops the other first, so the
+    two can never both be moving the same layers.
 
     Args:
         appearance: the gene-appearance panel, if there is one. Its
@@ -1956,12 +1999,23 @@ def addGeneTourPanel(viewer, appearance=None, interval_ms: int = 50) -> Any:
     box = QWidget()
     outer = QVBoxLayout(box)
 
-    play = QPushButton("Play gene tour")
+    play = QPushButton("Pulse each gene")
     play.setToolTip(
-        "Pulses each gene layer in turn for five seconds, naming it on\n"
-        "the canvas. Click again to stop; every gamma is put back."
+        "Leaves every gene on screen and sweeps one gene's gamma down and\n"
+        "back, once a second for five seconds, naming it on the canvas.\n"
+        'Answers "where is this one, among the others". Click again to\n'
+        "stop; every gamma is put back."
+    )
+    solo = QPushButton("Show one gene at a time")
+    solo.setToolTip(
+        "Hides the other genes and shows one for five seconds, naming it\n"
+        'on the canvas. Answers "what does this one look like by\n'
+        'itself", which additive blending otherwise makes hard. The\n'
+        "section underneath stays visible. Click again to stop; every\n"
+        "layer is shown again."
     )
     outer.addWidget(play)
+    outer.addWidget(solo)
 
     status = QLabel("")
     status.setWordWrap(True)
@@ -1974,7 +2028,7 @@ def addGeneTourPanel(viewer, appearance=None, interval_ms: int = 50) -> Any:
     # boundary would fall a frame early or late depending on the
     # interval, which is the kind of bug that only shows up on somebody
     # else's machine. Multiplying an integer is exact.
-    tour = {"on": False, "order": [], "i": 0, "n": 0, "base": 1.0}
+    tour = {"on": False, "mode": "", "order": [], "i": 0, "n": 0, "base": 1.0, "shown": {}}
     steps_per_gene = max(1, int(round(seconds_per_gene * 1000 / interval_ms)))
 
     def _baseGamma() -> float:
@@ -2018,17 +2072,29 @@ def addGeneTourPanel(viewer, appearance=None, interval_ms: int = 50) -> Any:
             pass
 
     def _stop(message=""):
-        if tour["order"] and 0 <= tour["i"] < len(tour["order"]):
-            _restore(tour["order"][tour["i"]])
         # Every gene, not only the one in hand: an earlier one whose
         # restore was missed because its layer was briefly gone would
         # otherwise stay where the sweep left it.
-        for name in tour["order"]:
-            _restore(name)
-        tour.update(on=False, order=[], i=0, n=0)
+        if tour["mode"] == "pulse":
+            for name in tour["order"]:
+                _restore(name)
+        elif tour["mode"] == "solo":
+            # Back to what each layer's visibility WAS, not to all-on: a
+            # gene the reader had already hidden by hand should stay
+            # hidden, and a tour is not a request to change that.
+            for name, was in tour["shown"].items():
+                layer = _layer(name)
+                if layer is None:
+                    continue
+                try:
+                    layer.visible = bool(was)
+                except Exception:  # noqa: BLE001 - a control never costs the picture
+                    pass
+        tour.update(on=False, mode="", order=[], i=0, n=0, shown={})
         timer.stop()
         _overlay("", visible=False)
-        play.setText("Play gene tour")
+        play.setText("Pulse each gene")
+        solo.setText("Show one gene at a time")
         status.setText(message)
 
     def _step():
@@ -2047,8 +2113,12 @@ def addGeneTourPanel(viewer, appearance=None, interval_ms: int = 50) -> Any:
         layer = _layer(name)
         if layer is None:
             # Unticked while the tour was on it. Move along rather than
-            # spending five seconds pulsing something that is not there.
+            # spending five seconds on something that is not there.
             tour["n"] = steps_per_gene - 1
+            return
+        if tour["mode"] != "pulse":
+            # Solo changes nothing between gene boundaries -- the switch
+            # happens once, in _announce. The clock still has to run.
             return
         try:
             elapsed = tour["n"] * interval_ms / 1000.0
@@ -2058,6 +2128,8 @@ def addGeneTourPanel(viewer, appearance=None, interval_ms: int = 50) -> Any:
 
     def _announce():
         name = tour["order"][tour["i"]]
+        if tour["mode"] == "solo":
+            applySolo(geneLayers(viewer), name)
         _overlay(geneName(_layer(name)) if _layer(name) is not None else geneName(name))
         status.setText(f"{tour['i'] + 1} of {len(tour['order'])}")
 
@@ -2065,20 +2137,31 @@ def addGeneTourPanel(viewer, appearance=None, interval_ms: int = 50) -> Any:
     timer.setInterval(interval_ms)
     timer.timeout.connect(_step)
 
-    def _toggle():
+    def _toggle(mode="pulse"):
+        # Clicking the running mode's button stops it; clicking the other
+        # one switches, which means stopping first so the layers it was
+        # moving are put back before the next mode records them.
+        was = tour["mode"]
         if tour["on"]:
             _stop("Stopped.")
-            return
-        order = [str(layer.name) for layer in geneLayers(viewer)]
+            if was == mode:
+                return
+        layers = geneLayers(viewer)
+        order = [str(layer.name) for layer in layers]
         if not order:
             status.setText("No gene layers to tour -- tick some genes first.")
             return
-        tour.update(on=True, order=order, i=0, n=0, base=_baseGamma())
-        play.setText("Stop")
+        shown = {}
+        if mode == "solo":
+            for layer in layers:
+                shown[str(layer.name)] = bool(getattr(layer, "visible", True))
+        tour.update(on=True, mode=mode, order=order, i=0, n=0, base=_baseGamma(), shown=shown)
+        (play if mode == "pulse" else solo).setText("Stop")
         _announce()
         timer.start()
 
-    play.clicked.connect(_toggle)
+    play.clicked.connect(lambda *_: _toggle("pulse"))
+    solo.clicked.connect(lambda *_: _toggle("solo"))
 
     row = QHBoxLayout()
     row.addStretch()
