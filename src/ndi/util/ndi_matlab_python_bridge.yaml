@@ -516,3 +516,29 @@ not_applicable:
       MATLAB sub-package with find_instance_name.m and
       find_techniques_names.m. Ported to ndi.openminds_convert
       module in Python (different namespace).
+
+# =============================================================================
+# Not-yet-ported MATLAB functions
+# =============================================================================
+not_yet_ported:
+
+  - name: hdf5Contents
+    matlab_path: "+ndi/+util/hdf5Contents.m"
+    matlab_last_sync_hash: "b745ee1d"
+    status: not_yet_ported
+    decision_log: >
+      Prints a table of contents for an HDF5 container -- groups,
+      datasets, attributes -- and a verdict naming which layout it is:
+      square-bin GEF, CellBin GEF, AnnData, or none of those. It exists
+      because a Stereo-seq run leaves several files with the same stem and
+      different middles (Y00709C1E2.tissue.gef beside
+      Y00709C1E2.adjusted.cellbin.gef), all of them HDF5, and the
+      extension does not say which one ndi.fun.doc.gene.fromGEF can read.
+
+      Not ported yet because it is a MATLAB-console convenience: the
+      question it answers is asked interactively, before committing to an
+      ingest, and NDI-matlab is where that ingest is driven from
+      (ndi.gui.app.GEFManager). Nothing in the Python package calls it.
+      h5py makes the port straightforward whenever a Python-side ingest
+      GUI wants the same answer; it is the printing and the verdict
+      wording that would need mirroring, not the walk.

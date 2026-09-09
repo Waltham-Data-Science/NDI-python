@@ -2011,6 +2011,50 @@ functions:
       becomes a Python keyword of the same name. See readViewportBase for
       the source-coordinate entry point.
 
+  - name: tileFileName
+    matlab_path: "+ndi/+fun/+doc/+gene/tileFileName.m"
+    matlab_last_sync_hash: "1e06bc79"
+    python_path: "ndi/fun/doc_gene.py"
+    input_arguments:
+      - name: tiles_props
+        type_matlab: "struct"
+        type_python: "dict"
+      - name: index
+        type_python: "int"
+    output_arguments:
+      - name: name
+        type_python: "str"
+    decision_log: >
+      Exact match. The tile INDEX is zero-based on both sides -- it is a
+      grid position, and index_order defines it as row*tile_columns +
+      column, so it is internal data per the indexing_policy. The FILE
+      SUFFIX is one-based, because a DID file series names its first
+      member NAME_1 and addFileSeries rejects anything else. The
+      difference between the two is the document's tile_index_origin,
+      which this function adds.
+
+  - name: tileIndexFromName
+    matlab_path: "+ndi/+fun/+doc/+gene/tileIndexFromName.m"
+    matlab_last_sync_hash: "9920b8f0"
+    python_path: "ndi/fun/doc_gene.py"
+    decision_log: >
+      Exact match; the inverse of tileFileName, for readers that walk a
+      document's stored names and work back to (row, column).
+
+  - name: tileIndexOrigin
+    matlab_path: "+ndi/+fun/+doc/+gene/tileIndexOrigin.m"
+    matlab_last_sync_hash: "6aa994e3"
+    status: not_applicable
+    decision_log: >
+      MATLAB-only helper. It exists because MATLAB has no equivalent of
+      dict.get with a default and needs isfield/isnumeric/isscalar guards
+      to read an optional numeric field; in Python that is one .get call
+      inline in tileFileName and tileIndexFromName, so a separate
+      function would be a wrapper around nothing. The BEHAVIOUR is
+      mirrored and tested on both sides: an absent, empty, non-numeric or
+      non-scalar tile_index_origin reads as 0, which is the legacy
+      zero-based naming.
+
   - name: exportRegion
     matlab_path: "+ndi/+fun/+doc/+gene/exportRegion.m"
     matlab_last_sync_hash: "96f10959"
