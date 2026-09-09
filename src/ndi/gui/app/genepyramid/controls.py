@@ -1224,7 +1224,7 @@ def addCellBlurPanel(viewer, points_layer, max_side: int = 1024) -> Any:
     controls where a reader already looks for them. This knob does width
     and nothing else, which is why the kernel is unity.
     """
-    from qtpy.QtCore import Qt
+    from qtpy.QtCore import Qt, QTimer
     from qtpy.QtWidgets import (
         QCheckBox,
         QDoubleSpinBox,
@@ -1240,6 +1240,13 @@ def addCellBlurPanel(viewer, points_layer, max_side: int = 1024) -> Any:
     outer = QVBoxLayout(box)
 
     show = QCheckBox("blurred cell density")
+    follow = QCheckBox("follow the view")
+    follow.setToolTip(
+        "Re-blurs by itself a moment after you stop moving.\n"
+        "Off by default: the redraw is 38-126 ms, so following every camera\n"
+        "event would stutter through a pan -- hence the pause rather than\n"
+        "live tracking."
+    )
     here = QPushButton("Re-blur here")
     here.setToolTip(
         "Re-bins just what is on screen, at full resolution for this zoom.\n"
@@ -1381,6 +1388,37 @@ def addCellBlurPanel(viewer, points_layer, max_side: int = 1024) -> Any:
     row.addWidget(spin)
     row.addWidget(here)
     here.clicked.connect(_reblurHere)
+
+    # DEBOUNCED, not live. Camera events fire continuously through a pan
+    # and each redraw is 38-126 ms, so following them directly would
+    # stutter the whole drag. The timer restarts on every event and only
+    # fires once movement has stopped, which is the same moment a hand
+    # would have reached for the button.
+    settle = QTimer(box)
+    settle.setSingleShot(True)
+    settle.setInterval(400)
+    settle.timeout.connect(lambda: _reblurHere() if follow.isChecked() else None)
+
+    def _cameraMoved(_event=None):
+        if follow.isChecked():
+            settle.start()
+
+    def _watchCamera(on):
+        # Connected once and left connected: _cameraMoved checks the box
+        # itself, so toggling cannot leak a second connection, and
+        # disconnecting a napari event is the fiddlier half of the API.
+        if on:
+            _reblurHere()
+
+    for _evt in ("zoom", "center"):
+        try:
+            getattr(viewer.camera.events, _evt).connect(_cameraMoved)
+        except Exception:  # noqa: BLE001 - following is optional, the panel is not
+            follow.setEnabled(False)
+            follow.setToolTip("this napari does not report camera movement")
+
+    follow.toggled.connect(_watchCamera)
+    outer.addWidget(follow)
     outer.addWidget(show)
     outer.addLayout(row)
     outer.addWidget(status)
@@ -1512,6 +1550,51 @@ def addRotationPanel(viewer, layers) -> Any:
     return box
 
 
+def cloudPaperStyle():
+    """A Qt stylesheet putting a widget on the NDI Cloud palette.
+
+    napari ships a dark theme and its docks inherit it, so the control
+    panels came out grey against every other NDI applet, which are white
+    bodies with a navy header. The palette is not invented here -- it is
+    :mod:`ndi.gui.cloud_colors`, the same triplets ndi.gui.cloudColors
+    holds on the MATLAB side, so the two stay one look rather than two
+    approximations of one.
+    """
+    from ndi.gui.cloud_colors import CloudColors
+
+    c = CloudColors()
+
+    def hexOf(triplet):
+        return "#" + "".join(f"{int(round(v * 255)):02x}" for v in triplet)
+
+    body = hexOf(c.off_white)
+    ink = hexOf(c.dark_blue)
+    edge = hexOf(c.neutral_grey)
+    field = hexOf(c.white)
+    return (
+        f"QWidget {{ background: {body}; color: {ink}; }}"
+        f"QLabel, QCheckBox, QRadioButton {{ background: transparent; color: {ink}; }}"
+        f"QLineEdit, QAbstractItemView, QDoubleSpinBox, QSpinBox "
+        f"{{ background: {field}; color: {ink}; border: 1px solid {edge}; }}"
+        f"QPushButton {{ background: {field}; color: {ink};"
+        f" border: 1px solid {edge}; padding: 3px 8px; }}"
+    )
+
+
+def applyCloudStyle(widget) -> bool:
+    """Put one panel on the cloud palette. False if it would not take.
+
+    Styling is never worth the window, and a Qt build that refuses a
+    stylesheet should cost the colour rather than the panel -- the same
+    trade ndi.gui.app.GEFManager.paper makes on the MATLAB side.
+    """
+    try:
+        widget.setStyleSheet(cloudPaperStyle())
+        return True
+    except Exception:  # noqa: BLE001 - a colour is never worth the panel
+        return False
+
+
 def _importQtWidgets() -> None:
     """Import qtpy.QtWidgets, or raise ImportError.
 
@@ -1573,7 +1656,12 @@ def addAllPanels(
 
     def _build(name, fn):
         try:
-            return fn()
+            panel = fn()
+            # Styled here rather than in each builder, so a panel added
+            # later cannot forget and come out grey among white ones.
+            if panel is not None:
+                applyCloudStyle(panel)
+            return panel
         except Exception as e:  # noqa: BLE001 - a panel is never worth the window
             print(
                 f"[genepyramid] the {name} panel could not be built "

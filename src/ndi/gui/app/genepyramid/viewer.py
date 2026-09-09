@@ -95,12 +95,23 @@ def openPyramid(
     Returns:
         The napari Viewer.
     """
+    import sys
+
     from .progress import closeLaunchWindow, note, stage
 
     with stage("importing napari"):
         napari = require_napari()
 
     viewer = napari.Viewer()
+    # THE LIGHT THEME. napari defaults to its dark one, which left the
+    # window grey against every other NDI applet -- white bodies under a
+    # navy header. Guarded rather than assumed: theme names are napari's
+    # and could move, and a viewer that opens in the wrong grey is better
+    # than one that does not open.
+    try:
+        viewer.theme = "light"
+    except Exception as e:  # noqa: BLE001 - a colour is never worth the window
+        print(f"[genepyramid] could not set the light theme ({e})", file=sys.stderr)
     # The image ladder is LAZY: layerSpec resolves tile paths and the
     # level table, and reads no tile bytes. Nothing here is the wait.
     with stage("building the pyramid ladder (lazy)"):
