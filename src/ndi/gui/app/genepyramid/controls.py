@@ -644,7 +644,6 @@ def addDisplayPanel(viewer, session, pyr_doc, image_layer, density: bool = True)
 
     box = QWidget()
     outer = QVBoxLayout(box)
-    outer.addWidget(QLabel("Base layer values"))
 
     r_density = QRadioButton("density (counts per base pixel)")
     r_counts = QRadioButton("raw counts (summed per bin)")
@@ -666,8 +665,14 @@ def addDisplayPanel(viewer, session, pyr_doc, image_layer, density: bool = True)
     for w in (r_density, r_counts):
         w.setToolTip(why)
 
+    # Kept, but HIDDEN until something goes wrong. It used to sit under the
+    # buttons restating which one was just clicked, which the buttons
+    # already show. Deleting it outright would make a failed switch silent,
+    # and a control that can fail without saying so is worse than a
+    # redundant line -- so it appears only when there is something to say.
     status = QLabel("")
     status.setWordWrap(True)
+    status.hide()
 
     def _switch(want_density: bool):
         try:
@@ -677,8 +682,9 @@ def addDisplayPanel(viewer, session, pyr_doc, image_layer, density: bool = True)
             image_layer.reset_contrast_limits()
         except Exception as e:
             status.setText(f"failed: {e}")
+            status.show()
             return
-        status.setText("density" if want_density else "raw counts")
+        status.hide()
 
     r_density.toggled.connect(lambda on: _switch(True) if on else None)
     r_counts.toggled.connect(lambda on: _switch(False) if on else None)
@@ -1092,7 +1098,6 @@ def addRotationPanel(viewer, layers) -> Any:
 
     box = QWidget()
     outer = QVBoxLayout(box)
-    outer.addWidget(QLabel("Rotation"))
 
     slider = QSlider(Qt.Horizontal)
     slider.setMinimum(-180)
@@ -1114,8 +1119,11 @@ def addRotationPanel(viewer, layers) -> Any:
     for w in (slider, spin):
         w.setToolTip(why)
 
-    status = QLabel("0.0 deg")
+    # Hidden until it has something to report, for the same reason as the
+    # display panel's: the spin box already shows the angle.
+    status = QLabel("")
     status.setWordWrap(True)
+    status.hide()
 
     # One-element lists rather than nonlocal: these are read and written
     # from several nested callbacks and a mutable holder keeps them in one
@@ -1133,8 +1141,9 @@ def addRotationPanel(viewer, layers) -> Any:
             applyRotation(layers, angle, _pivot())
         except Exception as e:  # noqa: BLE001 - a control never costs the picture
             status.setText(f"failed: {e}")
+            status.show()
             return
-        status.setText(f"{angle:.1f} deg")
+        status.hide()
 
     def _sync(angle, source):
         # The slider and the box show the same number, so each has to move
