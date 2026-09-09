@@ -2756,7 +2756,7 @@ functions:
 
   - name: tileFileName
     matlab_path: "+ndi/+fun/+doc/+gene/tileFileName.m"
-    matlab_last_sync_hash: "1e06bc79"
+    matlab_last_sync_hash: "10687267a"
     python_path: "ndi/fun/doc_gene.py"
     input_arguments:
       - name: tiles_props
@@ -2778,7 +2778,7 @@ functions:
 
   - name: tileIndexFromName
     matlab_path: "+ndi/+fun/+doc/+gene/tileIndexFromName.m"
-    matlab_last_sync_hash: "9920b8f0"
+    matlab_last_sync_hash: "10687267a"
     python_path: "ndi/fun/doc_gene.py"
     decision_log: >
       Exact match; the inverse of tileFileName, for readers that walk a
@@ -2786,7 +2786,7 @@ functions:
 
   - name: tileIndexOrigin
     matlab_path: "+ndi/+fun/+doc/+gene/tileIndexOrigin.m"
-    matlab_last_sync_hash: "6aa994e3"
+    matlab_last_sync_hash: "10687267a"
     status: matlab_only
     decision_log: >
       Python needs nothing here, by design. The function reads an

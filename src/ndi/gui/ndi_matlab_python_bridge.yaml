@@ -822,7 +822,7 @@ ported_late:
 
   - name: GEFManager
     matlab_path: "+ndi/+gui/+app/GEFManager.m"
-    matlab_last_sync_hash: "8edda6d"
+    matlab_last_sync_hash: "a328f306e"
     status: porting_deferred
     decision_log: >
       MATLAB App Designer window that lists, views, adds and removes
