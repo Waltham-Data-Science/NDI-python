@@ -651,3 +651,24 @@ class TestTheTwoModesDoNotOverlap:
         labels = [b.text() for b in panel.findChildren(qt.QPushButton)]
         assert "Stop" in labels
         assert any("Pulse" in t for t in labels)
+
+
+class TestTheColourCycle:
+    def test_it_runs_in_rainbow_order(self):
+        """Genes are assigned colours in the order they are ticked, so
+        this tuple's order is the order a reader sees them arrive. A
+        spectral run is one they can hold in their head and read back off
+        the picture; an arbitrary one is six colours to memorise."""
+        assert controls._GENE_COLORMAPS == (
+            "red",
+            "yellow",
+            "green",
+            "cyan",
+            "blue",
+            "magenta",
+        )
+
+    def test_every_colour_is_distinct(self):
+        """The layers blend additively, so two genes in the same colormap
+        make one picture that neither of them is."""
+        assert len(set(controls._GENE_COLORMAPS)) == len(controls._GENE_COLORMAPS)

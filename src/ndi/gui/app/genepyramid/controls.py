@@ -179,7 +179,14 @@ def abundanceBand(totals, lo: float = 0.0, hi: float = 100.0):
 # Distinct colours rather than one map applied to everything: the layers
 # blend additively, so two genes in the same colormap make one picture
 # that neither of them is.
-_GENE_COLORMAPS = ("magenta", "green", "cyan", "yellow", "red", "blue")
+#
+# IN RAINBOW ORDER, long wavelength to short: red, yellow, green, cyan,
+# blue, then magenta. Genes are assigned in the order they are ticked, so
+# the order of this tuple is the order a reader sees them arrive -- and a
+# spectral run is one they can hold in their head and read back off the
+# picture. Magenta is not spectral at all; it closes the circle, which is
+# where the eye expects it after blue.
+_GENE_COLORMAPS = ("red", "yellow", "green", "cyan", "blue", "magenta")
 
 
 # --------------------------------------------------- gene layer appearance
