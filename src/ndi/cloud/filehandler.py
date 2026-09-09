@@ -8,9 +8,13 @@ MATLAB equivalents:
 The ndic:// URI scheme provides stable references to cloud-hosted binary
 files.  When a dataset is downloaded without ``sync_files=True``, document
 file_info locations are rewritten to ``ndic://{dataset_id}/{file_uid}``.
-When a binary file is opened, the URI is resolved on demand: a fresh
-presigned S3 URL is fetched via ``getFileDetails`` and the file is
-streamed to local storage.
+When a binary file is opened, the URI is resolved on demand.
+
+For an ordinary file the resolver calls ``getFileDetails`` once for a fresh
+presigned URL. For a file series with many members -- the case that
+motivates the batch path -- DID passes the document id in the per-call
+context and every member's URL is served from a single ``/signed-url-set``
+call cached in :mod:`.batch_signed_url`. See NDI-python#262.
 """
 
 from __future__ import annotations
@@ -21,6 +25,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from .batch_signed_url import BatchSignedUrlLookup
     from .client import CloudClient
 
 logger = logging.getLogger(__name__)
@@ -154,18 +159,32 @@ def fetch_cloud_file(
     ndic_uri: str,
     target_path: str | Path,
     client: CloudClient | None = None,
+    *,
+    ndi_document_id: str = "",
+    series_name: str = "",
+    batch_lookup: BatchSignedUrlLookup | None = None,
 ) -> bool:
     """Download a cloud file on demand.
 
-    Parses the ``ndic://`` URI, calls ``getFileDetails`` for a fresh
-    presigned S3 URL, then streams the file to *target_path*.  Uses an
-    atomic write (download to ``.tmp``, then rename) to avoid partial files.
+    Parses the ``ndic://`` URI. When *ndi_document_id* is given, first
+    consults the per-document signed-URL cache (:mod:`.batch_signed_url`),
+    which turns one API call per uid into one call per (dataset, document,
+    series) scope. On a cache miss for the uid -- or when no document id is
+    available -- falls back to a per-uid ``getFileDetails`` call for a fresh
+    presigned URL. Streams the file to *target_path* using an atomic write
+    (download to ``.tmp``, then rename) to avoid partial files.
 
     Args:
         ndic_uri: An ``ndic://dataset_id/file_uid`` URI.
         target_path: Local path where the file should be saved.
         client: Authenticated :class:`CloudClient`.  If *None*,
             :func:`get_or_create_cloud_client` is used as a fallback.
+        ndi_document_id: The NDI document id (``data.base.id``) whose
+            signed-URL set covers this uid. Empty disables the batch path.
+        series_name: When *ndi_document_id* is set, restrict the batch scope
+            to one file series. Empty scopes the batch to the whole document.
+        batch_lookup: Cache instance to use. Defaults to the process-wide
+            one. Present so tests can inject their own.
 
     Returns:
         True on success.
@@ -181,13 +200,28 @@ def fetch_cloud_file(
     if client is None:
         client = get_or_create_cloud_client()
 
-    # Get fresh presigned URL
-    details = getFileDetails(dataset_id, file_uid, client=client)
-    download_url = details.get("downloadUrl", "")
-    if not download_url:
-        from .exceptions import CloudError
+    download_url = ""
+    if ndi_document_id:
+        # Batch path first. Empty means the batch could not answer for this
+        # uid; fall back per uid so the read still succeeds.
+        from .batch_signed_url import get_default
 
-        raise CloudError(f"No downloadUrl in file details for {ndic_uri}. " f"Response: {details}")
+        lookup = batch_lookup if batch_lookup is not None else get_default()
+        download_url = lookup.lookup(
+            dataset_id,
+            ndi_document_id,
+            series_name,
+            file_uid,
+            client=client,
+        )
+
+    if not download_url:
+        details = getFileDetails(dataset_id, file_uid, client=client)
+        download_url = details.get("downloadUrl", "")
+        if not download_url:
+            from .exceptions import CloudError
+
+            raise CloudError(f"No downloadUrl in file details for {ndic_uri}. Response: {details}")
 
     # Stream download to temp file, then atomic rename
     target = Path(target_path)
@@ -652,4 +686,19 @@ def download_file_from_cloud(
         dataset_id, _manifest_uid = parse_ndic_uri(uri)
         uri = f"{NDIC_SCHEME}{dataset_id}/{member_uid}"
 
-    fetch_cloud_file(uri, dest_path, client=client)
+    # Pass DID's context through to fetch_cloud_file so the batch signed-URL
+    # cache can key on it. Without documentId, batch lookup is skipped and
+    # every uid pays a fresh getFileDetails call -- the naive path.
+    ndi_document_id = ""
+    series_name = ""
+    if isinstance(context, dict):
+        ndi_document_id = str(context.get("documentId", "") or "")
+        series_name = str(context.get("seriesName", "") or "")
+
+    fetch_cloud_file(
+        uri,
+        dest_path,
+        client=client,
+        ndi_document_id=ndi_document_id,
+        series_name=series_name,
+    )

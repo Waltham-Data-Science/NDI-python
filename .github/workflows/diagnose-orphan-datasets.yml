@@ -1,0 +1,99 @@
+name: Diagnose orphan NDI_PYTEST_* datasets
+
+# Read-only inventory of leftover NDI_PYTEST_* datasets for issue #106.
+# Runs once a day (a few hours after the nightly, so the nightly's own
+# leftovers -- if any -- are visible) and pushes one JSON report per run
+# to the `diagnostics/orphan-datasets` branch. Never deletes.
+#
+# Deliberately no workflow-level `cancel-in-progress: true` here: this is
+# the shape the issue and the CI job comment call out as the leak source.
+
+on:
+  schedule:
+    # 03:00 UTC daily. The cloud nightly is 00:00 UTC; three hours gives it
+    # time to finish (or fail) before we take the snapshot.
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    name: Inventory orphans and commit report
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main (for the script)
+        uses: actions/checkout@v4
+        with:
+          path: main
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install NDI-python
+        working-directory: main
+        run: |
+          python -m pip install --upgrade pip
+          python ndi_install.py --dev --no-validate --verbose
+
+      - name: Run diagnostic
+        working-directory: main
+        env:
+          NDI_CLOUD_TEST_USER_1_USERNAME: ${{ secrets.TEST_USER_1_USERNAME }}
+          NDI_CLOUD_TEST_USER_1_PASSWORD: ${{ secrets.TEST_USER_1_PASSWORD }}
+          NDI_CLOUD_TEST_USER_2_USERNAME: ${{ secrets.TEST_USER_2_USERNAME }}
+          NDI_CLOUD_TEST_USER_2_PASSWORD: ${{ secrets.TEST_USER_2_PASSWORD }}
+        run: |
+          stamp="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+          echo "REPORT_STAMP=${stamp}" >> "$GITHUB_ENV"
+          python scripts/diagnose_orphan_datasets.py \
+            --out "$RUNNER_TEMP/report-${stamp}.json"
+          echo "REPORT_FILE=$RUNNER_TEMP/report-${stamp}.json" >> "$GITHUB_ENV"
+
+      - name: Fetch or create diagnostics branch
+        run: |
+          set -euo pipefail
+          mkdir diag
+          cd diag
+          git init -q
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          # Try to fetch the diagnostics branch; if it does not exist yet,
+          # start an orphan branch with an empty tree.
+          if git fetch --depth=1 origin diagnostics/orphan-datasets 2>/dev/null; then
+            git checkout -B diagnostics/orphan-datasets FETCH_HEAD
+          else
+            git checkout --orphan diagnostics/orphan-datasets
+            git rm -rf . >/dev/null 2>&1 || true
+            printf '# NDI_PYTEST_* orphan-dataset diagnostic reports\n\nSee issue #106.\n' > README.md
+            git add README.md
+          fi
+
+      - name: Commit and push report
+        working-directory: diag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Layout: reports/YYYY/MM/YYYY-MM-DDTHH-MM-SSZ.json -- one file per
+          # run, nested so the branch stays navigable if we observe for
+          # months rather than days.
+          stamp="${REPORT_STAMP}"
+          year="${stamp%%-*}"
+          rest="${stamp#*-}"
+          month="${rest%%-*}"
+          out_dir="reports/${year}/${month}"
+          mkdir -p "$out_dir"
+          cp "$REPORT_FILE" "${out_dir}/${stamp}.json"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${out_dir}/${stamp}.json" README.md 2>/dev/null || git add "${out_dir}/${stamp}.json"
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "diagnostic report ${stamp}"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            HEAD:diagnostics/orphan-datasets
