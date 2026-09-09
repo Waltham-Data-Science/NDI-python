@@ -33,6 +33,13 @@ __all__ = [
     "addCloudPanel",
     "cloudSessionLooksLikely",
     "saveCloudProfile",
+    "geneLayers",
+    "geneName",
+    "contrastWindow",
+    "pulseGamma",
+    "applyGeneAppearance",
+    "addGeneAppearancePanel",
+    "addGeneTourPanel",
     "blurLevels",
     "basePixelUm",
 ]
@@ -172,6 +179,124 @@ def abundanceBand(totals, lo: float = 0.0, hi: float = 100.0):
 # blend additively, so two genes in the same colormap make one picture
 # that neither of them is.
 _GENE_COLORMAPS = ("magenta", "green", "cyan", "yellow", "red", "blue")
+
+
+# --------------------------------------------------- gene layer appearance
+
+# The one thing that separates a gene layer from the base image and the
+# cell overlays. Named rather than spelled out at each use: three panels
+# now depend on it, and a prefix that drifts in one of them would leave a
+# control quietly governing nothing.
+_GENE_PREFIX = "gene: "
+
+# napari rejects a gamma of exactly zero, and the value is a divisor in
+# its shader. Small enough to look like zero, large enough to be legal.
+_GAMMA_FLOOR = 0.01
+
+
+def geneLayers(viewer):
+    """The gene layers, in the order they were added.
+
+    EXCLUDES the base image, whose name is the pyramid's own label, and
+    the cell overlays. That is the whole point of these controls: the
+    base layer is the anatomy read underneath, and dimming or gamma-
+    pulsing it would take the reference frame away from the thing being
+    pointed at.
+    """
+    out = []
+    for layer in getattr(viewer, "layers", ()) or ():
+        if str(getattr(layer, "name", "")).startswith(_GENE_PREFIX):
+            out.append(layer)
+    return out
+
+
+def geneName(layer) -> str:
+    """A gene layer's symbol, without the prefix the layer list needs."""
+    name = str(getattr(layer, "name", ""))
+    return name[len(_GENE_PREFIX) :] if name.startswith(_GENE_PREFIX) else name
+
+
+def contrastWindow(reference, contrast: float):
+    """Narrow a layer's contrast window by *contrast*, about its floor.
+
+    ``reference`` is ``(lo, hi)`` as the layer was auto-set when it
+    arrived, and the result is ``(lo, lo + (hi - lo) / contrast)``.
+
+    THE REFERENCE IS THE POINT. Applying a factor to whatever the limits
+    are NOW compounds -- three nudges up and one back down does not
+    return you to where you started, and the knob stops meaning a
+    setting and starts meaning a history. Every change is computed from
+    the window the layer was born with, so the number on the control is
+    the whole state.
+
+    Above 1 narrows the window, which is what "more contrast" means for
+    a sparse signal: the dim end of the range is where all the counts
+    are, so the picture brightens and separates. Below 1 widens it.
+
+    The floor is held rather than the centre because these layers start
+    at zero and blend additively: raising the floor would punch holes in
+    the background where a gene is merely absent.
+    """
+    lo, hi = float(reference[0]), float(reference[1])
+    contrast = max(1e-6, float(contrast))
+    span = (hi - lo) / contrast
+    # A window with no width is not a picture. One count of separation is
+    # the smallest thing the data can express, so that is the smallest
+    # window worth handing to napari.
+    return (lo, lo + span if span > 0 else lo + 1.0)
+
+
+def pulseGamma(base: float, seconds: float, period: float = 1.0) -> float:
+    """Gamma partway through one pulse: base -> ~0 -> base, once a period.
+
+    A TRIANGLE, not a sine. The eye reads a linear ramp as a steady
+    sweep and a sinusoid as a lingering pause at each end; what this is
+    for is saying "this one, now", and the sweep says it more clearly.
+
+    Args:
+        base: the gamma to return to, and to depart from.
+        seconds: elapsed time. Any value works, including past the end of
+            a period -- the pulse repeats.
+        period: seconds per pulse.
+
+    Returns:
+        A gamma in ``[_GAMMA_FLOOR, base]``, at the floor rather than at
+        zero because napari will not take zero.
+    """
+    if period <= 0:
+        return float(base)
+    phase = (float(seconds) % period) / period
+    # 1 at the start of the period, 0 at its middle, 1 at its end.
+    away = abs(2.0 * phase - 1.0)
+    return max(_GAMMA_FLOOR, float(base) * away)
+
+
+def applyGeneAppearance(layers, contrast: float, gamma: float, references: dict) -> int:
+    """Put one contrast and one gamma on every gene layer.
+
+    *references* maps layer name to the ``(lo, hi)`` the layer was
+    auto-set to when it arrived, and is FILLED IN HERE for any layer not
+    yet in it. A layer's own current limits are the right reference only
+    the first time; after that they are this function's own output.
+
+    Returns:
+        How many layers were changed. A layer that refuses either
+        setting is skipped rather than allowed to stop the rest -- one
+        odd layer must not cost the control.
+    """
+    done = 0
+    for layer in layers:
+        name = str(getattr(layer, "name", ""))
+        try:
+            if name not in references:
+                lo, hi = layer.contrast_limits
+                references[name] = (float(lo), float(hi))
+            layer.contrast_limits = list(contrastWindow(references[name], contrast))
+            layer.gamma = max(_GAMMA_FLOOR, float(gamma))
+        except Exception:  # noqa: BLE001 - see docstring
+            continue
+        done += 1
+    return done
 
 
 def countsOrder(totals, ascending: bool = False):
@@ -1630,6 +1755,342 @@ def saveCloudProfile(email: str, password: str) -> None:
     profile.set_default(uid)
 
 
+def addGeneAppearancePanel(viewer) -> Any:
+    """One contrast and one gamma across every gene layer at once.
+
+    Gene layers arrive with limits set from their own data, which is
+    right for reading one gene and wrong for comparing several: two
+    genes an order of magnitude apart are drawn as though they were the
+    same brightness, and the picture says less than the data does. These
+    two knobs move them together, so what is being compared stays
+    comparable.
+
+    THE BASE LAYER IS NOT TOUCHED, and neither are the cell overlays.
+    The section underneath is the anatomy the genes are read against;
+    dimming it to make a gene stand out would take away the frame that
+    makes standing out mean anything.
+
+    Both are ABSOLUTE. Contrast recomputes from the window each layer
+    was born with rather than from whatever it is now, so the number on
+    the control is the whole state and a nudge back really does return.
+    """
+    from qtpy.QtCore import Qt
+    from qtpy.QtWidgets import (
+        QDoubleSpinBox,
+        QHBoxLayout,
+        QLabel,
+        QPushButton,
+        QSlider,
+        QVBoxLayout,
+        QWidget,
+    )
+
+    box = QWidget()
+    outer = QVBoxLayout(box)
+
+    # name -> the (lo, hi) the layer was auto-set to when it arrived.
+    references: dict[str, tuple[float, float]] = {}
+    state = {"contrast": 1.0, "gamma": 1.0}
+
+    def _row(label, lo, hi, value, decimals, step, tip):
+        """A slider under a number, both driving one value.
+
+        The same shape as the rotation panel, and for the same reason: a
+        dock is narrow, and a slider sharing its row with a spin box is
+        a stub too short to aim with.
+        """
+        spin = QDoubleSpinBox()
+        spin.setRange(lo, hi)
+        spin.setDecimals(decimals)
+        spin.setSingleStep(step)
+        spin.setValue(value)
+        spin.setToolTip(tip)
+        slider = QSlider(Qt.Horizontal)
+        # Sliders are integers, so the value is carried in hundredths and
+        # converted at the boundary. Hundredths because gamma runs from
+        # 0.1 to 3 and tenths would be eight usable positions.
+        slider.setRange(int(lo * 100), int(hi * 100))
+        slider.setValue(int(value * 100))
+        slider.setToolTip(tip)
+        head = QHBoxLayout()
+        head.addWidget(QLabel(label))
+        head.addWidget(spin)
+        head.addStretch()
+        outer.addLayout(head)
+        outer.addWidget(slider)
+        return spin, slider
+
+    contrast_tip = (
+        "Narrows the contrast window of every gene layer about its floor.\n"
+        "Above 1 brightens and separates a sparse gene, because the dim\n"
+        "end of the range is where all the counts are. The base section\n"
+        "and the cell layers are not affected."
+    )
+    gamma_tip = (
+        "Gamma for every gene layer. Below 1 lifts the faint counts;\n"
+        "above 1 pushes them down. The base section and the cell layers\n"
+        "are not affected."
+    )
+    contrast_spin, contrast_slider = _row("contrast", 0.1, 10.0, 1.0, 2, 0.1, contrast_tip)
+    gamma_spin, gamma_slider = _row("gamma", 0.1, 3.0, 1.0, 2, 0.05, gamma_tip)
+
+    status = QLabel("")
+    status.setWordWrap(True)
+    status.hide()
+    reset = QPushButton("Reset")
+    row = QHBoxLayout()
+    row.addStretch()
+    row.addWidget(reset)
+    outer.addLayout(row)
+    outer.addWidget(status)
+    outer.addStretch()
+
+    guard = [False]
+
+    def _apply():
+        layers = geneLayers(viewer)
+        if not layers:
+            status.setText("No gene layers yet -- tick a gene to see this work.")
+            status.show()
+            return
+        applyGeneAppearance(layers, state["contrast"], state["gamma"], references)
+        status.hide()
+
+    def _sync(which, value, source):
+        # The slider and the box are one control; setting either emits a
+        # signal that would come straight back here without this.
+        if guard[0]:
+            return
+        guard[0] = True
+        try:
+            state[which] = float(value)
+            spin, slider = (
+                (contrast_spin, contrast_slider)
+                if which == "contrast"
+                else (gamma_spin, gamma_slider)
+            )
+            if source is not spin:
+                spin.setValue(float(value))
+            if source is not slider:
+                slider.setValue(int(round(float(value) * 100)))
+            _apply()
+        finally:
+            guard[0] = False
+
+    contrast_spin.valueChanged.connect(lambda v: _sync("contrast", v, contrast_spin))
+    contrast_slider.valueChanged.connect(lambda v: _sync("contrast", v / 100.0, contrast_slider))
+    gamma_spin.valueChanged.connect(lambda v: _sync("gamma", v, gamma_spin))
+    gamma_slider.valueChanged.connect(lambda v: _sync("gamma", v / 100.0, gamma_slider))
+
+    def _reset():
+        _sync("contrast", 1.0, None)
+        _sync("gamma", 1.0, None)
+
+    reset.clicked.connect(_reset)
+
+    def _onInserted(event=None):
+        """A gene ticked later gets the settings already in force.
+
+        Otherwise it arrives at its own auto-set brightness while the
+        others sit where the knobs put them, and the comparison the
+        panel exists for is broken by the act of adding to it.
+        """
+        layer = getattr(event, "value", None)
+        if layer is None or not str(getattr(layer, "name", "")).startswith(_GENE_PREFIX):
+            return
+        if state["contrast"] == 1.0 and state["gamma"] == 1.0:
+            return
+        applyGeneAppearance([layer], state["contrast"], state["gamma"], references)
+
+    def _onRemoved(event=None):
+        # Its reference window goes with it, so a gene ticked, unticked
+        # and ticked again is measured from its new data rather than
+        # from what it happened to look like the first time.
+        layer = getattr(event, "value", None)
+        references.pop(str(getattr(layer, "name", "")), None)
+
+    try:
+        viewer.layers.events.inserted.connect(_onInserted)
+        viewer.layers.events.removed.connect(_onRemoved)
+    except Exception:  # noqa: BLE001 - a headless fake has no event system
+        pass
+
+    # Exposed so the tour can pulse around the gamma this panel set,
+    # and put it back afterwards rather than back to 1.
+    box._ndi_appearance = state
+    viewer.window.add_dock_widget(box, name="Gene appearance", area="right")
+    return box
+
+
+def addGeneTourPanel(viewer, appearance=None, interval_ms: int = 50) -> Any:
+    """One button that walks the gene layers, pulsing each in turn.
+
+    Showing someone six genes means saying which is which, and a legend
+    of six colours against a section this dense is a legend nobody can
+    read. So the picture says it instead: one gene at a time is pulsed
+    -- its gamma swept down and back, once a second for five seconds --
+    while its name stands in the corner of the canvas.
+
+    NOTHING BLOCKS. The sweep is a timer stepping a small state machine,
+    not a loop with sleeps in it, so the viewer stays live throughout: a
+    tour can be stopped mid-gene, and panning while it runs works.
+
+    WHAT IT TOUCHES IT PUTS BACK. Each layer's gamma is recorded when the
+    tour reaches it and restored when it leaves, so stopping halfway --
+    or closing the window mid-sweep -- cannot leave a gene stuck at a
+    gamma nobody chose.
+
+    Args:
+        appearance: the gene-appearance panel, if there is one. Its
+            gamma is the value each pulse departs from and returns to,
+            so the two controls agree rather than fighting.
+        interval_ms: timer period. 50ms is 20 steps a second, which
+            reads as a sweep rather than a blink.
+    """
+    from qtpy.QtCore import QTimer
+    from qtpy.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+
+    seconds_per_gene = 5.0
+    pulse_period = 1.0
+
+    box = QWidget()
+    outer = QVBoxLayout(box)
+
+    play = QPushButton("Play gene tour")
+    play.setToolTip(
+        "Pulses each gene layer in turn for five seconds, naming it on\n"
+        "the canvas. Click again to stop; every gamma is put back."
+    )
+    outer.addWidget(play)
+
+    status = QLabel("")
+    status.setWordWrap(True)
+    outer.addWidget(status)
+    outer.addStretch()
+
+    # THE CLOCK IS A STEP COUNT, not an accumulated float. Adding 0.05 a
+    # hundred times lands near 5.0 but not on it, and "has this gene had
+    # its five seconds" is a comparison against exactly that -- so the
+    # boundary would fall a frame early or late depending on the
+    # interval, which is the kind of bug that only shows up on somebody
+    # else's machine. Multiplying an integer is exact.
+    tour = {"on": False, "order": [], "i": 0, "n": 0, "base": 1.0}
+    steps_per_gene = max(1, int(round(seconds_per_gene * 1000 / interval_ms)))
+
+    def _baseGamma() -> float:
+        if appearance is not None:
+            try:
+                return float(appearance._ndi_appearance["gamma"])
+            except Exception:  # noqa: BLE001 - a panel that is gone is not a crash
+                pass
+        return 1.0
+
+    def _layer(name):
+        try:
+            return viewer.layers[name]
+        except Exception:  # noqa: BLE001 - removed mid-tour is normal, not an error
+            return None
+
+    def _overlay(text, visible=True):
+        """The gene's name, bottom right, in something readable.
+
+        On the canvas rather than in the panel because that is where the
+        eye already is, and because a demo is usually being watched on
+        somebody else's screen where the docks are small.
+        """
+        try:
+            overlay = viewer.text_overlay
+            overlay.text = str(text)
+            overlay.visible = bool(visible)
+            overlay.font_size = 24
+            overlay.position = "bottom_right"
+            overlay.color = "white"
+        except Exception:  # noqa: BLE001 - an older napari names these differently
+            pass
+
+    def _restore(name):
+        layer = _layer(name)
+        if layer is None:
+            return
+        try:
+            layer.gamma = max(_GAMMA_FLOOR, tour["base"])
+        except Exception:  # noqa: BLE001 - a control never costs the picture
+            pass
+
+    def _stop(message=""):
+        if tour["order"] and 0 <= tour["i"] < len(tour["order"]):
+            _restore(tour["order"][tour["i"]])
+        # Every gene, not only the one in hand: an earlier one whose
+        # restore was missed because its layer was briefly gone would
+        # otherwise stay where the sweep left it.
+        for name in tour["order"]:
+            _restore(name)
+        tour.update(on=False, order=[], i=0, n=0)
+        timer.stop()
+        _overlay("", visible=False)
+        play.setText("Play gene tour")
+        status.setText(message)
+
+    def _step():
+        if not tour["on"]:
+            return
+        tour["n"] += 1
+        if tour["n"] >= steps_per_gene:
+            _restore(tour["order"][tour["i"]])
+            tour["i"] += 1
+            tour["n"] = 0
+            if tour["i"] >= len(tour["order"]):
+                _stop("Tour finished.")
+                return
+            _announce()
+        name = tour["order"][tour["i"]]
+        layer = _layer(name)
+        if layer is None:
+            # Unticked while the tour was on it. Move along rather than
+            # spending five seconds pulsing something that is not there.
+            tour["n"] = steps_per_gene - 1
+            return
+        try:
+            elapsed = tour["n"] * interval_ms / 1000.0
+            layer.gamma = pulseGamma(tour["base"], elapsed, pulse_period)
+        except Exception:  # noqa: BLE001 - see _restore
+            pass
+
+    def _announce():
+        name = tour["order"][tour["i"]]
+        _overlay(geneName(_layer(name)) if _layer(name) is not None else geneName(name))
+        status.setText(f"{tour['i'] + 1} of {len(tour['order'])}")
+
+    timer = QTimer(box)
+    timer.setInterval(interval_ms)
+    timer.timeout.connect(_step)
+
+    def _toggle():
+        if tour["on"]:
+            _stop("Stopped.")
+            return
+        order = [str(layer.name) for layer in geneLayers(viewer)]
+        if not order:
+            status.setText("No gene layers to tour -- tick some genes first.")
+            return
+        tour.update(on=True, order=order, i=0, n=0, base=_baseGamma())
+        play.setText("Stop")
+        _announce()
+        timer.start()
+
+    play.clicked.connect(_toggle)
+
+    row = QHBoxLayout()
+    row.addStretch()
+    outer.addLayout(row)
+
+    box._ndi_tour = tour
+    box._ndi_step = _step
+    box._ndi_toggle = _toggle
+    viewer.window.add_dock_widget(box, name="Gene tour", area="right")
+    return box
+
+
 def addAllPanels(
     viewer,
     session,
@@ -1706,6 +2167,12 @@ def addAllPanels(
             ),
         )
     made["genes"] = _build("genes", lambda: addGenePanel(viewer, session, pyr_doc))
+    # Below the gene list, because both act on what is ticked in it and
+    # neither means anything before something is.
+    made["appearance"] = _build("gene appearance", lambda: addGeneAppearancePanel(viewer))
+    made["tour"] = _build(
+        "gene tour", lambda: addGeneTourPanel(viewer, appearance=made.get("appearance"))
+    )
     # Last, and only when there is a token to run out. It is the panel
     # nobody needs until they do, so it reads at the bottom rather than
     # above the controls the session is actually for.

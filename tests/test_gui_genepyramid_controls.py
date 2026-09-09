@@ -257,6 +257,8 @@ def test_the_chosen_labelings_reach_the_cell_type_panel(monkeypatch):
     monkeypatch.setattr(controls, "addCellTypePanel", cells)
     monkeypatch.setattr(controls, "addGenePanel", _Recorder())
     monkeypatch.setattr(controls, "addRotationPanel", _Recorder())
+    monkeypatch.setattr(controls, "addGeneAppearancePanel", _Recorder())
+    monkeypatch.setattr(controls, "addGeneTourPanel", _Recorder())
 
     controls.addAllPanels(
         object(),
@@ -286,6 +288,8 @@ def test_a_panel_that_throws_does_not_take_the_window_with_it(monkeypatch, capsy
     monkeypatch.setattr(controls, "addCellTypePanel", _Recorder())
     monkeypatch.setattr(controls, "addGenePanel", genes)
     monkeypatch.setattr(controls, "addRotationPanel", _Recorder())
+    monkeypatch.setattr(controls, "addGeneAppearancePanel", _Recorder())
+    monkeypatch.setattr(controls, "addGeneTourPanel", _Recorder())
 
     made = controls.addAllPanels(object(), object(), object(), object(), True)
 
@@ -312,6 +316,8 @@ def test_no_qt_binding_costs_the_panels_and_not_the_picture(monkeypatch, capsys)
     monkeypatch.setattr(controls, "addDisplayPanel", built)
     monkeypatch.setattr(controls, "addGenePanel", built)
     monkeypatch.setattr(controls, "addRotationPanel", _Recorder())
+    monkeypatch.setattr(controls, "addGeneAppearancePanel", _Recorder())
+    monkeypatch.setattr(controls, "addGeneTourPanel", _Recorder())
 
     made = controls.addAllPanels(object(), object(), object(), object(), True)
 
@@ -333,6 +339,8 @@ def test_the_rotation_panel_gets_all_three_layers(monkeypatch):
     monkeypatch.setattr(controls, "addCellTypePanel", _Recorder())
     monkeypatch.setattr(controls, "addGenePanel", _Recorder())
     monkeypatch.setattr(controls, "addRotationPanel", rotation)
+    monkeypatch.setattr(controls, "addGeneAppearancePanel", _Recorder())
+    monkeypatch.setattr(controls, "addGeneTourPanel", _Recorder())
 
     image, points, shapes = object(), object(), object()
     controls.addAllPanels(
@@ -360,6 +368,8 @@ def test_a_session_with_no_cells_still_gets_rotation(monkeypatch):
     monkeypatch.setattr(controls, "addCellTypePanel", _Recorder())
     monkeypatch.setattr(controls, "addGenePanel", _Recorder())
     monkeypatch.setattr(controls, "addRotationPanel", rotation)
+    monkeypatch.setattr(controls, "addGeneAppearancePanel", _Recorder())
+    monkeypatch.setattr(controls, "addGeneTourPanel", _Recorder())
 
     made = controls.addAllPanels(object(), object(), object(), object(), True)
     assert made["rotation"] is not None
@@ -372,7 +382,14 @@ def test_the_cloud_panel_is_only_offered_when_there_is_a_token_to_expire(monkeyp
     implies the picture might be waiting on something. A local pyramid
     has no cloud token in its environment; a cloud one does."""
     monkeypatch.setattr(controls, "_importQtWidgets", lambda: None)
-    for name in ("addDisplayPanel", "addCellTypePanel", "addGenePanel", "addRotationPanel"):
+    for name in (
+        "addDisplayPanel",
+        "addCellTypePanel",
+        "addGenePanel",
+        "addRotationPanel",
+        "addGeneAppearancePanel",
+        "addGeneTourPanel",
+    ):
         monkeypatch.setattr(controls, name, _Recorder())
     cloud = _Recorder()
     monkeypatch.setattr(controls, "addCloudPanel", cloud)
@@ -391,7 +408,14 @@ def test_a_failing_cloud_panel_costs_only_itself(monkeypatch, capsys):
     """It is the last panel and the least essential one -- a keyring that
     will not open must not cost the section."""
     monkeypatch.setattr(controls, "_importQtWidgets", lambda: None)
-    for name in ("addDisplayPanel", "addCellTypePanel", "addGenePanel", "addRotationPanel"):
+    for name in (
+        "addDisplayPanel",
+        "addCellTypePanel",
+        "addGenePanel",
+        "addRotationPanel",
+        "addGeneAppearancePanel",
+        "addGeneTourPanel",
+    ):
         monkeypatch.setattr(controls, name, _Recorder())
     monkeypatch.setattr(controls, "addCloudPanel", _Recorder(boom=True))
     monkeypatch.setenv("NDI_CLOUD_TOKEN", "anything")
@@ -400,3 +424,65 @@ def test_a_failing_cloud_panel_costs_only_itself(monkeypatch, capsys):
     assert made["cloud"] is None
     assert made["genes"] is not None
     assert "cloud" in capsys.readouterr().err
+
+
+def test_the_appearance_and_tour_panels_are_built_after_the_gene_list(monkeypatch):
+    """Both act on what is ticked in it, and neither means anything
+    before something is."""
+    monkeypatch.setattr(controls, "_importQtWidgets", lambda: None)
+    order = []
+
+    def _named(name):
+        def build(*a, **k):
+            order.append(name)
+            return object()
+
+        return build
+
+    for name in ("addDisplayPanel", "addCellTypePanel", "addRotationPanel"):
+        monkeypatch.setattr(controls, name, _named(name))
+    monkeypatch.setattr(controls, "addGenePanel", _named("genes"))
+    monkeypatch.setattr(controls, "addGeneAppearancePanel", _named("appearance"))
+    monkeypatch.setattr(controls, "addGeneTourPanel", _named("tour"))
+    monkeypatch.delenv("NDI_CLOUD_TOKEN", raising=False)
+
+    made = controls.addAllPanels(object(), object(), object(), object(), True)
+    assert order.index("genes") < order.index("appearance") < order.index("tour")
+    assert made["appearance"] is not None and made["tour"] is not None
+
+
+def test_the_tour_is_handed_the_appearance_panel(monkeypatch):
+    """So a pulse departs from the gamma the reader chose and returns to
+    it, rather than resetting their setting to 1."""
+    monkeypatch.setattr(controls, "_importQtWidgets", lambda: None)
+    for name in ("addDisplayPanel", "addCellTypePanel", "addGenePanel", "addRotationPanel"):
+        monkeypatch.setattr(controls, name, _Recorder())
+    appearance = object()
+    monkeypatch.setattr(controls, "addGeneAppearancePanel", lambda *a, **k: appearance)
+    tour = _Recorder()
+    monkeypatch.setattr(controls, "addGeneTourPanel", tour)
+    monkeypatch.delenv("NDI_CLOUD_TOKEN", raising=False)
+
+    controls.addAllPanels(object(), object(), object(), object(), True)
+    assert tour.calls, "the tour panel was never built"
+    _args, kwargs = tour.calls[0]
+    assert kwargs.get("appearance") is appearance
+
+
+def test_a_failing_appearance_panel_still_leaves_a_tour(monkeypatch, capsys):
+    """The tour reads the appearance panel's gamma when it has one and
+    falls back to 1 when it does not -- so one failing must not cascade."""
+    monkeypatch.setattr(controls, "_importQtWidgets", lambda: None)
+    for name in ("addDisplayPanel", "addCellTypePanel", "addGenePanel", "addRotationPanel"):
+        monkeypatch.setattr(controls, name, _Recorder())
+    monkeypatch.setattr(controls, "addGeneAppearancePanel", _Recorder(boom=True))
+    tour = _Recorder()
+    monkeypatch.setattr(controls, "addGeneTourPanel", tour)
+    monkeypatch.delenv("NDI_CLOUD_TOKEN", raising=False)
+
+    made = controls.addAllPanels(object(), object(), object(), object(), True)
+    assert made["appearance"] is None
+    assert tour.calls, "a failing appearance panel took the tour with it"
+    _args, kwargs = tour.calls[0]
+    assert kwargs.get("appearance") is None
+    assert "gene appearance" in capsys.readouterr().err
