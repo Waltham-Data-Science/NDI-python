@@ -46,22 +46,24 @@ array of samples, into the presentation order) is 0-based, per
 ``docs/developer_notes/ndi_xlang_principles.md``. The conversions are made
 explicitly at each boundary rather than absorbed, so they can be checked.
 
-AN UPSTREAM BUG, MIRRORED DELIBERATELY
-MATLAB hands ``control_stimulus_ids`` -- a per-presentation vector of control
-PRESENTATION numbers -- to a vlt argument named ``control_stimid``, which
-that function documents as the id of the control STIMULUS. The two are
-different quantities, so the stimulus subtracted as the "blank" is whichever
-one's id happens to equal the blank's position in repetition 1: correct by
+AN UPSTREAM BUG, NOW FIXED ON BOTH SIDES
+MATLAB used to hand ``control_stimulus_ids`` -- a per-presentation vector of
+control PRESENTATION numbers -- to a vlt argument named ``control_stimid``,
+which that function documents as the id of the control STIMULUS. The two are
+different quantities, so the stimulus subtracted as the "blank" was whichever
+one's id happened to equal the blank's position in repetition 1: correct by
 coincidence for an unshuffled order, a different grating each epoch for a
 pseudorandom one. The effect is close to a constant baseline offset -- tuning
 shape and preferred direction are unchanged, which is why it went unnoticed
 -- but the offset can be as large as the whole response when the substitute
 lands on the preferred direction.
 
-It is mirrored here rather than corrected: parity with NDI-matlab is the
-contract, and a divergence would make the two ports store different controls
-for the same data. Reported as VH-Lab/NDI-matlab#912, with the one-line fix;
-this port should follow whatever lands there.
+This port mirrored it deliberately while it stood, because parity with
+NDI-matlab is the contract and a divergence would have made the two ports
+store different controls for the same data. It was reported as
+VH-Lab/NDI-matlab#912 and fixed there in ae7916628, which recovers the
+blank's stimulus id from the presentation order at the stored control
+positions. :func:`_control_stimulus_ids_from_trials` is that fix here.
 """
 
 from __future__ import annotations
@@ -651,11 +653,14 @@ class ndi_app_stimulus_tuning__response(ndi_app):
 
         control_stimulus_ids: list[Any] = []
         if control_doc is not None:
-            control_stimulus_ids = list(
+            control_trials = list(
                 (control_doc.document_properties.get("control_stimulus_ids", {}) or {}).get(
                     "control_stimulus_ids", []
                 )
                 or []
+            )
+            control_stimulus_ids = _control_stimulus_ids_from_trials(
+                control_trials, presentation_order
             )
 
         response_docs: list[ndi_document] = []
@@ -1677,6 +1682,56 @@ def _control_stimulus_indexes(
         if matched:
             found.append(index + 1)  # 1-based, as the presentation order is
     return found
+
+
+def _control_stimulus_ids_from_trials(
+    control_trials: list[Any],
+    presentation_order: Any,
+) -> list[Any]:
+    """The blank's STIMULUS id(s), from the per-trial control TRIAL numbers.
+
+    MATLAB counterpart: ``+ndi/+app/+stimulus/tuning_response.m``::
+
+        cs_ids = control_doc...control_stimulus_ids(:);
+        controlstimids = unique(stim_doc...presentation_order(cs_ids(~isnan(cs_ids))));
+
+    ``control_stimulus_ids`` holds, per trial, WHICH TRIAL is that trial's
+    blank -- a presentation number. The ``control_stimid`` argument
+    downstream wants the id of the blank STIMULUS. The two are different
+    quantities, and passing the first as the second subtracted whichever
+    stimulus happened to carry the blank's position as its id: correct by
+    coincidence for an unshuffled order, a different grating each epoch for
+    a pseudorandom one. The effect is close to a constant baseline offset,
+    which is why it went unnoticed, but the offset can be as large as the
+    whole response when the substitute lands on the preferred direction.
+
+    This port mirrored that bug deliberately while it stood, and reported it
+    as VH-Lab/NDI-matlab#912. It is fixed there in ae7916628; this follows,
+    as the module docstring said it would.
+
+    Args:
+        control_trials: one control trial number per trial, 1-based, NaN
+            where a trial has no blank.
+        presentation_order: the stimulus id presented at each trial.
+
+    Returns:
+        The distinct stimulus ids of the blanks, ascending. Empty when no
+        trial has a control, which is a legitimate run without a blank.
+    """
+    order = np.asarray(presentation_order, dtype=float).ravel()
+    ids: list[float] = []
+    for trial in control_trials:
+        value = float(trial) if trial is not None else float("nan")
+        if not np.isfinite(value):
+            continue
+        # control_trials is 1-based, as MATLAB writes it and as
+        # _match_trials_to_controls documents; presentation_order is a
+        # 0-based array here. The conversion is explicit per
+        # docs/developer_notes/ndi_xlang_principles.md.
+        index = int(value) - 1
+        if 0 <= index < order.size:
+            ids.append(float(order[index]))
+    return sorted(set(ids))
 
 
 def _match_trials_to_controls(

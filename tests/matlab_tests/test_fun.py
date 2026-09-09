@@ -362,11 +362,11 @@ class TestSessionDiff:
         result = session_diff(session, session2)
 
         assert result["equal"] is True
-        assert len(result["only_in_s1"]) == 0
-        assert len(result["only_in_s2"]) == 0
+        assert len(result["documentsInAOnly"]) == 0
+        assert len(result["documentsInBOnly"]) == 0
         # 3 demo docs + 1 auto-created session document
         assert result["common_count"] == 4
-        assert len(result["mismatches"]) == 0
+        assert len(result["mismatchedDocuments"]) == 0
 
     def test_docs_only_in_s1(self, tmp_path):
         """ndi_session 1 has extra docs that ndi_session 2 does not.
@@ -390,9 +390,9 @@ class TestSessionDiff:
 
         assert result["equal"] is False
         # 3 demo docs + 1 auto-created session doc in session1
-        assert len(result["only_in_s1"]) == 4
+        assert len(result["documentsInAOnly"]) == 4
         # session2 has its own auto-created session doc
-        assert len(result["only_in_s2"]) == 1
+        assert len(result["documentsInBOnly"]) == 1
         assert result["common_count"] == 0
 
     def test_docs_only_in_s2(self, tmp_path):
@@ -417,9 +417,9 @@ class TestSessionDiff:
 
         assert result["equal"] is False
         # session1 has its own auto-created session doc
-        assert len(result["only_in_s1"]) == 1
+        assert len(result["documentsInAOnly"]) == 1
         # 2 demo docs + 1 auto-created session doc in session2
-        assert len(result["only_in_s2"]) == 3
+        assert len(result["documentsInBOnly"]) == 3
         assert result["common_count"] == 0
 
     def test_mismatched_docs(self, tmp_path):
@@ -451,8 +451,8 @@ class TestSessionDiff:
 
         assert result["equal"] is False
         assert result["common_count"] == 1
-        assert len(result["mismatches"]) == 1
-        assert result["mismatches"][0]["doc_id"] == doc_id
+        assert len(result["mismatchedDocuments"]) == 1
+        assert result["mismatchedDocuments"][0]["id"] == doc_id
 
 
 # ===========================================================================
@@ -489,7 +489,8 @@ class TestDatasetDiff:
         result = dataset_diff(dataset1, dataset2)
 
         assert result["equal"] is True
-        assert result["session_diff"]["equal"] is True
+        assert result["mismatchedDocuments"] == []
+        assert result["fileDifferences"] == []
 
     def test_docs_only_in_dataset1(self, tmp_path):
         """ndi_dataset 1 has extra docs that ndi_dataset 2 does not.
@@ -517,9 +518,8 @@ class TestDatasetDiff:
         result = dataset_diff(dataset1, dataset2)
 
         assert result["equal"] is False
-        sd = result["session_diff"]
         # ndi_dataset 1 has documents that dataset 2 does not
-        assert len(sd["only_in_s1"]) > 0 or len(sd["mismatches"]) > 0
+        assert len(result["documentsInAOnly"]) > 0 or len(result["mismatchedDocuments"]) > 0
 
     def test_docs_only_in_dataset2(self, tmp_path):
         """ndi_dataset 2 has extra docs that ndi_dataset 1 does not.
@@ -547,8 +547,7 @@ class TestDatasetDiff:
         result = dataset_diff(dataset1, dataset2)
 
         assert result["equal"] is False
-        sd = result["session_diff"]
-        assert len(sd["only_in_s2"]) > 0 or len(sd["mismatches"]) > 0
+        assert len(result["documentsInBOnly"]) > 0 or len(result["mismatchedDocuments"]) > 0
 
     def test_mismatched_datasets(self, tmp_path):
         """Datasets with same doc IDs but different properties.

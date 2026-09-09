@@ -603,6 +603,7 @@ functions:
     matlab_path: "+ndi/+cloud/+api/+documents/getBulkUploadURL.m"
     matlab_last_sync_hash: "9b75c0fe"
     python_path: "ndi/cloud/api/documents.py"
+    python_qualified: "ndi.cloud.api.documents.getBulkUploadURL"
     input_arguments:
       - name: dataset_id
         type_matlab: "string"
@@ -613,7 +614,11 @@ functions:
     output_arguments:
       - name: url
         type_python: "str"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match. One of TWO entries for this MATLAB file: Python exposes
+      the bulk-upload URL from both api.documents and api.files, so each
+      port is recorded separately and told apart by python_qualified. See
+      the api.files entry below.
 
   - name: getBulkDownloadURL
     matlab_path: "+ndi/+cloud/+api/+documents/getBulkDownloadURL.m"
@@ -659,7 +664,7 @@ functions:
 
   - name: ndiquery
     matlab_path: "+ndi/+cloud/+api/+documents/ndiquery.m"
-    matlab_last_sync_hash: "17af9080"
+    matlab_last_sync_hash: "88c0fb904"
     python_path: "ndi/cloud/api/documents.py"
     input_arguments:
       - name: scope
@@ -684,7 +689,7 @@ functions:
 
   - name: ndiqueryAll
     matlab_path: "+ndi/+cloud/+api/+documents/ndiqueryAll.m"
-    matlab_last_sync_hash: "17af9080"
+    matlab_last_sync_hash: "88c0fb904"
     python_path: "ndi/cloud/api/documents.py"
     input_arguments:
       - name: scope
@@ -847,7 +852,7 @@ functions:
 
   - name: getFile
     matlab_path: "+ndi/+cloud/+api/+files/getFile.m"
-    matlab_last_sync_hash: "6aac0c72"
+    matlab_last_sync_hash: "605416a26"
     python_path: "ndi/cloud/api/files.py"
     input_arguments:
       - name: url
@@ -862,11 +867,24 @@ functions:
     output_arguments:
       - name: success
         type_python: "bool"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match.
+      2026-09-08: examined against 605416a26 (was 6aac0c72). Three commits.
+      3ac36ce2d defaults useCurl to true and does not port: MATLAB shells out to
+      curl because websave mishandles some signed URLs, while this side transfers
+      through requests and has no second mechanism to choose between. 605416a26
+      validates the URL and path before building that curl command; its
+      shell-injection half likewise has no counterpart here (no shell, no
+      interpolation), but its other half did -- the URL must be https with a real
+      host, or a signed URL's own query-string credential travels in plaintext
+      along with the file. Ported as assert_safe_transfer_url, called at every
+      transfer site (commit 59cfce5 on this branch). 11d041ff5 is a documentation
+      commit on both sides: the docstring now says target_path is overwritten
+      without warning.
 
   - name: listFiles
     matlab_path: "+ndi/+cloud/+api/+files/listFiles.m"
-    matlab_last_sync_hash: "8b9e4dfa"
+    matlab_last_sync_hash: "be2f79334"
     python_path: "ndi/cloud/api/files.py"
     input_arguments:
       - name: dataset_id
@@ -878,7 +896,12 @@ functions:
     output_arguments:
       - name: result
         type_python: "APIResponse"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match.
+      NDI-matlab be2f79334 is documentation only: it drops isRaw from the
+      ANSWER field list, the server having stopped returning it. Nothing to
+      port -- this passes the file records through as the API returns them and
+      never named isRaw.
 
   - name: getFileDetails
     matlab_path: "+ndi/+cloud/+api/+files/getFileDetails.m"
@@ -1074,7 +1097,7 @@ functions:
 
   - name: me
     matlab_path: "+ndi/+cloud/+api/+users/me.m"
-    matlab_last_sync_hash: "f0c2597f"
+    matlab_last_sync_hash: "f2b91923f"
     python_path: "ndi/cloud/api/users.py"
     input_arguments:
       - name: client
@@ -1083,7 +1106,18 @@ functions:
     output_arguments:
       - name: user
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match.
+      NDI-matlab f2b91923f is documentation only: it writes out the fields
+      /users/me returns, including the organizations array and the parallel
+      organizationID / organizationName / organizationCanUploadDataset
+      convenience arrays its implementation class derives from it. Nothing to
+      port. Those parallel arrays are a MATLAB idiom for reaching into an array
+      of structs; Python returns the response as it stands, so
+      me()["organizations"] is already a list of dicts with id, name and
+      canUploadDataset -- the same information in the shape the language
+      already has. That list is where a caller finds the organization id that
+      cloud.api.compute.startSession now requires.
 
   - name: GetUser
     matlab_path: "+ndi/+cloud/+api/+users/GetUser.m"
@@ -1213,12 +1247,15 @@ functions:
   # --- compute.py ---
   - name: startSession
     matlab_path: "+ndi/+cloud/+api/+compute/startSession.m"
-    matlab_last_sync_hash: "c5718fde"
+    matlab_last_sync_hash: "fd226f6d1"
     python_path: "ndi/cloud/api/compute.py"
     input_arguments:
       - name: pipeline_id
         type_matlab: "char"
         type_python: "NonEmptyStr"
+      - name: organization_id
+        type_matlab: "string"
+        type_python: "str"
       - name: input_params
         type_matlab: "struct"
         type_python: "dict[str, Any] | None"
@@ -1268,7 +1305,7 @@ functions:
 
   - name: advanceSession
     matlab_path: "+ndi/+cloud/+api/+compute/advanceSession.m"
-    matlab_last_sync_hash: "c5718fde"
+    matlab_last_sync_hash: "bf1fe244a"
     python_path: "ndi/cloud/api/compute.py"
     input_arguments:
       - name: session_id
@@ -1319,23 +1356,36 @@ not_yet_ported:
   - name: call
     matlab_path: "+ndi/+cloud/+api/call.m"
     matlab_last_sync_hash: "9b75c0fe"
-    status: not_applicable
+    status: ported_differently
     decision_log: >
       MATLAB generic HTTP dispatcher. Python uses CloudClient._request()
       which serves the same purpose.
 
   - name: url
     matlab_path: "+ndi/+cloud/+api/url.m"
-    matlab_last_sync_hash: "f9112a14"
-    status: not_applicable
+    matlab_last_sync_hash: "5804cd80d"
+    status: ported_differently
     decision_log: >
       MATLAB URL builder. Python uses CloudClient._build_url()
       which serves the same purpose.
+      2026-09-08: examined against 5804cd80d (was f9112a14). Eleven commits, every
+      one of them a row added to MATLAB's url() route table: documentClassCounts,
+      documents.bulkFetch, the MATLAB BYOL license routes, the bulk-upload status
+      route, compute finalize renamed to advance, and the signed-URL-set routes
+      (cd11b1982, 683fde855, 4b5c0478d, 5804cd80d). None of them reaches this
+      entry, because Python has no route table to add a row to --
+      CloudClient._build_url() interpolates the route each api function names at
+      its own call site, which is what status ported_differently records. The
+      endpoints themselves are tracked where they are used: the license routes are
+      in api/users.py, documentClassCounts and bulkFetch in api/documents.py, the
+      bulk-upload status in api/files.py, /advance is what compute.advanceSession
+      already posts to, and the signed-URL-set gap is recorded on
+      batchSignedUrlLookup and downloadGenericFiles.
 
   - name: documentCount
     matlab_path: "+ndi/+cloud/+api/+documents/documentCount.m"
     matlab_last_sync_hash: "9b75c0fe"
-    status: not_applicable
+    status: ported_differently
     decision_log: >
       MATLAB duplicate/alias for countDocuments. Python uses countDocuments
       which is the canonical name.
@@ -1370,7 +1420,7 @@ not_yet_ported:
   - name: createSignedURLSetJob
     matlab_path: "+ndi/+cloud/+api/+files/createSignedURLSetJob.m"
     matlab_last_sync_hash: "5804cd80"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       Part of the signed-URL-set family (#206). Python has no
       signed-URL-set support yet, so createSignedURLSetJob has no Python
@@ -1380,7 +1430,7 @@ not_yet_ported:
   - name: getSignedURLSet
     matlab_path: "+ndi/+cloud/+api/+files/getSignedURLSet.m"
     matlab_last_sync_hash: "5804cd80"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       Part of the signed-URL-set family (#206). One page of a document's
       UID -> signed URL map, via GET /signed-url-set. Python has no
@@ -1389,7 +1439,7 @@ not_yet_ported:
   - name: getSignedURLSetAll
     matlab_path: "+ndi/+cloud/+api/+files/getSignedURLSetAll.m"
     matlab_last_sync_hash: "5804cd80"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       Part of the signed-URL-set family (#206). Walks getSignedURLSet
       cursors and merges every page into one map. Python has no
@@ -1398,7 +1448,7 @@ not_yet_ported:
   - name: getSignedURLSetJob
     matlab_path: "+ndi/+cloud/+api/+files/getSignedURLSetJob.m"
     matlab_last_sync_hash: "cd11b198"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       Part of the signed-URL-set family (#206). Poll one signed-URL-set
       job's state via GET /signed-url-set-jobs/{jobId}. Python has no
@@ -1407,7 +1457,7 @@ not_yet_ported:
   - name: getSignedURLSetResult
     matlab_path: "+ndi/+cloud/+api/+files/getSignedURLSetResult.m"
     matlab_last_sync_hash: "4b5c0478"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       Part of the signed-URL-set family (#206). Downloads and parses the
       gzipped blob a ready job produced (a UID -> signed URL map plus
@@ -1417,7 +1467,7 @@ not_yet_ported:
   - name: waitForSignedURLSetJob
     matlab_path: "+ndi/+cloud/+api/+files/waitForSignedURLSetJob.m"
     matlab_last_sync_hash: "cd11b198"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       Part of the signed-URL-set family (#206). Polls
       getSignedURLSetJob with exponentially growing intervals until the

@@ -7,7 +7,11 @@ MATLAB equivalents: +ndi/+cloud/+internal/*.m,
 
 from __future__ import annotations
 
+import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .client import CloudClient
@@ -145,29 +149,71 @@ def listLocalDocuments(dataset: Any) -> tuple[list[Any], list[str]]:
     return docs, ids
 
 
+#: Where a sync stages downloaded binaries before the database ingests them.
+#: Relative to the dataset folder, mirroring
+#: ``ndi.cloud.sync.internal.Constants.FileSyncLocation``.
+#:
+#: TEMPORARY, and deliberately NOT DID's file store. DID ingests a file by
+#: copying it from the location a document records into ``FileDir/<uid>`` and
+#: then deleting the original, so staging is what gives the ingest something
+#: to copy FROM. Downloading straight into ``FileDir`` skips ingestion
+#: altogether: the bytes are findable by uid, but no files-table row is
+#: written and the document's file_info still points at the cloud.
+FILE_SYNC_LOCATION = Path("download") / "files"
+
+
+def _as_list(value: Any) -> list[Any]:
+    """A ``file_info`` or ``locations`` field as a list, whatever arrived.
+
+    MATLAB's jsonencode writes a one-element struct array as a bare object,
+    so a document with exactly one file comes back with ``file_info`` as a
+    dict rather than a list of one. Iterating that dict yields its KEYS --
+    strings -- which are then skipped as "not a dict", so the document's
+    only file is silently invisible. filehandler.py normalises the same two
+    fields for the same reason.
+    """
+    if isinstance(value, dict):
+        return [value]
+    if isinstance(value, list):
+        return value
+    return []
+
+
 def getFileUidsFromDocuments(documents: list[Any]) -> list[str]:
     """Extract unique file UIDs from a list of documents.
 
     MATLAB equivalent: +sync/+internal/getFileUidsFromDocuments.m
+
+    Walks ``files.file_info(j).locations(k).uid`` -- every location of every
+    file -- because that is where a document records what it has. The
+    top-level ``file_uid`` is accepted as well: some cloud payloads carry
+    one, and it costs nothing to keep.
+
+    ORDER IS FIRST-SEEN, not arbitrary. MATLAB returns
+    ``unique(..., 'stable')``, and a set here made the order depend on
+    Python's string hashing -- so the download order, the log, and any
+    report built from it differed between runs of the same input for no
+    reason. Deduplicated with a dict, which preserves insertion order.
     """
-    uids: set[str] = set()
+    uids: dict[str, None] = {}
     for doc in documents:
         props = doc.document_properties if hasattr(doc, "document_properties") else doc
         if not isinstance(props, dict):
             continue
-        # Check files.file_info
-        files = props.get("files", {})
+        files = props.get("files")
         if isinstance(files, dict):
-            for fi in files.get("file_info", []):
-                if isinstance(fi, dict):
-                    for loc in fi.get("locations", []):
-                        uid = loc.get("uid", "")
-                        if uid:
-                            uids.add(uid)
-        # Also check top-level file_uid
-        fuid = props.get("file_uid", "")
+            for fi in _as_list(files.get("file_info")):
+                if not isinstance(fi, dict):
+                    continue
+                for loc in _as_list(fi.get("locations")):
+                    if not isinstance(loc, dict):
+                        continue
+                    uid = str(loc.get("uid", "") or "")
+                    if uid:
+                        uids[uid] = None
+        fuid = str(props.get("file_uid", "") or "")
         if fuid:
-            uids.add(fuid)
+            uids[fuid] = None
     return list(uids)
 
 
@@ -179,7 +225,24 @@ def filesNotYetUploaded(
 ) -> list[dict[str, Any]]:
     """Filter a file manifest to only files not yet in the cloud.
 
-    MATLAB equivalent: +sync/+internal/filesNotYetUploaded.m
+    MATLAB equivalent: ``+sync/+internal/filesNotYetUploaded.m``
+
+    A file needs uploading if the remote dataset does not list it at all,
+    **or if it is listed and its ``uploaded`` status is false**. Presence in
+    the listing is not the same as presence of the bytes: the cloud records
+    a file when its upload is registered, and ``uploaded`` is what says the
+    transfer finished.
+
+    Matching on the uid alone -- which is what this did -- treats a
+    registered-but-unsent file as done, so the document is recorded as
+    synced while its binary is not on the cloud. Downstream consumers
+    (export, mirror, twoWaySync) then 404, and nothing re-queues the file
+    because the sync index says it is finished (NDI-matlab#805).
+
+    A remote entry that OMITS ``uploaded`` is re-queued rather than assumed
+    complete, with a warning. The status cannot be confirmed, and the
+    asymmetry is deliberate: a needless re-upload costs bandwidth, while a
+    wrongly skipped one costs the binary.
     """
     from .api.files import listFiles
 
@@ -188,13 +251,30 @@ def filesNotYetUploaded(
     except Exception:
         return file_manifest  # can't check, assume all need upload
 
-    remote_uids = set()
+    remote_by_uid: dict[str, dict[str, Any]] = {}
     for rf in remote_files:
-        uid = rf.get("uid", "")
+        uid = rf.get("uid", "") if hasattr(rf, "get") else ""
         if uid:
-            remote_uids.add(uid)
+            remote_by_uid[uid] = rf
 
-    return [f for f in file_manifest if f.get("uid", "") not in remote_uids]
+    needs_upload: list[dict[str, Any]] = []
+    for entry in file_manifest:
+        uid = entry.get("uid", "")
+        remote = remote_by_uid.get(uid)
+        if remote is None:
+            needs_upload.append(entry)
+            continue
+        if "uploaded" not in remote:
+            logger.warning(
+                "Remote file entry for UID %s lacks an 'uploaded' field; "
+                "conservatively re-queuing it for upload.",
+                uid,
+            )
+            needs_upload.append(entry)
+            continue
+        if not remote.get("uploaded"):
+            needs_upload.append(entry)
+    return needs_upload
 
 
 def validateSync(

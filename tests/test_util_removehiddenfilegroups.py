@@ -25,6 +25,8 @@ genuine epoch's epoch_id.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from ndi.file.navigator import find_file_groups
@@ -157,7 +159,7 @@ class TestWhereTheShadowFileIsStopped:
 
         groups = self._navigator_over(tmp_path).selectfilegroups_disk()
         found = {f for group in groups for f in group}
-        assert any(f.endswith("/Epoch1.bin") for f in found)
+        assert any(Path(f).name == "Epoch1.bin" for f in found)
         assert not any("._Epoch1.bin" in f for f in found)
 
     def test_hidden_directories_are_still_skipped(self, tmp_path):

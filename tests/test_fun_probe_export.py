@@ -12,6 +12,8 @@ ones here.
 
 from __future__ import annotations
 
+import sys
+
 import numpy as np
 import pytest
 
@@ -237,6 +239,10 @@ class TestOneProbe:
         assert (tmp_path / "kiasort" / "ctx_-_1" / "kiasort.bin").is_file()
         assert (tmp_path / "kilosort" / "ctx_-_1" / "kilosort.bin").is_file()
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="Windows filesystems forbid '|' in filenames; legacy folder is unreachable",
+    )
     def test_a_legacy_probe_folder_is_reused_rather_than_duplicated(self, tmp_path):
         """Data written by an older NDI lives under 'ctx_|_1'. Exporting
         beside it would leave the user with two folders and no clue which

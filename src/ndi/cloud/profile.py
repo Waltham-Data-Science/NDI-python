@@ -157,18 +157,23 @@ def _read_secrets_file(filename: Path) -> dict:
         return {}
 
 
-def _write_secrets_file(filename: Path, payload: dict) -> None:
-    # Write via os.open with 0600 so a shared-workstation neighbour cannot
-    # read the AES ciphertext. The AES key is derived from hostname+username
-    # (see _aes_key_bytes), which they may know. tempfile+replace so a
-    # concurrent open never sees the old file at the tightened mode with the
-    # wrong contents. No-op on Windows for the mode bits, atomic on all
-    # POSIX filesystems.
+def _write_owner_only(filename: Path, text: str) -> None:
+    """Write *text* to *filename*, readable only by its owner.
+
+    Via ``os.open`` with 0600 so a shared-workstation neighbour never sees
+    the contents, not even in the window between create and chmod. The AES
+    key is derived from hostname+username (see :func:`_aes_key_bytes`),
+    which such a neighbour may well know. tempfile+replace so a concurrent
+    reader never catches a half-written file. No-op on Windows for the mode
+    bits, atomic on all POSIX filesystems.
+
+    MATLAB counterpart: ``ndi.cloud.profile.restrictToOwner``.
+    """
     tmp = filename.with_suffix(filename.suffix + ".tmp")
     fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     try:
         with os.fdopen(fd, "w") as fh:
-            fh.write(json.dumps(payload, indent=2))
+            fh.write(text)
     except Exception:
         try:
             os.unlink(tmp)
@@ -182,6 +187,10 @@ def _write_secrets_file(filename: Path, payload: dict) -> None:
         os.chmod(filename, 0o600)
     except OSError:
         pass
+
+
+def _write_secrets_file(filename: Path, payload: dict) -> None:
+    _write_owner_only(filename, json.dumps(payload, indent=2))
 
 
 def _as_profile_list(raw) -> list:
@@ -403,7 +412,11 @@ class _ProfileSingleton:
             "DefaultUID": self.default_uid,
         }
         try:
-            self.filename.write_text(json.dumps(payload, indent=2))
+            # 0600 like the secrets file beside it: this one holds account
+            # emails and UIDs rather than credentials, but MATLAB's
+            # restrictToOwner covers both and there is no reason for the
+            # weaker of the two modes to be the one that wins.
+            _write_owner_only(self.filename, json.dumps(payload, indent=2))
         except OSError as exc:
             logger.warning("Could not save cloud profiles to %s: %s", self.filename, exc)
 

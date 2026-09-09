@@ -221,7 +221,7 @@ classes:
   - name: NielsenLabStims
     type: class
     matlab_path: "+ndi/+daq/+metadatareader/NielsenLabStims.m"
-    matlab_last_sync_hash: "fe64a9f5"
+    matlab_last_sync_hash: "f037e2086"
     python_path: "ndi/daq/metadatareader/nielsenlab_stims.py"
     python_class: "ndi_daq_metadatareader_NielsenLabStims"
     inherits: "ndi.daq.metadatareader"
@@ -315,10 +315,17 @@ classes:
   - name: RayoLabStims
     type: class
     matlab_path: "+ndi/+daq/+metadatareader/RayoLabStims.m"
-    matlab_last_sync_hash: "2566fe4d"
+    matlab_last_sync_hash: "a05a0a80a"
     python_path: "ndi/daq/metadatareader/rayolab_stims.py"
     python_class: "ndi_daq_metadatareader_RayoLabStims"
     inherits: "ndi.daq.metadatareader"
+    decision_log: >
+      NDI-matlab a05a0a80a added a readmetadata override so the reader no
+      longer needs a file matching its tab_separated_file_parameter before
+      it will return the constant {stimid: 1} -- the base class would
+      otherwise insist on one. Nothing to port: Python already overrides
+      readmetadata itself rather than only readmetadatafromfile, so it has
+      never consulted the pattern.
 
     methods:
       - name: RayoLabStims

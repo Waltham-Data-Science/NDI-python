@@ -19,18 +19,30 @@ Example:
     doc = db.read(doc_id)
 """
 
+import logging
 from pathlib import Path
+from typing import Literal
 
 from .document import ndi_document
 from .query import ndi_query
 
+logger = logging.getLogger(__name__)
 
-def _cloud_file_handler(dest_path, source_path):
+
+def _cloud_file_handler(dest_path, source_path, context=None):
     """DID's ``custom_file_handler``, wired to NDI's cloud retrieval.
 
     DID downloads nothing itself; a downstream package supplies retrieval.
     NDI-matlab passes ``@download_file_from_cloud`` to both ``add_docs`` and
     ``open_doc`` in didsqlite.m, and this is the same handler.
+
+    THREE PARAMETERS, NOT TWO. This function is what DID actually receives,
+    so its signature -- not the one it delegates to -- is what DID counts
+    when choosing between ``handler(dest, source)`` and
+    ``handler(dest, source, context)``. Declaring two here means the context
+    is dropped before ``download_file_from_cloud`` can read it, and a series
+    member is then fetched as its own manifest. See that function for what
+    the context carries and why it matters.
 
     Imported lazily and tolerant of failure: the cloud extra may be absent,
     and a session that never touches a remote location must not require it.
@@ -41,7 +53,7 @@ def _cloud_file_handler(dest_path, source_path):
         from .cloud.filehandler import download_file_from_cloud
     except ImportError:
         return
-    download_file_from_cloud(dest_path, source_path)
+    download_file_from_cloud(dest_path, source_path, context)
 
 
 class SQLiteDriver:
@@ -198,6 +210,21 @@ class SQLiteDriver:
 
         return [d.document_properties for d in docs if d is not None]
 
+    def close(self) -> None:
+        """Close the underlying DID SQLiteDB, releasing its file handles.
+
+        Idempotent: safe to call more than once. Needed on Windows, where an
+        open SQLite connection keeps a file lock that blocks ``shutil.rmtree``
+        of the containing directory (issue #274). CPython usually closes the
+        connection during garbage collection on POSIX, but that is not
+        guaranteed and does not release the Windows lock in time for a caller
+        that immediately removes the directory.
+        """
+        db = getattr(self, "_db", None)
+        if db is not None:
+            db.close()
+            self._db = None
+
 
 class ndi_database:
     """NDI database interface.
@@ -313,21 +340,42 @@ class ndi_database:
 
         return doc
 
-    def remove(self, document: ndi_document | str) -> bool:
+    def remove(
+        self,
+        document: ndi_document | str,
+        on_missing: Literal["ignore", "warn", "error"] = "ignore",
+    ) -> bool:
         """Remove a document from the database.
 
         Args:
             document: The ndi_document or document ID to remove.
+            on_missing: What to do when the id is not in the database.
+                ``"ignore"`` (the default) treats an already-deleted
+                document as success -- the caller wanted it gone either
+                way. ``"warn"`` logs it; ``"error"`` raises. Mirrors
+                MATLAB's ``OnMissing`` name-value argument.
 
         Returns:
             True if removed, False if not found.
 
+        Raises:
+            KeyError: if the document is absent and ``on_missing="error"``.
+
         Example:
             db.remove(doc)
             db.remove('abc123')
+            db.remove('abc123', on_missing="error")
         """
+        if on_missing not in ("ignore", "warn", "error"):
+            raise ValueError(f"on_missing must be 'ignore', 'warn' or 'error', not {on_missing!r}")
         doc_id = document.id if isinstance(document, ndi_document) else document
-        return self._driver.delete_by_id(doc_id)
+        removed = self._driver.delete_by_id(doc_id)
+        if not removed:
+            if on_missing == "error":
+                raise KeyError(f"No document with id {doc_id!r} to remove")
+            if on_missing == "warn":
+                logger.warning("No document with id %r to remove", doc_id)
+        return removed
 
     # === ndi_query Operations ===
 
@@ -488,13 +536,19 @@ class ndi_database:
         return list(documents)
 
     def remove_many(
-        self, query: ndi_query | None = None, documents: list[ndi_document] | None = None
+        self,
+        query: ndi_query | None = None,
+        documents: list[ndi_document] | None = None,
+        on_missing: Literal["ignore", "warn", "error"] = "ignore",
     ) -> int:
         """Remove multiple documents.
 
         Args:
             query: ndi_query to select documents to remove.
             documents: Explicit list of documents to remove.
+            on_missing: Applied to each id, as in :meth:`remove`. MATLAB's
+                ``remove`` takes a cell array and passes ``OnMissing``
+                down to each removal the same way.
 
         Returns:
             Number of documents removed.
@@ -515,7 +569,7 @@ class ndi_database:
 
         count = 0
         for doc_id in to_remove:
-            if self.remove(doc_id):
+            if self.remove(doc_id, on_missing=on_missing):
                 count += 1
         return count
 
@@ -542,6 +596,17 @@ class ndi_database:
         doc_id = doc_or_id.id if isinstance(doc_or_id, ndi_document) else doc_or_id
         found, path = self._driver.exist_binary(doc_id, file_name)
         return found, (Path(path) if path else None)
+
+    def close(self) -> None:
+        """Close the underlying SQLite driver.
+
+        Idempotent: safe to call more than once. Needed on Windows so that
+        deleting the session's directory does not race the still-open SQLite
+        connection (issue #274).
+        """
+        driver = getattr(self, "_driver", None)
+        if driver is not None:
+            driver.close()
 
     def __repr__(self) -> str:
         return f"ndi_database('{self.session_path}')"

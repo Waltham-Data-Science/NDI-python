@@ -16,10 +16,40 @@ classes:
   # =========================================================================
   - name: tuningcurve
     type: class
+    status: porting_deferred
     matlab_path: "src/ndi/+ndi/+calc/+stimulus/tuningcurve.m"
+    matlab_last_sync_hash: "63043f393"
     python_path: "ndi/calc/stimulus/tuningcurve.py"
     python_class: "ndi_calc_stimulus_tuningcurve"
     inherits: "ndi.calculator"
+    decision_log: >
+      Examined against NDI-matlab 63043f393, the file's last-touching commit,
+      AND THE STATUS IS CHANGED TO porting_deferred, because CALCULATE -- the
+      whole point of a calculator -- IS A STUB. MATLAB's calculate errors if
+      input_parameters or depends_on is missing, looks up the
+      stimulus_response_scalar document named by the
+      stimulus_response_scalar_id dependency and errors unless exactly one
+      comes back, splits independent_label and independent_parameter on commas
+      and errors if their counts differ, then walks
+      parameters.input_parameters.selection applying seven different
+      operations -- hasnumericvalue, hasnumericvalue>, hasnumericvalue<,
+      NumberAtLeast, 'best' (through best_value and the named best_algorithm),
+      'greatest', and 'varies' -- RETURNING NO DOCUMENT AT ALL when a
+      constraint is not met, and only then builds the tuning curve. The port
+      creates a tuningcurve_calc document whose independent_variable,
+      response_mean and response_stderr are EMPTY LISTS, sets the session id
+      and the first dependency, and returns it. No stimulus response is looked
+      up, no selection constraint is applied, no curve is computed, and a
+      document always comes back. So a caller gets a well-formed
+      tuningcurve_calc that says nothing, for every input, including inputs
+      MATLAB would decline. WHAT IS REAL: property_value_array, best_value and
+      best_value_empirical are genuine ports, and default_parameters_query
+      matches. They are the helpers calculate exists to use. ALSO MISSING:
+      is_valid_dependency_input, doc_about and plot. Recorded rather than
+      invented -- writing the selection engine and the curve computation from
+      the MATLAB without a populated session to check against is how a
+      plausible wrong answer gets committed, and this entry has already
+      carried one claim too many.
 
     methods:
       - name: tuningcurve
@@ -42,7 +72,17 @@ classes:
         output_arguments:
           - name: doc
             type_python: "list[ndi_document]"
-        decision_log: "Exact match."
+        decision_log: >
+          NOT an exact match -- THIS IS A STUB, and the record said the
+          opposite. See this class's decision_log for what MATLAB's calculate
+          does and what the port does instead; in short, no stimulus response
+          is looked up, no selection constraint is applied, no curve is
+          computed, and a well-formed but empty tuningcurve_calc document is
+          returned for EVERY input, including inputs MATLAB declines by
+          returning no document at all. The class was moved to
+          porting_deferred when this was found (NDI-python#211), but this
+          method's own log still read "Exact match." and so still contradicted
+          the entry above it. Tracked as NDI-python#269.
 
       - name: default_search_for_input_parameters
         input_arguments: []

@@ -17,9 +17,16 @@ classes:
   - name: app
     type: class
     matlab_path: "src/ndi/+ndi/app.m"
+    matlab_last_sync_hash: "8533e9f89"
     python_path: "ndi/app/__init__.py"
     python_class: "ndi_app"
     inherits: "ndi.documentservice"
+    decision_log: >
+      Examined against NDI-matlab 8533e9f89, the file's last-touching commit.
+      The whole surface is present: the constructor taking (session, name) and
+      defaulting name to 'generic', the two protected-set properties, and all
+      four methods -- varappname, version_url, newdocument, searchquery.
+      Nothing to port.
 
     properties:
       - name: session
@@ -97,8 +104,44 @@ classes:
   - name: appdoc
     type: class
     matlab_path: "src/ndi/+ndi/+app/appdoc.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/app/appdoc.py"
     python_class: "ndi_app_appdoc"
+    decision_log: >
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      This is the base every NDI app's document handling sits on, so each of
+      these was inherited by every app. (1) REPLACEIFDIFFERENT KEPT DOCUMENTS
+      MATLAB REPLACES. MATLAB replaces unless it was told to check AND there
+      is EXACTLY ONE existing document equal to what was asked for -- its
+      comment is explicit that more than one "must be different". The port
+      looped over every existing document and returned as soon as ANY of them
+      matched, so a database holding three versions, one of which happened to
+      match, kept all three. (2) A FAILED REMOVAL WAS SWALLOWED AND THEN
+      WRITTEN BESIDE. MATLAB clears through clear_appdoc and errors -- 'Could
+      not delete existing X document(s).' -- if it returns false. The port
+      removed documents inline under `except Exception: pass` and carried on
+      to add the replacement, so a database that refused the deletion ended up
+      with both. clear_appdoc had the same swallow AND returned true
+      regardless, which is what made its return value useless to the caller
+      that reads it. (3) appdoc_struct WAS NOT RESOLVED. MATLAB accepts an
+      empty value (use the defaults), an ndi.document (convert it back through
+      doc2struct), or a struct, and errors on anything else. Only the empty
+      case was handled, so a caller who passed the document they had just
+      found had it written straight into struct2doc as if it were parameters,
+      and a number or a list went the same way in silence. (4)
+      appdoc_description had no counterpart at all, so a caller following
+      MATLAB met an AttributeError. Added on the base class, listing the
+      declared types; MATLAB's subclasses override it with their own tables,
+      and the two Python subclasses now inherit the generic one. All four
+      ported, with the ERROR message now naming the count and the type as
+      MATLAB's does, and an unknown action refused rather than quietly falling
+      through to a plain add. Covered by
+      tests/test_app_appdoc_against_matlab.py. NOT PORTED, and MATLAB should
+      probably fix it rather than this: its char branch reads
+      `vlt.file.loadStructArray(appdoc_strut)` -- note the misspelling -- so
+      passing a FILENAME, which the branch exists for, always lands in the
+      catch and reports a file-reading failure. There is no point mirroring a
+      path that cannot work; a filename is simply not accepted here.
 
     properties:
       - name: doc_types
@@ -420,9 +463,45 @@ classes:
   - name: spikeextractor
     type: class
     matlab_path: "src/ndi/+ndi/+app/spikeextractor.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/app/spikeextractor.py"
     python_class: "ndi_app_spikeextractor"
     inherits: "ndi.app & ndi.app.appdoc"
+    decision_log: >
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit,
+      method by method, and this one is a careful port. The detection and
+      extraction core matches: the same two threshold methods with the same
+      sign convention, the same dotdisc, the same edge trimming at -S0 and
+      length-S1, the same sort-then-refractory, the same sign-flipped
+      centerspikes_neg and flip back, the same Nsamples x Nchannels x Nspikes
+      layout, and the same two attached files -- a real vhlspikewaveformfile
+      .vsw and float32 spiketimes.bin, byte-compatible with what MATLAB
+      writes. makefilterstruct and filter match exactly. ONE STRUCTURAL
+      DIVERGENCE, and it changes detection. MATLAB reads the epoch in CHUNKS
+      of read_time seconds with overlap seconds between them, in a while loop,
+      appending waveforms to the file as it goes. The port reads the whole
+      epoch in one readtimeseries call. Three consequences. (a) The read_time
+      and overlap extraction parameters are INERT here -- they are carried in
+      the document and in the defaults, and nothing reads them, so a caller
+      tuning them sees no effect. (b) A long epoch MATLAB streams is loaded
+      entire. (c) The standard_deviation threshold is computed PER CHUNK in
+      MATLAB and once for the whole epoch here, so on a recording whose noise
+      level drifts the two find different spikes. The port's behaviour is
+      arguably the better one -- no spike is lost at a chunk boundary and none
+      is found twice in the overlap -- but it is not MATLAB's, and it is
+      recorded rather than changed because rewriting the reader would change
+      which spikes come out of every existing recording. TWO SMALLER
+      DIFFERENCES. The .vsw header's name field is the extraction name here
+      and the spikewaves DOCUMENT ID in MATLAB, and MATLAB also writes ref=0
+      and comment=<epoch id> where the port writes neither; a cross-language
+      reader comparing headers will see it. And MATLAB's extract clears BOTH
+      the 'spikewaves' and the 'spiketimes' appdoc types before writing, where
+      the port clears only 'spikewaves' -- harmless in this design, since the
+      spike times are a file on the spikewaves document rather than a document
+      of their own, and neither language lists 'spiketimes' in doc_types even
+      though both accept it in find_appdoc. appdoc_description had no
+      counterpart; the base class now provides a generic one, where MATLAB's
+      subclass overrides it with its own table.
 
     methods:
       - name: spikeextractor
@@ -557,9 +636,37 @@ classes:
   - name: spikesorter
     type: class
     matlab_path: "src/ndi/+ndi/+app/spikesorter.m"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/app/spikesorter.py"
     python_class: "ndi_app_spikesorter"
     inherits: "ndi.app & ndi.app.appdoc"
+    decision_log: >
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit,
+      and this one is a careful port too, with ONE GAP THAT IS ALREADY
+      DOCUMENTED IN THE CODE. spike_sort matches step for step -- the
+      sorting_parameters lookup with the same two errors for none and for too
+      many, check_sorting_parameters, the existing-clusters short-circuit and
+      the redo removal, loadwaveforms, the interpolation branch with
+      oversamplespikes and the sign-flipped centerspikes_neg, PCA features,
+      KlustaKwik, cluster_initializeclusterinfo, and a spike_clusters document
+      carrying epoch_info, clusterinfo and waveform_sample_times.
+      clusters2neurons matches as well: the same neuron_extracellular lookup
+      by spike_clusters_id, the same early return unless redo, the same
+      removal of the neuron ELEMENTS rather than just the documents, and the
+      same rule that a cluster labelled 'Unselected' or 'Not useable' is
+      skipped -- so a freshly auto-sorted document yields no neurons until
+      someone curates the clusters. THE GAP: graphical_mode=1 raises
+      NotImplementedError. MATLAB pops up
+      vlt.neuro.spikesorting.cluster_spikewaves_gui and lets a person curate
+      the clusters by hand; the interactive editor is tracked as NDI-python
+      issue #97, and the automatic path (graphical_mode=0) is complete. That
+      is stated in the method's own docstring, which is the right place for
+      it, and it is worth knowing alongside the curation rule above: without
+      the editor, nothing marks a cluster usable, so clusters2neurons has
+      nothing to promote. One dependency also worth naming: the automatic path
+      needs klustakwik2, an optional dependency, and says so when it is
+      absent. appdoc_description had no counterpart; the base class now
+      provides a generic one.
 
     methods:
       - name: spikesorter

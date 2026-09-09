@@ -1,0 +1,80 @@
+# Bridge drift burn-down list -- every line here is an IOU, not a rule.
+#
+# tests/test_matlab_bridge_hashes.py gates two things: no bridge entry may
+# drift from NDI-matlab, and every entry naming a matlab_path must carry a
+# matlab_last_sync_hash. Both were newly enforced per NDI-python#211, and the
+# entries below already violated them on the day the gate went up.
+#
+# THE GATE IS ON FOR EVERYTHING ELSE. An entry not listed here fails
+# immediately, so no NEW unexamined drift can enter. This file is the
+# pre-existing debt, enumerated so it can be counted and burnt down rather
+# than sitting invisible -- which is how 60 entries drifted unnoticed in the
+# first place (#191).
+#
+# TO BURN ONE DOWN: read what MATLAB actually changed,
+#     git -C ../NDI-matlab log <matlab_last_sync_hash>..HEAD -- src/ndi/<matlab_path>
+#     git -C ../NDI-matlab diff <matlab_last_sync_hash>..HEAD -- src/ndi/<matlab_path>
+# then either port the behavioural change and bump the hash, or -- if nothing
+# on the Python side must follow -- just bump it. A regular port needs no
+# decision_log for this; see section 7 of the bridge spec. Then DELETE the
+# line from this file. A shrinking file is the progress metric.
+#
+# THIS FILE CANNOT ROT. TestTheAllowlistOnlyShrinks fails if a listed entry no
+# longer drifts, so a fixed entry MUST be removed here in the same PR. The
+# list can only shrink; nothing can be added to it without a deliberate edit
+# that a reviewer sees.
+#
+# THE DRIFT BURN-DOWN IS DONE. It ran 60 -> 0 in five passes: the 18
+# signature entries (#214), the 16 body entries under src/ndi (#220), the 8
+# non-cloud body entries and the 2 comments-only ones (#224), and the 18 of
+# the +ndi/+cloud/ cluster, which moved together in MATLAB -- bulk uploads
+# and waitForAllBulkUploads, curl instead of websave, signed-URL sets, and
+# the sync pipeline reporting failures it used to bury -- so they were read
+# as one change rather than eighteen. The last, downloadNdiDocuments, was
+# held open on purpose until #215 gave the cloud path file-series support,
+# because bumping its hash would have claimed the entry was current when
+# that missing support was exactly what its drift pointed at.
+#
+# WHAT IT FOUND. Roughly one entry in three was hiding a real defect, not
+# bookkeeping. The signature pass alone: startSession had dropped a
+# now-required organizationId, a dataset-scoped query was unreachable from
+# Python, setup.lab duplicated every DAQ system on a second run,
+# session.database_rm ignored the flag it was passed and deleted some
+# documents twice, database.remove had no OnMissing, and the profiles file
+# sat at the umask default beside a 0600 secrets file. The cloud pass:
+# waitForAllBulkUploads was ported but never called, so a sync could list the
+# remote mid-extraction; a file the cloud listed but never received was never
+# re-queued; a document archive with nothing to read in it returned an empty
+# list; a transfer URL was never checked for https; a zipped folder
+# downloaded with no extension; and a document whose binary failed to upload
+# was recorded as synced. Each is in the decision_log of its entry.
+#
+# THE POINT BEING: an entry whose hash is stale is not a formality. Read the
+# diff before bumping.
+
+# ---------------------------------------------------------------------------
+# drifted: EMPTY. No bridge entry is behind its MATLAB counterpart.
+#
+# Nothing may be added back. An entry that drifts and is not listed here
+# fails test_no_entry_has_drifted immediately, and TestTheAllowlistOnlyShrinks
+# fails if a listed entry no longer drifts -- so this file cannot be used to
+# park a new problem, and a fixed entry must be delisted in the same PR.
+# ---------------------------------------------------------------------------
+drifted: []
+
+# ---------------------------------------------------------------------------
+# no_hash: EMPTY. Every entry that names a matlab_path now carries a
+# matlab_last_sync_hash, and each one was recorded by someone who read that
+# MATLAB file against its Python counterpart and wrote down what they found.
+#
+# An entry with a matlab_path and no matlab_last_sync_hash can never show
+# drift, so it claims its port is current forever and no check can contradict
+# it. That was true of 92 entries when this section went up (#211).
+#
+# Nothing may be added back. test_every_matlab_path_entry_carries_a_hash
+# fails immediately for a new hashless entry, and TestAHashChangeIsJustified
+# requires that recording a hash without touching the entry's python_path
+# files also change that entry's decision_log, naming the commit -- so the
+# cheap path of bumping a hash to silence the gate is closed.
+# ---------------------------------------------------------------------------
+no_hash: []

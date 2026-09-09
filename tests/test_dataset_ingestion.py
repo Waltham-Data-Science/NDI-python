@@ -220,6 +220,13 @@ class TestConvertLinkedSessionToIngested:
 
         dataset.convertLinkedSessionToIngested(session.id(), are_you_sure=True)
 
+        # Close both handles before rmtree: on Windows an open SQLite
+        # connection keeps a lock that makes the removal fail (issue #274).
+        # ``del`` alone is not enough -- CPython's __del__ closes the
+        # SQLiteDB via garbage collection on POSIX but not reliably in time
+        # on Windows.
+        session._database.close()
+        dataset._session._database.close()
         del dataset, session
         shutil.rmtree(session_path)
         assert not session_path.exists()

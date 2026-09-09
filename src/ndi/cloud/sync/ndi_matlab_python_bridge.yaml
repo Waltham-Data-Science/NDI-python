@@ -17,7 +17,7 @@ classes:
   - name: SyncMode
     type: enum
     matlab_path: "+ndi/+cloud/+sync/+enum/SyncMode.m"
-    matlab_last_sync_hash: "fe64a9f5"
+    matlab_last_sync_hash: "42f930762"
     python_path: "ndi/cloud/sync/mode.py"
     python_class: "SyncMode"
     members:
@@ -35,6 +35,11 @@ classes:
       MATLAB uses PascalCase enum values (DownloadNew, UploadNew, etc).
       Python uses UPPER_SNAKE for enum members (DOWNLOAD_NEW) with
       lowercase string values matching MATLAB's string representation.
+      NDI-matlab 42f930762 fixed a dispatch that could never work: it called
+      syncOptions.nvpairs(), a method SyncOptions does not have, and passed the
+      result unexpanded. Nothing to port: Python's SyncMode is a plain Enum of
+      mode names with no Function property and no dispatch of its own; the
+      caller selects the operation.
 
   - name: SyncOptions
     type: dataclass
@@ -63,7 +68,26 @@ classes:
   - name: SyncIndex
     type: dataclass
     matlab_path: "+ndi/+cloud/+sync/+internal/+index/"
+    matlab_last_sync_hash: "fe4c4e79c"
     python_path: "ndi/cloud/sync/index.py"
+    decision_log: >
+      Examined against NDI-matlab fe4c4e79c, the commit that made the write
+      atomic. The atomic write itself was already ported and matches. What did
+      not: .ndi/sync/index.json lives INSIDE the dataset, so it is an
+      interchange format between the two languages, and the two languages used
+      different key names for it. MATLAB's createSyncIndexStruct writes
+      localDocumentIdsLastSync / remoteDocumentIdsLastSync /
+      lastSyncTimestamp; Python wrote local_doc_ids_last_sync /
+      remote_doc_ids_last_sync / last_sync_timestamp. Neither could read the
+      other's index, and neither reports a bad read -- SyncIndex.read fell back
+      to [] for every unrecognised key, so a MATLAB-written index came back
+      EMPTY and indistinguishable from never-synced. That is the state
+      writeSyncIndex's own comment warns about. With it, uploadNew uploads
+      nothing, downloadNew and mirrorFromRemote re-download the whole remote,
+      twoWaySync sees everything as new, and mirrorToRemote computes
+      remote - local and DELETES THE WHOLE REMOTE. Python now writes MATLAB's
+      keys and reads both, so an index already on disk from an older
+      NDI-python still loads and is migrated on the next write.
     python_class: "SyncIndex"
     properties:
       - name: local_doc_ids_last_sync
@@ -73,6 +97,32 @@ classes:
       - name: last_sync_timestamp
         type_python: "str"
     methods:
+      - name: index_filepath
+        kind: function
+        matlab_equivalent: "getIndexFilepath"
+        input_arguments:
+          - name: dataset_path
+            type_python: "Path"
+          - name: mode
+            type_matlab: "string, mustBeMember([\"read\",\"write\"])"
+            type_python: "str"
+            default: "'read'"
+          - name: verbose
+            type_matlab: "options.Verbose (logical, default true)"
+            type_python: "bool"
+            default: "False"
+        output_arguments:
+          - name: index_path
+            type_python: "Path"
+        decision_log: >
+          Newly ported. MATLAB's getIndexFilepath was a named function and
+          Python had inlined the path in read and write, which is how the two
+          drifted apart on whether reading creates the directory: MATLAB
+          creates it only in write mode, so reading a never-synced dataset
+          leaves no trace. Verbose announces the creation, as MATLAB does, and
+          an unrecognised mode is refused rather than treated as read --
+          MATLAB's mustBeMember does the same.
+
       - name: read
         kind: classmethod
         matlab_equivalent: "readSyncIndex"
@@ -83,8 +133,13 @@ classes:
           - name: index
             type_python: "SyncIndex"
         decision_log: >
-          MATLAB has readSyncIndex as standalone function.
-          Python wraps it as a classmethod on SyncIndex dataclass.
+          MATLAB has readSyncIndex as a standalone function; Python wraps it as
+          a classmethod. Now reads MATLAB's key names, falling back to the
+          legacy Python spellings so an index already on disk still loads.
+          MATLAB returns struct.empty for a missing file where Python returns a
+          default-constructed index; callers on both sides treat that as never
+          synced, but Python cannot distinguish "no file" from "empty index".
+          Left as is -- no caller needs the distinction -- and recorded.
 
       - name: write
         matlab_equivalent: "writeSyncIndex"
@@ -93,8 +148,10 @@ classes:
             type_python: "Path"
         output_arguments: []
         decision_log: >
-          MATLAB has writeSyncIndex as standalone function.
-          Python wraps it as an instance method.
+          MATLAB has writeSyncIndex as a standalone function; Python wraps it
+          as an instance method. Both write atomically through a temp file in
+          the destination directory, for the same reason and with the same
+          same-filesystem constraint. Now writes MATLAB's key names.
 
       - name: update
         matlab_equivalent: "updateSyncIndex"
@@ -105,8 +162,20 @@ classes:
             type_python: "list[str]"
         output_arguments: []
         decision_log: >
-          MATLAB has updateSyncIndex as standalone function.
-          Python wraps it as an instance method.
+          NOT the same function, and recorded rather than changed. MATLAB's
+          updateSyncIndex(ndiDataset, cloudDatasetId, indexData) FETCHES the id
+          lists when they are not supplied -- listLocalDocuments and
+          listRemoteDocumentIds -- then builds the struct AND writes it.
+          Python's update is a setter: both lists are required and it does not
+          write. The behaviour is not missing, it is decomposed: every caller
+          in operations.py does read -> work -> update -> write itself, and
+          both list helpers exist in ndi.cloud.internal. Adding a composite
+          nothing calls would be worse than the asymmetry. The timestamp now
+          uses MATLAB's format from createSyncIndexStruct,
+          yyyy-MM-dd'T'HH:mm:ssZZZZ -- local time, second resolution, explicit
+          numeric offset -- where Python wrote UTC isoformat with microseconds.
+          Local time is MATLAB's choice; the offset is written out, so the
+          value stays unambiguous. Nothing on either side parses it.
 
 # =============================================================================
 # Functions — operations.py
@@ -116,7 +185,7 @@ functions:
 
   - name: uploadNew
     matlab_path: "+ndi/+cloud/+sync/uploadNew.m"
-    matlab_last_sync_hash: "c372693a"
+    matlab_last_sync_hash: "8c31a8f28"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: dataset_path
@@ -135,11 +204,58 @@ functions:
     output_arguments:
       - name: result
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match.
+      2026-09-08: examined against 8c31a8f28 (was c372693a). Two commits.
+      c425cd115 adds waitForAllBulkUploads and wires it into the sync pipeline,
+      replacing fixed pauses; the wrapper existed here but nothing called it, so a
+      sync could list the remote while the server was still extracting an upload
+      and conclude documents were missing. Now settled before the first listing in
+      all five entry points (commit 73b89fd on this branch). 8c31a8f28 stops the
+      sync index recording documents whose binaries failed to upload: this side
+      already records only the IDs whose addDocument returned, so a failed
+      metadata upload never enters the index, and the binary half is now enforced
+      in mirrorToRemote (commit 8b6351c). uploadNew itself uploads no binaries at
+      all and posts an ndiId rather than the document body -- a structural gap
+      these commits expose but do not cause, tracked as #232.
+      2026-09-08: signature changed to take an ndi.dataset, matching MATLAB's
+      uploadNew(ndiDataset, syncOptions), and the cloud id is now optional -- an empty one
+      is resolved from the dataset's dataset_remote document as MATLAB does. This
+      side previously took (dataset_path, cloud_dataset_id) and worked from the
+      sync index's id lists alone, which made the port's central claim false:
+      with only ids there is no document content to send, so every upload posted
+      {"ndiId": id} -- a document with no base, no document_class and no
+      properties. The call succeeded, the remote listed the id, and no later run
+      resent it because a live listing showed it present. NDI-python#232.
+      Also returns MATLAB's (success, errorMessage, report) triple rather than the
+      report alone, so a caller can ask "did it work" without reconstructing the
+      answer from report fields whose names differ per mode. success is false when
+      anything did not transfer, in either direction: NDI-matlab 29546720b made a
+      partial upload a failure rather than a clean mirror ("a scripted pipeline
+      checking only success believed the dataset was mirrored when zero documents
+      transferred"), and the same argument covers a partial download, which MATLAB
+      still reports as success. Stricter than MATLAB for the two download modes,
+      and never wrong. One divergence kept deliberately: MATLAB aborts on a failed
+      upload and leaves the sync index un-advanced, while this records what
+      actually landed and advances over exactly that, so a retry re-sends only
+      what is still missing. A caller mistake -- a path where a dataset belongs --
+      still raises rather than becoming success=false.
+      Correction to the note above: the sync-index divergence it described is
+      gone. An upload failure -- documents or binaries -- now aborts before the
+      index is written, matching MATLAB exactly: uploadNew returns early with
+      "sync index not updated" (8c31a8f28), and mirrorToRemote and twoWaySync
+      raise NDI:Cloud:Sync:UploadIncomplete so every later phase is skipped
+      (29546720b). In mirrorToRemote that includes the remote deletions, which
+      matters on its own -- deleting the remote's copies while the local ones have
+      not all arrived is how a half-finished mirror loses documents. A failed
+      remote deletion still does NOT abort, because MATLAB's deleteRemoteDocuments
+      warns and returns rather than throwing; nor does a short download. Selection
+      runs against a live remote listing rather than the index, so skipping the
+      index write costs no retries.
 
   - name: downloadNew
     matlab_path: "+ndi/+cloud/+sync/downloadNew.m"
-    matlab_last_sync_hash: "c372693a"
+    matlab_last_sync_hash: "7efa0a8a0"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: dataset_path
@@ -158,11 +274,46 @@ functions:
     output_arguments:
       - name: result
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match.
+      2026-09-08: examined against 7efa0a8a0 (was c372693a). Two commits.
+      c425cd115 is the bulk-upload settling, ported (see uploadNew). 7efa0a8a0
+      stops the sync index burying a short download -- ask for 50 documents, get
+      47, and downloadNew wrote the full remote list into the index anyway, so the
+      three that never arrived were recorded as synced and never requested again.
+      The index half of that was already ported (a document not landed on disk
+      enters neither list); what was added now is the warning, so a short download
+      is visible without reading report['failed'] (commit 21a4e4b on this branch).
+      2026-09-08: signature changed to take an ndi.dataset, matching MATLAB's
+      downloadNew(ndiDataset, syncOptions), and the cloud id is now optional -- an empty one
+      is resolved from the dataset's dataset_remote document as MATLAB does. This
+      side previously took (dataset_path, cloud_dataset_id) and worked from the
+      sync index's id lists alone, which made the port's central claim false:
+      with only ids there is no document content to send, so every upload posted
+      {"ndiId": id} -- a document with no base, no document_class and no
+      properties. The call succeeded, the remote listed the id, and no later run
+      resent it because a live listing showed it present. NDI-python#232.
+      Also returns MATLAB's (success, errorMessage, report) triple rather than the
+      report alone, so a caller can ask "did it work" without reconstructing the
+      answer from report fields whose names differ per mode. success is false when
+      anything did not transfer, in either direction: NDI-matlab 29546720b made a
+      partial upload a failure rather than a clean mirror ("a scripted pipeline
+      checking only success believed the dataset was mirrored when zero documents
+      transferred"), and the same argument covers a partial download, which MATLAB
+      still reports as success. Stricter than MATLAB for the two download modes,
+      and never wrong. One divergence kept deliberately: MATLAB aborts on a failed
+      upload and leaves the sync index un-advanced, while this records what
+      actually landed and advances over exactly that, so a retry re-sends only
+      what is still missing. A caller mistake -- a path where a dataset belongs --
+      still raises rather than becoming success=false.
+      Correction to the note above: these two have no upload phase, so the abort
+      rule added for the upload modes does not reach them. A short download warns
+      and still writes the index over what actually landed, exactly as MATLAB
+      does -- only the success flag is stricter here.
 
   - name: mirrorToRemote
     matlab_path: "+ndi/+cloud/+sync/mirrorToRemote.m"
-    matlab_last_sync_hash: "c372693a"
+    matlab_last_sync_hash: "29546720b"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: dataset_path
@@ -181,11 +332,55 @@ functions:
     output_arguments:
       - name: result
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match.
+      2026-09-08: examined against 29546720b (was c372693a). Two commits.
+      c425cd115 is the bulk-upload settling, ported (see uploadNew). 29546720b
+      stops sync reporting success when uploads failed; the report here already
+      distinguishes what uploaded from what did not, and the index already records
+      only what actually happened rather than a blanket "remote now equals local".
+      The binary pass was the exception, and is fixed here: a document whose file
+      upload failed is withheld from the recorded remote state and named in
+      report['failed'] (commit 8b6351c on this branch). What this function still
+      posts is an ndiId rather than the document body -- see #232.
+      2026-09-08: signature changed to take an ndi.dataset, matching MATLAB's
+      mirrorToRemote(ndiDataset, syncOptions), and the cloud id is now optional -- an empty one
+      is resolved from the dataset's dataset_remote document as MATLAB does. This
+      side previously took (dataset_path, cloud_dataset_id) and worked from the
+      sync index's id lists alone, which made the port's central claim false:
+      with only ids there is no document content to send, so every upload posted
+      {"ndiId": id} -- a document with no base, no document_class and no
+      properties. The call succeeded, the remote listed the id, and no later run
+      resent it because a live listing showed it present. NDI-python#232.
+      Also returns MATLAB's (success, errorMessage, report) triple rather than the
+      report alone, so a caller can ask "did it work" without reconstructing the
+      answer from report fields whose names differ per mode. success is false when
+      anything did not transfer, in either direction: NDI-matlab 29546720b made a
+      partial upload a failure rather than a clean mirror ("a scripted pipeline
+      checking only success believed the dataset was mirrored when zero documents
+      transferred"), and the same argument covers a partial download, which MATLAB
+      still reports as success. Stricter than MATLAB for the two download modes,
+      and never wrong. One divergence kept deliberately: MATLAB aborts on a failed
+      upload and leaves the sync index un-advanced, while this records what
+      actually landed and advances over exactly that, so a retry re-sends only
+      what is still missing. A caller mistake -- a path where a dataset belongs --
+      still raises rather than becoming success=false.
+      Correction to the note above: the sync-index divergence it described is
+      gone. An upload failure -- documents or binaries -- now aborts before the
+      index is written, matching MATLAB exactly: uploadNew returns early with
+      "sync index not updated" (8c31a8f28), and mirrorToRemote and twoWaySync
+      raise NDI:Cloud:Sync:UploadIncomplete so every later phase is skipped
+      (29546720b). In mirrorToRemote that includes the remote deletions, which
+      matters on its own -- deleting the remote's copies while the local ones have
+      not all arrived is how a half-finished mirror loses documents. A failed
+      remote deletion still does NOT abort, because MATLAB's deleteRemoteDocuments
+      warns and returns rather than throwing; nor does a short download. Selection
+      runs against a live remote listing rather than the index, so skipping the
+      index write costs no retries.
 
   - name: mirrorFromRemote
     matlab_path: "+ndi/+cloud/+sync/mirrorFromRemote.m"
-    matlab_last_sync_hash: "c372693a"
+    matlab_last_sync_hash: "7efa0a8a0"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: dataset_path
@@ -204,11 +399,45 @@ functions:
     output_arguments:
       - name: result
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match.
+      2026-09-08: examined against 7efa0a8a0 (was c372693a). Two commits.
+      c425cd115 is the bulk-upload settling, ported (see uploadNew). 7efa0a8a0 is
+      the short-download fix: this side already excludes a document that did not
+      land from both sides of the index, which for mirrorFromRemote is the half
+      that matters -- the next run computes to_download as remote minus local, so
+      a failed download recorded as local would never be retried. The warning was
+      added with it (commit 21a4e4b on this branch).
+      2026-09-08: signature changed to take an ndi.dataset, matching MATLAB's
+      mirrorFromRemote(ndiDataset, syncOptions), and the cloud id is now optional -- an empty one
+      is resolved from the dataset's dataset_remote document as MATLAB does. This
+      side previously took (dataset_path, cloud_dataset_id) and worked from the
+      sync index's id lists alone, which made the port's central claim false:
+      with only ids there is no document content to send, so every upload posted
+      {"ndiId": id} -- a document with no base, no document_class and no
+      properties. The call succeeded, the remote listed the id, and no later run
+      resent it because a live listing showed it present. NDI-python#232.
+      Also returns MATLAB's (success, errorMessage, report) triple rather than the
+      report alone, so a caller can ask "did it work" without reconstructing the
+      answer from report fields whose names differ per mode. success is false when
+      anything did not transfer, in either direction: NDI-matlab 29546720b made a
+      partial upload a failure rather than a clean mirror ("a scripted pipeline
+      checking only success believed the dataset was mirrored when zero documents
+      transferred"), and the same argument covers a partial download, which MATLAB
+      still reports as success. Stricter than MATLAB for the two download modes,
+      and never wrong. One divergence kept deliberately: MATLAB aborts on a failed
+      upload and leaves the sync index un-advanced, while this records what
+      actually landed and advances over exactly that, so a retry re-sends only
+      what is still missing. A caller mistake -- a path where a dataset belongs --
+      still raises rather than becoming success=false.
+      Correction to the note above: these two have no upload phase, so the abort
+      rule added for the upload modes does not reach them. A short download warns
+      and still writes the index over what actually landed, exactly as MATLAB
+      does -- only the success flag is stricter here.
 
   - name: twoWaySync
     matlab_path: "+ndi/+cloud/+sync/twoWaySync.m"
-    matlab_last_sync_hash: "c372693a"
+    matlab_last_sync_hash: "29546720b"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: dataset_path
@@ -227,7 +456,50 @@ functions:
     output_arguments:
       - name: result
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match.
+      2026-09-08: examined against 29546720b (was c372693a). Two commits.
+      c425cd115 is the bulk-upload settling, ported (see uploadNew). 29546720b
+      stops sync reporting success when uploads failed, which this side already
+      did not do. twoWaySync is the function that reads the index as settled
+      state, so the honesty of the other modes' index writes is what protects it;
+      that is why a document whose binary failed is now withheld from
+      remote_doc_ids_last_sync (commit 8b6351c on this branch). Like the other
+      upload modes it posts an ndiId rather than the document body -- see #232.
+      2026-09-08: signature changed to take an ndi.dataset, matching MATLAB's
+      twoWaySync(ndiDataset, syncOptions), and the cloud id is now optional -- an empty one
+      is resolved from the dataset's dataset_remote document as MATLAB does. This
+      side previously took (dataset_path, cloud_dataset_id) and worked from the
+      sync index's id lists alone, which made the port's central claim false:
+      with only ids there is no document content to send, so every upload posted
+      {"ndiId": id} -- a document with no base, no document_class and no
+      properties. The call succeeded, the remote listed the id, and no later run
+      resent it because a live listing showed it present. NDI-python#232.
+      Also returns MATLAB's (success, errorMessage, report) triple rather than the
+      report alone, so a caller can ask "did it work" without reconstructing the
+      answer from report fields whose names differ per mode. success is false when
+      anything did not transfer, in either direction: NDI-matlab 29546720b made a
+      partial upload a failure rather than a clean mirror ("a scripted pipeline
+      checking only success believed the dataset was mirrored when zero documents
+      transferred"), and the same argument covers a partial download, which MATLAB
+      still reports as success. Stricter than MATLAB for the two download modes,
+      and never wrong. One divergence kept deliberately: MATLAB aborts on a failed
+      upload and leaves the sync index un-advanced, while this records what
+      actually landed and advances over exactly that, so a retry re-sends only
+      what is still missing. A caller mistake -- a path where a dataset belongs --
+      still raises rather than becoming success=false.
+      Correction to the note above: the sync-index divergence it described is
+      gone. An upload failure -- documents or binaries -- now aborts before the
+      index is written, matching MATLAB exactly: uploadNew returns early with
+      "sync index not updated" (8c31a8f28), and mirrorToRemote and twoWaySync
+      raise NDI:Cloud:Sync:UploadIncomplete so every later phase is skipped
+      (29546720b). In mirrorToRemote that includes the remote deletions, which
+      matters on its own -- deleting the remote's copies while the local ones have
+      not all arrived is how a half-finished mirror loses documents. A failed
+      remote deletion still does NOT abort, because MATLAB's deleteRemoteDocuments
+      warns and returns rather than throwing; nor does a short download. Selection
+      runs against a live remote listing rather than the index, so skipping the
+      index write costs no retries.
 
   - name: validate
     matlab_path: "+ndi/+cloud/+sync/validate.m"
@@ -325,7 +597,7 @@ functions:
 
   - name: downloadNdiDocuments
     matlab_path: "+ndi/+cloud/+sync/+internal/downloadNdiDocuments.m"
-    matlab_last_sync_hash: "211a705e"
+    matlab_last_sync_hash: "cd3c11673"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: cloud_dataset_id
@@ -344,8 +616,39 @@ functions:
       - name: failed_ids
         type_python: "list[str]"
     decision_log: >
-      MATLAB places this in +sync/+internal. Python places it in
-      operations.py. Exact name match.
+      MATLAB places this in +sync/+internal; Python places it in
+      operations.py. Examined against NDI-matlab cd3c11673, clearing the two
+      commits that had accumulated since 211a705e. This entry was the last one
+      in the drift allowlist, held deliberately because the second of those
+      changes had no Python counterpart at all.
+      (1) NDI-matlab 7efa0a8a0 added a warning for a PARTIAL download -- ask
+      for 50 documents, receive 47 -- which is what silent cloud pagination
+      produces and which previously passed through without a word. Already
+      ported: downloadNdiDocuments logs it, computed from which requested api
+      ids came back rather than from a count. MATLAB additionally guards on
+      isDownloadAllRequest, its empty-string "download everything" mode; there
+      is no such mode here (an empty ids_to_download returns early), so the
+      guard has no counterpart and needs none. MATLAB raises a warning with
+      identifier NDI:cloud:sync:PartialDownload where this logs at warning
+      level; left as is, the callers already keep the missing ids out of the
+      sync index either way.
+      (2) NDI-matlab cd3c11673 (#958) threaded cloudDatasetId into
+      updateFileInfoForLocalFiles so reconstructSeriesIngestLocations can
+      build the ndic:// locations of a downloaded series. This is the gap that
+      was NDI-python#215 and it is now closed: reconstructSeriesIngestLocations
+      and updateFileInfoForLocalFiles both exist in ndi/cloud/filehandler.py,
+      and the cloud id is threaded at the call site.
+      STRUCTURAL DIVERGENCE, recorded rather than changed: MATLAB builds the
+      documentUpdateFcn inside downloadNdiDocuments, so the id is threaded
+      there. Here downloadNdiDocuments only fetches, and the rewrite happens in
+      ndi.cloud.orchestration.downloadDataset. Same behaviour, different seam.
+      That seam is why the threading was untested -- cloud_dataset_id is an
+      optional third argument and every test called
+      updateFileInfoForLocalFiles directly, so dropping it at the call site
+      broke nothing any test could see while a downloaded series silently lost
+      its manifest reference. Now pinned by
+      TestTheCloudDatasetIdReachesTheRewrite in
+      tests/test_cloud_download_ordering.py.
 
 # =============================================================================
 # Not-yet-ported MATLAB functions
@@ -355,13 +658,21 @@ not_yet_ported:
   - name: Constants
     matlab_path: "+ndi/+cloud/+sync/+internal/Constants.m"
     matlab_last_sync_hash: "fe64a9f5"
-    status: not_yet_ported
-    decision_log: "MATLAB sync constants class. Values may be inlined in Python."
+    status: ported_differently
+    python_path: "ndi/cloud/internal.py"
+    decision_log: >
+      MATLAB sync constants class; the earlier entry said "values may be
+      inlined in Python" and none had been. Its one property,
+      FileSyncLocation, is now the module constant FILE_SYNC_LOCATION in
+      internal.py -- a classdef of a single constant has no reason to
+      become a Python class. downloadDataset stages downloaded binaries
+      there before the database ingests them, which is what the MATLAB
+      constant is for. No hash move: the MATLAB side is unchanged.
 
   - name: deleteRemoteDocuments
     matlab_path: "+ndi/+cloud/+sync/+internal/deleteRemoteDocuments.m"
     matlab_last_sync_hash: "1498b2ea"
-    status: not_yet_ported
+    status: ported_differently
     decision_log: >
       MATLAB internal for removing remote documents during mirror operations.
       Python sync operations handle this inline via API calls.
@@ -369,7 +680,7 @@ not_yet_ported:
   - name: createSyncIndexStruct
     matlab_path: "+ndi/+cloud/+sync/+internal/+index/createSyncIndexStruct.m"
     matlab_last_sync_hash: "fe64a9f5"
-    status: not_applicable
+    status: ported_differently
     decision_log: >
       MATLAB struct constructor. Python uses SyncIndex dataclass
       with default field values instead.
@@ -377,7 +688,7 @@ not_yet_ported:
   - name: getIndexFilepath
     matlab_path: "+ndi/+cloud/+sync/+internal/+index/getIndexFilepath.m"
     matlab_last_sync_hash: "fe64a9f5"
-    status: not_applicable
+    status: ported_differently
     decision_log: >
       MATLAB path resolver. Python handles this inside
       SyncIndex.read() and SyncIndex.write() methods.
@@ -385,7 +696,7 @@ not_yet_ported:
   - name: uploadedDocumentIds
     matlab_path: "+ndi/+cloud/+sync/+internal/uploadedDocumentIds.m"
     matlab_last_sync_hash: "29546720"
-    status: not_applicable
+    status: matlab_only
     decision_log: >
       MATLAB needs this because uploadDocumentCollection reports a
       manifest of INTENDED ids alongside a parallel per-entry status

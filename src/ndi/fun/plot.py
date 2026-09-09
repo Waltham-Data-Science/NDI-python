@@ -70,7 +70,14 @@ def bar3(
     group_indices = []
     for var in grouping_variables:
         cats = df[var].unique()
-        cats_sorted = sorted(cats, key=str)
+        # MATLAB's unique on a table column sorts in the column's OWN order,
+        # so numeric categories sort numerically. Sorting every category by
+        # str() put 10 before 2. Fall back to str only for genuinely mixed
+        # types, which have no natural order.
+        try:
+            cats_sorted = sorted(cats)
+        except TypeError:
+            cats_sorted = sorted(cats, key=str)
         cat_map = {c: i for i, c in enumerate(cats_sorted)}
         groups.append(cats_sorted)
         group_indices.append(df[var].map(cat_map).values)
@@ -79,8 +86,17 @@ def bar3(
     g2_size = len(groups[1])
     g3_size = len(groups[2])
 
-    # Color map for inner group
-    cmap = plt.cm.get_cmap("tab10")
+    # Color map for inner group.
+    #
+    # plt.cm.get_cmap was REMOVED in matplotlib 3.9, so this raised
+    # AttributeError on any current install and the function could not run
+    # at all. plt.get_cmap is the supported spelling and has been since 3.5.
+    #
+    # MATLAB uses lines(N), which cycles a seven-colour palette; tab10
+    # cycles ten. Both are "a distinct colour per inner group", which is
+    # what the MATLAB comment asks for, and neither name is part of the
+    # contract.
+    cmap = plt.get_cmap("tab10")
     colors = [cmap(i % 10) for i in range(g3_size)]
 
     fig, axes = plt.subplots(1, g1_size, figsize=(5 * g1_size, 4), squeeze=False)
@@ -94,7 +110,10 @@ def bar3(
                 vals = df.loc[mask, plotting_variable].values
                 x = j * (g3_size + 1) + k + 1
                 if len(vals) > 0:
-                    ax.bar(x, np.nanmean(vals), color=colors[k])
+                    # MATLAB's mean() PROPAGATES NaN, so a group holding one
+                    # missing value shows no bar there rather than the mean
+                    # of the rest. np.nanmean quietly reported the rest.
+                    ax.bar(x, np.mean(vals), color=colors[k])
 
         # Format subplot
         tick_positions = [(g3_size + 1) * j + (g3_size + 1) / 2 for j in range(g2_size)]

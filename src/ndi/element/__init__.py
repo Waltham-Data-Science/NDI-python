@@ -54,6 +54,48 @@ def _parse_t0_t1(raw: Any) -> list[tuple[float, float]]:
     return []
 
 
+def _parse_direct(value: Any) -> bool:
+    """The document's ``element.direct`` flag, as a bool.
+
+    MATLAB counterpart: the ``element.direct`` branch of
+    ``+ndi/element.m``'s document constructor, which replaced
+    ``logical(eval(...))`` with an explicit parse (NDI-matlab a030c830e):
+    the value comes out of a document and must never be run as code.
+
+    Python never used ``eval`` here, so that half has no counterpart -- but
+    the same change also widened what is accepted, and ``int("true")``
+    raises. A document written by the current MATLAB carrying ``"true"``
+    would have failed here with a bare ValueError about base-10 literals,
+    which says nothing about which field or which document.
+
+    Args:
+        value: the stored flag: a bool, a number, or a string.
+
+    Returns:
+        The flag as a bool. An empty value is True, matching MATLAB's
+        default for an element that does not say.
+
+    Raises:
+        ValueError: if a string is neither a keyword nor a number.
+    """
+    if isinstance(value, bool):
+        return value
+    if not isinstance(value, str):
+        return bool(value)
+    text = value.strip()
+    if text == "":
+        return True
+    lowered = text.lower()
+    if lowered in ("1", "true"):
+        return True
+    if lowered in ("0", "false"):
+        return False
+    try:
+        return bool(float(text))
+    except ValueError:
+        raise ValueError(f'element.direct string "{text}" is not a valid boolean.') from None
+
+
 class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
     """
     Base class for data elements.
@@ -155,8 +197,7 @@ class ndi_element(ndi_ido, ndi_epoch_epochset, ndi_documentservice):
         ref = elem.get("reference", 0)
         self._reference = int(ref) if ref != "" else 0
         self._type = elem.get("type", "")
-        direct_val = elem.get("direct", True)
-        self._direct = bool(int(direct_val)) if direct_val != "" else True
+        self._direct = _parse_direct(elem.get("direct", True))
 
         # Get ID from base
         base = props.get("base", {}) if isinstance(props, dict) else {}

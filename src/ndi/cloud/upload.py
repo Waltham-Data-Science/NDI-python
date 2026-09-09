@@ -10,6 +10,7 @@ MATLAB equivalents: +ndi/+cloud/+upload/*.m, uploadSingleFile.m
 from __future__ import annotations
 
 import json
+import logging
 import tempfile
 import zipfile
 from pathlib import Path
@@ -19,6 +20,28 @@ from .client import _auto_client
 
 if TYPE_CHECKING:
     from .client import CloudClient
+
+logger = logging.getLogger(__name__)
+
+
+def document_id(doc: dict[str, Any]) -> str:
+    """The NDI id of a document, whichever shape it arrived in.
+
+    ``ndiId`` is what the cloud returns and what a manifest entry carries;
+    ``base.id`` is what a real ``ndi.document`` carries. Reading only the
+    first two meant every document enumerated from a dataset resolved to
+    ``""`` -- so an upload manifest came back as a list of empty strings and
+    the caller could not tell which documents had landed.
+    """
+    if not isinstance(doc, dict):
+        return ""
+    base = doc.get("base")
+    return str(
+        doc.get("ndiId")
+        or (base.get("id") if isinstance(base, dict) else "")
+        or doc.get("id")
+        or ""
+    )
 
 
 def uploadDocumentCollection(
@@ -55,12 +78,22 @@ def uploadDocumentCollection(
     if only_missing:
         try:
             existing = docs_api.listDatasetDocumentsAll(dataset_id, client=client)
-            existing_ids = {d.get("ndiId", d.get("id", "")) for d in existing.data}
-            filtered = [d for d in documents if d.get("ndiId", d.get("id", "")) not in existing_ids]
+            existing_ids = {document_id(d) for d in existing.data}
+            filtered = [d for d in documents if document_id(d) not in existing_ids]
             report["skipped"] = len(documents) - len(filtered)
             documents = filtered
-        except Exception:
-            pass  # proceed with all
+        except Exception as exc:
+            # Proceeding with all of them is the safe fallback -- the remote
+            # rejects a duplicate, it does not corrupt anything. But a bare
+            # pass here means a listing call that has stopped working looks
+            # exactly like a dataset with nothing on the remote yet: every
+            # run re-uploads everything and nothing ever says why.
+            logger.warning(
+                "Could not list existing remote documents (%s); "
+                "uploading all %d documents without the only_missing filter",
+                exc,
+                len(documents),
+            )
 
     if not documents:
         return report
@@ -75,8 +108,7 @@ def uploadDocumentCollection(
             try:
                 docs_api.addDocument(dataset_id, doc, client=client)
                 report["uploaded"] += 1
-                doc_id = doc.get("ndiId", doc.get("id", ""))
-                report["manifest"].append(doc_id)
+                report["manifest"].append(document_id(doc))
             except Exception as exc:
                 report["status"] = "partial"
                 if report.get("errors") is None:
@@ -147,22 +179,83 @@ def uploadFilesForDatasetDocuments(
         "uploaded": 0,
         "failed": 0,
         "errors": [],
+        # Which documents own the binaries that did not make it. A count
+        # cannot be acted on: the caller has to know which documents to
+        # keep out of the sync index, or it records them as synced with
+        # their binaries missing from the remote (NDI-matlab#805).
+        "failed_document_ids": [],
     }
 
     for doc in documents:
-        file_uid = doc.get("file_uid", "")
-        file_path = doc.get("file_path", "")
-        if not file_uid or not file_path:
-            continue
-        try:
-            url = files_api.getFileUploadURL(org_id, dataset_id, file_uid, client=client)
-            files_api.putFiles(url, file_path)
-            report["uploaded"] += 1
-        except Exception as exc:
-            report["failed"] += 1
-            report["errors"].append(str(exc))
+        doc_id = document_id(doc)
+        for file_uid, file_path in file_uploads_for_document(doc):
+            try:
+                url = files_api.getFileUploadURL(org_id, dataset_id, file_uid, client=client)
+                files_api.putFiles(url, file_path)
+                report["uploaded"] += 1
+            except Exception as exc:
+                report["failed"] += 1
+                report["errors"].append(str(exc))
+                if doc_id and doc_id not in report["failed_document_ids"]:
+                    report["failed_document_ids"].append(doc_id)
 
     return report
+
+
+def file_uploads_for_document(doc: dict[str, Any]) -> list[tuple[str, str]]:
+    """The ``(file_uid, local_path)`` pairs to upload for one document.
+
+    TWO SHAPES REACH THIS, AND ONLY ONE USED TO BE READ.
+
+    A manifest entry carries ``file_uid`` and ``file_path`` at the top level,
+    and that is all this looked at. A real ``ndi.document`` carries neither:
+    its binaries live under ``files.file_info[].locations[]``, each location
+    holding a ``uid`` and a ``location`` that is a filesystem path until
+    :mod:`ndi.cloud.filehandler` rewrites it to ``ndic://``. So every caller
+    passing real documents -- which is every caller that enumerates a dataset
+    -- matched nothing and uploaded nothing, silently, because a document
+    with no recognised file is indistinguishable from a document with no
+    files at all.
+
+    Locations already rewritten to ``ndic://`` are skipped: that scheme means
+    the file is on the cloud, which is the opposite of something to upload.
+    A location that no longer exists on disk is skipped too -- there is
+    nothing to send -- and the caller learns of it as a document whose
+    binaries did not arrive.
+    """
+    import os
+
+    top_uid = str(doc.get("file_uid", "") or "")
+    top_path = str(doc.get("file_path", "") or "")
+    if top_uid and top_path:
+        return [(top_uid, top_path)]
+
+    pairs: list[tuple[str, str]] = []
+    files = doc.get("files") or {}
+    if not isinstance(files, dict):
+        return pairs
+    infos = files.get("file_info") or []
+    if isinstance(infos, dict):
+        infos = [infos]
+    for info in infos:
+        if not isinstance(info, dict):
+            continue
+        locations = info.get("locations") or []
+        if isinstance(locations, dict):
+            locations = [locations]
+        uid = ""
+        local_path = ""
+        for loc in locations:
+            if not isinstance(loc, dict):
+                continue
+            uid = uid or str(loc.get("uid", "") or "")
+            candidate = str(loc.get("location", "") or "")
+            if not local_path and candidate and "://" not in candidate:
+                if os.path.exists(candidate):
+                    local_path = candidate
+        if uid and local_path:
+            pairs.append((uid, local_path))
+    return pairs
 
 
 @_auto_client

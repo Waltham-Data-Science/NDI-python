@@ -168,7 +168,27 @@ classes:
   - name: commonTriggersOverlappingEpochs
     type: class
     matlab_path: "+ndi/+time/+syncrule/commonTriggersOverlappingEpochs.m"
-    matlab_last_sync_hash: "ca27911b"
+    matlab_last_sync_hash: "8736980ca"
+    decision_log: >
+      PORTED in NDI-python#223. NDI-matlab 8736980ca stopped a trigger-count
+      mismatch from being fatal: it logs the counts and the two epoch ids,
+      then falls back to ndi.time.fun.syncTriggerTrains to align trains of
+      unequal length. Python used to raise ValueError("Trigger count
+      mismatch") instead, refusing a synchronisation MATLAB completes -- and a
+      missing pulse, which is what the fallback exists for, is ordinary in
+      real recordings, so the refusal fired on the normal case and surfaced as
+      an exception during epoch-graph construction. apply() now branches the
+      same way MATLAB does: equal counts take the least-squares path
+      (_sync_triggers), unequal counts log and fall back to
+      _sync_trigger_trains, the port of syncTriggerTrains recorded under
+      time_fun in src/ndi/time/ndi_matlab_python_bridge.yaml.
+      THE LOG LINE IS PART OF THE PORT, not decoration. It names both counts
+      and both epoch ids, because the fallback answers from imperfectly
+      matched trains: what a caller gets instead of the old exception is a
+      mapping whose quality depends on how well the trains align, and a
+      silent fallback would hide the recording problem that caused it. The
+      earlier commits in this range only revert and re-comment the map_coeffs
+      order, which Python already has right.
     python_path: "ndi/time/syncrule/common_triggers_overlapping_epochs.py"
     python_class: "ndi_time_syncrule_commonTriggersOverlappingEpochs"
     inherits: "ndi.time.syncrule"
@@ -249,8 +269,12 @@ classes:
           accepts daqsystem_a as third argument. Checks embedded
           file overlap (grandparent/parent matching), expands
           epoch group iteratively, reads triggers from all
-          overlapping epochs, and computes linear mapping via
-          least-squares (vlt.time.syncTriggers equivalent).
+          overlapping epochs, and computes a linear mapping:
+          least-squares (vlt.time.syncTriggers equivalent) when
+          the two trigger counts are equal, otherwise a logged
+          fallback to _sync_trigger_trains
+          (ndi.time.fun.syncTriggerTrains equivalent), which
+          aligns trains of unequal length.
           Checks for cached syncrule_mapping documents in the
           database before computing. Returns (None, None) if
           no embedded overlap or names/clocks do not match.
@@ -343,11 +367,16 @@ classes:
         decision_log: >
           Exact match. Extended signature vs ndi_time_syncrule_filematch/ndi_time_syncrule_filefind:
           accepts daqsystem_a as third argument. Reads random
-          pulse trigger events from each epoch, uses
-          inter-pulse-interval cross-correlation to align
-          sequences (ndi.time.fun.syncRandomTriggers equivalent),
-          then computes a linear time mapping. Checks for cached
+          pulse trigger events from each epoch, calls
+          _sync_random_triggers (the port of
+          ndi.time.fun.syncRandomTriggers -- hash the longer
+          recording's interval fingerprints, probe the shorter
+          in randomized order, secondary-pulse-check each hit),
+          then computes a linear time mapping. On no match the
+          helper returns (nan, nan) and this method raises
+          ValueError("Could not find random pulse match.") when
+          errorOnFailure=True, or returns (None, None) when
+          errorOnFailure=False. Checks for cached
           syncrule_mapping documents in the database before
           computing. Returns (None, None) if names/clocks do
-          not match. Raises RuntimeError on failure if
-          errorOnFailure=True.
+          not match.

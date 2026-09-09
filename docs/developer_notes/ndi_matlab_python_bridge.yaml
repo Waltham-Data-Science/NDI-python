@@ -28,9 +28,13 @@ project_metadata:
 # 1. Check:  Does the function/class exist in the YAML?
 # 2. Add/Update: If it is missing or the MATLAB signature has changed,
 #    update the YAML first.
-# 3. Record Hash: Store the short git hash of the MATLAB .m file being
-#    ported in the `matlab_last_sync_hash` field. Obtain the hash with:
+# 3. Record Hash: Store, in `matlab_last_sync_hash`, the short hash of a
+#    COMMIT in NDI-matlab that your examination was made against:
 #      git log -1 --format="%h" -- <path-to-matlab-file>
+#    It MUST be a commit, never a blob. `git hash-object <file>` returns the
+#    hash of the file's CONTENTS and is useless here -- the freshness check
+#    walks history (git log <hash>..HEAD -- <path>), and a blob is not a
+#    point in history to walk from. A test rejects anything but a commit.
 # 4. Notify: The agent MUST explicitly tell the user:
 #    "I have updated the ndi_matlab_python_bridge.yaml to include
 #    [Function Name]. Please review the interface contract."
@@ -38,15 +42,17 @@ project_metadata:
 # =============================================================================
 # 3a. Detecting Upstream MATLAB Changes
 # =============================================================================
-# The `matlab_last_sync_hash` field enables efficient change detection:
+# `matlab_last_sync_hash` is what makes this detectable: ask git whether the
+# file has moved since the commit the entry was examined against.
 #
-# 1. For each entry, compare `matlab_last_sync_hash` against the current
-#    HEAD hash of the corresponding MATLAB .m file:
-#      git log -1 --format="%h" -- <matlab_path>
-# 2. If the hashes differ, the MATLAB file has changed since the last sync
-#    and the Python port may need to be updated.
-# 3. After re-syncing, update `matlab_last_sync_hash` to the new hash and
-#    record the sync date in `decision_log`.
+#     git -C ../NDI-matlab log <matlab_last_sync_hash>..HEAD -- src/ndi/<matlab_path>
+#
+# That is why the field holds a COMMIT rather than a content hash -- a blob
+# can only say "different", while a commit says what changed and how much.
+#
+# SECTION 7 IS THE NORMATIVE RULE: when this counts as drift, what clears it,
+# which hash forms are legal, and why a regular port needs no decision_log for
+# it. Deliberately not restated here.
 
 # =============================================================================
 # 4. Structure for Classes and Functions
@@ -94,11 +100,238 @@ project_metadata:
 # Field                | Rule
 # ---------------------|----------------------------------------------------------
 # name                 | Strict Match. Case-sensitive match to the MATLAB .m file.
-# matlab_last_sync_hash| The short git hash of the MATLAB .m file at the time it
-#                      | was last examined/ported. Used to detect upstream changes.
+# matlab_last_sync_hash| Short hash of a COMMIT in NDI-matlab that the entry was
+#                      | last examined against -- the file's own last-touching
+#                      | commit, or a repo-wide commit for a batch sync. Both are
+#                      | points in history. NEVER a blob hash (git hash-object):
+#                      | enforced by tests/test_matlab_bridge_hashes.py.
+# status               | One of the five values in section 6 below, or ABSENT.
+#                      | Absent + a python_path is the normal case and means
+#                      | ported. Enforced by tests/test_matlab_bridge_status.py.
 # input_arguments      | Used to generate Pydantic @validate_call.
 # output_arguments     | Defines the order of the Return Tuple.
 # type_python          | Use Python 3.10+ syntax (e.g., str | int).
 # decision_log         | Mandatory for any divergence. Should include the sync
 #                      | date (e.g., "Synchronized with MATLAB main as of
 #                      | 2026-03-12.").
+
+# =============================================================================
+# 6. The status vocabulary -- THE NORMATIVE LIST
+# =============================================================================
+# VALUES: ported, ported_differently, matlab_only, porting_deferred, retired
+#
+# That line is parsed by tests/test_matlab_bridge_status.py and compared
+# against the set the code enforces, so this document and the check cannot
+# drift apart -- adding a value in one place without the other fails CI.
+#
+# This section is the single source of truth for `status:`. Other documents
+# point here; they must not restate it. (The one rule that WAS restated in
+# three places -- matlab_last_sync_hash -- is how the prose came to contradict
+# the command printed beside it, which put 35 blob hashes in the tree.)
+#
+# The question every entry answers is: CAN I DO THIS FROM PYTHON, AND IF NOT,
+# WILL I EVER BE ABLE TO? A status that does not answer that is not worth
+# having, which is why the old `not_applicable` was retired: it was used for
+# three incompatible claims at once, and ~15 of its 48 entries meant "Python
+# does this another way" -- the OPPOSITE of what a reader concluded from the
+# label.
+#
+# -----------------------------------------------------------------------------
+# (no status) + a python_path -- PORTED, the normal case
+# -----------------------------------------------------------------------------
+# A 1:1 counterpart exists under the mirrored name. This is ~460 entries, so it
+# is spelled by absence rather than by repeating a word on every one of them.
+# Writing `status: ported` explicitly is allowed where an entry benefits from
+# saying so out loud (a port whose shape differs enough to need a decision_log),
+# but it is never required. `implemented` was a synonym and is gone.
+#
+# -----------------------------------------------------------------------------
+# ported_differently -- Python CAN do it, just not 1:1
+# -----------------------------------------------------------------------------
+# The capability exists IN THIS REPOSITORY, under a different name, folded into
+# a class, or handled by different machinery. The decision_log must say how, and
+# a python_path should point at it.
+#
+# NAMED FOR THE MANNER, NOT THE PLACE, and that is deliberate (NDR-python#21).
+# The earlier spelling was `ported_elsewhere`, but "elsewhere" names a PLACE and
+# python_path already answers where. What a reader cannot recover from any other
+# field is HOW the port differs -- and for most of these entries nothing moved
+# at all: a library does the job (numcodecs.Blosc for decompressBlosc), or the
+# design is simply different. "Differently" is the part worth a word.
+#   ndi.cloud.api.call        -> CloudClient._request()
+#   createSyncIndexStruct     -> the SyncIndex dataclass
+#   openMINDSobj2struct       -> ndi/openminds_convert.py
+# Use this whenever a reader asking "can I do this from Python?" should hear
+# YES. That is the distinction the old vocabulary destroyed.
+#
+# -----------------------------------------------------------------------------
+# matlab_only -- Python needs nothing, by design
+# -----------------------------------------------------------------------------
+# The MATLAB function exists to work around MATLAB itself, or names a concept
+# Python does not have. There is no counterpart and there should never be one.
+#   readNPY              MATLAB cannot read NumPy's format; numpy.load can
+#   parallelWorkers      computes an argument for `parfor`; Python has no parfor
+#   debuglog / syslog    MATLAB has no logging module; Python's stdlib does
+#   systemCurlEnvPrefix  resets LD_LIBRARY_PATH that MATLAB itself polluted
+#   choosefile           a MATLAB GUI dialog
+# THE LINE AGAINST ported_differently: does the replacement live in this repo
+# (ported_differently), or does the Python language and its standard library make
+# the function unnecessary (matlab_only)? "Use tempfile" is matlab_only;
+# "use our SyncIndex class" is ported_differently.
+#
+# -----------------------------------------------------------------------------
+# porting_deferred -- no counterpart yet, and we know it
+# -----------------------------------------------------------------------------
+# Portable work that has not been done. The decision_log must say why not now:
+# no caller needs it, it ports as a group with its siblings, or it is blocked on
+# something outside this repo. Blocked-ness is recorded in the log rather than
+# as its own status, because it goes stale -- three ndi.gui.app entries were
+# marked blocked on external toolboxes and were then ported around the blocker.
+# Replaces `not_yet_ported`, which never distinguished "deferred" from
+# "declined" and was read as both.
+#
+# -----------------------------------------------------------------------------
+# retired -- there is no MATLAB function to port
+# -----------------------------------------------------------------------------
+# It was removed upstream, or it never existed despite an entry appearing to
+# describe it. The entry is a TOMBSTONE: it stays so the decision is not
+# re-litigated by the next reader who notices the absence. Set matlab_path to
+# "N/A" for a deleted file so the stale-path guard stays satisfied.
+#   uploadToNDICloud   removed in VH-Lab/NDI-matlab#965
+#   ndi.OBJECT         never existed on either side
+# Replaces `does_not_exist`.
+#
+# -----------------------------------------------------------------------------
+# CHOOSING BETWEEN THEM
+# -----------------------------------------------------------------------------
+# 1. Is there no MATLAB function at all?              -> retired
+# 2. Can a Python caller do this today?
+#      yes, same name and shape                       -> (no status) + python_path
+#      yes, but not as a 1:1 mirror                   -> ported_differently
+# 3. Could there ever be a Python counterpart?
+#      no, the need is MATLAB's own                   -> matlab_only
+#      yes, nobody has written it                     -> porting_deferred
+#
+# Every one of these except the ported default requires a decision_log; that is
+# enforced separately by TestTheDeferralsSayWhy in
+# tests/test_matlab_bridge_completeness.py.
+
+# =============================================================================
+# 7. DRIFT: what happens when MATLAB moves -- THE NORMATIVE RULE
+# =============================================================================
+# Settled in NDI-python#211 as one answer for NDI-python, NDR-python and
+# DID-python. Those repos cross-reference this section; they do not restate
+# it. (Restating a rule in three places is how Section 5's wording came to
+# contradict the command printed beside it, and 35 blob hashes followed.)
+#
+# WHY GATE AT ALL. These repos exist to mirror MATLAB, and `status` is a claim
+# about CORRESPONDENCE, not a task tracker: "ported" asserts that this Python
+# matches that MATLAB. The moment MATLAB changes the file, that assertion is
+# no longer known to be true, and it stays unknown until a human reads the
+# diff. Red is the honest state. That no commit in THIS repo caused the change
+# is true and beside the point -- the bridge's job is not to apportion blame
+# for a discrepancy, it is to stop the repo asserting a correspondence nobody
+# has verified.
+#
+# THE RULE. An entry DRIFTS when NDI-matlab has commits touching its
+# `matlab_path` after its `matlab_last_sync_hash`:
+#
+#     git -C ../NDI-matlab log <matlab_last_sync_hash>..HEAD -- src/ndi/<matlab_path>
+#
+# Non-empty output is drift, and drift fails CI.
+#
+# IT IS PATH-FILTERED, ALWAYS. The `-- <matlab_path>` means only commits
+# touching THAT FILE count. Unrelated activity in NDI-matlab never trips it.
+#
+# SO BOTH HASH FORMS STAY LEGAL, and no entry needs rewriting to satisfy this:
+#   * the file's own last-touching commit (`git log -1 --format=%h -- <path>`)
+#     -- the documented default, and the more informative: it says "I examined
+#     THIS version of THIS file";
+#   * a repo-wide commit, e.g. NDI-matlab HEAD when a batch was examined
+#     together -- a broader claim ("I examined as of this repo state"), and
+#     still sound, since any later change to the file is caught and earlier
+#     ones fall inside what was examined.
+#
+# A RULE DEMANDING THE HASH *EQUAL* THE FILE'S LAST COMMIT WAS REJECTED. It
+# fails 163 entries here against drift's 60. The extra 103 record a batch-sync
+# commit for a file that has not moved since -- markgarbage and oridirtuning,
+# for instance, whose files last changed in fe64a9f5, long before the commit
+# each records. Their records are TRUE. Equality rejects them for bookkeeping,
+# and the only way to clear the red build is to rewrite a correct value, which
+# is how a check teaches everyone to ignore it.
+#
+# CLEARING DRIFT. Read the diff, then either:
+#   1. port the behavioural change and bump the hash; or
+#   2. bump the hash, having read the diff and found nothing the Python side
+#      must follow (comment-only, formatting, an analyzer fix).
+# Never bump without doing one of those. An unexamined bump asserts an
+# examination that did not happen, which is the failure this field exists to
+# prevent. Where the entry carries a `status`, note a no-op in its
+# `decision_log`.
+#
+# A HASH THAT MOVES WITHOUT A PORT MUST SAY WHY. If a change alters an
+# entry's hash but touches none of that entry's python_path files, that
+# entry's decision_log must change in the same diff and must NAME the commit
+# being accounted for. Porting needs nothing extra; this bites only the
+# "nothing to do here" case, which is a decision and belongs in writing.
+# Enforced by TestAHashChangeIsJustified, which reads only this repo and so
+# runs in every job -- it needs a merge-base, which is why CI checks THIS
+# repo out with fetch-depth: 0 as well as NDI-matlab.
+#
+# WHY THE MECHANISM AND NOT JUST THIS PARAGRAPH. NDR-python#23: one commit
+# (6377973) added matlab_last_sync_hash to 20 bridge files at once, touching
+# no code, asserting 1148 examinations that had not happened -- and an Intan
+# multi-file feature stayed missing behind them. Their finding is the one
+# worth repeating here: telling a reader "the hash does not match" invites
+# them to correct the hash rather than to see that something needs fixing,
+# and naming the cheap path in prose reads as permission rather than caution.
+# So the cheap path has to cost a sentence that a reviewer can see and check.
+# What this CANNOT do is verify that anyone read the diff; it makes the claim
+# explicit, specific and attributable, which is the honest ceiling.
+#
+# A REGULAR PORT NEEDS NO decision_log FOR ANY OF THIS. That field explains a
+# DIVERGENCE, and a regular port has none -- that is what "regular" means.
+# Re-examining one and finding nothing to follow does not create a divergence;
+# the bumped hash is itself the record of examination. 142 of the 458 entries
+# with no `status` carry no decision_log today, and requiring one would fail
+# them all while burying the ~100 logs that hold real reasoning under
+# boilerplate. Drift gating attaches to the hash, not to the prose.
+#
+# EVERY ENTRY NAMING A matlab_path MUST CARRY A HASH. One without a hash can
+# never drift, so it claims its port is current forever and no check can
+# contradict it -- the same false assurance as a stale hash, but silent rather
+# than red. 146 entries were in that state when the gate went up.
+#
+# HOW IT IS ENFORCED, AND HOW THAT GOES WRONG QUIETLY. NDR-python and
+# DID-python wire up the same two checks, and both have a way of passing
+# while checking nothing at all -- so the wiring is part of the rule here,
+# not an implementation detail left to each repo.
+#
+#   * THE TWO CHECKS GATE IN DIFFERENT PLACES, because they need different
+#     things. Drift compares against NDI-matlab, so it can only gate in the
+#     one job that checks NDI-matlab out. The hash-presence check reads only
+#     this repo, so it gates in EVERY test job -- which is what makes an
+#     entry with no hash impossible to land, including through a job that
+#     has no MATLAB tree.
+#   * A CHECK NO JOB NAMES RUNS NOWHERE. The bridge job invokes test files
+#     by name (`pytest tests/test_matlab_bridge_hashes.py`), so adding a
+#     file to the repo does not add it to CI: nothing collects it and the
+#     build is green. Adding a check means adding its step too, and reading
+#     the job log to confirm the count it collected.
+#   * A CHECK WITH NO MATLAB TREE SKIPS ITSELF. Absent the tree the drift
+#     check skips, which is right for a local run and useless in CI. The
+#     workflow sets NDI_BRIDGE_CHECK_STRICT=1 after checking NDI-matlab out,
+#     so a workflow that stops providing the tree fails instead of quietly
+#     passing (#77).
+#   * IT NEEDS A NON-SHALLOW CHECKOUT. A shallow clone holds only the tip
+#     commit, so every recorded hash resolves to nothing and the whole
+#     bridge looks broken. CI uses `fetch-depth: 0`, and the test asserts a
+#     non-shallow tree rather than emitting one false failure per entry.
+#
+# THE BURN-DOWN. The gate went up over pre-existing debt: 60 drifted entries
+# and 146 with no hash, enumerated in tests/bridge_drift_allowlist.yaml. Every
+# entry NOT on that list is gated today, so no new unexamined drift can enter.
+# The list can only shrink -- a test fails if it names an entry that no longer
+# drifts, so a fix must delist in the same PR. Start with the 18 whose MATLAB
+# change touched a signature or an arguments block; that is where a stale hash
+# is most likely hiding a real defect.

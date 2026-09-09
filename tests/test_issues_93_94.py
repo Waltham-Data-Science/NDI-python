@@ -398,6 +398,15 @@ class _FakeSession:
     def syncgraph_addrule(self, rule):
         self.sync_rules.append(rule)
 
+    def daqsystem_load(self, name=None, **kwargs):
+        """Nothing is installed yet, which is what these tests set up.
+
+        ``ndi.setup.lab`` asks before creating, so that a second call adds
+        nothing rather than a duplicate (MATLAB
+        ``+setup/+daq/addDaqSystems``).
+        """
+        return None
+
 
 def _metadata_reader_docs(session: _FakeSession) -> list[_FakeDoc]:
     return [d for d in session.docs if d.doc_type == "daq/daqmetadatareader"]

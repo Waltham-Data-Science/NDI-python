@@ -144,23 +144,72 @@ def docCellArray2Table(
     """
     _require_pandas()
 
+    frames: list[pd.DataFrame] = []
     rows: list[dict[str, Any]] = []
+
     for doc in documents:
+        # MATLAB is `cellfun(@(doc) doc.to_table(), ...)` then vstack, so use
+        # the document's own to_table when it really gives a frame.
+        table = getattr(doc, "to_table", None)
+        if callable(table):
+            try:
+                built = table()
+            except Exception:  # noqa: BLE001 -- fall back to the properties
+                built = None
+            if isinstance(built, pd.DataFrame):
+                frames.append(built)
+                continue
+
         props = doc.document_properties if hasattr(doc, "document_properties") else doc
         if not isinstance(props, dict):
             continue
+        rows.append(_document_row(props))
 
-        row: dict[str, Any] = {}
-        # Flatten top-level sections
-        for section, data in props.items():
-            if isinstance(data, dict):
-                for key, val in data.items():
-                    row[f"{section}.{key}"] = val
+    if rows:
+        frames.append(pd.DataFrame(rows))
+    if not frames:
+        return pd.DataFrame()
+    # ndi.fun.table.vstack: union of columns, first-encounter order.
+    return pd.concat(frames, ignore_index=True, sort=False)
+
+
+def _document_row(props: dict[str, Any]) -> dict[str, Any]:
+    """One document's properties as a flat row, the way ``to_table`` does it.
+
+    MATLAB's docCellArray2Table does not flatten anything itself -- it calls
+    ``ndi.document/to_table``, which drops ``depends_on`` and ``files``, gives
+    each dependency its own ``depends_on_NAME`` column, and flattens the rest
+    with dot notation TO ANY DEPTH.
+
+    This port flattened ``document_properties`` inline instead, one level
+    deep, keeping both of the fields MATLAB removes. On the same document the
+    two produced different columns entirely:
+
+        port      base.id, base.name, depends_on, element.type, files.file_list
+        to_table  base.id, base.name, depends_on_subject_id, element.type.nested
+
+    -- a raw ``depends_on`` column and a ``files.*`` column that should not be
+    there, no ``depends_on_*`` column that should, and a nested value left
+    unflattened.
+    """
+    row: dict[str, Any] = {}
+
+    for entry in props.get("depends_on") or []:
+        if isinstance(entry, dict) and "name" in entry:
+            row[f"depends_on_{entry['name']}"] = entry.get("value")
+
+    def flatten(obj: dict[str, Any], prefix: str = "") -> None:
+        for key, value in obj.items():
+            if not prefix and key in ("depends_on", "files"):
+                continue
+            full = f"{prefix}{key}" if prefix else key
+            if isinstance(value, dict):
+                flatten(value, f"{full}.")
             else:
-                row[section] = data
-        rows.append(row)
+                row[full] = value
 
-    return pd.DataFrame(rows) if rows else pd.DataFrame()
+    flatten(props)
+    return row
 
 
 def element(
@@ -186,11 +235,17 @@ def element(
         props = doc.document_properties
         el = props.get("element", {})
         base = props.get("base", {})
+        # MATLAB's five pre-allocated base fields, under MATLAB's names:
+        #   data.subject_id / element_id / element_name / element_type /
+        #   element_reference
+        # This port used id/name/reference/type and omitted subject_id
+        # entirely, so no column matched and the subject link was absent.
         row = {
-            "id": base.get("id", ""),
-            "name": el.get("name", ""),
-            "reference": el.get("reference", 0),
-            "type": el.get("type", ""),
+            "subject_id": _get_depends_on(props, "subject_id"),
+            "element_id": base.get("id", ""),
+            "element_name": el.get("name", ""),
+            "element_type": el.get("type", ""),
+            "element_reference": el.get("reference", 0),
         }
         rows.append(row)
 
@@ -445,6 +500,51 @@ def epoch(
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
+#: MATLAB builds the type filter as
+#: ``['https://openminds.om-i.org/types/', type]``.
+OPENMINDS_TYPE_URL_PREFIX = "https://openminds.om-i.org/types/"
+
+
+def _props(doc: Any) -> dict[str, Any]:
+    props = doc.document_properties if hasattr(doc, "document_properties") else doc
+    return props if isinstance(props, dict) else {}
+
+
+def _doc_id(doc: Any) -> str:
+    return str(_props(doc).get("base", {}).get("id", ""))
+
+
+def _openminds_type(doc: Any) -> str:
+    return str(_props(doc).get("openminds", {}).get("openminds_type", ""))
+
+
+def _openminds_fields(doc: Any) -> dict[str, Any]:
+    fields = _props(doc).get("openminds", {}).get("fields", {})
+    return fields if isinstance(fields, dict) else {}
+
+
+def _dependency_value(doc: Any, name: str) -> str:
+    """The value of the dependency called *name*, '' when absent.
+
+    MATLAB uses ``dependency_value(name)`` and catches the error; taking the
+    FIRST dependency instead, as this port did, returns another document's id
+    whenever a document has more than one.
+    """
+    return _get_depends_on(_props(doc), name)
+
+
+def _single_text(value: Any, label: str) -> str:
+    """MATLAB errors unless *value* is a single string."""
+    if value is None or value == "" or value == []:
+        return ""
+    if isinstance(value, str):
+        return value
+    items = list(value)
+    if len(items) != 1:
+        raise ValueError(f"{label} must be a single string.")
+    return str(items[0])
+
+
 def openminds(
     session: Any,
     doc_type: str = "openminds",
@@ -475,36 +575,59 @@ def openminds(
     _require_pandas()
     from ndi.query import ndi_query
 
-    docs = session.database_search(ndi_query("").isa(doc_type))
+    # `type` is an openMINDS TYPE, matched against
+    # document_properties.openminds.openminds_type, NOT a document class.
+    # This port ran `isa(type)` -- an isa query for a document class literally
+    # named e.g. "Strain" -- so it selected the wrong documents (usually
+    # none), and then read the fields from props[type] rather than
+    # props["openminds"]["fields"], so every row came back holding nothing but
+    # an id. depends_on, depends_on_docs and allOpenMindsDocs were accepted
+    # and never read, and the third output took the FIRST dependency rather
+    # than the one named by depends_on.
+    type_url = f"{OPENMINDS_TYPE_URL_PREFIX}{doc_type}"
+    want = _single_text(depends_on, "depends_on")
+
+    if depends_on_docs and allOpenMindsDocs and want:
+        # MATLAB's optimised path: filter the pre-fetched lists, no new query.
+        wanted_ids = {_doc_id(d) for d in depends_on_docs}
+        type_docs = [
+            d
+            for d in allOpenMindsDocs
+            if _openminds_type(d) == type_url and _dependency_value(d, want) in wanted_ids
+        ]
+    else:
+        type_docs = [
+            d
+            for d in session.database_search(ndi_query("").isa("openminds"))
+            if _openminds_type(d) == type_url
+        ]
+
+    if not type_docs:
+        if errorIfEmpty:
+            raise ValueError(f'No documents of type "{doc_type}" were found.')
+        return pd.DataFrame(), [], []
+
     rows: list[dict[str, Any]] = []
     doc_ids: list[str] = []
     dependency_ids: list[str] = []
 
-    for doc in docs:
-        props = doc.document_properties
-        base = props.get("base", {})
-        om = props.get(doc_type, {})
-        doc_id = base.get("id", "")
-        row = {"id": doc_id}
-        if isinstance(om, dict):
-            row.update(om)
-        rows.append(row)
-        doc_ids.append(doc_id)
+    for doc in type_docs:
+        doc_ids.append(_doc_id(doc))
+        dependency_ids.append(_dependency_value(doc, want) if want else "")
 
-        # Extract primary dependency
-        dep_id = ""
-        dep_list = props.get("depends_on", [])
-        if isinstance(dep_list, list) and dep_list:
-            first = dep_list[0]
-            if isinstance(first, dict):
-                dep_id = first.get("value", "")
-        dependency_ids.append(dep_id)
+        fields = _openminds_fields(doc)
+        ontology_key = next(
+            (k for k in fields if "ontology" in k.lower()),
+            "",
+        )
+        rows.append(
+            {
+                f"{doc_type}Name": fields.get("name", ""),
+                f"{doc_type}Ontology": fields.get(ontology_key, "") if ontology_key else "",
+            }
+        )
 
-    if errorIfEmpty and not rows:
-        raise ValueError(f"No documents of type '{doc_type}' found in session.")
-
-    table = pd.DataFrame(rows) if rows else pd.DataFrame()
-    return table, doc_ids, dependency_ids
+    return pd.DataFrame(rows), doc_ids, dependency_ids
 
 
 def treatment(
@@ -749,7 +872,7 @@ def subject(
 
     Returns:
         DataFrame with columns: SubjectDocumentIdentifier,
-        SessionDocumentIdentifier, SubjectLocalIdentifier,
+        SessionIdentifier, SubjectLocalIdentifier,
         StrainName, StrainOntology, GeneticStrainTypeName,
         SpeciesName, SpeciesOntology, BackgroundStrainName,
         BackgroundStrainOntology, BiologicalSexName, BiologicalSexOntology,
@@ -771,7 +894,8 @@ def subject(
         if sid:
             subject_info[sid] = {
                 "SubjectDocumentIdentifier": sid,
-                "SessionDocumentIdentifier": base.get("session_id", ""),
+                # MATLAB names this column SessionIdentifier.
+                "SessionIdentifier": base.get("session_id", ""),
                 "SubjectLocalIdentifier": subj.get("local_identifier", ""),
             }
 
@@ -968,7 +1092,7 @@ def subject(
     # Column order: fixed metadata first, then dynamic treatment columns
     fixed_cols = [
         "SubjectDocumentIdentifier",
-        "SessionDocumentIdentifier",
+        "SessionIdentifier",
         "SubjectLocalIdentifier",
         "StrainName",
         "StrainOntology",

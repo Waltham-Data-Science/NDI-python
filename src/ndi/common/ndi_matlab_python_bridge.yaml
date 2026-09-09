@@ -84,7 +84,14 @@ classes:
   - name: ndi_common_PathConstants
     type: class
     matlab_path: "+ndi/+common/PathConstants.m"
-    matlab_last_sync_hash: "cb34982"
+    matlab_last_sync_hash: "8ad41d0b3"
+    decision_log: >
+      NDI-matlab 8ad41d0b3 moved Preferences from userpath/Preferences/NDI to
+      ~/.ndi, explicitly to match where ndi-python has always written
+      (ndi-matlab#922 / ndi-python#172). Nothing to port, in two senses: this
+      Python class exposes no Preferences attribute at all -- its preference
+      locations live in ndi.cloud.profile._prefdir and
+      ndi.session.sessiontable -- and both already resolve to ~/.ndi.
     python_path: "ndi/common/__init__.py"
     python_class: "ndi_common_PathConstants"
 
@@ -139,7 +146,7 @@ classes:
       - name: updateDIDConstants
         kind: "module-level function (MATLAB: static method)"
         matlab_path: "+ndi/+common/PathConstants.m"
-        matlab_last_sync_hash: "cb34982"
+        matlab_last_sync_hash: "8ad41d0b3"
         python_path: "ndi/common/__init__.py"
         input_arguments:
           - name: force
@@ -167,6 +174,9 @@ classes:
           Ported 2026-08-29 because DID-python's add_docs began validating
           documents against their schemas; before that an unregistered
           placeholder merely made superclass lookups miss silently.
+          Same NDI-matlab commit 8ad41d0b3 as ndi_common_PathConstants, which the
+          two entries share a file with: the Preferences directory moved to ~/.ndi
+          to match ndi-python. Nothing to port here either.
 
 # =========================================================================
 # Not-yet-ported MATLAB functions
@@ -176,7 +186,7 @@ not_yet_ported:
   - name: systemCurlEnvPrefix
     matlab_path: "+ndi/+common/systemCurlEnvPrefix.m"
     matlab_last_sync_hash: "74db0c8c"
-    status: not_applicable
+    status: matlab_only
     decision_log: >
       Returns a shell prefix that resets LD_LIBRARY_PATH so a curl launched
       with SYSTEM() loads the OS libraries rather than the ones MATLAB

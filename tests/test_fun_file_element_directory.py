@@ -12,7 +12,22 @@ are pinned here.
 
 from __future__ import annotations
 
+import sys
+
+import pytest
+
 from ndi.fun.file import elementDirectory, elementDirectoryName
+
+# The legacy fallback is what the port carries the ``|`` name for at all; the
+# tests that exercise it must create a folder called ``ctx_|_1`` first.
+# Windows forbids ``|`` in a filename outright (WinError 123), so those
+# tests cannot even set themselves up there. Skip them on Windows and let
+# the same fixture stand up the folder on POSIX. Mirrors NDI-matlab's
+# ``ElementDirectoryTest``, which skips the same case with ``assumeFalse(ispc())``.
+_SKIP_ON_WINDOWS = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows filesystems forbid '|' in filenames; legacy folder is unreachable",
+)
 
 
 class FakeProbe:
@@ -27,6 +42,7 @@ def test_the_new_name_is_used_when_nothing_exists_yet(tmp_path):
     assert is_legacy is False
 
 
+@_SKIP_ON_WINDOWS
 def test_an_existing_legacy_folder_is_used_instead(tmp_path):
     (tmp_path / "ctx_|_1").mkdir()
     path, name, is_legacy = elementDirectory(tmp_path, FakeProbe())
@@ -35,6 +51,7 @@ def test_an_existing_legacy_folder_is_used_instead(tmp_path):
     assert is_legacy is True
 
 
+@_SKIP_ON_WINDOWS
 def test_the_new_folder_wins_when_both_exist(tmp_path):
     """Both present means the data has already been migrated; reading the
     old one would return whatever was left behind."""

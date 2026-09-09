@@ -17,9 +17,31 @@ classes:
   - name: simple
     type: class
     matlab_path: "src/ndi/+ndi/+calc/+example/simple.m"
+    matlab_last_sync_hash: "31da40e14"
     python_path: "ndi/calc/example/simple.py"
     python_class: "ndi_calc_example_simple"
     inherits: "ndi.calculator"
+    decision_log: >
+      Examined against NDI-matlab 31da40e14, the file's last-touching commit.
+      calculate and default_search_for_input_parameters match in substance --
+      the simple_calc document holding input_parameters and answer, the
+      document_id dependency, the default answer of 5 and the isa('base')
+      query. ONE THING PORTED: MATLAB validates its argument with
+      ndi.validators.mustHaveFields(parameters,
+      {'input_parameters','depends_on'}) and then reads
+      input_parameters.answer directly, so a missing field is an error. Every
+      read here was a .get() with a default, so calculate({}) produced a
+      perfectly well-formed document asserting that the answer is 0 -- the
+      failure mode a validator exists to prevent. Both checks added. ONE
+      METHOD NOT PORTED, recorded rather than invented: generate_mock_docs,
+      which builds the mock inputs and expected outputs for ndi.mock.ctest and
+      takes generate_expected_docs and specific_test_inds options. It is the
+      calculator side of the same mock pipeline whose other half is recorded
+      as porting_deferred on the ndi.mock stimulus_response entry; the two
+      want doing together. One difference left alone: MATLAB hardcodes the
+      dependency NAME as 'document_id' where the port uses the name carried on
+      the dependency itself, defaulting to document_id -- strictly more
+      general, and it agrees with MATLAB on every input MATLAB accepts.
 
     methods:
       - name: simple

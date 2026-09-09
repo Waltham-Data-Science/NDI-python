@@ -104,6 +104,7 @@ functions:
   - name: location
     type: function
     matlab_path: "+ndi/+fun/+probe/location.m"
+    matlab_last_sync_hash: "9e3de46de"
     python_path: "ndi/fun/probe/location.py"
     input_arguments:
       - name: session
@@ -122,6 +123,20 @@ functions:
       for an NDI element. Traverses underlying_element dependency
       tree until ndi_probe object is found. element can be an
       ndi.element.ndi_element object or string identifier.
+
+      Examined against NDI-matlab 9e3de46de, the file's last-touching commit.
+      The port holds -- resolve a string id through ndi_document2ndi_object,
+      walk down underlying_element to the probe, then query depends_on
+      probe_id AND isa probe_location -- and IT IS AHEAD OF MATLAB ON ONE
+      POINT, which is worth reporting upstream. MATLAB's descent loop reads
+      the ORIGINAL element every time: `while
+      ~isa(current_element,'ndi.probe'); current_element =
+      e.underlying_element; ...` -- note e, not current_element. For a chain
+      deeper than one level that assigns the same object forever and the
+      function HANGS; it only terminates when the first underlying element is
+      either the probe or empty. The port walks `current`, which is what the
+      loop was written to do. Nothing to port here; the fix belongs in
+      NDI-matlab.
 
 # =========================================================================
 # ndi.fun.probe.export  (MATLAB +ndi/+fun/+probe/+export/)
@@ -533,29 +548,6 @@ functions:
       elementDirectory legacy fallback for how documents written before this
       change are still located).
 
-  - name: import.kiasort
-    type: package
-    matlab_path: "+ndi/+fun/+probe/+import/+kiasort/"
-    matlab_last_sync_hash: "1b99d29a"
-    status: not_yet_ported
-    decision_log: >
-      Not ported: all twelve MATLAB files under +kiasort, recorded here as
-      one entry because the package is one decision, not twelve. KIASORT is
-      a DIFFERENT spike sorter from Kilosort, and the resemblance of the two
-      names is a hazard rather than a convenience: +kiasort/probe.m,
-      session.m, status.m and getInfo.m have the same names as +kilosort
-      files and do different things. The port is blocked on the external
-      kiasort toolbox having no Python distribution
-      (Waltham-Data-Science/NDI-python#122); until it does, an importer here
-      would have nothing to import from.
-      Python names KIASORT only on the EXPORT side, and does that fully:
-      export.binary defaults to kiasort/kiasort.bin, geometry.toKilosortMap
-      and writeKilosortMap build the channel map KIASORT's load_channel_map
-      reads, and ndi.gui.app.electrode_data_export offers KIASORT beside
-      Kilosort. So the outbound half of the loop works; reading a KIASORT
-      run's results back in is the missing half.
-      ndi/fun/probe/import_/__init__.py says the same thing in the code.
-
   - name: geometry.listLibrary
     type: function
     matlab_path: "+ndi/+fun/+probe/+geometry/listLibrary.m"
@@ -712,7 +704,7 @@ functions:
   - name: geometry.fromKilosortMap
     matlab_path: "+ndi/+fun/+probe/+geometry/fromKilosortMap.m"
     matlab_last_sync_hash: "0e2caa09"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       Not ported. The inverse of geometry.toKilosortMap, which IS ported:
       reads a Kilosort/KIASORT channel map (a .mat file or a struct with
@@ -727,7 +719,7 @@ functions:
   - name: geometry.fromProbeInterface
     matlab_path: "+ndi/+fun/+probe/+geometry/fromProbeInterface.m"
     matlab_last_sync_hash: "0e2caa09"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       Not ported. Converts a ProbeInterface JSON probe (the SpikeInterface
       community format) into an NDI electrode-layout struct plus a
@@ -741,7 +733,7 @@ functions:
   - name: geometry.writeLibrary
     matlab_path: "+ndi/+fun/+probe/+geometry/writeLibrary.m"
     matlab_last_sync_hash: "0e2caa09"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       Not ported. Writes a layout as ndi_common/probe/geometry/group/model
       .json so it ships with NDI and is found by listLibrary. This is a
@@ -860,26 +852,38 @@ functions:
   - name: import.jrclust
     type: package
     matlab_path: "+ndi/+fun/+probe/+import/+jrclust/"
-    status: not_yet_ported
+    matlab_last_sync_hash: "0e8556233"
+    status: porting_deferred
     decision_log: >
-      Not ported yet. All fourteen MATLAB files under +jrclust are recorded
+      Not ported yet. All fifteen MATLAB files under +jrclust are recorded
       here as one entry, matching how import.kiasort is recorded above: the
-      package is one decision, not fourteen. JRCLUST is a MATLAB spike sorter
+      package is one decision, not fifteen. JRCLUST is a MATLAB spike sorter
       with no Python distribution, so the wrappers that drive it (run.m,
       curate.m, traces.m, editParameters.m, install.m, requireprm.m) have
       nothing to call from Python, and the surrounding file work (paths.m,
       readprm.m, results.m, epochbounds.m, splitspikes.m, probe.m,
-      removeOld.m) has no Python caller until someone wants to ingest a
-      JRCLUST sort MATLAB produced. Deferred until the spike-sorting roadmap
+      removeOld.m, session.m, status.m) has no Python caller until someone
+      wants to ingest a JRCLUST sort MATLAB produced. Deferred until the spike-sorting roadmap
       answers that question; the split between the two groups is left for
       whoever picks it up, in the same shape as +kiasort. Noted in #204.
+
+      Confirmed against NDI-matlab 0e8556233, the package's last-touching
+      commit, which made the pipeline read JRCLUST's real stage markers
+      instead of inferring them from field presence -- the behaviour status.m
+      reports. Nothing to port while the deferral holds.
 
   - name: export.jrclust
     type: function
     matlab_path: "+ndi/+fun/+probe/+export/jrclust.m"
-    status: not_yet_ported
+    matlab_last_sync_hash: "a3765c9e5"
+    status: porting_deferred
     decision_log: >
       Not ported yet. Writes a JRCLUST .prm file for a probe. Left deferred
       alongside the +jrclust importer package: the export half only earns its
       keep once Python has a reason to run JRCLUST or ingest its results, and
       today it does not. Noted in #204.
+
+      Confirmed against NDI-matlab a3765c9e5, the file's last-touching commit
+      and the one that introduced the whole JRCLUST pipeline. Still writes a
+      .prm file at [S.path]/.JRCLUST/[element string]/jrclust.prm. Deferral
+      unchanged: Python still has no reason to run JRCLUST.

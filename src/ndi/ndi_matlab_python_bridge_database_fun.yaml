@@ -14,7 +14,7 @@ functions:
   - name: findallantecedents
     type: function
     matlab_path: "+ndi/+database/+fun/findallantecedents.m"
-    matlab_last_sync_hash: "25cd329a"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     input_arguments:
       - name: E
@@ -40,7 +40,7 @@ functions:
   - name: findalldependencies
     type: function
     matlab_path: "+ndi/+database/+fun/findalldependencies.m"
-    matlab_last_sync_hash: "738739e2"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     input_arguments:
       - name: E
@@ -61,7 +61,7 @@ functions:
   - name: docs_from_ids
     type: function
     matlab_path: "+ndi/+database/+fun/docs_from_ids.m"
-    matlab_last_sync_hash: "c44ecb1b"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     input_arguments:
       - name: D_or_S
@@ -79,7 +79,7 @@ functions:
   - name: docs2graph
     type: function
     matlab_path: "+ndi/+database/+fun/docs2graph.m"
-    matlab_last_sync_hash: "2e056a3a"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     input_arguments:
       - name: ndi_document_obj
@@ -110,7 +110,7 @@ functions:
   - name: find_ingested_docs
     type: function
     matlab_path: "+ndi/+database/+fun/find_ingested_docs.m"
-    matlab_last_sync_hash: "59381b77"
+    matlab_last_sync_hash: "831a3fbef"
     python_path: "ndi/database_fun.py"
     input_arguments:
       - name: S
@@ -125,7 +125,7 @@ functions:
   - name: finddocs_elementEpochType
     type: function
     matlab_path: "+ndi/+database/+fun/finddocs_elementEpochType.m"
-    matlab_last_sync_hash: "43051900"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     python_name: "finddocs_elementEpochType"
     input_arguments:
@@ -153,7 +153,7 @@ functions:
   - name: ndi_document2ndi_object
     type: function
     matlab_path: "+ndi/+database/+fun/ndi_document2ndi_object.m"
-    matlab_last_sync_hash: "62f7fa5e"
+    matlab_last_sync_hash: "e94c2b2f5"
     python_path: "ndi/database_fun.py"
     input_arguments:
       - name: ndi_document_obj
@@ -167,15 +167,23 @@ functions:
         type_matlab: "ndi object"
         type_python: "Any | None"
     decision_log: >
-      MATLAB uses eval-based class resolution from document_class fields.
-      Python uses a hardcoded class_map. Both look up from document_class.class_name.
-      Python returns None on failure; MATLAB throws error.
-      Synchronized 2026-03-13.
+      MATLAB reads a class name out of the document and constructs it;
+      Python resolves document_class.class_name through a fixed class_map and
+      can only build what that map names. Both look up from
+      document_class.class_name. Python returns None on failure; MATLAB
+      throws.
+      MATLAB e94c2b2f5 replaced its eval with feval behind
+      ndi.validators.mustBeClassnameOfType, checking the named class by
+      lineage because the name arrives in an untrusted payload (a dataset
+      downloaded from the cloud). Python needs no counterpart: a name from
+      the document is never constructed, only matched against the map, so
+      there is nothing for a hostile value to reach. The narrower thing
+      Python's map can rebuild is a separate, pre-existing gap.
 
   - name: copy_session_to_dataset
     type: function
     matlab_path: "+ndi/+database/+fun/copy_session_to_dataset.m"
-    matlab_last_sync_hash: "c58397b5"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     input_arguments:
       - name: ndi_session_obj
@@ -201,7 +209,7 @@ functions:
   - name: finddocs_missing_dependencies
     type: function
     matlab_path: "+ndi/+database/+fun/finddocs_missing_dependencies.m"
-    matlab_last_sync_hash: "6372fef5"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     input_arguments:
       - name: E
@@ -222,7 +230,7 @@ functions:
   - name: write_presentation_time_structure
     type: function
     matlab_path: "+ndi/+database/+fun/write_presentation_time_structure.m"
-    matlab_last_sync_hash: "12cb5d54"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     input_arguments:
       - name: filename
@@ -237,7 +245,7 @@ functions:
   - name: read_presentation_time_structure
     type: function
     matlab_path: "+ndi/+database/+fun/read_presentation_time_structure.m"
-    matlab_last_sync_hash: "31718f35"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     input_arguments:
       - name: filename
@@ -271,7 +279,7 @@ functions:
   - name: database2json
     type: function
     matlab_path: "+ndi/+database/+fun/database2json.m"
-    matlab_last_sync_hash: "ff445350"
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     python_name: "database2json"
     input_arguments:
@@ -294,7 +302,7 @@ functions:
   - name: copydocfile2temp
     type: function
     matlab_path: "+ndi/+database/+fun/copydocfile2temp.m"
-    matlab_last_sync_hash: "6db763c9"
+    matlab_last_sync_hash: "f46b6bc03"
     python_path: "ndi/database_fun.py"
     python_name: "copydocfile2temp"
     input_arguments:
@@ -321,11 +329,15 @@ functions:
     decision_log: >
       RENAMED from copy_doc_file_to_temp to copydocfile2temp to match MATLAB.
       Synchronized 2026-03-13.
+      NDI-matlab f46b6bc03 changed fread(Inf) to fread(Inf,'uint8') because
+      MATLAB's default precision corrupted binary payloads. Nothing to port:
+      database_openbinarydoc returns a file opened 'rb' and this reads it with
+      read(), so there is no precision to get wrong.
 
   - name: extract_doc_files
     type: function
     matlab_path: "+ndi/+database/+fun/extract_docs_files.m"
-    matlab_last_sync_hash: "9dc96e22"
+    matlab_last_sync_hash: "a36e261c4"
     python_path: "ndi/database_fun.py"
     python_name: "extract_doc_files"
     input_arguments:
@@ -349,6 +361,29 @@ functions:
       Note: the MATLAB .m file is named extract_docs_files.m but the
       function inside is named extract_doc_files. Using the function
       name. Synchronized 2026-03-13.
+      PORTED PROPERLY for NDI-python#215; this entry used to say the file
+      series gap could not be closed because Python had no series support
+      anywhere in the path. It has since (#256-#259), so the five NDI-matlab
+      commits up to a36e261c4 are ported here: a series' MEMBERS are copied
+      and not just its manifest, each under its ORIGINAL uid, and recorded
+      in the extracted document's ingest_locations -- which is what lets the
+      copy be stored elsewhere, since DID refuses a document declaring
+      present members while recording no location for any of them
+      (DID-matlab#185) and ingestion writes each member to FileDir/<uid>
+      from that record.
+      MATLAB's #946 fix -- carrying files.series_info across reset_file_info
+      -- has no counterpart: Python clears files.file_info alone rather than
+      calling a reset, so the per-series record survives on its own. Same
+      asymmetry, same reason, as updateFileInfoForLocalFiles.
+      THE OUTPUT LAYOUT CHANGED to match MATLAB: files are copied to
+      target_path/<uid>, flat, and each returned document's file_info is
+      rebuilt to name its copy. Python previously wrote
+      target_path/<doc_id>/document.json with the files beside it and never
+      touched the documents, so nothing pointed at the copies and the
+      extract could not be added to another database -- which is the one
+      thing ndi.dataset.copySessionToDataset needs it for. It also walked
+      files.file_list, the class DECLARATION, rather than
+      current_file_list(), what the document actually has.
 
 # =========================================================================
 # Not Applicable — MATLAB functions intentionally not ported to Python
@@ -357,50 +392,89 @@ not_applicable:
 
   - name: createGenBankControlledVocabulary
     matlab_path: "+ndi/+database/+fun/createGenBankControlledVocabulary.m"
-    status: not_applicable
+    matlab_last_sync_hash: "fe64a9f53"
+    status: matlab_only
     decision_log: >
       MATLAB utility for creating a controlled vocabulary from GenBank
       taxonomy data. Bioinformatics-specific helper for populating
       ontology tables. Not needed in Python; equivalent functionality
       available via BioPython or direct GenBank API access.
 
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Still reads names.dmp and nodes.dmp from a GenBank taxonomy dump and
+      writes GenBankControlledVocabulary.tsv. A one-time data-import script
+      rather than a library call, and its product --
+      GenBankControlledVocabulary.tsv.gz -- already ships in this repo's
+      ndi_common/controlled_vocabulary/. Nothing to port.
+
   - name: readGenBankNames
     matlab_path: "+ndi/+database/+fun/readGenBankNames.m"
-    status: not_applicable
+    matlab_last_sync_hash: "fe64a9f53"
+    status: matlab_only
     decision_log: >
       MATLAB utility for reading GenBank taxonomy names from flat files.
       Bioinformatics-specific parser. Python users can use BioPython
       (Bio.Entrez) or pandas to parse GenBank taxonomy files directly.
 
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Still the names.dmp parser feeding createGenBankControlledVocabulary,
+      returning one cell array per name class indexed by node. Nothing to
+      port: the generated vocabulary is what this repo consumes, not the dump.
+
   - name: readGenBankNodes
     matlab_path: "+ndi/+database/+fun/readGenBankNodes.m"
-    status: not_applicable
+    matlab_last_sync_hash: "fe64a9f53"
+    status: matlab_only
     decision_log: >
       MATLAB utility for reading GenBank taxonomy node hierarchy from
       flat files. Bioinformatics-specific parser. Python users can use
       BioPython or pandas to parse GenBank taxonomy files directly.
 
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Still the nodes.dmp parser, returning a sparse connectivity matrix G
+      with G(i,j) = 1 where node i is a parent of node j. Same reasoning as
+      readGenBankNames. Nothing to port.
+
   - name: createNIFbrainareas
     matlab_path: "+ndi/+database/+fun/createNIFbrainareas.m"
-    status: not_applicable
+    matlab_last_sync_hash: "fe64a9f53"
+    status: matlab_only
     decision_log: >
       MATLAB utility for creating NIF (Neuroscience Information
       Framework) brain area vocabulary entries. One-time data import
       script for populating ontology tables. Not needed as a library
       function in Python.
 
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Still walks the UBERON 'nervous system' node of the NIF-Ontology,
+      skipping the first depth level, and writes
+      NIFBrainAreaControlledVocabulary.tsv. A one-time import script whose
+      product is what gets used. Nothing to port.
+
   - name: create_new_database
     matlab_path: "+ndi/+database/+fun/create_new_database.m"
-    status: not_applicable
+    matlab_last_sync_hash: "fe64a9f53"
+    status: ported_differently
     decision_log: >
       MATLAB factory for instantiating a new database based on the
       database hierarchy preferences. In Python, this functionality is
       absorbed into ndi_database.__init__() which directly creates the
       SQLite backend. No separate factory needed.
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit,
+      AND THE REASON RECORDED ABOVE OVERSTATES IT. It is not a "factory for
+      instantiating a new database based on the database hierarchy
+      preferences" -- it instantiates nothing. It puts up an inputdlg asking
+      "Are you adding a document to an existing dataset? y/n", asks for a
+      dataset id if the answer is 'y', and then returns without using either
+      answer; most of the file is commented-out uicontrol experiment. The
+      conclusion is unaffected -- there is nothing here to port -- but the
+      record now says so for the right reason.
+
   - name: databasehierarchyinit
     matlab_path: "+ndi/+database/+fun/databasehierarchyinit.m"
-    status: not_applicable
+    matlab_last_sync_hash: "fe64a9f53"
+    status: ported_differently
     decision_log: >
       MATLAB function for initializing the database implementation
       hierarchy (preference list of database backends). In Python, the
@@ -408,52 +482,115 @@ not_applicable:
       single SQLite backend. The MATLAB multi-backend discovery pattern
       is not needed.
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      The recorded reason holds: it returns the struct naming the database
+      backend to use, and Python has one backend rather than a hierarchy.
+      Worth knowing when reading it: MATLAB assigns databasehierarchy TWICE,
+      so the first struct (matlabdumbjsondb2) is dead and only the second
+      (didsqlite) is ever returned -- the 'hierarchy' is one entry, which is
+      exactly what the Python side already assumes.
+
   - name: dataset_metadata
     matlab_path: "+ndi/+database/+fun/dataset_metadata.m"
-    status: not_applicable
+    matlab_last_sync_hash: "fe64a9f53"
+    status: ported_differently
     decision_log: >
       MATLAB utility for reading/writing dataset metadata structures.
       In Python, dataset metadata is handled natively via dict/JSON
       serialization in the ndi_document class. No separate utility needed.
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit,
+      AND THE REASON RECORDED ABOVE IS WRONG ABOUT WHAT IT DOES. It is not a
+      "utility for reading/writing dataset metadata structures"; it opens a
+      MATLAB GUI -- ndi.database.metadata_app.Apps.MetadataEditorApp -- for a
+      person to type metadata into, either on a fresh metadata_<id>.mat under
+      <session>/.ndi/NDIDatasetUpload or on each existing one. The conclusion
+      still stands and stands more firmly: an App Designer app has no Python
+      counterpart, which is a far better reason than dict/JSON serialisation.
+      Noted in passing: the body is guarded by `if nargin == 2`, so passing
+      the documented Debug option makes the function do nothing at all.
+
   - name: openMINDSobj2ndi_document
     matlab_path: "+ndi/+database/+fun/openMINDSobj2ndi_document.m"
-    status: not_applicable
+    matlab_last_sync_hash: "fe64a9f53"
+    status: ported_differently
     decision_log: >
       MATLAB function for converting openMINDS objects to NDI documents.
       In Python, this functionality is handled by the dedicated
       ndi/openminds_convert.py module which provides a more Pythonic
       approach to openMINDS integration.
 
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Still converts a cell array of openMINDS objects into ndi.document
+      objects, optionally setting a named dependency ('subject', 'element') to
+      a given value. The Python counterpart is ndi/openminds_convert.py's
+      openminds_obj_to_ndi_document, which ndi.fun.doc.makeSpeciesStrainSex
+      already calls with exactly that (objects, session_id, dependency_type,
+      dependency_value) shape. The ported_differently record holds.
+
   - name: openMINDSobj2struct
     matlab_path: "+ndi/+database/+fun/openMINDSobj2struct.m"
-    status: not_applicable
+    matlab_last_sync_hash: "bf1b6e623"
+    status: ported_differently
     decision_log: >
       MATLAB function for converting openMINDS objects to MATLAB structs.
       In Python, openMINDS objects are naturally represented as dicts.
       The ndi/openminds_convert.py module handles conversion directly.
 
+      Confirmed against NDI-matlab bf1b6e623, the file's last-touching commit
+      and the only one of these eleven whose file has moved since the src/
+      layout change. Still converts openMINDS objects to MATLAB structs
+      against openMINDS_MATLAB, with a cache key. Python has no such step: an
+      openMINDS object is already a mapping there, so openminds_convert goes
+      straight to the document. The ported_differently record holds.
+
   - name: plotinteractivedocgraph
     matlab_path: "+ndi/+database/+fun/plotinteractivedocgraph.m"
-    status: not_applicable
+    matlab_last_sync_hash: "fe64a9f53"
+    status: matlab_only
     decision_log: >
       MATLAB interactive GUI for visualizing document dependency graphs.
       Uses MATLAB-specific figure/axes/callback infrastructure. Python
       users can use networkx + matplotlib or graphviz for equivalent
       visualization from the docs2graph adjacency dict output.
 
+      Confirmed against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Still a digraph plot with a click handler that sets a global
+      'clicked_node' to the nearest document -- MATLAB figure, axes and
+      callback infrastructure throughout. Nothing to port.
+
   - name: projectvardef
     matlab_path: "+ndi/+database/+fun/projectvardef.m"
-    status: not_applicable
+    matlab_last_sync_hash: "fe64a9f53"
+    status: matlab_only
     decision_log: >
       MATLAB utility for defining project-level variable definitions
       used in the MATLAB workspace/project system. No equivalent
       concept in the Python package; configuration is handled via
       JSON/YAML files and ndi.common settings.
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit,
+      AND THE REASON RECORDED ABOVE DESCRIBES A DIFFERENT FUNCTION. It is not
+      about "project-level variable definitions used in the MATLAB
+      workspace/project system" and has nothing to do with configuration
+      files. It is a four-line shorthand that returns the name/value pairs for
+      building a 'projectvar' NDI DOCUMENT: base.name, projectvar.type,
+      projectvar.description, projectvar.data. And projectvar is not a
+      MATLAB-only concept -- projectvar.json ships in THIS repo's
+      ndi_common/database_documents/, though no Python code references it. So
+      the stated grounds for matlab_only do not hold: the equivalent concept
+      exists here. Whether the shorthand is worth porting is a maintainer's
+      call, which is why the status is left alone and the record corrected
+      rather than quietly re-decided.
+
   - name: readtablechar
     matlab_path: "+ndi/+database/+fun/readtablechar.m"
-    matlab_last_sync_hash: "234c356"
+    # Re-synced: the value here was once "234c356", which resolves to no
+    # object in NDI-matlab and could not be recovered (#191), so it was left
+    # absent -- an absent hash claims nothing, a wrong one claims something
+    # false. The file has now been read against fe64a9f53 and the hash below
+    # records that, with the comparison written up in the decision_log.
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     python_name: readtablechar
     input_arguments:
@@ -493,9 +630,25 @@ not_applicable:
       shipped mixture columns they could not fill. See
       Waltham-Data-Science/NDI-python#138.
 
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      This one holds, and the divergence is deliberate and already documented
+      in the function: MATLAB writes the text to a temporary file because
+      readtable needs a filename, where the port parses in memory, so ext only
+      selects the parser. It also REFUSES a readtable option it cannot map
+      rather than ignoring it -- dropping Delimiter silently would return one
+      column of joined text that still looks like a table. One difference
+      worth knowing: MATLAB's readtable sniffs the delimiter for a '.txt' file
+      where the port defaults to a comma, so text that relied on that sniffing
+      must pass Delimiter explicitly.
+
   - name: writetablechar
     matlab_path: "+ndi/+database/+fun/writetablechar.m"
-    matlab_last_sync_hash: "234c356"
+    # Re-synced: the value here was once "234c356", which resolves to no
+    # object in NDI-matlab and could not be recovered (#191), so it was left
+    # absent -- an absent hash claims nothing, a wrong one claims something
+    # false. The file has now been read against fe64a9f53 and the hash below
+    # records that, with the comparison written up in the decision_log.
+    matlab_last_sync_hash: "fe64a9f53"
     python_path: "ndi/database_fun.py"
     python_name: writetablechar
     input_arguments:
@@ -520,3 +673,10 @@ not_applicable:
       Round-tripping is the contract, and the test is MATLAB's own docstring
       example: values survive to 1e-15, not text identity -- a float is not
       written back the way it was typed, in either language.
+
+      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
+      Holds. Same in-memory-instead-of-temporary-file divergence as
+      readtablechar, and the same defaults MATLAB's writetable has -- comma
+      delimited, variable names on the first line -- which is the shape the
+      stored mixture tables are in, since marderbath.m calls it with no
+      options. Nothing to port.

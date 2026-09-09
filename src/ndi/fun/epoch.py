@@ -6,6 +6,7 @@ MATLAB equivalents: +ndi/+fun/+epoch/epochid2element.m, filename2epochid.m
 
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 import numpy as np
@@ -21,6 +22,13 @@ def epochid2element(
 
     MATLAB equivalent: ndi.fun.epoch.epochid2element
 
+    This used to read ``element.epoch_table`` out of the stored element
+    DOCUMENTS. There is no such field: it appears in no document schema and
+    nothing in this tree ever writes one, so the lookup came back empty for
+    every epoch id ever passed in. MATLAB asks the ELEMENT OBJECT for its
+    ``epochtable()``, which is built from the epoch files, and so does this
+    now.
+
     Args:
         session: An NDI session instance.
         epoch_ids: List of epoch ID strings to search for.
@@ -28,43 +36,48 @@ def epochid2element(
         element_type: Optional type filter for elements.
 
     Returns:
-        Dict mapping each epoch_id to a list of matching elements.
-    """
-    from ndi.query import ndi_query
+        Dict mapping each epoch_id to a list of matching elements. MATLAB
+        returns a cell array the same size as the input; a dict keyed by the
+        epoch id is the same information in the shape a Python caller
+        indexes, as in :func:`filename2epochid`.
 
-    # Get all elements
-    q = ndi_query("").isa("element")
+    Warns:
+        UserWarning: naming any epoch id no element claims, as MATLAB does.
+    """
+    filters: dict[str, str] = {}
     if element_name:
-        q = q & (ndi_query("element.name") == element_name)
-    docs = session.database_search(q)
+        filters["element.name"] = element_name
+    if element_type:
+        # The type filter used to look for element_type among
+        # document_class.class_list, a key element documents do not have --
+        # so an empty list was searched and EVERY element was skipped
+        # whenever a type was given. MATLAB filters on element.type.
+        filters["element.type"] = element_type
+
+    elements = session.getelements(**filters)
 
     result: dict[str, list[Any]] = {eid: [] for eid in epoch_ids}
+    wanted = {eid.lower(): eid for eid in epoch_ids}
 
-    for doc in docs:
-        props = doc.document_properties if hasattr(doc, "document_properties") else doc
-        if not isinstance(props, dict):
+    for element in elements:
+        try:
+            epoch_table, _ = element.epochtable()
+        except Exception:
+            # One element whose epoch files cannot be read must not cost the
+            # rest their answer.
             continue
+        for entry in epoch_table or []:
+            epoch_id = entry.get("epoch_id", "") if isinstance(entry, dict) else ""
+            key = wanted.get(str(epoch_id).lower())
+            if key is not None and element not in result[key]:
+                result[key].append(element)
 
-        if element_type:
-            classes = props.get("document_class", {}).get("class_list", [])
-            type_names = [c.get("class_name", "") for c in classes]
-            if element_type not in type_names:
-                continue
-
-        # Check epoch table
-        et = props.get("element", {}).get("epoch_table", [])
-        if not isinstance(et, list):
-            et = []
-        doc_epoch_ids = set()
-        for entry in et:
-            if isinstance(entry, dict):
-                eid = entry.get("epoch_id", "")
-                if eid:
-                    doc_epoch_ids.add(eid.lower())
-
-        for search_eid in epoch_ids:
-            if search_eid.lower() in doc_epoch_ids:
-                result[search_eid].append(doc)
+    missing = [eid for eid in epoch_ids if not result[eid]]
+    if missing:
+        warnings.warn(
+            "No element was found matching the epoch id(s):\n " + "\n".join(missing),
+            stacklevel=2,
+        )
 
     return result
 

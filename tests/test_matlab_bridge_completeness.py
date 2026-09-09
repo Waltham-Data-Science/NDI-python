@@ -421,6 +421,191 @@ class TestTheDeferralsSayWhy:
         )
 
 
+def duplicated_entries(sources: list[Path]) -> list[str]:
+    """Bridge entries that record one MATLAB file twice under one name.
+
+    Returns a description per offending (path, name); empty when clean. A
+    pair whose entries each carry a distinct ``python_qualified`` is
+    deliberate and not reported -- see
+    :class:`TestOneMatlabFileIsRecordedOnce`.
+    """
+    by_key: dict[tuple[str, str], list[tuple[str, dict[str, Any]]]] = {}
+    for source in sources:
+        data = yaml.safe_load(source.read_text(encoding="utf-8"))
+        for entry in _entries_with_a_matlab_path(data):
+            path = normalize_matlab_path(entry["matlab_path"])
+            name = entry.get("name")
+            if not path or not isinstance(name, str):
+                continue
+            by_key.setdefault((path, name), []).append((_display_path(source), entry))
+
+    offenders = []
+    for (path, name), records in sorted(by_key.items()):
+        if len(records) == 1:
+            continue
+        markers = [entry.get("python_qualified") for _, entry in records]
+        if all(markers) and len(set(markers)) == len(markers):
+            continue
+        listing = ", ".join(where for where, _ in records)
+        offenders.append(f"{name} ({path}) -- {len(records)} entries in: {listing}")
+    return offenders
+
+
+def _display_path(source: Path) -> str:
+    """A bridge file as repo-relative text. Every one is named the same, so
+    the directory is the only part that identifies it."""
+    try:
+        return str(source.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(source)
+
+
+class TestOneMatlabFileIsRecordedOnce:
+    """A MATLAB file gets ONE bridge entry, unless the duplication is declared.
+
+    Nothing checked this, and it drifted. Two entries for one file do not
+    fail the completeness check -- that check asks whether a MATLAB file is
+    recorded, and twice is recorded -- so the second copy sits there until
+    someone reads both. By the time this test was written the repo held
+    eleven such pairs, and the interesting ones did not agree:
+
+    * ``+ndi/+gui/+app/kiasort.m`` was ``not_yet_ported`` in
+      ``src/ndi/gui/`` while ``src/ndi/gui/app/`` recorded the port that
+      exists at ``ndi/gui/app/kiasort.py`` -- likewise vhNDISpikeSorter and
+      pipelineEditor.
+    * ``+ndi/+fun/+probe/+import/+kiasort/`` was ``not_yet_ported`` beside
+      an entry describing nine of its twelve files as ported.
+    * ``selectCloudDataset`` and ``LoginDialog`` were a gap in one entry and
+      ``ported_differently`` in another.
+
+    Each time the stale copy was the one a reader might hit first. The bridge
+    is the answer to "is this ported?", so two answers is worse than none.
+
+    WHAT THIS DOES NOT FLAG, and why the key is name AND path. Several
+    entries legitimately share one ``matlab_path``: ``parse_devicestring``
+    and ``build_devicestring`` are methods recorded off
+    ``epochprobemap_daqsystem.m``, ``bulkUploadsJobInfo`` is a second Python
+    reading of ``getBulkUploadStatus.m``, and ``name2variableName`` has a
+    PascalCase variant. Those are different things sharing a source file, and
+    a check keyed on path alone calls all of them errors -- which is the
+    fastest way to get a checker switched off. A duplicate is two entries
+    claiming to be the SAME thing: same name, same file.
+
+    THE ONE LEGITIMATE CASE IS DECLARED, NOT GUESSED AT. Python may expose a
+    single MATLAB function from two modules under the same name --
+    ``getBulkUploadURL`` is reachable as both ``ndi.cloud.api.documents`` and
+    ``ndi.cloud.api.files`` -- and that is a real pair of ports, not a
+    mistake. Those entries say so with ``python_qualified:``. Requiring the
+    marker on EVERY entry in the pair keeps the exception explicit: a
+    deliberate pair is one line of intent, an accidental one still fails.
+    """
+
+    def test_no_matlab_file_is_recorded_twice_under_one_name(self):
+        offenders = duplicated_entries(sorted(REPO_ROOT.glob(f"src/**/{BRIDGE_FILENAME}")))
+        assert not offenders, (
+            "these MATLAB files are recorded twice under one name:\n  "
+            + "\n  ".join(offenders)
+            + "\n\nKeep the entry that matches the Python tree today and delete the "
+            "other. If Python really does expose one MATLAB function from two "
+            "modules, give EVERY entry for it a distinct python_qualified: so the "
+            "duplication reads as deliberate."
+        )
+
+
+class TestTheDuplicateGuardWouldActuallyCatchOne:
+    """The guard above passes on a clean tree, which is also what a guard
+    that checks nothing does. These build the offending shapes by hand.
+    """
+
+    @staticmethod
+    def _write(tmp_path: Path, entries: str) -> Path:
+        source = tmp_path / BRIDGE_FILENAME
+        source.write_text(f"functions:\n{entries}", encoding="utf-8")
+        return source
+
+    def test_the_same_file_recorded_twice_is_reported(self, tmp_path):
+        source = self._write(
+            tmp_path,
+            "  - name: kiasort\n"
+            '    matlab_path: "+ndi/+gui/+app/kiasort.m"\n'
+            "    status: not_yet_ported\n"
+            "  - name: kiasort\n"
+            '    matlab_path: "+ndi/+gui/+app/kiasort.m"\n'
+            '    python_path: "ndi/gui/app/kiasort.py"\n',
+        )
+        offenders = duplicated_entries([source])
+        assert len(offenders) == 1
+        assert "kiasort" in offenders[0]
+
+    def test_a_declared_pair_is_allowed(self, tmp_path):
+        source = self._write(
+            tmp_path,
+            "  - name: getBulkUploadURL\n"
+            '    matlab_path: "+ndi/+cloud/+api/+documents/getBulkUploadURL.m"\n'
+            '    python_qualified: "ndi.cloud.api.documents.getBulkUploadURL"\n'
+            "  - name: getBulkUploadURL\n"
+            '    matlab_path: "+ndi/+cloud/+api/+documents/getBulkUploadURL.m"\n'
+            '    python_qualified: "ndi.cloud.api.files.getBulkUploadURL"\n',
+        )
+        assert duplicated_entries([source]) == []
+
+    def test_half_a_declaration_is_not_a_declaration(self, tmp_path):
+        """One marker on one side is the state the repo was already in: it
+        disambiguates nothing, because the other entry still claims the
+        unqualified name."""
+        source = self._write(
+            tmp_path,
+            "  - name: getBulkUploadURL\n"
+            '    matlab_path: "+ndi/+cloud/+api/+documents/getBulkUploadURL.m"\n'
+            "  - name: getBulkUploadURL\n"
+            '    matlab_path: "+ndi/+cloud/+api/+documents/getBulkUploadURL.m"\n'
+            '    python_qualified: "ndi.cloud.api.files.getBulkUploadURL"\n',
+        )
+        assert len(duplicated_entries([source])) == 1
+
+    def test_different_names_on_one_file_are_left_alone(self, tmp_path):
+        """Methods and variants recorded off one MATLAB file are not
+        duplicates; flagging them is how a checker gets ignored."""
+        source = self._write(
+            tmp_path,
+            "  - name: parse_devicestring\n"
+            '    matlab_path: "+ndi/+epoch/epochprobemap_daqsystem.m"\n'
+            "  - name: build_devicestring\n"
+            '    matlab_path: "+ndi/+epoch/epochprobemap_daqsystem.m"\n',
+        )
+        assert duplicated_entries([source]) == []
+
+    def test_python_only_entries_do_not_collide(self, tmp_path):
+        """``n/a`` names no file, so two Python-only entries are not two
+        records of one thing."""
+        source = self._write(
+            tmp_path,
+            "  - name: identifier\n"
+            '    matlab_path: "N/A"\n'
+            "  - name: somethingElse\n"
+            '    matlab_path: "N/A"\n',
+        )
+        assert duplicated_entries([source]) == []
+
+
+def _entries_with_a_matlab_path(node: Any) -> list[dict[str, Any]]:
+    """Every mapping in the tree that names a ``matlab_path``.
+
+    Recursive for the same reason :func:`_entries_with_status` is: entries
+    live at several depths, and a nested one counts.
+    """
+    found: list[dict[str, Any]] = []
+    if isinstance(node, dict):
+        if isinstance(node.get("matlab_path"), str):
+            found.append(node)
+        for value in node.values():
+            found.extend(_entries_with_a_matlab_path(value))
+    elif isinstance(node, list):
+        for item in node:
+            found.extend(_entries_with_a_matlab_path(item))
+    return found
+
+
 def _entries_with_status(node: Any) -> list[dict[str, Any]]:
     """Every mapping in the tree that carries a ``status:`` key."""
     found: list[dict[str, Any]] = []

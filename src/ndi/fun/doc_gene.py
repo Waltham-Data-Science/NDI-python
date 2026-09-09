@@ -356,7 +356,10 @@ def makeGeneList(
     n_dup = sum(1 for v in seen.values() if v > 1)
 
     fd, tsv_path = tempfile.mkstemp(suffix=".tsv")
-    with os.fdopen(fd, "w") as fh:
+    # newline="" so Python does not translate "\n" to "\r\n" on Windows.
+    # The file is read back as raw bytes by database_openbinarydoc, and a
+    # trailing "\r" would land on the last field of every row.
+    with os.fdopen(fd, "w", newline="") as fh:
         fh.write("gene_index\tgene_id\tgene_name\n")
         for i in range(n):
             # gene_index is written explicitly and is ZERO-BASED, matching
@@ -679,7 +682,7 @@ def _write_gene_totals(gene_index, count, n_genes):
     ).astype(np.int64)
     npx = np.bincount(np.asarray(gene_index, np.int64), minlength=n_genes).astype(np.int64)
     fd, path = tempfile.mkstemp(suffix=".tsv")
-    with os.fdopen(fd, "w") as fh:
+    with os.fdopen(fd, "w", newline="") as fh:
         fh.write("gene_index\ttotal_counts\tn_records\n")
         for i in range(n_genes):
             fh.write(f"{i}\t{int(tot[i])}\t{int(npx[i])}\n")
@@ -1442,6 +1445,7 @@ def makeCells(
     segmentationDilation: float = 0,
     coordinateUnits: str = "source",
     subjectID: str = "",
+    sourceFileID: str = "",
     extra: dict[str, Any] | None = None,
     contours=None,
     contourReference: str = "centroid",
@@ -1468,6 +1472,10 @@ def makeCells(
             a measured cell body.
         subjectID: optional here, because the pyramid already carries
             one -- unlike :func:`makePyramid`, where it is required.
+        sourceFileID: id of the ``generic_file`` document describing the
+            file these cells were segmented from. The class has carried a
+            ``source_file_id`` dependency since it was written and nothing
+            populated it (NDI-matlab 6ae508708).
         extra: further per-cell columns, written after the required four
             with their own names. The spec names area, dnb_count,
             total_counts and n_genes, but writers differ and
@@ -1502,7 +1510,7 @@ def makeCells(
     # every cellTypeLabels document reference. Written explicitly rather
     # than left implicit, so a reader never infers it from row order.
     fd, tsv_path = tempfile.mkstemp(suffix=".tsv")
-    with os.fdopen(fd, "w") as fh:
+    with os.fdopen(fd, "w", newline="") as fh:
         fh.write("\t".join(["cell_index", "cell_id", "x", "y", *extra.keys()]) + "\n")
         for i in range(n):
             row = [str(i), cell_id[i], f"{xs[i]:g}", f"{ys[i]:g}"]
@@ -1547,6 +1555,8 @@ def makeCells(
     )
     if subjectID:
         doc = doc.set_dependency_value("subject_id", subjectID, error_if_not_found=False)
+    if sourceFileID:
+        doc = doc.set_dependency_value("source_file_id", sourceFileID, error_if_not_found=False)
 
     return _store_doc(session, doc, file_names, file_paths)
 
@@ -1636,7 +1646,7 @@ def makeCellTypeLabels(
         )
 
     fd, tsv_path = tempfile.mkstemp(suffix=".tsv")
-    with os.fdopen(fd, "w") as fh:
+    with os.fdopen(fd, "w", newline="") as fh:
         # cell_index is the 0-BASED row of cells.tsv, written explicitly for
         # the same reason it is there: never inferred from row order.
         fh.write("cell_index\tlabel\n")

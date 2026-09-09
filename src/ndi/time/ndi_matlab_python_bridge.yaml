@@ -17,9 +17,15 @@ classes:
   - name: clocktype
     type: class
     matlab_path: "+ndi/+time/clocktype.m"
-    matlab_last_sync_hash: "821b5af5"
+    matlab_last_sync_hash: "5210c69db"
     python_path: "ndi/time/clocktype.py"
     python_class: "ndi_time_clocktype"
+    decision_log: >
+      NDI-matlab 5210c69db repaired a typo: ne()'s second argument was
+      declared ndi_cock_obj_b while the body read ndi_clocktype_obj_b, so
+      every ~= errored on an undefined variable, and the fix also switched
+      the comparison to strcmp. Nothing to port: Python's clocktype is an
+      Enum, so != comes from Enum identity and the bug never existed here.
 
     properties:
       - name: UTC
@@ -581,7 +587,16 @@ classes:
   - name: syncgraph
     type: class
     matlab_path: "+ndi/+time/syncgraph.m"
-    matlab_last_sync_hash: "dde9edf9"
+    matlab_last_sync_hash: "d06ef9cd5"
+    decision_log: >
+      NDI-matlab d06ef9cd5 and 2377c0679 repaired three MATLAB-only defects.
+      Two were dead on arrival: removerule called setdiff(1:n),index -- the
+      paren in the wrong place -- and the daqsystem node removal called
+      setdiff with one argument, so it always errored and the method never
+      ran. The third replaced == on a cell array of clocktypes with cellfun.
+      Nothing to port: Python's remove_rule deletes from a list, and an
+      epochnode carries a single clocktype rather than a cell array, so
+      neither shape exists here.
     python_path: "ndi/time/syncgraph.py"
     python_class: "ndi_time_syncgraph"
     inherits: "ndi.ido"
@@ -817,7 +832,7 @@ time_fun:
     matlab_path: "+ndi/+time/+fun/syncTriggerTrains.m"
     matlab_last_sync_hash: "0e2caa09"
     python_path: "ndi/time/syncrule/common_triggers_overlapping_epochs.py"
-    python_qualified: "_sync_triggers"
+    python_qualified: "_sync_trigger_trains"
     input_arguments:
       - name: t1
         type_matlab: "double vector"
@@ -825,29 +840,58 @@ time_fun:
       - name: t2
         type_matlab: "double vector"
         type_python: "np.ndarray"
+      - name: options.alignmentTolerance
+        type_matlab: "double"
+        type_python: "float"
+        default: "0.005"
+      - name: options.minMatchRate
+        type_matlab: "double"
+        type_python: "float"
+        default: "0.8"
+      - name: options.fingerprintSize
+        type_matlab: "double"
+        type_python: "int"
+        default: "5"
     output_arguments:
       - name: shift
         type_python: "float"
       - name: scale
         type_python: "float"
     decision_log: >
-      MATLAB keeps this as a free function in +time/+fun because two
+      PORTED in NDI-python#223, which closed the gap this entry used to
+      record. MATLAB keeps this as a free function in +time/+fun because two
       syncrules could use it; Python has one caller, so it lives as the
-      private _sync_triggers beside it. That part is only placement.
-      DIVERGENCE, and the reason this entry is worth reading: the two are
-      not the same algorithm. MATLAB's is 169 lines of drift-tolerant
-      inter-pulse-interval hashing -- it finds candidate alignments by
-      quantized IPI, validates each against a window that widens to absorb
-      200ppm+ clock drift over long files, PERMITS EXACTLY ONE MISSING
-      PULSE, and raises when more than one distinct alignment validates.
-      Python's is a least-squares polyfit that requires len(t1) == len(t2)
-      and raises "Trigger count mismatch" otherwise.
-      So Python fails precisely where MATLAB was engineered to succeed: a
-      single dropped pulse, which the MATLAB header calls out as the case
-      it exists for. Two devices that MATLAB can align, Python refuses to.
-      Recorded rather than fixed here: porting the real algorithm is its
-      own change with its own tests, and it needs cross-language cases to
-      prove the two agree on the same pulse trains.
+      private _sync_trigger_trains beside it, with runRobustGlobalSync as
+      _run_robust_global_sync. That is placement only -- the algorithm is
+      followed step for step: quantized inter-pulse-interval fingerprints
+      seed candidate offsets, each offset is validated across the whole
+      shorter train against a window that widens with distance from the seed
+      to absorb 200ppm+ drift, at most one unmatched pulse is permitted, and
+      the surviving hypotheses are ranked by match rate.
+      THREE BEHAVIOURS A CALLER MUST NOT LOSE, all preserved: it returns
+      (nan, nan) rather than a guess when nothing validates; it raises on a
+      genuinely ambiguous alignment (SyncAmbiguityError, carrying MATLAB's
+      'ndi:time:sync:ambiguous' identifier) rather than picking one; and the
+      "at most one missed pulse" budget counts pulses of the SHORTER train
+      with no partner in the longer one, so drops from the longer train are
+      unbounded. tests/test_sync_trigger_trains.py pins all three.
+      ONE DETAIL WORTH THE LINE: MATLAB's round() is half-away-from-zero and
+      numpy's is half-to-even, which would bucket an interval landing exactly
+      on .5 differently and silently fail to match a fingerprint. Python uses
+      an explicit _matlab_round.
+      ONE MATLAB DEFECT MIRRORED ON PURPOSE, reported upstream as
+      VH-Lab/NDI-matlab#975: a candidate offset's rough shift is anchored at
+      pulse 1 rather than at the fingerprint that produced the offset, so a
+      pulse dropped within the first fingerprintSize intervals yields nan for
+      an alignment that should be found. Mirrored rather than silently
+      corrected, because the bridge's claim is correspondence with MATLAB, not
+      improvement on it; test_a_drop_inside_the_lead_in_refuses pins it and
+      says what to change when upstream fixes it.
+      NOT THIS ENTRY, but adjacent and easy to confuse: _sync_triggers in the
+      same file is the equal-length least-squares path, modelling
+      vlt.time.syncTriggers (a different repo, so no entry here). It still
+      raises on a count mismatch; commonTriggersOverlappingEpochs chooses
+      between the two.
 
   - name: syncRandomTriggers
     matlab_path: "+ndi/+time/+fun/syncRandomTriggers.m"
@@ -861,6 +905,14 @@ time_fun:
       - name: t2
         type_matlab: "double vector"
         type_python: "np.ndarray"
+      - name: alignmentTolerance
+        type_matlab: "double"
+        type_python: "float"
+        default: "0.002"
+      - name: fingerprintSize
+        type_matlab: "double"
+        type_python: "int"
+        default: "4"
     output_arguments:
       - name: shift
         type_python: "float"
@@ -868,17 +920,39 @@ time_fun:
         type_python: "float"
     decision_log: >
       Same placement story as syncTriggerTrains: a free function in MATLAB,
-      a private helper beside its one caller in Python.
-      DIVERGENCE, smaller than its neighbour but real. Both find an offset
-      from inter-event intervals and then fit, so they agree in shape.
-      MATLAB builds a hash map of interval fingerprints from the longer
-      recording and probes it in randomized order, then validates the
-      candidate with a secondary pulse check and RAISES if the match is
-      ambiguous. Python cross-correlates the normalized IPI sequences and
-      takes the argmax, which always yields an answer -- an ambiguous
-      alignment produces a confident wrong one rather than an error.
-      The failure mode differs even where the result usually agrees, so a
-      caller cannot treat a Python answer as carrying MATLAB's guarantee.
+      a private helper beside its one caller in Python. Both return
+      (shift, scale) such that t1 = shift + scale * t2 -- and note that
+      convention is the OPPOSITE of syncTriggerTrains, which returns the
+      line for t2 in terms of t1; MATLAB's headers document both directions
+      that way and the port preserves each.
+      PORTED 1:1 (NDI-python#249). Hash the longer-duration recording's
+      interval fingerprints, probe the shorter one in randomized order,
+      validate each hit with a secondary pulse check one beyond the
+      fingerprint, and return the first candidate whose secondary check
+      passes. On no match, return (nan, nan) -- the same failure contract
+      MATLAB documents. That NaN is now the failure branch in the caller
+      (random_pulses.apply): errorOnFailure=True turns it into a
+      ValueError("Could not find random pulse match."), matching the
+      behaviour the branch was written to implement.
+      The pre-port helper cross-correlated the normalized IPI sequences and
+      committed to a single argmax lag, so an ambiguous alignment produced
+      a confident wrong answer and no-match surfaced as a "Poor fit
+      quality" ValueError -- neither of those matches MATLAB. That helper
+      is gone.
+      SHARED HELPER: _matlab_round comes from
+      common_triggers_overlapping_epochs.py (the sibling port for
+      syncTriggerTrains, NDI-python#223), because interval quantization
+      needs MATLAB's half-away-from-zero rounding, not numpy's half-to-
+      even. If a third caller shows up, the two-line helper is worth
+      lifting to a shared module.
+      ONE ALGORITHMIC LIMITATION carried over deliberately, pinned by
+      test_periodic_trains_pick_a_candidate_matlab_does_not_disambiguate:
+      unlike syncTriggerTrains, syncRandomTriggers does NOT detect
+      ambiguity. On perfectly periodic data every fingerprint matches
+      every fingerprint AND the secondary pulse check also passes at
+      several offsets, so the algorithm returns the first candidate it
+      trips over, which may be off by a whole pulse period. A caller who
+      needs the ambiguity guarantee should use syncTriggerTrains.
 
   - name: samples2times
     matlab_path: "+ndi/+time/+fun/samples2times.m"
@@ -913,7 +987,7 @@ not_yet_ported:
   - name: timeseries
     matlab_path: "+ndi/+time/timeseries.m"
     matlab_last_sync_hash: "0e2caa09"
-    status: not_applicable
+    status: ported_differently
     decision_log: >
       MATLAB's ndi.time.timeseries is an abstract mixin: it declares
       readtimeseries / samplerate / times2samples / samples2times and the

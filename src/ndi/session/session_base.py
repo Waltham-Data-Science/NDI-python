@@ -408,7 +408,11 @@ class ndi_session(ABC):
 
         Args:
             doc_or_id: ndi_document, document ID, or list of either
-            error_if_not_found: If True, raise error when not found
+            error_if_not_found: If True, raise when an id to be removed is
+                not in the database. The default is forgiving on purpose:
+                the point of a removal is that the document ends up gone,
+                so an id someone else already deleted counts as success.
+                MATLAB equivalent: ``ErrIfNotFound``.
 
         Returns:
             self for chaining
@@ -421,12 +425,27 @@ class ndi_session(ABC):
 
         doc_list = self._docinput2docs(doc_or_id)
 
-        # Find and remove dependents
+        # Dependents first, then the documents themselves -- and each id
+        # exactly once. A document can arrive by both routes: removing a
+        # daqsystem's daqreader also finds the daqsystem, and doc_list may
+        # repeat an id by itself. Removing one twice used to be harmless
+        # because the second delete was swallowed; with error_if_not_found
+        # it would report a document as missing that this very call had
+        # just removed. MATLAB's ndi.session/database_rm de-duplicates in
+        # the same order for the same reason.
+        on_missing = "error" if error_if_not_found else "ignore"
+        seen: set[str] = set()
+        to_remove: list[ndi_document] = []
         for doc in doc_list:
-            dependents = self._find_all_dependencies(doc)
-            for dep in dependents:
-                self._database.remove(dep)
-            self._database.remove(doc)
+            to_remove.extend(self._find_all_dependencies(doc))
+        to_remove.extend(doc_list)
+
+        for doc in to_remove:
+            doc_id = doc.id if isinstance(doc, ndi_document) else doc
+            if doc_id in seen:
+                continue
+            seen.add(doc_id)
+            self._database.remove(doc, on_missing=on_missing)
 
         return self
 

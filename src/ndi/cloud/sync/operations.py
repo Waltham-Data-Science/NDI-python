@@ -31,6 +31,53 @@ if TYPE_CHECKING:
 _DOC_DIR = ".ndi" / Path("documents")
 
 
+def _upload_id(doc: dict[str, Any]) -> str:
+    """The id ``_save_downloaded_docs`` filed a downloaded document under."""
+    return str(doc.get("ndiId") or doc.get("id") or "")
+
+
+def _ingest_downloaded_docs(dataset: Any, saved_properties: list[dict[str, Any]]) -> None:
+    """Put downloaded documents into the dataset's database.
+
+    MATLAB's ``downloadNdiDocuments`` ends in ``database_add``. This side
+    wrote the JSON to ``.ndi/documents/`` and stopped there, so a downloaded
+    document was on disk but not in the database -- and therefore not a
+    document the dataset would return from ``database_search``.
+
+    Nothing noticed while the sync functions took a path, because the index
+    was then the only record of what was local, and it recorded a download as
+    local whether or not anything had ingested it. Now that "local" is
+    measured by asking the dataset, an un-ingested download reads as absent
+    and gets fetched again on every run.
+
+    Failure here is logged, not raised: the JSON is already written, so the
+    documents are recoverable, and abandoning a whole sync because one
+    document would not ingest would be the worse outcome. The caller's index
+    only records what actually landed, so a failure here means the next run
+    tries again.
+    """
+    if not saved_properties:
+        return
+    add = getattr(dataset, "database_add", None)
+    if not callable(add):
+        logger.warning(
+            "Downloaded %d document(s) but this dataset cannot ingest them "
+            "(no database_add); they are on disk under .ndi/documents/ only.",
+            len(saved_properties),
+        )
+        return
+    from ..download import structsToNdiDocuments
+
+    try:
+        add(structsToNdiDocuments(saved_properties))
+    except Exception as exc:  # noqa: BLE001 - the JSON is already written
+        logger.warning(
+            "Downloaded %d document(s) but could not add them to the database: %s",
+            len(saved_properties),
+            exc,
+        )
+
+
 def _save_downloaded_docs(
     ds_path: Path,
     docs: list[dict[str, Any]],
@@ -137,7 +184,287 @@ def downloadNdiDocuments(
         if ndi_to_api.get(ndi_id, ndi_id) not in downloaded_api_ids
     ]
 
+    # A short answer -- ask for 50 documents, get 47 -- is the shape silent
+    # cloud pagination produces, and it is not an exception: the call
+    # succeeds and the caller gets a shorter list. The callers keep the
+    # missing IDs out of the sync index so they stay outstanding, but
+    # nothing has so far said the loss happened at all.
+    if failed:
+        logger.warning(
+            "Requested %d documents from the cloud and received %d; missing: %s",
+            len(ids_to_download),
+            len(ids_to_download) - len(failed),
+            ", ".join(sorted(failed)[:10]) + ("..." if len(failed) > 10 else ""),
+        )
+
     return docs, failed
+
+
+# ---------------------------------------------------------------------------
+# Resolving what a sync operates on
+#
+# THE SYNC FUNCTIONS TAKE A DATASET, NOT A PATH -- NDI-python#232.
+#
+# They used to take ``dataset_path: str``, and worked entirely from the sync
+# index's id lists. That made a whole class of work impossible: with only ids
+# in hand there is no document CONTENT to send, so every upload posted
+# ``{"ndiId": doc_id}`` -- a document with no base, no class and no
+# properties. The call succeeded, the remote listed the id, and no later run
+# ever sent it again, because a live listing showed it present. The index
+# recorded it as synced. Nothing reported a problem.
+#
+# MATLAB's counterparts take an ``ndi.dataset``, and so do these now. The
+# dataset is the only thing that can answer "what are my documents", which is
+# the question an upload has to ask.
+# ---------------------------------------------------------------------------
+
+
+def _dataset_path(dataset: Any) -> Path:
+    """The dataset's own directory, where ``.ndi/sync/index.json`` lives."""
+    if isinstance(dataset, (str, Path)):
+        raise CloudSyncError(
+            "The sync functions take an ndi.dataset, not a path (NDI-python#232). "
+            "A path cannot supply document contents, so uploads built from one "
+            "sent an id and no document. Open the dataset first -- "
+            "ndi.dataset.dir(path) -- and pass that."
+        )
+    for name in ("getpath", "path"):
+        attr = getattr(dataset, name, None)
+        if attr is None:
+            continue
+        value = attr() if callable(attr) else attr
+        if value:
+            return Path(str(value))
+    raise CloudSyncError("This dataset has no local path; the sync index is stored under it.")
+
+
+def _resolve_cloud_dataset_id(
+    dataset: Any,
+    cloud_dataset_id: str,
+    client: CloudClient | None,
+) -> str:
+    """The remote id to sync against, resolved from the dataset when absent.
+
+    MATLAB's sync functions take no cloud id at all -- they read it from the
+    dataset's ``dataset_remote`` document. Passing one stays supported, since
+    a caller that has already resolved it should not pay for it twice.
+    """
+    if cloud_dataset_id:
+        return cloud_dataset_id
+    from ..internal import getCloudDatasetIdForLocalDataset
+
+    try:
+        resolved, _ = getCloudDatasetIdForLocalDataset(dataset, client=client)
+    except Exception as exc:  # noqa: BLE001 - re-raised with the actionable message
+        raise CloudSyncError(
+            "Could not determine the cloud dataset id. Ensure the local dataset "
+            f"is linked to a remote one. Original error: {exc}"
+        ) from exc
+    if not resolved:
+        raise CloudSyncError(
+            "This dataset is not linked to a cloud dataset. Upload it to NDI Cloud first."
+        )
+    return resolved
+
+
+def _local_documents(dataset: Any) -> tuple[dict[str, dict[str, Any]], set[str]]:
+    """``({ndi_id: properties}, {ndi_id})`` for every document in *dataset*.
+
+    The properties dict is what an upload actually sends. Enumerating the
+    dataset -- rather than reading the index's remembered id list -- is also
+    what makes "local" mean the current truth: a document added since the
+    last sync is local now, and the index cannot know that.
+
+    Not wrapped in try/except: an unreadable database is not an empty
+    dataset, and uploading nothing must never be the reported outcome of
+    failing to look. (The same reasoning as orchestration.uploadDataset.)
+    """
+    from ..internal import listLocalDocuments
+    from ..upload import document_id
+
+    docs, _ids = listLocalDocuments(dataset)
+    by_id: dict[str, dict[str, Any]] = {}
+    for doc in docs:
+        props = doc.document_properties if hasattr(doc, "document_properties") else doc
+        if not isinstance(props, dict):
+            continue
+        doc_id = document_id(props)
+        if doc_id:
+            by_id[doc_id] = props
+    return by_id, set(by_id)
+
+
+def _upload_documents(
+    cloud_dataset_id: str,
+    documents: list[dict[str, Any]],
+    *,
+    client: CloudClient | None,
+) -> tuple[list[str], list[str]]:
+    """Send whole documents, and report ``(uploaded_ids, failed_ids)``.
+
+    Routed through :func:`ndi.cloud.upload.uploadDocumentCollection`, which is
+    the maintained producer and what MATLAB's uploadNew uses. ``only_missing``
+    is off because the caller has already worked out what the remote lacks;
+    asking the remote again per call would be a second full listing.
+    """
+    from ..upload import document_id, uploadDocumentCollection
+
+    if not documents:
+        return [], []
+    report = uploadDocumentCollection(
+        cloud_dataset_id, documents, only_missing=False, client=client
+    )
+    uploaded = [str(i) for i in report.get("manifest", []) if i]
+    sent = {document_id(d) for d in documents}
+    failed = sorted(i for i in sent if i and i not in set(uploaded))
+    if failed:
+        logger.warning(
+            "%d of %d document(s) did not upload: %s",
+            len(failed),
+            len(documents),
+            ", ".join(failed[:10]) + ("..." if len(failed) > 10 else ""),
+        )
+    return uploaded, failed
+
+
+def _upload_binaries(
+    cloud_dataset_id: str,
+    documents: list[dict[str, Any]],
+    options: SyncOptions,
+    *,
+    client: CloudClient | None,
+) -> set[str]:
+    """Upload each document's binaries; return the ids whose binaries failed.
+
+    A document whose binary did not upload must not be recorded as synced:
+    the remote then holds the metadata and none of the data, and a reader
+    gets a 404 (NDI-matlab#805). uploadFilesForDatasetDocuments does not
+    raise on a per-file failure -- it reports one -- so catching an exception
+    was never going to see the ordinary case.
+    """
+    if not options.sync_files or not documents:
+        return set()
+    from ..upload import document_id, uploadFilesForDatasetDocuments
+
+    try:
+        report = uploadFilesForDatasetDocuments(
+            getattr(getattr(client, "config", None), "org_id", ""),
+            cloud_dataset_id,
+            documents,
+            client=client,
+        )
+    except Exception as exc:  # noqa: BLE001
+        # The whole pass fell over: nothing in it can be claimed to have
+        # uploaded, so none of these documents is synced.
+        logger.warning("Binary upload pass failed: %s", exc)
+        return {document_id(d) for d in documents} - {""}
+    failed = {str(i) for i in report.get("failed_document_ids", []) if i}
+    if failed:
+        logger.warning(
+            "%d document(s) reached the remote without their binaries; "
+            "not recording them as synced: %s",
+            len(failed),
+            ", ".join(sorted(failed)),
+        )
+    return failed
+
+
+# ---------------------------------------------------------------------------
+# The (success, errorMessage, report) contract
+#
+# MATLAB's five sync entry points all return
+# ``[success, errorMessage, report]``. This side returned the report alone,
+# so the one question a scripted caller most wants to ask -- did it work? --
+# had to be reconstructed by inspecting report fields whose names differ per
+# mode. They return the triple now.
+#
+# WHAT MAKES IT FALSE. MATLAB sets success=false when the body throws, and
+# NDI-matlab 29546720b added the case that matters: a partial document
+# upload raises rather than reporting a clean mirror, because
+#
+#   "A scripted pipeline checking only `success` believed the dataset was
+#    mirrored when zero documents transferred."
+#
+# The same reasoning applies to a partial DOWNLOAD, which MATLAB still
+# reports as success -- the silent-loss shape NDI-matlab 7efa0a8a0 fixed on
+# the index side without revisiting the flag. So here, anything that did not
+# transfer makes success false, in either direction. That is stricter than
+# MATLAB for the two download modes and never wrong: a caller that wants the
+# detail has the report, and one that checks only the flag is not told a
+# partial sync was complete.
+#
+# WHAT ABORTS, AND WHAT ONLY REPORTS. An UPLOAD failure stops the run before
+# the sync index is written, exactly as MATLAB does -- uploadNew returns
+# early with "sync index not updated", mirrorToRemote and twoWaySync raise
+# NDI:Cloud:Sync:UploadIncomplete and let their handler catch it, so every
+# later phase is skipped. In mirrorToRemote that includes the remote
+# deletions, which matters on its own: deleting the remote's copies while
+# the local ones have not all arrived is how a half-finished mirror loses
+# documents outright.
+#
+# Nothing else aborts, again matching MATLAB. A failed remote deletion warns
+# and continues (deleteRemoteDocuments warns and returns rather than
+# throwing), and a short download warns and continues; both still write the
+# index, over what actually landed, so the next run retries only what is
+# still missing. Those cases do set success=false here -- the flag is
+# stricter than MATLAB's, the index behaviour is not.
+#
+# So success=false does NOT imply the index was untouched. It means the run
+# did not do everything it set out to; whether it got far enough to record
+# anything is the abort rule above.
+# ---------------------------------------------------------------------------
+
+
+def _outcome(report: dict[str, Any]) -> tuple[bool, str, dict[str, Any]]:
+    """``(success, errorMessage, report)`` for a run that completed.
+
+    A dry run reports the success of the dry run itself: it inspected both
+    sides and changed nothing, which is what it was asked to do.
+    """
+    failed = [str(i) for i in (report.get("failed") or [])]
+    unsaved = [str(i) for i in (report.get("unsaved_documents") or [])]
+    if not failed and not unsaved:
+        return True, "", report
+
+    parts: list[str] = []
+    if failed:
+        shown = ", ".join(sorted(failed)[:10]) + ("..." if len(failed) > 10 else "")
+        parts.append(f"{len(failed)} document(s) did not transfer: {shown}")
+    if unsaved:
+        parts.append(f"{len(unsaved)} downloaded document(s) could not be saved")
+    return False, "; ".join(parts), report
+
+
+def _aborted(report: dict[str, Any], message: str) -> tuple[bool, str, dict[str, Any]]:
+    """A failure that stops the run BEFORE the sync index is written.
+
+    MATLAB does this on an upload failure and only there: uploadNew returns
+    early with "sync index not updated", and mirrorToRemote / twoWaySync
+    raise ``NDI:Cloud:Sync:UploadIncomplete``, which their handler catches --
+    so the remaining phases, the index write among them, never run
+    (NDI-matlab 8c31a8f28 and 29546720b).
+
+    A failed remote DELETION does not abort: MATLAB's deleteRemoteDocuments
+    warns and returns. Nor does a short download. Those still write the
+    index, over what actually landed.
+    """
+    logger.warning("%s: %s", report.get("mode", "sync"), message)
+    return False, message, report
+
+
+def _failed_outcome(
+    mode: str, exc: BaseException, report: dict[str, Any] | None = None
+) -> tuple[bool, str, dict[str, Any]]:
+    """The triple for a run that could not complete.
+
+    The report still comes back, carrying whatever the run had recorded
+    before it stopped, so a caller can see how far it got.
+    """
+    logger.warning("%s failed: %s", mode, exc)
+    out = dict(report or {})
+    out.setdefault("mode", mode)
+    out.setdefault("failed", [])
+    return False, str(exc), out
 
 
 # ---------------------------------------------------------------------------
@@ -145,421 +472,644 @@ def downloadNdiDocuments(
 # ---------------------------------------------------------------------------
 
 
-def uploadNew(
-    dataset_path: str,
+#: How long a sync entry point will wait for in-flight bulk uploads before
+#: inventorying remote state. Deliberately far below
+#: waitForAllBulkUploads' own 300s default: this is a boundary crossed on
+#: every call, most of the time with nothing outstanding.
+_SETTLE_TIMEOUT = 30.0
+
+
+def _settle_bulk_uploads(
     cloud_dataset_id: str,
+    options: SyncOptions,
+    *,
+    client: Any = None,
+) -> None:
+    """Wait for in-flight bulk uploads before inventorying remote state.
+
+    MATLAB counterpart: NDI-matlab c425cd115 wires
+    ``ndi.cloud.api.files.waitForAllBulkUploads`` into all five sync entry
+    points, right after the dataset id is resolved and before the first
+    remote-state inventory.
+
+    THE RACE. A bulk upload lands as a zip that a server-side worker then
+    extracts. Until it finishes, ``listFiles`` can report ``uploaded=true``
+    -- the zip arrived -- while the per-file objects do not exist yet. A
+    sync that inventories in that window builds its whole plan on a picture
+    that is about to change, and the failures that follow look like
+    intermittent cloud flakiness rather than a race.
+
+    :func:`~ndi.cloud.api.files.waitForAllBulkUploads` was ported with a
+    docstring saying callers should do exactly this; nothing did.
+
+    Skipped under ``dry_run``: a dry run inventories to report, changes
+    nothing, and should not block on someone else's upload.
+
+    A wait that times out or reports failed jobs is logged, not raised.
+    The inventory that follows is then merely as stale as it was before
+    this existed, and refusing to sync at all would be a worse answer than
+    proceeding with a warning.
+
+    THE DEADLINE IS THE CALLER'S, NOT THE WAIT'S. waitForAllBulkUploads
+    defaults to 300s, which is the right budget for "an extraction really is
+    in flight and I want it finished". It is the wrong budget for a boundary
+    every sync entry point crosses on every call, including the many that
+    have no bulk upload outstanding at all. ``_SETTLE_TIMEOUT`` caps what a
+    sync will spend here; a genuinely long extraction is then reported as a
+    stale inventory rather than silently held.
+    """
+    if options.dry_run:
+        return
+    from ..api import files as files_api
+
+    try:
+        result = files_api.waitForAllBulkUploads(
+            cloud_dataset_id, timeout=_SETTLE_TIMEOUT, client=client
+        )
+    except Exception as exc:  # noqa: BLE001 - a wait that fails must not stop the sync
+        logger.warning("Could not wait for bulk uploads on %s: %s", cloud_dataset_id, exc)
+        return
+    state = (result or {}).get("state")
+    if state == "unavailable":
+        # No bulk-upload service to wait on. Not a sync problem, and not
+        # something to warn about on every single call.
+        logger.debug(
+            "No bulk-upload status available for %s (%s); proceeding.",
+            cloud_dataset_id,
+            (result or {}).get("error", ""),
+        )
+        return
+    if state and state != "complete":
+        logger.warning(
+            "Bulk uploads on %s did not settle (state=%s after %.1fs); the remote "
+            "inventory that follows may be incomplete.",
+            cloud_dataset_id,
+            state,
+            (result or {}).get("elapsed", float("nan")),
+        )
+
+
+def uploadNew(
+    dataset: Any,
+    cloud_dataset_id: str = "",
     options: SyncOptions | None = None,
     *,
     client: CloudClient | None = None,
-) -> dict[str, Any]:
+) -> tuple[bool, str, dict[str, Any]]:
     """Upload documents that exist locally but not in the cloud.
 
-    Reads the sync index to determine which docs are new, uploads
-    them, and updates the index.
+    MATLAB equivalent: ``ndi.cloud.sync.uploadNew(ndiDataset, syncOptions)``.
+
+    Args:
+        dataset: The local ``ndi.dataset``. Not a path -- see
+            :func:`_dataset_path` for why.
+        cloud_dataset_id: The remote to sync against. Empty resolves it from
+            the dataset's ``dataset_remote`` document, as MATLAB does.
+        options: Sync options; ``sync_files`` governs the binary pass.
+        client: Authenticated cloud client (auto-created if omitted).
+
+    Returns:
+        ``(success, errorMessage, report)``, matching MATLAB.
+
+    "New" is *local and not on the remote*, measured against a live listing
+    rather than against the index's remembered ids. That is deliberately not
+    MATLAB's phrasing ("added since the last sync"): a document whose upload
+    failed on an earlier run is still absent from the remote, and comparing
+    against the index would consider it handled and never retry it.
     """
-    from ..api import documents as docs_api
     from ..internal import listRemoteDocumentIds
 
     options = options or SyncOptions()
-    ds_path = Path(dataset_path)
-    index = SyncIndex.read(ds_path)
+    # Refusing a path is a caller mistake, not a sync outcome, so it raises
+    # rather than becoming success=False -- see _dataset_path.
+    ds_path = _dataset_path(dataset)
+    report: dict[str, Any] = {"mode": "upload_new", "failed": []}
+    try:
+        cloud_dataset_id = _resolve_cloud_dataset_id(dataset, cloud_dataset_id, client)
+        index = SyncIndex.read(ds_path)
 
-    # Get remote doc IDs
-    remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
-    remote_id_set = set(remote_ids.keys())
+        _settle_bulk_uploads(cloud_dataset_id, options, client=client)
 
-    # Get local doc IDs (from index — actual local enumeration deferred)
-    local_ids = set(index.local_doc_ids_last_sync)
+        remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
+        remote_id_set = set(remote_ids.keys())
+        documents, local_ids = _local_documents(dataset)
 
-    # New = in local but not in remote (since last sync)
-    new_ids = local_ids - remote_id_set
+        new_ids = local_ids - remote_id_set
 
-    report: dict[str, Any] = {
-        "mode": "upload_new",
-        "new_count": len(new_ids),
-        "uploaded_document_ids": [],
-        "dry_run": options.dry_run,
-    }
+        report.update(
+            {
+                "new_count": len(new_ids),
+                "uploaded_document_ids": [],
+                "dry_run": options.dry_run,
+            }
+        )
 
-    if options.dry_run:
-        report["uploaded_document_ids"] = list(new_ids)
-        return report
+        if options.dry_run:
+            report["uploaded_document_ids"] = sorted(new_ids)
+            return _outcome(report)
 
-    failed: list[str] = []
-    for doc_id in new_ids:
-        try:
-            docs_api.addDocument(cloud_dataset_id, {"ndiId": doc_id}, client=client)
-            report["uploaded_document_ids"].append(doc_id)
-        except Exception as exc:
-            logger.warning("Failed to upload %s: %s", doc_id, exc)
-            failed.append(doc_id)
-    report["failed"] = failed
+        to_send = [documents[i] for i in sorted(new_ids)]
+        uploaded, failed = _upload_documents(cloud_dataset_id, to_send, client=client)
+        report["uploaded_document_ids"] = uploaded
+        if failed:
+            report["failed"] = sorted(failed)
+            return _aborted(report, "Document upload failed; sync index not updated.")
 
-    # Update index
-    index.update(
-        list(local_ids),
-        list(remote_id_set | set(report["uploaded_document_ids"])),
-    )
-    index.write(ds_path)
+        # Binaries only for documents whose metadata actually landed. Sending a
+        # file for a document the remote does not have would orphan it.
+        binaries_failed = _upload_binaries(
+            cloud_dataset_id,
+            [documents[i] for i in uploaded if i in documents],
+            options,
+            client=client,
+        )
+        if binaries_failed:
+            report["failed"] = sorted(binaries_failed)
+            return _aborted(
+                report,
+                f"Binary upload failed for {len(binaries_failed)} document(s); "
+                "sync index not updated.",
+            )
 
-    return report
+        if options.verbose and uploaded:
+            logger.info("uploadNew: uploaded %d documents", len(uploaded))
+
+        index.update(sorted(local_ids), sorted(remote_id_set | set(uploaded)))
+        index.write(ds_path)
+    except Exception as exc:  # noqa: BLE001 - reported through the triple
+        return _failed_outcome("upload_new", exc, report)
+
+    return _outcome(report)
 
 
 def downloadNew(
-    dataset_path: str,
-    cloud_dataset_id: str,
+    dataset: Any,
+    cloud_dataset_id: str = "",
     options: SyncOptions | None = None,
     *,
     client: CloudClient | None = None,
-) -> dict[str, Any]:
-    """Download documents that exist in the cloud but not locally."""
+) -> tuple[bool, str, dict[str, Any]]:
+    """Download documents that exist in the cloud but not locally.
+
+    MATLAB equivalent: ``ndi.cloud.sync.downloadNew(ndiDataset, syncOptions)``.
+
+    Returns:
+        ``(success, errorMessage, report)``, matching MATLAB.
+    """
     from ..internal import listRemoteDocumentIds
 
     options = options or SyncOptions()
-    ds_path = Path(dataset_path)
-    index = SyncIndex.read(ds_path)
+    # Refusing a path is a caller mistake, not a sync outcome, so it raises
+    # rather than becoming success=False -- see _dataset_path.
+    ds_path = _dataset_path(dataset)
+    report: dict[str, Any] = {"mode": "download_new", "failed": []}
+    try:
+        cloud_dataset_id = _resolve_cloud_dataset_id(dataset, cloud_dataset_id, client)
+        index = SyncIndex.read(ds_path)
 
-    remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
-    remote_id_set = set(remote_ids.keys())
-    local_ids = set(index.local_doc_ids_last_sync)
+        _settle_bulk_uploads(cloud_dataset_id, options, client=client)
 
-    new_ids = remote_id_set - local_ids
+        remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
+        remote_id_set = set(remote_ids.keys())
+        _documents, local_ids = _local_documents(dataset)
 
-    report: dict[str, Any] = {
-        "mode": "download_new",
-        "new_count": len(new_ids),
-        "downloaded_document_ids": [],
-        "failed": [],
-        "unsaved_documents": [],
-        "dry_run": options.dry_run,
-    }
+        new_ids = remote_id_set - local_ids
 
-    if options.dry_run:
-        report["downloaded_document_ids"] = list(new_ids)
-        return report
+        report.update(
+            {
+                "new_count": len(new_ids),
+                "downloaded_document_ids": [],
+                "unsaved_documents": [],
+                "dry_run": options.dry_run,
+            }
+        )
 
-    # Actually fetch documents from the cloud
-    docs, failed = downloadNdiDocuments(cloud_dataset_id, remote_ids, new_ids, client=client)
-    saved, unsaved = _save_downloaded_docs(ds_path, docs)
-    report["downloaded_document_ids"] = saved
-    report["failed"] = failed
-    report["unsaved_documents"] = unsaved
+        if options.dry_run:
+            report["downloaded_document_ids"] = sorted(new_ids)
+            return _outcome(report)
 
-    if options.verbose and saved:
-        logger.info("downloadNew: downloaded %d documents", len(saved))
+        docs, failed = downloadNdiDocuments(cloud_dataset_id, remote_ids, new_ids, client=client)
+        saved, unsaved = _save_downloaded_docs(ds_path, docs)
+        _ingest_downloaded_docs(dataset, [d for d in docs if _upload_id(d) in set(saved)])
+        report["downloaded_document_ids"] = saved
+        report["failed"] = failed
+        report["unsaved_documents"] = unsaved
 
-    # Update index. A document we set out to fetch but did not land on disk
-    # is not synced, so it must not enter either list: recording it on the
-    # remote side would make remote_doc_ids_last_sync a claim about documents
-    # that were never fetched.
-    not_obtained = new_ids - set(saved)
-    index.update(
-        list(local_ids | set(saved)),
-        list(remote_id_set - not_obtained),
-    )
-    index.write(ds_path)
+        if options.verbose and saved:
+            logger.info("downloadNew: downloaded %d documents", len(saved))
 
-    return report
+        # Update index. A document we set out to fetch but did not land on disk
+        # is not synced, so it must not enter either list: recording it on the
+        # remote side would make remote_doc_ids_last_sync a claim about documents
+        # that were never fetched.
+        not_obtained = new_ids - set(saved)
+        index.update(
+            sorted(local_ids | set(saved)),
+            sorted(remote_id_set - not_obtained),
+        )
+        index.write(ds_path)
+    except Exception as exc:  # noqa: BLE001 - reported through the triple
+        return _failed_outcome("download_new", exc, report)
+
+    return _outcome(report)
 
 
 def mirrorToRemote(
-    dataset_path: str,
-    cloud_dataset_id: str,
+    dataset: Any,
+    cloud_dataset_id: str = "",
     options: SyncOptions | None = None,
     *,
     client: CloudClient | None = None,
-) -> dict[str, Any]:
-    """Make the remote match the local state (upload new, delete remote-only)."""
-    from ..api import documents as docs_api
-    from ..internal import listRemoteDocumentIds
+) -> tuple[bool, str, dict[str, Any]]:
+    """Make the remote match the local state (upload new, delete remote-only).
 
-    options = options or SyncOptions()
-    ds_path = Path(dataset_path)
-    index = SyncIndex.read(ds_path)
+    MATLAB equivalent: ``ndi.cloud.sync.mirrorToRemote(ndiDataset, syncOptions)``.
 
-    remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
-    remote_id_set = set(remote_ids.keys())
-    local_ids = set(index.local_doc_ids_last_sync)
-
-    to_upload = local_ids - remote_id_set
-    to_delete = remote_id_set - local_ids
-
-    report: dict[str, Any] = {
-        "mode": "mirror_to_remote",
-        "upload_count": len(to_upload),
-        "delete_count": len(to_delete),
-        "uploaded_document_ids": [],
-        "deleted_remote_document_ids": [],
-        "dry_run": options.dry_run,
-    }
-
-    # A dry run reports what it would do and changes nothing -- writing the
-    # index here would record a sync that never happened. Every other mode
-    # returns before its index write for the same reason.
-    if options.dry_run:
-        report["uploaded_document_ids"] = list(to_upload)
-        report["deleted_remote_document_ids"] = list(to_delete)
-        report["failed"] = []
-        return report
-
-    failed: list[str] = []
-    for doc_id in to_upload:
-        try:
-            docs_api.addDocument(cloud_dataset_id, {"ndiId": doc_id}, client=client)
-            report["uploaded_document_ids"].append(doc_id)
-        except Exception as exc:
-            logger.warning("mirrorToRemote: failed to upload %s: %s", doc_id, exc)
-            failed.append(doc_id)
-    for doc_id in to_delete:
-        api_id = remote_ids.get(doc_id, doc_id)
-        try:
-            docs_api.deleteDocument(cloud_dataset_id, api_id, client=client)
-            report["deleted_remote_document_ids"].append(doc_id)
-        except Exception as exc:
-            logger.warning("mirrorToRemote: failed to delete %s: %s", doc_id, exc)
-            failed.append(doc_id)
-
-    # Upload associated files if requested
-    if options.sync_files and report["uploaded_document_ids"]:
-        try:
-            from ..upload import uploadFilesForDatasetDocuments
-
-            doc_dir = ds_path / _DOC_DIR
-            doc_dicts = []
-            for doc_id in report["uploaded_document_ids"]:
-                doc_file = doc_dir / f"{doc_id}.json"
-                if doc_file.exists():
-                    doc_dicts.append(json.loads(doc_file.read_text(encoding="utf-8")))
-            if doc_dicts:
-                uploadFilesForDatasetDocuments(
-                    client.config.org_id,
-                    cloud_dataset_id,
-                    doc_dicts,
-                    client=client,
-                )
-        except Exception as exc:
-            logger.warning("mirrorToRemote: file upload failed: %s", exc)
-
-    report["failed"] = failed
-
-    # The remote is what it held, plus what we actually uploaded, minus what
-    # we actually deleted -- not a blanket "remote now equals local", which
-    # would silently absorb every failed upload and every failed deletion.
-    final_remote = (remote_id_set | set(report["uploaded_document_ids"])) - set(
-        report["deleted_remote_document_ids"]
-    )
-    index.update(list(local_ids), list(final_remote))
-    index.write(ds_path)
-
-    return report
-
-
-def mirrorFromRemote(
-    dataset_path: str,
-    cloud_dataset_id: str,
-    options: SyncOptions | None = None,
-    *,
-    client: CloudClient | None = None,
-) -> dict[str, Any]:
-    """Make the local state match the remote (download new, delete local-only)."""
-    from ..internal import listRemoteDocumentIds
-
-    options = options or SyncOptions()
-    ds_path = Path(dataset_path)
-    index = SyncIndex.read(ds_path)
-
-    remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
-    remote_id_set = set(remote_ids.keys())
-    local_ids = set(index.local_doc_ids_last_sync)
-
-    to_download = remote_id_set - local_ids
-    to_delete_local = local_ids - remote_id_set
-
-    report: dict[str, Any] = {
-        "mode": "mirror_from_remote",
-        "download_count": len(to_download),
-        "delete_local_count": len(to_delete_local),
-        "downloaded_document_ids": [],
-        "deleted_local_document_ids": [],
-        "failed": [],
-        "unsaved_documents": [],
-        "dry_run": options.dry_run,
-    }
-
-    if options.dry_run:
-        report["downloaded_document_ids"] = list(to_download)
-        report["deleted_local_document_ids"] = list(to_delete_local)
-        return report
-
-    # Delete local-only documents
-    deleted = deleteLocalDocuments(ds_path, to_delete_local)
-    report["deleted_local_document_ids"] = deleted
-
-    # Download remote-only documents
-    docs, failed = downloadNdiDocuments(cloud_dataset_id, remote_ids, to_download, client=client)
-    saved, unsaved = _save_downloaded_docs(ds_path, docs)
-    report["downloaded_document_ids"] = saved
-    report["failed"] = failed
-    report["unsaved_documents"] = unsaved
-
-    if options.verbose:
-        logger.info(
-            "mirrorFromRemote: downloaded %d, deleted %d local",
-            len(saved),
-            len(deleted),
-        )
-
-    # Mirroring leaves both sides equal, but only over the documents that
-    # actually landed. Recording a failed download as local was the more
-    # damaging half of this: the next run computes to_download as
-    # remote_id_set - local_ids, so the document would never be retried.
-    not_obtained = to_download - set(saved)
-    mirrored = remote_id_set - not_obtained
-    index.update(list(mirrored), list(mirrored))
-    index.write(ds_path)
-
-    return report
-
-
-def twoWaySync(
-    dataset_path: str,
-    cloud_dataset_id: str,
-    options: SyncOptions | None = None,
-    *,
-    client: CloudClient | None = None,
-) -> dict[str, Any]:
-    """Bi-directional sync with conflict detection and deletion propagation.
-
-    Compares the current local/remote state against the last sync state
-    to compute deltas.  Documents added on both sides since the last sync
-    are flagged as conflicts and skipped.  Deletions on one side are
-    propagated to the other (unless the deleted doc was re-added).
+    Returns:
+        ``(success, errorMessage, report)``, matching MATLAB.
     """
     from ..api import documents as docs_api
     from ..internal import listRemoteDocumentIds
 
     options = options or SyncOptions()
-    ds_path = Path(dataset_path)
-    index = SyncIndex.read(ds_path)
+    # Refusing a path is a caller mistake, not a sync outcome, so it raises
+    # rather than becoming success=False -- see _dataset_path.
+    ds_path = _dataset_path(dataset)
+    report: dict[str, Any] = {"mode": "mirror_to_remote", "failed": []}
+    try:
+        cloud_dataset_id = _resolve_cloud_dataset_id(dataset, cloud_dataset_id, client)
+        index = SyncIndex.read(ds_path)
 
-    # Current state
-    remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
-    current_remote = set(remote_ids.keys())
-    current_local = set(index.local_doc_ids_last_sync)
+        _settle_bulk_uploads(cloud_dataset_id, options, client=client)
 
-    # Last sync state
-    last_local = set(index.local_doc_ids_last_sync)
-    last_remote = set(index.remote_doc_ids_last_sync)
+        remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
+        remote_id_set = set(remote_ids.keys())
+        documents, local_ids = _local_documents(dataset)
 
-    # Compute deltas
-    added_local = current_local - last_local
-    added_remote = current_remote - last_remote
-    deleted_local = last_local - current_local
-    deleted_remote = last_remote - current_remote
+        to_upload = local_ids - remote_id_set
+        to_delete = remote_id_set - local_ids
 
-    # Conflict detection: docs added on both sides since last sync
-    conflicts = added_local & added_remote
-    if conflicts and options.verbose:
-        logger.warning(
-            "twoWaySync: %d documents added on both sides (skipping): %s",
-            len(conflicts),
-            conflicts,
+        report.update(
+            {
+                "upload_count": len(to_upload),
+                "delete_count": len(to_delete),
+                "uploaded_document_ids": [],
+                "deleted_remote_document_ids": [],
+                "dry_run": options.dry_run,
+            }
         )
 
-    # What to upload: in local but not remote (excluding conflicts)
-    to_upload = (current_local - current_remote) - conflicts
+        # A dry run reports what it would do and changes nothing -- writing the
+        # index here would record a sync that never happened. Every other mode
+        # returns before its index write for the same reason.
+        if options.dry_run:
+            report["uploaded_document_ids"] = sorted(to_upload)
+            report["deleted_remote_document_ids"] = sorted(to_delete)
+            report["failed"] = []
+            return _outcome(report)
 
-    # What to download: in remote but not local (excluding conflicts)
-    to_download = (current_remote - current_local) - conflicts
+        uploaded, failed_ids = _upload_documents(
+            cloud_dataset_id, [documents[i] for i in sorted(to_upload)], client=client
+        )
+        report["uploaded_document_ids"] = uploaded
+        # MATLAB raises NDI:Cloud:Sync:UploadIncomplete here, which skips its
+        # remaining phases -- the remote deletions among them. Deleting the
+        # remote's copies while the local ones have not all arrived is how a
+        # half-finished mirror loses documents outright.
+        if failed_ids:
+            report["failed"] = sorted(failed_ids)
+            return _aborted(
+                report,
+                f"Upload to remote did not fully succeed: {len(uploaded)} of "
+                f"{len(to_upload)} document(s) uploaded; sync index not updated.",
+            )
+        failed: list[str] = []
 
-    # Deletion propagation:
-    # If deleted on remote, delete locally (unless just added locally)
-    to_delete_local = deleted_remote - added_local
-    # If deleted on local, delete from remote (unless just added remotely)
-    to_delete_remote = deleted_local - added_remote
+        for doc_id in sorted(to_delete):
+            api_id = remote_ids.get(doc_id, doc_id)
+            try:
+                docs_api.deleteDocument(cloud_dataset_id, api_id, client=client)
+                report["deleted_remote_document_ids"].append(doc_id)
+            except Exception as exc:
+                logger.warning("mirrorToRemote: failed to delete %s: %s", doc_id, exc)
+                failed.append(doc_id)
 
-    report: dict[str, Any] = {
-        "mode": "two_way_sync",
-        "upload_count": len(to_upload),
-        "download_count": len(to_download),
-        "delete_local_count": len(to_delete_local),
-        "delete_remote_count": len(to_delete_remote),
-        "conflict_count": len(conflicts),
-        "conflicts": list(conflicts),
-        "uploaded_document_ids": [],
-        "downloaded_document_ids": [],
-        "deleted_local_document_ids": [],
-        "deleted_remote_document_ids": [],
-        "failed": [],
-        "unsaved_documents": [],
-        "dry_run": options.dry_run,
-    }
+        binaries_failed = _upload_binaries(
+            cloud_dataset_id,
+            [documents[i] for i in uploaded if i in documents],
+            options,
+            client=client,
+        )
+        if binaries_failed:
+            report["failed"] = sorted(set(failed) | binaries_failed)
+            return _aborted(
+                report,
+                f"Binary upload failed for {len(binaries_failed)} document(s); "
+                "sync index not updated.",
+            )
 
-    if options.dry_run:
-        report["uploaded_document_ids"] = list(to_upload)
-        report["downloaded_document_ids"] = list(to_download)
-        report["deleted_local_document_ids"] = list(to_delete_local)
-        report["deleted_remote_document_ids"] = list(to_delete_remote)
-        return report
+        # A failed remote deletion does NOT abort: MATLAB's
+        # deleteRemoteDocuments warns and returns, so the index is still
+        # written -- over what actually happened.
+        report["failed"] = sorted(failed)
 
-    failed: list[str] = []
+        if options.verbose:
+            logger.info(
+                "mirrorToRemote: uploaded %d, deleted %d remote",
+                len(uploaded),
+                len(report["deleted_remote_document_ids"]),
+            )
 
-    # 1. Delete local docs that were removed on the remote
-    deleted_local_ids = deleteLocalDocuments(ds_path, to_delete_local)
-    report["deleted_local_document_ids"] = deleted_local_ids
+        # The remote is what it held, plus what we uploaded, minus what we
+        # actually deleted -- not a blanket "remote now equals local", which
+        # would silently absorb every failed deletion.
+        final_remote = (remote_id_set | set(uploaded)) - set(report["deleted_remote_document_ids"])
+        index.update(sorted(local_ids), sorted(final_remote))
+        index.write(ds_path)
+    except Exception as exc:  # noqa: BLE001 - reported through the triple
+        return _failed_outcome("mirror_to_remote", exc, report)
 
-    # 2. Delete remote docs that were removed locally
-    for doc_id in to_delete_remote:
-        api_id = remote_ids.get(doc_id, doc_id)
-        try:
-            docs_api.deleteDocument(cloud_dataset_id, api_id, client=client)
-            report["deleted_remote_document_ids"].append(doc_id)
-        except Exception as exc:
-            logger.warning("twoWaySync: failed to delete remote %s: %s", doc_id, exc)
-            failed.append(doc_id)
+    return _outcome(report)
 
-    # 3. Upload local-only docs
-    for doc_id in to_upload:
-        try:
-            docs_api.addDocument(cloud_dataset_id, {"ndiId": doc_id}, client=client)
-            report["uploaded_document_ids"].append(doc_id)
-        except Exception as exc:
-            logger.warning("twoWaySync: failed to upload %s: %s", doc_id, exc)
-            failed.append(doc_id)
 
-    # 4. Download remote-only docs
-    docs, dl_failed = downloadNdiDocuments(cloud_dataset_id, remote_ids, to_download, client=client)
-    saved, unsaved = _save_downloaded_docs(ds_path, docs)
-    report["downloaded_document_ids"] = saved
-    report["unsaved_documents"] = unsaved
-    failed.extend(dl_failed)
+def mirrorFromRemote(
+    dataset: Any,
+    cloud_dataset_id: str = "",
+    options: SyncOptions | None = None,
+    *,
+    client: CloudClient | None = None,
+) -> tuple[bool, str, dict[str, Any]]:
+    """Make the local state match the remote (download new, delete local-only).
 
-    report["failed"] = failed
+    MATLAB equivalent: ``ndi.cloud.sync.mirrorFromRemote(ndiDataset, syncOptions)``.
 
-    if options.verbose:
-        logger.info(
-            "twoWaySync: uploaded=%d downloaded=%d " "del_local=%d del_remote=%d conflicts=%d",
-            len(report["uploaded_document_ids"]),
-            len(report["downloaded_document_ids"]),
-            len(report["deleted_local_document_ids"]),
-            len(report["deleted_remote_document_ids"]),
-            len(conflicts),
+    Returns:
+        ``(success, errorMessage, report)``, matching MATLAB.
+    """
+    from ..internal import listRemoteDocumentIds
+
+    options = options or SyncOptions()
+    # Refusing a path is a caller mistake, not a sync outcome, so it raises
+    # rather than becoming success=False -- see _dataset_path.
+    ds_path = _dataset_path(dataset)
+    report: dict[str, Any] = {"mode": "mirror_from_remote", "failed": []}
+    try:
+        cloud_dataset_id = _resolve_cloud_dataset_id(dataset, cloud_dataset_id, client)
+        index = SyncIndex.read(ds_path)
+
+        _settle_bulk_uploads(cloud_dataset_id, options, client=client)
+
+        remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
+        remote_id_set = set(remote_ids.keys())
+        _documents, local_ids = _local_documents(dataset)
+
+        to_download = remote_id_set - local_ids
+        to_delete_local = local_ids - remote_id_set
+
+        report.update(
+            {
+                "download_count": len(to_download),
+                "delete_local_count": len(to_delete_local),
+                "downloaded_document_ids": [],
+                "deleted_local_document_ids": [],
+                "unsaved_documents": [],
+                "dry_run": options.dry_run,
+            }
         )
 
-    # Compute expected final state. A remote-only document we failed to
-    # download drops out of the remote side too, so the next run still sees
-    # it as remote work outstanding rather than as already synced.
-    not_obtained = to_download - set(saved)
-    final_local = (current_local | set(saved)) - set(deleted_local_ids)
-    final_remote = (
-        (current_remote | set(report["uploaded_document_ids"]))
-        - set(report["deleted_remote_document_ids"])
-        - not_obtained
-    )
-    index.update(list(final_local), list(final_remote))
-    index.write(ds_path)
+        if options.dry_run:
+            report["downloaded_document_ids"] = sorted(to_download)
+            report["deleted_local_document_ids"] = sorted(to_delete_local)
+            return _outcome(report)
 
-    return report
+        # Delete local-only documents
+        deleted = deleteLocalDocuments(ds_path, to_delete_local)
+        report["deleted_local_document_ids"] = deleted
+
+        # Download remote-only documents
+        docs, failed = downloadNdiDocuments(
+            cloud_dataset_id, remote_ids, to_download, client=client
+        )
+        saved, unsaved = _save_downloaded_docs(ds_path, docs)
+        _ingest_downloaded_docs(dataset, [d for d in docs if _upload_id(d) in set(saved)])
+        report["downloaded_document_ids"] = saved
+        report["failed"] = failed
+        report["unsaved_documents"] = unsaved
+
+        if options.verbose:
+            logger.info(
+                "mirrorFromRemote: downloaded %d, deleted %d local",
+                len(saved),
+                len(deleted),
+            )
+
+        # Mirroring leaves both sides equal, but only over the documents that
+        # actually landed. Recording a failed download as local was the more
+        # damaging half of this: the next run computes to_download as
+        # remote_id_set - local_ids, so the document would never be retried.
+        not_obtained = to_download - set(saved)
+        mirrored = remote_id_set - not_obtained
+        index.update(sorted(mirrored), sorted(mirrored))
+        index.write(ds_path)
+    except Exception as exc:  # noqa: BLE001 - reported through the triple
+        return _failed_outcome("mirror_from_remote", exc, report)
+
+    return _outcome(report)
+
+
+def twoWaySync(
+    dataset: Any,
+    cloud_dataset_id: str = "",
+    options: SyncOptions | None = None,
+    *,
+    client: CloudClient | None = None,
+) -> tuple[bool, str, dict[str, Any]]:
+    """Bi-directional sync with conflict detection and deletion propagation.
+
+    MATLAB equivalent: ``ndi.cloud.sync.twoWaySync(ndiDataset, syncOptions)``.
+
+    Compares the current local/remote state against the last sync state to
+    compute deltas. Documents added on both sides since the last sync are
+    flagged as conflicts and skipped. Deletions on one side are propagated to
+    the other (unless the deleted doc was re-added).
+
+    THE LOCAL DELTAS ONLY MEAN SOMETHING NOW THAT A DATASET IS PASSED. This
+    function read ``current_local`` and ``last_local`` from the same field of
+    the same index, so ``added_local`` and ``deleted_local`` were empty by
+    construction -- and with them, half the conflict detection and the whole
+    "deleted locally, so delete it on the remote" branch. There was nothing
+    else it could do: with only a path, the current local state was
+    unknowable. ``current_local`` now comes from the dataset and
+    ``last_local`` from the index, which is the comparison the algorithm
+    always described.
+
+    Returns:
+        ``(success, errorMessage, report)``, matching MATLAB.
+    """
+    from ..api import documents as docs_api
+    from ..internal import listRemoteDocumentIds
+
+    options = options or SyncOptions()
+    # Refusing a path is a caller mistake, not a sync outcome, so it raises
+    # rather than becoming success=False -- see _dataset_path.
+    ds_path = _dataset_path(dataset)
+    report: dict[str, Any] = {"mode": "two_way_sync", "failed": []}
+    try:
+        cloud_dataset_id = _resolve_cloud_dataset_id(dataset, cloud_dataset_id, client)
+        index = SyncIndex.read(ds_path)
+
+        _settle_bulk_uploads(cloud_dataset_id, options, client=client)
+
+        # Current state: the remote from a live listing, the local from the
+        # dataset itself.
+        remote_ids = listRemoteDocumentIds(cloud_dataset_id, client=client)
+        current_remote = set(remote_ids.keys())
+        documents, current_local = _local_documents(dataset)
+
+        # Last sync state
+        last_local = set(index.local_doc_ids_last_sync)
+        last_remote = set(index.remote_doc_ids_last_sync)
+
+        # Compute deltas
+        added_local = current_local - last_local
+        added_remote = current_remote - last_remote
+        deleted_local = last_local - current_local
+        deleted_remote = last_remote - current_remote
+
+        # Conflict detection: docs added on both sides since last sync
+        conflicts = added_local & added_remote
+        if conflicts and options.verbose:
+            logger.warning(
+                "twoWaySync: %d documents added on both sides (skipping): %s",
+                len(conflicts),
+                ", ".join(sorted(conflicts)),
+            )
+
+        # What to upload: in local but not remote (excluding conflicts)
+        to_upload = (current_local - current_remote) - conflicts
+
+        # What to download: in remote but not local (excluding conflicts)
+        to_download = (current_remote - current_local) - conflicts
+
+        # Deletion propagation:
+        # If deleted on remote, delete locally (unless just added locally)
+        to_delete_local = deleted_remote - added_local
+        # If deleted on local, delete from remote (unless just added remotely)
+        to_delete_remote = deleted_local - added_remote
+
+        # A document scheduled for deletion on one side must not also be sent to
+        # it. Without the current local state these sets could never overlap, so
+        # nothing had to say so before.
+        to_upload -= to_delete_remote
+        to_download -= to_delete_local
+
+        report.update(
+            {
+                "upload_count": len(to_upload),
+                "download_count": len(to_download),
+                "delete_local_count": len(to_delete_local),
+                "delete_remote_count": len(to_delete_remote),
+                "conflict_count": len(conflicts),
+                "conflicts": sorted(conflicts),
+                "uploaded_document_ids": [],
+                "downloaded_document_ids": [],
+                "deleted_local_document_ids": [],
+                "deleted_remote_document_ids": [],
+                "unsaved_documents": [],
+                "dry_run": options.dry_run,
+            }
+        )
+
+        if options.dry_run:
+            report["uploaded_document_ids"] = sorted(to_upload)
+            report["downloaded_document_ids"] = sorted(to_download)
+            report["deleted_local_document_ids"] = sorted(to_delete_local)
+            report["deleted_remote_document_ids"] = sorted(to_delete_remote)
+            return _outcome(report)
+
+        failed: list[str] = []
+
+        # 1. Delete local docs that were removed on the remote
+        deleted_local_ids = deleteLocalDocuments(ds_path, to_delete_local)
+        report["deleted_local_document_ids"] = deleted_local_ids
+
+        # 2. Delete remote docs that were removed locally
+        for doc_id in sorted(to_delete_remote):
+            api_id = remote_ids.get(doc_id, doc_id)
+            try:
+                docs_api.deleteDocument(cloud_dataset_id, api_id, client=client)
+                report["deleted_remote_document_ids"].append(doc_id)
+            except Exception as exc:
+                logger.warning("twoWaySync: failed to delete remote %s: %s", doc_id, exc)
+                failed.append(doc_id)
+
+        # 3. Upload local-only docs -- whole documents, not just their ids
+        uploaded, upload_failed = _upload_documents(
+            cloud_dataset_id, [documents[i] for i in sorted(to_upload)], client=client
+        )
+        report["uploaded_document_ids"] = uploaded
+        # MATLAB raises NDI:Cloud:Sync:UploadIncomplete here, skipping its
+        # download phase and its index write.
+        if upload_failed:
+            report["failed"] = sorted(set(failed) | set(upload_failed))
+            return _aborted(
+                report,
+                f"Upload to remote did not fully succeed: {len(uploaded)} of "
+                f"{len(to_upload)} document(s) uploaded; sync index not updated.",
+            )
+
+        binaries_failed = _upload_binaries(
+            cloud_dataset_id,
+            [documents[i] for i in uploaded if i in documents],
+            options,
+            client=client,
+        )
+        if binaries_failed:
+            report["failed"] = sorted(set(failed) | binaries_failed)
+            return _aborted(
+                report,
+                f"Binary upload failed for {len(binaries_failed)} document(s); "
+                "sync index not updated.",
+            )
+
+        # 4. Download remote-only docs
+        docs, dl_failed = downloadNdiDocuments(
+            cloud_dataset_id, remote_ids, to_download, client=client
+        )
+        saved, unsaved = _save_downloaded_docs(ds_path, docs)
+        _ingest_downloaded_docs(dataset, [d for d in docs if _upload_id(d) in set(saved)])
+        report["downloaded_document_ids"] = saved
+        report["unsaved_documents"] = unsaved
+        failed.extend(dl_failed)
+
+        report["failed"] = sorted(set(failed))
+
+        if options.verbose:
+            logger.info(
+                "twoWaySync: uploaded=%d downloaded=%d del_local=%d del_remote=%d conflicts=%d",
+                len(report["uploaded_document_ids"]),
+                len(report["downloaded_document_ids"]),
+                len(report["deleted_local_document_ids"]),
+                len(report["deleted_remote_document_ids"]),
+                len(conflicts),
+            )
+
+        # Compute expected final state. A remote-only document we failed to
+        # download drops out of the remote side too, so the next run still sees
+        # it as remote work outstanding rather than as already synced.
+        not_obtained = to_download - set(saved)
+        final_local = (current_local | set(saved)) - set(deleted_local_ids)
+        final_remote = (
+            (current_remote | set(uploaded))
+            - set(report["deleted_remote_document_ids"])
+            - not_obtained
+        )
+        index.update(sorted(final_local), sorted(final_remote))
+        index.write(ds_path)
+    except Exception as exc:  # noqa: BLE001 - reported through the triple
+        return _failed_outcome("two_way_sync", exc, report)
+
+    return _outcome(report)
 
 
 def validate(
@@ -581,14 +1131,18 @@ def validate(
 
 
 def sync(
-    dataset_path: str,
-    cloud_dataset_id: str,
-    mode: SyncMode,
+    dataset: Any,
+    cloud_dataset_id: str = "",
+    mode: SyncMode = SyncMode.DOWNLOAD_NEW,
     options: SyncOptions | None = None,
     *,
     client: CloudClient | None = None,
-) -> dict[str, Any]:
-    """Dispatch to the appropriate sync operation based on *mode*."""
+) -> tuple[bool, str, dict[str, Any]]:
+    """Dispatch to the appropriate sync operation based on *mode*.
+
+    Takes the same ``ndi.dataset`` the operations themselves take, and
+    returns their ``(success, errorMessage, report)`` unchanged.
+    """
     dispatch = {
         SyncMode.UPLOAD_NEW: uploadNew,
         SyncMode.DOWNLOAD_NEW: downloadNew,
@@ -599,7 +1153,7 @@ def sync(
     handler = dispatch.get(mode)
     if handler is None:
         raise CloudSyncError(f"Unknown sync mode: {mode}")
-    return handler(dataset_path, cloud_dataset_id, options, client=client)
+    return handler(dataset, cloud_dataset_id, options, client=client)
 
 
 def documentDifference(

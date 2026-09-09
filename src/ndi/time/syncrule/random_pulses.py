@@ -16,6 +16,7 @@ import numpy as np
 
 from ..syncrule_base import ndi_time_syncrule
 from ..timemapping import ndi_time_timemapping
+from .common_triggers_overlapping_epochs import _matlab_round
 
 
 def _parse_channel(ch_str: str) -> tuple[str, int]:
@@ -27,60 +28,135 @@ def _parse_channel(ch_str: str) -> tuple[str, int]:
     return ch_str[:idx], int(ch_str[idx:])
 
 
-def _sync_random_triggers(t1: np.ndarray, t2: np.ndarray) -> tuple[float, float]:
+def _run_hash_sync(
+    target: np.ndarray,
+    prober: np.ndarray,
+    alignment_tolerance: float,
+    fingerprint_size: int,
+    rng: np.random.Generator,
+) -> tuple[float, float]:
+    """Hash target intervals, probe with prober intervals in random order.
+
+    Returns ``(shift, scale)`` such that ``target = shift + scale * prober``,
+    or ``(nan, nan)`` when no candidate passes the secondary pulse check.
+
+    Mirrors ``runHashSync`` in ``+ndi/+time/+fun/syncRandomTriggers.m``.
     """
-    Find a linear mapping T1 = scale * T2 + shift by matching random pulses.
+    tol = alignment_tolerance
+    f_size = fingerprint_size
 
-    Uses inter-pulse interval cross-correlation to find the best alignment,
-    then performs a least-squares fit.
+    # Quantize target intervals into buckets of width `tol`. `_matlab_round`
+    # (half-away-from-zero) matches MATLAB's default `round`, so that halves
+    # land in the same bucket on both sides.
+    q_target = _matlab_round(np.diff(target) / tol).astype(np.int64)
+    fingerprints: dict[tuple[int, ...], int] = {}
+    for i in range(len(q_target) - f_size + 1):
+        key = tuple(int(v) for v in q_target[i : i + f_size])
+        # MATLAB's `if ~isKey`: keep the FIRST occurrence, ignore later ones.
+        if key not in fingerprints:
+            fingerprints[key] = i
 
-    Returns:
-        Tuple of (shift, scale) where T1 ~ scale * T2 + shift.
+    q_prober = _matlab_round(np.diff(prober) / tol).astype(np.int64)
+    num_probes = len(q_prober) - f_size + 1
+    if num_probes <= 0:
+        return float("nan"), float("nan")
+
+    # Randomized probe order so overlap is found in O(1) expected time no
+    # matter where in the recording it sits. `rng.permutation` is MATLAB's
+    # `randperm` for our purposes here.
+    search_order = rng.permutation(num_probes)
+
+    for i in search_order:
+        i = int(i)
+        key = tuple(int(v) for v in q_prober[i : i + f_size])
+        idx_target = fingerprints.get(key)
+        if idx_target is None:
+            continue
+
+        # A fingerprint of `f_size` intervals spans `f_size + 1` pulses.
+        p_target = target[idx_target : idx_target + f_size + 1]
+        p_prober = prober[i : i + f_size + 1]
+
+        # polyfit(prober, target, 1) -> target = scale * prober + shift.
+        seed_model = np.polyfit(p_prober, p_target, 1)
+        scale = float(seed_model[0])
+        shift = float(seed_model[1])
+
+        # Verification: check one pulse beyond the fingerprint on each side.
+        # A coincidental interval match still fails this if the clocks are
+        # not actually aligned. `continue` lets the search try the next
+        # candidate rather than committing to the coincidence.
+        if (i + f_size + 1 < len(prober)) and (idx_target + f_size + 1 < len(target)):
+            test_p_prob = float(prober[i + f_size + 1])
+            test_p_target = float(target[idx_target + f_size + 1])
+            predicted = scale * test_p_prob + shift
+            if abs(test_p_target - predicted) > tol:
+                continue
+
+        return shift, scale
+
+    return float("nan"), float("nan")
+
+
+def _sync_random_triggers(
+    t1: np.ndarray,
+    t2: np.ndarray,
+    alignment_tolerance: float = 0.002,
+    fingerprint_size: int = 4,
+    rng: np.random.Generator | None = None,
+) -> tuple[float, float]:
+    """Synchronize two clocks that recorded a common random pulse sequence.
+
+    MATLAB counterpart: ``ndi.time.fun.syncRandomTriggers``. Returns
+    ``(shift, scale)`` such that ``t1 = shift + scale * t2``. **Returns
+    ``(nan, nan)`` when no candidate alignment validates** -- that is
+    MATLAB's failure contract, and callers must check.
+
+    The algorithm hashes interval fingerprints from the longer recording,
+    probes them in randomized order with fingerprints from the shorter one,
+    and validates each hit with a secondary pulse check before committing.
+    A coincidental interval match is discarded and the search continues, so
+    a wrong candidate does not commit -- unlike a single-shot argmax on the
+    inter-pulse-interval cross-correlation.
+
+    Args:
+        t1: Pulse times (seconds) from device 1.
+        t2: Pulse times (seconds) from device 2.
+        alignment_tolerance: Maximum jitter (s) allowed between clocks to
+            consider two pulses a match. Also the quantization bucket width.
+            Default 2 ms, matching MATLAB.
+        fingerprint_size: Number of intervals per hash key. Default 4.
+        rng: Optional numpy Generator used for the probe permutation. Tests
+            inject one for reproducibility; production callers leave it None.
     """
-    if len(t1) < 2 or len(t2) < 2:
-        raise ValueError("Need at least 2 triggers in each sequence to synchronize.")
+    t1 = np.asarray(t1, dtype=float).ravel()
+    t2 = np.asarray(t2, dtype=float).ravel()
 
-    # Compute inter-pulse intervals
-    ipi1 = np.diff(t1)
-    ipi2 = np.diff(t2)
+    f_size = fingerprint_size
 
-    # Normalize for cross-correlation
-    ipi1_norm = (ipi1 - np.mean(ipi1)) / (np.std(ipi1) + 1e-15)
-    ipi2_norm = (ipi2 - np.mean(ipi2)) / (np.std(ipi2) + 1e-15)
+    # Not enough pulses to form a single fingerprint on both sides.
+    if len(t1) <= f_size or len(t2) <= f_size:
+        return float("nan"), float("nan")
 
-    # Cross-correlate to find best offset
-    corr = np.correlate(ipi1_norm, ipi2_norm, mode="full")
-    best_lag = int(np.argmax(corr)) - (len(ipi2_norm) - 1)
+    if rng is None:
+        rng = np.random.default_rng()
 
-    # Determine overlapping region
-    if best_lag >= 0:
-        n_overlap = min(len(t1) - best_lag, len(t2))
-        t1_matched = t1[best_lag : best_lag + n_overlap]
-        t2_matched = t2[:n_overlap]
-    else:
-        n_overlap = min(len(t1), len(t2) + best_lag)
-        t1_matched = t1[:n_overlap]
-        t2_matched = t2[-best_lag : -best_lag + n_overlap]
+    # Hash the LONGER recording so the shorter one probes into a denser map.
+    # `dur = max - min` rather than `len(t)` because partial-overlap
+    # recordings have their pulse counts skewed by which run started earlier.
+    dur1 = float(np.max(t1) - np.min(t1))
+    dur2 = float(np.max(t2) - np.min(t2))
 
-    if n_overlap < 2:
-        raise ValueError("Not enough overlapping triggers to compute mapping.")
+    if dur1 >= dur2:
+        # target = t1, prober = t2 -> t1 = shift + scale * t2 (what we want).
+        return _run_hash_sync(t1, t2, alignment_tolerance, f_size, rng)
 
-    # Least-squares fit: T1 = scale * T2 + shift
-    coeffs = np.polyfit(t2_matched, t1_matched, 1)
-    scale = float(coeffs[0])
-    shift = float(coeffs[1])
-
-    # Validate fit quality
-    residuals = t1_matched - (scale * t2_matched + shift)
-    rms_error = float(np.sqrt(np.mean(residuals**2)))
-    median_ipi = float(np.median(np.concatenate([ipi1, ipi2])))
-    if median_ipi > 0 and rms_error > 0.1 * median_ipi:
-        raise ValueError(
-            f"Poor fit quality (RMS={rms_error:.4f}, "
-            f"median IPI={median_ipi:.4f}). Sequences may not match."
-        )
-
-    return shift, scale
+    # target = t2, prober = t1 -> t2 = s_inv + m_inv * t1. Invert:
+    # t1 = (-s_inv / m_inv) + (1 / m_inv) * t2.
+    s_inv, m_inv = _run_hash_sync(t2, t1, alignment_tolerance, f_size, rng)
+    if np.isnan(s_inv) or np.isnan(m_inv) or m_inv == 0:
+        return float("nan"), float("nan")
+    return -s_inv / m_inv, 1.0 / m_inv
 
 
 class ndi_time_syncrule_randomPulses(ndi_time_syncrule):

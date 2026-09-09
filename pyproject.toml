@@ -35,7 +35,7 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "did @ git+https://github.com/VH-Lab/DID-python.git@main",
+    "did @ git+https://github.com/VH-Lab/DID-python.git@7b429e936c9d640c5e31428a896505642464e20a",
     "ndr[formats] @ git+https://github.com/VH-lab/NDR-python.git@main",
     "vhlab-toolbox-python @ git+https://github.com/VH-Lab/vhlab-toolbox-python.git@main",
     # ndi.app.oridirtuning needs vhlib.response_stats.neural_response_significance,

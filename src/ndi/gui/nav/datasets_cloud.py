@@ -13,19 +13,26 @@ That shape is what makes these testable at all -- MATLAB's versions are
 interleaved with ``uiprogressdlg`` and ``uialert`` calls, so the decision of
 WHAT to tell the user cannot be checked without a display. Here it can.
 
-TWO THINGS THE PORT HAD TO BRIDGE
-
-MATLAB's sync functions take a dataset (``ndi.cloud.sync.uploadNew(ds)``);
-Python's take a path and a resolved cloud id
-(``uploadNew(dataset_path, cloud_dataset_id)``). :func:`resolve_cloud_target`
-does that resolution once, and turns "this dataset is not linked to the
-cloud" into a clear message rather than a stack trace.
+ONE THING THE PORT HAD TO BRIDGE
 
 MATLAB's sync reports name their fields ``uploaded_document_ids`` and so on;
 Python's name them ``uploaded``. ``sync_result_message`` accepts both, so a
 real sync report is summarised correctly whichever layer produced it. See
 its note -- the underlying divergence is a library-level question, not a GUI
 one.
+
+The other two are gone, both via NDI-python#232. Python's sync functions
+used to take a path and a resolved cloud id where MATLAB's take a dataset,
+and this module did that conversion; a path cannot answer "what are my
+documents", so every upload built from one sent an id with no document body.
+They also returned a report alone where MATLAB returns
+``[success, errorMessage, report]``, which left this module inferring the
+outcome from report fields -- so a sync that transferred three of fifty
+documents was announced as a success. It now reads the flag.
+
+:func:`resolve_cloud_target` still exists and still resolves the id, since
+checking the link BEFORE running gives the user "this dataset is not linked"
+rather than a stack trace from inside a sync.
 """
 
 from __future__ import annotations
@@ -110,11 +117,13 @@ def mirror_prompt(direction: str) -> tuple[str, str]:
     return MIRROR_MODES[direction][1], _MIRROR_PROMPTS[direction]
 
 
-def resolve_cloud_target(dataset: Any) -> tuple[str, str]:
-    """The ``(dataset_path, cloud_dataset_id)`` the sync functions need.
+def resolve_cloud_target(dataset: Any) -> str:
+    """The ``cloud_dataset_id`` DATASET is linked to.
 
-    MATLAB's sync functions take the dataset itself; Python's take a path
-    and an already-resolved cloud id, so this does that step once.
+    The sync functions resolve this themselves when given an empty id, so
+    this is not plumbing they need -- it is the check that lets the pane say
+    "this dataset is not linked" up front, in its own words, instead of
+    surfacing a CloudSyncError raised several frames down.
 
     Raises:
         ValueError: When the dataset is not linked to a cloud dataset, with
@@ -133,18 +142,7 @@ def resolve_cloud_target(dataset: Any) -> tuple[str, str]:
             "This dataset is not linked to a cloud dataset. Use "
             '"Upload to Cloud" to add it first.'
         )
-    return _dataset_path(dataset), cloud_id
-
-
-def _dataset_path(dataset: Any) -> str:
-    for name in ("getpath", "path"):
-        attr = getattr(dataset, name, None)
-        if attr is None:
-            continue
-        value = attr() if callable(attr) else attr
-        if value:
-            return str(value)
-    raise ValueError("This dataset has no local path.")
+    return cloud_id
 
 
 def check_cloud_status(dataset: Any) -> CloudActionResult:
@@ -250,16 +248,29 @@ def _run_sync(
     from ...cloud import sync as sync_module
 
     try:
-        dataset_path, cloud_id = resolve_cloud_target(dataset)
+        cloud_id = resolve_cloud_target(dataset)
     except ValueError as exc:
         return CloudActionResult(False, title, str(exc), "error", None)
 
     operation = getattr(sync_module, function_name)
     try:
-        report = operation(dataset_path, cloud_id)
+        success, message, report = operation(dataset, cloud_id)
     except Exception as exc:  # noqa: BLE001
         return CloudActionResult(
             False, title, f"{failure_verb} did not complete: {exc}", "error", None
+        )
+
+    # A sync that transferred only some of what it set out to is not a
+    # success, and the pane must not report one. The report still comes
+    # back, so the summary can say what DID move alongside the reason.
+    if not success:
+        detail = sync_result_message(report)
+        return CloudActionResult(
+            False,
+            title,
+            f"{failure_verb} did not complete: {message} ({detail})",
+            "error",
+            None,
         )
 
     # No state is reported, matching MATLAB: cloudSync and cloudMirror leave

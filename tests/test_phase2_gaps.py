@@ -314,24 +314,49 @@ class TestCopyDocFileToTemp:
 
 
 class TestExtractDocsFiles:
-    """Tests for ndi.database_fun.extract_doc_files."""
+    """Tests for ndi.database_fun.extract_doc_files.
+
+    The layout changed when the function was ported properly: files go to
+    ``target_path/<uid>``, flat, as MATLAB has always written them, and each
+    document's file_info is rebuilt to name its copy. It used to write
+    ``target_path/<doc_id>/document.json`` plus the files beside it, which
+    no MATLAB caller nor any caller in this repository expected -- and which
+    left the extract unstorable, since nothing pointed at the copies.
+
+    Behaviour lives in tests/test_extract_doc_files_series.py, against real
+    sessions; a mock cannot say whether an extract can be added to a second
+    database, which is the whole contract.
+    """
 
     def test_extracts_docs(self):
         from ndi.database_fun import extract_doc_files
-
-        doc1 = MagicMock()
-        doc1.document_properties = {
-            "base": {"id": "doc-abc"},
-            "files": {"file_list": []},
-        }
-
-        session = MagicMock()
-        session.database_search.return_value = [doc1]
+        from ndi.document import ndi_document
+        from ndi.session.dir import ndi_session_dir
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            docs, path = extract_doc_files(session, tmpdir)
-            assert len(docs) == 1
-            assert (Path(tmpdir) / "doc-abc" / "document.json").exists()
+            root = Path(tmpdir)
+            session_dir = root / "sess"
+            session_dir.mkdir()
+            with ndi_session_dir("exp", session_dir) as session:
+                payload = root / "payload.bin"
+                payload.write_bytes(b"hello")
+                props = ndi_document("demoNDI").document_properties
+                props["base"]["session_id"] = session.id()
+                props["demoNDI"]["value"] = 1
+                session.database_add(ndi_document(props).add_file("filename1.ext", str(payload)))
+
+                out = root / "out"
+                docs, path = extract_doc_files(session, str(out))
+
+                assert path == str(out)
+                copies = [p for p in out.iterdir() if p.is_file()]
+                assert [p.read_bytes() for p in copies] == [b"hello"]
+                assert any(
+                    d.document_properties.get("files", {}).get("file_info")
+                    and d.document_properties["files"]["file_info"][0]["locations"][0]["location"]
+                    == str(copies[0])
+                    for d in docs
+                ), "no document names its copy"
 
     def test_creates_temp_dir_if_none(self):
         from ndi.database_fun import extract_doc_files

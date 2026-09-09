@@ -423,7 +423,7 @@ classes:
   - name: stimulator
     type: class
     matlab_path: "+ndi/+probe/+timeseries/stimulator.m"
-    matlab_last_sync_hash: "209d46b3"
+    matlab_last_sync_hash: "f1e2ff8c9"
     python_path: "ndi/probe/timeseries_stimulator.py"
     python_class: "ndi_probe_timeseries_stimulator"
     inherits: "ndi.probe.timeseries"
@@ -505,7 +505,7 @@ not_yet_ported:
   - name: probestruct2probe
     matlab_path: "+ndi/+probe/+fun/probestruct2probe.m"
     matlab_last_sync_hash: "0e2caa09"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       Turns probe structs (name, reference, type) into probe OBJECTS by
       looking each type up in getProbeTypeMap and constructing the class it
@@ -531,7 +531,7 @@ not_yet_ported:
   - name: image
     matlab_path: "+ndi/+probe/image.m"
     matlab_last_sync_hash: "2e6f3c35"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       The imaging counterpart of ndi.probe.timeseries: reads frames from an
       ndi.daq.system.image and returns each frame's time through the epoch

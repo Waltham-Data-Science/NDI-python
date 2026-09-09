@@ -153,9 +153,10 @@ class TestAtomicWrite:
         idx.update(["d1", "d2"], ["r1"])
         idx.write(tmp_path)
         raw = json.loads((tmp_path / ".ndi" / "sync" / "index.json").read_text())
-        assert raw["local_doc_ids_last_sync"] == ["d1", "d2"]
-        assert raw["remote_doc_ids_last_sync"] == ["r1"]
-        assert raw["last_sync_timestamp"]
+        # MATLAB's key names, per createSyncIndexStruct.
+        assert raw["localDocumentIdsLastSync"] == ["d1", "d2"]
+        assert raw["remoteDocumentIdsLastSync"] == ["r1"]
+        assert raw["lastSyncTimestamp"]
 
 
 # ---------------------------------------------------------------------------

@@ -245,13 +245,27 @@ class ndi_session_dir(ndi_session):
         # Datasets store 'session_in_a_dataset' (current) or
         # 'dataset_session_info' (legacy) bookkeeping; standalone sessions
         # never do.
+        #
+        # Searched WITHOUT the session filter, which is a deliberate
+        # divergence from MATLAB's database_search here. Those documents say
+        # "this directory is a dataset"; they do not say "and the session you
+        # happened to open owns me". A downloaded dataset has several
+        # sessions, and opening its directory as a plain session adopts one
+        # of them -- not necessarily the one the bookkeeping document belongs
+        # to. Filtering then finds nothing and records 'session' for a real
+        # dataset. Measured on the symmetry archive 69a8705aa9ab25373cdc6563:
+        # session-filtered finds 0 session_in_a_dataset documents, unfiltered
+        # finds 1. The looser search cannot mislabel a plain session, which
+        # has no such document under any session id.
         is_dataset = False
         try:
             from ..query import ndi_query
 
-            docs = self.database_search(ndi_query("").isa("session_in_a_dataset"))
+            if self._database is None:
+                raise RuntimeError("no database")
+            docs = self._database.search(ndi_query("").isa("session_in_a_dataset"))
             if not docs:
-                docs = self.database_search(ndi_query("").isa("dataset_session_info"))
+                docs = self._database.search(ndi_query("").isa("dataset_session_info"))
             is_dataset = bool(docs)
         except Exception:
             # A directory whose database cannot be searched yet is not a
@@ -343,6 +357,11 @@ class ndi_session_dir(ndi_session):
         passed = are_you_sure
 
         if passed:
+            # Close the SQLite connection before removing its file: on Windows
+            # an open handle keeps a lock that makes shutil.rmtree fail with
+            # WinError 32 (issue #274). NDI-matlab does the same in commit
+            # 71758b8.
+            self.close()
             ndi_dir = self._path / ".ndi"
             if ndi_dir.exists():
                 shutil.rmtree(ndi_dir)
@@ -387,9 +406,30 @@ class ndi_session_dir(ndi_session):
             print("Not erasing session because confirmation not given.")
             return
 
+        # Same lock issue as deleteSessionDataStructures; see #274.
+        session.close()
         ndi_dir = session._path / ".ndi"
         if ndi_dir.exists():
             shutil.rmtree(ndi_dir)
+
+    def close(self) -> None:
+        """Close the session's database, releasing its SQLite file handle.
+
+        Idempotent: safe to call more than once and safe to call before the
+        session's directory is removed. Windows requires the SQLite handle to
+        be released before ``shutil.rmtree`` can remove the containing
+        directory; POSIX tolerates the leak, so nothing else in the session's
+        lifecycle changes (issue #274).
+        """
+        database = getattr(self, "_database", None)
+        if database is not None:
+            database.close()
+
+    def __enter__(self) -> ndi_session_dir:
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
 
     def __eq__(self, other: Any) -> bool:
         """Check equality by ID and path."""

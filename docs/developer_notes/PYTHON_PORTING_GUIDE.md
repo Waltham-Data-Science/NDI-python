@@ -22,8 +22,18 @@ To port or update a function, agents must follow these steps:
 
 1. **Check the Bridge:** Open the `ndi_matlab_python_bridge.yaml` in the target package.
 2. **Sync the Interface:** If the function is missing or outdated, update the YAML entry first based on the MATLAB `.m` file.
-3. **Record the Sync Hash:** Store the short git hash of the MATLAB `.m` file being ported in the `matlab_last_sync_hash` field. Obtain it with: `git log -1 --format="%h" -- <path-to-matlab-file>`. This allows future comparison to detect upstream MATLAB changes.
+3. **Record the Sync Hash:** Store, in `matlab_last_sync_hash`, the short hash of a **COMMIT in NDI-matlab** that your examination was made against. Obtain it with:
+
+   ```
+   git log -1 --format="%h" -- <path-to-matlab-file>
+   ```
+
+   **It must be a commit, never a blob.** `git hash-object <file>` returns the hash *of the file's contents*, which looks equally plausible in the YAML and is useless here: the freshness check works by walking history (`git log <hash>..HEAD -- <path>`), and a blob is not a point in history to walk from. 35 entries carried blob hashes before this was written down, because "the hash of the MATLAB file" reads naturally as either one. A test now rejects anything that is not a commit.
+
+   Either kind of commit is acceptable: the file'''s own last-touching commit (what the command above gives), or a repo-wide commit such as NDI-matlab `HEAD` when you examined a batch of files together. Both are points in history, so both let the check ask "has this file moved since?"
 4. **Implement:** Write the Python code to satisfy the `input_arguments` and `output_arguments` defined in the YAML.
+
+   If you are NOT porting it, the entry needs a `status` and a `decision_log` instead. The five permitted values, what each claims, and how to choose between them are defined in section 6 of `docs/developer_notes/ndi_matlab_python_bridge.yaml` — that is the normative list, and this guide deliberately does not repeat it.
 5. **Log & Notify:** Record the sync date in the YAML's `decision_log` (e.g., `"Synchronized with MATLAB main as of 2026-03-12."`). ndi_document any intentional divergences. Explicitly tell the user what changes were made to the bridge file so they can review the contract.
 
 ## 4. Input Validation: Pydantic is Mandatory

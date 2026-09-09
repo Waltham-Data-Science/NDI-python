@@ -17,7 +17,13 @@ from typing import Annotated, Any, Literal
 from pydantic import SkipValidation, validate_call
 
 from ..client import APIResponse, CloudClient, _auto_client
-from ._validators import VALIDATE_CONFIG, CloudId, FilePath, NonEmptyStr
+from ._validators import (
+    VALIDATE_CONFIG,
+    CloudId,
+    FilePath,
+    NonEmptyStr,
+    assert_safe_transfer_url,
+)
 
 _Client = Annotated[CloudClient | None, SkipValidation()]
 
@@ -109,6 +115,7 @@ def putFiles(
 
     from ..exceptions import CloudUploadError
 
+    assert_safe_transfer_url(url, what="upload URL")
     file_path = Path(file_path)
     with open(file_path, "rb") as fh:
         resp = requests.put(
@@ -155,6 +162,7 @@ def putFileBytes(
 
     from ..exceptions import CloudUploadError
 
+    assert_safe_transfer_url(url, what="upload URL")
     resp = requests.put(
         url,
         data=data,
@@ -175,6 +183,10 @@ def getFile(
 ) -> bool:
     """Download a file from a presigned URL.
 
+    ``target_path`` is overwritten if it already exists, without warning and
+    without a backup. Callers that must not clobber an existing file have to
+    check for it themselves.
+
     MATLAB equivalent: +cloud/+api/+files/getFile.m
     """
     import logging
@@ -183,6 +195,7 @@ def getFile(
 
     logger = logging.getLogger(__name__)
 
+    assert_safe_transfer_url(url, what="download URL")
     target_path = Path(target_path)
     target_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -430,6 +443,7 @@ def waitForAllBulkUploads(
     start = time.monotonic()
     interval = initial_interval
     last_jobs: list[dict[str, Any]] = []
+    ever_listed = False
     while True:
         elapsed = time.monotonic() - start
         try:
@@ -437,6 +451,7 @@ def waitForAllBulkUploads(
             listing = listActiveBulkUploads(dataset_id, state=scope, client=client)
             jobs = listing.get("jobs", []) if hasattr(listing, "get") else []
             last_jobs = list(jobs) if jobs else []
+            ever_listed = True
 
             active_jobs = [
                 j
@@ -461,8 +476,24 @@ def waitForAllBulkUploads(
                     "jobs": [],
                     "elapsed": time.monotonic() - start,
                 }
-        except Exception:
-            active_jobs = last_jobs  # treat error as still active; let timeout govern
+        except Exception as exc:
+            # A blip after we have seen the listing work is worth riding out:
+            # there may be a real extraction in flight, and abandoning the
+            # wait on one failed poll is how a race gets reintroduced.
+            #
+            # A failure on the FIRST poll is different. Nothing has ever been
+            # observed, so the error is not evidence of activity -- it is
+            # evidence the wait cannot be performed at all (the endpoint is
+            # absent, the credentials do not reach it, the deployment has no
+            # bulk-upload service). Sleeping out the whole timeout there buys
+            # nothing and costs every caller the full deadline.
+            if not ever_listed:
+                return {
+                    "state": "unavailable",
+                    "jobs": [],
+                    "elapsed": time.monotonic() - start,
+                    "error": str(exc),
+                }
         if elapsed + interval > timeout:
             return {
                 "state": "timeout",
