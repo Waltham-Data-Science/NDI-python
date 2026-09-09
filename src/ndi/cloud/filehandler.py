@@ -15,6 +15,7 @@ streamed to local storage.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -118,6 +119,37 @@ def updateFileInfoForRemoteFiles(doc_props: dict, cloud_dataset_id: str) -> None
         files["file_info"] = fi_list[0]
 
 
+#: Installed by :func:`watchFetches`. Module-level rather than a parameter
+#: because DID fixes the file handler's signature -- it counts positional
+#: parameters to decide between the two- and three-argument forms -- so
+#: there is nowhere to thread one through from a caller.
+_fetch_observer = None
+
+
+@contextlib.contextmanager
+def watchFetches(observer):
+    """Report every on-demand cloud fetch to *observer* for the duration.
+
+    *observer* is called as ``observer(event, uri, done, total)``, where
+    *event* is ``"start"``, ``"chunk"`` or ``"done"``, sizes are bytes, and
+    *total* is None when the server sent no Content-Length.
+
+    Restores the previous observer on exit, including on an exception, so
+    nested use and a failed launch both leave the hook as they found it.
+
+    Fetches happen on whichever thread asked for the file -- the launch
+    thread for the cell table and the gene list, a _TileFetcher worker for
+    a tile -- so an observer that renders anything owns its own locking.
+    """
+    global _fetch_observer
+    previous = _fetch_observer
+    _fetch_observer = observer
+    try:
+        yield
+    finally:
+        _fetch_observer = previous
+
+
 def fetch_cloud_file(
     ndic_uri: str,
     target_path: str | Path,
@@ -163,7 +195,20 @@ def fetch_cloud_file(
     tmp_path = target.with_suffix(target.suffix + ".tmp")
 
     logger.debug("Fetching cloud file %s -> %s", ndic_uri, target)
-    success = getFile(download_url, tmp_path, timeout=300)
+    observer = _fetch_observer
+    if observer is None:
+        success = getFile(download_url, tmp_path, timeout=300)
+    else:
+        observer("start", ndic_uri, 0, None)
+        try:
+            success = getFile(
+                download_url,
+                tmp_path,
+                timeout=300,
+                progress=lambda done, total: observer("chunk", ndic_uri, done, total),
+            )
+        finally:
+            observer("done", ndic_uri, 0, None)
 
     if success:
         tmp_path.rename(target)

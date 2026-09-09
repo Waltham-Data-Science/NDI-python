@@ -180,12 +180,25 @@ def getFile(
     url: NonEmptyStr,
     target_path: str | Path,
     timeout: int = 120,
+    *,
+    progress=None,
 ) -> bool:
     """Download a file from a presigned URL.
 
     ``target_path`` is overwritten if it already exists, without warning and
     without a backup. Callers that must not clobber an existing file have to
     check for it themselves.
+
+    ``progress``, if given, is called as ``progress(done, total)`` after each
+    chunk, in bytes; *total* is the ``Content-Length`` the server sent, or
+    None when it sent none. It is keyword-only so it cannot be mistaken for
+    ``timeout``, and it is called from whichever thread is downloading --
+    a caller that renders it is responsible for its own locking.
+
+    WHY HERE. This is the one place every on-demand fetch passes through:
+    the cell table, the contour file, the gene list and every pyramid tile
+    all arrive by fetch_cloud_file -> getFile. Reporting anywhere else
+    would cover some of the wait and not the rest.
 
     MATLAB equivalent: +cloud/+api/+files/getFile.m
     """
@@ -201,9 +214,25 @@ def getFile(
 
     resp = requests.get(url, timeout=timeout, stream=True)
     if resp.status_code == 200:
+        total = None
+        if progress is not None:
+            # Absent on a chunked response, and a caller must cope with that
+            # rather than the bar guessing a denominator.
+            try:
+                total = int(resp.headers.get("Content-Length", "") or 0) or None
+            except (TypeError, ValueError):
+                total = None
+        done = 0
         with open(target_path, "wb") as fh:
             for chunk in resp.iter_content(chunk_size=8192):
                 fh.write(chunk)
+                if progress is not None:
+                    done += len(chunk)
+                    # A reporting callback must never cost the download.
+                    try:
+                        progress(done, total)
+                    except Exception:  # noqa: BLE001
+                        progress = None
         return True
 
     # Log the failure with S3 error details when available
