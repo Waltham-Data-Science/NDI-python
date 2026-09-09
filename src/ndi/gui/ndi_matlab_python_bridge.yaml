@@ -822,7 +822,7 @@ ported_late:
 
   - name: GEFManager
     matlab_path: "+ndi/+gui/+app/GEFManager.m"
-    matlab_last_sync_hash: "92ddd79c1"
+    matlab_last_sync_hash: "cf0983b5c"
     status: porting_deferred
     decision_log: >
       MATLAB App Designer window that lists, views, adds and removes
@@ -853,3 +853,9 @@ ported_late:
       from ndi.gui.cloud_colors, the identical palette. Nothing to port:
       these are two different windows that agreed to look alike, not one
       window and its port.
+
+      NDI-matlab cf0983b5c made the View dialog non-modal -- onView no
+      longer ends in uiwait -- and gave the app an onClose that takes the
+      dialog with it. Nothing to port: the Python side draws no dialog at
+      all. View builds a command line and runs napariViewGEF, which is
+      already its own process and has never blocked anything.
