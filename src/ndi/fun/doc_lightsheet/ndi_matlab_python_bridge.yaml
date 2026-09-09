@@ -1,0 +1,94 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/fun/doc_lightsheet/
+# The Primary Contract for the +ndi/+fun/+doc/+lightsheet MATLAB package.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# +ndi/+fun/+doc/+lightsheet -- lightsheet OME-Zarr document tooling
+# (VH-Lab/NDI-matlab claude/lightsheet-zarr-ndi-viewer-djp5vk).
+#
+# A group of MATLAB functions that build lightsheetZarrPyramid +
+# lightsheetZarrLevel documents from an OME-Zarr store and read them
+# back through the NDI cloud cache. None have a Python counterpart yet.
+# The napari viewer they enable is on the Python side already
+# (src/ndi/gui/app/lightsheetZarr/), but its reader queries the same
+# documents through the standard NDI query API rather than through a
+# ported wrapper: the Python surface a viewer needs and the Python
+# surface a script needs are different, and the second waits until
+# there is a caller.
+#
+# When the ingest boundary is drawn on the Python side, these functions
+# port as a group into a doc_lightsheet.py flat file, mirroring how
+# doc_gene.py mirrors +ndi/+fun/+doc/+gene. Deferred as a group rather
+# than a file at a time because they call each other -- fromOMEZarr
+# drives makePyramid + makeSourceFile, and readViewport-style callers
+# will need chooseLevel + levelTable.
+# =========================================================================
+functions:
+
+  - name: fromOMEZarr
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/fromOMEZarr.m"
+    status: porting_deferred
+    decision_log: >-
+      MATLAB probes an OME-Zarr store with ndr.format.omezarr.listPyramids
+      and writes ONE lightsheetZarrPyramid document per multiscales
+      entry (typically two: mean, max) and ONE lightsheetZarrLevel
+      document per level. Metadata-only; no chunk bytes copied. Ports
+      with the other five entries under this heading.
+
+  - name: makePyramid
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/makePyramid.m"
+    status: porting_deferred
+    decision_log: >-
+      The per-multiscales-entry worker fromOMEZarr calls; reusable when
+      the caller already has an ndr.format.omezarr.listPyramids struct.
+      Writes exactly one parent + n_levels child documents. Ports with
+      the other five entries.
+
+  - name: makeSourceFile
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/makeSourceFile.m"
+    status: porting_deferred
+    decision_log: >-
+      MATLAB creates the fileReference document the lightsheet
+      documents' source_file_id dependency points at, so a pyramid can
+      name the OME-Zarr store it was built from. Describes rather than
+      attaches (the store is many files; a checksum of the .zattrs is
+      the part worth having). Ports with the other five entries.
+
+  - name: chooseLevel
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/chooseLevel.m"
+    status: porting_deferred
+    decision_log: >-
+      Given a level table and a target per-axis voxel size, returns the
+      coarsest level whose voxel size still meets the target. Pure
+      function over the pyramid metadata; when Python readers grow a
+      viewport-style call this ports as its selection helper.
+
+  - name: levelTable
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/levelTable.m"
+    status: porting_deferred
+    decision_log: >-
+      Joins a lightsheetZarrPyramid and its lightsheetZarrLevel
+      children into one finest-first table, carrying the parent frame
+      in Properties.UserData. Python already has an equivalent inside
+      ndi.gui.app.lightsheetZarr.multiscale.levelTable (which returns a
+      list of dicts); the doc-package mirror lands with the other five
+      entries so the surface a script sees matches on both sides.
+
+  - name: viewCommand
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/viewCommand.m"
+    status: porting_deferred
+    decision_log: >-
+      Pure command builder that ndi.gui.app.LightsheetZarrManager calls
+      to construct the /usr/local/bin/napariViewLightsheet invocation.
+      The flag set here defines the CLI in
+      ndi.gui.app.lightsheetZarr.cli exactly, so if a Python-hosted
+      equivalent ever needs to build the same command (a batch runner,
+      a headless test), that is when this ports. Same pattern the GEF
+      side follows (viewCommand is on the GEFManager class, not in the
+      doc.gene package, but the shape is the same); the lightsheet
+      package puts it under +doc/+lightsheet because the manager stays
+      thin.
