@@ -28,6 +28,17 @@ classes:
       Enum, so != comes from Enum identity and the bug never existed here.
 
     properties:
+      - name: type
+        type_matlab: "char"
+        type_python: "str"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: >
+          MATLAB holds the clock type string in a public `type` property.
+          Python models the class as an Enum, so the string lives in .value;
+          since NDI-python#295 it is also readable as `type`, because
+          MATLAB-shaped code asks for that name and a missing one reads as
+          None rather than raising. The Enum members below are unaffected.
+
       - name: UTC
         type_matlab: "char"
         type_python: "str"
@@ -301,13 +312,17 @@ classes:
         access: "GetAccess=public, SetAccess=protected"
         decision_log: "Implemented as @property in Python."
 
-      - name: session_id
+      - name: session_ID
         type_matlab: "char"
         type_python: "str"
         access: "GetAccess=public, SetAccess=protected"
         decision_log: >
-          Implemented as @property in Python. Extracted from
-          referent if not explicitly provided.
+          Implemented as @property in Python, named session_id. MATLAB spells
+          it session_ID, and since NDI-python#295 that spelling is exposed as
+          an alias: the other four properties on this class already carry
+          MATLAB's name, and this one differed only in case -- the kind of gap
+          that reads as None to a getattr caller instead of raising. Extracted
+          from referent if not explicitly provided.
 
     methods:
       - name: timereference

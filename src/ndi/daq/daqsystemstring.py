@@ -109,6 +109,30 @@ class ndi_daq_daqsystemstring:
 
         return f"{self.devicename}:{';'.join(parts)}"
 
+    @property
+    def channeltype(self) -> list[str]:
+        """The channel type of each channel, one entry per channel.
+
+        MATLAB counterpart: ``ndi.daq.daqsystemstring``'s public
+        ``channeltype`` property. MATLAB stores it as
+        ``repmat({ct}, 1, numel(channelshere))`` -- a cell array PARALLEL to
+        :attr:`channellist`, not one entry per group. This is therefore not
+        the same list as :meth:`channel_types`, which reports one type per
+        group; both are kept because both are asked for. See #295.
+        """
+        return [ct for ct, cl in self.channels for _ in cl]
+
+    @property
+    def channellist(self) -> list[int]:
+        """Every channel number, flattened, aligned with :attr:`channeltype`.
+
+        MATLAB counterpart: ``ndi.daq.daqsystemstring``'s public
+        ``channellist`` property. Equivalent to :meth:`channel_list` called
+        with no type filter; exposed as a property because MATLAB declares it
+        as one. See #295.
+        """
+        return [c for _, cl in self.channels for c in cl]
+
     def channel_types(self) -> list[str]:
         """Get list of unique channel types."""
         return [ct for ct, _ in self.channels]

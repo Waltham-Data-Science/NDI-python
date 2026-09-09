@@ -95,6 +95,16 @@ classes:
     python_path: "ndi/common/__init__.py"
     python_class: "ndi_common_PathConstants"
 
+    decision_log: >
+      NDI-python#295: MATLAB declares twelve public `properties (Constant)`
+      here, each resolved once at class load. This port resolves lazily
+      through classmethods instead, so an NDI_ROOT override or a test fixture
+      can move the tree after import -- MATLAB's Constants cannot be
+      re-evaluated and this port needs them to be. Exposing MATLAB's names as
+      class attributes would force eager resolution at import and undo that,
+      so the divergence is structural rather than a spelling choice. Recorded
+      per property in tests/bridge_property_allowlist.yaml.
+
     properties:
       - name: NDI_ROOT
         type_matlab: "char"

@@ -20,6 +20,14 @@ classes:
     matlab_last_sync_hash: "42f930762"
     python_path: "ndi/cloud/sync/mode.py"
     python_class: "SyncMode"
+
+    decision_log: >
+      NDI-python#295: MATLAB's enumeration carries a public `Function`
+      property -- a function_handle bound per member so SyncMode.execute can
+      dispatch through it. Python's SyncMode is a plain str-valued Enum and
+      dispatch lives in the sync entry point, which keeps the enum importable
+      without pulling in every sync implementation. Recorded in
+      tests/bridge_property_allowlist.yaml.
     members:
       - name: DOWNLOAD_NEW
         value: "download_new"
@@ -47,6 +55,13 @@ classes:
     matlab_last_sync_hash: "b7dc4b16"
     python_path: "ndi/cloud/sync/mode.py"
     python_class: "SyncOptions"
+
+    decision_log: >
+      NDI-python#295: MATLAB's four public properties are CamelCase because
+      the matlab.mixin.SetGet interface requires it; this port is a plain
+      dataclass whose fields are passed as keyword arguments, so they carry
+      PEP 8 names (SyncFiles -> sync_files, and so on). Values and defaults
+      match. Recorded per property in tests/bridge_property_allowlist.yaml.
     properties:
       - name: sync_files
         type_matlab: "logical"

@@ -29,7 +29,11 @@ classes:
         decision_log: >
           MATLAB stores as 'path'. Python stores as 'session_path' (a Path object).
           Semantic equivalent; Python also derives database_path and binary_path
-          from session_path.
+          from session_path. Since NDI-python#295 `path` is exposed as well, as
+          an alias for session_path: MATLAB declares it public, so code that
+          reads obj.path without knowing the class found nothing here. Both
+          names are kept -- session_path is what this class is constructed
+          with and what the port uses internally.
 
       - name: session_unique_reference
         type_matlab: "char"
@@ -37,7 +41,12 @@ classes:
         access: "SetAccess=protected, GetAccess=public"
         decision_log: >
           MATLAB stores as a property. Python does not expose this directly;
-          the session reference is managed by the session object.
+          the session reference is managed by the session object. Recorded as
+          a deliberate divergence in tests/bridge_property_allowlist.yaml
+          (NDI-python#295): the Python ndi_database is constructed from a path
+          alone and never learns a reference, so there is no value to expose.
+          Exposing an always-None attribute would be worse than its absence --
+          that None branch is exactly the failure mode #295 is about.
 
     methods:
       # --- Constructor ---
