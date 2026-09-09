@@ -822,7 +822,7 @@ ported_late:
 
   - name: GEFManager
     matlab_path: "+ndi/+gui/+app/GEFManager.m"
-    matlab_last_sync_hash: "38aa4e8fb"
+    matlab_last_sync_hash: "92ddd79c1"
     status: porting_deferred
     decision_log: >
       MATLAB App Designer window that lists, views, adds and removes
@@ -843,3 +843,13 @@ ported_late:
       is the ingest and the listing; the viewing the MATLAB app offers is
       this side's, reached across a process boundary rather than
       reimplemented.
+
+      NDI-matlab 92ddd79c1 is styling only: a paper() helper puts the
+      uitable, uitextarea, uilistbox and uieditfield on the cloud
+      palette's white body, since the figure and its layouts were already
+      on c.offWhite while the controls kept MATLAB's own grey. The Python
+      side made the SAME correction independently and in its own idiom --
+      the napari viewer sets the light theme and styles its dock panels
+      from ndi.gui.cloud_colors, the identical palette. Nothing to port:
+      these are two different windows that agreed to look alike, not one
+      window and its port.
