@@ -17,7 +17,7 @@ import logging
 import os
 from datetime import datetime, timezone
 
-from .config import _API_URLS, CloudConfig
+from .config import CloudConfig
 from .exceptions import CloudAuthError
 
 logger = logging.getLogger(__name__)
@@ -293,8 +293,8 @@ def logout(config: CloudConfig | None = None) -> None:
     config.org_id = ""
 
 
-def _profile_credentials() -> tuple[str, str, str]:
-    """Return ``(email, password, stage)`` from the saved cloud profile.
+def _profile_credentials() -> tuple[str, str]:
+    """Return ``(email, password)`` from the saved cloud profile.
 
     The session's current profile wins over the persisted default, matching
     :func:`ndi.cloud.profile.get_current` / :func:`~ndi.cloud.profile.get_default`.
@@ -310,14 +310,14 @@ def _profile_credentials() -> tuple[str, str, str]:
 
         entry = _profile.get_current() or _profile.get_default()
         if entry is None:
-            return "", "", ""
+            return "", ""
         password = _profile.get_password(entry.UID)
         if not entry.Email or not password:
-            return "", "", ""
-        return entry.Email, password, entry.Stage or ""
+            return "", ""
+        return entry.Email, password
     except Exception as exc:  # noqa: BLE001 - see docstring
         logger.debug("No usable cloud profile: %s", exc)
-        return "", "", ""
+        return "", ""
 
 
 def authenticate(config: CloudConfig | None = None) -> tuple[str, str]:
@@ -367,18 +367,11 @@ def authenticate(config: CloudConfig | None = None) -> tuple[str, str]:
     #    It goes last rather than first because an explicitly exported
     #    NDI_CLOUD_USERNAME is a deliberate override and should keep winning
     #    over whatever is on disk.
-    email, password, stage = _profile_credentials()
+    #    The profile's Stage picks prod vs dev, but that is resolved in
+    #    CloudConfig.from_env rather than here, because it has to apply to a
+    #    config that short-circuits at step 1 on an already-exported token.
+    email, password = _profile_credentials()
     if email and password:
-        # Honour the profile's stage, but never over an explicit request:
-        # either environment variable means the caller has already chosen.
-        if (
-            stage
-            and not os.environ.get("NDI_CLOUD_URL")
-            and not os.environ.get("CLOUD_API_ENVIRONMENT")
-        ):
-            url = _API_URLS.get(stage)
-            if url:
-                config.api_url = url
         updated = login(email, password, config)
         return updated.token, updated.org_id
 
