@@ -35,6 +35,8 @@ __all__ = [
     "cloudSignInDialog",
     "buildCloudSignInDialog",
     "cloudProfileChoices",
+    "cloudLogoPath",
+    "cloudLogoLabel",
     "cloudSessionLooksLikely",
     "saveCloudProfile",
     "geneLayers",
@@ -1753,6 +1755,54 @@ def cloudProfileChoices():
     return rows
 
 
+def cloudLogoPath():
+    """The bundled NDI Cloud wordmark, or None if it is not there.
+
+    Copied from NDI-matlab rather than referenced, because the viewer
+    runs from a Python install that need not have NDI-matlab on disk at
+    all -- a downloaded dataset opened by someone who has never run
+    MATLAB is the normal case.
+
+    None rather than a raise: a missing asset costs a picture, never a
+    panel, and the panel falls back to its own name in text.
+    """
+    from pathlib import Path
+
+    path = Path(__file__).with_name("resources") / "ndi_cloud_logo.png"
+    return path if path.is_file() else None
+
+
+def cloudLogoLabel(parent=None):
+    """The wordmark on a white card, sized for a dock. None if unusable.
+
+    ON A WHITE CARD because the wordmark is dark navy on transparency
+    and napari's docks follow the viewer's theme -- on the dark one the
+    lettering simply is not there. A white card is how the brand is used
+    elsewhere anyway, so this is the ordinary treatment rather than a
+    workaround.
+
+    Scaled to twice its display width with a device pixel ratio of 2, so
+    it stays crisp on the retina screen a demo is usually given from.
+    """
+    from qtpy.QtCore import Qt
+    from qtpy.QtGui import QPixmap
+    from qtpy.QtWidgets import QLabel
+
+    path = cloudLogoPath()
+    if path is None:
+        return None
+    pixmap = QPixmap(str(path))
+    if pixmap.isNull():
+        return None
+    pixmap = pixmap.scaledToWidth(300, Qt.SmoothTransformation)
+    pixmap.setDevicePixelRatio(2.0)
+    label = QLabel(parent)
+    label.setPixmap(pixmap)
+    label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+    label.setStyleSheet("background: #ffffff; border-radius: 4px; padding: 6px 8px 6px 8px;")
+    return label
+
+
 def addCloudPanel(viewer) -> Any:
     """A clock on the cloud token, and a button that renews it.
 
@@ -1778,6 +1828,12 @@ def addCloudPanel(viewer) -> Any:
 
     box = QWidget()
     outer = QVBoxLayout(box)
+
+    # The wordmark first, so the panel says whose account this is before
+    # it says anything about a token.
+    logo = cloudLogoLabel(box)
+    if logo is not None:
+        outer.addWidget(logo)
 
     signin = QPushButton("Sign in...")
     signin.setToolTip(
@@ -2487,6 +2543,14 @@ def addAllPanels(
             return None
 
     made = {}
+    # FIRST, when there is a token to run out. It is the only panel about
+    # whether the picture can still be READ rather than how it is drawn,
+    # and its clock is the thing worth catching before it bites -- a
+    # reader who sees "12 min left" at the top of the stack can sign in
+    # at a convenient moment instead of discovering it through a tile
+    # that will not load.
+    if cloudSessionLooksLikely():
+        made["cloud"] = _build("cloud", lambda: addCloudPanel(viewer))
     made["display"] = _build(
         "display", lambda: addDisplayPanel(viewer, session, pyr_doc, image_layer, density)
     )
@@ -2504,11 +2568,6 @@ def addAllPanels(
                 viewer, session, cells_doc, points_layer, shapes_layer, labelings
             ),
         )
-    # Only when there is a token to run out, and up here with the other
-    # whole-session controls rather than among the gene ones: it is about
-    # the connection, not about the picture.
-    if cloudSessionLooksLikely():
-        made["cloud"] = _build("cloud", lambda: addCloudPanel(viewer))
     made["appearance"] = _build("gene appearance", lambda: addGeneAppearancePanel(viewer))
     made["tour"] = _build(
         "gene tour", lambda: addGeneTourPanel(viewer, appearance=made.get("appearance"))

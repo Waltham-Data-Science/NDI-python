@@ -454,11 +454,12 @@ def test_the_gene_list_is_built_last_so_it_sits_at_the_bottom(monkeypatch):
     assert made["appearance"] is not None and made["tour"] is not None
 
 
-def test_the_cloud_panel_sits_above_the_gene_controls(monkeypatch):
-    """It is about the connection, not about the picture, so it reads
-    with the other whole-session controls rather than among the gene
-    ones -- and it must not come between the gene panels and the bottom
-    of the stack, which belongs to the list."""
+def test_the_cloud_panel_is_first_and_the_gene_list_last(monkeypatch):
+    """The cloud row is the only panel about whether the picture can
+    still be READ rather than how it is drawn, and its clock is the
+    thing worth catching before it bites -- so it goes at the top, where
+    "12 min left" is seen in time to do something about it. The gene
+    list stays at the bottom, where the leftover height belongs."""
     monkeypatch.setattr(controls, "_importQtWidgets", lambda: None)
     order = []
 
@@ -482,7 +483,7 @@ def test_the_cloud_panel_sits_above_the_gene_controls(monkeypatch):
     monkeypatch.setenv("NDI_CLOUD_TOKEN", "anything")
 
     controls.addAllPanels(object(), object(), object(), object(), True)
-    assert order.index("addCloudPanel") < order.index("addGeneAppearancePanel")
+    assert order[0] == "addCloudPanel"
     assert order[-1] == "addGenePanel"
 
 

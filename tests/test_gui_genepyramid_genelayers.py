@@ -418,3 +418,72 @@ class TestWhyThereIsNoPassword:
         dialog, _outcome = dialogOf([_Entry("u1", "me@example.com", "work")])
         dialog._ndi_fields["profile"].setCurrentIndex(1)
         assert dialog._ndi_said.isHidden()
+
+
+@pytest.fixture
+def heldLogo(qt):
+    """A logo label that OUTLIVES the assertion.
+
+    cloudLogoLabel returns a parentless QLabel; a temporary is collected
+    the moment the expression ends, Qt deletes the C++ object underneath
+    it, and reading .pixmap() off the dangling wrapper SEGFAULTS PyQt5
+    rather than raising. Holding it is the whole fix.
+    """
+    label = controls.cloudLogoLabel()
+    assert label is not None, "the bundled logo did not load"
+    yield label
+    del label
+
+
+class TestTheCloudLogo:
+    """The wordmark, bundled and drawn so it is actually visible.
+
+    Copied from NDI-matlab rather than referenced: the viewer runs from
+    a Python install that need not have NDI-matlab on disk at all, which
+    is the normal case for someone opening a downloaded dataset.
+    """
+
+    def test_it_ships_with_the_package(self):
+        path = controls.cloudLogoPath()
+        assert path is not None, "the bundled logo is missing"
+        assert path.is_file()
+        assert path.suffix == ".png"
+
+    def test_it_is_the_file_ndi_matlab_serves(self):
+        """Byte-for-byte, so the two repos cannot drift into showing
+        different marks for the same product."""
+        import hashlib
+
+        digest = hashlib.md5(controls.cloudLogoPath().read_bytes()).hexdigest()
+        assert digest == "3e8439f1b1b8686b38ad71f314fff157"
+
+    def test_it_is_drawn_on_a_white_card(self, qt, heldLogo):
+        """The wordmark is dark navy on transparency and napari's docks
+        follow the viewer's theme -- on the dark one the lettering simply
+        is not there."""
+        assert "#ffffff" in heldLogo.styleSheet()
+
+    def test_it_is_sized_for_a_dock_and_stays_crisp(self, qt, heldLogo):
+        """Twice the display width at a device pixel ratio of 2, for the
+        retina screen a demo is usually given from."""
+        pixmap = heldLogo.pixmap()
+        assert pixmap.devicePixelRatio() == 2.0
+        assert 120 <= pixmap.width() / pixmap.devicePixelRatio() <= 200
+
+    def test_a_missing_asset_costs_no_panel(self, qt, monkeypatch):
+        """A missing file must cost the picture nothing -- the panel
+        falls back to its own dock name in text."""
+        monkeypatch.setattr(controls, "cloudLogoPath", lambda: None)
+        assert controls.cloudLogoLabel() is None
+        viewer = _Viewer()
+        panel = controls.addCloudPanel(viewer)
+        assert panel is not None
+        assert viewer.window.docked
+
+    def test_the_panel_shows_it(self, qt):
+        viewer = _Viewer()
+        panel = controls.addCloudPanel(viewer)
+        assert any(
+            lbl.pixmap() and not lbl.pixmap().isNull() for lbl in panel.findChildren(qt.QLabel)
+        )
+        assert viewer.window.docked
