@@ -712,22 +712,6 @@ not_applicable:
       Still five lines splitting mfilename("fullpath") and rejoining all but
       the last three parts. Nothing to port.
 
-  - name: hdf5Contents
-    matlab_path: "+ndi/+util/hdf5Contents.m"
-    matlab_last_sync_hash: "33edeb22"
-    status: matlab_only
-    decision_log: >
-      Table of contents for an HDF5 file (.gef and .h5ad included), with
-      a verdict on WHICH kind of file it is -- square-bin GEF vs CellBin
-      GEF vs AnnData -- so the ingest paths in +fun/+doc/+gene can be
-      pointed at the right reader. Added on NDI-matlab main in the
-      spatial-genomics merge. Python has no equivalent because it has no
-      NEED for one: h5py provides File.visititems / File.attrs directly,
-      pandas can print an .h5ad's /obs frame, and the same verdict is a
-      handful of lines a caller writes inline. Recorded matlab_only until
-      a Python caller wants the exact same tabular output, at which point
-      it ports as a thin wrapper over h5py.
-
   - name: "+openminds sub-package"
     matlab_path: "+ndi/+util/+openminds/"
     matlab_last_sync_hash: "fe64a9f53"
