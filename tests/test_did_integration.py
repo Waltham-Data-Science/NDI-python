@@ -252,6 +252,44 @@ def _bundled_document_types():
         yield rel_posix.removesuffix(".json"), path
 
 
+def _bind_the_files_it_declares(props):
+    """Give a blank template a binding for every file name it declares.
+
+    A definition is a TEMPLATE: it names the files a stored document must
+    carry and binds none of them, because the document that binds them is
+    the one that gets stored.  Since VH-Lab/DID-python#86 the validator says
+    so -- ``DID:Database:ValidationFiles``, "declared in the file_list ...
+    but no file is bound to that name" -- and says it FIRST, ahead of the
+    field checks, so seven definitions started reporting that instead of
+    whatever is actually wrong with them.
+
+    That is the right answer about a document and the wrong question here.
+    This gate asks about the DEFINITION's structure, and asks it of a blank
+    one; an unbound file is a property of the blank, exactly as an unfilled
+    dependency is (see ``_BLANK_TEMPLATE_IDENTIFIERS``).  So bind the
+    declared names first -- the same fix the fixtures elsewhere in this
+    suite took -- and let validation reach the questions the lists below
+    record.  Skipping the identifier instead would have hidden those: five
+    of the seven are listed for a field error that is still there.
+
+    A name ending in ``#`` is a file SERIES, matched by ``is_filename_match``
+    as the stem followed by digits, so it is bound under its first member's
+    name.  Locations are ``https://`` URLs because ``can_find_one_file`` does
+    no network I/O and does not pre-check a non-local location: nothing here
+    touches the filesystem.
+    """
+    file_list = [str(n) for n in (props.get("files") or {}).get("file_list") or []]
+    if not file_list:
+        return
+    props["files"]["file_info"] = [
+        {
+            "name": f"{name[:-1]}1" if name.endswith("#") else name,
+            "locations": [{"location": "https://example.invalid/placeholder"}],
+        }
+        for name in file_list
+    ]
+
+
 def _structural_failure(doc_type):
     """Validate a blank document of ``doc_type``; return an error id or None."""
     from did.validate import ValidationError, get_document_schema, validate_doc_vs_schema
@@ -261,6 +299,7 @@ def _structural_failure(doc_type):
     doc_id = props["base"]["id"]
     session_id = ndi_ido().id
     props["base"]["session_id"] = session_id
+    _bind_the_files_it_declares(props)
     try:
         schema = get_document_schema(props["document_class"]["validation"])
         with warnings.catch_warnings():

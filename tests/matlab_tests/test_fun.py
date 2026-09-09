@@ -47,6 +47,24 @@ def _make_demo_doc(name: str = "test", value: int = 42, session_id: str = "") ->
     return ndi_document(props)
 
 
+def _make_demo_doc_with_file(
+    directory, name: str, value: int, session_id: str = ""
+) -> ndi_document:
+    """A demoNDI document with its declared file bound.
+
+    demoNDI declares ``filename1.ext`` in its ``file_list``, and a document
+    that declares a required file and binds nothing is refused at add time
+    (VH-Lab/DID-python#86). Mirrors ``conftest._add_doc_with_file``, except
+    that the source file is kept: several of these tests add a copy of the
+    same properties to a SECOND database, which needs the location to still
+    resolve after the first ingest.
+    """
+    doc = _make_demo_doc(name, value, session_id)
+    payload = directory / f"{name}.dat"
+    payload.write_text(name)
+    return doc.add_file("filename1.ext", str(payload), delete_original=0)
+
+
 def _make_session_with_docs(tmp_path, ref, doc_specs):
     """Create a ndi_session_dir and add documents from a list of (name, value) tuples.
 
@@ -163,7 +181,7 @@ class TestFindFuid:
         session = ndi_session_dir("fuid_test2", session_dir)
 
         # Add a document (so the database is not empty)
-        doc = _make_demo_doc("some_doc", 99, session.id())
+        doc = _make_demo_doc_with_file(session_dir, "some_doc", 99, session.id())
         session.database_add(doc)
 
         found_doc, found_name = findFuid(session, "nonexistent_uid_12345")
@@ -353,7 +371,7 @@ class TestSessionDiff:
         session = ndi_session_dir("identical", session_dir)
 
         for i in range(1, 4):
-            doc = _make_demo_doc(f"doc_{i}", i, session.id())
+            doc = _make_demo_doc_with_file(session_dir, f"doc_{i}", i, session.id())
             session.database_add(doc)
 
         # Reopen same session (same path -> same data)
@@ -383,7 +401,7 @@ class TestSessionDiff:
 
         # Add 3 docs to session1, 0 to session2
         for i in range(1, 4):
-            doc = _make_demo_doc(f"doc_{i}", i, session1.id())
+            doc = _make_demo_doc_with_file(s1_dir, f"doc_{i}", i, session1.id())
             session1.database_add(doc)
 
         result = session_diff(session1, session2)
@@ -410,7 +428,7 @@ class TestSessionDiff:
 
         # Add 2 docs to session2, 0 to session1
         for i in range(1, 3):
-            doc = _make_demo_doc(f"doc_{i}", i, session2.id())
+            doc = _make_demo_doc_with_file(s2_dir, f"doc_{i}", i, session2.id())
             session2.database_add(doc)
 
         result = session_diff(session1, session2)
@@ -436,7 +454,7 @@ class TestSessionDiff:
         session2 = ndi_session_dir("sess_b", s2_dir)
 
         # Create a document with a known ID
-        doc = _make_demo_doc("shared_doc", 10, session1.id())
+        doc = _make_demo_doc_with_file(s1_dir, "shared_doc", 10, session1.id())
         doc_id = doc.document_properties["base"]["id"]
         session1.database_add(doc)
 
@@ -474,7 +492,7 @@ class TestDatasetDiff:
         sess_dir.mkdir()
         session = ndi_session_dir("src", sess_dir)
         for i in range(1, 3):
-            doc = _make_demo_doc(f"doc_{i}", i, session.id())
+            doc = _make_demo_doc_with_file(sess_dir, f"doc_{i}", i, session.id())
             session.database_add(doc)
 
         # Create dataset and ingest
@@ -502,7 +520,7 @@ class TestDatasetDiff:
         sess1_dir.mkdir()
         session1 = ndi_session_dir("sess1", sess1_dir)
         for i in range(1, 4):
-            doc = _make_demo_doc(f"doc_{i}", i, session1.id())
+            doc = _make_demo_doc_with_file(sess1_dir, f"doc_{i}", i, session1.id())
             session1.database_add(doc)
 
         ds1_dir = tmp_path / "ds1"
@@ -536,7 +554,7 @@ class TestDatasetDiff:
         sess2_dir.mkdir()
         session2 = ndi_session_dir("sess2", sess2_dir)
         for i in range(1, 4):
-            doc = _make_demo_doc(f"doc_{i}", i, session2.id())
+            doc = _make_demo_doc_with_file(sess2_dir, f"doc_{i}", i, session2.id())
             session2.database_add(doc)
 
         ds2_dir = tmp_path / "ds2"
@@ -555,7 +573,7 @@ class TestDatasetDiff:
         MATLAB equivalent: diffTest.testMismatchedDocs
         """
         # Create a document
-        doc = _make_demo_doc("shared", 10)
+        doc = _make_demo_doc_with_file(tmp_path, "shared", 10)
         doc.document_properties["base"]["id"]
 
         # ndi_dataset 1

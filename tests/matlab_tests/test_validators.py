@@ -23,6 +23,21 @@ from ndi.ido import ndi_ido
 from ndi.session.dir import ndi_session_dir
 from ndi.session.session_base import empty_id
 
+
+def _with_its_declared_file(doc, directory):
+    """Bind demoNDI's declared ``filename1.ext``.
+
+    demoNDI declares that file in its ``file_list``, and a document that
+    declares a required file and binds nothing is refused at add time
+    (VH-Lab/DID-python#86). These tests are about session_id handling, so
+    the file's content is incidental -- it just has to be there for the add
+    to reach the behaviour under test.
+    """
+    payload = directory / f"{doc.id}.ext"
+    payload.write_text(doc.id)
+    return doc.add_file("filename1.ext", str(payload))
+
+
 # ===========================================================================
 # TestDocumentValidation
 # Port of: MATLAB validator tests - document-level validation
@@ -87,7 +102,7 @@ class TestDocumentValidation:
         props = doc.document_properties
         props["base"]["session_id"] = ""
         props["demoNDI"]["value"] = 99
-        doc = ndi_document(props)
+        doc = _with_its_declared_file(ndi_document(props), session_dir)
 
         # Should not raise -- empty session_id is accepted and auto-assigned
         session.database_add(doc)
@@ -105,7 +120,7 @@ class TestDocumentValidation:
         props = doc.document_properties
         props["base"]["session_id"] = empty_id()
         props["demoNDI"]["value"] = 88
-        doc = ndi_document(props)
+        doc = _with_its_declared_file(ndi_document(props), session_dir)
 
         # Should not raise -- empty_id is accepted and auto-assigned
         session.database_add(doc)

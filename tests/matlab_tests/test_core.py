@@ -224,6 +224,14 @@ class TestQuery:
                 "demoNDI.value": 2,
             },
         )
+        # demoNDI declares filename1.ext in its file_list; a document that
+        # declares a required file and binds nothing is refused at add time
+        # (VH-Lab/DID-python#86).
+        for doc, name in ((doc1, "alpha"), (doc2, "beta")):
+            payload = session_dir / f"{name}.dat"
+            payload.write_text(name)
+            doc.add_file("filename1.ext", str(payload))
+
         session.database_add(doc1)
         session.database_add(doc2)
 
