@@ -1429,21 +1429,33 @@ not_yet_ported:
 
   - name: getSignedURLSet
     matlab_path: "+ndi/+cloud/+api/+files/getSignedURLSet.m"
+    python_path: "ndi/cloud/api/files.py"
     matlab_last_sync_hash: "5804cd80"
-    status: porting_deferred
+    status: ported
     decision_log: >
-      Part of the signed-URL-set family (#206). One page of a document's
-      UID -> signed URL map, via GET /signed-url-set. Python has no
-      counterpart; ports as a unit, see the shared note above.
+      Ported by NDI-python#262 as the API foundation of batch_signed_url.
+      Python's getSignedURLSet takes (dataset_id, document_id) and
+      keyword-only limit/cursor/file_series/id_namespace. The MATLAB
+      signedURLFileMap / signedURLSetPage helpers are absent -- Python's
+      json.loads keeps arbitrary string keys verbatim, so no key-recovery
+      pass off the raw payload is needed. Behaviour with respect to the
+      route table matches MATLAB: id_namespace="ndi" targets the
+      /ndi-documents/ path and is what NDI's own callers use.
 
   - name: getSignedURLSetAll
     matlab_path: "+ndi/+cloud/+api/+files/getSignedURLSetAll.m"
+    python_path: "ndi/cloud/api/files.py"
     matlab_last_sync_hash: "5804cd80"
-    status: porting_deferred
+    status: ported
     decision_log: >
-      Part of the signed-URL-set family (#206). Walks getSignedURLSet
-      cursors and merges every page into one map. Python has no
-      counterpart; ports as a unit, see the shared note above.
+      Ported by NDI-python#262. Walks getSignedURLSet cursors and merges
+      every page into one dict. Same terminating conditions as MATLAB --
+      no nextCursor or empty nextCursor ends the walk; a cursor that
+      equals the one just sent raises SignedURLSetCursorDidNotAdvance;
+      running past max_pages raises SignedURLSetMaxPagesReached with the
+      partial merged dict on the exception. The async job path
+      (createSignedURLSetJob + waitForSignedURLSetJob) is still deferred
+      because batch_signed_url does not use it.
 
   - name: getSignedURLSetJob
     matlab_path: "+ndi/+cloud/+api/+files/getSignedURLSetJob.m"
