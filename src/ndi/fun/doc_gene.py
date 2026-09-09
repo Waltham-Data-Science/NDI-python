@@ -399,7 +399,9 @@ def makePyramid(
     gene_list_doc,
     subjectID: str,
     binSizes=(1, 2, 4, 8, 16, 32),
-    grid: int = 9,
+    grid: int | None = None,
+    tileBudgetBytes: int = 50 * 2**20,
+    gridRange=(3, 64),
     basePixelSize=(0.5, 0.5),
     pixelSizeUnits: str = "micrometer",
     label: str = "",
@@ -407,6 +409,7 @@ def makePyramid(
     chipSerial: str = "",
     pipelineVersion: str = "",
     origin=None,
+    progressFcn=None,
 ):
     """Bin flat spatial records into a tiled pyramid and store its documents.
 
@@ -432,9 +435,28 @@ def makePyramid(
             the step's AREA factor while leaving the mean unchanged, so
             uniform small ratios zoom most smoothly.
         grid: tile grid, ``grid`` by ``grid`` at EVERY level. Constant
-            because nonzeros barely fall with bin size, so every level
-            wants comparable tiling and a viewport maps to tile indices
-            once, independent of zoom.
+            across levels because nonzeros barely fall with bin size, so
+            every level wants comparable tiling and a viewport maps to
+            tile indices once, independent of zoom. ``None``, the default,
+            SIZES IT FROM THE DATA: a grid is a fixed fraction of the
+            extent, so the same 9x9 that gives a mouse section 20 MB tiles
+            gave a real ferret hemisphere 257 MB ones.
+        tileBudgetBytes: what the automatic grid aims for in the BIGGEST
+            tile at the finest level, not the average one. Tissue does not
+            spread evenly over its bounding box, so the densest tile of a
+            real section runs a few times the median (2.5x, measured) and
+            budgeting the median misses by that factor. Bigger tiles mean
+            fewer files to store and upload; smaller tiles mean less to
+            fetch before a viewer can draw. Ignored when ``grid`` is set.
+        gridRange: bounds on the automatic grid. The upper bound is a file
+            COUNT limit rather than a geometric one -- ``grid**2`` files
+            per level, every one of them written, stored and uploaded.
+        progressFcn: called as ``progressFcn(fraction, text)`` with
+            ``fraction`` in [0, 1] across this call. This is the slow half
+            of an ingest and reporting only at its ends makes minutes of
+            it indistinguishable from a hang, so the grid choice, every
+            level and every band within a level report. ``None`` is
+            silent.
         basePixelSize: (x, y) physical size of one base pixel.
         origin: ``(min_x, min_y)`` of the tiled region, or None to take it
             from the data. Prefer the acquisition's own bounding box when
@@ -482,6 +504,26 @@ def makePyramid(
     extent_y = int(y.max()) - min_y + 1
     bins = sorted(int(b) for b in binSizes)
 
+    if grid is None:
+        _tick(progressFcn, 0.0, "Choosing the tile grid...")
+        grid, est_bytes = _choose_grid(
+            x, y, min_x, min_y, extent_x, extent_y, bins[0], tileBudgetBytes, gridRange
+        )
+        # Said out loud, because the file COUNT is a cost this choice
+        # cannot see: grid**2 files per level, all of which have to be
+        # written, stored and uploaded. A caller who cares more about that
+        # than about fetch latency raises tileBudgetBytes or fixes grid.
+        _tick(
+            progressFcn,
+            0.0,
+            f"Tile grid {grid}x{grid}: {grid * grid:,} files per level, "
+            f"biggest tile about {_human_bytes(est_bytes)}.",
+        )
+    else:
+        grid = int(grid)
+        if grid < 1:
+            raise ValueError("grid must be a positive integer, or None to size it from the data")
+
     pyr_doc = (
         _blank(
             "spatialGeneExpressionPyramid",
@@ -510,6 +552,7 @@ def makePyramid(
     pyr_doc = pyr_doc.set_dependency_value("geneList_id", gene_list_doc.id)
     pyr_doc = pyr_doc.set_dependency_value("subject_id", subjectID)
 
+    _tick(progressFcn, 0.0, "Summing per-gene totals...")
     totals_path = _write_gene_totals(gene_index, count, n_genes)
     try:
         pyr_doc = _store_doc(session, pyr_doc, ["gene_totals.tsv"], [totals_path])
@@ -517,27 +560,36 @@ def makePyramid(
         if os.path.exists(totals_path):
             os.unlink(totals_path)
 
-    tile_docs = [
-        _make_level(
-            session,
-            x,
-            y,
-            gene_index,
-            count,
-            min_x,
-            min_y,
-            extent_x,
-            extent_y,
-            b,
-            grid,
-            n_genes,
-            pyr_doc,
-            basePixelSize,
-            pixelSizeUnits,
-            subjectID,
+    # Equal shares per level. Every level sorts the SAME record array --
+    # coarsening merges pixels but leaves the genes distinct, so the record
+    # count barely falls with bin size and bin32 costs about what bin1
+    # costs. Weighting the shares by output size would report a lie.
+    tile_docs = []
+    for k, b in enumerate(bins):
+        lo = 0.05 + 0.95 * k / len(bins)
+        hi = 0.05 + 0.95 * (k + 1) / len(bins)
+        tile_docs.append(
+            _make_level(
+                session,
+                x,
+                y,
+                gene_index,
+                count,
+                min_x,
+                min_y,
+                extent_x,
+                extent_y,
+                b,
+                grid,
+                n_genes,
+                pyr_doc,
+                basePixelSize,
+                pixelSizeUnits,
+                subjectID,
+                _level_progress(progressFcn, lo, hi, k + 1, len(bins), b),
+            )
         )
-        for b in bins
-    ]
+    _tick(progressFcn, 1.0, "Pyramid complete.")
     return pyr_doc, tile_docs
 
 
@@ -558,71 +610,51 @@ def _make_level(
     base_pixel_size,
     pixel_size_units,
     subject_id,
+    progress=None,
 ):
-    """Build and store one resolution level."""
+    """Build and store one resolution level.
+
+    ONE BAND OF TILE ROWS AT A TIME, and this is what decides how much
+    memory a section needs. A tile spans ``th`` level rows and the full
+    width of its row, so records in different tile rows never share a tile
+    and can be sorted, collapsed and written entirely apart. Doing the
+    whole level at once means the sort's working set scales with the
+    section; doing it a band at a time means it scales with the section
+    DIVIDED BY THE GRID -- and because the grid is chosen from the data, a
+    section big enough to need the chunking is exactly the one that gets a
+    fine grid to chunk with.
+
+    The cost is ``grid`` passes over the coordinates to select the bands,
+    cheap next to ``grid`` sorts, and a build that is somewhat slower and
+    fits. Nothing about what is written changes: a band holds whole tiles.
+    """
     lw = -(-extent_x // b)  # ceil
     lh = -(-extent_y // b)
     tw = -(-lw // grid)
     th = -(-lh // grid)
-    n_tiles = grid * grid
-
-    px = (x - min_x) // b
-    py = (y - min_y) // b
-    tcol = px // tw
-    trow = py // th
-    xl = px - tcol * tw
-    yl = py - trow * th
-    tid = trow * grid + tcol
-
-    # ONE sort, on a TILE-MAJOR key, so tile boundaries fall out of the
-    # sorted order with a searchsorted instead of needing a second sort.
-    #
-    # int64 from the first term. This product reaches ~1e13 on a real
-    # section; under NumPy's weak promotion an int32 array times a Python
-    # int stays int32, which wraps SILENTLY at 2.15e9. Distinct
-    # (pixel, gene) pairs then collide and the dedup below merges them --
-    # about 1.7M spurious merges on one measured section, matching the
-    # n**2/2**33 collision estimate. Assert rather than trust: no fixture
-    # small enough to run quickly can reach the overflow.
-    key = ((tid.astype(np.int64) * th + yl) * tw + xl) * n_genes + gi
-    if key.dtype != np.int64:
-        raise TypeError(f"sort key must be int64, got {key.dtype}")
-    span = np.int64(th) * tw * n_genes
-    if n_tiles * span >= 2**63:
-        raise OverflowError(f"sort key would reach {n_tiles * span:,}, past int64")
-
-    order = np.argsort(key, kind="stable")
-    key = key[order]
-    xl = xl[order]
-    yl = yl[order]
-    g = gi[order]
-    # int32 is enough: a group sums at most b*b base records.
-    cc = c[order].astype(np.int64)
-
-    # Collapse duplicate (pixel, gene) pairs created by binning.
-    new = np.empty(len(key), bool)
-    new[0] = True
-    np.not_equal(key[1:], key[:-1], out=new[1:])
-    starts = np.flatnonzero(new)
-    cc = np.add.reduceat(cc, starts)
-    xl, yl, g, key = xl[starts], yl[starts], g[starts], key[starts]
-    cc = np.minimum(cc, 65535)  # data_type_count is uint16
-
-    tid_sorted = key // span
-    bounds = np.searchsorted(tid_sorted, np.arange(n_tiles + 1))
 
     names, paths = [], []
     tmpdir = tempfile.mkdtemp()
     try:
-        for t in range(n_tiles):
-            lo, hi = int(bounds[t]), int(bounds[t + 1])
-            if lo == hi:
-                continue  # tiles with no data are not written
-            name = f"tile.bin_{t + TILE_INDEX_ORIGIN}"
-            p = os.path.join(tmpdir, name)
-            writeTileFile(p, xl[lo:hi], yl[lo:hi], g[lo:hi], cc[lo:hi])
-            names.append(name)
-            paths.append(p)
+        for trow in range(grid):
+            _tick(progress, 0.05 + 0.85 * trow / grid, f"tile row {trow + 1} of {grid}...")
+            # The band's bounds in SOURCE units. Computing each record's
+            # level row to compare against would allocate the full-length
+            # array this loop exists not to allocate; the bounds map back
+            # into source units exactly, so the comparison happens on the
+            # coordinates as they are.
+            y_lo = min_y + trow * th * b
+            y_hi = y_lo + th * b
+            sel = (y >= y_lo) & (y < y_hi)
+            if not sel.any():
+                continue
+            for name, data in _make_band(
+                x[sel], y[sel], gi[sel], c[sel], min_x, min_y, b, grid, tw, th, n_genes
+            ):
+                p = os.path.join(tmpdir, name)
+                writeTileFile(p, *data)
+                names.append(name)
+                paths.append(p)
 
         doc = (
             _blank(
@@ -658,6 +690,7 @@ def _make_level(
         )
         doc = doc.set_dependency_value("spatialGeneExpressionPyramid_id", pyr_doc.id)
         doc = doc.set_dependency_value("subject_id", subject_id)
+        _tick(progress, 0.92, f"storing {len(names)} tiles...")
         return _store_doc(session, doc, names, paths)
     finally:
         for p in paths:
@@ -665,6 +698,179 @@ def _make_level(
                 os.unlink(p)
         if os.path.isdir(tmpdir):
             os.rmdir(tmpdir)
+
+
+def _make_band(x, y, gi, c, min_x, min_y, b, grid, tw, th, n_genes):
+    """Collapse one band of tile rows, yielding ``(name, arrays)`` per tile.
+
+    THE KEY SORTS TILE-MAJOR: tile index, then the pixel within the tile,
+    then the gene. Two things follow.
+
+    Tile boundaries fall out of the sorted order, so no second sort and no
+    pass per grid cell is needed to find them -- which matters once the
+    grid is sized from the data and can reach 64x64, i.e. 4096 cells.
+
+    And the key already encodes the tile, the tile-local pixel AND the
+    gene, so none of them has to survive the sort: they are DECODED back
+    out of it afterwards. Two full-length arrays go through the sort where
+    six used to. The decode is exact for as long as the int64 guard below
+    holds, which is the condition the key already needed.
+
+    int64 from the first term. This product reaches ~1e13 on a real
+    section; under NumPy's weak promotion an int32 array times a Python int
+    stays int32, which wraps SILENTLY at 2.15e9. Distinct (pixel, gene)
+    pairs then collide and the dedup merges them -- about 1.7M spurious
+    merges on one measured section, matching the n**2/2**33 collision
+    estimate. Assert rather than trust: no fixture small enough to run
+    quickly can reach the overflow.
+    """
+    py = (y - min_y) // b
+    trow = py // th
+    yl = py - trow * th
+    del py
+    px = (x - min_x) // b
+    tcol = px // tw
+    xl = px - tcol * tw
+    del px
+    tid = trow * grid + tcol
+    del trow, tcol
+
+    key = ((tid.astype(np.int64) * th + yl) * tw + xl) * n_genes + gi
+    if key.dtype != np.int64:
+        raise TypeError(f"sort key must be int64, got {key.dtype}")
+    span = np.int64(th) * tw * n_genes
+    if grid * grid * span >= 2**63:
+        raise OverflowError(f"sort key would reach {grid * grid * span:,}, past int64")
+    del tid, xl, yl
+
+    order = np.argsort(key, kind="stable")
+    key = key[order]
+    # int64 because a group sums at most b*b base records.
+    cc = c[order].astype(np.int64)
+    del order
+
+    # Collapse duplicate (pixel, gene) pairs created by binning.
+    new = np.empty(len(key), bool)
+    new[0] = True
+    np.not_equal(key[1:], key[:-1], out=new[1:])
+    starts = np.flatnonzero(new)
+    del new
+    cc = np.minimum(np.add.reduceat(cc, starts), 65535)  # data_type_count is uint16
+    key = key[starts]
+    del starts
+
+    # Decode the survivors back out of the key. xl and yl come out already
+    # tile-local, which is the form writeTileFile wants.
+    g, key = key % n_genes, key // n_genes
+    xl, key = key % tw, key // tw
+    yl, tid = key % th, key // th
+    del key
+
+    # One contiguous slice per occupied tile. Tiles with no data are not
+    # written at all, so the stored series has holes in it and a
+    # document's file list, not a walk, is what reports which exist.
+    t_start = np.flatnonzero(np.r_[True, tid[1:] != tid[:-1]])
+    t_end = np.r_[t_start[1:], len(tid)]
+    for lo, hi in zip(t_start, t_end):
+        name = f"tile.bin_{int(tid[lo]) + TILE_INDEX_ORIGIN}"
+        yield name, (xl[lo:hi], yl[lo:hi], g[lo:hi], cc[lo:hi])
+
+
+def _tick(fcn, frac, txt):
+    """Silent when no handle was given, so every phase can report progress
+    without each call site testing for a display first."""
+    if fcn is None:
+        return
+    fcn(float(frac), txt)
+
+
+def _level_progress(fcn, lo, hi, k, n_levels, b):
+    """Re-scale a caller's [0, 1] handle onto the ``[lo, hi]`` slice of it,
+    so a level reports its own progress in its own terms without knowing
+    where in the whole build it sits. ``None`` stays ``None``."""
+    if fcn is None:
+        return None
+
+    def sub(frac, txt):
+        fcn(lo + (hi - lo) * frac, f"Level {k} of {n_levels} (bin {b}): {txt}")
+
+    return sub
+
+
+def _human_bytes(n):
+    """Progress text, so a rounded human unit rather than a byte count."""
+    units = ("B", "KB", "MB", "GB", "TB")
+    k = 0
+    n = float(n)
+    while n >= 1024 and k < len(units) - 1:
+        n /= 1024
+        k += 1
+    return f"{n:.1f} {units[k]}"
+
+
+def _choose_grid(x, y, min_x, min_y, extent_x, extent_y, b1, budget, g_range):
+    """Size the tile grid from where the data actually is.
+
+    The thing being budgeted is the LARGEST tile at the FINEST level: the
+    one a viewer waits on and the one that has to be uploaded. Two facts
+    make the obvious estimate -- total bytes over ``grid**2`` -- wrong by a
+    factor of a few:
+
+    1. Tissue does not fill its bounding box, and where it is present it
+       is not uniform. On a real ferret hemisphere the densest tile ran
+       2.5x the median, so budgeting the mean tile overshoots by 2.5x.
+    2. Coarser levels are cheaper per record but not by much -- binning
+       merges pixels while the genes in them stay distinct -- so bin1
+       binds and the other levels come along.
+
+    So this histograms the records over the extent and budgets the
+    heaviest cell, rather than assuming they are spread evenly.
+
+    Returns:
+        ``(grid, estimated_biggest_tile_bytes)``.
+    """
+    H = 256  # histogram cells per side
+
+    # Subsample. Choosing a grid does not need every record, and a full
+    # pass would cost two more full-length arrays at exactly the moment
+    # this is trying to save them. Records in a .gef are ordered by GENE,
+    # so a fixed stride is spatially unbiased.
+    n = len(x)
+    step = max(1, -(-n // 20_000_000))
+    cx = np.minimum(((x[::step] - min_x) * H) // extent_x, H - 1).astype(np.int64)
+    cy = np.minimum(((y[::step] - min_y) * H) // extent_y, H - 1).astype(np.int64)
+    h = np.bincount(cy * H + cx, minlength=H * H).reshape(H, H)
+    frac = h / h.sum()  # share of all records, per histogram cell
+    del cx, cy, h
+
+    # Bytes a record costs in tile format version 1: 4 for the gene index,
+    # 2 for the count, plus the per-pixel row header amortised over the
+    # genes detected in that pixel. Measured at ~10.6 on a full section;
+    # 11 is used so the estimate errs towards a smaller tile.
+    bytes_per_record = 11
+
+    g_lo = max(int(g_range[0]), 1)
+    g_hi = max(int(g_range[1]), g_lo)
+    # A tile may not exceed 65536 level-pixels on a side: tile-local
+    # coordinates are uint16. This is a floor on the search, so the
+    # automatic grid never proposes a geometry the writer would refuse.
+    side = max(-(-extent_x // b1), -(-extent_y // b1))
+    g_lo = max(g_lo, -(-side // 65536))
+    g_hi = max(g_hi, g_lo)
+
+    est = float("inf")
+    for g in range(g_lo, g_hi + 1):
+        # Both partitions are uniform over the same extent, so a histogram
+        # cell belongs to the tile containing its centre. The map is the
+        # same along both axes and separable, so aggregating H x H down to
+        # g x g is one indicator matrix applied on each side.
+        m = np.minimum(((np.arange(H) * 2 + 1) * g) // (2 * H), g - 1)
+        a = np.zeros((H, g))
+        a[np.arange(H), m] = 1.0
+        est = float((a.T @ frac @ a).max()) * n * bytes_per_record
+        if est <= budget:
+            return g, est
+    return g_hi, est
 
 
 def _write_gene_totals(gene_index, count, n_genes):
