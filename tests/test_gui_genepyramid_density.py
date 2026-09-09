@@ -109,3 +109,17 @@ class TestTheKernelIsUnity:
         out = blurRaster(counts, 3.0, 1.0)
         assert out.sum() < 1.0, "mass at a corner should leave the frame"
         assert out.max() < 1.0
+
+
+def test_the_default_raster_stays_inside_a_slider_drag():
+    """The blur is redrawn on every change of the width knob, so the cap
+    is on the interactive path. Measured with scipy's gaussian_filter:
+    1024^2 is 38-126 ms across the useful sigma range, 2048^2 is 177-442,
+    4096^2 is 757-1815. A default that lags the drag is the wrong default,
+    and this is the sort of number that drifts back up unnoticed."""
+    import numpy as np
+
+    row = np.array([0.0, 59000.0])
+    col = np.array([0.0, 40000.0])
+    counts, _, _ = densityRaster(row, col)
+    assert max(counts.shape) <= 1025

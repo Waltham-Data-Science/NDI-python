@@ -1068,18 +1068,30 @@ def applyRotation(layers, angle_deg, center):
     return a
 
 
-def densityRaster(row, col, max_side: int = 2048):
+def densityRaster(row, col, max_side: int = 1024):
     """Bin centroids onto a raster, coarse enough to blur cheaply.
 
     Points cannot be blurred. napari draws a Points layer as discrete
     marks, and there is no kernel to widen -- so making sparse cells
     easier to see means rendering them into an IMAGE and blurring that.
 
-    The raster is deliberately coarse. A ferret section is ~40,000 x
-    59,000 base pixels, and a full-resolution density image would be 2.4
-    billion pixels to hold a few hundred thousand cells. The longest side
-    is capped instead, and the layer carries a matching ``scale`` and
-    ``translate`` so it still lands on top of the cells it was made from.
+    The raster is deliberately coarse, for two reasons. A ferret section
+    is ~40,000 x 59,000 base pixels, so a full-resolution density image
+    would be 2.4 billion pixels to hold a few hundred thousand cells. And
+    the BLUR is redrawn on every change of the width knob, which puts the
+    cap on the interactive path rather than the loading one -- measured,
+    on this raster, with scipy's gaussian_filter:
+
+        1024^2   38 ms at sigma 2px,  126 ms at sigma 20px
+        2048^2  177 ms               442 ms
+        4096^2  757 ms              1815 ms
+
+    1024 is the largest that still redraws inside a slider drag. Binning
+    the points is not what costs -- 400,000 cells histogram in 13 ms, once
+    -- so the cap is about the blur, not the counting.
+
+    The layer carries a matching ``scale`` and ``translate`` so it still
+    lands on top of the cells it was made from.
 
     Args:
         row, col: centroid coordinates in WORLD units, as the points layer
@@ -1146,7 +1158,7 @@ def blurRaster(counts, sigma_world: float, step: float):
     return gaussian_filter(counts, sigma=float(sigma_world) / float(step), mode="constant")
 
 
-def addCellBlurPanel(viewer, points_layer, max_side: int = 2048) -> Any:
+def addCellBlurPanel(viewer, points_layer, max_side: int = 1024) -> Any:
     """A width knob for a blurred density image under the cell centroids.
 
     Sparse centroids are single marks and hard to pick out. This adds a
