@@ -1328,6 +1328,25 @@ class ndi_dataset_dir(ndi_dataset):
         # datasets that don't yet have session_in_a_dataset tracking).
         self._ensure_session_tracking()
 
+    @property
+    def path(self) -> Path:
+        """The directory this dataset lives in.
+
+        MATLAB equivalent: ``ndi.dataset.dir``'s ``path`` property, which
+        it has declared since it was written -- this side simply never
+        exposed the ``_path`` it was already keeping, which made a
+        directory-backed dataset unable to say where it was.
+
+        That gap had teeth. Anything asking a session-or-dataset where it
+        lives got an answer from a session and None from a dataset, and
+        the failure landed far from the cause: the gene pyramid's tile
+        fetcher builds a per-thread handle by reopening whatever it was
+        given AT ITS OWN PATH, and with no path it cannot, so opening a
+        downloaded dataset in the napari viewer failed on the first tile
+        with a threading error rather than a missing attribute.
+        """
+        return self._path
+
     @staticmethod
     def _must_not_be_session(path: Path) -> None:
         """Raise if *path* holds a standalone session rather than a dataset.
