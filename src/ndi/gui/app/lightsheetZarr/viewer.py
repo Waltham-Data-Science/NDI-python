@@ -32,6 +32,7 @@ def openPyramid(
     level: int | None = None,
     controls: bool = True,
     name: str | None = None,
+    reduction: str | None = None,
     show: bool = True,
 ):
     """Open a lightsheetZarrPyramid in napari.
@@ -52,6 +53,9 @@ def openPyramid(
         Whether to dock the reduction / channel / level panels.
     name
         Layer name. ``None`` uses the pyramid document's label.
+    reduction
+        Filter the level ladder to ``reduction_function`` in
+        ``{'none', reduction}``. ``None`` shows every level.
     show
         Whether to call ``napari.run()`` after the layer is added. Set
         False from a caller that manages its own event loop.
@@ -65,7 +69,9 @@ def openPyramid(
     napari = require_napari()
     from ndi.gui.app.lightsheetZarr import multiscale
 
-    spec = multiscale.layerSpec(session, pyramid_doc, channel=channel, name=name)
+    spec = multiscale.layerSpec(
+        session, pyramid_doc, channel=channel, name=name, reduction=reduction
+    )
     viewer = napari.Viewer()
     viewer.add_image(**spec)
 
@@ -96,6 +102,5 @@ def _attach_controls(viewer, session, pyramid_doc) -> None:
     rather than refusing to open at all.
     """
     # Intentionally no-op in this scaffold. The follow-up PR adds
-    # magicgui panels for reduction switching (mean/max sibling
-    # pyramid) and channel selection.
+    # magicgui panels for reduction switching and channel selection.
     return

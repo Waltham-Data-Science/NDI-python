@@ -29,7 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "session",
-        help="Path to the ndi.session.dir on disk (or its cloud-cache " "local mirror).",
+        help="Path to the ndi.session.dir on disk (or its cloud-cache local mirror).",
     )
     p.add_argument(
         "--pyramid",
@@ -40,11 +40,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--reduction",
-        choices=("mean", "max"),
         default=None,
-        help="Open the sibling pyramid with this reduction instead of "
-        "the one --pyramid names. Requires that --pyramid also identify "
-        "the sibling (same subject_id + source_file_id).",
+        help="Filter the pyramid's level ladder to levels with "
+        "reduction_function in {'none', <reduction>}. Required when the "
+        "ladder holds more than one non-'none' reduction. "
+        "'none' is the shared raw level 0 that both mean and max "
+        "pyramids typically point at.",
     )
     p.add_argument(
         "--channel",
@@ -75,13 +76,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--list",
         action="store_true",
-        help="Enumerate lightsheetZarrPyramid documents in the session " "and exit (no napari).",
+        help="Enumerate lightsheetZarrPyramid documents in the session and exit (no napari).",
     )
     p.add_argument(
         "--report",
         action="store_true",
-        help="Print the pyramid's level table (level, reduction, shape, "
-        "chunks, voxel size) and exit (no napari).",
+        help="Print the pyramid's level table (level, reduction_function, "
+        "shape, chunks, voxel size) and exit (no napari).",
     )
     return p
 
@@ -104,15 +105,42 @@ def _pyramids(session: Any) -> list[Any]:
     return list(session.database_search(ndi_query("").isa("lightsheetZarrPyramid")))
 
 
-def _describe(doc: Any) -> str:
-    """One line per pyramid, matching what --list prints."""
+def _reductions_for(session: Any, pyramid_doc: Any) -> list[str]:
+    """Set of non-'none' reduction_function values in the pyramid's ladder."""
+    from ndi.gui.app.lightsheetZarr.multiscale import levelDocs  # deferred
+
+    docs = levelDocs(session, pyramid_doc)
+    seen = {
+        d.document_properties["lightsheetZarrLevel"].get("reduction_function", "none")
+        for d in docs
+    }
+    return sorted(seen - {"none"})
+
+
+def _describe(session: Any, doc: Any) -> str:
+    """One line per pyramid, matching what --list prints.
+
+    The parent no longer carries reduction / n_levels; both come from a
+    child query. One query per pyramid on --list is fine at the scales
+    this runs at (a session typically holds a handful of pyramids).
+    """
+    from ndi.gui.app.lightsheetZarr.multiscale import levelDocs  # deferred
+
     props = doc.document_properties["lightsheetZarrPyramid"]
     label = props.get("label") or props.get("pyramid_name") or "(unnamed)"
-    reduction = props.get("reduction", "?")
-    n_levels = props.get("n_levels", 0)
     shape = props.get("shape_level0", [])
+    docs = levelDocs(session, doc)
+    n_levels = len(docs)
+    reductions = sorted(
+        {
+            d.document_properties["lightsheetZarrLevel"].get("reduction_function", "none")
+            for d in docs
+        }
+        - {"none"}
+    ) or ["(none)"]
     return (
-        f"{doc.id():.16}  reduction={reduction:<4}  n_levels={n_levels}  "
+        f"{doc.id():.16}  n_levels={n_levels}  "
+        f"reductions={','.join(reductions):<12}  "
         f"shape0={list(shape)}  label={label}"
     )
 
@@ -139,24 +167,30 @@ def _pick_pyramid(session: Any, pyramid_id: str | None) -> Any:
     raise SystemExit(f"No lightsheetZarrPyramid with id starting {pyramid_id!r}.")
 
 
-def _resolve_reduction(session: Any, pyramid_doc: Any, reduction: str) -> Any:
-    """Swap to the sibling pyramid with a different reduction."""
-    props = pyramid_doc.document_properties["lightsheetZarrPyramid"]
-    if props.get("reduction") == reduction:
-        return pyramid_doc
-    subject_id = pyramid_doc.dependency_value("subject_id")
-    source_file_id = pyramid_doc.dependency_value("source_file_id")
-    for other in _pyramids(session):
-        p = other.document_properties["lightsheetZarrPyramid"]
-        if (
-            p.get("reduction") == reduction
-            and other.dependency_value("subject_id") == subject_id
-            and other.dependency_value("source_file_id") == source_file_id
-        ):
-            return other
+def _pick_reduction(session: Any, pyramid_doc: Any, requested: str | None) -> str | None:
+    """Choose which reduction the viewer should show.
+
+    None-return means "do not filter" -- the ladder holds only 'none'
+    levels (e.g. a raw-only pyramid). Otherwise returns the reduction
+    string to use as the filter. Refuses ambiguity: a ladder with
+    multiple non-'none' reductions and no ``--reduction`` on the CLI
+    is not something the viewer can guess.
+    """
+    available = _reductions_for(session, pyramid_doc)
+    if requested is not None:
+        if requested not in available:
+            raise SystemExit(
+                f"Reduction {requested!r} not available on this pyramid. "
+                f"Available: {available or ['(none)']}."
+            )
+        return requested
+    if not available:
+        return None
+    if len(available) == 1:
+        return available[0]
     raise SystemExit(
-        f"No sibling lightsheetZarrPyramid with reduction={reduction!r} "
-        f"for subject={subject_id!s} / source_file={source_file_id!s}."
+        f"Pyramid ladder holds multiple reductions ({available}); "
+        "pass --reduction <name> to pick one."
     )
 
 
@@ -171,18 +205,17 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.list:
         for doc in _pyramids(session):
-            print(_describe(doc))
+            print(_describe(session, doc))
         return 0
 
     pyramid_doc = _pick_pyramid(session, args.pyramid)
-    if args.reduction is not None:
-        pyramid_doc = _resolve_reduction(session, pyramid_doc, args.reduction)
+    reduction = _pick_reduction(session, pyramid_doc, args.reduction)
 
     if args.report:
         # levelTable does the depends_on query and reports metadata only.
         from ndi.gui.app.lightsheetZarr import multiscale  # deferred
 
-        for row in multiscale.levelTable(session, pyramid_doc):
+        for row in multiscale.levelTable(session, pyramid_doc, reduction=reduction):
             print(row)
         return 0
 
@@ -196,6 +229,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         level=args.level,
         controls=args.controls,
         name=args.name,
+        reduction=reduction,
         show=True,
     )
     return 0
