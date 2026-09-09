@@ -124,6 +124,14 @@ class TestIsIngestedInDataset:
         props["demoNDI"]["value"] = 42
         props["base"]["session_id"] = session.id()
         doc = ndi_document(props)
+
+        # demoNDI declares filename1.ext in its file_list; a document that
+        # declares a required file and binds nothing is refused at add time
+        # (VH-Lab/DID-python#86). Mirrors conftest._add_doc_with_file.
+        payload = session_dir / "test_doc.dat"
+        payload.write_text("test_doc")
+        doc = doc.add_file("filename1.ext", str(payload))
+
         session.database_add(doc)
 
         # Create dataset and ingest

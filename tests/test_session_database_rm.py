@@ -39,6 +39,13 @@ def _a_document(session):
     doc = session.newdocument("data/generic_file")
     doc.document_properties["generic_file"]["dateCreated"] = 0
     doc.document_properties["generic_file"]["dateUpdated"] = 0
+    # data/generic_file declares generic_file.ext in its file_list, and a
+    # document that declares a required file and binds nothing is refused at
+    # add time (VH-Lab/DID-python#86). The file is incidental here -- these
+    # tests are about database_rm -- but it has to exist.
+    payload = session.path / f"{doc.id}.ext"
+    payload.write_text(doc.id)
+    doc = doc.add_file("generic_file.ext", str(payload))
     session.database_add(doc)
     return doc
 
