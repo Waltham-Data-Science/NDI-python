@@ -17,7 +17,7 @@ import logging
 import os
 from datetime import datetime, timezone
 
-from .config import CloudConfig
+from .config import _API_URLS, CloudConfig
 from .exceptions import CloudAuthError
 
 logger = logging.getLogger(__name__)
@@ -293,12 +293,40 @@ def logout(config: CloudConfig | None = None) -> None:
     config.org_id = ""
 
 
+def _profile_credentials() -> tuple[str, str, str]:
+    """Return ``(email, password, stage)`` from the saved cloud profile.
+
+    The session's current profile wins over the persisted default, matching
+    :func:`ndi.cloud.profile.get_current` / :func:`~ndi.cloud.profile.get_default`.
+
+    Returns three empty strings when there is no usable profile. Every
+    failure mode here is benign -- no profile file, no default set, a
+    secrets backend that cannot decrypt -- and none of them should turn a
+    missing credential into a traceback from an unrelated call site, so they
+    all fall through to the caller's own "no credentials" error.
+    """
+    try:
+        from . import profile as _profile
+
+        entry = _profile.get_current() or _profile.get_default()
+        if entry is None:
+            return "", "", ""
+        password = _profile.get_password(entry.UID)
+        if not entry.Email or not password:
+            return "", "", ""
+        return entry.Email, password, entry.Stage or ""
+    except Exception as exc:  # noqa: BLE001 - see docstring
+        logger.debug("No usable cloud profile: %s", exc)
+        return "", "", ""
+
+
 def authenticate(config: CloudConfig | None = None) -> tuple[str, str]:
     """Return an active token and organization ID, attempting login if needed.
 
     Priority (matching MATLAB ``authenticate.m``):
     1. Existing valid token in config/env (local JWT exp pre-check).
     2. Username + password from env → login.
+    3. The saved cloud profile (current, else default) → login.
 
     Args:
         config: Optional config.
@@ -326,9 +354,38 @@ def authenticate(config: CloudConfig | None = None) -> tuple[str, str]:
         updated = login(email, password, config)
         return updated.token, updated.org_id
 
+    # 3. Fall back to the saved cloud profile.
+    #
+    #    MATLAB's authenticate.m has this step -- authenticatedWithSecret,
+    #    which reads the MATLAB Vault -- ahead of the environment one. Python
+    #    had no equivalent at all, so a user who had set up a profile (the
+    #    documented way to keep a cloud password) still got "no credentials
+    #    available" from anything that authenticated implicitly: every
+    #    @_auto_client API call, and, most visibly, the ndic:// file handler
+    #    that fetches pyramid tiles for a downloaded dataset.
+    #
+    #    It goes last rather than first because an explicitly exported
+    #    NDI_CLOUD_USERNAME is a deliberate override and should keep winning
+    #    over whatever is on disk.
+    email, password, stage = _profile_credentials()
+    if email and password:
+        # Honour the profile's stage, but never over an explicit request:
+        # either environment variable means the caller has already chosen.
+        if (
+            stage
+            and not os.environ.get("NDI_CLOUD_URL")
+            and not os.environ.get("CLOUD_API_ENVIRONMENT")
+        ):
+            url = _API_URLS.get(stage)
+            if url:
+                config.api_url = url
+        updated = login(email, password, config)
+        return updated.token, updated.org_id
+
     raise CloudAuthError(
-        "No valid token and no credentials available. "
-        "Set NDI_CLOUD_TOKEN or NDI_CLOUD_USERNAME/NDI_CLOUD_PASSWORD."
+        "No valid token and no credentials available. Set NDI_CLOUD_TOKEN or "
+        "NDI_CLOUD_USERNAME/NDI_CLOUD_PASSWORD, or save a default cloud "
+        "profile (ndi.cloud.profile.add(...) then set_default(...))."
     )
 
 
