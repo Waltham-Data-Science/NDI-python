@@ -615,9 +615,10 @@ def _make_level(
             lo, hi = int(bounds[t]), int(bounds[t + 1])
             if lo == hi:
                 continue  # tiles with no data are not written
-            p = os.path.join(tmpdir, f"tile.bin_{t}")
+            name = f"tile.bin_{t + TILE_INDEX_ORIGIN}"
+            p = os.path.join(tmpdir, name)
             writeTileFile(p, xl[lo:hi], yl[lo:hi], g[lo:hi], cc[lo:hi])
-            names.append(f"tile.bin_{t}")
+            names.append(name)
             paths.append(p)
 
         doc = (
@@ -647,6 +648,7 @@ def _make_level(
                     "data_type_coordinate": "uint16",
                     "tile_compression": "none",
                     "tile_format_version": 1,
+                    "tile_index_origin": TILE_INDEX_ORIGIN,
                 },
             )
             + session.newdocument()
@@ -682,6 +684,58 @@ def _write_gene_totals(gene_index, count, n_genes):
         for i in range(n_genes):
             fh.write(f"{i}\t{int(tot[i])}\t{int(npx[i])}\n")
     return path
+
+
+# The file suffix is ONE-BASED. A DID file series names its first member
+# NAME_1, not NAME_0 -- did.document/addFileSeries takes "ONE-BASED member
+# numbers" and refuses anything else ("Member indices must be positive
+# integers (one-based)"). The tile INDEX stays zero-based, because it is a
+# grid position and index_order defines it as row*tile_columns + column, so
+# the suffix is that index plus this origin.
+#
+# Getting this wrong is not cosmetic: NDI-matlab's uploader walks a legacy
+# NAME# series as NAME1, NAME2, ... and stops at the first name that is not
+# there, because that gap was how it learned where the series ended. A
+# zero-based pyramid therefore hands it a series starting at a name it never
+# probes.
+TILE_INDEX_ORIGIN = 1
+
+
+def tileFileName(tiles_props, index):
+    """Name of the file holding tile *index* of a tiles document.
+
+    *index* is the zero-based grid index (``row * tile_columns + column``
+    for row-major); the returned name carries the document's own origin.
+
+    Pyramids written before the one-based convention was honoured name
+    their first tile ``tile.bin_0`` and record no ``tile_index_origin``,
+    which reads as 0 and keeps them readable. The origin has to be recorded
+    rather than detected: a sparse pyramid whose first tile happens to be
+    empty has no ``_0`` under either convention, so a guess from the stored
+    names would shift every tile by one on the documents it got wrong --
+    a picture that is quietly wrong rather than one that is missing.
+    """
+    try:
+        origin = int(tiles_props.get("tile_index_origin", 0) or 0)
+    except (TypeError, ValueError):
+        origin = 0
+    return f"tile.bin_{int(index) + origin}"
+
+
+def tileIndexFromName(tiles_props, name):
+    """The zero-based grid index of the tile stored under *name*.
+
+    The inverse of :func:`tileFileName`. Readers that walk a document's
+    stored names and work backwards to (row, column) need this: with a
+    one-based origin the suffix is one MORE than the grid index, and
+    reading the suffix as the index puts every tile one cell along its
+    row -- and, for the last tile of a row, into the next row.
+    """
+    try:
+        origin = int(tiles_props.get("tile_index_origin", 0) or 0)
+    except (TypeError, ValueError):
+        origin = 0
+    return int(str(name).rsplit("_", 1)[1]) - origin
 
 
 def _find_level(session, pyr_doc, bin_size):
@@ -743,7 +797,7 @@ def readViewport(session, pyr_doc, bin_size, rect=None, gene_rows=None, density=
 
     for r in range(y0 // th, min(max(y1 - 1, y0) // th, rows - 1) + 1):
         for c in range(x0 // tw, min(max(x1 - 1, x0) // tw, cols - 1) + 1):
-            name = f"tile.bin_{r * cols + c}"
+            name = tileFileName(lv, r * cols + c)
             if name not in stored:
                 info["tiles_empty"] += 1
                 continue
@@ -800,8 +854,7 @@ def exportRegion(session, pyr_doc, bin_size, rect=None):
     rows_idx, cols_idx, vals, coords = [], [], [], []
     n_px = 0
     for name in sorted(tile_doc.current_file_list()):
-        t_id = int(name.rsplit("_", 1)[1])
-        tr, tc = divmod(t_id, cols)
+        tr, tc = divmod(tileIndexFromName(lv, name), cols)
         tx0, ty0 = tc * tw, tr * th
         if tx0 >= x1 or tx0 + tw <= x0 or ty0 >= y1 or ty0 + th <= y0:
             continue

@@ -111,7 +111,7 @@ def levelArrays(session, pyr_doc, gene_rows=None, density: bool = True) -> list[
     dask, da = _require_dask()
     levels, _frame = levelTable(session, pyr_doc)
 
-    from ....fun.doc_gene import _find_level
+    from ....fun.doc_gene import _find_level, tileFileName
 
     out = []
     for lv in levels:
@@ -120,7 +120,7 @@ def levelArrays(session, pyr_doc, gene_rows=None, density: bool = True) -> list[
         rows, cols = lv["tileRows"], lv["tileColumns"]
         lh, lw = lv["levelHeight"], lv["levelWidth"]
 
-        tile_doc, _props = _find_level(session, pyr_doc, b)
+        tile_doc, lv_props = _find_level(session, pyr_doc, b)
         stored = set(tile_doc.current_file_list())
         scale = b if density else 1
 
@@ -145,7 +145,7 @@ def levelArrays(session, pyr_doc, gene_rows=None, density: bool = True) -> list[
         paths = {}
         for r in range(rows):
             for c in range(cols):
-                name = f"tile.bin_{r * cols + c}"
+                name = tileFileName(lv_props, r * cols + c)
                 if name not in stored:
                     continue
                 fh = session.database_openbinarydoc(tile_doc, name)

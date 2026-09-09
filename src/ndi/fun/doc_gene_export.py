@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .doc_gene import _find_level, exportRegion, readTileFile
+from .doc_gene import _find_level, exportRegion, readTileFile, tileIndexFromName
 
 __all__ = ["exportGef", "exportHdf5", "readGeneList", "readGeneTotals"]
 
@@ -146,8 +146,7 @@ def _gather(session, pyr_doc, bin_size):
 
     xs, ys, gs, cs = [], [], [], []
     for name in sorted(tile_doc.current_file_list(), key=lambda s: int(s.rsplit("_", 1)[1])):
-        t_id = int(name.rsplit("_", 1)[1])
-        tr, tc = divmod(t_id, cols)
+        tr, tc = divmod(tileIndexFromName(lv, name), cols)
         fh = session.database_openbinarydoc(tile_doc, name)
         try:
             t = readTileFile(fh)
