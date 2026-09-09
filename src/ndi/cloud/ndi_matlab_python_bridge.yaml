@@ -1292,7 +1292,7 @@ functions:
   # --- profile.py (singleton manager for cloud login profiles) ---
   - name: profile
     matlab_path: "+ndi/+cloud/profile.m"
-    matlab_last_sync_hash: "33edeb22"
+    matlab_last_sync_hash: "e6a580b34"
     python_path: "ndi/cloud/profile.py"
     functions:
       - matlab: "ndi.cloud.profile.list()"

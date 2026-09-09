@@ -279,7 +279,7 @@ def levelArrays(session, pyr_doc, gene_rows=None, density: bool = True) -> list[
     levels, _frame = levelTable(session, pyr_doc)
     fetcher = _TileFetcher(session)
 
-    from ....fun.doc_gene import _find_level
+    from ....fun.doc_gene import _find_level, tileFileName
 
     out = []
     for lv in levels:
@@ -288,7 +288,7 @@ def levelArrays(session, pyr_doc, gene_rows=None, density: bool = True) -> list[
         rows, cols = lv["tileRows"], lv["tileColumns"]
         lh, lw = lv["levelHeight"], lv["levelWidth"]
 
-        tile_doc, _props = _find_level(session, pyr_doc, b)
+        tile_doc, lv_props = _find_level(session, pyr_doc, b)
         stored = set(tile_doc.current_file_list())
         scale = b if density else 1
 
@@ -312,8 +312,10 @@ def levelArrays(session, pyr_doc, gene_rows=None, density: bool = True) -> list[
             _th=th,
             _tw=tw,
             _scale=scale,
+            _name=tileFileName,
+            _lv=lv_props,
         ):
-            name = f"tile.bin_{r * _cols + c}"
+            name = _name(_lv, r * _cols + c)
             if name not in _stored:
                 return np.zeros((_th, _tw), np.float32)  # missing tile costs nothing
             try:

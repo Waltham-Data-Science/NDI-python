@@ -41,6 +41,20 @@ class ndi_time_clocktype(Enum):
     NO_TIME = "no_time"
     INHERITED = "inherited"
 
+    @property
+    def type(self) -> str:
+        """The clock type string, e.g. ``'utc'`` or ``'dev_local_time'``.
+
+        MATLAB counterpart: ``ndi.time.clocktype``'s public ``type``
+        property (``SetAccess=protected, GetAccess=public``), which holds
+        exactly this string.
+
+        Python models the class as an ``Enum``, so the string lives in
+        ``.value``; this exposes it under the name MATLAB-shaped code reads.
+        See #295.
+        """
+        return self.value
+
     @classmethod
     def from_string(cls, type_str: str) -> ndi_time_clocktype:
         """

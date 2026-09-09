@@ -163,3 +163,31 @@ def test_readGeneList_asserts_zero_based_order(built):
     assert ids[0] == "ENS00000"
     assert names[3] == "Gene3"
     assert len(ids) == len(names)
+
+
+def test_gene_totals_read_back_the_reads_that_were_written(built):
+    """The counts the panel shows must be the counts the pyramid holds."""
+    S, pyr, _x, _y, g, c, ng = built
+    totals, records = doc_gene_export.readGeneTotals(S, pyr)
+    assert totals is not None
+    assert len(totals) == ng
+    expected = np.bincount(g, weights=c, minlength=ng).astype(np.int64)
+    np.testing.assert_array_equal(totals, expected)
+    # n_records is how many stored records a gene appears in, which is a
+    # different number from its reads and must not be confused with it.
+    np.testing.assert_array_equal(records, np.bincount(g, minlength=ng))
+
+
+def test_a_pyramid_without_totals_says_so_rather_than_returning_zeros(built):
+    """A gene with no reads and a gene never counted are different things."""
+
+    class _NoFiles:
+        id = "pyr"
+        document_properties = {"spatialGeneExpressionPyramid": {}}
+
+        def current_file_list(self):
+            return ["something_else.tsv"]
+
+    S, _pyr, *_rest = built
+    totals, records = doc_gene_export.readGeneTotals(S, _NoFiles())
+    assert totals is None and records is None

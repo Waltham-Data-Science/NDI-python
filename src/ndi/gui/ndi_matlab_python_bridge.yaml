@@ -199,6 +199,14 @@ classes:
       this side. The filter (contains / begins with / ends with over a chosen
       column) matches.
 
+      NDI-python#295: the MATLAB properties this port does not expose under
+      MATLAB's name are enumerated in tests/bridge_property_allowlist.yaml,
+      with a reason each. They are MATLAB graphics handles or MATLAB-drawing
+      settings that a Qt port has nothing to put behind, plus widget
+      attributes spelled in PEP 8. Every MATLAB property that holds a VALUE
+      -- Value, Size, Location, Title, UpdateInterval, Tag, Progress, State --
+      does carry MATLAB's name here and is checked by the property gate.
+
     properties:
       - name: fullDocuments
         type_matlab: "ndi.document[]"
@@ -425,6 +433,14 @@ classes:
       code that neither this container nor CI can execute, and writing it
       unexecuted is how a plausible-looking wrong answer gets committed. The
       state machine it needs is now here and tested.
+
+      NDI-python#295: the MATLAB properties this port does not expose under
+      MATLAB's name are enumerated in tests/bridge_property_allowlist.yaml,
+      with a reason each. They are MATLAB graphics handles or MATLAB-drawing
+      settings that a Qt port has nothing to put behind, plus widget
+      attributes spelled in PEP 8. Every MATLAB property that holds a VALUE
+      -- Value, Size, Location, Title, UpdateInterval, Tag, Progress, State --
+      does carry MATLAB's name here and is checked by the property gate.
 
     properties:
       - name: editable
@@ -822,20 +838,40 @@ ported_late:
 
   - name: GEFManager
     matlab_path: "+ndi/+gui/+app/GEFManager.m"
-    matlab_last_sync_hash: "33edeb22"
-    status: matlab_only
+    matlab_last_sync_hash: "06f31a4e5"
+    status: porting_deferred
     decision_log: >
-      MATLAB App Designer window that lists, adds and removes spatial
-      transcriptomics pyramids in a session, and drives the .gef /
-      cellbin .h5ad ingest path with a confirm step between file choice
-      and the write. Renamed from GeneIngest to GEFManager on NDI-matlab
-      main to match the pattern (LightsheetZarrManager, and future
-      per-format managers). Its ingest-time work lives in
-      +fun/+doc/+gene entry points (fromGEF, fromCellBin, makeSourceFile,
-      readNotes, tilePath) which are recorded separately in
-      src/ndi/fun/; interactive viewing is separately napari's, through
-      ndi.gui.app.genepyramid on the Python side. Recorded matlab_only
-      here because the Python surface is the napari CLI + reader, not a
-      MATLAB App Designer window; a Python-hosted equivalent would land
-      as its own class when one is planned, mirroring the LightsheetZarr
-      layout.
+      MATLAB App Designer window that lists, views, adds and removes
+      spatial transcriptomics pyramids in a session, and drives the .gef
+      / cellbin .h5ad ingest path with a confirm step between file choice
+      and the write. Added in VH-Lab/NDI-matlab PR #933 as GeneIngest and
+      renamed there in PR #977, which also gave it a View button. Named
+      alongside the +fun/+doc/+gene entry points (fromGEF, fromCellBin,
+      makeSourceFile, readNotes, tilePath) that this app calls, all
+      recorded not_yet_ported in src/ndi/fun/. Python has the pyramid
+      readers and writers (ndi.fun.doc_gene) but no session-scoped ingest
+      UI over them; the app is the natural place for one and lands with a
+      non-interactive or navigator-integrated equivalent.
+      ONE PART OF IT IS ALREADY PORTED, in the other direction. View
+      draws nothing in MATLAB: it builds a command line for the napari
+      viewer in THIS package -- ndi.gui.app.genepyramid.cli, the
+      napariViewGEF console script -- and runs it. So what stays unported
+      is the ingest and the listing; the viewing the MATLAB app offers is
+      this side's, reached across a process boundary rather than
+      reimplemented.
+
+      NDI-matlab 92ddd79c1 is styling only: a paper() helper puts the
+      uitable, uitextarea, uilistbox and uieditfield on the cloud
+      palette's white body, since the figure and its layouts were already
+      on c.offWhite while the controls kept MATLAB's own grey. The Python
+      side made the SAME correction independently and in its own idiom --
+      the napari viewer sets the light theme and styles its dock panels
+      from ndi.gui.cloud_colors, the identical palette. Nothing to port:
+      these are two different windows that agreed to look alike, not one
+      window and its port.
+
+      NDI-matlab cf0983b5c made the View dialog non-modal -- onView no
+      longer ends in uiwait -- and gave the app an onClose that takes the
+      dialog with it. Nothing to port: the Python side draws no dialog at
+      all. View builds a command line and runs napariViewGEF, which is
+      already its own process and has never blocked anything.

@@ -266,6 +266,21 @@ class ndi_database:
         self._driver = SQLiteDriver(db_path, **backend_kwargs)
 
     @property
+    def path(self) -> Path:
+        """The file system path to the database.
+
+        MATLAB counterpart: ``ndi.database``'s public ``path`` property
+        (``SetAccess=protected, GetAccess=public``), "the file system or
+        remote path to the database".
+
+        An alias for :attr:`session_path`, which is the same value under the
+        Python name. Both are kept: ``session_path`` is what this class is
+        constructed with and what the rest of the port uses, and ``path`` is
+        what MATLAB-shaped code asks for. See #295.
+        """
+        return self.session_path
+
+    @property
     def database_path(self) -> Path:
         """Path to the SQLite database file."""
         return self.session_path / self._db_name / "did-sqlite.sqlite"

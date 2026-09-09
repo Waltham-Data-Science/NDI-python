@@ -43,6 +43,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="comma list of gene symbols or accessions; default is every gene",
     )
     p.add_argument(
+        "--gene-layers",
+        default="",
+        metavar="A:red,B:cyan",
+        help="open these genes as their own additive layers on top of the "
+        "base image, optionally each in a named colormap. Different from "
+        "--genes, which filters the base layer to a subset and leaves one "
+        "picture: this keeps the base and adds a layer per gene, which is "
+        "what makes two genes comparable. A gene with no colour takes the "
+        "next one from the cycle. Colormap names may contain spaces "
+        "(napari ships 'bop orange'), so quote the whole value.",
+    )
+    p.add_argument(
         "--no-density",
         action="store_true",
         help="show raw summed counts rather than counts per base pixel. "
@@ -60,6 +72,35 @@ def build_parser() -> argparse.ArgumentParser:
         "Otherwise a document id, or a directory holding cells.tsv as "
         "extract_cells.py writes it.",
     )
+    p.add_argument(
+        "--outlines",
+        action="store_true",
+        help="draw cell boundary polygons, not just centroids. Needs "
+        "--cells and a cells document whose contours_present is 1.",
+    )
+    p.add_argument(
+        "--name",
+        default="",
+        metavar="TEXT",
+        help="name for the image layer. Default is the pyramid's label, "
+        "which the ingest usually took from the file, so it names the "
+        "SECTION rather than what is being shown.",
+    )
+    p.add_argument(
+        "--labels",
+        default="",
+        metavar="A,B",
+        help="which cell type labelings to show, by name; 'none' shows no "
+        "labeling panel. Default shows every one the cells document has, "
+        "each with its own switch, and names any pair that says the same "
+        "thing about the section -- a subclass call and the clustering it "
+        "was transferred onto -- so you can switch one off.",
+    )
+    p.add_argument(
+        "--no-controls",
+        action="store_true",
+        help="do not dock the gene / density panel",
+    )
     p.add_argument("--list", action="store_true", help="list the pyramids and exit")
     p.add_argument(
         "--report",
@@ -69,10 +110,64 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _open_session(path):
+def _asDataset(path):
+    """Open PATH as a dataset. A named function, not an inline import, so
+    a test can stand in for it: what _open_session does AROUND the two
+    readings -- which it prefers, and that a failure of one does not lose
+    the other -- is not about how either is constructed."""
+    from ndi.dataset import ndi_dataset_dir
+
+    return ndi_dataset_dir(path)
+
+
+def _asSession(path):
+    """Open PATH as a session. Named for the same reason as _asDataset,
+    and with more cause: ``ndi.session.dir`` resolves to the CLASS rather
+    than the module (the package attribute shadows the submodule), so
+    patching it where it is imported does not work."""
     from ndi.session.dir import ndi_session_dir
 
     return ndi_session_dir(path)
+
+
+def _open_session(path):
+    """Open PATH, whether it holds a session or a downloaded dataset.
+
+    THE TWO LOOK IDENTICAL ON DISK. A dataset keeps its database at
+    <path>/.ndi exactly as a session does, so ndi_session_dir opens a
+    downloaded dataset without complaint -- and then finds almost
+    nothing in it. A dataset's documents may live in LINKED SESSIONS,
+    and only ndi_dataset.database_search follows those links; the
+    session reader looks in the dataset's own database and stops there.
+
+    The symptom is a downloaded dataset reporting "no
+    spatialGeneExpressionPyramid" while the same directory opened in
+    MATLAB as an ndi.dataset.dir lists the pyramid and its levels. The
+    path is right, the data is there, and the reader is looking one
+    level too shallow.
+
+    So the dataset reading is tried first and kept when it finds
+    pyramids. A plain session opened as a dataset simply has no linked
+    sessions and answers the same as before, but that is not relied on:
+    if the dataset reading raises, or finds nothing where the session
+    reading finds something, the session reading wins.
+    """
+    opened = None
+    for describe in (_asDataset, _asSession):
+        try:
+            candidate = describe(path)
+        except Exception:  # noqa: BLE001 - the other reading may still work
+            continue
+        try:
+            if _pyramids(candidate):
+                return candidate
+        except Exception:  # noqa: BLE001 - likewise
+            continue
+        if opened is None:
+            opened = candidate
+    if opened is None:
+        raise ValueError(f"{path} could not be opened as either an NDI session or a dataset")
+    return opened
 
 
 def _pyramids(session):
@@ -139,7 +234,81 @@ def _resolve_cells(session, pyr_doc, spec: str):
         )
     cols, info = readCells(session, docs[0])
     info["source"] = docs[0].id
+    # The document itself, not just its id: the cell-type panel needs it to
+    # find the cellTypeLabels that depend on it, and re-querying by id in
+    # the viewer would be the same search done twice.
+    info["document"] = docs[0]
     return cols, info
+
+
+def _resolve_labelings(spec: str):
+    """--labels into what openPyramid wants: names, none of them, or None.
+
+    ``none`` is an EMPTY LIST rather than None, because the two mean
+    different things here: no names asked for, against no choice made.
+    """
+    spec = (spec or "").strip()
+    if not spec:
+        return None
+    if spec.lower() == "none":
+        return []
+    return [s.strip() for s in spec.split(",") if s.strip()]
+
+
+def _resolve_outlines(session, pyr_doc, spec: str, cells_info, cells=None):
+    """Boundary polygons for the cells document --cells resolved.
+
+    Returns None after printing why, so main can exit 1. A directory of
+    extracted cells is refused rather than half-supported: contours.bin
+    is read out of the DOCUMENT, and pretending otherwise would fail
+    later with a message about a missing file rather than about the
+    thing the caller actually asked for.
+    """
+    import os
+
+    from ndi.fun.doc_gene import readContours
+    from ndi.query import ndi_query
+
+    if spec != "auto" and os.path.isdir(spec):
+        print(
+            "--outlines reads contours.bin from the cells DOCUMENT, and "
+            f"{spec} is a directory. Drop the path from --cells to use the "
+            "pyramid's own cells document.",
+            file=sys.stderr,
+        )
+        return None
+
+    if cells_info is not None and not cells_info.get("contoursPresent"):
+        print(
+            "this cells document has contours_present 0: it was written "
+            "without boundaries, so there is nothing to draw. Re-ingest the "
+            "cellbin with contours.",
+            file=sys.stderr,
+        )
+        return None
+
+    docs = session.database_search(
+        ndi_query("").isa("spatialGeneExpressionCells")
+        & ndi_query("").depends_on("spatialGeneExpressionPyramid_id", pyr_doc.id)
+    )
+    if spec != "auto":
+        docs = [d for d in docs if d.id == spec]
+    if len(docs) != 1:
+        print(f"expected one cells document for --outlines, found {len(docs)}", file=sys.stderr)
+        return None
+
+    try:
+        polys, info = readContours(session, docs[0], cells=cells)
+    except Exception as e:
+        print(f"could not read contours: {e}", file=sys.stderr)
+        return None
+
+    drawn = sum(1 for p in polys if len(p))
+    print(
+        f"[outlines] {drawn} of {info['nCells']} cells have a boundary "
+        f"({info['contourReference']}-referenced, {info['nVerticesTotal']} vertices)"
+    )
+    return polys
 
 
 def _resolve_genes(session, pyr_doc, spec: str):
@@ -172,11 +341,28 @@ def _resolve_genes(session, pyr_doc, spec: str):
     return sorted(set(rows))
 
 
+def _resolve_gene_layers(spec: str):
+    """``--gene-layers`` to the pairs the gene panel opens with.
+
+    Parsed here rather than in the panel so a malformed value is a
+    startup error rather than a panel that silently opens fewer layers
+    than were asked for. Whether the SYMBOLS exist is the panel's to
+    answer -- it holds the gene list, and it says so on the panel.
+    """
+    from .controls import parseGeneLayers
+
+    return parseGeneLayers(spec) or None
+
+
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
 
-    session = _open_session(args.session)
-    docs = _pyramids(session)
+    from .progress import stage
+
+    with stage(f"opening the session at {args.session}"):
+        session = _open_session(args.session)
+    with stage("finding the pyramids"):
+        docs = _pyramids(session)
 
     if not docs:
         print(f"no spatialGeneExpressionPyramid in {args.session}", file=sys.stderr)
@@ -201,8 +387,21 @@ def main(argv=None) -> int:
             print(_describe(d), file=sys.stderr)
         return 1
 
+    if args.outlines and not args.cells:
+        print(
+            "--outlines needs --cells: the boundaries live on the cells "
+            "document, and centroid-relative vertices need the centroids "
+            "to be placed at all.",
+            file=sys.stderr,
+        )
+        return 1
+
     gene_rows = _resolve_genes(session, pyr, args.genes)
-    cells, cells_info = _resolve_cells(session, pyr, args.cells)
+    import contextlib
+
+    reading_cells = stage("reading the cell table") if args.cells else contextlib.nullcontext()
+    with reading_cells:
+        cells, cells_info = _resolve_cells(session, pyr, args.cells)
     density = not args.no_density
 
     if args.report:
@@ -225,7 +424,12 @@ def main(argv=None) -> int:
             if cells_info.get("segmentationMethod"):
                 print(f"          segmented by {cells_info['segmentationMethod']}")
             if cells_info.get("contoursPresent"):
-                print("          contours present but not read; centroids only")
+                print(
+                    f"          contours present ({cells_info.get('contourReference')}"
+                    f"-referenced); --outlines draws them"
+                )
+            else:
+                print("          no contours in this document; centroids only")
         print(f"  {'bin':>5} {'height':>8} {'width':>8} {'tiles':>12}")
         for lv in levels:
             print(
@@ -239,7 +443,30 @@ def main(argv=None) -> int:
     overlay = None
     if cells is not None:
         overlay = {"x": cells["x"], "y": cells["y"]}
-    openPyramid(session, pyr, gene_rows=gene_rows, density=density, cells=overlay)
+
+    polys = None
+    if args.outlines:
+        with stage("reading the cell boundaries"):
+            # The centroids are handed over rather than re-read: the
+            # boundaries are stored relative to them, and cells.tsv is
+            # the slower of the two files to parse.
+            polys = _resolve_outlines(session, pyr, args.cells, cells_info, cells)
+        if polys is None:
+            return 1
+
+    openPyramid(
+        session,
+        pyr,
+        gene_rows=gene_rows,
+        density=density,
+        cells=overlay,
+        outlines=polys,
+        cells_doc=(cells_info or {}).get("document"),
+        controls=not args.no_controls,
+        name=args.name or None,
+        labelings=_resolve_labelings(args.labels),
+        gene_layers=_resolve_gene_layers(args.gene_layers),
+    )
     return 0
 
 

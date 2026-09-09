@@ -399,7 +399,9 @@ def makePyramid(
     gene_list_doc,
     subjectID: str,
     binSizes=(1, 2, 4, 8, 16, 32),
-    grid: int = 9,
+    grid: int | None = None,
+    tileBudgetBytes: int = 50 * 2**20,
+    gridRange=(3, 64),
     basePixelSize=(0.5, 0.5),
     pixelSizeUnits: str = "micrometer",
     label: str = "",
@@ -407,6 +409,7 @@ def makePyramid(
     chipSerial: str = "",
     pipelineVersion: str = "",
     origin=None,
+    progressFcn=None,
 ):
     """Bin flat spatial records into a tiled pyramid and store its documents.
 
@@ -432,9 +435,28 @@ def makePyramid(
             the step's AREA factor while leaving the mean unchanged, so
             uniform small ratios zoom most smoothly.
         grid: tile grid, ``grid`` by ``grid`` at EVERY level. Constant
-            because nonzeros barely fall with bin size, so every level
-            wants comparable tiling and a viewport maps to tile indices
-            once, independent of zoom.
+            across levels because nonzeros barely fall with bin size, so
+            every level wants comparable tiling and a viewport maps to
+            tile indices once, independent of zoom. ``None``, the default,
+            SIZES IT FROM THE DATA: a grid is a fixed fraction of the
+            extent, so the same 9x9 that gives a mouse section 20 MB tiles
+            gave a real ferret hemisphere 257 MB ones.
+        tileBudgetBytes: what the automatic grid aims for in the BIGGEST
+            tile at the finest level, not the average one. Tissue does not
+            spread evenly over its bounding box, so the densest tile of a
+            real section runs a few times the median (2.5x, measured) and
+            budgeting the median misses by that factor. Bigger tiles mean
+            fewer files to store and upload; smaller tiles mean less to
+            fetch before a viewer can draw. Ignored when ``grid`` is set.
+        gridRange: bounds on the automatic grid. The upper bound is a file
+            COUNT limit rather than a geometric one -- ``grid**2`` files
+            per level, every one of them written, stored and uploaded.
+        progressFcn: called as ``progressFcn(fraction, text)`` with
+            ``fraction`` in [0, 1] across this call. This is the slow half
+            of an ingest and reporting only at its ends makes minutes of
+            it indistinguishable from a hang, so the grid choice, every
+            level and every band within a level report. ``None`` is
+            silent.
         basePixelSize: (x, y) physical size of one base pixel.
         origin: ``(min_x, min_y)`` of the tiled region, or None to take it
             from the data. Prefer the acquisition's own bounding box when
@@ -482,6 +504,26 @@ def makePyramid(
     extent_y = int(y.max()) - min_y + 1
     bins = sorted(int(b) for b in binSizes)
 
+    if grid is None:
+        _tick(progressFcn, 0.0, "Choosing the tile grid...")
+        grid, est_bytes = _choose_grid(
+            x, y, min_x, min_y, extent_x, extent_y, bins[0], tileBudgetBytes, gridRange
+        )
+        # Said out loud, because the file COUNT is a cost this choice
+        # cannot see: grid**2 files per level, all of which have to be
+        # written, stored and uploaded. A caller who cares more about that
+        # than about fetch latency raises tileBudgetBytes or fixes grid.
+        _tick(
+            progressFcn,
+            0.0,
+            f"Tile grid {grid}x{grid}: {grid * grid:,} files per level, "
+            f"biggest tile about {_human_bytes(est_bytes)}.",
+        )
+    else:
+        grid = int(grid)
+        if grid < 1:
+            raise ValueError("grid must be a positive integer, or None to size it from the data")
+
     pyr_doc = (
         _blank(
             "spatialGeneExpressionPyramid",
@@ -510,6 +552,7 @@ def makePyramid(
     pyr_doc = pyr_doc.set_dependency_value("geneList_id", gene_list_doc.id)
     pyr_doc = pyr_doc.set_dependency_value("subject_id", subjectID)
 
+    _tick(progressFcn, 0.0, "Summing per-gene totals...")
     totals_path = _write_gene_totals(gene_index, count, n_genes)
     try:
         pyr_doc = _store_doc(session, pyr_doc, ["gene_totals.tsv"], [totals_path])
@@ -517,27 +560,36 @@ def makePyramid(
         if os.path.exists(totals_path):
             os.unlink(totals_path)
 
-    tile_docs = [
-        _make_level(
-            session,
-            x,
-            y,
-            gene_index,
-            count,
-            min_x,
-            min_y,
-            extent_x,
-            extent_y,
-            b,
-            grid,
-            n_genes,
-            pyr_doc,
-            basePixelSize,
-            pixelSizeUnits,
-            subjectID,
+    # Equal shares per level. Every level sorts the SAME record array --
+    # coarsening merges pixels but leaves the genes distinct, so the record
+    # count barely falls with bin size and bin32 costs about what bin1
+    # costs. Weighting the shares by output size would report a lie.
+    tile_docs = []
+    for k, b in enumerate(bins):
+        lo = 0.05 + 0.95 * k / len(bins)
+        hi = 0.05 + 0.95 * (k + 1) / len(bins)
+        tile_docs.append(
+            _make_level(
+                session,
+                x,
+                y,
+                gene_index,
+                count,
+                min_x,
+                min_y,
+                extent_x,
+                extent_y,
+                b,
+                grid,
+                n_genes,
+                pyr_doc,
+                basePixelSize,
+                pixelSizeUnits,
+                subjectID,
+                _level_progress(progressFcn, lo, hi, k + 1, len(bins), b),
+            )
         )
-        for b in bins
-    ]
+    _tick(progressFcn, 1.0, "Pyramid complete.")
     return pyr_doc, tile_docs
 
 
@@ -558,70 +610,51 @@ def _make_level(
     base_pixel_size,
     pixel_size_units,
     subject_id,
+    progress=None,
 ):
-    """Build and store one resolution level."""
+    """Build and store one resolution level.
+
+    ONE BAND OF TILE ROWS AT A TIME, and this is what decides how much
+    memory a section needs. A tile spans ``th`` level rows and the full
+    width of its row, so records in different tile rows never share a tile
+    and can be sorted, collapsed and written entirely apart. Doing the
+    whole level at once means the sort's working set scales with the
+    section; doing it a band at a time means it scales with the section
+    DIVIDED BY THE GRID -- and because the grid is chosen from the data, a
+    section big enough to need the chunking is exactly the one that gets a
+    fine grid to chunk with.
+
+    The cost is ``grid`` passes over the coordinates to select the bands,
+    cheap next to ``grid`` sorts, and a build that is somewhat slower and
+    fits. Nothing about what is written changes: a band holds whole tiles.
+    """
     lw = -(-extent_x // b)  # ceil
     lh = -(-extent_y // b)
     tw = -(-lw // grid)
     th = -(-lh // grid)
-    n_tiles = grid * grid
-
-    px = (x - min_x) // b
-    py = (y - min_y) // b
-    tcol = px // tw
-    trow = py // th
-    xl = px - tcol * tw
-    yl = py - trow * th
-    tid = trow * grid + tcol
-
-    # ONE sort, on a TILE-MAJOR key, so tile boundaries fall out of the
-    # sorted order with a searchsorted instead of needing a second sort.
-    #
-    # int64 from the first term. This product reaches ~1e13 on a real
-    # section; under NumPy's weak promotion an int32 array times a Python
-    # int stays int32, which wraps SILENTLY at 2.15e9. Distinct
-    # (pixel, gene) pairs then collide and the dedup below merges them --
-    # about 1.7M spurious merges on one measured section, matching the
-    # n**2/2**33 collision estimate. Assert rather than trust: no fixture
-    # small enough to run quickly can reach the overflow.
-    key = ((tid.astype(np.int64) * th + yl) * tw + xl) * n_genes + gi
-    if key.dtype != np.int64:
-        raise TypeError(f"sort key must be int64, got {key.dtype}")
-    span = np.int64(th) * tw * n_genes
-    if n_tiles * span >= 2**63:
-        raise OverflowError(f"sort key would reach {n_tiles * span:,}, past int64")
-
-    order = np.argsort(key, kind="stable")
-    key = key[order]
-    xl = xl[order]
-    yl = yl[order]
-    g = gi[order]
-    # int32 is enough: a group sums at most b*b base records.
-    cc = c[order].astype(np.int64)
-
-    # Collapse duplicate (pixel, gene) pairs created by binning.
-    new = np.empty(len(key), bool)
-    new[0] = True
-    np.not_equal(key[1:], key[:-1], out=new[1:])
-    starts = np.flatnonzero(new)
-    cc = np.add.reduceat(cc, starts)
-    xl, yl, g, key = xl[starts], yl[starts], g[starts], key[starts]
-    cc = np.minimum(cc, 65535)  # data_type_count is uint16
-
-    tid_sorted = key // span
-    bounds = np.searchsorted(tid_sorted, np.arange(n_tiles + 1))
 
     names, paths = [], []
     tmpdir = tempfile.mkdtemp()
     try:
-        for t in range(n_tiles):
-            lo, hi = int(bounds[t]), int(bounds[t + 1])
-            if lo == hi:
-                continue  # tiles with no data are not written
-            p = os.path.join(tmpdir, f"tile.bin_{t}")
-            writeTileFile(p, xl[lo:hi], yl[lo:hi], g[lo:hi], cc[lo:hi])
-            names.append(f"tile.bin_{t}")
-            paths.append(p)
+        for trow in range(grid):
+            _tick(progress, 0.05 + 0.85 * trow / grid, f"tile row {trow + 1} of {grid}...")
+            # The band's bounds in SOURCE units. Computing each record's
+            # level row to compare against would allocate the full-length
+            # array this loop exists not to allocate; the bounds map back
+            # into source units exactly, so the comparison happens on the
+            # coordinates as they are.
+            y_lo = min_y + trow * th * b
+            y_hi = y_lo + th * b
+            sel = (y >= y_lo) & (y < y_hi)
+            if not sel.any():
+                continue
+            for name, data in _make_band(
+                x[sel], y[sel], gi[sel], c[sel], min_x, min_y, b, grid, tw, th, n_genes
+            ):
+                p = os.path.join(tmpdir, name)
+                writeTileFile(p, *data)
+                names.append(name)
+                paths.append(p)
 
         doc = (
             _blank(
@@ -650,12 +683,14 @@ def _make_level(
                     "data_type_coordinate": "uint16",
                     "tile_compression": "none",
                     "tile_format_version": 1,
+                    "tile_index_origin": TILE_INDEX_ORIGIN,
                 },
             )
             + session.newdocument()
         )
         doc = doc.set_dependency_value("spatialGeneExpressionPyramid_id", pyr_doc.id)
         doc = doc.set_dependency_value("subject_id", subject_id)
+        _tick(progress, 0.92, f"storing {len(names)} tiles...")
         return _store_doc(session, doc, names, paths)
     finally:
         for p in paths:
@@ -663,6 +698,179 @@ def _make_level(
                 os.unlink(p)
         if os.path.isdir(tmpdir):
             os.rmdir(tmpdir)
+
+
+def _make_band(x, y, gi, c, min_x, min_y, b, grid, tw, th, n_genes):
+    """Collapse one band of tile rows, yielding ``(name, arrays)`` per tile.
+
+    THE KEY SORTS TILE-MAJOR: tile index, then the pixel within the tile,
+    then the gene. Two things follow.
+
+    Tile boundaries fall out of the sorted order, so no second sort and no
+    pass per grid cell is needed to find them -- which matters once the
+    grid is sized from the data and can reach 64x64, i.e. 4096 cells.
+
+    And the key already encodes the tile, the tile-local pixel AND the
+    gene, so none of them has to survive the sort: they are DECODED back
+    out of it afterwards. Two full-length arrays go through the sort where
+    six used to. The decode is exact for as long as the int64 guard below
+    holds, which is the condition the key already needed.
+
+    int64 from the first term. This product reaches ~1e13 on a real
+    section; under NumPy's weak promotion an int32 array times a Python int
+    stays int32, which wraps SILENTLY at 2.15e9. Distinct (pixel, gene)
+    pairs then collide and the dedup merges them -- about 1.7M spurious
+    merges on one measured section, matching the n**2/2**33 collision
+    estimate. Assert rather than trust: no fixture small enough to run
+    quickly can reach the overflow.
+    """
+    py = (y - min_y) // b
+    trow = py // th
+    yl = py - trow * th
+    del py
+    px = (x - min_x) // b
+    tcol = px // tw
+    xl = px - tcol * tw
+    del px
+    tid = trow * grid + tcol
+    del trow, tcol
+
+    key = ((tid.astype(np.int64) * th + yl) * tw + xl) * n_genes + gi
+    if key.dtype != np.int64:
+        raise TypeError(f"sort key must be int64, got {key.dtype}")
+    span = np.int64(th) * tw * n_genes
+    if grid * grid * span >= 2**63:
+        raise OverflowError(f"sort key would reach {grid * grid * span:,}, past int64")
+    del tid, xl, yl
+
+    order = np.argsort(key, kind="stable")
+    key = key[order]
+    # int64 because a group sums at most b*b base records.
+    cc = c[order].astype(np.int64)
+    del order
+
+    # Collapse duplicate (pixel, gene) pairs created by binning.
+    new = np.empty(len(key), bool)
+    new[0] = True
+    np.not_equal(key[1:], key[:-1], out=new[1:])
+    starts = np.flatnonzero(new)
+    del new
+    cc = np.minimum(np.add.reduceat(cc, starts), 65535)  # data_type_count is uint16
+    key = key[starts]
+    del starts
+
+    # Decode the survivors back out of the key. xl and yl come out already
+    # tile-local, which is the form writeTileFile wants.
+    g, key = key % n_genes, key // n_genes
+    xl, key = key % tw, key // tw
+    yl, tid = key % th, key // th
+    del key
+
+    # One contiguous slice per occupied tile. Tiles with no data are not
+    # written at all, so the stored series has holes in it and a
+    # document's file list, not a walk, is what reports which exist.
+    t_start = np.flatnonzero(np.r_[True, tid[1:] != tid[:-1]])
+    t_end = np.r_[t_start[1:], len(tid)]
+    for lo, hi in zip(t_start, t_end):
+        name = f"tile.bin_{int(tid[lo]) + TILE_INDEX_ORIGIN}"
+        yield name, (xl[lo:hi], yl[lo:hi], g[lo:hi], cc[lo:hi])
+
+
+def _tick(fcn, frac, txt):
+    """Silent when no handle was given, so every phase can report progress
+    without each call site testing for a display first."""
+    if fcn is None:
+        return
+    fcn(float(frac), txt)
+
+
+def _level_progress(fcn, lo, hi, k, n_levels, b):
+    """Re-scale a caller's [0, 1] handle onto the ``[lo, hi]`` slice of it,
+    so a level reports its own progress in its own terms without knowing
+    where in the whole build it sits. ``None`` stays ``None``."""
+    if fcn is None:
+        return None
+
+    def sub(frac, txt):
+        fcn(lo + (hi - lo) * frac, f"Level {k} of {n_levels} (bin {b}): {txt}")
+
+    return sub
+
+
+def _human_bytes(n):
+    """Progress text, so a rounded human unit rather than a byte count."""
+    units = ("B", "KB", "MB", "GB", "TB")
+    k = 0
+    n = float(n)
+    while n >= 1024 and k < len(units) - 1:
+        n /= 1024
+        k += 1
+    return f"{n:.1f} {units[k]}"
+
+
+def _choose_grid(x, y, min_x, min_y, extent_x, extent_y, b1, budget, g_range):
+    """Size the tile grid from where the data actually is.
+
+    The thing being budgeted is the LARGEST tile at the FINEST level: the
+    one a viewer waits on and the one that has to be uploaded. Two facts
+    make the obvious estimate -- total bytes over ``grid**2`` -- wrong by a
+    factor of a few:
+
+    1. Tissue does not fill its bounding box, and where it is present it
+       is not uniform. On a real ferret hemisphere the densest tile ran
+       2.5x the median, so budgeting the mean tile overshoots by 2.5x.
+    2. Coarser levels are cheaper per record but not by much -- binning
+       merges pixels while the genes in them stay distinct -- so bin1
+       binds and the other levels come along.
+
+    So this histograms the records over the extent and budgets the
+    heaviest cell, rather than assuming they are spread evenly.
+
+    Returns:
+        ``(grid, estimated_biggest_tile_bytes)``.
+    """
+    H = 256  # histogram cells per side
+
+    # Subsample. Choosing a grid does not need every record, and a full
+    # pass would cost two more full-length arrays at exactly the moment
+    # this is trying to save them. Records in a .gef are ordered by GENE,
+    # so a fixed stride is spatially unbiased.
+    n = len(x)
+    step = max(1, -(-n // 20_000_000))
+    cx = np.minimum(((x[::step] - min_x) * H) // extent_x, H - 1).astype(np.int64)
+    cy = np.minimum(((y[::step] - min_y) * H) // extent_y, H - 1).astype(np.int64)
+    h = np.bincount(cy * H + cx, minlength=H * H).reshape(H, H)
+    frac = h / h.sum()  # share of all records, per histogram cell
+    del cx, cy, h
+
+    # Bytes a record costs in tile format version 1: 4 for the gene index,
+    # 2 for the count, plus the per-pixel row header amortised over the
+    # genes detected in that pixel. Measured at ~10.6 on a full section;
+    # 11 is used so the estimate errs towards a smaller tile.
+    bytes_per_record = 11
+
+    g_lo = max(int(g_range[0]), 1)
+    g_hi = max(int(g_range[1]), g_lo)
+    # A tile may not exceed 65536 level-pixels on a side: tile-local
+    # coordinates are uint16. This is a floor on the search, so the
+    # automatic grid never proposes a geometry the writer would refuse.
+    side = max(-(-extent_x // b1), -(-extent_y // b1))
+    g_lo = max(g_lo, -(-side // 65536))
+    g_hi = max(g_hi, g_lo)
+
+    est = float("inf")
+    for g in range(g_lo, g_hi + 1):
+        # Both partitions are uniform over the same extent, so a histogram
+        # cell belongs to the tile containing its centre. The map is the
+        # same along both axes and separable, so aggregating H x H down to
+        # g x g is one indicator matrix applied on each side.
+        m = np.minimum(((np.arange(H) * 2 + 1) * g) // (2 * H), g - 1)
+        a = np.zeros((H, g))
+        a[np.arange(H), m] = 1.0
+        est = float((a.T @ frac @ a).max()) * n * bytes_per_record
+        if est <= budget:
+            return g, est
+    return g_hi, est
 
 
 def _write_gene_totals(gene_index, count, n_genes):
@@ -685,6 +893,58 @@ def _write_gene_totals(gene_index, count, n_genes):
         for i in range(n_genes):
             fh.write(f"{i}\t{int(tot[i])}\t{int(npx[i])}\n")
     return path
+
+
+# The file suffix is ONE-BASED. A DID file series names its first member
+# NAME_1, not NAME_0 -- did.document/addFileSeries takes "ONE-BASED member
+# numbers" and refuses anything else ("Member indices must be positive
+# integers (one-based)"). The tile INDEX stays zero-based, because it is a
+# grid position and index_order defines it as row*tile_columns + column, so
+# the suffix is that index plus this origin.
+#
+# Getting this wrong is not cosmetic: NDI-matlab's uploader walks a legacy
+# NAME# series as NAME1, NAME2, ... and stops at the first name that is not
+# there, because that gap was how it learned where the series ended. A
+# zero-based pyramid therefore hands it a series starting at a name it never
+# probes.
+TILE_INDEX_ORIGIN = 1
+
+
+def tileFileName(tiles_props, index):
+    """Name of the file holding tile *index* of a tiles document.
+
+    *index* is the zero-based grid index (``row * tile_columns + column``
+    for row-major); the returned name carries the document's own origin.
+
+    Pyramids written before the one-based convention was honoured name
+    their first tile ``tile.bin_0`` and record no ``tile_index_origin``,
+    which reads as 0 and keeps them readable. The origin has to be recorded
+    rather than detected: a sparse pyramid whose first tile happens to be
+    empty has no ``_0`` under either convention, so a guess from the stored
+    names would shift every tile by one on the documents it got wrong --
+    a picture that is quietly wrong rather than one that is missing.
+    """
+    try:
+        origin = int(tiles_props.get("tile_index_origin", 0) or 0)
+    except (TypeError, ValueError):
+        origin = 0
+    return f"tile.bin_{int(index) + origin}"
+
+
+def tileIndexFromName(tiles_props, name):
+    """The zero-based grid index of the tile stored under *name*.
+
+    The inverse of :func:`tileFileName`. Readers that walk a document's
+    stored names and work backwards to (row, column) need this: with a
+    one-based origin the suffix is one MORE than the grid index, and
+    reading the suffix as the index puts every tile one cell along its
+    row -- and, for the last tile of a row, into the next row.
+    """
+    try:
+        origin = int(tiles_props.get("tile_index_origin", 0) or 0)
+    except (TypeError, ValueError):
+        origin = 0
+    return int(str(name).rsplit("_", 1)[1]) - origin
 
 
 def _find_level(session, pyr_doc, bin_size):
@@ -746,7 +1006,7 @@ def readViewport(session, pyr_doc, bin_size, rect=None, gene_rows=None, density=
 
     for r in range(y0 // th, min(max(y1 - 1, y0) // th, rows - 1) + 1):
         for c in range(x0 // tw, min(max(x1 - 1, x0) // tw, cols - 1) + 1):
-            name = f"tile.bin_{r * cols + c}"
+            name = tileFileName(lv, r * cols + c)
             if name not in stored:
                 info["tiles_empty"] += 1
                 continue
@@ -803,8 +1063,7 @@ def exportRegion(session, pyr_doc, bin_size, rect=None):
     rows_idx, cols_idx, vals, coords = [], [], [], []
     n_px = 0
     for name in sorted(tile_doc.current_file_list()):
-        t_id = int(name.rsplit("_", 1)[1])
-        tr, tc = divmod(t_id, cols)
+        tr, tc = divmod(tileIndexFromName(lv, name), cols)
         tx0, ty0 = tc * tw, tr * th
         if tx0 >= x1 or tx0 + tw <= x0 or ty0 >= y1 or ty0 + th <= y0:
             continue
@@ -1359,16 +1618,24 @@ def readContourFile(
     vx = np.frombuffer(raw, vt, count=total, offset=pos)
     vy = np.frombuffer(raw, vt, count=total, offset=pos + total * vt.itemsize)
 
-    polys = [
-        np.stack([vx[offsets[i] : offsets[i + 1]], vy[offsets[i] : offsets[i + 1]]], 1)
-        for i in range(n)
-    ]
+    # One (total, 2) array, then SPLIT INTO VIEWS of it. A stack per cell
+    # cost 2.0s on the opossum section's 493,126 cells; this costs 0.4s,
+    # and the whole-file array is what lets readContours place every
+    # vertex in one vectorised addition instead of half a million small
+    # ones. The views share that array, so nothing is copied.
+    xy = np.empty((total, 2), vt)
+    xy[:, 0] = vx
+    xy[:, 1] = vy
+    polys = np.split(xy, offsets[1:-1]) if n else []
     info = {
         "nCells": n,
         "nVerticesTotal": total,
         "vertexType": vertexType,
         "offsetType": offsetType,
         "nVerticesPerCell": nVerticesPerCell,
+        # The flat form, for callers that would otherwise rebuild it.
+        "vertices": xy,
+        "offsets": offsets,
     }
     return polys, info
 
@@ -1630,3 +1897,180 @@ def _cells_doc_count(cells_doc):
     except Exception:
         pass
     return None
+
+
+def readContours(session, cells_doc, cells=None):
+    """Boundary polygons for a cells document, in SOURCE coordinates.
+
+    The document-level companion to :func:`readContourFile`, which parses
+    the bytes. This adds the two things a caller needs and the file does
+    not carry: it finds ``contours.bin`` in the document, and it applies
+    ``contour_reference``.
+
+    THAT SECOND PART IS THE POINT. Vertices are usually stored RELATIVE to
+    their cell's centroid -- that is what makes them fit in int16, and
+    :func:`writeContourFile` refuses absolute coordinates that would wrap
+    -- so a caller that draws :func:`readContourFile`'s output directly
+    puts every outline in a small cluster near the origin. That is a
+    picture of nothing, drawn without an error. Here the centroid is added
+    back, so what comes out is always in the same frame as the centroids
+    from :func:`readCells` and as the pyramid itself.
+
+    Args:
+        session: an ndi.session or ndi.dataset holding the document.
+        cells_doc: a spatialGeneExpressionCells document.
+        cells: the columns :func:`readCells` returns for this same
+            document, when the caller already has them. Only the
+            centroids are used, and only for a centroid-referenced file.
+            Passing them avoids a second parse of cells.tsv, which is the
+            larger of the two files and the slower to parse.
+
+    Returns:
+        ``(polys, info)``. *polys* is one ``(N, 2)`` array of ``[x, y]``
+        per cell in cell_index order; a cell with no usable boundary gets
+        a ``(0, 2)`` array rather than being dropped, so row i here is
+        row i of cells.tsv. *info* is :func:`readContourFile`'s, plus
+        ``contourReference`` and ``nEmpty``.
+
+    Raises:
+        ValueError: if the document was written without contours, if the
+            reference is not one this understands, or if there are not as
+            many centroids as cells to place them on.
+    """
+    c = cells_doc.document_properties["spatialGeneExpressionCells"]
+    if not bool(c.get("contours_present")):
+        raise ValueError(
+            f"spatialGeneExpressionCells {cells_doc.id} has contours_present "
+            f"0: this cell table was written without boundaries. Re-ingest "
+            f"the cellbin with contours to get them."
+        )
+
+    reference = c.get("contour_reference") or "centroid"
+    if reference not in ("centroid", "absolute"):
+        raise ValueError(f"contour_reference is {reference!r}; expected 'centroid' or 'absolute'.")
+
+    fh = session.database_openbinarydoc(cells_doc, "contours.bin")
+    try:
+        # The dtypes are document FIELDS, not constants, so they are passed
+        # through rather than assumed -- the same reason readContourFile
+        # takes them as arguments.
+        polys, info = readContourFile(
+            fh,
+            nVerticesPerCell=int(c.get("n_vertices_per_cell") or 0),
+            vertexType=c.get("data_type_vertex") or _CONTOUR_VERTEX_TYPE,
+            offsetType=c.get("data_type_offset") or _CONTOUR_OFFSET_TYPE,
+        )
+    finally:
+        session.database_closebinarydoc(fh)
+
+    verts = np.asarray(info["vertices"], dtype=float)
+    offsets = info["offsets"]
+    n = info["nCells"]
+
+    if reference == "centroid":
+        # Re-reading cells.tsv here cost a second parse of a 26 MB file --
+        # 3.4s on the opossum section, for centroids the caller had
+        # already read. Passed in, it is free.
+        cols = cells if cells is not None else readCells(session, cells_doc)[0]
+        cx = np.asarray(cols["x"], dtype=float)
+        cy = np.asarray(cols["y"], dtype=float)
+        if len(cx) != n:
+            raise ValueError(
+                f"contours.bin holds {n} cells but cells.tsv "
+                f"holds {len(cx)} rows. Centroid-relative vertices cannot be "
+                f"placed without a centroid each."
+            )
+        # One addition over every vertex, rather than one per cell. Each
+        # vertex takes its own cell's centroid through np.repeat, which
+        # is what makes a per-cell offset expressible as a whole-array
+        # operation: 1.5s in place of 5.3s.
+        counts = np.diff(offsets)
+        verts[:, 0] += np.repeat(cx, counts)
+        verts[:, 1] += np.repeat(cy, counts)
+
+    polys = np.split(verts, offsets[1:-1]) if n else []
+
+    info = dict(info)
+    info["contourReference"] = reference
+    info["nEmpty"] = sum(1 for p in polys if len(p) == 0)
+    return polys, info
+
+
+def readCellTypeLabels(session, labels_doc):
+    """Read ``labels.tsv`` -- one class name per cell.
+
+    The counterpart to :func:`makeCellTypeLabels`, which had no reader.
+
+    ROW ORDER IS THE CONTRACT with cells.tsv, and cell_index is written
+    explicitly rather than inferred, so this returns labels placed BY
+    cell_index rather than in file order. A file that arrived reordered
+    would otherwise give every cell its neighbour's type -- valid-looking
+    and wrong, which is the same failure the writer refuses to create.
+
+    An unlabelled cell is the empty string, not a missing row: a labeling
+    that covers part of the table is normal, and dropping those rows would
+    shift the rest.
+
+    Args:
+        session: an ndi.session or ndi.dataset holding the document.
+        labels_doc: a cellTypeLabels document.
+
+    Returns:
+        ``(labels, info)``. *labels* is a list of str, one per cell, in
+        cell_index order. *info* carries labelName, isUnsupervised,
+        categories (sorted, blanks excluded), nUnlabeled and nCells.
+    """
+    c = labels_doc.document_properties["cellTypeLabels"]
+
+    fh = session.database_openbinarydoc(labels_doc, "labels.tsv")
+    try:
+        text = fh.read().decode("utf-8")
+    finally:
+        session.database_closebinarydoc(fh)
+
+    rows = [ln for ln in text.splitlines() if ln.strip()]
+    if not rows:
+        raise ValueError(f"labels.tsv of {labels_doc.id} is empty.")
+    header = rows[0].split("\t")
+    try:
+        i_idx = header.index("cell_index")
+        i_lab = header.index("label")
+    except ValueError as e:
+        raise ValueError(
+            f"labels.tsv of {labels_doc.id} has header {header!r}; expected "
+            f"cell_index and label."
+        ) from e
+
+    n = int(c.get("n_cells") or (len(rows) - 1))
+    labels = [""] * n
+    for ln in rows[1:]:
+        parts = ln.split("\t")
+        idx = int(parts[i_idx])
+        if 0 <= idx < n:
+            labels[idx] = parts[i_lab] if i_lab < len(parts) else ""
+
+    info = {
+        "labelName": c.get("label_name", ""),
+        "isUnsupervised": bool(c.get("is_unsupervised")),
+        "taxonomyLevel": c.get("taxonomy_level", ""),
+        "assignmentMethod": c.get("assignment_method", ""),
+        "nCells": n,
+        "nUnlabeled": sum(1 for v in labels if not v.strip()),
+        "categories": sorted({v for v in labels if v.strip()}),
+    }
+    return labels, info
+
+
+def findCellTypeLabels(session, cells_doc):
+    """Every cellTypeLabels document belonging to a cells document.
+
+    Returned rather than merged: a cellbin routinely carries a transferred
+    atlas call AND one or more unsupervised clusterings, and they are not
+    interchangeable, so a caller picks.
+    """
+    from ..query import ndi_query
+
+    return session.database_search(
+        ndi_query("").isa("cellTypeLabels")
+        & ndi_query("").depends_on("cells_document_id", cells_doc.id)
+    )

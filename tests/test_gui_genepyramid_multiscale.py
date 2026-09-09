@@ -351,3 +351,64 @@ def test_layer_spec_name_falls_back_when_the_pyramid_has_no_label(tmp_path):
         grid=1,
     )
     assert layerSpec(S, pyr)["name"] == "genes"
+
+
+class TestADatasetCanBeReopenedPerThread:
+    """A downloaded cloud dataset opened in the viewer failed on its first
+    tile with a threading error, not a missing attribute.
+
+    The tile fetcher builds a per-thread session handle by reopening
+    whatever it was given AT ITS OWN PATH -- NDI's database belongs to the
+    thread that opened it, and dask runs blocks on a pool. A session
+    exposes ``path`` and could be reopened; ``ndi_dataset_dir`` kept the
+    same value privately as ``_path`` and could not, so the fetcher had no
+    way to build a handle and said so from the worker thread.
+
+    MATLAB's ``ndi.dataset.dir`` has declared a public ``path`` property
+    since it was written, so this was a parity gap rather than a design
+    choice.
+    """
+
+    def test_a_directory_backed_dataset_reports_its_path(self):
+        from ndi.dataset import ndi_dataset_dir
+
+        assert isinstance(ndi_dataset_dir.path, property)
+
+    def test_the_fetcher_can_reopen_anything_with_a_path(self):
+        from ndi.gui.app.genepyramid.multiscale import _TileFetcher
+
+        class Pathed:
+            def __init__(self, p):
+                self._p = p
+
+            @property
+            def path(self):
+                return self._p
+
+        assert _TileFetcher(Pathed("/tmp/somewhere"))._reopen is not None
+
+    def test_something_with_no_path_is_left_alone(self):
+        """Anything holding a live client or credentials is not duplicated
+        on a guess -- reopening one could re-authenticate per thread."""
+        from ndi.gui.app.genepyramid.multiscale import _TileFetcher
+
+        class Clientish:
+            pass
+
+        assert _TileFetcher(Clientish())._reopen is None
+
+    def test_a_reopened_handle_is_the_same_class_at_the_same_path(self):
+        from ndi.gui.app.genepyramid.multiscale import _TileFetcher
+
+        class Pathed:
+            def __init__(self, p):
+                self._p = p
+
+            @property
+            def path(self):
+                return self._p
+
+        original = Pathed("/tmp/here")
+        rebuilt = _TileFetcher(original)._reopen()
+        assert type(rebuilt) is Pathed
+        assert rebuilt.path == "/tmp/here"

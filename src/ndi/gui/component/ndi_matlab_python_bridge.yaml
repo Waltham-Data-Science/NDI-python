@@ -34,6 +34,14 @@ classes:
       source, matching MATLAB's notify('TaskCompleted', eventData); the
       argument is optional so an existing one-argument listener still works.
 
+      NDI-python#295: the MATLAB properties this port does not expose under
+      MATLAB's name are enumerated in tests/bridge_property_allowlist.yaml,
+      with a reason each. They are MATLAB graphics handles or MATLAB-drawing
+      settings that a Qt port has nothing to put behind, plus widget
+      attributes spelled in PEP 8. Every MATLAB property that holds a VALUE
+      -- Value, Size, Location, Title, UpdateInterval, Tag, Progress, State --
+      does carry MATLAB's name here and is checked by the property gate.
+
     properties:
       - name: Title
         type_matlab: "char"
@@ -436,6 +444,14 @@ classes:
       PySide6 widget, so those have no counterpart by design and the widget is
       reached through the extra `widget` accessor. Nothing to port.
 
+      NDI-python#295: the MATLAB properties this port does not expose under
+      MATLAB's name are enumerated in tests/bridge_property_allowlist.yaml,
+      with a reason each. They are MATLAB graphics handles or MATLAB-drawing
+      settings that a Qt port has nothing to put behind, plus widget
+      attributes spelled in PEP 8. Every MATLAB property that holds a VALUE
+      -- Value, Size, Location, Title, UpdateInterval, Tag, Progress, State --
+      does carry MATLAB's name here and is checked by the property gate.
+
     properties:
       - name: Value
         type_matlab: "double"
@@ -504,6 +520,14 @@ classes:
       that does have PySide6 gets a Qt failure where MATLAB degrades quietly.
       Porting a silent mode is a design decision for a maintainer rather than
       something to invent while dating a hash.
+
+      NDI-python#295: the MATLAB properties this port does not expose under
+      MATLAB's name are enumerated in tests/bridge_property_allowlist.yaml,
+      with a reason each. They are MATLAB graphics handles or MATLAB-drawing
+      settings that a Qt port has nothing to put behind, plus widget
+      attributes spelled in PEP 8. Every MATLAB property that holds a VALUE
+      -- Value, Size, Location, Title, UpdateInterval, Tag, Progress, State --
+      does carry MATLAB's name here and is checked by the property gate.
 
     properties:
       - name: ScreenFrac

@@ -20,6 +20,16 @@ classes:
     matlab_last_sync_hash: "fe64a9f5"
     python_path: "ndi/cloud/admin/crossref.py"
     python_class: "CrossrefConstants"
+
+    decision_log: >
+      NDI-python#295: MATLAB declares these as `properties (Constant)`, so
+      every one is public, and this port spells them UPPER_SNAKE per PEP 8
+      (DOIPrefix -> DOI_PREFIX, and so on). Three -- DatabaseDescription,
+      DatabaseOrganization, DatabaseCreationDate -- are not ported at all,
+      because the Python deposit builder writes the description and
+      organisation from the dataset's own metadata rather than from fixed
+      database-level constants. Enumerated per property in
+      tests/bridge_property_allowlist.yaml, which the property gate reads.
     properties:
       - name: DOI_PREFIX
         type_python: "str"

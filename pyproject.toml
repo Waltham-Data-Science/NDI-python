@@ -60,6 +60,16 @@ dependencies = [
     "pydantic>=2.0",
     "openMINDS>=0.2.0",
     "scipy>=1.9.0",
+    # ndi.cloud.profile documents the AES-128/CBC file backend as its
+    # DEFAULT, and that backend needs cryptography. Without it the
+    # detector falls through to the in-memory backend, which persists
+    # nothing and reads nothing -- so a clean install could never load a
+    # saved cloud password, and said so only through a logger warning.
+    # Not an extra: ndi.cloud is part of the package rather than an
+    # opt-in surface, and a default that nothing installs is not a
+    # default. keyring is preferred when present but stays optional,
+    # since it is the OS-keychain path rather than the portable one.
+    "cryptography>=41.0",
 ]
 
 [project.optional-dependencies]

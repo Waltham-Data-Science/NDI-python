@@ -135,6 +135,29 @@ classes:
           MATLAB uses struct array with channeltype and channellist fields.
           Python uses list of (channeltype, channellist) tuples.
 
+      - name: channeltype
+        type_matlab: "cell array of char"
+        type_python: "list[str]"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: >
+          MATLAB declares this public and fills it with
+          repmat({ct}, 1, numel(channelshere)) -- one type string PER CHANNEL,
+          parallel to channellist, not one per group. Python grouped the pair
+          into `channels` and offered channel_types(), which reports one type
+          per GROUP and is therefore a different list. Since NDI-python#295
+          `channeltype` is exposed as a property with MATLAB's per-channel
+          shape; channel_types() is unchanged.
+
+      - name: channellist
+        type_matlab: "double array"
+        type_python: "list[int]"
+        access: "GetAccess=public, SetAccess=protected"
+        decision_log: >
+          MATLAB declares this public. Equivalent to channel_list() called
+          with no type filter, exposed as a property since NDI-python#295
+          because MATLAB declares it as one and getattr callers look for the
+          property, not the method.
+
     methods:
       - name: parse
         kind: classmethod
@@ -747,11 +770,16 @@ classes:
         access: "property (read-only)"
         decision_log: "Exact match."
 
-      - name: daqmetadatareaders
+      - name: daqmetadatareader
         type_matlab: "cell array of ndi.daq.metadatareader"
         type_python: "list[Any]"
         access: "property (read-only)"
-        decision_log: "Exact match."
+        decision_log: >
+          NOT an exact match, as this entry previously claimed: MATLAB names
+          the property daqmetadatareader -- singular in name, a cell array in
+          content -- and Python pluralised it to daqmetadatareaders. Since
+          NDI-python#295 both names read the same list; daqmetadatareaders
+          stays the name the port uses internally.
 
       - name: session
         type_matlab: "ndi.session"

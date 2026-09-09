@@ -26,6 +26,26 @@ _API_URLS = {
 }
 
 
+def _profile_stage() -> str:
+    """The Stage ('prod'/'dev') of the cloud profile that would be used.
+
+    NDI-matlab's profile.switchProfile does ``setenv('CLOUD_API_ENVIRONMENT',
+    prof.Stage)`` and api/url.m reads it back, so Stage naming the API
+    environment is the established contract, not an invention here.
+
+    Empty string when there is no usable profile. Every failure mode is
+    benign -- no profile file, no default set, a secrets backend that will
+    not load -- and none should stop a config from being built.
+    """
+    try:
+        from . import profile as _profile
+
+        entry = _profile.get_current() or _profile.get_default()
+        return entry.Stage if entry is not None else ""
+    except Exception:  # noqa: BLE001 - see docstring
+        return ""
+
+
 @dataclass
 class CloudConfig:
     """NDI Cloud connection configuration.
@@ -51,10 +71,18 @@ class CloudConfig:
     @classmethod
     def from_env(cls) -> CloudConfig:
         """Create a CloudConfig from environment variables."""
-        # Determine API URL
+        # Determine API URL. Precedence: an explicit URL, then an explicit
+        # environment, then the saved profile's Stage, then prod.
+        #
+        # The profile step has to be HERE rather than at the point of login.
+        # login() exports NDI_CLOUD_TOKEN, so every later from_env() carries a
+        # valid token and authenticate() returns at its first step without
+        # ever reaching the credential path -- which meant a dev profile
+        # logged in against dev and then issued every subsequent request
+        # against prod, where the dataset 404s.
         api_url = os.environ.get("NDI_CLOUD_URL", "")
         if not api_url:
-            env = os.environ.get("CLOUD_API_ENVIRONMENT", "prod")
+            env = os.environ.get("CLOUD_API_ENVIRONMENT", "") or _profile_stage() or "prod"
             api_url = _API_URLS.get(env, _API_URLS["prod"])
 
         upload_no_zip_raw = os.environ.get("NDI_CLOUD_UPLOAD_NO_ZIP", "")

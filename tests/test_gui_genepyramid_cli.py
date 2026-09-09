@@ -205,3 +205,78 @@ def test_auto_cells_with_no_document_says_so(one_pyramid):
 def test_no_cells_flag_means_no_overlay(one_pyramid, capsys):
     assert main([one_pyramid, "--report"]) == 0
     assert "centroids" not in capsys.readouterr().out
+
+
+# ------------------------------------------------------- opening a dataset
+
+
+class TestOpeningADownloadedDataset:
+    """A downloaded cloud dataset and a session are indistinguishable on
+    disk -- both keep their database at <path>/.ndi -- so opening one as
+    the other succeeds and then finds almost nothing. A dataset's
+    documents may live in LINKED SESSIONS, and only
+    ndi_dataset.database_search follows those links.
+
+    The symptom was a downloaded ferret dataset reporting "no
+    spatialGeneExpressionPyramid" while the same directory opened in
+    MATLAB as an ndi.dataset.dir listed the pyramid and its levels.
+    """
+
+    def _install(self, monkeypatch, dataset, session):
+        from ndi.gui.app.genepyramid import cli
+
+        monkeypatch.setattr(cli, "_pyramids", lambda obj: getattr(obj, "pyramids", []))
+        monkeypatch.setattr(cli, "_asDataset", dataset)
+        monkeypatch.setattr(cli, "_asSession", session)
+        return cli
+
+    def test_the_dataset_reading_wins_when_it_finds_the_pyramids(self, monkeypatch):
+        class Dataset:
+            pyramids = ["pyr"]
+
+        class Session:
+            pyramids = []
+
+        cli = self._install(monkeypatch, lambda _p: Dataset(), lambda _p: Session())
+        assert isinstance(cli._open_session("/some/download"), Dataset)
+
+    def test_a_plain_session_still_opens_when_the_dataset_reading_is_empty(self, monkeypatch):
+        class Dataset:
+            pyramids = []
+
+        class Session:
+            pyramids = ["pyr"]
+
+        cli = self._install(monkeypatch, lambda _p: Dataset(), lambda _p: Session())
+        assert isinstance(cli._open_session("/some/session"), Session)
+
+    def test_a_dataset_reading_that_raises_does_not_lose_the_session(self, monkeypatch):
+        def boom(_p):
+            raise RuntimeError("not a dataset")
+
+        class Session:
+            pyramids = ["pyr"]
+
+        cli = self._install(monkeypatch, boom, lambda _p: Session())
+        assert isinstance(cli._open_session("/some/session"), Session)
+
+    def test_neither_reading_working_says_so(self, monkeypatch):
+        import pytest
+
+        def boom(_p):
+            raise RuntimeError("nope")
+
+        cli = self._install(monkeypatch, boom, boom)
+        with pytest.raises(ValueError, match="either an NDI session or a dataset"):
+            cli._open_session("/nowhere")
+
+    def test_an_empty_path_still_returns_something_to_report_on(self, monkeypatch):
+        """Both open, neither has pyramids: the caller wants the object so
+        it can print its own 'no pyramid here' message naming the path,
+        not an exception from the opener."""
+
+        class Empty:
+            pyramids = []
+
+        cli = self._install(monkeypatch, lambda _p: Empty(), lambda _p: Empty())
+        assert isinstance(cli._open_session("/empty"), Empty)

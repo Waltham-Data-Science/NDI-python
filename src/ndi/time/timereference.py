@@ -158,6 +158,20 @@ class ndi_time_timereference:
         """Get the session ID."""
         return self._session_id
 
+    @property
+    def session_ID(self) -> str:  # noqa: N802 -- mirrors the MATLAB spelling
+        """The ID of the session that contains the time.
+
+        MATLAB counterpart: ``ndi.time.timereference``'s public
+        ``session_ID`` property. The other four (``referent``,
+        ``clocktype``, ``epoch``, ``time``) already carry MATLAB's spelling;
+        this one differed only in case, which is exactly the kind of gap that
+        reads as ``None`` to a ``getattr`` caller rather than raising. An
+        alias for :attr:`session_id`, which stays the name the port uses.
+        See #295.
+        """
+        return self._session_id
+
     def to_struct(self) -> ndi_time_timereference__struct:
         """
         Convert to a structure that lacks live Matlab/Python objects.
