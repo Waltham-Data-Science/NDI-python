@@ -224,14 +224,41 @@ class TestStorageErrorsAreNotSwallowed:
 
 
 class TestEpochWithoutData:
-    def test_addepoch_without_samples_stores_no_binary(self, element):
+    """An epoch may have no DATA. It may not have no FILE.
+
+    These two used to assert the opposite -- that an epoch added without
+    samples stored no binary at all -- which is a document MATLAB cannot
+    produce. ndi.element.timeseries/addepoch writes the vhsb and attaches
+    it after the argument handling rather than inside it, and takes
+    timepoints/datapoints as required positional arguments; an epoch with
+    no samples goes through it as [] and [], and still gets a file, just
+    an empty one (ndi/+mock/+fun/subject_stimulator_neuron.m does exactly
+    that for a stimulator element).
+
+    element_epoch's schema has always said so -- mustbenotempty on
+    epoch_binary_data.vhsb -- and DID simply was not checking until
+    DID-python#86 closed check_files' step-3 fail-open. So the old
+    assertions were pinning a Python-only divergence that produced
+    documents the database now rejects at add time and used to accept and
+    fail on at read time.
+    """
+
+    def test_addepoch_without_samples_still_binds_the_binary(self, element):
         session, elem = element
         _, doc = elem.addepoch("epoch_1", _clock(), [(0.0, 1.0)])
         exists, _ = session.database_existbinarydoc(doc, BINARY_FILE_NAME)
-        assert not exists
+        assert exists, "an epoch with no samples still stores an empty vhsb"
 
-    def test_reading_an_epoch_with_no_binary_is_not_an_error(self, element):
-        """It falls through to the underlying element, which is empty here."""
+    def test_the_bound_binary_is_declared_on_the_document(self, element):
+        """Bound, not merely written: what DID rejects is a name in
+        file_list with no matching entry in files.file_info."""
+        session, elem = element
+        _, doc = elem.addepoch("epoch_1", _clock(), [(0.0, 1.0)])
+        assert BINARY_FILE_NAME in doc.current_file_list()
+
+    def test_reading_an_epoch_with_no_samples_gives_nothing(self, element):
+        """The file is there and empty, so the read is empty rather than
+        an error -- which is what the old test was really about."""
         session, elem = element
         elem, _ = elem.addepoch("epoch_1", _clock(), [(0.0, 1.0)])
         data, times, _ = elem.readtimeseries("epoch_1", -np.inf, np.inf)

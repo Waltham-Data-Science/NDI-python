@@ -287,10 +287,28 @@ class ndi_element_timeseries(ndi_element):
         ``ndi.element.timeseries/addepoch``; ``add_to_database`` is the
         explicit form of that, since Python has no ``nargout``.
         """
-        has_data = timepoints is not None and datapoints is not None
-
-        if not has_data or self._session is None:
-            return super().addepoch(epoch_id, epoch_clock, t0_t1, add_to_database=add_to_database)
+        # THE BINARY IS ALWAYS WRITTEN AND ALWAYS ATTACHED, empty or not.
+        #
+        # This used to skip both when timepoints or datapoints was None and
+        # fall through to the base class, which added an element_epoch with
+        # nothing bound to epoch_binary_data.vhsb. MATLAB has no such branch:
+        # in ndi.element.timeseries/addepoch the vhsb_write and the add_file
+        # sit after the argument handling rather than inside it, and
+        # timepoints/datapoints are required positional arguments, so the
+        # class cannot produce a fileless epoch document at all.
+        #
+        # An epoch with NO SAMPLES is a supported case -- see
+        # ndi/+mock/+fun/subject_stimulator_neuron.m, which calls addepoch
+        # with [] for both -- but its binary is still written, just empty.
+        # An epoch may have no data; it may not have no file. That is exactly
+        # what element_epoch's schema says with mustbenotempty on the file,
+        # and DID enforces it now that DID-python#86 closed check_files'
+        # step-3 fail-open. Before that the invalid document was accepted at
+        # add time and only noticed on read.
+        if timepoints is None:
+            timepoints = np.zeros((0, 1))
+        if datapoints is None:
+            datapoints = np.zeros((0, 1))
 
         _, doc = super().addepoch(epoch_id, epoch_clock, t0_t1, add_to_database=False)
         doc = self._attach_timeseries_data(doc, timepoints, datapoints)
