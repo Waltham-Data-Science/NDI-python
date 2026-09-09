@@ -62,7 +62,7 @@ functions:
 
   - name: chooseTileShape
     matlab_path: "+ndi/+fun/+doc/+lightsheet/chooseTileShape.m"
-    matlab_last_sync_hash: "c8f3479"
+    matlab_last_sync_hash: "1d11302"
     status: porting_deferred
     decision_log: >-
       Pure function that picks an OME-Zarr chunk shape landing near a
