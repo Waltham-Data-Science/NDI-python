@@ -2787,16 +2787,20 @@ functions:
   - name: tileIndexOrigin
     matlab_path: "+ndi/+fun/+doc/+gene/tileIndexOrigin.m"
     matlab_last_sync_hash: "6aa994e3"
-    status: not_applicable
+    status: matlab_only
     decision_log: >
-      MATLAB-only helper. It exists because MATLAB has no equivalent of
-      dict.get with a default and needs isfield/isnumeric/isscalar guards
-      to read an optional numeric field; in Python that is one .get call
-      inline in tileFileName and tileIndexFromName, so a separate
-      function would be a wrapper around nothing. The BEHAVIOUR is
-      mirrored and tested on both sides: an absent, empty, non-numeric or
-      non-scalar tile_index_origin reads as 0, which is the legacy
-      zero-based naming.
+      Python needs nothing here, by design. The function reads an
+      optional numeric document field with a default, which in MATLAB
+      takes isfield, isnumeric and isscalar guards and so earns a name;
+      in Python it is one dict.get call from the standard library,
+      written inline in tileFileName and tileIndexFromName. That puts it
+      on the matlab_only side of the line rather than
+      ported_differently: the replacement is the language, not something
+      in this repo.
+
+      The BEHAVIOUR is mirrored and tested on both sides -- an absent,
+      empty, non-numeric or non-scalar tile_index_origin reads as 0,
+      which is the legacy zero-based tile naming.
 
   - name: exportRegion
     matlab_path: "+ndi/+fun/+doc/+gene/exportRegion.m"

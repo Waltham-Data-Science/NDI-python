@@ -727,14 +727,14 @@ not_applicable:
       to port.
 
 # =============================================================================
-# Not-yet-ported MATLAB functions
+# Deferred MATLAB functions
 # =============================================================================
-not_yet_ported:
+porting_deferred:
 
   - name: hdf5Contents
     matlab_path: "+ndi/+util/hdf5Contents.m"
     matlab_last_sync_hash: "b745ee1d"
-    status: not_yet_ported
+    status: porting_deferred
     decision_log: >
       Prints a table of contents for an HDF5 container -- groups,
       datasets, attributes -- and a verdict naming which layout it is:
