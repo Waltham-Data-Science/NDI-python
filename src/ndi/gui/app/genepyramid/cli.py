@@ -98,10 +98,64 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _open_session(path):
+def _asDataset(path):
+    """Open PATH as a dataset. A named function, not an inline import, so
+    a test can stand in for it: what _open_session does AROUND the two
+    readings -- which it prefers, and that a failure of one does not lose
+    the other -- is not about how either is constructed."""
+    from ndi.dataset import ndi_dataset_dir
+
+    return ndi_dataset_dir(path)
+
+
+def _asSession(path):
+    """Open PATH as a session. Named for the same reason as _asDataset,
+    and with more cause: ``ndi.session.dir`` resolves to the CLASS rather
+    than the module (the package attribute shadows the submodule), so
+    patching it where it is imported does not work."""
     from ndi.session.dir import ndi_session_dir
 
     return ndi_session_dir(path)
+
+
+def _open_session(path):
+    """Open PATH, whether it holds a session or a downloaded dataset.
+
+    THE TWO LOOK IDENTICAL ON DISK. A dataset keeps its database at
+    <path>/.ndi exactly as a session does, so ndi_session_dir opens a
+    downloaded dataset without complaint -- and then finds almost
+    nothing in it. A dataset's documents may live in LINKED SESSIONS,
+    and only ndi_dataset.database_search follows those links; the
+    session reader looks in the dataset's own database and stops there.
+
+    The symptom is a downloaded dataset reporting "no
+    spatialGeneExpressionPyramid" while the same directory opened in
+    MATLAB as an ndi.dataset.dir lists the pyramid and its levels. The
+    path is right, the data is there, and the reader is looking one
+    level too shallow.
+
+    So the dataset reading is tried first and kept when it finds
+    pyramids. A plain session opened as a dataset simply has no linked
+    sessions and answers the same as before, but that is not relied on:
+    if the dataset reading raises, or finds nothing where the session
+    reading finds something, the session reading wins.
+    """
+    opened = None
+    for describe in (_asDataset, _asSession):
+        try:
+            candidate = describe(path)
+        except Exception:  # noqa: BLE001 - the other reading may still work
+            continue
+        try:
+            if _pyramids(candidate):
+                return candidate
+        except Exception:  # noqa: BLE001 - likewise
+            continue
+        if opened is None:
+            opened = candidate
+    if opened is None:
+        raise ValueError(f"{path} could not be opened as either an NDI session or a dataset")
+    return opened
 
 
 def _pyramids(session):
