@@ -31,6 +31,7 @@ functions:
 
   - name: fromOMEZarr
     matlab_path: "+ndi/+fun/+doc/+lightsheet/fromOMEZarr.m"
+    matlab_last_sync_hash: "5ab84f3"
     status: porting_deferred
     decision_log: >-
       MATLAB probes an OME-Zarr store with ndr.format.omezarr.listPyramids
@@ -41,6 +42,7 @@ functions:
 
   - name: makePyramid
     matlab_path: "+ndi/+fun/+doc/+lightsheet/makePyramid.m"
+    matlab_last_sync_hash: "8f8af4e"
     status: porting_deferred
     decision_log: >-
       The per-multiscales-entry worker fromOMEZarr calls; reusable when
@@ -50,6 +52,7 @@ functions:
 
   - name: makeSourceFile
     matlab_path: "+ndi/+fun/+doc/+lightsheet/makeSourceFile.m"
+    matlab_last_sync_hash: "5ab84f3"
     status: porting_deferred
     decision_log: >-
       MATLAB creates the fileReference document the lightsheet
@@ -60,6 +63,7 @@ functions:
 
   - name: chooseLevel
     matlab_path: "+ndi/+fun/+doc/+lightsheet/chooseLevel.m"
+    matlab_last_sync_hash: "5ab84f3"
     status: porting_deferred
     decision_log: >-
       Given a level table and a target per-axis voxel size, returns the
@@ -69,6 +73,7 @@ functions:
 
   - name: levelTable
     matlab_path: "+ndi/+fun/+doc/+lightsheet/levelTable.m"
+    matlab_last_sync_hash: "5ab84f3"
     status: porting_deferred
     decision_log: >-
       Joins a lightsheetZarrPyramid and its lightsheetZarrLevel
@@ -80,6 +85,7 @@ functions:
 
   - name: viewCommand
     matlab_path: "+ndi/+fun/+doc/+lightsheet/viewCommand.m"
+    matlab_last_sync_hash: "5ab84f3"
     status: porting_deferred
     decision_log: >-
       Pure command builder that ndi.gui.app.LightsheetZarrManager calls

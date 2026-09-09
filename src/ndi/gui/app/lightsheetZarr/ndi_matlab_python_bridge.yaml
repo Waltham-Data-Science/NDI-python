@@ -31,6 +31,7 @@ functions:
   # -----------------------------------------------------------------------
   - name: LightsheetZarrManager
     matlab_path: "+ndi/+gui/+app/LightsheetZarrManager.m"
+    matlab_last_sync_hash: "5ab84f3"
     status: not_applicable
     decision_log: >-
       Not ported: napari is Python-only, so the manager class stays
