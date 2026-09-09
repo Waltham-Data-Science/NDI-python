@@ -1158,6 +1158,54 @@ def blurRaster(counts, sigma_world: float, step: float):
     return gaussian_filter(counts, sigma=float(sigma_world) / float(step), mode="constant")
 
 
+def viewportBounds(center, zoom, canvas_px):
+    """The visible world rectangle, as ``(r0, r1, c0, c1)``.
+
+    napari's ``camera.zoom`` is canvas PIXELS PER WORLD UNIT, so the
+    visible extent is the canvas size divided by it, centred on
+    ``camera.center``. Qt reports a canvas as ``(width, height)`` while
+    napari axes are ``(row, col)``, so width belongs to the column span
+    and height to the row span -- the one place this is easy to get
+    backwards, and invisible when the window happens to be square.
+
+    Pure arithmetic, separate from the viewer, because it is the part that
+    can be wrong and the part that needs no display to check.
+
+    Args:
+        center: ``camera.center``, ``(z, y, x)`` even in 2D; the last two
+            are read.
+        zoom: ``camera.zoom``.
+        canvas_px: ``(width, height)`` in device pixels.
+    """
+    cy, cx = float(center[-2]), float(center[-1])
+    w_px, h_px = float(canvas_px[0]), float(canvas_px[1])
+    if zoom <= 0:
+        raise ValueError(f"camera zoom must be positive, got {zoom!r}")
+    half_r = (h_px / float(zoom)) / 2.0
+    half_c = (w_px / float(zoom)) / 2.0
+    return (cy - half_r, cy + half_r, cx - half_c, cx + half_c)
+
+
+def canvasSize(viewer):
+    """The canvas size in pixels, or None if this napari will not say.
+
+    Reached through private attributes that have moved between napari
+    versions, so it is tried rather than assumed and the caller falls back
+    to the whole section rather than failing. A blur over the wrong
+    rectangle would be worse than a coarse one over the right rectangle.
+    """
+    for path in (("_qt_viewer",), ("qt_viewer",)):
+        obj = viewer.window
+        try:
+            for name in path:
+                obj = getattr(obj, name)
+            size = obj.canvas.size
+            return (float(size[0]), float(size[1]))
+        except Exception:  # noqa: BLE001 - any miss means "cannot tell"
+            continue
+    return None
+
+
 def addCellBlurPanel(viewer, points_layer, max_side: int = 1024) -> Any:
     """A width knob for a blurred density image under the cell centroids.
 
@@ -1182,6 +1230,7 @@ def addCellBlurPanel(viewer, points_layer, max_side: int = 1024) -> Any:
         QDoubleSpinBox,
         QHBoxLayout,
         QLabel,
+        QPushButton,
         QSlider,
         QVBoxLayout,
         QWidget,
@@ -1191,6 +1240,13 @@ def addCellBlurPanel(viewer, points_layer, max_side: int = 1024) -> Any:
     outer = QVBoxLayout(box)
 
     show = QCheckBox("blurred cell density")
+    here = QPushButton("Re-blur here")
+    here.setToolTip(
+        "Re-bins just what is on screen, at full resolution for this zoom.\n"
+        "The standing raster covers the whole section and goes blocky when\n"
+        "you zoom past it; this trades that for a view that has to be\n"
+        "refreshed after you move."
+    )
     show.setToolTip(
         "Bins the centroids and blurs them with a unity Gaussian, so widening\n"
         "spreads each cell rather than brightening it. Contrast and colormap\n"
@@ -1208,19 +1264,58 @@ def addCellBlurPanel(viewer, points_layer, max_side: int = 1024) -> Any:
 
     state = {"layer": None, "counts": None, "step": 1.0, "origin": (0.0, 0.0)}
 
+    def _rebin(bounds=None):
+        """Bin the centroids, optionally only those inside BOUNDS.
+
+        Whole-section by default. Restricted to the viewport, the same
+        max_side spans a smaller region, so the raster is finer exactly
+        where it is being looked at -- which is the whole point of the
+        button, and why this is on demand rather than on every camera
+        move: the blur is 38-126 ms and a pan would stutter through it.
+        """
+        import numpy as np
+
+        data = points_layer.data
+        row, col = data[:, 0], data[:, 1]
+        if bounds is not None:
+            r0, r1, c0, c1 = bounds
+            keep = (row >= r0) & (row <= r1) & (col >= c0) & (col <= c1)
+            if not np.any(keep):
+                raise ValueError("no cells in view")
+            row, col = row[keep], col[keep]
+        counts, step, origin = densityRaster(row, col, max_side)
+        state.update(counts=counts, step=step, origin=origin)
+
     def _raster():
         if state["counts"] is None:
-            data = points_layer.data
-            counts, step, origin = densityRaster(data[:, 0], data[:, 1], max_side)
-            state.update(counts=counts, step=step, origin=origin)
+            _rebin()
             # The slider is in WORLD units and its useful range depends on
             # how big the section is, so it is set from the data rather
             # than guessed: a tenth of the raster is a wide blur anywhere.
-            widest = max(step * max_side / 10.0, 1.0)
+            widest = max(state["step"] * max_side / 10.0, 1.0)
             slider.setRange(0, 100)
             spin.setRange(0.0, widest)
             spin.setSingleStep(widest / 100.0)
         return state["counts"], state["step"], state["origin"]
+
+    def _reblurHere():
+        size = canvasSize(viewer)
+        if size is None:
+            status.setText(
+                "this napari will not report its canvas size, so the blur "
+                "stays over the whole section"
+            )
+            status.show()
+            return
+        try:
+            bounds = viewportBounds(viewer.camera.center, viewer.camera.zoom, size)
+            _rebin(bounds)
+        except Exception as e:  # noqa: BLE001 - a control never costs the picture
+            status.setText(f"failed: {e}")
+            status.show()
+            return
+        show.setChecked(True)
+        _apply(_sigma())
 
     def _apply(sigma):
         try:
@@ -1239,7 +1334,12 @@ def addCellBlurPanel(viewer, points_layer, max_side: int = 1024) -> Any:
                 # the centroids, not a replacement.
                 viewer.layers.move(len(viewer.layers) - 1, 0)
             else:
+                # scale and translate too: a re-blur over the viewport
+                # changes all three, and data alone would leave the image
+                # stretched over the old rectangle.
                 state["layer"].data = img
+                state["layer"].scale = (step, step)
+                state["layer"].translate = origin
             state["layer"].visible = show.isChecked()
             state["layer"].reset_contrast_limits()
         except Exception as e:  # noqa: BLE001 - a control never costs the picture
@@ -1279,6 +1379,8 @@ def addCellBlurPanel(viewer, points_layer, max_side: int = 1024) -> Any:
     row.addWidget(QLabel("width"))
     row.addWidget(slider, 1)
     row.addWidget(spin)
+    row.addWidget(here)
+    here.clicked.connect(_reblurHere)
     outer.addWidget(show)
     outer.addLayout(row)
     outer.addWidget(status)

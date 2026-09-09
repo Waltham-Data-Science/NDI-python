@@ -123,3 +123,86 @@ def test_the_default_raster_stays_inside_a_slider_drag():
     col = np.array([0.0, 40000.0])
     counts, _, _ = densityRaster(row, col)
     assert max(counts.shape) <= 1025
+
+
+class TestTheViewportRectangle:
+    """The standing raster covers the whole section, so it goes blocky
+    when you zoom past it. "Re-blur here" re-bins just what is on screen,
+    which puts the same number of raster pixels over a smaller region.
+
+    The arithmetic is where this can be wrong, and it needs no display.
+    """
+
+    def test_the_visible_extent_is_the_canvas_over_the_zoom(self):
+        """napari's zoom is canvas PIXELS PER WORLD UNIT."""
+        from ndi.gui.app.genepyramid.controls import viewportBounds
+
+        # 800x600 canvas at 2 px per world unit -> 400 x 300 world units.
+        r0, r1, c0, c1 = viewportBounds((0.0, 100.0, 200.0), 2.0, (800, 600))
+        assert (c1 - c0) == pytest.approx(400.0)
+        assert (r1 - r0) == pytest.approx(300.0)
+
+    def test_width_belongs_to_columns_and_height_to_rows(self):
+        """The one thing here that is easy to get backwards, and invisible
+        whenever the window happens to be square."""
+        from ndi.gui.app.genepyramid.controls import viewportBounds
+
+        r0, r1, c0, c1 = viewportBounds((0.0, 0.0, 0.0), 1.0, (1000, 200))
+        assert (c1 - c0) == pytest.approx(1000.0), "canvas WIDTH spans columns"
+        assert (r1 - r0) == pytest.approx(200.0), "canvas HEIGHT spans rows"
+
+    def test_it_is_centred_on_the_camera(self):
+        from ndi.gui.app.genepyramid.controls import viewportBounds
+
+        r0, r1, c0, c1 = viewportBounds((0.0, 50.0, -20.0), 1.0, (100, 100))
+        assert (r0 + r1) / 2 == pytest.approx(50.0)
+        assert (c0 + c1) / 2 == pytest.approx(-20.0)
+
+    def test_a_zoom_of_zero_is_refused_rather_than_dividing(self):
+        from ndi.gui.app.genepyramid.controls import viewportBounds
+
+        with pytest.raises(ValueError, match="zoom must be positive"):
+            viewportBounds((0.0, 0.0, 0.0), 0.0, (100, 100))
+
+    def test_a_viewport_raster_is_finer_than_a_whole_section_one(self):
+        """THE POINT OF THE BUTTON: same max_side, smaller region."""
+        rng = np.random.default_rng(1)
+        row = rng.uniform(0, 59000, 20000)
+        col = rng.uniform(0, 40000, 20000)
+        _, whole_step, _ = densityRaster(row, col, max_side=256)
+
+        keep = (row > 29000) & (row < 30000) & (col > 20000) & (col < 21000)
+        _, view_step, _ = densityRaster(row[keep], col[keep], max_side=256)
+        assert view_step < whole_step / 10
+
+
+class TestTheCanvasSizeIsOptional:
+    """It is reached through private napari attributes that have moved
+    between versions, so a miss falls back to the whole section rather
+    than failing -- a blur over the wrong rectangle would be worse than a
+    coarse one over the right rectangle."""
+
+    def test_a_viewer_that_will_not_say_returns_none(self):
+        from ndi.gui.app.genepyramid.controls import canvasSize
+
+        class Bare:
+            window = object()
+
+        assert canvasSize(Bare()) is None
+
+    def test_it_reads_the_canvas_when_one_is_there(self):
+        from ndi.gui.app.genepyramid.controls import canvasSize
+
+        class Canvas:
+            size = (1280, 720)
+
+        class QtViewer:
+            canvas = Canvas()
+
+        class Window:
+            _qt_viewer = QtViewer()
+
+        class Viewer:
+            window = Window()
+
+        assert canvasSize(Viewer()) == (1280.0, 720.0)
