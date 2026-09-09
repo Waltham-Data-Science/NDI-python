@@ -714,9 +714,23 @@ def reload() -> None:
 
 
 def reset() -> None:
-    """Clear the in-memory singleton state.  Does NOT touch disk."""
+    """Clear the in-memory singleton state.  Does NOT touch disk.
+
+    THIS INCLUDES A FORCED BACKEND. :func:`use_backend` is a test hook and
+    the override it sets is in-memory singleton state like any other, so
+    reset returns it to :func:`_detect_backend`.
+
+    Leaving it out let the memory backend outlive the tests that selected
+    it: the singleton lives for the whole process, so a test run left
+    every later :func:`set_password` writing to a dict that is discarded
+    at exit -- with no error, and with :func:`get_password` returning the
+    value it had just stored, so it looked as though the password had
+    been saved. NDI-matlab had the same hole and the same symptom; see
+    ndi.cloud.profile.reset there.
+    """
     obj = _get_singleton()
     obj.profiles = []
     obj.current_uid = ""
     obj.default_uid = ""
     obj._memory_store = {}
+    obj.backend = _detect_backend()

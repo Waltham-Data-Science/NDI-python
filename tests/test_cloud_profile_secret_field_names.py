@@ -199,3 +199,32 @@ class TestOlderPythonSecretsStillOpen(_AesStoreCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestResetRestoresTheDetectedBackend(unittest.TestCase):
+    """A forced backend must not outlive the test that forced it.
+
+    use_backend is a test hook, and the override it sets is in-memory
+    singleton state like any other -- the singleton lives for the whole
+    process. Before reset cleared it, one test selecting the memory
+    backend left every later set_password writing to a dict discarded at
+    exit: no error, and get_password returned the value it had just
+    stored, so it looked as though the password had been saved. NDI-matlab
+    had the same hole; this is the port of its fix.
+    """
+
+    def setUp(self):
+        profile.reset()
+        self.addCleanup(profile.reset)
+
+    def test_a_forced_backend_does_not_survive_a_reset(self):
+        detected = profile.backend()
+        profile.use_backend("memory")
+        self.assertEqual(profile.backend(), "memory")
+        profile.reset()
+        self.assertEqual(profile.backend(), detected)
+
+    def test_the_restored_backend_is_a_real_one(self):
+        profile.use_backend("memory")
+        profile.reset()
+        self.assertIn(profile.backend(), ("keyring", "aes", "memory"))

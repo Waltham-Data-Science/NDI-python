@@ -211,6 +211,19 @@ class ndi_preferences:
             "subclass ndi.gui.app.SessionApp are added to the built-in "
             "ndi.gui.app and ndi.app packages.",
         )
+        self._add_item(
+            "GUI",
+            "GEFManager",
+            "ViewerLauncher",
+            "/usr/local/bin/napariViewGEF",
+            "str",
+            "Program the GEF Manager's View button runs to open a pyramid in "
+            "napari. Normally a small shell wrapper rather than the "
+            "napariViewGEF console script itself: MATLAB exports library "
+            "paths of its own, and a Python process started from MATLAB loads "
+            "MATLAB's copies of libraries it must not use, so the wrapper "
+            "scrubs the environment before running the real entry point.",
+        )
 
     def _add_item(
         self,

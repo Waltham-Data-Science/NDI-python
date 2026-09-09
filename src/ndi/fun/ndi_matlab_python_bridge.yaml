@@ -2690,7 +2690,7 @@ functions:
 
   - name: makePyramid
     matlab_path: "+ndi/+fun/+doc/+gene/makePyramid.m"
-    matlab_last_sync_hash: "6ae508708"
+    matlab_last_sync_hash: "10687267a"
     python_path: "ndi/fun/doc_gene.py"
     decision_log: >
       Exact match. Options keep their MATLAB spelling (binSizes, grid,
@@ -2701,7 +2701,7 @@ functions:
 
   - name: readViewport
     matlab_path: "+ndi/+fun/+doc/+gene/readViewport.m"
-    matlab_last_sync_hash: "b9972abf1"
+    matlab_last_sync_hash: "10687267a"
     python_path: "ndi/fun/doc_gene.py"
     input_arguments:
       - name: bin_size
@@ -2804,7 +2804,7 @@ functions:
 
   - name: exportRegion
     matlab_path: "+ndi/+fun/+doc/+gene/exportRegion.m"
-    matlab_last_sync_hash: "b9972abf1"
+    matlab_last_sync_hash: "10687267a"
     python_path: "ndi/fun/doc_gene.py"
     decision_log: >
       Exact match. Returns raw counts, never density.
@@ -2967,7 +2967,7 @@ functions:
 
   - name: makeCells
     matlab_path: "+ndi/+fun/+doc/+gene/makeCells.m"
-    matlab_last_sync_hash: "6ae508708"
+    matlab_last_sync_hash: "b589db9bb"
     python_path: "ndi/fun/doc_gene.py"
     decision_log: >
       Writes cells.tsv, optionally contours.bin, and stores the document.
@@ -3042,7 +3042,7 @@ functions:
 
   - name: fromCellBin
     matlab_path: "+ndi/+fun/+doc/+gene/fromCellBin.m"
-    matlab_last_sync_hash: "6ae5087"
+    matlab_last_sync_hash: "b589db9bb"
     status: porting_deferred
     decision_log: >
       MATLAB reads a SAW cellbin .h5ad with
@@ -3053,9 +3053,13 @@ functions:
       about row order. Ports as a group with the other three entries
       under this heading; no current Python caller.
 
+      NDI-matlab b589db9bb changed one line of the help text --
+      recordSource now says it creates a fileReference rather than a
+      generic_file, following makeSourceFile. Comment only; no
+      behavioural change, and nothing to port here.
   - name: fromGEF
     matlab_path: "+ndi/+fun/+doc/+gene/fromGEF.m"
-    matlab_last_sync_hash: "a178e46"
+    matlab_last_sync_hash: "b589db9bb"
     status: porting_deferred
     decision_log: >
       MATLAB reads a Stereo-seq .gef with ndr.format.stereoseq.readGEF
@@ -3064,16 +3068,32 @@ functions:
       path in one call. Ports with the other three entries under this
       heading.
 
+      NDI-matlab b589db9bb changed three lines of the help text: two
+      naming ndi.gui.app.GeneIngest, which was renamed GEFManager, and
+      one saying recordSource creates a fileReference rather than a
+      generic_file, following makeSourceFile. Comments only; no
+      behavioural change, and nothing to port here.
   - name: makeSourceFile
     matlab_path: "+ndi/+fun/+doc/+gene/makeSourceFile.m"
-    matlab_last_sync_hash: "6ae5087"
+    matlab_last_sync_hash: "b589db9bb"
     status: porting_deferred
     decision_log: >
-      MATLAB creates the generic_file document that the spatial gene
-      expression documents' source_file_id dependency points at, so a
-      pyramid can name the .gef it was built from. Describes by default
-      (name + checksum + dates), attaches only when attachFile=true.
-      Ports with the other three entries under this heading.
+      MATLAB creates the document that the spatial gene expression
+      documents' source_file_id dependency points at, so a pyramid can
+      name the .gef it was built from.
+
+      WHICH document changed, in NDI-matlab b589db9bb. Describing a file the
+      database does not hold is now a fileReference -- a new class with no
+      files section at all -- and only attachFile=true produces a
+      generic_file with the bytes attached. The old shape was a
+      generic_file with nothing attached, which is invalid, since
+      generic_file requires generic_file.ext; nothing enforced it until
+      DID-matlab #182 closed a fail-open, at which point adding such a
+      session to a dataset failed at the add rather than at the write
+      that made it.
+
+      Ports with the other three entries under this heading. A Python
+      port must create a fileReference, not a generic_file.
 
   - name: readNotes
     matlab_path: "+ndi/+fun/+doc/+gene/readNotes.m"
