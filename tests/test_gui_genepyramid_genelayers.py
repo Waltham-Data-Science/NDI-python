@@ -180,8 +180,9 @@ class TestTheProfileChoices:
             lambda: [_Entry("u1", "me@example.com", "work")],
         )
         monkeypatch.setattr("ndi.cloud.profile.get_password", lambda _u: "pw")
+        monkeypatch.setattr("ndi.cloud.profile.backend", lambda: "aes")
         rows = controls.cloudProfileChoices()
-        assert rows == [("work (me@example.com)", "me@example.com", "u1", True)]
+        assert rows == [("work (me@example.com)", "me@example.com", "u1", True, "password saved")]
 
     def test_a_dev_profile_is_marked(self, monkeypatch):
         """A dev profile signing in against prod is the failure that
@@ -191,9 +192,11 @@ class TestTheProfileChoices:
             lambda: [_Entry("u1", "me@example.com", stage="dev")],
         )
         monkeypatch.setattr("ndi.cloud.profile.get_password", lambda _u: "")
-        label, _email, _uid, stored = controls.cloudProfileChoices()[0]
+        monkeypatch.setattr("ndi.cloud.profile.backend", lambda: "keyring")
+        label, _email, _uid, stored, note = controls.cloudProfileChoices()[0]
         assert "[dev]" in label
         assert not stored
+        assert "keyring" in note
 
     def test_a_backend_that_will_not_open_costs_no_dialog(self, monkeypatch):
         """Typing the credentials by hand is exactly the fallback this
@@ -213,6 +216,7 @@ class TestTheProfileChoices:
             "ndi.cloud.profile.list_profiles", lambda: [_Entry("u1", "me@example.com")]
         )
         monkeypatch.setattr("ndi.cloud.profile.get_password", boom)
+        monkeypatch.setattr("ndi.cloud.profile.backend", lambda: "keyring")
         rows = controls.cloudProfileChoices()
         assert len(rows) == 1 and rows[0][3] is False
 
@@ -226,6 +230,7 @@ def dialogOf(qt, monkeypatch):
         monkeypatch.setattr(
             "ndi.cloud.profile.get_password", lambda uid: "saved-pw" if uid == "u1" else ""
         )
+        monkeypatch.setattr("ndi.cloud.profile.backend", lambda: "keyring")
         dialog, outcome = controls.buildCloudSignInDialog()
         held.append(dialog)
         return dialog, outcome
@@ -342,3 +347,74 @@ class TestTheSignInDialog:
         dialog._ndi_accept()
         assert outcome["ok"]
         assert "Signed in" in outcome["note"] and "keyring" in outcome["note"]
+
+
+class TestWhyThereIsNoPassword:
+    """A backend mismatch used to look exactly like an empty store.
+
+    profile._detect_backend picks keyring whenever keyring merely
+    imports, while MATLAB writes its secret to the AES file -- so a
+    machine with both looks in the wrong one and finds nothing. Told as
+    "no password saved", that sends the reader off to re-save a password
+    that is already saved, in a store nothing is reading.
+    """
+
+    def test_an_empty_store_names_the_backend(self, monkeypatch):
+        monkeypatch.setattr(
+            "ndi.cloud.profile.list_profiles", lambda: [_Entry("u1", "me@example.com")]
+        )
+        monkeypatch.setattr("ndi.cloud.profile.get_password", lambda _u: "")
+        monkeypatch.setattr("ndi.cloud.profile.backend", lambda: "keyring")
+        note = controls.cloudProfileChoices()[0][4]
+        assert "keyring" in note and "no password" in note
+
+    def test_an_unreadable_secret_carries_its_reason(self, monkeypatch):
+        def boom(_uid):
+            raise RuntimeError("cryptography failed to load")
+
+        monkeypatch.setattr(
+            "ndi.cloud.profile.list_profiles", lambda: [_Entry("u1", "me@example.com")]
+        )
+        monkeypatch.setattr("ndi.cloud.profile.get_password", boom)
+        monkeypatch.setattr("ndi.cloud.profile.backend", lambda: "aes")
+        note = controls.cloudProfileChoices()[0][4]
+        assert "unreadable" in note
+        assert "cryptography failed to load" in note
+        assert "aes" in note
+
+    def test_a_saved_password_says_so(self, monkeypatch):
+        monkeypatch.setattr(
+            "ndi.cloud.profile.list_profiles", lambda: [_Entry("u1", "me@example.com")]
+        )
+        monkeypatch.setattr("ndi.cloud.profile.get_password", lambda _u: "pw")
+        monkeypatch.setattr("ndi.cloud.profile.backend", lambda: "aes")
+        assert controls.cloudProfileChoices()[0][4] == "password saved"
+
+    def test_a_backend_that_will_not_name_itself_is_not_an_error(self, monkeypatch):
+        def boom():
+            raise RuntimeError("no")
+
+        monkeypatch.setattr(
+            "ndi.cloud.profile.list_profiles", lambda: [_Entry("u1", "me@example.com")]
+        )
+        monkeypatch.setattr("ndi.cloud.profile.get_password", lambda _u: "")
+        monkeypatch.setattr("ndi.cloud.profile.backend", boom)
+        assert "unknown" in controls.cloudProfileChoices()[0][4]
+
+    def test_the_chooser_shows_the_reason(self, qt, dialogOf):
+        dialog, _outcome = dialogOf([_Entry("u2", "them@example.com", "other")])
+        chooser = dialog._ndi_fields["profile"]
+        assert "no password in the keyring store" in chooser.itemText(1)
+
+    def test_picking_one_puts_the_reason_on_screen(self, qt, dialogOf):
+        """ "This profile's password is not readable from here" is a
+        different problem from "you never saved one", and only one of
+        them is solved by typing it again."""
+        dialog, _outcome = dialogOf([_Entry("u2", "them@example.com", "other")])
+        dialog._ndi_fields["profile"].setCurrentIndex(1)
+        assert "keyring" in dialog._ndi_said.text()
+
+    def test_picking_a_working_one_says_nothing(self, qt, dialogOf):
+        dialog, _outcome = dialogOf([_Entry("u1", "me@example.com", "work")])
+        dialog._ndi_fields["profile"].setCurrentIndex(1)
+        assert dialog._ndi_said.isHidden()

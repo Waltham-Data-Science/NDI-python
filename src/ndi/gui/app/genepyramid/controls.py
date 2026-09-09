@@ -1701,11 +1701,21 @@ def cloudSessionLooksLikely() -> bool:
 
 
 def cloudProfileChoices():
-    """Saved profiles, as ``(label, email, uid, has_password)`` rows.
+    """Saved profiles, as ``(label, email, uid, stored, note)`` rows.
 
     The label is what a chooser shows: the nickname when there is one,
     else the email, with the email appended either way so two profiles
     for the same person on different stages can be told apart.
+
+    ``note`` SAYS WHY THERE IS NO PASSWORD, which is the whole reason
+    this returns five things rather than four. A profile whose secret
+    lives in a store this process is not reading looks exactly like a
+    profile with no secret at all -- and that is not a rare corner:
+    :func:`ndi.cloud.profile._detect_backend` picks ``keyring`` whenever
+    keyring merely imports, while MATLAB writes its secret to the AES
+    file, so a machine with both ends up looking in the wrong one. The
+    note names the backend, so the reader is told which store came up
+    empty instead of being told their password is missing.
 
     Never raises. A secrets backend that will not open, a profile file
     that will not parse -- none of that is a reason a sign-in dialog
@@ -1719,6 +1729,10 @@ def cloudProfileChoices():
         entries = profile.list_profiles()
     except Exception:  # noqa: BLE001 - see docstring
         return rows
+    try:
+        backend = str(profile.backend())
+    except Exception:  # noqa: BLE001 - a name is a nicety, not a requirement
+        backend = "unknown"
     for entry in entries:
         uid = str(getattr(entry, "UID", "") or "")
         email = str(getattr(entry, "Email", "") or "")
@@ -1729,12 +1743,13 @@ def cloudProfileChoices():
             label = f"{label} ({email})"
         if stage and stage != "prod":
             label = f"{label} [{stage}]"
-        stored = False
+        stored, note = False, ""
         try:
             stored = bool(profile.get_password(uid))
-        except Exception:  # noqa: BLE001 - an unreadable secret is not an error here
-            stored = False
-        rows.append((label, email, uid, stored))
+            note = "password saved" if stored else f"no password in the {backend} store"
+        except Exception as exc:  # noqa: BLE001 - the reason is the useful part
+            note = f"password unreadable from the {backend} store ({exc})"
+        rows.append((label, email, uid, stored, note))
     return rows
 
 
@@ -1878,8 +1893,8 @@ def buildCloudSignInDialog(parent=None):
     choices = cloudProfileChoices()
     chooser = QComboBox()
     chooser.addItem("type them below", None)
-    for label, email, uid, stored in choices:
-        chooser.addItem(f"{label}{' -- password saved' if stored else ''}", (email, uid, stored))
+    for label, email, uid, stored, note in choices:
+        chooser.addItem(f"{label} -- {note}" if note else label, (email, uid, stored))
 
     email = QLineEdit()
     email.setPlaceholderText("you@example.com")
@@ -1914,15 +1929,24 @@ def buildCloudSignInDialog(parent=None):
     def _chose(index):
         data = chooser.itemData(index)
         if not data:
+            said.hide()
             return
         picked_email, _uid, stored = data
         email.setText(picked_email)
         # A profile whose password is saved needs nothing typed.
         password.clear()
         if not stored:
-            # A profile without a saved password needs the password and
-            # not the email, so the focus goes where the work is.
+            # A profile without a usable password needs the password and
+            # not the email, so the focus goes where the work is -- and
+            # the reason is put on screen, because "this profile exists
+            # but its password is not readable from here" is a different
+            # problem from "you never saved one", and only one of them is
+            # solved by typing it again.
+            said.setText(choices[index - 1][4])
+            said.show()
             password.setFocus()
+        else:
+            said.hide()
 
     chooser.currentIndexChanged.connect(_chose)
 
