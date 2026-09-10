@@ -48,10 +48,8 @@ def levelDocs(session: Any, pyramid_doc: Any, reduction: str | None = None) -> l
     """
     from ndi.query import ndi_query
 
-    q = (
-        ndi_query("")
-        .isa("lightsheetZarrLevel")
-        .depends_on("lightsheetZarrPyramid_id", pyramid_doc.id)
+    q = ndi_query("").isa("lightsheetZarrLevel") & ndi_query("").depends_on(
+        "lightsheetZarrPyramid_id", pyramid_doc.id
     )
     docs = list(session.database_search(q))
     if reduction is not None:
