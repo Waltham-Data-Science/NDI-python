@@ -137,11 +137,8 @@ def levelArrays(
     ``reduction`` filters the ladder to ``reduction_function`` in
     ``{'none', reduction}``; ``None`` returns every level.
     """
-    import os
-
-    import numpy as np
-    from dask import delayed
     import dask.array as da
+    from dask import delayed
 
     docs = levelDocs(session, pyramid_doc, reduction=reduction)
     if not docs:
@@ -183,13 +180,31 @@ def _numpy_dtype(s: str):
         endian = "<"
         rest = s
     aliases = {
-        "u1": "u1", "u2": "u2", "u4": "u4", "u8": "u8",
-        "i1": "i1", "i2": "i2", "i4": "i4", "i8": "i8",
-        "f2": "f2", "f4": "f4", "f8": "f8",
-        "uint8": "u1", "uint16": "u2", "uint32": "u4", "uint64": "u8",
-        "int8": "i1", "int16": "i2", "int32": "i4", "int64": "i8",
-        "float16": "f2", "float32": "f4", "float64": "f8",
-        "half": "f2", "single": "f4", "double": "f8",
+        "u1": "u1",
+        "u2": "u2",
+        "u4": "u4",
+        "u8": "u8",
+        "i1": "i1",
+        "i2": "i2",
+        "i4": "i4",
+        "i8": "i8",
+        "f2": "f2",
+        "f4": "f4",
+        "f8": "f8",
+        "uint8": "u1",
+        "uint16": "u2",
+        "uint32": "u4",
+        "uint64": "u8",
+        "int8": "i1",
+        "int16": "i2",
+        "int32": "i4",
+        "int64": "i8",
+        "float16": "f2",
+        "float32": "f4",
+        "float64": "f8",
+        "half": "f2",
+        "single": "f4",
+        "double": "f8",
     }
     code = aliases.get(rest, rest)
     return np.dtype(f"{endian}{code}")
@@ -219,8 +234,7 @@ def _build_block_grid(session, doc, shape, chunks, chunk_grid, dtype, fill, dela
         idx_1 = _linear_chunk_index(indices, chunk_grid)
         # Edge blocks are smaller along one or more axes.
         block_shape = tuple(
-            min(chunks[a], shape[a] - indices[a] * chunks[a])
-            for a in range(len(indices))
+            min(chunks[a], shape[a] - indices[a] * chunks[a]) for a in range(len(indices))
         )
         d = delayed(_read_chunk)(session, doc, idx_1, chunks, block_shape, dtype, fill)
         return da.from_delayed(d, shape=block_shape, dtype=dtype)
