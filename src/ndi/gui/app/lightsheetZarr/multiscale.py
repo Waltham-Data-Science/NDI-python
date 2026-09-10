@@ -224,9 +224,19 @@ def _linear_chunk_index(indices: tuple, chunk_grid: tuple) -> int:
 def _build_block_grid(session, doc, shape, chunks, chunk_grid, dtype, fill, codec, delayed, da):
     """Recursively build a nested list of dask blocks matching chunk_grid.
 
-    Each block is a ``da.from_delayed(_read_chunk(...))`` at that chunk
-    position, with the true edge-block shape so ``da.block`` can
-    concatenate.
+    All chunk paths are resolved EAGERLY on the main thread via
+    ``_fetch_chunk`` before any dask ``delayed`` task is created. The
+    delayed task itself only opens the resolved file and decodes bytes,
+    which is thread-safe. Doing the SQLite lookup inside a delayed task
+    is not: dask's default threaded scheduler runs those tasks on worker
+    threads, and DID's SQLiteDB is a stdlib ``sqlite3.Connection`` that
+    raises "SQLite objects created in a thread can only be used in that
+    same thread". ``find_by_id`` swallows that error and returns None,
+    which surfaced as a silent black napari canvas.
+
+    Each block is a ``da.from_delayed(_read_chunk_from_path(...))`` at
+    that chunk position, with the true edge-block shape so ``da.block``
+    can concatenate.
     """
 
     def one_block(indices: tuple):
@@ -235,7 +245,11 @@ def _build_block_grid(session, doc, shape, chunks, chunk_grid, dtype, fill, code
         block_shape = tuple(
             min(chunks[a], shape[a] - indices[a] * chunks[a]) for a in range(len(indices))
         )
-        d = delayed(_read_chunk)(session, doc, idx_1, chunks, block_shape, dtype, fill, codec)
+        # Resolve the on-disk path here, on the main thread. `path` may
+        # be None for a sparse chunk that was never materialised; the
+        # reader falls back to fill_value in that case.
+        path = _fetch_chunk(session, doc, idx_1)
+        d = delayed(_read_chunk_from_path)(path, chunks, block_shape, dtype, fill, codec)
         return da.from_delayed(d, shape=block_shape, dtype=dtype)
 
     def recurse(prefix: list) -> list:
@@ -247,24 +261,24 @@ def _build_block_grid(session, doc, shape, chunks, chunk_grid, dtype, fill, code
     return recurse([])
 
 
-def _read_chunk(session, doc, idx_1based, chunks_full, block_shape, dtype, fill, codec):
-    """Fetch one chunk file, decode raw bytes to ndarray, trim to block_shape.
+def _read_chunk_from_path(path, chunks_full, block_shape, dtype, fill, codec):
+    """Open a pre-resolved chunk file, decode bytes, trim to block_shape.
 
-    This is the concrete body of the per-chunk read: the file lives in
-    the NDI cloud cache via ``session.database_openbinarydoc``; a missing
-    or short file resolves to ``fill_value`` bytes rather than raising.
+    This runs inside a dask delayed task and MUST NOT touch the NDI
+    database or session. All it does is open a plain filesystem path,
+    decompress the bytes if the level's codec says so, and reshape the
+    result. A ``path`` of None (no such chunk on disk) resolves to
+    ``fill_value``.
 
     Two codecs are supported today: ``raw`` (uncompressed C-order bytes)
     and ``blosc-zstd`` (Blosc v1 container wrapping byte-shuffled Zstd
-    output). The codec identity comes from the level document's ``codec``
-    field; ``codec_params`` is not consulted here because numcodecs.Blosc
-    reads the parameters straight out of the container header.
+    output). numcodecs.Blosc reads its parameters straight out of the
+    container header, so ``codec_params`` is not consulted here.
     """
     import os
 
     import numpy as np
 
-    path = _fetch_chunk(session, doc, idx_1based)
     n_expected = int(np.prod(chunks_full)) * dtype.itemsize
     if path is None or not os.path.isfile(path):
         return np.full(block_shape, fill, dtype=dtype)
