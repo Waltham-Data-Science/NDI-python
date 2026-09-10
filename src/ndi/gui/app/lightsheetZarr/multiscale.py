@@ -328,14 +328,38 @@ def _fetch_chunk(session: Any, level_doc: Any, one_based_index: int) -> str | No
     Returns ``None`` when the file is not present (index out of range,
     or a sparse chunk that was never materialised). Callers use that
     to fall back to ``fill_value``.
+
+    Set ``NDI_LIGHTSHEET_DEBUG=1`` in the environment to print the
+    exception raised by ``database_openbinarydoc`` instead of silently
+    resolving to ``fill_value``. Useful when a napari layer opens as a
+    black canvas -- swallowing the exception is what makes that failure
+    mode silent.
     """
+    import os
+
     filename = f"chunk.bin_{one_based_index:d}"
     try:
         fh = session.database_openbinarydoc(level_doc, filename)
-    except Exception:
+    except Exception as exc:
+        if os.environ.get("NDI_LIGHTSHEET_DEBUG"):
+            import sys
+
+            print(
+                f"[lightsheet] _fetch_chunk({filename}) failed: "
+                f"{type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
         return None
     try:
         path = getattr(fh, "fullpathfilename", None)
+        if path is None and os.environ.get("NDI_LIGHTSHEET_DEBUG"):
+            import sys
+
+            print(
+                f"[lightsheet] _fetch_chunk({filename}): open returned a handle "
+                f"without .fullpathfilename (type={type(fh).__name__})",
+                file=sys.stderr,
+            )
         return str(path) if path else None
     finally:
         try:
