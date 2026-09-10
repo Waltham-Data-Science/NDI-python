@@ -76,9 +76,14 @@ functions:
       pancake tiles rather than voxel cubes. Non-spatial axes (t, c)
       stay at 1. Across a dyadic pyramid this keeps chunk-in-voxels
       constant so chunk_grid halves per axis per level and tile count
-      drops by 8x per level for a 3D ladder. Ports with the other
-      entries under this heading; the Python builder that mirrors
-      makePyramid will call it directly.
+      drops by 8x per level for a 3D ladder. The Python port must use
+      element-wise membership on the axes_order string to identify
+      spatial axes (1d11302 fixed a bug where MATLAB's ismember with a
+      cellstr collapsed the char row into one string and returned a
+      scalar); the equivalent Python idiom is `[ax not in "tc" for ax
+      in axes_order.lower()]`. Ports with the other entries under this
+      heading; the Python builder that mirrors makePyramid will call
+      it directly.
 
   - name: makeSourceFile
     matlab_path: "+ndi/+fun/+doc/+lightsheet/makeSourceFile.m"
