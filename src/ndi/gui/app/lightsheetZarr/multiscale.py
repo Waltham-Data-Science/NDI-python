@@ -299,6 +299,34 @@ def _read_chunk_from_path(path, chunks_full, block_shape, dtype, fill, codec):
     return arr
 
 
+# Colorblind-friendly default palette for napari image layers, one
+# colour per channel. Green/magenta first is the standard biology
+# "safe pair" -- distinguishable under every common form of colour
+# blindness -- and the rest extend the palette while keeping every
+# adjacent pair distinguishable. Higher indices are assumed to be
+# less common; the palette is padded with 'gray' if a fixture ever
+# ships more than seven channels.
+DEFAULT_CHANNEL_PALETTE: tuple[str, ...] = (
+    "green",
+    "magenta",
+    "cyan",
+    "yellow",
+    "blue",
+    "red",
+    "gray",
+)
+
+
+def defaultChannelColors(n_channels: int) -> list[str]:
+    """Return the first ``n_channels`` napari colormap names from the
+    default palette. Any request beyond the palette length is padded
+    with the last colour ('gray')."""
+    palette = list(DEFAULT_CHANNEL_PALETTE)
+    if n_channels <= len(palette):
+        return palette[:n_channels]
+    return palette + [palette[-1]] * (n_channels - len(palette))
+
+
 def layerSpec(
     session: Any,
     pyramid_doc: Any,
@@ -311,20 +339,81 @@ def layerSpec(
     ``data`` is the list of dask arrays from :func:`levelArrays`;
     ``multiscale=True``; ``scale`` and ``translate`` come from
     :func:`worldTransform`; ``name`` defaults to the pyramid's own label.
+
+    If the pyramid's ``axes_order`` contains a ``'c'`` axis, this also
+    fills in ``channel_axis`` (so napari splits the layer into one
+    layer per channel) plus per-channel ``colormap`` and ``name``:
+    channel names come from the pyramid's ``channel_names`` field
+    (comma-separated when present) and fall back to ``Ch1``, ``Ch2``,
+    ...; colormaps come from :func:`defaultChannelColors`.
     """
     arrays = levelArrays(session, pyramid_doc, channel=channel, reduction=reduction)
     scale, translate = worldTransform(session, pyramid_doc)
-    if name is None:
-        p = pyramid_doc.document_properties["lightsheetZarrPyramid"]
-        name = p.get("label") or p.get("pyramid_name") or "lightsheet zarr"
+
+    p = pyramid_doc.document_properties["lightsheetZarrPyramid"]
+    axes_order = str(p.get("axes_order", "")).lower()
+    base_name = name
+    if base_name is None:
+        base_name = p.get("label") or p.get("pyramid_name") or "lightsheet zarr"
+
+    c_index = axes_order.find("c") if axes_order else -1
+    if c_index < 0 or not arrays:
+        return {
+            "data": arrays,
+            "multiscale": True,
+            "name": base_name,
+            "scale": scale or None,
+            "translate": translate or None,
+        }
+
+    n_channels = int(arrays[0].shape[c_index])
+    names = _channelNames(p, n_channels, base_name)
+    colors = defaultChannelColors(n_channels)
+
+    # World transform axes drop the channel axis: napari's `scale` /
+    # `translate` on a multiscale image describe the FINEST level in
+    # world coordinates, and channel is not a world axis.
+    spatial_scale = _dropAxis(scale, c_index) if scale else None
+    spatial_trans = _dropAxis(translate, c_index) if translate else None
 
     return {
         "data": arrays,
         "multiscale": True,
-        "name": name,
-        "scale": scale or None,
-        "translate": translate or None,
+        "channel_axis": c_index,
+        "name": names,
+        "colormap": colors,
+        "scale": spatial_scale or None,
+        "translate": spatial_trans or None,
     }
+
+
+def _channelNames(pyramid_props: dict, n_channels: int, base_name: str) -> list[str]:
+    """Split the pyramid doc's comma-separated channel_names field into a
+    list. Missing / short / empty entries fall back to 'Ch1', 'Ch2', ...
+    Each returned name is prefixed with the layer's base_name so the
+    napari layer panel disambiguates two pyramids opened side by side.
+    """
+    raw = str(pyramid_props.get("channel_names", "") or "").strip()
+    if raw:
+        parts = [s.strip() for s in raw.split(",")]
+    else:
+        parts = []
+    out: list[str] = []
+    for i in range(n_channels):
+        label = parts[i] if i < len(parts) and parts[i] else f"Ch{i + 1}"
+        out.append(f"{base_name} {label}" if base_name else label)
+    return out
+
+
+def _dropAxis(values: list, axis_index: int) -> list:
+    """Return VALUES with the entry at AXIS_INDEX removed. Silent no-op
+    when the list is empty or the index is out of range so the caller
+    can defend against a partially-populated pyramid document."""
+    if not values or axis_index < 0 or axis_index >= len(values):
+        return list(values) if values else []
+    out = list(values)
+    del out[axis_index]
+    return out
 
 
 # ---------------------------------------------------------------------------
