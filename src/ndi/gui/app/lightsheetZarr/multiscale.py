@@ -345,8 +345,7 @@ def _fetch_chunk(session: Any, level_doc: Any, one_based_index: int) -> str | No
             import sys
 
             print(
-                f"[lightsheet] _fetch_chunk({filename}) failed: "
-                f"{type(exc).__name__}: {exc}",
+                f"[lightsheet] _fetch_chunk({filename}) failed: " f"{type(exc).__name__}: {exc}",
                 file=sys.stderr,
             )
         return None
