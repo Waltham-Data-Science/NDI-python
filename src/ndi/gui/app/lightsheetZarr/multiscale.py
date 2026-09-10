@@ -155,11 +155,12 @@ def levelArrays(
         chunk_grid = tuple(int(v) for v in p["chunk_grid"])
         dtype = _numpy_dtype(str(p.get("dtype", "uint16")))
         fill = int(p.get("fill_value", 0))
+        codec = str(p.get("codec", "raw"))
 
         # Build a nested list of dask blocks in the shape of the chunk
         # grid so da.block concatenates them into one array.
         nested = _build_block_grid(
-            session, doc, shape, chunks, chunk_grid, dtype, fill, delayed, da
+            session, doc, shape, chunks, chunk_grid, dtype, fill, codec, delayed, da
         )
         arrays.append(da.block(nested))
 
@@ -220,7 +221,7 @@ def _linear_chunk_index(indices: tuple, chunk_grid: tuple) -> int:
     return linear + 1
 
 
-def _build_block_grid(session, doc, shape, chunks, chunk_grid, dtype, fill, delayed, da):
+def _build_block_grid(session, doc, shape, chunks, chunk_grid, dtype, fill, codec, delayed, da):
     """Recursively build a nested list of dask blocks matching chunk_grid.
 
     Each block is a ``da.from_delayed(_read_chunk(...))`` at that chunk
@@ -234,7 +235,7 @@ def _build_block_grid(session, doc, shape, chunks, chunk_grid, dtype, fill, dela
         block_shape = tuple(
             min(chunks[a], shape[a] - indices[a] * chunks[a]) for a in range(len(indices))
         )
-        d = delayed(_read_chunk)(session, doc, idx_1, chunks, block_shape, dtype, fill)
+        d = delayed(_read_chunk)(session, doc, idx_1, chunks, block_shape, dtype, fill, codec)
         return da.from_delayed(d, shape=block_shape, dtype=dtype)
 
     def recurse(prefix: list) -> list:
@@ -246,12 +247,18 @@ def _build_block_grid(session, doc, shape, chunks, chunk_grid, dtype, fill, dela
     return recurse([])
 
 
-def _read_chunk(session, doc, idx_1based, chunks_full, block_shape, dtype, fill):
+def _read_chunk(session, doc, idx_1based, chunks_full, block_shape, dtype, fill, codec):
     """Fetch one chunk file, decode raw bytes to ndarray, trim to block_shape.
 
     This is the concrete body of the per-chunk read: the file lives in
     the NDI cloud cache via ``session.database_openbinarydoc``; a missing
     or short file resolves to ``fill_value`` bytes rather than raising.
+
+    Two codecs are supported today: ``raw`` (uncompressed C-order bytes)
+    and ``blosc-zstd`` (Blosc v1 container wrapping byte-shuffled Zstd
+    output). The codec identity comes from the level document's ``codec``
+    field; ``codec_params`` is not consulted here because numcodecs.Blosc
+    reads the parameters straight out of the container header.
     """
     import os
 
@@ -263,6 +270,12 @@ def _read_chunk(session, doc, idx_1based, chunks_full, block_shape, dtype, fill)
         return np.full(block_shape, fill, dtype=dtype)
     with open(path, "rb") as f:
         raw = f.read()
+
+    if codec == "blosc-zstd":
+        from numcodecs import Blosc
+
+        raw = Blosc().decode(raw)
+
     if len(raw) < n_expected:
         raw = raw + b"\x00" * (n_expected - len(raw))
     arr = np.frombuffer(raw[:n_expected], dtype=dtype).reshape(chunks_full)
