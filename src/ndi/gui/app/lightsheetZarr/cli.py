@@ -138,7 +138,7 @@ def _describe(session: Any, doc: Any) -> str:
         - {"none"}
     ) or ["(none)"]
     return (
-        f"{doc.id():.16}  n_levels={n_levels}  "
+        f"{doc.id:.16}  n_levels={n_levels}  "
         f"reductions={','.join(reductions):<12}  "
         f"shape0={list(shape)}  label={label}"
     )
@@ -161,7 +161,7 @@ def _pick_pyramid(session: Any, pyramid_id: str | None) -> Any:
             "documents; pass --pyramid <id> or use --list to see them."
         )
     for doc in all_pyramids:
-        if doc.id() == pyramid_id or doc.id().startswith(pyramid_id):
+        if doc.id == pyramid_id or doc.id.startswith(pyramid_id):
             return doc
     raise SystemExit(f"No lightsheetZarrPyramid with id starting {pyramid_id!r}.")
 

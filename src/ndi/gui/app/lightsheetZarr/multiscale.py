@@ -51,7 +51,7 @@ def levelDocs(session: Any, pyramid_doc: Any, reduction: str | None = None) -> l
     q = (
         ndi_query("")
         .isa("lightsheetZarrLevel")
-        .depends_on("lightsheetZarrPyramid_id", pyramid_doc.id())
+        .depends_on("lightsheetZarrPyramid_id", pyramid_doc.id)
     )
     docs = list(session.database_search(q))
     if reduction is not None:
@@ -86,7 +86,7 @@ def levelTable(session: Any, pyramid_doc: Any, reduction: str | None = None) -> 
                 "voxel_size": list(p.get("voxel_size", [])),
                 "translation": list(p.get("translation", [])),
                 "dtype": p.get("dtype", ""),
-                "id": doc.id(),
+                "id": doc.id,
             }
         )
     return rows
@@ -143,7 +143,7 @@ def levelArrays(
     docs = levelDocs(session, pyramid_doc, reduction=reduction)
     if not docs:
         raise ValueError(
-            f"pyramid {pyramid_doc.id()!s} has no lightsheetZarrLevel children for "
+            f"pyramid {pyramid_doc.id!s} has no lightsheetZarrLevel children for "
             f"reduction={reduction!r}."
         )
 
