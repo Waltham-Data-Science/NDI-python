@@ -46,7 +46,7 @@ functions:
 
   - name: makePyramid
     matlab_path: "+ndi/+fun/+doc/+lightsheet/makePyramid.m"
-    matlab_last_sync_hash: "c8f3479"
+    matlab_last_sync_hash: "04293e3"
     status: porting_deferred
     decision_log: >-
       The worker fromOMEZarr calls; writes one lightsheetZarrPyramid
@@ -57,8 +57,12 @@ functions:
       c8f3479 drops the source zarr's chunk shape and re-chooses per
       level via chooseTileShape to hit tileBudgetBytes (default 8 MB
       uncompressed, sized for a viewer over an ~200 MB/s link fetching
-      ~4 tiles in parallel per pan gesture). Ports with the other
-      entries.
+      ~4 tiles in parallel per pan gesture). 04293e3 encodes
+      axes_units as a comma-separated string (e.g.
+      'micrometer,micrometer,micrometer') and leaves channel_names
+      empty by default, matching the schema type change from matrix
+      to string on both fields -- the Python port must match this
+      encoding when it lands. Ports with the other entries.
 
   - name: chooseTileShape
     matlab_path: "+ndi/+fun/+doc/+lightsheet/chooseTileShape.m"
