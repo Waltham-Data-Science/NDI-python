@@ -31,7 +31,7 @@ functions:
 
   - name: fromOMEZarr
     matlab_path: "+ndi/+fun/+doc/+lightsheet/fromOMEZarr.m"
-    matlab_last_sync_hash: "bd6a245"
+    matlab_last_sync_hash: "5f631f2"
     status: porting_deferred
     decision_log: >-
       MATLAB probes an OME-Zarr store with ndr.format.omezarr.listPyramids,
@@ -50,7 +50,7 @@ functions:
 
   - name: makePyramid
     matlab_path: "+ndi/+fun/+doc/+lightsheet/makePyramid.m"
-    matlab_last_sync_hash: "bd6a245"
+    matlab_last_sync_hash: "5f631f2"
     status: porting_deferred
     decision_log: >-
       The worker fromOMEZarr calls; writes one lightsheetZarrPyramid
@@ -153,7 +153,7 @@ functions:
       thin.
   - name: view
     matlab_path: "+ndi/+fun/+doc/+lightsheet/view.m"
-    matlab_last_sync_hash: "bd6a245"
+    matlab_last_sync_hash: "5f631f2"
     status: porting_deferred
     decision_log: >-
       MATLAB caller that pairs viewCommand + SYSTEM: builds the
