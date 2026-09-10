@@ -31,22 +31,26 @@ functions:
 
   - name: fromOMEZarr
     matlab_path: "+ndi/+fun/+doc/+lightsheet/fromOMEZarr.m"
-    matlab_last_sync_hash: "c8f3479"
+    matlab_last_sync_hash: "bd6a245"
     status: porting_deferred
     decision_log: >-
       MATLAB probes an OME-Zarr store with ndr.format.omezarr.listPyramids,
       writes ONE lightsheetZarrPyramid document (per source volume), and
       one lightsheetZarrLevel document per unique array path across all
       multiscales entries. Level 0 is deduped when two entries reference
-      the same NGFF path (typical for mean + max pyramids). Metadata-only;
-      no chunk bytes copied. c8f3479 added tileBudgetBytes (default 8 MB
-      uncompressed) and an optional chunks override, forwarded to
-      makePyramid so each level is re-tiled to hit the budget. Ports
-      with the other entries under this heading.
+      the same NGFF path (typical for mean + max pyramids). c8f3479 added
+      tileBudgetBytes (default 8 MB uncompressed) and an optional chunks
+      override, forwarded to makePyramid so each level is re-tiled to hit
+      the budget. bd6a245 added materializeChunks (default false) which
+      makePyramid uses to read each level from the source OME-Zarr and
+      write chunk.bin_<idx> files onto the level documents before
+      database_add -- the Python port lands the same option and calls
+      into ndr.format.omezarr.readArray equivalent. Ports with the other
+      entries under this heading.
 
   - name: makePyramid
     matlab_path: "+ndi/+fun/+doc/+lightsheet/makePyramid.m"
-    matlab_last_sync_hash: "04293e3"
+    matlab_last_sync_hash: "bd6a245"
     status: porting_deferred
     decision_log: >-
       The worker fromOMEZarr calls; writes one lightsheetZarrPyramid
@@ -62,7 +66,15 @@ functions:
       'micrometer,micrometer,micrometer') and leaves channel_names
       empty by default, matching the schema type change from matrix
       to string on both fields -- the Python port must match this
-      encoding when it lands. Ports with the other entries.
+      encoding when it lands. bd6a245 added materializeChunks +
+      sourceZarrPath options: when enabled the maker reads each level
+      via ndr.format.omezarr.readArray and attaches chunk.bin_<idx>
+      files via add_file BEFORE database_add (NDI documents are
+      immutable after add). n_chunks_stored is set to
+      prod(chunk_grid) in that mode; the metadata-only default keeps
+      it at 0. Bytes are C-order to match Zarr v2 -- MATLAB permutes
+      into reversed axis order before serialising. Ports with the
+      other entries.
 
   - name: chooseTileShape
     matlab_path: "+ndi/+fun/+doc/+lightsheet/chooseTileShape.m"
@@ -139,3 +151,17 @@ functions:
       doc.gene package, but the shape is the same); the lightsheet
       package puts it under +doc/+lightsheet because the manager stays
       thin.
+  - name: view
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/view.m"
+    matlab_last_sync_hash: "bd6a245"
+    status: porting_deferred
+    decision_log: >-
+      MATLAB caller that pairs viewCommand + SYSTEM: builds the
+      napariViewLightsheet command line from viewCommand and dispatches
+      it via system(). Optional PYRAMIDID argument; empty runs the
+      launcher in --list mode. Launcher defaults to
+      /usr/local/bin/napariViewLightsheet, the shell wrapper installed
+      alongside NDI-python. Backgrounds the launcher on POSIX so MATLAB
+      stays interactive. No Python-side counterpart is needed because
+      the Python side IS the launcher; this is the MATLAB-side entry
+      point. Ports with the other entries.
