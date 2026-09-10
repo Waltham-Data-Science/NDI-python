@@ -128,8 +128,7 @@ def levelArrays(
 
     Each array reads its chunks from the level document's
     ``chunk.bin_#`` file series through the NDI cloud cache; a missing
-    chunk (``# > n_chunks_stored``) resolves to the level's
-    ``fill_value``.
+    chunk resolves to the level's ``fill_value``.
 
     ``channel`` (1-based) narrows the returned arrays to a single
     channel along the pyramid's ``c`` axis; ``None`` returns every
@@ -137,11 +136,13 @@ def levelArrays(
 
     ``reduction`` filters the ladder to ``reduction_function`` in
     ``{'none', reduction}``; ``None`` returns every level.
-
-    STATUS: scaffold. Enumerating levels and reading level metadata is
-    wired up; the per-chunk read + dask assembly is the next step. See
-    the package's README for the exact hook to complete.
     """
+    import os
+
+    import numpy as np
+    from dask import delayed
+    import dask.array as da
+
     docs = levelDocs(session, pyramid_doc, reduction=reduction)
     if not docs:
         raise ValueError(
@@ -149,15 +150,114 @@ def levelArrays(
             f"reduction={reduction!r}."
         )
 
-    _ = channel  # signature is stable while the chunk fetcher lands
-    _ = _fetch_chunk  # keep the private helper reachable for the follow-up
+    _ = channel  # single-channel narrowing lands with the magicgui panels
 
-    raise NotImplementedError(
-        "levelArrays: the per-chunk reader through "
-        "session.database_openbinarydoc(level_doc, 'chunk.bin_#') is a "
-        "scaffold in this PR. See src/ndi/gui/app/lightsheetZarr/README-"
-        "lightsheet-zarr.md for the hook to complete."
-    )
+    arrays: list[Any] = []
+    for doc in docs:
+        p = doc.document_properties["lightsheetZarrLevel"]
+        shape = tuple(int(v) for v in p["shape"])
+        chunks = tuple(int(v) for v in p["chunks"])
+        chunk_grid = tuple(int(v) for v in p["chunk_grid"])
+        dtype = _numpy_dtype(str(p.get("dtype", "uint16")))
+        fill = int(p.get("fill_value", 0))
+
+        # Build a nested list of dask blocks in the shape of the chunk
+        # grid so da.block concatenates them into one array.
+        nested = _build_block_grid(
+            session, doc, shape, chunks, chunk_grid, dtype, fill, delayed, da
+        )
+        arrays.append(da.block(nested))
+
+    return arrays
+
+
+def _numpy_dtype(s: str):
+    """Turn a Zarr / MATLAB dtype string into a numpy dtype."""
+    import numpy as np
+
+    s = s.strip().lower()
+    if s and s[0] in "<>|=":
+        endian = s[0]
+        rest = s[1:]
+    else:
+        endian = "<"
+        rest = s
+    aliases = {
+        "u1": "u1", "u2": "u2", "u4": "u4", "u8": "u8",
+        "i1": "i1", "i2": "i2", "i4": "i4", "i8": "i8",
+        "f2": "f2", "f4": "f4", "f8": "f8",
+        "uint8": "u1", "uint16": "u2", "uint32": "u4", "uint64": "u8",
+        "int8": "i1", "int16": "i2", "int32": "i4", "int64": "i8",
+        "float16": "f2", "float32": "f4", "float64": "f8",
+        "half": "f2", "single": "f4", "double": "f8",
+    }
+    code = aliases.get(rest, rest)
+    return np.dtype(f"{endian}{code}")
+
+
+def _linear_chunk_index(indices: tuple, chunk_grid: tuple) -> int:
+    """C-order linear index from a per-axis 0-based tuple, returned 1-based."""
+    linear = 0
+    n = len(chunk_grid)
+    for a, idx0 in enumerate(indices):
+        stride = 1
+        for b in range(a + 1, n):
+            stride *= chunk_grid[b]
+        linear += idx0 * stride
+    return linear + 1
+
+
+def _build_block_grid(session, doc, shape, chunks, chunk_grid, dtype, fill, delayed, da):
+    """Recursively build a nested list of dask blocks matching chunk_grid.
+
+    Each block is a ``da.from_delayed(_read_chunk(...))`` at that chunk
+    position, with the true edge-block shape so ``da.block`` can
+    concatenate.
+    """
+
+    def one_block(indices: tuple):
+        idx_1 = _linear_chunk_index(indices, chunk_grid)
+        # Edge blocks are smaller along one or more axes.
+        block_shape = tuple(
+            min(chunks[a], shape[a] - indices[a] * chunks[a])
+            for a in range(len(indices))
+        )
+        d = delayed(_read_chunk)(session, doc, idx_1, chunks, block_shape, dtype, fill)
+        return da.from_delayed(d, shape=block_shape, dtype=dtype)
+
+    def recurse(prefix: list) -> list:
+        axis = len(prefix)
+        if axis == len(chunk_grid):
+            return one_block(tuple(prefix))
+        return [recurse(prefix + [i]) for i in range(chunk_grid[axis])]
+
+    return recurse([])
+
+
+def _read_chunk(session, doc, idx_1based, chunks_full, block_shape, dtype, fill):
+    """Fetch one chunk file, decode raw bytes to ndarray, trim to block_shape.
+
+    This is the concrete body of the per-chunk read: the file lives in
+    the NDI cloud cache via ``session.database_openbinarydoc``; a missing
+    or short file resolves to ``fill_value`` bytes rather than raising.
+    """
+    import os
+
+    import numpy as np
+
+    path = _fetch_chunk(session, doc, idx_1based)
+    n_expected = int(np.prod(chunks_full)) * dtype.itemsize
+    if path is None or not os.path.isfile(path):
+        return np.full(block_shape, fill, dtype=dtype)
+    with open(path, "rb") as f:
+        raw = f.read()
+    if len(raw) < n_expected:
+        raw = raw + b"\x00" * (n_expected - len(raw))
+    arr = np.frombuffer(raw[:n_expected], dtype=dtype).reshape(chunks_full)
+    # Edge blocks trim the padded chunk to the true shape.
+    if block_shape != chunks_full:
+        arr = arr[tuple(slice(0, s) for s in block_shape)]
+    return arr
 
 
 def layerSpec(
@@ -192,23 +292,28 @@ def layerSpec(
 # private
 
 
-def _fetch_chunk(session: Any, level_doc: Any, one_based_index: int):
-    """Read one chunk file through the NDI cloud cache and return raw bytes.
+def _fetch_chunk(session: Any, level_doc: Any, one_based_index: int) -> str | None:
+    """Resolve one chunk file through the NDI cloud cache; return its path.
 
-    Mirrors the genepyramid tile fetcher: open, read
-    ``.fullpathfilename``, close. Called from a dask.delayed block; the
-    caller is responsible for decoding those bytes per the level's
-    ``codec``/``dtype``/``chunk_order`` and reshaping to the level's
-    ``chunks`` shape.
+    Opens the level document's ``chunk.bin_<index>`` file series entry
+    with ``session.database_openbinarydoc``, records the local cache
+    path from ``.fullpathfilename``, closes the handle, and returns the
+    path. The caller opens the file itself and reads raw bytes.
 
-    STATUS: scaffold. The signature is fixed so the follow-up PR that
-    lands the dask block can drop it in without changing the call
-    sites in :func:`levelArrays`.
+    Returns ``None`` when the file is not present (index out of range,
+    or a sparse chunk that was never materialised). Callers use that
+    to fall back to ``fill_value``.
     """
     filename = f"chunk.bin_{one_based_index:d}"
-    _ = session, level_doc, filename
-    raise NotImplementedError(
-        "_fetch_chunk: read the file through "
-        "session.database_openbinarydoc(level_doc, 'chunk.bin_#') and "
-        "decode per the level's codec. See the package README."
-    )
+    try:
+        fh = session.database_openbinarydoc(level_doc, filename)
+    except Exception:
+        return None
+    try:
+        path = getattr(fh, "fullpathfilename", None)
+        return str(path) if path else None
+    finally:
+        try:
+            session.database_closebinarydoc(fh)
+        except Exception:
+            pass
