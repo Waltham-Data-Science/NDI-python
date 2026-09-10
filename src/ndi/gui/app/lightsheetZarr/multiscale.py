@@ -31,6 +31,8 @@ optional install extras (``pip install 'ndi[napari]'``).
 
 from __future__ import annotations
 
+import os
+import threading
 from typing import Any
 
 # ---------------------------------------------------------------------------
@@ -116,21 +118,181 @@ def worldTransform(session: Any, pyramid_doc: Any) -> tuple[list[float], list[fl
 # multiscale arrays
 
 
+class _ChunkFetcher:
+    """Fetches chunk paths on threads that own their own session handle.
+
+    Same shape as genepyramid._TileFetcher (see that file for the reasoning
+    -- worth reading in full if this is touched). Recap:
+
+    DID's SQLiteDB is thread-owned: only the thread that opened a session
+    may call ``database_openbinarydoc`` on it. Dask's default (threaded)
+    scheduler runs delayed tasks on a pool. If a task reaches into the
+    caller's session, DID's read path catches sqlite's cross-thread error
+    and returns None -- and session_base then raises
+    ``ndi_document <id> not found`` for a document that is present. Only
+    the synchronous scheduler passes.
+
+    Resolving every chunk on the main thread AVOIDS that trap and works
+    for a directory-backed session (path resolution is free), but on a
+    cloud-backed session ``database_openbinarydoc`` DOWNLOADS THE FILE --
+    resolving is fetching. Eager resolution of every chunk of every level
+    then downloads the whole pyramid before napari draws a pixel.
+
+    This class is the middle ground: dedicated fetcher threads each own
+    their own re-opened session. Delayed tasks call ``chunkPath(doc, name)``
+    from whichever thread they run on; the fetcher dispatches through its
+    pool and returns the resolved local path. Resolved paths are memoised
+    per (doc_id, filename) so a re-render never reaches the fetch threads
+    again -- a cached hit is one ``os.path.exists`` from any thread.
+
+    ``workers`` DEFAULTS TO 1: one session opened once, exactly as if a
+    separate process held it. Cloud fetches are latency-bound, so raising
+    it buys overlap; it also costs another whole session per worker.
+    """
+
+    def __init__(self, session, workers: int = 1):
+        self._session = session
+        self._owner = threading.get_ident()
+        self._reopen = self._reopener(session)
+        self._workers = max(1, int(workers))
+        self._local = threading.local()
+        self._pool = None
+        self._lock = threading.Lock()
+        self._paths: dict[tuple[str, str], str] = {}
+
+    @staticmethod
+    def _reopener(session):
+        """How to build another handle on the same data, or None if unknown.
+
+        Only a path-backed session is reopened; anything holding a live
+        client or credentials is left alone rather than duplicated on a
+        guess (per-thread reauth would be worse than the serialisation it
+        buys).
+        """
+        path = getattr(session, "path", None)
+        if path is None:
+            return None
+        cls = type(session)
+        return lambda: cls(path)
+
+    def _initThread(self):
+        self._local.session = self._reopen()
+
+    def _ensurePool(self):
+        if self._pool is not None or self._reopen is None:
+            return self._pool
+        with self._lock:
+            if self._pool is None:
+                from concurrent.futures import ThreadPoolExecutor
+
+                self._pool = ThreadPoolExecutor(
+                    max_workers=self._workers,
+                    thread_name_prefix="ndi-lightsheet",
+                    initializer=self._initThread,
+                )
+        return self._pool
+
+    def warm(self) -> None:
+        """Build the session handles now, off the calling thread.
+
+        Optional; worth calling right after ``napari.Viewer()`` so the
+        one-off session-open cost lands while the user is staring at an
+        empty canvas rather than at the first pan.
+        """
+        pool = self._ensurePool()
+        if pool is None:
+            return
+        for f in [pool.submit(lambda: None) for _ in range(self._workers)]:
+            f.result()
+
+    def _resolve(self, doc, filename) -> str | None:
+        s = getattr(self._local, "session", None) or self._session
+        try:
+            fh = s.database_openbinarydoc(doc, filename)
+        except Exception as exc:
+            if os.environ.get("NDI_LIGHTSHEET_DEBUG"):
+                import sys
+
+                print(
+                    f"[lightsheet] chunk fetch failed for {filename}: "
+                    f"{type(exc).__name__}: {exc}",
+                    file=sys.stderr,
+                )
+            return None
+        try:
+            path = getattr(fh, "fullpathfilename", None)
+            return str(path) if path else None
+        finally:
+            try:
+                s.database_closebinarydoc(fh)
+            except Exception:
+                pass
+
+    def chunkPath(self, doc, filename) -> str | None:
+        """Resolve one chunk file to a local path, fetching it if remote.
+
+        None when the chunk was never materialised (sparse) or when the
+        underlying fetch raised.
+
+        Memoised: once a path is known, subsequent lookups are one
+        ``os.path.exists`` from any thread. Files can be evicted, so a
+        stale hit that fails on read should be dropped with :meth:`forget`.
+        """
+        key = (getattr(doc, "id", str(doc)), filename)
+        known = self._paths.get(key)
+        if known is not None and os.path.exists(known):
+            return known
+        path = self._fetch(doc, filename)
+        if path is not None:
+            self._paths[key] = path
+        return path
+
+    def forget(self, doc, filename) -> None:
+        """Drop a memoised path so the next call fetches it again."""
+        self._paths.pop((getattr(doc, "id", str(doc)), filename), None)
+
+    def _fetch(self, doc, filename) -> str | None:
+        if threading.get_ident() == self._owner:
+            return self._resolve(doc, filename)
+        pool = self._ensurePool()
+        if pool is None:
+            raise RuntimeError(
+                f"Cannot fetch {filename!r} from thread "
+                f"{threading.current_thread().name}: this session cannot be "
+                f"reopened for another thread, and NDI's database may only "
+                f"be used from the thread that opened it. Compute the ladder "
+                f"with dask's synchronous scheduler, or pass a session that "
+                f"exposes a path."
+            )
+        return pool.submit(self._resolve, doc, filename).result()
+
+    def close(self) -> None:
+        if self._pool is not None:
+            self._pool.shutdown(wait=False)
+            self._pool = None
+
+
 def levelArrays(
     session: Any,
     pyramid_doc: Any,
     channel: int | None = None,
     reduction: str | None = None,
-) -> list[Any]:
-    """One lazy dask array per level, in the same order napari expects.
+) -> tuple[list[Any], _ChunkFetcher]:
+    """One lazy dask array per level, plus the fetcher backing them.
 
-    Each array reads its chunks from the level document's
-    ``chunk.bin_#`` file series through the NDI cloud cache; a missing
-    chunk resolves to the level's ``fill_value``.
+    Each array reads its chunks from the level document's ``chunk.bin_#``
+    file series through the NDI cloud cache; a missing chunk resolves to
+    the level's ``fill_value`` without any network call.
 
-    ``channel`` (1-based) narrows the returned arrays to a single
-    channel along the pyramid's ``c`` axis; ``None`` returns every
-    channel as its own axis.
+    The returned :class:`_ChunkFetcher` owns the dedicated fetcher threads
+    that back the delayed tasks. It stays alive because the block closures
+    hold a reference to it, so the caller does not strictly need to keep
+    it -- but returning it lets a viewer call ``.warm()`` before the first
+    pan and ``.close()`` on teardown.
+
+    ``channel`` (1-based) narrows the returned arrays to a single channel
+    along the pyramid's ``c`` axis; ``None`` returns every channel as its
+    own axis.
 
     ``reduction`` filters the ladder to ``reduction_function`` in
     ``{'none', reduction}``; ``None`` returns every level.
@@ -147,6 +309,8 @@ def levelArrays(
 
     _ = channel  # single-channel narrowing lands with the magicgui panels
 
+    fetcher = _ChunkFetcher(session)
+
     arrays: list[Any] = []
     for doc in docs:
         p = doc.document_properties["lightsheetZarrLevel"]
@@ -156,15 +320,48 @@ def levelArrays(
         dtype = _numpy_dtype(str(p.get("dtype", "uint16")))
         fill = int(p.get("fill_value", 0))
         codec = str(p.get("codec", "raw"))
+        stored = _storedChunkNames(doc)
 
-        # Build a nested list of dask blocks in the shape of the chunk
-        # grid so da.block concatenates them into one array.
         nested = _build_block_grid(
-            session, doc, shape, chunks, chunk_grid, dtype, fill, codec, delayed, da
+            fetcher,
+            doc,
+            shape,
+            chunks,
+            chunk_grid,
+            dtype,
+            fill,
+            codec,
+            stored,
+            delayed,
+            da,
         )
         arrays.append(da.block(nested))
 
-    return arrays
+    return arrays, fetcher
+
+
+def _storedChunkNames(level_doc: Any) -> set[str] | None:
+    """Return the set of ``chunk.bin_#`` names attached to a level document.
+
+    Returned as a set for O(1) membership tests during the delayed-block
+    grid build. Empty set means "the level document knows it has no
+    chunks" and every position resolves to fill_value with no fetch. None
+    means "the level document does not expose a file list" (older docs,
+    unusual backends) -- the reader then falls back to trying every
+    position, matching the pre-file-list behaviour.
+    """
+    try:
+        names = level_doc.current_file_list()
+    except Exception:
+        return None
+    if names is None:
+        return None
+    out: set[str] = set()
+    for name in names:
+        s = str(name)
+        if s.startswith("chunk.bin_"):
+            out.add(s)
+    return out
 
 
 def _numpy_dtype(s: str):
@@ -221,22 +418,23 @@ def _linear_chunk_index(indices: tuple, chunk_grid: tuple) -> int:
     return linear + 1
 
 
-def _build_block_grid(session, doc, shape, chunks, chunk_grid, dtype, fill, codec, delayed, da):
+def _build_block_grid(
+    fetcher, doc, shape, chunks, chunk_grid, dtype, fill, codec, stored, delayed, da
+):
     """Recursively build a nested list of dask blocks matching chunk_grid.
 
-    All chunk paths are resolved EAGERLY on the main thread via
-    ``_fetch_chunk`` before any dask ``delayed`` task is created. The
-    delayed task itself only opens the resolved file and decodes bytes,
-    which is thread-safe. Doing the SQLite lookup inside a delayed task
-    is not: dask's default threaded scheduler runs those tasks on worker
-    threads, and DID's SQLiteDB is a stdlib ``sqlite3.Connection`` that
-    raises "SQLite objects created in a thread can only be used in that
-    same thread". ``find_by_id`` swallows that error and returns None,
-    which surfaced as a silent black napari canvas.
+    Chunk paths are resolved LAZILY, inside each delayed task, through
+    the shared :class:`_ChunkFetcher`. That is what makes the reader
+    stream on a cloud-backed session: nothing is fetched until dask asks
+    for a specific block, and each block goes through fetcher threads
+    that own their own session handle (dodging DID's thread-owned
+    SQLite connection).
 
-    Each block is a ``da.from_delayed(_read_chunk_from_path(...))`` at
-    that chunk position, with the true edge-block shape so ``da.block``
-    can concatenate.
+    STORED (a set of ``chunk.bin_#`` names, or None) short-circuits the
+    fetcher for chunks the level document doesn't list. On a sparse
+    volume, empty tiles are one hash lookup and a ``np.full`` -- no
+    network call at all. None means the level document has no file
+    list, and the reader falls back to attempting every position.
     """
 
     def one_block(indices: tuple):
@@ -245,11 +443,15 @@ def _build_block_grid(session, doc, shape, chunks, chunk_grid, dtype, fill, code
         block_shape = tuple(
             min(chunks[a], shape[a] - indices[a] * chunks[a]) for a in range(len(indices))
         )
-        # Resolve the on-disk path here, on the main thread. `path` may
-        # be None for a sparse chunk that was never materialised; the
-        # reader falls back to fill_value in that case.
-        path = _fetch_chunk(session, doc, idx_1)
-        d = delayed(_read_chunk_from_path)(path, chunks, block_shape, dtype, fill, codec)
+        name = f"chunk.bin_{idx_1:d}"
+        # Short-circuit missing chunks BEFORE they reach a dask task, so
+        # sparse regions don't even schedule work.
+        if stored is not None and name not in stored:
+            d = delayed(_zero_block)(block_shape, dtype, fill)
+        else:
+            d = delayed(_read_chunk_from_fetcher)(
+                fetcher, doc, name, chunks, block_shape, dtype, fill, codec
+            )
         return da.from_delayed(d, shape=block_shape, dtype=dtype)
 
     def recurse(prefix: list) -> list:
@@ -261,29 +463,43 @@ def _build_block_grid(session, doc, shape, chunks, chunk_grid, dtype, fill, code
     return recurse([])
 
 
-def _read_chunk_from_path(path, chunks_full, block_shape, dtype, fill, codec):
-    """Open a pre-resolved chunk file, decode bytes, trim to block_shape.
-
-    This runs inside a dask delayed task and MUST NOT touch the NDI
-    database or session. All it does is open a plain filesystem path,
-    decompress the bytes if the level's codec says so, and reshape the
-    result. A ``path`` of None (no such chunk on disk) resolves to
-    ``fill_value``.
-
-    Two codecs are supported today: ``raw`` (uncompressed C-order bytes)
-    and ``blosc-zstd`` (Blosc v1 container wrapping byte-shuffled Zstd
-    output). numcodecs.Blosc reads its parameters straight out of the
-    container header, so ``codec_params`` is not consulted here.
-    """
-    import os
-
+def _zero_block(block_shape, dtype, fill):
+    """A missing-chunk block: fill_value at the true edge-block shape."""
     import numpy as np
 
+    return np.full(block_shape, fill, dtype=dtype)
+
+
+def _read_chunk_from_fetcher(fetcher, doc, filename, chunks_full, block_shape, dtype, fill, codec):
+    """Resolve a chunk file through the fetcher, then decode + trim.
+
+    Runs inside a dask delayed task and therefore may execute on any
+    worker thread. All NDI database access goes through ``fetcher``,
+    which owns its own thread(s) with their own session handle -- so
+    the delayed body itself never touches the caller's session.
+
+    A resolved path that has been evicted from the local cache between
+    the memo check and the read is retried once with :meth:`forget`; a
+    persistent miss falls through to fill_value rather than raising, so
+    a torn cache never poisons the whole canvas.
+    """
+    import numpy as np
+
+    path = fetcher.chunkPath(doc, filename)
     n_expected = int(np.prod(chunks_full)) * dtype.itemsize
-    if path is None or not os.path.isfile(path):
+    if path is None:
         return np.full(block_shape, fill, dtype=dtype)
-    with open(path, "rb") as f:
-        raw = f.read()
+    try:
+        raw = _readAll(path)
+    except OSError:
+        fetcher.forget(doc, filename)
+        path = fetcher.chunkPath(doc, filename)
+        if path is None:
+            return np.full(block_shape, fill, dtype=dtype)
+        try:
+            raw = _readAll(path)
+        except OSError:
+            return np.full(block_shape, fill, dtype=dtype)
 
     if codec == "blosc-zstd":
         from numcodecs import Blosc
@@ -293,10 +509,14 @@ def _read_chunk_from_path(path, chunks_full, block_shape, dtype, fill, codec):
     if len(raw) < n_expected:
         raw = raw + b"\x00" * (n_expected - len(raw))
     arr = np.frombuffer(raw[:n_expected], dtype=dtype).reshape(chunks_full)
-    # Edge blocks trim the padded chunk to the true shape.
     if block_shape != chunks_full:
         arr = arr[tuple(slice(0, s) for s in block_shape)]
     return arr
+
+
+def _readAll(path: str) -> bytes:
+    with open(path, "rb") as f:
+        return f.read()
 
 
 # Colorblind-friendly default palette for napari image layers, one
@@ -333,21 +553,28 @@ def layerSpec(
     channel: int | None = None,
     name: str | None = None,
     reduction: str | None = None,
-) -> dict:
-    """Return kwargs suitable for ``napari.Viewer.add_image(**spec)``.
+) -> tuple[dict, _ChunkFetcher]:
+    """Return ``(spec, fetcher)`` where SPEC is kwargs for ``add_image``.
 
-    ``data`` is the list of dask arrays from :func:`levelArrays`;
+    ``spec['data']`` is the list of dask arrays from :func:`levelArrays`;
     ``multiscale=True``; ``scale`` and ``translate`` come from
     :func:`worldTransform`; ``name`` defaults to the pyramid's own label.
 
-    If the pyramid's ``axes_order`` contains a ``'c'`` axis, this also
-    fills in ``channel_axis`` (so napari splits the layer into one
+    ``fetcher`` is the :class:`_ChunkFetcher` backing the delayed reads.
+    It is already held alive by the block closures, so the caller doesn't
+    strictly need to hold it, but exposing it lets a viewer call
+    ``fetcher.warm()`` before the first pan (so the one-off session-open
+    cost lands while napari's window is opening) and ``fetcher.close()``
+    on teardown.
+
+    If the pyramid's ``axes_order`` contains a ``'c'`` axis, ``spec``
+    also fills in ``channel_axis`` (so napari splits the layer into one
     layer per channel) plus per-channel ``colormap`` and ``name``:
     channel names come from the pyramid's ``channel_names`` field
     (comma-separated when present) and fall back to ``Ch1``, ``Ch2``,
     ...; colormaps come from :func:`defaultChannelColors`.
     """
-    arrays = levelArrays(session, pyramid_doc, channel=channel, reduction=reduction)
+    arrays, fetcher = levelArrays(session, pyramid_doc, channel=channel, reduction=reduction)
     scale, translate = worldTransform(session, pyramid_doc)
 
     p = pyramid_doc.document_properties["lightsheetZarrPyramid"]
@@ -358,13 +585,14 @@ def layerSpec(
 
     c_index = axes_order.find("c") if axes_order else -1
     if c_index < 0 or not arrays:
-        return {
+        spec = {
             "data": arrays,
             "multiscale": True,
             "name": base_name,
             "scale": scale or None,
             "translate": translate or None,
         }
+        return spec, fetcher
 
     n_channels = int(arrays[0].shape[c_index])
     names = _channelNames(p, n_channels, base_name)
@@ -376,7 +604,7 @@ def layerSpec(
     spatial_scale = _dropAxis(scale, c_index) if scale else None
     spatial_trans = _dropAxis(translate, c_index) if translate else None
 
-    return {
+    spec = {
         "data": arrays,
         "multiscale": True,
         "channel_axis": c_index,
@@ -385,6 +613,7 @@ def layerSpec(
         "scale": spatial_scale or None,
         "translate": spatial_trans or None,
     }
+    return spec, fetcher
 
 
 def _channelNames(pyramid_props: dict, n_channels: int, base_name: str) -> list[str]:
@@ -416,55 +645,6 @@ def _dropAxis(values: list, axis_index: int) -> list:
     return out
 
 
-# ---------------------------------------------------------------------------
-# private
-
-
-def _fetch_chunk(session: Any, level_doc: Any, one_based_index: int) -> str | None:
-    """Resolve one chunk file through the NDI cloud cache; return its path.
-
-    Opens the level document's ``chunk.bin_<index>`` file series entry
-    with ``session.database_openbinarydoc``, records the local cache
-    path from ``.fullpathfilename``, closes the handle, and returns the
-    path. The caller opens the file itself and reads raw bytes.
-
-    Returns ``None`` when the file is not present (index out of range,
-    or a sparse chunk that was never materialised). Callers use that
-    to fall back to ``fill_value``.
-
-    Set ``NDI_LIGHTSHEET_DEBUG=1`` in the environment to print the
-    exception raised by ``database_openbinarydoc`` instead of silently
-    resolving to ``fill_value``. Useful when a napari layer opens as a
-    black canvas -- swallowing the exception is what makes that failure
-    mode silent.
-    """
-    import os
-
-    filename = f"chunk.bin_{one_based_index:d}"
-    try:
-        fh = session.database_openbinarydoc(level_doc, filename)
-    except Exception as exc:
-        if os.environ.get("NDI_LIGHTSHEET_DEBUG"):
-            import sys
-
-            print(
-                f"[lightsheet] _fetch_chunk({filename}) failed: " f"{type(exc).__name__}: {exc}",
-                file=sys.stderr,
-            )
-        return None
-    try:
-        path = getattr(fh, "fullpathfilename", None)
-        if path is None and os.environ.get("NDI_LIGHTSHEET_DEBUG"):
-            import sys
-
-            print(
-                f"[lightsheet] _fetch_chunk({filename}): open returned a handle "
-                f"without .fullpathfilename (type={type(fh).__name__})",
-                file=sys.stderr,
-            )
-        return str(path) if path else None
-    finally:
-        try:
-            session.database_closebinarydoc(fh)
-        except Exception:
-            pass
+# All chunk fetching now goes through _ChunkFetcher.chunkPath, which
+# owns its own thread(s) with re-opened session handles. The old
+# _fetch_chunk (main-thread eager resolver) is gone.

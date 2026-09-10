@@ -69,11 +69,20 @@ def openPyramid(
     napari = require_napari()
     from ndi.gui.app.lightsheetZarr import multiscale
 
-    spec = multiscale.layerSpec(
+    spec, fetcher = multiscale.layerSpec(
         session, pyramid_doc, channel=channel, name=name, reduction=reduction
     )
     viewer = napari.Viewer()
     viewer.add_image(**spec)
+
+    # Build the fetcher's session handles now, while the user is looking
+    # at an empty canvas rather than at the first pan. Harmless on a
+    # local session (the pool starts, the sessions open, the first tile
+    # goes straight through); real win on a cloud session.
+    try:
+        fetcher.warm()
+    except Exception:
+        pass  # warm is best-effort; a fetch that needs it will still work
 
     if level is not None:
         # napari's multiscale layer picks a level from the current zoom;
@@ -88,7 +97,10 @@ def openPyramid(
         _attach_controls(viewer, session, pyramid_doc)
 
     if show:
-        napari.run()
+        try:
+            napari.run()
+        finally:
+            fetcher.close()
 
     return viewer
 
