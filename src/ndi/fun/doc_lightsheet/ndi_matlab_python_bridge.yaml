@@ -31,7 +31,7 @@ functions:
 
   - name: fromOMEZarr
     matlab_path: "+ndi/+fun/+doc/+lightsheet/fromOMEZarr.m"
-    matlab_last_sync_hash: "a7ba07a"
+    matlab_last_sync_hash: "f3a430b"
     status: porting_deferred
     decision_log: >-
       MATLAB probes an OME-Zarr store with ndr.format.omezarr.listPyramids,
