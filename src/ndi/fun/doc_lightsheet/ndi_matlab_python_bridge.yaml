@@ -50,7 +50,7 @@ functions:
 
   - name: makePyramid
     matlab_path: "+ndi/+fun/+doc/+lightsheet/makePyramid.m"
-    matlab_last_sync_hash: "a7ba07a"
+    matlab_last_sync_hash: "f37fbf1"
     status: porting_deferred
     decision_log: >-
       The worker fromOMEZarr calls; writes one lightsheetZarrPyramid
@@ -73,8 +73,14 @@ functions:
       immutable after add). n_chunks_stored is set to
       prod(chunk_grid) in that mode; the metadata-only default keeps
       it at 0. Bytes are C-order to match Zarr v2 -- MATLAB permutes
-      into reversed axis order before serialising. Ports with the
-      other entries.
+      into reversed axis order before serialising. f37fbf1 replaced
+      the ~100-line encodeBloscZstd/compressZstd shell-out with a
+      call to ndr.format.blosc.encode -- NDR-matlab now owns the
+      Blosc container encoder, backed by numcodecs.Blosc inside a
+      self-installing private venv (sonpipe pattern; MATLAB's pyenv
+      is never touched). Container bytes are unchanged, so this side
+      of the port stays the same when it lands: use numcodecs.Blosc
+      directly. Ports with the other entries.
 
   - name: chooseTileShape
     matlab_path: "+ndi/+fun/+doc/+lightsheet/chooseTileShape.m"
