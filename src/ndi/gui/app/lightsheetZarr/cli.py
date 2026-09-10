@@ -138,7 +138,7 @@ def _describe(session: Any, doc: Any) -> str:
         - {"none"}
     ) or ["(none)"]
     return (
-        f"{doc.id:.16}  n_levels={n_levels}  "
+        f"{doc.id}  n_levels={n_levels}  "
         f"reductions={','.join(reductions):<12}  "
         f"shape0={list(shape)}  label={label}"
     )
