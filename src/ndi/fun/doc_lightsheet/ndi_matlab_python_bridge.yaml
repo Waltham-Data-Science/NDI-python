@@ -1,0 +1,173 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/fun/doc_lightsheet/
+# The Primary Contract for the +ndi/+fun/+doc/+lightsheet MATLAB package.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# +ndi/+fun/+doc/+lightsheet -- lightsheet OME-Zarr document tooling
+# (VH-Lab/NDI-matlab claude/lightsheet-zarr-ndi-viewer-djp5vk).
+#
+# A group of MATLAB functions that build lightsheetZarrPyramid +
+# lightsheetZarrLevel documents from an OME-Zarr store and read them
+# back through the NDI cloud cache. None have a Python counterpart yet.
+# The napari viewer they enable is on the Python side already
+# (src/ndi/gui/app/lightsheetZarr/), but its reader queries the same
+# documents through the standard NDI query API rather than through a
+# ported wrapper: the Python surface a viewer needs and the Python
+# surface a script needs are different, and the second waits until
+# there is a caller.
+#
+# When the ingest boundary is drawn on the Python side, these functions
+# port as a group into a doc_lightsheet.py flat file, mirroring how
+# doc_gene.py mirrors +ndi/+fun/+doc/+gene. Deferred as a group rather
+# than a file at a time because they call each other -- fromOMEZarr
+# drives makePyramid + makeSourceFile, and readViewport-style callers
+# will need chooseLevel + levelTable.
+# =========================================================================
+functions:
+
+  - name: fromOMEZarr
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/fromOMEZarr.m"
+    matlab_last_sync_hash: "f3a430b"
+    status: porting_deferred
+    decision_log: >-
+      MATLAB probes an OME-Zarr store with ndr.format.omezarr.listPyramids,
+      writes ONE lightsheetZarrPyramid document (per source volume), and
+      one lightsheetZarrLevel document per unique array path across all
+      multiscales entries. Level 0 is deduped when two entries reference
+      the same NGFF path (typical for mean + max pyramids). c8f3479 added
+      tileBudgetBytes (default 8 MB uncompressed) and an optional chunks
+      override, forwarded to makePyramid so each level is re-tiled to hit
+      the budget. bd6a245 added materializeChunks (default false) which
+      makePyramid uses to read each level from the source OME-Zarr and
+      write chunk.bin_<idx> files onto the level documents before
+      database_add -- the Python port lands the same option and calls
+      into ndr.format.omezarr.readArray equivalent. Ports with the other
+      entries under this heading.
+
+  - name: makePyramid
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/makePyramid.m"
+    matlab_last_sync_hash: "1c19307"
+    status: porting_deferred
+    decision_log: >-
+      The worker fromOMEZarr calls; writes one lightsheetZarrPyramid
+      parent (describes the source volume, reduction-agnostic) plus one
+      lightsheetZarrLevel per unique NGFF path across all entries.
+      reduction_function on the level names the reduction ('none' for
+      the shared raw level 0, 'mean' / 'max' / ... for reduced levels).
+      c8f3479 drops the source zarr's chunk shape and re-chooses per
+      level via chooseTileShape to hit tileBudgetBytes (default 8 MB
+      uncompressed, sized for a viewer over an ~200 MB/s link fetching
+      ~4 tiles in parallel per pan gesture). 04293e3 encodes
+      axes_units as a comma-separated string (e.g.
+      'micrometer,micrometer,micrometer') and leaves channel_names
+      empty by default, matching the schema type change from matrix
+      to string on both fields -- the Python port must match this
+      encoding when it lands. bd6a245 added materializeChunks +
+      sourceZarrPath options: when enabled the maker reads each level
+      via ndr.format.omezarr.readArray and attaches chunk.bin_<idx>
+      files via add_file BEFORE database_add (NDI documents are
+      immutable after add). n_chunks_stored is set to
+      prod(chunk_grid) in that mode; the metadata-only default keeps
+      it at 0. Bytes are C-order to match Zarr v2 -- MATLAB permutes
+      into reversed axis order before serialising. f37fbf1 replaced
+      the ~100-line encodeBloscZstd/compressZstd shell-out with a
+      call to ndr.format.blosc.encode -- NDR-matlab now owns the
+      Blosc container encoder, backed by numcodecs.Blosc inside a
+      self-installing private venv (sonpipe pattern; MATLAB's pyenv
+      is never touched). Container bytes are unchanged, so this side
+      of the port stays the same when it lands: use numcodecs.Blosc
+      directly. Ports with the other entries.
+
+  - name: chooseTileShape
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/chooseTileShape.m"
+    matlab_last_sync_hash: "1d11302"
+    status: porting_deferred
+    decision_log: >-
+      Pure function that picks an OME-Zarr chunk shape landing near a
+      byte budget with tiles ISOTROPIC IN WORLD SPACE: each spatial
+      axis gets a chunk length inversely proportional to its voxel
+      size, so a lightsheet volume with 1 um XY and 5 um Z produces
+      pancake tiles rather than voxel cubes. Non-spatial axes (t, c)
+      stay at 1. Across a dyadic pyramid this keeps chunk-in-voxels
+      constant so chunk_grid halves per axis per level and tile count
+      drops by 8x per level for a 3D ladder. The Python port must use
+      element-wise membership on the axes_order string to identify
+      spatial axes (1d11302 fixed a bug where MATLAB's ismember with a
+      cellstr collapsed the char row into one string and returned a
+      scalar); the equivalent Python idiom is `[ax not in "tc" for ax
+      in axes_order.lower()]`. Ports with the other entries under this
+      heading; the Python builder that mirrors makePyramid will call
+      it directly.
+
+  - name: makeSourceFile
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/makeSourceFile.m"
+    matlab_last_sync_hash: "1af66bb"
+    status: porting_deferred
+    decision_log: >-
+      MATLAB creates the fileReference document the lightsheet documents'
+      source_file_id dependency points at, so a pyramid can name the
+      OME-Zarr store it was built from. Describes rather than attaches by
+      default (the store is a directory tree of many GB; a checksum of
+      .zattrs is the identifying fingerprint). attachFile=true is
+      accepted only for a plain file (creating a generic_file), never a
+      directory. Mirrors +gene/makeSourceFile after issue #981. Ports
+      with the other five entries.
+
+  - name: chooseLevel
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/chooseLevel.m"
+    matlab_last_sync_hash: "5ab84f3"
+    status: porting_deferred
+    decision_log: >-
+      Given a level table and a target per-axis voxel size, returns the
+      coarsest level whose voxel size still meets the target. Pure
+      function over the pyramid metadata; when Python readers grow a
+      viewport-style call this ports as its selection helper.
+
+  - name: levelTable
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/levelTable.m"
+    matlab_last_sync_hash: "1af66bb"
+    status: porting_deferred
+    decision_log: >-
+      Joins a lightsheetZarrPyramid and its lightsheetZarrLevel children
+      into one finest-first table, carrying the parent frame in
+      Properties.UserData. Accepts an optional 'reduction' name-value
+      that filters the table to reduction_function in {'none',
+      <reduction>}. Python already has an equivalent inside
+      ndi.gui.app.lightsheetZarr.multiscale.levelTable (which returns a
+      list of dicts and takes the same reduction filter); the
+      doc-package mirror lands with the other five entries so the
+      surface a script sees matches on both sides.
+
+  - name: viewCommand
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/viewCommand.m"
+    matlab_last_sync_hash: "5ab84f3"
+    status: porting_deferred
+    decision_log: >-
+      Pure command builder that ndi.gui.app.LightsheetZarrManager calls
+      to construct the /usr/local/bin/napariViewLightsheet invocation.
+      The flag set here defines the CLI in
+      ndi.gui.app.lightsheetZarr.cli exactly, so if a Python-hosted
+      equivalent ever needs to build the same command (a batch runner,
+      a headless test), that is when this ports. Same pattern the GEF
+      side follows (viewCommand is on the GEFManager class, not in the
+      doc.gene package, but the shape is the same); the lightsheet
+      package puts it under +doc/+lightsheet because the manager stays
+      thin.
+  - name: view
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/view.m"
+    matlab_last_sync_hash: "a7ba07a"
+    status: porting_deferred
+    decision_log: >-
+      MATLAB caller that pairs viewCommand + SYSTEM: builds the
+      napariViewLightsheet command line from viewCommand and dispatches
+      it via system(). Optional PYRAMIDID argument; empty runs the
+      launcher in --list mode. Launcher defaults to
+      /usr/local/bin/napariViewLightsheet, the shell wrapper installed
+      alongside NDI-python. Backgrounds the launcher on POSIX so MATLAB
+      stays interactive. No Python-side counterpart is needed because
+      the Python side IS the launcher; this is the MATLAB-side entry
+      point. Ports with the other entries.

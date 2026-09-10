@@ -134,6 +134,10 @@ ndi = "ndi.__main__:main"
 # pip generates this with the venv's absolute interpreter in its shebang, so
 # a symlink from /usr/local/bin works with no activation and no PYTHONPATH.
 napariViewGEF = "ndi.gui.app.genepyramid.cli:main"
+# Sibling of napariViewGEF for lightsheet OME-Zarr pyramids. Same shell-wrapper
+# story: the MATLAB LightsheetZarrManager execs /usr/local/bin/napariViewLightsheet,
+# which scrubs MATLAB's library paths and then runs this console script.
+napariViewLightsheet = "ndi.gui.app.lightsheetZarr.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/Waltham-Data-Science/NDI-python"
