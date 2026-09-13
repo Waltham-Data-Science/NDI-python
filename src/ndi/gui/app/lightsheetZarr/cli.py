@@ -148,8 +148,7 @@ def _open_session(session_path: str) -> Any:
             opened = candidate
     if opened is None:
         raise SystemExit(
-            f"{session_path} could not be opened as either an NDI "
-            "session or a dataset."
+            f"{session_path} could not be opened as either an NDI " "session or a dataset."
         )
     return opened
 

@@ -35,9 +35,7 @@ class TestOpenSessionOrDataset:
     def _install(self, monkeypatch, dataset, session):
         from ndi.gui.app.lightsheetZarr import cli
 
-        monkeypatch.setattr(
-            cli, "_pyramids", lambda obj: list(getattr(obj, "pyramids", []))
-        )
+        monkeypatch.setattr(cli, "_pyramids", lambda obj: list(getattr(obj, "pyramids", [])))
         monkeypatch.setattr(cli, "_as_dataset", dataset)
         monkeypatch.setattr(cli, "_as_session", session)
         return cli
