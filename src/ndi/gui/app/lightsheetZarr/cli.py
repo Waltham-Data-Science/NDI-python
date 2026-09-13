@@ -87,15 +87,71 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _open_session(session_path: str) -> Any:
-    """Open the ndi.session.dir at ``session_path``.
+def _as_dataset(path: str) -> Any:
+    """Open PATH as an ndi.dataset.dir. A named function, not an inline
+    import, so a test can stand in for it."""
+    from ndi.dataset import ndi_dataset_dir  # deferred
 
-    Kept in this module rather than in ``multiscale`` so ``--list`` and
-    ``--report`` do not import napari or dask via that module.
+    return ndi_dataset_dir(path)
+
+
+def _as_session(path: str) -> Any:
+    """Open PATH as an ndi.session.dir. Named for the same reason as
+    _as_dataset, and with more cause: ``ndi.session.dir`` resolves to
+    the CLASS rather than the module (the package attribute shadows
+    the submodule), so patching it where it is imported does not work.
     """
     from ndi.session.dir import ndi_session_dir  # deferred
 
-    return ndi_session_dir(session_path)
+    return ndi_session_dir(path)
+
+
+def _open_session(session_path: str) -> Any:
+    """Open PATH, whether it holds a session or a downloaded dataset.
+
+    THE TWO LOOK IDENTICAL ON DISK. A dataset keeps its database at
+    ``<path>/.ndi`` exactly as a session does, so ``ndi_session_dir``
+    opens a downloaded dataset without complaint -- and then finds
+    almost nothing in it. A dataset's documents may live in LINKED
+    SESSIONS, and only ``ndi.dataset.database_search`` follows those
+    links; the session reader looks in the dataset's own database and
+    stops there.
+
+    The symptom is a downloaded dataset reporting "No
+    lightsheetZarrPyramid documents in this session" while the same
+    directory opened in MATLAB as an ndi.dataset.dir (or via
+    ``ndi.cloud.download_helper``'s DL.open_session) lists the pyramid
+    fine. The path is right, the data is there, and the reader is
+    looking one level too shallow.
+
+    So the dataset reading is tried first and kept when it finds
+    pyramids. A plain session opened as a dataset simply has no linked
+    sessions and answers the same as before; if the dataset reading
+    raises or finds nothing where the session reading finds something,
+    the session reading wins.
+
+    This mirrors ndi.gui.app.genepyramid.cli._open_session, which
+    solves the same problem for spatial gene expression pyramids.
+    """
+    opened = None
+    for describe in (_as_dataset, _as_session):
+        try:
+            candidate = describe(session_path)
+        except Exception:  # noqa: BLE001 - the other reading may still work
+            continue
+        try:
+            if list(_pyramids(candidate)):
+                return candidate
+        except Exception:  # noqa: BLE001 - likewise
+            continue
+        if opened is None:
+            opened = candidate
+    if opened is None:
+        raise SystemExit(
+            f"{session_path} could not be opened as either an NDI "
+            "session or a dataset."
+        )
+    return opened
 
 
 def _pyramids(session: Any) -> list[Any]:
