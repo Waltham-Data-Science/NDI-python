@@ -112,10 +112,14 @@ def _open_session(session_path: str) -> Any:
     THE TWO LOOK IDENTICAL ON DISK. A dataset keeps its database at
     ``<path>/.ndi`` exactly as a session does, so ``ndi_session_dir``
     opens a downloaded dataset without complaint -- and then finds
-    almost nothing in it. A dataset's documents may live in LINKED
-    SESSIONS, and only ``ndi.dataset.database_search`` follows those
-    links; the session reader looks in the dataset's own database and
-    stops there.
+    almost nothing in it. A dataset CONTAINS sessions two different
+    ways -- LINKED (an external session referenced by path) and
+    INGESTED (a session whose bytes were copied into the dataset) --
+    and only ``ndi.dataset.database_search`` walks the contained
+    sessions of either kind. The session reader looks in the
+    dataset's own database and stops there. Anything downloaded from
+    the NDI cloud arrives as an ingested session inside a dataset, so
+    the session reader hits the empty parent and reports no pyramids.
 
     The symptom is a downloaded dataset reporting "No
     lightsheetZarrPyramid documents in this session" while the same
@@ -125,7 +129,7 @@ def _open_session(session_path: str) -> Any:
     looking one level too shallow.
 
     So the dataset reading is tried first and kept when it finds
-    pyramids. A plain session opened as a dataset simply has no linked
+    pyramids. A plain session opened as a dataset simply contains no
     sessions and answers the same as before; if the dataset reading
     raises or finds nothing where the session reading finds something,
     the session reading wins.
