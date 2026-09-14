@@ -321,6 +321,7 @@ def levelArrays(
         fill = int(p.get("fill_value", 0))
         codec = str(p.get("codec", "raw"))
         stored = _storedChunkNames(doc)
+        _assertStoredMatchesLevel(doc, p, stored)
 
         nested = _build_block_grid(
             fetcher,
@@ -338,6 +339,53 @@ def levelArrays(
         arrays.append(da.block(nested))
 
     return arrays, fetcher
+
+
+def _assertStoredMatchesLevel(level_doc: Any, level_props: dict, stored: set[str] | None) -> None:
+    """Raise if the resolved chunk name set can't cover the level's writes.
+
+    A level document records ``n_chunks_stored`` -- how many
+    ``chunk.bin_#`` members the writer actually wrote. When the reader
+    resolves an empty stored set (or a set clearly smaller than what the
+    writer claims), the level document lays its chunks out somewhere the
+    reader doesn't look, and rendering would fall through to fill_value
+    for every position -- a solid fill_value canvas, no error. That is
+    exactly the failure mode that hid the file_series switch: the reader
+    kept filtering ``file_info`` for ``chunk.bin_#`` after the writer
+    moved the members to ``files.series_info``, produced an empty set,
+    and drew black without a peep. Fail loudly here so a similar drift
+    in the future is caught at open time, not by staring at a blank
+    viewer.
+
+    A ``None`` stored set means "no file list on this document"; the
+    reader then attempts every position, which is fine on a raw-only
+    fixture but not something a level with recorded writes should hit.
+    Treat that as a mismatch too.
+    """
+    try:
+        n_stored = int(level_props.get("n_chunks_stored", 0) or 0)
+    except (TypeError, ValueError):
+        n_stored = 0
+    if n_stored <= 0:
+        return
+    if stored is None or len(stored) < n_stored:
+        doc_id = getattr(level_doc, "id", None) or "<unknown>"
+        label = str(level_props.get("label", "") or "")
+        found = 0 if stored is None else len(stored)
+        raise RuntimeError(
+            f"lightsheetZarrLevel {doc_id} (label={label!r}) claims "
+            f"n_chunks_stored={n_stored} but the reader resolved {found} "
+            f"chunk file(s) on the document. The reader looks at "
+            f"files.series_info first (chunk.bin as a DID file series) "
+            f"and falls back to files.file_info entries matching "
+            f"'chunk.bin_#'; neither carried enough members here. Either "
+            f"the writer stored the chunks under a different layout the "
+            f"reader has not learned yet, or the document lost its files "
+            f"between ingest and read. Investigate the level document's "
+            f"files.series_info / file_info before opening the pyramid; "
+            f"opening it now would render a solid fill_value canvas "
+            f"instead of the actual volume."
+        )
 
 
 def _storedChunkNames(level_doc: Any) -> set[str] | None:
