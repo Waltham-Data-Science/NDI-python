@@ -230,9 +230,10 @@ def _pick_reduction(session: Any, pyramid_doc: Any, requested: str | None) -> st
 
     None-return means "do not filter" -- the ladder holds only 'none'
     levels (e.g. a raw-only pyramid). Otherwise returns the reduction
-    string to use as the filter. Refuses ambiguity: a ladder with
-    multiple non-'none' reductions and no ``--reduction`` on the CLI
-    is not something the viewer can guess.
+    string to use as the filter. With multiple non-'none' reductions
+    and no ``--reduction`` on the CLI, ``mean`` wins by default because
+    that is what a viewer opening a pyramid cold most often wants; the
+    reduction dock still lets the user flip live.
     """
     available = _reductions_for(session, pyramid_doc)
     if requested is not None:
@@ -246,10 +247,9 @@ def _pick_reduction(session: Any, pyramid_doc: Any, requested: str | None) -> st
         return None
     if len(available) == 1:
         return available[0]
-    raise SystemExit(
-        f"Pyramid ladder holds multiple reductions ({available}); "
-        "pass --reduction <name> to pick one."
-    )
+    if "mean" in available:
+        return "mean"
+    return available[0]
 
 
 def main(argv: Sequence[str] | None = None) -> int:
