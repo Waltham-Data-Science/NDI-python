@@ -190,9 +190,7 @@ class TestReconstructionSkipsWhenNotNeeded:
             called["n"] += 1
             raise AssertionError("the handler must not be called")
 
-        updateFileInfoForRemoteFiles(
-            props, CLOUD_ID, custom_file_handler=refuse_handler
-        )
+        updateFileInfoForRemoteFiles(props, CLOUD_ID, custom_file_handler=refuse_handler)
 
         assert called["n"] == 0
         after = props["files"]["series_info"][0]["ingest_locations"]
@@ -220,9 +218,7 @@ class TestReconstructionSkipsWhenNotNeeded:
         def refuse_handler(dest, source, ctx):
             raise AssertionError("the handler must not be called")
 
-        updateFileInfoForRemoteFiles(
-            props, CLOUD_ID, custom_file_handler=refuse_handler
-        )
+        updateFileInfoForRemoteFiles(props, CLOUD_ID, custom_file_handler=refuse_handler)
 
         # file_info still reshaped; nothing else touched.
         assert props["files"]["file_info"][0]["locations"][0]["location_type"] == "ndicloud"
@@ -257,14 +253,10 @@ class TestReconstructionThroughAMockHandler:
         session.database_add(doc)
 
         # Read the doc back from the store; ingest_locations is now stripped.
-        results = session.database_search(
-            ndi_query("base.id") == doc.id
-        )
+        results = session.database_search(ndi_query("base.id") == doc.id)
         assert len(results) == 1, "the doc should be readable back"
         stored_props = results[0].document_properties
-        assert not stored_props["files"]["series_info"][0].get(
-            "ingest_locations"
-        ), (
+        assert not stored_props["files"]["series_info"][0].get("ingest_locations"), (
             "fixture: DID should have stripped ingest_locations so this test "
             "is exercising the reconstruction, not a shortcut"
         )
@@ -292,9 +284,7 @@ class TestReconstructionThroughAMockHandler:
         # Reshape through updateFileInfoForRemoteFiles with the mock. It
         # must reconstruct ingest_locations without writing anything
         # durable outside the temp dir it manages.
-        updateFileInfoForRemoteFiles(
-            stored_props, CLOUD_ID, custom_file_handler=mock_handler
-        )
+        updateFileInfoForRemoteFiles(stored_props, CLOUD_ID, custom_file_handler=mock_handler)
 
         il = stored_props["files"]["series_info"][0].get("ingest_locations", [])
         assert len(il) == 2, "one ingest_locations entry per present member"
@@ -309,9 +299,7 @@ class TestReconstructionThroughAMockHandler:
         # manifest, not a member). Multiple present slots must not
         # provoke multiple manifest fetches -- that guarantee is what
         # makes reconstruction cheap for a 28,000-member series.
-        assert call_log["uids"] == [manifest_uid(tag)], (
-            "exactly one manifest fetch expected"
-        )
+        assert call_log["uids"] == [manifest_uid(tag)], "exactly one manifest fetch expected"
         assert call_log["series_names"] == [""], (
             "the manifest fetch must carry seriesName='' in its context "
             "(non-empty marks a MEMBER fetch)"
@@ -331,9 +319,7 @@ class TestReconstructionThroughAMockHandler:
         def failing_handler(dest, source, ctx):
             raise RuntimeError("cloud unreachable")
 
-        updateFileInfoForRemoteFiles(
-            props, CLOUD_ID, custom_file_handler=failing_handler
-        )
+        updateFileInfoForRemoteFiles(props, CLOUD_ID, custom_file_handler=failing_handler)
 
         # ingest_locations still empty -- DID's guard will fire on add.
         assert not props["files"]["series_info"][0].get("ingest_locations")
@@ -354,9 +340,7 @@ class TestReconstructionThroughAMockHandler:
         def two_arg_handler(dest_path, source_path):
             Path(dest_path).write_bytes(bytes_)
 
-        updateFileInfoForRemoteFiles(
-            props, CLOUD_ID, custom_file_handler=two_arg_handler
-        )
+        updateFileInfoForRemoteFiles(props, CLOUD_ID, custom_file_handler=two_arg_handler)
 
         il = props["files"]["series_info"][0].get("ingest_locations", [])
         assert len(il) == 1

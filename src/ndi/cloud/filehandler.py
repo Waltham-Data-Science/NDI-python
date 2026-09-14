@@ -300,9 +300,7 @@ def _fetch_manifest(
             "uid": manifest_uid,
             "mode": "open",
         }
-        _dispatch_custom_file_handler(
-            custom_file_handler, dest_path, source_path, context
-        )
+        _dispatch_custom_file_handler(custom_file_handler, dest_path, source_path, context)
         return
 
     fetch_cloud_file(
@@ -314,9 +312,7 @@ def _fetch_manifest(
     )
 
 
-def _dispatch_custom_file_handler(
-    handler, dest_path: str, source_path: str, context: dict
-) -> None:
+def _dispatch_custom_file_handler(handler, dest_path: str, source_path: str, context: dict) -> None:
     """Arity-aware call of a ``custom_file_handler``.
 
     A handler declared with three or more positional inputs (or with
