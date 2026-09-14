@@ -838,7 +838,7 @@ ported_late:
 
   - name: GEFManager
     matlab_path: "+ndi/+gui/+app/GEFManager.m"
-    matlab_last_sync_hash: "06f31a4e5"
+    matlab_last_sync_hash: "59c96e57"
     status: porting_deferred
     decision_log: >
       MATLAB App Designer window that lists, views, adds and removes
@@ -875,3 +875,9 @@ ported_late:
       dialog with it. Nothing to port: the Python side draws no dialog at
       all. View builds a command line and runs napariViewGEF, which is
       already its own process and has never blocked anything.
+
+      NDI-matlab 59c96e57 (VH-Lab/NDI-matlab#984) raises the open GEF
+      Manager for a session instead of building a second window when the
+      navigator's Apps menu opens it again. MATLAB App Designer window
+      uniqueness only; nothing to port on this side, which draws no such
+      window in the first place. Hash bumped to acknowledge the drift.

@@ -999,7 +999,7 @@ functions:
   # --- filehandler.py functions ---
   - name: updateFileInfoForRemoteFiles
     matlab_path: "+ndi/+cloud/+sync/+internal/updateFileInfoForRemoteFiles.m"
-    matlab_last_sync_hash: "fe64a9f5"
+    matlab_last_sync_hash: "aea0c72c"
     python_path: "ndi/cloud/filehandler.py"
     input_arguments:
       - name: doc_props
@@ -1008,6 +1008,16 @@ functions:
       - name: cloud_dataset_id
         type_matlab: "char"
         type_python: "str"
+      - name: custom_file_handler
+        type_matlab: "function_handle (name-value)"
+        type_python: "callable | None"
+        default: "None"
+        keyword_only: true
+      - name: client
+        type_matlab: "n/a"
+        type_python: "CloudClient | None"
+        default: "None"
+        keyword_only: true
     output_arguments: []
     decision_log: >
       MATLAB places this in +sync/+internal. Python places it in
@@ -1019,22 +1029,29 @@ functions:
       and the per-series record survives on its own.
       SERIES ARE PORTED NOW (NDI-python#215; this entry used to say they
       were not). cloudDatasetId is the third argument on both sides, and
-      with it a downloaded series gets the two things it needs to be
-      readable: the manifest keeps the ndic:// reference it came from as a
-      second location beside the local copy (504c5bcf4, NDI-matlab#966),
-      so DID can hand that location to the file handler with a member's uid
-      in the context; and files.series_info(:).ingest_locations are rebuilt
-      from the downloaded manifest by reconstructSeriesIngestLocations
-      (cd3c11673, NDI-matlab#958), without which DID refuses the document
-      outright. The representation itself is DID's -- files.series_info,
-      file_series and n_present are read through did.document, not
-      reimplemented here, per AGENTS.md section 4.
-      Python builds the manifest's second location record directly rather
-      than through ndi.document.add_file, because this works on a properties
-      DICT: the whole download pipeline mutates dicts in place, as
-      updateFileInfoForRemoteFiles does, and converting to a document would
-      deep-copy and lose the mutation. The record shape is pinned to
-      add_file's by test_cloud_series_reconstruction.py.
+      with it files.series_info(:).ingest_locations are rebuilt from the
+      downloaded manifest by reconstructSeriesIngestLocations (cd3c11673,
+      NDI-matlab#958) -- without which DID refuses the document outright.
+      The representation itself is DID's -- files.series_info, file_series
+      and n_present are read through did.document, not reimplemented here,
+      per AGENTS.md section 4.
+      NDI-matlab#988 (1a6ec2fc, 414e8572, a4dfb076) then extended this to
+      the SyncFiles=false path: when a document returns from a cloud round
+      trip with n_present populated and ingest_locations stripped (which
+      DID does on store), the manifest bytes are NOT on disk to read.
+      Reconstruction here fetches each qualifying series' manifest through
+      the DID custom_file_handler contract (VH-Lab/DID-matlab#201,
+      VH-Lab/DID-python#88) -- the same contract DID uses on the read
+      side, so a caller with a handler already can pass it in and both
+      sides use the same one. With no handler, fetch_cloud_file is called
+      directly, matching what the read-side handler does when a manifest
+      is asked for by uid. Manifests fetched here do NOT land in the DID
+      file cache; a subsequent member open trips DID#201's lazy fetch,
+      which is what populates the cache. Cache eviction on a later
+      session is answered by the same re-fetch path. A per-manifest
+      fetch failure leaves the entry un-reconstructed so DID's #185
+      guard fires on add_docs with the document's own identity -- the
+      right signal a partial download deserves.
   - name: updateFileInfoForLocalFiles
     matlab_path: "+ndi/+cloud/+sync/+internal/updateFileInfoForLocalFiles.m"
     matlab_last_sync_hash: "504c5bcf4"
