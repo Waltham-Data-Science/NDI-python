@@ -349,7 +349,33 @@ def _storedChunkNames(level_doc: Any) -> set[str] | None:
     means "the level document does not expose a file list" (older docs,
     unusual backends) -- the reader then falls back to trying every
     position, matching the pre-file-list behaviour.
+
+    ``chunk.bin`` is a DID file series: the level document's
+    ``file_info`` names only the series manifest (``chunk.bin``); its
+    members ``chunk.bin_1..N`` are recorded on ``files.series_info``.
+    Read the series record first and, if present, return the set of
+    member names it enumerates. Fall back to filtering ``file_info``
+    for direct ``chunk.bin_#`` entries so pre-series documents still
+    resolve chunks (older ingests wrote each member into ``file_info``
+    directly).
     """
+    props = getattr(level_doc, "document_properties", None) or {}
+    files = props.get("files") if isinstance(props, dict) else None
+    if isinstance(files, dict):
+        raw_series = files.get("series_info")
+        if isinstance(raw_series, dict):
+            series_entries: list[dict] = [raw_series]
+        elif isinstance(raw_series, list):
+            series_entries = [e for e in raw_series if isinstance(e, dict)]
+        else:
+            series_entries = []
+        for entry in series_entries:
+            if str(entry.get("name", "")) != "chunk.bin":
+                continue
+            names_from_series = _seriesMemberNames("chunk.bin", entry)
+            if names_from_series is not None:
+                return names_from_series
+
     try:
         names = level_doc.current_file_list()
     except Exception:
@@ -362,6 +388,39 @@ def _storedChunkNames(level_doc: Any) -> set[str] | None:
         if s.startswith("chunk.bin_"):
             out.add(s)
     return out
+
+
+def _seriesMemberNames(base: str, series_entry: dict) -> set[str] | None:
+    """Expand one series' record into ``base_<index>`` member names.
+
+    Prefers the entry's ``ingest_locations`` (each carries an explicit
+    ``index``), which is the sparse-aware shape DID materialises when a
+    series is added; falls back to a dense 1..count listing when only
+    the count is recorded, matching how a freshly-added series looks
+    before any location bookkeeping runs.
+    """
+    ingest = series_entry.get("ingest_locations")
+    if isinstance(ingest, list) and ingest:
+        out: set[str] = set()
+        for loc in ingest:
+            if not isinstance(loc, dict):
+                continue
+            try:
+                idx = int(loc.get("index", 0))
+            except (TypeError, ValueError):
+                continue
+            if idx >= 1:
+                out.add(f"{base}_{idx:d}")
+        if out:
+            return out
+
+    try:
+        count = int(series_entry.get("count", 0) or 0)
+    except (TypeError, ValueError):
+        count = 0
+    if count <= 0:
+        return set()
+    return {f"{base}_{i:d}" for i in range(1, count + 1)}
 
 
 def _numpy_dtype(s: str):
