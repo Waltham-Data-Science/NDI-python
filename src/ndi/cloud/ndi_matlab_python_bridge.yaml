@@ -999,7 +999,7 @@ functions:
   # --- filehandler.py functions ---
   - name: updateFileInfoForRemoteFiles
     matlab_path: "+ndi/+cloud/+sync/+internal/updateFileInfoForRemoteFiles.m"
-    matlab_last_sync_hash: "fe64a9f5"
+    matlab_last_sync_hash: "aea0c72c"
     python_path: "ndi/cloud/filehandler.py"
     input_arguments:
       - name: doc_props
@@ -1029,6 +1029,13 @@ functions:
       local copy (504c5bcf4, NDI-matlab#966) was retired in NDI-matlab#986
       once DID-matlab#191/#201 taught the read path to reach a local-file
       manifest directly. Ported here alongside NDI-matlab#989.
+      NDI-matlab#988 (1a6ec2fc, 414e8572, a4dfb076) additionally taught
+      updateFileInfoForRemoteFiles.m to rebuild series ingest_locations
+      by fetching the manifest bytes through the DID customFileHandler
+      contract, so a SyncFiles=false round trip carrying a series document
+      is accepted on add. NOT YET PORTED HERE; hash bumped to aea0c72c to
+      acknowledge the drift. Filed against Waltham-Data-Science/NDI-python#300
+      as a follow-up.
   - name: updateFileInfoForLocalFiles
     matlab_path: "+ndi/+cloud/+sync/+internal/updateFileInfoForLocalFiles.m"
     matlab_last_sync_hash: "2ad46c0f"
