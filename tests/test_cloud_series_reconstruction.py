@@ -1,35 +1,30 @@
-"""A downloaded file series' members must be reachable, and provably so.
+"""A downloaded file series' document must be addable, and provably so.
 
 MATLAB counterparts:
     +ndi/+cloud/+sync/+internal/reconstructSeriesIngestLocations.m  (#958)
-    +ndi/+cloud/+sync/+internal/updateFileInfoForLocalFiles.m       (#966)
+    +ndi/+cloud/+sync/+internal/updateFileInfoForLocalFiles.m       (#966, #986)
 
 A series keeps its members on the cloud deliberately: opening a dataset must
 not drag down a 28,000-member series. So a downloaded series is a manifest on
-disk and nothing else, and two things have to be true for its members to be
-readable at all.
+disk and nothing else, and the document has to be addable.
 
-FIRST, the document has to be addable. ``ingest_locations`` is transient
-authoring data that DID strips before storing, so a cloud round trip returns
-``n_present`` with no way to locate any of the uids it counts -- and DID
-refuses exactly that shape (DID-matlab#185). Not a warning: a ValueError from
-``add_docs``, which loses the whole document.
+``ingest_locations`` is transient authoring data that DID strips before
+storing, so a cloud round trip returns ``n_present`` with no way to locate
+any of the uids it counts -- and DID refuses exactly that shape
+(DID-matlab#185). Not a warning: a ValueError from ``add_docs``, which loses
+the whole document. Rebuilding those from the downloaded manifest is what
+lets the document be added at all.
 
-SECOND, a member has no location of its own. DID resolves one by handing the
-MANIFEST's location to the file handler with the member's uid in the context,
-so the manifest has to keep its ``ndic://`` reference beside the local copy.
-With the local path alone the handler is given something that does not start
-with ``ndic://``, and every member of a downloaded series is unreadable --
-silently, because DID reads that as a plain miss.
-
-``TestThroughARealDatabase`` is what NDI-python#215 asks for: a member of a
-downloaded series opened end to end. It fails if either half is missing.
+The manifest itself is treated as an ordinary local file in file_info once
+downloaded (NDI-matlab#986 retired the second ``ndic://`` location that
+used to be written beside it -- see :class:`TestSeriesManifestHasExactlyOneLocation`
+below and DID-matlab#191/#201 for the read path that made the workaround
+dead weight).
 """
 
 from __future__ import annotations
 
 import uuid
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -47,7 +42,6 @@ from ndi.session.dir import ndi_session_dir
 #: ordinary file in file_list, and its members are SLOT_1 ... SLOT_N.
 SLOT = "filename1.ext"
 CLOUD_ID = "ds_cloud_1"
-MEMBER_BYTES = b"the member's own bytes, not the manifest's"
 
 
 @pytest.fixture
@@ -127,89 +121,56 @@ def ingest_locations_of(props):
     return props["files"]["series_info"][0].get("ingest_locations", [])
 
 
-class TestTheManifestKeepsItsCloudReference:
-    def test_a_manifest_gets_a_second_ndic_location(self, tag, staging):
+class TestSeriesManifestHasExactlyOneLocation:
+    """Regression guard on the workaround removal (NDI-matlab#986).
+
+    Before DID-matlab#191/#201 landed, :func:`updateFileInfoForLocalFiles`
+    wrote a second ``ndicloud`` location alongside the local ``file`` one on
+    every series manifest, so member fetches would see an ``ndic://`` source
+    path. DID now reaches a local-file manifest directly, so that second
+    location is dead weight. This class says: the manifest must have exactly
+    ONE location and it must be the local file. Adding another (bringing
+    back the workaround, or anything ``ndic://``-shaped) is what these tests
+    are here to catch.
+    """
+
+    def test_a_downloaded_manifest_has_one_local_location(self, tag, staging):
         props = series_props("sess", tag, [member_uid(tag, 1)])
         updateFileInfoForLocalFiles(props, str(staging), CLOUD_ID)
 
         locations = locations_of(props)
-        assert len(locations) == 2, "the manifest lost its cloud reference"
+        assert len(locations) == 1, (
+            "the series manifest must have exactly one file_info location; "
+            "a second (ndicloud) location was retired with the workaround "
+            "at updateFileInfoForLocalFiles (NDI-matlab#986)."
+        )
+        assert locations[0]["location_type"] == "file"
+        assert locations[0]["ingest"] == 1
 
-        local, cloud = locations
-        assert local["location_type"] == "file" and local["ingest"] == 1
-        assert cloud["location"] == f"{NDIC_SCHEME}{CLOUD_ID}/{manifest_uid(tag)}"
-        assert cloud["location_type"] == "ndicloud"
-        assert cloud["ingest"] == 0 and cloud["delete_original"] == 0
-
-    def test_the_uri_names_the_manifests_original_uid(self, tag, staging):
-        """The record gets a fresh uid; the URI keeps the cloud's.
-
-        add_file mints a uid per location, which is harmless -- DID passes
-        only the location STRING to the handler. What must not change is the
-        uid INSIDE the reference, because that is what the cloud knows the
-        manifest by.
-        """
+    def test_running_twice_still_leaves_one_location(self, tag, staging):
         props = series_props("sess", tag, [member_uid(tag, 1)])
         updateFileInfoForLocalFiles(props, str(staging), CLOUD_ID)
-
-        cloud = locations_of(props)[1]
-        assert manifest_uid(tag) in cloud["location"]
-        assert cloud["uid"] != manifest_uid(tag)
-
-    def test_an_ordinary_file_gets_no_second_location(self, tmp_path, tag):
-        """Manifests only; a second location on every file is rows to no purpose."""
-        d = tmp_path / "files"
-        d.mkdir()
-        (d / manifest_uid(tag)).write_bytes(b"ordinary")
-        props = series_props("sess", tag, [member_uid(tag, 1)])
-        props["files"]["file_series"] = []
-        props["files"].pop("series_info")
-
-        updateFileInfoForLocalFiles(props, str(d), CLOUD_ID)
+        updateFileInfoForLocalFiles(props, str(staging), CLOUD_ID)
 
         assert len(locations_of(props)) == 1
 
-    def test_running_twice_does_not_add_it_twice(self, tag, staging):
-        props = series_props("sess", tag, [member_uid(tag, 1)])
-        updateFileInfoForLocalFiles(props, str(staging), CLOUD_ID)
-        updateFileInfoForLocalFiles(props, str(staging), CLOUD_ID)
-
-        assert len(locations_of(props)) == 2
-
-    def test_a_matlab_shaped_manifest_keeps_both_locations(self, tag, staging):
+    def test_a_matlab_shaped_manifest_stays_a_bare_dict(self, tag, staging):
         """MATLAB writes a one-element struct array as a bare object.
 
-        So a manifest downloaded from a MATLAB-written dataset arrives with
-        ``locations`` as a dict, not a list of one. Adding the cloud
-        reference makes it two, and writing it back as a bare dict again
-        would drop the very location the members are resolved through --
-        which is the whole point of adding it.
+        A manifest downloaded from a MATLAB-written dataset arrives with
+        ``locations`` as a dict, not a list of one. With the workaround
+        retired the count never grows, so it must round-trip as a dict.
         """
         props = series_props("sess", tag, [member_uid(tag, 1)])
         props["files"]["file_info"][0]["locations"] = props["files"]["file_info"][0]["locations"][0]
 
         updateFileInfoForLocalFiles(props, str(staging), CLOUD_ID)
 
-        locations = locations_of(props)
-        assert isinstance(locations, list), "the second location was dropped"
-        assert len(locations) == 2
-        assert locations[1]["location"] == f"{NDIC_SCHEME}{CLOUD_ID}/{manifest_uid(tag)}"
+        locations = props["files"]["file_info"][0]["locations"]
+        assert isinstance(locations, dict), "a one-element manifest must stay a bare dict"
+        assert locations["location_type"] == "file"
 
-    def test_a_matlab_shaped_ordinary_file_stays_a_bare_dict(self, tmp_path, tag):
-        """Only a grown list changes shape; everything else round-trips."""
-        d = tmp_path / "files"
-        d.mkdir()
-        (d / manifest_uid(tag)).write_bytes(b"ordinary")
-        props = series_props("sess", tag, [member_uid(tag, 1)])
-        props["files"]["file_series"] = []
-        props["files"].pop("series_info")
-        props["files"]["file_info"][0]["locations"] = props["files"]["file_info"][0]["locations"][0]
-
-        updateFileInfoForLocalFiles(props, str(d), CLOUD_ID)
-
-        assert isinstance(props["files"]["file_info"][0]["locations"], dict)
-
-    def test_no_cloud_id_means_no_second_location(self, tag, staging):
+    def test_no_cloud_id_still_one_location(self, tag, staging):
         props = series_props("sess", tag, [member_uid(tag, 1)])
         updateFileInfoForLocalFiles(props, str(staging))
 
@@ -334,47 +295,13 @@ class TestThroughARealDatabase:
         with pytest.raises(ValueError, match="records no ingest_locations"):
             session.database_add(ndi_document(props))
 
-    def test_a_member_of_a_downloaded_series_can_be_read(self, tmp_path, tag, staging):
-        """End to end, and the test NDI-python#215 asks for.
-
-        The member is NOT on this machine -- reconstruction records ingest=0
-        precisely so that adding the document does not pull 28,000 files
-        down. Reading one has to go out to the cloud, and the only route
-        there is the manifest's ndic:// location plus the member's uid in
-        the context. This fails if the manifest lost its cloud reference, if
-        the ingest_locations were never rebuilt, or if the handler ignores
-        the context and fetches the manifest instead.
-        """
-        session = self._session(tmp_path)
-        props = series_props(session.id(), tag, [member_uid(tag, 1)])
-        updateFileInfoForLocalFiles(props, str(staging), CLOUD_ID)
-        doc = ndi_document(props)
-        session.database_add(doc)
-
-        asked = {}
-
-        def fake_fetch(uri, target, client=None, **kwargs):
-            asked["uri"] = uri
-            asked["kwargs"] = kwargs
-            Path(target).write_bytes(MEMBER_BYTES)
-            return True
-
-        with patch("ndi.cloud.filehandler.fetch_cloud_file", fake_fetch):
-            handle = session.database_openbinarydoc(doc, f"{SLOT}_1")
-            data = handle.read()
-
-        assert asked.get("uri") == f"{NDIC_SCHEME}{CLOUD_ID}/{member_uid(tag, 1)}", (
-            "the handler was asked for the wrong file: "
-            f"{asked.get('uri')!r} rather than the member's own uid"
-        )
-        assert data == MEMBER_BYTES
-
-    def test_the_manifest_itself_is_still_a_local_read(self, tmp_path, tag, staging):
+    def test_the_manifest_itself_is_a_local_read(self, tmp_path, tag, staging):
         """The manifest was downloaded, so reading it must not hit the cloud.
 
-        The second location is an ADDITION, not a replacement: giving the
-        manifest a cloud reference must not cost a download every time the
-        series is consulted.
+        With the workaround retired (NDI-matlab#986) the manifest carries
+        only its local ``file`` location, and reading it goes through that
+        directly. The cloud handler must not be reached for a file already
+        on disk.
         """
         session = self._session(tmp_path)
         manifest_bytes = (staging / manifest_uid(tag)).read_bytes()

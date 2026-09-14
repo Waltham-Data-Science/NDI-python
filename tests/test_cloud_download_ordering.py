@@ -246,14 +246,16 @@ class TestTheCloudDatasetIdReachesTheRewrite:
 
     MATLAB does it inside downloadNdiDocuments, where the documentUpdateFcn
     is built; here the rewrite lives in orchestration.downloadDataset. Either
-    way the id is what lets a downloaded series keep its manifest's ndic://
-    reference and get its ingest_locations rebuilt -- without which DID
-    refuses the document.
+    way the id is what lets a downloaded series get its ``ingest_locations``
+    rebuilt from the downloaded manifest -- without which DID refuses the
+    document. (The second ``ndic://`` location the manifest used to keep
+    for member fetches was retired with NDI-matlab#986; the id is still
+    needed for the ingest_locations rebuild alone.)
 
     updateFileInfoForLocalFiles takes cloud_dataset_id as an OPTIONAL third
     argument, and every existing test called it directly. So dropping the
     argument at the call site broke nothing any test could see, while a
-    downloaded series lost the reference. This pins the call site.
+    downloaded series lost the reconstruction. This pins the call site.
     """
 
     def _spy(self, monkeypatch):

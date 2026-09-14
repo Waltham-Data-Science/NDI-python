@@ -1019,25 +1019,19 @@ functions:
       and the per-series record survives on its own.
       SERIES ARE PORTED NOW (NDI-python#215; this entry used to say they
       were not). cloudDatasetId is the third argument on both sides, and
-      with it a downloaded series gets the two things it needs to be
-      readable: the manifest keeps the ndic:// reference it came from as a
-      second location beside the local copy (504c5bcf4, NDI-matlab#966),
-      so DID can hand that location to the file handler with a member's uid
-      in the context; and files.series_info(:).ingest_locations are rebuilt
-      from the downloaded manifest by reconstructSeriesIngestLocations
-      (cd3c11673, NDI-matlab#958), without which DID refuses the document
-      outright. The representation itself is DID's -- files.series_info,
-      file_series and n_present are read through did.document, not
-      reimplemented here, per AGENTS.md section 4.
-      Python builds the manifest's second location record directly rather
-      than through ndi.document.add_file, because this works on a properties
-      DICT: the whole download pipeline mutates dicts in place, as
-      updateFileInfoForRemoteFiles does, and converting to a document would
-      deep-copy and lose the mutation. The record shape is pinned to
-      add_file's by test_cloud_series_reconstruction.py.
+      with it files.series_info(:).ingest_locations are rebuilt from the
+      downloaded manifest by reconstructSeriesIngestLocations (cd3c11673,
+      NDI-matlab#958) -- without which DID refuses the document outright.
+      The representation itself is DID's -- files.series_info, file_series
+      and n_present are read through did.document, not reimplemented here,
+      per AGENTS.md section 4.
+      The second ``ndic://`` location the manifest used to keep beside the
+      local copy (504c5bcf4, NDI-matlab#966) was retired in NDI-matlab#986
+      once DID-matlab#191/#201 taught the read path to reach a local-file
+      manifest directly. Ported here alongside NDI-matlab#989.
   - name: updateFileInfoForLocalFiles
     matlab_path: "+ndi/+cloud/+sync/+internal/updateFileInfoForLocalFiles.m"
-    matlab_last_sync_hash: "504c5bcf4"
+    matlab_last_sync_hash: "2ad46c0f"
     python_path: "ndi/cloud/filehandler.py"
     input_arguments:
       - name: doc_props
@@ -1058,15 +1052,13 @@ functions:
       rebuilds, Python edits the properties dict where it stands. So
       MATLAB's #945 fix -- carrying files.series_info across the reset that
       would otherwise drop it -- has nothing to fix here; there is no reset.
-      NOT PORTED, and larger than this entry: MATLAB's cloudDatasetId
-      argument (045c0eef4, 504c5bcf4) reconstructs a downloaded series'
-      ingest_locations and keeps the manifest's ndic:// reference beside the
-      local copy, so a member of a 28,000-member series left on the cloud
-      can still be resolved. Python has no file-series support in the cloud
-      path at all -- nothing here reads files.series_info, file_series or
-      n_present -- so there is no partial fix to make; the port of series
-      themselves has to come first. Recorded here rather than left implied
-      by a bumped hash.
+      cloudDatasetId (045c0eef4) drives the ingest_locations rebuild via
+      reconstructSeriesIngestLocations so DID-matlab#185's MembersNotLocatable
+      guard is satisfied on the following add_docs. The second ``ndic://``
+      location the manifest used to keep beside the local copy (504c5bcf4,
+      NDI-matlab#966) was retired in NDI-matlab#986 (PR #989, 2ad46c0f) once
+      DID-matlab#191/#201 taught the read path to reach a local-file manifest
+      directly. Ported here alongside that removal.
 
   - name: parse_ndic_uri
     matlab_path: "N/A"

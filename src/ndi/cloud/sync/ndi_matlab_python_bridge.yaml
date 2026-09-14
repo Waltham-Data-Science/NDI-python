@@ -661,9 +661,14 @@ functions:
       optional third argument and every test called
       updateFileInfoForLocalFiles directly, so dropping it at the call site
       broke nothing any test could see while a downloaded series silently lost
-      its manifest reference. Now pinned by
+      its ingest_locations reconstruction. Now pinned by
       TestTheCloudDatasetIdReachesTheRewrite in
       tests/test_cloud_download_ordering.py.
+      (3) The second ``ndic://`` location the manifest used to keep beside
+      the local copy (NDI-matlab#966) was retired in NDI-matlab#986 (PR
+      #989, 2ad46c0f) once DID-matlab#191/#201 taught the read path to
+      reach a local-file manifest directly. Ported here alongside that
+      removal.
 
 # =============================================================================
 # Not-yet-ported MATLAB functions

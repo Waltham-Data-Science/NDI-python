@@ -274,33 +274,6 @@ def get_or_create_cloud_client() -> CloudClient:
     return CloudClient.from_env()
 
 
-def _ndic_location_record(cloud_dataset_id: str, file_uid: str) -> dict:
-    """One ``locations`` entry pointing at ``file_uid`` in the cloud.
-
-    The same record :meth:`ndi.document.ndi_document.add_file` builds for an
-    ``ndic://`` location, spelled out here because this function works on a
-    properties DICT rather than a document -- as updateFileInfoForRemoteFiles
-    does, and as the whole download pipeline does, so that both rewrites
-    mutate the same objects in place. ``test_the_record_matches_add_files``
-    pins the two together so this cannot drift.
-
-    The uid inside the URI is the file's ORIGINAL uid, the one the cloud
-    knows it by. The record gets a fresh uid of its own, exactly as add_file
-    mints one: DID passes only the location STRING to the handler, and a
-    series member's uid comes from the context.
-    """
-    from ..ido import ndi_ido
-
-    return {
-        "delete_original": 0,
-        "uid": ndi_ido().id,
-        "location": f"{NDIC_SCHEME}{cloud_dataset_id}/{file_uid}",
-        "parameters": "",
-        "location_type": "ndicloud",
-        "ingest": 0,
-    }
-
-
 def reconstructSeriesIngestLocations(
     doc_props: dict,
     file_directory: str,
@@ -443,28 +416,6 @@ def _manifest_uid(file_info: list, series_name: str) -> str:
     return ""
 
 
-def _declared_series_names(doc_props: dict) -> set:
-    """Lowercased names of the file series this document's class declares.
-
-    Asked of did.document rather than read out of files.file_series here:
-    which names are series is DID's question, the declaration is a property
-    of the document CLASS, and the matching is case-insensitive in a way
-    worth having in one place. Document() wraps the dict without copying it,
-    so this costs nothing and sees exactly what we are about to edit.
-
-    A document whose class declares no series -- almost all of them -- gives
-    an empty set, and nothing below changes.
-    """
-    try:
-        from did.document import Document
-    except ImportError:  # pragma: no cover - did is a hard dependency
-        return set()
-    try:
-        return {str(name).lower() for name in Document(doc_props).series_names()}
-    except Exception:  # noqa: BLE001 - a malformed document is not ours to fix
-        return set()
-
-
 def updateFileInfoForLocalFiles(
     doc_props: dict,
     file_directory: str,
@@ -478,39 +429,20 @@ def updateFileInfoForLocalFiles(
     the location with the local file path ``{file_directory}/{uid}``
     and sets ``delete_original=1``, ``ingest=1``.
 
-    SERIES, when ``cloud_dataset_id`` is given. Two things happen that do
-    not for an ordinary file:
-
-    A series MANIFEST keeps the cloud reference it came from, as a second
-    location beside the local copy. Its members are still on the cloud --
-    left there deliberately, so that opening a dataset does not drag down a
-    28,000-member series -- and a member has no location of its own, so DID
-    resolves one by handing the MANIFEST's location to the file handler with
-    the member's uid in the context. That location is the only thing telling
-    the handler where to look; with the local path alone the handler is
-    given something that does not start with ``ndic://`` and every member of
-    a downloaded series is unreadable. See NDI-matlab#966.
-
-    And the series' ``ingest_locations`` are rebuilt from the downloaded
-    manifest, which is what lets the document be added at all. See
-    :func:`reconstructSeriesIngestLocations`.
-
-    MATLAB carries files.series_info across a ``reset_file_info`` it makes
-    here (NDI-matlab#945). There is nothing to carry here: this edits the
-    properties dict where it stands and never resets, so the per-series
-    record survives on its own.
+    When ``cloud_dataset_id`` is given and the document declares any file
+    series with n_present > 0, the series' ``ingest_locations`` are rebuilt
+    from the downloaded manifest -- one entry per present member,
+    ``ingest=0`` -- which is what lets the document be added at all. See
+    :func:`reconstructSeriesIngestLocations` and NDI-matlab#958.
 
     Args:
         doc_props: ndi_document properties dict (as from JSON).
         file_directory: Directory where local files are stored.
-        cloud_dataset_id: Cloud dataset id. Without it, series get neither
-            the manifest's second location nor rebuilt ingest_locations,
-            and a document with a populated series will be refused by DID
-            on the following add.
+        cloud_dataset_id: Cloud dataset id. Without it, series get no
+            rebuilt ingest_locations, and a document with a populated
+            series will be refused by DID on the following add.
     """
     import os
-
-    series_names = _declared_series_names(doc_props)
 
     files = doc_props.get("files")
     if not files or not isinstance(files, dict):
@@ -546,7 +478,6 @@ def updateFileInfoForLocalFiles(
         else:
             continue
 
-        extra_locations: list[dict] = []
         for loc in loc_list:
             if not isinstance(loc, dict):
                 continue
@@ -559,18 +490,6 @@ def updateFileInfoForLocalFiles(
                 loc["location_type"] = "file"
                 loc["delete_original"] = 1
                 loc["ingest"] = 1
-                # Manifests only. Every other file is already here, and a
-                # second location on each would be rows to no purpose.
-                if (
-                    cloud_dataset_id
-                    and str(fi.get("name", "")).lower() in series_names
-                    and not any(
-                        isinstance(other, dict)
-                        and str(other.get("location", "")).startswith(NDIC_SCHEME)
-                        for other in loc_list
-                    )
-                ):
-                    extra_locations.append(_ndic_location_record(cloud_dataset_id, uid))
             else:
                 logger.warning(
                     "Local file does not exist for uid %s at %s",
@@ -578,15 +497,8 @@ def updateFileInfoForLocalFiles(
                     file_location,
                 )
 
-        loc_list.extend(extra_locations)
-
-        # A manifest that gained its cloud reference now has two locations,
-        # so it cannot go back as a bare dict -- doing so would drop the
-        # very location the members are resolved through.
-        if loc_was_dict and len(loc_list) == 1:
+        if loc_was_dict:
             fi["locations"] = loc_list[0]
-        elif loc_was_dict:
-            fi["locations"] = loc_list
 
     if was_dict:
         files["file_info"] = fi_list[0]
