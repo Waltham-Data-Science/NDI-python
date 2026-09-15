@@ -751,12 +751,21 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
             channeltype: Type(s) of channel to read
             channel: Channel number(s) to read (1-indexed)
             epochfiles: Files for this epoch (starting with epochid://)
-            s0: Start sample (1-indexed)
-            s1: End sample (1-indexed)
+            s0: Start sample (0-indexed; may be ``-np.inf`` or a value
+                before the epoch's first sample, both of which clamp to
+                the epoch's start)
+            s1: End sample (0-indexed; may be ``np.inf`` or a value past
+                the epoch's last sample, both of which clamp to the
+                epoch's end)
             session: ndi_session object with database access
 
         Returns:
-            Array with shape (num_samples, num_channels)
+            Array with shape (num_samples, num_channels). Empty
+            ``np.zeros((0, len(channel)))`` when the requested window
+            lies entirely outside the epoch.
+
+        Raises:
+            ValueError: If ``s0 > s1``.
         """
         import ndicompress
 
@@ -779,15 +788,38 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         if len(sr_unique) != 1:
             raise ValueError("Cannot handle different sampling rates across channels")
 
-        # Handle infinite bounds
+        # Clamp the requested window to what the epoch actually has.
+        # The ingested reader addresses concrete _seg.nbf_N files, so it
+        # cannot pass an out-of-range sample number through to disk the
+        # way the local readers can; a filter-warm-up read like
+        # pyraview's (which asks for t = t0 - excess on the first chunk)
+        # would otherwise ask for a _seg.nbf_0 that no writer has ever
+        # produced.
         t0_t1 = self.t0_t1_ingested(epochfiles, session)
         abs_s = self.epochtimes2samples_ingested(
             channeltype, channel, epochfiles, np.array(t0_t1[0]), session
         )
-        if np.isinf(s0):
-            s0 = int(abs_s[0])
-        if np.isinf(s1):
-            s1 = int(abs_s[1])
+        absolute_beginning = int(abs_s[0])
+        absolute_end = int(abs_s[1])
+
+        # A caller who passes s0 > s1 has inverted the endpoints; that is
+        # a coding error, not a request. Check before the clamp so an
+        # inversion is not silently absorbed by clipping one endpoint
+        # into the other.
+        if s0 > s1:
+            raise ValueError("s0 must be less than or equal to s1")
+
+        # -Inf and any finite value before the epoch mean "start at the
+        # first sample"; +Inf and any finite value past the epoch mean
+        # "end at the last sample". A window that lies entirely outside
+        # [t0, t1] returns an empty slice -- read past the edge, get
+        # nothing there.
+        s0 = max(s0, absolute_beginning)
+        s1 = min(s1, absolute_end)
+        if s0 > s1:
+            return np.zeros((0, len(channel)))
+        s0 = int(s0)
+        s1 = int(s1)
 
         # Get channel info for group decoding
         full_channel_info = self.getchannelsepoch_ingested(epochfiles, session)
@@ -854,39 +886,30 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
 
             for g_idx, grp in enumerate(groups):
                 fname = f"{prefix}_group{grp}_seg.nbf_{seg}"
-                try:
-                    fobj = session.database_openbinarydoc(doc, fname)
-                    tname = fobj.name
-                    fobj.close()
+                fobj = session.database_openbinarydoc(doc, fname)
+                tname = fobj.name
+                fobj.close()
 
-                    # Remove .tgz extension for ndicompress (it adds it back)
-                    tname_base = tname
-                    if tname_base.endswith(".tgz"):
-                        tname_base = tname_base[:-4]
-                    if tname_base.endswith(".nbf"):
-                        tname_base = tname_base[:-4]
+                # Remove .tgz extension for ndicompress (it adds it back)
+                tname_base = tname
+                if tname_base.endswith(".tgz"):
+                    tname_base = tname_base[:-4]
+                if tname_base.endswith(".nbf"):
+                    tname_base = tname_base[:-4]
 
-                    result = expand_fn(tname_base)
-                    # expand_* functions return (data, error_signal) tuple
-                    data_here = result[0] if isinstance(result, tuple) else result
+                result = expand_fn(tname_base)
+                # expand_* functions return (data, error_signal) tuple
+                data_here = result[0] if isinstance(result, tuple) else result
 
-                    # Handle last segment possibly having fewer samples
-                    if data_here.shape[0] <= s1_:
-                        s1_ = data_here.shape[0] - 1
-                        n_samples_here = s1_ - s0_ + 1
+                # Handle last segment possibly having fewer samples
+                if data_here.shape[0] <= s1_:
+                    s1_ = data_here.shape[0] - 1
+                    n_samples_here = s1_ - s0_ + 1
 
-                    rows = slice(count, count + n_samples_here)
-                    data[rows, ch_idx_in_output[g_idx]] = data_here[
-                        s0_ : s1_ + 1, ch_idx_in_groups[g_idx]
-                    ]
-                except Exception as seg_exc:
-                    import logging
-
-                    logging.getLogger("ndi").warning(
-                        "readchannels_epochsamples_ingested: segment %s failed: %s",
-                        fname,
-                        seg_exc,
-                    )
+                rows = slice(count, count + n_samples_here)
+                data[rows, ch_idx_in_output[g_idx]] = data_here[
+                    s0_ : s1_ + 1, ch_idx_in_groups[g_idx]
+                ]
 
             count += n_samples_here
 
