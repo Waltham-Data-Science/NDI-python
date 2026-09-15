@@ -157,17 +157,21 @@ def uploadFilesForDatasetDocuments(
     dataset_id: str,
     documents: list[dict[str, Any]],
     *,
+    dataset: Any | None = None,
     client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """Upload associated binary files for a list of documents.
-
-    For each document that has a ``file_uid`` field, obtains a
-    presigned URL and uploads the file.
 
     Args:
         org_id: Organisation ID.
         dataset_id: Cloud dataset ID.
         documents: List of document property dicts.
+        dataset: The local ``ndi.dataset`` that produced *documents*. When
+            given, its ``database_existbinarydoc`` is the source of truth
+            for where each file actually lives on disk, and series members
+            (which have no ``file_info`` entry) are enumerated from
+            ``series_info[k].count``. Mirrors NDI-matlab's
+            ``list_binary_files.m``.
         client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
@@ -188,7 +192,7 @@ def uploadFilesForDatasetDocuments(
 
     for doc in documents:
         doc_id = document_id(doc)
-        for file_uid, file_path in file_uploads_for_document(doc):
+        for file_uid, file_path in file_uploads_for_document(doc, dataset=dataset):
             try:
                 url = files_api.getFileUploadURL(org_id, dataset_id, file_uid, client=client)
                 files_api.putFiles(url, file_path)
@@ -202,33 +206,133 @@ def uploadFilesForDatasetDocuments(
     return report
 
 
-def file_uploads_for_document(doc: dict[str, Any]) -> list[tuple[str, str]]:
+def file_uploads_for_document(
+    doc: dict[str, Any],
+    *,
+    dataset: Any | None = None,
+) -> list[tuple[str, str]]:
     """The ``(file_uid, local_path)`` pairs to upload for one document.
 
-    TWO SHAPES REACH THIS, AND ONLY ONE USED TO BE READ.
+    THREE SHAPES REACH THIS.
 
-    A manifest entry carries ``file_uid`` and ``file_path`` at the top level,
-    and that is all this looked at. A real ``ndi.document`` carries neither:
-    its binaries live under ``files.file_info[].locations[]``, each location
-    holding a ``uid`` and a ``location`` that is a filesystem path until
-    :mod:`ndi.cloud.filehandler` rewrites it to ``ndic://``. So every caller
-    passing real documents -- which is every caller that enumerates a dataset
-    -- matched nothing and uploaded nothing, silently, because a document
-    with no recognised file is indistinguishable from a document with no
-    files at all.
+    * A manifest entry carrying top-level ``file_uid`` and ``file_path`` is
+      taken as-is: legacy input from callers that already know the pair.
 
-    Locations already rewritten to ``ndic://`` are skipped: that scheme means
-    the file is on the cloud, which is the opposite of something to upload.
-    A location that no longer exists on disk is skipped too -- there is
-    nothing to send -- and the caller learns of it as a document whose
-    binaries did not arrive.
+    * A real ``ndi.document`` alongside its owning ``dataset``: the storage-
+      side path is asked for by name, via
+      :meth:`ndi.dataset.database_existbinarydoc` (which is DID's
+      ``exist_doc``). This mirrors NDI-matlab's
+      ``+ndi/+database/+internal/list_binary_files.m`` and is what the live
+      upload path always uses now. The advantage: it covers both the
+      recorded-location-is-gone-after-ingest case (Waltham-Data-Science/
+      NDI-python#306 -- ``did.document.Document.add_file_series`` writes the
+      manifest to a tempfile, and ``add_file`` with the default
+      ``delete_original=True`` removes it once ingested) AND series MEMBERS,
+      which have no ``file_info`` entry and are enumerated from
+      ``series_info[k].count`` (1..count, member names ``NAME_i``).
+
+    * A raw document dict WITHOUT a dataset: the fallback reads
+      ``files.file_info[].locations[].location`` and calls ``os.path.exists``.
+      Kept so isolated tests and callers with no dataset in hand behave the
+      way they used to. Locations already rewritten to ``ndic://`` are
+      skipped there: that scheme means the file is on the cloud, which is
+      the opposite of something to upload.
     """
-    import os
-
     top_uid = str(doc.get("file_uid", "") or "")
     top_path = str(doc.get("file_path", "") or "")
     if top_uid and top_path:
         return [(top_uid, top_path)]
+
+    if dataset is not None and callable(getattr(dataset, "database_existbinarydoc", None)):
+        return _file_uploads_via_dataset(doc, dataset)
+
+    return _file_uploads_via_recorded_location(doc)
+
+
+def _file_uploads_via_dataset(
+    doc: dict[str, Any],
+    dataset: Any,
+) -> list[tuple[str, str]]:
+    """Enumerate binaries the way NDI-matlab's ``list_binary_files.m`` does.
+
+    Ordinary files: walk ``files.file_info[i].name`` (which is what
+    ``current_file_list()`` returns). For a series document, this yields the
+    manifest name, and the manifest bytes live at ``<FileDir>/<manifest_uid>``
+    after ingest -- exactly where ``database_existbinarydoc`` looks.
+
+    Series members: iterate ``files.series_info[k].count`` from 1..count and
+    ask for ``NAME_i``. Slots are one-based (see DID's series API), an absent
+    slot is normal (a sparse series is the case the mechanism exists for),
+    and the manifest is what makes each slot's uid resolvable.
+
+    ``uid = basename(path)``: DID's file store keys files by uid, and
+    ``exist_doc`` returns a path under ``<FileDir>/`` whose basename IS the
+    uid. NDI-matlab's ``list_binary_files.m`` does the same
+    (``fileparts(full_file_path)``).
+    """
+    import os
+
+    doc_id = document_id(doc)
+    if not doc_id:
+        return []
+    files = doc.get("files") or {}
+    if not isinstance(files, dict):
+        return []
+
+    pairs: list[tuple[str, str]] = []
+
+    file_info = files.get("file_info") or []
+    if isinstance(file_info, dict):
+        file_info = [file_info]
+    for entry in file_info:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name", "") or "")
+        if not name:
+            continue
+        found, path = dataset.database_existbinarydoc(doc_id, name)
+        if not found or path is None:
+            continue
+        path_str = str(path)
+        uid = os.path.basename(path_str)
+        if uid:
+            pairs.append((uid, path_str))
+
+    series_info = files.get("series_info") or []
+    if isinstance(series_info, dict):
+        series_info = [series_info]
+    for entry in series_info:
+        if not isinstance(entry, dict):
+            continue
+        series_name = str(entry.get("name", "") or "")
+        if not series_name:
+            continue
+        try:
+            count = int(entry.get("count", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        for i in range(1, count + 1):
+            member_name = f"{series_name}_{i}"
+            found, path = dataset.database_existbinarydoc(doc_id, member_name)
+            if not found or path is None:
+                continue
+            path_str = str(path)
+            uid = os.path.basename(path_str)
+            if uid:
+                pairs.append((uid, path_str))
+
+    return pairs
+
+
+def _file_uploads_via_recorded_location(doc: dict[str, Any]) -> list[tuple[str, str]]:
+    """The pre-#306 shape: read the authoring record off the doc dict.
+
+    Kept for callers that pass a raw dict and no dataset. Never covers series
+    members (they have no ``file_info`` entry), and skips a location whose
+    file has been removed from disk -- both facts are what made the
+    dataset-driven path necessary in the first place.
+    """
+    import os
 
     pairs: list[tuple[str, str]] = []
     files = doc.get("files") or {}

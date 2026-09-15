@@ -54,7 +54,13 @@ def parse_ndic_uri(uri: str) -> tuple[str, str]:
     return parts[0], parts[1]
 
 
-def updateFileInfoForRemoteFiles(doc_props: dict, cloud_dataset_id: str) -> None:
+def updateFileInfoForRemoteFiles(
+    doc_props: dict,
+    cloud_dataset_id: str,
+    *,
+    custom_file_handler=None,
+    client: CloudClient | None = None,
+) -> None:
     """Rewrite a document's file_info locations to use ``ndic://`` URIs.
 
     MATLAB equivalent: ``ndi.cloud.sync.internal.updateFileInfoForRemoteFiles``
@@ -66,9 +72,39 @@ def updateFileInfoForRemoteFiles(doc_props: dict, cloud_dataset_id: str) -> None
     Handles both list-style and dict-style (MATLAB struct) ``file_info``
     and ``locations`` fields.
 
+    SERIES. When the document declares any file series with ``n_present > 0``
+    and empty ``ingest_locations``, the series' ``ingest_locations`` are
+    reconstructed from the downloaded manifest bytes -- fetched here on the
+    fly, either through *custom_file_handler* (the DID contract DID uses on
+    the read side, VH-Lab/DID-matlab#201 / VH-Lab/DID-python#88) or, when
+    no handler is given, through :func:`fetch_cloud_file`. Without this,
+    DID's ``MembersNotLocatable`` guard (DID-matlab#185) refuses the
+    document on the following ``add_docs`` -- the whole SyncFiles=false
+    path was blocked on that guard for any document carrying a populated
+    series. See VH-Lab/NDI-matlab#988.
+
+    The manifest bytes are dropped when the function returns, so no local
+    files persist -- the manifest is expected to land in the DID file cache
+    on the next member open, through DID#201's handler-fetch path. If the
+    cache is ever evicted, the same path re-fetches.
+
+    A per-manifest fetch failure is caught and logged; the entry is left
+    un-reconstructed so DID's guard fires on the following ``add_docs`` --
+    the right signal a partial download deserves.
+
     Args:
         doc_props: ndi_document properties dict (as from JSON).
         cloud_dataset_id: The cloud dataset ID to embed in URIs.
+        custom_file_handler: Optional callable following DID's
+            ``custom_file_handler`` contract (``(dest_path, source_path[,
+            context])``) used to fetch each qualifying series' manifest by
+            uid. When omitted, the manifest is fetched by minting a signed
+            URL against ``ndi.cloud.api.files``, matching what
+            ``download_file_from_cloud`` does when a manifest is asked for
+            by uid.
+        client: Authenticated cloud client for the direct-fetch path; falls
+            back to the ambient one. Ignored when *custom_file_handler* is
+            given.
     """
     files = doc_props.get("files")
     if not files or not isinstance(files, dict):
@@ -122,6 +158,198 @@ def updateFileInfoForRemoteFiles(doc_props: dict, cloud_dataset_id: str) -> None
 
     if was_dict:
         files["file_info"] = fi_list[0]
+
+    if _needs_series_reconstruction(files):
+        _reconstruct_series_from_cloud(
+            doc_props,
+            cloud_dataset_id,
+            custom_file_handler=custom_file_handler,
+            client=client,
+        )
+
+
+def _needs_series_reconstruction(files: dict) -> bool:
+    """True if any series in *files* has ``n_present > 0`` and no
+    ``ingest_locations``.
+
+    Same predicate :func:`reconstructSeriesIngestLocations` uses per entry,
+    hoisted here so an all-good document skips the whole scratch-dir dance.
+    """
+    series_info = _as_list(files.get("series_info"))
+    for entry in series_info:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            n_present = int(entry.get("n_present", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        if n_present <= 0:
+            continue
+        if entry.get("ingest_locations"):
+            continue
+        return True
+    return False
+
+
+def _reconstruct_series_from_cloud(
+    doc_props: dict,
+    cloud_dataset_id: str,
+    *,
+    custom_file_handler=None,
+    client: CloudClient | None = None,
+) -> None:
+    """Fetch each qualifying series' manifest into a scratch dir and rebuild
+    its ``ingest_locations``.
+
+    Manifests do NOT land in the DID file cache here -- a subsequent member
+    open trips DID#201's lazy fetch, which is what populates the cache.
+    That is the design: the manifest is never a persistent local file the
+    caller depends on, and cache eviction on a later session is answered by
+    the same re-fetch path.
+
+    Deletes the scratch dir on exit. A per-manifest fetch failure is
+    logged; the entry is left un-reconstructed so DID's guard fires on
+    ``add_docs``.
+    """
+    import os
+    import tempfile
+
+    files = doc_props.get("files")
+    if not isinstance(files, dict):
+        return
+    file_info = _as_list(files.get("file_info"))
+    series_info = _as_list(files.get("series_info"))
+    document_id = ""
+    try:
+        base = doc_props.get("base")
+        if isinstance(base, dict):
+            document_id = str(base.get("id", "") or "")
+    except Exception:  # noqa: BLE001 - a malformed doc is not ours to fix
+        document_id = ""
+
+    with tempfile.TemporaryDirectory(prefix="ndi-manifest-fetch-") as tmp_dir:
+        for entry in series_info:
+            if not isinstance(entry, dict):
+                continue
+            try:
+                n_present = int(entry.get("n_present", 0) or 0)
+            except (TypeError, ValueError):
+                continue
+            if n_present <= 0:
+                continue
+            if entry.get("ingest_locations"):
+                continue
+
+            series_name = str(entry.get("name", "") or "")
+            manifest_uid = _manifest_uid(file_info, series_name)
+            if not manifest_uid:
+                continue
+
+            dest_path = os.path.join(tmp_dir, manifest_uid)
+            try:
+                _fetch_manifest(
+                    dest_path,
+                    cloud_dataset_id,
+                    manifest_uid,
+                    document_id,
+                    series_name,
+                    custom_file_handler=custom_file_handler,
+                    client=client,
+                )
+            except Exception as error:  # noqa: BLE001
+                # A manifest that cannot be fetched leaves the entry
+                # un-reconstructed; DID's #185 guard will then fire on
+                # add_docs with the document's own identity, which is the
+                # right signal a partial download deserves.
+                logger.warning(
+                    'Cannot fetch manifest for series "%s" (uid %s): %s',
+                    series_name,
+                    manifest_uid,
+                    error,
+                )
+
+        reconstructSeriesIngestLocations(doc_props, tmp_dir, cloud_dataset_id)
+
+
+def _fetch_manifest(
+    dest_path: str,
+    cloud_dataset_id: str,
+    manifest_uid: str,
+    document_id: str,
+    series_name: str,
+    *,
+    custom_file_handler=None,
+    client: CloudClient | None = None,
+) -> None:
+    """Fetch one manifest by uid to *dest_path*.
+
+    When *custom_file_handler* is given, dispatch through the DID contract
+    with ``seriesName=""`` in the context (a non-empty seriesName marks a
+    member fetch, where the handler treats ``ctx.uid`` as the file to
+    retrieve and ``source_path`` as the manifest -- the exact opposite of
+    what we want here). Otherwise, call :func:`fetch_cloud_file` directly,
+    matching what the read-side handler does when a manifest is asked for
+    by uid.
+    """
+    source_path = f"{NDIC_SCHEME}{cloud_dataset_id}/{manifest_uid}"
+    if custom_file_handler is not None:
+        context = {
+            "documentId": document_id,
+            "filename": series_name,
+            "seriesName": "",
+            "uid": manifest_uid,
+            "mode": "open",
+        }
+        _dispatch_custom_file_handler(custom_file_handler, dest_path, source_path, context)
+        return
+
+    fetch_cloud_file(
+        source_path,
+        dest_path,
+        client=client,
+        ndi_document_id=document_id,
+        series_name="",
+    )
+
+
+def _dispatch_custom_file_handler(handler, dest_path: str, source_path: str, context: dict) -> None:
+    """Arity-aware call of a ``custom_file_handler``.
+
+    A handler declared with three or more positional inputs (or with
+    ``*args``) is called with ``(dest_path, source_path, context)``. A
+    handler declared with two inputs is called without context, so an
+    older two-argument signature still works. Mirrors
+    ``did.implementations.sqlitedb.SqliteDb._dispatch_custom_file_handler``
+    and MATLAB's ``did.implementations.sqlitedb.dispatchCustomFileHandler``.
+    """
+    import inspect
+
+    try:
+        signature = inspect.signature(handler)
+    except (TypeError, ValueError):
+        # Builtin or C-implemented callable: fall back to positional try.
+        try:
+            handler(dest_path, source_path, context)
+            return
+        except TypeError:
+            handler(dest_path, source_path)
+            return
+
+    positional = 0
+    has_var_positional = False
+    for p in signature.parameters.values():
+        if p.kind in (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        ):
+            positional += 1
+        elif p.kind == inspect.Parameter.VAR_POSITIONAL:
+            has_var_positional = True
+
+    if has_var_positional or positional >= 3:
+        handler(dest_path, source_path, context)
+    else:
+        handler(dest_path, source_path)
 
 
 #: Installed by :func:`watchFetches`. Module-level rather than a parameter

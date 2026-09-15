@@ -174,18 +174,28 @@ class TestBatchLookupFallback:
         assert len(signer.calls) == 2
 
     def test_a_uid_absent_from_the_batch_map_falls_back(self):
-        """Data drift: the scope was fetched, but this uid is not in it."""
+        """Data drift: the scope was fetched, but this uid is not in it.
+
+        A missing uid triggers ONE re-fetch (see
+        :class:`TestBatchLookupPartialMapRetry` below). When the second
+        answer still does not name the uid -- which is the case here,
+        the fake signer serves the same map every time -- the caller
+        falls back per uid, exactly as it did before the retry existed.
+        """
         from ndi.cloud.batch_signed_url import BatchSignedUrlLookup
 
         files = {"known": "https://s3.example.com/known"}
         signer = _FakeSigner({("ds1", "doc1", ""): files})
-        lookup = BatchSignedUrlLookup(signer=signer)
+        # Skip the sleep for offline test speed.
+        lookup = BatchSignedUrlLookup(signer=signer, partial_map_retry_seconds=0)
 
         assert lookup.lookup("ds1", "doc1", "", "known") == "https://s3.example.com/known"
         assert lookup.lookup("ds1", "doc1", "", "unknown") == ""
         stats = lookup.stats()
         assert stats.uid_hits == 1
         assert stats.uid_misses == 1
+        assert stats.partial_map_retries == 1, "the miss should have triggered one retry"
+        assert stats.signer_calls == 2, "one call for the initial fetch, one for the retry"
 
     def test_failure_reason_names_the_cause(self):
         """Reporting one silent miss leaves the endpoint owner with nothing.
@@ -200,6 +210,147 @@ class TestBatchLookupFallback:
         lookup = BatchSignedUrlLookup(signer=signer)
         lookup.lookup("ds1", "doc1", "", "u1")
         assert "no 'files'" in lookup.stats().last_failure_reason
+
+
+class TestBatchLookupPartialMapRetry:
+    """The batch endpoint sometimes lags behind ``waitForAllBulkUploads``.
+
+    A cluster that has not fully indexed a series' members answers with a
+    populated map that is missing some of them. Without a retry, the caller
+    then falls back per uid for those members and defeats the batch design.
+    NDI-python#309 saw this on TEST_USER_1/prod immediately after upload:
+    the batch answered with 2 of 4 member uids, so 2 members took a per-uid
+    ``getFileDetails`` round trip apiece.
+
+    Fix: on the miss, sleep briefly and re-fetch ONCE. If the second answer
+    covers the uid, take it. If not, warn and fall back. Bounded to one
+    retry per scope so a genuine data-drift miss costs one extra signer
+    call for the whole scope, not one per uid.
+    """
+
+    class _EventualSigner:
+        """Returns a partial map on call 1, the full map on call 2."""
+
+        def __init__(self, scope, partial_files, full_files):
+            self._scope = scope
+            self._partial = partial_files
+            self._full = full_files
+            self.calls = 0
+
+        def __call__(self, dataset_id, document_id, *, file_series="", client=None):
+            self.calls += 1
+            if (dataset_id, document_id, file_series) != self._scope:
+                return False, {"message": "no such scope"}
+            files = self._partial if self.calls == 1 else self._full
+            return True, {"files": dict(files)}
+
+    def _lookup(self, signer, sleeps=None):
+        """A lookup with the sleep short-circuited so tests stay fast.
+
+        The retry sleep exists on the live path to give a cloud endpoint
+        time to catch up; a test does not need to wait. If ``sleeps`` is
+        given, each recorded sleep duration is appended to it so the test
+        can assert that the retry did (or did not) pause.
+        """
+        from ndi.cloud.batch_signed_url import BatchSignedUrlLookup
+
+        recorded = sleeps if sleeps is not None else []
+        return BatchSignedUrlLookup(
+            signer=signer,
+            partial_map_retry_seconds=0.5,
+            sleep=recorded.append,
+        )
+
+    def test_a_lagged_scope_settles_on_the_retry(self):
+        """First map has 2 of 4; the retry names all 4."""
+        scope = ("ds1", "doc1", "chunks")
+        partial = {"u_1": "https://s3/u_1", "u_2": "https://s3/u_2"}
+        full = {
+            "u_1": "https://s3/u_1",
+            "u_2": "https://s3/u_2",
+            "u_3": "https://s3/u_3",
+            "u_4": "https://s3/u_4",
+        }
+        signer = self._EventualSigner(scope, partial, full)
+        lookup = self._lookup(signer)
+
+        # Open all four members in order. The first two are in the partial
+        # map; the third triggers the retry; the fourth uses the refreshed
+        # map.
+        urls = [lookup.lookup("ds1", "doc1", "chunks", f"u_{i}") for i in (1, 2, 3, 4)]
+
+        assert urls == [f"https://s3/u_{i}" for i in (1, 2, 3, 4)]
+        stats = lookup.stats()
+        assert stats.uid_hits == 4, f"every uid should resolve; got {stats!r}"
+        assert stats.uid_misses == 0
+        assert stats.partial_map_retries == 1, "one scope re-fetch, not one per uid"
+        assert stats.signer_calls == 2, "initial fetch + one retry"
+
+    def test_the_retry_pauses_before_re_fetching(self):
+        """The retry exists to give a lagged endpoint time to catch up.
+        Fire the second call too fast and the map is still stale."""
+        scope = ("ds1", "doc1", "chunks")
+        partial = {"u_1": "https://s3/u_1"}
+        full = {"u_1": "https://s3/u_1", "u_2": "https://s3/u_2"}
+        signer = self._EventualSigner(scope, partial, full)
+        sleeps: list[float] = []
+        lookup = self._lookup(signer, sleeps=sleeps)
+
+        lookup.lookup("ds1", "doc1", "chunks", "u_1")
+        lookup.lookup("ds1", "doc1", "chunks", "u_2")
+
+        assert sleeps == [0.5], f"expected one 500 ms pause before the retry; got {sleeps!r}"
+
+    def test_a_scope_is_only_retried_once(self):
+        """A second miss in the same scope must not fire another retry.
+
+        Without this guard a series whose scope is genuinely missing
+        several uids would cost N retries instead of one.
+        """
+        scope = ("ds1", "doc1", "chunks")
+        # Signer that always returns the same partial map -- retry never helps.
+        signer = _FakeSigner({scope: {"u_2": "https://s3/u_2"}})
+        lookup = self._lookup(signer)
+
+        lookup.lookup("ds1", "doc1", "chunks", "u_1")  # miss + retry
+        lookup.lookup("ds1", "doc1", "chunks", "u_3")  # miss, NO retry
+        lookup.lookup("ds1", "doc1", "chunks", "u_4")  # miss, NO retry
+
+        stats = lookup.stats()
+        assert stats.partial_map_retries == 1, "retry must be once per scope"
+        assert stats.signer_calls == 2, "one initial fetch, one retry, then no more"
+        assert stats.uid_misses == 3
+        # The one uid that IS in the map still resolves.
+        assert lookup.lookup("ds1", "doc1", "chunks", "u_2") == "https://s3/u_2"
+
+    def test_a_retry_that_returns_no_map_at_all_still_falls_back(self):
+        """The retry can itself fail (a fetch that raises, a bad payload).
+        The caller must still get an empty string, not a crash."""
+
+        class _FailingRetry:
+            """Partial map first, exception on retry."""
+
+            def __init__(self):
+                self.calls = 0
+
+            def __call__(self, dataset_id, document_id, *, file_series="", client=None):
+                self.calls += 1
+                if self.calls == 1:
+                    return True, {"files": {"u_1": "https://s3/u_1"}}
+                raise RuntimeError("retry blew up")
+
+        signer = _FailingRetry()
+        lookup = self._lookup(signer)
+
+        # u_1 resolves from the initial map; u_2 misses, retry raises.
+        assert lookup.lookup("ds1", "doc1", "chunks", "u_1") == "https://s3/u_1"
+        assert lookup.lookup("ds1", "doc1", "chunks", "u_2") == ""
+        stats = lookup.stats()
+        assert stats.uid_hits == 1
+        # One miss for u_2 (the retry recorded it as the scope-failure miss).
+        assert stats.uid_misses == 1
+        assert stats.partial_map_retries == 1
+        assert "RuntimeError" in stats.last_failure_reason
 
 
 class TestBatchLookupClear:

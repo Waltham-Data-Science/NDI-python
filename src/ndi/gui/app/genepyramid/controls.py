@@ -383,6 +383,30 @@ def countsOrder(totals, ascending: bool = False):
     return np.argsort(t if ascending else -t, kind="stable")
 
 
+def _dockScrollable(viewer, widget, *, name, area="right"):
+    """Dock WIDGET on AREA, inside a vertical-scrolling viewport.
+
+    Screens too short for the whole right-hand stack used to peg the
+    panel to the top and hide the lower controls; wrapping each panel
+    in a QScrollArea gives it a vertical scrollbar the moment it is
+    taller than the dock area, and changes nothing when it fits.
+
+    setWidgetResizable is REQUIRED: without it the viewport keeps the
+    inner widget at its size hint, and a panel whose layout only asks
+    for stretch collapses to zero width. Horizontal scrolling is off,
+    so a slightly wide panel wraps or clips rather than growing a
+    second scrollbar under the vertical one.
+    """
+    from qtpy.QtCore import Qt
+    from qtpy.QtWidgets import QScrollArea
+
+    scroll = QScrollArea()
+    scroll.setWidgetResizable(True)
+    scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+    scroll.setWidget(widget)
+    viewer.window.add_dock_widget(scroll, name=name, area=area)
+
+
 def addGenePanel(viewer, session, pyr_doc, initial=None) -> Any:
     """A filterable list of gene symbols, one checkbox each.
 
@@ -898,7 +922,7 @@ def addGenePanel(viewer, session, pyr_doc, initial=None) -> Any:
         # AFTER _report, not before: _report rewrites this same label, so
         # the warning set first is the warning nobody sees.
         status.setText(f"not in this pyramid: {', '.join(missing)}")
-    viewer.window.add_dock_widget(box, name="Genes", area="right")
+    _dockScrollable(viewer, box, name="Genes")
     return box
 
 
@@ -1006,7 +1030,7 @@ def addDisplayPanel(viewer, session, pyr_doc, image_layer, density: bool = True)
     outer.addWidget(status)
     outer.addStretch()
 
-    viewer.window.add_dock_widget(box, name="Display", area="right")
+    _dockScrollable(viewer, box, name="Display")
     return box
 
 
@@ -1296,7 +1320,7 @@ def addCellTypePanel(
 
     outer.addStretch()
 
-    viewer.window.add_dock_widget(box, name="Cell types", area="right")
+    _dockScrollable(viewer, box, name="Cell types")
     return box
 
 
@@ -1564,7 +1588,7 @@ def addRotationPanel(viewer, layers) -> Any:
     outer.addWidget(status)
     outer.addStretch()
 
-    viewer.window.add_dock_widget(box, name="Rotation", area="right")
+    _dockScrollable(viewer, box, name="Rotation")
     return box
 
 
@@ -1887,7 +1911,7 @@ def addCloudPanel(viewer) -> Any:
     _tick()
 
     box._ndi_signin = _open
-    viewer.window.add_dock_widget(box, name="NDI Cloud", area="right")
+    _dockScrollable(viewer, box, name="NDI Cloud")
     return box
 
 
@@ -2298,7 +2322,7 @@ def addGeneAppearancePanel(viewer) -> Any:
     # Exposed so the tour can pulse around the gamma this panel set,
     # and put it back afterwards rather than back to 1.
     box._ndi_appearance = state
-    viewer.window.add_dock_widget(box, name="Gene appearance", area="right")
+    _dockScrollable(viewer, box, name="Gene appearance")
     return box
 
 
@@ -2522,7 +2546,7 @@ def addGeneTourPanel(viewer, appearance=None, interval_ms: int = 50) -> Any:
     box._ndi_tour = tour
     box._ndi_step = _step
     box._ndi_toggle = _toggle
-    viewer.window.add_dock_widget(box, name="Gene tour", area="right")
+    _dockScrollable(viewer, box, name="Gene tour")
     return box
 
 

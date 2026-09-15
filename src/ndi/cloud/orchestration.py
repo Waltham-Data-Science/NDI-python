@@ -539,6 +539,7 @@ def uploadDataset(
             client.config.org_id,
             cloud_id,
             doc_jsons,
+            dataset=dataset,
             client=client,
         )
         if verbose:
