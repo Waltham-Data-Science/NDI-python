@@ -332,6 +332,7 @@ def _upload_binaries(
     documents: list[dict[str, Any]],
     options: SyncOptions,
     *,
+    dataset: Any = None,
     client: CloudClient | None,
 ) -> set[str]:
     """Upload each document's binaries; return the ids whose binaries failed.
@@ -341,9 +342,15 @@ def _upload_binaries(
     gets a 404 (NDI-matlab#805). uploadFilesForDatasetDocuments does not
     raise on a per-file failure -- it reports one -- so catching an exception
     was never going to see the ordinary case.
+
+    *dataset* threads the local dataset's DID ``FileDir`` down to
+    :func:`ndi.cloud.upload.file_uploads_for_document` so a doc whose
+    recorded location is gone (a series manifest tempfile after ingest)
+    is still uploaded from its bytes in the file store. See #306.
     """
     if not options.sync_files or not documents:
         return set()
+    from ..orchestration import _did_file_store_roots
     from ..upload import document_id, uploadFilesForDatasetDocuments
 
     try:
@@ -351,6 +358,7 @@ def _upload_binaries(
             getattr(getattr(client, "config", None), "org_id", ""),
             cloud_dataset_id,
             documents,
+            additional_roots=_did_file_store_roots(dataset) if dataset is not None else None,
             client=client,
         )
     except Exception as exc:  # noqa: BLE001
@@ -621,6 +629,7 @@ def uploadNew(
             cloud_dataset_id,
             [documents[i] for i in uploaded if i in documents],
             options,
+            dataset=dataset,
             client=client,
         )
         if binaries_failed:
@@ -798,6 +807,7 @@ def mirrorToRemote(
             cloud_dataset_id,
             [documents[i] for i in uploaded if i in documents],
             options,
+            dataset=dataset,
             client=client,
         )
         if binaries_failed:
@@ -1062,6 +1072,7 @@ def twoWaySync(
             cloud_dataset_id,
             [documents[i] for i in uploaded if i in documents],
             options,
+            dataset=dataset,
             client=client,
         )
         if binaries_failed:

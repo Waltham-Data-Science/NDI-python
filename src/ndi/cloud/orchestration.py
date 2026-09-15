@@ -24,6 +24,29 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _did_file_store_roots(dataset: Any) -> list[str]:
+    """Directories to search for a document's binaries when the recorded
+    location is gone.
+
+    DID ingests a file with ``delete_original=True`` by default -- it copies
+    the bytes into ``<FileDir>/<uid>`` and removes the source path -- so the
+    ``file_info`` location the document holds no longer resolves on disk.
+    Returning the local dataset's DID ``FileDir`` here lets
+    :func:`ndi.cloud.upload.file_uploads_for_document` recover the bytes by
+    uid. See Waltham-Data-Science/NDI-python#306.
+
+    Reads defensively: an unusual dataset shape or a DID rename must not
+    stop an upload of the doc whose location is still resolvable on its own.
+    """
+    try:
+        binary_path = dataset._session._database.binary_path
+    except Exception:  # noqa: BLE001 - a stand-in dataset is not ours to fix
+        return []
+    if not binary_path:
+        return []
+    return [str(binary_path)]
+
+
 def _remove_empty_staging(staging: Path) -> None:
     """Remove the staging tree, if ingestion emptied it.
 
@@ -539,6 +562,7 @@ def uploadDataset(
             client.config.org_id,
             cloud_id,
             doc_jsons,
+            additional_roots=_did_file_store_roots(dataset),
             client=client,
         )
         if verbose:

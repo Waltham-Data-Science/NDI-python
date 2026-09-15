@@ -157,6 +157,7 @@ def uploadFilesForDatasetDocuments(
     dataset_id: str,
     documents: list[dict[str, Any]],
     *,
+    additional_roots: list[str] | None = None,
     client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """Upload associated binary files for a list of documents.
@@ -168,6 +169,10 @@ def uploadFilesForDatasetDocuments(
         org_id: Organisation ID.
         dataset_id: Cloud dataset ID.
         documents: List of document property dicts.
+        additional_roots: Extra directories to search for a file whose
+            recorded ``location`` no longer exists on disk -- typically
+            the dataset's DID ``FileDir``. Passed through to
+            :func:`file_uploads_for_document`.
         client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
@@ -188,7 +193,9 @@ def uploadFilesForDatasetDocuments(
 
     for doc in documents:
         doc_id = document_id(doc)
-        for file_uid, file_path in file_uploads_for_document(doc):
+        for file_uid, file_path in file_uploads_for_document(
+            doc, additional_roots=additional_roots
+        ):
             try:
                 url = files_api.getFileUploadURL(org_id, dataset_id, file_uid, client=client)
                 files_api.putFiles(url, file_path)
@@ -202,7 +209,11 @@ def uploadFilesForDatasetDocuments(
     return report
 
 
-def file_uploads_for_document(doc: dict[str, Any]) -> list[tuple[str, str]]:
+def file_uploads_for_document(
+    doc: dict[str, Any],
+    *,
+    additional_roots: list[str] | None = None,
+) -> list[tuple[str, str]]:
     """The ``(file_uid, local_path)`` pairs to upload for one document.
 
     TWO SHAPES REACH THIS, AND ONLY ONE USED TO BE READ.
@@ -219,9 +230,19 @@ def file_uploads_for_document(doc: dict[str, Any]) -> list[tuple[str, str]]:
 
     Locations already rewritten to ``ndic://`` are skipped: that scheme means
     the file is on the cloud, which is the opposite of something to upload.
-    A location that no longer exists on disk is skipped too -- there is
-    nothing to send -- and the caller learns of it as a document whose
-    binaries did not arrive.
+
+    A location that no longer resolves on disk is looked up by uid in
+    *additional_roots* (typically the dataset's DID ``FileDir``, plus DID's
+    global file cache via :func:`did.file.cached_path_for_uid`). The
+    recorded location is the source path the caller passed to ``add_file``,
+    and DID's ingest moves the bytes into ``<FileDir>/<uid>`` with
+    ``delete_original=True`` by default -- so a series manifest, which
+    ``did.document.add_file_series`` writes to a tempfile, is gone from its
+    original path by the time the upload runs. The bytes are still there,
+    keyed by uid, and this fallback finds them. Without it, a series
+    document's manifest is silently never uploaded and every reader on the
+    cloud side sees "manifest not a file of this dataset" and a series it
+    cannot open. See Waltham-Data-Science/NDI-python#306.
     """
     import os
 
@@ -253,9 +274,31 @@ def file_uploads_for_document(doc: dict[str, Any]) -> list[tuple[str, str]]:
             if not local_path and candidate and "://" not in candidate:
                 if os.path.exists(candidate):
                     local_path = candidate
+        if uid and not local_path:
+            local_path = _cached_path_for_uid(uid, additional_roots)
         if uid and local_path:
             pairs.append((uid, local_path))
     return pairs
+
+
+def _cached_path_for_uid(uid: str, additional_roots: list[str] | None) -> str:
+    """Look ``uid`` up in DID's on-disk stores, or return ``""``.
+
+    Isolated so a did-python import failure never breaks the ordinary
+    recorded-location path: DID is a hard dependency at runtime, but this
+    helper is on the fallback path and swallowing an ImportError keeps the
+    upload behaviour of a doc with a live location identical.
+    """
+    if not uid:
+        return ""
+    try:
+        from did.file import cached_path_for_uid
+    except ImportError:  # pragma: no cover - DID is a hard runtime dep
+        return ""
+    try:
+        return str(cached_path_for_uid(uid, additional_roots=additional_roots) or "")
+    except Exception:  # noqa: BLE001 - a malformed uid must not fail the upload
+        return ""
 
 
 @_auto_client
