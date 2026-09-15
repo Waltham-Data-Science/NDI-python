@@ -332,6 +332,7 @@ def _upload_binaries(
     documents: list[dict[str, Any]],
     options: SyncOptions,
     *,
+    dataset: Any = None,
     client: CloudClient | None,
 ) -> set[str]:
     """Upload each document's binaries; return the ids whose binaries failed.
@@ -341,6 +342,12 @@ def _upload_binaries(
     gets a 404 (NDI-matlab#805). uploadFilesForDatasetDocuments does not
     raise on a per-file failure -- it reports one -- so catching an exception
     was never going to see the ordinary case.
+
+    ``dataset`` is passed through to ``uploadFilesForDatasetDocuments`` so
+    ``database_existbinarydoc`` can locate each binary at its storage-side
+    path (which is stable across ingest) and so series MEMBERS -- which have
+    no ``file_info`` entry -- are enumerated from ``series_info[k].count``.
+    See Waltham-Data-Science/NDI-python#306.
     """
     if not options.sync_files or not documents:
         return set()
@@ -351,6 +358,7 @@ def _upload_binaries(
             getattr(getattr(client, "config", None), "org_id", ""),
             cloud_dataset_id,
             documents,
+            dataset=dataset,
             client=client,
         )
     except Exception as exc:  # noqa: BLE001
@@ -621,6 +629,7 @@ def uploadNew(
             cloud_dataset_id,
             [documents[i] for i in uploaded if i in documents],
             options,
+            dataset=dataset,
             client=client,
         )
         if binaries_failed:
@@ -798,6 +807,7 @@ def mirrorToRemote(
             cloud_dataset_id,
             [documents[i] for i in uploaded if i in documents],
             options,
+            dataset=dataset,
             client=client,
         )
         if binaries_failed:
@@ -1062,6 +1072,7 @@ def twoWaySync(
             cloud_dataset_id,
             [documents[i] for i in uploaded if i in documents],
             options,
+            dataset=dataset,
             client=client,
         )
         if binaries_failed:
