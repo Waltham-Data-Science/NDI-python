@@ -921,6 +921,9 @@ functions:
       - name: documents
         type_matlab: "cell"
         type_python: "list[dict[str, Any]]"
+      - name: dataset
+        type_python: "Any | None"
+        default: "None"
       - name: client
         type_python: "CloudClient | None"
         default: "None"
@@ -930,6 +933,21 @@ functions:
     decision_log: >
       MATLAB places this in +sync/+internal. Python places it in upload.py.
       Exact name match.
+
+      2026-09-15: added a ``dataset`` kwarg. On MATLAB, +sync/+internal/
+      uploadFilesForDatasetDocuments always has the dataset in hand -- it
+      calls +ndi/+database/+internal/list_binary_files, which uses
+      ndi_dataset.database_existbinarydoc (DID's exist_doc, the storage-side
+      source of truth) to locate each binary and enumerates series members
+      by iterating series_info(k).count. The Python counterpart was reading
+      the doc dict's authoring record (files.file_info[].locations[].
+      location), which goes stale after DID ingest -- add_file with the
+      default delete_original=True removes the source and moves the bytes
+      to <FileDir>/<uid> -- and it never enumerated series members at all.
+      Both symptoms hit run 227 on TEST_USER_1 (Waltham-Data-Science/
+      NDI-python#306). Passing the dataset in lets file_uploads_for_document
+      take the same MATLAB path when it is available; a caller without a
+      dataset falls back to the recorded-location shape (raw dict tests).
 
   - name: uploadSingleFile
     matlab_path: "+ndi/+cloud/uploadSingleFile.m"
