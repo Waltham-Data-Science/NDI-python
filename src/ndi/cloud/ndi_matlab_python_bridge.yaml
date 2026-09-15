@@ -1502,6 +1502,13 @@ not_yet_ported:
       waitForSignedURLSetJob) since the batch helper does not use it;
       those remain porting_deferred in the api YAML.
 
+      NDI-matlab 9120c002 (VH-Lab/NDI-matlab#992) retries the batch signer
+      once when the endpoint returns a partial map. No Python port yet -
+      the Python side always signs one scope per call and never sees a
+      partial-map response, so there is no equivalent gap to close. Left
+      as a known behavioural difference to revisit if the Python
+      implementation ever grows a multi-scope batch call.
+
   - name: buildGenericFileDownloadList
     matlab_path: "+ndi/+cloud/+download/+internal/buildGenericFileDownloadList.m"
     matlab_last_sync_hash: "65aeeeb"
