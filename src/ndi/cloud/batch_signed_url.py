@@ -46,6 +46,13 @@ DEFAULT_TTL_SECONDS = 20 * 3600
 # MATLAB counterpart's testFailingSignerReturnsEmpty.
 DEFAULT_FAILURE_TTL_SECONDS = 60
 
+# 500 ms: pause before re-fetching a scope whose first answer was a
+# partial map -- the scope was populated, but it did not name the uid the
+# caller asked about. On some cloud environments the batch endpoint lags
+# briefly behind ``waitForAllBulkUploads``, and the second call names the
+# whole set. See Waltham-Data-Science/NDI-python#309.
+DEFAULT_PARTIAL_MAP_RETRY_SECONDS = 0.5
+
 
 @dataclass
 class _CacheEntry:
@@ -75,7 +82,7 @@ class Stats:
 
     Fields:
         signer_calls: How many times the batch endpoint was actually
-            called (one per scope fetch).
+            called (one per scope fetch, plus one per partial-map retry).
         uid_hits: uids answered from a batch map.
         uid_misses: uids the batch could NOT answer, each of which sends
             the caller to the per-uid getFileDetails fallback.
@@ -88,6 +95,12 @@ class Stats:
             usable map. Four unrelated causes end there; reporting them as
             one silent miss leaves the endpoint owner with nothing to act
             on. See NDI-matlab#968.
+        partial_map_retries: How many scopes were re-fetched because the
+            first answer was populated but did not name a requested uid.
+            One retry per scope, ever, whether it settled or not; a caller
+            that wants to know "does this scope EVER answer for this uid"
+            gets that answer after the retry. See Waltham-Data-Science/
+            NDI-python#309.
     """
 
     signer_calls: int = 0
@@ -96,6 +109,7 @@ class Stats:
     last_map_size: int = 0
     last_map_uids: list[str] = field(default_factory=list)
     last_failure_reason: str = ""
+    partial_map_retries: int = 0
 
 
 # The default signer walks every page. Injected for tests.
@@ -146,12 +160,19 @@ class BatchSignedUrlLookup:
         signer: Callable[..., tuple[bool, dict[str, Any]]] | None = None,
         ttl_seconds: float = DEFAULT_TTL_SECONDS,
         failure_ttl_seconds: float = DEFAULT_FAILURE_TTL_SECONDS,
+        partial_map_retry_seconds: float = DEFAULT_PARTIAL_MAP_RETRY_SECONDS,
+        sleep: Callable[[float], None] | None = None,
     ) -> None:
         self._signer = signer or _default_signer
         self._ttl_seconds = ttl_seconds
         self._failure_ttl_seconds = failure_ttl_seconds
+        self._partial_map_retry_seconds = partial_map_retry_seconds
+        # Injected only for tests: the retry has a real wait, and a test
+        # that runs it 20 times should not pay 10 seconds for it.
+        self._sleep = sleep or time.sleep
         self._cache: dict[str, _CacheEntry] = {}
         self._failed_scopes: dict[str, _FailureEntry] = {}
+        self._retried_scopes: set[str] = set()
         self._warned: set[str] = set()
         self._stats = Stats()
         # A batch fetch is IO-bound and slow, and download handlers can be
@@ -235,9 +256,45 @@ class BatchSignedUrlLookup:
                 self._stats.uid_hits += 1
                 return url
 
-            # The scope was fetched but does not name this uid -- data
-            # drift, or a scope that does not cover the file. The caller
-            # falls back per uid.
+            # The scope was fetched but does not name this uid. Two
+            # distinct causes: data drift (this file was never in the
+            # scope), or a lagged index (the file IS in the scope on the
+            # server, but the batch endpoint's map has not caught up yet).
+            # Only the second is worth a retry, and this side has no way
+            # to distinguish them a priori -- so retry ONCE per scope,
+            # sleep briefly first, and if the second answer still does not
+            # name the uid, take that as data drift and warn.
+            #
+            # Bounded and per-scope: a data-drift miss costs one extra
+            # signer call for the whole scope, not one per uid. A lagged
+            # index that recovers replaces the cache entry for every
+            # subsequent uid in the same scope, so a whole series' worth
+            # of misses becomes a whole series' worth of hits from one
+            # retry. See Waltham-Data-Science/NDI-python#309.
+            if cache_key not in self._retried_scopes:
+                self._retried_scopes.add(cache_key)
+                if self._partial_map_retry_seconds > 0:
+                    self._sleep(self._partial_map_retry_seconds)
+                # Drop the stale entry so _fetch_scope replaces it fresh.
+                self._cache.pop(cache_key, None)
+                self._stats.partial_map_retries += 1
+                refreshed = self._fetch_scope(
+                    cache_key,
+                    cloud_dataset_id,
+                    ndi_document_id,
+                    series_name,
+                    uid,
+                    client=client,
+                )
+                if refreshed is None:
+                    # _fetch_scope already recorded the miss and warned.
+                    # Do not double-count here.
+                    return ""
+                url = refreshed.files.get(uid, "")
+                if url:
+                    self._stats.uid_hits += 1
+                    return url
+
             self._stats.uid_misses += 1
             self._warn_once(cache_key)
             return ""
@@ -252,6 +309,7 @@ class BatchSignedUrlLookup:
                 last_map_size=self._stats.last_map_size,
                 last_map_uids=list(self._stats.last_map_uids),
                 last_failure_reason=self._stats.last_failure_reason,
+                partial_map_retries=self._stats.partial_map_retries,
             )
 
     def clear(self) -> None:
@@ -259,6 +317,7 @@ class BatchSignedUrlLookup:
         with self._lock:
             self._cache.clear()
             self._failed_scopes.clear()
+            self._retried_scopes.clear()
             self._warned.clear()
             self._stats = Stats()
 

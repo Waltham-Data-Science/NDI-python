@@ -345,12 +345,24 @@ class TestFileSeriesRoundTrip:
             f"a member fell back to per-uid getFileDetails. "
             f"Stats: signer_calls={stats.signer_calls}, "
             f"uid_hits={stats.uid_hits}, uid_misses={stats.uid_misses}, "
+            f"partial_map_retries={stats.partial_map_retries}, "
             f"failure_reason={stats.last_failure_reason!r}"
         )
-        assert stats.signer_calls == 1, (
-            f"the members of one series should cost ONE presign call: "
-            f"the first fetch populates the scope and the rest resolve "
-            f"from the in-process cache. Got {stats.signer_calls}."
+        # One presign call for the scope, plus at most one retry if the
+        # first answer was a partial map (Waltham-Data-Science/
+        # NDI-python#309 -- some environments lag briefly after the bulk
+        # upload). Anything beyond that would be per-uid fallback, which
+        # the uid_misses assertion above already rules out; this is just
+        # for a clearer failure message.
+        assert stats.signer_calls == 1 + stats.partial_map_retries, (
+            f"the members of one series should cost ONE presign call, "
+            f"plus at most one retry if the first map was partial. "
+            f"Got signer_calls={stats.signer_calls}, "
+            f"partial_map_retries={stats.partial_map_retries}."
+        )
+        assert stats.partial_map_retries <= 1, (
+            f"the retry is bounded to once per scope; "
+            f"got partial_map_retries={stats.partial_map_retries}."
         )
 
     def test_members_survive_a_download_from_the_cloud_with_sync_files_false(
