@@ -1472,7 +1472,7 @@ not_yet_ported:
   - name: batchSignedUrlLookup
     matlab_path: "+ndi/+cloud/+download/+internal/batchSignedUrlLookup.m"
     python_path: "ndi/cloud/batch_signed_url.py"
-    matlab_last_sync_hash: "5804cd80"
+    matlab_last_sync_hash: "9120c002"
     status: ported
     decision_log: >
       PORTED for NDI-python#262. Turns one-call-per-uid into one call per
@@ -1501,6 +1501,14 @@ not_yet_ported:
       Skips the async job path (createSignedURLSetJob +
       waitForSignedURLSetJob) since the batch helper does not use it;
       those remain porting_deferred in the api YAML.
+
+      NDI-matlab 9120c002 adds a one-shot partial-map retry: when a
+      cached scope answers with a URL but a subsequent uid in that
+      scope misses, drop the entry, pause, and re-fetch once
+      (VH-Lab/NDI-matlab#991). The Python side landed the same shape
+      first in Waltham-Data-Science/NDI-python#310
+      (_partial_map_retry_seconds / STATS.partial_map_retries in
+      ndi/cloud/batch_signed_url.py), so this is a hash-only bump.
 
   - name: buildGenericFileDownloadList
     matlab_path: "+ndi/+cloud/+download/+internal/buildGenericFileDownloadList.m"
