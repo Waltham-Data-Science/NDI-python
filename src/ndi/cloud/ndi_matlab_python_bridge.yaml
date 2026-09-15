@@ -1472,7 +1472,7 @@ not_yet_ported:
   - name: batchSignedUrlLookup
     matlab_path: "+ndi/+cloud/+download/+internal/batchSignedUrlLookup.m"
     python_path: "ndi/cloud/batch_signed_url.py"
-    matlab_last_sync_hash: "5804cd80"
+    matlab_last_sync_hash: "9120c002"
     status: ported
     decision_log: >
       PORTED for NDI-python#262. Turns one-call-per-uid into one call per
