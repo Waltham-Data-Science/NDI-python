@@ -396,8 +396,18 @@ classes:
   - name: mfdaq_reader
     type: class
     matlab_path: "+ndi/+daq/+reader/mfdaq.m"
-    matlab_last_sync_hash: "866bee2bd"
+    matlab_last_sync_hash: "770c1eb3"
     decision_log: >
+      NDI-matlab 770c1eb3 clamps readchannels_epochsamples_ingested's
+      window to what the epoch has: a finite s0 below the first sample
+      (or s1 past the last sample) is clamped rather than passed through,
+      an inverted request raises before the clamp, and a window entirely
+      outside the epoch returns an empty slice. Ported to Python with
+      the 0-based-index shape (abs_s[0] is 0 for t = t0, not 1); the
+      per-segment try/except that used to NaN-pad on a _seg.nbf_N miss
+      is dropped in the same change since a miss is now genuine document
+      corruption. See NDI-python#311 / #312 and NDI-matlab#993 / #994.
+
       NDI-matlab 866bee2bd stops the ingest path querying samplerate for
       event/marker/text channels: they are timestamped events with no scalar
       rate, and the eventmarktext branch never used the answer. Nothing to
