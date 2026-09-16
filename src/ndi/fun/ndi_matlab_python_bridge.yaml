@@ -3084,6 +3084,7 @@ functions:
       recordSource now says it creates a fileReference rather than a
       generic_file, following makeSourceFile. Comment only; no
       behavioural change, and nothing to port here.
+
   - name: fromGEF
     matlab_path: "+ndi/+fun/+doc/+gene/fromGEF.m"
     matlab_last_sync_hash: "38aa4e8fb"
@@ -3106,6 +3107,7 @@ functions:
       the whole build where 14 does, 14 GB on a 7.7e8-record section --
       and hands makePyramid a progressFcn scaled onto the last 30% of its
       own. Both belong to the deferred port, not to doc_gene.py.
+
   - name: makeSourceFile
     matlab_path: "+ndi/+fun/+doc/+gene/makeSourceFile.m"
     matlab_last_sync_hash: "b589db9bb"
