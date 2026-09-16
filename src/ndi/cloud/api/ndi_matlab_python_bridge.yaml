@@ -1486,7 +1486,7 @@ not_yet_ported:
 
   - name: url
     matlab_path: "+ndi/+cloud/+api/url.m"
-    matlab_last_sync_hash: "5804cd80d"
+    matlab_last_sync_hash: "6fdec7e7"
     status: ported_differently
     decision_log: >
       MATLAB URL builder. Python uses CloudClient._build_url()
@@ -1504,6 +1504,11 @@ not_yet_ported:
       bulk-upload status in api/files.py, /advance is what compute.advanceSession
       already posts to, and the signed-URL-set gap is recorded on
       batchSignedUrlLookup and downloadGenericFiles.
+      2026-09-16: bumped to 6fdec7e7 (NDI-matlab#990). Two rows added for the
+      file-tier routes (create_file_tier_job -> POST /datasets/{d}/file-tier-jobs,
+      get_file_tier_job -> GET /file-tier-jobs/{jobId}); both are inlined at the
+      call sites in api/files.py by setFileTier / getFileTierJob, so this entry
+      has nothing to add.
 
   - name: documentCount
     matlab_path: "+ndi/+cloud/+api/+documents/documentCount.m"
