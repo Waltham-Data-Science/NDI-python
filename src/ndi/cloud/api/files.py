@@ -31,6 +31,23 @@ _Client = Annotated[CloudClient | None, SkipValidation()]
 _TERMINAL_BULK_STATES = ("complete", "failed")
 _ACTIVE_BULK_STATES = ("queued", "extracting")
 
+# Terminal job states reported by the file-tier service. 'superseded' is
+# unique to file-tier: a later job for the same file has taken over, so
+# polling on is pointless. See ndi-cloud-node/manuals/file-tier-design.md.
+_TERMINAL_FILE_TIER_STATES = ("completed", "failed", "superseded")
+
+# Target tiers accepted by the server. PSEUDO_COLD is a non-production
+# server-side test target that skips S3 entirely; it is not exposed here as
+# a normal option but is accepted at the wire level for callers who need it
+# in test environments. See ndi-cloud-node/manuals/file-tier-design.md.
+FileTier = Literal[
+    "STANDARD",
+    "STANDARD_IA",
+    "GLACIER_IR",
+    "GLACIER",
+    "DEEP_ARCHIVE",
+]
+
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
@@ -708,3 +725,244 @@ def waitForAllBulkUploads(
             }
         time.sleep(interval)
         interval = min(interval * backoff_factor, max_interval)
+
+
+# ---------------------------------------------------------------------------
+# File-tier family
+#
+# Kick off, poll, wait on, and read back the "move these documents' files to
+# storage class X" workflow. See ndi-cloud-node/manuals/file-tier-design.md
+# for the full design (warmest-wins shared-UID rule, fencing tokens,
+# two-phase thaw semantics, terminal states).
+# ---------------------------------------------------------------------------
+
+
+@_auto_client
+@validate_call(config=VALIDATE_CONFIG)
+def setFileTier(
+    dataset_id: CloudId,
+    document_ids: list[str] | tuple[str, ...] | str,
+    target_tier: str,
+    *,
+    id_namespace: Literal["auto", "cloud", "ndi"] = "auto",
+    client: _Client = None,
+) -> dict[str, Any]:
+    """POST /datasets/{datasetId}/file-tier-jobs
+
+    Kick off an async job that moves every file referenced by *document_ids*
+    to *target_tier*. Documents may be addressed by cloud ``_id`` or NDI id;
+    the server infers each selector's namespace unless *id_namespace* forces
+    it. Returns the accepted-job envelope with ``jobId``, ``fileCount``,
+    ``resolvedDocumentCount``, and ``collateralDocumentIds``. See
+    ndi-cloud-node/manuals/file-tier-design.md.
+
+    Args:
+        dataset_id: The cloud dataset id.
+        document_ids: One document id, a list/tuple of ids, or a mix of
+            cloud (24-hex) and NDI ids. Must be non-empty.
+        target_tier: Target S3 storage class. One of ``"STANDARD"``,
+            ``"STANDARD_IA"``, ``"GLACIER_IR"``, ``"GLACIER"``,
+            ``"DEEP_ARCHIVE"``. ``"PSEUDO_COLD"`` is accepted at the wire
+            level and used by the server-side non-production test path;
+            production stages reject it as ``INVALID_TARGET_TIER``.
+        id_namespace: ``"auto"`` (default) lets the server infer each id's
+            shape (24-hex → cloud, else NDI). Pass ``"cloud"`` or ``"ndi"``
+            to force one interpretation for every selector.
+        client: Authenticated cloud client (auto-created if omitted).
+
+    Returns:
+        Dict with ``jobId``, ``fileCount``, ``resolvedDocumentCount``,
+        ``collateralDocumentIds``. Pass ``jobId`` to
+        :func:`waitForFileTierJob` (or :func:`getFileTierJob` for one poll)
+        to follow the job to completion.
+
+    MATLAB equivalent: +cloud/+api/+files/setFileTier.m
+    """
+    if isinstance(document_ids, str):
+        ids: list[str] = [document_ids]
+    else:
+        ids = [str(d) for d in document_ids]
+    if not ids:
+        raise ValueError("document_ids must be non-empty")
+
+    selectors: list[dict[str, str]] = []
+    for did in ids:
+        sel: dict[str, str] = {"id": did}
+        if id_namespace != "auto":
+            sel["kind"] = id_namespace
+        selectors.append(sel)
+
+    payload = {
+        "targetTier": target_tier,
+        "documentSelectors": selectors,
+    }
+    return client.post(
+        "/datasets/{datasetId}/file-tier-jobs",
+        json=payload,
+        datasetId=dataset_id,
+    )
+
+
+@_auto_client
+@validate_call(config=VALIDATE_CONFIG)
+def getFileTierJob(
+    job_id: NonEmptyStr,
+    *,
+    client: _Client = None,
+) -> dict[str, Any]:
+    """GET /file-tier-jobs/{jobId} -- one poll of an async file-tier job.
+
+    Returns a dict with fields ``jobId``, ``datasetId``, ``state``,
+    ``targetTier``, ``fileCount``, ``filesDone``, ``filesFailed``,
+    ``perPhaseCounts``, ``errors``, ``createdAt``, ``updatedAt``. Terminal
+    states are ``'completed'``, ``'failed'``, and ``'superseded'``. See
+    ndi-cloud-node/manuals/file-tier-design.md.
+
+    MATLAB equivalent: +cloud/+api/+files/getFileTierJob.m
+    """
+    return client.get("/file-tier-jobs/{jobId}", jobId=job_id)
+
+
+@_auto_client
+@validate_call(config=VALIDATE_CONFIG)
+def waitForFileTierJob(
+    job_id: NonEmptyStr,
+    *,
+    timeout: float = 600.0,
+    initial_interval: float = 3.0,
+    max_interval: float = 30.0,
+    backoff_factor: float = 2.0,
+    client: _Client = None,
+) -> dict[str, Any]:
+    """Poll a file-tier job until it finishes or times out.
+
+    Repeatedly calls :func:`getFileTierJob` at exponentially growing
+    intervals until the job reaches a terminal state (``'completed'``,
+    ``'failed'``, or ``'superseded'``) or the overall timeout elapses. A
+    transient API failure is NOT treated as terminal -- a gateway blip
+    would otherwise be mistaken for a dead job.
+
+    Args:
+        job_id: The file-tier job identifier from :func:`setFileTier`.
+        timeout: Overall deadline in seconds. Default 600 -- tier moves
+            fan out to many CopyObject calls; give them room.
+        initial_interval: First sleep between polls (s). Default 3.
+        max_interval: Cap on the per-poll sleep (s). Default 30.
+        backoff_factor: Multiplier applied after each poll. Default 2.
+
+    Returns:
+        The last status dict from the server. On timeout, the returned
+        dict has ``state='timeout'`` and ``elapsed`` set to the
+        wall-clock seconds spent polling. The caller decides success by
+        reading ``state`` (``'completed'`` is the only "job did what you
+        asked" verdict; ``'failed'`` and ``'superseded'`` are terminal
+        non-successes).
+
+    MATLAB equivalent: +cloud/+api/+files/waitForFileTierJob.m
+    """
+    start = time.monotonic()
+    interval = initial_interval
+    last: Any = None
+    while True:
+        elapsed = time.monotonic() - start
+        try:
+            status = getFileTierJob(job_id, client=client)
+            last = status
+            state = status.get("state", "") if hasattr(status, "get") else ""
+            if state in _TERMINAL_FILE_TIER_STATES:
+                return status
+        except Exception:
+            # A failed poll is not a failed job. The gateway (Lambda 29 s
+            # cap) or an in-flight worker restart can drop one read; keep
+            # polling until the deadline rather than reporting the job
+            # dead on the first blip.
+            pass
+        if elapsed + interval > timeout:
+            payload: dict[str, Any]
+            if last is not None and hasattr(last, "data") and isinstance(last.data, dict):
+                payload = dict(last.data)
+            elif isinstance(last, dict):
+                payload = dict(last)
+            else:
+                payload = {}
+            payload["state"] = "timeout"
+            payload["elapsed"] = time.monotonic() - start
+            return payload
+        time.sleep(interval)
+        interval = min(interval * backoff_factor, max_interval)
+
+
+@_auto_client
+@validate_call(config=VALIDATE_CONFIG)
+def getFileTier(
+    dataset_id: CloudId,
+    document_id: CloudId,
+    *,
+    client: _Client = None,
+) -> dict[str, Any]:
+    """Read the cached files-tier summary for one document.
+
+    Answers "what tier are this document's files on?" from the doc's
+    cached ``filesTier`` summary. Backed by
+    ``GET /datasets/{d}/documents/{doc}`` via
+    :func:`~ndi.cloud.api.documents.getDocument` -- there is no dedicated
+    tier-read endpoint because the server keeps a per-doc summary
+    alongside the doc, recomputed by the tier worker after every job. See
+    ndi-cloud-node/manuals/file-tier-design.md.
+
+    Args:
+        dataset_id: The cloud dataset id.
+        document_id: The cloud API id of the document.
+        client: Authenticated cloud client (auto-created if omitted).
+
+    Returns:
+        Dict with fields:
+            ``counts``    - per-tier file-count map (``STANDARD`` |
+                            ``STANDARD_IA`` | ``GLACIER_IR`` | ``GLACIER`` |
+                            ``DEEP_ARCHIVE`` | ``PSEUDO_COLD`` -> int).
+                            Empty dict when the doc has never had a tier
+                            operation.
+            ``dominant``  - the coldest tier with a non-zero count (the
+                            design's ``dominantFileTier`` shorthand). ``""``
+                            if no tier state yet.
+            ``notes``     - list of divergence notes, e.g. "warmest-wins
+                            overruled a freeze because sibling doc needs
+                            file warm". Empty when clean.
+            ``updatedAt`` - timestamp of the last summary write, or
+                            ``None`` until the first tier job runs.
+            ``raw``       - the full get-document response, for callers
+                            that want the whole doc.
+
+    MATLAB equivalent: +cloud/+api/+files/getFileTier.m
+    """
+    from . import documents as docs_api
+
+    doc = docs_api.getDocument(dataset_id, document_id, client=client)
+
+    result: dict[str, Any] = {
+        "counts": {},
+        "dominant": "",
+        "notes": [],
+        "updatedAt": None,
+        "raw": doc,
+    }
+
+    summary = doc.get("filesTier") if hasattr(doc, "get") else None
+    if isinstance(summary, dict):
+        counts = summary.get("counts")
+        if isinstance(counts, dict) and counts:
+            result["counts"] = dict(counts)
+        dominant = summary.get("dominant")
+        if dominant:
+            result["dominant"] = str(dominant)
+        notes = summary.get("notes")
+        if notes:
+            if isinstance(notes, (list, tuple)):
+                result["notes"] = [str(n) for n in notes]
+            else:
+                result["notes"] = [str(notes)]
+        updated_at = summary.get("updatedAt")
+        if updated_at:
+            result["updatedAt"] = updated_at
+
+    return result

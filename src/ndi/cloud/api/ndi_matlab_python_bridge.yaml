@@ -1072,6 +1072,129 @@ functions:
       Sync-pipeline callers use this to ensure remote inventories are
       stable before reading them.
 
+  # --- file-tier family (files.py) ---
+  - name: setFileTier
+    matlab_path: "+ndi/+cloud/+api/+files/setFileTier.m"
+    matlab_last_sync_hash: "6fdec7e7"
+    python_path: "ndi/cloud/api/files.py"
+    input_arguments:
+      - name: dataset_id
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: document_ids
+        type_matlab: "string | cellstr"
+        type_python: "list[str] | tuple[str, ...] | str"
+      - name: target_tier
+        type_matlab: "string"
+        type_python: "str"
+      - name: id_namespace
+        type_matlab: "string"
+        type_python: 'Literal["auto", "cloud", "ndi"]'
+        default: '"auto"'
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Ported from NDI-matlab#990 (matlab HEAD 6fdec7e7). POST
+      /datasets/{datasetId}/file-tier-jobs kicks off an async job that
+      moves the files referenced by a list of documents to a target S3
+      storage class. Accepts a single id, a list, or a tuple; selectors
+      are built the same way MATLAB builds them (id + optional kind),
+      and idNamespace="auto" (default) suppresses the kind field so the
+      server can infer per-selector. target_tier is a plain str at the
+      wire level to admit PSEUDO_COLD in test environments -- the
+      docstring names the five production tiers explicitly. The
+      convenience FileTier Literal is exposed for callers who want
+      strict typing.
+
+  - name: getFileTierJob
+    matlab_path: "+ndi/+cloud/+api/+files/getFileTierJob.m"
+    matlab_last_sync_hash: "6fdec7e7"
+    python_path: "ndi/cloud/api/files.py"
+    input_arguments:
+      - name: job_id
+        type_matlab: "string"
+        type_python: "NonEmptyStr"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Ported from NDI-matlab#990 (matlab HEAD 6fdec7e7). GET
+      /file-tier-jobs/{jobId} -- one poll of a file-tier job. Terminal
+      states are 'completed', 'failed', 'superseded'; see
+      ndi-cloud-node/manuals/file-tier-design.md.
+
+  - name: waitForFileTierJob
+    matlab_path: "+ndi/+cloud/+api/+files/waitForFileTierJob.m"
+    matlab_last_sync_hash: "6fdec7e7"
+    python_path: "ndi/cloud/api/files.py"
+    input_arguments:
+      - name: job_id
+        type_matlab: "string"
+        type_python: "NonEmptyStr"
+      - name: timeout
+        type_matlab: "double"
+        type_python: "float"
+        default: "600.0"
+      - name: initial_interval
+        type_matlab: "double"
+        type_python: "float"
+        default: "3.0"
+      - name: max_interval
+        type_matlab: "double"
+        type_python: "float"
+        default: "30.0"
+      - name: backoff_factor
+        type_matlab: "double"
+        type_python: "float"
+        default: "2.0"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Ported from NDI-matlab#990 (matlab HEAD 6fdec7e7). Polls
+      getFileTierJob at exponentially growing intervals until the job
+      reaches a terminal state (completed | failed | superseded) or the
+      overall timeout elapses. Follows waitForBulkUpload's contract:
+      returns the last status dict with state='timeout' + elapsed on
+      timeout, letting the caller decide success by reading state. A
+      transient poll error (gateway blip) is NOT treated as terminal
+      -- the FileTierMockTest pin ports over as a mock unit test.
+
+  - name: getFileTier
+    matlab_path: "+ndi/+cloud/+api/+files/getFileTier.m"
+    matlab_last_sync_hash: "6fdec7e7"
+    python_path: "ndi/cloud/api/files.py"
+    input_arguments:
+      - name: dataset_id
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: document_id
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Ported from NDI-matlab#990 (matlab HEAD 6fdec7e7). Reads the
+      document's cached filesTier summary via documents.getDocument and
+      projects out {counts, dominant, notes, updatedAt, raw}. Absent
+      fields become empty defaults so callers can rely on the shape.
+      No dedicated tier-read endpoint exists; the server keeps a
+      per-doc summary alongside the doc.
+
   # --- users.py ---
   - name: createUser
     matlab_path: "+ndi/+cloud/+api/+users/createUser.m"
