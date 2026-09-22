@@ -45,7 +45,7 @@ functions:
   # --- datasets.py ---
   - name: getDataset
     matlab_path: "+ndi/+cloud/+api/+datasets/getDataset.m"
-    matlab_last_sync_hash: "9b75c0fe"
+    matlab_last_sync_hash: "3fce6cb"
     python_path: "ndi/cloud/api/datasets.py"
     input_arguments:
       - name: dataset_id
@@ -57,7 +57,15 @@ functions:
     output_arguments:
       - name: dataset
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match.
+      2026-09-22: examined against 3fce6cb (was 9b75c0fe). The NDI-matlab#1004
+      file-listing migration touched getDataset.m (c71ebf7d) with a docs-only
+      change -- getDataset no longer embeds the file list (the server trims it
+      to avoid an oversized response); callers page it via listFilesAll. Nothing
+      to port: Python getDataset is a passthrough to GET /datasets/{datasetId}
+      and never read an embedded array. The file listing itself lives in
+      api/files.py (listFiles/listFilesAll).
 
   - name: createDataset
     matlab_path: "+ndi/+cloud/+api/+datasets/createDataset.m"
@@ -1537,7 +1545,7 @@ not_yet_ported:
 
   - name: url
     matlab_path: "+ndi/+cloud/+api/url.m"
-    matlab_last_sync_hash: "6fdec7e7"
+    matlab_last_sync_hash: "3fce6cb"
     status: ported_differently
     decision_log: >
       MATLAB URL builder. Python uses CloudClient._build_url()
@@ -1555,6 +1563,11 @@ not_yet_ported:
       bulk-upload status in api/files.py, /advance is what compute.advanceSession
       already posts to, and the signed-URL-set gap is recorded on
       batchSignedUrlLookup and downloadGenericFiles.
+      2026-09-22: examined against 3fce6cb (was 6fdec7e7). NDI-matlab#1004
+      (6bf12fc0) added the list_dataset_files route
+      (/datasets/{datasetId}/files) and made it keyset-paginated. As above,
+      there is no route table to update here; the endpoint is interpolated at
+      its call site in api/files.py by listFiles/listFilesAll.
       2026-09-16: bumped to 6fdec7e7 (NDI-matlab#990). Two rows added for the
       file-tier routes (create_file_tier_job -> POST /datasets/{d}/file-tier-jobs,
       get_file_tier_job -> GET /file-tier-jobs/{jobId}); both are inlined at the
