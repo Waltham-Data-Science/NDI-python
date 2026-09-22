@@ -337,7 +337,7 @@ functions:
   - name: extract_doc_files
     type: function
     matlab_path: "+ndi/+database/+fun/extract_docs_files.m"
-    matlab_last_sync_hash: "a36e261c4"
+    matlab_last_sync_hash: "3fce6cb"
     python_path: "ndi/database_fun.py"
     python_name: "extract_doc_files"
     input_arguments:
@@ -384,6 +384,17 @@ functions:
       thing ndi.dataset.copySessionToDataset needs it for. It also walked
       files.file_list, the class DECLARATION, rather than
       current_file_list(), what the document actually has.
+      2026-09-22: resynced to NDI-matlab 3fce6cb (was a36e261c4). NDI-matlab
+      14af6d6c gave extract_docs_files a ReferenceInPlace option: when a source
+      file's bytes are on the local filesystem it points the returned document
+      at that file with delete_original 0 (so a later database_add copies it
+      once, straight into the destination store) rather than first staging a
+      copy in a temp dir, removing the transient 2x disk-space cost; non-local
+      (cloud) files fall back to the copy path. The RESULT is unchanged -- the
+      same documents and files reach the destination -- so this Python port
+      still matches functionally. The optimization is a performance-only
+      divergence not yet mirrored here (Python always copies) and is left as a
+      deferred follow-up rather than bolted onto an unrelated change.
 
 # =========================================================================
 # Not Applicable — MATLAB functions intentionally not ported to Python
