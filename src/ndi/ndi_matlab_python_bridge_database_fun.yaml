@@ -394,7 +394,7 @@ functions:
       same documents and files reach the destination -- so this Python port
       still matches functionally. The optimization is a performance-only
       divergence not yet mirrored here (Python always copies) and is left as a
-      deferred follow-up rather than bolted onto an unrelated change.
+      deferred follow-up rather than bolted onto an unrelated change (issue #317).
 
 # =========================================================================
 # Not Applicable — MATLAB functions intentionally not ported to Python

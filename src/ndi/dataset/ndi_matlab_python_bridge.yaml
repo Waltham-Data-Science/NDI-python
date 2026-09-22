@@ -28,7 +28,7 @@ classes:
       to copying). The output is unchanged, so the Python port still matches
       functionally; the optimization itself is a performance-only divergence
       not yet mirrored on the Python side, tracked as a deferred follow-up
-      alongside the extract_doc_files entry.
+      alongside the extract_doc_files entry (issue #317).
 
     properties:
       - name: session
