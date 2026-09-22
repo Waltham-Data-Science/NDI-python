@@ -245,7 +245,7 @@ class TestAFileListedButNotUploadedIsRequeued:
 
         listing = MagicMock()
         listing.data = remote
-        with patch("ndi.cloud.api.files.listFiles", lambda *a, **k: listing):
+        with patch("ndi.cloud.api.files.listFilesAll", lambda *a, **k: listing):
             return internal.filesNotYetUploaded(manifest, "65a1b2c3d4e5f60718293a4b")
 
     def test_an_unlisted_file_needs_uploading(self):

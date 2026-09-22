@@ -884,12 +884,20 @@ functions:
 
   - name: listFiles
     matlab_path: "+ndi/+cloud/+api/+files/listFiles.m"
-    matlab_last_sync_hash: "be2f79334"
+    matlab_last_sync_hash: "3fce6cb"
     python_path: "ndi/cloud/api/files.py"
     input_arguments:
       - name: dataset_id
         type_matlab: "string"
         type_python: "CloudId"
+      - name: limit
+        type_matlab: "double"
+        type_python: "int"
+        default: "1000"
+      - name: after
+        type_matlab: "string"
+        type_python: "str"
+        default: '""'
       - name: client
         type_python: "_Client"
         default: "None"
@@ -897,11 +905,54 @@ functions:
       - name: result
         type_python: "APIResponse"
     decision_log: >
-      Exact match.
-      NDI-matlab be2f79334 is documentation only: it drops isRaw from the
-      ANSWER field list, the server having stopped returning it. Nothing to
-      port -- this passes the file records through as the API returns them and
-      never named isRaw.
+      Keyset-pagination port (NDI-matlab#1004). GET /datasets/{datasetId}/files
+      is now cursor paginated: `limit` and an opaque `after` cursor in, and an
+      envelope out ({datasetId, limit, count, cursor, hasMore, totalNumber,
+      files}). listFiles returns that envelope (files plus cursor/hasMore/
+      totalNumber), the same page-plus-metadata shape as listDatasetDocuments;
+      MATLAB's separate `answer`/`apiResponse.Body.Data` split collapses into
+      one dict here. getDataset no longer embeds the files array, so the old
+      "fetch the dataset, read ds.files" body is gone.
+
+  - name: listFilesAll
+    matlab_path: "+ndi/+cloud/+api/+files/listFilesAll.m"
+    matlab_last_sync_hash: "3fce6cb"
+    python_path: "ndi/cloud/api/files.py"
+    input_arguments:
+      - name: dataset_id
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: limit
+        type_matlab: "double"
+        type_python: "int"
+        default: "1000"
+      - name: check_for_updates
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "False"
+      - name: wait_for_updates
+        type_matlab: "double"
+        type_python: "float"
+        default: "5.0"
+      - name: max_update_reads
+        type_matlab: "double"
+        type_python: "int"
+        default: "100"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "APIResponse"
+    decision_log: >
+      Keyset-pagination port (NDI-matlab#1004). Walks listFiles page by page,
+      following the envelope cursor while hasMore is true, and de-duplicates by
+      uid; returns an APIResponse wrapping the flat file list, matching
+      listDatasetDocumentsAll's return shape. checkForUpdates/waitForUpdates/
+      maximumNumberUpdateReads map to check_for_updates/wait_for_updates/
+      max_update_reads (default off, as in the MATLAB user-facing wrapper). The
+      MATLAB `retries` knob is omitted: transient GET retries are handled
+      centrally by CloudClient, not per call site.
 
   - name: getFileDetails
     matlab_path: "+ndi/+cloud/+api/+files/getFileDetails.m"
