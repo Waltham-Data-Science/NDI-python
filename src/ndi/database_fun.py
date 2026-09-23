@@ -740,19 +740,42 @@ def copydocfile2temp(
 def extract_doc_files(
     session: Any,
     target_path: str | None = None,
+    *,
+    reference_in_place: bool | None = None,
 ) -> tuple[list[Any], str]:
-    """Extract a copy of all documents and their files to a directory.
+    """Extract every document, with its files, so it can be stored elsewhere.
 
-    MATLAB equivalent: ndi.database.fun.extract_doc_files
+    MATLAB equivalent: ndi.database.fun.extract_docs_files
 
-    Every file is copied to ``target_path/<uid>`` under the uid the source
-    database knows it by, and each returned document's file_info is rebuilt
-    to name its copy. That is what makes the extract STORABLE somewhere else
-    -- ``ndi.dataset.copySessionToDataset`` is the caller this exists for --
-    rather than a pile of bytes with nothing pointing at it.
+    Returns the documents with each file location rewritten so that a
+    subsequent ``database_add`` lands the bytes in the destination store --
+    ``ndi.dataset.copySessionToDataset`` is the caller this exists for.
+
+    FILE HANDLING. There are two ways the returned documents point at their
+    bytes, selected by *reference_in_place*:
+
+    * REFERENCE IN PLACE (the default when *target_path* is not given). Each
+      file location is pointed AT THE SOURCE SESSION'S EXISTING file on disk,
+      with ``delete_original=False``. A later ``database_add`` then copies
+      each file exactly once, directly from the source into the destination,
+      leaving the source untouched. This is what a dataset ingest wants: it
+      avoids staging a second full copy of every file in a temp directory
+      first, so the operation no longer transiently needs 2x the session's
+      disk space.
+    * COPY (the default when a *target_path* is given, and the behavior for
+      any file whose bytes are NOT on the local filesystem). Files are copied
+      to ``target_path/<uid>`` under the uid the source database knows them
+      by. With no *target_path*, a temp directory is used.
+
+    Reference in place applies ONLY to files whose bytes are on the LOCAL
+    filesystem, which ``database_existbinarydoc`` reports without going to the
+    network. A file that is not local -- a member of a cloud-backed session
+    not fetched to this machine -- has nothing local to reference, so it falls
+    back to the copy path (a temp directory is created on demand). A
+    cloud-backed session therefore behaves as it did before this option.
 
     FILE SERIES. A series' manifest is an ordinary document file and is
-    copied like one. The MEMBERS are copied too, which ``current_file_list``
+    handled like one. The MEMBERS are handled too, which ``current_file_list``
     does not cover: it returns the manifest name only, deliberately, so that
     a 28,000-member series does not materialise 28,000 names. The members are
     enumerated from the series record instead and fetched by their
@@ -760,22 +783,29 @@ def extract_doc_files(
     (DID-matlab#173, #183). An absent slot is normal -- a sparse series is
     the case the mechanism exists for.
 
-    Each copied member is recorded in the extracted document's
-    ``ingest_locations`` UNDER ITS ORIGINAL UID. That is what lets the copy
-    be stored elsewhere: DID refuses a document declaring present members
-    while recording no location for any of them (DID-matlab#185), and
-    ingestion writes each member to ``FileDir/<uid>`` from this record -- so
-    reusing the uid keeps the copied manifest, which names its members by
-    uid, correct in the new store.
+    Each member is recorded in the extracted document's ``ingest_locations``
+    UNDER ITS ORIGINAL UID. That is what lets the copy be stored elsewhere:
+    DID refuses a document declaring present members while recording no
+    location for any of them (DID-matlab#185), and ingestion writes each
+    member to ``FileDir/<uid>`` from this record -- so reusing the uid keeps
+    the copied manifest, which names its members by uid, correct in the new
+    store.
 
     Args:
         session: An NDI session or dataset.
-        target_path: Directory to write files. If None, creates a temp dir.
+        target_path: Directory to write copies to. If None, a temp dir is
+            used on demand.
+        reference_in_place: If True, reference local source files in place
+            rather than copying them; if False, copy. The default is True
+            when *target_path* is not supplied and False when it is (naming a
+            *target_path* means "put copies there").
 
     Returns:
-        Tuple of ``(documents, target_path)``. The documents are the ones
-        the search returned, with their file_info rebuilt to point at the
-        copies.
+        Tuple of ``(documents, target_path)``. The documents are the ones the
+        search returned, with their file_info rebuilt to point at either the
+        referenced source files or the copies. ``target_path`` is the
+        directory copies were written to, or ``""`` if nothing was copied
+        (pure reference-in-place).
 
     Raises:
         OSError: If a file cannot be copied. Every copy made so far is
@@ -788,18 +818,39 @@ def extract_doc_files(
 
     from .query import ndi_query
 
-    if target_path is None:
+    # Default: reference in place when no target_path was asked for; copy when
+    # one was. MATLAB's extract_docs_files resolves the default the same way.
+    if reference_in_place is None:
+        reference_in_place = not target_path
+
+    # In copy mode with no target_path, stage into a temp dir up front. In
+    # reference-in-place mode the temp dir is created lazily -- only if a
+    # non-local file forces a fall-back copy (see _ensure_copy_target).
+    if not reference_in_place and not target_path:
         target_path = tempfile.mkdtemp(prefix="ndi_extract_")
 
-    out = Path(target_path)
-    out.mkdir(parents=True, exist_ok=True)
-
-    docs = session.database_search(ndi_query("").isa("base"))
+    # A one-element holder so the nested copy helper can create the directory
+    # lazily and hand the resolved path back to the caller.
+    made_target = {"path": target_path or ""}
     files_i_made: list[Path] = []
 
+    # An explicitly given (or eagerly staged) target is created up front, so a
+    # caller that named one finds it even when nothing needed copying. A
+    # reference-in-place run with no target leaves this empty and creates a
+    # directory only if a non-local file forces a fall-back copy.
+    if made_target["path"]:
+        Path(made_target["path"]).mkdir(parents=True, exist_ok=True)
+
+    def _ensure_copy_target() -> Path:
+        if not made_target["path"]:
+            made_target["path"] = tempfile.mkdtemp(prefix="ndi_extract_")
+        out = Path(made_target["path"])
+        out.mkdir(parents=True, exist_ok=True)
+        return out
+
     def copy_in(source: str | Path, uid: str) -> Path:
-        """Copy one file to out/<uid>, unwinding the whole extract on failure."""
-        destination = out / uid
+        """Copy one file to <target>/<uid>, unwinding the extract on failure."""
+        destination = _ensure_copy_target() / uid
         try:
             shutil.copyfile(source, destination)
         except OSError:
@@ -811,6 +862,8 @@ def extract_doc_files(
             raise
         files_i_made.append(destination)
         return destination
+
+    docs = session.database_search(ndi_query("").isa("base"))
 
     for doc in docs:
         # has_files() rather than "does it declare a files section": the
@@ -848,24 +901,49 @@ def extract_doc_files(
         props["files"]["file_info"] = []
 
         for filename in file_names:
-            handle = session.database_openbinarydoc(doc, filename)
-            try:
-                source = getattr(handle, "fullpathfilename", None)
-            finally:
-                session.database_closebinarydoc(handle)
-            if not source:
-                continue
-            # fileparts, as MATLAB does: an ingested file is named by its
-            # uid with no extension, and stripping one guards against a
-            # retrieval that handed back a suffixed scratch copy.
-            uid = Path(source).stem
-            doc.add_file(filename, str(copy_in(source, uid)))
+            # Is the file's bytes on the local filesystem? database_existbinarydoc
+            # answers from local state only -- it never goes to the network --
+            # so a true answer means we can reference the source file directly.
+            local_path = ""
+            if reference_in_place:
+                exists, candidate = session.database_existbinarydoc(doc_id, filename)
+                if exists and candidate and Path(candidate).is_file():
+                    local_path = str(candidate)
+
+            if local_path:
+                # Reference the source file in place. delete_original=False:
+                # this is the source session's own file, not a copy we made,
+                # so a later database_add must copy it into the destination
+                # WITHOUT removing it here. Deliberately not tracked in
+                # files_i_made -- the error cleanup deletes what it made,
+                # never the source.
+                doc.add_file(filename, local_path, delete_original=False)
+            else:
+                handle = session.database_openbinarydoc(doc, filename)
+                try:
+                    source = getattr(handle, "fullpathfilename", None)
+                finally:
+                    session.database_closebinarydoc(handle)
+                if not source:
+                    continue
+                # fileparts, as MATLAB does: an ingested file is named by its
+                # uid with no extension, and stripping one guards against a
+                # retrieval that handed back a suffixed scratch copy.
+                uid = Path(source).stem
+                doc.add_file(filename, str(copy_in(source, uid)))
 
         if series_info:
-            _copy_series_members(session, doc, doc_id, series_info, copy_in)
+            _copy_series_members(
+                session,
+                doc,
+                doc_id,
+                series_info,
+                copy_in,
+                reference_in_place=reference_in_place,
+            )
             doc.setproperties(**{"files.series_info": series_info})
 
-    return docs, target_path
+    return docs, made_target["path"]
 
 
 def _extract_series_record(props: dict) -> list[dict]:
@@ -903,13 +981,20 @@ def _copy_series_members(
     doc_id: str,
     series_info: list[dict],
     copy_in: Any,
+    *,
+    reference_in_place: bool = False,
 ) -> None:
-    """Copy every present member of every series, recording each by uid.
+    """Record every present member of every series, one ingest entry per uid.
 
     Walks the slots the series record declares and asks for each by its
     ``NAME_<i>`` name, which resolves through the manifest. Uses
     ``database_existbinarydoc`` rather than opening: an absent slot is
     normal, and a sparse series is the case the mechanism exists for.
+
+    With *reference_in_place* the member entry points at the source file and
+    nothing is copied; otherwise the member is copied via *copy_in*. Either
+    way ``delete_original`` is 0 -- whether it is our copy or a reference to
+    the source, the caller was promised the files would still be there.
     """
     from pathlib import Path
 
@@ -928,20 +1013,22 @@ def _copy_series_members(
             if not exists or not member_path:
                 continue
             # Keep the ORIGINAL uid: ingestion writes the member to
-            # FileDir/<uid> from this record, and the manifest just copied
-            # names its members by uid, so a fresh uid would leave the
+            # FileDir/<uid> from this record, and the manifest just carried
+            # over names its members by uid, so a fresh uid would leave the
             # copy's manifest pointing at nothing.
             member_uid = Path(member_path).stem
-            destination = copy_in(member_path, member_uid)
+            if reference_in_place:
+                # Reference the source file: do not copy, do not delete.
+                location = str(member_path)
+            else:
+                location = str(copy_in(member_path, member_uid))
             members.append(
                 {
                     "index": index,
                     "uid": member_uid,
-                    "location": str(destination),
+                    "location": location,
                     "location_type": "file",
                     "ingest": 1,
-                    # These are our copies in target_path, and the caller
-                    # was promised the files would be there.
                     "delete_original": 0,
                     "parameters": "",
                 }
