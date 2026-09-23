@@ -135,9 +135,7 @@ class ndi_dataset:
 
         return self
 
-    def add_ingested_session(
-        self, session: Any, *, reference_in_place: bool = True
-    ) -> ndi_dataset:
+    def add_ingested_session(self, session: Any, *, reference_in_place: bool = True) -> ndi_dataset:
         """
         Ingest a session into this dataset by copying documents.
 
