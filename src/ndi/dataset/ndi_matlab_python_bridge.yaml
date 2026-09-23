@@ -14,9 +14,21 @@ classes:
   - name: dataset
     type: class
     matlab_path: "+ndi/dataset.m"
-    matlab_last_sync_hash: "9bf6e3fee"
+    matlab_last_sync_hash: "3fce6cb"
     python_path: "ndi/dataset/_dataset.py"
     python_class: "ndi_dataset"
+    decision_log: >
+      2026-09-22: resynced to NDI-matlab 3fce6cb (was 9bf6e3fee). The two
+      commits touching dataset.m in that span are the same ReferenceInPlace
+      work (f3940dbc, 14af6d6c): add_ingested_session,
+      convertLinkedSessionToIngested and copySessionToDataset gained a
+      ReferenceInPlace option that copies a session's local files directly
+      into the dataset rather than staging a second copy in a temp dir
+      (removing the transient 2x disk requirement; non-local files fall back
+      to copying). The output is unchanged, so the Python port still matches
+      functionally; the optimization itself is a performance-only divergence
+      not yet mirrored on the Python side, tracked as a deferred follow-up
+      alongside the extract_doc_files entry (issue #317).
 
     properties:
       - name: session

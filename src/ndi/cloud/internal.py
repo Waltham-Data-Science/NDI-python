@@ -244,10 +244,12 @@ def filesNotYetUploaded(
     asymmetry is deliberate: a needless re-upload costs bandwidth, while a
     wrongly skipped one costs the binary.
     """
-    from .api.files import listFiles
+    from .api.files import listFilesAll
 
     try:
-        remote_files = listFiles(cloud_dataset_id, client=client).data
+        # getDataset no longer embeds the files array; enumerate via the
+        # keyset files endpoint (NDI-matlab#1004).
+        remote_files = listFilesAll(cloud_dataset_id, client=client).data
     except Exception:
         return file_manifest  # can't check, assume all need upload
 

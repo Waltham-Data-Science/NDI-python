@@ -673,7 +673,7 @@ functions:
 
   - name: downloadDatasetFiles
     matlab_path: "+ndi/+cloud/+download/downloadDatasetFiles.m"
-    matlab_last_sync_hash: "ac2df649e"
+    matlab_last_sync_hash: "3fce6cb"
     python_path: "ndi/cloud/download.py"
     input_arguments:
       - name: dataset_id
@@ -700,6 +700,12 @@ functions:
       "../../x" reaches the download as a filename; this side already refuses one,
       through safeLocalFilename and _contained_path, so the fix is present rather
       than needed.
+      2026-09-22: examined against 3fce6cb (was ac2df649e). NDI-matlab#1004
+      (3f7c476d) switched downloadDatasetFiles.m from reading getDataset().files
+      to listFilesAll (getDataset no longer embeds the array). Nothing to port:
+      the Python downloadDatasetFiles takes its documents explicitly and derives
+      file uids from them (getFileUidsFromDocuments), so it never read the
+      embedded dataset array.
 
   - name: jsons2documents
     matlab_path: "N/A"
@@ -1237,7 +1243,7 @@ functions:
 
   - name: filesNotYetUploaded
     matlab_path: "+ndi/+cloud/+sync/+internal/filesNotYetUploaded.m"
-    matlab_last_sync_hash: "8c31a8f28"
+    matlab_last_sync_hash: "3fce6cb"
     python_path: "ndi/cloud/internal.py"
     input_arguments:
       - name: file_manifest
@@ -1261,6 +1267,10 @@ functions:
       never re-queued. Now missing entry, uploaded: false, and a missing
       `uploaded` field all queue the file, the last of them with a warning
       (commit e3f1b8c on this branch).
+      2026-09-22: examined against 3fce6cb (was 8c31a8f28). NDI-matlab#1004
+      (03583d91) switched this helper from listFiles to listFilesAll now that
+      the files endpoint is keyset-paginated; ported here -- filesNotYetUploaded
+      now enumerates via listFilesAll instead of the (removed) embedded array.
 
   - name: validateSync
     matlab_path: "N/A"
@@ -1575,9 +1585,14 @@ not_yet_ported:
 
   - name: getUploadedFileIds
     matlab_path: "+ndi/+cloud/+internal/getUploadedFileIds.m"
-    matlab_last_sync_hash: "7ab96514"
+    matlab_last_sync_hash: "3fce6cb"
     status: porting_deferred
-    decision_log: "MATLAB internal for file upload tracking."
+    decision_log: >
+      MATLAB internal for file upload tracking.
+      2026-09-22: examined against 3fce6cb (was 7ab96514). NDI-matlab#1004
+      (3f7c476d) re-sourced getUploadedFileIds.m from listFilesAll (the
+      list_datasets response no longer carries files). Still porting_deferred --
+      there is no Python counterpart to update.
 
   - name: getWeboptionsWithAuthHeader
     matlab_path: "+ndi/+cloud/+internal/getWeboptionsWithAuthHeader.m"
