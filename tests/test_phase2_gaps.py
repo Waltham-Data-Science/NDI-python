@@ -358,13 +358,25 @@ class TestExtractDocsFiles:
                     for d in docs
                 ), "no document names its copy"
 
-    def test_creates_temp_dir_if_none(self):
+    def test_no_target_references_in_place_and_makes_no_temp_dir(self):
+        """The default with no target_path is reference-in-place (matching
+        MATLAB), so no temp directory is staged and the returned path is empty
+        when nothing is copied."""
         from ndi.database_fun import extract_doc_files
 
         session = MagicMock()
         session.database_search.return_value = []
 
         docs, path = extract_doc_files(session)
+        assert path == ""
+
+    def test_force_copy_creates_temp_dir_if_none(self):
+        from ndi.database_fun import extract_doc_files
+
+        session = MagicMock()
+        session.database_search.return_value = []
+
+        docs, path = extract_doc_files(session, reference_in_place=False)
         assert os.path.isdir(path)
         # Clean up
         os.rmdir(path)

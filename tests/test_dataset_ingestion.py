@@ -86,6 +86,52 @@ def _session_info(dataset, session_id):
     return dataset._find_session_in_info(session_id)
 
 
+class TestReferenceInPlaceIngest:
+    """add_ingested_session copies each file once, directly into the dataset,
+    whichever way it is told to source the bytes. The result is the same
+    self-contained dataset; reference_in_place only decides whether a second
+    copy is staged in a temp directory on the way (the 2x-disk path)."""
+
+    @pytest.mark.parametrize("reference_in_place", [True, False])
+    def test_the_file_lands_in_the_dataset_and_the_source_survives(
+        self, dataset, session, reference_in_place
+    ):
+        doc_id = session.database_search(ndi_query("").isa("demoNDI"))[0].id
+
+        dataset.add_ingested_session(session, reference_in_place=reference_in_place)
+
+        # The dataset now holds its own copy of the file...
+        found, resolved = dataset._session._database.exist_binary(doc_id, FILE_SLOT)
+        assert found, "the binary file did not come across into the dataset"
+        assert Path(resolved).read_text() == PAYLOAD
+        # ...and the source session's own file is untouched (delete_original=0).
+        src_found, src_resolved = session._database.exist_binary(doc_id, FILE_SLOT)
+        assert src_found, "reference-in-place must not remove the source file"
+        assert Path(src_resolved).read_text() == PAYLOAD
+
+    def test_the_two_modes_are_self_contained_after_the_source_is_deleted(
+        self, dataset, session, tmp_path
+    ):
+        """The staged-copy path (reference_in_place=False) must be just as
+        self-contained: delete the source and read the file back."""
+        doc_id = session.database_search(ndi_query("").isa("demoNDI"))[0].id
+        session_path = Path(session.path)
+        dataset_path = Path(dataset.getpath())
+
+        dataset.add_ingested_session(session, reference_in_place=False)
+
+        session._database.close()
+        dataset._session._database.close()
+        del dataset, session
+        shutil.rmtree(session_path)
+        assert not session_path.exists()
+
+        reopened = ndi_dataset_dir("myds", str(dataset_path))
+        found, resolved = reopened._session._database.exist_binary(doc_id, FILE_SLOT)
+        assert found, "the staged-copy ingest was not self-contained"
+        assert Path(resolved).read_text() == PAYLOAD
+
+
 def _own_doc_count(dataset) -> int:
     """Documents in the DATASET'S OWN database.
 
