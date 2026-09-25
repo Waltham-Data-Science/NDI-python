@@ -1602,6 +1602,23 @@ not_yet_ported:
       MATLAB-specific HTTP configuration. Python uses CloudClient
       with requests.ndi_session which handles auth headers internally.
 
+  - name: resolveOrganizationId
+    matlab_path: "+ndi/+cloud/+internal/resolveOrganizationId.m"
+    matlab_last_sync_hash: "f847d7c4"
+    status: porting_deferred
+    decision_log: >
+      MATLAB helper introduced with NDI-matlab#979: given
+      organizationName or organizationID, resolves against
+      ndi.cloud.api.users.me and returns the id, verifying membership.
+      Wired into ndi.cloud.uploadDataset as the 'organizationName' /
+      'organizationID' options so a user who belongs to more than one
+      NDI Cloud organization can route the upload explicitly. Python's
+      uploadDataset does not currently expose those options, so the
+      resolver has no Python caller yet -- porting_deferred rather
+      than matlab_only because Python COULD do this once the upload
+      surface grows the same options. See NDI-python cloud
+      orchestration when that lands.
+
   - name: createCloudMetadataStruct
     matlab_path: "+ndi/+cloud/+utility/createCloudMetadataStruct.m"
     matlab_last_sync_hash: "80092b7c"
