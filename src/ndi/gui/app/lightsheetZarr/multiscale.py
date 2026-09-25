@@ -866,21 +866,51 @@ def layerSpec(
     # only a graph rewrite that says "block[c] instead of block[all]".
     import dask.array as da
 
+    # NDI_LIGHTSHEET_SINGLE_LEVEL=1 collapses each per-channel layer
+    # to only the coarsest level as a non-multiscale layer. Diagnostic
+    # for napari 0.5's multiscale slicer, which has been observed to
+    # never mark layer.loaded=True on a lazy cloud-backed multiscale
+    # pyramid (the channel-list spinner spins forever). A
+    # single-level layer takes the multiscale slicer out of the loop
+    # entirely; if the image draws under this knob and not under
+    # multiscale, the diagnosis is confirmed.
+    single_level = _env_true("NDI_LIGHTSHEET_SINGLE_LEVEL")
+
     specs: list[dict] = []
     for c in range(n_channels):
         per_channel_arrays = [da.take(a, indices=c, axis=c_index) for a in arrays]
-        specs.append(
-            {
-                "data": per_channel_arrays,
-                "multiscale": True,
-                "name": names[c],
-                "colormap": colors[c],
-                "contrast_limits": contrast_limits,
-                "scale": spatial_scale or None,
-                "translate": spatial_trans or None,
-            }
-        )
+        if single_level:
+            # Coarsest level only, as a plain (non-multiscale) layer.
+            coarsest = per_channel_arrays[-1]
+            specs.append(
+                {
+                    "data": coarsest,
+                    "multiscale": False,
+                    "name": names[c],
+                    "colormap": colors[c],
+                    "contrast_limits": contrast_limits,
+                    "scale": spatial_scale or None,
+                    "translate": spatial_trans or None,
+                }
+            )
+        else:
+            specs.append(
+                {
+                    "data": per_channel_arrays,
+                    "multiscale": True,
+                    "name": names[c],
+                    "colormap": colors[c],
+                    "contrast_limits": contrast_limits,
+                    "scale": spatial_scale or None,
+                    "translate": spatial_trans or None,
+                }
+            )
     return specs, fetcher
+
+
+def _env_true(name: str) -> bool:
+    val = os.environ.get(name, "").strip().lower()
+    return val not in ("", "0", "false", "no")
 
 
 def _channelNames(pyramid_props: dict, n_channels: int, base_name: str) -> list[str]:
