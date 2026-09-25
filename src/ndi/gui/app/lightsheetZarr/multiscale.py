@@ -900,10 +900,30 @@ def layerSpec(
     for c in range(n_channels):
         per_channel_levels.append([da.take(a, indices=c, axis=c_index) for a in arrays])
 
+    # Per-level scales, so that the level dropdown can update
+    # layer.scale and keep world coordinates locked when it swaps
+    # data. Each level document records its own voxel_size (finest to
+    # coarsest); we drop the channel entry so it matches the 3D
+    # per-channel array shape napari sees.
+    level_docs_ordered = levelDocs(session, pyramid_doc, reduction=reduction)
+    per_level_scale: list[list[float] | None] = []
+    for doc in level_docs_ordered:
+        lvl_props = doc.document_properties["lightsheetZarrLevel"]
+        vs = lvl_props.get("voxel_size")
+        if isinstance(vs, list) and len(vs) > c_index:
+            per_level_scale.append(_dropAxis([float(v) for v in vs], c_index))
+        else:
+            per_level_scale.append(None)
+
     specs: list[dict] = []
     for c in range(n_channels):
         if single_level:
             # Coarsest level only, as a plain (non-multiscale) layer.
+            # Initial scale is the coarsest level's own voxel size,
+            # not the finest -- otherwise napari places the coarsest
+            # pixels at level-0 world coordinates and the image
+            # jumps as the user swaps levels.
+            coarsest_scale = per_level_scale[-1] or spatial_scale
             specs.append(
                 {
                     "data": per_channel_levels[c][-1],
@@ -911,18 +931,20 @@ def layerSpec(
                     "name": names[c],
                     "colormap": colors[c],
                     "contrast_limits": contrast_limits,
-                    "scale": spatial_scale or None,
+                    "scale": coarsest_scale or None,
                     "translate": spatial_trans or None,
                     # Kept on the spec so openPyramid can attach the
                     # level selector without recomputing arrays. Not
                     # a napari.add_image kwarg; caller pops before
                     # calling add_image.
                     "_ndi_level_arrays": per_channel_levels[c],
+                    "_ndi_level_scales": per_level_scale,
                 }
             )
         else:
             specs.append(
                 {
+                    "_ndi_level_scales": per_level_scale,
                     "data": per_channel_levels[c],
                     "multiscale": True,
                     "name": names[c],

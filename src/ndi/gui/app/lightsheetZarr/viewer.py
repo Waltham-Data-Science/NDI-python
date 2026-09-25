@@ -360,8 +360,10 @@ def openPyramid(
     # Extract per-layer level lists BEFORE add_image; the "_ndi_"
     # prefix is our marker for kwargs napari does not understand.
     layer_levels: list[list[Any]] = []
+    layer_scales: list[list[list[float] | None]] = []
     for spec in specs:
         layer_levels.append(spec.pop("_ndi_level_arrays", []))
+        layer_scales.append(spec.pop("_ndi_level_scales", []))
 
     added_layers: list[Any] = []
     with progress.stage("attaching image to viewer"):
@@ -462,7 +464,7 @@ def openPyramid(
 
     if controls:
         _attach_controls(viewer, session, pyramid_doc)
-        _attach_level_selector(viewer, added_layers, layer_levels)
+        _attach_level_selector(viewer, added_layers, layer_levels, layer_scales)
 
     # Print which multiscale level napari picks. Async slicing chooses
     # at paint time based on viewbox size and zoom; without this the
@@ -563,14 +565,25 @@ def _report_loaded(layer) -> None:
     )
 
 
-def _attach_level_selector(viewer, layers, per_layer_levels) -> None:
-    """Dock a small "Level" selector that swaps each layer's data.
+def _attach_level_selector(viewer, layers, per_layer_levels, per_layer_scales) -> None:
+    """Dock a "Resolution" selector that swaps each layer's level.
 
-    Single-level is the default (napari 0.5's multiscale slicer is
-    unreliable for our pipeline), but users still want to zoom in on
-    detail. Swap ``layer.data`` between the pre-built lazy arrays for
-    each level. No new fetches happen on swap -- the graphs are
-    already there -- only napari-side re-slicing.
+    Swaps ``layer.data`` AND ``layer.scale`` together so world
+    coordinates stay locked when the pixel dimensions change. No new
+    fetches happen on swap -- the graphs are pre-built during
+    layerSpec -- only napari-side re-slicing at the new pixel size.
+
+    Prints a wall-clock timeline to stderr:
+
+      level selector: request level 2 at t=+41.3s
+      level selector: layer 'mean Ch1' data swapped at t=+41.3s
+      level selector: request completed in 0.05s
+
+    Napari's own re-slice and paint happen after this returns; the
+    "completed" line pins the moment WE were done handing napari the
+    new data, not the moment the picture updates. Fetches that follow
+    then show up in the fetch counter's own tile-by-tile lines, so
+    the user can read the whole sequence back.
 
     Silent no-op when magicgui isn't installed or when nothing has
     levels to switch between.
@@ -592,11 +605,9 @@ def _attach_level_selector(viewer, layers, per_layer_levels) -> None:
         )
         return
 
-    # Levels are ordered finest-first in per_layer_levels. Present
-    # them the same way, but default to the coarsest (index -1) so
-    # the viewer opens at the fastest-loading resolution.
     labels = [f"level {i}" for i in range(max_levels)]
-    default_label = labels[-1]
+    default_label = labels[-1]  # coarsest
+    session_start = time.monotonic()
 
     @magicgui(
         auto_call=True,
@@ -604,12 +615,38 @@ def _attach_level_selector(viewer, layers, per_layer_levels) -> None:
     )
     def _picker(level: str = default_label):
         idx = labels.index(level)
-        for layer, arrays in zip(layers, per_layer_levels):
+        t0 = time.monotonic()
+        elapsed_start = t0 - session_start
+        print(
+            f"[lightsheet] level selector: request {level} at t=+{elapsed_start:.1f}s",
+            file=sys.stderr,
+            flush=True,
+        )
+        for layer, arrays, scales in zip(layers, per_layer_levels, per_layer_scales):
             if not arrays or idx >= len(arrays):
                 continue
             layer.data = arrays[idx]
+            # scale MUST update alongside data or napari places the
+            # new pixels at the previous level's world position, and
+            # the picture jumps to a different spatial location.
+            if scales and idx < len(scales) and scales[idx]:
+                try:
+                    layer.scale = scales[idx]
+                except Exception as exc:  # noqa: BLE001
+                    print(
+                        f"[lightsheet]   scale swap on {layer.name!r} failed: {exc}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+            print(
+                f"[lightsheet]   layer {layer.name!r} data/scale swapped "
+                f"at t=+{time.monotonic() - session_start:.1f}s",
+                file=sys.stderr,
+                flush=True,
+            )
         print(
-            f"[lightsheet] level selector: switched to {level}",
+            f"[lightsheet] level selector: request completed in "
+            f"{time.monotonic() - t0:.2f}s (napari now re-slicing)",
             file=sys.stderr,
             flush=True,
         )
