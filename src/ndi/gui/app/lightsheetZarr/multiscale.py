@@ -159,6 +159,14 @@ class _ChunkFetcher:
         self._pool = None
         self._lock = threading.Lock()
         self._paths: dict[tuple[str, str], str] = {}
+        # Per-fetch timing bucketed by outcome. Set by _resolve on every
+        # call, including memo hits, so a caller can tell whether a
+        # slow tile is "cloud is slow" vs "local cache lookup is slow"
+        # vs "memo miss forces a re-fetch".
+        self._stats_lock = threading.Lock()
+        self._resolve_times_cache: list[float] = []
+        self._resolve_times_fetch: list[float] = []
+        self._resolve_none: int = 0
 
     @staticmethod
     def _reopener(session):
@@ -207,9 +215,14 @@ class _ChunkFetcher:
 
     def _resolve(self, doc, filename) -> str | None:
         s = getattr(self._local, "session", None) or self._session
+        import time as _time
+
+        t0 = _time.monotonic()
         try:
             fh = s.database_openbinarydoc(doc, filename)
         except Exception as exc:
+            with self._stats_lock:
+                self._resolve_none += 1
             if os.environ.get("NDI_LIGHTSHEET_DEBUG"):
                 import sys
 
@@ -221,12 +234,58 @@ class _ChunkFetcher:
             return None
         try:
             path = getattr(fh, "fullpathfilename", None)
+            dt = _time.monotonic() - t0
+            # database_openbinarydoc has two happy paths: a local-cache
+            # hit (near instant, microseconds; no cloud roundtrip) and
+            # a cloud fetch (tens of ms to seconds). Split the buckets
+            # so a summary later can say how many of each we saw and
+            # what each one costs.
+            #
+            # 50 ms is comfortably above local disk latency and well
+            # under any credible cloud RTT; picking a threshold rather
+            # than routing on internal state keeps the classifier
+            # independent of DID's evolving fast paths.
+            with self._stats_lock:
+                if dt < 0.05:
+                    self._resolve_times_cache.append(dt)
+                else:
+                    self._resolve_times_fetch.append(dt)
             return str(path) if path else None
         finally:
             try:
                 s.database_closebinarydoc(fh)
             except Exception:
                 pass
+
+    def stats_summary(self) -> str:
+        """One-line summary of resolve timings for the last session.
+
+        Formats as:
+
+          resolves: N cache-hits (mean X.Xms), M cloud-fetches (mean X.Xs),
+          F failures.
+
+        Reset by :meth:`reset_stats`; the object stays alive across a
+        viewer session and prints once from ``openPyramid`` on shutdown.
+        """
+        with self._stats_lock:
+            n_cache = len(self._resolve_times_cache)
+            n_fetch = len(self._resolve_times_fetch)
+            n_none = self._resolve_none
+            mean_cache_ms = 1000.0 * (sum(self._resolve_times_cache) / n_cache if n_cache else 0.0)
+            mean_fetch_s = sum(self._resolve_times_fetch) / n_fetch if n_fetch else 0.0
+            max_fetch_s = max(self._resolve_times_fetch) if n_fetch else 0.0
+        return (
+            f"resolves: {n_cache} cache-hits (mean {mean_cache_ms:.1f}ms), "
+            f"{n_fetch} cloud-fetches (mean {mean_fetch_s:.2f}s, max "
+            f"{max_fetch_s:.2f}s), {n_none} failures"
+        )
+
+    def reset_stats(self) -> None:
+        with self._stats_lock:
+            self._resolve_times_cache.clear()
+            self._resolve_times_fetch.clear()
+            self._resolve_none = 0
 
     def chunkPath(self, doc, filename) -> str | None:
         """Resolve one chunk file to a local path, fetching it if remote.

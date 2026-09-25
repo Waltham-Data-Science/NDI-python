@@ -270,6 +270,16 @@ def openPyramid(
     from ndi.cloud.filehandler import watchFetches
     from ndi.gui.app.lightsheetZarr import multiscale
 
+    # Install the loud fetch counter FIRST, before any stage. Every
+    # cloud fetch that happens between here and napari.run()'s exit
+    # then flows through the same observer. Nested watchFetches inside
+    # progress.stage's cloudFetches temporarily override for byte
+    # updates but the counter's outer scope resumes on stage exit,
+    # so start/done counts still add up across stages.
+    counter = _FetchCounter()
+    fetch_watch = watchFetches(counter)
+    fetch_watch.__enter__()
+
     with progress.stage("preparing on-demand image levels"):
         spec, fetcher = multiscale.layerSpec(
             session, pyramid_doc, channel=channel, name=name, reduction=reduction
@@ -319,15 +329,24 @@ def openPyramid(
     progress.closeLaunchWindow()
     progress.note("viewer running -- watching tile fetches on stderr")
 
-    counter = _FetchCounter()
-
     if show:
         try:
-            with watchFetches(counter):
-                napari.run()
+            napari.run()
         finally:
             counter.stop()
+            fetch_watch.__exit__(None, None, None)
+            # Fetcher stats: cache-hit vs cloud-fetch split.
+            # Complements the counter (which only sees cloud fetches
+            # through watchFetches) with the local-cache hits it can't
+            # see. Together they give the full picture of what happened
+            # under this viewer session.
+            print(f"[lightsheet] {fetcher.stats_summary()}", file=sys.stderr, flush=True)
             fetcher.close()
+    else:
+        # Not showing napari means the caller ran their own event loop
+        # or is scripting the viewer; drop the observer so the caller
+        # doesn't inherit our counter as ambient state.
+        fetch_watch.__exit__(None, None, None)
 
     return viewer
 
