@@ -670,6 +670,33 @@ DEFAULT_CHANNEL_PALETTE: tuple[str, ...] = (
 )
 
 
+def _defaultContrastLimits(pyramid_props: dict, dtype) -> tuple[float, float]:
+    """The ``contrast_limits`` napari should open the layer with.
+
+    Prefers the pyramid document's declared ``value_range`` (a pair of
+    numbers written when the pyramid was built and typically covering
+    the observed dynamic range); falls back to the dtype's full range
+    for integer types and (0, 1) for float. Never samples the data,
+    because sampling is what this function exists to avoid.
+    """
+    import numpy as np
+
+    declared = pyramid_props.get("value_range")
+    if isinstance(declared, (list, tuple)) and len(declared) == 2:
+        try:
+            lo, hi = float(declared[0]), float(declared[1])
+            if hi > lo:
+                return (lo, hi)
+        except (TypeError, ValueError):
+            pass
+
+    d = np.dtype(dtype)
+    if np.issubdtype(d, np.integer):
+        info = np.iinfo(d)
+        return (float(info.min), float(info.max))
+    return (0.0, 1.0)
+
+
 def defaultChannelColors(n_channels: int) -> list[str]:
     """Return the first ``n_channels`` napari colormap names from the
     default palette. Any request beyond the palette length is padded
@@ -719,6 +746,24 @@ def layerSpec(
     if base_name is None:
         base_name = p.get("label") or p.get("pyramid_name") or "lightsheet zarr"
 
+    # Napari auto-detects ``contrast_limits`` by sampling the coarsest
+    # level with ``np.asarray(...)``. On a lazy cloud-backed pyramid
+    # that first ``add_image`` call then synchronously fetches every
+    # chunk of the coarsest level -- hundreds of HTTPS roundtrips
+    # before the window can even repaint. Passing an explicit range
+    # here (dtype full range, or the pyramid document's declared
+    # ``value_range`` when it has one) skips the probe.
+    #
+    # Users adjust contrast in napari's LUT slider anyway, so a
+    # default of the dtype range is safe -- if the layer starts flat,
+    # they double-click the histogram to auto-fit against a slice
+    # already in memory. The alternative (napari doing that fit at
+    # open time, from the cloud) is not acceptable.
+    if arrays:
+        contrast_limits = _defaultContrastLimits(p, arrays[0].dtype)
+    else:
+        contrast_limits = None
+
     c_index = axes_order.find("c") if axes_order else -1
     if c_index < 0 or not arrays:
         spec = {
@@ -727,6 +772,7 @@ def layerSpec(
             "name": base_name,
             "scale": scale or None,
             "translate": translate or None,
+            "contrast_limits": contrast_limits,
         }
         return spec, fetcher
 
@@ -746,6 +792,7 @@ def layerSpec(
         "channel_axis": c_index,
         "name": names,
         "colormap": colors,
+        "contrast_limits": contrast_limits,
         "scale": spatial_scale or None,
         "translate": spatial_trans or None,
     }
