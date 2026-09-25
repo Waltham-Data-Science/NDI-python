@@ -464,7 +464,13 @@ def openPyramid(
 
     if controls:
         _attach_controls(viewer, session, pyramid_doc)
-        _attach_level_selector(viewer, added_layers, layer_levels, layer_scales)
+        picker, picker_labels = _attach_level_selector(
+            viewer, added_layers, layer_levels, layer_scales
+        )
+        # Zoom-driven level swap uses the picker as its handle so the
+        # dock widget always shows the level napari is drawing and
+        # the manual and automatic paths share one code path.
+        _attach_zoom_level_swap(viewer, picker, picker_labels, layer_scales)
 
     # Print which multiscale level napari picks. Async slicing chooses
     # at paint time based on viewbox size and zoom; without this the
@@ -565,13 +571,18 @@ def _report_loaded(layer) -> None:
     )
 
 
-def _attach_level_selector(viewer, layers, per_layer_levels, per_layer_scales) -> None:
+def _attach_level_selector(viewer, layers, per_layer_levels, per_layer_scales):
     """Dock a "Resolution" selector that swaps each layer's level.
 
     Swaps ``layer.data`` AND ``layer.scale`` together so world
     coordinates stay locked when the pixel dimensions change. No new
     fetches happen on swap -- the graphs are pre-built during
     layerSpec -- only napari-side re-slicing at the new pixel size.
+
+    Returns ``(picker_widget, labels)`` so callers -- notably the
+    auto-level watcher -- can drive the same picker programmatically
+    and keep the visible choice, the layer data, and the layer scale
+    in sync.
 
     Prints a wall-clock timeline to stderr:
 
@@ -585,14 +596,14 @@ def _attach_level_selector(viewer, layers, per_layer_levels, per_layer_scales) -
     then show up in the fetch counter's own tile-by-tile lines, so
     the user can read the whole sequence back.
 
-    Silent no-op when magicgui isn't installed or when nothing has
-    levels to switch between.
+    Returns ``(None, [])`` when magicgui isn't installed or when
+    nothing has levels to switch between.
     """
     if not layers or not per_layer_levels:
-        return
+        return None, []
     max_levels = max((len(lst) for lst in per_layer_levels), default=0)
     if max_levels < 2:
-        return  # Nothing to switch between.
+        return None, []  # Nothing to switch between.
 
     try:
         from magicgui import magicgui
@@ -603,7 +614,7 @@ def _attach_level_selector(viewer, layers, per_layer_levels, per_layer_scales) -
             file=sys.stderr,
             flush=True,
         )
-        return
+        return None, []
 
     labels = [f"level {i}" for i in range(max_levels)]
     default_label = labels[-1]  # coarsest
@@ -659,6 +670,168 @@ def _attach_level_selector(viewer, layers, per_layer_levels, per_layer_scales) -
             file=sys.stderr,
             flush=True,
         )
+    return _picker, labels
+
+
+def _attach_zoom_level_swap(viewer, picker, labels, per_layer_scales) -> None:
+    """Auto-select a pyramid level based on the camera's current zoom.
+
+    A level is worth spending bandwidth on only when its pixels are
+    finer than the screen can display. Napari's camera exposes ``zoom``
+    as screen pixels per world unit, so a screen pixel is
+    ``1 / zoom`` world units wide -- and any level whose voxel size is
+    MUCH smaller than that number is over-detailed: we would fetch
+    tiles just to average them down to one screen pixel each.
+
+    Picking rule: the coarsest level whose Y/X voxel size is smaller
+    than the current world-per-screen-pixel (with a 1.5x oversample
+    safety margin, so a slightly under-Nyquist level still qualifies).
+    When the user zooms right in past level 0, level 0 is the finest
+    thing we have and stays selected.
+
+    Debounced 400ms so a smooth pinch or wheel-zoom does not thrash
+    through every level on the way through. The visible "Resolution"
+    picker is updated via ``picker.level.value = <label>`` -- magicgui
+    then fires the picker's own callback, so the data/scale swap and
+    the log line are exactly the same as a manual click. That is the
+    point of routing through the picker rather than swapping directly:
+    one code path for both, and the widget always shows the level
+    napari is actually drawing.
+
+    Silent no-op when ``NDI_LIGHTSHEET_AUTOLEVEL=0`` is set, when
+    no picker exists, or when no level knows its voxel size.
+    """
+    if picker is None or not labels:
+        return
+    if os.environ.get("NDI_LIGHTSHEET_AUTOLEVEL", "1").strip().lower() in ("0", "false", "off"):
+        print(
+            "[lightsheet] auto-level: disabled via NDI_LIGHTSHEET_AUTOLEVEL",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+    if not per_layer_scales:
+        return
+
+    # All layers cover the same volume, so any layer's per-level
+    # scale list answers the "how big is a voxel at level i" question.
+    # Pick the first non-empty one; skip missing entries within it.
+    scales = None
+    for candidate in per_layer_scales:
+        if candidate:
+            scales = candidate
+            break
+    if scales is None:
+        return
+
+    # Voxel size at each level, in world units per pixel on the tighter
+    # of the two display axes (Y and X). Missing entries fall back to
+    # +inf so they never win the "coarsest that still qualifies" search.
+    level_yx_voxels: list[float] = []
+    for s in scales:
+        if s is None or len(s) < 2:
+            level_yx_voxels.append(float("inf"))
+            continue
+        try:
+            level_yx_voxels.append(min(float(s[-2]), float(s[-1])))
+        except (TypeError, ValueError):
+            level_yx_voxels.append(float("inf"))
+
+    if not any(v != float("inf") for v in level_yx_voxels):
+        print(
+            "[lightsheet] auto-level: no per-level voxel sizes available; disabled",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+
+    try:
+        from qtpy.QtCore import QTimer
+    except ImportError:  # pragma: no cover - Qt is required for napari
+        return
+
+    session_start = time.monotonic()
+    # The picker was created with the coarsest level as its default.
+    # Track that so we do not repeatedly set the same value and log
+    # an auto-level line for a no-op.
+    last_choice = {"idx": len(labels) - 1}
+
+    def choose_level() -> None:
+        try:
+            zoom = float(viewer.camera.zoom)
+        except Exception:  # noqa: BLE001 - camera could be gone during shutdown
+            return
+        if zoom <= 0:
+            return
+        world_per_pixel = 1.0 / zoom
+        # Oversample factor: fetch one level finer than strict Nyquist
+        # so the image on screen has a little headroom. 1.5 means a
+        # level whose voxel is up to 1.5x the screen-pixel size still
+        # qualifies as "the finest one worth fetching".
+        threshold = world_per_pixel * 1.5
+
+        # Walk coarsest -> finest looking for the first level whose
+        # voxel size is smaller than the threshold. Levels are ordered
+        # finest (index 0) to coarsest (index N-1), so we iterate
+        # in reverse to find the coarsest that satisfies the rule.
+        target_idx = 0
+        for i in range(len(level_yx_voxels) - 1, -1, -1):
+            if level_yx_voxels[i] <= threshold:
+                target_idx = i
+                break
+
+        if target_idx == last_choice["idx"]:
+            return
+        last_choice["idx"] = target_idx
+        elapsed = time.monotonic() - session_start
+        print(
+            f"[lightsheet] auto-level: zoom={zoom:.4f} px/world, "
+            f"world/px={world_per_pixel:.3f}, pick level {target_idx} "
+            f"(voxel {level_yx_voxels[target_idx]:.3f}) "
+            f"at t=+{elapsed:.1f}s",
+            file=sys.stderr,
+            flush=True,
+        )
+        # Set the picker's value; magicgui's auto_call fires the
+        # picker function, which does the actual data/scale swap
+        # and prints its own log line.
+        try:
+            picker.level.value = labels[target_idx]
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"[lightsheet] auto-level: could not set picker level: {exc}",
+                file=sys.stderr,
+                flush=True,
+            )
+
+    debouncer = QTimer()
+    debouncer.setSingleShot(True)
+    debouncer.setInterval(400)
+    debouncer.timeout.connect(choose_level)
+
+    def on_zoom_event(_event=None) -> None:
+        # Restart the countdown on every zoom event; a settling
+        # camera fires many events in rapid succession and only the
+        # final resting zoom is worth acting on.
+        try:
+            debouncer.start()
+        except Exception:  # noqa: BLE001 - Qt event loop may be shutting down
+            pass
+
+    try:
+        viewer.camera.events.zoom.connect(on_zoom_event)
+    except Exception as exc:  # noqa: BLE001
+        print(
+            f"[lightsheet] auto-level: could not attach zoom listener: {exc}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+
+    # Prime with an initial choice after napari has drawn its first
+    # frame -- the camera's zoom is only meaningful once the viewer
+    # has fitted its initial view to the layer extents.
+    QTimer.singleShot(750, choose_level)
 
 
 def _attach_controls(viewer, session, pyramid_doc) -> None:

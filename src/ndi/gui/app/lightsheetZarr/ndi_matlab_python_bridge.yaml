@@ -140,6 +140,20 @@ functions:
       scaffold; the follow-up PR lands the magicgui panels alongside
       without changing this signature.
 
+  - name: _attach_zoom_level_swap
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/viewer.py"
+    decision_log: >-
+      Python-only. Zoom-driven multiscale level swap. Listens on
+      viewer.camera.events.zoom and, after a 400ms debounce, sets the
+      Resolution picker's value to the coarsest level whose Y/X voxel
+      size is <= 1.5x the current world-per-screen-pixel. Routes the
+      swap through the picker widget (rather than editing layer.data
+      directly) so the docked Resolution control always shows the
+      level napari is drawing and one code path handles both manual
+      and automatic changes. Opt-out via NDI_LIGHTSHEET_AUTOLEVEL=0.
+      No MATLAB counterpart because napari has no MATLAB counterpart.
+
   - name: stage
     matlab_path: null
     python_path: "ndi/gui/app/lightsheetZarr/progress.py"
