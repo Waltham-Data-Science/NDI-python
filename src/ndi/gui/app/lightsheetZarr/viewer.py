@@ -136,8 +136,25 @@ def openPyramid(
     except Exception:
         pass  # warm is best-effort; a fetch that needs it will still work
 
+    if verbose:
+        print("[lightsheet] creating napari.Viewer() ...", file=sys.stderr, flush=True)
+    t0 = time.monotonic()
     viewer = napari.Viewer()
+    if verbose:
+        print(
+            f"[lightsheet] Viewer ready in {time.monotonic() - t0:.1f}s; " "calling add_image ...",
+            file=sys.stderr,
+            flush=True,
+        )
+    t0 = time.monotonic()
     viewer.add_image(**spec)
+    if verbose:
+        print(
+            f"[lightsheet] add_image done in {time.monotonic() - t0:.1f}s; "
+            "starting napari event loop (window may need dock click on macOS) ...",
+            file=sys.stderr,
+            flush=True,
+        )
 
     if level is not None:
         # napari's multiscale layer picks a level from the current zoom;
