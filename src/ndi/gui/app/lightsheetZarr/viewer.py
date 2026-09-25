@@ -70,6 +70,35 @@ def require_napari():
     return napari
 
 
+def _enable_async_slicing(napari_module) -> None:
+    """Turn on napari's async slicing so first-frame chunk fetches don't
+    block the paint thread.
+
+    A Ctrl+C traceback on a real cloud pyramid showed vispy's paintGL
+    calling into napari's _project_thick_slice, which does
+    np.asarray(data[slices]) -- a synchronous dask.compute() on the
+    main thread. On a lazy cloud-backed multiscale layer that fires
+    hundreds of HTTPS fetches before the window can repaint. With
+    async slicing, napari schedules the slice compute on a worker
+    thread and the paint thread returns immediately.
+
+    Napari 0.5+ moved the toggle from the NAPARI_ASYNC env var to a
+    settings property, so set it programmatically. Best-effort: on a
+    napari version that has no such setting the call is a silent
+    no-op and the caller gets whatever the default policy is.
+    """
+    import os
+
+    os.environ.setdefault("NAPARI_ASYNC", "1")  # napari 0.4 fallback
+    try:
+        settings = napari_module.settings.get_settings()
+        experimental = getattr(settings, "experimental", None)
+        if experimental is not None and hasattr(experimental, "async_"):
+            experimental.async_ = True
+    except Exception:  # noqa: BLE001 - a setting that isn't there isn't fatal
+        pass
+
+
 def openPyramid(
     session: Any,
     pyramid_doc: Any,
@@ -120,6 +149,8 @@ def openPyramid(
     progress.note("opening lightsheet pyramid ...")
 
     napari = require_napari()
+    _enable_async_slicing(napari)
+
     from ndi.cloud.filehandler import watchFetches
     from ndi.gui.app.lightsheetZarr import multiscale
 
