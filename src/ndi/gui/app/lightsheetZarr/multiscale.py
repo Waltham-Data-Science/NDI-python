@@ -301,6 +301,21 @@ class _ChunkFetcher:
         known = self._paths.get(key)
         if known is not None and os.path.exists(known):
             return known
+        # Loud trace under debug so we can see whether napari is
+        # actually reaching this reader at all -- a session that draws
+        # nothing and produces no observer events could mean either
+        # "napari never asked for a slice" or "napari asked but our
+        # dask blocks didn't run". Print unconditionally under debug
+        # so the two cases are distinguishable.
+        if os.environ.get("NDI_LIGHTSHEET_DEBUG"):
+            import sys
+            import threading as _th
+
+            print(
+                f"[lightsheet] chunkPath: {filename} (thread " f"{_th.current_thread().name})",
+                file=sys.stderr,
+                flush=True,
+            )
         path = self._fetch(doc, filename)
         if path is not None:
             self._paths[key] = path
