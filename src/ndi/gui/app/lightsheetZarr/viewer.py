@@ -5,11 +5,15 @@ resolution, depends_on queries, dask arrays over chunk.bin_# files -
 lives in ``multiscale``. Napari is an optional extra
 (``pip install 'ndi[napari]'``); ``require_napari`` fails with that
 hint rather than a bare ImportError.
+
+Progress -- both the stderr channel and the Qt launch window -- lives
+in :mod:`.progress` and is on by default; ``NDI_LIGHTSHEET_QUIET=1``
+silences it, ``NDI_LIGHTSHEET_PROGRESS`` picks the mode, and
+``NDI_LIGHTSHEET_DEBUG`` forces the stderr channel on top of a GUI.
 """
 
 from __future__ import annotations
 
-import os
 import sys
 import threading
 import time
@@ -19,9 +23,11 @@ from typing import Any
 class _FetchCounter:
     """Thread-safe observer for ``ndi.cloud.filehandler.watchFetches``.
 
-    Aggregates start/done events into a single "N/M fetched, X in flight"
-    status line, throttled to a print every ~0.5 s so a wall of concurrent
-    chunk fetches from :class:`_ChunkFetcher`'s worker pool doesn't drown
+    A start/done aggregate on top of the byte-level updates
+    :mod:`.progress` already draws. Used to keep the stderr debug
+    channel informative when the terminal doesn't get a per-file
+    byte counter (e.g. a run piped to a log file); throttled to a
+    print every ~0.5 s so a wall of concurrent fetches doesn't drown
     the terminal.
     """
 
@@ -31,7 +37,6 @@ class _FetchCounter:
         self._interval = interval
         self._started = 0
         self._done = 0
-        self._bytes = 0
         self._last_print = 0.0
 
     def __call__(self, event, uri, done, total):
@@ -40,8 +45,6 @@ class _FetchCounter:
                 self._started += 1
             elif event == "done":
                 self._done += 1
-            elif event == "chunk" and isinstance(done, int):
-                self._bytes = max(self._bytes, done)
             now = time.monotonic()
             if event in ("start", "done") and now - self._last_print >= self._interval:
                 self._last_print = now
@@ -108,53 +111,37 @@ def openPyramid(
         The viewer that was created (whether or not ``napari.run()`` was
         called).
     """
+    # Build the launch window BEFORE napari is imported: napari's own
+    # QApplication then reuses ours, and Qt is up to draw the progress
+    # bar while Python's import cost for napari lands. progress._mode
+    # picks GUI on macOS/Windows and where a display is set.
+    from . import progress
+
+    progress.note("opening lightsheet pyramid ...")
+
     napari = require_napari()
     from ndi.cloud.filehandler import watchFetches
     from ndi.gui.app.lightsheetZarr import multiscale
 
-    verbose = bool(os.environ.get("NDI_LIGHTSHEET_DEBUG"))
-
-    if verbose:
-        print("[lightsheet] building lazy multiscale ladder ...", file=sys.stderr, flush=True)
-    spec, fetcher = multiscale.layerSpec(
-        session, pyramid_doc, channel=channel, name=name, reduction=reduction
-    )
-
-    if verbose:
-        print(
-            f"[lightsheet] ladder ready ({len(spec['data'])} levels); "
-            "opening napari and streaming initial chunks ...",
-            file=sys.stderr,
-            flush=True,
+    with progress.stage("building lazy multiscale ladder"):
+        spec, fetcher = multiscale.layerSpec(
+            session, pyramid_doc, channel=channel, name=name, reduction=reduction
         )
 
-    # Build the fetcher's session handles now, off the main thread, so
-    # the one-off session-open cost lands while napari's window is coming
-    # up rather than at the first pan.
-    try:
-        fetcher.warm()
-    except Exception:
-        pass  # warm is best-effort; a fetch that needs it will still work
+    # Warm the worker pool now, off the main thread. The one-off
+    # session-open cost then overlaps with napari.Viewer()'s Qt startup
+    # rather than serialising against the first fetch.
+    with progress.stage("warming fetcher pool"):
+        try:
+            fetcher.warm()
+        except Exception:
+            pass
 
-    if verbose:
-        print("[lightsheet] creating napari.Viewer() ...", file=sys.stderr, flush=True)
-    t0 = time.monotonic()
-    viewer = napari.Viewer()
-    if verbose:
-        print(
-            f"[lightsheet] Viewer ready in {time.monotonic() - t0:.1f}s; " "calling add_image ...",
-            file=sys.stderr,
-            flush=True,
-        )
-    t0 = time.monotonic()
-    viewer.add_image(**spec)
-    if verbose:
-        print(
-            f"[lightsheet] add_image done in {time.monotonic() - t0:.1f}s; "
-            "starting napari event loop (window may need dock click on macOS) ...",
-            file=sys.stderr,
-            flush=True,
-        )
+    with progress.stage("creating napari.Viewer()"):
+        viewer = napari.Viewer()
+
+    with progress.stage("calling add_image"):
+        viewer.add_image(**spec)
 
     if level is not None:
         # napari's multiscale layer picks a level from the current zoom;
@@ -168,20 +155,28 @@ def openPyramid(
     if controls:
         _attach_controls(viewer, session, pyramid_doc)
 
-    # Watch fetches for the LIFETIME of the viewer. add_image only
-    # builds the layer -- the actual cascade of chunk fetches happens
-    # inside napari's Qt event loop as it renders, so an observer that
-    # only wraps add_image is torn down before any fetch begins.
-    counter = _FetchCounter() if verbose else None
+    progress.note("napari event loop starting (click the dock icon if needed)")
+
+    # Two observers on the same fetch stream: watchFetches serialises,
+    # so wrap the STDERR counter (text: "fetched D/S, in flight X")
+    # around the GUI byte progress from progress.stage. The inner
+    # watchFetches inside progress.cloudFetches overrides for byte
+    # updates; on exit the outer observer resumes -- which is
+    # unnecessary here (nothing runs after) but keeps the pattern
+    # honest, and the counter still saw the start events before the
+    # inner window opened.
+    #
+    # The launch window is closed after napari.run() returns, so the
+    # first-frame chunk cascade updates its progress bar. Napari has
+    # no equivalent for a lazy-multiscale layer.
+    counter = _FetchCounter()
 
     if show:
         try:
-            if counter is not None:
-                with watchFetches(counter):
-                    napari.run()
-            else:
+            with watchFetches(counter), progress.stage("napari viewer (first frame + user pan)"):
                 napari.run()
         finally:
+            progress.closeLaunchWindow()
             fetcher.close()
 
     return viewer

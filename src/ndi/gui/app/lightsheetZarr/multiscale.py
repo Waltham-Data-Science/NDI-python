@@ -311,12 +311,15 @@ def levelArrays(
     ``_ChunkFetcher`` runs. Defaults to the ``NDI_LIGHTSHEET_WORKERS``
     env var or 8; cloud reads are latency-bound so a higher count buys
     real overlap on the first-frame cascade.
-    """
-    import sys
-    import time as _time
 
+    Per-level progress goes through :mod:`.progress` so a Qt launch
+    window (when Qt is available) and the stderr channel share one
+    label per step.
+    """
     import dask.array as da
     from dask import delayed
+
+    from . import progress
 
     docs = levelDocs(session, pyramid_doc, reduction=reduction)
     if not docs:
@@ -329,7 +332,6 @@ def levelArrays(
 
     fetcher = _ChunkFetcher(session, workers=workers if workers is not None else _default_workers())
 
-    verbose = bool(os.environ.get("NDI_LIGHTSHEET_DEBUG"))
     arrays: list[Any] = []
     for i, doc in enumerate(docs):
         p = doc.document_properties["lightsheetZarrLevel"]
@@ -345,35 +347,22 @@ def levelArrays(
         n_blocks = 1
         for g in chunk_grid:
             n_blocks *= g
-        if verbose:
-            print(
-                f"[lightsheet] building level {i} ({n_blocks} blocks, " f"shape={list(shape)}) ...",
-                file=sys.stderr,
-                flush=True,
-            )
-        t0 = _time.time()
 
-        nested = _build_block_grid(
-            fetcher,
-            doc,
-            shape,
-            chunks,
-            chunk_grid,
-            dtype,
-            fill,
-            codec,
-            stored,
-            delayed,
-            da,
-        )
-        arrays.append(da.block(nested))
-
-        if verbose:
-            print(
-                f"[lightsheet] level {i} ready in {_time.time() - t0:.1f}s",
-                file=sys.stderr,
-                flush=True,
+        with progress.stage(f"building level {i} ({n_blocks} blocks, shape={list(shape)})"):
+            nested = _build_block_grid(
+                fetcher,
+                doc,
+                shape,
+                chunks,
+                chunk_grid,
+                dtype,
+                fill,
+                codec,
+                stored,
+                delayed,
+                da,
             )
+            arrays.append(da.block(nested))
 
     return arrays, fetcher
 

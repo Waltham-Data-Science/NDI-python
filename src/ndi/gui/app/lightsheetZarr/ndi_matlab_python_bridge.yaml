@@ -140,6 +140,19 @@ functions:
       scaffold; the follow-up PR lands the magicgui panels alongside
       without changing this signature.
 
+  - name: stage
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/progress.py"
+    status: ported_differently
+    decision_log: >-
+      Python-only. Launch narration for the lightsheetZarr viewer:
+      stderr lines + a Qt QProgressBar window while the multiscale
+      ladder is being built and the first chunk cascade fetched. No
+      MATLAB counterpart because napari has no MATLAB counterpart;
+      MATLAB uses its own ProgressBarWindow for the file crawl and the
+      batch upload that ndi.cloud.uploadDataset runs. Mirrors
+      ndi.gui.app.genepyramid.progress.
+
   - name: levelDocs
     matlab_path: null
     python_path: "ndi/gui/app/lightsheetZarr/multiscale.py"
