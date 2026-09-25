@@ -915,6 +915,14 @@ def layerSpec(
         else:
             per_level_scale.append(None)
 
+    # Additive blending across channels: napari's default is
+    # "translucent" so a later channel simply covers the earlier one,
+    # which for two-channel fluorescence gives a magenta or green
+    # canvas but never the overlaid picture the user actually wants.
+    # "additive" makes colors sum; this is how fluorescence viewers
+    # composite channels everywhere else.
+    blending = "additive" if n_channels > 1 else "translucent"
+
     specs: list[dict] = []
     for c in range(n_channels):
         if single_level:
@@ -930,6 +938,7 @@ def layerSpec(
                     "multiscale": False,
                     "name": names[c],
                     "colormap": colors[c],
+                    "blending": blending,
                     "contrast_limits": contrast_limits,
                     "scale": coarsest_scale or None,
                     "translate": spatial_trans or None,
@@ -949,6 +958,7 @@ def layerSpec(
                     "multiscale": True,
                     "name": names[c],
                     "colormap": colors[c],
+                    "blending": blending,
                     "contrast_limits": contrast_limits,
                     "scale": spatial_scale or None,
                     "translate": spatial_trans or None,
