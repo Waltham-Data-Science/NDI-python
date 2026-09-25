@@ -309,6 +309,46 @@ def openPyramid(
     with progress.stage("attaching image to viewer"):
         viewer.add_image(**spec)
 
+    # Debug: after add_image, print what napari actually has. A silent
+    # session where the reader never fires could be a layer that failed
+    # to register, a layer that is invisible, or a layer whose shape /
+    # dtype napari refused to slice against. Under debug we make each
+    # visible.
+    if os.environ.get("NDI_LIGHTSHEET_DEBUG"):
+        try:
+            print(
+                f"[lightsheet] viewer.layers has {len(viewer.layers)} layer(s) " f"after add_image",
+                file=sys.stderr,
+                flush=True,
+            )
+            for i, layer in enumerate(viewer.layers):
+                data_attr = getattr(layer, "data", None)
+                multiscale_attr = getattr(layer, "multiscale", None)
+                visible = getattr(layer, "visible", None)
+                if isinstance(data_attr, list):
+                    shape = getattr(data_attr[0], "shape", "?")
+                    dtype = getattr(data_attr[0], "dtype", "?")
+                    n_levels = len(data_attr)
+                else:
+                    shape = getattr(data_attr, "shape", "?")
+                    dtype = getattr(data_attr, "dtype", "?")
+                    n_levels = 1
+                print(
+                    f"[lightsheet]   layer {i}: name={layer.name!r} "
+                    f"visible={visible} multiscale={multiscale_attr} "
+                    f"n_levels={n_levels} shape={shape} dtype={dtype}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            print(
+                f"[lightsheet] viewer.dims: ndim={viewer.dims.ndim} "
+                f"current_step={list(viewer.dims.current_step)}",
+                file=sys.stderr,
+                flush=True,
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f"[lightsheet] layer inspect failed: {exc}", file=sys.stderr, flush=True)
+
     # Guarantee the initial frame is drawn at the coarsest level rather
     # than at whatever camera state napari happened to open with. On a
     # multiscale layer, reset_view fits the whole data extent to the
@@ -322,6 +362,25 @@ def openPyramid(
         viewer.reset_view()
     except Exception:
         pass  # older napari, best-effort
+
+    # Force a slice compute so we can tell if napari's slicer would
+    # ever call our reader. Under debug, walking the current step
+    # nudges the dims and re-triggers set_view_slice; any resulting
+    # dask compute goes through _read_chunk_from_fetcher, which prints
+    # chunkPath lines. If the layer refuses to slice, the exception
+    # names why.
+    if os.environ.get("NDI_LIGHTSHEET_DEBUG"):
+        try:
+            for i, layer in enumerate(viewer.layers):
+                if getattr(layer, "multiscale", False):
+                    print(
+                        f"[lightsheet] forcing refresh of layer {i} to probe slicer",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    layer.refresh()
+        except Exception as exc:  # noqa: BLE001
+            print(f"[lightsheet] refresh failed: {exc}", file=sys.stderr, flush=True)
 
     if level is not None:
         # napari's multiscale layer picks a level from the current zoom;
