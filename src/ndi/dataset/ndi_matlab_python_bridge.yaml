@@ -14,7 +14,7 @@ classes:
   - name: dataset
     type: class
     matlab_path: "+ndi/dataset.m"
-    matlab_last_sync_hash: ""f3940dbc""
+    matlab_last_sync_hash: "f3940dbc"
     python_path: "ndi/dataset/_dataset.py"
     python_class: "ndi_dataset"
     decision_log: >

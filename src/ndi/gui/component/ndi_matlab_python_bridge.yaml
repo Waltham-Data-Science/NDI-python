@@ -498,7 +498,7 @@ classes:
   - name: ndi_gui_component_ProgressBarWindow
     type: class
     matlab_path: "+ndi/+gui/+component/ProgressBarWindow.m"
-    matlab_last_sync_hash: ""b367283b""
+    matlab_last_sync_hash: "b367283b"
     python_path: "ndi/gui/component/ProgressBarWindow.py"
     python_class: "ndi_gui_component_ProgressBarWindow"
     inherits: "matlab.apps.AppBase"
