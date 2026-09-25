@@ -831,10 +831,23 @@ def layerSpec(
     if base_name is None:
         base_name = p.get("label") or p.get("pyramid_name") or "lightsheet zarr"
 
-    # See _defaultContrastLimits: napari would auto-sample the
-    # coarsest level otherwise, firing hundreds of synchronous HTTPS
-    # fetches before the window can repaint.
-    if arrays:
+    # Contrast limits: default is None (let napari auto-detect by
+    # sampling the coarsest level). Napari's genepyramid viewer works
+    # under exactly this policy -- the auto-detect on a small 2D
+    # coarsest level is the "drawing the overview" stage its progress
+    # bar names. For lightsheet 3D the same policy reads ~a few
+    # hundred coarsest-level tiles, most of which are locally cached
+    # after ingest.
+    #
+    # NDI_LIGHTSHEET_CONTRAST_LIMITS=pin restores the previous
+    # behaviour: pin contrast to the pyramid's value_range or the
+    # dtype full range so napari does no sampling at all. That path
+    # was added when we thought the auto-detect was the hang; it
+    # turned out to also short-circuit napari's slice-then-loaded
+    # transition on a multiscale layer (loaded stayed False forever,
+    # channel spinner stuck on). Pinning is now the diagnostic knob,
+    # not the default.
+    if arrays and _env_true("NDI_LIGHTSHEET_CONTRAST_LIMITS"):
         contrast_limits = _defaultContrastLimits(p, arrays[0].dtype)
     else:
         contrast_limits = None
