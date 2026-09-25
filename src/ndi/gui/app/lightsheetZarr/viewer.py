@@ -123,7 +123,7 @@ def openPyramid(
     from ndi.cloud.filehandler import watchFetches
     from ndi.gui.app.lightsheetZarr import multiscale
 
-    with progress.stage("building lazy multiscale ladder"):
+    with progress.stage("preparing on-demand image levels"):
         spec, fetcher = multiscale.layerSpec(
             session, pyramid_doc, channel=channel, name=name, reduction=reduction
         )
@@ -131,16 +131,16 @@ def openPyramid(
     # Warm the worker pool now, off the main thread. The one-off
     # session-open cost then overlaps with napari.Viewer()'s Qt startup
     # rather than serialising against the first fetch.
-    with progress.stage("warming fetcher pool"):
+    with progress.stage("connecting to image store"):
         try:
             fetcher.warm()
         except Exception:
             pass
 
-    with progress.stage("creating napari.Viewer()"):
+    with progress.stage("opening image viewer"):
         viewer = napari.Viewer()
 
-    with progress.stage("calling add_image"):
+    with progress.stage("attaching image to viewer"):
         viewer.add_image(**spec)
 
     if level is not None:
@@ -155,7 +155,7 @@ def openPyramid(
     if controls:
         _attach_controls(viewer, session, pyramid_doc)
 
-    progress.note("napari event loop starting (click the dock icon if needed)")
+    progress.note("viewer running (click the dock icon if needed)")
 
     # Two observers on the same fetch stream: watchFetches serialises,
     # so wrap the STDERR counter (text: "fetched D/S, in flight X")
@@ -173,7 +173,7 @@ def openPyramid(
 
     if show:
         try:
-            with watchFetches(counter), progress.stage("napari viewer (first frame + user pan)"):
+            with watchFetches(counter), progress.stage("loading image tiles on demand"):
                 napari.run()
         finally:
             progress.closeLaunchWindow()

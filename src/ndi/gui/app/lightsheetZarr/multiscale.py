@@ -348,7 +348,7 @@ def levelArrays(
         for g in chunk_grid:
             n_blocks *= g
 
-        with progress.stage(f"building level {i} ({n_blocks} blocks, shape={list(shape)})"):
+        with progress.stage(f"preparing level {i} ({n_blocks:,} tiles, shape={list(shape)})"):
             nested = _build_block_grid(
                 fetcher,
                 doc,
