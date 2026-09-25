@@ -319,6 +319,12 @@ def closeLaunchWindow() -> None:
     Called once napari's viewer is built and about to take over: a
     progress window that outlives the thing it was reporting on is
     worse than none, because it makes a finished launch look stuck.
+
+    Prints a confirmation line to stderr under any of the on-stderr
+    modes: users have reported the launch dialog lingering, and a
+    log line pinning the exact moment we asked it to close lets us
+    tell "we closed it, Qt hasn't repainted yet" from "we never
+    called close at all".
     """
     global _window
     win, _window = _window, None
@@ -327,3 +333,8 @@ def closeLaunchWindow() -> None:
     with contextlib.suppress(Exception):
         win["widget"].close()
         win["app"].processEvents()
+    print(
+        "[lightsheet] closeLaunchWindow: launch dialog close requested",
+        file=sys.stderr,
+        flush=True,
+    )

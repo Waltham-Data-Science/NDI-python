@@ -427,13 +427,18 @@ def openPyramid(
 
 
 def _subscribe_level_change(viewer) -> None:
-    """Print a line to stderr each time napari picks a different level.
+    """Print a line to stderr each time napari picks a different level,
+    and when a layer's slice-loading indicator changes.
 
     Multiscale layers fire an event when they promote or demote to a
     coarser/finer level; napari's exact event name has moved between
     versions, so this walks a small set of known names and attaches
     to the first that exists. On a viewer whose layers don't expose
-    any of them, this is a silent no-op.
+    any of them, that half is a silent no-op.
+
+    Also connects to ``layer.events.loaded`` when present: napari's
+    per-layer channel-panel spinner is driven by that event, and users
+    watching the spinner want a log line pinning the moment it stops.
     """
     for layer in getattr(viewer, "layers", []):
         events = getattr(layer, "events", None)
@@ -446,6 +451,10 @@ def _subscribe_level_change(viewer) -> None:
             emitter.connect(lambda e, lyr=layer, key=name: _report_level(lyr, key))
             break
 
+        loaded_emitter = getattr(events, "loaded", None)
+        if loaded_emitter is not None:
+            loaded_emitter.connect(lambda e, lyr=layer: _report_loaded(lyr))
+
 
 def _report_level(layer, event_name: str) -> None:
     level = getattr(layer, "data_level", None)
@@ -454,6 +463,24 @@ def _report_level(layer, event_name: str) -> None:
     lname = getattr(layer, "name", "?")
     print(
         f"[lightsheet] napari picked level {level} for layer {lname!r} " f"(event={event_name})",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
+def _report_loaded(layer) -> None:
+    """Fire when napari flips the layer's ``loaded`` flag.
+
+    The channel-list panel spinner is driven by ``layer.loaded``:
+    False means "napari is waiting for a slice", True means "the
+    slice arrived". A stuck-on-False means napari never finished
+    slicing. Printing both edges pins the moment the spinner starts
+    and stops to a wall-clock timestamp in the log.
+    """
+    loaded = getattr(layer, "loaded", None)
+    lname = getattr(layer, "name", "?")
+    print(
+        f"[lightsheet] layer {lname!r} loaded={loaded}",
         file=sys.stderr,
         flush=True,
     )
