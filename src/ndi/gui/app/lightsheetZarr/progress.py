@@ -320,12 +320,16 @@ def closeLaunchWindow() -> None:
     progress window that outlives the thing it was reporting on is
     worse than none, because it makes a finished launch look stuck.
 
-    ``close()`` alone leaves the widget in the QApplication's widget
-    list on macOS; the window then keeps its "starting" label on
-    screen. ``hide()`` removes it from view immediately,
-    ``deleteLater()`` schedules destruction so it does not come back
-    when Qt processes pending events. Together they actually take the
-    dialog down, on every platform.
+    This runs BEFORE ``napari.run()`` starts spinning the event loop,
+    so a callback deferred with ``QTimer.singleShot`` will not fire
+    until napari picks up -- and by then the user has already seen a
+    stale "starting" dialog next to the viewer for as long as napari
+    took to compose its first frame. Every step here is therefore
+    synchronous: hide the widget, close it (which triggers the close
+    event immediately), then destroy the native window handle so the
+    OS-level window resource is released without waiting for anyone.
+    ``processEvents`` at the end flushes whatever the close and
+    destroy queued so the desktop actually repaints without us.
     """
     global _window
     win, _window = _window, None
@@ -333,23 +337,26 @@ def closeLaunchWindow() -> None:
         return
     widget = win["widget"]
     app = win["app"]
-    # Hide immediately so the user sees the dialog vanish even before
-    # any event-loop tick paints anything. hide() alone doesn't queue
-    # a paint; setVisible(False) triggers a hide event that Qt will
-    # apply as soon as it can.
     with contextlib.suppress(Exception):
         widget.setVisible(False)
-        widget.hide()
-    # Defer close() and deleteLater() to the first event-loop tick
-    # via QTimer. napari.run()'s event loop then services them
-    # promptly. Calling them synchronously here can leave the widget
-    # visible on macOS because Qt hasn't had a chance to run its
-    # deletion queue yet.
     with contextlib.suppress(Exception):
-        from qtpy.QtCore import QTimer
-
-        QTimer.singleShot(0, widget.close)
-        QTimer.singleShot(0, widget.deleteLater)
+        widget.hide()
+    with contextlib.suppress(Exception):
+        # close() runs the closeEvent path synchronously and marks
+        # the widget for deletion when its Qt.WA_DeleteOnClose is
+        # set (it is by default for top-level widgets shown with
+        # show()); either way the window state moves to closed now,
+        # not on the next event-loop tick.
+        widget.close()
+    with contextlib.suppress(Exception):
+        # destroy() tears down the underlying platform window
+        # (QWindow / native handle) so the OS compositor cannot
+        # keep painting the last frame after we return. Without
+        # this, Wayland and some X11 window managers leave the
+        # dialog on screen until something else forces a redraw.
+        widget.destroy(True, True)
+    with contextlib.suppress(Exception):
+        widget.deleteLater()
     with contextlib.suppress(Exception):
         app.processEvents()
     print(
