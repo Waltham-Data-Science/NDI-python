@@ -43,6 +43,11 @@ functions:
       MATLAB-app equivalent is built, this entry is where it will get
       declared.
 
+      2026-09-25: NDI-matlab 60a79cf0 fixed the buildRowsForSession
+      table so Levels and Reduction come from the child
+      lightsheetZarrLevel documents rather than nonexistent parent
+      fields. Still matlab_only; no Python counterpart to update.
+
   # -----------------------------------------------------------------------
   # Python-only implementation.
   # -----------------------------------------------------------------------

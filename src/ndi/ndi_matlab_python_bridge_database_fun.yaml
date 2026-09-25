@@ -397,6 +397,7 @@ functions:
       referenced with delete_original=False and non-local files fall back to
       copying. _copy_series_members mirrors it for series members. The return
       value is ("") when nothing is copied (pure reference-in-place).
+      2026-09-25: NDI-matlab 14af6d6c defaulted extract_docs_files to reference-in-place when target_path is empty, avoiding a 2x temp stage. The Python port already writes files at their source paths for the reference-in-place case; no behavioural change here.
 
 # =========================================================================
 # Not Applicable — MATLAB functions intentionally not ported to Python

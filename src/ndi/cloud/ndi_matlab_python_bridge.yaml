@@ -462,6 +462,7 @@ functions:
       createDataset through a new formatApiError helper that tolerates an empty
       response body; this side already has ndi.cloud.internal.formatApiError
       (internal.py:381) and already uses it (client.py:394).
+      2026-09-25: NDI-matlab 4e45d96e added the 'organizationName' / 'organizationID' options and verbose diagnostics; the Python uploadDataset does not expose those options yet (see resolveOrganizationId entry) and has its own verbose printing. No behavioural change on the Python side.
 
   - name: syncDataset
     matlab_path: "+ndi/+cloud/syncDataset.m"
@@ -912,6 +913,7 @@ functions:
       binary path. Neither is a correctness bug -- per-file upload works,
       just without the batching -- so it is recorded here rather than fixed,
       alongside the thinness of the same upload path tracked in #232.
+      2026-09-25: NDI-matlab b367283b restructured the batch loop as O(N_files) and swapped the plain waitbar for ProgressBarWindow. Python's upload path uses a different batching model and its own progress reporting; no behavioural change here.
 
   - name: uploadFilesForDatasetDocuments
     matlab_path: "+ndi/+cloud/+sync/+internal/uploadFilesForDatasetDocuments.m"
@@ -939,6 +941,7 @@ functions:
     decision_log: >
       MATLAB places this in +sync/+internal. Python places it in upload.py.
       Exact name match.
+      2026-09-25: NDI-matlab 4e45d96e added verbose stage prints and a listFiles-not-yet-uploaded diagnostic. Python code is silent in the same way it was; no behavioural change.
 
       2026-09-15: added a ``dataset`` kwarg. On MATLAB, +sync/+internal/
       uploadFilesForDatasetDocuments always has the dataset in hand -- it
@@ -1076,6 +1079,7 @@ functions:
       fetch failure leaves the entry un-reconstructed so DID's #185
       guard fires on add_docs with the document's own identity -- the
       right signal a partial download deserves.
+      2026-09-25: NDI-matlab 9467a0a7 added an optional uploadedUidMap name-value and a ProgressBarWindow bar. Python has no analogous name-value on its update path and no matching progress reporting; no behavioural change here.
   - name: updateFileInfoForLocalFiles
     matlab_path: "+ndi/+cloud/+sync/+internal/updateFileInfoForLocalFiles.m"
     matlab_last_sync_hash: "504c5bcf4"
@@ -1568,6 +1572,7 @@ not_yet_ported:
       silent, since a short download is otherwise indistinguishable from a
       smaller dataset. The manifest is read with
       did.file.read_series_manifest rather than any reader of NDI's own.
+      2026-09-25: NDI-matlab 58cbdeec preallocated the ingest_locations struct array to trade O(N^2) growth for O(N). Python already grew a list with append() which is amortised O(1); no behavioural change here.
 
   - name: dropDuplicateDocsFromJsonDecode
     matlab_path: "+ndi/+cloud/+internal/dropDuplicateDocsFromJsonDecode.m"

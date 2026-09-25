@@ -35,6 +35,7 @@ classes:
       ndi.database_fun.extract_doc_files (the old 2x path) and removes the
       staging dir afterward. Same result either way (byte-identical, source
       untouched); the flag only decides whether a second copy is staged.
+      2026-09-25: NDI-matlab f3940dbc added the missing options arg to add_ingested_session's signature. Python's ndi_dataset_dir.add_ingested_session already accepts the same options; no behavioural change here.
 
     properties:
       - name: session

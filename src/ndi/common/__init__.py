@@ -49,11 +49,25 @@ class _PathConstantsMeta(type):
             cls._ndi_root = cls._find_ndi_root()
         return cls._ndi_root
 
+    @NDI_ROOT.setter
+    def NDI_ROOT(cls, value: Path | None) -> None:
+        cls._ndi_root = value
+
     @property
     def COMMON_FOLDER(cls) -> Path:
         if cls._common_folder is None:
             cls._common_folder = cls.NDI_ROOT / "ndi_common"
         return cls._common_folder
+
+    @COMMON_FOLDER.setter
+    def COMMON_FOLDER(cls, value: Path | None) -> None:
+        # Writing COMMON_FOLDER invalidates the derived paths so a subsequent
+        # read recomputes them against the new folder. Tests use monkeypatch
+        # to redirect COMMON_FOLDER at a tmp_path and rely on DOCUMENT_PATH /
+        # SCHEMA_PATH pointing under it.
+        cls._common_folder = value
+        cls._document_path = None
+        cls._schema_path = None
 
     @property
     def DOCUMENT_PATH(cls) -> Path:
@@ -61,11 +75,19 @@ class _PathConstantsMeta(type):
             cls._document_path = cls.COMMON_FOLDER / "database_documents"
         return cls._document_path
 
+    @DOCUMENT_PATH.setter
+    def DOCUMENT_PATH(cls, value: Path | None) -> None:
+        cls._document_path = value
+
     @property
     def SCHEMA_PATH(cls) -> Path:
         if cls._schema_path is None:
             cls._schema_path = cls.COMMON_FOLDER / "schema_documents"
         return cls._schema_path
+
+    @SCHEMA_PATH.setter
+    def SCHEMA_PATH(cls, value: Path | None) -> None:
+        cls._schema_path = value
 
 
 class ndi_common_PathConstants(metaclass=_PathConstantsMeta):
