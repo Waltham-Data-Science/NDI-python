@@ -612,7 +612,7 @@ functions:
 
   - name: downloadNdiDocuments
     matlab_path: "+ndi/+cloud/+sync/+internal/downloadNdiDocuments.m"
-    matlab_last_sync_hash: "cd3c11673"
+    matlab_last_sync_hash: ""9467a0a7""
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: cloud_dataset_id

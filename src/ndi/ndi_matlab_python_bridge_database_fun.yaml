@@ -337,7 +337,7 @@ functions:
   - name: extract_doc_files
     type: function
     matlab_path: "+ndi/+database/+fun/extract_docs_files.m"
-    matlab_last_sync_hash: "c5a36adc"
+    matlab_last_sync_hash: ""14af6d6c""
     python_path: "ndi/database_fun.py"
     python_name: "extract_doc_files"
     input_arguments:
