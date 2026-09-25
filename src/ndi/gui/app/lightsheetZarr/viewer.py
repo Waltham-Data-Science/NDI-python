@@ -364,24 +364,15 @@ def openPyramid(
     except Exception:
         pass  # older napari, best-effort
 
-    # Force a slice compute so we can tell if napari's slicer would
-    # ever call our reader. Under debug, walking the current step
-    # nudges the dims and re-triggers set_view_slice; any resulting
-    # dask compute goes through _read_chunk_from_fetcher, which prints
-    # chunkPath lines. If the layer refuses to slice, the exception
-    # names why.
-    if os.environ.get("NDI_LIGHTSHEET_DEBUG"):
-        try:
-            for i, layer in enumerate(viewer.layers):
-                if getattr(layer, "multiscale", False):
-                    print(
-                        f"[lightsheet] forcing refresh of layer {i} to probe slicer",
-                        file=sys.stderr,
-                        flush=True,
-                    )
-                    layer.refresh()
-        except Exception as exc:  # noqa: BLE001
-            print(f"[lightsheet] refresh failed: {exc}", file=sys.stderr, flush=True)
+    # Earlier revisions of this file force-called layer.refresh() here
+    # under debug as a probe: with async slicing the probe was needed
+    # to confirm the slicer would ever reach our reader. But refresh()
+    # on a sync-slicing napari (NDI_LIGHTSHEET_ASYNC=0) runs the whole
+    # slice compute on the main thread and blocks Qt's event loop for
+    # the duration -- macOS then marks the app "Not Responding" and
+    # the window never comes up. The probe has served its purpose:
+    # chunkPath tracing has confirmed napari's own paint reaches the
+    # reader. No forced refresh here.
 
     if level is not None:
         # napari's multiscale layer picks a level from the current zoom;
