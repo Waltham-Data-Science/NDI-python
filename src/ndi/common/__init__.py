@@ -53,6 +53,13 @@ class _PathConstantsMeta(type):
     def NDI_ROOT(cls, value: Path | None) -> None:
         cls._ndi_root = value
 
+    @NDI_ROOT.deleter
+    def NDI_ROOT(cls) -> None:
+        # Pytest's monkeypatch.setattr cleans up by calling delattr on the
+        # target, expecting the class to fall back to its default. Reset the
+        # cached value so the next getter recomputes; matches setattr(None).
+        cls._ndi_root = None
+
     @property
     def COMMON_FOLDER(cls) -> Path:
         if cls._common_folder is None:
@@ -69,6 +76,12 @@ class _PathConstantsMeta(type):
         cls._document_path = None
         cls._schema_path = None
 
+    @COMMON_FOLDER.deleter
+    def COMMON_FOLDER(cls) -> None:
+        cls._common_folder = None
+        cls._document_path = None
+        cls._schema_path = None
+
     @property
     def DOCUMENT_PATH(cls) -> Path:
         if cls._document_path is None:
@@ -79,6 +92,10 @@ class _PathConstantsMeta(type):
     def DOCUMENT_PATH(cls, value: Path | None) -> None:
         cls._document_path = value
 
+    @DOCUMENT_PATH.deleter
+    def DOCUMENT_PATH(cls) -> None:
+        cls._document_path = None
+
     @property
     def SCHEMA_PATH(cls) -> Path:
         if cls._schema_path is None:
@@ -88,6 +105,10 @@ class _PathConstantsMeta(type):
     @SCHEMA_PATH.setter
     def SCHEMA_PATH(cls, value: Path | None) -> None:
         cls._schema_path = value
+
+    @SCHEMA_PATH.deleter
+    def SCHEMA_PATH(cls) -> None:
+        cls._schema_path = None
 
 
 class ndi_common_PathConstants(metaclass=_PathConstantsMeta):
