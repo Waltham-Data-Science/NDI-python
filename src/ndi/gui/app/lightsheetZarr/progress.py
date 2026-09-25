@@ -331,11 +331,27 @@ def closeLaunchWindow() -> None:
     win, _window = _window, None
     if win is None:
         return
+    widget = win["widget"]
+    app = win["app"]
+    # Hide immediately so the user sees the dialog vanish even before
+    # any event-loop tick paints anything. hide() alone doesn't queue
+    # a paint; setVisible(False) triggers a hide event that Qt will
+    # apply as soon as it can.
     with contextlib.suppress(Exception):
-        win["widget"].hide()
-        win["widget"].close()
-        win["widget"].deleteLater()
-        win["app"].processEvents()
+        widget.setVisible(False)
+        widget.hide()
+    # Defer close() and deleteLater() to the first event-loop tick
+    # via QTimer. napari.run()'s event loop then services them
+    # promptly. Calling them synchronously here can leave the widget
+    # visible on macOS because Qt hasn't had a chance to run its
+    # deletion queue yet.
+    with contextlib.suppress(Exception):
+        from qtpy.QtCore import QTimer
+
+        QTimer.singleShot(0, widget.close)
+        QTimer.singleShot(0, widget.deleteLater)
+    with contextlib.suppress(Exception):
+        app.processEvents()
     print(
         "[lightsheet] closeLaunchWindow: launch dialog close requested",
         file=sys.stderr,
