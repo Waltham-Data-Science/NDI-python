@@ -23,17 +23,30 @@ from typing import Any
 class _FetchCounter:
     """Thread-safe observer for ``ndi.cloud.filehandler.watchFetches``.
 
-    Prints a running count of chunk fetches to stderr, throttled to
-    at most one line every ``interval`` seconds. Fires on every
-    start/done event, so a user watching the terminal always sees
-    activity within half a second of a chunk cascade starting -- the
-    "silent hang" is what we're trying to avoid.
+    Prints a running count of tile fetches to stderr and tracks per-fetch
+    timing / byte counts so a user can decide whether the current chunk
+    size is right for their link. The tuning question we want to answer
+    is "are tiles latency-bound or bandwidth-bound?" -- if each 4 MB
+    fetch takes 0.5 s of TLS handshake plus 20 ms of actual transfer,
+    bigger chunks win; if 4 MB streams in 200 ms and the connection is
+    already saturated, they don't.
 
-    Also prints an idle heartbeat every ``idle_interval`` seconds
-    when there is no activity, so a user waiting on background load
-    can tell the difference between "no fetches" and "still fetching
-    slowly". The heartbeat is a separate thread that wakes on a
-    condition variable, so it costs no CPU while activity is high.
+    Three channels of output, all on stderr:
+
+    * Per-fetch (throttled): every ``interval`` seconds during a
+      cascade, one summary line -- "tiles: D loaded / S requested (in
+      flight: X); last fetch Ys, Z MB". Fires on start and done so
+      activity is visible within half a second.
+    * Heartbeat: every ``idle_interval`` seconds when no lines have
+      printed, either "no tiles requested yet by napari" (before the
+      first fetch) or the current counter (during a slow cascade). A
+      daemon thread wakes on a condition variable so it costs no CPU
+      while activity is high.
+    * Aggregate on stop: one closing summary -- fetches, total MB,
+      wall clock, mean and max per-fetch time, effective MB/s. Emitted
+      when :meth:`stop` is called (after napari.run() returns) so a
+      viewer session ends with the numbers a user needs to pick a
+      chunk size.
     """
 
     def __init__(
@@ -50,6 +63,13 @@ class _FetchCounter:
         self._done = 0
         self._last_activity = time.monotonic()
         self._last_print = 0.0
+        self._pending_starts: dict[str, float] = {}
+        self._pending_bytes: dict[str, int] = {}
+        self._durations: list[float] = []
+        self._byte_sizes: list[int] = []
+        self._last_duration: float | None = None
+        self._last_bytes: int | None = None
+        self._session_start = time.monotonic()
         self._stop = threading.Event()
         self._heartbeat = threading.Thread(
             target=self._heartbeat_loop,
@@ -60,14 +80,27 @@ class _FetchCounter:
 
     def __call__(self, event, uri, done, total):
         with self._lock:
+            now = time.monotonic()
             if event == "start":
                 self._started += 1
-                self._last_activity = time.monotonic()
+                self._pending_starts[uri] = now
+                self._pending_bytes[uri] = 0
+                self._last_activity = now
+            elif event == "chunk":
+                if isinstance(done, int):
+                    self._pending_bytes[uri] = max(self._pending_bytes.get(uri, 0), done)
+                self._last_activity = now
             elif event == "done":
                 self._done += 1
-                self._last_activity = time.monotonic()
-            elif event == "chunk":
-                self._last_activity = time.monotonic()
+                self._last_activity = now
+                t_start = self._pending_starts.pop(uri, None)
+                nbytes = self._pending_bytes.pop(uri, 0)
+                if t_start is not None:
+                    dt = now - t_start
+                    self._durations.append(dt)
+                    self._byte_sizes.append(nbytes)
+                    self._last_duration = dt
+                    self._last_bytes = nbytes
             self._maybe_print(force=(event == "done" and self._done == self._started))
 
     def _maybe_print(self, force: bool = False) -> None:
@@ -76,9 +109,13 @@ class _FetchCounter:
             return
         self._last_print = now
         in_flight = self._started - self._done
+        last = ""
+        if self._last_duration is not None:
+            mb = (self._last_bytes or 0) / (1024.0 * 1024.0)
+            last = f"; last fetch {self._last_duration:.2f}s, {mb:.1f} MB"
         print(
             f"[lightsheet] tiles: {self._done} loaded / {self._started} requested "
-            f"(in flight: {in_flight})",
+            f"(in flight: {in_flight}){last}",
             file=self._out,
             flush=True,
         )
@@ -99,6 +136,25 @@ class _FetchCounter:
 
     def stop(self) -> None:
         self._stop.set()
+        with self._lock:
+            if not self._durations:
+                return
+            n = len(self._durations)
+            total_bytes = sum(self._byte_sizes)
+            wall = time.monotonic() - self._session_start
+            mean_dt = sum(self._durations) / n
+            max_dt = max(self._durations)
+            min_dt = min(self._durations)
+            mean_mb = (total_bytes / n) / (1024.0 * 1024.0)
+            total_mb = total_bytes / (1024.0 * 1024.0)
+            throughput = (total_bytes / wall) / (1024.0 * 1024.0) if wall > 0 else 0.0
+            print(
+                f"[lightsheet] fetch summary: {n} tiles, {total_mb:.1f} MB total, "
+                f"{wall:.1f}s wall, mean {mean_dt:.2f}s/tile ({mean_mb:.1f} MB), "
+                f"min {min_dt:.2f}s, max {max_dt:.2f}s, throughput {throughput:.1f} MB/s",
+                file=self._out,
+                flush=True,
+            )
 
 
 def require_napari():
