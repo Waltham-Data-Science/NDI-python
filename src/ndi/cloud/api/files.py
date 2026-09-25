@@ -244,7 +244,6 @@ def getFile(
     """
     import logging
 
-
     logger = logging.getLogger(__name__)
 
     assert_safe_transfer_url(url, what="download URL")
