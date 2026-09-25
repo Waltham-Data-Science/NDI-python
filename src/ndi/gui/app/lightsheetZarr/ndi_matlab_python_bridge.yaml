@@ -140,6 +140,33 @@ functions:
       scaffold; the follow-up PR lands the magicgui panels alongside
       without changing this signature.
 
+  - name: attach_viewport_clip
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/viewport.py"
+    decision_log: >-
+      Python-only. Opt-in viewport clipping (NDI_LIGHTSHEET_VIEWPORT_CLIP=1).
+      Recomputes each layer's data as a chunk-aligned crop of the
+      current level to the visible world rectangle on every pan / zoom
+      / Z-slice change (debounced 300ms). Napari's slicer then only
+      asks for chunks inside the crop, so a level-1 view of a large
+      brain does not try to fetch every tile at that level. Wraps the
+      Resolution picker via magicgui's `called` emitter, so a manual
+      or auto-level swap ends with a fresh crop against the new level.
+      Off by default because it swaps layer.data on every pan; the
+      auto-level swap alone is the tested default. No MATLAB
+      counterpart because napari has no MATLAB counterpart.
+
+  - name: ViewportClip
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/viewport.py"
+    decision_log: >-
+      Python-only. Class that owns the viewport-clip state for one
+      viewer session: the full-level arrays, the current level per
+      layer, the base translate anchors, and the QTimer debouncer.
+      Public surface is one method, `refresh`, which reads the
+      current camera and re-crops every layer's data + translate.
+      Wired by `attach_viewport_clip`. No MATLAB counterpart.
+
   - name: _attach_zoom_level_swap
     matlab_path: null
     python_path: "ndi/gui/app/lightsheetZarr/viewer.py"

@@ -471,6 +471,21 @@ def openPyramid(
         # dock widget always shows the level napari is drawing and
         # the manual and automatic paths share one code path.
         _attach_zoom_level_swap(viewer, picker, picker_labels, layer_scales)
+        # Viewport clipping is opt-in via NDI_LIGHTSHEET_VIEWPORT_CLIP=1
+        # because it is newer and pans / zooms rebuild the graph.
+        # When on, it re-crops each layer to the visible world bbox on
+        # every camera event, so napari only asks for chunks that
+        # can actually be drawn.
+        from ndi.gui.app.lightsheetZarr import viewport as _viewport
+
+        _viewport.attach_viewport_clip(
+            viewer,
+            added_layers,
+            layer_levels,
+            layer_scales,
+            picker=picker,
+            labels=picker_labels,
+        )
 
     # Print which multiscale level napari picks. Async slicing chooses
     # at paint time based on viewbox size and zoom; without this the
