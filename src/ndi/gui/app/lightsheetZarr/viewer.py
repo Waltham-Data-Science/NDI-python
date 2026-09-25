@@ -300,6 +300,20 @@ def openPyramid(
     with progress.stage("attaching image to viewer"):
         viewer.add_image(**spec)
 
+    # Guarantee the initial frame is drawn at the coarsest level rather
+    # than at whatever camera state napari happened to open with. On a
+    # multiscale layer, reset_view fits the whole data extent to the
+    # viewport, and napari's level picker then chooses the level whose
+    # shape best fits the (much smaller) viewport -- the coarsest one,
+    # for a lightsheet layer that is thousands of pixels on a side.
+    # Without this the first paint can pick a finer level than the
+    # viewport can display, needlessly fetching thousands of tiles for
+    # a first frame the user will scroll away from immediately.
+    try:
+        viewer.reset_view()
+    except Exception:
+        pass  # older napari, best-effort
+
     if level is not None:
         # napari's multiscale layer picks a level from the current zoom;
         # this forces the initial choice by scaling the camera to match

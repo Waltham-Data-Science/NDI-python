@@ -85,8 +85,15 @@ def stage(label: str):
         _guiStage(label)
     t0 = time.perf_counter()
     try:
-        with cloudFetches(label):
-            yield
+        # Stages used to nest their own cloudFetches observer here,
+        # which silently overrode a counter the caller had installed
+        # around the whole viewer session. Any fetches during add_image
+        # then went to the inner observer (silent on start/done) and
+        # never reached the counter -- the "no tiles requested yet"
+        # heartbeat kept firing while chunks were quietly downloading.
+        # Callers that want byte progress can install their own outer
+        # observer via ndi.cloud.filehandler.watchFetches.
+        yield
     finally:
         dt = time.perf_counter() - t0
         if mode == "text" or _debug():
