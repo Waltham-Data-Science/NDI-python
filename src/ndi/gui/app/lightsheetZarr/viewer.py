@@ -9,7 +9,49 @@ hint rather than a bare ImportError.
 
 from __future__ import annotations
 
+import os
+import sys
+import threading
+import time
 from typing import Any
+
+
+class _FetchCounter:
+    """Thread-safe observer for ``ndi.cloud.filehandler.watchFetches``.
+
+    Aggregates start/done events into a single "N/M fetched, X in flight"
+    status line, throttled to a print every ~0.5 s so a wall of concurrent
+    chunk fetches from :class:`_ChunkFetcher`'s worker pool doesn't drown
+    the terminal.
+    """
+
+    def __init__(self, out=sys.stderr, interval: float = 0.5):
+        self._lock = threading.Lock()
+        self._out = out
+        self._interval = interval
+        self._started = 0
+        self._done = 0
+        self._bytes = 0
+        self._last_print = 0.0
+
+    def __call__(self, event, uri, done, total):
+        with self._lock:
+            if event == "start":
+                self._started += 1
+            elif event == "done":
+                self._done += 1
+            elif event == "chunk" and isinstance(done, int):
+                self._bytes = max(self._bytes, done)
+            now = time.monotonic()
+            if event in ("start", "done") and now - self._last_print >= self._interval:
+                self._last_print = now
+                in_flight = self._started - self._done
+                print(
+                    f"[lightsheet] fetched {self._done}/{self._started} "
+                    f"(in flight: {in_flight})",
+                    file=self._out,
+                    flush=True,
+                )
 
 
 def require_napari():
@@ -67,22 +109,42 @@ def openPyramid(
         called).
     """
     napari = require_napari()
+    from ndi.cloud.filehandler import watchFetches
     from ndi.gui.app.lightsheetZarr import multiscale
 
+    verbose = bool(os.environ.get("NDI_LIGHTSHEET_DEBUG"))
+
+    if verbose:
+        print("[lightsheet] building lazy multiscale ladder ...", file=sys.stderr, flush=True)
     spec, fetcher = multiscale.layerSpec(
         session, pyramid_doc, channel=channel, name=name, reduction=reduction
     )
-    viewer = napari.Viewer()
-    viewer.add_image(**spec)
 
-    # Build the fetcher's session handles now, while the user is looking
-    # at an empty canvas rather than at the first pan. Harmless on a
-    # local session (the pool starts, the sessions open, the first tile
-    # goes straight through); real win on a cloud session.
+    if verbose:
+        print(
+            f"[lightsheet] ladder ready ({len(spec['data'])} levels); "
+            "opening napari and streaming initial chunks ...",
+            file=sys.stderr,
+            flush=True,
+        )
+
+    # Build the fetcher's session handles now, off the main thread, so
+    # the one-off session-open cost lands while napari's window is coming
+    # up rather than at the first pan.
     try:
         fetcher.warm()
     except Exception:
         pass  # warm is best-effort; a fetch that needs it will still work
+
+    viewer = napari.Viewer()
+    # Wrap the first add_image cascade so the terminal shows a live
+    # "N/M fetched" line while napari resolves the coarsest level.
+    counter = _FetchCounter() if verbose else None
+    if counter is not None:
+        with watchFetches(counter):
+            viewer.add_image(**spec)
+    else:
+        viewer.add_image(**spec)
 
     if level is not None:
         # napari's multiscale layer picks a level from the current zoom;

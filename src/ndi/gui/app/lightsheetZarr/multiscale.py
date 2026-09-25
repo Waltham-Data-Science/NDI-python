@@ -272,11 +272,21 @@ class _ChunkFetcher:
             self._pool = None
 
 
+def _default_workers() -> int:
+    """Chunk-fetcher worker count. Env override for the cloud-latency case."""
+    try:
+        n = int(os.environ.get("NDI_LIGHTSHEET_WORKERS", "8"))
+    except ValueError:
+        return 8
+    return max(1, n)
+
+
 def levelArrays(
     session: Any,
     pyramid_doc: Any,
     channel: int | None = None,
     reduction: str | None = None,
+    workers: int | None = None,
 ) -> tuple[list[Any], _ChunkFetcher]:
     """One lazy dask array per level, plus the fetcher backing them.
 
@@ -296,7 +306,15 @@ def levelArrays(
 
     ``reduction`` filters the ladder to ``reduction_function`` in
     ``{'none', reduction}``; ``None`` returns every level.
+
+    ``workers`` sets how many parallel fetcher threads the returned
+    ``_ChunkFetcher`` runs. Defaults to the ``NDI_LIGHTSHEET_WORKERS``
+    env var or 8; cloud reads are latency-bound so a higher count buys
+    real overlap on the first-frame cascade.
     """
+    import sys
+    import time as _time
+
     import dask.array as da
     from dask import delayed
 
@@ -309,10 +327,11 @@ def levelArrays(
 
     _ = channel  # single-channel narrowing lands with the magicgui panels
 
-    fetcher = _ChunkFetcher(session)
+    fetcher = _ChunkFetcher(session, workers=workers if workers is not None else _default_workers())
 
+    verbose = bool(os.environ.get("NDI_LIGHTSHEET_DEBUG"))
     arrays: list[Any] = []
-    for doc in docs:
+    for i, doc in enumerate(docs):
         p = doc.document_properties["lightsheetZarrLevel"]
         shape = tuple(int(v) for v in p["shape"])
         chunks = tuple(int(v) for v in p["chunks"])
@@ -322,6 +341,17 @@ def levelArrays(
         codec = str(p.get("codec", "raw"))
         stored = _storedChunkNames(doc)
         _assertStoredMatchesLevel(doc, p, stored)
+
+        n_blocks = 1
+        for g in chunk_grid:
+            n_blocks *= g
+        if verbose:
+            print(
+                f"[lightsheet] building level {i} ({n_blocks} blocks, " f"shape={list(shape)}) ...",
+                file=sys.stderr,
+                flush=True,
+            )
+        t0 = _time.time()
 
         nested = _build_block_grid(
             fetcher,
@@ -337,6 +367,13 @@ def levelArrays(
             da,
         )
         arrays.append(da.block(nested))
+
+        if verbose:
+            print(
+                f"[lightsheet] level {i} ready in {_time.time() - t0:.1f}s",
+                file=sys.stderr,
+                flush=True,
+            )
 
     return arrays, fetcher
 
@@ -660,6 +697,7 @@ def layerSpec(
     channel: int | None = None,
     name: str | None = None,
     reduction: str | None = None,
+    workers: int | None = None,
 ) -> tuple[dict, _ChunkFetcher]:
     """Return ``(spec, fetcher)`` where SPEC is kwargs for ``add_image``.
 
@@ -681,7 +719,9 @@ def layerSpec(
     (comma-separated when present) and fall back to ``Ch1``, ``Ch2``,
     ...; colormaps come from :func:`defaultChannelColors`.
     """
-    arrays, fetcher = levelArrays(session, pyramid_doc, channel=channel, reduction=reduction)
+    arrays, fetcher = levelArrays(
+        session, pyramid_doc, channel=channel, reduction=reduction, workers=workers
+    )
     scale, translate = worldTransform(session, pyramid_doc)
 
     p = pyramid_doc.document_properties["lightsheetZarrPyramid"]
