@@ -187,30 +187,39 @@ def require_napari():
 
 
 def _enable_async_slicing(napari_module) -> None:
-    """Turn on napari's async slicing so first-frame chunk fetches don't
-    block the paint thread.
+    """Configure napari's slicing mode.
 
-    A Ctrl+C traceback on a real cloud pyramid showed vispy's paintGL
-    calling into napari's _project_thick_slice, which does
-    np.asarray(data[slices]) -- a synchronous dask.compute() on the
-    main thread. On a lazy cloud-backed multiscale layer that fires
-    hundreds of HTTPS fetches before the window can repaint. With
-    async slicing, napari schedules the slice compute on a worker
-    thread and the paint thread returns immediately.
+    Default is async (background slice compute, non-blocking paint),
+    which is what we want on a cloud-backed multiscale layer -- a Ctrl+C
+    on the sync path showed vispy's paintGL blocked in
+    _project_thick_slice -> dask.compute for the whole coarsest level.
 
-    Napari 0.5+ moved the toggle from the NAPARI_ASYNC env var to a
-    settings property, so set it programmatically. Best-effort: on a
-    napari version that has no such setting the call is a silent
-    no-op and the caller gets whatever the default policy is.
+    Overridable via ``NDI_LIGHTSHEET_ASYNC``:
+      "1" or unset -- async slicing on (default)
+      "0"          -- async slicing off; napari falls back to synchronous
+                       slicing on the main thread. Useful when the async
+                       task manager is not dispatching (napari 0.5+
+                       Python 3.13 has been seen to hang here). Our
+                       contrast_limits pin prevents the "auto-sample
+                       the coarsest level" trap that the sync path hit
+                       originally, so sync is a reasonable second
+                       choice: add_image blocks until the first slice
+                       is on screen, then subsequent paints only
+                       recompute on pan/zoom.
+
+    Best-effort under try/except: on a napari version that has neither
+    NAPARI_ASYNC nor an experimental.async_ setting, the caller gets
+    whatever the default policy is.
     """
     import os
 
-    os.environ.setdefault("NAPARI_ASYNC", "1")  # napari 0.4 fallback
+    async_on = os.environ.get("NDI_LIGHTSHEET_ASYNC", "1").strip() != "0"
+    os.environ.setdefault("NAPARI_ASYNC", "1" if async_on else "0")
     try:
         settings = napari_module.settings.get_settings()
         experimental = getattr(settings, "experimental", None)
         if experimental is not None and hasattr(experimental, "async_"):
-            experimental.async_ = True
+            experimental.async_ = async_on
     except Exception:  # noqa: BLE001 - a setting that isn't there isn't fatal
         pass
 
