@@ -21,7 +21,54 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 
-class ndi_common_PathConstants:
+class _PathConstantsMeta(type):
+    """Metaclass so NDI_ROOT / COMMON_FOLDER / DOCUMENT_PATH / SCHEMA_PATH
+    can be accessed as class-level attributes across every supported Python
+    version.
+
+    We used to stack ``@classmethod @property`` to give the class properties
+    that lazily compute paths. Python 3.9-3.10 accepted that stacking as a
+    workaround; Python 3.11 deprecated it (PEP under discussion; behaviour
+    still worked but warned) and Python 3.12 REMOVED it: accessing
+    ``ndi_common_PathConstants.DOCUMENT_PATH`` returned the bound method
+    itself instead of the computed Path, and ``method / "base.json"`` then
+    raised ``TypeError: unsupported operand type(s) for /: 'method' and
+    'str'`` -- the exact failure ndi_install's smoke test surfaces on
+    3.12+ MATLAB-adjacent installs. See CPython issue gh-89519 for the
+    upstream removal.
+
+    A metaclass property is the forward-compatible replacement: it makes
+    ``Cls.PROP`` fetch through the metaclass's ``__get__``, so every
+    consumer (``root / "base.json"``) sees a real ``Path`` on every
+    supported Python.
+    """
+
+    @property
+    def NDI_ROOT(cls) -> Path:
+        if cls._ndi_root is None:
+            cls._ndi_root = cls._find_ndi_root()
+        return cls._ndi_root
+
+    @property
+    def COMMON_FOLDER(cls) -> Path:
+        if cls._common_folder is None:
+            cls._common_folder = cls.NDI_ROOT / "ndi_common"
+        return cls._common_folder
+
+    @property
+    def DOCUMENT_PATH(cls) -> Path:
+        if cls._document_path is None:
+            cls._document_path = cls.COMMON_FOLDER / "database_documents"
+        return cls._document_path
+
+    @property
+    def SCHEMA_PATH(cls) -> Path:
+        if cls._schema_path is None:
+            cls._schema_path = cls.COMMON_FOLDER / "schema_documents"
+        return cls._schema_path
+
+
+class ndi_common_PathConstants(metaclass=_PathConstantsMeta):
     """NDI path constants for document definitions and schemas.
 
     This class provides paths to NDI document definitions, schemas,
@@ -63,38 +110,6 @@ class ndi_common_PathConstants:
             "Cannot find NDI root directory. "
             "Set NDI_ROOT environment variable or install NDI properly."
         )
-
-    @classmethod
-    @property
-    def NDI_ROOT(cls) -> Path:
-        """Root directory of NDI installation."""
-        if cls._ndi_root is None:
-            cls._ndi_root = cls._find_ndi_root()
-        return cls._ndi_root
-
-    @classmethod
-    @property
-    def COMMON_FOLDER(cls) -> Path:
-        """Path to ndi_common folder with shared resources."""
-        if cls._common_folder is None:
-            cls._common_folder = cls.NDI_ROOT / "ndi_common"
-        return cls._common_folder
-
-    @classmethod
-    @property
-    def DOCUMENT_PATH(cls) -> Path:
-        """Path to document JSON definitions."""
-        if cls._document_path is None:
-            cls._document_path = cls.COMMON_FOLDER / "database_documents"
-        return cls._document_path
-
-    @classmethod
-    @property
-    def SCHEMA_PATH(cls) -> Path:
-        """Path to JSON schema files."""
-        if cls._schema_path is None:
-            cls._schema_path = cls.COMMON_FOLDER / "schema_documents"
-        return cls._schema_path
 
     @classmethod
     def set_paths(
