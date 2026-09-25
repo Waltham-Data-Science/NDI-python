@@ -67,7 +67,7 @@ def attach_viewport_clip(
     per_layer_scales: list[list[list[float] | None]],
     picker=None,
     labels: list[str] | None = None,
-) -> "ViewportClip | None":
+) -> ViewportClip | None:
     """Wire viewport-scoped cropping onto the given layers.
 
     Returns the :class:`ViewportClip` handle so a caller can call
