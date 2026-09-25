@@ -23,38 +23,82 @@ from typing import Any
 class _FetchCounter:
     """Thread-safe observer for ``ndi.cloud.filehandler.watchFetches``.
 
-    A start/done aggregate on top of the byte-level updates
-    :mod:`.progress` already draws. Used to keep the stderr debug
-    channel informative when the terminal doesn't get a per-file
-    byte counter (e.g. a run piped to a log file); throttled to a
-    print every ~0.5 s so a wall of concurrent fetches doesn't drown
-    the terminal.
+    Prints a running count of chunk fetches to stderr, throttled to
+    at most one line every ``interval`` seconds. Fires on every
+    start/done event, so a user watching the terminal always sees
+    activity within half a second of a chunk cascade starting -- the
+    "silent hang" is what we're trying to avoid.
+
+    Also prints an idle heartbeat every ``idle_interval`` seconds
+    when there is no activity, so a user waiting on background load
+    can tell the difference between "no fetches" and "still fetching
+    slowly". The heartbeat is a separate thread that wakes on a
+    condition variable, so it costs no CPU while activity is high.
     """
 
-    def __init__(self, out=sys.stderr, interval: float = 0.5):
+    def __init__(
+        self,
+        out=sys.stderr,
+        interval: float = 0.5,
+        idle_interval: float = 5.0,
+    ):
         self._lock = threading.Lock()
         self._out = out
         self._interval = interval
+        self._idle_interval = idle_interval
         self._started = 0
         self._done = 0
+        self._last_activity = time.monotonic()
         self._last_print = 0.0
+        self._stop = threading.Event()
+        self._heartbeat = threading.Thread(
+            target=self._heartbeat_loop,
+            name="ndi-lightsheet-heartbeat",
+            daemon=True,
+        )
+        self._heartbeat.start()
 
     def __call__(self, event, uri, done, total):
         with self._lock:
             if event == "start":
                 self._started += 1
+                self._last_activity = time.monotonic()
             elif event == "done":
                 self._done += 1
-            now = time.monotonic()
-            if event in ("start", "done") and now - self._last_print >= self._interval:
-                self._last_print = now
-                in_flight = self._started - self._done
-                print(
-                    f"[lightsheet] fetched {self._done}/{self._started} "
-                    f"(in flight: {in_flight})",
-                    file=self._out,
-                    flush=True,
-                )
+                self._last_activity = time.monotonic()
+            elif event == "chunk":
+                self._last_activity = time.monotonic()
+            self._maybe_print(force=(event == "done" and self._done == self._started))
+
+    def _maybe_print(self, force: bool = False) -> None:
+        now = time.monotonic()
+        if not force and now - self._last_print < self._interval:
+            return
+        self._last_print = now
+        in_flight = self._started - self._done
+        print(
+            f"[lightsheet] tiles: {self._done} loaded / {self._started} requested "
+            f"(in flight: {in_flight})",
+            file=self._out,
+            flush=True,
+        )
+
+    def _heartbeat_loop(self) -> None:
+        while not self._stop.wait(self._idle_interval):
+            with self._lock:
+                idle = time.monotonic() - self._last_activity
+                if self._started == 0:
+                    print(
+                        "[lightsheet] no tiles requested yet by napari; "
+                        "waiting for first slice ...",
+                        file=self._out,
+                        flush=True,
+                    )
+                elif self._done < self._started and idle >= self._idle_interval:
+                    self._maybe_print(force=True)
+
+    def stop(self) -> None:
+        self._stop.set()
 
 
 def require_napari():
@@ -186,31 +230,67 @@ def openPyramid(
     if controls:
         _attach_controls(viewer, session, pyramid_doc)
 
-    progress.note("viewer running (click the dock icon if needed)")
+    # Print which multiscale level napari picks. Async slicing chooses
+    # at paint time based on viewbox size and zoom; without this the
+    # user is guessing whether it's level 0 (121k tiles) or level 3
+    # (252 tiles) that is going through the fetcher. Best-effort:
+    # older napari versions may not expose the event under the same
+    # name, in which case the listener installs silently or not at
+    # all and we lose only the extra line.
+    _subscribe_level_change(viewer)
 
-    # Two observers on the same fetch stream: watchFetches serialises,
-    # so wrap the STDERR counter (text: "fetched D/S, in flight X")
-    # around the GUI byte progress from progress.stage. The inner
-    # watchFetches inside progress.cloudFetches overrides for byte
-    # updates; on exit the outer observer resumes -- which is
-    # unnecessary here (nothing runs after) but keeps the pattern
-    # honest, and the counter still saw the start events before the
-    # inner window opened.
-    #
-    # The launch window is closed after napari.run() returns, so the
-    # first-frame chunk cascade updates its progress bar. Napari has
-    # no equivalent for a lazy-multiscale layer.
+    # Launch window is closed BEFORE napari.run() because napari's
+    # event loop blocks the main thread and our Qt window can't
+    # repaint during it -- a frozen progress bar next to napari looks
+    # worse than none. The stderr counter takes over as the "is
+    # anything happening" indicator.
+    progress.closeLaunchWindow()
+    progress.note("viewer running -- watching tile fetches on stderr")
+
     counter = _FetchCounter()
 
     if show:
         try:
-            with watchFetches(counter), progress.stage("loading image tiles on demand"):
+            with watchFetches(counter):
                 napari.run()
         finally:
-            progress.closeLaunchWindow()
+            counter.stop()
             fetcher.close()
 
     return viewer
+
+
+def _subscribe_level_change(viewer) -> None:
+    """Print a line to stderr each time napari picks a different level.
+
+    Multiscale layers fire an event when they promote or demote to a
+    coarser/finer level; napari's exact event name has moved between
+    versions, so this walks a small set of known names and attaches
+    to the first that exists. On a viewer whose layers don't expose
+    any of them, this is a silent no-op.
+    """
+    for layer in getattr(viewer, "layers", []):
+        events = getattr(layer, "events", None)
+        if events is None:
+            continue
+        for name in ("data_level", "corner_pixels", "_data_level"):
+            emitter = getattr(events, name, None)
+            if emitter is None:
+                continue
+            emitter.connect(lambda e, lyr=layer, key=name: _report_level(lyr, key))
+            break
+
+
+def _report_level(layer, event_name: str) -> None:
+    level = getattr(layer, "data_level", None)
+    if level is None:
+        level = getattr(layer, "_data_level", None)
+    lname = getattr(layer, "name", "?")
+    print(
+        f"[lightsheet] napari picked level {level} for layer {lname!r} " f"(event={event_name})",
+        file=sys.stderr,
+        flush=True,
+    )
 
 
 def _attach_controls(viewer, session, pyramid_doc) -> None:
