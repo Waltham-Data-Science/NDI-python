@@ -337,7 +337,7 @@ functions:
   - name: extract_doc_files
     type: function
     matlab_path: "+ndi/+database/+fun/extract_docs_files.m"
-    matlab_last_sync_hash: "a36e261c4"
+    matlab_last_sync_hash: "c5a36adc"
     python_path: "ndi/database_fun.py"
     python_name: "extract_doc_files"
     input_arguments:
@@ -384,6 +384,19 @@ functions:
       thing ndi.dataset.copySessionToDataset needs it for. It also walked
       files.file_list, the class DECLARATION, rather than
       current_file_list(), what the document actually has.
+      2026-09-22: resynced to NDI-matlab 3fce6cb (was a36e261c4). NDI-matlab
+      14af6d6c gave extract_docs_files a ReferenceInPlace option: when a source
+      file's bytes are on the local filesystem it points the returned document
+      at that file with delete_original 0 (so a later database_add copies it
+      once, straight into the destination store) rather than first staging a
+      copy in a temp dir, removing the transient 2x disk-space cost; non-local
+      (cloud) files fall back to the copy path.
+      2026-09-23: ReferenceInPlace ported (issue #317, examined against
+      c5a36adc). extract_doc_files now takes reference_in_place: default True
+      when no target_path is given and False when one is; local files are
+      referenced with delete_original=False and non-local files fall back to
+      copying. _copy_series_members mirrors it for series members. The return
+      value is ("") when nothing is copied (pure reference-in-place).
 
 # =========================================================================
 # Not Applicable — MATLAB functions intentionally not ported to Python

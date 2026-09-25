@@ -135,7 +135,7 @@ class ndi_dataset:
 
         return self
 
-    def add_ingested_session(self, session: Any) -> ndi_dataset:
+    def add_ingested_session(self, session: Any, *, reference_in_place: bool = True) -> ndi_dataset:
         """
         Ingest a session into this dataset by copying documents.
 
@@ -143,6 +143,13 @@ class ndi_dataset:
 
         Args:
             session: ndi_session object to ingest
+            reference_in_place: If True (the default), each of the session's
+                local files is copied directly from its location in the
+                source session into the dataset, without first staging a
+                second copy in a temp directory -- so the operation does not
+                transiently need 2x the session's disk space. Set to False to
+                force the old staged copy. See
+                :meth:`_copy_session_documents`.
 
         Returns:
             self for chaining
@@ -168,7 +175,7 @@ class ndi_dataset:
                 f"in ingested form to a dataset."
             )
 
-        self._copy_session_documents(session)
+        self._copy_session_documents(session, reference_in_place=reference_in_place)
 
         session_info_here = self._make_session_info(session, is_linked=False)
         # For ingested sessions, clear the path arg (matches MATLAB kludge)
@@ -230,6 +237,8 @@ class ndi_dataset:
         self,
         session_id: str,
         are_you_sure: bool = False,
+        *,
+        reference_in_place: bool = True,
     ) -> ndi_dataset:
         """
         Convert a linked session in this dataset into an ingested one.
@@ -256,6 +265,11 @@ class ndi_dataset:
             are_you_sure: Must be True to proceed. MATLAB additionally offers
                 ``askUserToConfirm``, which puts up a dialog; there is no
                 dialog here, so this flag is the whole gate.
+            reference_in_place: If True (the default), the session's local
+                files are copied directly into the dataset rather than being
+                staged into a temp directory first, avoiding the transient 2x
+                disk-space requirement described above. Set to False to force
+                the old staged copy. See :meth:`_copy_session_documents`.
 
         Returns:
             self for chaining.
@@ -325,7 +339,7 @@ class ndi_dataset:
         # duplicate check: the session is deliberately already listed here,
         # as a linked one. MATLAB passes skipDuplicateCheck for the same
         # reason (dataset.m:462).
-        self._copy_session_documents(session)
+        self._copy_session_documents(session, reference_in_place=reference_in_place)
 
         # Step 7: replace the linked record with an ingested one
         self.removeSessionInfoFromDataset(self, session_id)
@@ -907,7 +921,7 @@ class ndi_dataset:
     # Internal Helpers
     # =========================================================================
 
-    def _copy_session_documents(self, session: Any) -> None:
+    def _copy_session_documents(self, session: Any, *, reference_in_place: bool = True) -> None:
         """Copy every document in SESSION, with its files, into this dataset.
 
         Shared by :meth:`add_ingested_session` and
@@ -922,29 +936,58 @@ class ndi_dataset:
         its ORIGINAL session_id, which is how the dataset can still say which
         session each document came from.
 
+        FILE HANDLING mirrors ``ndi.database.fun.extract_docs_files``'
+        ``ReferenceInPlace`` option:
+
+        * *reference_in_place* True (the default): each document's file
+          locations are pointed at the source session's own ingested copies
+          (``delete_original=0``) via :meth:`_relocate_files_to_source`, so
+          ``_database.add`` copies each file exactly once, directly from the
+          source into the dataset. Nothing is staged in a temp directory, so
+          the ingest does not transiently need 2x the session's disk space.
+        * *reference_in_place* False: the session's files are first copied
+          into a temp directory by
+          :func:`~ndi.database_fun.extract_doc_files`, then added and the temp
+          directory removed. This is the old 2x-disk behavior, kept for
+          callers who explicitly want copies staged.
+
         Raises:
             RuntimeError: If any document could not be added, listing the
                 failures. A partial copy is reported, never passed off as a
                 success.
         """
-        all_docs = session.database_search(ndi_query("").isa("base"))
-        ingestion_failures: list[tuple[str, str]] = []
-        for doc in all_docs:
-            try:
-                # DID ingests the document's files as part of the add, so the
-                # locations it is handed have to be reachable. A document read
-                # back from the source session still names the path the file
-                # was ingested FROM, and add_file defaults delete_original to
-                # true, so that path is usually gone by now. Point each
-                # location at the source session's ingested copy before
-                # handing the document over.
-                doc = self._relocate_files_to_source(session, doc)
-                self._session._database.add(doc)
-            except FileExistsError:
-                pass  # Re-ingestion duplicates are expected
-            except Exception as exc:  # noqa: BLE001 - collected and re-raised below
-                doc_id = ndi_dataset_dir._get_doc_id(doc)
-                ingestion_failures.append((doc_id, str(exc)))
+        staged_dir = ""
+        if reference_in_place:
+            # DID ingests the document's files as part of the add, so the
+            # locations it is handed have to be reachable. A document read
+            # back from the source session still names the path the file was
+            # ingested FROM, and add_file defaults delete_original to true, so
+            # that path is usually gone by now. Point each location at the
+            # source session's ingested copy before handing the document over.
+            prepared = [
+                self._relocate_files_to_source(session, doc)
+                for doc in session.database_search(ndi_query("").isa("base"))
+            ]
+        else:
+            from ..database_fun import extract_doc_files
+
+            prepared, staged_dir = extract_doc_files(session, reference_in_place=False)
+
+        try:
+            ingestion_failures: list[tuple[str, str]] = []
+            for doc in prepared:
+                try:
+                    self._session._database.add(doc)
+                except FileExistsError:
+                    pass  # Re-ingestion duplicates are expected
+                except Exception as exc:  # noqa: BLE001 - collected and re-raised below
+                    doc_id = ndi_dataset_dir._get_doc_id(doc)
+                    ingestion_failures.append((doc_id, str(exc)))
+        finally:
+            if staged_dir:
+                import shutil
+
+                shutil.rmtree(staged_dir, ignore_errors=True)
 
         if ingestion_failures:
             failure_details = "\n".join(
@@ -956,7 +999,7 @@ class ndi_dataset:
                 else ""
             )
             raise RuntimeError(
-                f"Failed to add {len(ingestion_failures)} of {len(all_docs)} "
+                f"Failed to add {len(ingestion_failures)} of {len(prepared)} "
                 f"documents during session ingestion:\n{failure_details}{extra}"
             )
 

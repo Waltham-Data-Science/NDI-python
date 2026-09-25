@@ -14,9 +14,27 @@ classes:
   - name: dataset
     type: class
     matlab_path: "+ndi/dataset.m"
-    matlab_last_sync_hash: "9bf6e3fee"
+    matlab_last_sync_hash: "c5a36adc"
     python_path: "ndi/dataset/_dataset.py"
     python_class: "ndi_dataset"
+    decision_log: >
+      2026-09-22: resynced to NDI-matlab 3fce6cb (was 9bf6e3fee). The two
+      commits touching dataset.m in that span are the same ReferenceInPlace
+      work (f3940dbc, 14af6d6c): add_ingested_session,
+      convertLinkedSessionToIngested and copySessionToDataset gained a
+      ReferenceInPlace option that copies a session's local files directly
+      into the dataset rather than staging a second copy in a temp dir
+      (removing the transient 2x disk requirement; non-local files fall back
+      to copying).
+      2026-09-23: ReferenceInPlace ported (issue #317, examined against
+      c5a36adc). add_ingested_session and convertLinkedSessionToIngested now
+      take reference_in_place (default True). Python's ingest already
+      referenced source files in place by default via
+      _relocate_files_to_source (delete_original=0), so True keeps that fast,
+      no-2x-staging path; reference_in_place=False stages copies through
+      ndi.database_fun.extract_doc_files (the old 2x path) and removes the
+      staging dir afterward. Same result either way (byte-identical, source
+      untouched); the flag only decides whether a second copy is staged.
 
     properties:
       - name: session

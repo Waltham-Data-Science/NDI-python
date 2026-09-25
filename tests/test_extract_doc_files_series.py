@@ -28,7 +28,9 @@ added to a second session and its members are read back there.
 
 from __future__ import annotations
 
+import os
 import uuid
+from pathlib import Path
 
 import pytest
 from did.file import write_series_manifest
@@ -175,14 +177,35 @@ class TestOrdinaryFiles:
         assert docs
         assert not [p for p in out.iterdir() if p.is_file()]
 
-    def test_a_temp_directory_is_made_when_none_is_given(self, tmp_path):
-        import os
+    def test_no_target_references_in_place_and_makes_no_temp_dir(self, tmp_path):
+        """The default with no target_path is reference-in-place (matching
+        MATLAB): the source file is pointed at directly, nothing is copied,
+        and no temp directory is created."""
+        session = _session(tmp_path, "src_session")
+        doc = _doc_with_a_plain_file(tmp_path, session)
+
+        docs, path = extract_doc_files(session)
+
+        assert path == "", "a temp directory was created for a reference-in-place run"
+        location = _extracted(docs, doc).document_properties["files"]["file_info"][0]["locations"][
+            0
+        ]
+        # The location points at the source session's own ingested file, and
+        # ingesting it leaves the source untouched.
+        assert location["location"] != ""
+        assert location["delete_original"] == 0
+        assert os.path.isfile(location["location"])
+        assert Path(location["location"]).read_bytes() == PLAIN_BYTES
+
+    def test_force_copy_with_no_target_makes_a_temp_dir(self, tmp_path):
+        """reference_in_place=False keeps the old behavior: a temp directory
+        is created and the file is copied into it."""
         import shutil
 
         session = _session(tmp_path, "src_session")
         _doc_with_a_plain_file(tmp_path, session)
 
-        _docs, path = extract_doc_files(session)
+        _docs, path = extract_doc_files(session, reference_in_place=False)
         try:
             assert os.path.isdir(path)
             assert [p for p in os.scandir(path) if p.is_file()]
@@ -305,3 +328,86 @@ class TestTheExtractIsStorableElsewhere:
 
         exists, _path = target.database_existbinarydoc(extracted, f"{SLOT}_2")
         assert not exists
+
+
+class TestReferenceInPlace:
+    """reference_in_place points the extract at the SOURCE files instead of
+    copying them: no temp copy is staged, the source is left untouched, and
+    a later database_add copies each file once, directly into the target."""
+
+    def test_nothing_is_copied_and_locations_point_at_the_source(self, tmp_path, tag):
+        session = _session(tmp_path, "src_session")
+        doc = _doc_with_a_sparse_series(tmp_path, session, tag)
+
+        docs, path = extract_doc_files(session)  # default: reference in place
+
+        assert path == "", "reference-in-place must not stage a temp copy"
+        # Every member location is the source session's own ingested file --
+        # under the session directory, not a fresh copy in an extract dir.
+        entries = _ingest_locations(_extracted(docs, doc))
+        assert entries, "no members were recorded"
+        for entry in entries:
+            assert entry["delete_original"] == 0
+            assert os.path.isfile(entry["location"])
+            assert str(session.path) in entry["location"]
+
+    def test_the_source_survives_storing_the_extract_elsewhere(self, tmp_path, tag):
+        """delete_original=0 on every location, so ingesting the extract into
+        another database copies the bytes and leaves the source readable."""
+        source = _session(tmp_path, "src_session")
+        doc = _doc_with_a_sparse_series(tmp_path, source, tag)
+
+        docs, _ = extract_doc_files(source)  # reference in place
+        target = _session(tmp_path, "target_session")
+        extracted = _extracted(docs, doc)
+        extracted.document_properties["base"]["session_id"] = target.id()
+        target.database_add(extracted)
+
+        # Target has its own copy...
+        assert target.database_openbinarydoc(extracted, f"{SLOT}_1").read() == MEMBER_ONE
+        assert target.database_openbinarydoc(extracted, f"{SLOT}_3").read() == MEMBER_THREE
+        # ...and the source is untouched.
+        assert source.database_openbinarydoc(doc, f"{SLOT}_1").read() == MEMBER_ONE
+        assert source.database_openbinarydoc(doc, f"{SLOT}_3").read() == MEMBER_THREE
+
+    def test_reference_and_copy_land_the_same_bytes(self, tmp_path):
+        """The optimization only removes the intermediate copy: an extract
+        made either way, added to a fresh session, yields identical files."""
+        tag_r = uuid.uuid4().hex[:8]
+        tag_c = uuid.uuid4().hex[:8]
+
+        ref_src = _session(tmp_path, "ref_src")
+        ref_doc = _doc_with_a_sparse_series(tmp_path, ref_src, tag_r)
+        ref_docs, _ = extract_doc_files(ref_src, reference_in_place=True)
+        ref_target = _session(tmp_path, "ref_target")
+        ref_extracted = _extracted(ref_docs, ref_doc)
+        ref_extracted.document_properties["base"]["session_id"] = ref_target.id()
+        ref_target.database_add(ref_extracted)
+
+        copy_src = _session(tmp_path, "copy_src")
+        copy_doc = _doc_with_a_sparse_series(tmp_path, copy_src, tag_c)
+        copy_docs, _staged = extract_doc_files(copy_src, str(tmp_path / "staged"))
+        copy_target = _session(tmp_path, "copy_target")
+        copy_extracted = _extracted(copy_docs, copy_doc)
+        copy_extracted.document_properties["base"]["session_id"] = copy_target.id()
+        copy_target.database_add(copy_extracted)
+
+        for name, payload in ((f"{SLOT}_1", MEMBER_ONE), (f"{SLOT}_3", MEMBER_THREE)):
+            assert ref_target.database_openbinarydoc(ref_extracted, name).read() == payload
+            assert copy_target.database_openbinarydoc(copy_extracted, name).read() == payload
+
+    def test_a_target_path_still_defaults_to_copying(self, tmp_path, tag):
+        """Naming a target_path means 'put copies there': the members are
+        copied into it rather than referenced in place."""
+        session = _session(tmp_path, "src_session")
+        _doc_with_a_sparse_series(tmp_path, session, tag)
+        out = tmp_path / "out"
+
+        _docs, path = extract_doc_files(session, str(out))
+
+        assert path == str(out)
+        # The manifest plus both present members are copied into out/.
+        names = {p.name for p in out.iterdir() if p.is_file()}
+        assert member_uid(tag, 1) in names
+        assert member_uid(tag, 3) in names
+        assert len(names) == 3

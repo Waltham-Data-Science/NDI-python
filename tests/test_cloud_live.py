@@ -702,7 +702,7 @@ class TestFileLifecycle:
         from ndi.cloud.api.files import (
             getFileDetails,
             getFileUploadURL,
-            listFiles,
+            listFilesAll,
         )
 
         file_uid = "pytest-upload-test-file"
@@ -726,7 +726,7 @@ class TestFileLifecycle:
         details = {}
         for wait in (3, 5, 10):
             time.sleep(wait)
-            files = listFiles(fresh_dataset, client=client).data
+            files = listFilesAll(fresh_dataset, client=client).data
             file_uids = [f.get("uid", "") for f in files]
             if file_uid not in file_uids:
                 continue
@@ -743,10 +743,15 @@ class TestFileLifecycle:
         assert dl_resp.content == test_content
 
     def test_listFiles(self, client, fresh_dataset, cloud_config):
-        """After uploading a file, listFiles should return it."""
+        """After uploading a file, the keyset file listing should return it.
+
+        Exercises both the single-page envelope from ``listFiles`` (which
+        carries ``files`` plus the cursor/hasMore/totalNumber metadata) and
+        the whole-dataset walk from ``listFilesAll``.
+        """
         import requests
 
-        from ndi.cloud.api.files import getFileUploadURL, listFiles
+        from ndi.cloud.api.files import getFileUploadURL, listFiles, listFilesAll
 
         file_uid = "pytest-list-test-file"
         upload_url = getFileUploadURL(cloud_config.org_id, fresh_dataset, file_uid, client=client)
@@ -758,7 +763,14 @@ class TestFileLifecycle:
         )
         time.sleep(3)
 
-        files = listFiles(fresh_dataset, client=client).data
+        # Single keyset page: the envelope exposes files plus pagination.
+        page = listFiles(fresh_dataset, client=client)
+        assert isinstance(page.get("files"), list)
+        assert "hasMore" in page
+        assert "totalNumber" in page
+
+        # Whole-dataset walk returns the flat, de-duplicated list.
+        files = listFilesAll(fresh_dataset, client=client).data
         assert isinstance(files, list)
         uids = [f.get("uid", "") for f in files]
         assert file_uid in uids

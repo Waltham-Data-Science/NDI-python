@@ -267,24 +267,158 @@ def getFile(
     return False
 
 
+# ---------------------------------------------------------------------------
+# File listing (keyset / cursor pagination)
+#
+# GET /datasets/{datasetId}/files is keyset-paginated: a `limit` and an opaque
+# `after` cursor go in, and an envelope comes out --
+#   {datasetId, limit, count, cursor, hasMore, totalNumber, files: [...]}
+# where each file summary carries uid, uploaded, sourceDatasetId, size. Follow
+# the cursor by passing the returned `cursor` back as `after` while `hasMore`
+# is true; listFilesAll does that walk.
+#
+# getDataset NO LONGER embeds the files array (it returns fileCount instead),
+# so this endpoint is the only way to enumerate a dataset's files. Callers
+# that used to read dataset["files"] must list here or use fileCount for a
+# count. See NDI-matlab#1004 and ndi-cloud-node#142.
+# ---------------------------------------------------------------------------
+
+#: Safety cap on the number of keyset pages listFilesAll will fetch before
+#: giving up, so a server that never clears hasMore cannot loop forever. With
+#: the default limit of 1000 this bounds a walk at 100 million files.
+_MAX_FILE_PAGES = 100_000
+
+
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
 def listFiles(
     dataset_id: CloudId,
     *,
+    limit: int = 1000,
+    after: str = "",
     client: _Client = None,
 ) -> APIResponse:
-    """List all files associated with a cloud dataset.
+    """List one keyset page of files associated with a cloud dataset.
 
-    Fetches the dataset metadata and extracts the files list.
+    Retrieves a single keyset-paginated page from
+    ``GET /datasets/{datasetId}/files``. To retrieve the complete file list
+    across all pages, use :func:`listFilesAll`.
+
+    Args:
+        dataset_id: The cloud dataset id.
+        limit: Maximum number of files in the page. Default 1000.
+        after: Opaque keyset cursor from a prior page's ``cursor`` field.
+            Omit (or ``""``) for the first page.
+        client: Authenticated cloud client (auto-created if omitted).
+
+    Returns:
+        The page envelope with fields ``datasetId``, ``limit``, ``count``,
+        ``cursor``, ``hasMore``, ``totalNumber``, and ``files`` -- a list of
+        file summaries, each with ``uid``, ``uploaded``, ``sourceDatasetId``,
+        and ``size``. Follow ``cursor`` by passing it back as *after* while
+        ``hasMore`` is true.
 
     MATLAB equivalent: +cloud/+api/+files/listFiles.m
     """
-    from . import datasets as ds_api
+    params: dict[str, Any] = {"limit": limit}
+    # The cursor is sent only when set; the first page omits it. (An empty
+    # `after` is not a valid cursor, and sending one would ask the server to
+    # resume from nowhere.)
+    if after:
+        params["after"] = after
+    return client.get(
+        "/datasets/{datasetId}/files",
+        params=params,
+        datasetId=dataset_id,
+    )
 
-    ds = ds_api.getDataset(dataset_id, client=client)
-    files = ds.get("files", []) if hasattr(ds, "get") else []
-    return APIResponse(files, success=True, status_code=200, url="")
+
+@_auto_client
+@validate_call(config=VALIDATE_CONFIG)
+def listFilesAll(
+    dataset_id: CloudId,
+    *,
+    limit: int = 1000,
+    check_for_updates: bool = False,
+    wait_for_updates: float = 5.0,
+    max_update_reads: int = 100,
+    client: _Client = None,
+) -> APIResponse:
+    """List every file in a dataset by following the keyset cursor.
+
+    Walks :func:`listFiles` page by page, following the response envelope's
+    ``cursor`` while ``hasMore`` is true, and de-duplicates by ``uid`` so a
+    file that reappears across a page boundary (or after a concurrent write)
+    is returned exactly once. This is the whole-dataset counterpart to
+    :func:`listFiles`; it mirrors
+    :func:`~ndi.cloud.api.documents.listDatasetDocumentsAll` and returns an
+    :class:`~ndi.cloud.client.APIResponse` wrapping the list of file
+    summaries.
+
+    Keyset pagination (a cursor on insertion order) is used instead of
+    page/offset: it is O(1) per page at any depth and stable under concurrent
+    writes, and it lets an update poll resume from the last cursor to pick up
+    files appended while the scan ran.
+
+    Args:
+        dataset_id: The cloud dataset id.
+        limit: Maximum number of files fetched per page. Default 1000.
+        check_for_updates: If true, after the initial full scan re-poll from
+            the last cursor to pick up files appended while the scan ran,
+            stopping once a poll adds nothing new. Default false.
+        wait_for_updates: Seconds to pause before each update re-poll.
+            Default 5.
+        max_update_reads: Cap on the number of update re-polls, to bound the
+            loop. Default 100.
+        client: Authenticated cloud client (auto-created if omitted).
+
+    Returns:
+        An :class:`~ndi.cloud.client.APIResponse` whose ``data`` is the list
+        of de-duplicated file summaries (``uid``, ``uploaded``,
+        ``sourceDatasetId``, ``size``).
+
+    MATLAB equivalent: +cloud/+api/+files/listFilesAll.m
+    """
+    seen_uids: set[str] = set()
+    all_files: list[dict[str, Any]] = []
+
+    def _scan(after: str) -> str:
+        """Walk pages from *after* to the last, appending files not already
+        seen. Returns the last cursor observed (the resume token)."""
+        last_cursor = after
+        for _ in range(_MAX_FILE_PAGES):
+            page = listFiles(dataset_id, limit=limit, after=after, client=client)
+            files = page.get("files", []) if hasattr(page, "get") else []
+            for f in files or []:
+                uid = f.get("uid", "") if hasattr(f, "get") else ""
+                if uid and uid not in seen_uids:
+                    seen_uids.add(uid)
+                    all_files.append(f)
+            cursor = page.get("cursor", "") if hasattr(page, "get") else ""
+            if cursor:
+                last_cursor = cursor
+            has_more = bool(page.get("hasMore", False)) if hasattr(page, "get") else False
+            # Advance only when there is a next page AND the cursor actually
+            # moved. A server that echoes the same cursor with hasMore=true
+            # would otherwise page in place forever.
+            if has_more and cursor and cursor != after:
+                after = cursor
+            else:
+                break
+        return last_cursor
+
+    last_cursor = _scan("")
+
+    if check_for_updates:
+        for _ in range(max_update_reads):
+            if wait_for_updates > 0:
+                time.sleep(wait_for_updates)
+            count_before = len(all_files)
+            last_cursor = _scan(last_cursor)
+            if len(all_files) == count_before:
+                break  # nothing new was added
+
+    return APIResponse(all_files, success=True, status_code=200, url="")
 
 
 @_auto_client
