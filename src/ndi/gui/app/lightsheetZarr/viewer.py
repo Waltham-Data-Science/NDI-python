@@ -319,7 +319,7 @@ def openPyramid(
     if os.environ.get("NDI_LIGHTSHEET_DEBUG"):
         try:
             print(
-                f"[lightsheet] viewer.layers has {len(viewer.layers)} layer(s) " f"after add_image",
+                f"[lightsheet] viewer.layers has {len(viewer.layers)} layer(s) after add_image",
                 file=sys.stderr,
                 flush=True,
             )
@@ -327,18 +327,37 @@ def openPyramid(
                 data_attr = getattr(layer, "data", None)
                 multiscale_attr = getattr(layer, "multiscale", None)
                 visible = getattr(layer, "visible", None)
-                if isinstance(data_attr, list):
-                    shape = getattr(data_attr[0], "shape", "?")
-                    dtype = getattr(data_attr[0], "dtype", "?")
+                loaded_attr = getattr(layer, "loaded", None)
+                data_type = type(data_attr).__name__
+                # napari 0.5 wraps multiscale data in a MultiScaleData
+                # (or similar) that isn't a python list; probe len()
+                # and index [0] rather than isinstance-checking. Both
+                # tuple and list satisfy this path too.
+                n_levels = 0
+                first_shape = "?"
+                first_dtype = "?"
+                try:
                     n_levels = len(data_attr)
+                except (TypeError, AttributeError):
+                    n_levels = 0
+                if n_levels:
+                    try:
+                        first = data_attr[0]
+                        first_shape = getattr(first, "shape", "?")
+                        first_dtype = getattr(first, "dtype", "?")
+                    except (TypeError, IndexError, KeyError):
+                        pass
                 else:
-                    shape = getattr(data_attr, "shape", "?")
-                    dtype = getattr(data_attr, "dtype", "?")
+                    # Single-array data attribute.
                     n_levels = 1
+                    first_shape = getattr(data_attr, "shape", "?")
+                    first_dtype = getattr(data_attr, "dtype", "?")
                 print(
                     f"[lightsheet]   layer {i}: name={layer.name!r} "
-                    f"visible={visible} multiscale={multiscale_attr} "
-                    f"n_levels={n_levels} shape={shape} dtype={dtype}",
+                    f"visible={visible} loaded={loaded_attr} "
+                    f"multiscale={multiscale_attr} "
+                    f"data_type={data_type} n_levels={n_levels} "
+                    f"shape={first_shape} dtype={first_dtype}",
                     file=sys.stderr,
                     flush=True,
                 )
