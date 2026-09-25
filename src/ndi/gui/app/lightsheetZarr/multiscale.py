@@ -788,24 +788,35 @@ def layerSpec(
     name: str | None = None,
     reduction: str | None = None,
     workers: int | None = None,
-) -> tuple[dict, _ChunkFetcher]:
-    """Return ``(spec, fetcher)`` where SPEC is kwargs for ``add_image``.
+) -> tuple[list[dict], _ChunkFetcher]:
+    """Return ``(specs, fetcher)`` where SPECS is a list of ``add_image``
+    kwargs -- one per channel (or one total when the pyramid has no
+    channel axis).
 
-    ``spec['data']`` is the list of dask arrays from :func:`levelArrays`;
-    ``multiscale=True``; ``scale`` and ``translate`` come from
-    :func:`worldTransform`; ``name`` defaults to the pyramid's own label.
+    Each ``spec['data']`` is a list of dask arrays (one per multiscale
+    level), 3D (Z, Y, X) with the channel dimension stripped. Napari
+    treats each list as a multiscale ladder for that channel's layer.
 
-    ``fetcher`` is the :class:`_ChunkFetcher` backing the delayed reads.
-    It is already held alive by the block closures, so the caller doesn't
-    strictly need to hold it, but exposing it lets a viewer call
-    ``fetcher.warm()`` before the first pan (so the one-off session-open
-    cost lands while napari's window is opening) and ``fetcher.close()``
-    on teardown.
+    Why one layer per channel, built ourselves, instead of a single
+    ``add_image(channel_axis=...)`` call? Napari 0.5's channel_axis
+    interacts badly with a list-of-multiscale-arrays: it splits the
+    outer list along the channel axis of the FIRST array, drops
+    multiscale on each per-channel layer, and registers a single-
+    level layer at the finest resolution. The caller's log then shows
+    ``n_levels=1 shape=[Z, Y, X]`` even though ``multiscale=True`` is
+    on, and napari asks for a viewport-sized handful of level-0
+    chunks -- an all-fill_value corner of a 121k-tile volume, which
+    auto-contrasts to zero. Splitting the channel axis ourselves and
+    passing per-channel multiscale lists side-steps that bug.
 
-    If the pyramid's ``axes_order`` contains a ``'c'`` axis, ``spec``
-    also fills in ``channel_axis`` (so napari splits the layer into one
-    layer per channel) plus per-channel ``colormap`` and ``name``:
-    channel names come from the pyramid's ``channel_names`` field
+    ``fetcher`` is the :class:`_ChunkFetcher` backing the delayed
+    reads. It is already held alive by the block closures, so the
+    caller doesn't strictly need to hold it, but exposing it lets a
+    viewer call ``fetcher.warm()`` before the first pan (so the
+    one-off session-open cost lands while napari's window is
+    opening) and ``fetcher.close()`` on teardown.
+
+    Channel names come from the pyramid's ``channel_names`` field
     (comma-separated when present) and fall back to ``Ch1``, ``Ch2``,
     ...; colormaps come from :func:`defaultChannelColors`.
     """
@@ -820,19 +831,9 @@ def layerSpec(
     if base_name is None:
         base_name = p.get("label") or p.get("pyramid_name") or "lightsheet zarr"
 
-    # Napari auto-detects ``contrast_limits`` by sampling the coarsest
-    # level with ``np.asarray(...)``. On a lazy cloud-backed pyramid
-    # that first ``add_image`` call then synchronously fetches every
-    # chunk of the coarsest level -- hundreds of HTTPS roundtrips
-    # before the window can even repaint. Passing an explicit range
-    # here (dtype full range, or the pyramid document's declared
-    # ``value_range`` when it has one) skips the probe.
-    #
-    # Users adjust contrast in napari's LUT slider anyway, so a
-    # default of the dtype range is safe -- if the layer starts flat,
-    # they double-click the histogram to auto-fit against a slice
-    # already in memory. The alternative (napari doing that fit at
-    # open time, from the cloud) is not acceptable.
+    # See _defaultContrastLimits: napari would auto-sample the
+    # coarsest level otherwise, firing hundreds of synchronous HTTPS
+    # fetches before the window can repaint.
     if arrays:
         contrast_limits = _defaultContrastLimits(p, arrays[0].dtype)
     else:
@@ -848,7 +849,7 @@ def layerSpec(
             "translate": translate or None,
             "contrast_limits": contrast_limits,
         }
-        return spec, fetcher
+        return [spec], fetcher
 
     n_channels = int(arrays[0].shape[c_index])
     names = _channelNames(p, n_channels, base_name)
@@ -860,17 +861,26 @@ def layerSpec(
     spatial_scale = _dropAxis(scale, c_index) if scale else None
     spatial_trans = _dropAxis(translate, c_index) if translate else None
 
-    spec = {
-        "data": arrays,
-        "multiscale": True,
-        "channel_axis": c_index,
-        "name": names,
-        "colormap": colors,
-        "contrast_limits": contrast_limits,
-        "scale": spatial_scale or None,
-        "translate": spatial_trans or None,
-    }
-    return spec, fetcher
+    # Build one multiscale spec per channel by slicing each level
+    # array on c_index. dask.take is lazy: no fetches happen here,
+    # only a graph rewrite that says "block[c] instead of block[all]".
+    import dask.array as da
+
+    specs: list[dict] = []
+    for c in range(n_channels):
+        per_channel_arrays = [da.take(a, indices=c, axis=c_index) for a in arrays]
+        specs.append(
+            {
+                "data": per_channel_arrays,
+                "multiscale": True,
+                "name": names[c],
+                "colormap": colors[c],
+                "contrast_limits": contrast_limits,
+                "scale": spatial_scale or None,
+                "translate": spatial_trans or None,
+            }
+        )
+    return specs, fetcher
 
 
 def _channelNames(pyramid_props: dict, n_channels: int, base_name: str) -> list[str]:

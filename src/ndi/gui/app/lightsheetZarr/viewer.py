@@ -291,7 +291,7 @@ def openPyramid(
     fetch_watch.__enter__()
 
     with progress.stage("preparing on-demand image levels"):
-        spec, fetcher = multiscale.layerSpec(
+        specs, fetcher = multiscale.layerSpec(
             session, pyramid_doc, channel=channel, name=name, reduction=reduction
         )
 
@@ -308,7 +308,8 @@ def openPyramid(
         viewer = napari.Viewer()
 
     with progress.stage("attaching image to viewer"):
-        viewer.add_image(**spec)
+        for spec in specs:
+            viewer.add_image(**spec)
 
     # Debug: after add_image, print what napari actually has. A silent
     # session where the reader never fires could be a layer that failed

@@ -198,13 +198,21 @@ functions:
     matlab_path: null
     python_path: "ndi/gui/app/lightsheetZarr/multiscale.py"
     output_arguments:
-      - name: spec
-        type_python: dict
+      - name: specs
+        type_python: "list[dict]"
     decision_log: >-
       Python-only. Napari-consumable kwargs (`data`, `multiscale`,
-      `name`, `scale`, `translate`) for `viewer.add_image(**spec)`.
-      Split from openPyramid so a headless caller can build the ladder
-      without a display.
+      `name`, `scale`, `translate`, `colormap`, `contrast_limits`) --
+      one dict per napari layer -- for a caller that does
+      `for spec in specs: viewer.add_image(**spec)`. One layer per
+      channel with the channel axis stripped out of each level's data
+      before it reaches napari, because napari 0.5's `channel_axis` on
+      a list-of-multiscale-arrays silently drops multiscale and
+      registers a single-level layer at the finest resolution -- the
+      viewer then asks for a viewport-sized handful of level-0 chunks
+      and everything else is fill_value. Split-here-then-add-once side
+      steps that. Split from openPyramid so a headless caller can
+      build the ladders without a display.
 
   - name: _fetch_chunk
     matlab_path: null
