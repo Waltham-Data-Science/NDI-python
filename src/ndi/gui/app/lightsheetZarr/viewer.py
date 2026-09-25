@@ -14,6 +14,7 @@ silences it, ``NDI_LIGHTSHEET_PROGRESS`` picks the mode, and
 
 from __future__ import annotations
 
+import os
 import sys
 import threading
 import time
