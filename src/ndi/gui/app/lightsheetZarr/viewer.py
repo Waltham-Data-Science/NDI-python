@@ -21,6 +21,32 @@ import time
 from typing import Any
 
 
+class _NapariStatusReporter:
+    """Push a tile-loading status message into napari's status bar.
+
+    Called from the fetch counter's main-thread-safe surfaces. Napari's
+    status bar is a Qt widget, so a background thread calling
+    ``viewer.status = ...`` would need main-thread dispatch; the
+    counter's ``_maybe_print`` runs on whichever thread fired the
+    fetch event. Rather than adding QThread machinery here, we keep
+    a reference to the viewer and to the last string, and only
+    push on the main thread via a QTimer.singleShot(0, ...).
+    """
+
+    def __init__(self, viewer):
+        self._viewer = viewer
+
+    def push(self, message: str) -> None:
+        # QTimer.singleShot is thread-safe; the callback runs on the
+        # Qt main thread, which is what viewer.status expects.
+        try:
+            from qtpy.QtCore import QTimer
+        except ImportError:
+            return
+        v = self._viewer
+        QTimer.singleShot(0, lambda: setattr(v, "status", message))
+
+
 class _FetchCounter:
     """Thread-safe observer for ``ndi.cloud.filehandler.watchFetches``.
 
@@ -55,11 +81,13 @@ class _FetchCounter:
         out=sys.stderr,
         interval: float = 0.5,
         idle_interval: float = 5.0,
+        status_reporter=None,
     ):
         self._lock = threading.Lock()
         self._out = out
         self._interval = interval
         self._idle_interval = idle_interval
+        self._status_reporter = status_reporter
         self._started = 0
         self._done = 0
         self._last_activity = time.monotonic()
@@ -78,6 +106,17 @@ class _FetchCounter:
             daemon=True,
         )
         self._heartbeat.start()
+
+    def set_status_reporter(self, reporter) -> None:
+        """Attach a reporter to update napari's status bar.
+
+        Called from openPyramid after napari.Viewer() exists, since
+        the reporter needs a viewer to write to. The counter itself
+        is built earlier so it can observe fetches during layerSpec
+        and add_image.
+        """
+        with self._lock:
+            self._status_reporter = reporter
 
     def __call__(self, event, uri, done, total):
         with self._lock:
@@ -114,12 +153,18 @@ class _FetchCounter:
         if self._last_duration is not None:
             mb = (self._last_bytes or 0) / (1024.0 * 1024.0)
             last = f"; last fetch {self._last_duration:.2f}s, {mb:.1f} MB"
-        print(
+        stderr_line = (
             f"[lightsheet] tiles: {self._done} loaded / {self._started} requested "
-            f"(in flight: {in_flight}){last}",
-            file=self._out,
-            flush=True,
+            f"(in flight: {in_flight}){last}"
         )
+        print(stderr_line, file=self._out, flush=True)
+        if self._status_reporter is not None:
+            status_msg = (
+                f"lightsheet: {self._done}/{self._started} tiles"
+                + (f" ({in_flight} in flight)" if in_flight else "")
+                + (f" | last {self._last_duration:.2f}s" if self._last_duration else "")
+            )
+            self._status_reporter.push(status_msg)
 
     def _heartbeat_loop(self) -> None:
         while not self._stop.wait(self._idle_interval):
@@ -306,6 +351,11 @@ def openPyramid(
 
     with progress.stage("opening image viewer"):
         viewer = napari.Viewer()
+
+    # Now that a viewer exists, wire the counter to napari's status
+    # bar so users see tile progress inside the viewer window rather
+    # than having to watch the terminal.
+    counter.set_status_reporter(_NapariStatusReporter(viewer))
 
     # Extract per-layer level lists BEFORE add_image; the "_ndi_"
     # prefix is our marker for kwargs napari does not understand.
