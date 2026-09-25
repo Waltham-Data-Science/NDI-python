@@ -320,18 +320,21 @@ def closeLaunchWindow() -> None:
     progress window that outlives the thing it was reporting on is
     worse than none, because it makes a finished launch look stuck.
 
-    Prints a confirmation line to stderr under any of the on-stderr
-    modes: users have reported the launch dialog lingering, and a
-    log line pinning the exact moment we asked it to close lets us
-    tell "we closed it, Qt hasn't repainted yet" from "we never
-    called close at all".
+    ``close()`` alone leaves the widget in the QApplication's widget
+    list on macOS; the window then keeps its "starting" label on
+    screen. ``hide()`` removes it from view immediately,
+    ``deleteLater()`` schedules destruction so it does not come back
+    when Qt processes pending events. Together they actually take the
+    dialog down, on every platform.
     """
     global _window
     win, _window = _window, None
     if win is None:
         return
     with contextlib.suppress(Exception):
+        win["widget"].hide()
         win["widget"].close()
+        win["widget"].deleteLater()
         win["app"].processEvents()
     print(
         "[lightsheet] closeLaunchWindow: launch dialog close requested",

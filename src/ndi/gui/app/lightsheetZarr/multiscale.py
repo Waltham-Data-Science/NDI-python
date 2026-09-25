@@ -879,43 +879,58 @@ def layerSpec(
     # only a graph rewrite that says "block[c] instead of block[all]".
     import dask.array as da
 
-    # NDI_LIGHTSHEET_SINGLE_LEVEL=1 collapses each per-channel layer
-    # to only the coarsest level as a non-multiscale layer. Diagnostic
-    # for napari 0.5's multiscale slicer, which has been observed to
-    # never mark layer.loaded=True on a lazy cloud-backed multiscale
-    # pyramid (the channel-list spinner spins forever). A
-    # single-level layer takes the multiscale slicer out of the loop
-    # entirely; if the image draws under this knob and not under
-    # multiscale, the diagnosis is confirmed.
-    single_level = _env_true("NDI_LIGHTSHEET_SINGLE_LEVEL")
+    # Default is single-level (only the coarsest, as a plain non-
+    # multiscale layer). Napari 0.5's multiscale slicer has been
+    # observed to never mark layer.loaded=True on a lazy cloud-backed
+    # 3D multiscale pyramid: the channel-list spinner spins forever
+    # and nothing draws. Single-level takes the multiscale slicer out
+    # of the loop entirely; the layer draws, then a magicgui panel
+    # lets the user swap between levels manually (see
+    # :func:`_attach_level_selector` in viewer.py).
+    #
+    # NDI_LIGHTSHEET_MULTISCALE=1 opts back into the multiscale path
+    # for anyone testing whether the napari-side bug has been fixed
+    # or for a data shape that does not hit it.
+    single_level = not _env_true("NDI_LIGHTSHEET_MULTISCALE")
+
+    # Build per-channel arrays once; each is a list of one 3D lazy
+    # dask array per level. The level dropdown swaps between the
+    # elements at runtime.
+    per_channel_levels: list[list[Any]] = []
+    for c in range(n_channels):
+        per_channel_levels.append([da.take(a, indices=c, axis=c_index) for a in arrays])
 
     specs: list[dict] = []
     for c in range(n_channels):
-        per_channel_arrays = [da.take(a, indices=c, axis=c_index) for a in arrays]
         if single_level:
             # Coarsest level only, as a plain (non-multiscale) layer.
-            coarsest = per_channel_arrays[-1]
             specs.append(
                 {
-                    "data": coarsest,
+                    "data": per_channel_levels[c][-1],
                     "multiscale": False,
                     "name": names[c],
                     "colormap": colors[c],
                     "contrast_limits": contrast_limits,
                     "scale": spatial_scale or None,
                     "translate": spatial_trans or None,
+                    # Kept on the spec so openPyramid can attach the
+                    # level selector without recomputing arrays. Not
+                    # a napari.add_image kwarg; caller pops before
+                    # calling add_image.
+                    "_ndi_level_arrays": per_channel_levels[c],
                 }
             )
         else:
             specs.append(
                 {
-                    "data": per_channel_arrays,
+                    "data": per_channel_levels[c],
                     "multiscale": True,
                     "name": names[c],
                     "colormap": colors[c],
                     "contrast_limits": contrast_limits,
                     "scale": spatial_scale or None,
                     "translate": spatial_trans or None,
+                    "_ndi_level_arrays": per_channel_levels[c],
                 }
             )
     return specs, fetcher

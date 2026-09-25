@@ -307,9 +307,16 @@ def openPyramid(
     with progress.stage("opening image viewer"):
         viewer = napari.Viewer()
 
+    # Extract per-layer level lists BEFORE add_image; the "_ndi_"
+    # prefix is our marker for kwargs napari does not understand.
+    layer_levels: list[list[Any]] = []
+    for spec in specs:
+        layer_levels.append(spec.pop("_ndi_level_arrays", []))
+
+    added_layers: list[Any] = []
     with progress.stage("attaching image to viewer"):
         for spec in specs:
-            viewer.add_image(**spec)
+            added_layers.append(viewer.add_image(**spec))
 
     # Debug: after add_image, print what napari actually has. A silent
     # session where the reader never fires could be a layer that failed
@@ -405,6 +412,7 @@ def openPyramid(
 
     if controls:
         _attach_controls(viewer, session, pyramid_doc)
+        _attach_level_selector(viewer, added_layers, layer_levels)
 
     # Print which multiscale level napari picks. Async slicing chooses
     # at paint time based on viewbox size and zoom; without this the
@@ -503,6 +511,67 @@ def _report_loaded(layer) -> None:
         file=sys.stderr,
         flush=True,
     )
+
+
+def _attach_level_selector(viewer, layers, per_layer_levels) -> None:
+    """Dock a small "Level" selector that swaps each layer's data.
+
+    Single-level is the default (napari 0.5's multiscale slicer is
+    unreliable for our pipeline), but users still want to zoom in on
+    detail. Swap ``layer.data`` between the pre-built lazy arrays for
+    each level. No new fetches happen on swap -- the graphs are
+    already there -- only napari-side re-slicing.
+
+    Silent no-op when magicgui isn't installed or when nothing has
+    levels to switch between.
+    """
+    if not layers or not per_layer_levels:
+        return
+    max_levels = max((len(lst) for lst in per_layer_levels), default=0)
+    if max_levels < 2:
+        return  # Nothing to switch between.
+
+    try:
+        from magicgui import magicgui
+    except ImportError:  # pragma: no cover - optional at import
+        print(
+            "[lightsheet] magicgui not installed; level selector unavailable "
+            "(pip install magicgui)",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+
+    # Levels are ordered finest-first in per_layer_levels. Present
+    # them the same way, but default to the coarsest (index -1) so
+    # the viewer opens at the fastest-loading resolution.
+    labels = [f"level {i}" for i in range(max_levels)]
+    default_label = labels[-1]
+
+    @magicgui(
+        auto_call=True,
+        level={"choices": labels, "label": "Resolution"},
+    )
+    def _picker(level: str = default_label):
+        idx = labels.index(level)
+        for layer, arrays in zip(layers, per_layer_levels):
+            if not arrays or idx >= len(arrays):
+                continue
+            layer.data = arrays[idx]
+        print(
+            f"[lightsheet] level selector: switched to {level}",
+            file=sys.stderr,
+            flush=True,
+        )
+
+    try:
+        viewer.window.add_dock_widget(_picker, area="right", name="Resolution")
+    except Exception as exc:  # noqa: BLE001
+        print(
+            f"[lightsheet] could not dock level selector: {exc}",
+            file=sys.stderr,
+            flush=True,
+        )
 
 
 def _attach_controls(viewer, session, pyramid_doc) -> None:
