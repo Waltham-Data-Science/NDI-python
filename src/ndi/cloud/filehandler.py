@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -484,12 +486,38 @@ def fetch_cloud_file(
         raise CloudError(f"Failed to download file from {ndic_uri}")
 
 
-def get_or_create_cloud_client() -> CloudClient:
-    """Create an authenticated CloudClient from environment variables.
+#: Process-wide CloudClient reused across on-demand fetches. Cached so
+#: streaming a pyramid does not log in once per chunk (napari's
+#: multiscale renderer resolves hundreds of chunks per frame, and each
+#: fresh :meth:`CloudClient.from_env` call is an HTTPS login roundtrip).
+_ambient_cloud_client: CloudClient | None = None
+_ambient_client_key: tuple | None = None
+_ambient_client_lock = threading.Lock()
 
-    Delegates to :meth:`CloudClient.from_env`, which checks for an
-    existing valid token first, then falls back to username/password
-    login.
+
+def _current_env_key() -> tuple:
+    """Env fingerprint the ambient client is keyed on.
+
+    Any of these changing means the cached client's identity has moved
+    (login roundtrip must run again): the credentials or environment
+    the caller wants to use are simply different.
+    """
+    return (
+        os.environ.get("NDI_CLOUD_TOKEN", ""),
+        os.environ.get("NDI_CLOUD_USERNAME", ""),
+        os.environ.get("NDI_CLOUD_PASSWORD", ""),
+        os.environ.get("CLOUD_API_ENVIRONMENT", ""),
+    )
+
+
+def get_or_create_cloud_client() -> CloudClient:
+    """Return a shared authenticated CloudClient, creating it on first use.
+
+    Cache is keyed on the credential env vars, so a legitimate change of
+    ``NDI_CLOUD_USERNAME`` / ``NDI_CLOUD_PASSWORD`` /
+    ``CLOUD_API_ENVIRONMENT`` / ``NDI_CLOUD_TOKEN`` between calls builds a
+    fresh client -- the reuse is a per-configuration cache, not a
+    stale-credential trap.
 
     Returns:
         An authenticated :class:`CloudClient`.
@@ -497,9 +525,16 @@ def get_or_create_cloud_client() -> CloudClient:
     Raises:
         CloudAuthError: If credentials are missing or login fails.
     """
+    global _ambient_cloud_client, _ambient_client_key
     from .client import CloudClient
 
-    return CloudClient.from_env()
+    key = _current_env_key()
+    with _ambient_client_lock:
+        if _ambient_cloud_client is not None and _ambient_client_key == key:
+            return _ambient_cloud_client
+        _ambient_cloud_client = CloudClient.from_env()
+        _ambient_client_key = key
+        return _ambient_cloud_client
 
 
 def _ndic_location_record(cloud_dataset_id: str, file_uid: str) -> dict:

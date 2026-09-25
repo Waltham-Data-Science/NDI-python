@@ -137,14 +137,7 @@ def openPyramid(
         pass  # warm is best-effort; a fetch that needs it will still work
 
     viewer = napari.Viewer()
-    # Wrap the first add_image cascade so the terminal shows a live
-    # "N/M fetched" line while napari resolves the coarsest level.
-    counter = _FetchCounter() if verbose else None
-    if counter is not None:
-        with watchFetches(counter):
-            viewer.add_image(**spec)
-    else:
-        viewer.add_image(**spec)
+    viewer.add_image(**spec)
 
     if level is not None:
         # napari's multiscale layer picks a level from the current zoom;
@@ -158,9 +151,19 @@ def openPyramid(
     if controls:
         _attach_controls(viewer, session, pyramid_doc)
 
+    # Watch fetches for the LIFETIME of the viewer. add_image only
+    # builds the layer -- the actual cascade of chunk fetches happens
+    # inside napari's Qt event loop as it renders, so an observer that
+    # only wraps add_image is torn down before any fetch begins.
+    counter = _FetchCounter() if verbose else None
+
     if show:
         try:
-            napari.run()
+            if counter is not None:
+                with watchFetches(counter):
+                    napari.run()
+            else:
+                napari.run()
         finally:
             fetcher.close()
 
