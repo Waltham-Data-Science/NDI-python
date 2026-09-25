@@ -137,11 +137,27 @@ class _FetchCounter:
     def stop(self) -> None:
         self._stop.set()
         with self._lock:
+            wall = time.monotonic() - self._session_start
             if not self._durations:
+                # Zero fetches is a diagnostic all on its own -- with a
+                # multiscale layer active this means napari is either
+                # drawing only fill_value chunks (short-circuited before
+                # any HTTPS) or its async slicer never scheduled a
+                # slice. Whichever it is, silence would hide it.
+                started = self._started
+                in_flight = self._started - self._done
+                print(
+                    f"[lightsheet] fetch summary: 0 tiles fetched in {wall:.1f}s "
+                    f"(started={started}, in_flight={in_flight}). "
+                    "napari either drew only sparse/fill regions, or the async "
+                    "slicer never dispatched -- try dragging the Z slider or "
+                    "zooming in to force a slice compute.",
+                    file=self._out,
+                    flush=True,
+                )
                 return
             n = len(self._durations)
             total_bytes = sum(self._byte_sizes)
-            wall = time.monotonic() - self._session_start
             mean_dt = sum(self._durations) / n
             max_dt = max(self._durations)
             min_dt = min(self._durations)
