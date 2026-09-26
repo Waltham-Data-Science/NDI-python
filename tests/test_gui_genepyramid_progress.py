@@ -70,11 +70,27 @@ class _FakeResponse:
         yield from self._chunks
 
 
+class _FakeSession:
+    """Stand-in for the module-level requests.Session in getFile.
+
+    getFile now downloads through ``_download_session().get(...)`` so
+    S3 fetches share a keep-alive connection; the tests need to hand
+    it a fake Session whose ``get`` yields a canned response.
+    """
+
+    def __init__(self, response):
+        self._response = response
+
+    def get(self, url, **kwargs):  # noqa: ARG002
+        return self._response
+
+
 class TestGetFileReportsBytes(unittest.TestCase):
     def _run(self, chunks, length, progress_fn, tmp):
         from ndi.cloud.api import files as files_api
 
-        with mock.patch("requests.get", return_value=_FakeResponse(chunks, length)):
+        fake = _FakeSession(_FakeResponse(chunks, length))
+        with mock.patch.object(files_api, "_download_session", return_value=fake):
             return files_api.getFile("https://example.invalid/x", tmp, progress=progress_fn)
 
     def setUp(self):
@@ -106,7 +122,8 @@ class TestGetFileReportsBytes(unittest.TestCase):
         resp = _FakeResponse([b"x"], None)
         resp.headers = {"Content-Length": "banana"}
         seen = []
-        with mock.patch("requests.get", return_value=resp):
+        fake = _FakeSession(resp)
+        with mock.patch.object(files_api, "_download_session", return_value=fake):
             files_api.getFile(
                 "https://example.invalid/x", self.tmp, progress=lambda d, t: seen.append((d, t))
             )

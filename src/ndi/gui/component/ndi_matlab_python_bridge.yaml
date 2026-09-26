@@ -498,7 +498,7 @@ classes:
   - name: ndi_gui_component_ProgressBarWindow
     type: class
     matlab_path: "+ndi/+gui/+component/ProgressBarWindow.m"
-    matlab_last_sync_hash: "dfa7591cc"
+    matlab_last_sync_hash: "b367283b"
     python_path: "ndi/gui/component/ProgressBarWindow.py"
     python_class: "ndi_gui_component_ProgressBarWindow"
     inherits: "matlab.apps.AppBase"
@@ -520,6 +520,7 @@ classes:
       that does have PySide6 gets a Qt failure where MATLAB degrades quietly.
       Porting a silent mode is a design decision for a maintainer rather than
       something to invent while dating a hash.
+      2026-09-25: NDI-matlab b367283b added a per-bar Timeout name-value on addBar so a long-running bar can opt out of the global auto-timeout sweep. No Python UI counterpart; no behavioural change here.
 
       NDI-python#295: the MATLAB properties this port does not expose under
       MATLAB's name are enumerated in tests/bridge_property_allowlist.yaml,

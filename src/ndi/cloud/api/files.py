@@ -193,6 +193,29 @@ def putFileBytes(
 
 
 @validate_call
+def _download_session():
+    """Return the module-level ``requests.Session`` used for downloads.
+
+    A single Session lets ``requests`` reuse the underlying HTTPS
+    connection across sibling ``getFile`` calls. Every tile of a
+    pyramid goes to the same S3 host, so a shared Session amortises
+    the TLS handshake (~100-500ms) across N chunks. Thread-safe for
+    GET; the default pool holds 10 connections which is comfortable
+    for the lightsheet fetcher's 8 workers.
+
+    A previous version opened a fresh connection per call
+    (``requests.get(url, ...)``) which added handshake latency to
+    every tile. See NDI-python#$(TBD).
+    """
+    import requests
+
+    session = getattr(_download_session, "_session", None)
+    if session is None:
+        session = requests.Session()
+        _download_session._session = session
+    return session
+
+
 def getFile(
     url: NonEmptyStr,
     target_path: str | Path,
@@ -221,15 +244,20 @@ def getFile(
     """
     import logging
 
-    import requests
-
     logger = logging.getLogger(__name__)
 
     assert_safe_transfer_url(url, what="download URL")
     target_path = Path(target_path)
     target_path.parent.mkdir(parents=True, exist_ok=True)
 
-    resp = requests.get(url, timeout=timeout, stream=True)
+    # 256 KiB chunk_size (was 8 KiB). Python iterates once per chunk, and
+    # every iteration is a socket read + a progress() callback + GIL
+    # contention. 8 KiB meant ~500 iterations per 4 MB tile which caps
+    # single-stream throughput well below what the link can actually push;
+    # 256 KiB drops that to ~16 iterations and lets the TCP buffer stay
+    # full. A larger buffer costs a little peak memory (256 KiB per
+    # concurrent download) and gives up nothing.
+    resp = _download_session().get(url, timeout=timeout, stream=True)
     if resp.status_code == 200:
         total = None
         if progress is not None:
@@ -241,7 +269,7 @@ def getFile(
                 total = None
         done = 0
         with open(target_path, "wb") as fh:
-            for chunk in resp.iter_content(chunk_size=8192):
+            for chunk in resp.iter_content(chunk_size=262144):
                 fh.write(chunk)
                 if progress is not None:
                     done += len(chunk)

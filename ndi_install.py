@@ -540,9 +540,9 @@ def validate() -> tuple[int, int]:
     # ndi_common check
     total += 1
     try:
-        from ndi.common import PathConstants
+        from ndi.common import ndi_common_PathConstants
 
-        folder = PathConstants.COMMON_FOLDER
+        folder = ndi_common_PathConstants.COMMON_FOLDER
         if folder.is_dir():
             success(f"ndi_common data folder ({folder})")
             passed += 1

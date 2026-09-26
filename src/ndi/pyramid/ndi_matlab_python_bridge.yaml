@@ -1,0 +1,170 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/pyramid/
+# The Primary Contract for ndi.pyramid.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# NAPARI-INDEPENDENT MULTISCALE PYRAMID LOADER.
+#
+# ndi.pyramid holds the retrieval logic for a lightsheetZarrPyramid
+# document -- enumerating level documents, building lazy dask arrays per
+# level, resolving chunk.bin_# files through the NDI cloud API,
+# pre-fetching the coarsest level, and (opt-in) substituting coarser
+# cached data under unfinished fine tiles.
+#
+# The classes here know nothing about napari; the same loader drives
+# napari (via ndi.gui.app.lightsheetZarr.viewer), matplotlib,
+# Jupyter, headless batch analyses, and eventually a sibling
+# +ndi/+pyramid/ namespace under NDI-matlab.
+# =========================================================================
+functions:
+
+  # -----------------------------------------------------------------------
+  # ImagePyramidLoader -- the facade a caller talks to.
+  # -----------------------------------------------------------------------
+
+  - name: ImagePyramidLoader
+    matlab_path: null
+    python_path: "ndi/pyramid/loader.py"
+    decision_log: >-
+      Python-only in this namespace, so far -- a sibling class under
+      +ndi/+pyramid/ImagePyramidLoader.m is the intended MATLAB
+      counterpart once the multiscale reader lands in NDI-matlab
+      (arrays.tiled or memmap instead of dask, same public surface).
+      The class encapsulates a lightsheetZarrPyramid's retrieval
+      state: fetcher pool, per-level lazy arrays, coarsest-level
+      prefetch, upsample-fallback refresh-hook registration, stats.
+      Napari consumes it through gui/app/lightsheetZarr/viewer.py;
+      matplotlib and Jupyter callers construct it the same way.
+      When the MATLAB sibling exists, this entry's status flips to
+      `ported_differently` with the MATLAB path filled in.
+
+  # -----------------------------------------------------------------------
+  # Level-document discovery + dask assembly.
+  # -----------------------------------------------------------------------
+
+  - name: levelDocs
+    matlab_path: null
+    python_path: "ndi/pyramid/multiscale.py"
+    output_arguments:
+      - name: docs
+        type_python: list
+    decision_log: >-
+      Python-only in this namespace. Depends_on query for a pyramid's
+      lightsheetZarrLevel children, sorted finest-first. One place
+      that spells the depends_on slot name so levelTable and
+      levelArrays stay in sync. MATLAB counterpart lives in
+      +ndi/+fun/+doc/+lightsheet and is recorded there.
+
+  - name: levelTable
+    matlab_path: null
+    python_path: "ndi/pyramid/multiscale.py"
+    decision_log: >-
+      Python-only in this namespace. Metadata-only rows for --report
+      and for choosing a level without reading chunk bytes. Mirror of
+      the MATLAB ndi.fun.doc.lightsheet.levelTable.
+
+  - name: worldTransform
+    matlab_path: null
+    python_path: "ndi/pyramid/multiscale.py"
+    decision_log: >-
+      Python-only in this namespace. Napari applies scale/translate
+      to the FINEST level of a multiscale layer; coarser levels come
+      out of the level documents' own voxel_size/translation.
+
+  - name: levelArrays
+    matlab_path: null
+    python_path: "ndi/pyramid/multiscale.py"
+    output_arguments:
+      - name: arrays
+        type_python: list
+    decision_log: >-
+      Python-only in this namespace. One lazy dask array per level,
+      backed by the level's chunk.bin_# file series through the NDI
+      cloud cache. Building block for ImagePyramidLoader (added in
+      a follow-up commit). A MATLAB sibling would build the same
+      table using arrays.tiled or memmap rather than dask.
+
+  - name: layerSpec
+    matlab_path: null
+    python_path: "ndi/pyramid/multiscale.py"
+    output_arguments:
+      - name: specs
+        type_python: "list[dict]"
+    decision_log: >-
+      Python-only in this namespace. Napari-consumable kwargs for a
+      caller that does `for spec in specs: viewer.add_image(**spec)`.
+      One layer per channel. Kept here (rather than viewer.py) so a
+      headless caller can build the ladders without a display.
+
+  - name: prefetchCoarsestLevel
+    matlab_path: null
+    python_path: "ndi/pyramid/multiscale.py"
+    decision_log: >-
+      Python-only in this namespace. Fetches every stored chunk of
+      the pyramid's coarsest level in a background thread, so a
+      later zoom into a fine level has coarse data to fall back on
+      for the upsample-fallback reader.
+
+  # -----------------------------------------------------------------------
+  # Upsample-fallback reader (opt-in via NDI_LIGHTSHEET_UPSAMPLE_FALLBACK).
+  # -----------------------------------------------------------------------
+
+  - name: readChunkWithFallback
+    matlab_path: null
+    python_path: "ndi/pyramid/upsample_fallback.py"
+    decision_log: >-
+      Python-only in this namespace. Reader with a coarser-level
+      upsample fallback -- returns an upsampled patch of the covering
+      coarsest-level chunk when a fine chunk is not on disk yet.
+      The classic multiresolution rendering trick.
+
+  - name: LevelGeometry
+    matlab_path: null
+    python_path: "ndi/pyramid/upsample_fallback.py"
+    decision_log: >-
+      Python-only in this namespace. Struct-like holder for a level's
+      chunks / chunk_grid / shape / voxel_size / translation /
+      axes_order.
+
+  - name: levelGeometry
+    matlab_path: null
+    python_path: "ndi/pyramid/upsample_fallback.py"
+    decision_log: >-
+      Python-only in this namespace. Build a LevelGeometry from a
+      lightsheetZarrLevel document.
+
+  - name: fineChunkWorldBox
+    matlab_path: null
+    python_path: "ndi/pyramid/upsample_fallback.py"
+    decision_log: >-
+      Python-only in this namespace. World bbox for one chunk of a
+      level, per axis. Straight geometry -- would be the same in
+      MATLAB.
+
+  - name: findCoveringCoarseChunk
+    matlab_path: null
+    python_path: "ndi/pyramid/upsample_fallback.py"
+    decision_log: >-
+      Python-only in this namespace. Given a fine chunk's world
+      bbox, find the coarse chunk that fully covers it and the
+      sub-slice inside that coarse chunk to upsample.
+
+  - name: upsampleToBlock
+    matlab_path: null
+    python_path: "ndi/pyramid/upsample_fallback.py"
+    decision_log: >-
+      Python-only in this namespace. Nearest-neighbour upsample of a
+      coarse region to a fine block shape via numpy.kron.
+
+  - name: fallbackStatsSummary
+    matlab_path: null
+    python_path: "ndi/pyramid/upsample_fallback.py"
+    decision_log: >-
+      Python-only in this namespace. One-line summary of what the
+      fallback reader has been doing -- hit_fine, upsampled,
+      prefetches_queued -- for diagnosing "the picture stays blurry
+      forever" symptoms.
