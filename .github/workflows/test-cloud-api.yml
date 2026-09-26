@@ -49,4 +49,9 @@ jobs:
           # All live cloud test files, not just test_cloud_live.py -- the
           # others were previously exercised only by ci.yml, so they had no
           # coverage on days when nobody opened a PR.
-          pytest tests/test_cloud_*.py -v --tb=short
+          #
+          # test_pyramid_loader_integration.py points at the permanent
+          # lightsheet blob fixture (see tests/fixtures/lightsheet_cloud_fixture.json,
+          # built by build-lightsheet-fixture.yml). It runs under the
+          # same account-and-env matrix as the rest of the cloud tests.
+          pytest tests/test_cloud_*.py tests/test_pyramid_loader_integration.py -v --tb=short

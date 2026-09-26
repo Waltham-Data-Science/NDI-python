@@ -161,6 +161,7 @@ addopts = "-v --tb=short --ignore=tests/symmetry"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "symmetry: marks cross-language symmetry tests (run with 'pytest tests/symmetry/')",
+    "cloud: marks live-cloud tests (skipped when NDI_CLOUD_USERNAME / NDI_CLOUD_PASSWORD are missing)",
 ]
 
 [tool.black]
