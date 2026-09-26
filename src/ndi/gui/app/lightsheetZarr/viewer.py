@@ -679,21 +679,40 @@ def _attach_level_selector(viewer, layers, per_layer_levels, per_layer_scales):
         for layer, arrays, scales in zip(layers, per_layer_levels, per_layer_scales):
             if not arrays or idx >= len(arrays):
                 continue
-            layer.data = arrays[idx]
-            # scale MUST update alongside data or napari places the
-            # new pixels at the previous level's world position, and
-            # the picture jumps to a different spatial location.
+            new_scale = None
             if scales and idx < len(scales) and scales[idx]:
+                new_scale = scales[idx]
+            # Set SCALE FIRST, then DATA. Napari fires a re-slice on
+            # `layer.data =` and uses whatever `layer.scale` is at
+            # that instant. Setting data first means the re-slice
+            # runs with the OLD scale on the NEW data, so the new
+            # image draws at the wrong world position -- visible as
+            # a black moment (viewport lands off the image) and a
+            # few-second stretch of wrong-scale pixels until the
+            # eventual scale assignment triggers a second re-slice
+            # and the picture snaps into place. Setting scale first
+            # means the single re-slice from the data change already
+            # has the right transform.
+            if new_scale is not None:
                 try:
-                    layer.scale = scales[idx]
+                    layer.scale = new_scale
                 except Exception as exc:  # noqa: BLE001
                     print(
                         f"[lightsheet]   scale swap on {layer.name!r} failed: {exc}",
                         file=sys.stderr,
                         flush=True,
                     )
+            layer.data = arrays[idx]
+            # Force a fresh re-slice so any pending slice that started
+            # against the previous data or previous scale is superseded
+            # by one with the current combination -- kills the
+            # "old-data-at-new-scale" ghost frame.
+            try:
+                layer.refresh()
+            except Exception:  # noqa: BLE001
+                pass
             print(
-                f"[lightsheet]   layer {layer.name!r} data/scale swapped "
+                f"[lightsheet]   layer {layer.name!r} scale/data swapped "
                 f"at t=+{time.monotonic() - session_start:.1f}s",
                 file=sys.stderr,
                 flush=True,
