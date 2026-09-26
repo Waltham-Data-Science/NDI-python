@@ -612,7 +612,7 @@ functions:
 
   - name: downloadNdiDocuments
     matlab_path: "+ndi/+cloud/+sync/+internal/downloadNdiDocuments.m"
-    matlab_last_sync_hash: "cd3c11673"
+    matlab_last_sync_hash: "9467a0a7"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: cloud_dataset_id
@@ -664,6 +664,7 @@ functions:
       its manifest reference. Now pinned by
       TestTheCloudDatasetIdReachesTheRewrite in
       tests/test_cloud_download_ordering.py.
+      2026-09-25: NDI-matlab 9467a0a7 threaded a listFilesAll-derived uploaded-uid map into the SyncFiles=false branch. Python's download path calls its own listFilesAll on demand and has no matching threading; no behavioural change here.
 
 # =============================================================================
 # Not-yet-ported MATLAB functions

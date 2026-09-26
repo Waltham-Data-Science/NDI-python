@@ -410,7 +410,7 @@ functions:
 
   - name: uploadDataset
     matlab_path: "+ndi/+cloud/uploadDataset.m"
-    matlab_last_sync_hash: "abc6ad2a2"
+    matlab_last_sync_hash: "4e45d96e"
     python_path: "ndi/cloud/orchestration.py"
     input_arguments:
       - name: dataset
@@ -462,6 +462,7 @@ functions:
       createDataset through a new formatApiError helper that tolerates an empty
       response body; this side already has ndi.cloud.internal.formatApiError
       (internal.py:381) and already uses it (client.py:394).
+      2026-09-25: NDI-matlab 4e45d96e added the 'organizationName' / 'organizationID' options and verbose diagnostics; the Python uploadDataset does not expose those options yet (see resolveOrganizationId entry) and has its own verbose printing. No behavioural change on the Python side.
 
   - name: syncDataset
     matlab_path: "+ndi/+cloud/syncDataset.m"
@@ -868,7 +869,7 @@ functions:
 
   - name: zipForUpload
     matlab_path: "+ndi/+cloud/+upload/zipForUpload.m"
-    matlab_last_sync_hash: "8c31a8f28"
+    matlab_last_sync_hash: "b367283b"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
       - name: documents
@@ -912,10 +913,11 @@ functions:
       binary path. Neither is a correctness bug -- per-file upload works,
       just without the batching -- so it is recorded here rather than fixed,
       alongside the thinness of the same upload path tracked in #232.
+      2026-09-25: NDI-matlab b367283b restructured the batch loop as O(N_files) and swapped the plain waitbar for ProgressBarWindow. Python's upload path uses a different batching model and its own progress reporting; no behavioural change here.
 
   - name: uploadFilesForDatasetDocuments
     matlab_path: "+ndi/+cloud/+sync/+internal/uploadFilesForDatasetDocuments.m"
-    matlab_last_sync_hash: "7026d493"
+    matlab_last_sync_hash: "4e45d96e"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
       - name: org_id
@@ -939,6 +941,7 @@ functions:
     decision_log: >
       MATLAB places this in +sync/+internal. Python places it in upload.py.
       Exact name match.
+      2026-09-25: NDI-matlab 4e45d96e added verbose stage prints and a listFiles-not-yet-uploaded diagnostic. Python code is silent in the same way it was; no behavioural change.
 
       2026-09-15: added a ``dataset`` kwarg. On MATLAB, +sync/+internal/
       uploadFilesForDatasetDocuments always has the dataset in hand -- it
@@ -1023,7 +1026,7 @@ functions:
   # --- filehandler.py functions ---
   - name: updateFileInfoForRemoteFiles
     matlab_path: "+ndi/+cloud/+sync/+internal/updateFileInfoForRemoteFiles.m"
-    matlab_last_sync_hash: "aea0c72c"
+    matlab_last_sync_hash: "9467a0a7"
     python_path: "ndi/cloud/filehandler.py"
     input_arguments:
       - name: doc_props
@@ -1076,6 +1079,7 @@ functions:
       fetch failure leaves the entry un-reconstructed so DID's #185
       guard fires on add_docs with the document's own identity -- the
       right signal a partial download deserves.
+      2026-09-25: NDI-matlab 9467a0a7 added an optional uploadedUidMap name-value and a ProgressBarWindow bar. Python has no analogous name-value on its update path and no matching progress reporting; no behavioural change here.
   - name: updateFileInfoForLocalFiles
     matlab_path: "+ndi/+cloud/+sync/+internal/updateFileInfoForLocalFiles.m"
     matlab_last_sync_hash: "504c5bcf4"
@@ -1533,7 +1537,7 @@ not_yet_ported:
 
   - name: reconstructSeriesIngestLocations
     matlab_path: "+ndi/+cloud/+sync/+internal/reconstructSeriesIngestLocations.m"
-    matlab_last_sync_hash: "cd3c116"
+    matlab_last_sync_hash: "58cbdeec"
     python_path: "ndi/cloud/filehandler.py"
     input_arguments:
       - name: doc_props
@@ -1568,6 +1572,7 @@ not_yet_ported:
       silent, since a short download is otherwise indistinguishable from a
       smaller dataset. The manifest is read with
       did.file.read_series_manifest rather than any reader of NDI's own.
+      2026-09-25: NDI-matlab 58cbdeec preallocated the ingest_locations struct array to trade O(N^2) growth for O(N). Python already grew a list with append() which is amortised O(1); no behavioural change here.
 
   - name: dropDuplicateDocsFromJsonDecode
     matlab_path: "+ndi/+cloud/+internal/dropDuplicateDocsFromJsonDecode.m"
@@ -1601,6 +1606,23 @@ not_yet_ported:
     decision_log: >
       MATLAB-specific HTTP configuration. Python uses CloudClient
       with requests.ndi_session which handles auth headers internally.
+
+  - name: resolveOrganizationId
+    matlab_path: "+ndi/+cloud/+internal/resolveOrganizationId.m"
+    matlab_last_sync_hash: "f847d7c4"
+    status: porting_deferred
+    decision_log: >
+      MATLAB helper introduced with NDI-matlab#979: given
+      organizationName or organizationID, resolves against
+      ndi.cloud.api.users.me and returns the id, verifying membership.
+      Wired into ndi.cloud.uploadDataset as the 'organizationName' /
+      'organizationID' options so a user who belongs to more than one
+      NDI Cloud organization can route the upload explicitly. Python's
+      uploadDataset does not currently expose those options, so the
+      resolver has no Python caller yet -- porting_deferred rather
+      than matlab_only because Python COULD do this once the upload
+      surface grows the same options. See NDI-python cloud
+      orchestration when that lands.
 
   - name: createCloudMetadataStruct
     matlab_path: "+ndi/+cloud/+utility/createCloudMetadataStruct.m"

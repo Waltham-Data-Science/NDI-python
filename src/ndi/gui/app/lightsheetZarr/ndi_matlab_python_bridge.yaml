@@ -1,0 +1,355 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/gui/app/lightsheetZarr/
+# The Primary Contract for ndi.gui.app.lightsheetZarr.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# PYTHON-ONLY PACKAGE, plus the ONE MATLAB GUI class that shells out to
+# our console script.
+#
+# napari has no MATLAB counterpart, so unlike the rest of ndi.gui.app there
+# is nothing here to mirror on the viewer side. MATLAB reads the same
+# documents through +ndi/+fun/+doc/+lightsheet, which is recorded under
+# src/ndi/fun/doc_lightsheet/ndi_matlab_python_bridge.yaml. What differs
+# here is only the surface that draws them.
+#
+# The MATLAB GUI class ndi.gui.app.LightsheetZarrManager is recorded here
+# rather than in src/ndi/gui/app/ndi_matlab_python_bridge.yaml so that
+# every part of the lightsheetZarr feature lives in one file. It's not
+# ported (napari is Python-only), but the shell wrapper it targets is,
+# and that's the piece the CLI is documented against.
+# =========================================================================
+functions:
+
+  # -----------------------------------------------------------------------
+  # MATLAB GUI class — not ported (napari has no MATLAB counterpart).
+  # The manager shell-execs /usr/local/bin/napariViewLightsheet, which is
+  # a bash wrapper around this package's cli.main.
+  # -----------------------------------------------------------------------
+  - name: LightsheetZarrManager
+    matlab_path: "+ndi/+gui/+app/LightsheetZarrManager.m"
+    matlab_last_sync_hash: "60a79cf0"
+    status: matlab_only
+    decision_log: >-
+      matlab_only: napari is Python-only, so the manager class stays
+      MATLAB-only. It is the caller side of the CLI in this package -
+      shell-execs /usr/local/bin/napariViewLightsheet (a wrapper that
+      scrubs MATLAB's library paths) which then runs
+      ndi.gui.app.lightsheetZarr.cli.main. Mirrors the GEFManager /
+      napariViewGEF split; if the day ever comes that a Python-hosted
+      MATLAB-app equivalent is built, this entry is where it will get
+      declared.
+
+      2026-09-25: NDI-matlab 60a79cf0 fixed the buildRowsForSession
+      table so Levels and Reduction come from the child
+      lightsheetZarrLevel documents rather than nonexistent parent
+      fields. Still matlab_only; no Python counterpart to update.
+
+  # -----------------------------------------------------------------------
+  # Python-only implementation.
+  # -----------------------------------------------------------------------
+
+  - name: build_parser
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/cli.py"
+    output_arguments:
+      - name: parser
+        type_python: argparse.ArgumentParser
+    decision_log: >-
+      Python-only. argparse surface for the napariViewLightsheet console
+      script. The flag set MUST stay in sync with
+      ndi.fun.doc.lightsheet.viewCommand in NDI-matlab: --pyramid,
+      --reduction, --channel, --level, --no-controls, --name, --list,
+      --report. Kept in a separate function so tests can inspect the
+      parser without invoking main and without importing napari.
+
+  - name: main
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/cli.py"
+    input_arguments:
+      - name: argv
+        type_python: "Sequence[str] | None"
+    output_arguments:
+      - name: exit_code
+        type_python: int
+    decision_log: >-
+      Python-only. The napariViewLightsheet command line, reachable two
+      ways that are the same function: the installed console script, and
+      the shell wrapper that scrubs MATLAB's environment before exec.
+      Handles --list and --report without importing napari or dask so
+      those subcommands stay cheap on a headless box; napari is loaded
+      only when a viewer is actually opened. Returns an integer exit
+      code so the wrapper can propagate failure.
+
+  - name: _open_session
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/cli.py"
+    decision_log: >-
+      Python-only. Kept out of multiscale.py so --list and --report do
+      not force a napari or dask import when they load the session.
+      Deferred imports (ndi.session.dir) matter here because a
+      MATLAB-launched Python inherits an ill-fitting LD_LIBRARY_PATH;
+      every module touched before the first useful line is a candidate
+      for a linker crash.
+
+  - name: _pyramids
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/cli.py"
+    decision_log: >-
+      Python-only. One place that spells the
+      isa("lightsheetZarrPyramid") query so --list, --report and
+      --pyramid resolution stay consistent.
+
+  - name: _pick_pyramid
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/cli.py"
+    decision_log: >-
+      Python-only. Refusal-first: a session with two pyramids and no
+      --pyramid does not silently open the first one; it explains the
+      situation and points at --list. Mirrors the pyramid_id-is-required
+      stance in ndi.fun.doc.lightsheet.viewCommand.
+
+  - name: _resolve_reduction
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/cli.py"
+    decision_log: >-
+      Python-only. --reduction swaps to the sibling pyramid with the
+      same subject_id + source_file_id but a different reduction. NDI
+      documents are immutable, so mean and max are separate parents;
+      switching is a pyramid swap, not a doc edit.
+
+  - name: require_napari
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/viewer.py"
+    decision_log: >-
+      Python-only. Mirrors ndi.gui.app.genepyramid.viewer.require_napari:
+      napari is an extra, not a runtime dependency, so a headless
+      install does not pull in Qt and OpenGL, and a missing toolkit
+      surfaces as a sentence naming the extra rather than a traceback
+      from deep inside.
+
+  - name: openPyramid
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/viewer.py"
+    decision_log: >-
+      Python-only. Opens the pyramid in a napari.Viewer via layerSpec.
+      Reduction / channel / level control panels are a no-op in this
+      scaffold; the follow-up PR lands the magicgui panels alongside
+      without changing this signature.
+
+  - name: readChunkWithFallback
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/upsample_fallback.py"
+    decision_log: >-
+      Python-only. Reader with a coarser-level upsample fallback:
+      when a fine chunk is not cached on disk, returns an
+      upsampled patch of the covering coarsest-level chunk
+      (put on disk at launch by prefetchCoarsestLevel) instead of
+      fill_value, and fires an async fetch of the fine chunk so a
+      subsequent napari re-slice can find real data. Opt-in via
+      NDI_LIGHTSHEET_UPSAMPLE_FALLBACK=1. Nearest-neighbour
+      upsampling via numpy.kron for the common power-of-2
+      pyramid; straddling fine chunks fall through to fill_value
+      in v1. No MATLAB counterpart because napari has no MATLAB
+      counterpart.
+
+  - name: levelGeometry
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/upsample_fallback.py"
+    decision_log: >-
+      Python-only. Struct-like holder for a lightsheetZarrLevel's
+      chunks / chunk_grid / shape / voxel_size / translation /
+      axes_order, so the fallback reader can compute world bboxes
+      per chunk without re-reading the document from every dask
+      delayed task. No MATLAB counterpart.
+
+  - name: findCoveringCoarseChunk
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/upsample_fallback.py"
+    decision_log: >-
+      Python-only. Given a fine chunk's world bbox, returns the
+      coarse chunk that fully covers it and the sub-slice inside
+      that coarse chunk to upsample. Returns None when the fine
+      bbox straddles two coarse chunks -- v1 does not stitch
+      coarse chunks together. No MATLAB counterpart.
+
+  - name: upsampleToBlock
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/upsample_fallback.py"
+    decision_log: >-
+      Python-only. Nearest-neighbour upsampling from a coarse
+      region to a fine block shape. Uses numpy.kron for integer
+      scale factors (the typical case) and an index-array
+      fallback for non-integer ratios. No MATLAB counterpart.
+
+  - name: RefreshHint
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/upsample_fallback.py"
+    decision_log: >-
+      Python-only. Debounces napari layer.refresh() calls fired
+      by async fine-chunk fetches; coalesces a burst of arrivals
+      into one re-slice per ~250ms so napari's slicer is not
+      overwhelmed. No MATLAB counterpart.
+
+  - name: prefetchAsync
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/multiscale.py"
+    decision_log: >-
+      Python-only. Fire-and-forget fetch of one chunk into the
+      cache; used by the upsample fallback reader to load the real
+      fine chunk while returning coarser data now. Deduplicates
+      in-flight requests by chunk key and calls a completion
+      callback when the pool worker finishes. Method on
+      _ChunkFetcher. No MATLAB counterpart.
+
+  - name: chunkPathIfCached
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/multiscale.py"
+    decision_log: >-
+      Python-only. Non-blocking cache probe -- returns a local
+      path IFF the chunk is already on disk, else None. Never
+      fetches. The upsample fallback reader calls this from every
+      dask task to decide between real fine data and coarse
+      upsample without ever waiting on the cloud. Method on
+      _ChunkFetcher. No MATLAB counterpart.
+
+  - name: attach_viewport_clip
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/viewport.py"
+    decision_log: >-
+      Python-only. Opt-in viewport clipping (NDI_LIGHTSHEET_VIEWPORT_CLIP=1).
+      Recomputes each layer's data as a chunk-aligned crop of the
+      current level to the visible world rectangle on every pan / zoom
+      / Z-slice change (debounced 300ms). Napari's slicer then only
+      asks for chunks inside the crop, so a level-1 view of a large
+      brain does not try to fetch every tile at that level. Wraps the
+      Resolution picker via magicgui's `called` emitter, so a manual
+      or auto-level swap ends with a fresh crop against the new level.
+      Off by default because it swaps layer.data on every pan; the
+      auto-level swap alone is the tested default. No MATLAB
+      counterpart because napari has no MATLAB counterpart.
+
+  - name: ViewportClip
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/viewport.py"
+    decision_log: >-
+      Python-only. Class that owns the viewport-clip state for one
+      viewer session: the full-level arrays, the current level per
+      layer, the base translate anchors, and the QTimer debouncer.
+      Public surface is one method, `refresh`, which reads the
+      current camera and re-crops every layer's data + translate.
+      Wired by `attach_viewport_clip`. No MATLAB counterpart.
+
+  - name: _attach_zoom_level_swap
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/viewer.py"
+    decision_log: >-
+      Python-only. Zoom-driven multiscale level swap. Listens on
+      viewer.camera.events.zoom and, after a 400ms debounce, sets the
+      Resolution picker's value to the coarsest level whose Y/X voxel
+      size is <= 1.5x the current world-per-screen-pixel. Routes the
+      swap through the picker widget (rather than editing layer.data
+      directly) so the docked Resolution control always shows the
+      level napari is drawing and one code path handles both manual
+      and automatic changes. Opt-out via NDI_LIGHTSHEET_AUTOLEVEL=0.
+      No MATLAB counterpart because napari has no MATLAB counterpart.
+
+  - name: stage
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/progress.py"
+    status: ported_differently
+    decision_log: >-
+      Python-only. Launch narration for the lightsheetZarr viewer:
+      stderr lines + a Qt QProgressBar window while the multiscale
+      ladder is being built and the first chunk cascade fetched. No
+      MATLAB counterpart because napari has no MATLAB counterpart;
+      MATLAB uses its own ProgressBarWindow for the file crawl and the
+      batch upload that ndi.cloud.uploadDataset runs. Mirrors
+      ndi.gui.app.genepyramid.progress.
+
+  - name: levelDocs
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/multiscale.py"
+    output_arguments:
+      - name: docs
+        type_python: list
+    decision_log: >-
+      Python-only. Depends_on query for a pyramid's level children,
+      sorted finest-first. One place that spells the depends_on slot
+      name so levelTable and levelArrays stay in sync.
+
+  - name: levelTable
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/multiscale.py"
+    decision_log: >-
+      Python-only. Metadata-only rows for --report and for choosing a
+      level without reading chunk bytes. Mirror of the MATLAB
+      ndi.fun.doc.lightsheet.levelTable.
+
+  - name: worldTransform
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/multiscale.py"
+    decision_log: >-
+      Python-only. Napari applies `scale` and `translate` to the FINEST
+      level of a multiscale layer; coarser levels come out of the level
+      documents' own voxel_size/translation. Returns (scale, translate)
+      as plain lists so the caller can drop napari's Nones in when a
+      pyramid has no coordinate transform.
+
+  - name: prefetchCoarsestLevel
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/multiscale.py"
+    decision_log: >-
+      Python-only. Fetches every stored chunk of the pyramid's
+      coarsest level in the background as soon as the fetcher pool
+      exists, so a later zoom into a fine level has coarse data to
+      fall back on for the upsample-fallback reader. Serial through
+      fetcher.chunkPath so the pool stays available to napari's
+      foreground fetches. Off with
+      NDI_LIGHTSHEET_PREFETCH_COARSEST=0. No MATLAB counterpart
+      because napari has no MATLAB counterpart.
+
+  - name: levelArrays
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/multiscale.py"
+    output_arguments:
+      - name: arrays
+        type_python: list
+    decision_log: >-
+      Python-only. One lazy dask array per level, backed by the level's
+      chunk.bin_# file series through the NDI cloud cache. Scaffold in
+      this PR: enumerates levels and reads metadata; the per-chunk
+      reader plus the dask.delayed assembly is the next step.
+
+  - name: layerSpec
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/multiscale.py"
+    output_arguments:
+      - name: specs
+        type_python: "list[dict]"
+    decision_log: >-
+      Python-only. Napari-consumable kwargs (`data`, `multiscale`,
+      `name`, `scale`, `translate`, `colormap`, `contrast_limits`) --
+      one dict per napari layer -- for a caller that does
+      `for spec in specs: viewer.add_image(**spec)`. One layer per
+      channel with the channel axis stripped out of each level's data
+      before it reaches napari, because napari 0.5's `channel_axis` on
+      a list-of-multiscale-arrays silently drops multiscale and
+      registers a single-level layer at the finest resolution -- the
+      viewer then asks for a viewport-sized handful of level-0 chunks
+      and everything else is fill_value. Split-here-then-add-once side
+      steps that. Split from openPyramid so a headless caller can
+      build the ladders without a display.
+
+  - name: _fetch_chunk
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/multiscale.py"
+    decision_log: >-
+      Python-only. Reads one chunk file through
+      session.database_openbinarydoc(level_doc, 'chunk.bin_#') and
+      returns raw bytes; the caller decodes per the level's
+      codec/dtype/chunk_order. Signature is fixed so the follow-up dask
+      block can drop it in without changing levelArrays' call sites.
