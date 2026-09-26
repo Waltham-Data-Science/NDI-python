@@ -98,9 +98,11 @@ def _run_one(user_index: int, environment: str, username: str, password: str) ->
     # A per-user config, isolated from process env so a second call doesn't
     # inherit the first's token.
     config = CloudConfig(
-        api_url="https://api.ndi-cloud.com/v1"
-        if environment == "prod"
-        else "https://dev-api.ndi-cloud.com/v1",
+        api_url=(
+            "https://api.ndi-cloud.com/v1"
+            if environment == "prod"
+            else "https://dev-api.ndi-cloud.com/v1"
+        ),
         username=username,
         password=password,
     )
