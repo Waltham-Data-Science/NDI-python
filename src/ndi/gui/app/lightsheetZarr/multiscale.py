@@ -159,6 +159,13 @@ class _ChunkFetcher:
         self._pool = None
         self._lock = threading.Lock()
         self._paths: dict[tuple[str, str], str] = {}
+        # Async prefetch bookkeeping. When the upsample-fallback reader
+        # kicks off a background fetch, this maps the chunk key to the
+        # list of on_complete callbacks that fire when the pool worker
+        # finishes. Sharing the map de-duplicates: the same chunk
+        # requested twice enqueues one task and both callers are
+        # notified when it lands.
+        self._in_flight: dict[tuple[str, str], list] = {}
         # Per-fetch timing bucketed by outcome. Set by _resolve on every
         # call, including memo hits, so a caller can tell whether a
         # slow tile is "cloud is slow" vs "local cache lookup is slow"
@@ -325,6 +332,91 @@ class _ChunkFetcher:
         """Drop a memoised path so the next call fetches it again."""
         self._paths.pop((getattr(doc, "id", str(doc)), filename), None)
 
+    def chunkPathIfCached(self, doc, filename) -> str | None:
+        """Return a local path IFF the chunk is already on disk, else None.
+
+        Never fetches -- reads only the memoisation table and the
+        filesystem, so this is safe to call from every dask task on
+        the critical read path. The upsample-fallback reader uses
+        this to decide "return real fine data" vs "fall back to
+        upsampled coarse data" WITHOUT waiting on a cloud round
+        trip. A miss means "we do not have it now"; whether we ever
+        will is a separate question the async prefetch answers.
+        """
+        key = (getattr(doc, "id", str(doc)), filename)
+        known = self._paths.get(key)
+        if known is not None and os.path.exists(known):
+            return known
+        return None
+
+    def prefetchAsync(self, doc, filename, on_complete=None) -> None:
+        """Kick off a background fetch of one chunk. Never blocks.
+
+        The upsample-fallback reader returns coarse-upsampled data
+        immediately for a chunk that is not on disk; this asks the
+        pool to go fetch the real thing so a later re-slice can
+        find it via :meth:`chunkPathIfCached`. On completion (or
+        failure), ``on_complete`` is called with the resolved path
+        or None -- callers use that to trigger a napari refresh so
+        the user is not stuck looking at blurred data forever.
+
+        De-duplicates by memo key: the same (doc, filename) already
+        in flight or already cached does not enqueue a second task.
+        Errors are absorbed; the reader will retry on the next
+        re-slice and eventually get real data or a permanent
+        fallback.
+        """
+        key = (getattr(doc, "id", str(doc)), filename)
+        with self._lock:
+            if key in self._paths and os.path.exists(self._paths[key]):
+                # Already cached -- no need to enqueue. Fire the
+                # completion callback synchronously so the caller
+                # can react uniformly whether the answer was cheap
+                # or expensive.
+                if on_complete is not None:
+                    try:
+                        on_complete(self._paths[key])
+                    except Exception:  # noqa: BLE001
+                        pass
+                return
+            if key in self._in_flight:
+                if on_complete is not None:
+                    self._in_flight[key].append(on_complete)
+                return
+            self._in_flight[key] = [on_complete] if on_complete is not None else []
+
+        pool = self._ensurePool()
+        if pool is None:
+            # No pool means this session cannot be reopened, and
+            # the fetcher is single-threaded. Fall back to a
+            # blocking resolve on the caller's thread -- it is the
+            # rare directory-backed case and does not need async.
+            path = self._resolve(doc, filename)
+            self._settle_in_flight(key, path)
+            return
+
+        def _run():
+            try:
+                path = self._resolve(doc, filename)
+            except Exception:  # noqa: BLE001
+                path = None
+            if path is not None:
+                with self._lock:
+                    self._paths[key] = path
+            self._settle_in_flight(key, path)
+
+        pool.submit(_run)
+
+    def _settle_in_flight(self, key, path) -> None:
+        """Drain and call every pending completion callback for one key."""
+        with self._lock:
+            callbacks = self._in_flight.pop(key, [])
+        for cb in callbacks:
+            try:
+                cb(path)
+            except Exception:  # noqa: BLE001 - a bad callback is not fatal
+                pass
+
     def _fetch(self, doc, filename) -> str | None:
         if threading.get_ident() == self._owner:
             return self._resolve(doc, filename)
@@ -406,6 +498,16 @@ def levelArrays(
 
     fetcher = _ChunkFetcher(session, workers=workers if workers is not None else _default_workers())
 
+    # Upsample-fallback context: build once from the coarsest level's
+    # document so every fine-level delayed task can look up covering
+    # coarse chunks without re-reading the doc. Only material when the
+    # NDI_LIGHTSHEET_UPSAMPLE_FALLBACK env var is on. The context also
+    # rides on the fetcher itself so viewer.py can install a napari
+    # refresh hint AFTER the arrays exist (the viewer does not, at
+    # this point).
+    fallback_context = _prepFallbackContext(docs)
+    fetcher._fallback_context = fallback_context  # type: ignore[attr-defined]
+
     arrays: list[Any] = []
     for i, doc in enumerate(docs):
         p = doc.document_properties["lightsheetZarrLevel"]
@@ -422,6 +524,13 @@ def levelArrays(
         for g in chunk_grid:
             n_blocks *= g
 
+        # The coarsest level is its own fallback; wrapping its reader
+        # would recurse into itself for missing chunks. Only levels
+        # ABOVE the coarsest get the fallback treatment.
+        fallback_reader = None
+        if fallback_context is not None and i < len(docs) - 1:
+            fallback_reader = _makeFallbackReader(p, fallback_context)
+
         with progress.stage(f"preparing level {i} ({n_blocks:,} tiles, shape={list(shape)})"):
             nested = _build_block_grid(
                 fetcher,
@@ -435,10 +544,79 @@ def levelArrays(
                 stored,
                 delayed,
                 da,
+                fallback_reader=fallback_reader,
             )
             arrays.append(da.block(nested))
 
     return arrays, fetcher
+
+
+def _prepFallbackContext(docs: list) -> dict | None:
+    """Assemble the coarse-level context the upsample fallback needs.
+
+    Returns a dict with the coarsest level's document, its geometry,
+    and its stored-chunk name set -- or None when the env var is off
+    or the pyramid has only one level (no fine level to fall back
+    from). The dict also carries a one-element list ``refresh_hint_slot``
+    that the viewer later populates with a debounced
+    :class:`RefreshHint`; the fallback reader reads slot[0] at
+    delayed-task time, so a hint installed after ``levelArrays``
+    returns is still picked up by every subsequent slice.
+    """
+    from . import upsample_fallback
+
+    if not upsample_fallback.env_on():
+        return None
+    if len(docs) < 2:
+        return None
+    coarse_doc = docs[-1]
+    coarse_props = coarse_doc.document_properties["lightsheetZarrLevel"]
+    coarse_geom = upsample_fallback.levelGeometry(coarse_props)
+    coarse_stored = _storedChunkNames(coarse_doc)
+    return {
+        "coarse_doc": coarse_doc,
+        "coarse_geom": coarse_geom,
+        "coarse_stored": coarse_stored,
+        "refresh_hint_slot": [None],
+    }
+
+
+def _makeFallbackReader(fine_props: dict, ctx: dict):
+    """Return a closure over the fallback context for one fine level.
+
+    The closure has the signature ``_build_block_grid`` expects for
+    ``fallback_reader``: ``(fetcher, doc, filename, indices, chunks,
+    block_shape, dtype, fill, codec)``. It reads the current refresh
+    hint from ``ctx["refresh_hint_slot"][0]`` per call, so a hint
+    installed after this closure was built still fires.
+    """
+    from . import upsample_fallback
+
+    fine_geom = upsample_fallback.levelGeometry(fine_props)
+    coarse_doc = ctx["coarse_doc"]
+    coarse_geom = ctx["coarse_geom"]
+    coarse_stored = ctx["coarse_stored"]
+    slot = ctx["refresh_hint_slot"]
+
+    def reader(fetcher, doc, filename, indices, chunks_full, block_shape, dtype, fill, codec):
+        return upsample_fallback.readChunkWithFallback(
+            fetcher,
+            doc,
+            filename,
+            fine_geom,
+            tuple(indices),
+            coarse_doc,
+            coarse_geom,
+            coarse_stored,
+            chunks_full,
+            block_shape,
+            dtype,
+            fill,
+            codec,
+            refresh_hint=slot[0],
+        )
+
+    return reader
 
 
 def prefetchCoarsestLevel(
@@ -723,7 +901,19 @@ def _linear_chunk_index(indices: tuple, chunk_grid: tuple) -> int:
 
 
 def _build_block_grid(
-    fetcher, doc, shape, chunks, chunk_grid, dtype, fill, codec, stored, delayed, da
+    fetcher,
+    doc,
+    shape,
+    chunks,
+    chunk_grid,
+    dtype,
+    fill,
+    codec,
+    stored,
+    delayed,
+    da,
+    *,
+    fallback_reader=None,
 ):
     """Recursively build a nested list of dask blocks matching chunk_grid.
 
@@ -739,6 +929,15 @@ def _build_block_grid(
     volume, empty tiles are one hash lookup and a ``np.full`` -- no
     network call at all. None means the level document has no file
     list, and the reader falls back to attempting every position.
+
+    ``fallback_reader`` swaps the delayed body from
+    :func:`_read_chunk_from_fetcher` to a wrapper that shows
+    coarser-level data (upsampled) when the fine chunk is not on disk
+    yet, so unfinished tiles do not draw as black holes. Its signature
+    is ``(fetcher, doc, filename, indices_tuple, chunks, block_shape,
+    dtype, fill, codec)``; ``indices_tuple`` is the fine chunk's
+    per-axis 0-based multi-index, which the wrapper needs to compute
+    the covering coarse region.
     """
 
     def one_block(indices: tuple):
@@ -752,6 +951,10 @@ def _build_block_grid(
         # sparse regions don't even schedule work.
         if stored is not None and name not in stored:
             d = delayed(_zero_block)(block_shape, dtype, fill)
+        elif fallback_reader is not None:
+            d = delayed(fallback_reader)(
+                fetcher, doc, name, indices, chunks, block_shape, dtype, fill, codec
+            )
         else:
             d = delayed(_read_chunk_from_fetcher)(
                 fetcher, doc, name, chunks, block_shape, dtype, fill, codec

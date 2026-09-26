@@ -384,6 +384,20 @@ def openPyramid(
         for spec in specs:
             added_layers.append(viewer.add_image(**spec))
 
+    # Install the debounced napari refresh hint into the fallback
+    # context that levelArrays stashed on the fetcher. Every async
+    # fine-chunk fetch that completes calls this hint; the hint
+    # coalesces a burst of arrivals into one layer.refresh() and
+    # lets napari swap the coarse-upsampled placeholder for real
+    # fine data. No-op when the upsample fallback is off.
+    fallback_ctx = getattr(fetcher, "_fallback_context", None)
+    if fallback_ctx is not None:
+        from ndi.gui.app.lightsheetZarr import upsample_fallback as _upsample_fallback
+
+        fallback_ctx["refresh_hint_slot"][0] = _upsample_fallback.refreshHintFor(
+            viewer, added_layers
+        )
+
     # Debug: after add_image, print what napari actually has. A silent
     # session where the reader never fires could be a layer that failed
     # to register, a layer that is invisible, or a layer whose shape /

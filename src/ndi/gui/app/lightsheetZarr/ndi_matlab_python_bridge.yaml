@@ -140,6 +140,82 @@ functions:
       scaffold; the follow-up PR lands the magicgui panels alongside
       without changing this signature.
 
+  - name: readChunkWithFallback
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/upsample_fallback.py"
+    decision_log: >-
+      Python-only. Reader with a coarser-level upsample fallback:
+      when a fine chunk is not cached on disk, returns an
+      upsampled patch of the covering coarsest-level chunk
+      (put on disk at launch by prefetchCoarsestLevel) instead of
+      fill_value, and fires an async fetch of the fine chunk so a
+      subsequent napari re-slice can find real data. Opt-in via
+      NDI_LIGHTSHEET_UPSAMPLE_FALLBACK=1. Nearest-neighbour
+      upsampling via numpy.kron for the common power-of-2
+      pyramid; straddling fine chunks fall through to fill_value
+      in v1. No MATLAB counterpart because napari has no MATLAB
+      counterpart.
+
+  - name: levelGeometry
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/upsample_fallback.py"
+    decision_log: >-
+      Python-only. Struct-like holder for a lightsheetZarrLevel's
+      chunks / chunk_grid / shape / voxel_size / translation /
+      axes_order, so the fallback reader can compute world bboxes
+      per chunk without re-reading the document from every dask
+      delayed task. No MATLAB counterpart.
+
+  - name: findCoveringCoarseChunk
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/upsample_fallback.py"
+    decision_log: >-
+      Python-only. Given a fine chunk's world bbox, returns the
+      coarse chunk that fully covers it and the sub-slice inside
+      that coarse chunk to upsample. Returns None when the fine
+      bbox straddles two coarse chunks -- v1 does not stitch
+      coarse chunks together. No MATLAB counterpart.
+
+  - name: upsampleToBlock
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/upsample_fallback.py"
+    decision_log: >-
+      Python-only. Nearest-neighbour upsampling from a coarse
+      region to a fine block shape. Uses numpy.kron for integer
+      scale factors (the typical case) and an index-array
+      fallback for non-integer ratios. No MATLAB counterpart.
+
+  - name: RefreshHint
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/upsample_fallback.py"
+    decision_log: >-
+      Python-only. Debounces napari layer.refresh() calls fired
+      by async fine-chunk fetches; coalesces a burst of arrivals
+      into one re-slice per ~250ms so napari's slicer is not
+      overwhelmed. No MATLAB counterpart.
+
+  - name: prefetchAsync
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/multiscale.py"
+    decision_log: >-
+      Python-only. Fire-and-forget fetch of one chunk into the
+      cache; used by the upsample fallback reader to load the real
+      fine chunk while returning coarser data now. Deduplicates
+      in-flight requests by chunk key and calls a completion
+      callback when the pool worker finishes. Method on
+      _ChunkFetcher. No MATLAB counterpart.
+
+  - name: chunkPathIfCached
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/multiscale.py"
+    decision_log: >-
+      Python-only. Non-blocking cache probe -- returns a local
+      path IFF the chunk is already on disk, else None. Never
+      fetches. The upsample fallback reader calls this from every
+      dask task to decide between real fine data and coarse
+      upsample without ever waiting on the cloud. Method on
+      _ChunkFetcher. No MATLAB counterpart.
+
   - name: attach_viewport_clip
     matlab_path: null
     python_path: "ndi/gui/app/lightsheetZarr/viewport.py"
