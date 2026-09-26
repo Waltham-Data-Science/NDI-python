@@ -441,6 +441,103 @@ def levelArrays(
     return arrays, fetcher
 
 
+def prefetchCoarsestLevel(
+    session: Any,
+    pyramid_doc: Any,
+    fetcher,
+    *,
+    reduction: str | None = None,
+) -> threading.Thread | None:
+    """Fetch every stored chunk of the coarsest pyramid level in the background.
+
+    This is the launch-time complement of the upsample fallback that
+    (in a follow-up) fills fine-level gaps by resampling coarser
+    cached data: without at least one level fully on disk, the
+    fallback still has holes. The coarsest level is the natural
+    choice -- it is the smallest (252 tiles here, not 121,440) and
+    stretched-up coarse pixels look better than black rectangles.
+
+    Runs off the main thread so napari can paint before this
+    finishes. The fetcher's worker pool serves the requests, and
+    :meth:`_ChunkFetcher.chunkPath` is memoised -- a chunk that
+    napari already fetched during the launch cascade is one
+    ``os.path.exists`` here, not a repeat network round trip.
+
+    Off with ``NDI_LIGHTSHEET_PREFETCH_COARSEST=0`` for the case
+    where a caller wants to keep the pool fully available to napari's
+    own foreground fetches. Skipped when the coarsest level records
+    no stored chunks -- a directory-backed session that already has
+    everything, or an empty test fixture.
+
+    Returns the background thread (already started) or None when
+    nothing to do or the knob is off. Callers do not need to join
+    it: it is daemonised so a viewer exit does not wait.
+    """
+    if os.environ.get("NDI_LIGHTSHEET_PREFETCH_COARSEST", "1").strip().lower() in (
+        "0",
+        "false",
+        "off",
+    ):
+        return None
+
+    docs = levelDocs(session, pyramid_doc, reduction=reduction)
+    if not docs:
+        return None
+    coarsest = docs[-1]  # levelDocs is finest-first, so coarsest is last.
+    stored = _storedChunkNames(coarsest)
+    if not stored:
+        return None
+
+    # Materialise the chunk name list up front so the log line
+    # reports a stable denominator; a set's iteration order would
+    # otherwise change what "10/252" refers to across ticks.
+    names = sorted(stored)
+    total = len(names)
+
+    # Import here so the module still imports cleanly on a system
+    # without the progress module ready (tests import multiscale
+    # without progress's Qt path being importable).
+    from . import progress
+
+    def _do_prefetch() -> None:
+        import time as _time
+
+        t0 = _time.monotonic()
+        completed = 0
+        skipped_errors = 0
+        # Serial through the fetcher: each chunkPath submits ONE task
+        # to the pool and blocks on its return. That leaves the other
+        # (workers - 1) pool threads for napari's own foreground
+        # fetches instead of drowning them under a 252-deep queue.
+        for i, name in enumerate(names, 1):
+            try:
+                fetcher.chunkPath(coarsest, name)
+            except Exception:  # noqa: BLE001 - a stale prefetch is not fatal
+                skipped_errors += 1
+            completed = i
+            if i == total or i % 25 == 0:
+                dt = _time.monotonic() - t0
+                rate = i / dt if dt > 0 else 0.0
+                progress.note(
+                    f"prefetch coarsest level: {i}/{total} tiles "
+                    f"({dt:.1f}s, {rate:.1f} tiles/s)"
+                )
+        dt = _time.monotonic() - t0
+        tail = f", {skipped_errors} skipped on errors" if skipped_errors else ""
+        progress.note(
+            f"prefetch coarsest level: DONE {completed}/{total} tiles " f"in {dt:.1f}s{tail}"
+        )
+
+    thread = threading.Thread(
+        target=_do_prefetch,
+        name="ndi-lightsheet-prefetch",
+        daemon=True,
+    )
+    thread.start()
+    progress.note(f"prefetch coarsest level: kicked off {total} tiles in background")
+    return thread
+
+
 def _assertStoredMatchesLevel(level_doc: Any, level_props: dict, stored: set[str] | None) -> None:
     """Raise if the resolved chunk name set can't cover the level's writes.
 

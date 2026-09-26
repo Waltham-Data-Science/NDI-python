@@ -223,6 +223,19 @@ functions:
       as plain lists so the caller can drop napari's Nones in when a
       pyramid has no coordinate transform.
 
+  - name: prefetchCoarsestLevel
+    matlab_path: null
+    python_path: "ndi/gui/app/lightsheetZarr/multiscale.py"
+    decision_log: >-
+      Python-only. Fetches every stored chunk of the pyramid's
+      coarsest level in the background as soon as the fetcher pool
+      exists, so a later zoom into a fine level has coarse data to
+      fall back on for the upsample-fallback reader. Serial through
+      fetcher.chunkPath so the pool stays available to napari's
+      foreground fetches. Off with
+      NDI_LIGHTSHEET_PREFETCH_COARSEST=0. No MATLAB counterpart
+      because napari has no MATLAB counterpart.
+
   - name: levelArrays
     matlab_path: null
     python_path: "ndi/gui/app/lightsheetZarr/multiscale.py"

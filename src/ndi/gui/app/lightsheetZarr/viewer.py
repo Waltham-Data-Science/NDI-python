@@ -349,6 +349,20 @@ def openPyramid(
         except Exception:
             pass
 
+    # Fire the coarsest-level prefetch in the background as soon as
+    # the fetcher pool exists. This lands the coarse tiles on disk
+    # while the user is still opening the viewer, so a later zoom
+    # into a fine level has coarse data to fall back on the moment
+    # the upsample-fallback reader looks for it.
+    try:
+        multiscale.prefetchCoarsestLevel(session, pyramid_doc, fetcher, reduction=reduction)
+    except Exception as exc:  # noqa: BLE001 - a prefetch failure is never fatal
+        print(
+            f"[lightsheet] prefetch coarsest level: could not start ({exc})",
+            file=sys.stderr,
+            flush=True,
+        )
+
     with progress.stage("opening image viewer"):
         viewer = napari.Viewer()
 
