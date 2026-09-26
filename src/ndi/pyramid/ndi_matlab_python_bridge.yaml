@@ -23,6 +23,26 @@ project_metadata:
 functions:
 
   # -----------------------------------------------------------------------
+  # ImagePyramidLoader -- the facade a caller talks to.
+  # -----------------------------------------------------------------------
+
+  - name: ImagePyramidLoader
+    matlab_path: null
+    python_path: "ndi/pyramid/loader.py"
+    decision_log: >-
+      Python-only in this namespace, so far -- a sibling class under
+      +ndi/+pyramid/ImagePyramidLoader.m is the intended MATLAB
+      counterpart once the multiscale reader lands in NDI-matlab
+      (arrays.tiled or memmap instead of dask, same public surface).
+      The class encapsulates a lightsheetZarrPyramid's retrieval
+      state: fetcher pool, per-level lazy arrays, coarsest-level
+      prefetch, upsample-fallback refresh-hook registration, stats.
+      Napari consumes it through gui/app/lightsheetZarr/viewer.py;
+      matplotlib and Jupyter callers construct it the same way.
+      When the MATLAB sibling exists, this entry's status flips to
+      `ported_differently` with the MATLAB path filled in.
+
+  # -----------------------------------------------------------------------
   # Level-document discovery + dask assembly.
   # -----------------------------------------------------------------------
 

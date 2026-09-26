@@ -323,7 +323,8 @@ def openPyramid(
     _enable_async_slicing(napari)
 
     from ndi.cloud.filehandler import watchFetches
-    from ndi.gui.app.lightsheetZarr import multiscale
+    from ndi.gui.app.lightsheetZarr.refresh_hint import refreshHintFor
+    from ndi.pyramid.loader import ImagePyramidLoader
 
     # Install the loud fetch counter FIRST, before any stage. Every
     # cloud fetch that happens between here and napari.run()'s exit
@@ -335,10 +336,20 @@ def openPyramid(
     fetch_watch = watchFetches(counter)
     fetch_watch.__enter__()
 
+    # Build the pyramid loader. The loader is napari-independent and
+    # owns the dask arrays, the fetcher pool, coarsest-level prefetch
+    # and stats. This module's job from here is to wire what the
+    # loader exposes into napari's viewer.
+    loader = ImagePyramidLoader(
+        session,
+        pyramid_doc,
+        reduction=reduction,
+        channel=channel,
+        name=name,
+    )
     with progress.stage("preparing on-demand image levels"):
-        specs, fetcher = multiscale.layerSpec(
-            session, pyramid_doc, channel=channel, name=name, reduction=reduction
-        )
+        specs = loader.specs
+    fetcher = loader.fetcher
 
     # Warm the worker pool now, off the main thread. The one-off
     # session-open cost then overlaps with napari.Viewer()'s Qt startup
@@ -355,7 +366,7 @@ def openPyramid(
     # into a fine level has coarse data to fall back on the moment
     # the upsample-fallback reader looks for it.
     try:
-        multiscale.prefetchCoarsestLevel(session, pyramid_doc, fetcher, reduction=reduction)
+        loader.startPrefetch()
     except Exception as exc:  # noqa: BLE001 - a prefetch failure is never fatal
         print(
             f"[lightsheet] prefetch coarsest level: could not start ({exc})",
@@ -384,19 +395,13 @@ def openPyramid(
         for spec in specs:
             added_layers.append(viewer.add_image(**spec))
 
-    # Install the debounced napari refresh hint into the fallback
-    # context that levelArrays stashed on the fetcher. Every async
-    # fine-chunk fetch that completes calls this hint; the hint
-    # coalesces a burst of arrivals into one layer.refresh() and
-    # lets napari swap the coarse-upsampled placeholder for real
-    # fine data. No-op when the upsample fallback is off.
-    fallback_ctx = getattr(fetcher, "_fallback_context", None)
-    if fallback_ctx is not None:
-        from ndi.gui.app.lightsheetZarr import upsample_fallback as _upsample_fallback
-
-        fallback_ctx["refresh_hint_slot"][0] = _upsample_fallback.refreshHintFor(
-            viewer, added_layers
-        )
+    # Install the debounced napari refresh hint via the loader's
+    # public hook. Every async fine-chunk fetch that completes calls
+    # this hint; the hint coalesces a burst of arrivals into one
+    # layer.refresh() and lets napari swap the coarse-upsampled
+    # placeholder for real fine data. No-op when the upsample
+    # fallback is off (loader.registerRefreshHint handles that).
+    loader.registerRefreshHint(refreshHintFor(viewer, added_layers))
 
     # Debug: after add_image, print what napari actually has. A silent
     # session where the reader never fires could be a layer that failed
@@ -538,29 +543,15 @@ def openPyramid(
         finally:
             counter.stop()
             fetch_watch.__exit__(None, None, None)
-            # Fetcher stats: cache-hit vs cloud-fetch split.
-            # Complements the counter (which only sees cloud fetches
-            # through watchFetches) with the local-cache hits it can't
-            # see. Together they give the full picture of what happened
-            # under this viewer session.
-            print(f"[lightsheet] {fetcher.stats_summary()}", file=sys.stderr, flush=True)
-            # Upsample-fallback stats (only interesting when the env
-            # var is on): tells us whether napari ever went back to
-            # the reader after fine chunks landed on disk. Many
-            # `upsampled` and near-zero `hit_fine` means the refresh
-            # hint is not causing napari to re-slice.
-            try:
-                from ndi.gui.app.lightsheetZarr import upsample_fallback as _upsample_fallback
-
-                if _upsample_fallback.env_on():
-                    print(
-                        f"[lightsheet] {_upsample_fallback.fallbackStatsSummary()}",
-                        file=sys.stderr,
-                        flush=True,
-                    )
-            except Exception:  # noqa: BLE001
-                pass
-            fetcher.close()
+            # Loader stats: cache-hit vs cloud-fetch split from the
+            # fetcher, plus upsample-fallback counters when opted
+            # in. Complements the counter (which only sees cloud
+            # fetches through watchFetches) with the local-cache
+            # hits it can't see. Together they give the full picture
+            # of what happened under this viewer session.
+            for key, line in loader.stats().items():
+                print(f"[lightsheet] {key}: {line}", file=sys.stderr, flush=True)
+            loader.close()
     else:
         # Not showing napari means the caller ran their own event loop
         # or is scripting the viewer; drop the observer so the caller
