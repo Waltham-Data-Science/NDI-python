@@ -56,6 +56,20 @@ def env_on() -> bool:
     )
 
 
+def _fallback_debug() -> bool:
+    """Whether to print per-refresh trace lines to stderr.
+
+    On when either NDI_LIGHTSHEET_DEBUG or NDI_LIGHTSHEET_UPSAMPLE_DEBUG
+    is truthy. The regular NDI_LIGHTSHEET_DEBUG channel already carries
+    the rest of the launch narration, so a single knob keeps things
+    manageable.
+    """
+    for name in ("NDI_LIGHTSHEET_UPSAMPLE_DEBUG", "NDI_LIGHTSHEET_DEBUG"):
+        if os.environ.get(name, "").strip().lower() in ("1", "true", "on", "yes"):
+            return True
+    return False
+
+
 class LevelGeometry:
     """Everything needed to place a chunk at level L in world coordinates.
 
@@ -255,6 +269,45 @@ def upsampleToBlock(
         return None
 
 
+#: Counters for how each block resolves. Read from the reader on
+#: every call and printed by :func:`fallbackStatsSummary` at shutdown
+#: (and in periodic heartbeats under debug), so we can tell whether a
+#: viewer session that stays blurry stayed that way because fine
+#: chunks never arrived (many HITs are impossible without fetches
+#: settling in ``_paths``) or because napari never re-called the
+#: reader after they arrived (a lot of MISSes and a lot of
+#: PREFETCHED-in-flight, but no HITs later on).
+_STATS_LOCK = threading.Lock()
+_STATS = {
+    "hit_fine": 0,  # chunkPathIfCached found it -> real fine returned
+    "upsampled": 0,  # fine missing, upsampled from coarse
+    "zero_no_coarse_cover": 0,  # no covering coarse chunk in-range
+    "zero_coarse_missing": 0,  # covering coarse chunk not on disk
+    "zero_upsample_failed": 0,  # upsampler returned None
+    "zero_read_fail": 0,  # decode of coarse chunk raised
+    "prefetches_queued": 0,  # prefetchAsync calls
+}
+
+
+def fallbackStatsSummary() -> str:
+    """One-line summary of what the fallback reader has been doing.
+
+    Useful for diagnosing "the picture stays blurry forever": a
+    session with many ``upsampled`` and near-zero ``hit_fine`` means
+    either the async prefetches are not landing (network / auth
+    breaking silently) or napari is not re-calling the reader after
+    they land (refresh hint not triggering a slice compute).
+    """
+    with _STATS_LOCK:
+        parts = [f"{k}={v}" for k, v in _STATS.items()]
+    return "upsample-fallback " + " ".join(parts)
+
+
+def _bump(key: str, n: int = 1) -> None:
+    with _STATS_LOCK:
+        _STATS[key] = _STATS.get(key, 0) + n
+
+
 def readChunkWithFallback(
     fetcher,
     fine_doc,
@@ -295,24 +348,29 @@ def readChunkWithFallback(
     fine_path = fetcher.chunkPathIfCached(fine_doc, fine_filename)
     if fine_path is not None:
         try:
-            return _read_chunk_from_fetcher(
+            result = _read_chunk_from_fetcher(
                 fetcher, fine_doc, fine_filename, chunks_full, block_shape, dtype, fill, codec
             )
+            _bump("hit_fine")
+            return result
         except Exception:  # noqa: BLE001 - a bad decode is fallback time
             pass
 
     # Path 2: fine missing -> upsample coarse if we can, and fetch fine.
     fetcher.prefetchAsync(fine_doc, fine_filename, on_complete=refresh_hint)
+    _bump("prefetches_queued")
 
     world_starts, world_ends = fineChunkWorldBox(fine_geom, fine_chunk_multi_index)
     covering = findCoveringCoarseChunk(coarse_geom, world_starts, world_ends)
     if covering is None:
+        _bump("zero_no_coarse_cover")
         return _zero_block(block_shape, dtype, fill)
 
     coarse_multi, sub_slice = covering
     coarse_filename = _coarse_chunk_filename(coarse_multi, coarse_geom.chunk_grid)
     if stored_coarse_names is not None and coarse_filename not in stored_coarse_names:
         # Coarse chunk was never written -- level is sparse there.
+        _bump("zero_no_coarse_cover")
         return _zero_block(block_shape, dtype, fill)
 
     coarse_path = fetcher.chunkPathIfCached(coarse_doc, coarse_filename)
@@ -321,6 +379,7 @@ def readChunkWithFallback(
         # if we opened during prefetch we may see this. Nothing to
         # upsample from; fill and hope the fine fetch we just queued
         # arrives soon.
+        _bump("zero_coarse_missing")
         return _zero_block(block_shape, dtype, fill)
 
     try:
@@ -335,6 +394,7 @@ def readChunkWithFallback(
             codec,
         )
     except Exception:  # noqa: BLE001
+        _bump("zero_read_fail")
         return _zero_block(block_shape, dtype, fill)
 
     # Upsample to the fine block's shape. block_shape may be smaller
@@ -343,7 +403,9 @@ def readChunkWithFallback(
     # smaller shape.
     upsampled = upsampleToBlock(coarse_full, sub_slice, block_shape)
     if upsampled is None:
+        _bump("zero_upsample_failed")
         return _zero_block(block_shape, dtype, fill)
+    _bump("upsampled")
     return upsampled
 
 
@@ -404,13 +466,56 @@ class RefreshHint:
             pass
 
     def _fire(self) -> None:
+        # napari 0.5 has three different ways to force a re-slice
+        # depending on whether the async slicer is on, and they do
+        # not overlap in every version. Try them in order of least
+        # invasive to most; whichever one napari actually reacts to
+        # is what makes the swap from coarse to fine visible.
+        # Under debug, print each attempt so we can see which one
+        # napari finally responded to.
+        debug = _fallback_debug()
         for layer in self._layers:
+            emitted = []
             try:
-                # napari's public refresh triggers an async slice
-                # compute against the current view.
+                # 1. Public API: refresh() -- best case, napari
+                # re-slices from current view. Some versions only
+                # redraw the cached slice, which is why we do more.
                 layer.refresh()
-            except Exception:  # noqa: BLE001 - a failed refresh is not fatal
+                emitted.append("refresh")
+            except Exception:  # noqa: BLE001
                 pass
+            try:
+                # 2. Fire the set_data event by hand. napari's
+                # async slicer listens to this; it is what
+                # `layer.data = layer.data` would emit, without
+                # re-assigning the array.
+                events = getattr(layer, "events", None)
+                if events is not None:
+                    set_data = getattr(events, "set_data", None)
+                    if set_data is not None:
+                        set_data()
+                        emitted.append("events.set_data")
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                # 3. Private force-reload -- present on napari
+                # >= 0.4.18 to invalidate the slice cache and
+                # trigger a fresh compute.
+                reload = getattr(layer, "reload", None) or getattr(layer, "_reload_async", None)
+                if callable(reload):
+                    reload()
+                    emitted.append("reload")
+            except Exception:  # noqa: BLE001
+                pass
+            if debug and emitted:
+                import sys
+
+                print(
+                    f"[lightsheet] refresh-hint fired on {getattr(layer, 'name', '?')!r}: "
+                    f"{', '.join(emitted)}",
+                    file=sys.stderr,
+                    flush=True,
+                )
 
 
 def refreshHintFor(viewer, layers, debounce_ms: int = 250) -> RefreshHint | None:

@@ -544,6 +544,22 @@ def openPyramid(
             # see. Together they give the full picture of what happened
             # under this viewer session.
             print(f"[lightsheet] {fetcher.stats_summary()}", file=sys.stderr, flush=True)
+            # Upsample-fallback stats (only interesting when the env
+            # var is on): tells us whether napari ever went back to
+            # the reader after fine chunks landed on disk. Many
+            # `upsampled` and near-zero `hit_fine` means the refresh
+            # hint is not causing napari to re-slice.
+            try:
+                from ndi.gui.app.lightsheetZarr import upsample_fallback as _upsample_fallback
+
+                if _upsample_fallback.env_on():
+                    print(
+                        f"[lightsheet] {_upsample_fallback.fallbackStatsSummary()}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+            except Exception:  # noqa: BLE001
+                pass
             fetcher.close()
     else:
         # Not showing napari means the caller ran their own event loop
