@@ -18,7 +18,7 @@ from unittest import mock
 
 import numpy as np
 
-from ndi.gui.app.lightsheetZarr import upsample_fallback as uf
+from ndi.pyramid import upsample_fallback as uf
 
 
 class TestLevelGeometry(unittest.TestCase):
