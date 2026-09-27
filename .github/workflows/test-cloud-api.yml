@@ -8,6 +8,18 @@ on:
   # Allow manual runs from the Actions tab
   workflow_dispatch:
 
+  # Run on pull requests that touch the pyramid loader, its cloud
+  # fixture, or the workflow itself. Kept path-filtered so a PR that
+  # only edits, say, gene-pyramid code does not burn cloud API calls
+  # and bill the two shared test accounts on every push.
+  pull_request:
+    paths:
+      - 'src/ndi/pyramid/**'
+      - 'tests/test_pyramid_loader_integration.py'
+      - 'tests/fixtures/lightsheet_cloud_fixture.json'
+      - 'tests/test_cloud_*.py'
+      - '.github/workflows/test-cloud-api.yml'
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
