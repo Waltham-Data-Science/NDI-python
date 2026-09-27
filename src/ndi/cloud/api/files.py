@@ -10,9 +10,12 @@ MATLAB equivalents: +ndi/+cloud/+api/+files/*.m,
 
 from __future__ import annotations
 
+import logging
 import time
 from pathlib import Path
 from typing import Annotated, Any, Literal
+
+_module_logger = logging.getLogger(__name__)
 
 from pydantic import SkipValidation, validate_call
 
@@ -610,7 +613,18 @@ def getSignedURLSetAll(
         "pages": 0,
     }
     cursor = ""
+    walk_started = time.monotonic()
     for _ in range(max_pages):
+        page_started = time.monotonic()
+        _module_logger.info(
+            "getSignedURLSetAll: fetching page %d for document %s (series=%r, "
+            "so far %d uids, %.1fs elapsed)",
+            merged["pages"] + 1,
+            document_id,
+            file_series,
+            merged["pageCount"],
+            page_started - walk_started,
+        )
         page = getSignedURLSet(
             dataset_id,
             document_id,
@@ -620,6 +634,7 @@ def getSignedURLSetAll(
             id_namespace=id_namespace,
             client=client,
         )
+        page_dt = time.monotonic() - page_started
         files = page.get("files", {}) if hasattr(page, "get") else {}
         if isinstance(files, dict):
             merged["files"].update(files)
@@ -631,6 +646,14 @@ def getSignedURLSetAll(
         if expires_at:
             merged["expiresAt"] = expires_at
         merged["pages"] += 1
+        _module_logger.info(
+            "getSignedURLSetAll: page %d returned %d uids in %.2fs " "(total so far %d/%d)",
+            merged["pages"],
+            len(files) if isinstance(files, dict) else 0,
+            page_dt,
+            merged["pageCount"],
+            merged["totalCount"] or -1,
+        )
 
         next_cursor = page.get("nextCursor", "") if hasattr(page, "get") else ""
         if not next_cursor:

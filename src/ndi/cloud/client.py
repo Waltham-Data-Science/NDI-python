@@ -12,11 +12,14 @@ from __future__ import annotations
 
 import functools
 import json
+import logging
 import random
 import re
 import time
 from typing import Any
 from urllib.parse import quote as _url_quote
+
+logger = logging.getLogger(__name__)
 
 from .config import CloudConfig
 from .exceptions import (
@@ -304,7 +307,18 @@ class CloudClient:
                     and isinstance(exc, transient_exceptions)
                     and attempt < self.MAX_ATTEMPTS
                 ):
-                    time.sleep(self._retry_delay(attempt))
+                    delay = self._retry_delay(attempt)
+                    logger.info(
+                        "cloud request %s %s: attempt %d/%d hit %s " "(%s); retrying in %.1fs",
+                        method,
+                        endpoint,
+                        attempt,
+                        self.MAX_ATTEMPTS,
+                        type(exc).__name__,
+                        exc,
+                        delay,
+                    )
+                    time.sleep(delay)
                     continue
                 raise CloudAPIError(f"Request failed{self._attempt_note(attempt)}: {exc}") from exc
 
@@ -313,7 +327,17 @@ class CloudClient:
                 and resp.status_code in self.RETRY_STATUSES
                 and attempt < self.MAX_ATTEMPTS
             ):
-                time.sleep(self._retry_delay(attempt))
+                delay = self._retry_delay(attempt)
+                logger.info(
+                    "cloud request %s %s: attempt %d/%d got HTTP %d; " "retrying in %.1fs",
+                    method,
+                    endpoint,
+                    attempt,
+                    self.MAX_ATTEMPTS,
+                    resp.status_code,
+                    delay,
+                )
+                time.sleep(delay)
                 continue
             break
 
