@@ -319,7 +319,7 @@ class TestDefaultSignerHappyPath:
         assert create_kwargs.get("file_series") == "level_a"
 
     def test_failed_state_reports_the_server_error(self):
-        from ndi.cloud.batch_signed_url import _default_signer
+        from ndi.cloud.batch_signed_url import BatchScopeUnreachable, _default_signer
 
         with (
             patch(
@@ -331,14 +331,11 @@ class TestDefaultSignerHappyPath:
                 return_value={"state": "failed", "error": "signer crashed"},
             ),
         ):
-            ok, answer = _default_signer("ds1", "doc1", client=MagicMock(), retry_delays=())
-
-        assert ok is False
-        error = answer.get("__error__", "")
-        assert "signer crashed" in error, f"failure must name the server error: {error!r}"
+            with pytest.raises(BatchScopeUnreachable, match="signer crashed"):
+                _default_signer("ds1", "doc1", client=MagicMock(), retry_delays=())
 
     def test_wait_timeout_is_reported_as_failure(self):
-        from ndi.cloud.batch_signed_url import _default_signer
+        from ndi.cloud.batch_signed_url import BatchScopeUnreachable, _default_signer
 
         with (
             patch(
@@ -350,20 +347,20 @@ class TestDefaultSignerHappyPath:
                 return_value={"state": "timeout", "elapsed": 900.0},
             ),
         ):
-            ok, answer = _default_signer("ds1", "doc1", client=MagicMock(), retry_delays=())
+            with pytest.raises(BatchScopeUnreachable) as exc_info:
+                _default_signer("ds1", "doc1", client=MagicMock(), retry_delays=())
 
-        assert ok is False
-        error = answer.get("__error__", "")
+        message = str(exc_info.value)
         assert (
-            "timeout" in error.lower() or "did not finish" in error
-        ), f"failure must name the timeout: {error!r}"
+            "did not finish" in message or "timeout" in message.lower()
+        ), f"failure must name the timeout: {message!r}"
 
     def test_ready_without_result_url_is_reported_as_failure(self):
         """A ready job that carries no resultUrl is a server bug we must not
         follow into an assertion-free read. See NDI-matlab#1009 for the
         same guard on the MATLAB side.
         """
-        from ndi.cloud.batch_signed_url import _default_signer
+        from ndi.cloud.batch_signed_url import BatchScopeUnreachable, _default_signer
 
         with (
             patch(
@@ -375,8 +372,5 @@ class TestDefaultSignerHappyPath:
                 return_value={"state": "ready"},  # no resultUrl
             ),
         ):
-            ok, answer = _default_signer("ds1", "doc1", client=MagicMock(), retry_delays=())
-
-        assert ok is False
-        error = answer.get("__error__", "")
-        assert "resultUrl" in error, f"failure must name the missing field: {error!r}"
+            with pytest.raises(BatchScopeUnreachable, match="resultUrl"):
+                _default_signer("ds1", "doc1", client=MagicMock(), retry_delays=())

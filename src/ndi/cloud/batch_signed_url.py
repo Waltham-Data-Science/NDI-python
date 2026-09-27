@@ -69,6 +69,32 @@ DEFAULT_PARTIAL_MAP_RETRY_SECONDS = 0.5
 DEFAULT_BATCH_RETRY_DELAYS: tuple[float, ...] = (1.0, 4.0, 16.0)
 
 
+class BatchScopeUnreachable(RuntimeError):
+    """The async signed-URL-set job path could not answer for a scope.
+
+    Raised by :func:`_default_signer` after every retry attempt has failed
+    -- ``createSignedURLSetJob``, ``waitForSignedURLSetJob`` and
+    ``getSignedURLSetResult`` between them have not produced a usable map
+    for this (dataset, document, series) scope.
+
+    Why raise rather than return ``(False, ...)`` and let the caller fall
+    back to per-member ``getFileDetails``? A napari viewport loads dozens
+    of chunks per frame, and per-member fallback for a 100k-member series
+    is thousands of API calls per zoom -- unusable UX. Worse, that
+    fallback works "well enough" that the underlying bug (the async job
+    endpoint returned 404 / timed out / drifted from the schema) stays
+    hidden while the viewer feels merely slow. Raising forces the real
+    error to the surface so we see and fix it, and never silently ship a
+    bad path.
+
+    The partial-map case is separate and does NOT raise: a batch that
+    successfully returned a map but did not happen to name a particular
+    uid still hits the per-uid fallback in ``fetch_cloud_file``, because
+    that is a data-drift case rather than a broken endpoint. Only real
+    failures of the async job path raise here.
+    """
+
+
 @dataclass
 class _CacheEntry:
     """One cached scope: uid -> URL, and when we fetched it."""
@@ -222,7 +248,7 @@ def _default_signer(
 
             answer = files_api.getSignedURLSetResult(result_url)
             return True, answer
-        except Exception as exc:  # noqa: BLE001 - reported as a miss reason
+        except Exception as exc:  # noqa: BLE001 - reported by BatchScopeUnreachable
             last_exc = exc
             if attempt < attempts - 1:
                 delay = retry_delays[attempt]
@@ -234,10 +260,15 @@ def _default_signer(
                     delay,
                 )
                 sleep(delay)
-    # Every attempt raised; report the last cause.
-    return False, {
-        "__error__": f"{type(last_exc).__name__}: {last_exc} (after {attempts} attempts)"
-    }
+    # Every attempt raised. Surface the last cause instead of returning
+    # (False, ...) -- see BatchScopeUnreachable's docstring for why a
+    # silent per-uid fallback would just hide the bug.
+    raise BatchScopeUnreachable(
+        f"async signed-URL-set job failed for scope "
+        f"({dataset_id!r}, {document_id!r}, file_series={file_series!r}) "
+        f"after {attempts} attempts. Last cause: "
+        f"{type(last_exc).__name__}: {last_exc}"
+    ) from last_exc
 
 
 class BatchSignedUrlLookup:
@@ -434,7 +465,14 @@ class BatchSignedUrlLookup:
         *,
         client: CloudClient | None,
     ) -> _CacheEntry | None:
-        """Populate the cache for one scope. None on any failure."""
+        """Populate the cache for one scope. None on any failure.
+
+        :class:`BatchScopeUnreachable` from the signer is NOT caught -- it
+        means the async job path itself is broken and per-uid fallback
+        would just hide the real error. Every other exception from an
+        injected signer is still reported as a miss reason so existing
+        tests keep working.
+        """
         failure_reason = ""
         try:
             ok, answer = self._signer(
@@ -443,6 +481,11 @@ class BatchSignedUrlLookup:
                 file_series=series_name,
                 client=client,
             )
+        except BatchScopeUnreachable:
+            # Real failure of the async signed-URL-set path; propagate so
+            # the caller (viewer, download orchestrator, test) sees the
+            # cause instead of a slow per-uid walk that hides the bug.
+            raise
         except Exception as exc:  # noqa: BLE001 - reported as a miss reason
             ok = False
             answer = {}

@@ -663,8 +663,14 @@ class TestDefaultSignerRetries:
         assert answer["files"] == {"u1": "https://s3.example.com/u1"}
         assert calls["n"] == 2, "should have retried exactly once before succeeding"
 
-    def test_every_attempt_raising_reports_the_last_cause(self):
-        from ndi.cloud.batch_signed_url import _default_signer
+    def test_every_attempt_raising_raises_batch_scope_unreachable(self):
+        """After every retry attempt fails, raise instead of silent fallback.
+
+        Falling back per-uid on an actually-broken async job path
+        would hide the bug behind slow-but-working chunk fetches. See
+        BatchScopeUnreachable's docstring.
+        """
+        from ndi.cloud.batch_signed_url import BatchScopeUnreachable, _default_signer
 
         calls = {"n": 0}
 
@@ -673,19 +679,21 @@ class TestDefaultSignerRetries:
             raise ConnectionError(f"try {calls['n']}")
 
         with patch("ndi.cloud.api.files.createSignedURLSetJob", side_effect=always_fails):
-            ok, answer = _default_signer(
-                "ds1",
-                "doc1",
-                client=MagicMock(),
-                retry_delays=(0.0, 0.0),  # 3 attempts total
-                sleep=lambda _s: None,
-            )
+            with pytest.raises(BatchScopeUnreachable) as exc_info:
+                _default_signer(
+                    "ds1",
+                    "doc1",
+                    client=MagicMock(),
+                    retry_delays=(0.0, 0.0),  # 3 attempts total
+                    sleep=lambda _s: None,
+                )
 
-        assert ok is False
         assert calls["n"] == 3, "should have made 3 attempts (initial + 2 retries)"
-        error = answer.get("__error__", "")
-        assert "ConnectionError" in error
-        assert "3 attempts" in error, f"should name the attempt count: {error!r}"
+        message = str(exc_info.value)
+        assert "ConnectionError" in message
+        assert "3 attempts" in message, f"should name the attempt count: {message!r}"
+        # The underlying transport error is chained for programmatic access.
+        assert isinstance(exc_info.value.__cause__, ConnectionError)
 
     def test_zero_retry_delays_is_a_single_attempt(self):
         """Passing an empty retry_delays disables retry entirely.
@@ -694,7 +702,7 @@ class TestDefaultSignerRetries:
         fast-fail probe, or an environment where the signer already handles
         its own retries).
         """
-        from ndi.cloud.batch_signed_url import _default_signer
+        from ndi.cloud.batch_signed_url import BatchScopeUnreachable, _default_signer
 
         calls = {"n": 0}
 
@@ -703,20 +711,20 @@ class TestDefaultSignerRetries:
             raise ConnectionError("nope")
 
         with patch("ndi.cloud.api.files.createSignedURLSetJob", side_effect=always_fails):
-            ok, _ = _default_signer(
-                "ds1",
-                "doc1",
-                client=MagicMock(),
-                retry_delays=(),
-                sleep=lambda _s: None,
-            )
+            with pytest.raises(BatchScopeUnreachable):
+                _default_signer(
+                    "ds1",
+                    "doc1",
+                    client=MagicMock(),
+                    retry_delays=(),
+                    sleep=lambda _s: None,
+                )
 
-        assert ok is False
         assert calls["n"] == 1, "empty retry_delays should mean one attempt, no retries"
 
     def test_retry_delays_are_slept_in_order(self):
         """The backoff delays are consumed in order, once per failed attempt."""
-        from ndi.cloud.batch_signed_url import _default_signer
+        from ndi.cloud.batch_signed_url import BatchScopeUnreachable, _default_signer
 
         slept: list[float] = []
 
@@ -724,16 +732,36 @@ class TestDefaultSignerRetries:
             raise ConnectionError("nope")
 
         with patch("ndi.cloud.api.files.createSignedURLSetJob", side_effect=always_fails):
-            _default_signer(
-                "ds1",
-                "doc1",
-                client=MagicMock(),
-                retry_delays=(1.0, 4.0, 16.0),
-                sleep=slept.append,
-            )
+            with pytest.raises(BatchScopeUnreachable):
+                _default_signer(
+                    "ds1",
+                    "doc1",
+                    client=MagicMock(),
+                    retry_delays=(1.0, 4.0, 16.0),
+                    sleep=slept.append,
+                )
 
         assert slept == [
             1.0,
             4.0,
             16.0,
         ], f"expected the three backoff delays consumed in order, got {slept}"
+
+    def test_fetch_scope_propagates_batch_scope_unreachable(self):
+        """The strict-mode raise must not be caught by _fetch_scope.
+
+        _fetch_scope catches Exception from injected signers so tests can
+        script arbitrary failures (existing behavior). But when the DEFAULT
+        signer's async job path exhausts its retries, the resulting
+        BatchScopeUnreachable must propagate all the way to the caller so
+        the real error surfaces.
+        """
+        from ndi.cloud.batch_signed_url import BatchScopeUnreachable, BatchSignedUrlLookup
+
+        def unreachable_signer(*args, **kwargs):
+            raise BatchScopeUnreachable("simulated async-job failure")
+
+        lookup = BatchSignedUrlLookup(signer=unreachable_signer)
+
+        with pytest.raises(BatchScopeUnreachable, match="simulated async-job failure"):
+            lookup.lookup("ds1", "doc1", "chunks", "u_1")
