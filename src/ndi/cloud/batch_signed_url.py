@@ -105,10 +105,17 @@ class _CacheEntry:
 
 @dataclass
 class _FailureEntry:
-    """A scope's most recent batch failure, with the uid that saw it."""
+    """A scope's most recent batch failure, with the uid that saw it.
+
+    ``unreachable`` distinguishes a real async-job failure (surfaced as
+    :class:`BatchScopeUnreachable`, no per-uid fallback) from an
+    injected-signer failure or a partial-map miss (per-uid fallback OK).
+    """
 
     at: float
     uid: str
+    unreachable: bool = False
+    cause: str = ""
 
 
 @dataclass
@@ -368,6 +375,17 @@ class BatchSignedUrlLookup:
                 if failure is not None:
                     if (now - failure.at) >= self._failure_ttl_seconds:
                         del self._failed_scopes[cache_key]
+                    elif failure.unreachable:
+                        # The async job path was strict-mode-failed for
+                        # this scope within the TTL. Re-raise fast rather
+                        # than running another 4-attempt retry cycle for
+                        # every next uid the viewport asks about. The
+                        # cause carried on the entry preserves what the
+                        # first raise said.
+                        raise BatchScopeUnreachable(
+                            f"scope {cache_key!r} was unreachable "
+                            f"{now - failure.at:.1f}s ago: {failure.cause}"
+                        )
                     elif failure.uid != uid:
                         self._stats.uid_misses += 1
                         self._warn_once(cache_key)
@@ -486,10 +504,20 @@ class BatchSignedUrlLookup:
                 file_series=series_name,
                 client=client,
             )
-        except BatchScopeUnreachable:
-            # Real failure of the async signed-URL-set path; propagate so
-            # the caller (viewer, download orchestrator, test) sees the
-            # cause instead of a slow per-uid walk that hides the bug.
+        except BatchScopeUnreachable as exc:
+            # Real failure of the async signed-URL-set path. Record the
+            # scope as unreachable so subsequent lookups in the same scope
+            # fast-fail (re-raising a fresh BatchScopeUnreachable) instead
+            # of running another full retry cycle every time napari asks
+            # for a chunk. Then propagate so the caller sees the cause.
+            self._stats.last_failure_reason = f"async job path unreachable: {exc}"
+            self._stats.uid_misses += 1
+            self._failed_scopes[cache_key] = _FailureEntry(
+                at=time.monotonic(),
+                uid=uid,
+                unreachable=True,
+                cause=str(exc),
+            )
             raise
         except Exception as exc:  # noqa: BLE001 - reported as a miss reason
             ok = False
