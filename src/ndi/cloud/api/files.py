@@ -827,17 +827,37 @@ def waitForSignedURLSetJob(
     start = time.monotonic()
     interval = initial_interval
     last: Any = None
+    poll = 0
     while True:
         elapsed = time.monotonic() - start
         try:
             status = getSignedURLSetJob(job_id, client=client)
             last = status
             state = status.get("state", "") if hasattr(status, "get") else ""
+            signed = status.get("signedCount") if hasattr(status, "get") else None
+            total = status.get("totalCount") if hasattr(status, "get") else None
+            _module_logger.info(
+                "waitForSignedURLSetJob: jobId=%s poll #%d state=%r signed=%s/%s "
+                "(elapsed %.1fs)",
+                job_id,
+                poll,
+                state,
+                signed,
+                total,
+                elapsed,
+            )
             if state in _TERMINAL_SIGNED_URL_SET_STATES:
                 return status
-        except Exception:
+        except Exception as exc:
             # A failed poll is not a failed job; ride out gateway blips.
-            pass
+            _module_logger.info(
+                "waitForSignedURLSetJob: jobId=%s poll #%d failed (%s: %s); " "will retry",
+                job_id,
+                poll,
+                type(exc).__name__,
+                exc,
+            )
+        poll += 1
         if elapsed + interval > timeout:
             payload: dict[str, Any]
             if last is not None and hasattr(last, "data") and isinstance(last.data, dict):

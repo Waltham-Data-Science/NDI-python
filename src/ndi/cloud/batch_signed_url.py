@@ -207,8 +207,18 @@ def _default_signer(
 
     attempts = len(retry_delays) + 1
     last_exc: Exception | None = None
+    scope_started = time.monotonic()
     for attempt in range(attempts):
         try:
+            logger.info(
+                "batch signed-URL job: submitting createSignedURLSetJob for scope "
+                "(%s, %s, series=%r) attempt %d/%d",
+                dataset_id,
+                document_id,
+                file_series,
+                attempt + 1,
+                attempts,
+            )
             job = files_api.createSignedURLSetJob(
                 dataset_id,
                 document_id,
@@ -219,6 +229,12 @@ def _default_signer(
             job_id = job.get("jobId", "") if hasattr(job, "get") else ""
             if not job_id:
                 raise RuntimeError(f"createSignedURLSetJob returned no jobId (payload: {job!r})")
+            logger.info(
+                "batch signed-URL job: submitted jobId=%s, waiting for terminal state "
+                "(timeout %.0fs)",
+                job_id,
+                job_timeout,
+            )
 
             status = files_api.waitForSignedURLSetJob(
                 job_id,
@@ -226,6 +242,12 @@ def _default_signer(
                 client=client,
             )
             state = status.get("state", "") if hasattr(status, "get") else ""
+            logger.info(
+                "batch signed-URL job: jobId=%s reached state=%r after %.1fs total",
+                job_id,
+                state,
+                time.monotonic() - scope_started,
+            )
             if state == "failed":
                 err = status.get("error", "") if hasattr(status, "get") else ""
                 raise RuntimeError(
@@ -252,8 +274,25 @@ def _default_signer(
                 raise RuntimeError(
                     f"signed-URL-set job {job_id} was ready but carried no resultUrl"
                 )
+            logger.info(
+                "batch signed-URL job: jobId=%s ready, fetching result blob",
+                job_id,
+            )
 
             answer = files_api.getSignedURLSetResult(result_url)
+            n_files = 0
+            if isinstance(answer, dict) and isinstance(answer.get("files"), dict):
+                n_files = len(answer["files"])
+            logger.info(
+                "batch signed-URL job: jobId=%s delivered %d uid->URL entries "
+                "for scope (%s, %s, series=%r) in %.1fs total",
+                job_id,
+                n_files,
+                dataset_id,
+                document_id,
+                file_series,
+                time.monotonic() - scope_started,
+            )
             return True, answer
         except Exception as exc:  # noqa: BLE001 - reported by BatchScopeUnreachable
             last_exc = exc
