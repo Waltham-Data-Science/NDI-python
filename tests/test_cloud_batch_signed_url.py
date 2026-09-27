@@ -608,3 +608,116 @@ class TestGetSignedURLSetAll:
             with pytest.raises(files_api.SignedURLSetMaxPagesReached) as exc:
                 files_api.getSignedURLSetAll("ds1", "doc1", max_pages=3, client=MagicMock())
         assert exc.value.merged["pages"] == 3
+
+
+# ---------------------------------------------------------------------------
+# The default signer retries transient batch failures.
+# ---------------------------------------------------------------------------
+
+
+class TestDefaultSignerRetries:
+    """A ConnectionFailed-style raise from getSignedURLSetAll must not
+    collapse a whole scope to the O(N) per-member fallback on the first
+    try. See Waltham-Data-Science/NDI-python#322 and the parallel
+    VH-Lab/NDI-matlab#1010: a residential-network TLS blip used to hang
+    downloads for hours by tripping this cascade.
+    """
+
+    def test_a_transient_raise_then_success_returns_success(self):
+        from ndi.cloud.batch_signed_url import _default_signer
+
+        calls = {"n": 0}
+
+        def flaky(*args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise ConnectionError("first try, transient")
+            return {"files": {"u1": "https://s3.example.com/u1"}, "pages": 1}
+
+        with patch("ndi.cloud.api.files.getSignedURLSetAll", side_effect=flaky):
+            ok, answer = _default_signer(
+                "ds1",
+                "doc1",
+                client=MagicMock(),
+                retry_delays=(0.0, 0.0, 0.0),
+                sleep=lambda _s: None,
+            )
+
+        assert ok is True
+        assert answer["files"] == {"u1": "https://s3.example.com/u1"}
+        assert calls["n"] == 2, "should have retried exactly once before succeeding"
+
+    def test_every_attempt_raising_reports_the_last_cause(self):
+        from ndi.cloud.batch_signed_url import _default_signer
+
+        calls = {"n": 0}
+
+        def always_fails(*args, **kwargs):
+            calls["n"] += 1
+            raise ConnectionError(f"try {calls['n']}")
+
+        with patch("ndi.cloud.api.files.getSignedURLSetAll", side_effect=always_fails):
+            ok, answer = _default_signer(
+                "ds1",
+                "doc1",
+                client=MagicMock(),
+                retry_delays=(0.0, 0.0),  # 3 attempts total
+                sleep=lambda _s: None,
+            )
+
+        assert ok is False
+        assert calls["n"] == 3, "should have made 3 attempts (initial + 2 retries)"
+        error = answer.get("__error__", "")
+        assert "ConnectionError" in error
+        assert "3 attempts" in error, f"should name the attempt count: {error!r}"
+
+    def test_zero_retry_delays_is_a_single_attempt(self):
+        """Passing an empty retry_delays disables retry entirely.
+
+        Useful anywhere a caller wants the pre-retry behavior (a test, a
+        fast-fail probe, or an environment where the signer already handles
+        its own retries).
+        """
+        from ndi.cloud.batch_signed_url import _default_signer
+
+        calls = {"n": 0}
+
+        def always_fails(*args, **kwargs):
+            calls["n"] += 1
+            raise ConnectionError("nope")
+
+        with patch("ndi.cloud.api.files.getSignedURLSetAll", side_effect=always_fails):
+            ok, _ = _default_signer(
+                "ds1",
+                "doc1",
+                client=MagicMock(),
+                retry_delays=(),
+                sleep=lambda _s: None,
+            )
+
+        assert ok is False
+        assert calls["n"] == 1, "empty retry_delays should mean one attempt, no retries"
+
+    def test_retry_delays_are_slept_in_order(self):
+        """The backoff delays are consumed in order, once per failed attempt."""
+        from ndi.cloud.batch_signed_url import _default_signer
+
+        slept: list[float] = []
+
+        def always_fails(*args, **kwargs):
+            raise ConnectionError("nope")
+
+        with patch("ndi.cloud.api.files.getSignedURLSetAll", side_effect=always_fails):
+            _default_signer(
+                "ds1",
+                "doc1",
+                client=MagicMock(),
+                retry_delays=(1.0, 4.0, 16.0),
+                sleep=slept.append,
+            )
+
+        assert slept == [
+            1.0,
+            4.0,
+            16.0,
+        ], f"expected the three backoff delays consumed in order, got {slept}"

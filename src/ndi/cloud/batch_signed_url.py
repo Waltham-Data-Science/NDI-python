@@ -53,6 +53,16 @@ DEFAULT_FAILURE_TTL_SECONDS = 60
 # whole set. See Waltham-Data-Science/NDI-python#309.
 DEFAULT_PARTIAL_MAP_RETRY_SECONDS = 0.5
 
+# Backoff schedule for :func:`_default_signer` when the batch endpoint call
+# raises. One transient TLS or connection error at start of run used to
+# mark the scope failed and drop every uid in it to per-member
+# getFileDetails -- O(N) API calls on a series that should have cost one.
+# Retrying the batch itself keeps the O(1) fast path across residential
+# network blips. See Waltham-Data-Science/NDI-python#322 (and the parallel
+# VH-Lab/NDI-matlab#1010). Only the default production signer retries;
+# a caller-injected signer is left as-is so tests keep control of counts.
+DEFAULT_BATCH_RETRY_DELAYS: tuple[float, ...] = (1.0, 4.0, 16.0)
+
 
 @dataclass
 class _CacheEntry:
@@ -119,26 +129,52 @@ def _default_signer(
     *,
     file_series: str = "",
     client: CloudClient | None = None,
+    retry_delays: tuple[float, ...] = DEFAULT_BATCH_RETRY_DELAYS,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> tuple[bool, dict[str, Any]]:
     """Fetch the whole scope through the paged getSignedURLSetAll call.
 
     Returns ``(True, answer)`` on success, ``(False, {})`` on any failure --
     the batch is best-effort and its caller's fallback is what keeps the
     read correct.
+
+    A raise from ``getSignedURLSetAll`` is retried with the delays in
+    ``retry_delays`` before it is reported as a failure. This is what keeps
+    one transient TLS blip on a residential connection from cascading to
+    the O(N) per-member fallback: the batch itself gets a few more chances,
+    at ~20 s of wall clock in the worst case, before its caller is told the
+    scope is unreachable. See Waltham-Data-Science/NDI-python#322.
     """
     from .api import files as files_api
 
-    try:
-        answer = files_api.getSignedURLSetAll(
-            dataset_id,
-            document_id,
-            id_namespace="ndi",
-            file_series=file_series,
-            client=client,
-        )
-    except Exception as exc:  # noqa: BLE001 - reported as a miss reason
-        return False, {"__error__": f"{type(exc).__name__}: {exc}"}
-    return True, answer
+    attempts = len(retry_delays) + 1
+    last_exc: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            answer = files_api.getSignedURLSetAll(
+                dataset_id,
+                document_id,
+                id_namespace="ndi",
+                file_series=file_series,
+                client=client,
+            )
+            return True, answer
+        except Exception as exc:  # noqa: BLE001 - reported as a miss reason
+            last_exc = exc
+            if attempt < attempts - 1:
+                delay = retry_delays[attempt]
+                logger.info(
+                    "batch signed-URL fetch attempt %d/%d failed (%s); " "retrying in %.1fs",
+                    attempt + 1,
+                    attempts,
+                    type(exc).__name__,
+                    delay,
+                )
+                sleep(delay)
+    # Every attempt raised; report the last cause.
+    return False, {
+        "__error__": f"{type(last_exc).__name__}: {last_exc} (after {attempts} attempts)"
+    }
 
 
 class BatchSignedUrlLookup:
