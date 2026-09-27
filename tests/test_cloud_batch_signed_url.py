@@ -616,11 +616,20 @@ class TestGetSignedURLSetAll:
 
 
 class TestDefaultSignerRetries:
-    """A ConnectionFailed-style raise from getSignedURLSetAll must not
-    collapse a whole scope to the O(N) per-member fallback on the first
-    try. See Waltham-Data-Science/NDI-python#322 and the parallel
+    """A ConnectionFailed-style raise from the batch API must not collapse
+    a whole scope to the O(N) per-member fallback on the first try. See
+    Waltham-Data-Science/NDI-python#322 and the parallel
     VH-Lab/NDI-matlab#1010: a residential-network TLS blip used to hang
     downloads for hours by tripping this cascade.
+
+    NDI-python#206 rewired the default signer from the paged
+    ``getSignedURLSetAll`` walk to the async job path
+    (``createSignedURLSetJob`` -> ``waitForSignedURLSetJob`` ->
+    ``getSignedURLSetResult``). The retry contract is unchanged: any raise
+    from the three-step exchange is retried per ``retry_delays``. These
+    tests patch the first step (``createSignedURLSetJob``) to trip the
+    retry, which is enough to exercise the loop without also needing to
+    script the wait and result calls.
     """
 
     def test_a_transient_raise_then_success_returns_success(self):
@@ -628,13 +637,20 @@ class TestDefaultSignerRetries:
 
         calls = {"n": 0}
 
-        def flaky(*args, **kwargs):
+        def flaky_create(*args, **kwargs):
             calls["n"] += 1
             if calls["n"] == 1:
                 raise ConnectionError("first try, transient")
-            return {"files": {"u1": "https://s3.example.com/u1"}, "pages": 1}
+            return {"jobId": "job-1"}
 
-        with patch("ndi.cloud.api.files.getSignedURLSetAll", side_effect=flaky):
+        ready_status = {"state": "ready", "resultUrl": "https://example/result"}
+        result_payload = {"files": {"u1": "https://s3.example.com/u1"}, "fileCount": 1}
+
+        with (
+            patch("ndi.cloud.api.files.createSignedURLSetJob", side_effect=flaky_create),
+            patch("ndi.cloud.api.files.waitForSignedURLSetJob", return_value=ready_status),
+            patch("ndi.cloud.api.files.getSignedURLSetResult", return_value=result_payload),
+        ):
             ok, answer = _default_signer(
                 "ds1",
                 "doc1",
@@ -656,7 +672,7 @@ class TestDefaultSignerRetries:
             calls["n"] += 1
             raise ConnectionError(f"try {calls['n']}")
 
-        with patch("ndi.cloud.api.files.getSignedURLSetAll", side_effect=always_fails):
+        with patch("ndi.cloud.api.files.createSignedURLSetJob", side_effect=always_fails):
             ok, answer = _default_signer(
                 "ds1",
                 "doc1",
@@ -686,7 +702,7 @@ class TestDefaultSignerRetries:
             calls["n"] += 1
             raise ConnectionError("nope")
 
-        with patch("ndi.cloud.api.files.getSignedURLSetAll", side_effect=always_fails):
+        with patch("ndi.cloud.api.files.createSignedURLSetJob", side_effect=always_fails):
             ok, _ = _default_signer(
                 "ds1",
                 "doc1",
@@ -707,7 +723,7 @@ class TestDefaultSignerRetries:
         def always_fails(*args, **kwargs):
             raise ConnectionError("nope")
 
-        with patch("ndi.cloud.api.files.getSignedURLSetAll", side_effect=always_fails):
+        with patch("ndi.cloud.api.files.createSignedURLSetJob", side_effect=always_fails):
             _default_signer(
                 "ds1",
                 "doc1",

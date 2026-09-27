@@ -8,10 +8,15 @@ each time. For an ordinary document that is fine. For a file series with
 many members -- 28,000 in the lightsheet-pyramid case that motivates this
 (VH-Lab/NDI-matlab#952) -- it is one API round trip per member.
 
-The batch path: one call to /signed-url-set (walked with getSignedURLSetAll)
-returns the whole document's uid -> URL map. Subsequent uids in the same
-(dataset, document [, series]) scope resolve from the cached map without
-another round trip.
+The batch path: submit an async signed-URL-set job (createSignedURLSetJob
+-> waitForSignedURLSetJob -> getSignedURLSetResult) that builds the whole
+document's uid -> URL map server-side and hands it back in one gzipped
+blob. Subsequent uids in the same (dataset, document [, series]) scope
+resolve from the cached map without another round trip. The paged
+getSignedURLSetAll walk is still supported as an API entry point but the
+default signer no longer uses it -- for a 121k-uid document the walk
+takes 100+ minutes at ~25 s per 500-uid page (NDI-matlab#952,
+NDI-matlab#1009).
 
 Empty return values are legitimate answers, not errors: the batch call may
 fail (network, auth, timeout) or the map it returns may not name this uid
@@ -122,7 +127,17 @@ class Stats:
     partial_map_retries: int = 0
 
 
-# The default signer walks every page. Injected for tests.
+# Default timeout for the async signed-URL-set job. The server has to sign
+# every member and gzip the resulting map, so a 121k-uid document is not a
+# short wait -- 15 min gives it room while still surfacing a truly stuck
+# job. The batch cache's caller (fetch_cloud_file) falls back per-member if
+# the wait times out, so this is a "give up on the fast path" deadline,
+# not a "give up on the read" one.
+DEFAULT_JOB_TIMEOUT_SECONDS = 15 * 60
+
+
+# The default signer submits the async job, waits for it to reach 'ready',
+# and reads the gzipped result blob. Injected for tests.
 def _default_signer(
     dataset_id: str,
     document_id: str,
@@ -131,19 +146,29 @@ def _default_signer(
     client: CloudClient | None = None,
     retry_delays: tuple[float, ...] = DEFAULT_BATCH_RETRY_DELAYS,
     sleep: Callable[[float], None] = time.sleep,
+    job_timeout: float = DEFAULT_JOB_TIMEOUT_SECONDS,
 ) -> tuple[bool, dict[str, Any]]:
-    """Fetch the whole scope through the paged getSignedURLSetAll call.
+    """Fetch the whole scope through the async signed-URL-set-job path.
 
-    Returns ``(True, answer)`` on success, ``(False, {})`` on any failure --
-    the batch is best-effort and its caller's fallback is what keeps the
-    read correct.
+    Submits a ``createSignedURLSetJob`` for the (dataset, document, series)
+    scope, waits for the job to reach state ``"ready"`` (or ``"failed"``,
+    or the overall ``job_timeout``), and downloads and parses the gzipped
+    result blob. Returns ``(True, answer)`` on success and
+    ``(False, {"__error__": ...})`` on any failure -- the batch is
+    best-effort and its caller's fallback keeps the read correct.
 
-    A raise from ``getSignedURLSetAll`` is retried with the delays in
-    ``retry_delays`` before it is reported as a failure. This is what keeps
-    one transient TLS blip on a residential connection from cascading to
-    the O(N) per-member fallback: the batch itself gets a few more chances,
-    at ~20 s of wall clock in the worst case, before its caller is told the
-    scope is unreachable. See Waltham-Data-Science/NDI-python#322.
+    Preferred over the paged ``getSignedURLSetAll`` walk: for a document
+    with 121k members the walk takes 100+ minutes at ~25 s per 500-uid
+    page, whereas the async job builds the whole map server-side and
+    returns it in one blob (NDI-matlab#952, NDI-matlab#1009).
+
+    A raise anywhere in ``create -> wait -> read`` is retried with the
+    delays in ``retry_delays`` before it is reported as a failure. This is
+    what keeps one transient TLS blip on a residential connection from
+    cascading to the O(N) per-member fallback: the batch itself gets a few
+    more chances at ~20 s of wall clock in the worst case before its
+    caller is told the scope is unreachable. See
+    Waltham-Data-Science/NDI-python#322.
     """
     from .api import files as files_api
 
@@ -151,20 +176,58 @@ def _default_signer(
     last_exc: Exception | None = None
     for attempt in range(attempts):
         try:
-            answer = files_api.getSignedURLSetAll(
+            job = files_api.createSignedURLSetJob(
                 dataset_id,
                 document_id,
                 id_namespace="ndi",
                 file_series=file_series,
                 client=client,
             )
+            job_id = job.get("jobId", "") if hasattr(job, "get") else ""
+            if not job_id:
+                raise RuntimeError(f"createSignedURLSetJob returned no jobId (payload: {job!r})")
+
+            status = files_api.waitForSignedURLSetJob(
+                job_id,
+                timeout=job_timeout,
+                client=client,
+            )
+            state = status.get("state", "") if hasattr(status, "get") else ""
+            if state == "failed":
+                err = status.get("error", "") if hasattr(status, "get") else ""
+                raise RuntimeError(
+                    f"signed-URL-set job {job_id} failed: {err}"
+                    if err
+                    else f"signed-URL-set job {job_id} failed"
+                )
+            if state == "timeout":
+                elapsed = (
+                    status.get("elapsed", job_timeout) if hasattr(status, "get") else job_timeout
+                )
+                raise RuntimeError(
+                    f"signed-URL-set job {job_id} did not finish within "
+                    f"{elapsed:.0f}s (state after wait: {state!r})"
+                )
+            if state != "ready":
+                raise RuntimeError(
+                    f"signed-URL-set job {job_id} ended in unexpected state "
+                    f"{state!r} (expected 'ready')"
+                )
+
+            result_url = status.get("resultUrl", "") if hasattr(status, "get") else ""
+            if not result_url:
+                raise RuntimeError(
+                    f"signed-URL-set job {job_id} was ready but carried no resultUrl"
+                )
+
+            answer = files_api.getSignedURLSetResult(result_url)
             return True, answer
         except Exception as exc:  # noqa: BLE001 - reported as a miss reason
             last_exc = exc
             if attempt < attempts - 1:
                 delay = retry_delays[attempt]
                 logger.info(
-                    "batch signed-URL fetch attempt %d/%d failed (%s); " "retrying in %.1fs",
+                    "batch signed-URL fetch attempt %d/%d failed (%s); retrying in %.1fs",
                     attempt + 1,
                     attempts,
                     type(exc).__name__,

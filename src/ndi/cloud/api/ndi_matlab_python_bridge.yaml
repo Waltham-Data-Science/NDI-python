@@ -1586,9 +1586,10 @@ not_yet_ported:
   # +ndi/+cloud/+api/+files -- signed-URL-set family
   #
   # A coherent group of six MATLAB functions added by NDI-matlab's
-  # signed-URL-set work (PRs #967, #969, #970 and preceding). Together they
-  # cover the /signed-url-set (paged) and /signed-url-set-jobs (async)
-  # routes the cloud exposes for bulk pre-signed downloads:
+  # signed-URL-set work (PRs #967, #969, #970 and preceding, and #1009
+  # which stabilized the async job path). Together they cover the
+  # /signed-url-set (paged) and /signed-url-set-jobs (async) routes the
+  # cloud exposes for bulk pre-signed downloads:
   #
   #   getSignedURLSet       - one page of a document's UID -> signed URL map
   #   getSignedURLSetAll    - walk every page and merge into a single map
@@ -1598,26 +1599,36 @@ not_yet_ported:
   #   waitForSignedURLSetJob- poll with exponential backoff until terminal
   #   getSignedURLSetResult - GET + parse the blob a ready job produced
   #
-  # This is what fetching a 28,000-member file-series document over the
-  # cloud requires (VH-Lab/NDI-matlab#952) -- one API call per document
-  # instead of one per member. Python currently has no signed-URL-set
-  # support at all (grep -r "signed_url_set\|SignedURLSet" src/ndi/ is
-  # empty), so the honest status for all six is not_yet_ported. Recorded
-  # together with one shared decision_log because there is no case-by-case
-  # judgement to make: the family lands as a unit or not at all.
+  # This is what fetching a document with tens or hundreds of thousands of
+  # members over the cloud requires (VH-Lab/NDI-matlab#952) -- one API
+  # call per document instead of one per member.
   #
-  # Filed as Waltham-Data-Science/ndi-python#206.
+  # STATUS. Ported as of NDI-python#206. The four async-job functions were
+  # added to src/ndi/cloud/api/files.py alongside the paged pair, and
+  # batch_signed_url._default_signer now submits a job via
+  # createSignedURLSetJob -> waitForSignedURLSetJob ->
+  # getSignedURLSetResult instead of walking pages. For a 121k-uid
+  # document the walk took 100+ minutes at ~25 s per 500-uid page; the
+  # async job builds the whole map server-side and returns it in one
+  # blob. The paged pair is still exported as an API entry point (a
+  # smaller document can still walk it), but no NDI code path uses it any
+  # longer. Filed as Waltham-Data-Science/ndi-python#206.
   # =======================================================================
 
   - name: createSignedURLSetJob
     matlab_path: "+ndi/+cloud/+api/+files/createSignedURLSetJob.m"
-    matlab_last_sync_hash: "5804cd80"
-    status: porting_deferred
+    python_path: "ndi/cloud/api/files.py"
+    matlab_last_sync_hash: "0a2cdec"
+    status: ported
     decision_log: >
-      Part of the signed-URL-set family (#206). Python has no
-      signed-URL-set support yet, so createSignedURLSetJob has no Python
-      counterpart. Ports as a unit with the other five entries under this
-      heading; see the shared note above.
+      Ported by NDI-python#206 as part of the signed-URL-set family. POSTs
+      to /datasets/{d}/documents/{doc}/signed-url-set-jobs (or the
+      ndi-documents route when id_namespace='ndi', which is what NDI's own
+      callers use). Optional file_series is folded into the endpoint as a
+      query parameter; MATLAB does the same via
+      matlab.net.QueryParameter. Returns the accepted-job envelope
+      ({jobId, datasetId, documentId, statusUrl, pollAfterSec}) so the
+      caller can hand jobId to waitForSignedURLSetJob.
 
   - name: getSignedURLSet
     matlab_path: "+ndi/+cloud/+api/+files/getSignedURLSet.m"
@@ -1645,36 +1656,52 @@ not_yet_ported:
       no nextCursor or empty nextCursor ends the walk; a cursor that
       equals the one just sent raises SignedURLSetCursorDidNotAdvance;
       running past max_pages raises SignedURLSetMaxPagesReached with the
-      partial merged dict on the exception. The async job path
-      (createSignedURLSetJob + waitForSignedURLSetJob) is still deferred
-      because batch_signed_url does not use it.
+      partial merged dict on the exception. Still exported as an API entry
+      point but no longer the batch_signed_url signer: at ~25 s per
+      500-uid page a 121k-member document took 100+ minutes here, so the
+      default signer now goes through the async job path
+      (createSignedURLSetJob + waitForSignedURLSetJob +
+      getSignedURLSetResult).
 
   - name: getSignedURLSetJob
     matlab_path: "+ndi/+cloud/+api/+files/getSignedURLSetJob.m"
-    matlab_last_sync_hash: "cd11b198"
-    status: porting_deferred
+    python_path: "ndi/cloud/api/files.py"
+    matlab_last_sync_hash: "0a2cdec"
+    status: ported
     decision_log: >
-      Part of the signed-URL-set family (#206). Poll one signed-URL-set
-      job's state via GET /signed-url-set-jobs/{jobId}. Python has no
-      counterpart; ports as a unit, see the shared note above.
+      Ported by NDI-python#206 as part of the signed-URL-set family. GETs
+      /signed-url-set-jobs/{jobId}. Returns the job's status payload
+      verbatim, including state (one of 'queued', 'running', 'ready',
+      'failed'), signedCount/totalCount, and -- on 'ready' -- resultUrl,
+      resultByteSize, expiresAt and filesExpireAt.
 
   - name: getSignedURLSetResult
     matlab_path: "+ndi/+cloud/+api/+files/getSignedURLSetResult.m"
-    matlab_last_sync_hash: "4b5c0478"
-    status: porting_deferred
+    python_path: "ndi/cloud/api/files.py"
+    matlab_last_sync_hash: "0a2cdec"
+    status: ported
     decision_log: >
-      Part of the signed-URL-set family (#206). Downloads and parses the
-      gzipped blob a ready job produced (a UID -> signed URL map plus
-      count and generation timestamp). Python has no counterpart; ports
-      as a unit, see the shared note above.
+      Ported by NDI-python#206 as part of the signed-URL-set family.
+      Downloads the presigned resultUrl a ready job carries, detects gzip
+      vs. inflated body from the magic number (0x1f 0x8b) rather than
+      Content-Encoding -- some transports auto-inflate, and MATLAB takes
+      the same approach for the same reason -- and returns the parsed
+      dict verbatim ({files: {uid -> url}, fileCount, generatedAt, ...})
+      so the batch_signed_url signer can hand the whole payload through
+      without reshaping. MATLAB wraps files in a containers.Map; Python's
+      json.loads keeps arbitrary string keys as a dict, so no key-recovery
+      pass is needed.
 
   - name: waitForSignedURLSetJob
     matlab_path: "+ndi/+cloud/+api/+files/waitForSignedURLSetJob.m"
-    matlab_last_sync_hash: "cd11b198"
-    status: porting_deferred
+    python_path: "ndi/cloud/api/files.py"
+    matlab_last_sync_hash: "0a2cdec"
+    status: ported
     decision_log: >
-      Part of the signed-URL-set family (#206). Polls
-      getSignedURLSetJob with exponentially growing intervals until the
-      job reaches a terminal state ('ready' or 'failed') or the overall
-      timeout elapses. Python has no counterpart; ports as a unit, see
-      the shared note above.
+      Ported by NDI-python#206 as part of the signed-URL-set family.
+      Polls getSignedURLSetJob at exponentially growing intervals until
+      the job reaches state 'ready' or 'failed', or the overall timeout
+      elapses. Mirrors waitForBulkUpload/waitForFileTierJob: on timeout
+      returns the last status dict with state='timeout' and elapsed set,
+      and a transient API failure is NOT treated as terminal so a gateway
+      blip does not mark the job dead.

@@ -668,6 +668,280 @@ def getSignedURLSetAll(
     raise SignedURLSetMaxPagesReached(merged)
 
 
+# ---------------------------------------------------------------------------
+# Signed-URL-set-job family (async)
+#
+# The paged getSignedURLSetAll walks the /signed-url-set route with cursor
+# pagination and takes ~25 s per 500-uid page. For a document with 121k
+# members that is 100+ minutes to prime the batch cache. The async job path
+# builds the whole uid -> URL map server-side, gzips it to S3, and hands
+# back one presigned URL to download the blob:
+#
+#   createSignedURLSetJob -> POST /.../signed-url-set-jobs           returns jobId
+#   waitForSignedURLSetJob -> GET /signed-url-set-jobs/{jobId}       poll to 'ready'
+#   getSignedURLSetResult  -> download + parse the gzipped result blob
+#
+# See NDI-matlab#952, NDI-matlab#1009, NDI-python#206.
+# ---------------------------------------------------------------------------
+
+# Terminal states reported by the signed-URL-set job service. Non-terminal
+# states are 'queued' and 'running'; the mirror is intentional so callers
+# see a consistent poll vocabulary across the bulk-upload and file-tier
+# jobs.
+_TERMINAL_SIGNED_URL_SET_STATES = ("ready", "failed")
+
+
+@_auto_client
+@validate_call(config=VALIDATE_CONFIG)
+def createSignedURLSetJob(
+    dataset_id: CloudId,
+    document_id: NonEmptyStr,
+    *,
+    file_series: str = "",
+    id_namespace: Literal["cloud", "ndi"] = "cloud",
+    client: _Client = None,
+) -> dict[str, Any]:
+    """Kick off an async job that builds a document's signed URL set.
+
+    POSTs to /datasets/{datasetId}/.../signed-url-set-jobs. The server signs
+    every file the document references, gzips the resulting UID -> signed
+    URL map and writes it to S3, then hands back a job id. Poll with
+    :func:`getSignedURLSetJob` (or :func:`waitForSignedURLSetJob`) until the
+    job reaches state ``"ready"``, then read the map with
+    :func:`getSignedURLSetResult`.
+
+    Preferred over :func:`getSignedURLSetAll` for documents with thousands
+    of members: one API call per document instead of one per 500-uid page.
+
+    Args:
+        dataset_id: The cloud dataset id.
+        document_id: The document id. Namespace controlled by *id_namespace*.
+        file_series: If set, restrict the job to one file series' members.
+        id_namespace: ``"cloud"`` (default) sends the mongo ``_id`` to the
+            by-``_id`` route; ``"ndi"`` sends ``data.base.id`` to the
+            ndi-documents route. NDI's own callers hold NDI ids and must
+            pass ``"ndi"``; passing one as ``"cloud"`` is a 404. See
+            NDI-matlab#968.
+        client: Authenticated cloud client (auto-created if omitted).
+
+    Returns:
+        Dict with (at least) ``jobId``, ``datasetId``, ``documentId``,
+        ``statusUrl``, ``pollAfterSec``. Pass ``jobId`` to the wait
+        helpers below.
+
+    MATLAB equivalent: +cloud/+api/+files/createSignedURLSetJob.m
+    """
+    if id_namespace == "ndi":
+        endpoint = "/datasets/{datasetId}/ndi-documents/{ndiDocumentId}/signed-url-set-jobs"
+        path_params = {"datasetId": dataset_id, "ndiDocumentId": document_id}
+    else:
+        endpoint = "/datasets/{datasetId}/documents/{documentId}/signed-url-set-jobs"
+        path_params = {"datasetId": dataset_id, "documentId": document_id}
+
+    # The MATLAB implementation appends fileSeries as a query parameter on
+    # the URL; the client's post() takes path params, not query params, so
+    # bake it into the endpoint template here.
+    if file_series:
+        endpoint = endpoint + "?fileSeries={fileSeries}"
+        path_params["fileSeries"] = file_series
+
+    # MATLAB posts an empty JSON object rather than a zero-byte body so the
+    # gateway does not reject the POST. Mirror that here.
+    return client.post(endpoint, json={}, **path_params)
+
+
+class SignedURLSetJobFailed(RuntimeError):
+    """A signed-URL-set job reached state ``"failed"``.
+
+    The ``.status`` attribute carries the last status dict from the server,
+    so a caller can inspect the ``error`` field.
+    """
+
+    def __init__(self, status: dict[str, Any]):
+        err = status.get("error", "") if isinstance(status, dict) else ""
+        super().__init__(
+            f"signed-URL-set job {status.get('jobId', '?')} failed: {err}"
+            if err
+            else f"signed-URL-set job {status.get('jobId', '?')} failed"
+        )
+        self.status = status
+
+
+@_auto_client
+@validate_call(config=VALIDATE_CONFIG)
+def getSignedURLSetJob(
+    job_id: NonEmptyStr,
+    *,
+    client: _Client = None,
+) -> dict[str, Any]:
+    """GET /signed-url-set-jobs/{jobId} -- one poll of a signed-URL-set job.
+
+    Returns a dict with (at least) ``jobId``, ``datasetId``, ``documentId``,
+    ``state``, ``createdAt``, ``startedAt``, ``completedAt``,
+    ``heartbeatAt``, ``signedCount``, ``totalCount``. When ``state`` is
+    ``"ready"`` the payload also carries ``resultUrl`` (a 24 h presigned
+    GET for the gzipped JSON blob), ``resultByteSize``, ``expiresAt``, and
+    ``filesExpireAt``. When ``state`` is ``"failed"`` it carries
+    ``error``. Non-terminal states are ``"queued"`` and ``"running"``.
+
+    MATLAB equivalent: +cloud/+api/+files/getSignedURLSetJob.m
+    """
+    return client.get("/signed-url-set-jobs/{jobId}", jobId=job_id)
+
+
+@_auto_client
+@validate_call(config=VALIDATE_CONFIG)
+def waitForSignedURLSetJob(
+    job_id: NonEmptyStr,
+    *,
+    timeout: float = 300.0,
+    initial_interval: float = 3.0,
+    max_interval: float = 30.0,
+    backoff_factor: float = 2.0,
+    client: _Client = None,
+) -> dict[str, Any]:
+    """Poll a signed-URL-set job until it finishes or times out.
+
+    Repeatedly calls :func:`getSignedURLSetJob` at exponentially growing
+    intervals until the job reaches a terminal state (``"ready"`` or
+    ``"failed"``) or the overall timeout elapses. A transient API failure
+    is NOT treated as terminal -- a gateway blip would otherwise be
+    mistaken for a dead job, mirroring :func:`waitForBulkUpload` and
+    :func:`waitForFileTierJob`.
+
+    Args:
+        job_id: The signed-URL-set job identifier from
+            :func:`createSignedURLSetJob`.
+        timeout: Overall deadline in seconds. Default 300.
+        initial_interval: First sleep between polls (s). Default 3.
+        max_interval: Cap on the per-poll sleep (s). Default 30.
+        backoff_factor: Multiplier applied after each poll. Default 2.
+
+    Returns:
+        The last status dict from the server. On timeout, the returned
+        dict has ``state='timeout'`` and ``elapsed`` set to the
+        wall-clock seconds spent polling.
+
+    MATLAB equivalent: +cloud/+api/+files/waitForSignedURLSetJob.m
+    """
+    start = time.monotonic()
+    interval = initial_interval
+    last: Any = None
+    while True:
+        elapsed = time.monotonic() - start
+        try:
+            status = getSignedURLSetJob(job_id, client=client)
+            last = status
+            state = status.get("state", "") if hasattr(status, "get") else ""
+            if state in _TERMINAL_SIGNED_URL_SET_STATES:
+                return status
+        except Exception:
+            # A failed poll is not a failed job; ride out gateway blips.
+            pass
+        if elapsed + interval > timeout:
+            payload: dict[str, Any]
+            if last is not None and hasattr(last, "data") and isinstance(last.data, dict):
+                payload = dict(last.data)
+            elif isinstance(last, dict):
+                payload = dict(last)
+            else:
+                payload = {}
+            payload["state"] = "timeout"
+            payload["elapsed"] = time.monotonic() - start
+            return payload
+        time.sleep(interval)
+        interval = min(interval * backoff_factor, max_interval)
+
+
+@validate_call
+def getSignedURLSetResult(
+    result_url: NonEmptyStr,
+    *,
+    timeout: int = 120,
+) -> dict[str, Any]:
+    """Download and parse the blob a ready signed-URL-set job produced.
+
+    A ready job's status carries a ``resultUrl``: a presigned 24 h GET for
+    a gzipped JSON body of shape::
+
+        { jobId, datasetId, documentId, generatedAt, fileCount,
+          files: {uid: url, ...} }
+
+    This fetches that blob and returns a dict with (at least) the ``files``
+    map. Whether the body arrives gzipped or already inflated by the
+    transport is decided from the gzip magic number rather than assumed --
+    that mirrors the MATLAB implementation and covers both S3 responses
+    (raw bytes) and any gateway that auto-inflates on the way through.
+
+    The URL is presigned, so no Authorization header is added; adding one
+    makes S3 reject the request.
+
+    Args:
+        result_url: The ``resultUrl`` a ready :func:`getSignedURLSetJob`
+            response carries.
+        timeout: HTTP timeout in seconds for the download. Default 120.
+
+    Returns:
+        Dict with (at least) ``files`` (a ``dict[str, str]`` mapping file
+        uid to presigned download URL). Also carries ``fileCount``,
+        ``generatedAt`` and any other fields the server included, so the
+        signer can hand the whole payload back to
+        :class:`ndi.cloud.batch_signed_url.BatchSignedUrlLookup` without
+        reshaping.
+
+    Raises:
+        RuntimeError: If the download failed or the body could not be
+            parsed as JSON.
+
+    MATLAB equivalent: +cloud/+api/+files/getSignedURLSetResult.m
+    """
+    import gzip
+    import json
+
+    assert_safe_transfer_url(result_url, what="signed-URL-set result URL")
+
+    resp = _download_session().get(result_url, timeout=timeout)
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"signed-URL-set result download failed (HTTP {resp.status_code}): "
+            f"{resp.text[:200]}"
+        )
+
+    raw = resp.content
+    # Decide gzip vs. inflated by the magic number rather than the
+    # Content-Encoding header, because requests auto-decompresses on some
+    # Content-Encoding values and leaves others alone. The MATLAB port
+    # takes the same approach for the same reason.
+    if len(raw) >= 2 and raw[0] == 0x1F and raw[1] == 0x8B:
+        try:
+            body = gzip.decompress(raw).decode("utf-8")
+        except OSError as exc:
+            raise RuntimeError(
+                f"signed-URL-set result blob could not be decompressed: {exc}"
+            ) from exc
+    else:
+        body = raw.decode("utf-8")
+
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"signed-URL-set result blob is not valid JSON: {exc}") from exc
+
+    if not isinstance(data, dict):
+        raise RuntimeError(
+            f"signed-URL-set result blob decoded to a {type(data).__name__}, "
+            "expected an object with a 'files' field."
+        )
+
+    files = data.get("files")
+    if not isinstance(files, dict):
+        raise RuntimeError(
+            f"signed-URL-set result 'files' arrived as a " f"{type(files).__name__}, not a dict."
+        )
+
+    return data
+
+
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
 def getFileCollectionUploadURL(
