@@ -35,6 +35,8 @@ import os
 import threading
 from typing import Any
 
+from ndi.cloud.batch_signed_url import BatchScopeUnreachable
+
 # ---------------------------------------------------------------------------
 # depends_on / doc discovery
 
@@ -227,6 +229,19 @@ class _ChunkFetcher:
         t0 = _time.monotonic()
         try:
             fh = s.database_openbinarydoc(doc, filename)
+        except BatchScopeUnreachable:
+            # A systemic failure of the batch signed-URL path is not a
+            # transient blip we can paper over with fill_value: every
+            # chunk in the scope will fail identically, and swallowing
+            # this one turns the whole canvas into silent zeros -- the
+            # exact "silent fetch failure" pattern this loader was
+            # written to prevent. Propagate so callers (viewer, dask
+            # compute, integration test) see the actual cause. See
+            # Waltham-Data-Science/NDI-python#322 and the strict-mode
+            # rationale on BatchScopeUnreachable itself.
+            with self._stats_lock:
+                self._resolve_none += 1
+            raise
         except Exception as exc:
             with self._stats_lock:
                 self._resolve_none += 1
