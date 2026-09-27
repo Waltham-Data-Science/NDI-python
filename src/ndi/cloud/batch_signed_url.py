@@ -253,10 +253,15 @@ def _default_signer(
             if attempt < attempts - 1:
                 delay = retry_delays[attempt]
                 logger.info(
-                    "batch signed-URL fetch attempt %d/%d failed (%s); retrying in %.1fs",
+                    "batch signed-URL fetch attempt %d/%d for scope "
+                    "(%s, %s, series=%r) failed (%s: %s); retrying in %.1fs",
                     attempt + 1,
                     attempts,
+                    dataset_id,
+                    document_id,
+                    file_series,
                     type(exc).__name__,
+                    exc,
                     delay,
                 )
                 sleep(delay)
