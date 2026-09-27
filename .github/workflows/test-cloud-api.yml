@@ -46,6 +46,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python ndi_install.py --dev --no-validate --verbose
+          # dask lives under the napari extra, which also pulls in Qt
+          # and OpenGL -- overkill for headless cloud tests. The
+          # pyramid loader integration test needs dask[array] to
+          # build its multiscale arrays, so install just that piece.
+          pip install 'dask[array]>=2023.1'
 
       - name: Run cloud API tests
         env:
