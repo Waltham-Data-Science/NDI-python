@@ -80,16 +80,34 @@ def downloaded_dataset(tmp_path_factory) -> Path:
     with sync_files on, every chunk arrives during download and the
     loader's cloud-fetch path never runs.
     """
+    from ndi.cloud.exceptions import CloudNotFoundError
     from ndi.cloud.orchestration import downloadDataset
 
     target = tmp_path_factory.mktemp("lightsheet_fixture_download")
     dataset_id = _fixture_id()
-    dataset = downloadDataset(
-        dataset_id,
-        str(target),
-        sync_files=False,
-        verbose=False,
-    )
+    try:
+        dataset = downloadDataset(
+            dataset_id,
+            str(target),
+            sync_files=False,
+            verbose=False,
+        )
+    except CloudNotFoundError as exc:
+        # The fixture lives on one account + env (see
+        # lightsheet_cloud_fixture.json; currently user 1, prod). The
+        # cloud-CI matrix runs every account x env combination, so
+        # three of the four cells cannot see the fixture and would
+        # crash with HTTP 404. Skip cleanly there rather than fail
+        # -- one green cell per fixture is the intended baseline.
+        # Set NDI_LIGHTSHEET_TEST_FIXTURE_ID to a dataset that IS
+        # visible on the account you are running under to point the
+        # tests at a different fixture.
+        pytest.skip(
+            f"fixture {dataset_id} not accessible from this account "
+            f"(NDI_CLOUD_USERNAME={os.environ.get('NDI_CLOUD_USERNAME', '?')!r}, "
+            f"CLOUD_API_ENVIRONMENT={os.environ.get('CLOUD_API_ENVIRONMENT', '?')!r}): "
+            f"{exc}"
+        )
     # downloadDataset returns an ndi.ndi_dataset backed by
     # target/<dataset_id>. The tests want the on-disk path so
     # ImagePyramidLoader can open a session on it.
