@@ -292,6 +292,13 @@ def _fetch_manifest(
     what we want here). Otherwise, call :func:`fetch_cloud_file` directly,
     matching what the read-side handler does when a manifest is asked for
     by uid.
+
+    We bypass the batch signed-URL lookup here. The batch is scoped
+    per-document, and a series with N members has an N-URL scope: for a
+    lightsheet OME-Zarr level with 100k+ chunks that is a page walk of
+    50-100 minutes for the ONE URL a manifest fetch actually needs. A
+    single-file fetch through :func:`getFileDetails` is the right shape
+    at O(1). See Waltham-Data-Science/NDI-python#322 / issue TBD.
     """
     source_path = f"{NDIC_SCHEME}{cloud_dataset_id}/{manifest_uid}"
     if custom_file_handler is not None:
@@ -309,7 +316,10 @@ def _fetch_manifest(
         source_path,
         dest_path,
         client=client,
-        ndi_document_id=document_id,
+        # Empty ndi_document_id skips the batch lookup and goes straight to
+        # getFileDetails for the one uid. Batch here would ask the server
+        # for every other file in the document too.
+        ndi_document_id="",
         series_name="",
     )
 
