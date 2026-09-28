@@ -711,7 +711,7 @@ not_yet_ported:
 
   - name: fetchManifest
     matlab_path: "+ndi/+cloud/+sync/+internal/fetchManifest.m"
-    matlab_last_sync_hash: "0ae6bfad"
+    matlab_last_sync_hash: "a84130a7"
     status: ported_differently
     python_path: "ndi/cloud/filehandler.py"
     decision_log: >

@@ -1026,7 +1026,7 @@ functions:
   # --- filehandler.py functions ---
   - name: updateFileInfoForRemoteFiles
     matlab_path: "+ndi/+cloud/+sync/+internal/updateFileInfoForRemoteFiles.m"
-    matlab_last_sync_hash: "9467a0a7"
+    matlab_last_sync_hash: "a84130a7"
     python_path: "ndi/cloud/filehandler.py"
     input_arguments:
       - name: doc_props
