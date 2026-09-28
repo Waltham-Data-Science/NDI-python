@@ -323,6 +323,91 @@ class TestBatchLookupPartialMapRetry:
         # The one uid that IS in the map still resolves.
         assert lookup.lookup("ds1", "doc1", "chunks", "u_2") == "https://s3/u_2"
 
+    def test_a_multi_wave_schedule_retries_until_a_hit_or_exhaustion(self):
+        """A schedule of several delays fires each in order until either
+        the map settles or the schedule is exhausted.
+
+        On User-1-prod after a bulk upload the batch endpoint has been
+        observed lagging further than the original single 0.5 s retry
+        covered (Waltham-Data-Science/NDI-python#320), so the default
+        schedule is now a bounded exponential backoff rather than one
+        shot. Each wave still costs one scope refetch, not one per uid.
+        """
+
+        class _EventualSigner:
+            """Partial map for the first N answers, then the full map."""
+
+            def __init__(self, misses_before_hit: int):
+                self.misses_before_hit = misses_before_hit
+                self.calls = 0
+
+            def __call__(self, dataset_id, document_id, *, file_series="", client=None):
+                self.calls += 1
+                if self.calls <= self.misses_before_hit:
+                    return True, {"files": {"u_present": "https://s3/u_present"}}
+                return True, {
+                    "files": {
+                        "u_present": "https://s3/u_present",
+                        "u_lagged": "https://s3/u_lagged",
+                    }
+                }
+
+        from ndi.cloud.batch_signed_url import BatchSignedUrlLookup
+
+        # Three waves scheduled; the map settles on the SECOND wave, so
+        # one initial fetch + two retries = three signer calls, then no
+        # more.
+        sleeps: list[float] = []
+        signer = _EventualSigner(misses_before_hit=2)
+        lookup = BatchSignedUrlLookup(
+            signer=signer,
+            partial_map_retry_delays=(0.1, 0.2, 0.4),
+            sleep=sleeps.append,
+        )
+
+        assert lookup.lookup("ds1", "doc1", "chunks", "u_lagged") == "https://s3/u_lagged"
+        stats = lookup.stats()
+        assert stats.partial_map_retries == 2
+        assert stats.signer_calls == 3
+        assert stats.uid_misses == 0
+        assert sleeps == [0.1, 0.2], f"expected two waves' worth of sleeps; got {sleeps!r}"
+
+    def test_a_schedule_that_never_settles_bounds_retries_to_len(self):
+        """If every wave still returns a partial map, retries stop at
+        the schedule length -- not one per uid, not unbounded."""
+
+        class _AlwaysPartial:
+            def __init__(self):
+                self.calls = 0
+
+            def __call__(self, dataset_id, document_id, *, file_series="", client=None):
+                self.calls += 1
+                return True, {"files": {"u_present": "https://s3/u_present"}}
+
+        from ndi.cloud.batch_signed_url import BatchSignedUrlLookup
+
+        sleeps: list[float] = []
+        signer = _AlwaysPartial()
+        lookup = BatchSignedUrlLookup(
+            signer=signer,
+            partial_map_retry_delays=(0.05, 0.1, 0.2),
+            sleep=sleeps.append,
+        )
+
+        assert lookup.lookup("ds1", "doc1", "chunks", "u_lagged") == ""
+        stats = lookup.stats()
+        assert stats.partial_map_retries == 3, "all three waves fire before giving up"
+        assert stats.signer_calls == 4, "one initial fetch + three retries"
+        assert stats.uid_misses == 1
+        assert sleeps == [0.05, 0.1, 0.2]
+
+        # A second uid on the same scope must not spend another wave.
+        signer_calls_before = signer.calls
+        assert lookup.lookup("ds1", "doc1", "chunks", "u_also_lagged") == ""
+        assert signer.calls == signer_calls_before, "schedule exhausted; no more retries"
+        stats = lookup.stats()
+        assert stats.partial_map_retries == 3
+
     def test_a_retry_that_returns_no_map_at_all_still_falls_back(self):
         """The retry can itself fail (a fetch that raises, a bad payload).
         The caller must still get an empty string, not a crash."""
