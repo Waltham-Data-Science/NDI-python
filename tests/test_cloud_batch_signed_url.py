@@ -453,6 +453,166 @@ class TestBatchLookupClear:
         assert lookup.stats().signer_calls == 1  # refetched after clear
 
 
+class TestBatchLookupPrefetch:
+    """The prefetch path warms one scope without asking about a uid.
+
+    The whole point is to hide the 20-80 s signed-URL-set wall time
+    behind an initial render the user is already watching -- a later
+    ``lookup()`` on any uid in the scope must then be a pure cache
+    hit and NOT run another signer call.
+    """
+
+    def test_prefetch_scope_populates_the_cache(self):
+        """After a prefetch, lookup() serves the map without an extra call."""
+        from ndi.cloud.batch_signed_url import BatchSignedUrlLookup
+
+        files = {"u1": "https://s3/u1", "u2": "https://s3/u2"}
+        signer = _FakeSigner({("ds1", "doc1", "chunk.bin"): files})
+        lookup = BatchSignedUrlLookup(signer=signer)
+
+        assert lookup.prefetch_scope("ds1", "doc1", "chunk.bin") is True
+        assert len(signer.calls) == 1
+
+        # A subsequent lookup on any uid in the scope must be a pure cache hit.
+        assert lookup.lookup("ds1", "doc1", "chunk.bin", "u1") == "https://s3/u1"
+        assert lookup.lookup("ds1", "doc1", "chunk.bin", "u2") == "https://s3/u2"
+        assert len(signer.calls) == 1, (
+            "the prefetched scope must serve subsequent lookups from cache; "
+            f"signer was called {len(signer.calls)} times"
+        )
+
+    def test_prefetch_scope_returns_true_when_already_cached(self):
+        """A second prefetch of a fresh scope is a no-op; no extra call."""
+        from ndi.cloud.batch_signed_url import BatchSignedUrlLookup
+
+        signer = _FakeSigner({("ds1", "doc1", "chunk.bin"): {"u1": "https://s3/u1"}})
+        lookup = BatchSignedUrlLookup(signer=signer)
+
+        assert lookup.prefetch_scope("ds1", "doc1", "chunk.bin") is True
+        assert lookup.prefetch_scope("ds1", "doc1", "chunk.bin") is True
+        assert len(signer.calls) == 1, (
+            "a second prefetch of a fresh scope must not fire another signer call; "
+            f"got {len(signer.calls)} calls"
+        )
+
+    def test_prefetch_scope_returns_false_on_empty_document_id(self):
+        """No document id means nothing to batch against."""
+        from ndi.cloud.batch_signed_url import BatchSignedUrlLookup
+
+        signer = _FakeSigner({})
+        lookup = BatchSignedUrlLookup(signer=signer)
+
+        assert lookup.prefetch_scope("ds1", "", "chunk.bin") is False
+        assert signer.calls == []
+
+    def test_start_prefetch_iterates_scopes_in_the_background(self):
+        """The background thread warms every scope it is handed."""
+        from ndi.cloud.batch_signed_url import BatchSignedUrlLookup
+
+        scopes_files = {
+            ("ds1", "doc_a", "chunk.bin"): {"u_a1": "https://s3/a1"},
+            ("ds1", "doc_b", "chunk.bin"): {"u_b1": "https://s3/b1"},
+            ("ds1", "doc_c", "chunk.bin"): {"u_c1": "https://s3/c1"},
+        }
+        signer = _FakeSigner(scopes_files)
+        lookup = BatchSignedUrlLookup(signer=signer)
+
+        thread = lookup.start_prefetch(
+            [
+                ("ds1", "doc_a", "chunk.bin"),
+                ("ds1", "doc_b", "chunk.bin"),
+                ("ds1", "doc_c", "chunk.bin"),
+            ]
+        )
+        thread.join(timeout=5.0)
+        assert not thread.is_alive(), "prefetch thread did not finish"
+
+        # All three scopes must now be cached, so lookup() serves without
+        # another signer call.
+        signer_calls_before = len(signer.calls)
+        assert lookup.lookup("ds1", "doc_a", "chunk.bin", "u_a1") == "https://s3/a1"
+        assert lookup.lookup("ds1", "doc_b", "chunk.bin", "u_b1") == "https://s3/b1"
+        assert lookup.lookup("ds1", "doc_c", "chunk.bin", "u_c1") == "https://s3/c1"
+        assert len(signer.calls) == signer_calls_before, (
+            "lookups after prefetch must be pure cache hits; "
+            f"signer went from {signer_calls_before} to {len(signer.calls)}"
+        )
+        assert (
+            signer_calls_before == 3
+        ), f"expected one signer call per prefetched scope, got {signer_calls_before}"
+
+    def test_start_prefetch_skips_empty_document_ids(self):
+        """A scope with an empty ndi_document_id is skipped, not fetched."""
+        from ndi.cloud.batch_signed_url import BatchSignedUrlLookup
+
+        scopes_files = {
+            ("ds1", "doc_a", "chunk.bin"): {"u_a1": "https://s3/a1"},
+            ("ds1", "doc_c", "chunk.bin"): {"u_c1": "https://s3/c1"},
+        }
+        signer = _FakeSigner(scopes_files)
+        lookup = BatchSignedUrlLookup(signer=signer)
+
+        thread = lookup.start_prefetch(
+            [
+                ("ds1", "doc_a", "chunk.bin"),
+                ("ds1", "", "chunk.bin"),  # skipped
+                ("ds1", "doc_c", "chunk.bin"),
+            ]
+        )
+        thread.join(timeout=5.0)
+        assert not thread.is_alive()
+
+        assert len(signer.calls) == 2, (
+            "the empty-doc-id scope must be skipped; "
+            f"expected 2 signer calls, got {len(signer.calls)}"
+        )
+        scopes_fetched = {tuple(c) for c in signer.calls}
+        assert scopes_fetched == {
+            ("ds1", "doc_a", "chunk.bin"),
+            ("ds1", "doc_c", "chunk.bin"),
+        }
+
+    def test_start_prefetch_continues_after_a_failure(self):
+        """A BatchScopeUnreachable on one scope must not stop the rest."""
+        from ndi.cloud.batch_signed_url import BatchScopeUnreachable, BatchSignedUrlLookup
+
+        good_files = {"u_b1": "https://s3/b1"}
+        good_files_c = {"u_c1": "https://s3/c1"}
+
+        state = {"calls": 0}
+
+        def signer(dataset_id, document_id, *, file_series="", client=None):
+            state["calls"] += 1
+            if document_id == "doc_a":
+                raise BatchScopeUnreachable("simulated async-job failure for doc_a")
+            if document_id == "doc_b":
+                return True, {"files": dict(good_files)}
+            if document_id == "doc_c":
+                return True, {"files": dict(good_files_c)}
+            return False, {"message": "no such scope"}
+
+        lookup = BatchSignedUrlLookup(signer=signer)
+
+        thread = lookup.start_prefetch(
+            [
+                ("ds1", "doc_a", "chunk.bin"),  # raises
+                ("ds1", "doc_b", "chunk.bin"),
+                ("ds1", "doc_c", "chunk.bin"),
+            ]
+        )
+        thread.join(timeout=5.0)
+        assert not thread.is_alive()
+
+        # The remaining two scopes still landed in the cache.
+        signer_calls_before = state["calls"]
+        assert lookup.lookup("ds1", "doc_b", "chunk.bin", "u_b1") == "https://s3/b1"
+        assert lookup.lookup("ds1", "doc_c", "chunk.bin", "u_c1") == "https://s3/c1"
+        assert state["calls"] == signer_calls_before, (
+            "lookups after a partial prefetch must still be cache hits; "
+            f"signer went from {signer_calls_before} to {state['calls']}"
+        )
+
+
 # ---------------------------------------------------------------------------
 # fetch_cloud_file wiring: the batch cache is consulted, and its answer is
 # what gets streamed. On a batch miss, the per-uid getFileDetails is called.

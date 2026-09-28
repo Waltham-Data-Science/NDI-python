@@ -31,7 +31,7 @@ import logging
 import threading
 import time
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -565,6 +565,133 @@ class BatchSignedUrlLookup:
             self._scope_retry_attempts.clear()
             self._warned.clear()
             self._stats = Stats()
+
+    def prefetch_scope(
+        self,
+        cloud_dataset_id: str,
+        ndi_document_id: str,
+        series_name: str,
+        *,
+        client: CloudClient | None = None,
+    ) -> bool:
+        """Populate the cache for one scope without asking about a specific uid.
+
+        Seeds the cache so a subsequent :meth:`lookup` on any uid in the
+        scope resolves without another signer call. Safe to call from a
+        background thread; the same lock that guards :meth:`lookup`
+        serialises the fetch so a concurrent lookup on the same scope
+        does not stampede the endpoint.
+
+        The partial-map retry is NOT run here on purpose: prefetch's
+        job is to seed the cache, and the retry only helps when a
+        specific uid is expected to be present. If the map that arrives
+        is partial, the first lookup that misses will drive its own
+        retry through the existing bounded schedule.
+
+        Args:
+            cloud_dataset_id: The dataset id.
+            ndi_document_id: The NDI document id. Empty returns False
+                immediately: nothing to batch against.
+            series_name: ``""`` for a whole-document scope, or a file
+                series name to scope the batch.
+            client: Passed to the signer (default signer only).
+
+        Returns:
+            True when a cache entry now exists for the scope (either
+            just populated, or already fresh); False otherwise.
+        """
+        if not ndi_document_id:
+            return False
+
+        cache_key = f"{cloud_dataset_id}/{ndi_document_id}/{series_name}"
+        now = time.monotonic()
+
+        with self._lock:
+            entry = self._cache.get(cache_key)
+            if entry is not None and (now - entry.fetched_at) < self._ttl_seconds:
+                return True
+            # Drop stale entry so _fetch_scope replaces it.
+            if entry is not None:
+                del self._cache[cache_key]
+
+            entry = self._fetch_scope(
+                cache_key,
+                cloud_dataset_id,
+                ndi_document_id,
+                series_name,
+                uid="",
+                client=client,
+            )
+            return entry is not None
+
+    def start_prefetch(
+        self,
+        scopes: Sequence[tuple[str, str, str]],
+        *,
+        client: CloudClient | None = None,
+    ) -> threading.Thread:
+        """Spawn a daemon thread that prefetches ``scopes`` in order.
+
+        Each scope is ``(cloud_dataset_id, ndi_document_id, series_name)``.
+        Scopes with an empty ``ndi_document_id`` are skipped (nothing to
+        batch against). A :class:`BatchScopeUnreachable` from one scope
+        is logged and the thread continues with the next -- the point
+        of prefetch is to warm the cache best-effort, not to fail loud.
+
+        Returns the started thread so tests can join it; production
+        callers can fire and forget.
+        """
+        scopes_list = list(scopes)
+
+        def _run() -> None:
+            logger.info(
+                "signed-URL prefetch: warming %d scope(s) in background",
+                len(scopes_list),
+            )
+            for cloud_dataset_id, ndi_document_id, series_name in scopes_list:
+                if not ndi_document_id:
+                    logger.info(
+                        "signed-URL prefetch: skipping scope "
+                        "(%s, <empty doc id>, series=%r) -- nothing to batch against",
+                        cloud_dataset_id,
+                        series_name,
+                    )
+                    continue
+                started = time.monotonic()
+                try:
+                    ok = self.prefetch_scope(
+                        cloud_dataset_id,
+                        ndi_document_id,
+                        series_name,
+                        client=client,
+                    )
+                except BatchScopeUnreachable as exc:
+                    logger.warning(
+                        "signed-URL prefetch: scope (%s, %s, series=%r) unreachable "
+                        "after %.1fs: %s -- continuing with the next scope",
+                        cloud_dataset_id,
+                        ndi_document_id,
+                        series_name,
+                        time.monotonic() - started,
+                        exc,
+                    )
+                    continue
+                logger.info(
+                    "signed-URL prefetch: scope (%s, %s, series=%r) %s in %.1fs",
+                    cloud_dataset_id,
+                    ndi_document_id,
+                    series_name,
+                    "cached" if ok else "failed",
+                    time.monotonic() - started,
+                )
+
+        thread = threading.Thread(
+            target=_run,
+            name="ndi-signed-url-prefetch",
+            daemon=True,
+        )
+        thread.start()
+        return thread
 
     # ------------------------------------------------------------------
     # Internal

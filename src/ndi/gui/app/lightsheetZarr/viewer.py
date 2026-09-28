@@ -21,6 +21,29 @@ import time
 from typing import Any
 
 
+def _cloud_dataset_id(session: Any) -> str:
+    """Discover the remote NDI Cloud dataset id from an opened session.
+
+    ``_open_session`` in ``cli.py`` may hand back either an
+    ``ndi.session.dir`` or an ``ndi.dataset.dir``; only the dataset
+    exposes ``is_in_cloud()``, which returns ``(in_cloud, id)`` off
+    of the ``dataset_remote`` document written the first time the
+    dataset was uploaded. Everything else (plain session, non-cloud
+    open, older reader) reads as ``""`` -- no cloud context, no
+    prefetch to do.
+    """
+    checker = getattr(session, "is_in_cloud", None)
+    if not callable(checker):
+        return ""
+    try:
+        in_cloud, cloud_id = checker()
+    except Exception:  # noqa: BLE001 - a bad probe is never fatal
+        return ""
+    if not in_cloud:
+        return ""
+    return str(cloud_id or "")
+
+
 class _NapariStatusReporter:
     """Push a tile-loading status message into napari's status bar.
 
@@ -370,6 +393,30 @@ def openPyramid(
     except Exception as exc:  # noqa: BLE001 - a prefetch failure is never fatal
         print(
             f"[lightsheet] prefetch coarsest level: could not start ({exc})",
+            file=sys.stderr,
+            flush=True,
+        )
+
+    # Eagerly warm the signed-URL cache for every level's chunk.bin
+    # series. Each async signed-URL-set job takes 20-80 s server-side,
+    # so a 5-level pyramid otherwise pays that wall time the first
+    # time the user zooms into each level; running the jobs in the
+    # background while level 0 renders hides those waits behind the
+    # moment the user is already looking at level 0.
+    try:
+        cloud_dataset_id = _cloud_dataset_id(session)
+        if cloud_dataset_id:
+            loader.startSignedUrlPrefetch(cloud_dataset_id)
+        else:
+            print(
+                "[lightsheet] signed-URL prefetch skipped: no cloud dataset id "
+                "on this session (local-only open?)",
+                file=sys.stderr,
+                flush=True,
+            )
+    except Exception as exc:  # noqa: BLE001 - a prefetch failure is never fatal
+        print(
+            f"[lightsheet] signed-URL prefetch: could not start ({exc})",
             file=sys.stderr,
             flush=True,
         )
