@@ -1000,6 +1000,22 @@ def download_file_from_cloud(
         ndi_document_id = str(context.get("documentId", "") or "")
         series_name = str(context.get("seriesName", "") or "")
 
+    # A single-file fetch (a series manifest, or any doc-level attachment)
+    # arrives here with seriesName="", because there is no member being
+    # asked for. Going through the per-document batch scope to answer one
+    # uid is pure loss: for a lightsheet-scale pyramid document that scope
+    # names 15k+ files, so the batch endpoint spends 60-90 s on a signed-
+    # URL set the caller has no use for, delaying the ONE URL that
+    # download actually needs by more than a minute. Same reasoning that
+    # ``_fetch_manifest`` above uses for the internal manifest fetch: for
+    # a single uid, the direct ``getFileDetails`` path is O(1) and wins.
+    # (VH-Lab/NDI-matlab#1010's Python analog. When the caller does need
+    # a whole-doc scope -- an ordinary series member fetch that follows
+    # with seriesName="chunk.bin" -- the batch fires there and the cost
+    # amortizes across every member.)
+    if not series_name:
+        ndi_document_id = ""
+
     fetch_cloud_file(
         uri,
         dest_path,

@@ -601,13 +601,20 @@ class TestDownloadHandlerPassesContext:
         assert kwargs["ndi_document_id"] == "doc_ndi"
         assert kwargs["series_name"] == "stack"
 
-    def test_ordinary_file_still_carries_document_scope(self, tmp_path):
-        """Two documents each with one file must not share a scope.
+    def test_a_single_file_fetch_bypasses_batch(self, tmp_path):
+        """An ordinary file (no seriesName) is a SINGLE-uid fetch, so it
+        must take the direct ``getFileDetails`` path -- NOT ask the batch
+        endpoint for a whole-document scope to answer one question.
 
-        An ordinary file (no seriesName) with a documentId still keys its
-        batch scope on that documentId, so the endpoint returns just that
-        document's map -- exactly one uid, but the cache is still primed
-        for the next uid in the same document.
+        For a lightsheet-scale pyramid document that scope names 15k+
+        files, so the batch endpoint spends 60-90 s signing a set the
+        caller has no use for, delaying the ONE URL that the download
+        actually needs by more than a minute. This is the same reasoning
+        that ``_fetch_manifest`` uses for the internal manifest fetch;
+        the DID handler path has to make the same choice or the pyramid
+        pathology reappears whenever DID reads a series member (DID
+        fetches the manifest via the handler with seriesName="" before
+        it fetches any members). See Waltham-Data-Science/NDI-python#320.
         """
         from ndi.cloud.filehandler import download_file_from_cloud
 
@@ -620,7 +627,9 @@ class TestDownloadHandlerPassesContext:
             )
 
         _, kwargs = mock_fetch.call_args
-        assert kwargs["ndi_document_id"] == "doc_ndi"
+        # documentId is discarded on the single-file path so
+        # fetch_cloud_file skips the batch scope entirely.
+        assert kwargs["ndi_document_id"] == ""
         assert kwargs["series_name"] == ""
 
     def test_no_context_disables_batch(self, tmp_path):
