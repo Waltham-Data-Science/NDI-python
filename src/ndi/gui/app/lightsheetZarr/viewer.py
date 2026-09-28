@@ -18,7 +18,34 @@ import os
 import sys
 import threading
 import time
+from datetime import datetime
 from typing import Any
+
+
+def _ts() -> str:
+    """Return the current wall clock as ``HH:MM:SS.mmm``.
+
+    A wall-clock timestamp on every ``[lightsheet]`` line lets a user
+    quantify the actual UX -- how long the signed-URL job took, how
+    long between the first tile request and the first tile back, how
+    long a level swap sat on a black screen -- without cross-referencing
+    the ``ndi.cloud.*`` INFO lines that already carry timestamps.
+
+    Sub-second precision matters when a tile fetch finishes in
+    ~0.5-2 s: a second-only stamp collapses adjacent lines into the
+    same second and makes progression look stepped.
+    """
+    return datetime.now().strftime("%H:%M:%S.%f")[:-3]
+
+
+def _ls(msg: str, *, file=None) -> None:
+    """Print ``[HH:MM:SS.mmm lightsheet] msg`` to stderr, flushed.
+
+    Named so a caller can write ``_ls(f"tiles: {n}/{m}")`` instead of
+    building the full prefix by hand. Pass ``file=`` to route to a
+    stream other than stderr (the fetch counter uses this).
+    """
+    print(f"{_ts()} [lightsheet] {msg}", file=file or sys.stderr, flush=True)
 
 
 def _cloud_dataset_id(session: Any) -> str:
@@ -176,11 +203,11 @@ class _FetchCounter:
         if self._last_duration is not None:
             mb = (self._last_bytes or 0) / (1024.0 * 1024.0)
             last = f"; last fetch {self._last_duration:.2f}s, {mb:.1f} MB"
-        stderr_line = (
-            f"[lightsheet] tiles: {self._done} loaded / {self._started} requested "
-            f"(in flight: {in_flight}){last}"
+        _ls(
+            f"tiles: {self._done} loaded / {self._started} requested "
+            f"(in flight: {in_flight}){last}",
+            file=self._out,
         )
-        print(stderr_line, file=self._out, flush=True)
         if self._status_reporter is not None:
             status_msg = (
                 f"lightsheet: {self._done}/{self._started} tiles"
@@ -194,11 +221,9 @@ class _FetchCounter:
             with self._lock:
                 idle = time.monotonic() - self._last_activity
                 if self._started == 0:
-                    print(
-                        "[lightsheet] no tiles requested yet by napari; "
-                        "waiting for first slice ...",
+                    _ls(
+                        "no tiles requested yet by napari; waiting for first slice ...",
                         file=self._out,
-                        flush=True,
                     )
                 elif self._done < self._started and idle >= self._idle_interval:
                     self._maybe_print(force=True)
@@ -215,14 +240,13 @@ class _FetchCounter:
                 # slice. Whichever it is, silence would hide it.
                 started = self._started
                 in_flight = self._started - self._done
-                print(
-                    f"[lightsheet] fetch summary: 0 tiles fetched in {wall:.1f}s "
+                _ls(
+                    f"fetch summary: 0 tiles fetched in {wall:.1f}s "
                     f"(started={started}, in_flight={in_flight}). "
                     "napari either drew only sparse/fill regions, or the async "
                     "slicer never dispatched -- try dragging the Z slider or "
                     "zooming in to force a slice compute.",
                     file=self._out,
-                    flush=True,
                 )
                 return
             n = len(self._durations)
@@ -233,12 +257,11 @@ class _FetchCounter:
             mean_mb = (total_bytes / n) / (1024.0 * 1024.0)
             total_mb = total_bytes / (1024.0 * 1024.0)
             throughput = (total_bytes / wall) / (1024.0 * 1024.0) if wall > 0 else 0.0
-            print(
-                f"[lightsheet] fetch summary: {n} tiles, {total_mb:.1f} MB total, "
+            _ls(
+                f"fetch summary: {n} tiles, {total_mb:.1f} MB total, "
                 f"{wall:.1f}s wall, mean {mean_dt:.2f}s/tile ({mean_mb:.1f} MB), "
                 f"min {min_dt:.2f}s, max {max_dt:.2f}s, throughput {throughput:.1f} MB/s",
                 file=self._out,
-                flush=True,
             )
 
 
@@ -725,11 +748,7 @@ def _attach_level_selector(viewer, layers, per_layer_levels, per_layer_scales):
         idx = labels.index(level)
         t0 = time.monotonic()
         elapsed_start = t0 - session_start
-        print(
-            f"[lightsheet] level selector: request {level} at t=+{elapsed_start:.1f}s",
-            file=sys.stderr,
-            flush=True,
-        )
+        _ls(f"level selector: request {level} at t=+{elapsed_start:.1f}s")
         for layer, arrays, scales in zip(layers, per_layer_levels, per_layer_scales):
             if not arrays or idx >= len(arrays):
                 continue
@@ -765,17 +784,13 @@ def _attach_level_selector(viewer, layers, per_layer_levels, per_layer_scales):
                 layer.refresh()
             except Exception:  # noqa: BLE001
                 pass
-            print(
-                f"[lightsheet]   layer {layer.name!r} scale/data swapped "
-                f"at t=+{time.monotonic() - session_start:.1f}s",
-                file=sys.stderr,
-                flush=True,
+            _ls(
+                f"  layer {layer.name!r} scale/data swapped "
+                f"at t=+{time.monotonic() - session_start:.1f}s"
             )
-        print(
-            f"[lightsheet] level selector: request completed in "
-            f"{time.monotonic() - t0:.2f}s (napari now re-slicing)",
-            file=sys.stderr,
-            flush=True,
+        _ls(
+            f"level selector: request completed in {time.monotonic() - t0:.2f}s "
+            "(napari now re-slicing)"
         )
 
     try:

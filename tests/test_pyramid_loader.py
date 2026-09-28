@@ -197,9 +197,16 @@ class TestRegisterRefreshHint(unittest.TestCase):
 
 
 class TestStats(unittest.TestCase):
-    def test_before_build_the_snapshot_is_empty(self):
+    def test_before_build_no_fetcher_line(self):
+        """No fetcher yet means no fetcher line. The fallback stats line
+        is a module-level counter (env-gated, not fetcher-gated), so it
+        may still be present -- what this pins is that ``stats()`` does
+        not fabricate a fetcher summary before build."""
+        import os
+
         loader = ImagePyramidLoader(_FakeSession(), _FakeDoc())
-        self.assertEqual(loader.stats(), {})
+        with mock.patch.dict(os.environ, {"NDI_LIGHTSHEET_UPSAMPLE_FALLBACK": "0"}, clear=False):
+            self.assertEqual(loader.stats(), {})
 
     def test_after_build_the_fetcher_line_is_present(self):
         fetcher = _FakeFetcher()
@@ -210,6 +217,13 @@ class TestStats(unittest.TestCase):
             self.assertEqual(snap.get("fetcher"), "cache=42, cloud=10")
 
     def test_fallback_line_only_appears_when_the_env_is_on(self):
+        """The fallback env is on by default now (#320); the stats line
+        tracks whichever state ``env_on()`` reports.
+
+        With the env unset the default is ON, and the stats show
+        'fallback'. With ``=0`` the fallback is off and the stats
+        section is absent.
+        """
         import os
 
         fetcher = _FakeFetcher()
@@ -218,9 +232,9 @@ class TestStats(unittest.TestCase):
             loader.build()
             with mock.patch.dict(os.environ, {}, clear=False):
                 os.environ.pop("NDI_LIGHTSHEET_UPSAMPLE_FALLBACK", None)
-                self.assertNotIn("fallback", loader.stats())
-            with mock.patch.dict(os.environ, {"NDI_LIGHTSHEET_UPSAMPLE_FALLBACK": "1"}):
                 self.assertIn("fallback", loader.stats())
+            with mock.patch.dict(os.environ, {"NDI_LIGHTSHEET_UPSAMPLE_FALLBACK": "0"}):
+                self.assertNotIn("fallback", loader.stats())
 
 
 class TestClose(unittest.TestCase):
