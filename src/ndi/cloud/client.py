@@ -183,6 +183,12 @@ class CloudClient:
 
     def __init__(self, config: CloudConfig):
         self.config = config
+        # A hand-built ``CloudClient(CloudConfig(token=...))`` uses that
+        # token as given and does not refresh against env credentials on
+        # 401/403 -- the caller told us what token to use. ``from_env()``
+        # (and any explicit login helper we add) sets this True after a
+        # successful ``authenticate()``.
+        self._can_reauth = False
         try:
             import requests
         except ImportError as exc:
@@ -331,7 +337,7 @@ class CloudClient:
             # ~10 min. One-shot per request: a second 401/403 after
             # reauthentication is a real auth problem (bad creds, revoked
             # key) and belongs at the surface.
-            if resp.status_code in (401, 403) and not reauth_tried:
+            if resp.status_code in (401, 403) and not reauth_tried and self._can_reauth:
                 logger.info(
                     "cloud request %s %s: got HTTP %d (token likely expired); "
                     "reauthenticating and retrying",
@@ -488,7 +494,12 @@ class CloudClient:
 
         config = CloudConfig.from_env()
         config.token, config.org_id = authenticate(config)
-        return cls(config)
+        client = cls(config)
+        # We just obtained this token ourselves, so a mid-run 401/403
+        # (typical after the token's TTL expires) can be answered by
+        # calling ``authenticate`` again with the same credentials.
+        client._can_reauth = True
+        return client
 
     def _reauthenticate(self) -> None:
         """Refresh this client's token in place from the same credentials.

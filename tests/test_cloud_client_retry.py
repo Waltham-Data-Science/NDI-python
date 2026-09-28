@@ -103,15 +103,21 @@ def slept(monkeypatch):
     return waits
 
 
-def make_client(*script):
+def make_client(*script, can_reauth: bool = True):
     """A client whose transport is the given script.
 
     ``__new__`` rather than the constructor: the real one builds a
     ``requests.Session`` that would have to be replaced anyway.
+
+    ``can_reauth`` defaults to True so ordinary retry tests continue to
+    behave as if the client were obtained via ``from_env()``. Tests that
+    verify the "hand-built CloudClient(CloudConfig(token=...)) does not
+    refresh against env credentials" behavior pass ``can_reauth=False``.
     """
     client = CloudClient.__new__(CloudClient)
     client.config = CloudConfig()
     client._session = Transport(*script)
+    client._can_reauth = can_reauth
     return client
 
 
@@ -467,6 +473,31 @@ class TestReauthOnTokenExpiry:
 
         assert captured_authorizations[0] == "Bearer the-stale-token"
         assert captured_authorizations[1] == "Bearer the-fresh-token"
+
+    def test_a_hand_built_client_does_not_reauth_against_env(self, slept, monkeypatch):
+        """``CloudClient(CloudConfig(token=...))`` uses the given token as
+        given: a 401 surfaces as ``CloudAuthError`` rather than silently
+        being replaced by whatever ``authenticate()`` would return from
+        env. Without this, a test that hard-codes a bad token to verify
+        auth failure "passes" because CI happens to have valid
+        ``NDI_CLOUD_USERNAME``/``NDI_CLOUD_PASSWORD`` in env, and the
+        client swaps in a fresh valid token behind the caller's back.
+        """
+        client = make_client(response(401, text="expired"), can_reauth=False)
+
+        reauth_calls = {"n": 0}
+
+        def should_not_be_called():
+            reauth_calls["n"] += 1
+            client.config.token = "would-be-fresh"
+
+        monkeypatch.setattr(client, "_reauthenticate", should_not_be_called)
+
+        with pytest.raises(CloudAuthError):
+            client.get("/datasets")
+
+        assert reauth_calls["n"] == 0, "hand-built client must not refresh from env"
+        assert client._session.attempts == 1, "no retry when reauth is disabled"
 
 
 if __name__ == "__main__":

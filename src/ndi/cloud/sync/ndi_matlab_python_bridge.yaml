@@ -709,6 +709,25 @@ not_yet_ported:
       MATLAB path resolver. Python handles this inside
       SyncIndex.read() and SyncIndex.write() methods.
 
+  - name: fetchManifest
+    matlab_path: "+ndi/+cloud/+sync/+internal/fetchManifest.m"
+    matlab_last_sync_hash: "0ae6bfad"
+    status: ported_differently
+    python_path: "ndi/cloud/filehandler.py"
+    decision_log: >
+      MATLAB extracts fetchManifest as a standalone helper so the
+      "resolve one known uid without going through the per-document
+      batch signed-URL cache" path can be exercised in isolation.
+      Python has the same behavior baked directly into
+      ndi.cloud.filehandler._fetch_manifest (commit 5ab9c04: the
+      single-manifest fetch bypasses BatchSignedUrlLookup and calls
+      getFileDetails on the manifest uid). The single-uid direct
+      path is what both languages need to avoid the ~12 h penalty of
+      walking a lightsheet document's entire batch to answer one
+      question -- see VH-Lab/NDI-matlab#1010. No separate
+      fetch_manifest module in Python: it stays inline with the
+      caller that needs the manifest bytes.
+
   - name: uploadedDocumentIds
     matlab_path: "+ndi/+cloud/+sync/+internal/uploadedDocumentIds.m"
     matlab_last_sync_hash: "29546720"
