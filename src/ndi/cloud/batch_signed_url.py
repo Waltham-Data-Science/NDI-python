@@ -617,9 +617,7 @@ class BatchSignedUrlLookup:
             try:
                 from . import signed_url_disk_cache
 
-                signed_url_disk_cache.save(
-                    cloud_dataset_id, ndi_document_id, series_name, answer
-                )
+                signed_url_disk_cache.save(cloud_dataset_id, ndi_document_id, series_name, answer)
             except Exception:  # noqa: BLE001 - best-effort
                 logger.debug(
                     "signed-URL disk cache save raised for scope %r; ignored",
@@ -645,9 +643,7 @@ class BatchSignedUrlLookup:
         try:
             from . import signed_url_disk_cache
 
-            disk = signed_url_disk_cache.load(
-                cloud_dataset_id, ndi_document_id, series_name
-            )
+            disk = signed_url_disk_cache.load(cloud_dataset_id, ndi_document_id, series_name)
         except Exception:  # noqa: BLE001 - never fail a read on disk I/O
             logger.debug(
                 "signed-URL disk cache load raised for scope %r; ignored",

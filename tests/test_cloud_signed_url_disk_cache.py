@@ -77,8 +77,7 @@ class TestSaveLoadRoundTrip:
         assert got is not None, "a just-written scope should load"
         assert got["files"] == payload["files"]
         assert (
-            got["files"]["4192a3c0dd1b4e00_4fe8a1b2c3d4e5f6"]
-            == "https://s3/two?sig=abc%2F123"
+            got["files"]["4192a3c0dd1b4e00_4fe8a1b2c3d4e5f6"] == "https://s3/two?sig=abc%2F123"
         ), "URL with url-escaped bytes must survive JSON encoding"
         assert got["filesExpireAt"] == payload["filesExpireAt"]
         assert got["fileCount"] == 2
@@ -128,9 +127,7 @@ class TestExpiryAndSafetyBuffer:
         )
         assert cache.load("ds1", "doc1", "") is None
 
-    def test_safety_buffer_guards_against_almost_expired(
-        self, isolated_cache_dir, monkeypatch
-    ):
+    def test_safety_buffer_guards_against_almost_expired(self, isolated_cache_dir, monkeypatch):
         """20 min ≤ default 30 min buffer is a miss."""
         from ndi.cloud import signed_url_disk_cache as cache
 
@@ -141,9 +138,7 @@ class TestExpiryAndSafetyBuffer:
             sample_payload(filesExpireAt=future_iso(20 * 60), expiresAt=""),
         )
 
-        assert cache.load("ds1", "doc1", "") is None, (
-            "20 min < 30 min safety buffer must be a miss"
-        )
+        assert cache.load("ds1", "doc1", "") is None, "20 min < 30 min safety buffer must be a miss"
 
         # Tighten the buffer and the SAME payload becomes visible --
         # proving the check is the buffer doing the work, not the
@@ -196,9 +191,7 @@ class TestForget:
         cache.forget("ds1", "doc1", "chunk.bin")
 
         assert cache.load("ds1", "doc1", "chunk.bin") is None
-        assert not (
-            isolated_cache_dir / "ds1" / "doc1_chunk.bin.json.gz"
-        ).exists()
+        assert not (isolated_cache_dir / "ds1" / "doc1_chunk.bin.json.gz").exists()
 
     def test_forget_on_unknown_scope_is_silent(self, isolated_cache_dir):
         """S3-403 recovery must not need to check-first."""
@@ -259,9 +252,7 @@ class TestAtomicWrite:
         # Whichever landed last is fine; what matters is no half-write.
         assert len(got["files"]) == 1
 
-    def test_temp_files_do_not_linger_next_to_the_cache_file(
-        self, isolated_cache_dir
-    ):
+    def test_temp_files_do_not_linger_next_to_the_cache_file(self, isolated_cache_dir):
         """A successful save leaves ONE file: no .tmp scraps around."""
         from ndi.cloud import signed_url_disk_cache as cache
 
@@ -273,9 +264,7 @@ class TestAtomicWrite:
         # Under a race with a second process the two writers could each
         # briefly hold a .tmp file, but a fully successful run should
         # never leak one.
-        assert names == ["doc1_chunks.json.gz"], (
-            f"expected exactly one cache file, got {names!r}"
-        )
+        assert names == ["doc1_chunks.json.gz"], f"expected exactly one cache file, got {names!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -307,9 +296,7 @@ class TestSeriesNameEscaping:
 
         ds_dir = isolated_cache_dir / "ds1"
         n_gz = sum(1 for p in ds_dir.iterdir() if p.name.endswith(".json.gz"))
-        assert n_gz == 2, (
-            "two distinct series names must produce two distinct cache files"
-        )
+        assert n_gz == 2, "two distinct series names must produce two distinct cache files"
 
     def test_very_long_series_name_hashes(self, isolated_cache_dir):
         """A 500-char series name lands as ``hash-<sha1>``, never overflows."""
@@ -346,9 +333,7 @@ class TestOnDiskLayout:
         from ndi.cloud import signed_url_disk_cache as cache
 
         cache.save("ds1", "doc1", "chunk.bin", sample_payload())
-        assert (
-            isolated_cache_dir / "ds1" / "doc1_chunk.bin.json.gz"
-        ).is_file()
+        assert (isolated_cache_dir / "ds1" / "doc1_chunk.bin.json.gz").is_file()
 
     def test_corrupt_file_is_treated_as_miss(self, isolated_cache_dir):
         """A truncated / non-gzip file must not crash load()."""
@@ -439,19 +424,14 @@ class TestBatchLookupDiskCacheWiring:
         assert u2a == "https://s3/one"
         assert u2b == "https://s3/two"
         assert state["count"] == 1, (
-            "run 2 must have hit the disk cache -- signer must not have "
-            "been called again"
+            "run 2 must have hit the disk cache -- signer must not have " "been called again"
         )
 
-    def test_disk_cache_off_by_default_signs_every_cold_run(
-        self, isolated_cache_dir
-    ):
+    def test_disk_cache_off_by_default_signs_every_cold_run(self, isolated_cache_dir):
         """The default (disk_cache=False) preserves pre-cache behaviour."""
         from ndi.cloud.batch_signed_url import BatchSignedUrlLookup
 
-        signer, state = self._counting_signer(
-            {"aa_bb": "https://s3/x"}, future_iso(23 * 3600)
-        )
+        signer, state = self._counting_signer({"aa_bb": "https://s3/x"}, future_iso(23 * 3600))
 
         for _ in range(3):
             lookup = BatchSignedUrlLookup(signer=signer)  # disk_cache=False

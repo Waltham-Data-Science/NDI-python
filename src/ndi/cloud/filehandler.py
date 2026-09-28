@@ -509,21 +509,14 @@ def fetch_cloud_file(
         # the same scope. Best-effort; a failed forget is not fatal
         # to the CloudError we're raising. Mirrors NDI-matlab's own
         # 403-invalidation hook in didsqlite.download_file_from_cloud.
-        if (
-            url_came_from_batch
-            and error_out is not None
-            and error_out.get("status") == 403
-        ):
+        if url_came_from_batch and error_out is not None and error_out.get("status") == 403:
             try:
                 from . import signed_url_disk_cache
 
-                signed_url_disk_cache.forget(
-                    dataset_id, ndi_document_id, series_name
-                )
+                signed_url_disk_cache.forget(dataset_id, ndi_document_id, series_name)
             except Exception:  # noqa: BLE001 - best-effort
                 logger.debug(
-                    "signed-URL disk cache forget raised for scope "
-                    "(%s, %s, series=%r); ignored",
+                    "signed-URL disk cache forget raised for scope " "(%s, %s, series=%r); ignored",
                     dataset_id,
                     ndi_document_id,
                     series_name,

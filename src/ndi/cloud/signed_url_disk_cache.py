@@ -127,7 +127,7 @@ logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
 DEFAULT_SAFETY_SECONDS = 1800  # 30 min; task-declared floor.
-MAX_ESCAPED_SERIES_LEN = 96    # Beyond this we hash the series name.
+MAX_ESCAPED_SERIES_LEN = 96  # Beyond this we hash the series name.
 
 _ISO_FMT = "%Y-%m-%dT%H:%M:%SZ"
 
@@ -164,9 +164,7 @@ def cache_dir() -> Path:
     return base
 
 
-def load(
-    dataset_id: str, document_id: str, series_name: str = ""
-) -> dict[str, Any] | None:
+def load(dataset_id: str, document_id: str, series_name: str = "") -> dict[str, Any] | None:
     """Read one scope's cached signed-URL set, or ``None`` on any miss.
 
     Returns a dict (fields: files, filesExpireAt, expiresAt,
@@ -201,9 +199,7 @@ def load(
     # Enforce the safety-buffer floor against the authoritative server
     # timestamp. A payload with no timestamp is a miss: better to
     # refetch than hand out a URL we can't age-check.
-    expiry_str = _read_string(data, "filesExpireAt") or _read_string(
-        data, "expiresAt"
-    )
+    expiry_str = _read_string(data, "filesExpireAt") or _read_string(data, "expiresAt")
     if not expiry_str:
         return None
     expiry = _parse_iso_utc(expiry_str)
@@ -290,9 +286,7 @@ def save(
     # rename() rather than a cross-device copy+unlink. The random
     # suffix means two writers on the same scope in the same process
     # don't collide on their own temp file.
-    tmp_path = file_path.parent / (
-        file_path.name + f".tmp.{os.getpid()}.{secrets.token_hex(4)}"
-    )
+    tmp_path = file_path.parent / (file_path.name + f".tmp.{os.getpid()}.{secrets.token_hex(4)}")
     try:
         with gzip.open(tmp_path, "wb") as gz:
             gz.write(text.encode("utf-8"))
