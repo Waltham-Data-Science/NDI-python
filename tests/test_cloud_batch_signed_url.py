@@ -393,7 +393,11 @@ class TestFetchCloudFileUsesBatch:
             patch("ndi.cloud.api.files.getFile") as mock_get_file,
         ):
 
-            def fake_get_file(url, path, timeout=300):
+            def fake_get_file(url, path, timeout=300, **kwargs):
+                # **kwargs so fetch_cloud_file's opt-in error_out sink for
+                # the batch-cache 403 hook (NDI-python#322 follow-on) does
+                # not blow up the mock; the mock never fails, so error_out
+                # goes untouched.
                 Path(path).write_bytes(b"member bytes")
                 return True
 

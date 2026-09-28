@@ -343,6 +343,7 @@ class BatchSignedUrlLookup:
         failure_ttl_seconds: float = DEFAULT_FAILURE_TTL_SECONDS,
         partial_map_retry_seconds: float = DEFAULT_PARTIAL_MAP_RETRY_SECONDS,
         sleep: Callable[[float], None] | None = None,
+        disk_cache: bool = False,
     ) -> None:
         self._signer = signer or _default_signer
         self._ttl_seconds = ttl_seconds
@@ -351,6 +352,13 @@ class BatchSignedUrlLookup:
         # Injected only for tests: the retry has a real wait, and a test
         # that runs it 20 times should not pay 10 seconds for it.
         self._sleep = sleep or time.sleep
+        # Disk cache off by default: a scripted signer in a test suite
+        # would otherwise persist fake URLs to ~/.ndi/signed-url-cache
+        # and hit them on the next test's first lookup. Production
+        # callers (the DID chunk-download path) turn it on explicitly
+        # via ``get_default()``, which is where reopens actually pay.
+        # See :mod:`ndi.cloud.signed_url_disk_cache`.
+        self._disk_cache = disk_cache
         self._cache: dict[str, _CacheEntry] = {}
         self._failed_scopes: dict[str, _FailureEntry] = {}
         self._retried_scopes: set[str] = set()
@@ -399,6 +407,17 @@ class BatchSignedUrlLookup:
                 # Stale; drop and refetch.
                 del self._cache[cache_key]
                 entry = None
+
+            if entry is None and self._disk_cache:
+                # Consult the on-disk cache before running the async
+                # signed-URL-set job. On hit, populate the in-memory
+                # cache so every uid in the scope resolves without
+                # another disk read. On miss (no file, corrupt file,
+                # expired-or-within-safety-buffer), fall through to the
+                # signer as before.
+                entry = self._try_disk_cache(
+                    cache_key, cloud_dataset_id, ndi_document_id, series_name
+                )
 
             if entry is None:
                 # A scope that just failed is not retried for every uid
@@ -586,6 +605,73 @@ class BatchSignedUrlLookup:
         self._cache[cache_key] = entry
         self._stats.last_map_size = len(entry.files)
         self._stats.last_map_uids = list(entry.files.keys())
+
+        # Persist to disk when the caller has opted in AND the payload
+        # carries a server-signed expiry we can age-check off of. A
+        # payload with neither filesExpireAt nor expiresAt is not
+        # cacheable -- the disk cache refuses to invent a TTL, on
+        # purpose (see :func:`signed_url_disk_cache.save`). Best-effort:
+        # any I/O failure is swallowed so a full disk does not break a
+        # read that just succeeded.
+        if self._disk_cache:
+            try:
+                from . import signed_url_disk_cache
+
+                signed_url_disk_cache.save(
+                    cloud_dataset_id, ndi_document_id, series_name, answer
+                )
+            except Exception:  # noqa: BLE001 - best-effort
+                logger.debug(
+                    "signed-URL disk cache save raised for scope %r; ignored",
+                    cache_key,
+                    exc_info=True,
+                )
+        return entry
+
+    def _try_disk_cache(
+        self,
+        cache_key: str,
+        cloud_dataset_id: str,
+        ndi_document_id: str,
+        series_name: str,
+    ) -> _CacheEntry | None:
+        """Load one scope from the on-disk cache, or return None.
+
+        Populates the in-memory cache on hit so subsequent uids in the
+        same scope don't re-read the file. A miss is silent -- the
+        caller falls through to the signer, which is the shape a fresh
+        or expired-cache first open takes.
+        """
+        try:
+            from . import signed_url_disk_cache
+
+            disk = signed_url_disk_cache.load(
+                cloud_dataset_id, ndi_document_id, series_name
+            )
+        except Exception:  # noqa: BLE001 - never fail a read on disk I/O
+            logger.debug(
+                "signed-URL disk cache load raised for scope %r; ignored",
+                cache_key,
+                exc_info=True,
+            )
+            return None
+        if not disk:
+            return None
+        files = disk.get("files")
+        if not isinstance(files, dict) or not files:
+            return None
+        entry = _CacheEntry(files=dict(files), fetched_at=time.monotonic())
+        self._cache[cache_key] = entry
+        self._stats.last_map_size = len(entry.files)
+        self._stats.last_map_uids = list(entry.files.keys())
+        logger.info(
+            "signed-URL disk cache: served scope (%s, %s, series=%r) "
+            "with %d uids -- signer not called",
+            cloud_dataset_id,
+            ndi_document_id,
+            series_name,
+            len(entry.files),
+        )
         return entry
 
     def _warn_once(self, cache_key: str) -> None:
@@ -646,12 +732,25 @@ _DEFAULT_LOCK = threading.Lock()
 
 
 def get_default() -> BatchSignedUrlLookup:
-    """The process-wide default cache. Created on first use."""
+    """The process-wide default cache. Created on first use.
+
+    Constructed with the on-disk cache enabled: this is the production
+    reopen path. A scientist reopening the same lightsheet the next
+    morning must not pay the ~85 min signed-URL-set job again -- the
+    first open persists the scope to ``~/.ndi/signed-url-cache/`` (or
+    wherever ``NDI_SIGNED_URL_CACHE_DIR`` points), the reopen reads it
+    back and never touches the signer. See
+    :mod:`ndi.cloud.signed_url_disk_cache`.
+
+    Tests inject their own :class:`BatchSignedUrlLookup` -- disk cache
+    off by default there -- so scripted-signer suites don't persist
+    fake URLs into the user's real cache directory.
+    """
     global _DEFAULT_LOOKUP
     if _DEFAULT_LOOKUP is None:
         with _DEFAULT_LOCK:
             if _DEFAULT_LOOKUP is None:
-                _DEFAULT_LOOKUP = BatchSignedUrlLookup()
+                _DEFAULT_LOOKUP = BatchSignedUrlLookup(disk_cache=True)
     return _DEFAULT_LOOKUP
 
 

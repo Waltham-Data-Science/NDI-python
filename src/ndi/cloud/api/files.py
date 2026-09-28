@@ -225,6 +225,7 @@ def getFile(
     timeout: int = 120,
     *,
     progress=None,
+    error_out: dict | None = None,
 ) -> bool:
     """Download a file from a presigned URL.
 
@@ -237,6 +238,13 @@ def getFile(
     None when it sent none. It is keyword-only so it cannot be mistaken for
     ``timeout``, and it is called from whichever thread is downloading --
     a caller that renders it is responsible for its own locking.
+
+    ``error_out``, if given, is populated on FAILURE (return value
+    ``False``) with the HTTP details -- currently ``{"status": int,
+    "body": str}`` -- so a caller who needs the status code (e.g. to
+    invalidate a cached signed URL that returned S3 403) does not have
+    to re-download or infer from a log line. It is not touched on
+    success. Kept opt-in so getFile's happy-path signature is unchanged.
 
     WHY HERE. This is the one place every on-demand fetch passes through:
     the cell table, the contour file, the gene list and every pyramid tile
@@ -295,6 +303,9 @@ def getFile(
         url[:80],
         body[:200],
     )
+    if error_out is not None:
+        error_out["status"] = int(resp.status_code)
+        error_out["body"] = body[:200]
     return False
 
 

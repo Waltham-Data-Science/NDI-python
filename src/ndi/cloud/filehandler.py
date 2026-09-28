@@ -441,6 +441,7 @@ def fetch_cloud_file(
         client = get_or_create_cloud_client()
 
     download_url = ""
+    url_came_from_batch = False
     if ndi_document_id:
         # Batch path first. Empty means the batch could not answer for this
         # uid; fall back per uid so the read still succeeds.
@@ -454,6 +455,7 @@ def fetch_cloud_file(
             file_uid,
             client=client,
         )
+        url_came_from_batch = bool(download_url)
 
     if not download_url:
         details = getFileDetails(dataset_id, file_uid, client=client)
@@ -470,16 +472,24 @@ def fetch_cloud_file(
 
     logger.debug("Fetching cloud file %s -> %s", ndic_uri, target)
     observer = _fetch_observer
+    # error_out is only needed when the URL came from the batch disk cache
+    # and we might have to invalidate a stale scope on S3 403. Passing it
+    # unconditionally would force every mocked getFile in the test suite
+    # to accept the new keyword.
+    error_out: dict | None = {} if url_came_from_batch else None
+    call_kwargs: dict = {"timeout": 300}
+    if error_out is not None:
+        call_kwargs["error_out"] = error_out
     if observer is None:
-        success = getFile(download_url, tmp_path, timeout=300)
+        success = getFile(download_url, tmp_path, **call_kwargs)
     else:
         observer("start", ndic_uri, 0, None)
         try:
             success = getFile(
                 download_url,
                 tmp_path,
-                timeout=300,
                 progress=lambda done, total: observer("chunk", ndic_uri, done, total),
+                **call_kwargs,
             )
         finally:
             observer("done", ndic_uri, 0, None)
@@ -491,6 +501,35 @@ def fetch_cloud_file(
     else:
         # Clean up partial download
         tmp_path.unlink(missing_ok=True)
+
+        # An S3 403 on a URL that WAS served from the disk cache says
+        # the cached scope has gone stale (token revoked, or the object
+        # rotated). Drop the scope so the next read refetches --
+        # otherwise we'd 403 our way through every subsequent uid in
+        # the same scope. Best-effort; a failed forget is not fatal
+        # to the CloudError we're raising. Mirrors NDI-matlab's own
+        # 403-invalidation hook in didsqlite.download_file_from_cloud.
+        if (
+            url_came_from_batch
+            and error_out is not None
+            and error_out.get("status") == 403
+        ):
+            try:
+                from . import signed_url_disk_cache
+
+                signed_url_disk_cache.forget(
+                    dataset_id, ndi_document_id, series_name
+                )
+            except Exception:  # noqa: BLE001 - best-effort
+                logger.debug(
+                    "signed-URL disk cache forget raised for scope "
+                    "(%s, %s, series=%r); ignored",
+                    dataset_id,
+                    ndi_document_id,
+                    series_name,
+                    exc_info=True,
+                )
+
         from .exceptions import CloudError
 
         raise CloudError(f"Failed to download file from {ndic_uri}")
