@@ -251,7 +251,29 @@ def save(
     files_expire_at = _read_string(payload, "filesExpireAt")
     expires_at = _read_string(payload, "expiresAt")
     if not files_expire_at and not expires_at:
-        # Refuse to persist an un-age-checkable payload.
+        # Refuse to persist an un-age-checkable payload. This is a
+        # CALLER bug, not an environmental issue -- a signer that hands
+        # us a payload with neither expiry field means the disk cache
+        # will silently stay empty forever, which is exactly how the
+        # Waltham-Data-Science/NDI-python#320 first-fresh-machine run
+        # spent minutes signing 121k URLs and left no trace to reuse.
+        # WARN rather than raise: the surrounding read has already
+        # succeeded and we don't want to break it, but the noise is
+        # what turns "the cache mysteriously never fills" into "here
+        # is the exact scope and the exact reason". Silent on I/O
+        # errors (missing dir, permission, disk full) below -- those
+        # are legitimate best-effort skips, not callee bugs.
+        logger.warning(
+            "signed-URL disk cache: refusing to persist scope "
+            "(dataset=%s, document=%s, series=%r): payload carries "
+            "neither 'filesExpireAt' nor 'expiresAt', so the cache "
+            "cannot age-check it. This is a signer bug -- the URL "
+            "expiration must be carried on the payload passed to "
+            "save(). Cache stays empty for this scope.",
+            dataset_id,
+            document_id,
+            series_name,
+        )
         return
 
     generated_at = _read_string(payload, "generatedAt")
