@@ -614,6 +614,21 @@ class BatchSignedUrlLookup:
             if entry is not None:
                 del self._cache[cache_key]
 
+            # Consult the on-disk cache before running the async signed-
+            # URL-set job -- the whole point of the disk cache is that
+            # a scope warmed by a previous process should not have to
+            # re-sign 100k URLs at every viewer launch. Mirrors what
+            # ``lookup`` does. ``_try_disk_cache`` filters entries whose
+            # URLs would expire within the safety buffer, so a hit here
+            # is safe to hand to callers. See
+            # :mod:`ndi.cloud.signed_url_disk_cache`.
+            if self._disk_cache:
+                entry = self._try_disk_cache(
+                    cache_key, cloud_dataset_id, ndi_document_id, series_name
+                )
+                if entry is not None:
+                    return True
+
             entry = self._fetch_scope(
                 cache_key,
                 cloud_dataset_id,
