@@ -291,6 +291,23 @@ def _default_signer(
             )
 
             answer = files_api.getSignedURLSetResult(result_url)
+            # Carry the URL-expiration fields over from the JOB STATUS
+            # into the RESULT payload. The status is the only place the
+            # server puts filesExpireAt / expiresAt; the result blob
+            # itself does not include them (see getSignedURLSetResult's
+            # docstring for the blob shape). Without this merge the
+            # disk cache's save() correctly refuses to persist a
+            # payload it cannot age-check, and the on-disk cache stays
+            # empty even after a full successful signing -- exactly
+            # what we saw on the first fresh-machine run. Non-string /
+            # missing values are dropped so an accidental None does
+            # not overwrite a good value we might learn to fill in
+            # elsewhere later.
+            if isinstance(answer, dict):
+                for expiry_key in ("filesExpireAt", "expiresAt"):
+                    value = status.get(expiry_key, "") if hasattr(status, "get") else ""
+                    if isinstance(value, str) and value and expiry_key not in answer:
+                        answer[expiry_key] = value
             n_files = 0
             if isinstance(answer, dict) and isinstance(answer.get("files"), dict):
                 n_files = len(answer["files"])
