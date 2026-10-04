@@ -521,22 +521,31 @@ def openPyramid(
         unit_str = ""
     if axes:
         dim_labels = tuple(axes)
-        # channel axis has no spatial unit; time axis gets its own unit if
-        # the level ever carries one, else blank (napari treats "" as unitless)
-        dim_units = tuple("" if ax.lower() in ("c", "t") else unit_str for ax in axes)
         try:
             viewer.dims.axis_labels = dim_labels
+        except Exception:
+            pass
+        # viewer.dims.units wants pint.Unit instances in current napari
+        # (strings get rejected by the pydantic validator). Build them
+        # via pint when it is installed; skip units silently otherwise
+        # -- labels are already set and are the main thing users read.
+        # Spatial axes get the pyramid's unit, non-spatial (c, t) stay
+        # dimensionless.
+        try:
+            import pint
+
+            ureg = pint.UnitRegistry()
+            spatial_unit = ureg.Unit(unit_str) if unit_str else ureg.Unit("")
+            dim_units = tuple(
+                ureg.Unit("") if ax.lower() in ("c", "t") else spatial_unit for ax in axes
+            )
             viewer.dims.units = dim_units
-        except Exception as exc:  # noqa: BLE001 - older napari may not support dims.units
+        except Exception as exc:  # noqa: BLE001 - a units set failure is never fatal
             print(
-                f"[lightsheet] viewer.dims.units set failed ({exc!s}); labels only.",
+                f"[lightsheet] viewer.dims.units set skipped ({exc!s}); labels only.",
                 file=sys.stderr,
                 flush=True,
             )
-            try:
-                viewer.dims.axis_labels = dim_labels
-            except Exception:
-                pass
 
     # Install the debounced napari refresh hint via the loader's
     # public hook. Every async fine-chunk fetch that completes calls

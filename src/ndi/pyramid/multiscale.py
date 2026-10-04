@@ -1225,21 +1225,22 @@ def layerSpec(
     import dask.array as da
 
     # Default is multiscale: napari picks the level that matches the
-    # current zoom, so a pan or a zoom draws the appropriate level
-    # without the viewer having to swap layer.data by hand. The fine
-    # levels carry an upsample-fallback reader, so a zoom-in paints a
-    # coarse-upsampled placeholder immediately and refines as fine
-    # chunks arrive.
+    # current zoom and the fine levels carry the upsample-fallback
+    # reader, so zoom-in paints a coarse-upsampled placeholder
+    # immediately and refines as fine chunks arrive. The initial
+    # paint can be slow on a large volume (minutes on the Maddie
+    # dataset) because napari's slicer walks the whole ladder before
+    # it marks the layer loaded, but once a user manipulates the
+    # view it does draw and subsequent zooms are responsive.
     #
     # NDI_LIGHTSHEET_SINGLE_LEVEL=1 opts back into the earlier
     # fallback mode: one single-level layer at the coarsest level,
     # with a magicgui dock widget that swaps layer.data between
-    # levels on zoom. Keep this knob available because napari 0.5's
+    # levels on zoom. Keep this knob available because napari's
     # multiscale slicer has historically failed to mark
-    # layer.loaded=True on some lazy cloud-backed 3D pyramids (the
-    # channel-list spinner spins forever, nothing draws); if that bug
-    # resurfaces on a dataset, the knob is the escape hatch while the
-    # fix lands.
+    # layer.loaded=True on some lazy cloud-backed 3D pyramids; if
+    # that bug resurfaces on a dataset, the knob is the escape
+    # hatch while the fix lands.
     single_level = _env_true("NDI_LIGHTSHEET_SINGLE_LEVEL")
 
     # Build per-channel arrays once; each is a list of one 3D lazy
