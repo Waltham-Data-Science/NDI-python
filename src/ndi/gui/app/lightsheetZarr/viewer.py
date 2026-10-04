@@ -932,11 +932,13 @@ def _attach_refresh_button(viewer, layers) -> None:
     """Dock a Refresh View button on the right.
 
     Users click it when the view shows coarse-level data in regions
-    that should have refined after a zoom-in. The handler toggles
-    layer.visible off/on (deferred via QTimer so Qt processes the
-    off-event first) and calls layer.refresh() -- the sequence a user
-    discovered unsticks napari's slicer on the Maddie dataset where
-    camera events alone do not.
+    that should have refined after a zoom-in. The handler zooms the
+    camera out by 20% and then back in 100 ms later -- the sequence
+    a user discovered unsticks napari's slicer on the Maddie dataset
+    (toggling layer.visible or calling layer.refresh() alone does
+    not; only a real camera event does). A visibility toggle still
+    runs as a secondary nudge in case the camera change is coalesced
+    out.
 
     Hidden via NDI_LIGHTSHEET_REFRESH_BUTTON=0 for scripted / headless
     viewers. Falls back to a silent no-op if magicgui isn't installed.
@@ -970,44 +972,72 @@ def _attach_refresh_button(viewer, layers) -> None:
         import time as _time
 
         t0 = _time.monotonic()
-        # Phase 1: hide every layer, call refresh. Hiding tears down
-        # the vispy node for that layer; a repaint without it does the
-        # cleanup napari would normally do at slicer re-init time.
-        hidden: list = []
-        for layer in layers:
-            try:
-                if getattr(layer, "visible", False):
-                    layer.visible = False
-                    hidden.append(layer)
-            except Exception:
-                pass
 
-        # Phase 2 is scheduled 50 ms later so Qt processes the
-        # hide-event first; otherwise visible=True immediately after
-        # visible=False collapses to a no-op in napari's internals.
-        def _unhide_and_refresh():
-            for layer in hidden:
-                try:
-                    layer.visible = True
-                except Exception:
-                    pass
-            for layer in layers:
-                try:
-                    layer.refresh()
-                except Exception:
-                    pass
-            dt = _time.monotonic() - t0
+        # Phase 1: zoom out by 20%. This is the piece that actually
+        # unsticks the slicer -- a real camera event forces napari
+        # to re-slice. The 20% factor is big enough that napari
+        # doesn't coalesce it with the "set it back" that follows,
+        # and small enough that it looks like a brief flash on screen
+        # rather than a jarring zoom out.
+        orig_zoom = None
+        try:
+            orig_zoom = float(viewer.camera.zoom)
+            viewer.camera.zoom = orig_zoom * 0.8
+        except Exception as exc:  # noqa: BLE001
             print(
-                f"[lightsheet] refresh view: toggled {len(hidden)} layer(s), "
-                f"took {dt * 1000:.0f} ms",
+                f"[lightsheet] refresh view: zoom-out failed ({exc})",
                 file=sys.stderr,
                 flush=True,
             )
 
+        # Phase 2 (100 ms later): zoom back in, and -- as a belt-and-
+        # suspenders fallback -- toggle layer.visible off then on.
+        # The hide/show pair tears down and rebuilds each layer's
+        # vispy node, which is what the manual workaround users
+        # discovered first did.
+        def _restore_and_toggle():
+            if orig_zoom is not None:
+                try:
+                    viewer.camera.zoom = orig_zoom
+                except Exception:
+                    pass
+            hidden: list = []
+            for layer in layers:
+                try:
+                    if getattr(layer, "visible", False):
+                        layer.visible = False
+                        hidden.append(layer)
+                except Exception:
+                    pass
+
+            def _unhide():
+                for layer in hidden:
+                    try:
+                        layer.visible = True
+                    except Exception:
+                        pass
+                for layer in layers:
+                    try:
+                        layer.refresh()
+                    except Exception:
+                        pass
+                dt = _time.monotonic() - t0
+                print(
+                    f"[lightsheet] refresh view: zoom-nudge + toggled "
+                    f"{len(hidden)} layer(s), took {dt * 1000:.0f} ms",
+                    file=sys.stderr,
+                    flush=True,
+                )
+
+            if QTimer is not None:
+                QTimer.singleShot(50, _unhide)
+            else:
+                _unhide()
+
         if QTimer is not None:
-            QTimer.singleShot(50, _unhide_and_refresh)
+            QTimer.singleShot(100, _restore_and_toggle)
         else:
-            _unhide_and_refresh()
+            _restore_and_toggle()
 
     try:
         button = PushButton(text="Refresh view")
@@ -1081,8 +1111,18 @@ def _attach_cloud_panel(viewer) -> None:
         )
         return
 
-    if not cloudSessionLooksLikely():
-        return
+    # Always show the NDI Cloud panel, even on a local-only dataset:
+    # the wordmark and BETA badge identify what this viewer is, and
+    # a user who later wants cloud access needs an obvious place to
+    # sign in. cloudSessionLooksLikely is still consulted to tune
+    # the clock copy (an unsigned/local session reads "not signed
+    # in" rather than a token-expiry clock), but it no longer gates
+    # the panel.
+    has_cloud = False
+    try:
+        has_cloud = bool(cloudSessionLooksLikely())
+    except Exception:
+        pass
 
     try:
         from qtpy.QtCore import Qt, QTimer
@@ -1152,6 +1192,13 @@ def _attach_cloud_panel(viewer) -> None:
     outer.addStretch()
 
     def _tick():
+        # Local-only session: show "not signed in" rather than a stale
+        # token clock. tokenStatusLine()/tokenSecondsRemaining() are
+        # safe to call but their output can be misleading when no cloud
+        # pyramid is loaded, so we prefer an explicit copy.
+        if not has_cloud:
+            clock.setText("Not signed in. Sign in to access NDI Cloud pyramids.")
+            return
         left = auth.tokenSecondsRemaining()
         line = auth.tokenStatusLine()
         if left is not None and 0 < left < 900:
