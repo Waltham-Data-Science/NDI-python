@@ -1224,24 +1224,24 @@ def layerSpec(
     # only a graph rewrite that says "block[c] instead of block[all]".
     import dask.array as da
 
-    # Default is multiscale: napari picks the level that matches the
-    # current zoom and the fine levels carry the upsample-fallback
-    # reader, so zoom-in paints a coarse-upsampled placeholder
-    # immediately and refines as fine chunks arrive. The initial
-    # paint can be slow on a large volume (minutes on the Maddie
-    # dataset) because napari's slicer walks the whole ladder before
-    # it marks the layer loaded, but once a user manipulates the
-    # view it does draw and subsequent zooms are responsive.
+    # Default is single-level (only the coarsest, as a plain non-
+    # multiscale layer). Tried flipping the default to multiscale
+    # in c129852 and it did not survive production use on the
+    # Maddie dataset: the first paint sat on "no tiles requested
+    # yet by napari" for ~2 minutes while vispy spammed destroyed-
+    # dispatcher warnings, and once the view did come up a plain
+    # zoom-in did NOT trigger napari's level swap -- the user had
+    # to zoom out and back in to get a finer level to render. That
+    # is unacceptable UX for the common case. Single-level takes
+    # napari's multiscale slicer out of the loop entirely: the
+    # layer draws promptly at the coarsest level, then a magicgui
+    # dock widget swaps layer.data between levels (manually, or
+    # driven by the zoom-level-swap listener on camera events).
     #
-    # NDI_LIGHTSHEET_SINGLE_LEVEL=1 opts back into the earlier
-    # fallback mode: one single-level layer at the coarsest level,
-    # with a magicgui dock widget that swaps layer.data between
-    # levels on zoom. Keep this knob available because napari's
-    # multiscale slicer has historically failed to mark
-    # layer.loaded=True on some lazy cloud-backed 3D pyramids; if
-    # that bug resurfaces on a dataset, the knob is the escape
-    # hatch while the fix lands.
-    single_level = _env_true("NDI_LIGHTSHEET_SINGLE_LEVEL")
+    # NDI_LIGHTSHEET_MULTISCALE=1 opts into the native multiscale
+    # path for anyone testing whether napari's slicer has been
+    # fixed on a given data shape.
+    single_level = not _env_true("NDI_LIGHTSHEET_MULTISCALE")
 
     # Build per-channel arrays once; each is a list of one 3D lazy
     # dask array per level. The level dropdown swaps between the
