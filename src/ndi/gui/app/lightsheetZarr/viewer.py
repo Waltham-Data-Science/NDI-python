@@ -710,9 +710,20 @@ def openPyramid(
     # times before napari asks the fetcher for finer tiles. Call
     # layer.refresh() ourselves on every camera event (debounced),
     # which forces napari's slicer to compile a new slice request.
+    # Observed to help only partially on the Maddie dataset; the
+    # explicit Refresh View button below is the user-facing lever.
     # Silent no-op if the camera doesn't expose the expected events
     # (older napari) or if NDI_LIGHTSHEET_NUDGE=0 is set.
     _attach_camera_nudge(viewer, added_layers)
+
+    # Manual Refresh View button in a right-dock widget. Toggles
+    # layer.visible off/on and calls refresh() -- the sequence the
+    # user discovered unsticks napari's slicer when zoom alone does
+    # not. Users click this when regions still show coarse-level
+    # data after a zoom-in. Hidden-by-default via
+    # NDI_LIGHTSHEET_REFRESH_BUTTON=0 for a scripted viewer where
+    # the panel chrome is unwanted.
+    _attach_refresh_button(viewer, added_layers)
 
     # Launch window is closed BEFORE napari.run() because napari's
     # event loop blocks the main thread and our Qt window can't
@@ -897,6 +908,125 @@ def _attach_camera_nudge(viewer, layers) -> None:
     print(
         f"[lightsheet] camera-nudge: on, hooked camera.events.{'/'.join(hooked)} "
         "(set NDI_LIGHTSHEET_NUDGE=0 to disable)",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
+# Weak reference holder so the refresh-button widget doesn't get GC'd
+# the moment _attach_refresh_button returns. Qt owns the dock widget
+# once docked, but the magicgui wrapper is a Python object and will
+# be collected without this.
+_REFRESH_BUTTONS: dict[int, Any] = {}
+
+
+def _attach_refresh_button(viewer, layers) -> None:
+    """Dock a Refresh View button on the right.
+
+    Users click it when the view shows coarse-level data in regions
+    that should have refined after a zoom-in. The handler toggles
+    layer.visible off/on (deferred via QTimer so Qt processes the
+    off-event first) and calls layer.refresh() -- the sequence a user
+    discovered unsticks napari's slicer on the Maddie dataset where
+    camera events alone do not.
+
+    Hidden via NDI_LIGHTSHEET_REFRESH_BUTTON=0 for scripted / headless
+    viewers. Falls back to a silent no-op if magicgui isn't installed.
+    """
+    if not layers:
+        return
+    if os.environ.get("NDI_LIGHTSHEET_REFRESH_BUTTON", "1").strip().lower() in (
+        "0",
+        "false",
+        "off",
+    ):
+        return
+
+    try:
+        from magicgui.widgets import Container, PushButton
+    except ImportError:
+        print(
+            "[lightsheet] refresh button: magicgui not installed; skipping "
+            "(pip install magicgui)",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+
+    try:
+        from qtpy.QtCore import QTimer
+    except ImportError:
+        QTimer = None  # type: ignore[assignment]
+
+    def _do_refresh():
+        import time as _time
+
+        t0 = _time.monotonic()
+        # Phase 1: hide every layer, call refresh. Hiding tears down
+        # the vispy node for that layer; a repaint without it does the
+        # cleanup napari would normally do at slicer re-init time.
+        hidden: list = []
+        for layer in layers:
+            try:
+                if getattr(layer, "visible", False):
+                    layer.visible = False
+                    hidden.append(layer)
+            except Exception:
+                pass
+
+        # Phase 2 is scheduled 50 ms later so Qt processes the
+        # hide-event first; otherwise visible=True immediately after
+        # visible=False collapses to a no-op in napari's internals.
+        def _unhide_and_refresh():
+            for layer in hidden:
+                try:
+                    layer.visible = True
+                except Exception:
+                    pass
+            for layer in layers:
+                try:
+                    layer.refresh()
+                except Exception:
+                    pass
+            dt = _time.monotonic() - t0
+            print(
+                f"[lightsheet] refresh view: toggled {len(hidden)} layer(s), "
+                f"took {dt * 1000:.0f} ms",
+                file=sys.stderr,
+                flush=True,
+            )
+
+        if QTimer is not None:
+            QTimer.singleShot(50, _unhide_and_refresh)
+        else:
+            _unhide_and_refresh()
+
+    try:
+        button = PushButton(text="Refresh view")
+        button.clicked.connect(_do_refresh)
+        container = Container(widgets=[button], labels=False)
+    except Exception as exc:
+        print(
+            f"[lightsheet] refresh button: construction failed ({exc})",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+
+    try:
+        viewer.window.add_dock_widget(container, area="right", name="Refresh")
+    except Exception as exc:
+        print(
+            f"[lightsheet] refresh button: could not dock ({exc})",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+
+    _REFRESH_BUTTONS[id(viewer)] = container
+    print(
+        "[lightsheet] refresh button: docked (click when regions still show "
+        "coarse data after a zoom)",
         file=sys.stderr,
         flush=True,
     )
