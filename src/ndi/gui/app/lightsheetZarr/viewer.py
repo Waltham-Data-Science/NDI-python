@@ -465,6 +465,40 @@ def openPyramid(
         for spec in specs:
             added_layers.append(viewer.add_image(**spec))
 
+    # Set physical units on the dimension sliders. Without this napari
+    # labels the slider in "pixels" and reports cursor position in
+    # voxels, so switching multiscale levels appears to the user as
+    # the slider range changing underneath them. With world units set,
+    # the slider and status bar read microns (or whatever the level
+    # declares) and stay stable across level swaps. Pulled from the
+    # pyramid's finest level since every level shares the same
+    # axes_order and the same world units.
+    try:
+        level0_props = loader.docs[0].document_properties["lightsheetZarrLevel"]
+        axes = str(level0_props.get("axes_order", "tczyx"))
+        unit_str = str(level0_props.get("voxel_size_units", "micrometer"))
+    except Exception:  # noqa: BLE001 - fall back to the napari default on any shape surprise
+        axes = ""
+        unit_str = ""
+    if axes:
+        dim_labels = tuple(axes)
+        # channel axis has no spatial unit; time axis gets its own unit if
+        # the level ever carries one, else blank (napari treats "" as unitless)
+        dim_units = tuple("" if ax.lower() in ("c", "t") else unit_str for ax in axes)
+        try:
+            viewer.dims.axis_labels = dim_labels
+            viewer.dims.units = dim_units
+        except Exception as exc:  # noqa: BLE001 - older napari may not support dims.units
+            print(
+                f"[lightsheet] viewer.dims.units set failed ({exc!s}); labels only.",
+                file=sys.stderr,
+                flush=True,
+            )
+            try:
+                viewer.dims.axis_labels = dim_labels
+            except Exception:
+                pass
+
     # Install the debounced napari refresh hint via the loader's
     # public hook. Every async fine-chunk fetch that completes calls
     # this hint; the hint coalesces a burst of arrivals into one
