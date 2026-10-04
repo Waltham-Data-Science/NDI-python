@@ -725,6 +725,14 @@ def openPyramid(
     # the panel chrome is unwanted.
     _attach_refresh_button(viewer, added_layers)
 
+    # NDI Cloud sign-in panel, same shape as the gene-pyramid
+    # viewer uses. Shown only when a cloud token is in the
+    # environment -- a purely local pyramid has no reason for a
+    # login control. The lightsheet viewer carries a "beta" badge
+    # under the wordmark because this surface is still rough on
+    # the dataset-shape edges called out in the README.
+    _attach_cloud_panel(viewer)
+
     # Launch window is closed BEFORE napari.run() because napari's
     # event loop blocks the main thread and our Qt window can't
     # repaint during it -- a frozen progress bar next to napari looks
@@ -1027,6 +1035,165 @@ def _attach_refresh_button(viewer, layers) -> None:
     print(
         "[lightsheet] refresh button: docked (click when regions still show "
         "coarse data after a zoom)",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
+# Weak reference holder for the cloud panel widget. Same reason as
+# the refresh button: Qt owns the dock once added, but the Python
+# wrapper and its slot connections need a strong ref.
+_CLOUD_PANELS: dict[int, Any] = {}
+
+
+def _attach_cloud_panel(viewer) -> None:
+    """Dock an NDI Cloud sign-in panel with a BETA badge.
+
+    Reuses the gene-pyramid viewer's addCloudPanel contract -- same
+    shape, same auth plumbing, so a user who has signed in to that
+    viewer sees the same profile list and the same token clock
+    here. We don't call addCloudPanel directly because we want a
+    small "BETA" badge immediately under the wordmark, which the
+    gene-pyramid viewer does not carry; building the panel locally
+    is less fragile than monkey-patching after dock.
+
+    Silent no-op when the environment has no cloud token (same
+    cloudSessionLooksLikely rule the gene viewer uses) or when
+    NDI_LIGHTSHEET_CLOUD_PANEL=0 opts it out. A purely local
+    pyramid has no reason for a login control; a login panel on a
+    local-only window implies the picture might be waiting on
+    something, which it isn't.
+    """
+    if os.environ.get("NDI_LIGHTSHEET_CLOUD_PANEL", "1").strip().lower() in ("0", "false", "off"):
+        return
+
+    try:
+        from ndi.gui.app.genepyramid.controls import (
+            cloudLogoLabel,
+            cloudSessionLooksLikely,
+            cloudSignInDialog,
+        )
+    except ImportError as exc:
+        print(
+            f"[lightsheet] cloud panel: gene-pyramid controls unavailable ({exc})",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+
+    if not cloudSessionLooksLikely():
+        return
+
+    try:
+        from qtpy.QtCore import Qt, QTimer
+        from qtpy.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+    except ImportError:
+        return
+
+    try:
+        from ndi.cloud import auth
+    except ImportError as exc:
+        print(
+            f"[lightsheet] cloud panel: ndi.cloud.auth unavailable ({exc})",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+
+    box = QWidget()
+    outer = QVBoxLayout(box)
+
+    logo = cloudLogoLabel(box)
+    if logo is not None:
+        outer.addWidget(logo)
+
+    beta = QLabel("BETA")
+    beta.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+    beta.setStyleSheet(
+        "QLabel {"
+        " color: #ffffff;"
+        " background: #c9372c;"
+        " font-weight: 700;"
+        " font-size: 10px;"
+        " letter-spacing: 2px;"
+        " padding: 2px 8px;"
+        " border-radius: 3px;"
+        "}"
+    )
+    beta.setToolTip(
+        "The lightsheet viewer is in beta. First-paint and\n"
+        "zoom-refinement can be janky on large pyramids;\n"
+        "use the Refresh View button if a region stays coarse."
+    )
+    beta_row = QHBoxLayout()
+    beta_row.setContentsMargins(0, 2, 0, 6)
+    beta_row.addWidget(beta, 0, Qt.AlignLeft)
+    beta_row.addStretch(1)
+    outer.addLayout(beta_row)
+
+    signin = QPushButton("Sign in...")
+    signin.setToolTip(
+        "Sign in to NDI Cloud, so tiles that are not already\n"
+        "downloaded keep loading. The token lives in this\n"
+        "process, so signing in anywhere else does not reach\n"
+        "this window."
+    )
+    clock = QLabel("")
+    clock.setWordWrap(True)
+    row = QHBoxLayout()
+    row.addWidget(signin)
+    row.addWidget(clock, 1)
+    outer.addLayout(row)
+
+    result = QLabel("")
+    result.setWordWrap(True)
+    result.hide()
+    outer.addWidget(result)
+    outer.addStretch()
+
+    def _tick():
+        left = auth.tokenSecondsRemaining()
+        line = auth.tokenStatusLine()
+        if left is not None and 0 < left < 900:
+            clock.setText(f"{line} -- renew before it runs out.")
+        elif left is not None and left <= 0:
+            clock.setText(f"{line}. Undownloaded tiles will fail until you sign in.")
+        else:
+            clock.setText(line)
+
+    def _open():
+        ok, note = cloudSignInDialog(box)
+        if note:
+            result.setText(note)
+            result.show()
+        elif ok:
+            result.hide()
+        _tick()
+
+    signin.clicked.connect(_open)
+
+    # Parented to the widget so the timer stops when the dock
+    # goes. A free timer would fire at a deleted label and take
+    # the process with it.
+    timer = QTimer(box)
+    timer.setInterval(30_000)
+    timer.timeout.connect(_tick)
+    timer.start()
+    _tick()
+
+    try:
+        viewer.window.add_dock_widget(box, area="right", name="NDI Cloud")
+    except Exception as exc:
+        print(
+            f"[lightsheet] cloud panel: could not dock ({exc})",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+
+    _CLOUD_PANELS[id(viewer)] = box
+    print(
+        "[lightsheet] cloud panel: docked (NDI Cloud sign-in + beta badge)",
         file=sys.stderr,
         flush=True,
     )
