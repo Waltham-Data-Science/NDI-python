@@ -169,9 +169,17 @@ class TestLoaderOpensTheFixture:
             assert len(specs) == 2, f"expected 2 layer specs, got {len(specs)}"
             for spec in specs:
                 assert "data" in spec
-                # The single-level scaffold delivers a 3D array
-                # (channel axis stripped) at the coarsest level.
-                data_shape = getattr(spec["data"], "shape", ())
+                # Multiscale default: spec["data"] is a list of 3D arrays
+                # (channel axis stripped), one per level finest-first.
+                # Single-level mode (NDI_LIGHTSHEET_SINGLE_LEVEL=1) would
+                # give a single 3D array instead; accept either.
+                data = spec["data"]
+                if isinstance(data, list):
+                    assert data, "expected at least one level in multiscale ladder"
+                    first = data[0]
+                else:
+                    first = data
+                data_shape = getattr(first, "shape", ())
                 assert len(data_shape) == 3, f"expected 3D per-channel data, got shape {data_shape}"
         finally:
             loader.close()
@@ -192,8 +200,11 @@ class TestLoaderReadsRealBytes:
         loader = ImagePyramidLoader(session, doc, reduction="mean")
         try:
             specs = loader.specs
-            data = specs[0]["data"]  # coarsest-level array for channel 0
-            arr = data.compute()
+            # Multiscale default: data is a finest-first list; coarsest is
+            # the last entry. Single-level mode gives a single array.
+            data = specs[0]["data"]
+            coarsest = data[-1] if isinstance(data, list) else data
+            arr = coarsest.compute()
             assert arr.dtype == np.uint16, f"expected uint16, got {arr.dtype}"
             assert arr.any(), "coarsest-level channel-0 slice is entirely fill_value"
         finally:
