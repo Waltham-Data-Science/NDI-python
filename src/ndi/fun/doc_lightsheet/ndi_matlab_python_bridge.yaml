@@ -46,8 +46,11 @@ functions:
       makePyramid uses to read each level from the source OME-Zarr and
       write chunk.bin_<idx> files onto the level documents before
       database_add -- the Python port lands the same option and calls
-      into ndr.format.omezarr.readArray equivalent. Ports with the other
-      entries under this heading.
+      into ndr.format.omezarr.readArray equivalent. 5c9e8a8 bumped the
+      default tileBudgetBytes from 8 MB to 32 MB; no Python-side change
+      is needed while this entry is porting_deferred -- the deferred
+      port will pick up the new default when it lands. Ports with the
+      other entries under this heading.
 
   - name: makePyramid
     matlab_path: "+ndi/+fun/+doc/+lightsheet/makePyramid.m"
@@ -82,7 +85,10 @@ functions:
       self-installing private venv (sonpipe pattern; MATLAB's pyenv
       is never touched). Container bytes are unchanged, so this side
       of the port stays the same when it lands: use numcodecs.Blosc
-      directly. Ports with the other entries.
+      directly. 5c9e8a8 bumped the default tileBudgetBytes from 8 MB
+      to 32 MB; no Python-side change is needed while this entry is
+      porting_deferred -- the deferred port will pick up the new
+      default when it lands. Ports with the other entries.
 
   - name: chooseTileShape
     matlab_path: "+ndi/+fun/+doc/+lightsheet/chooseTileShape.m"
@@ -103,7 +109,11 @@ functions:
       scalar); the equivalent Python idiom is `[ax not in "tc" for ax
       in axes_order.lower()]`. Ports with the other entries under this
       heading; the Python builder that mirrors makePyramid will call
-      it directly.
+      it directly. 5c9e8a8 changed only the docstring default from
+      8 MB to 32 MB (the argument default on this pure helper also
+      moved, but the Python port -- when it lands -- will take the
+      budget as a parameter and the makePyramid-side default is what
+      callers actually hit); no port-side change needed.
 
   - name: makeSourceFile
     matlab_path: "+ndi/+fun/+doc/+lightsheet/makeSourceFile.m"
