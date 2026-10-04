@@ -1224,24 +1224,24 @@ def layerSpec(
     # only a graph rewrite that says "block[c] instead of block[all]".
     import dask.array as da
 
-    # Default is single-level (only the coarsest, as a plain non-
-    # multiscale layer). Tried flipping the default to multiscale
-    # in c129852 and it did not survive production use on the
-    # Maddie dataset: the first paint sat on "no tiles requested
-    # yet by napari" for ~2 minutes while vispy spammed destroyed-
-    # dispatcher warnings, and once the view did come up a plain
-    # zoom-in did NOT trigger napari's level swap -- the user had
-    # to zoom out and back in to get a finer level to render. That
-    # is unacceptable UX for the common case. Single-level takes
-    # napari's multiscale slicer out of the loop entirely: the
-    # layer draws promptly at the coarsest level, then a magicgui
-    # dock widget swaps layer.data between levels (manually, or
-    # driven by the zoom-level-swap listener on camera events).
+    # Default is multiscale: user A/B preferred this over single-level
+    # because the transition between levels is smoother -- single-level
+    # swaps layer.data under napari, which shows up as a short black
+    # frame on every level change, while a native multiscale layer
+    # just picks a finer level and refines. Both modes have been
+    # observed to hit the same napari slicer wedge on this dataset
+    # (vispy "QBasicTimer destroyed dispatcher" spam, no tile
+    # requests), so single-level is not actually safer -- it just
+    # looks janker when it does paint.
     #
-    # NDI_LIGHTSHEET_MULTISCALE=1 opts into the native multiscale
-    # path for anyone testing whether napari's slicer has been
-    # fixed on a given data shape.
-    single_level = not _env_true("NDI_LIGHTSHEET_MULTISCALE")
+    # NDI_LIGHTSHEET_SINGLE_LEVEL=1 opts back into the earlier
+    # single-level + Resolution-picker mode for anyone who wants
+    # the manual swap flow (or is debugging the multiscale slicer
+    # bug on a different dataset shape).
+    # NDI_LIGHTSHEET_ASYNC=0 is the escape hatch when the slicer
+    # wedges: it blocks add_image until the first slice is on
+    # screen, bypassing napari's async slicer entirely.
+    single_level = _env_true("NDI_LIGHTSHEET_SINGLE_LEVEL")
 
     # Build per-channel arrays once; each is a list of one 3D lazy
     # dask array per level. The level dropdown swaps between the

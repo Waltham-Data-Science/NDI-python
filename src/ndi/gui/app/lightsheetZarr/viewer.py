@@ -81,59 +81,82 @@ class _NapariStatusReporter:
     overlay is big and lives on top of the picture, so a fetch in
     flight is unambiguous.
 
-    Called from the fetch counter's main-thread-safe surfaces. Napari's
-    status bar and text overlay are Qt widgets, so a background thread
-    calling ``viewer.status = ...`` or ``viewer.text_overlay.text = ...``
-    would need main-thread dispatch; the counter's ``_maybe_print``
-    runs on whichever thread fired the fetch event. Rather than adding
-    QThread machinery here, we keep a reference to the viewer and
-    push on the main thread via a QTimer.singleShot(0, ...).
+    Cross-thread safe: push() is called from the fetch counter, which
+    runs on worker threads (the heartbeat, the fetch handlers).
+    Napari's status bar and text overlay are Qt widgets and must only
+    be written from the main thread. A QTimer.singleShot started from
+    a worker thread has no event dispatcher there and does nothing
+    useful (and spams "QBasicTimer::start: current thread's event
+    dispatcher has already been destroyed"), so we use a Qt signal:
+    signals emitted from a worker thread cross to the owning thread
+    via a queued connection, which is exactly the main-thread
+    delivery we need. The signal lives on a QObject (``_Bridge``)
+    moved to the main thread at construction time.
     """
 
     def __init__(self, viewer):
         self._viewer = viewer
         self._overlay_configured = False
-
-    def push(self, message: str, *, in_flight: int = 0) -> None:
-        # QTimer.singleShot is thread-safe; the callback runs on the
-        # Qt main thread, which is what viewer.status / viewer.text_overlay
-        # expect.
+        self._bridge = None
         try:
-            from qtpy.QtCore import QTimer
-        except ImportError:
-            return
-        v = self._viewer
-        overlay_text = f"Loading tiles ... ({in_flight} in flight)" if in_flight > 0 else ""
+            from qtpy.QtCore import QCoreApplication, QObject, Qt, Signal
 
-        def _apply():
+            class _Bridge(QObject):
+                update = Signal(str, int)
+
+                def __init__(self, outer):
+                    super().__init__()
+                    self._outer = outer
+                    self.update.connect(self._on_update, Qt.QueuedConnection)
+
+                def _on_update(self, message, in_flight):
+                    self._outer._apply(message, in_flight)
+
+            self._bridge = _Bridge(self)
+            app = QCoreApplication.instance()
+            if app is not None:
+                self._bridge.moveToThread(app.thread())
+        except Exception:
+            self._bridge = None
+
+    def _apply(self, message: str, in_flight: int) -> None:
+        """Runs on the main thread (queued-signal callback)."""
+        v = self._viewer
+        try:
+            v.status = message
+        except Exception:
+            pass
+        overlay = getattr(v, "text_overlay", None)
+        if overlay is None:
+            return
+        if not self._overlay_configured:
             try:
-                v.status = message
-            except Exception:
-                pass
-            overlay = getattr(v, "text_overlay", None)
-            if overlay is None:
-                return
-            if not self._overlay_configured:
+                overlay.font_size = 18
+                overlay.position = "top_left"
                 try:
-                    overlay.font_size = 18
-                    overlay.position = "top_left"
-                    try:
-                        overlay.color = "yellow"
-                    except Exception:
-                        pass
-                    self._overlay_configured = True
+                    overlay.color = "yellow"
                 except Exception:
                     pass
-            try:
-                if overlay_text:
-                    overlay.text = overlay_text
-                    overlay.visible = True
-                else:
-                    overlay.visible = False
+                self._overlay_configured = True
             except Exception:
                 pass
+        try:
+            if in_flight > 0:
+                overlay.text = f"Loading tiles ... ({in_flight} in flight)"
+                overlay.visible = True
+            else:
+                overlay.visible = False
+        except Exception:
+            pass
 
-        QTimer.singleShot(0, _apply)
+    def push(self, message: str, *, in_flight: int = 0) -> None:
+        """Called from any thread; delivery hops to main via a signal."""
+        if self._bridge is None:
+            return
+        try:
+            self._bridge.update.emit(message, int(in_flight))
+        except Exception:
+            pass
 
 
 class _FetchCounter:
