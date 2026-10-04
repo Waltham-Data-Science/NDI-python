@@ -39,9 +39,10 @@ functions:
       one lightsheetZarrLevel document per unique array path across all
       multiscales entries. Level 0 is deduped when two entries reference
       the same NGFF path (typical for mean + max pyramids). c8f3479 added
-      tileBudgetBytes (default 8 MB uncompressed) and an optional chunks
-      override, forwarded to makePyramid so each level is re-tiled to hit
-      the budget. bd6a245 added materializeChunks (default false) which
+      tileBudgetBytes (default 32 MB uncompressed; was 8 MB until the
+      sweet-spot measurement bumped it) and an optional chunks override,
+      forwarded to makePyramid so each level is re-tiled to hit the
+      budget. bd6a245 added materializeChunks (default false) which
       makePyramid uses to read each level from the source OME-Zarr and
       write chunk.bin_<idx> files onto the level documents before
       database_add -- the Python port lands the same option and calls
@@ -59,9 +60,10 @@ functions:
       reduction_function on the level names the reduction ('none' for
       the shared raw level 0, 'mean' / 'max' / ... for reduced levels).
       c8f3479 drops the source zarr's chunk shape and re-chooses per
-      level via chooseTileShape to hit tileBudgetBytes (default 8 MB
-      uncompressed, sized for a viewer over an ~200 MB/s link fetching
-      ~4 tiles in parallel per pan gesture). 04293e3 encodes
+      level via chooseTileShape to hit tileBudgetBytes (default 32 MB
+      uncompressed, sized to the measured signing+fetch+decode sweet
+      spot for a viewer on an ~200 MB/s link; bumped up from 8 MB after
+      ~121k-chunk level 0s in production). 04293e3 encodes
       axes_units as a comma-separated string (e.g.
       'micrometer,micrometer,micrometer') and leaves channel_names
       empty by default, matching the schema type change from matrix
