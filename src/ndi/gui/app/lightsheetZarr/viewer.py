@@ -704,6 +704,16 @@ def openPyramid(
     # all and we lose only the extra line.
     _subscribe_level_change(viewer)
 
+    # Camera-nudge workaround for the vispy/napari slicer wedge
+    # observed on macOS: after launch, zoom events sometimes do not
+    # trigger a re-slice, so a user has to zoom-out-then-in several
+    # times before napari asks the fetcher for finer tiles. Call
+    # layer.refresh() ourselves on every camera event (debounced),
+    # which forces napari's slicer to compile a new slice request.
+    # Silent no-op if the camera doesn't expose the expected events
+    # (older napari) or if NDI_LIGHTSHEET_NUDGE=0 is set.
+    _attach_camera_nudge(viewer, added_layers)
+
     # Launch window is closed BEFORE napari.run() because napari's
     # event loop blocks the main thread and our Qt window can't
     # repaint during it -- a frozen progress bar next to napari looks
@@ -791,6 +801,102 @@ def _report_loaded(layer) -> None:
     lname = getattr(layer, "name", "?")
     print(
         f"[lightsheet] layer {lname!r} loaded={loaded}",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
+# Weak reference holder so the nudge QTimer doesn't get garbage
+# collected the moment _attach_camera_nudge returns. Keyed by viewer
+# id so a second viewer in the same process gets its own timer. The
+# timer is Qt-owned once started, but Python GC can still cut it loose
+# if nothing holds a reference.
+_NUDGE_TIMERS: dict[int, Any] = {}
+
+
+def _attach_camera_nudge(viewer, layers) -> None:
+    """Force a layer.refresh() on every camera event (debounced).
+
+    Workaround for a vispy/napari slicer wedge observed on macOS: after
+    launch, zoom and pan events sometimes do not trigger a re-slice, so
+    napari sits on a stale frame while the user zooms. The symptom in
+    the fetch log is "no tiles requested yet by napari" that never
+    clears, with vispy spamming "QBasicTimer::start: current thread's
+    event dispatcher has already been destroyed" from the slicer.
+    Calling layer.refresh() ourselves forces napari to compile a new
+    slice request on the main thread, which does fire, so a single
+    zoom gesture becomes enough to kick a level swap.
+
+    Debounced 120 ms so a pinch-zoom or wheel-zoom settling through
+    many micro-events refreshes once at rest rather than per event.
+    Silent no-op when the camera doesn't expose the expected events
+    (older napari) or when ``NDI_LIGHTSHEET_NUDGE=0`` turns it off.
+    """
+    if not layers:
+        return
+    if os.environ.get("NDI_LIGHTSHEET_NUDGE", "1").strip().lower() in ("0", "false", "off"):
+        print(
+            "[lightsheet] camera-nudge: disabled via NDI_LIGHTSHEET_NUDGE",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+
+    try:
+        from qtpy.QtCore import QTimer
+    except ImportError:
+        return
+
+    try:
+        timer = QTimer()
+        timer.setSingleShot(True)
+        timer.setInterval(120)
+    except Exception:
+        return
+
+    def _do_refresh():
+        for layer in layers:
+            try:
+                layer.refresh()
+            except Exception:
+                pass
+
+    try:
+        timer.timeout.connect(_do_refresh)
+    except Exception:
+        return
+
+    def _on_camera(_event):
+        try:
+            timer.start()
+        except Exception:
+            pass
+
+    camera = getattr(viewer, "camera", None)
+    events = getattr(camera, "events", None)
+    if events is None:
+        return
+    hooked = []
+    for name in ("zoom", "center", "angles"):
+        emitter = getattr(events, name, None)
+        if emitter is None:
+            continue
+        try:
+            emitter.connect(_on_camera)
+            hooked.append(name)
+        except Exception:
+            pass
+    if not hooked:
+        return
+
+    # Keep the timer (and its slot connections) alive for the viewer's
+    # lifetime; a plain local goes out of scope at return and Qt
+    # cannot keep a dangling PyQt QTimer running without a reference.
+    _NUDGE_TIMERS[id(viewer)] = timer
+
+    print(
+        f"[lightsheet] camera-nudge: on, hooked camera.events.{'/'.join(hooked)} "
+        "(set NDI_LIGHTSHEET_NUDGE=0 to disable)",
         file=sys.stderr,
         flush=True,
     )
