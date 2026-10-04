@@ -42,6 +42,7 @@ layer.
 from __future__ import annotations
 
 import os
+import sys
 import threading
 from typing import Any
 
@@ -291,6 +292,7 @@ def upsampleToBlock(
 _STATS_LOCK = threading.Lock()
 _STATS = {
     "hit_fine": 0,  # chunkPathIfCached found it -> real fine returned
+    "fine_decode_failed": 0,  # fine chunk on disk but decode raised (silent-fallback)
     "upsampled": 0,  # fine missing, upsampled from coarse
     "zero_no_coarse_cover": 0,  # no covering coarse chunk in-range
     "zero_coarse_missing": 0,  # covering coarse chunk not on disk
@@ -310,13 +312,61 @@ def fallbackStatsSummary() -> str:
     they land (refresh hint not triggering a slice compute).
     """
     with _STATS_LOCK:
-        parts = [f"{k}={v}" for k, v in _STATS.items()]
+        parts = [f"{k}={v}" for k, v in _STATS.items() if not k.startswith("_")]
     return "upsample-fallback " + " ".join(parts)
 
 
 def _bump(key: str, n: int = 1) -> None:
     with _STATS_LOCK:
         _STATS[key] = _STATS.get(key, 0) + n
+        _STATS["_dirty"] = _STATS.get("_dirty", 0) + n
+
+
+_HEARTBEAT_STARTED = False
+_HEARTBEAT_LOCK = threading.Lock()
+
+
+def _ensure_debug_heartbeat() -> None:
+    """Spin up one daemon thread that dumps fallback stats every ~5 s.
+
+    Only runs when ``_fallback_debug()`` is on. Prints a stats line
+    only when something changed since the last tick, so a quiet
+    session stays quiet. Starts lazily on the first fallback call so
+    there is nothing to clean up at shutdown.
+    """
+    global _HEARTBEAT_STARTED
+    if _HEARTBEAT_STARTED or not _fallback_debug():
+        return
+    with _HEARTBEAT_LOCK:
+        if _HEARTBEAT_STARTED:
+            return
+        _HEARTBEAT_STARTED = True
+
+        def _loop():
+            import time
+
+            last_signature = None
+            while True:
+                time.sleep(5.0)
+                with _STATS_LOCK:
+                    dirty = _STATS.get("_dirty", 0)
+                    if dirty == 0:
+                        continue
+                    _STATS["_dirty"] = 0
+                    snapshot = {k: v for k, v in _STATS.items() if not k.startswith("_")}
+                sig = tuple(sorted(snapshot.items()))
+                if sig == last_signature:
+                    continue
+                last_signature = sig
+                parts = " ".join(f"{k}={v}" for k, v in snapshot.items())
+                print(
+                    f"[lightsheet] upsample-fallback live: {parts}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+
+        t = threading.Thread(target=_loop, name="ndi-lightsheet-fallback-stats", daemon=True)
+        t.start()
 
 
 def readChunkWithFallback(
@@ -355,6 +405,8 @@ def readChunkWithFallback(
     """
     from ndi.pyramid.multiscale import _read_chunk_from_fetcher, _zero_block
 
+    _ensure_debug_heartbeat()
+
     # Path 1: fine chunk on disk -> normal read.
     fine_path = fetcher.chunkPathIfCached(fine_doc, fine_filename)
     if fine_path is not None:
@@ -364,8 +416,21 @@ def readChunkWithFallback(
             )
             _bump("hit_fine")
             return result
-        except Exception:  # noqa: BLE001 - a bad decode is fallback time
-            pass
+        except Exception as decode_exc:  # noqa: BLE001 - a bad decode is fallback time
+            # The fine chunk is on disk but failed to decode: a
+            # truncated download, a codec mismatch, or a corrupt
+            # blob. Falling through to coarse-upsample keeps the
+            # view from going black, but if we don't LOG this, the
+            # user sees level-3 pixels forever while the Auto-level
+            # picker reports level 0 and no error ever appears --
+            # that was the silent-blurry symptom before this change.
+            _bump("fine_decode_failed")
+            print(
+                f"[lightsheet] fine decode failed, upsampling from coarse: "
+                f"{fine_filename!r} ({type(decode_exc).__name__}: {decode_exc})",
+                file=sys.stderr,
+                flush=True,
+            )
 
     # Path 2: fine missing -> upsample coarse if we can, and fetch fine.
     fetcher.prefetchAsync(fine_doc, fine_filename, on_complete=refresh_hint)
