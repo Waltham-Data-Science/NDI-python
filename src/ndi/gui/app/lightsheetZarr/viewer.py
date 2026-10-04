@@ -72,29 +72,68 @@ def _cloud_dataset_id(session: Any) -> str:
 
 
 class _NapariStatusReporter:
-    """Push a tile-loading status message into napari's status bar.
+    """Push a tile-loading status message into napari's status bar
+    and -- when fetches are in flight -- a large overlay on the canvas.
+
+    Status bar alone was easy to miss: on the user's zoom-and-wait
+    cases, nothing in the canvas said "loading", so they read a
+    coarse-upsampled placeholder as "this is the final image." The
+    overlay is big and lives on top of the picture, so a fetch in
+    flight is unambiguous.
 
     Called from the fetch counter's main-thread-safe surfaces. Napari's
-    status bar is a Qt widget, so a background thread calling
-    ``viewer.status = ...`` would need main-thread dispatch; the
-    counter's ``_maybe_print`` runs on whichever thread fired the
-    fetch event. Rather than adding QThread machinery here, we keep
-    a reference to the viewer and to the last string, and only
+    status bar and text overlay are Qt widgets, so a background thread
+    calling ``viewer.status = ...`` or ``viewer.text_overlay.text = ...``
+    would need main-thread dispatch; the counter's ``_maybe_print``
+    runs on whichever thread fired the fetch event. Rather than adding
+    QThread machinery here, we keep a reference to the viewer and
     push on the main thread via a QTimer.singleShot(0, ...).
     """
 
     def __init__(self, viewer):
         self._viewer = viewer
+        self._overlay_configured = False
 
-    def push(self, message: str) -> None:
+    def push(self, message: str, *, in_flight: int = 0) -> None:
         # QTimer.singleShot is thread-safe; the callback runs on the
-        # Qt main thread, which is what viewer.status expects.
+        # Qt main thread, which is what viewer.status / viewer.text_overlay
+        # expect.
         try:
             from qtpy.QtCore import QTimer
         except ImportError:
             return
         v = self._viewer
-        QTimer.singleShot(0, lambda: setattr(v, "status", message))
+        overlay_text = f"Loading tiles ... ({in_flight} in flight)" if in_flight > 0 else ""
+
+        def _apply():
+            try:
+                v.status = message
+            except Exception:
+                pass
+            overlay = getattr(v, "text_overlay", None)
+            if overlay is None:
+                return
+            if not self._overlay_configured:
+                try:
+                    overlay.font_size = 18
+                    overlay.position = "top_left"
+                    try:
+                        overlay.color = "yellow"
+                    except Exception:
+                        pass
+                    self._overlay_configured = True
+                except Exception:
+                    pass
+            try:
+                if overlay_text:
+                    overlay.text = overlay_text
+                    overlay.visible = True
+                else:
+                    overlay.visible = False
+            except Exception:
+                pass
+
+        QTimer.singleShot(0, _apply)
 
 
 class _FetchCounter:
@@ -214,7 +253,7 @@ class _FetchCounter:
                 + (f" ({in_flight} in flight)" if in_flight else "")
                 + (f" | last {self._last_duration:.2f}s" if self._last_duration else "")
             )
-            self._status_reporter.push(status_msg)
+            self._status_reporter.push(status_msg, in_flight=in_flight)
 
     def _heartbeat_loop(self) -> None:
         while not self._stop.wait(self._idle_interval):
@@ -728,6 +767,11 @@ def _report_loaded(layer) -> None:
 def _attach_level_selector(viewer, layers, per_layer_levels, per_layer_scales):
     """Dock a "Resolution" selector that swaps each layer's level.
 
+    No-op when the layers are already native multiscale layers:
+    napari then picks the level itself from the current zoom and
+    swapping ``layer.data`` out from under it would corrupt the
+    MultiScaleData wrapper.
+
     Swaps ``layer.data`` AND ``layer.scale`` together so world
     coordinates stay locked when the pixel dimensions change. No new
     fetches happen on swap -- the graphs are pre-built during
@@ -754,6 +798,10 @@ def _attach_level_selector(viewer, layers, per_layer_levels, per_layer_scales):
     nothing has levels to switch between.
     """
     if not layers or not per_layer_levels:
+        return None, []
+    # Multiscale layers manage their own level selection; a dock-widget
+    # swap would fight napari.
+    if any(getattr(layer, "multiscale", False) for layer in layers):
         return None, []
     max_levels = max((len(lst) for lst in per_layer_levels), default=0)
     if max_levels < 2:
