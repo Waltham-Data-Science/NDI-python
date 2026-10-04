@@ -31,7 +31,7 @@ functions:
 
   - name: fromOMEZarr
     matlab_path: "+ndi/+fun/+doc/+lightsheet/fromOMEZarr.m"
-    matlab_last_sync_hash: "71d7387"
+    matlab_last_sync_hash: "5c9e8a8"
     status: porting_deferred
     decision_log: >-
       MATLAB probes an OME-Zarr store with ndr.format.omezarr.listPyramids,
@@ -51,7 +51,7 @@ functions:
 
   - name: makePyramid
     matlab_path: "+ndi/+fun/+doc/+lightsheet/makePyramid.m"
-    matlab_last_sync_hash: "8134a20"
+    matlab_last_sync_hash: "5c9e8a8"
     status: porting_deferred
     decision_log: >-
       The worker fromOMEZarr calls; writes one lightsheetZarrPyramid
@@ -86,7 +86,7 @@ functions:
 
   - name: chooseTileShape
     matlab_path: "+ndi/+fun/+doc/+lightsheet/chooseTileShape.m"
-    matlab_last_sync_hash: "1d11302"
+    matlab_last_sync_hash: "5c9e8a8"
     status: porting_deferred
     decision_log: >-
       Pure function that picks an OME-Zarr chunk shape landing near a
