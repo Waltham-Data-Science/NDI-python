@@ -18,109 +18,150 @@ uninvolved either way.
 from __future__ import annotations
 
 import sys
-import threading
+
+# RefreshHint must be a QObject so it can own a Signal and live on
+# the Qt main thread. The signal is marshalled from any worker
+# thread's __call__ into the main thread with Qt.QueuedConnection,
+# which is the ONLY way to get the slot to fire on the Qt event
+# loop from a non-Qt thread; a bare QTimer.singleShot(ms, callable)
+# posts to whichever thread called it, so from a background
+# fetcher-pool worker it silently never fires (that is what the
+# vispy "QBasicTimer::start: current thread's event dispatcher
+# has already been destroyed" warnings describe).
 
 
-class RefreshHint:
-    """Debounce ``layer.refresh()`` calls triggered by async fetches.
+def _tryImportQt():
+    """Return (QObject, Qt, Signal, QTimer, QApplication) or None.
 
-    An async fine-fetch fires this on completion. Many hundreds of
-    chunks in flight would swamp napari's slicer with refresh events,
-    so this collects them into one refresh per ``debounce_ms``
-    window.
+    Pulled out as a function so the ImportError path returns a
+    uniform shape and :class:`RefreshHint` only has to check once.
     """
+    try:
+        from qtpy.QtCore import QObject, Qt, Signal
+        from qtpy.QtCore import QTimer as _QTimer
+        from qtpy.QtWidgets import QApplication
+    except ImportError:  # pragma: no cover - Qt required for napari
+        return None
+    return (QObject, Qt, Signal, _QTimer, QApplication)
 
-    def __init__(self, viewer, layers, debounce_ms: int = 250):
-        self._viewer = viewer
-        self._layers = list(layers)
-        self._debounce_ms = debounce_ms
-        self._lock = threading.Lock()
-        self._timer = None
-        self._QTimer = None
-        try:
-            from qtpy.QtCore import QTimer
 
-            self._QTimer = QTimer
-        except ImportError:  # pragma: no cover - Qt required for napari
-            return
-        # The QTimer lives on the main thread; construct it lazily
-        # on first use so we do not touch Qt at import time.
+_qt = _tryImportQt()
 
-    def __call__(self, _path=None) -> None:
-        """Called from the completion of an async fetch. Not on Qt thread."""
-        from ndi.pyramid.upsample_fallback import bump as _bump_stat
 
-        _bump_stat("refresh_hints_called")
-        if self._QTimer is None:
-            return
-        # QTimer.singleShot is safe from any thread; the callback
-        # runs on the Qt main thread.
-        try:
-            self._QTimer.singleShot(self._debounce_ms, self._fire)
-            _bump_stat("refresh_hints_scheduled")
-        except Exception as exc:  # noqa: BLE001
-            print(
-                f"[lightsheet] refresh-hint schedule failed: {type(exc).__name__}: {exc}",
-                file=sys.stderr,
-                flush=True,
-            )
+if _qt is not None:
+    _QObject, _Qt, _Signal, _QTimer, _QApplication = _qt
 
-    def _fire(self) -> None:
-        # napari 0.5 has three different ways to force a re-slice
-        # depending on whether the async slicer is on, and they do
-        # not overlap in every version. Try them in order of least
-        # invasive to most; whichever one napari actually reacts to
-        # is what makes the swap from coarse to fine visible.
-        # Under debug, print each attempt so we can see which one
-        # napari finally responded to.
-        from ndi.pyramid.upsample_fallback import _fallback_debug
-        from ndi.pyramid.upsample_fallback import bump as _bump_stat
+    class _RefreshHintImpl(_QObject):
+        """QObject that owns the main-thread signal.
 
-        _bump_stat("refresh_hints_fired")
-        debug = _fallback_debug()
-        for layer in self._layers:
-            emitted = []
+        The ``_request`` signal is wired to ``_onRequest`` with
+        ``Qt.QueuedConnection``. Emitting it from any thread posts
+        a queued event to the main-thread event loop; Qt then
+        invokes the slot on the main thread when the loop next
+        runs. Equivalent to the ``_NapariStatusReporter._Bridge``
+        in viewer.py.
+        """
+
+        _request = _Signal()
+
+        def __init__(self, viewer, layers, debounce_ms: int):
+            super().__init__()
+            self._viewer = viewer
+            self._layers = list(layers)
+            self._debounce_ms = debounce_ms
+            app = _QApplication.instance()
+            if app is not None:
+                try:
+                    self.moveToThread(app.thread())
+                except Exception:  # noqa: BLE001
+                    pass
+            self._request.connect(self._onRequest, _Qt.QueuedConnection)
+
+        def __call__(self, _path=None) -> None:
+            """Called from the completion of an async fetch. Not on Qt thread."""
+            from ndi.pyramid.upsample_fallback import bump as _bump_stat
+
+            _bump_stat("refresh_hints_called")
+            # emit() with a QueuedConnection target returns
+            # immediately on the worker thread; the slot runs on
+            # the main thread.
             try:
-                # 1. Public API: refresh() -- best case, napari
-                # re-slices from current view. Some versions only
-                # redraw the cached slice, which is why we do more.
-                layer.refresh()
-                emitted.append("refresh")
-            except Exception:  # noqa: BLE001
-                pass
-            try:
-                # 2. Fire the set_data event by hand. napari's
-                # async slicer listens to this; it is what
-                # `layer.data = layer.data` would emit, without
-                # re-assigning the array.
-                events = getattr(layer, "events", None)
-                if events is not None:
-                    set_data = getattr(events, "set_data", None)
-                    if set_data is not None:
-                        set_data()
-                        emitted.append("events.set_data")
-            except Exception:  # noqa: BLE001
-                pass
-            try:
-                # 3. Private force-reload -- present on napari
-                # >= 0.4.18 to invalidate the slice cache and
-                # trigger a fresh compute.
-                reload = getattr(layer, "reload", None) or getattr(layer, "_reload_async", None)
-                if callable(reload):
-                    reload()
-                    emitted.append("reload")
-            except Exception:  # noqa: BLE001
-                pass
-            if debug and emitted:
+                self._request.emit()
+                _bump_stat("refresh_hints_scheduled")
+            except Exception as exc:  # noqa: BLE001
                 print(
-                    f"[lightsheet] refresh-hint fired on {getattr(layer, 'name', '?')!r}: "
-                    f"{', '.join(emitted)}",
+                    f"[lightsheet] refresh-hint emit failed: " f"{type(exc).__name__}: {exc}",
                     file=sys.stderr,
                     flush=True,
                 )
 
+        def _onRequest(self) -> None:
+            # Running on the main thread now. Debounce via QTimer:
+            # it was never the problem, we just needed to be on
+            # the right thread first.
+            try:
+                _QTimer.singleShot(self._debounce_ms, self._fire)
+            except Exception:  # noqa: BLE001
+                self._fire()
 
-def refreshHintFor(viewer, layers, debounce_ms: int = 250) -> RefreshHint | None:
+        def _fire(self) -> None:
+            from ndi.pyramid.upsample_fallback import _fallback_debug
+            from ndi.pyramid.upsample_fallback import bump as _bump_stat
+
+            _bump_stat("refresh_hints_fired")
+            debug = _fallback_debug()
+            for layer in self._layers:
+                emitted = []
+                try:
+                    layer.refresh()
+                    emitted.append("refresh")
+                except Exception:  # noqa: BLE001
+                    pass
+                try:
+                    events = getattr(layer, "events", None)
+                    if events is not None:
+                        set_data = getattr(events, "set_data", None)
+                        if set_data is not None:
+                            set_data()
+                            emitted.append("events.set_data")
+                except Exception:  # noqa: BLE001
+                    pass
+                try:
+                    reload = getattr(layer, "reload", None) or getattr(layer, "_reload_async", None)
+                    if callable(reload):
+                        reload()
+                        emitted.append("reload")
+                except Exception:  # noqa: BLE001
+                    pass
+                if debug and emitted:
+                    print(
+                        f"[lightsheet] refresh-hint fired on "
+                        f"{getattr(layer, 'name', '?')!r}: {', '.join(emitted)}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+
+    RefreshHint = _RefreshHintImpl
+
+else:
+
+    class RefreshHint:  # type: ignore[no-redef]
+        """Headless no-op shim used in environments without Qt.
+
+        Kept so callers can import :class:`RefreshHint` without
+        wrapping every reference in a conditional; ``refreshHintFor``
+        returns None in this case so the hint is never actually
+        installed.
+        """
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __call__(self, _path=None) -> None:
+            return None
+
+
+def refreshHintFor(viewer, layers, debounce_ms: int = 250):
     """Factory: build a debounced refresh hint or None when Qt is missing.
 
     Returns None when the layers list is empty (nothing to refresh)
@@ -128,7 +169,6 @@ def refreshHintFor(viewer, layers, debounce_ms: int = 250) -> RefreshHint | None
     """
     if not layers:
         return None
-    hint = RefreshHint(viewer, layers, debounce_ms=debounce_ms)
-    if hint._QTimer is None:
+    if _qt is None:
         return None
-    return hint
+    return RefreshHint(viewer, layers, debounce_ms=debounce_ms)
