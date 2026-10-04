@@ -139,11 +139,11 @@ jobs:
             % them up: on stdout for the log, and via
             % GITHUB_OUTPUT so a follow-up job can consume them.
             fprintf('CLOUD_DATASET_ID=%s\n', info.cloudDatasetId);
-            fprintf('DATASET_NAME=%s\n', info.remoteDatasetName);
+            fprintf('DATASET_NAME=%s\n', info.cloudDatasetName);
 
             fid = fopen(getenv("GITHUB_OUTPUT"), "a");
             fprintf(fid, "cloud_dataset_id=%s\n", info.cloudDatasetId);
-            fprintf(fid, "dataset_name=%s\n", info.remoteDatasetName);
+            fprintf(fid, "dataset_name=%s\n", info.cloudDatasetName);
             fclose(fid);
 
       - name: Write summary

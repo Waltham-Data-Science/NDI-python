@@ -284,6 +284,23 @@ class TestFetchCloudFile:
 class TestGetOrCreateCloudClient:
     """Tests for get_or_create_cloud_client."""
 
+    @pytest.fixture(autouse=True)
+    def reset_ambient_client(self):
+        """The ambient CloudClient is cached process-wide, so any earlier
+        test in this session that did a real cloud fetch (e.g. the live
+        Cloud API suites) leaves it populated -- and then
+        ``test_env_vars_present`` sees the cached client returned instead
+        of a fresh ``from_env`` call, and fails "Called 0 times". Reset
+        both slots before AND after each test in this class so the tests
+        exercise the create path they mean to."""
+        import ndi.cloud.filehandler as fh
+
+        fh._ambient_cloud_client = None
+        fh._ambient_client_key = None
+        yield
+        fh._ambient_cloud_client = None
+        fh._ambient_client_key = None
+
     def test_missing_env_vars(self):
         from ndi.cloud.exceptions import CloudAuthError
         from ndi.cloud.filehandler import get_or_create_cloud_client

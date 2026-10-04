@@ -223,3 +223,43 @@ def _isolate_did_file_cache(tmp_path_factory):
         else:
             os.environ[env_var] = previous
         did_common._cached_cache = None
+
+
+# ---------------------------------------------------------------------------
+# Isolate the signed-URL disk cache for the whole test session.
+#
+# Waltham-Data-Science/NDI-python#322: ``ndi.cloud.signed_url_disk_cache``
+# persists signed-URL-set responses under ``~/.ndi/signed-url-cache/`` so a
+# scientist reopening the same lightsheet the next morning pays the
+# ~85 min async job cost once. That is exactly the trap DID's file cache
+# used to be: a live-cloud test that hits the production
+# ``batch_signed_url.get_default()`` populates the user's real cache, and
+# subsequent test runs against different accounts / different environments
+# could either read stale entries or silently pollute the developer's home
+# directory.
+#
+# Point the cache dir at a session-scoped tmp directory and unset the
+# safety-buffer override so each test starts from the documented 30 min
+# default. Same shape as the DID isolation above, same reasoning.
+# ---------------------------------------------------------------------------
+
+
+@_pytest.fixture(autouse=True, scope="session")
+def _isolate_signed_url_disk_cache(tmp_path_factory):
+    cache_dir = tmp_path_factory.mktemp("signed-url-cache")
+
+    previous_dir = os.environ.get("NDI_SIGNED_URL_CACHE_DIR")
+    previous_safety = os.environ.get("NDI_SIGNED_URL_CACHE_SAFETY_SECONDS")
+    os.environ["NDI_SIGNED_URL_CACHE_DIR"] = str(cache_dir)
+    os.environ.pop("NDI_SIGNED_URL_CACHE_SAFETY_SECONDS", None)
+    try:
+        yield cache_dir
+    finally:
+        if previous_dir is None:
+            os.environ.pop("NDI_SIGNED_URL_CACHE_DIR", None)
+        else:
+            os.environ["NDI_SIGNED_URL_CACHE_DIR"] = previous_dir
+        if previous_safety is None:
+            os.environ.pop("NDI_SIGNED_URL_CACHE_SAFETY_SECONDS", None)
+        else:
+            os.environ["NDI_SIGNED_URL_CACHE_SAFETY_SECONDS"] = previous_safety

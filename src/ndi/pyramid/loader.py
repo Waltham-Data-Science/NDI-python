@@ -24,8 +24,54 @@ layer stat splits, matplotlib helpers) without touching viewer.py.
 
 from __future__ import annotations
 
+import logging
+import os
 import threading
 from typing import Any
+
+logger = logging.getLogger(__name__)
+
+
+def _docHasChunkBinSeries(doc: Any) -> bool:
+    """True iff DOC's file metadata mentions the ``chunk.bin`` series.
+
+    Named at module scope so it stays testable and so the prefetch
+    path stays honest about what "no chunk.bin" means: skip. Checks
+    the DID ``files.series_info`` shape first (the current writer),
+    and falls back to any ``file_info`` entry whose name starts with
+    ``chunk.bin`` (older ingests that wrote each member into
+    ``file_info`` directly). Missing or malformed metadata reads
+    as "no series", which is safe -- we just don't prefetch for
+    that doc.
+    """
+    props = getattr(doc, "document_properties", None) or {}
+    if not isinstance(props, dict):
+        return False
+    files = props.get("files")
+    if not isinstance(files, dict):
+        return False
+
+    raw_series = files.get("series_info")
+    series_entries: list[dict]
+    if isinstance(raw_series, dict):
+        series_entries = [raw_series]
+    elif isinstance(raw_series, list):
+        series_entries = [e for e in raw_series if isinstance(e, dict)]
+    else:
+        series_entries = []
+    for entry in series_entries:
+        if str(entry.get("name", "")) == "chunk.bin":
+            return True
+
+    raw_file_info = files.get("file_info")
+    if isinstance(raw_file_info, list):
+        for entry in raw_file_info:
+            if not isinstance(entry, dict):
+                continue
+            name = str(entry.get("name", ""))
+            if name == "chunk.bin" or name.startswith("chunk.bin_"):
+                return True
+    return False
 
 
 class ImagePyramidLoader:
@@ -167,6 +213,64 @@ class ImagePyramidLoader:
             self._fetcher,
             reduction=self.reduction,
         )
+
+    def startSignedUrlPrefetch(
+        self,
+        cloud_dataset_id: str,
+        *,
+        client: Any = None,
+    ) -> threading.Thread | None:
+        """Prefetch signed-URL scopes for every level document, in background.
+
+        Each level's ``chunk.bin`` file series takes 20-80 s server-side
+        to sign, and the user hits that wait the first time they zoom
+        into a new level. Kicking off the async signed-URL-set jobs
+        for every level while the initial level-0 view is loading
+        hides those waits behind a moment the user was already
+        watching -- when they later zoom, the URLs are cached.
+
+        Sequential inside one background thread on purpose (see the
+        design note in the task that added this): parallelizing across
+        scopes would need a lock refactor and 5 levels at ~1 minute
+        each still fit inside the initial-render wall time.
+
+        Args:
+            cloud_dataset_id: The remote NDI Cloud dataset id. Empty
+                means "no cloud context"; the call is a no-op.
+            client: Passed to the signer (default signer only).
+
+        Returns:
+            The background thread on success, ``None`` when disabled
+            or when there is nothing to prefetch. Off with
+            ``NDI_LIGHTSHEET_PREFETCH_SIGNED_URLS=0``.
+        """
+        if os.environ.get("NDI_LIGHTSHEET_PREFETCH_SIGNED_URLS", "1").strip().lower() in (
+            "0",
+            "false",
+            "off",
+        ):
+            logger.info("signed-URL prefetch disabled via NDI_LIGHTSHEET_PREFETCH_SIGNED_URLS")
+            return None
+        if not cloud_dataset_id:
+            return None
+
+        self.build()
+
+        scopes: list[tuple[str, str, str]] = []
+        for doc in self.docs:
+            doc_id = getattr(doc, "id", "") or ""
+            if not doc_id:
+                continue
+            if not _docHasChunkBinSeries(doc):
+                continue
+            scopes.append((cloud_dataset_id, doc_id, "chunk.bin"))
+
+        if not scopes:
+            return None
+
+        from ndi.cloud.batch_signed_url import get_default
+
+        return get_default().start_prefetch(scopes, client=client)
 
     # ------------------------------------------------------------------ hooks
 

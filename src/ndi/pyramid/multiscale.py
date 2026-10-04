@@ -35,6 +35,8 @@ import os
 import threading
 from typing import Any
 
+from ndi.cloud.batch_signed_url import BatchScopeUnreachable
+
 # ---------------------------------------------------------------------------
 # depends_on / doc discovery
 
@@ -174,6 +176,16 @@ class _ChunkFetcher:
         self._resolve_times_cache: list[float] = []
         self._resolve_times_fetch: list[float] = []
         self._resolve_none: int = 0
+        # Systemic failure of the batch signed-URL path. Once one background
+        # prefetch surfaces a BatchScopeUnreachable, every chunk in the
+        # affected scope will fail identically -- and returning fill_value
+        # for all of them would silently render the whole canvas as zeros,
+        # exactly the pattern the loader was written to prevent. We hold
+        # the first raise here so subsequent lookups (chunkPathIfCached,
+        # chunkPath) can surface it instead of hiding behind the fallback.
+        # See Waltham-Data-Science/NDI-python#322 and the strict-mode
+        # rationale in ndi.cloud.batch_signed_url.BatchScopeUnreachable.
+        self._unreachable_exc: BatchScopeUnreachable | None = None
 
     @staticmethod
     def _reopener(session):
@@ -227,6 +239,19 @@ class _ChunkFetcher:
         t0 = _time.monotonic()
         try:
             fh = s.database_openbinarydoc(doc, filename)
+        except BatchScopeUnreachable:
+            # A systemic failure of the batch signed-URL path is not a
+            # transient blip we can paper over with fill_value: every
+            # chunk in the scope will fail identically, and swallowing
+            # this one turns the whole canvas into silent zeros -- the
+            # exact "silent fetch failure" pattern this loader was
+            # written to prevent. Propagate so callers (viewer, dask
+            # compute, integration test) see the actual cause. See
+            # Waltham-Data-Science/NDI-python#322 and the strict-mode
+            # rationale on BatchScopeUnreachable itself.
+            with self._stats_lock:
+                self._resolve_none += 1
+            raise
         except Exception as exc:
             with self._stats_lock:
                 self._resolve_none += 1
@@ -304,6 +329,8 @@ class _ChunkFetcher:
         ``os.path.exists`` from any thread. Files can be evicted, so a
         stale hit that fails on read should be dropped with :meth:`forget`.
         """
+        if self._unreachable_exc is not None:
+            raise self._unreachable_exc
         key = (getattr(doc, "id", str(doc)), filename)
         known = self._paths.get(key)
         if known is not None and os.path.exists(known):
@@ -342,7 +369,16 @@ class _ChunkFetcher:
         upsampled coarse data" WITHOUT waiting on a cloud round
         trip. A miss means "we do not have it now"; whether we ever
         will is a separate question the async prefetch answers.
+
+        Raises :class:`BatchScopeUnreachable` if a prior background
+        prefetch established that the batch signed-URL path is dead
+        for this fetcher. The upsample fallback would otherwise
+        quietly return a zero block for every chunk in the affected
+        scope; surfacing the exception here forces the actual cause
+        out through ``.compute()``.
         """
+        if self._unreachable_exc is not None:
+            raise self._unreachable_exc
         key = (getattr(doc, "id", str(doc)), filename)
         known = self._paths.get(key)
         if known is not None and os.path.exists(known):
@@ -398,6 +434,15 @@ class _ChunkFetcher:
         def _run():
             try:
                 path = self._resolve(doc, filename)
+            except BatchScopeUnreachable as exc:
+                # Systemic scope failure. Remember it so the next
+                # chunkPathIfCached / chunkPath surfaces it instead of
+                # letting the upsample fallback quietly return a
+                # canvas full of zeros.
+                with self._lock:
+                    if self._unreachable_exc is None:
+                        self._unreachable_exc = exc
+                path = None
             except Exception:  # noqa: BLE001
                 path = None
             if path is not None:

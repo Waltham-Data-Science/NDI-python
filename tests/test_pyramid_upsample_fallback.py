@@ -194,10 +194,12 @@ class TestCoarseChunkFilename(unittest.TestCase):
 
 
 class TestEnvGate(unittest.TestCase):
-    def test_absent_env_is_off(self):
+    def test_absent_env_is_on(self):
+        """Default flipped in #320 so users see coarse-level fill during
+        level swaps instead of a black screen while fine tiles load."""
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("NDI_LIGHTSHEET_UPSAMPLE_FALLBACK", None)
-            self.assertFalse(uf.env_on())
+            self.assertTrue(uf.env_on())
 
     def test_truthy_env_is_on(self):
         for value in ("1", "true", "on", "yes", "TRUE"):
@@ -206,9 +208,13 @@ class TestEnvGate(unittest.TestCase):
             ):
                 self.assertTrue(uf.env_on(), value)
 
-    def test_zero_is_off(self):
-        with mock.patch.dict(os.environ, {"NDI_LIGHTSHEET_UPSAMPLE_FALLBACK": "0"}, clear=False):
-            self.assertFalse(uf.env_on())
+    def test_falsy_env_is_off(self):
+        """The opt-out knob: anything falsy disables the fallback."""
+        for value in ("0", "false", "off", "no", "FALSE"):
+            with mock.patch.dict(
+                os.environ, {"NDI_LIGHTSHEET_UPSAMPLE_FALLBACK": value}, clear=False
+            ):
+                self.assertFalse(uf.env_on(), value)
 
 
 if __name__ == "__main__":

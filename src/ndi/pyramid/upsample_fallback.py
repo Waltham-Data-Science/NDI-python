@@ -28,7 +28,7 @@ Scope of this first cut:
   of interest. Bicubic is prettier but the point is "any pixel beats
   black" not "publication quality".
 
-Off by default -- opt in with ``NDI_LIGHTSHEET_UPSAMPLE_FALLBACK=1``.
+On by default; opt out with ``NDI_LIGHTSHEET_UPSAMPLE_FALLBACK=0``.
 When on, the reader path in :func:`multiscale._build_block_grid`
 routes each block through :func:`readChunkWithFallback` instead of
 :func:`multiscale._read_chunk_from_fetcher`. Reader also fires an
@@ -47,13 +47,24 @@ from typing import Any
 
 
 def env_on() -> bool:
-    """True when the upsample fallback is opted-in via the env var."""
-    return os.environ.get("NDI_LIGHTSHEET_UPSAMPLE_FALLBACK", "").strip().lower() in (
-        "1",
-        "true",
-        "on",
-        "yes",
-    )
+    """True unless the upsample fallback is explicitly disabled.
+
+    Default flipped to ON in Waltham-Data-Science/NDI-python#320 after
+    a user reported multi-minute black stretches during level swaps on
+    a home connection: without the fallback, napari has nothing to
+    paint for a region until every visible fine-level chunk arrives,
+    which for a 1000-tile crop over ~15 MB/s aggregate can be minutes.
+    With the fallback on, the coarsest-level tiles (which
+    ``prefetchCoarsestLevel`` puts on disk at launch) are upsampled and
+    painted immediately -- blurry but present -- and sharpen as the
+    fine-level fetches arrive.
+
+    ``NDI_LIGHTSHEET_UPSAMPLE_FALLBACK=0`` (or false/off/no) restores
+    the previous opt-in behaviour. Any other value, including empty
+    (env var unset), enables the fallback.
+    """
+    value = os.environ.get("NDI_LIGHTSHEET_UPSAMPLE_FALLBACK", "").strip().lower()
+    return value not in ("0", "false", "off", "no")
 
 
 def _fallback_debug() -> bool:

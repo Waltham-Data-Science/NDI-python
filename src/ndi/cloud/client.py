@@ -12,11 +12,14 @@ from __future__ import annotations
 
 import functools
 import json
+import logging
 import random
 import re
 import time
 from typing import Any
 from urllib.parse import quote as _url_quote
+
+logger = logging.getLogger(__name__)
 
 from .config import CloudConfig
 from .exceptions import (
@@ -180,6 +183,12 @@ class CloudClient:
 
     def __init__(self, config: CloudConfig):
         self.config = config
+        # A hand-built ``CloudClient(CloudConfig(token=...))`` uses that
+        # token as given and does not refresh against env credentials on
+        # 401/403 -- the caller told us what token to use. ``from_env()``
+        # (and any explicit login helper we add) sets this True after a
+        # successful ``authenticate()``.
+        self._can_reauth = False
         try:
             import requests
         except ImportError as exc:
@@ -286,6 +295,7 @@ class CloudClient:
         retryable = method.upper() in self.RETRY_METHODS
 
         attempt = 0
+        reauth_tried = False
         while True:
             attempt += 1
             try:
@@ -304,16 +314,71 @@ class CloudClient:
                     and isinstance(exc, transient_exceptions)
                     and attempt < self.MAX_ATTEMPTS
                 ):
-                    time.sleep(self._retry_delay(attempt))
+                    delay = self._retry_delay(attempt)
+                    logger.info(
+                        "cloud request %s %s: attempt %d/%d hit %s " "(%s); retrying in %.1fs",
+                        method,
+                        endpoint,
+                        attempt,
+                        self.MAX_ATTEMPTS,
+                        type(exc).__name__,
+                        exc,
+                        delay,
+                    )
+                    time.sleep(delay)
                     continue
                 raise CloudAPIError(f"Request failed{self._attempt_note(attempt)}: {exc}") from exc
+
+            # Token expired mid-run? Refresh once and retry. A long-running
+            # operation (e.g. polling a signed-URL-set job for tens of
+            # minutes) can outlive the token TTL, and without this every
+            # subsequent request 403s forever until the outer timeout
+            # fires -- observed on a 1-hour signing job that broke at
+            # ~10 min. One-shot per request: a second 401/403 after
+            # reauthentication is a real auth problem (bad creds, revoked
+            # key) and belongs at the surface.
+            if resp.status_code in (401, 403) and not reauth_tried and self._can_reauth:
+                logger.info(
+                    "cloud request %s %s: got HTTP %d (token likely expired); "
+                    "reauthenticating and retrying",
+                    method,
+                    endpoint,
+                    resp.status_code,
+                )
+                try:
+                    self._reauthenticate()
+                except Exception as exc:  # noqa: BLE001 - report and surface original 4xx
+                    logger.info(
+                        "cloud request %s %s: reauthenticate failed (%s: %s); "
+                        "letting the original HTTP %d surface",
+                        method,
+                        endpoint,
+                        type(exc).__name__,
+                        exc,
+                        resp.status_code,
+                    )
+                else:
+                    if self.config.token:
+                        headers["Authorization"] = f"Bearer {self.config.token}"
+                    reauth_tried = True
+                    continue
 
             if (
                 retryable
                 and resp.status_code in self.RETRY_STATUSES
                 and attempt < self.MAX_ATTEMPTS
             ):
-                time.sleep(self._retry_delay(attempt))
+                delay = self._retry_delay(attempt)
+                logger.info(
+                    "cloud request %s %s: attempt %d/%d got HTTP %d; " "retrying in %.1fs",
+                    method,
+                    endpoint,
+                    attempt,
+                    self.MAX_ATTEMPTS,
+                    resp.status_code,
+                    delay,
+                )
+                time.sleep(delay)
                 continue
             break
 
@@ -429,7 +494,34 @@ class CloudClient:
 
         config = CloudConfig.from_env()
         config.token, config.org_id = authenticate(config)
-        return cls(config)
+        client = cls(config)
+        # We just obtained this token ourselves, so a mid-run 401/403
+        # (typical after the token's TTL expires) can be answered by
+        # calling ``authenticate`` again with the same credentials.
+        client._can_reauth = True
+        return client
+
+    def _reauthenticate(self) -> None:
+        """Refresh this client's token in place from the same credentials.
+
+        Called by :meth:`_request` when a 401/403 comes back mid-operation
+        (typically because the current token's TTL has expired during a
+        long-running poll or download). Uses the same credential-resolution
+        path as :meth:`from_env`, so a valid ``NDI_CLOUD_USERNAME`` /
+        ``NDI_CLOUD_PASSWORD`` pair yields a fresh bearer token; a
+        pre-baked ``NDI_CLOUD_TOKEN`` that is itself expired will still
+        fail, and the retry surfaces the auth error to the caller.
+
+        Mutates ``self.config.token`` in place so any other caller holding
+        the same client keeps working.
+        """
+        from .auth import authenticate
+
+        fresh_config = CloudConfig.from_env()
+        token, org_id = authenticate(fresh_config)
+        self.config.token = token
+        if org_id:
+            self.config.org_id = org_id
 
     def __repr__(self) -> str:
         return f"CloudClient(api_url={self.config.api_url!r})"

@@ -8,6 +8,18 @@ on:
   # Allow manual runs from the Actions tab
   workflow_dispatch:
 
+  # Run on pull requests that touch the pyramid loader, its cloud
+  # fixture, or the workflow itself. Kept path-filtered so a PR that
+  # only edits, say, gene-pyramid code does not burn cloud API calls
+  # and bill the two shared test accounts on every push.
+  pull_request:
+    paths:
+      - 'src/ndi/pyramid/**'
+      - 'tests/test_pyramid_loader_integration.py'
+      - 'tests/fixtures/lightsheet_cloud_fixture.json'
+      - 'tests/test_cloud_*.py'
+      - '.github/workflows/test-cloud-api.yml'
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -49,4 +61,9 @@ jobs:
           # All live cloud test files, not just test_cloud_live.py -- the
           # others were previously exercised only by ci.yml, so they had no
           # coverage on days when nobody opened a PR.
-          pytest tests/test_cloud_*.py -v --tb=short
+          #
+          # test_pyramid_loader_integration.py points at the permanent
+          # lightsheet blob fixture (see tests/fixtures/lightsheet_cloud_fixture.json,
+          # built by build-lightsheet-fixture.yml). It runs under the
+          # same account-and-env matrix as the rest of the cloud tests.
+          pytest tests/test_cloud_*.py tests/test_pyramid_loader_integration.py -v --tb=short

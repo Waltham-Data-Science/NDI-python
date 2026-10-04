@@ -87,10 +87,20 @@ def cloud_config():
 
 @pytest.fixture(scope="module")
 def client(cloud_config):
-    """Return an authenticated CloudClient."""
+    """Return an authenticated CloudClient.
+
+    The fixture's config was obtained via ``login()`` from env credentials,
+    so a mid-run 401/403 (typical after the bearer's TTL expires on a
+    long-running poll) can be resolved by re-authenticating against the
+    same env. Callers who hand-build ``CloudClient(CloudConfig(token=...))``
+    with a specific token get the default (no reauth) so that a hard-coded
+    token is used exactly as given.
+    """
     from ndi.cloud.client import CloudClient
 
-    return CloudClient(cloud_config)
+    client = CloudClient(cloud_config)
+    client._can_reauth = True
+    return client
 
 
 @pytest.fixture(scope="module")
