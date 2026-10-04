@@ -299,7 +299,10 @@ _STATS = {
     "zero_upsample_failed": 0,  # upsampler returned None
     "zero_read_fail": 0,  # decode of coarse chunk raised
     "prefetches_queued": 0,  # prefetchAsync calls
-    "refresh_hints_fired": 0,  # RefreshHint._fire ran (fine fetch arrived)
+    "refresh_hints_null": 0,  # reader called with no refresh hint installed
+    "refresh_hints_called": 0,  # RefreshHint.__call__ invoked (from fetch completion)
+    "refresh_hints_scheduled": 0,  # QTimer.singleShot was accepted
+    "refresh_hints_fired": 0,  # RefreshHint._fire ran (on the Qt main thread)
 }
 
 
@@ -452,6 +455,8 @@ def readChunkWithFallback(
             )
 
     # Path 2: fine missing -> upsample coarse if we can, and fetch fine.
+    if refresh_hint is None:
+        _bump("refresh_hints_null")
     fetcher.prefetchAsync(fine_doc, fine_filename, on_complete=refresh_hint)
     _bump("prefetches_queued")
 

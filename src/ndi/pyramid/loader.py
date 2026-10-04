@@ -290,9 +290,36 @@ class ImagePyramidLoader:
         self.build()
         fetcher = self._fetcher
         ctx = getattr(fetcher, "_fallback_context", None)
+        import os
+        import sys as _sys
+
+        debug = os.environ.get("NDI_LIGHTSHEET_DEBUG", "").strip().lower() in (
+            "1",
+            "true",
+            "on",
+            "yes",
+        )
         if ctx is None:
+            if debug:
+                print(
+                    "[lightsheet] registerRefreshHint: SKIPPED -- fetcher has "
+                    "no _fallback_context (fallback env off, or single-level "
+                    "pyramid). Napari will not be auto-nudged when fine "
+                    "chunks arrive; the user must trigger a camera event.",
+                    file=_sys.stderr,
+                    flush=True,
+                )
             return
         ctx["refresh_hint_slot"][0] = hint
+        if debug:
+            print(
+                f"[lightsheet] registerRefreshHint: installed "
+                f"{'hint' if hint is not None else 'None (no-op)'}; "
+                f"future async fine fetches will "
+                f"{'nudge napari to re-slice' if hint is not None else 'NOT nudge napari'}.",
+                file=_sys.stderr,
+                flush=True,
+            )
 
     # ------------------------------------------------------------------ stats
 

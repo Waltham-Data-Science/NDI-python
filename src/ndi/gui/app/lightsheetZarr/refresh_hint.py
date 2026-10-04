@@ -48,14 +48,22 @@ class RefreshHint:
 
     def __call__(self, _path=None) -> None:
         """Called from the completion of an async fetch. Not on Qt thread."""
+        from ndi.pyramid.upsample_fallback import bump as _bump_stat
+
+        _bump_stat("refresh_hints_called")
         if self._QTimer is None:
             return
         # QTimer.singleShot is safe from any thread; the callback
         # runs on the Qt main thread.
         try:
             self._QTimer.singleShot(self._debounce_ms, self._fire)
-        except Exception:  # noqa: BLE001
-            pass
+            _bump_stat("refresh_hints_scheduled")
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"[lightsheet] refresh-hint schedule failed: {type(exc).__name__}: {exc}",
+                file=sys.stderr,
+                flush=True,
+            )
 
     def _fire(self) -> None:
         # napari 0.5 has three different ways to force a re-slice
