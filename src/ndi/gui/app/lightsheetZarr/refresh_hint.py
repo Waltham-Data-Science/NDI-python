@@ -66,7 +66,9 @@ class RefreshHint:
         # Under debug, print each attempt so we can see which one
         # napari finally responded to.
         from ndi.pyramid.upsample_fallback import _fallback_debug
+        from ndi.pyramid.upsample_fallback import bump as _bump_stat
 
+        _bump_stat("refresh_hints_fired")
         debug = _fallback_debug()
         for layer in self._layers:
             emitted = []

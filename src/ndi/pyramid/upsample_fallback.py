@@ -299,6 +299,7 @@ _STATS = {
     "zero_upsample_failed": 0,  # upsampler returned None
     "zero_read_fail": 0,  # decode of coarse chunk raised
     "prefetches_queued": 0,  # prefetchAsync calls
+    "refresh_hints_fired": 0,  # RefreshHint._fire ran (fine fetch arrived)
 }
 
 
@@ -320,6 +321,24 @@ def _bump(key: str, n: int = 1) -> None:
     with _STATS_LOCK:
         _STATS[key] = _STATS.get(key, 0) + n
         _STATS["_dirty"] = _STATS.get("_dirty", 0) + n
+
+
+# Expose module-level bump so RefreshHint can log its activity in
+# the same stats stream the user already watches.
+bump = _bump
+
+
+def totalReaderActivity() -> int:
+    """How many times the fallback reader has returned a block.
+
+    Sum of hit_fine + upsampled + every zero_* bucket. Used by the
+    viewer heartbeat to tell "napari actually asked for a slice" from
+    "napari has no local-disk fetches so the cloud-only _FetchCounter
+    stayed at zero even though the slicer was working all along."
+    """
+    activity_keys = {"hit_fine", "upsampled", "fine_decode_failed"}
+    with _STATS_LOCK:
+        return sum(v for k, v in _STATS.items() if k in activity_keys or k.startswith("zero_"))
 
 
 _HEARTBEAT_STARTED = False

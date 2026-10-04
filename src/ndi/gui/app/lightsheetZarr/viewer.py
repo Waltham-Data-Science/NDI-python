@@ -283,10 +283,34 @@ class _FetchCounter:
             with self._lock:
                 idle = time.monotonic() - self._last_activity
                 if self._started == 0:
-                    _ls(
-                        "no tiles requested yet by napari; waiting for first slice ...",
-                        file=self._out,
-                    )
+                    # _started counts cloud HTTPS fetches via
+                    # watchFetches. On a local-disk pyramid that's
+                    # permanently zero -- but the slicer may well be
+                    # running against the local-disk fallback reader.
+                    # Check that activity before claiming the slicer
+                    # is dead, so we don't tell the user "no tiles
+                    # requested" when they're staring at ~200
+                    # fallback-reader calls per minute.
+                    try:
+                        from ndi.pyramid.upsample_fallback import (
+                            totalReaderActivity as _tra,
+                        )
+
+                        fallback_n = _tra()
+                    except Exception:  # noqa: BLE001
+                        fallback_n = 0
+                    if fallback_n == 0:
+                        _ls(
+                            "no tiles requested yet by napari; waiting for first slice ...",
+                            file=self._out,
+                        )
+                    else:
+                        _ls(
+                            f"local-disk slicer active: {fallback_n} fallback-reader call(s). "
+                            "(No cloud fetches on a local pyramid, so the fetch counter stays "
+                            "at zero -- that is normal here.)",
+                            file=self._out,
+                        )
                 elif self._done < self._started and idle >= self._idle_interval:
                     self._maybe_print(force=True)
 
