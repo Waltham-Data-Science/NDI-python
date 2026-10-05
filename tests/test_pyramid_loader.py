@@ -217,12 +217,14 @@ class TestStats(unittest.TestCase):
             self.assertEqual(snap.get("fetcher"), "cache=42, cloud=10")
 
     def test_fallback_line_only_appears_when_the_env_is_on(self):
-        """The fallback env is on by default now (#320); the stats line
-        tracks whichever state ``env_on()`` reports.
+        """The fallback env defaults OFF after live A/B testing on the
+        Maddie lightsheet showed the fallback hiding newly-arrived
+        fine data. The stats line tracks whichever state ``env_on()``
+        reports.
 
-        With the env unset the default is ON, and the stats show
-        'fallback'. With ``=0`` the fallback is off and the stats
-        section is absent.
+        With the env unset the default is OFF, and the stats do NOT
+        include 'fallback'. With ``=1`` the fallback is opted in and
+        the stats section is present.
         """
         import os
 
@@ -232,9 +234,9 @@ class TestStats(unittest.TestCase):
             loader.build()
             with mock.patch.dict(os.environ, {}, clear=False):
                 os.environ.pop("NDI_LIGHTSHEET_UPSAMPLE_FALLBACK", None)
-                self.assertIn("fallback", loader.stats())
-            with mock.patch.dict(os.environ, {"NDI_LIGHTSHEET_UPSAMPLE_FALLBACK": "0"}):
                 self.assertNotIn("fallback", loader.stats())
+            with mock.patch.dict(os.environ, {"NDI_LIGHTSHEET_UPSAMPLE_FALLBACK": "1"}):
+                self.assertIn("fallback", loader.stats())
 
 
 class TestClose(unittest.TestCase):
