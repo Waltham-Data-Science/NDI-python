@@ -48,24 +48,29 @@ from typing import Any
 
 
 def env_on() -> bool:
-    """True unless the upsample fallback is explicitly disabled.
+    """False unless explicitly enabled via NDI_LIGHTSHEET_UPSAMPLE_FALLBACK.
 
-    Default flipped to ON in Waltham-Data-Science/NDI-python#320 after
-    a user reported multi-minute black stretches during level swaps on
-    a home connection: without the fallback, napari has nothing to
-    paint for a region until every visible fine-level chunk arrives,
-    which for a 1000-tile crop over ~15 MB/s aggregate can be minutes.
-    With the fallback on, the coarsest-level tiles (which
-    ``prefetchCoarsestLevel`` puts on disk at launch) are upsampled and
-    painted immediately -- blurry but present -- and sharpen as the
-    fine-level fetches arrive.
+    Default flipped back to OFF after live A/B testing on the Maddie
+    lightsheet pyramid showed the fallback actively hiding fresh fine
+    data: once Path 2 returned an upsampled-coarse block for a chunk
+    on the first slice compute, napari treated that slice as "loaded"
+    and did not re-render even after our refresh hint fired and Path 1
+    returned real fine data on the next compute (hit_fine climbed in
+    the stats while the on-screen pixels stayed coarse). Flipping the
+    knob to 0 made the view refresh correctly as fine chunks arrived.
 
-    ``NDI_LIGHTSHEET_UPSAMPLE_FALLBACK=0`` (or false/off/no) restores
-    the previous opt-in behaviour. Any other value, including empty
-    (env var unset), enables the fallback.
+    The historical reason to default it ON was multi-minute black
+    stretches during level swaps on a slow cloud connection; keep the
+    knob so cloud users can still opt in, but default OFF because
+    "coarse pixels forever that never refine" is worse UX than "black
+    briefly then correct fine pixels".
+
+    ``NDI_LIGHTSHEET_UPSAMPLE_FALLBACK=1`` (or true/on/yes) opts in.
+    Any other value, including empty (env var unset), leaves the
+    fallback off.
     """
     value = os.environ.get("NDI_LIGHTSHEET_UPSAMPLE_FALLBACK", "").strip().lower()
-    return value not in ("0", "false", "off", "no")
+    return value in ("1", "true", "on", "yes")
 
 
 def _fallback_debug() -> bool:
