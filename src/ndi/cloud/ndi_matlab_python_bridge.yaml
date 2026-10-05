@@ -1026,7 +1026,7 @@ functions:
   # --- filehandler.py functions ---
   - name: updateFileInfoForRemoteFiles
     matlab_path: "+ndi/+cloud/+sync/+internal/updateFileInfoForRemoteFiles.m"
-    matlab_last_sync_hash: "9467a0a7"
+    matlab_last_sync_hash: "a84130a7"
     python_path: "ndi/cloud/filehandler.py"
     input_arguments:
       - name: doc_props
@@ -1486,7 +1486,7 @@ not_yet_ported:
   - name: batchSignedUrlLookup
     matlab_path: "+ndi/+cloud/+download/+internal/batchSignedUrlLookup.m"
     python_path: "ndi/cloud/batch_signed_url.py"
-    matlab_last_sync_hash: "9120c002"
+    matlab_last_sync_hash: "02880062"
     status: ported
     decision_log: >
       PORTED for NDI-python#262. Turns one-call-per-uid into one call per
@@ -1512,10 +1512,6 @@ not_yet_ported:
         NEXT uid in a sweep is suppressed, a caller re-asking for the
         same uid gets a fresh attempt.
 
-      Skips the async job path (createSignedURLSetJob +
-      waitForSignedURLSetJob) since the batch helper does not use it;
-      those remain porting_deferred in the api YAML.
-
       NDI-matlab 9120c002 adds a one-shot partial-map retry: when a
       cached scope answers with a URL but a subsequent uid in that
       scope misses, drop the entry, pause, and re-fetch once
@@ -1523,6 +1519,85 @@ not_yet_ported:
       first in Waltham-Data-Science/NDI-python#310
       (_partial_map_retry_seconds / STATS.partial_map_retries in
       ndi/cloud/batch_signed_url.py), so this is a hash-only bump.
+
+      NDI-python#206: _default_signer switched from getSignedURLSetAll
+      (paged, ~25 s per 500-uid page) to the async signed-URL-set-job
+      family (createSignedURLSetJob -> waitForSignedURLSetJob ->
+      getSignedURLSetResult). For a 121k-uid document the paged walk
+      took 100+ minutes; the async job builds the whole map server-side
+      and returns it in one gzipped blob. The signer contract is
+      unchanged -- still returns (True, {"files": {uid: url}, ...}) on
+      success and (False, {"__error__": ...}) on failure -- and the
+      transient-error retry (NDI-python#322) still wraps the whole
+      three-step exchange.
+
+      NDI-matlab#1010 follow-on (MATLAB commit 27661a3): the constructor
+      gains ``disk_cache: bool = False`` and get_default() constructs
+      with ``disk_cache=True``, wiring the persistent on-disk cache
+      module below. ``ttlSeconds`` is still the in-memory freshness
+      cap; the disk cache is age-checked against the SERVER's
+      filesExpireAt with a 30 min safety buffer.
+
+  - name: signedUrlDiskCache
+    matlab_path: "+ndi/+cloud/+download/+internal/signedUrlDiskCache.m"
+    python_path: "ndi/cloud/signed_url_disk_cache.py"
+    matlab_last_sync_hash: "988ec74"
+    status: ported
+    decision_log: >
+      PORTED for VH-Lab/NDI-matlab#1010 follow-on / Waltham-Data-Science/
+      NDI-python#322. Persistent (on-disk) layer beneath
+      batchSignedUrlLookup's in-process cache: a scientist reopening the
+      same lightsheet-scale dataset over a day pays the ~85 min async
+      signed-URL-set-job cost ONCE.
+
+      The two implementations write byte-for-byte identical files: a
+      cache dir written by MATLAB is readable by Python and vice
+      versa. Portability is the whole point -- a mixed lab must not pay
+      the sign cost twice.
+
+      Shared on-disk contract (documented at the module top of both
+      files):
+        - Layout: <cache_dir>/<datasetId>/<documentId>.json.gz for
+          whole-doc scopes, <cache_dir>/<datasetId>/<documentId>_<escaped>.json.gz
+          for scoped ones. Empty seriesName maps to the whole-doc
+          filename explicitly so the two spellings can never collide.
+        - Filename escaping: bytes outside [A-Za-z0-9._-] become %XX
+          (uppercase hex); the escaped string above 96 characters is
+          replaced with hash-<sha1(raw)> so a pathologically long name
+          never overflows a filesystem's 255-byte name limit.
+        - Format: standard gzip (RFC 1952), single member, UTF-8 JSON
+          body with schemaVersion=1 and the fields datasetId,
+          documentId, seriesName, cachedAt, filesExpireAt, expiresAt,
+          generatedAt, fileCount, files.
+        - TTL: authoritative filesExpireAt (falls back to expiresAt),
+          minus a 30 min safety buffer (overridable via
+          NDI_SIGNED_URL_CACHE_SAFETY_SECONDS). A payload with neither
+          is un-cacheable; the cache refuses to invent a TTL.
+        - Env override: NDI_SIGNED_URL_CACHE_DIR points cache_dir()
+          anywhere. Default ~/.ndi/signed-url-cache, mode 0700 on POSIX.
+
+      Departures from the MATLAB implementation (all internal-only, no
+      on-disk difference):
+        - Standard-library gzip + os.replace instead of MATLAB's Java
+          GZIPInputStream/GZIPOutputStream + java.nio.file.Files.move
+          dance. Same atomic-rename semantics, cleaner one-liner.
+        - json.load handles digit-prefixed uid keys natively, so the
+          MATLAB signedURLFileMap workaround (recover keys from raw
+          payload because jsondecode renames them) has no counterpart
+          here.
+        - SHA-1 via hashlib rather than java.security.MessageDigest.
+        - forget()'s idempotence is expressed via Path.unlink(missing_ok=True)
+          rather than an isfile() guard, but the caller-visible
+          contract is the same: silent no-op on a missing scope.
+
+      The read-path 403 invalidation hook: ndi.cloud.filehandler.
+      fetch_cloud_file consults the batch cache when the caller has a
+      document id; on a subsequent S3 403 during the actual getFile
+      the scope is forgotten from disk so the next lookup refetches --
+      mirroring NDI-matlab's own hook in
+      didsqlite.download_file_from_cloud. getFile grew an opt-in
+      error_out: dict | None keyword to surface the HTTP status; the
+      status code, not a stringly-typed message, drives the hook.
 
   - name: buildGenericFileDownloadList
     matlab_path: "+ndi/+cloud/+download/+internal/buildGenericFileDownloadList.m"

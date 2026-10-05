@@ -35,6 +35,8 @@ import os
 import threading
 from typing import Any
 
+from ndi.cloud.batch_signed_url import BatchScopeUnreachable
+
 # ---------------------------------------------------------------------------
 # depends_on / doc discovery
 
@@ -174,6 +176,16 @@ class _ChunkFetcher:
         self._resolve_times_cache: list[float] = []
         self._resolve_times_fetch: list[float] = []
         self._resolve_none: int = 0
+        # Systemic failure of the batch signed-URL path. Once one background
+        # prefetch surfaces a BatchScopeUnreachable, every chunk in the
+        # affected scope will fail identically -- and returning fill_value
+        # for all of them would silently render the whole canvas as zeros,
+        # exactly the pattern the loader was written to prevent. We hold
+        # the first raise here so subsequent lookups (chunkPathIfCached,
+        # chunkPath) can surface it instead of hiding behind the fallback.
+        # See Waltham-Data-Science/NDI-python#322 and the strict-mode
+        # rationale in ndi.cloud.batch_signed_url.BatchScopeUnreachable.
+        self._unreachable_exc: BatchScopeUnreachable | None = None
 
     @staticmethod
     def _reopener(session):
@@ -227,6 +239,19 @@ class _ChunkFetcher:
         t0 = _time.monotonic()
         try:
             fh = s.database_openbinarydoc(doc, filename)
+        except BatchScopeUnreachable:
+            # A systemic failure of the batch signed-URL path is not a
+            # transient blip we can paper over with fill_value: every
+            # chunk in the scope will fail identically, and swallowing
+            # this one turns the whole canvas into silent zeros -- the
+            # exact "silent fetch failure" pattern this loader was
+            # written to prevent. Propagate so callers (viewer, dask
+            # compute, integration test) see the actual cause. See
+            # Waltham-Data-Science/NDI-python#322 and the strict-mode
+            # rationale on BatchScopeUnreachable itself.
+            with self._stats_lock:
+                self._resolve_none += 1
+            raise
         except Exception as exc:
             with self._stats_lock:
                 self._resolve_none += 1
@@ -304,6 +329,8 @@ class _ChunkFetcher:
         ``os.path.exists`` from any thread. Files can be evicted, so a
         stale hit that fails on read should be dropped with :meth:`forget`.
         """
+        if self._unreachable_exc is not None:
+            raise self._unreachable_exc
         key = (getattr(doc, "id", str(doc)), filename)
         known = self._paths.get(key)
         if known is not None and os.path.exists(known):
@@ -342,7 +369,16 @@ class _ChunkFetcher:
         upsampled coarse data" WITHOUT waiting on a cloud round
         trip. A miss means "we do not have it now"; whether we ever
         will is a separate question the async prefetch answers.
+
+        Raises :class:`BatchScopeUnreachable` if a prior background
+        prefetch established that the batch signed-URL path is dead
+        for this fetcher. The upsample fallback would otherwise
+        quietly return a zero block for every chunk in the affected
+        scope; surfacing the exception here forces the actual cause
+        out through ``.compute()``.
         """
+        if self._unreachable_exc is not None:
+            raise self._unreachable_exc
         key = (getattr(doc, "id", str(doc)), filename)
         known = self._paths.get(key)
         if known is not None and os.path.exists(known):
@@ -398,6 +434,15 @@ class _ChunkFetcher:
         def _run():
             try:
                 path = self._resolve(doc, filename)
+            except BatchScopeUnreachable as exc:
+                # Systemic scope failure. Remember it so the next
+                # chunkPathIfCached / chunkPath surfaces it instead of
+                # letting the upsample fallback quietly return a
+                # canvas full of zeros.
+                with self._lock:
+                    if self._unreachable_exc is None:
+                        self._unreachable_exc = exc
+                path = None
             except Exception:  # noqa: BLE001
                 path = None
             if path is not None:
@@ -1179,19 +1224,24 @@ def layerSpec(
     # only a graph rewrite that says "block[c] instead of block[all]".
     import dask.array as da
 
-    # Default is single-level (only the coarsest, as a plain non-
-    # multiscale layer). Napari 0.5's multiscale slicer has been
-    # observed to never mark layer.loaded=True on a lazy cloud-backed
-    # 3D multiscale pyramid: the channel-list spinner spins forever
-    # and nothing draws. Single-level takes the multiscale slicer out
-    # of the loop entirely; the layer draws, then a magicgui panel
-    # lets the user swap between levels manually (see
-    # :func:`_attach_level_selector` in viewer.py).
+    # Default is multiscale: user A/B preferred this over single-level
+    # because the transition between levels is smoother -- single-level
+    # swaps layer.data under napari, which shows up as a short black
+    # frame on every level change, while a native multiscale layer
+    # just picks a finer level and refines. Both modes have been
+    # observed to hit the same napari slicer wedge on this dataset
+    # (vispy "QBasicTimer destroyed dispatcher" spam, no tile
+    # requests), so single-level is not actually safer -- it just
+    # looks janker when it does paint.
     #
-    # NDI_LIGHTSHEET_MULTISCALE=1 opts back into the multiscale path
-    # for anyone testing whether the napari-side bug has been fixed
-    # or for a data shape that does not hit it.
-    single_level = not _env_true("NDI_LIGHTSHEET_MULTISCALE")
+    # NDI_LIGHTSHEET_SINGLE_LEVEL=1 opts back into the earlier
+    # single-level + Resolution-picker mode for anyone who wants
+    # the manual swap flow (or is debugging the multiscale slicer
+    # bug on a different dataset shape).
+    # NDI_LIGHTSHEET_ASYNC=0 is the escape hatch when the slicer
+    # wedges: it blocks add_image until the first slice is on
+    # screen, bypassing napari's async slicer entirely.
+    single_level = _env_true("NDI_LIGHTSHEET_SINGLE_LEVEL")
 
     # Build per-channel arrays once; each is a list of one 3D lazy
     # dask array per level. The level dropdown swaps between the

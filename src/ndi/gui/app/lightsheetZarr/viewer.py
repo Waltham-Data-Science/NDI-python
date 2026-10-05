@@ -18,33 +18,145 @@ import os
 import sys
 import threading
 import time
+from datetime import datetime
 from typing import Any
 
 
-class _NapariStatusReporter:
-    """Push a tile-loading status message into napari's status bar.
+def _ts() -> str:
+    """Return the current wall clock as ``HH:MM:SS.mmm``.
 
-    Called from the fetch counter's main-thread-safe surfaces. Napari's
-    status bar is a Qt widget, so a background thread calling
-    ``viewer.status = ...`` would need main-thread dispatch; the
-    counter's ``_maybe_print`` runs on whichever thread fired the
-    fetch event. Rather than adding QThread machinery here, we keep
-    a reference to the viewer and to the last string, and only
-    push on the main thread via a QTimer.singleShot(0, ...).
+    A wall-clock timestamp on every ``[lightsheet]`` line lets a user
+    quantify the actual UX -- how long the signed-URL job took, how
+    long between the first tile request and the first tile back, how
+    long a level swap sat on a black screen -- without cross-referencing
+    the ``ndi.cloud.*`` INFO lines that already carry timestamps.
+
+    Sub-second precision matters when a tile fetch finishes in
+    ~0.5-2 s: a second-only stamp collapses adjacent lines into the
+    same second and makes progression look stepped.
+    """
+    return datetime.now().strftime("%H:%M:%S.%f")[:-3]
+
+
+def _ls(msg: str, *, file=None) -> None:
+    """Print ``[HH:MM:SS.mmm lightsheet] msg`` to stderr, flushed.
+
+    Named so a caller can write ``_ls(f"tiles: {n}/{m}")`` instead of
+    building the full prefix by hand. Pass ``file=`` to route to a
+    stream other than stderr (the fetch counter uses this).
+    """
+    print(f"{_ts()} [lightsheet] {msg}", file=file or sys.stderr, flush=True)
+
+
+def _cloud_dataset_id(session: Any) -> str:
+    """Discover the remote NDI Cloud dataset id from an opened session.
+
+    ``_open_session`` in ``cli.py`` may hand back either an
+    ``ndi.session.dir`` or an ``ndi.dataset.dir``; only the dataset
+    exposes ``is_in_cloud()``, which returns ``(in_cloud, id)`` off
+    of the ``dataset_remote`` document written the first time the
+    dataset was uploaded. Everything else (plain session, non-cloud
+    open, older reader) reads as ``""`` -- no cloud context, no
+    prefetch to do.
+    """
+    checker = getattr(session, "is_in_cloud", None)
+    if not callable(checker):
+        return ""
+    try:
+        in_cloud, cloud_id = checker()
+    except Exception:  # noqa: BLE001 - a bad probe is never fatal
+        return ""
+    if not in_cloud:
+        return ""
+    return str(cloud_id or "")
+
+
+class _NapariStatusReporter:
+    """Push a tile-loading status message into napari's status bar
+    and -- when fetches are in flight -- a large overlay on the canvas.
+
+    Status bar alone was easy to miss: on the user's zoom-and-wait
+    cases, nothing in the canvas said "loading", so they read a
+    coarse-upsampled placeholder as "this is the final image." The
+    overlay is big and lives on top of the picture, so a fetch in
+    flight is unambiguous.
+
+    Cross-thread safe: push() is called from the fetch counter, which
+    runs on worker threads (the heartbeat, the fetch handlers).
+    Napari's status bar and text overlay are Qt widgets and must only
+    be written from the main thread. A QTimer.singleShot started from
+    a worker thread has no event dispatcher there and does nothing
+    useful (and spams "QBasicTimer::start: current thread's event
+    dispatcher has already been destroyed"), so we use a Qt signal:
+    signals emitted from a worker thread cross to the owning thread
+    via a queued connection, which is exactly the main-thread
+    delivery we need. The signal lives on a QObject (``_Bridge``)
+    moved to the main thread at construction time.
     """
 
     def __init__(self, viewer):
         self._viewer = viewer
-
-    def push(self, message: str) -> None:
-        # QTimer.singleShot is thread-safe; the callback runs on the
-        # Qt main thread, which is what viewer.status expects.
+        self._overlay_configured = False
+        self._bridge = None
         try:
-            from qtpy.QtCore import QTimer
-        except ImportError:
-            return
+            from qtpy.QtCore import QCoreApplication, QObject, Qt, Signal
+
+            class _Bridge(QObject):
+                update = Signal(str, int)
+
+                def __init__(self, outer):
+                    super().__init__()
+                    self._outer = outer
+                    self.update.connect(self._on_update, Qt.QueuedConnection)
+
+                def _on_update(self, message, in_flight):
+                    self._outer._apply(message, in_flight)
+
+            self._bridge = _Bridge(self)
+            app = QCoreApplication.instance()
+            if app is not None:
+                self._bridge.moveToThread(app.thread())
+        except Exception:
+            self._bridge = None
+
+    def _apply(self, message: str, in_flight: int) -> None:
+        """Runs on the main thread (queued-signal callback)."""
         v = self._viewer
-        QTimer.singleShot(0, lambda: setattr(v, "status", message))
+        try:
+            v.status = message
+        except Exception:
+            pass
+        overlay = getattr(v, "text_overlay", None)
+        if overlay is None:
+            return
+        if not self._overlay_configured:
+            try:
+                overlay.font_size = 18
+                overlay.position = "top_left"
+                try:
+                    overlay.color = "yellow"
+                except Exception:
+                    pass
+                self._overlay_configured = True
+            except Exception:
+                pass
+        try:
+            if in_flight > 0:
+                overlay.text = f"Loading tiles ... ({in_flight} in flight)"
+                overlay.visible = True
+            else:
+                overlay.visible = False
+        except Exception:
+            pass
+
+    def push(self, message: str, *, in_flight: int = 0) -> None:
+        """Called from any thread; delivery hops to main via a signal."""
+        if self._bridge is None:
+            return
+        try:
+            self._bridge.update.emit(message, int(in_flight))
+        except Exception:
+            pass
 
 
 class _FetchCounter:
@@ -153,30 +265,52 @@ class _FetchCounter:
         if self._last_duration is not None:
             mb = (self._last_bytes or 0) / (1024.0 * 1024.0)
             last = f"; last fetch {self._last_duration:.2f}s, {mb:.1f} MB"
-        stderr_line = (
-            f"[lightsheet] tiles: {self._done} loaded / {self._started} requested "
-            f"(in flight: {in_flight}){last}"
+        _ls(
+            f"tiles: {self._done} loaded / {self._started} requested "
+            f"(in flight: {in_flight}){last}",
+            file=self._out,
         )
-        print(stderr_line, file=self._out, flush=True)
         if self._status_reporter is not None:
             status_msg = (
                 f"lightsheet: {self._done}/{self._started} tiles"
                 + (f" ({in_flight} in flight)" if in_flight else "")
                 + (f" | last {self._last_duration:.2f}s" if self._last_duration else "")
             )
-            self._status_reporter.push(status_msg)
+            self._status_reporter.push(status_msg, in_flight=in_flight)
 
     def _heartbeat_loop(self) -> None:
         while not self._stop.wait(self._idle_interval):
             with self._lock:
                 idle = time.monotonic() - self._last_activity
                 if self._started == 0:
-                    print(
-                        "[lightsheet] no tiles requested yet by napari; "
-                        "waiting for first slice ...",
-                        file=self._out,
-                        flush=True,
-                    )
+                    # _started counts cloud HTTPS fetches via
+                    # watchFetches. On a local-disk pyramid that's
+                    # permanently zero -- but the slicer may well be
+                    # running against the local-disk fallback reader.
+                    # Check that activity before claiming the slicer
+                    # is dead, so we don't tell the user "no tiles
+                    # requested" when they're staring at ~200
+                    # fallback-reader calls per minute.
+                    try:
+                        from ndi.pyramid.upsample_fallback import (
+                            totalReaderActivity as _tra,
+                        )
+
+                        fallback_n = _tra()
+                    except Exception:  # noqa: BLE001
+                        fallback_n = 0
+                    if fallback_n == 0:
+                        _ls(
+                            "no tiles requested yet by napari; waiting for first slice ...",
+                            file=self._out,
+                        )
+                    else:
+                        _ls(
+                            f"local-disk slicer active: {fallback_n} fallback-reader call(s). "
+                            "(No cloud fetches on a local pyramid, so the fetch counter stays "
+                            "at zero -- that is normal here.)",
+                            file=self._out,
+                        )
                 elif self._done < self._started and idle >= self._idle_interval:
                     self._maybe_print(force=True)
 
@@ -192,14 +326,13 @@ class _FetchCounter:
                 # slice. Whichever it is, silence would hide it.
                 started = self._started
                 in_flight = self._started - self._done
-                print(
-                    f"[lightsheet] fetch summary: 0 tiles fetched in {wall:.1f}s "
+                _ls(
+                    f"fetch summary: 0 tiles fetched in {wall:.1f}s "
                     f"(started={started}, in_flight={in_flight}). "
                     "napari either drew only sparse/fill regions, or the async "
                     "slicer never dispatched -- try dragging the Z slider or "
                     "zooming in to force a slice compute.",
                     file=self._out,
-                    flush=True,
                 )
                 return
             n = len(self._durations)
@@ -210,12 +343,11 @@ class _FetchCounter:
             mean_mb = (total_bytes / n) / (1024.0 * 1024.0)
             total_mb = total_bytes / (1024.0 * 1024.0)
             throughput = (total_bytes / wall) / (1024.0 * 1024.0) if wall > 0 else 0.0
-            print(
-                f"[lightsheet] fetch summary: {n} tiles, {total_mb:.1f} MB total, "
+            _ls(
+                f"fetch summary: {n} tiles, {total_mb:.1f} MB total, "
                 f"{wall:.1f}s wall, mean {mean_dt:.2f}s/tile ({mean_mb:.1f} MB), "
                 f"min {min_dt:.2f}s, max {max_dt:.2f}s, throughput {throughput:.1f} MB/s",
                 file=self._out,
-                flush=True,
             )
 
 
@@ -374,6 +506,30 @@ def openPyramid(
             flush=True,
         )
 
+    # Eagerly warm the signed-URL cache for every level's chunk.bin
+    # series. Each async signed-URL-set job takes 20-80 s server-side,
+    # so a 5-level pyramid otherwise pays that wall time the first
+    # time the user zooms into each level; running the jobs in the
+    # background while level 0 renders hides those waits behind the
+    # moment the user is already looking at level 0.
+    try:
+        cloud_dataset_id = _cloud_dataset_id(session)
+        if cloud_dataset_id:
+            loader.startSignedUrlPrefetch(cloud_dataset_id)
+        else:
+            print(
+                "[lightsheet] signed-URL prefetch skipped: no cloud dataset id "
+                "on this session (local-only open?)",
+                file=sys.stderr,
+                flush=True,
+            )
+    except Exception as exc:  # noqa: BLE001 - a prefetch failure is never fatal
+        print(
+            f"[lightsheet] signed-URL prefetch: could not start ({exc})",
+            file=sys.stderr,
+            flush=True,
+        )
+
     with progress.stage("opening image viewer"):
         viewer = napari.Viewer()
 
@@ -394,6 +550,49 @@ def openPyramid(
     with progress.stage("attaching image to viewer"):
         for spec in specs:
             added_layers.append(viewer.add_image(**spec))
+
+    # Set physical units on the dimension sliders. Without this napari
+    # labels the slider in "pixels" and reports cursor position in
+    # voxels, so switching multiscale levels appears to the user as
+    # the slider range changing underneath them. With world units set,
+    # the slider and status bar read microns (or whatever the level
+    # declares) and stay stable across level swaps. Pulled from the
+    # pyramid's finest level since every level shares the same
+    # axes_order and the same world units.
+    try:
+        level0_props = loader.docs[0].document_properties["lightsheetZarrLevel"]
+        axes = str(level0_props.get("axes_order", "tczyx"))
+        unit_str = str(level0_props.get("voxel_size_units", "micrometer"))
+    except Exception:  # noqa: BLE001 - fall back to the napari default on any shape surprise
+        axes = ""
+        unit_str = ""
+    if axes:
+        dim_labels = tuple(axes)
+        try:
+            viewer.dims.axis_labels = dim_labels
+        except Exception:
+            pass
+        # viewer.dims.units wants pint.Unit instances in current napari
+        # (strings get rejected by the pydantic validator). Build them
+        # via pint when it is installed; skip units silently otherwise
+        # -- labels are already set and are the main thing users read.
+        # Spatial axes get the pyramid's unit, non-spatial (c, t) stay
+        # dimensionless.
+        try:
+            import pint
+
+            ureg = pint.UnitRegistry()
+            spatial_unit = ureg.Unit(unit_str) if unit_str else ureg.Unit("")
+            dim_units = tuple(
+                ureg.Unit("") if ax.lower() in ("c", "t") else spatial_unit for ax in axes
+            )
+            viewer.dims.units = dim_units
+        except Exception as exc:  # noqa: BLE001 - a units set failure is never fatal
+            print(
+                f"[lightsheet] viewer.dims.units set skipped ({exc!s}); labels only.",
+                file=sys.stderr,
+                flush=True,
+            )
 
     # Install the debounced napari refresh hint via the loader's
     # public hook. Every async fine-chunk fetch that completes calls
@@ -529,6 +728,35 @@ def openPyramid(
     # all and we lose only the extra line.
     _subscribe_level_change(viewer)
 
+    # Camera-nudge workaround for the vispy/napari slicer wedge
+    # observed on macOS: after launch, zoom events sometimes do not
+    # trigger a re-slice, so a user has to zoom-out-then-in several
+    # times before napari asks the fetcher for finer tiles. Call
+    # layer.refresh() ourselves on every camera event (debounced),
+    # which forces napari's slicer to compile a new slice request.
+    # Observed to help only partially on the Maddie dataset; the
+    # explicit Refresh View button below is the user-facing lever.
+    # Silent no-op if the camera doesn't expose the expected events
+    # (older napari) or if NDI_LIGHTSHEET_NUDGE=0 is set.
+    _attach_camera_nudge(viewer, added_layers)
+
+    # Manual Refresh View button in a right-dock widget. Toggles
+    # layer.visible off/on and calls refresh() -- the sequence the
+    # user discovered unsticks napari's slicer when zoom alone does
+    # not. Users click this when regions still show coarse-level
+    # data after a zoom-in. Hidden-by-default via
+    # NDI_LIGHTSHEET_REFRESH_BUTTON=0 for a scripted viewer where
+    # the panel chrome is unwanted.
+    _attach_refresh_button(viewer, added_layers)
+
+    # NDI Cloud sign-in panel, same shape as the gene-pyramid
+    # viewer uses. Shown only when a cloud token is in the
+    # environment -- a purely local pyramid has no reason for a
+    # login control. The lightsheet viewer carries a "beta" badge
+    # under the wordmark because this surface is still rough on
+    # the dataset-shape edges called out in the README.
+    _attach_cloud_panel(viewer)
+
     # Launch window is closed BEFORE napari.run() because napari's
     # event loop blocks the main thread and our Qt window can't
     # repaint during it -- a frozen progress bar next to napari looks
@@ -621,8 +849,434 @@ def _report_loaded(layer) -> None:
     )
 
 
+# Weak reference holder so the nudge QTimer doesn't get garbage
+# collected the moment _attach_camera_nudge returns. Keyed by viewer
+# id so a second viewer in the same process gets its own timer. The
+# timer is Qt-owned once started, but Python GC can still cut it loose
+# if nothing holds a reference.
+_NUDGE_TIMERS: dict[int, Any] = {}
+
+
+def _attach_camera_nudge(viewer, layers) -> None:
+    """Force a layer.refresh() on every camera event (debounced).
+
+    Workaround for a vispy/napari slicer wedge observed on macOS: after
+    launch, zoom and pan events sometimes do not trigger a re-slice, so
+    napari sits on a stale frame while the user zooms. The symptom in
+    the fetch log is "no tiles requested yet by napari" that never
+    clears, with vispy spamming "QBasicTimer::start: current thread's
+    event dispatcher has already been destroyed" from the slicer.
+    Calling layer.refresh() ourselves forces napari to compile a new
+    slice request on the main thread, which does fire, so a single
+    zoom gesture becomes enough to kick a level swap.
+
+    Debounced 120 ms so a pinch-zoom or wheel-zoom settling through
+    many micro-events refreshes once at rest rather than per event.
+    Silent no-op when the camera doesn't expose the expected events
+    (older napari) or when ``NDI_LIGHTSHEET_NUDGE=0`` turns it off.
+    """
+    if not layers:
+        return
+    if os.environ.get("NDI_LIGHTSHEET_NUDGE", "1").strip().lower() in ("0", "false", "off"):
+        print(
+            "[lightsheet] camera-nudge: disabled via NDI_LIGHTSHEET_NUDGE",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+
+    try:
+        from qtpy.QtCore import QTimer
+    except ImportError:
+        return
+
+    try:
+        timer = QTimer()
+        timer.setSingleShot(True)
+        timer.setInterval(120)
+    except Exception:
+        return
+
+    def _do_refresh():
+        for layer in layers:
+            try:
+                layer.refresh()
+            except Exception:
+                pass
+
+    try:
+        timer.timeout.connect(_do_refresh)
+    except Exception:
+        return
+
+    def _on_camera(_event):
+        try:
+            timer.start()
+        except Exception:
+            pass
+
+    camera = getattr(viewer, "camera", None)
+    events = getattr(camera, "events", None)
+    if events is None:
+        return
+    hooked = []
+    for name in ("zoom", "center", "angles"):
+        emitter = getattr(events, name, None)
+        if emitter is None:
+            continue
+        try:
+            emitter.connect(_on_camera)
+            hooked.append(name)
+        except Exception:
+            pass
+    if not hooked:
+        return
+
+    # Keep the timer (and its slot connections) alive for the viewer's
+    # lifetime; a plain local goes out of scope at return and Qt
+    # cannot keep a dangling PyQt QTimer running without a reference.
+    _NUDGE_TIMERS[id(viewer)] = timer
+
+    print(
+        f"[lightsheet] camera-nudge: on, hooked camera.events.{'/'.join(hooked)} "
+        "(set NDI_LIGHTSHEET_NUDGE=0 to disable)",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
+# Weak reference holder so the refresh-button widget doesn't get GC'd
+# the moment _attach_refresh_button returns. Qt owns the dock widget
+# once docked, but the magicgui wrapper is a Python object and will
+# be collected without this.
+_REFRESH_BUTTONS: dict[int, Any] = {}
+
+
+def _attach_refresh_button(viewer, layers) -> None:
+    """Dock a Refresh View button on the right.
+
+    Users click it when the view shows coarse-level data in regions
+    that should have refined after a zoom-in. The handler zooms the
+    camera out by 20% and then back in 100 ms later -- the sequence
+    a user discovered unsticks napari's slicer on the Maddie dataset
+    (toggling layer.visible or calling layer.refresh() alone does
+    not; only a real camera event does). A visibility toggle still
+    runs as a secondary nudge in case the camera change is coalesced
+    out.
+
+    Hidden via NDI_LIGHTSHEET_REFRESH_BUTTON=0 for scripted / headless
+    viewers. Falls back to a silent no-op if magicgui isn't installed.
+    """
+    if not layers:
+        return
+    if os.environ.get("NDI_LIGHTSHEET_REFRESH_BUTTON", "1").strip().lower() in (
+        "0",
+        "false",
+        "off",
+    ):
+        return
+
+    try:
+        from magicgui.widgets import Container, PushButton
+    except ImportError:
+        print(
+            "[lightsheet] refresh button: magicgui not installed; skipping "
+            "(pip install magicgui)",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+
+    try:
+        from qtpy.QtCore import QTimer
+    except ImportError:
+        QTimer = None  # type: ignore[assignment]
+
+    def _do_refresh():
+        import time as _time
+
+        t0 = _time.monotonic()
+
+        # Phase 1: zoom out by 20%. This is the piece that actually
+        # unsticks the slicer -- a real camera event forces napari
+        # to re-slice. The 20% factor is big enough that napari
+        # doesn't coalesce it with the "set it back" that follows,
+        # and small enough that it looks like a brief flash on screen
+        # rather than a jarring zoom out.
+        orig_zoom = None
+        try:
+            orig_zoom = float(viewer.camera.zoom)
+            viewer.camera.zoom = orig_zoom * 0.8
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"[lightsheet] refresh view: zoom-out failed ({exc})",
+                file=sys.stderr,
+                flush=True,
+            )
+
+        # Phase 2 (100 ms later): zoom back in, and -- as a belt-and-
+        # suspenders fallback -- toggle layer.visible off then on.
+        # The hide/show pair tears down and rebuilds each layer's
+        # vispy node, which is what the manual workaround users
+        # discovered first did.
+        def _restore_and_toggle():
+            if orig_zoom is not None:
+                try:
+                    viewer.camera.zoom = orig_zoom
+                except Exception:
+                    pass
+            hidden: list = []
+            for layer in layers:
+                try:
+                    if getattr(layer, "visible", False):
+                        layer.visible = False
+                        hidden.append(layer)
+                except Exception:
+                    pass
+
+            def _unhide():
+                for layer in hidden:
+                    try:
+                        layer.visible = True
+                    except Exception:
+                        pass
+                for layer in layers:
+                    try:
+                        layer.refresh()
+                    except Exception:
+                        pass
+                dt = _time.monotonic() - t0
+                print(
+                    f"[lightsheet] refresh view: zoom-nudge + toggled "
+                    f"{len(hidden)} layer(s), took {dt * 1000:.0f} ms",
+                    file=sys.stderr,
+                    flush=True,
+                )
+
+            if QTimer is not None:
+                QTimer.singleShot(50, _unhide)
+            else:
+                _unhide()
+
+        if QTimer is not None:
+            QTimer.singleShot(100, _restore_and_toggle)
+        else:
+            _restore_and_toggle()
+
+    try:
+        button = PushButton(text="Refresh view")
+        button.clicked.connect(_do_refresh)
+        container = Container(widgets=[button], labels=False)
+    except Exception as exc:
+        print(
+            f"[lightsheet] refresh button: construction failed ({exc})",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+
+    try:
+        viewer.window.add_dock_widget(container, area="right", name="Refresh")
+    except Exception as exc:
+        print(
+            f"[lightsheet] refresh button: could not dock ({exc})",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+
+    _REFRESH_BUTTONS[id(viewer)] = container
+    print(
+        "[lightsheet] refresh button: docked (click when regions still show "
+        "coarse data after a zoom)",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
+# Weak reference holder for the cloud panel widget. Same reason as
+# the refresh button: Qt owns the dock once added, but the Python
+# wrapper and its slot connections need a strong ref.
+_CLOUD_PANELS: dict[int, Any] = {}
+
+
+def _attach_cloud_panel(viewer) -> None:
+    """Dock an NDI Cloud sign-in panel with a BETA badge.
+
+    Reuses the gene-pyramid viewer's addCloudPanel contract -- same
+    shape, same auth plumbing, so a user who has signed in to that
+    viewer sees the same profile list and the same token clock
+    here. We don't call addCloudPanel directly because we want a
+    small "BETA" badge immediately under the wordmark, which the
+    gene-pyramid viewer does not carry; building the panel locally
+    is less fragile than monkey-patching after dock.
+
+    Silent no-op when the environment has no cloud token (same
+    cloudSessionLooksLikely rule the gene viewer uses) or when
+    NDI_LIGHTSHEET_CLOUD_PANEL=0 opts it out. A purely local
+    pyramid has no reason for a login control; a login panel on a
+    local-only window implies the picture might be waiting on
+    something, which it isn't.
+    """
+    if os.environ.get("NDI_LIGHTSHEET_CLOUD_PANEL", "1").strip().lower() in ("0", "false", "off"):
+        return
+
+    try:
+        from ndi.gui.app.genepyramid.controls import (
+            cloudLogoLabel,
+            cloudSessionLooksLikely,
+            cloudSignInDialog,
+        )
+    except ImportError as exc:
+        print(
+            f"[lightsheet] cloud panel: gene-pyramid controls unavailable ({exc})",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+
+    # Always show the NDI Cloud panel, even on a local-only dataset:
+    # the wordmark and BETA badge identify what this viewer is, and
+    # a user who later wants cloud access needs an obvious place to
+    # sign in. cloudSessionLooksLikely is still consulted to tune
+    # the clock copy (an unsigned/local session reads "not signed
+    # in" rather than a token-expiry clock), but it no longer gates
+    # the panel.
+    has_cloud = False
+    try:
+        has_cloud = bool(cloudSessionLooksLikely())
+    except Exception:
+        pass
+
+    try:
+        from qtpy.QtCore import Qt, QTimer
+        from qtpy.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+    except ImportError:
+        return
+
+    try:
+        from ndi.cloud import auth
+    except ImportError as exc:
+        print(
+            f"[lightsheet] cloud panel: ndi.cloud.auth unavailable ({exc})",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+
+    box = QWidget()
+    outer = QVBoxLayout(box)
+
+    logo = cloudLogoLabel(box)
+    if logo is not None:
+        outer.addWidget(logo)
+
+    beta = QLabel("BETA")
+    beta.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+    beta.setStyleSheet(
+        "QLabel {"
+        " color: #ffffff;"
+        " background: #c9372c;"
+        " font-weight: 700;"
+        " font-size: 10px;"
+        " letter-spacing: 2px;"
+        " padding: 2px 8px;"
+        " border-radius: 3px;"
+        "}"
+    )
+    beta.setToolTip(
+        "The lightsheet viewer is in beta. First-paint and\n"
+        "zoom-refinement can be janky on large pyramids;\n"
+        "use the Refresh View button if a region stays coarse."
+    )
+    beta_row = QHBoxLayout()
+    beta_row.setContentsMargins(0, 2, 0, 6)
+    beta_row.addWidget(beta, 0, Qt.AlignLeft)
+    beta_row.addStretch(1)
+    outer.addLayout(beta_row)
+
+    signin = QPushButton("Sign in...")
+    signin.setToolTip(
+        "Sign in to NDI Cloud, so tiles that are not already\n"
+        "downloaded keep loading. The token lives in this\n"
+        "process, so signing in anywhere else does not reach\n"
+        "this window."
+    )
+    clock = QLabel("")
+    clock.setWordWrap(True)
+    row = QHBoxLayout()
+    row.addWidget(signin)
+    row.addWidget(clock, 1)
+    outer.addLayout(row)
+
+    result = QLabel("")
+    result.setWordWrap(True)
+    result.hide()
+    outer.addWidget(result)
+    outer.addStretch()
+
+    def _tick():
+        # Local-only session: show "not signed in" rather than a stale
+        # token clock. tokenStatusLine()/tokenSecondsRemaining() are
+        # safe to call but their output can be misleading when no cloud
+        # pyramid is loaded, so we prefer an explicit copy.
+        if not has_cloud:
+            clock.setText("Not signed in. Sign in to access NDI Cloud pyramids.")
+            return
+        left = auth.tokenSecondsRemaining()
+        line = auth.tokenStatusLine()
+        if left is not None and 0 < left < 900:
+            clock.setText(f"{line} -- renew before it runs out.")
+        elif left is not None and left <= 0:
+            clock.setText(f"{line}. Undownloaded tiles will fail until you sign in.")
+        else:
+            clock.setText(line)
+
+    def _open():
+        ok, note = cloudSignInDialog(box)
+        if note:
+            result.setText(note)
+            result.show()
+        elif ok:
+            result.hide()
+        _tick()
+
+    signin.clicked.connect(_open)
+
+    # Parented to the widget so the timer stops when the dock
+    # goes. A free timer would fire at a deleted label and take
+    # the process with it.
+    timer = QTimer(box)
+    timer.setInterval(30_000)
+    timer.timeout.connect(_tick)
+    timer.start()
+    _tick()
+
+    try:
+        viewer.window.add_dock_widget(box, area="right", name="NDI Cloud")
+    except Exception as exc:
+        print(
+            f"[lightsheet] cloud panel: could not dock ({exc})",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+
+    _CLOUD_PANELS[id(viewer)] = box
+    print(
+        "[lightsheet] cloud panel: docked (NDI Cloud sign-in + beta badge)",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
 def _attach_level_selector(viewer, layers, per_layer_levels, per_layer_scales):
     """Dock a "Resolution" selector that swaps each layer's level.
+
+    No-op when the layers are already native multiscale layers:
+    napari then picks the level itself from the current zoom and
+    swapping ``layer.data`` out from under it would corrupt the
+    MultiScaleData wrapper.
 
     Swaps ``layer.data`` AND ``layer.scale`` together so world
     coordinates stay locked when the pixel dimensions change. No new
@@ -651,6 +1305,10 @@ def _attach_level_selector(viewer, layers, per_layer_levels, per_layer_scales):
     """
     if not layers or not per_layer_levels:
         return None, []
+    # Multiscale layers manage their own level selection; a dock-widget
+    # swap would fight napari.
+    if any(getattr(layer, "multiscale", False) for layer in layers):
+        return None, []
     max_levels = max((len(lst) for lst in per_layer_levels), default=0)
     if max_levels < 2:
         return None, []  # Nothing to switch between.
@@ -678,11 +1336,7 @@ def _attach_level_selector(viewer, layers, per_layer_levels, per_layer_scales):
         idx = labels.index(level)
         t0 = time.monotonic()
         elapsed_start = t0 - session_start
-        print(
-            f"[lightsheet] level selector: request {level} at t=+{elapsed_start:.1f}s",
-            file=sys.stderr,
-            flush=True,
-        )
+        _ls(f"level selector: request {level} at t=+{elapsed_start:.1f}s")
         for layer, arrays, scales in zip(layers, per_layer_levels, per_layer_scales):
             if not arrays or idx >= len(arrays):
                 continue
@@ -718,17 +1372,13 @@ def _attach_level_selector(viewer, layers, per_layer_levels, per_layer_scales):
                 layer.refresh()
             except Exception:  # noqa: BLE001
                 pass
-            print(
-                f"[lightsheet]   layer {layer.name!r} scale/data swapped "
-                f"at t=+{time.monotonic() - session_start:.1f}s",
-                file=sys.stderr,
-                flush=True,
+            _ls(
+                f"  layer {layer.name!r} scale/data swapped "
+                f"at t=+{time.monotonic() - session_start:.1f}s"
             )
-        print(
-            f"[lightsheet] level selector: request completed in "
-            f"{time.monotonic() - t0:.2f}s (napari now re-slicing)",
-            file=sys.stderr,
-            flush=True,
+        _ls(
+            f"level selector: request completed in {time.monotonic() - t0:.2f}s "
+            "(napari now re-slicing)"
         )
 
     try:

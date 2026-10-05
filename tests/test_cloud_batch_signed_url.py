@@ -323,6 +323,91 @@ class TestBatchLookupPartialMapRetry:
         # The one uid that IS in the map still resolves.
         assert lookup.lookup("ds1", "doc1", "chunks", "u_2") == "https://s3/u_2"
 
+    def test_a_multi_wave_schedule_retries_until_a_hit_or_exhaustion(self):
+        """A schedule of several delays fires each in order until either
+        the map settles or the schedule is exhausted.
+
+        On User-1-prod after a bulk upload the batch endpoint has been
+        observed lagging further than the original single 0.5 s retry
+        covered (Waltham-Data-Science/NDI-python#320), so the default
+        schedule is now a bounded exponential backoff rather than one
+        shot. Each wave still costs one scope refetch, not one per uid.
+        """
+
+        class _EventualSigner:
+            """Partial map for the first N answers, then the full map."""
+
+            def __init__(self, misses_before_hit: int):
+                self.misses_before_hit = misses_before_hit
+                self.calls = 0
+
+            def __call__(self, dataset_id, document_id, *, file_series="", client=None):
+                self.calls += 1
+                if self.calls <= self.misses_before_hit:
+                    return True, {"files": {"u_present": "https://s3/u_present"}}
+                return True, {
+                    "files": {
+                        "u_present": "https://s3/u_present",
+                        "u_lagged": "https://s3/u_lagged",
+                    }
+                }
+
+        from ndi.cloud.batch_signed_url import BatchSignedUrlLookup
+
+        # Three waves scheduled; the map settles on the SECOND wave, so
+        # one initial fetch + two retries = three signer calls, then no
+        # more.
+        sleeps: list[float] = []
+        signer = _EventualSigner(misses_before_hit=2)
+        lookup = BatchSignedUrlLookup(
+            signer=signer,
+            partial_map_retry_delays=(0.1, 0.2, 0.4),
+            sleep=sleeps.append,
+        )
+
+        assert lookup.lookup("ds1", "doc1", "chunks", "u_lagged") == "https://s3/u_lagged"
+        stats = lookup.stats()
+        assert stats.partial_map_retries == 2
+        assert stats.signer_calls == 3
+        assert stats.uid_misses == 0
+        assert sleeps == [0.1, 0.2], f"expected two waves' worth of sleeps; got {sleeps!r}"
+
+    def test_a_schedule_that_never_settles_bounds_retries_to_len(self):
+        """If every wave still returns a partial map, retries stop at
+        the schedule length -- not one per uid, not unbounded."""
+
+        class _AlwaysPartial:
+            def __init__(self):
+                self.calls = 0
+
+            def __call__(self, dataset_id, document_id, *, file_series="", client=None):
+                self.calls += 1
+                return True, {"files": {"u_present": "https://s3/u_present"}}
+
+        from ndi.cloud.batch_signed_url import BatchSignedUrlLookup
+
+        sleeps: list[float] = []
+        signer = _AlwaysPartial()
+        lookup = BatchSignedUrlLookup(
+            signer=signer,
+            partial_map_retry_delays=(0.05, 0.1, 0.2),
+            sleep=sleeps.append,
+        )
+
+        assert lookup.lookup("ds1", "doc1", "chunks", "u_lagged") == ""
+        stats = lookup.stats()
+        assert stats.partial_map_retries == 3, "all three waves fire before giving up"
+        assert stats.signer_calls == 4, "one initial fetch + three retries"
+        assert stats.uid_misses == 1
+        assert sleeps == [0.05, 0.1, 0.2]
+
+        # A second uid on the same scope must not spend another wave.
+        signer_calls_before = signer.calls
+        assert lookup.lookup("ds1", "doc1", "chunks", "u_also_lagged") == ""
+        assert signer.calls == signer_calls_before, "schedule exhausted; no more retries"
+        stats = lookup.stats()
+        assert stats.partial_map_retries == 3
+
     def test_a_retry_that_returns_no_map_at_all_still_falls_back(self):
         """The retry can itself fail (a fetch that raises, a bad payload).
         The caller must still get an empty string, not a crash."""
@@ -368,6 +453,166 @@ class TestBatchLookupClear:
         assert lookup.stats().signer_calls == 1  # refetched after clear
 
 
+class TestBatchLookupPrefetch:
+    """The prefetch path warms one scope without asking about a uid.
+
+    The whole point is to hide the 20-80 s signed-URL-set wall time
+    behind an initial render the user is already watching -- a later
+    ``lookup()`` on any uid in the scope must then be a pure cache
+    hit and NOT run another signer call.
+    """
+
+    def test_prefetch_scope_populates_the_cache(self):
+        """After a prefetch, lookup() serves the map without an extra call."""
+        from ndi.cloud.batch_signed_url import BatchSignedUrlLookup
+
+        files = {"u1": "https://s3/u1", "u2": "https://s3/u2"}
+        signer = _FakeSigner({("ds1", "doc1", "chunk.bin"): files})
+        lookup = BatchSignedUrlLookup(signer=signer)
+
+        assert lookup.prefetch_scope("ds1", "doc1", "chunk.bin") is True
+        assert len(signer.calls) == 1
+
+        # A subsequent lookup on any uid in the scope must be a pure cache hit.
+        assert lookup.lookup("ds1", "doc1", "chunk.bin", "u1") == "https://s3/u1"
+        assert lookup.lookup("ds1", "doc1", "chunk.bin", "u2") == "https://s3/u2"
+        assert len(signer.calls) == 1, (
+            "the prefetched scope must serve subsequent lookups from cache; "
+            f"signer was called {len(signer.calls)} times"
+        )
+
+    def test_prefetch_scope_returns_true_when_already_cached(self):
+        """A second prefetch of a fresh scope is a no-op; no extra call."""
+        from ndi.cloud.batch_signed_url import BatchSignedUrlLookup
+
+        signer = _FakeSigner({("ds1", "doc1", "chunk.bin"): {"u1": "https://s3/u1"}})
+        lookup = BatchSignedUrlLookup(signer=signer)
+
+        assert lookup.prefetch_scope("ds1", "doc1", "chunk.bin") is True
+        assert lookup.prefetch_scope("ds1", "doc1", "chunk.bin") is True
+        assert len(signer.calls) == 1, (
+            "a second prefetch of a fresh scope must not fire another signer call; "
+            f"got {len(signer.calls)} calls"
+        )
+
+    def test_prefetch_scope_returns_false_on_empty_document_id(self):
+        """No document id means nothing to batch against."""
+        from ndi.cloud.batch_signed_url import BatchSignedUrlLookup
+
+        signer = _FakeSigner({})
+        lookup = BatchSignedUrlLookup(signer=signer)
+
+        assert lookup.prefetch_scope("ds1", "", "chunk.bin") is False
+        assert signer.calls == []
+
+    def test_start_prefetch_iterates_scopes_in_the_background(self):
+        """The background thread warms every scope it is handed."""
+        from ndi.cloud.batch_signed_url import BatchSignedUrlLookup
+
+        scopes_files = {
+            ("ds1", "doc_a", "chunk.bin"): {"u_a1": "https://s3/a1"},
+            ("ds1", "doc_b", "chunk.bin"): {"u_b1": "https://s3/b1"},
+            ("ds1", "doc_c", "chunk.bin"): {"u_c1": "https://s3/c1"},
+        }
+        signer = _FakeSigner(scopes_files)
+        lookup = BatchSignedUrlLookup(signer=signer)
+
+        thread = lookup.start_prefetch(
+            [
+                ("ds1", "doc_a", "chunk.bin"),
+                ("ds1", "doc_b", "chunk.bin"),
+                ("ds1", "doc_c", "chunk.bin"),
+            ]
+        )
+        thread.join(timeout=5.0)
+        assert not thread.is_alive(), "prefetch thread did not finish"
+
+        # All three scopes must now be cached, so lookup() serves without
+        # another signer call.
+        signer_calls_before = len(signer.calls)
+        assert lookup.lookup("ds1", "doc_a", "chunk.bin", "u_a1") == "https://s3/a1"
+        assert lookup.lookup("ds1", "doc_b", "chunk.bin", "u_b1") == "https://s3/b1"
+        assert lookup.lookup("ds1", "doc_c", "chunk.bin", "u_c1") == "https://s3/c1"
+        assert len(signer.calls) == signer_calls_before, (
+            "lookups after prefetch must be pure cache hits; "
+            f"signer went from {signer_calls_before} to {len(signer.calls)}"
+        )
+        assert (
+            signer_calls_before == 3
+        ), f"expected one signer call per prefetched scope, got {signer_calls_before}"
+
+    def test_start_prefetch_skips_empty_document_ids(self):
+        """A scope with an empty ndi_document_id is skipped, not fetched."""
+        from ndi.cloud.batch_signed_url import BatchSignedUrlLookup
+
+        scopes_files = {
+            ("ds1", "doc_a", "chunk.bin"): {"u_a1": "https://s3/a1"},
+            ("ds1", "doc_c", "chunk.bin"): {"u_c1": "https://s3/c1"},
+        }
+        signer = _FakeSigner(scopes_files)
+        lookup = BatchSignedUrlLookup(signer=signer)
+
+        thread = lookup.start_prefetch(
+            [
+                ("ds1", "doc_a", "chunk.bin"),
+                ("ds1", "", "chunk.bin"),  # skipped
+                ("ds1", "doc_c", "chunk.bin"),
+            ]
+        )
+        thread.join(timeout=5.0)
+        assert not thread.is_alive()
+
+        assert len(signer.calls) == 2, (
+            "the empty-doc-id scope must be skipped; "
+            f"expected 2 signer calls, got {len(signer.calls)}"
+        )
+        scopes_fetched = {tuple(c) for c in signer.calls}
+        assert scopes_fetched == {
+            ("ds1", "doc_a", "chunk.bin"),
+            ("ds1", "doc_c", "chunk.bin"),
+        }
+
+    def test_start_prefetch_continues_after_a_failure(self):
+        """A BatchScopeUnreachable on one scope must not stop the rest."""
+        from ndi.cloud.batch_signed_url import BatchScopeUnreachable, BatchSignedUrlLookup
+
+        good_files = {"u_b1": "https://s3/b1"}
+        good_files_c = {"u_c1": "https://s3/c1"}
+
+        state = {"calls": 0}
+
+        def signer(dataset_id, document_id, *, file_series="", client=None):
+            state["calls"] += 1
+            if document_id == "doc_a":
+                raise BatchScopeUnreachable("simulated async-job failure for doc_a")
+            if document_id == "doc_b":
+                return True, {"files": dict(good_files)}
+            if document_id == "doc_c":
+                return True, {"files": dict(good_files_c)}
+            return False, {"message": "no such scope"}
+
+        lookup = BatchSignedUrlLookup(signer=signer)
+
+        thread = lookup.start_prefetch(
+            [
+                ("ds1", "doc_a", "chunk.bin"),  # raises
+                ("ds1", "doc_b", "chunk.bin"),
+                ("ds1", "doc_c", "chunk.bin"),
+            ]
+        )
+        thread.join(timeout=5.0)
+        assert not thread.is_alive()
+
+        # The remaining two scopes still landed in the cache.
+        signer_calls_before = state["calls"]
+        assert lookup.lookup("ds1", "doc_b", "chunk.bin", "u_b1") == "https://s3/b1"
+        assert lookup.lookup("ds1", "doc_c", "chunk.bin", "u_c1") == "https://s3/c1"
+        assert state["calls"] == signer_calls_before, (
+            "lookups after a partial prefetch must still be cache hits; "
+            f"signer went from {signer_calls_before} to {state['calls']}"
+        )
+
+
 # ---------------------------------------------------------------------------
 # fetch_cloud_file wiring: the batch cache is consulted, and its answer is
 # what gets streamed. On a batch miss, the per-uid getFileDetails is called.
@@ -393,7 +638,11 @@ class TestFetchCloudFileUsesBatch:
             patch("ndi.cloud.api.files.getFile") as mock_get_file,
         ):
 
-            def fake_get_file(url, path, timeout=300):
+            def fake_get_file(url, path, timeout=300, **kwargs):
+                # **kwargs so fetch_cloud_file's opt-in error_out sink for
+                # the batch-cache 403 hook (NDI-python#322 follow-on) does
+                # not blow up the mock; the mock never fails, so error_out
+                # goes untouched.
                 Path(path).write_bytes(b"member bytes")
                 return True
 
@@ -512,13 +761,20 @@ class TestDownloadHandlerPassesContext:
         assert kwargs["ndi_document_id"] == "doc_ndi"
         assert kwargs["series_name"] == "stack"
 
-    def test_ordinary_file_still_carries_document_scope(self, tmp_path):
-        """Two documents each with one file must not share a scope.
+    def test_a_single_file_fetch_bypasses_batch(self, tmp_path):
+        """An ordinary file (no seriesName) is a SINGLE-uid fetch, so it
+        must take the direct ``getFileDetails`` path -- NOT ask the batch
+        endpoint for a whole-document scope to answer one question.
 
-        An ordinary file (no seriesName) with a documentId still keys its
-        batch scope on that documentId, so the endpoint returns just that
-        document's map -- exactly one uid, but the cache is still primed
-        for the next uid in the same document.
+        For a lightsheet-scale pyramid document that scope names 15k+
+        files, so the batch endpoint spends 60-90 s signing a set the
+        caller has no use for, delaying the ONE URL that the download
+        actually needs by more than a minute. This is the same reasoning
+        that ``_fetch_manifest`` uses for the internal manifest fetch;
+        the DID handler path has to make the same choice or the pyramid
+        pathology reappears whenever DID reads a series member (DID
+        fetches the manifest via the handler with seriesName="" before
+        it fetches any members). See Waltham-Data-Science/NDI-python#320.
         """
         from ndi.cloud.filehandler import download_file_from_cloud
 
@@ -531,7 +787,9 @@ class TestDownloadHandlerPassesContext:
             )
 
         _, kwargs = mock_fetch.call_args
-        assert kwargs["ndi_document_id"] == "doc_ndi"
+        # documentId is discarded on the single-file path so
+        # fetch_cloud_file skips the batch scope entirely.
+        assert kwargs["ndi_document_id"] == ""
         assert kwargs["series_name"] == ""
 
     def test_no_context_disables_batch(self, tmp_path):
@@ -608,3 +866,160 @@ class TestGetSignedURLSetAll:
             with pytest.raises(files_api.SignedURLSetMaxPagesReached) as exc:
                 files_api.getSignedURLSetAll("ds1", "doc1", max_pages=3, client=MagicMock())
         assert exc.value.merged["pages"] == 3
+
+
+# ---------------------------------------------------------------------------
+# The default signer retries transient batch failures.
+# ---------------------------------------------------------------------------
+
+
+class TestDefaultSignerRetries:
+    """A ConnectionFailed-style raise from the batch API must not collapse
+    a whole scope to the O(N) per-member fallback on the first try. See
+    Waltham-Data-Science/NDI-python#322 and the parallel
+    VH-Lab/NDI-matlab#1010: a residential-network TLS blip used to hang
+    downloads for hours by tripping this cascade.
+
+    NDI-python#206 rewired the default signer from the paged
+    ``getSignedURLSetAll`` walk to the async job path
+    (``createSignedURLSetJob`` -> ``waitForSignedURLSetJob`` ->
+    ``getSignedURLSetResult``). The retry contract is unchanged: any raise
+    from the three-step exchange is retried per ``retry_delays``. These
+    tests patch the first step (``createSignedURLSetJob``) to trip the
+    retry, which is enough to exercise the loop without also needing to
+    script the wait and result calls.
+    """
+
+    def test_a_transient_raise_then_success_returns_success(self):
+        from ndi.cloud.batch_signed_url import _default_signer
+
+        calls = {"n": 0}
+
+        def flaky_create(*args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise ConnectionError("first try, transient")
+            return {"jobId": "job-1"}
+
+        ready_status = {"state": "ready", "resultUrl": "https://example/result"}
+        result_payload = {"files": {"u1": "https://s3.example.com/u1"}, "fileCount": 1}
+
+        with (
+            patch("ndi.cloud.api.files.createSignedURLSetJob", side_effect=flaky_create),
+            patch("ndi.cloud.api.files.waitForSignedURLSetJob", return_value=ready_status),
+            patch("ndi.cloud.api.files.getSignedURLSetResult", return_value=result_payload),
+        ):
+            ok, answer = _default_signer(
+                "ds1",
+                "doc1",
+                client=MagicMock(),
+                retry_delays=(0.0, 0.0, 0.0),
+                sleep=lambda _s: None,
+            )
+
+        assert ok is True
+        assert answer["files"] == {"u1": "https://s3.example.com/u1"}
+        assert calls["n"] == 2, "should have retried exactly once before succeeding"
+
+    def test_every_attempt_raising_raises_batch_scope_unreachable(self):
+        """After every retry attempt fails, raise instead of silent fallback.
+
+        Falling back per-uid on an actually-broken async job path
+        would hide the bug behind slow-but-working chunk fetches. See
+        BatchScopeUnreachable's docstring.
+        """
+        from ndi.cloud.batch_signed_url import BatchScopeUnreachable, _default_signer
+
+        calls = {"n": 0}
+
+        def always_fails(*args, **kwargs):
+            calls["n"] += 1
+            raise ConnectionError(f"try {calls['n']}")
+
+        with patch("ndi.cloud.api.files.createSignedURLSetJob", side_effect=always_fails):
+            with pytest.raises(BatchScopeUnreachable) as exc_info:
+                _default_signer(
+                    "ds1",
+                    "doc1",
+                    client=MagicMock(),
+                    retry_delays=(0.0, 0.0),  # 3 attempts total
+                    sleep=lambda _s: None,
+                )
+
+        assert calls["n"] == 3, "should have made 3 attempts (initial + 2 retries)"
+        message = str(exc_info.value)
+        assert "ConnectionError" in message
+        assert "3 attempts" in message, f"should name the attempt count: {message!r}"
+        # The underlying transport error is chained for programmatic access.
+        assert isinstance(exc_info.value.__cause__, ConnectionError)
+
+    def test_zero_retry_delays_is_a_single_attempt(self):
+        """Passing an empty retry_delays disables retry entirely.
+
+        Useful anywhere a caller wants the pre-retry behavior (a test, a
+        fast-fail probe, or an environment where the signer already handles
+        its own retries).
+        """
+        from ndi.cloud.batch_signed_url import BatchScopeUnreachable, _default_signer
+
+        calls = {"n": 0}
+
+        def always_fails(*args, **kwargs):
+            calls["n"] += 1
+            raise ConnectionError("nope")
+
+        with patch("ndi.cloud.api.files.createSignedURLSetJob", side_effect=always_fails):
+            with pytest.raises(BatchScopeUnreachable):
+                _default_signer(
+                    "ds1",
+                    "doc1",
+                    client=MagicMock(),
+                    retry_delays=(),
+                    sleep=lambda _s: None,
+                )
+
+        assert calls["n"] == 1, "empty retry_delays should mean one attempt, no retries"
+
+    def test_retry_delays_are_slept_in_order(self):
+        """The backoff delays are consumed in order, once per failed attempt."""
+        from ndi.cloud.batch_signed_url import BatchScopeUnreachable, _default_signer
+
+        slept: list[float] = []
+
+        def always_fails(*args, **kwargs):
+            raise ConnectionError("nope")
+
+        with patch("ndi.cloud.api.files.createSignedURLSetJob", side_effect=always_fails):
+            with pytest.raises(BatchScopeUnreachable):
+                _default_signer(
+                    "ds1",
+                    "doc1",
+                    client=MagicMock(),
+                    retry_delays=(1.0, 4.0, 16.0),
+                    sleep=slept.append,
+                )
+
+        assert slept == [
+            1.0,
+            4.0,
+            16.0,
+        ], f"expected the three backoff delays consumed in order, got {slept}"
+
+    def test_fetch_scope_propagates_batch_scope_unreachable(self):
+        """The strict-mode raise must not be caught by _fetch_scope.
+
+        _fetch_scope catches Exception from injected signers so tests can
+        script arbitrary failures (existing behavior). But when the DEFAULT
+        signer's async job path exhausts its retries, the resulting
+        BatchScopeUnreachable must propagate all the way to the caller so
+        the real error surfaces.
+        """
+        from ndi.cloud.batch_signed_url import BatchScopeUnreachable, BatchSignedUrlLookup
+
+        def unreachable_signer(*args, **kwargs):
+            raise BatchScopeUnreachable("simulated async-job failure")
+
+        lookup = BatchSignedUrlLookup(signer=unreachable_signer)
+
+        with pytest.raises(BatchScopeUnreachable, match="simulated async-job failure"):
+            lookup.lookup("ds1", "doc1", "chunks", "u_1")

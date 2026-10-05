@@ -195,20 +195,29 @@ class TestCoarseChunkFilename(unittest.TestCase):
 
 class TestEnvGate(unittest.TestCase):
     def test_absent_env_is_off(self):
+        """Default re-flipped OFF after live A/B testing: with the
+        fallback on, napari treated the first slice as 'loaded' with
+        upsampled-coarse data and did not re-render when fine chunks
+        arrived. Black briefly then correct beats blurry forever."""
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("NDI_LIGHTSHEET_UPSAMPLE_FALLBACK", None)
             self.assertFalse(uf.env_on())
 
     def test_truthy_env_is_on(self):
+        """The opt-in knob: cloud users on slow links who prefer a
+        blurry-but-present first paint to a black one can still get it."""
         for value in ("1", "true", "on", "yes", "TRUE"):
             with mock.patch.dict(
                 os.environ, {"NDI_LIGHTSHEET_UPSAMPLE_FALLBACK": value}, clear=False
             ):
                 self.assertTrue(uf.env_on(), value)
 
-    def test_zero_is_off(self):
-        with mock.patch.dict(os.environ, {"NDI_LIGHTSHEET_UPSAMPLE_FALLBACK": "0"}, clear=False):
-            self.assertFalse(uf.env_on())
+    def test_falsy_env_is_off(self):
+        for value in ("0", "false", "off", "no", "FALSE"):
+            with mock.patch.dict(
+                os.environ, {"NDI_LIGHTSHEET_UPSAMPLE_FALLBACK": value}, clear=False
+            ):
+                self.assertFalse(uf.env_on(), value)
 
 
 if __name__ == "__main__":

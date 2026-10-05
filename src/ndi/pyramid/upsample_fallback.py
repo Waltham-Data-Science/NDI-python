@@ -28,7 +28,7 @@ Scope of this first cut:
   of interest. Bicubic is prettier but the point is "any pixel beats
   black" not "publication quality".
 
-Off by default -- opt in with ``NDI_LIGHTSHEET_UPSAMPLE_FALLBACK=1``.
+On by default; opt out with ``NDI_LIGHTSHEET_UPSAMPLE_FALLBACK=0``.
 When on, the reader path in :func:`multiscale._build_block_grid`
 routes each block through :func:`readChunkWithFallback` instead of
 :func:`multiscale._read_chunk_from_fetcher`. Reader also fires an
@@ -42,18 +42,35 @@ layer.
 from __future__ import annotations
 
 import os
+import sys
 import threading
 from typing import Any
 
 
 def env_on() -> bool:
-    """True when the upsample fallback is opted-in via the env var."""
-    return os.environ.get("NDI_LIGHTSHEET_UPSAMPLE_FALLBACK", "").strip().lower() in (
-        "1",
-        "true",
-        "on",
-        "yes",
-    )
+    """False unless explicitly enabled via NDI_LIGHTSHEET_UPSAMPLE_FALLBACK.
+
+    Default flipped back to OFF after live A/B testing on the Maddie
+    lightsheet pyramid showed the fallback actively hiding fresh fine
+    data: once Path 2 returned an upsampled-coarse block for a chunk
+    on the first slice compute, napari treated that slice as "loaded"
+    and did not re-render even after our refresh hint fired and Path 1
+    returned real fine data on the next compute (hit_fine climbed in
+    the stats while the on-screen pixels stayed coarse). Flipping the
+    knob to 0 made the view refresh correctly as fine chunks arrived.
+
+    The historical reason to default it ON was multi-minute black
+    stretches during level swaps on a slow cloud connection; keep the
+    knob so cloud users can still opt in, but default OFF because
+    "coarse pixels forever that never refine" is worse UX than "black
+    briefly then correct fine pixels".
+
+    ``NDI_LIGHTSHEET_UPSAMPLE_FALLBACK=1`` (or true/on/yes) opts in.
+    Any other value, including empty (env var unset), leaves the
+    fallback off.
+    """
+    value = os.environ.get("NDI_LIGHTSHEET_UPSAMPLE_FALLBACK", "").strip().lower()
+    return value in ("1", "true", "on", "yes")
 
 
 def _fallback_debug() -> bool:
@@ -280,12 +297,17 @@ def upsampleToBlock(
 _STATS_LOCK = threading.Lock()
 _STATS = {
     "hit_fine": 0,  # chunkPathIfCached found it -> real fine returned
+    "fine_decode_failed": 0,  # fine chunk on disk but decode raised (silent-fallback)
     "upsampled": 0,  # fine missing, upsampled from coarse
     "zero_no_coarse_cover": 0,  # no covering coarse chunk in-range
     "zero_coarse_missing": 0,  # covering coarse chunk not on disk
     "zero_upsample_failed": 0,  # upsampler returned None
     "zero_read_fail": 0,  # decode of coarse chunk raised
     "prefetches_queued": 0,  # prefetchAsync calls
+    "refresh_hints_null": 0,  # reader called with no refresh hint installed
+    "refresh_hints_called": 0,  # RefreshHint.__call__ invoked (from fetch completion)
+    "refresh_hints_scheduled": 0,  # QTimer.singleShot was accepted
+    "refresh_hints_fired": 0,  # RefreshHint._fire ran (on the Qt main thread)
 }
 
 
@@ -299,13 +321,79 @@ def fallbackStatsSummary() -> str:
     they land (refresh hint not triggering a slice compute).
     """
     with _STATS_LOCK:
-        parts = [f"{k}={v}" for k, v in _STATS.items()]
+        parts = [f"{k}={v}" for k, v in _STATS.items() if not k.startswith("_")]
     return "upsample-fallback " + " ".join(parts)
 
 
 def _bump(key: str, n: int = 1) -> None:
     with _STATS_LOCK:
         _STATS[key] = _STATS.get(key, 0) + n
+        _STATS["_dirty"] = _STATS.get("_dirty", 0) + n
+
+
+# Expose module-level bump so RefreshHint can log its activity in
+# the same stats stream the user already watches.
+bump = _bump
+
+
+def totalReaderActivity() -> int:
+    """How many times the fallback reader has returned a block.
+
+    Sum of hit_fine + upsampled + every zero_* bucket. Used by the
+    viewer heartbeat to tell "napari actually asked for a slice" from
+    "napari has no local-disk fetches so the cloud-only _FetchCounter
+    stayed at zero even though the slicer was working all along."
+    """
+    activity_keys = {"hit_fine", "upsampled", "fine_decode_failed"}
+    with _STATS_LOCK:
+        return sum(v for k, v in _STATS.items() if k in activity_keys or k.startswith("zero_"))
+
+
+_HEARTBEAT_STARTED = False
+_HEARTBEAT_LOCK = threading.Lock()
+
+
+def _ensure_debug_heartbeat() -> None:
+    """Spin up one daemon thread that dumps fallback stats every ~5 s.
+
+    Only runs when ``_fallback_debug()`` is on. Prints a stats line
+    only when something changed since the last tick, so a quiet
+    session stays quiet. Starts lazily on the first fallback call so
+    there is nothing to clean up at shutdown.
+    """
+    global _HEARTBEAT_STARTED
+    if _HEARTBEAT_STARTED or not _fallback_debug():
+        return
+    with _HEARTBEAT_LOCK:
+        if _HEARTBEAT_STARTED:
+            return
+        _HEARTBEAT_STARTED = True
+
+        def _loop():
+            import time
+
+            last_signature = None
+            while True:
+                time.sleep(5.0)
+                with _STATS_LOCK:
+                    dirty = _STATS.get("_dirty", 0)
+                    if dirty == 0:
+                        continue
+                    _STATS["_dirty"] = 0
+                    snapshot = {k: v for k, v in _STATS.items() if not k.startswith("_")}
+                sig = tuple(sorted(snapshot.items()))
+                if sig == last_signature:
+                    continue
+                last_signature = sig
+                parts = " ".join(f"{k}={v}" for k, v in snapshot.items())
+                print(
+                    f"[lightsheet] upsample-fallback live: {parts}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+
+        t = threading.Thread(target=_loop, name="ndi-lightsheet-fallback-stats", daemon=True)
+        t.start()
 
 
 def readChunkWithFallback(
@@ -344,6 +432,8 @@ def readChunkWithFallback(
     """
     from ndi.pyramid.multiscale import _read_chunk_from_fetcher, _zero_block
 
+    _ensure_debug_heartbeat()
+
     # Path 1: fine chunk on disk -> normal read.
     fine_path = fetcher.chunkPathIfCached(fine_doc, fine_filename)
     if fine_path is not None:
@@ -353,10 +443,25 @@ def readChunkWithFallback(
             )
             _bump("hit_fine")
             return result
-        except Exception:  # noqa: BLE001 - a bad decode is fallback time
-            pass
+        except Exception as decode_exc:  # noqa: BLE001 - a bad decode is fallback time
+            # The fine chunk is on disk but failed to decode: a
+            # truncated download, a codec mismatch, or a corrupt
+            # blob. Falling through to coarse-upsample keeps the
+            # view from going black, but if we don't LOG this, the
+            # user sees level-3 pixels forever while the Auto-level
+            # picker reports level 0 and no error ever appears --
+            # that was the silent-blurry symptom before this change.
+            _bump("fine_decode_failed")
+            print(
+                f"[lightsheet] fine decode failed, upsampling from coarse: "
+                f"{fine_filename!r} ({type(decode_exc).__name__}: {decode_exc})",
+                file=sys.stderr,
+                flush=True,
+            )
 
     # Path 2: fine missing -> upsample coarse if we can, and fetch fine.
+    if refresh_hint is None:
+        _bump("refresh_hints_null")
     fetcher.prefetchAsync(fine_doc, fine_filename, on_complete=refresh_hint)
     _bump("prefetches_queued")
 
