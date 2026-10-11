@@ -554,6 +554,12 @@ def levelArrays(
     fetcher._fallback_context = fallback_context  # type: ignore[attr-defined]
 
     arrays: list[Any] = []
+    # Per-level chunk geometry, finest first (same order as ARRAYS).
+    # The viewer reads this to work out which chunks the current view
+    # needs, so it can say "37 of 120 tiles" rather than only how many
+    # are in flight. Rides on the fetcher like the fallback context.
+    level_meta: list[dict] = []
+    fetcher._level_meta = level_meta  # type: ignore[attr-defined]
     for i, doc in enumerate(docs):
         p = doc.document_properties["lightsheetZarrLevel"]
         shape = tuple(int(v) for v in p["shape"])
@@ -564,6 +570,16 @@ def levelArrays(
         codec = str(p.get("codec", "raw"))
         stored = _storedChunkNames(doc)
         _assertStoredMatchesLevel(doc, p, stored)
+
+        level_meta.append(
+            {
+                "doc": doc,
+                "axes": str(p.get("axes_order", "")).lower(),
+                "chunks": chunks,
+                "chunk_grid": chunk_grid,
+                "stored": stored,
+            }
+        )
 
         n_blocks = 1
         for g in chunk_grid:

@@ -102,15 +102,15 @@ class _NapariStatusReporter:
             from qtpy.QtCore import QCoreApplication, QObject, Qt, Signal
 
             class _Bridge(QObject):
-                update = Signal(str, int)
+                update = Signal(str, str)
 
                 def __init__(self, outer):
                     super().__init__()
                     self._outer = outer
                     self.update.connect(self._on_update, Qt.QueuedConnection)
 
-                def _on_update(self, message, in_flight):
-                    self._outer._apply(message, in_flight)
+                def _on_update(self, message, overlay_text):
+                    self._outer._apply(message, overlay_text)
 
             self._bridge = _Bridge(self)
             app = QCoreApplication.instance()
@@ -119,7 +119,7 @@ class _NapariStatusReporter:
         except Exception:
             self._bridge = None
 
-    def _apply(self, message: str, in_flight: int) -> None:
+    def _apply(self, message: str, overlay_text: str) -> None:
         """Runs on the main thread (queued-signal callback)."""
         v = self._viewer
         try:
@@ -141,20 +141,23 @@ class _NapariStatusReporter:
             except Exception:
                 pass
         try:
-            if in_flight > 0:
-                overlay.text = f"Loading tiles ... ({in_flight} in flight)"
+            if overlay_text:
+                overlay.text = overlay_text
                 overlay.visible = True
             else:
                 overlay.visible = False
         except Exception:
             pass
 
-    def push(self, message: str, *, in_flight: int = 0) -> None:
-        """Called from any thread; delivery hops to main via a signal."""
+    def push(self, message: str, *, overlay: str = "") -> None:
+        """Called from any thread; delivery hops to main via a signal.
+
+        OVERLAY is the canvas text; empty hides the overlay.
+        """
         if self._bridge is None:
             return
         try:
-            self._bridge.update.emit(message, int(in_flight))
+            self._bridge.update.emit(message, str(overlay or ""))
         except Exception:
             pass
 
@@ -211,6 +214,12 @@ class _FetchCounter:
         self._last_duration: float | None = None
         self._last_bytes: int | None = None
         self._session_start = time.monotonic()
+        # Tiles the CURRENT VIEW needs vs has on disk, set from the
+        # main-thread poll in viewtiles.attachViewTally. None until the
+        # first poll, or when napari does not expose enough to tally.
+        self._view_ready: int | None = None
+        self._view_needed: int | None = None
+        self._view_since: float | None = None
         self._stop = threading.Event()
         self._heartbeat = threading.Thread(
             target=self._heartbeat_loop,
@@ -229,6 +238,29 @@ class _FetchCounter:
         """
         with self._lock:
             self._status_reporter = reporter
+
+    def set_view_tally(self, ready: int | None, needed: int | None) -> None:
+        """Record how many of the current view's tiles are on disk.
+
+        Logs once when a view finishes loading, with how long it took
+        from the first poll that found it incomplete.
+        """
+        with self._lock:
+            now = time.monotonic()
+            was_complete = self._view_needed is not None and self._view_ready == self._view_needed
+            self._view_ready, self._view_needed = ready, needed
+            if ready is None or needed is None:
+                self._view_since = None
+            elif ready < needed:
+                if self._view_since is None or was_complete:
+                    self._view_since = now
+            elif self._view_since is not None:
+                _ls(
+                    f"view complete: {needed} tile(s) in {now - self._view_since:.1f}s",
+                    file=self._out,
+                )
+                self._view_since = None
+            self._maybe_print(force=True)
 
     def __call__(self, event, uri, done, total):
         with self._lock:
@@ -265,18 +297,37 @@ class _FetchCounter:
         if self._last_duration is not None:
             mb = (self._last_bytes or 0) / (1024.0 * 1024.0)
             last = f"; last fetch {self._last_duration:.2f}s, {mb:.1f} MB"
+        ready, needed = self._view_ready, self._view_needed
+        view = ""
+        if needed is not None:
+            view = f"view: {ready}/{needed} tiles ready; "
         _ls(
-            f"tiles: {self._done} loaded / {self._started} requested "
+            f"{view}tiles: {self._done} loaded / {self._started} requested "
             f"(in flight: {in_flight}){last}",
             file=self._out,
         )
         if self._status_reporter is not None:
-            status_msg = (
-                f"lightsheet: {self._done}/{self._started} tiles"
+            parts = []
+            if needed is not None:
+                parts.append(f"view {ready}/{needed} tiles ready")
+            parts.append(
+                f"{self._done}/{self._started} fetched"
                 + (f" ({in_flight} in flight)" if in_flight else "")
-                + (f" | last {self._last_duration:.2f}s" if self._last_duration else "")
             )
-            self._status_reporter.push(status_msg, in_flight=in_flight)
+            if self._last_duration:
+                parts.append(f"last {self._last_duration:.2f}s")
+            status_msg = "lightsheet: " + " | ".join(parts)
+            if needed is not None and ready < needed:
+                overlay = f"Loading view: {ready} / {needed} tiles"
+                if in_flight:
+                    overlay += f" ({in_flight} in flight)"
+            elif in_flight:
+                # View is complete (or untallied); what is still
+                # moving is prefetch or a neighbouring region.
+                overlay = f"Loading tiles ... ({in_flight} in flight)"
+            else:
+                overlay = ""
+            self._status_reporter.push(status_msg, overlay=overlay)
 
     def _heartbeat_loop(self) -> None:
         while not self._stop.wait(self._idle_interval):
@@ -756,6 +807,33 @@ def openPyramid(
     # under the wordmark because this surface is still rough on
     # the dataset-shape edges called out in the README.
     _attach_cloud_panel(viewer)
+
+    # Tiles needed for the current view vs tiles on disk, polled on a
+    # main-thread timer and fed to the counter, so the status bar and
+    # overlay say "37 / 120" rather than only "12 in flight". Skipped
+    # in the modes where layer.data is not the full level ladder
+    # (single-level, viewport clip): there the level index napari
+    # reports does not line up with the level documents.
+    # Each env var is read with the parser its own feature uses.
+    from ndi.gui.app.lightsheetZarr.viewport import _env_true as _clip_env_true
+    from ndi.pyramid.multiscale import _env_true as _level_env_true
+
+    if not (
+        _level_env_true("NDI_LIGHTSHEET_SINGLE_LEVEL")
+        or _clip_env_true("NDI_LIGHTSHEET_VIEWPORT_CLIP")
+    ):
+        try:
+            from ndi.gui.app.lightsheetZarr.viewtiles import attachViewTally
+
+            view_timer = attachViewTally(  # noqa: F841 - parented to the window
+                viewer, added_layers, loader.levelMeta, fetcher, counter
+            )
+        except Exception as exc:  # noqa: BLE001 - a tally is never worth the viewer
+            print(
+                f"[lightsheet] view tile tally: could not start ({exc})",
+                file=sys.stderr,
+                flush=True,
+            )
 
     # Launch window is closed BEFORE napari.run() because napari's
     # event loop blocks the main thread and our Qt window can't

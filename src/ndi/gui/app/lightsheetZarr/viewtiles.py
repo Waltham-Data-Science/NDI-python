@@ -1,0 +1,229 @@
+"""How many tiles does the current view need, and how many are here?
+
+The fetch counter in :mod:`.viewer` sees fetches only as napari asks
+for them, so it can say "12 in flight" but not "12 in flight, 83 to
+go". The total IS knowable: napari draws one level per layer
+(``layer.data_level``) over one region of it (``layer.corner_pixels``)
+at one slice of the non-displayed axes (``viewer.dims.point``). The
+level documents give the chunk grid and the list of stored chunks, so
+the set of chunk files covering that region -- minus the sparse ones
+that resolve to fill_value with no fetch -- is the set the view needs.
+A chunk is "ready" once the fetcher has it on local disk.
+
+Split in two so the arithmetic is testable without napari:
+
+* :func:`chunksInBox` -- pure: per-axis inclusive data bounds in, the
+  stored ``chunk.bin_#`` names covering them out.
+* :func:`layerBox` / :func:`viewTally` -- read napari state and feed
+  the pure half. Anything napari does not expose the way we expect
+  returns None, and the viewer falls back to the in-flight count.
+
+:func:`attachViewTally` polls on a main-thread QTimer (napari layer
+state is not safe to read from the fetcher threads) and hands each
+change to the fetch counter, which owns the status bar and overlay.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+__all__ = ["chunksInBox", "layerBox", "viewTally", "attachViewTally"]
+
+#: A view whose box spans more chunk positions than this is not
+#: tallied (it would stall the main thread on every tick). napari's 3D
+#: mode draws the coarsest level, which stays far below it.
+MAX_POSITIONS = 50_000
+
+#: Poll interval for the main-thread timer, in milliseconds.
+POLL_MS = 400
+
+
+def chunksInBox(meta: dict, lo: list[int], hi: list[int]) -> list[str] | None:
+    """Stored chunk names covering the inclusive data box [LO, HI].
+
+    LO and HI have one entry per axis of the level's chunk grid. Bounds
+    are clipped to the grid; a box past the edge just covers fewer
+    chunks. Returns None when the box spans more than
+    :data:`MAX_POSITIONS` chunk positions.
+    """
+    chunks = meta["chunks"]
+    grid = meta["chunk_grid"]
+    stored = meta.get("stored")
+    n = len(grid)
+    if len(lo) != n or len(hi) != n:
+        return None
+
+    ranges = []
+    count = 1
+    for a in range(n):
+        first = max(0, int(lo[a]) // chunks[a])
+        last = min(grid[a] - 1, int(hi[a]) // chunks[a])
+        if last < first:
+            return []
+        ranges.append(range(first, last + 1))
+        count *= last - first + 1
+    if count > MAX_POSITIONS:
+        return None
+
+    strides = [1] * n
+    for a in range(n - 2, -1, -1):
+        strides[a] = strides[a + 1] * grid[a + 1]
+
+    names: list[str] = []
+
+    def walk(axis: int, linear: int) -> None:
+        if axis == n:
+            name = f"chunk.bin_{linear + 1:d}"
+            if stored is None or name in stored:
+                names.append(name)
+            return
+        for i in ranges[axis]:
+            walk(axis + 1, linear + i * strides[axis])
+
+    walk(0, 0)
+    return names
+
+
+def _gridAxisMap(meta: dict, layer_ndim: int) -> tuple[list[int], int] | None:
+    """Map layer axes onto grid axes.
+
+    Returns ``(layer_to_grid, c_axis)``: the grid axis for each layer
+    axis, and the grid's channel axis (-1 when there is none). The
+    layer arrays are the level arrays with the channel axis taken out,
+    so a ``tczyx`` grid backs a ``tzyx`` layer. Layer axes line up
+    with the TRAILING grid axes; any leading grid axis the layer does
+    not carry (a singleton ``t``) is pinned to 0 by the caller.
+    """
+    n = len(meta["chunk_grid"])
+    axes = meta.get("axes") or ("tczyx" if n == 5 else "")
+    c = axes.index("c") if len(axes) == n and "c" in axes else -1
+    if n == layer_ndim:
+        # Nothing was stripped: the layer IS the grid.
+        return list(range(n)), -1
+    spatial = [a for a in range(n) if a != c]
+    if len(spatial) < layer_ndim:
+        return None
+    return spatial[-layer_ndim:], c
+
+
+def layerBox(layer, viewer, meta_levels: list[dict], channel: int = 0):
+    """``(level_index, lo, hi)`` for what napari is drawing of LAYER.
+
+    LO/HI are inclusive data bounds on the level's chunk grid. None
+    when napari does not expose what we need.
+    """
+    # The level index only lines up with META_LEVELS on a native
+    # multiscale layer over the full ladder (not single-level mode).
+    if not getattr(layer, "multiscale", False):
+        return None
+    try:
+        if len(layer.data) != len(meta_levels):
+            return None
+        level = int(layer.data_level)
+        meta = meta_levels[level]
+        corners = layer.corner_pixels
+        ndim = int(layer.ndim)
+        # Layer axes are the LAST ndim world axes.
+        offset = int(viewer.dims.ndim) - ndim
+        displayed = [int(d) - offset for d in viewer.dims.displayed]
+        point = list(viewer.dims.point)[-ndim:]
+        data_pt = list(layer.world_to_data(point))
+        factors = layer.downsample_factors[level]
+    except Exception:  # noqa: BLE001 - any napari shape surprise -> unknown
+        return None
+
+    mapping = _gridAxisMap(meta, ndim)
+    if mapping is None:
+        return None
+    layer_to_grid, c_axis = mapping
+
+    n = len(meta["chunk_grid"])
+    lo = [0] * n
+    hi = [0] * n
+    for j in range(ndim):
+        g = layer_to_grid[j]
+        if j in displayed:
+            lo[g] = int(corners[0][j])
+            hi[g] = int(corners[1][j])
+        else:
+            # world_to_data maps to level-0 data; scale down to LEVEL.
+            idx = int(float(data_pt[j]) / float(factors[j]))
+            lo[g] = hi[g] = idx
+    if c_axis >= 0:
+        lo[c_axis] = hi[c_axis] = int(channel)
+    return level, lo, hi
+
+
+def viewTally(viewer, layers, meta_levels: list[dict], fetcher) -> tuple[int, int] | None:
+    """``(ready, needed)`` stored chunks for the current view, or None.
+
+    Counts each chunk once even when two channel layers share it.
+    Invisible layers draw nothing and are skipped.
+    """
+    if not meta_levels:
+        return None
+    wanted: dict[tuple, Any] = {}
+    for c, layer in enumerate(layers):
+        if not getattr(layer, "visible", True):
+            continue
+        box = layerBox(layer, viewer, meta_levels, channel=c)
+        if box is None:
+            return None
+        level, lo, hi = box
+        names = chunksInBox(meta_levels[level], lo, hi)
+        if names is None:
+            return None
+        doc = meta_levels[level]["doc"]
+        for name in names:
+            wanted[(level, name)] = doc
+
+    ready = 0
+    for (_level, name), doc in wanted.items():
+        try:
+            if fetcher.chunkPathIfCached(doc, name) is not None:
+                ready += 1
+        except Exception:  # noqa: BLE001 - unreachable scope: not ready
+            pass
+    return ready, len(wanted)
+
+
+def attachViewTally(viewer, layers, meta_levels: list[dict], fetcher, counter):
+    """Poll :func:`viewTally` on a main-thread timer; report to COUNTER.
+
+    COUNTER gets ``set_view_tally(ready, needed)`` on every change and
+    ``set_view_tally(None, None)`` when the view cannot be tallied.
+    Returns the QTimer (kept alive by its parent window), or None when
+    Qt or the window is not available.
+    """
+    try:
+        from qtpy.QtCore import QTimer
+    except Exception:  # noqa: BLE001
+        return None
+
+    parent = None
+    try:
+        window = viewer.window
+        parent = getattr(window, "_qt_window", None)
+    except Exception:  # noqa: BLE001
+        pass
+
+    last = {"value": object()}
+
+    def tick() -> None:
+        try:
+            value = viewTally(viewer, layers, meta_levels, fetcher)
+        except Exception:  # noqa: BLE001 - never take the viewer down
+            value = None
+        if value == last["value"]:
+            return
+        last["value"] = value
+        if value is None:
+            counter.set_view_tally(None, None)
+        else:
+            counter.set_view_tally(*value)
+
+    timer = QTimer(parent)
+    timer.setInterval(POLL_MS)
+    timer.timeout.connect(tick)
+    timer.start()
+    return timer
