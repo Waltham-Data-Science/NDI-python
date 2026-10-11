@@ -111,6 +111,14 @@ class TestLayerBox:
     def test_napari_without_the_attributes_is_unknown_not_a_crash(self):
         layer = types.SimpleNamespace(multiscale=True, data=[None])
         assert viewtiles.layerBox(layer, _fakeViewer((0, 0, 0)), [_meta()]) is None
+        assert "could not read napari layer state" in viewtiles.lastReason
+
+    def test_a_level_mismatch_says_so(self):
+        layer = _fakeLayer(0, [[0, 0, 0], [0, 1, 1]], n_levels=3)
+        viewtiles.layerBox(layer, _fakeViewer((0, 0, 0)), [_meta(), _meta()])
+        assert viewtiles.lastReason == (
+            "layer has 3 level(s) but the pyramid has 2 level document(s)"
+        )
 
 
 class TestViewTally:

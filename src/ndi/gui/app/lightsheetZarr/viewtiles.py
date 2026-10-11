@@ -37,6 +37,18 @@ MAX_POSITIONS = 50_000
 #: Poll interval for the main-thread timer, in milliseconds.
 POLL_MS = 400
 
+#: Why the last :func:`viewTally` returned None. A silent fallback to
+#: the in-flight count looks exactly like a viewer without this
+#: feature, so the poll logs this whenever it changes.
+lastReason = ""
+
+
+def _why(reason: str):
+    """Record why the view cannot be tallied; return None."""
+    global lastReason
+    lastReason = reason
+    return None
+
 
 def chunksInBox(meta: dict, lo: list[int], hi: list[int]) -> list[str] | None:
     """Stored chunk names covering the inclusive data box [LO, HI].
@@ -115,10 +127,13 @@ def layerBox(layer, viewer, meta_levels: list[dict], channel: int = 0):
     # The level index only lines up with META_LEVELS on a native
     # multiscale layer over the full ladder (not single-level mode).
     if not getattr(layer, "multiscale", False):
-        return None
+        return _why(f"layer {getattr(layer, 'name', '?')!r} is not multiscale")
     try:
         if len(layer.data) != len(meta_levels):
-            return None
+            return _why(
+                f"layer has {len(layer.data)} level(s) but the pyramid has "
+                f"{len(meta_levels)} level document(s)"
+            )
         level = int(layer.data_level)
         meta = meta_levels[level]
         corners = layer.corner_pixels
@@ -129,12 +144,15 @@ def layerBox(layer, viewer, meta_levels: list[dict], channel: int = 0):
         point = list(viewer.dims.point)[-ndim:]
         data_pt = list(layer.world_to_data(point))
         factors = layer.downsample_factors[level]
-    except Exception:  # noqa: BLE001 - any napari shape surprise -> unknown
-        return None
+    except Exception as exc:  # noqa: BLE001 - any napari shape surprise -> unknown
+        return _why(f"could not read napari layer state ({type(exc).__name__}: {exc})")
 
     mapping = _gridAxisMap(meta, ndim)
     if mapping is None:
-        return None
+        return _why(
+            f"cannot map a {ndim}-D layer onto a {len(meta['chunk_grid'])}-D chunk "
+            f"grid (axes_order={meta.get('axes')!r})"
+        )
     layer_to_grid, c_axis = mapping
 
     n = len(meta["chunk_grid"])
@@ -161,7 +179,7 @@ def viewTally(viewer, layers, meta_levels: list[dict], fetcher) -> tuple[int, in
     Invisible layers draw nothing and are skipped.
     """
     if not meta_levels:
-        return None
+        return _why("no level chunk metadata from the loader")
     wanted: dict[tuple, Any] = {}
     for c, layer in enumerate(layers):
         if not getattr(layer, "visible", True):
@@ -172,7 +190,7 @@ def viewTally(viewer, layers, meta_levels: list[dict], fetcher) -> tuple[int, in
         level, lo, hi = box
         names = chunksInBox(meta_levels[level], lo, hi)
         if names is None:
-            return None
+            return _why(f"view spans more than {MAX_POSITIONS:,} chunk positions")
         doc = meta_levels[level]["doc"]
         for name in names:
             wanted[(level, name)] = doc
@@ -195,9 +213,15 @@ def attachViewTally(viewer, layers, meta_levels: list[dict], fetcher, counter):
     Returns the QTimer (kept alive by its parent window), or None when
     Qt or the window is not available.
     """
+    import sys
+
+    def log(msg: str) -> None:
+        print(f"[lightsheet] view tile tally: {msg}", file=sys.stderr, flush=True)
+
     try:
         from qtpy.QtCore import QTimer
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        log(f"off -- no Qt timer ({exc})")
         return None
 
     parent = None
@@ -207,13 +231,18 @@ def attachViewTally(viewer, layers, meta_levels: list[dict], fetcher, counter):
     except Exception:  # noqa: BLE001
         pass
 
-    last = {"value": object()}
+    last = {"value": object(), "reason": ""}
 
     def tick() -> None:
         try:
             value = viewTally(viewer, layers, meta_levels, fetcher)
-        except Exception:  # noqa: BLE001 - never take the viewer down
-            value = None
+        except Exception as exc:  # noqa: BLE001 - never take the viewer down
+            value = _why(f"tally raised {type(exc).__name__}: {exc}")
+        if value is None and lastReason != last["reason"]:
+            last["reason"] = lastReason
+            log(f"cannot count this view -- {lastReason}")
+        if value is not None:
+            last["reason"] = ""
         if value == last["value"]:
             return
         last["value"] = value
@@ -226,4 +255,5 @@ def attachViewTally(viewer, layers, meta_levels: list[dict], fetcher, counter):
     timer.setInterval(POLL_MS)
     timer.timeout.connect(tick)
     timer.start()
+    log(f"on ({len(meta_levels)} level(s), polling every {POLL_MS} ms)")
     return timer

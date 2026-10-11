@@ -834,6 +834,12 @@ def openPyramid(
                 file=sys.stderr,
                 flush=True,
             )
+    else:
+        print(
+            "[lightsheet] view tile tally: off in single-level / viewport-clip mode",
+            file=sys.stderr,
+            flush=True,
+        )
 
     # Launch window is closed BEFORE napari.run() because napari's
     # event loop blocks the main thread and our Qt window can't
