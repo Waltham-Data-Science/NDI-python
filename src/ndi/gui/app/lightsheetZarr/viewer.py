@@ -402,6 +402,37 @@ class _FetchCounter:
             )
 
 
+def _quiet_stale_chunk_errors() -> None:
+    """Drop napari error notifications caused by StaleChunkRead.
+
+    Idempotent; any napari that does not route slice errors through
+    ``notification_manager.receive_error`` is left alone (the release
+    then shows as a notification, which is noisy but harmless).
+    """
+    try:
+        from napari.utils.notifications import notification_manager
+
+        from ndi.pyramid.multiscale import StaleChunkRead
+    except Exception:  # noqa: BLE001
+        return
+    original = notification_manager.receive_error
+    if getattr(original, "_ndi_quiet_stale", False):
+        return
+
+    def receive_error(exc_type, exc_value, tb, *args, **kwargs):
+        e = exc_value
+        seen = 0
+        while e is not None and seen < 10:
+            if isinstance(e, StaleChunkRead):
+                return None
+            e = e.__cause__ or e.__context__
+            seen += 1
+        return original(exc_type, exc_value, tb, *args, **kwargs)
+
+    receive_error._ndi_quiet_stale = True  # type: ignore[attr-defined]
+    notification_manager.receive_error = receive_error
+
+
 def require_napari():
     """Return the napari module or raise a helpful ImportError."""
     try:
@@ -583,6 +614,12 @@ def openPyramid(
 
     with progress.stage("opening image viewer"):
         viewer = napari.Viewer()
+
+    # A slice for a view the user has zoomed past is released with
+    # StaleChunkRead (see _ChunkFetcher.setView) so napari's one slicing
+    # thread can move on to the current view. napari reports a failed
+    # slice as an error notification; this one is deliberate.
+    _quiet_stale_chunk_errors()
 
     # Now that a viewer exists, wire the counter to napari's status
     # bar so users see tile progress inside the viewer window rather

@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from typing import Any
 
-__all__ = ["chunksInBox", "layerBox", "viewTally", "attachViewTally"]
+__all__ = ["chunksInBox", "layerBox", "viewChunks", "viewTally", "attachViewTally"]
 
 #: A view whose box spans more chunk positions than this is not
 #: tallied (it would stall the main thread on every tick). napari's 3D
@@ -172,11 +172,14 @@ def layerBox(layer, viewer, meta_levels: list[dict], channel: int = 0):
     return level, lo, hi
 
 
-def viewTally(viewer, layers, meta_levels: list[dict], fetcher) -> tuple[int, int] | None:
-    """``(ready, needed)`` stored chunks for the current view, or None.
+def viewChunks(viewer, layers, meta_levels: list[dict]) -> dict | None:
+    """Stored chunks the current view needs: ``{(doc_id, name): doc}``.
 
-    Counts each chunk once even when two channel layers share it.
-    Invisible layers draw nothing and are skipped.
+    Keyed the way :class:`ndi.pyramid.multiscale._ChunkFetcher` keys its
+    cache, so the result can be handed to ``fetcher.setView``. Counts
+    each chunk once even when two channel layers share it. Invisible
+    layers draw nothing and are skipped. None when the view cannot be
+    worked out (``lastReason`` says why).
     """
     if not meta_levels:
         return _why("no level chunk metadata from the loader")
@@ -192,17 +195,29 @@ def viewTally(viewer, layers, meta_levels: list[dict], fetcher) -> tuple[int, in
         if names is None:
             return _why(f"view spans more than {MAX_POSITIONS:,} chunk positions")
         doc = meta_levels[level]["doc"]
+        doc_id = getattr(doc, "id", str(doc))
         for name in names:
-            wanted[(level, name)] = doc
+            wanted[(doc_id, name)] = doc
+    return wanted
 
+
+def _countReady(wanted: dict, fetcher) -> int:
     ready = 0
-    for (_level, name), doc in wanted.items():
+    for (_doc_id, name), doc in wanted.items():
         try:
             if fetcher.chunkPathIfCached(doc, name) is not None:
                 ready += 1
         except Exception:  # noqa: BLE001 - unreachable scope: not ready
             pass
-    return ready, len(wanted)
+    return ready
+
+
+def viewTally(viewer, layers, meta_levels: list[dict], fetcher) -> tuple[int, int] | None:
+    """``(ready, needed)`` stored chunks for the current view, or None."""
+    wanted = viewChunks(viewer, layers, meta_levels)
+    if wanted is None:
+        return None
+    return _countReady(wanted, fetcher), len(wanted)
 
 
 def attachViewTally(viewer, layers, meta_levels: list[dict], fetcher, counter):
@@ -231,13 +246,30 @@ def attachViewTally(viewer, layers, meta_levels: list[dict], fetcher, counter):
     except Exception:  # noqa: BLE001
         pass
 
-    last = {"value": object(), "reason": ""}
+    last = {"value": object(), "reason": "", "keys": object()}
+
+    # The coarsest level is never released as stale: napari's
+    # auto-contrast samples it whatever the view is.
+    coarsest = meta_levels[-1]["doc"] if meta_levels else None
+    never_stale = [getattr(coarsest, "id", str(coarsest))] if coarsest is not None else []
+    set_view = getattr(fetcher, "setView", None)
 
     def tick() -> None:
         try:
-            value = viewTally(viewer, layers, meta_levels, fetcher)
+            wanted = viewChunks(viewer, layers, meta_levels)
+            value = None if wanted is None else (_countReady(wanted, fetcher), len(wanted))
         except Exception as exc:  # noqa: BLE001 - never take the viewer down
+            wanted = None
             value = _why(f"tally raised {type(exc).__name__}: {exc}")
+        # Hand the view to the fetcher only when it CHANGES: the change
+        # time is what decides whether a waiting read is stale.
+        keys = None if wanted is None else frozenset(wanted)
+        if set_view is not None and keys != last["keys"]:
+            last["keys"] = keys
+            try:
+                set_view(wanted, never_stale_doc_ids=never_stale)
+            except Exception as exc:  # noqa: BLE001
+                log(f"could not prioritise the view ({exc})")
         if value is None and lastReason != last["reason"]:
             last["reason"] = lastReason
             log(f"cannot count this view -- {lastReason}")
