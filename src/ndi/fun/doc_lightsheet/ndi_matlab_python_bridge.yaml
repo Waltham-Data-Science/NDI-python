@@ -190,7 +190,7 @@ functions:
       thin.
   - name: view
     matlab_path: "+ndi/+fun/+doc/+lightsheet/view.m"
-    matlab_last_sync_hash: "a7ba07a"
+    matlab_last_sync_hash: "2f9b0eaf"
     matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
     status: porting_deferred
     decision_log: >-
@@ -203,3 +203,47 @@ functions:
       stays interactive. No Python-side counterpart is needed because
       the Python side IS the launcher; this is the MATLAB-side entry
       point. Ports with the other entries.
+      2026-10-12: examined against 2f9b0eaf on
+      claude/lightsheet-zarr-ndi-viewer-djp5vk (was a7ba07a). A viewer
+      launch now goes through launchViewer (NDI_LIGHTSHEET_DEBUG=1, output
+      appended to lightsheet_YYYYMMDDHHMMSS.txt in NDI's temp folder), and
+      view gains 'debug' and 'logFile' options; --list mode is unchanged.
+      Nothing on the Python side to follow: the Python side is the
+      launched process, and it already honours NDI_LIGHTSHEET_DEBUG.
+
+  - name: launchViewer
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/launchViewer.m"
+    matlab_last_sync_hash: "2f9b0eaf"
+    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
+    status: matlab_only
+    decision_log: >-
+      MATLAB-side launch of the Python viewer: runs a viewCommand line
+      through SYSTEM with NDI_LIGHTSHEET_DEBUG=1 and stdout/stderr
+      appended to lightsheet_YYYYMMDDHHMMSS.txt in
+      ndi.common.PathConstants.TempFolder, so a viewer started from
+      MATLAB (no terminal) leaves a log. No Python counterpart: from
+      Python the viewer is called directly (napariViewLightsheet or
+      ndi.gui.app.lightsheetZarr.viewer.openPyramid) with its output on
+      the caller's own stderr, and the in-viewer log buffer
+      (ndi.gui.feedback) already keeps it for problem reports.
+
+  - name: viewerLogFile
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/viewerLogFile.m"
+    matlab_last_sync_hash: "2f9b0eaf"
+    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
+    status: matlab_only
+    decision_log: >-
+      Pure helper of launchViewer: the timestamped log path
+      lightsheet_YYYYMMDDHHMMSS.txt under NDI's temp folder. Not
+      needed in Python for the same reason as launchViewer -- nothing in
+      Python launches the viewer as a detached child that needs a log.
+
+  - name: viewerShellCommand
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/viewerShellCommand.m"
+    matlab_last_sync_hash: "2f9b0eaf"
+    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
+    status: matlab_only
+    decision_log: >-
+      Pure helper of launchViewer: the POSIX / cmd.exe line that sets
+      NDI_LIGHTSHEET_DEBUG, appends output to the log and detaches. Not
+      needed in Python for the same reason as launchViewer.

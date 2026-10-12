@@ -35,7 +35,7 @@ functions:
   # -----------------------------------------------------------------------
   - name: LightsheetZarrManager
     matlab_path: "+ndi/+gui/+app/LightsheetZarrManager.m"
-    matlab_last_sync_hash: "60a79cf0"
+    matlab_last_sync_hash: "2f9b0eaf"
     matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
     status: matlab_only
     decision_log: >-
@@ -52,6 +52,15 @@ functions:
       table so Levels and Reduction come from the child
       lightsheetZarrLevel documents rather than nonexistent parent
       fields. Still matlab_only; no Python counterpart to update.
+
+      2026-10-12: examined against 2f9b0eaf (was 60a79cf0). This range
+      brings in the 32 MB tile-budget and main merges plus 2f9b0eaf, where
+      the View dialog launches through ndi.fun.doc.lightsheet.launchViewer
+      (NDI_LIGHTSHEET_DEBUG=1, output kept in
+      lightsheet_YYYYMMDDHHMMSS.txt in NDI's temp folder, path shown in
+      the status line) and the private detach helper is removed. Still
+      matlab_only; the launched Python viewer already honours
+      NDI_LIGHTSHEET_DEBUG.
 
   # -----------------------------------------------------------------------
   # CLI (napariViewLightsheet).
