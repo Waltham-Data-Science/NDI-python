@@ -9,6 +9,7 @@ maps to a specific MATLAB argument constraint:
     PageSize    -> (1,1) double   (integer >= 1)
     Scope       -> {iMustBeValidScope} (keyword, or dataset-id list)
     FilePath    -> {mustBeFile}   (file must exist on disk)
+    FeedbackCategory -> {mustBeMember(category, ["bug", "performance", "other"])}
 
 Usage::
 
@@ -25,7 +26,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import urlparse
 
 from pydantic import AfterValidator, ConfigDict, Field
@@ -81,6 +82,12 @@ def _check_file_exists(v: str) -> str:
 
 
 FilePath = Annotated[str, AfterValidator(_check_file_exists)]
+
+# -- {mustBeMember}: feedback report category --------------------------------
+#: The categories POST /feedback accepts (ndi-cloud-node FEEDBACK_CATEGORIES).
+FEEDBACK_CATEGORIES = ("bug", "performance", "other")
+
+FeedbackCategory = Literal["bug", "performance", "other"]
 
 # -- Shared validate_call config ---------------------------------------------
 VALIDATE_CONFIG = ConfigDict(arbitrary_types_allowed=True)

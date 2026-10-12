@@ -1,7 +1,8 @@
 # ndi_matlab_python_bridge.yaml — src/ndi/cloud/api/
 # The Primary Contract for the ndi.cloud.api namespace.
 #
-# Covers: datasets.py, documents.py, files.py, users.py, compute.py, _validators.py
+# Covers: datasets.py, documents.py, files.py, users.py, compute.py, feedback.py,
+#         _validators.py
 
 project_metadata:
   bridge_version: "1.1"
@@ -1426,6 +1427,99 @@ functions:
       misconfigured CI from silently deleting a real registered
       license).
 
+  # --- feedback.py ---
+  - name: submitFeedback
+    matlab_path: "+ndi/+cloud/+api/+feedback/submitFeedback.m"
+    matlab_last_sync_hash: "75f937a76"
+    python_path: "ndi/cloud/api/feedback.py"
+    input_arguments:
+      - name: app
+        type_matlab: "string {mustBeNonzeroLengthText}"
+        type_python: "NonEmptyStr"
+      - name: category
+        type_matlab: "string {mustBeMember(category, [\"bug\", \"performance\", \"other\"])}"
+        type_python: "FeedbackCategory"
+      - name: description
+        type_matlab: "string {mustBeNonzeroLengthText}"
+        type_python: "NonEmptyStr"
+      - name: appVersion
+        type_matlab: "string = missing"
+        type_python: "str | None"
+        default: "None"
+      - name: datasetId
+        type_matlab: "string = missing"
+        type_python: "str | None"
+        default: "None"
+      - name: documentId
+        type_matlab: "string = missing"
+        type_python: "str | None"
+        default: "None"
+      - name: environment
+        type_matlab: "struct {mustBeScalarOrEmpty} = struct.empty"
+        type_python: "dict[str, Any] | None"
+        default: "None"
+      - name: state
+        type_matlab: "struct {mustBeScalarOrEmpty} = struct.empty"
+        type_python: "dict[str, Any] | None"
+        default: "None"
+      - name: log
+        type_matlab: "string = missing"
+        type_python: "str | None"
+        default: "None"
+      - name: traceback
+        type_matlab: "string = missing"
+        type_python: "str | None"
+        default: "None"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "APIResponse"
+    decision_log: >
+      Ported from NDI-matlab#1023 (75f937a76). POST /feedback with body
+      {schemaVersion: 1, app, category, description} plus each optional
+      field the caller supplied; the contract is ndi-cloud-node#158.
+      The optional arguments keep MATLAB's camelCase names (rather than the
+      snake_case the sibling modules use for arguments) because each one is
+      also the payload key, and the payload is shared with MATLAB and the
+      server. They are keyword-only, as MATLAB's are name-value options.
+      None plays the role of MATLAB's missing / struct.empty: the field is
+      omitted. "" and {} are sent, as MATLAB sends "" and struct().
+      Returns an APIResponse whose data is the stored report's id, so
+      `b, feedbackID, status, url = submitFeedback(...)` unpacks like
+      MATLAB's [b, feedbackID, apiResponse, apiURL]. Where MATLAB returns
+      b = false on a non-201, Python raises (CloudAPIError with
+      status_code 400 / 413 / 429, CloudAuthError on 401 / 403), as every
+      other ndi.cloud.api function does. The implementation class
+      SubmitFeedback (sends any struct as-is) is the private helper
+      feedback._submit, used by the tests to reach server-side validation.
+      Tests: tests/test_cloud_api_feedback.py (offline) and
+      tests/test_cloud_feedback_live.py (port of feedbackTest.m).
+
+  - name: deleteFeedback
+    matlab_path: "+ndi/+cloud/+api/+feedback/deleteFeedback.m"
+    matlab_last_sync_hash: "75f937a76"
+    python_path: "ndi/cloud/api/feedback.py"
+    input_arguments:
+      - name: feedbackID
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "APIResponse"
+    decision_log: >
+      Ported from NDI-matlab#1023 (75f937a76). DELETE /feedback/{feedbackId};
+      the server answers 204. data is MATLAB's confirmation message
+      "Feedback deleted successfully.". A report that does not exist or
+      belongs to another user raises CloudNotFoundError (MATLAB: b = false,
+      404); a malformed id raises CloudAPIError with status_code 400.
+      The id is not checked for ObjectId shape client-side, matching MATLAB,
+      so the server's 400 stays reachable.
+
   # --- compute.py ---
   - name: startSession
     matlab_path: "+ndi/+cloud/+api/+compute/startSession.m"
@@ -1545,7 +1639,7 @@ not_yet_ported:
 
   - name: url
     matlab_path: "+ndi/+cloud/+api/url.m"
-    matlab_last_sync_hash: "3fce6cb"
+    matlab_last_sync_hash: "75f937a76"
     status: ported_differently
     decision_log: >
       MATLAB URL builder. Python uses CloudClient._build_url()
@@ -1563,6 +1657,10 @@ not_yet_ported:
       bulk-upload status in api/files.py, /advance is what compute.advanceSession
       already posts to, and the signed-URL-set gap is recorded on
       batchSignedUrlLookup and downloadGenericFiles.
+      2026-10-11: examined against 75f937a76 (was 3fce6cb). NDI-matlab#1023
+      added submit_feedback (POST /feedback) and delete_feedback
+      (DELETE /feedback/{feedbackId}); both are interpolated at their call
+      sites in api/feedback.py, so there is no route table to update here.
       2026-09-22: examined against 3fce6cb (was 6fdec7e7). NDI-matlab#1004
       (6bf12fc0) added the list_dataset_files route
       (/datasets/{datasetId}/files) and made it keyset-paginated. As above,
