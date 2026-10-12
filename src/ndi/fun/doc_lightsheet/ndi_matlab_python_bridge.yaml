@@ -31,7 +31,8 @@ functions:
 
   - name: fromOMEZarr
     matlab_path: "+ndi/+fun/+doc/+lightsheet/fromOMEZarr.m"
-    matlab_last_sync_hash: "71d7387"
+    matlab_last_sync_hash: "5c9e8a83"
+    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
     status: porting_deferred
     decision_log: >-
       MATLAB probes an OME-Zarr store with ndr.format.omezarr.listPyramids,
@@ -47,10 +48,19 @@ functions:
       database_add -- the Python port lands the same option and calls
       into ndr.format.omezarr.readArray equivalent. Ports with the other
       entries under this heading.
+      2026-10-12: examined against 5c9e8a83 on
+      claude/lightsheet-zarr-ndi-viewer-djp5vk (was 71d7387). It raises
+      the default tile budget from 8*2^20 to 32*2^20 bytes
+      (signing/fetch/decode measurements on a whole-brain volume) and
+      updates the doc comments to match. Nothing on the Python side to
+      follow: this function has no Python counterpart yet, and the
+      Python viewer only reads the levels MATLAB wrote. The Python port
+      must use the 32 MB default when it lands.
 
   - name: makePyramid
     matlab_path: "+ndi/+fun/+doc/+lightsheet/makePyramid.m"
-    matlab_last_sync_hash: "8134a20"
+    matlab_last_sync_hash: "5c9e8a83"
+    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
     status: porting_deferred
     decision_log: >-
       The worker fromOMEZarr calls; writes one lightsheetZarrPyramid
@@ -81,10 +91,19 @@ functions:
       is never touched). Container bytes are unchanged, so this side
       of the port stays the same when it lands: use numcodecs.Blosc
       directly. Ports with the other entries.
+      2026-10-12: examined against 5c9e8a83 on
+      claude/lightsheet-zarr-ndi-viewer-djp5vk (was 8134a20). It raises
+      the default tile budget from 8*2^20 to 32*2^20 bytes
+      (signing/fetch/decode measurements on a whole-brain volume) and
+      updates the doc comments to match. Nothing on the Python side to
+      follow: this function has no Python counterpart yet, and the
+      Python viewer only reads the levels MATLAB wrote. The Python port
+      must use the 32 MB default when it lands.
 
   - name: chooseTileShape
     matlab_path: "+ndi/+fun/+doc/+lightsheet/chooseTileShape.m"
-    matlab_last_sync_hash: "1d11302"
+    matlab_last_sync_hash: "5c9e8a83"
+    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
     status: porting_deferred
     decision_log: >-
       Pure function that picks an OME-Zarr chunk shape landing near a
@@ -102,10 +121,19 @@ functions:
       in axes_order.lower()]`. Ports with the other entries under this
       heading; the Python builder that mirrors makePyramid will call
       it directly.
+      2026-10-12: examined against 5c9e8a83 on
+      claude/lightsheet-zarr-ndi-viewer-djp5vk (was 1d11302). It raises
+      the default tile budget from 8*2^20 to 32*2^20 bytes
+      (signing/fetch/decode measurements on a whole-brain volume) and
+      updates the doc comments to match. Nothing on the Python side to
+      follow: this function has no Python counterpart yet, and the
+      Python viewer only reads the levels MATLAB wrote. The Python port
+      must use the 32 MB default when it lands.
 
   - name: makeSourceFile
     matlab_path: "+ndi/+fun/+doc/+lightsheet/makeSourceFile.m"
     matlab_last_sync_hash: "1af66bb"
+    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
     status: porting_deferred
     decision_log: >-
       MATLAB creates the fileReference document the lightsheet documents'
@@ -120,6 +148,7 @@ functions:
   - name: chooseLevel
     matlab_path: "+ndi/+fun/+doc/+lightsheet/chooseLevel.m"
     matlab_last_sync_hash: "5ab84f3"
+    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
     status: porting_deferred
     decision_log: >-
       Given a level table and a target per-axis voxel size, returns the
@@ -130,6 +159,7 @@ functions:
   - name: levelTable
     matlab_path: "+ndi/+fun/+doc/+lightsheet/levelTable.m"
     matlab_last_sync_hash: "1af66bb"
+    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
     status: porting_deferred
     decision_log: >-
       Joins a lightsheetZarrPyramid and its lightsheetZarrLevel children
@@ -145,6 +175,7 @@ functions:
   - name: viewCommand
     matlab_path: "+ndi/+fun/+doc/+lightsheet/viewCommand.m"
     matlab_last_sync_hash: "5ab84f3"
+    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
     status: porting_deferred
     decision_log: >-
       Pure command builder that ndi.gui.app.LightsheetZarrManager calls
@@ -160,6 +191,7 @@ functions:
   - name: view
     matlab_path: "+ndi/+fun/+doc/+lightsheet/view.m"
     matlab_last_sync_hash: "a7ba07a"
+    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
     status: porting_deferred
     decision_log: >-
       MATLAB caller that pairs viewCommand + SYSTEM: builds the
