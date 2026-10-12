@@ -802,21 +802,6 @@ class TestFileLifecycle:
 # ===========================================================================
 
 
-def _skip_unless_server_has_file_lookup(client, dataset_id):
-    """Skip when this environment predates POST /files/lookup (#162).
-
-    The route and the crc32 recording ship together; a 404 on a dataset that
-    exists means the server has neither yet.
-    """
-    from ndi.cloud.api.files import lookupFiles
-    from ndi.cloud.exceptions import CloudNotFoundError
-
-    try:
-        lookupFiles(dataset_id, ["probe_uid"], client=client)
-    except CloudNotFoundError:
-        pytest.skip("This NDI Cloud environment predates POST /files/lookup (#162)")
-
-
 def _wait_for_lookup(client, dataset_id, uid, missing_uid=None):
     """Poll lookupFiles until *uid* is uploaded (the S3 event is async)."""
     from ndi.cloud.api.files import lookupFiles
@@ -845,7 +830,6 @@ class TestFileChecksums:
         )
         from ndi.fun.file import crc32
 
-        _skip_unless_server_has_file_lookup(client, fresh_dataset)
         path = tmp_path / "payload.bin"
         path.write_bytes(self.CONTENT)
         local_crc = crc32(str(path))
@@ -880,7 +864,6 @@ class TestFileChecksums:
         from ndi.cloud.exceptions import CloudUploadError
         from ndi.fun.file import crc32, crc32ToBase64
 
-        _skip_unless_server_has_file_lookup(client, fresh_dataset)
         path = tmp_path / "payload.bin"
         path.write_bytes(self.CONTENT)
         wrong = crc32ToBase64(0)
@@ -901,7 +884,6 @@ class TestFileChecksums:
         from ndi.cloud.upload import uploadSingleFile
         from ndi.fun.file import crc32
 
-        _skip_unless_server_has_file_lookup(client, fresh_dataset)
         path = tmp_path / "payload.bin"
         path.write_bytes(self.CONTENT)
         file_uid = "pytest-crc32-single"
@@ -916,7 +898,6 @@ class TestFileChecksums:
         """The server refuses more than 5000 uids, or a body without uids."""
         from ndi.cloud.exceptions import CloudAPIError
 
-        _skip_unless_server_has_file_lookup(client, fresh_dataset)
         for body in ({"uids": [f"u{i}" for i in range(5001)]}, {"notUids": 1}):
             with pytest.raises(CloudAPIError) as exc_info:
                 client.post(
@@ -928,7 +909,6 @@ class TestFileChecksums:
         """More than one server call's worth of uids, none uploaded."""
         from ndi.cloud.api.files import LOOKUP_MAX_UIDS, lookupFiles
 
-        _skip_unless_server_has_file_lookup(client, fresh_dataset)
         uids = [f"nouid{i}" for i in range(LOOKUP_MAX_UIDS + 3)]
         result = lookupFiles(fresh_dataset, uids, client=client)
         assert result["files"] == []
