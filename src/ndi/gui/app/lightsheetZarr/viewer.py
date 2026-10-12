@@ -193,12 +193,15 @@ class _FetchCounter:
 
     def __init__(
         self,
-        out=sys.stderr,
+        out=None,
         interval: float = 0.5,
         idle_interval: float = 5.0,
         status_reporter=None,
     ):
         self._lock = threading.Lock()
+        # None: resolve sys.stderr at print time (see _ls), so a log tee
+        # installed after import -- the feedback report's log buffer --
+        # still sees the counter's lines.
         self._out = out
         self._interval = interval
         self._idle_interval = idle_interval
@@ -531,6 +534,16 @@ def openPyramid(
     # picks GUI on macOS/Windows and where a display is set.
     from . import progress
 
+    # Keep the last few thousand log lines in memory from here on, so a
+    # "Report a problem" from the NDI Cloud panel can attach them -- a
+    # viewer launched from MATLAB has no terminal to copy them from.
+    try:
+        from ndi.gui.feedback import installLogBuffer
+
+        installLogBuffer()
+    except Exception:  # noqa: BLE001 - reporting is never worth the launch
+        pass
+
     progress.note("opening lightsheet pyramid ...")
 
     napari = require_napari()
@@ -843,7 +856,12 @@ def openPyramid(
     # login control. The lightsheet viewer carries a "beta" badge
     # under the wordmark because this surface is still rough on
     # the dataset-shape edges called out in the README.
-    _attach_cloud_panel(viewer)
+    _attach_cloud_panel(
+        viewer,
+        report_collect=_reportCollector(
+            viewer, session, pyramid_doc, loader, counter, added_layers
+        ),
+    )
 
     # Tiles needed for the current view vs tiles on disk, polled on a
     # main-thread timer and fed to the counter, so the status bar and
@@ -1221,7 +1239,102 @@ def _attach_refresh_button(viewer, layers) -> None:
 _CLOUD_PANELS: dict[int, Any] = {}
 
 
-def _attach_cloud_panel(viewer) -> None:
+def _reportCollector(viewer, session, pyramid_doc, loader, counter, layers):
+    """A zero-argument callable returning ``buildReport`` extras.
+
+    Everything a "the view is stuck / slow / wrong" report needs that
+    the user cannot be expected to type: which pyramid, which level and
+    region napari is drawing, how far the view's tiles have got, what
+    the fetcher has done, and the recent log. Each probe is guarded on
+    its own: a report about a broken viewer must not fail to build
+    because the viewer is broken.
+    """
+
+    def collect() -> dict:
+        state: dict[str, Any] = {}
+
+        def probe(key, fn):
+            try:
+                state[key] = fn()
+            except Exception as exc:  # noqa: BLE001
+                state[key] = f"<unavailable: {type(exc).__name__}: {exc}>"
+
+        probe(
+            "pyramid",
+            lambda: {
+                "id": (
+                    str(pyramid_doc.id())
+                    if callable(getattr(pyramid_doc, "id", None))
+                    else str(getattr(pyramid_doc, "id", ""))
+                ),
+                "levels": [
+                    {
+                        k: d.document_properties["lightsheetZarrLevel"].get(k)
+                        for k in ("shape", "chunks", "chunk_grid", "dtype", "codec", "axes_order")
+                    }
+                    for d in loader.docs
+                ],
+            },
+        )
+        probe(
+            "view",
+            lambda: {
+                "ready": counter._view_ready,
+                "needed": counter._view_needed,
+                "dims_point": [float(x) for x in viewer.dims.point],
+                "ndisplay": int(viewer.dims.ndisplay),
+                "camera_zoom": float(viewer.camera.zoom),
+                "camera_center": [float(x) for x in viewer.camera.center],
+            },
+        )
+        probe(
+            "layers",
+            lambda: [
+                {
+                    "name": layer.name,
+                    "visible": bool(layer.visible),
+                    "data_level": int(getattr(layer, "data_level", -1)),
+                    "corner_pixels": [[int(v) for v in row] for row in layer.corner_pixels],
+                    "loaded": bool(getattr(layer, "loaded", True)),
+                }
+                for layer in layers
+            ],
+        )
+        probe(
+            "fetches",
+            lambda: {
+                "requested": counter._started,
+                "loaded": counter._done,
+                "in_flight": counter._started - counter._done,
+                "last_fetch_s": counter._last_duration,
+            },
+        )
+        probe("loader", loader.stats)
+
+        extra: dict[str, Any] = {"state": state}
+        try:
+            extra["datasetId"] = _cloud_dataset_id(session) or None
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            doc_id = (
+                pyramid_doc.id() if callable(getattr(pyramid_doc, "id", None)) else pyramid_doc.id
+            )
+            extra["documentId"] = str(doc_id)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            from ndi.gui.feedback import installLogBuffer
+
+            extra["log"] = installLogBuffer().text()
+        except Exception:  # noqa: BLE001
+            pass
+        return {k: v for k, v in extra.items() if v is not None}
+
+    return collect
+
+
+def _attach_cloud_panel(viewer, report_collect=None) -> None:
     """Dock an NDI Cloud sign-in panel with a BETA badge.
 
     Reuses the gene-pyramid viewer's addCloudPanel contract -- same
@@ -1315,6 +1428,31 @@ def _attach_cloud_panel(viewer) -> None:
     beta_row.addWidget(beta, 0, Qt.AlignLeft)
     beta_row.addStretch(1)
     outer.addLayout(beta_row)
+
+    if report_collect is not None:
+        report = QPushButton("Report a problem...")
+        report.setToolTip(
+            "Tell us what went wrong. The viewer attaches its own\n"
+            "diagnostics (versions, what it was loading, recent log\n"
+            "lines) with sign-in tokens and signed links removed,\n"
+            "and you can see exactly what will be sent."
+        )
+        dialogs: list = []  # keep the non-modal dialog alive
+
+        def _report():
+            from ndi.gui.feedback import openFeedbackDialog
+
+            dialogs[:] = [
+                openFeedbackDialog(
+                    box,
+                    app="lightsheetZarr-viewer",
+                    collect=report_collect,
+                    title="Report a problem with the lightsheet viewer",
+                )
+            ]
+
+        report.clicked.connect(_report)
+        outer.addWidget(report)
 
     signin = QPushButton("Sign in...")
     signin.setToolTip(
