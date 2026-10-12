@@ -1430,29 +1430,16 @@ def _attach_cloud_panel(viewer, report_collect=None) -> None:
     outer.addLayout(beta_row)
 
     if report_collect is not None:
-        report = QPushButton("Report a problem...")
-        report.setToolTip(
-            "Tell us what went wrong. The viewer attaches its own\n"
-            "diagnostics (versions, what it was loading, recent log\n"
-            "lines) with sign-in tokens and signed links removed,\n"
-            "and you can see exactly what will be sent."
+        from ndi.gui.feedback import reportButton
+
+        outer.addWidget(
+            reportButton(
+                box,
+                app="lightsheetZarr-viewer",
+                collect=report_collect,
+                title="Report a problem with the lightsheet viewer",
+            )
         )
-        dialogs: list = []  # keep the non-modal dialog alive
-
-        def _report():
-            from ndi.gui.feedback import openFeedbackDialog
-
-            dialogs[:] = [
-                openFeedbackDialog(
-                    box,
-                    app="lightsheetZarr-viewer",
-                    collect=report_collect,
-                    title="Report a problem with the lightsheet viewer",
-                )
-            ]
-
-        report.clicked.connect(_report)
-        outer.addWidget(report)
 
     signin = QPushButton("Sign in...")
     signin.setToolTip(

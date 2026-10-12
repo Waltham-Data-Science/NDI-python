@@ -48,6 +48,8 @@ __all__ = [
     "describeSendError",
     "FeedbackDialog",
     "openFeedbackDialog",
+    "reportButton",
+    "napariState",
 ]
 
 #: Server limits (characters / JSON bytes). Reports are cut to fit, not
@@ -541,3 +543,87 @@ def openFeedbackDialog(parent=None, **kwargs):
     dlg.show()
     dlg.raise_()
     return dlg
+
+
+def reportButton(parent, *, app: str, collect: Callable[[], dict[str, Any]], title: str):
+    """A "Report a problem..." QPushButton that opens the dialog.
+
+    One definition for every viewer, so the wording, the tooltip and the
+    dialog stay the same wherever the button appears. The open dialog is
+    kept on the button (it is non-modal and would otherwise be collected).
+    """
+    from qtpy.QtWidgets import QPushButton
+
+    button = QPushButton("Report a problem...", parent)
+    button.setToolTip(
+        "Tell us what went wrong. The viewer attaches its own\n"
+        "diagnostics (versions, what it was showing, recent log\n"
+        "lines) with sign-in tokens and signed links removed,\n"
+        "and you can see exactly what will be sent."
+    )
+
+    def _open():
+        button._ndi_dialog = openFeedbackDialog(parent, app=app, collect=collect, title=title)
+
+    button.clicked.connect(_open)
+    return button
+
+
+def napariState(viewer) -> dict[str, Any]:
+    """What a napari viewer is showing: camera, dims and every layer.
+
+    Viewer-agnostic, so each viewer's collector starts from the same
+    picture of the canvas and adds its own specifics. Each part is
+    guarded: a report about a broken viewer must still build.
+    """
+    state: dict[str, Any] = {}
+
+    def probe(key, fn):
+        try:
+            state[key] = fn()
+        except Exception as exc:  # noqa: BLE001
+            state[key] = f"<unavailable: {type(exc).__name__}: {exc}>"
+
+    probe(
+        "canvas",
+        lambda: {
+            "dims_point": [float(x) for x in viewer.dims.point],
+            "ndisplay": int(viewer.dims.ndisplay),
+            "camera_zoom": float(viewer.camera.zoom),
+            "camera_center": [float(x) for x in viewer.camera.center],
+        },
+    )
+
+    def _layers():
+        out = []
+        for layer in viewer.layers:
+            entry: dict[str, Any] = {
+                "name": str(layer.name),
+                "type": type(layer).__name__,
+                "visible": bool(layer.visible),
+            }
+            if getattr(layer, "multiscale", False):
+                entry["n_levels"] = len(layer.data)
+                entry["data_level"] = int(layer.data_level)
+                entry["corner_pixels"] = [[int(v) for v in row] for row in layer.corner_pixels]
+            try:
+                entry["loaded"] = bool(layer.loaded)
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                entry["n_items"] = (
+                    len(layer.data)
+                    if type(layer).__name__
+                    in (
+                        "Points",
+                        "Shapes",
+                    )
+                    else entry.get("n_items")
+                )
+            except Exception:  # noqa: BLE001
+                pass
+            out.append({k: v for k, v in entry.items() if v is not None})
+        return out
+
+    probe("layers", _layers)
+    return state
