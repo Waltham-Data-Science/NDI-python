@@ -105,6 +105,9 @@ project_metadata:
 #                      | commit, or a repo-wide commit for a batch sync. Both are
 #                      | points in history. NEVER a blob hash (git hash-object):
 #                      | enforced by tests/test_matlab_bridge_hashes.py.
+# matlab_branch        | OPTIONAL. The NDI-matlab branch the MATLAB file lives on
+#                      | when it has not merged into NDI-matlab main yet. Only
+#                      | for that case, and removed once it merges. Section 8.
 # status               | One of the five values in section 6 below, or ABSENT.
 #                      | Absent + a python_path is the normal case and means
 #                      | ported. Enforced by tests/test_matlab_bridge_status.py.
@@ -335,3 +338,57 @@ project_metadata:
 # drifts, so a fix must delist in the same PR. Start with the 18 whose MATLAB
 # change touched a signature or an arguments block; that is where a stale hash
 # is most likely hiding a real defect.
+
+# =============================================================================
+# 8. MATLAB ON A BRANCH: a counterpart that has not reached NDI-matlab main
+# =============================================================================
+# Some work lands here before its MATLAB half reaches NDI-matlab main. The
+# lightsheet OME-Zarr feature is the case that forced this: the napari viewer,
+# its two document types and the bridge entries for the MATLAB writer merged
+# into NDI-python while VH-Lab/NDI-matlab claude/lightsheet-zarr-ndi-viewer-djp5vk
+# was still open. CI checks out NDI-matlab main (or a branch named like this
+# repo's), so every such entry read as a stale path -- "names a MATLAB file
+# that does not exist" -- and the bridge job stayed red on main. Neither
+# existing escape fits: `matlab_path: "N/A"` / `retired` say the MATLAB file is
+# gone or never was, which is false, and would have to be undone by hand the
+# day the branch merges.
+#
+# SO THE ENTRY SAYS WHERE THE FILE IS:
+#
+#     - name: makePyramid
+#       matlab_path: "+ndi/+fun/+doc/+lightsheet/makePyramid.m"
+#       matlab_last_sync_hash: "5c9e8a83"          # a commit ON that branch
+#       matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
+#       status: porting_deferred
+#
+# Everything else about the entry -- status, decision_log, python_path -- means
+# what it always does. An ndi_common file in the same position goes in
+# MATLAB_BRANCH_PENDING in tests/test_ndi_common_matlab_sync.py, mapped to its
+# branch.
+#
+# IT IS A CLAIM, AND IT IS CHECKED -- otherwise it would be a way to switch the
+# stale-path guard off for good. Read from the branch with git, so it needs
+# NDI-matlab's remote branches (fetch-depth: 0, which the bridge job has):
+#   * the branch must exist and the file must be on it
+#     (TestBranchPendingEntries in tests/test_matlab_bridge_completeness.py);
+#     an ndi_common file must also match its copy on the branch byte-for-byte
+#     (test_branch_pending_files_match_their_branch);
+#   * DRIFT STILL APPLIES (section 7), measured against the branch tip instead
+#     of HEAD: a commit on the branch touching the file after the recorded
+#     hash fails CI exactly as it would on main;
+#   * ONCE THE BRANCH MERGES INTO NDI-matlab main, the marker must go: the
+#     check fails, asking for matlab_branch (or the MATLAB_BRANCH_PENDING line)
+#     to be removed. A branch that has vanished fails the same way -- it was
+#     usually merged and deleted. Removing the marker is then all it takes:
+#     the file is on main and the ordinary checks take over.
+#
+# "Merged" means merged into NDI-matlab main, not into whatever is checked
+# out. When CI checks out the pending branch itself (an NDI-python branch of
+# the same name), the file is simply in the tree and is checked as usual.
+#
+# DO NOT USE IT FOR A FILE THAT IS ON MAIN, or to record an entry against a
+# branch because main has moved and the drift is inconvenient. It answers one
+# question -- "where is this MATLAB file, if not on main?" -- and nothing else.
+#
+# The checks are in tests/_matlab_branch.py and are themselves tested, against
+# a throwaway git repo, in tests/test_matlab_branch_pending.py.

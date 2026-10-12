@@ -36,6 +36,8 @@ from pathlib import Path
 
 import pytest
 
+from tests._matlab_branch import branch_ref, is_merged, read_on_branch
+
 NDI_COMMON_REL = Path("src/ndi/ndi_common")
 
 #: Set by CI once NDI-matlab is checked out. See the module docstring.
@@ -125,6 +127,25 @@ PYTHON_ONLY_EXPECTED: frozenset[str] = frozenset(
 )
 
 
+# Present in Python and on a named NDI-matlab branch that has not merged into
+# the checked-out tree yet. Mapped to that branch. Not an exclusion: each file
+# must match its copy on the branch byte-for-byte, and the entry must go once
+# the branch merges (test_branch_pending_files_match_their_branch). Section 8
+# of docs/developer_notes/ndi_matlab_python_bridge.yaml.
+_LIGHTSHEET_BRANCH = "claude/lightsheet-zarr-ndi-viewer-djp5vk"
+MATLAB_BRANCH_PENDING: dict[str, str] = {
+    # The lightsheet OME-Zarr document types, landed here with the napari
+    # viewer (src/ndi/gui/app/lightsheetZarr) and authored as a pair with
+    # the MATLAB writer on this branch.
+    "database_documents/data/lightsheetZarrLevel.json": _LIGHTSHEET_BRANCH,
+    "database_documents/data/lightsheetZarrLevel.md": _LIGHTSHEET_BRANCH,
+    "database_documents/data/lightsheetZarrPyramid.json": _LIGHTSHEET_BRANCH,
+    "database_documents/data/lightsheetZarrPyramid.md": _LIGHTSHEET_BRANCH,
+    "schema_documents/data/lightsheetZarrLevel_schema.json": _LIGHTSHEET_BRANCH,
+    "schema_documents/data/lightsheetZarrPyramid_schema.json": _LIGHTSHEET_BRANCH,
+}
+
+
 # Files present on both sides that intentionally do not match byte-for-byte.
 # Each entry pairs the relative path with a one-line reason so the exclusion
 # is not silent. When one of these converges, the test asks the caller to
@@ -183,11 +204,48 @@ def test_no_undeclared_python_only_files(python_common, matlab_common):
     py = _list_files(python_common)
     ml = _list_files(matlab_common)
     extra = py - ml
-    unexpected = extra - PYTHON_ONLY_EXPECTED
+    unexpected = extra - PYTHON_ONLY_EXPECTED - MATLAB_BRANCH_PENDING.keys()
     assert not unexpected, (
         "The following files exist in NDI-python/ndi_common but not in "
         "NDI-matlab. Either remove them, or add them to PYTHON_ONLY_EXPECTED "
-        "with a reason:\n  " + "\n  ".join(sorted(unexpected))
+        "with a reason (or, if they are on an NDI-matlab branch that has not "
+        "merged yet, to MATLAB_BRANCH_PENDING):\n  " + "\n  ".join(sorted(unexpected))
+    )
+
+
+def test_branch_pending_files_match_their_branch(python_common, matlab_common):
+    """Every MATLAB_BRANCH_PENDING file is on its branch, byte-for-byte.
+
+    The map exempts these files from the Python-only check above, so this is
+    what keeps it honest: a file that is not on the branch, or differs from
+    it, is an undeclared divergence; and a branch that has merged into
+    NDI-matlab main means the entry is no longer needed.
+    """
+    repo = matlab_common.parent.parent.parent
+    offenders, unresolved = [], []
+    for rel, branch in sorted(MATLAB_BRANCH_PENDING.items()):
+        tip = branch_ref(repo, branch)
+        if tip is None:
+            unresolved.append(f"{rel}: branch {branch!r} not found")
+            continue
+        theirs = read_on_branch(repo, tip, f"{NDI_COMMON_REL.as_posix()}/{rel}")
+        if theirs is None:
+            offenders.append(f"{rel}: not on {branch!r}")
+        elif theirs != (python_common / rel).read_bytes():
+            offenders.append(f"{rel}: differs from its copy on {branch!r}")
+        elif is_merged(repo, tip):
+            offenders.append(f"{rel}: {branch!r} has merged; remove it from MATLAB_BRANCH_PENDING")
+    if unresolved and not os.environ.get(STRICT_ENV_VAR, "").strip():
+        pytest.skip(
+            "this NDI-matlab checkout lacks branches MATLAB_BRANCH_PENDING names "
+            "(fetch them, or clone with full history): " + "; ".join(unresolved)
+        )
+    problems = offenders + unresolved
+    assert not problems, (
+        "MATLAB_BRANCH_PENDING entries do not hold up:\n  "
+        + "\n  ".join(problems)
+        + "\n\nA branch that is not found was usually merged and deleted: check the "
+        "file is on NDI-matlab main and remove its MATLAB_BRANCH_PENDING entry."
     )
 
 
