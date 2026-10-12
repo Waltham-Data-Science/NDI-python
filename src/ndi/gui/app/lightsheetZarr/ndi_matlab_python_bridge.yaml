@@ -36,6 +36,7 @@ functions:
   - name: LightsheetZarrManager
     matlab_path: "+ndi/+gui/+app/LightsheetZarrManager.m"
     matlab_last_sync_hash: "60a79cf0"
+    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
     status: matlab_only
     decision_log: >-
       matlab_only: napari is Python-only, so the manager class stays

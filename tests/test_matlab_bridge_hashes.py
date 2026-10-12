@@ -81,6 +81,7 @@ from typing import Any
 import pytest
 import yaml
 
+from tests._matlab_branch import branch_ref, pending_branch
 from tests.test_matlab_bridge_completeness import (
     BRIDGE_FILENAME,
     REPO_ROOT,
@@ -240,11 +241,28 @@ def drift_key(entry: dict[str, Any]) -> tuple[str, str]:
     return (matlab_file(entry), entry.get("name", "<unnamed>"))
 
 
-def has_drifted(repo: Path, entry: dict[str, Any]) -> bool:
+def drift_target(repo: Path, entry: dict[str, Any]) -> str | None:
+    """The NDI-matlab revision this entry's drift is measured against.
+
+    ``HEAD`` when the file is in the checked-out tree. An entry whose file is
+    only on a not-yet-merged branch (``matlab_branch``, section 8 of
+    docs/developer_notes/ndi_matlab_python_bridge.yaml) is measured against
+    that branch's tip, so recording one does not exempt it from drift. None
+    when there is nothing to measure against -- a file on neither, which the
+    completeness guard reports.
+    """
+    if (repo / "src" / "ndi" / matlab_file(entry)).exists():
+        return "HEAD"
+    branch = pending_branch(entry)
+    return branch_ref(repo, branch) if branch else None
+
+
+def has_drifted(repo: Path, entry: dict[str, Any], target: str = "HEAD") -> bool:
     """Have commits touching this entry's MATLAB file landed since its hash?
 
     Path-filtered on purpose: an unrelated commit elsewhere in NDI-matlab is
-    not this entry's problem and must not turn CI red.
+    not this entry's problem and must not turn CI red. TARGET is the
+    revision to measure up to; see :func:`drift_target`.
     """
     full = f"src/ndi/{matlab_file(entry)}"
     result = subprocess.run(
@@ -253,7 +271,7 @@ def has_drifted(repo: Path, entry: dict[str, Any]) -> bool:
             "-C",
             str(repo),
             "log",
-            f"{entry['matlab_last_sync_hash']}..HEAD",
+            f"{entry['matlab_last_sync_hash']}..{target}",
             "--oneline",
             "--",
             full,
@@ -300,13 +318,14 @@ class TestNothingDriftsFromMatlab:
                 key = drift_key(entry)
                 if key in allowed:
                     continue
-                full = repo / "src" / "ndi" / key[0]
-                if not full.exists():
+                target = drift_target(repo, entry)
+                if target is None:
                     continue
-                if has_drifted(repo, entry):
+                if has_drifted(repo, entry, target):
+                    where = "" if target == "HEAD" else f" on {pending_branch(entry)!r}"
                     offenders.append(
                         f"{display_path(source)}: {key[1]} ({key[0]}) -- MATLAB has "
-                        f"moved since {entry['matlab_last_sync_hash']}"
+                        f"moved{where} since {entry['matlab_last_sync_hash']}"
                     )
         assert not offenders, (
             "these bridge entries have drifted -- NDI-matlab changed the file after "
@@ -314,6 +333,7 @@ class TestNothingDriftsFromMatlab:
             "known to match:\n  " + "\n  ".join(offenders) + "\n\n"
             "Read the diff:\n"
             "    git -C ../NDI-matlab diff <matlab_last_sync_hash>..HEAD -- src/ndi/<matlab_path>\n"
+            "(for an entry with matlab_branch, diff up to origin/<matlab_branch> instead)\n"
             "then port the behavioural change and bump the hash, or -- if nothing on "
             "the Python side must follow -- just bump it. No decision_log is required "
             "for a regular port. See section 7 of "
@@ -361,9 +381,10 @@ class TestTheAllowlistOnlyShrinks:
                 if not isinstance(entry.get("matlab_last_sync_hash"), str):
                     live_nohash.add(key)
                     continue
-                if not (repo / "src" / "ndi" / key[0]).exists():
+                target = drift_target(repo, entry)
+                if target is None:
                     continue
-                if has_drifted(repo, entry):
+                if has_drifted(repo, entry, target):
                     live_drifted.add(key)
         fixed = sorted(
             [f"drifted: {n} ({p})" for p, n in drifted_allowed - live_drifted]
