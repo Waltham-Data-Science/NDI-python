@@ -797,6 +797,145 @@ class TestFileLifecycle:
 
 
 # ===========================================================================
+# TestFileChecksums -- matches MATLAB FilesTest checksum / lookupFiles tests
+# (NDI Cloud ndi-cloud-node#162, NDI-matlab#1025)
+# ===========================================================================
+
+
+def _skip_unless_server_has_file_lookup(client, dataset_id):
+    """Skip when this environment predates POST /files/lookup (#162).
+
+    The route and the crc32 recording ship together; a 404 on a dataset that
+    exists means the server has neither yet.
+    """
+    from ndi.cloud.api.files import lookupFiles
+    from ndi.cloud.exceptions import CloudNotFoundError
+
+    try:
+        lookupFiles(dataset_id, ["probe_uid"], client=client)
+    except CloudNotFoundError:
+        pytest.skip("This NDI Cloud environment predates POST /files/lookup (#162)")
+
+
+def _wait_for_lookup(client, dataset_id, uid, missing_uid=None):
+    """Poll lookupFiles until *uid* is uploaded (the S3 event is async)."""
+    from ndi.cloud.api.files import lookupFiles
+
+    uids = [uid] + ([missing_uid] if missing_uid else [])
+    result = {}
+    for wait in (3, 5, 10, 15):
+        time.sleep(wait)
+        result = lookupFiles(dataset_id, uids, client=client)
+        found = [f for f in result["files"] if f.get("uid") == uid]
+        if found and found[0].get("uploaded"):
+            break
+    return result
+
+
+class TestFileChecksums:
+    CONTENT = b"Checksum test file for NDI Cloud #162."
+
+    def test_upload_with_checksum_round_trip(self, client, cloud_config, fresh_dataset, tmp_path):
+        """A checksum sent with the upload is returned as crc32 everywhere."""
+        from ndi.cloud.api.files import (
+            getFileDetails,
+            getFileUploadURL,
+            listFiles,
+            putFiles,
+        )
+        from ndi.fun.file import crc32
+
+        _skip_unless_server_has_file_lookup(client, fresh_dataset)
+        path = tmp_path / "payload.bin"
+        path.write_bytes(self.CONTENT)
+        local_crc = crc32(str(path))
+        file_uid = "pytest-crc32-roundtrip"
+        missing_uid = "pytest-crc32-never-uploaded"
+
+        url = getFileUploadURL(
+            cloud_config.org_id, fresh_dataset, file_uid, checksum_crc32=local_crc, client=client
+        )
+        assert putFiles(url, str(path), checksum_crc32=local_crc)
+
+        result = _wait_for_lookup(client, fresh_dataset, file_uid, missing_uid)
+        assert [f["uid"] for f in result["files"]] == [file_uid]
+        rec = result["files"][0]
+        assert rec["uploaded"] is True
+        assert rec["size"] == len(self.CONTENT)
+        assert rec["crc32"] == local_crc
+        assert result["missing"] == [missing_uid]
+
+        details = getFileDetails(fresh_dataset, file_uid, client=client)
+        assert details.get("crc32") == local_crc
+
+        rows = list(listFiles(fresh_dataset, client=client).get("files", []))
+        row = [f for f in rows if f.get("uid") == file_uid]
+        assert row and row[0].get("crc32") == local_crc
+
+    def test_upload_with_wrong_checksum_is_rejected(
+        self, client, cloud_config, fresh_dataset, tmp_path
+    ):
+        """S3 refuses content whose CRC-32 does not match the signed checksum."""
+        from ndi.cloud.api.files import getFileUploadURL, putFiles
+        from ndi.cloud.exceptions import CloudUploadError
+        from ndi.fun.file import crc32, crc32ToBase64
+
+        _skip_unless_server_has_file_lookup(client, fresh_dataset)
+        path = tmp_path / "payload.bin"
+        path.write_bytes(self.CONTENT)
+        wrong = crc32ToBase64(0)
+        assert crc32(str(path)) != wrong
+
+        url = getFileUploadURL(
+            cloud_config.org_id,
+            fresh_dataset,
+            "pytest-crc32-wrong",
+            checksum_crc32=wrong,
+            client=client,
+        )
+        with pytest.raises(CloudUploadError):
+            putFiles(url, str(path), checksum_crc32=wrong)
+
+    def test_upload_single_file_records_checksum(self, client, fresh_dataset, tmp_path):
+        """ndi.cloud.upload.uploadSingleFile sends the checksum by default."""
+        from ndi.cloud.upload import uploadSingleFile
+        from ndi.fun.file import crc32
+
+        _skip_unless_server_has_file_lookup(client, fresh_dataset)
+        path = tmp_path / "payload.bin"
+        path.write_bytes(self.CONTENT)
+        file_uid = "pytest-crc32-single"
+
+        ok, err = uploadSingleFile(fresh_dataset, file_uid, str(path), client=client)
+        assert ok, err
+
+        result = _wait_for_lookup(client, fresh_dataset, file_uid)
+        assert result["files"] and result["files"][0]["crc32"] == crc32(str(path))
+
+    def test_lookup_files_rejects_an_invalid_body(self, client, fresh_dataset):
+        """The server refuses more than 5000 uids, or a body without uids."""
+        from ndi.cloud.exceptions import CloudAPIError
+
+        _skip_unless_server_has_file_lookup(client, fresh_dataset)
+        for body in ({"uids": [f"u{i}" for i in range(5001)]}, {"notUids": 1}):
+            with pytest.raises(CloudAPIError) as exc_info:
+                client.post(
+                    "/datasets/{datasetId}/files/lookup", json=body, datasetId=fresh_dataset
+                )
+            assert exc_info.value.status_code == 400
+
+    def test_lookup_files_splits_long_lists(self, client, fresh_dataset):
+        """More than one server call's worth of uids, none uploaded."""
+        from ndi.cloud.api.files import LOOKUP_MAX_UIDS, lookupFiles
+
+        _skip_unless_server_has_file_lookup(client, fresh_dataset)
+        uids = [f"nouid{i}" for i in range(LOOKUP_MAX_UIDS + 3)]
+        result = lookupFiles(fresh_dataset, uids, client=client)
+        assert result["files"] == []
+        assert sorted(result["missing"]) == sorted(uids)
+
+
+# ===========================================================================
 # TestNDIQuery -- matches MATLAB testNdiQuery
 # ===========================================================================
 
