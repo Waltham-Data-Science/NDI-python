@@ -585,10 +585,10 @@ def openPyramid(
     try:
         from ndi.pyramid.multiscale import configureDaskPool
 
-        n_pool = configureDaskPool(getattr(fetcher, "_workers", 1))
+        n_pool = configureDaskPool(getattr(fetcher, "maxWorkers", 1))
         print(
-            f"[lightsheet] fetch pool: {getattr(fetcher, '_workers', 1)} workers, "
-            f"dask pool {n_pool} threads",
+            f"[lightsheet] fetch pool: {getattr(fetcher, 'workerLimit', 1)} tiles in "
+            f"flight (up to {getattr(fetcher, 'maxWorkers', 1)}), dask pool {n_pool} threads",
             file=sys.stderr,
             flush=True,
         )
@@ -875,6 +875,7 @@ def openPyramid(
     # the dataset-shape edges called out in the README.
     _attach_cloud_panel(
         viewer,
+        fetcher=fetcher,
         report_collect=_reportCollector(
             viewer, session, pyramid_doc, loader, counter, added_layers
         ),
@@ -1351,7 +1352,47 @@ def _reportCollector(viewer, session, pyramid_doc, loader, counter, layers):
     return collect
 
 
-def _attach_cloud_panel(viewer, report_collect=None) -> None:
+def _tilesInFlightRow(fetcher, QHBoxLayout, QLabel, QComboBox):
+    """A "Tiles in flight" drop-down that changes the fetch limit live.
+
+    More tiles at once hides per-request latency, until the line is full:
+    past that, every tile in flight shares the same bandwidth and each one
+    arrives later, including the ones in view. The right number depends on
+    the connection, so the reader picks it.
+    """
+    from ndi.pyramid.multiscale import WORKER_CHOICES
+
+    row = QHBoxLayout()
+    label = QLabel("Tiles in flight")
+    combo = QComboBox()
+    choices = [n for n in WORKER_CHOICES if n <= fetcher.maxWorkers]
+    current = fetcher.workerLimit
+    if current not in choices:
+        choices = sorted(set(choices) | {current})
+    for n in choices:
+        combo.addItem(str(n), n)
+    combo.setCurrentIndex(choices.index(current))
+    tip = (
+        "How many tiles download at once. More hides network latency;\n"
+        "too many on a slow line just share the bandwidth, so every\n"
+        "tile -- including the ones in view -- arrives later. Try 8 on\n"
+        "~100 Mb/s, 32-64 on a fast connection. Takes effect now."
+    )
+    label.setToolTip(tip)
+    combo.setToolTip(tip)
+
+    def _changed(_index):
+        n = fetcher.setWorkers(int(combo.currentData()))
+        print(f"[lightsheet] tiles in flight: {n}", file=sys.stderr, flush=True)
+
+    combo.currentIndexChanged.connect(_changed)
+    row.addWidget(label)
+    row.addWidget(combo)
+    row.addStretch(1)
+    return row
+
+
+def _attach_cloud_panel(viewer, report_collect=None, fetcher=None) -> None:
     """Dock an NDI Cloud sign-in panel with a BETA badge.
 
     Reuses the gene-pyramid viewer's addCloudPanel contract -- same
@@ -1401,7 +1442,14 @@ def _attach_cloud_panel(viewer, report_collect=None) -> None:
 
     try:
         from qtpy.QtCore import Qt, QTimer
-        from qtpy.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+        from qtpy.QtWidgets import (
+            QComboBox,
+            QHBoxLayout,
+            QLabel,
+            QPushButton,
+            QVBoxLayout,
+            QWidget,
+        )
     except ImportError:
         return
 
@@ -1476,6 +1524,9 @@ def _attach_cloud_panel(viewer, report_collect=None) -> None:
     result.setWordWrap(True)
     result.hide()
     outer.addWidget(result)
+
+    if fetcher is not None and hasattr(fetcher, "setWorkers"):
+        outer.addLayout(_tilesInFlightRow(fetcher, QHBoxLayout, QLabel, QComboBox))
     outer.addStretch()
 
     def _tick():

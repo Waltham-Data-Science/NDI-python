@@ -210,11 +210,17 @@ class _ChunkFetcher:
     costs one idle thread.
     """
 
-    def __init__(self, session, workers: int = 1):
+    def __init__(self, session, workers: int = 1, max_workers: int | None = None):
         self._session = session
         self._owner = threading.get_ident()
         self._reopen = self._reopener(session)
-        self._workers = max(1, int(workers))
+        # max_workers threads are started; at most `workers` of them fetch
+        # at once. The limit can change while the viewer runs (setWorkers):
+        # threads past it just wait, so lowering it never interrupts a
+        # fetch and raising it takes effect on the next job.
+        self._limit = max(1, int(workers))
+        self._workers = max(self._limit, int(max_workers or 0))
+        self._running = 0
         self._local = threading.local()
         self._lock = threading.Lock()
         self._paths: dict[tuple[str, str], str] = {}
@@ -337,7 +343,7 @@ class _ChunkFetcher:
             with self._cv:
                 job = None
                 while job is None:
-                    while not self._heap and not self._closed:
+                    while (not self._heap or self._running >= self._limit) and not self._closed:
                         self._cv.wait()
                     if self._closed:
                         return
@@ -349,6 +355,7 @@ class _ChunkFetcher:
                         heapq.heappush(self._heap, (1, nseq, cand))
                         continue
                     cand.started = True
+                    self._running += 1
                     job = cand
             self._run(job)
 
@@ -374,6 +381,8 @@ class _ChunkFetcher:
         with self._cv:
             self._jobs.pop(job.key, None)
             callbacks, job.callbacks = job.callbacks, []
+            self._running -= 1
+            self._cv.notify_all()
         job.path = path
         job.done.set()
         for cb in callbacks:
@@ -397,6 +406,27 @@ class _ChunkFetcher:
                 heapq.heappush(self._heap, (tier, -next(self._seq), job))
                 self._cv.notify()
         return job
+
+    @property
+    def workerLimit(self) -> int:
+        """How many chunks may be fetched at once right now."""
+        return self._limit
+
+    @property
+    def maxWorkers(self) -> int:
+        """The most :meth:`setWorkers` will allow: the threads started."""
+        return self._workers
+
+    def setWorkers(self, n: int) -> int:
+        """Change how many chunks are fetched at once; returns the new limit.
+
+        Clamped to 1..:attr:`maxWorkers`. Takes effect immediately for
+        queued work; fetches already running finish undisturbed.
+        """
+        with self._cv:
+            self._limit = max(1, min(int(n), self._workers))
+            self._cv.notify_all()
+            return self._limit
 
     def warm(self) -> None:
         """Build the session handles now, off the calling thread.
@@ -762,7 +792,7 @@ class _ChunkFetcher:
             f"{n_fetch} cloud-fetches (mean {mean_fetch_s:.2f}s, max "
             f"{max_fetch_s:.2f}s), {n_none} failures, "
             f"{self._stale_released} stale reads released, "
-            f"{n_fallback} via a session ({self._workers} workers)"
+            f"{n_fallback} via a session ({self._limit} of {self._workers} workers)"
         )
 
     def reset_stats(self) -> None:
@@ -922,15 +952,23 @@ class _ChunkFetcher:
             self._cv.notify_all()
 
 
-_DEFAULT_WORKERS = 32
+_DEFAULT_WORKERS = 16
+
+#: Threads started per fetcher, so the viewer can raise the limit live.
+MAX_WORKERS = 64
+
+#: The choices the viewer offers for tiles in flight.
+WORKER_CHOICES = (8, 16, 32, 64)
 
 
 def _default_workers() -> int:
-    """Chunk-fetcher worker count; ``NDI_LIGHTSHEET_WORKERS`` overrides.
+    """Chunks fetched at once at launch; ``NDI_LIGHTSHEET_WORKERS`` overrides.
 
-    32 by default. A cloud tile is seconds of waiting on the network and
-    almost no CPU, and with session-free resolution a worker is just a
-    thread, so a wide pool is cheap and buys overlap.
+    16 by default. A cloud tile is seconds of waiting on the network and
+    almost no CPU, so overlap pays -- until the line is full: on a
+    100 Mb/s connection 32 tiles of a few MB each just share the same
+    bandwidth and every one arrives later. The viewer can change it live
+    (:meth:`_ChunkFetcher.setWorkers`).
     """
     try:
         n = int(os.environ.get("NDI_LIGHTSHEET_WORKERS", str(_DEFAULT_WORKERS)))
@@ -1028,7 +1066,8 @@ def levelArrays(
 
     _ = channel  # single-channel narrowing lands with the magicgui panels
 
-    fetcher = _ChunkFetcher(session, workers=workers if workers is not None else _default_workers())
+    limit = workers if workers is not None else _default_workers()
+    fetcher = _ChunkFetcher(session, workers=limit, max_workers=max(limit, MAX_WORKERS))
 
     # Upsample-fallback context: build once from the coarsest level's
     # document so every fine-level delayed task can look up covering

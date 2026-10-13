@@ -205,7 +205,7 @@ def test_direct_path_can_be_turned_off(series_session, monkeypatch):
 
 def test_default_workers_is_wide(monkeypatch):
     monkeypatch.delenv("NDI_LIGHTSHEET_WORKERS", raising=False)
-    assert multiscale._default_workers() == 32
+    assert multiscale._default_workers() == 16
     monkeypatch.setenv("NDI_LIGHTSHEET_WORKERS", "5")
     assert multiscale._default_workers() == 5
 
@@ -243,3 +243,55 @@ def test_fetch_cloud_file_records_stage_timing(monkeypatch, tmp_path):
     assert t["ok"] is True
     assert t["batch"] is False
     assert t["sign_s"] >= 0 and t["transfer_s"] >= 0
+
+
+def test_worker_limit_caps_concurrency_and_changes_live():
+    """setWorkers caps how many chunks fetch at once, and can be changed live."""
+    import time
+
+    class _Session:  # no path, no database: nothing to reopen
+        pass
+
+    fetcher = _ChunkFetcher(_Session(), workers=2, max_workers=4)
+    gate = threading.Event()
+    lock = threading.Lock()
+    state = {"now": 0, "peak": 0}
+
+    def slow_resolve(doc, filename):
+        with lock:
+            state["now"] += 1
+            state["peak"] = max(state["peak"], state["now"])
+        gate.wait(10)
+        with lock:
+            state["now"] -= 1
+        return f"/tmp/{filename}"
+
+    fetcher._resolve = slow_resolve
+    done = []
+    try:
+        for i in range(8):
+            fetcher.prefetchAsync(f"doc{i}", f"c_{i}", on_complete=done.append)
+        time.sleep(0.3)
+        assert state["peak"] == 2, f"limit 2 but {state['peak']} ran at once"
+
+        assert fetcher.setWorkers(99) == 4  # clamped to the threads started
+        time.sleep(0.3)
+        assert state["peak"] == 4
+
+        assert fetcher.setWorkers(0) == 1
+        assert fetcher.workerLimit == 1
+        gate.set()
+        deadline = time.time() + 10
+        while len(done) < 8 and time.time() < deadline:
+            time.sleep(0.05)
+        assert len(done) == 8
+    finally:
+        gate.set()
+        fetcher.close()
+
+
+def test_level_arrays_start_max_threads_with_default_limit(monkeypatch):
+    monkeypatch.delenv("NDI_LIGHTSHEET_WORKERS", raising=False)
+    assert multiscale._default_workers() == 16
+    assert set(multiscale.WORKER_CHOICES) >= {8, 16, 32, 64}
+    assert multiscale.MAX_WORKERS >= max(multiscale.WORKER_CHOICES)
