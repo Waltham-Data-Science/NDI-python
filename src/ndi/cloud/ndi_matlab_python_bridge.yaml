@@ -952,7 +952,7 @@ functions:
       The serial path now uploads every file with waitForUpload=false and
       then waits once, through waitForFileUpload, for NDI Cloud to record
       them all. Not ported: Python has no waitForFileUpload yet (recorded
-      as not_yet_ported in ndi/cloud/api); Python's uploads do not wait.
+      as porting_deferred in ndi/cloud/api); Python's uploads do not wait.
       2026-09-25: NDI-matlab 4e45d96e added verbose stage prints and a listFiles-not-yet-uploaded diagnostic. Python code is silent in the same way it was; no behavioural change.
 
       2026-09-15: added a ``dataset`` kwarg. On MATLAB, +sync/+internal/
@@ -1005,7 +1005,7 @@ functions:
       MATLAB gained a waitForUpload option (default true) that polls
       waitForFileUpload until NDI Cloud records the upload. Not ported yet:
       Python returns once the PUT succeeds; see waitForFileUpload
-      (not_yet_ported) in ndi/cloud/api.
+      (porting_deferred) in ndi/cloud/api.
       Exact match.
       2026-10-12: synced to NDI-matlab 8fa6ea5e (claude/file-crc32-lookup,
       NDI-matlab#1025): 'checksum' (default true) computes the file's CRC-32
@@ -1480,7 +1480,7 @@ functions:
 # =============================================================================
 # Not-yet-ported MATLAB functions
 # =============================================================================
-not_yet_ported:
+porting_deferred:
 
   # =======================================================================
   # +ndi/+cloud/+download/+internal -- internals of the download loop
@@ -1490,7 +1490,7 @@ not_yet_ported:
   # without a live dataset (NDI-matlab#962, #963, #970). Python's cloud
   # download path is in cloud/download.py and does not currently mirror
   # these boundaries -- the whole loop is one function -- so recording
-  # them as not_yet_ported is the honest status. They land as a group
+  # them as porting_deferred is the honest status. They land as a group
   # with the batch-presign work referenced by
   # +sync/+internal/reconstructSeriesIngestLocations and by the
   # signed-URL-set family in the api YAML (issue #206), because none of
