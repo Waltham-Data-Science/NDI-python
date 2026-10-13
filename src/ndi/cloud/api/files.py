@@ -10,6 +10,7 @@ MATLAB equivalents: +ndi/+cloud/+api/+files/*.m,
 
 from __future__ import annotations
 
+import re
 import time
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -26,6 +27,33 @@ from ._validators import (
 )
 
 _Client = Annotated[CloudClient | None, SkipValidation()]
+
+# A CRC-32 as NDI Cloud and S3 encode it: base64 of the 4-byte big-endian
+# value, so six base64 characters and '=='. See ndi.fun.file.crc32.
+_CRC32_BASE64 = re.compile(r"^[A-Za-z0-9+/]{6}==$")
+
+# POST /files/lookup accepts at most this many uids per call; lookupFiles
+# splits longer lists.
+LOOKUP_MAX_UIDS = 5000
+
+
+def _checked_crc32(checksum_crc32: str) -> str:
+    if checksum_crc32 and not _CRC32_BASE64.match(checksum_crc32):
+        raise ValueError(
+            "checksum_crc32 must be the base64 of a 4-byte CRC-32 (e.g. 'NhCmhg=='), "
+            f"got {checksum_crc32!r}"
+        )
+    return checksum_crc32
+
+
+def _upload_headers(checksum_crc32: str) -> dict[str, str]:
+    headers = {"Content-Type": "application/octet-stream"}
+    if checksum_crc32:
+        # The upload URL signs this header when it was requested with a
+        # checksum (NDI Cloud #162), so it must be sent, with the same value.
+        headers["x-amz-checksum-crc32"] = checksum_crc32
+    return headers
+
 
 # Terminal job states reported by the bulk-upload service.
 _TERMINAL_BULK_STATES = ("complete", "failed")
@@ -56,14 +84,31 @@ def getFileUploadURL(
     dataset_id: CloudId,
     file_uid: NonEmptyStr,
     *,
+    checksum_crc32: str = "",
     client: _Client = None,
 ) -> str:
     """GET /datasets/{organizationId}/{datasetId}/files/{file_uid}
 
     Returns a presigned S3 URL for uploading.
+
+    Args:
+        org_id: The organization id.
+        dataset_id: The cloud dataset id.
+        file_uid: The uid the file will have.
+        checksum_crc32: Optional. The file's CRC-32 as base64 of its 4-byte
+            big-endian value (:func:`ndi.fun.file.crc32`). When given, the URL
+            signs the ``x-amz-checksum-crc32`` header, so the upload must send
+            it: pass the same value to :func:`putFiles`. S3 then rejects
+            content that does not match, and the cloud records the value as
+            the file's ``crc32``.
+        client: Authenticated cloud client (auto-created if omitted).
+
+    MATLAB equivalent: +cloud/+api/+files/getFileUploadURL.m
     """
+    params = {"checksumCRC32": _checked_crc32(checksum_crc32)} if checksum_crc32 else None
     result = client.get(
         "/datasets/{organizationId}/{datasetId}/files/{file_uid}",
+        params=params,
         organizationId=org_id,
         datasetId=dataset_id,
         file_uid=file_uid,
@@ -100,6 +145,7 @@ def putFiles(
     job_id: str = "",
     wait_for_completion: bool = False,
     completion_timeout: float = 60.0,
+    checksum_crc32: str = "",
 ) -> bool:
     """PUT a local file to a presigned S3 URL.
 
@@ -118,6 +164,12 @@ def putFiles(
             the signed PUT returning 200 already means done.
         completion_timeout: Overall wait-for-completion deadline, in
             seconds.  Default 60.
+        checksum_crc32: The file's CRC-32 (:func:`ndi.fun.file.crc32`).
+            Required when the URL came from
+            ``getFileUploadURL(..., checksum_crc32=crc)``: that URL signs the
+            ``x-amz-checksum-crc32`` header, so it is sent with the same
+            value, and S3 rejects content that does not match. Default ``""``
+            (no header).
 
     Returns:
         True on success (and, when ``wait_for_completion`` is True, the
@@ -133,12 +185,13 @@ def putFiles(
     from ..exceptions import CloudUploadError
 
     assert_safe_transfer_url(url, what="upload URL")
+    headers = _upload_headers(_checked_crc32(checksum_crc32))
     file_path = Path(file_path)
     with open(file_path, "rb") as fh:
         resp = requests.put(
             url,
             data=fh,
-            headers={"Content-Type": "application/octet-stream"},
+            headers=headers,
             timeout=timeout,
         )
 
@@ -161,6 +214,8 @@ def putFileBytes(
     url: NonEmptyStr,
     data: bytes,
     timeout: int = 120,
+    *,
+    checksum_crc32: str = "",
 ) -> bool:
     """PUT raw bytes to a presigned S3 URL.
 
@@ -168,6 +223,8 @@ def putFileBytes(
         url: Presigned URL.
         data: Bytes to upload.
         timeout: Request timeout in seconds.
+        checksum_crc32: The bytes' CRC-32 (:func:`ndi.fun.file.crc32ToBase64`
+            of ``zlib.crc32(data)``); see :func:`putFiles`.
 
     Returns:
         True on success.
@@ -183,7 +240,7 @@ def putFileBytes(
     resp = requests.put(
         url,
         data=data,
-        headers={"Content-Type": "application/octet-stream"},
+        headers=_upload_headers(_checked_crc32(checksum_crc32)),
         timeout=timeout,
     )
 
@@ -343,7 +400,8 @@ def listFiles(
         The page envelope with fields ``datasetId``, ``limit``, ``count``,
         ``cursor``, ``hasMore``, ``totalNumber``, and ``files`` -- a list of
         file summaries, each with ``uid``, ``uploaded``, ``sourceDatasetId``,
-        and ``size``. Follow ``cursor`` by passing it back as *after* while
+        ``size`` and, when one was recorded at upload, ``crc32`` (base64
+        big-endian CRC-32; compare with :func:`ndi.fun.file.crc32`). Follow ``cursor`` by passing it back as *after* while
         ``hasMore`` is true.
 
     MATLAB equivalent: +cloud/+api/+files/listFiles.m
@@ -459,6 +517,9 @@ def getFileDetails(
 ) -> dict[str, Any]:
     """Get detail info (including download URL) for a file.
 
+    The record carries ``crc32`` (base64 big-endian CRC-32 of the content)
+    when one was recorded at upload.
+
     MATLAB equivalent: +cloud/+api/+files/getFileDetails.m
     """
     return client.get(
@@ -466,6 +527,59 @@ def getFileDetails(
         datasetId=dataset_id,
         file_uid=file_uid,
     )
+
+
+@_auto_client
+@validate_call(config=VALIDATE_CONFIG)
+def lookupFiles(
+    dataset_id: CloudId,
+    file_uids: list[str],
+    *,
+    client: _Client = None,
+) -> dict[str, Any]:
+    """Look up the upload state, size and CRC-32 of files by uid.
+
+    ``POST /datasets/{datasetId}/files/lookup``. Tells, for each uid, whether
+    the dataset has the file, whether it finished uploading, its size, and
+    the CRC-32 recorded at upload, without listing the whole dataset or
+    signing any URLs. Use it to decide which files of a document or import
+    batch still need uploading, e.g. to resume an interrupted upload.
+
+    The server takes at most :data:`LOOKUP_MAX_UIDS` (5000) uids per call;
+    longer lists are split into several calls and the results merged.
+    Duplicate uids are looked up once.
+
+    Args:
+        dataset_id: The cloud dataset id.
+        file_uids: File uids to look up.
+        client: Authenticated cloud client (auto-created if omitted).
+
+    Returns:
+        ``{"files": [...], "missing": [...]}``. ``files`` has one dict per uid
+        the dataset has a record for, with ``uid``, ``uploaded``, ``size`` and
+        ``crc32`` (base64 big-endian CRC-32, or ``None`` when none was
+        recorded -- compare ``size`` instead). ``missing`` lists the uids with
+        no record.
+
+    A cloud copy matches a local file when it is uploaded and its ``crc32``
+    equals :func:`ndi.fun.file.crc32` of the local file.
+
+    MATLAB equivalent: +cloud/+api/+files/lookupFiles.m
+    """
+    uids = list(dict.fromkeys(u for u in file_uids if u))
+    result: dict[str, Any] = {"files": [], "missing": []}
+    for start in range(0, len(uids), LOOKUP_MAX_UIDS):
+        batch = uids[start : start + LOOKUP_MAX_UIDS]
+        page = client.post(
+            "/datasets/{datasetId}/files/lookup",
+            json={"uids": batch},
+            datasetId=dataset_id,
+        )
+        files = page.get("files", []) if hasattr(page, "get") else []
+        missing = page.get("missing", []) if hasattr(page, "get") else []
+        result["files"].extend(files or [])
+        result["missing"].extend(missing or [])
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -498,8 +612,10 @@ def getSignedURLSet(
     """GET one page of a document's uid -> signed URL map.
 
     Returns a dict with fields ``datasetId``, ``documentId``, ``totalCount``,
-    ``pageCount``, optionally ``nextCursor``, ``expiresAt``, and ``files``
-    (a dict mapping file uid to pre-signed download URL, in uid-sorted order).
+    ``pageCount``, optionally ``nextCursor``, ``expiresAt``, ``files``
+    (a dict mapping file uid to pre-signed download URL, in uid-sorted order)
+    and ``fileInfo`` (a list of ``{uid, uploaded, size, crc32}`` for the same
+    files; ``crc32`` is ``None`` when none was recorded).
 
     Args:
         dataset_id: The cloud dataset id.
@@ -590,7 +706,8 @@ def getSignedURLSetAll(
 
     Returns:
         Merged dict with ``datasetId``, ``documentId``, ``files``
-        (uid -> URL), ``pageCount`` (total uids across pages), ``pages``
+        (uid -> URL), ``fileInfo`` (``{uid, uploaded, size, crc32}`` dicts
+        across pages), ``pageCount`` (total uids across pages), ``pages``
         (number of HTTP calls), ``totalCount`` (server-reported total),
         and ``expiresAt`` (from the last page carrying it).
 
@@ -605,6 +722,7 @@ def getSignedURLSetAll(
         "datasetId": dataset_id,
         "documentId": document_id,
         "files": {},
+        "fileInfo": [],
         "pageCount": 0,
         "totalCount": 0,
         "pages": 0,
@@ -624,6 +742,9 @@ def getSignedURLSetAll(
         if isinstance(files, dict):
             merged["files"].update(files)
             merged["pageCount"] += len(files)
+        file_info = page.get("fileInfo") if hasattr(page, "get") else None
+        if isinstance(file_info, list):
+            merged["fileInfo"].extend(file_info)
         total = page.get("totalCount") if hasattr(page, "get") else None
         if isinstance(total, int):
             merged["totalCount"] = total

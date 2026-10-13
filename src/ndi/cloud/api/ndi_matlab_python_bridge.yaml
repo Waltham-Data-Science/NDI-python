@@ -760,7 +760,7 @@ functions:
   # --- files.py ---
   - name: getFileUploadURL
     matlab_path: "+ndi/+cloud/+api/+files/getFileUploadURL.m"
-    matlab_last_sync_hash: "9b75c0fe"
+    matlab_last_sync_hash: "8fa6ea5e"
     python_path: "ndi/cloud/api/files.py"
     input_arguments:
       - name: org_id
@@ -772,13 +772,22 @@ functions:
       - name: file_uid
         type_matlab: "char"
         type_python: "NonEmptyStr"
+      - name: checksum_crc32
+        type_matlab: "string"
+        type_python: "str"
+        default: "''"
       - name: client
         type_python: "_Client"
         default: "None"
     output_arguments:
       - name: url
         type_python: "str"
-    decision_log: "Exact match."
+    decision_log: >
+      Exact match. 2026-10-12: synced to NDI-matlab 8fa6ea5e
+      (claude/file-crc32-lookup, NDI-matlab#1025): the 'checksumCRC32'
+      option becomes checksum_crc32, sent as the checksumCRC32 query
+      parameter (NDI Cloud ndi-cloud-node#162). The returned URL then signs
+      the x-amz-checksum-crc32 header, which putFiles must send.
 
   - name: getBulkUploadURL
     matlab_path: "+ndi/+cloud/+api/+documents/getBulkUploadURL.m"
@@ -806,7 +815,7 @@ functions:
 
   - name: putFiles
     matlab_path: "+ndi/+cloud/+api/+files/putFiles.m"
-    matlab_last_sync_hash: "2566fe4d"
+    matlab_last_sync_hash: "8fa6ea5e"
     python_path: "ndi/cloud/api/files.py"
     input_arguments:
       - name: url
@@ -830,10 +839,18 @@ functions:
         type_matlab: "double"
         type_python: "float"
         default: "60.0"
+      - name: checksum_crc32
+        type_matlab: "string"
+        type_python: "str"
+        default: "''"
     output_arguments:
       - name: success
         type_python: "bool"
     decision_log: >
+      2026-10-12: synced to NDI-matlab 8fa6ea5e (claude/file-crc32-lookup,
+      NDI-matlab#1025): 'checksumCRC32' becomes checksum_crc32 and is sent
+      as the x-amz-checksum-crc32 header, which a checksummed upload URL
+      signs (ndi-cloud-node#162). Validated as a base64 4-byte CRC-32.
       Synchronized with MATLAB main as of 2026-05-11 (matlab HEAD
       2566fe4d). Added job_id and wait_for_completion options to mirror
       the new MATLAB bulk-upload "fire-and-wait" pattern: after a
@@ -893,7 +910,7 @@ functions:
 
   - name: listFiles
     matlab_path: "+ndi/+cloud/+api/+files/listFiles.m"
-    matlab_last_sync_hash: "3fce6cb"
+    matlab_last_sync_hash: "8fa6ea5e"
     python_path: "ndi/cloud/api/files.py"
     input_arguments:
       - name: dataset_id
@@ -925,7 +942,7 @@ functions:
 
   - name: listFilesAll
     matlab_path: "+ndi/+cloud/+api/+files/listFilesAll.m"
-    matlab_last_sync_hash: "3fce6cb"
+    matlab_last_sync_hash: "8fa6ea5e"
     python_path: "ndi/cloud/api/files.py"
     input_arguments:
       - name: dataset_id
@@ -962,6 +979,30 @@ functions:
       max_update_reads (default off, as in the MATLAB user-facing wrapper). The
       MATLAB `retries` knob is omitted: transient GET retries are handled
       centrally by CloudClient, not per call site.
+
+  - name: lookupFiles
+    matlab_path: "+ndi/+cloud/+api/+files/lookupFiles.m"
+    matlab_last_sync_hash: "8fa6ea5e"
+    python_path: "ndi/cloud/api/files.py"
+    input_arguments:
+      - name: dataset_id
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: file_uids
+        type_matlab: "string array"
+        type_python: "list[str]"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Exact match. POST /datasets/{datasetId}/files/lookup (ndi-cloud-node#162),
+      split into calls of at most LOOKUP_MAX_UIDS (5000) uids and merged, as
+      MATLAB does. Returns {"files": [{uid, uploaded, size, crc32}],
+      "missing": [uid, ...]}. Where MATLAB normalizes a missing crc32 to ''
+      (a struct field cannot be null), Python keeps the server's None.
 
   - name: getFileDetails
     matlab_path: "+ndi/+cloud/+api/+files/getFileDetails.m"
@@ -1639,7 +1680,7 @@ not_yet_ported:
 
   - name: url
     matlab_path: "+ndi/+cloud/+api/url.m"
-    matlab_last_sync_hash: "75f937a76"
+    matlab_last_sync_hash: "8fa6ea5e"
     status: ported_differently
     decision_log: >
       MATLAB URL builder. Python uses CloudClient._build_url()
@@ -1671,6 +1712,11 @@ not_yet_ported:
       get_file_tier_job -> GET /file-tier-jobs/{jobId}); both are inlined at the
       call sites in api/files.py by setFileTier / getFileTierJob, so this entry
       has nothing to add.
+      2026-10-12: examined against 8fa6ea5e (was 75f937a76), NDI-matlab#1025:
+      one row added to url()'s route table, lookup_dataset_files ->
+      /datasets/{datasetId}/files/lookup. Nothing to port here; the route
+      string lives in ndi.cloud.api.files.lookupFiles, as every other route
+      does in Python.
 
   - name: documentCount
     matlab_path: "+ndi/+cloud/+api/+documents/documentCount.m"
@@ -1720,7 +1766,7 @@ not_yet_ported:
   - name: getSignedURLSet
     matlab_path: "+ndi/+cloud/+api/+files/getSignedURLSet.m"
     python_path: "ndi/cloud/api/files.py"
-    matlab_last_sync_hash: "5804cd80"
+    matlab_last_sync_hash: "8fa6ea5e"
     status: ported
     decision_log: >
       Ported by NDI-python#262 as the API foundation of batch_signed_url.
@@ -1735,7 +1781,7 @@ not_yet_ported:
   - name: getSignedURLSetAll
     matlab_path: "+ndi/+cloud/+api/+files/getSignedURLSetAll.m"
     python_path: "ndi/cloud/api/files.py"
-    matlab_last_sync_hash: "5804cd80"
+    matlab_last_sync_hash: "8fa6ea5e"
     status: ported
     decision_log: >
       Ported by NDI-python#262. Walks getSignedURLSet cursors and merges
@@ -1746,6 +1792,10 @@ not_yet_ported:
       partial merged dict on the exception. The async job path
       (createSignedURLSetJob + waitForSignedURLSetJob) is still deferred
       because batch_signed_url does not use it.
+      2026-10-12: synced to NDI-matlab 8fa6ea5e (NDI-matlab#1025): pages'
+      fileInfo lists ({uid, uploaded, size, crc32}, ndi-cloud-node#162) are
+      concatenated into merged["fileInfo"]. getSignedURLSet passes fileInfo
+      through untouched.
 
   - name: getSignedURLSetJob
     matlab_path: "+ndi/+cloud/+api/+files/getSignedURLSetJob.m"

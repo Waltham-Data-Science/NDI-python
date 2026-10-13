@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **File CRC-32 checksums for NDI Cloud** (ndi-cloud-node#162, mirroring
+  NDI-matlab#1025), so an importer can resume an interrupted upload by
+  re-uploading only the files whose cloud copy does not match.
+  `ndi.fun.file.crc32(path)` gives a file's CRC-32 in the cloud's encoding
+  (base64 of the 4-byte big-endian value). `getFileUploadURL` and `putFiles`
+  / `putFileBytes` take `checksum_crc32=`, so S3 rejects a corrupted upload
+  and the cloud records the value; `ndi.cloud.upload.uploadSingleFile` sends
+  it by default (`checksum=False` turns it off). New
+  `ndi.cloud.api.files.lookupFiles(dataset_id, uids)` returns `uploaded`,
+  `size` and `crc32` for given uids plus the `missing` ones, splitting lists
+  over the server's 5000-uid limit. `getSignedURLSetAll` merges the pages'
+  `fileInfo`. `listFiles` and `getFileDetails` already pass `crc32` through.
+
 ### Fixed
 
 - **`ndi.probe.timeseries.readtimeseries()` names its first argument
