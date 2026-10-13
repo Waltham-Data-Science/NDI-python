@@ -983,7 +983,6 @@ functions:
   - name: lookupFiles
     matlab_path: "+ndi/+cloud/+api/+files/lookupFiles.m"
     matlab_last_sync_hash: "8fa6ea5e"
-    matlab_branch: "claude/file-crc32-lookup"
     python_path: "ndi/cloud/api/files.py"
     input_arguments:
       - name: dataset_id

@@ -1302,7 +1302,6 @@ functions:
     type: function
     matlab_path: "+ndi/+fun/+file/crc32.m"
     matlab_last_sync_hash: "8fa6ea5e"
-    matlab_branch: "claude/file-crc32-lookup"
     python_path: "ndi/fun/file.py"
     input_arguments:
       - name: file_path
@@ -1325,7 +1324,6 @@ functions:
     type: function
     matlab_path: "+ndi/+fun/+file/crc32ToBase64.m"
     matlab_last_sync_hash: "8fa6ea5e"
-    matlab_branch: "claude/file-crc32-lookup"
     python_path: "ndi/fun/file.py"
     input_arguments:
       - name: value
