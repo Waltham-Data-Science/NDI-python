@@ -1137,6 +1137,19 @@ functions:
       elapses. On timeout the returned dict has state='timeout' and
       elapsed=<seconds>.
 
+  - name: waitForFileUpload
+    matlab_path: "+ndi/+cloud/+api/+files/waitForFileUpload.m"
+    status: not_yet_ported
+    decision_log: >
+      Added to NDI-matlab by VH-Lab/NDI-matlab#1027: polls NDI Cloud until
+      single-file uploads are recorded (uploaded=true) or a timeout passes,
+      so a PUT that S3 accepted but the upload-processing lambda has not yet
+      recorded is not mistaken for a missing file. MATLAB's uploadSingleFile
+      and serial uploadFilesForDatasetDocuments now wait through it. Not yet
+      ported: NDI-python's single-file upload path does not wait, and its
+      live tests poll listFiles themselves. Port alongside the next change
+      to ndi.cloud.upload's single-file path.
+
   - name: waitForAllBulkUploads
     matlab_path: "+ndi/+cloud/+api/+files/waitForAllBulkUploads.m"
     matlab_last_sync_hash: "2566fe4d"
