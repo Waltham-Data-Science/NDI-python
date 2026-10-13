@@ -102,15 +102,15 @@ class _NapariStatusReporter:
             from qtpy.QtCore import QCoreApplication, QObject, Qt, Signal
 
             class _Bridge(QObject):
-                update = Signal(str, int)
+                update = Signal(str, str)
 
                 def __init__(self, outer):
                     super().__init__()
                     self._outer = outer
                     self.update.connect(self._on_update, Qt.QueuedConnection)
 
-                def _on_update(self, message, in_flight):
-                    self._outer._apply(message, in_flight)
+                def _on_update(self, message, overlay_text):
+                    self._outer._apply(message, overlay_text)
 
             self._bridge = _Bridge(self)
             app = QCoreApplication.instance()
@@ -119,7 +119,7 @@ class _NapariStatusReporter:
         except Exception:
             self._bridge = None
 
-    def _apply(self, message: str, in_flight: int) -> None:
+    def _apply(self, message: str, overlay_text: str) -> None:
         """Runs on the main thread (queued-signal callback)."""
         v = self._viewer
         try:
@@ -141,20 +141,23 @@ class _NapariStatusReporter:
             except Exception:
                 pass
         try:
-            if in_flight > 0:
-                overlay.text = f"Loading tiles ... ({in_flight} in flight)"
+            if overlay_text:
+                overlay.text = overlay_text
                 overlay.visible = True
             else:
                 overlay.visible = False
         except Exception:
             pass
 
-    def push(self, message: str, *, in_flight: int = 0) -> None:
-        """Called from any thread; delivery hops to main via a signal."""
+    def push(self, message: str, *, overlay: str = "") -> None:
+        """Called from any thread; delivery hops to main via a signal.
+
+        OVERLAY is the canvas text; empty hides the overlay.
+        """
         if self._bridge is None:
             return
         try:
-            self._bridge.update.emit(message, int(in_flight))
+            self._bridge.update.emit(message, str(overlay or ""))
         except Exception:
             pass
 
@@ -190,12 +193,15 @@ class _FetchCounter:
 
     def __init__(
         self,
-        out=sys.stderr,
+        out=None,
         interval: float = 0.5,
         idle_interval: float = 5.0,
         status_reporter=None,
     ):
         self._lock = threading.Lock()
+        # None: resolve sys.stderr at print time (see _ls), so a log tee
+        # installed after import -- the feedback report's log buffer --
+        # still sees the counter's lines.
         self._out = out
         self._interval = interval
         self._idle_interval = idle_interval
@@ -211,6 +217,12 @@ class _FetchCounter:
         self._last_duration: float | None = None
         self._last_bytes: int | None = None
         self._session_start = time.monotonic()
+        # Tiles the CURRENT VIEW needs vs has on disk, set from the
+        # main-thread poll in viewtiles.attachViewTally. None until the
+        # first poll, or when napari does not expose enough to tally.
+        self._view_ready: int | None = None
+        self._view_needed: int | None = None
+        self._view_since: float | None = None
         self._stop = threading.Event()
         self._heartbeat = threading.Thread(
             target=self._heartbeat_loop,
@@ -229,6 +241,29 @@ class _FetchCounter:
         """
         with self._lock:
             self._status_reporter = reporter
+
+    def set_view_tally(self, ready: int | None, needed: int | None) -> None:
+        """Record how many of the current view's tiles are on disk.
+
+        Logs once when a view finishes loading, with how long it took
+        from the first poll that found it incomplete.
+        """
+        with self._lock:
+            now = time.monotonic()
+            was_complete = self._view_needed is not None and self._view_ready == self._view_needed
+            self._view_ready, self._view_needed = ready, needed
+            if ready is None or needed is None:
+                self._view_since = None
+            elif ready < needed:
+                if self._view_since is None or was_complete:
+                    self._view_since = now
+            elif self._view_since is not None:
+                _ls(
+                    f"view complete: {needed} tile(s) in {now - self._view_since:.1f}s",
+                    file=self._out,
+                )
+                self._view_since = None
+            self._maybe_print(force=True)
 
     def __call__(self, event, uri, done, total):
         with self._lock:
@@ -265,18 +300,37 @@ class _FetchCounter:
         if self._last_duration is not None:
             mb = (self._last_bytes or 0) / (1024.0 * 1024.0)
             last = f"; last fetch {self._last_duration:.2f}s, {mb:.1f} MB"
+        ready, needed = self._view_ready, self._view_needed
+        view = ""
+        if needed is not None:
+            view = f"view: {ready}/{needed} tiles ready; "
         _ls(
-            f"tiles: {self._done} loaded / {self._started} requested "
+            f"{view}tiles: {self._done} loaded / {self._started} requested "
             f"(in flight: {in_flight}){last}",
             file=self._out,
         )
         if self._status_reporter is not None:
-            status_msg = (
-                f"lightsheet: {self._done}/{self._started} tiles"
+            parts = []
+            if needed is not None:
+                parts.append(f"view {ready}/{needed} tiles ready")
+            parts.append(
+                f"{self._done}/{self._started} fetched"
                 + (f" ({in_flight} in flight)" if in_flight else "")
-                + (f" | last {self._last_duration:.2f}s" if self._last_duration else "")
             )
-            self._status_reporter.push(status_msg, in_flight=in_flight)
+            if self._last_duration:
+                parts.append(f"last {self._last_duration:.2f}s")
+            status_msg = "lightsheet: " + " | ".join(parts)
+            if needed is not None and ready < needed:
+                overlay = f"Loading view: {ready} / {needed} tiles"
+                if in_flight:
+                    overlay += f" ({in_flight} in flight)"
+            elif in_flight:
+                # View is complete (or untallied); what is still
+                # moving is prefetch or a neighbouring region.
+                overlay = f"Loading tiles ... ({in_flight} in flight)"
+            else:
+                overlay = ""
+            self._status_reporter.push(status_msg, overlay=overlay)
 
     def _heartbeat_loop(self) -> None:
         while not self._stop.wait(self._idle_interval):
@@ -349,6 +403,37 @@ class _FetchCounter:
                 f"min {min_dt:.2f}s, max {max_dt:.2f}s, throughput {throughput:.1f} MB/s",
                 file=self._out,
             )
+
+
+def _quiet_stale_chunk_errors() -> None:
+    """Drop napari error notifications caused by StaleChunkRead.
+
+    Idempotent; any napari that does not route slice errors through
+    ``notification_manager.receive_error`` is left alone (the release
+    then shows as a notification, which is noisy but harmless).
+    """
+    try:
+        from napari.utils.notifications import notification_manager
+
+        from ndi.pyramid.multiscale import StaleChunkRead
+    except Exception:  # noqa: BLE001
+        return
+    original = notification_manager.receive_error
+    if getattr(original, "_ndi_quiet_stale", False):
+        return
+
+    def receive_error(exc_type, exc_value, tb, *args, **kwargs):
+        e = exc_value
+        seen = 0
+        while e is not None and seen < 10:
+            if isinstance(e, StaleChunkRead):
+                return None
+            e = e.__cause__ or e.__context__
+            seen += 1
+        return original(exc_type, exc_value, tb, *args, **kwargs)
+
+    receive_error._ndi_quiet_stale = True  # type: ignore[attr-defined]
+    notification_manager.receive_error = receive_error
 
 
 def require_napari():
@@ -449,6 +534,16 @@ def openPyramid(
     # picks GUI on macOS/Windows and where a display is set.
     from . import progress
 
+    # Keep the last few thousand log lines in memory from here on, so a
+    # "Report a problem" from the NDI Cloud panel can attach them -- a
+    # viewer launched from MATLAB has no terminal to copy them from.
+    try:
+        from ndi.gui.feedback import installLogBuffer
+
+        installLogBuffer()
+    except Exception:  # noqa: BLE001 - reporting is never worth the launch
+        pass
+
     progress.note("opening lightsheet pyramid ...")
 
     napari = require_napari()
@@ -483,9 +578,26 @@ def openPyramid(
         specs = loader.specs
     fetcher = loader.fetcher
 
-    # Warm the worker pool now, off the main thread. The one-off
-    # session-open cost then overlaps with napari.Viewer()'s Qt startup
-    # rather than serialising against the first fetch.
+    # napari reads through dask, whose thread pool defaults to one thread
+    # per CPU -- sized for computation, but a chunk read is seconds of
+    # waiting on the network. Widen it to the fetcher's worker count so
+    # napari can keep every worker busy.
+    try:
+        from ndi.pyramid.multiscale import configureDaskPool
+
+        n_pool = configureDaskPool(getattr(fetcher, "maxWorkers", 1))
+        print(
+            f"[lightsheet] fetch pool: {getattr(fetcher, 'workerLimit', 1)} tiles in "
+            f"flight (up to {getattr(fetcher, 'maxWorkers', 1)}), dask pool {n_pool} threads",
+            file=sys.stderr,
+            flush=True,
+        )
+    except Exception as exc:  # noqa: BLE001 - the default pool still works
+        print(f"[lightsheet] could not widen the dask pool ({exc})", file=sys.stderr)
+
+    # Start the worker threads now, off the main thread, so the first
+    # fetch does not pay for it. Workers open no session up front: chunks
+    # resolve session-free, and a worker opens one only if it must.
     with progress.stage("connecting to image store"):
         try:
             fetcher.warm()
@@ -532,6 +644,12 @@ def openPyramid(
 
     with progress.stage("opening image viewer"):
         viewer = napari.Viewer()
+
+    # A slice for a view the user has zoomed past is released with
+    # StaleChunkRead (see _ChunkFetcher.setView) so napari's one slicing
+    # thread can move on to the current view. napari reports a failed
+    # slice as an error notification; this one is deliberate.
+    _quiet_stale_chunk_errors()
 
     # Now that a viewer exists, wire the counter to napari's status
     # bar so users see tile progress inside the viewer window rather
@@ -755,7 +873,46 @@ def openPyramid(
     # login control. The lightsheet viewer carries a "beta" badge
     # under the wordmark because this surface is still rough on
     # the dataset-shape edges called out in the README.
-    _attach_cloud_panel(viewer)
+    _attach_cloud_panel(
+        viewer,
+        fetcher=fetcher,
+        report_collect=_reportCollector(
+            viewer, session, pyramid_doc, loader, counter, added_layers
+        ),
+    )
+
+    # Tiles needed for the current view vs tiles on disk, polled on a
+    # main-thread timer and fed to the counter, so the status bar and
+    # overlay say "37 / 120" rather than only "12 in flight". Skipped
+    # in the modes where layer.data is not the full level ladder
+    # (single-level, viewport clip): there the level index napari
+    # reports does not line up with the level documents.
+    # Each env var is read with the parser its own feature uses.
+    from ndi.gui.app.lightsheetZarr.viewport import _env_true as _clip_env_true
+    from ndi.pyramid.multiscale import _env_true as _level_env_true
+
+    if not (
+        _level_env_true("NDI_LIGHTSHEET_SINGLE_LEVEL")
+        or _clip_env_true("NDI_LIGHTSHEET_VIEWPORT_CLIP")
+    ):
+        try:
+            from ndi.gui.app.lightsheetZarr.viewtiles import attachViewTally
+
+            view_timer = attachViewTally(  # noqa: F841 - parented to the window
+                viewer, added_layers, loader.levelMeta, fetcher, counter
+            )
+        except Exception as exc:  # noqa: BLE001 - a tally is never worth the viewer
+            print(
+                f"[lightsheet] view tile tally: could not start ({exc})",
+                file=sys.stderr,
+                flush=True,
+            )
+    else:
+        print(
+            "[lightsheet] view tile tally: off in single-level / viewport-clip mode",
+            file=sys.stderr,
+            flush=True,
+        )
 
     # Launch window is closed BEFORE napari.run() because napari's
     # event loop blocks the main thread and our Qt window can't
@@ -1100,7 +1257,142 @@ def _attach_refresh_button(viewer, layers) -> None:
 _CLOUD_PANELS: dict[int, Any] = {}
 
 
-def _attach_cloud_panel(viewer) -> None:
+def _reportCollector(viewer, session, pyramid_doc, loader, counter, layers):
+    """A zero-argument callable returning ``buildReport`` extras.
+
+    Everything a "the view is stuck / slow / wrong" report needs that
+    the user cannot be expected to type: which pyramid, which level and
+    region napari is drawing, how far the view's tiles have got, what
+    the fetcher has done, and the recent log. Each probe is guarded on
+    its own: a report about a broken viewer must not fail to build
+    because the viewer is broken.
+    """
+
+    def collect() -> dict:
+        state: dict[str, Any] = {}
+
+        def probe(key, fn):
+            try:
+                state[key] = fn()
+            except Exception as exc:  # noqa: BLE001
+                state[key] = f"<unavailable: {type(exc).__name__}: {exc}>"
+
+        probe(
+            "pyramid",
+            lambda: {
+                "id": (
+                    str(pyramid_doc.id())
+                    if callable(getattr(pyramid_doc, "id", None))
+                    else str(getattr(pyramid_doc, "id", ""))
+                ),
+                "levels": [
+                    {
+                        k: d.document_properties["lightsheetZarrLevel"].get(k)
+                        for k in ("shape", "chunks", "chunk_grid", "dtype", "codec", "axes_order")
+                    }
+                    for d in loader.docs
+                ],
+            },
+        )
+        probe(
+            "view",
+            lambda: {
+                "ready": counter._view_ready,
+                "needed": counter._view_needed,
+                "dims_point": [float(x) for x in viewer.dims.point],
+                "ndisplay": int(viewer.dims.ndisplay),
+                "camera_zoom": float(viewer.camera.zoom),
+                "camera_center": [float(x) for x in viewer.camera.center],
+            },
+        )
+        probe(
+            "layers",
+            lambda: [
+                {
+                    "name": layer.name,
+                    "visible": bool(layer.visible),
+                    "data_level": int(getattr(layer, "data_level", -1)),
+                    "corner_pixels": [[int(v) for v in row] for row in layer.corner_pixels],
+                    "loaded": bool(getattr(layer, "loaded", True)),
+                }
+                for layer in layers
+            ],
+        )
+        probe(
+            "fetches",
+            lambda: {
+                "requested": counter._started,
+                "loaded": counter._done,
+                "in_flight": counter._started - counter._done,
+                "last_fetch_s": counter._last_duration,
+            },
+        )
+        probe("loader", loader.stats)
+
+        extra: dict[str, Any] = {"state": state}
+        try:
+            extra["datasetId"] = _cloud_dataset_id(session) or None
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            doc_id = (
+                pyramid_doc.id() if callable(getattr(pyramid_doc, "id", None)) else pyramid_doc.id
+            )
+            extra["documentId"] = str(doc_id)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            from ndi.gui.feedback import installLogBuffer
+
+            extra["log"] = installLogBuffer().text()
+        except Exception:  # noqa: BLE001
+            pass
+        return {k: v for k, v in extra.items() if v is not None}
+
+    return collect
+
+
+def _tilesInFlightRow(fetcher, QHBoxLayout, QLabel, QComboBox):
+    """A "Tiles in flight" drop-down that changes the fetch limit live.
+
+    More tiles at once hides per-request latency, until the line is full:
+    past that, every tile in flight shares the same bandwidth and each one
+    arrives later, including the ones in view. The right number depends on
+    the connection, so the reader picks it.
+    """
+    from ndi.pyramid.multiscale import WORKER_CHOICES
+
+    row = QHBoxLayout()
+    label = QLabel("Tiles in flight")
+    combo = QComboBox()
+    choices = [n for n in WORKER_CHOICES if n <= fetcher.maxWorkers]
+    current = fetcher.workerLimit
+    if current not in choices:
+        choices = sorted(set(choices) | {current})
+    for n in choices:
+        combo.addItem(str(n), n)
+    combo.setCurrentIndex(choices.index(current))
+    tip = (
+        "How many tiles download at once. More hides network latency;\n"
+        "too many on a slow line just share the bandwidth, so every\n"
+        "tile -- including the ones in view -- arrives later. Try 8 on\n"
+        "~100 Mb/s, 32-64 on a fast connection. Takes effect now."
+    )
+    label.setToolTip(tip)
+    combo.setToolTip(tip)
+
+    def _changed(_index):
+        n = fetcher.setWorkers(int(combo.currentData()))
+        print(f"[lightsheet] tiles in flight: {n}", file=sys.stderr, flush=True)
+
+    combo.currentIndexChanged.connect(_changed)
+    row.addWidget(label)
+    row.addWidget(combo)
+    row.addStretch(1)
+    return row
+
+
+def _attach_cloud_panel(viewer, report_collect=None, fetcher=None) -> None:
     """Dock an NDI Cloud sign-in panel with a BETA badge.
 
     Reuses the gene-pyramid viewer's addCloudPanel contract -- same
@@ -1150,7 +1442,14 @@ def _attach_cloud_panel(viewer) -> None:
 
     try:
         from qtpy.QtCore import Qt, QTimer
-        from qtpy.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+        from qtpy.QtWidgets import (
+            QComboBox,
+            QHBoxLayout,
+            QLabel,
+            QPushButton,
+            QVBoxLayout,
+            QWidget,
+        )
     except ImportError:
         return
 
@@ -1195,6 +1494,18 @@ def _attach_cloud_panel(viewer) -> None:
     beta_row.addStretch(1)
     outer.addLayout(beta_row)
 
+    if report_collect is not None:
+        from ndi.gui.feedback import reportButton
+
+        outer.addWidget(
+            reportButton(
+                box,
+                app="lightsheetZarr-viewer",
+                collect=report_collect,
+                title="Report a problem with the lightsheet viewer",
+            )
+        )
+
     signin = QPushButton("Sign in...")
     signin.setToolTip(
         "Sign in to NDI Cloud, so tiles that are not already\n"
@@ -1213,6 +1524,9 @@ def _attach_cloud_panel(viewer) -> None:
     result.setWordWrap(True)
     result.hide()
     outer.addWidget(result)
+
+    if fetcher is not None and hasattr(fetcher, "setWorkers"):
+        outer.addLayout(_tilesInFlightRow(fetcher, QHBoxLayout, QLabel, QComboBox))
     outer.addStretch()
 
     def _tick():

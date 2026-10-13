@@ -166,6 +166,12 @@ def cloudFetches(label: str = "fetching"):
 _window = None
 _window_failed = False
 
+#: Set once closeLaunchWindow has run. Without it, the first progress
+#: call after the close (``note("viewer running ...")`` is one) goes
+#: through ``_mode()`` -> ``_launchWindow()``, finds no window, and
+#: builds a FRESH one stuck on "starting ..." that nothing ever closes.
+_window_closed = False
+
 
 def _mode() -> str:
     """Which indicator to use: ``"gui"``, ``"text"`` or ``"off"``."""
@@ -221,7 +227,7 @@ def _launchWindow():
     harmless where they are already the default (Qt6 deprecates both).
     """
     global _window, _window_failed
-    if _window is not None or _window_failed:
+    if _window is not None or _window_failed or _window_closed:
         return _window
     try:
         from qtpy.QtCore import Qt
@@ -324,8 +330,9 @@ def closeLaunchWindow() -> None:
     a progress window that outlives the thing it was reporting on is
     worse than none, because it makes a finished launch look stuck.
     """
-    global _window
+    global _window, _window_closed
     win, _window = _window, None
+    _window_closed = True
     if win is None:
         return
     with contextlib.suppress(Exception):

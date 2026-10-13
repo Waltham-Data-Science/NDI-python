@@ -369,6 +369,7 @@ def uploadSingleFile(
     file_path: str,
     *,
     use_bulk_upload: bool = False,
+    checksum: bool = True,
     client: CloudClient | None = None,
 ) -> tuple[bool, str]:
     """Upload a single file to the NDI cloud service.
@@ -381,6 +382,11 @@ def uploadSingleFile(
         file_path: Local path of the file to upload.
         use_bulk_upload: If True, zip the file and use the bulk upload
             mechanism. Defaults to False.
+        checksum: If True (default), compute the file's CRC-32
+            (:func:`ndi.fun.file.crc32`) and send it with the single-file
+            upload, so S3 rejects a corrupted upload and NDI Cloud records
+            the file's ``crc32``. Ignored for bulk uploads, whose zip entries
+            carry their own CRC-32.
         client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
@@ -408,13 +414,19 @@ def uploadSingleFile(
                 if zip_path.exists():
                     zip_path.unlink()
         else:
+            checksum_crc32 = ""
+            if checksum:
+                from ..fun.file import crc32
+
+                checksum_crc32 = crc32(file_path)
             url = files_api.getFileUploadURL(
                 client.config.org_id,
                 dataset_id,
                 file_uid,
+                checksum_crc32=checksum_crc32,
                 client=client,
             )
-            files_api.putFiles(url, file_path)
+            files_api.putFiles(url, file_path, checksum_crc32=checksum_crc32)
 
         return True, ""
     except Exception as exc:

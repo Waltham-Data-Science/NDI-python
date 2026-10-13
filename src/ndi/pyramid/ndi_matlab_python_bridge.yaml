@@ -100,6 +100,18 @@ functions:
       One layer per channel. Kept here (rather than viewer.py) so a
       headless caller can build the ladders without a display.
 
+  - name: configureDaskPool
+    matlab_path: null
+    python_path: "ndi/pyramid/multiscale.py"
+    output_arguments:
+      - name: n
+        type_python: int
+    decision_log: >-
+      Python-only in this namespace. Widens dask's threaded-scheduler pool
+      (default: one thread per CPU) to the chunk fetcher's worker count, so
+      napari's I/O-bound chunk reads can keep every worker busy. MATLAB has
+      no dask; nothing to mirror.
+
   - name: prefetchCoarsestLevel
     matlab_path: null
     python_path: "ndi/pyramid/multiscale.py"

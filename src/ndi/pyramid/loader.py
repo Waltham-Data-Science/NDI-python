@@ -168,6 +168,19 @@ class ImagePyramidLoader:
         return self._fetcher
 
     @property
+    def levelMeta(self) -> list[dict]:
+        """Per-level chunk geometry, finest first.
+
+        Each entry has ``doc``, ``axes`` (the level's ``axes_order``,
+        lower case), ``chunks``, ``chunk_grid`` and ``stored`` (the set
+        of ``chunk.bin_#`` names the level holds, or None when the
+        document has no file list). The viewer uses it to count the
+        chunks the current view needs.
+        """
+        self.build()
+        return list(getattr(self._fetcher, "_level_meta", None) or [])
+
+    @property
     def docs(self) -> list:
         """The level documents, sorted finest-first.
 

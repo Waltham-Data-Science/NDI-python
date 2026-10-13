@@ -31,11 +31,54 @@ optional install extras (``pip install 'ndi[napari]'``).
 
 from __future__ import annotations
 
+import heapq
+import itertools
 import os
 import threading
+import time
 from typing import Any
 
 from ndi.cloud.batch_signed_url import BatchScopeUnreachable
+
+
+class StaleChunkRead(Exception):
+    """A blocking chunk read was released because the view moved on.
+
+    napari computes slices on ONE thread, so a slice for a view the user
+    has already zoomed past holds up the slice for where they stopped
+    until every one of its tiles has arrived. When the viewer reports
+    (:meth:`_ChunkFetcher.setView`) that a waiting chunk is no longer in
+    view, the read raises this instead of waiting. The fetch itself is
+    NOT cancelled: it stays queued at low priority and lands in the
+    local cache, so zooming back costs nothing.
+
+    Raised, not answered with fill_value: napari's opportunistic dask
+    cache would keep a fill block under the chunk's task key, and the
+    region would stay blank after the real data arrived.
+    """
+
+
+# Returned by _ChunkFetcher._resolveDirect when the session-free path cannot
+# answer (no manifest on disk yet, no cloud location, not a series member) and
+# the caller should go through the session's database_openbinarydoc instead.
+_FALLBACK = object()
+
+
+class _Job:
+    """One queued or running chunk fetch, shared by everyone waiting on it."""
+
+    __slots__ = ("key", "doc", "filename", "started", "done", "path", "exc", "callbacks")
+
+    def __init__(self, key, doc, filename):
+        self.key = key
+        self.doc = doc
+        self.filename = filename
+        self.started = False
+        self.done = threading.Event()
+        self.path: str | None = None
+        self.exc: BaseException | None = None
+        self.callbacks: list = []
+
 
 # ---------------------------------------------------------------------------
 # depends_on / doc discovery
@@ -140,34 +183,72 @@ class _ChunkFetcher:
     resolving is fetching. Eager resolution of every chunk of every level
     then downloads the whole pyramid before napari draws a pixel.
 
-    This class is the middle ground: dedicated fetcher threads each own
-    their own re-opened session. Delayed tasks call ``chunkPath(doc, name)``
+    This class is the middle ground: dedicated fetcher threads resolve
+    chunks off the caller's thread. Delayed tasks call ``chunkPath(doc, name)``
     from whichever thread they run on; the fetcher dispatches through its
     pool and returns the resolved local path. Resolved paths are memoised
     per (doc_id, filename) so a re-render never reaches the fetch threads
     again -- a cached hit is one ``os.path.exists`` from any thread.
 
-    ``workers`` DEFAULTS TO 1: one session opened once, exactly as if a
-    separate process held it. Cloud fetches are latency-bound, so raising
-    it buys overlap; it also costs another whole session per worker.
+    SESSION-FREE MEMBER RESOLUTION. A chunk is a file series member, and
+    resolving one needs no database at all: the level document is already
+    in memory, its manifest names each member's uid, and DID's
+    ``cached_path_for_uid`` finds a member on disk with no SQL (it is
+    documented as safe from any thread). A member that is not on disk is
+    fetched through NDI's cloud handler -- the same
+    ``download_file_from_cloud`` DID itself would call, with the same
+    context -- and lands in DID's file cache under its uid, exactly where
+    ``open_doc`` would have put it. So workers are plain threads, and a
+    worker only opens a session of its own (lazily, on first need) when a
+    chunk has to go the long way: the manifest is not on disk yet, or the
+    document records no cloud location. ``NDI_LIGHTSHEET_DIRECT=0`` turns
+    the session-free path off.
+
+    ``workers`` defaults to 1 here; the viewer passes
+    :func:`_default_workers`. Cloud fetches are latency-bound, so many
+    workers buy overlap, and with session-free resolution an extra worker
+    costs one idle thread.
     """
 
-    def __init__(self, session, workers: int = 1):
+    def __init__(self, session, workers: int = 1, max_workers: int | None = None):
         self._session = session
         self._owner = threading.get_ident()
         self._reopen = self._reopener(session)
-        self._workers = max(1, int(workers))
+        # max_workers threads are started; at most `workers` of them fetch
+        # at once. The limit can change while the viewer runs (setWorkers):
+        # threads past it just wait, so lowering it never interrupts a
+        # fetch and raising it takes effect on the next job.
+        self._limit = max(1, int(workers))
+        self._workers = max(self._limit, int(max_workers or 0))
+        self._running = 0
         self._local = threading.local()
-        self._pool = None
         self._lock = threading.Lock()
         self._paths: dict[tuple[str, str], str] = {}
-        # Async prefetch bookkeeping. When the upsample-fallback reader
-        # kicks off a background fetch, this maps the chunk key to the
-        # list of on_complete callbacks that fire when the pool worker
-        # finishes. Sharing the map de-duplicates: the same chunk
-        # requested twice enqueues one task and both callers are
-        # notified when it lands.
-        self._in_flight: dict[tuple[str, str], list] = {}
+        # Work queue. A heap of (tier, -seq, job): tier 0 is a chunk in
+        # the current view (see setView), tier 1 everything else, and
+        # within a tier the NEWEST request goes first -- the user is
+        # looking at what they asked for last, not at the levels they
+        # zoomed through on the way. One _Job per chunk key, shared by
+        # every waiter and callback, so a chunk is never fetched twice.
+        # A re-request pushes a fresh entry; stale heap entries for a
+        # started job are skipped on pop.
+        self._cv = threading.Condition()
+        self._heap: list = []
+        self._jobs: dict[tuple[str, str], _Job] = {}
+        self._seq = itertools.count()
+        self._threads: list[threading.Thread] = []
+        self._threads_ready = 0
+        self._closed = False
+        # The current view's chunk keys, set from the viewer's main-
+        # thread poll. None means unknown: nothing is prioritised and
+        # no read is ever released as stale.
+        self._view_keys: frozenset | None = None
+        self._view_time = 0.0
+        # Chunks of these docs are never released as stale: napari's
+        # auto-contrast samples the coarsest level at launch, whatever
+        # the view is.
+        self._never_stale_docs: set[str] = set()
+        self._stale_released = 0
         # Per-fetch timing bucketed by outcome. Set by _resolve on every
         # call, including memo hits, so a caller can tell whether a
         # slow tile is "cloud is slow" vs "local cache lookup is slow"
@@ -186,6 +267,38 @@ class _ChunkFetcher:
         # See Waltham-Data-Science/NDI-python#322 and the strict-mode
         # rationale in ndi.cloud.batch_signed_url.BatchScopeUnreachable.
         self._unreachable_exc: BatchScopeUnreachable | None = None
+        # Session-free member resolution (see the class docstring). The
+        # file directory is read once, here, on the owner thread; the
+        # per-document and per-series caches hold only in-memory data
+        # and manifest uid lists.
+        self._direct = os.environ.get("NDI_LIGHTSHEET_DIRECT", "1").strip().lower() not in (
+            "0",
+            "false",
+            "off",
+        )
+        self._file_dir = self._fileDir(session)
+        self._did_docs: dict[str, Any] = {}
+        self._series: dict[tuple[str, str], tuple] = {}
+        self._direct_hits = 0
+        self._direct_fetches = 0
+        self._fallbacks = 0
+
+    @staticmethod
+    def _fileDir(session) -> str | None:
+        """DID's per-database file directory, or None if not reachable.
+
+        A session exposes its database directly; a dataset holds one
+        through its inner session.
+        """
+        for holder in (session, getattr(session, "_session", None)):
+            database = getattr(holder, "database", None) if holder is not None else None
+            try:
+                path = database.binary_path if database is not None else None
+            except Exception:  # noqa: BLE001 - not DID-backed
+                path = None
+            if path:
+                return str(path)
+        return None
 
     @staticmethod
     def _reopener(session):
@@ -202,22 +315,118 @@ class _ChunkFetcher:
         cls = type(session)
         return lambda: cls(path)
 
-    def _initThread(self):
-        self._local.session = self._reopen()
-
-    def _ensurePool(self):
-        if self._pool is not None or self._reopen is None:
-            return self._pool
-        with self._lock:
-            if self._pool is None:
-                from concurrent.futures import ThreadPoolExecutor
-
-                self._pool = ThreadPoolExecutor(
-                    max_workers=self._workers,
-                    thread_name_prefix="ndi-lightsheet",
-                    initializer=self._initThread,
+    def _ensureWorkers(self) -> bool:
+        """Start the fetcher threads once. False when the session cannot
+        be reopened for another thread (then everything runs inline)."""
+        if self._reopen is None and not self._direct:
+            return False
+        with self._cv:
+            if self._threads or self._closed:
+                return not self._closed
+            for i in range(self._workers):
+                t = threading.Thread(
+                    target=self._workerLoop,
+                    name=f"ndi-lightsheet_{i}",
+                    daemon=True,
                 )
-        return self._pool
+                self._threads.append(t)
+                t.start()
+        return True
+
+    def _workerLoop(self) -> None:
+        # No session here: most chunks resolve without one, and a worker
+        # that needs one opens it on first use (_threadSession).
+        with self._cv:
+            self._threads_ready += 1
+            self._cv.notify_all()
+        while True:
+            with self._cv:
+                job = None
+                while job is None:
+                    while (not self._heap or self._running >= self._limit) and not self._closed:
+                        self._cv.wait()
+                    if self._closed:
+                        return
+                    tier, nseq, cand = heapq.heappop(self._heap)
+                    if cand.started:
+                        continue
+                    if tier == 0 and (self._view_keys is None or cand.key not in self._view_keys):
+                        # Was in view when queued, is not any more.
+                        heapq.heappush(self._heap, (1, nseq, cand))
+                        continue
+                    cand.started = True
+                    self._running += 1
+                    job = cand
+            self._run(job)
+
+    def _run(self, job: _Job) -> None:
+        """Resolve one job on this thread and settle everyone waiting."""
+        path = None
+        try:
+            path = self._resolve(job.doc, job.filename)
+        except BatchScopeUnreachable as exc:
+            # Systemic scope failure. Remember it so the next
+            # chunkPathIfCached / chunkPath surfaces it instead of
+            # letting the upsample fallback quietly return a canvas
+            # full of zeros.
+            with self._lock:
+                if self._unreachable_exc is None:
+                    self._unreachable_exc = exc
+            job.exc = exc
+        except BaseException as exc:  # noqa: BLE001 - handed to the waiter
+            job.exc = exc
+        if path is not None:
+            with self._lock:
+                self._paths[job.key] = path
+        with self._cv:
+            self._jobs.pop(job.key, None)
+            callbacks, job.callbacks = job.callbacks, []
+            self._running -= 1
+            self._cv.notify_all()
+        job.path = path
+        job.done.set()
+        for cb in callbacks:
+            try:
+                cb(path)
+            except Exception:  # noqa: BLE001 - a bad callback is not fatal
+                pass
+
+    def _enqueue(self, doc, filename, on_complete=None) -> _Job:
+        """Queue a fetch (or bump an already-queued one to newest)."""
+        key = (getattr(doc, "id", str(doc)), filename)
+        with self._cv:
+            job = self._jobs.get(key)
+            if job is None:
+                job = _Job(key, doc, filename)
+                self._jobs[key] = job
+            if on_complete is not None:
+                job.callbacks.append(on_complete)
+            if not job.started:
+                tier = 0 if self._view_keys is not None and key in self._view_keys else 1
+                heapq.heappush(self._heap, (tier, -next(self._seq), job))
+                self._cv.notify()
+        return job
+
+    @property
+    def workerLimit(self) -> int:
+        """How many chunks may be fetched at once right now."""
+        return self._limit
+
+    @property
+    def maxWorkers(self) -> int:
+        """The most :meth:`setWorkers` will allow: the threads started."""
+        return self._workers
+
+    def setWorkers(self, n: int) -> int:
+        """Change how many chunks are fetched at once; returns the new limit.
+
+        Clamped to 1..:attr:`maxWorkers`. Takes effect immediately for
+        queued work; fetches already running finish undisturbed.
+        """
+        with self._cv:
+            self._limit = max(1, min(int(n), self._workers))
+            self._cv.notify_all()
+            return self._limit
 
     def warm(self) -> None:
         """Build the session handles now, off the calling thread.
@@ -226,18 +435,105 @@ class _ChunkFetcher:
         one-off session-open cost lands while the user is staring at an
         empty canvas rather than at the first pan.
         """
-        pool = self._ensurePool()
-        if pool is None:
+        if not self._ensureWorkers():
             return
-        for f in [pool.submit(lambda: None) for _ in range(self._workers)]:
-            f.result()
+        with self._cv:
+            while self._threads_ready < self._workers and not self._closed:
+                self._cv.wait()
+
+    def setView(self, keys, never_stale_doc_ids=None) -> None:
+        """Tell the fetcher which chunks the current view needs.
+
+        KEYS maps ``(doc_id, filename)`` to the level document (None:
+        the view is unknown). Chunks in view jump the queue -- and are
+        queued now if nobody has asked yet, so they are already on the
+        way while napari is still finishing an older slice. A blocking
+        read for a chunk that has dropped OUT of view is released with
+        :class:`StaleChunkRead`; its fetch stays queued at low priority.
+        """
+        with self._cv:
+            if never_stale_doc_ids is not None:
+                self._never_stale_docs = set(never_stale_doc_ids)
+            if keys is None:
+                self._view_keys = None
+                self._cv.notify_all()
+                return
+            self._view_keys = frozenset(keys)
+            self._view_time = time.monotonic()
+            # Re-rank what is queued: anything now in view to tier 0.
+            for key in self._view_keys:
+                job = self._jobs.get(key)
+                if job is not None and not job.started:
+                    heapq.heappush(self._heap, (0, -next(self._seq), job))
+            self._cv.notify_all()
+        # Queue what the view needs and nobody has asked for yet.
+        if not self._threads and not self._ensureWorkers():
+            return
+        for key, doc in keys.items():
+            known = self._paths.get(key)
+            if known is not None and os.path.exists(known):
+                continue
+            self._enqueue(doc, key[1])
+
+    def _isStale(self, job: _Job, since: float) -> bool:
+        view = self._view_keys
+        return (
+            view is not None
+            and self._view_time > since
+            and job.key not in view
+            and job.key[0] not in self._never_stale_docs
+        )
+
+    def staleReleased(self) -> int:
+        """How many blocking reads were released as stale so far."""
+        return self._stale_released
+
+    def _threadSession(self):
+        """The session this thread may use, opening one on first need.
+
+        The owner thread uses the caller's session. A worker reopens its
+        own the first time a chunk cannot be resolved session-free. A
+        session that cannot be reopened (no path) is used as-is, as before:
+        that is the directory-less case the inline fallback serves.
+        """
+        if threading.get_ident() == self._owner or self._reopen is None:
+            return self._session
+        s = getattr(self._local, "session", None)
+        if s is None:
+            s = self._reopen()
+            self._local.session = s
+        return s
 
     def _resolve(self, doc, filename) -> str | None:
-        s = getattr(self._local, "session", None) or self._session
         import time as _time
 
         t0 = _time.monotonic()
+        if self._direct:
+            try:
+                direct = self._resolveDirect(doc, filename)
+            except BatchScopeUnreachable:
+                with self._stats_lock:
+                    self._resolve_none += 1
+                raise
+            except Exception as exc:  # noqa: BLE001 - same contract as below
+                with self._stats_lock:
+                    self._resolve_none += 1
+                if os.environ.get("NDI_LIGHTSHEET_DEBUG"):
+                    import sys
+
+                    print(
+                        f"[lightsheet] chunk fetch failed for {filename}: "
+                        f"{type(exc).__name__}: {exc}",
+                        file=sys.stderr,
+                    )
+                return None
+            if direct is not _FALLBACK:
+                self._recordResolve(filename, _time.monotonic() - t0, direct)
+                return direct
+            with self._stats_lock:
+                self._fallbacks += 1
         try:
+            s = self._threadSession()
             fh = s.database_openbinarydoc(doc, filename)
         except BatchScopeUnreachable:
             # A systemic failure of the batch signed-URL path is not a
@@ -266,28 +562,211 @@ class _ChunkFetcher:
             return None
         try:
             path = getattr(fh, "fullpathfilename", None)
-            dt = _time.monotonic() - t0
-            # database_openbinarydoc has two happy paths: a local-cache
-            # hit (near instant, microseconds; no cloud roundtrip) and
-            # a cloud fetch (tens of ms to seconds). Split the buckets
-            # so a summary later can say how many of each we saw and
-            # what each one costs.
-            #
-            # 50 ms is comfortably above local disk latency and well
-            # under any credible cloud RTT; picking a threshold rather
-            # than routing on internal state keeps the classifier
-            # independent of DID's evolving fast paths.
-            with self._stats_lock:
-                if dt < 0.05:
-                    self._resolve_times_cache.append(dt)
-                else:
-                    self._resolve_times_fetch.append(dt)
-            return str(path) if path else None
+            path = str(path) if path else None
+            self._recordResolve(filename, _time.monotonic() - t0, path)
+            return path
         finally:
             try:
                 s.database_closebinarydoc(fh)
             except Exception:
                 pass
+
+    def _recordResolve(self, filename, dt: float, path) -> None:
+        """Bucket one resolve's time; under debug, say what a fetch cost.
+
+        database_openbinarydoc and the session-free path both have two
+        happy paths: a local hit (microseconds) and a cloud fetch (tens of
+        ms to seconds). 50 ms is comfortably above local disk latency and
+        well under any credible cloud round trip; a threshold keeps the
+        classifier independent of either path's internals.
+        """
+        with self._stats_lock:
+            if dt < 0.05:
+                self._resolve_times_cache.append(dt)
+            else:
+                self._resolve_times_fetch.append(dt)
+        if dt >= 0.05 and os.environ.get("NDI_LIGHTSHEET_DEBUG"):
+            import sys
+
+            from ndi.cloud.filehandler import lastFetchTiming
+
+            t = lastFetchTiming()
+            if t:
+                size = t.get("bytes", 0) or 0
+                xfer = t.get("transfer_s", 0.0) or 0.0
+                rate = f", {size / xfer / 1e6:.1f} MB/s" if xfer > 0 and size else ""
+                detail = (
+                    f"sign {t.get('sign_s', 0.0):.2f}s "
+                    f"({'batch' if t.get('batch') else 'per-file'}), "
+                    f"transfer {xfer:.2f}s, {size / 1e6:.2f} MB{rate}"
+                )
+            else:
+                detail = "no cloud timing recorded"
+            print(
+                f"[lightsheet] fetched {filename} in {dt:.2f}s: {detail} "
+                f"(thread {threading.current_thread().name})",
+                file=sys.stderr,
+                flush=True,
+            )
+
+    # ------------------------------------------------------------ direct path
+
+    def _resolveDirect(self, doc, filename):
+        """Resolve a series member with no database, or return _FALLBACK.
+
+        Local first, through DID's ``cached_path_for_uid`` (global file
+        cache, then this database's file directory -- the order
+        ``open_doc`` uses). A member that is not on disk is fetched through
+        the cloud handler into DID's file cache. Returns the local path,
+        None for a member the manifest records as absent (sparse; what
+        ``open_doc`` reports as NoSuchMember), or _FALLBACK when this path
+        cannot answer and the session must.
+        """
+        from did.file import cached_path_for_uid
+
+        found = self._seriesFor(doc, filename)
+        if found is None:
+            return _FALLBACK
+        stem, index, uids, manifest_location, doc_id = found
+        if index > len(uids) or not uids[index - 1]:
+            return None
+        member_uid = str(uids[index - 1])
+        roots = [self._file_dir] if self._file_dir else []
+        local = cached_path_for_uid(member_uid, additional_roots=roots)
+        if local:
+            with self._stats_lock:
+                self._direct_hits += 1
+            return str(local)
+        if not manifest_location:
+            return _FALLBACK
+        path = self._fetchMember(doc_id, filename, stem, member_uid, manifest_location)
+        with self._stats_lock:
+            self._direct_fetches += 1
+        return path
+
+    def _seriesFor(self, doc, filename):
+        """(stem, index, member uids, manifest ndic location, doc id), or None.
+
+        Reads only the document in memory and the manifest on disk. The
+        manifest's uid list is read once per (document, series) and kept;
+        a manifest that is not on disk yet is not remembered as missing,
+        so once the session path has fetched it the next call finds it.
+        """
+        try:
+            from did.document import Document as DIDDocument
+            from did.file import cached_path_for_uid, read_series_manifest
+        except ImportError:
+            return None
+        doc_id = getattr(doc, "id", None)
+        if not doc_id:
+            return None
+        did_doc = self._did_docs.get(doc_id)
+        if did_doc is None:
+            props = getattr(doc, "document_properties", None)
+            if not isinstance(props, dict):
+                return None
+            did_doc = DIDDocument(props)
+            self._did_docs[doc_id] = did_doc
+        stem, index = did_doc.series_member_of(filename)
+        if not stem or index is None or index < 1:
+            return None
+        entry = self._series.get((doc_id, stem))
+        if entry is None:
+            roots = [self._file_dir] if self._file_dir else []
+            manifest_path = None
+            for uid in did_doc.file_uids(stem):
+                manifest_path = cached_path_for_uid(uid, additional_roots=roots)
+                if manifest_path:
+                    break
+            if not manifest_path:
+                return None
+            try:
+                uids = [
+                    str(u) if u else "" for u in read_series_manifest(manifest_path).get("uids", [])
+                ]
+            except Exception:  # noqa: BLE001 - let the session path report it
+                return None
+            entry = (uids, _ndicLocation(did_doc.document_properties, stem))
+            self._series[(doc_id, stem)] = entry
+        uids, location = entry
+        return stem, index, uids, location, doc_id
+
+    def _fetchMember(self, doc_id, filename, stem, member_uid, manifest_location) -> str:
+        """Fetch one member through the cloud handler into DID's file cache.
+
+        The same call DID's ``open_doc`` makes -- the manifest's location
+        as the source and the member in the context, so the handler fetches
+        the member's own object through the batch signed-URL cache -- into
+        a unique scratch file in DID's temp folder, then moved into the
+        global file cache under the member's uid. A cache that cannot take
+        it (unwritable, or a uid of the wrong width) leaves the file in
+        this database's file directory instead; either way
+        ``cached_path_for_uid`` finds it next time, in this process or the
+        next, and so does DID.
+        """
+        import tempfile
+
+        from did.common import PathConstants
+
+        from ndi.cloud.filehandler import download_file_from_cloud
+
+        temp_dir = PathConstants().temppath
+        os.makedirs(temp_dir, exist_ok=True)
+        fd, scratch = tempfile.mkstemp(dir=temp_dir, prefix=f"{member_uid}.", suffix=".part")
+        os.close(fd)
+        os.remove(scratch)
+        try:
+            download_file_from_cloud(
+                scratch,
+                manifest_location,
+                {
+                    "documentId": doc_id,
+                    "filename": filename,
+                    "seriesName": stem,
+                    "uid": member_uid,
+                    "mode": "open",
+                },
+            )
+            if not os.path.isfile(scratch):
+                raise FileNotFoundError(
+                    f"the cloud handler produced no file for {filename} (uid {member_uid})"
+                )
+            return self._keepFetched(scratch, member_uid)
+        except BaseException:
+            try:
+                os.remove(scratch)
+            except OSError:
+                pass
+            raise
+
+    def _keepFetched(self, scratch: str, member_uid: str) -> str:
+        """Move a fetched member to where cached_path_for_uid will find it."""
+        import struct
+
+        try:
+            from did.common import get_cache
+
+            cache = get_cache()
+            if len(member_uid) == cache.file_name_characters:
+                if cache.is_file(member_uid):
+                    existing = cache.full_path(member_uid)
+                    if os.path.isfile(existing):
+                        # Another fetch of the same uid won the race; same bytes.
+                        os.remove(scratch)
+                        return existing
+                    cache.remove_file(member_uid)
+                cache.add_file(scratch, member_uid)
+                if os.path.exists(scratch):
+                    os.remove(scratch)
+                return cache.full_path(member_uid)
+        except (OSError, ValueError, struct.error):
+            pass
+        if self._file_dir:
+            os.makedirs(self._file_dir, exist_ok=True)
+            dest = os.path.join(self._file_dir, member_uid)
+            os.replace(scratch, dest)
+            return dest
+        return scratch
 
     def stats_summary(self) -> str:
         """One-line summary of resolve timings for the last session.
@@ -307,10 +786,13 @@ class _ChunkFetcher:
             mean_cache_ms = 1000.0 * (sum(self._resolve_times_cache) / n_cache if n_cache else 0.0)
             mean_fetch_s = sum(self._resolve_times_fetch) / n_fetch if n_fetch else 0.0
             max_fetch_s = max(self._resolve_times_fetch) if n_fetch else 0.0
+            n_fallback = self._fallbacks
         return (
             f"resolves: {n_cache} cache-hits (mean {mean_cache_ms:.1f}ms), "
             f"{n_fetch} cloud-fetches (mean {mean_fetch_s:.2f}s, max "
-            f"{max_fetch_s:.2f}s), {n_none} failures"
+            f"{max_fetch_s:.2f}s), {n_none} failures, "
+            f"{self._stale_released} stale reads released, "
+            f"{n_fallback} via a session ({self._limit} of {self._workers} workers)"
         )
 
     def reset_stats(self) -> None:
@@ -318,6 +800,9 @@ class _ChunkFetcher:
             self._resolve_times_cache.clear()
             self._resolve_times_fetch.clear()
             self._resolve_none = 0
+            self._direct_hits = 0
+            self._direct_fetches = 0
+            self._fallbacks = 0
 
     def chunkPath(self, doc, filename) -> str | None:
         """Resolve one chunk file to a local path, fetching it if remote.
@@ -390,83 +875,54 @@ class _ChunkFetcher:
 
         The upsample-fallback reader returns coarse-upsampled data
         immediately for a chunk that is not on disk; this asks the
-        pool to go fetch the real thing so a later re-slice can
-        find it via :meth:`chunkPathIfCached`. On completion (or
+        fetcher threads to go fetch the real thing so a later re-slice
+        can find it via :meth:`chunkPathIfCached`. On completion (or
         failure), ``on_complete`` is called with the resolved path
         or None -- callers use that to trigger a napari refresh so
         the user is not stuck looking at blurred data forever.
 
         De-duplicates by memo key: the same (doc, filename) already
-        in flight or already cached does not enqueue a second task.
+        queued or already cached does not fetch a second time.
         Errors are absorbed; the reader will retry on the next
         re-slice and eventually get real data or a permanent
         fallback.
         """
         key = (getattr(doc, "id", str(doc)), filename)
-        with self._lock:
-            if key in self._paths and os.path.exists(self._paths[key]):
-                # Already cached -- no need to enqueue. Fire the
-                # completion callback synchronously so the caller
-                # can react uniformly whether the answer was cheap
-                # or expensive.
-                if on_complete is not None:
-                    try:
-                        on_complete(self._paths[key])
-                    except Exception:  # noqa: BLE001
-                        pass
-                return
-            if key in self._in_flight:
-                if on_complete is not None:
-                    self._in_flight[key].append(on_complete)
-                return
-            self._in_flight[key] = [on_complete] if on_complete is not None else []
-
-        pool = self._ensurePool()
-        if pool is None:
-            # No pool means this session cannot be reopened, and
-            # the fetcher is single-threaded. Fall back to a
-            # blocking resolve on the caller's thread -- it is the
-            # rare directory-backed case and does not need async.
-            path = self._resolve(doc, filename)
-            self._settle_in_flight(key, path)
+        known = self._paths.get(key)
+        if known is not None and os.path.exists(known):
+            # Already cached -- fire the completion callback
+            # synchronously so the caller can react uniformly whether
+            # the answer was cheap or expensive.
+            if on_complete is not None:
+                try:
+                    on_complete(known)
+                except Exception:  # noqa: BLE001
+                    pass
             return
-
-        def _run():
+        if not self._ensureWorkers():
+            # No workers means this session cannot be reopened, and
+            # the fetcher is single-threaded. Fall back to a blocking
+            # resolve on the caller's thread -- it is the rare
+            # directory-backed case and does not need async.
             try:
                 path = self._resolve(doc, filename)
-            except BatchScopeUnreachable as exc:
-                # Systemic scope failure. Remember it so the next
-                # chunkPathIfCached / chunkPath surfaces it instead of
-                # letting the upsample fallback quietly return a
-                # canvas full of zeros.
-                with self._lock:
-                    if self._unreachable_exc is None:
-                        self._unreachable_exc = exc
-                path = None
             except Exception:  # noqa: BLE001
                 path = None
             if path is not None:
                 with self._lock:
                     self._paths[key] = path
-            self._settle_in_flight(key, path)
-
-        pool.submit(_run)
-
-    def _settle_in_flight(self, key, path) -> None:
-        """Drain and call every pending completion callback for one key."""
-        with self._lock:
-            callbacks = self._in_flight.pop(key, [])
-        for cb in callbacks:
-            try:
-                cb(path)
-            except Exception:  # noqa: BLE001 - a bad callback is not fatal
-                pass
+            if on_complete is not None:
+                try:
+                    on_complete(path)
+                except Exception:  # noqa: BLE001
+                    pass
+            return
+        self._enqueue(doc, filename, on_complete=on_complete)
 
     def _fetch(self, doc, filename) -> str | None:
         if threading.get_ident() == self._owner:
             return self._resolve(doc, filename)
-        pool = self._ensurePool()
-        if pool is None:
+        if not self._ensureWorkers():
             raise RuntimeError(
                 f"Cannot fetch {filename!r} from thread "
                 f"{threading.current_thread().name}: this session cannot be "
@@ -475,21 +931,90 @@ class _ChunkFetcher:
                 f"with dask's synchronous scheduler, or pass a session that "
                 f"exposes a path."
             )
-        return pool.submit(self._resolve, doc, filename).result()
+        since = time.monotonic()
+        job = self._enqueue(doc, filename)
+        # Wait, but keep checking whether the view has moved on: a
+        # slice for a view the user zoomed past must not hold up the
+        # slice for where they stopped (napari slices on one thread).
+        while not job.done.wait(0.1):
+            if self._isStale(job, since):
+                with self._lock:
+                    self._stale_released += 1
+                raise StaleChunkRead(f"{filename} left the view before it arrived")
+        if job.exc is not None:
+            raise job.exc
+        return job.path
 
     def close(self) -> None:
-        if self._pool is not None:
-            self._pool.shutdown(wait=False)
-            self._pool = None
+        with self._cv:
+            self._closed = True
+            self._heap.clear()
+            self._cv.notify_all()
+
+
+_DEFAULT_WORKERS = 16
+
+#: Threads started per fetcher, so the viewer can raise the limit live.
+MAX_WORKERS = 64
+
+#: The choices the viewer offers for tiles in flight.
+WORKER_CHOICES = (8, 16, 32, 64)
 
 
 def _default_workers() -> int:
-    """Chunk-fetcher worker count. Env override for the cloud-latency case."""
+    """Chunks fetched at once at launch; ``NDI_LIGHTSHEET_WORKERS`` overrides.
+
+    16 by default. A cloud tile is seconds of waiting on the network and
+    almost no CPU, so overlap pays -- until the line is full: on a
+    100 Mb/s connection 32 tiles of a few MB each just share the same
+    bandwidth and every one arrives later. The viewer can change it live
+    (:meth:`_ChunkFetcher.setWorkers`).
+    """
     try:
-        n = int(os.environ.get("NDI_LIGHTSHEET_WORKERS", "8"))
+        n = int(os.environ.get("NDI_LIGHTSHEET_WORKERS", str(_DEFAULT_WORKERS)))
     except ValueError:
-        return 8
+        return _DEFAULT_WORKERS
     return max(1, n)
+
+
+def configureDaskPool(workers: int) -> int:
+    """Size dask's thread pool for I/O-bound chunk reads; returns its size.
+
+    napari computes slices through dask's threaded scheduler, whose pool
+    defaults to one thread per CPU -- right for computation, wrong here:
+    each chunk read mostly waits on the network, so the pool, not the
+    fetcher, caps how many tiles are in flight. This sets the pool to at
+    least ``workers`` threads (never fewer than the CPU count), process
+    wide, so napari's reads can keep every fetcher worker busy.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    import dask
+
+    n = max(os.cpu_count() or 4, int(workers))
+    dask.config.set(pool=ThreadPoolExecutor(n, thread_name_prefix="ndi-dask"))
+    return n
+
+
+def _ndicLocation(props: dict, name: str) -> str:
+    """The ``ndic://`` location recorded for file ``name``, or ""."""
+    from ndi.cloud.filehandler import NDIC_SCHEME
+
+    files = props.get("files") if isinstance(props, dict) else None
+    if not isinstance(files, dict):
+        return ""
+    file_info = files.get("file_info")
+    infos = file_info if isinstance(file_info, list) else [file_info] if file_info else []
+    for info in infos:
+        if not isinstance(info, dict) or str(info.get("name", "")).lower() != name.lower():
+            continue
+        locations = info.get("locations")
+        locs = locations if isinstance(locations, list) else [locations] if locations else []
+        for loc in locs:
+            where = loc.get("location", "") if isinstance(loc, dict) else ""
+            if str(where).startswith(NDIC_SCHEME):
+                return str(where)
+    return ""
 
 
 def levelArrays(
@@ -541,7 +1066,8 @@ def levelArrays(
 
     _ = channel  # single-channel narrowing lands with the magicgui panels
 
-    fetcher = _ChunkFetcher(session, workers=workers if workers is not None else _default_workers())
+    limit = workers if workers is not None else _default_workers()
+    fetcher = _ChunkFetcher(session, workers=limit, max_workers=max(limit, MAX_WORKERS))
 
     # Upsample-fallback context: build once from the coarsest level's
     # document so every fine-level delayed task can look up covering
@@ -554,6 +1080,12 @@ def levelArrays(
     fetcher._fallback_context = fallback_context  # type: ignore[attr-defined]
 
     arrays: list[Any] = []
+    # Per-level chunk geometry, finest first (same order as ARRAYS).
+    # The viewer reads this to work out which chunks the current view
+    # needs, so it can say "37 of 120 tiles" rather than only how many
+    # are in flight. Rides on the fetcher like the fallback context.
+    level_meta: list[dict] = []
+    fetcher._level_meta = level_meta  # type: ignore[attr-defined]
     for i, doc in enumerate(docs):
         p = doc.document_properties["lightsheetZarrLevel"]
         shape = tuple(int(v) for v in p["shape"])
@@ -564,6 +1096,16 @@ def levelArrays(
         codec = str(p.get("codec", "raw"))
         stored = _storedChunkNames(doc)
         _assertStoredMatchesLevel(doc, p, stored)
+
+        level_meta.append(
+            {
+                "doc": doc,
+                "axes": str(p.get("axes_order", "")).lower(),
+                "chunks": chunks,
+                "chunk_grid": chunk_grid,
+                "stored": stored,
+            }
+        )
 
         n_blocks = 1
         for g in chunk_grid:

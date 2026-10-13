@@ -272,7 +272,7 @@ functions:
 
   - name: decodeJwt
     matlab_path: "+ndi/+cloud/+internal/decodeJwt.m"
-    matlab_last_sync_hash: "7ab96514"
+    matlab_last_sync_hash: "4a571dce"
     python_path: "ndi/cloud/auth.py"
     input_arguments:
       - name: token
@@ -284,6 +284,13 @@ functions:
     decision_log: >
       MATLAB places this in +internal; Python places it in auth.py
       since it is tightly coupled with authentication logic. Name exact match.
+      2026-10-12: examined against 4a571dce (was 7ab96514), NDI-matlab#1024.
+      MATLAB swapped javax.xml.bind.DatatypeConverter.parseBase64Binary,
+      which recent MATLAB releases no longer ship, for
+      matlab.net.base64decode. Same base64url-to-base64 translation and
+      padding before it, same bytes out. Nothing to follow: Python decodes
+      with the standard library's base64 module and never had the Java
+      dependency.
 
   - name: getTokenExpiration
     matlab_path: "+ndi/+cloud/+internal/getTokenExpiration.m"
@@ -960,7 +967,7 @@ functions:
 
   - name: uploadSingleFile
     matlab_path: "+ndi/+cloud/uploadSingleFile.m"
-    matlab_last_sync_hash: "d9213ccb7"
+    matlab_last_sync_hash: "8fa6ea5e"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
       - name: dataset_id
@@ -976,6 +983,10 @@ functions:
         type_matlab: "logical"
         type_python: "bool"
         default: "False"
+      - name: checksum
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "True"
       - name: client
         type_python: "CloudClient | None"
         default: "None"
@@ -986,6 +997,10 @@ functions:
         type_python: "str"
     decision_log: >
       Exact match.
+      2026-10-12: synced to NDI-matlab 8fa6ea5e (claude/file-crc32-lookup,
+      NDI-matlab#1025): 'checksum' (default true) computes the file's CRC-32
+      and sends it with the single-file upload URL request and the PUT
+      (ndi-cloud-node#162).
       2026-09-08: examined against d9213ccb7 (was 7026d493). Two commits.
       39ac4cabe forwards useCurl through the bulk branch and does not port.
       d9213ccb7 adds the bulk-upload status API and a waitForCompletion option on
@@ -1542,6 +1557,7 @@ not_yet_ported:
     matlab_path: "+ndi/+cloud/+download/+internal/signedUrlDiskCache.m"
     python_path: "ndi/cloud/signed_url_disk_cache.py"
     matlab_last_sync_hash: "988ec74"
+    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
     status: ported
     decision_log: >
       PORTED for VH-Lab/NDI-matlab#1010 follow-on / Waltham-Data-Science/
@@ -1685,6 +1701,7 @@ not_yet_ported:
   - name: resolveOrganizationId
     matlab_path: "+ndi/+cloud/+internal/resolveOrganizationId.m"
     matlab_last_sync_hash: "f847d7c4"
+    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
     status: porting_deferred
     decision_log: >
       MATLAB helper introduced with NDI-matlab#979: given
