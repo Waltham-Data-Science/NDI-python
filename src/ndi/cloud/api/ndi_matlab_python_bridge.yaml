@@ -1139,6 +1139,7 @@ functions:
 
   - name: waitForFileUpload
     matlab_path: "+ndi/+cloud/+api/+files/waitForFileUpload.m"
+    matlab_last_sync_hash: "eb583289"
     status: not_yet_ported
     decision_log: >
       Added to NDI-matlab by VH-Lab/NDI-matlab#1027: polls NDI Cloud until

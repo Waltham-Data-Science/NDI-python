@@ -924,7 +924,7 @@ functions:
 
   - name: uploadFilesForDatasetDocuments
     matlab_path: "+ndi/+cloud/+sync/+internal/uploadFilesForDatasetDocuments.m"
-    matlab_last_sync_hash: "4e45d96e"
+    matlab_last_sync_hash: "9c21eb61"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
       - name: org_id
@@ -948,6 +948,11 @@ functions:
     decision_log: >
       MATLAB places this in +sync/+internal. Python places it in upload.py.
       Exact name match.
+      2026-10-13: examined against NDI-matlab 9c21eb61 (VH-Lab/NDI-matlab#1027).
+      The serial path now uploads every file with waitForUpload=false and
+      then waits once, through waitForFileUpload, for NDI Cloud to record
+      them all. Not ported: Python has no waitForFileUpload yet (recorded
+      as not_yet_ported in ndi/cloud/api); Python's uploads do not wait.
       2026-09-25: NDI-matlab 4e45d96e added verbose stage prints and a listFiles-not-yet-uploaded diagnostic. Python code is silent in the same way it was; no behavioural change.
 
       2026-09-15: added a ``dataset`` kwarg. On MATLAB, +sync/+internal/
@@ -967,7 +972,7 @@ functions:
 
   - name: uploadSingleFile
     matlab_path: "+ndi/+cloud/uploadSingleFile.m"
-    matlab_last_sync_hash: "8fa6ea5e"
+    matlab_last_sync_hash: "9c21eb61"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
       - name: dataset_id
@@ -996,6 +1001,11 @@ functions:
       - name: error_message
         type_python: "str"
     decision_log: >
+      2026-10-13: examined against NDI-matlab 9c21eb61 (VH-Lab/NDI-matlab#1027).
+      MATLAB gained a waitForUpload option (default true) that polls
+      waitForFileUpload until NDI Cloud records the upload. Not ported yet:
+      Python returns once the PUT succeeds; see waitForFileUpload
+      (not_yet_ported) in ndi/cloud/api.
       Exact match.
       2026-10-12: synced to NDI-matlab 8fa6ea5e (claude/file-crc32-lookup,
       NDI-matlab#1025): 'checksum' (default true) computes the file's CRC-32
