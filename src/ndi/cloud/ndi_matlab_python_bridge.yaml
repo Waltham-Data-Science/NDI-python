@@ -967,7 +967,7 @@ functions:
 
   - name: uploadSingleFile
     matlab_path: "+ndi/+cloud/uploadSingleFile.m"
-    matlab_last_sync_hash: "d9213ccb7"
+    matlab_last_sync_hash: "8fa6ea5e"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
       - name: dataset_id
@@ -983,6 +983,10 @@ functions:
         type_matlab: "logical"
         type_python: "bool"
         default: "False"
+      - name: checksum
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "True"
       - name: client
         type_python: "CloudClient | None"
         default: "None"
@@ -993,6 +997,10 @@ functions:
         type_python: "str"
     decision_log: >
       Exact match.
+      2026-10-12: synced to NDI-matlab 8fa6ea5e (claude/file-crc32-lookup,
+      NDI-matlab#1025): 'checksum' (default true) computes the file's CRC-32
+      and sends it with the single-file upload URL request and the PUT
+      (ndi-cloud-node#162).
       2026-09-08: examined against d9213ccb7 (was 7026d493). Two commits.
       39ac4cabe forwards useCurl through the bulk branch and does not port.
       d9213ccb7 adds the bulk-upload status API and a waitForCompletion option on

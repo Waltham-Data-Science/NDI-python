@@ -1298,6 +1298,44 @@ functions:
       the 32-character lowercase digest and both refuse a missing file.
       Nothing to port.
 
+  - name: crc32
+    type: function
+    matlab_path: "+ndi/+fun/+file/crc32.m"
+    matlab_last_sync_hash: "8fa6ea5e"
+    python_path: "ndi/fun/file.py"
+    input_arguments:
+      - name: file_path
+        type_matlab: "string (fileName)"
+        type_python: "str"
+      - name: chunk_size
+        type_matlab: "double (chunkSize)"
+        type_python: "int"
+        default: "8388608"
+    output_arguments:
+      - name: checksum
+        type_python: "str"
+    decision_log: >
+      Exact match. CRC-32 (IEEE) of the file's bytes as base64 of the 4-byte
+      big-endian value, the encoding NDI Cloud and S3 use
+      (ndi-cloud-node#162). MATLAB uses java.util.zip.CRC32, Python
+      zlib.crc32; both read in chunks and give the same value.
+
+  - name: crc32ToBase64
+    type: function
+    matlab_path: "+ndi/+fun/+file/crc32ToBase64.m"
+    matlab_last_sync_hash: "8fa6ea5e"
+    python_path: "ndi/fun/file.py"
+    input_arguments:
+      - name: value
+        type_matlab: "double"
+        type_python: "int"
+    output_arguments:
+      - name: checksum
+        type_python: "str"
+    decision_log: >
+      Exact match. Base64 of the 4-byte big-endian value; rejects values
+      outside [0, 0xFFFFFFFF].
+
   - name: dateCreated
     type: function
     matlab_path: "+ndi/+fun/+file/dateCreated.m"

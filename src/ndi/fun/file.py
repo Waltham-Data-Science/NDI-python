@@ -1,12 +1,15 @@
 """
 ndi.fun.file - File utility functions.
 
-MATLAB equivalents: +ndi/+fun/+file/MD5.m, dateCreated.m, dateUpdated.m
+MATLAB equivalents: +ndi/+fun/+file/MD5.m, crc32.m, crc32ToBase64.m,
+    dateCreated.m, dateUpdated.m
 """
 
 from __future__ import annotations
 
+import base64
 import hashlib
+import zlib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -34,6 +37,60 @@ def MD5(file_path: str) -> str:
         for chunk in iter(lambda: f.read(8192), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def crc32ToBase64(value: int) -> str:
+    """Encode a numeric CRC-32 as base64 of its 4-byte big-endian value.
+
+    MATLAB equivalent: ndi.fun.file.crc32ToBase64
+
+    NDI Cloud and S3 represent a CRC-32 this way (``x-amz-checksum-crc32``).
+
+    Args:
+        value: The CRC-32, an integer in ``[0, 0xFFFFFFFF]`` (e.g. from
+            ``zlib.crc32``).
+
+    Returns:
+        8-character base64 string, e.g. ``'NhCmhg=='`` for ``0x3610A686``.
+
+    Raises:
+        ValueError: If *value* is not a 32-bit unsigned integer.
+    """
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 0xFFFFFFFF:
+        raise ValueError(f"CRC-32 must be an integer in [0, 0xFFFFFFFF], got {value!r}")
+    return base64.b64encode(value.to_bytes(4, "big")).decode("ascii")
+
+
+def crc32(file_path: str, chunk_size: int = 8 * 1024 * 1024) -> str:
+    """CRC-32 of a file, base64-encoded the way NDI Cloud and S3 store it.
+
+    MATLAB equivalent: ndi.fun.file.crc32
+
+    The CRC-32 (IEEE, as ``zlib.crc32``) of the file's bytes, returned as the
+    base64 of its 4-byte big-endian value. That is the value
+    :func:`ndi.cloud.api.files.getFileUploadURL` sends as ``checksum_crc32``
+    and the value NDI Cloud returns as a file's ``crc32``. The file is read in
+    chunks.
+
+    Args:
+        file_path: Path to the file.
+        chunk_size: Bytes read per chunk. Default 8 MiB.
+
+    Returns:
+        8-character base64 string, e.g. ``'NhCmhg=='`` for a file containing
+        ``b'hello'``.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+    """
+    p = Path(file_path)
+    if not p.is_file():
+        raise FileNotFoundError(f"File not found: {file_path}")
+    value = 0
+    with open(p, "rb") as f:
+        for chunk in iter(lambda: f.read(chunk_size), b""):
+            value = zlib.crc32(chunk, value)
+    return crc32ToBase64(value)
 
 
 def dateCreated(file_path: str) -> datetime | None:
