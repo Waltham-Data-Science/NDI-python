@@ -578,9 +578,26 @@ def openPyramid(
         specs = loader.specs
     fetcher = loader.fetcher
 
-    # Warm the worker pool now, off the main thread. The one-off
-    # session-open cost then overlaps with napari.Viewer()'s Qt startup
-    # rather than serialising against the first fetch.
+    # napari reads through dask, whose thread pool defaults to one thread
+    # per CPU -- sized for computation, but a chunk read is seconds of
+    # waiting on the network. Widen it to the fetcher's worker count so
+    # napari can keep every worker busy.
+    try:
+        from ndi.pyramid.multiscale import configureDaskPool
+
+        n_pool = configureDaskPool(getattr(fetcher, "_workers", 1))
+        print(
+            f"[lightsheet] fetch pool: {getattr(fetcher, '_workers', 1)} workers, "
+            f"dask pool {n_pool} threads",
+            file=sys.stderr,
+            flush=True,
+        )
+    except Exception as exc:  # noqa: BLE001 - the default pool still works
+        print(f"[lightsheet] could not widen the dask pool ({exc})", file=sys.stderr)
+
+    # Start the worker threads now, off the main thread, so the first
+    # fetch does not pay for it. Workers open no session up front: chunks
+    # resolve session-free, and a worker opens one only if it must.
     with progress.stage("connecting to image store"):
         try:
             fetcher.warm()

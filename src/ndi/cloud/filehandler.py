@@ -395,6 +395,22 @@ def watchFetches(observer):
         _fetch_observer = previous
 
 
+#: Per-thread timing of the last :func:`fetch_cloud_file` on that thread.
+_last_fetch = threading.local()
+
+
+def lastFetchTiming() -> dict | None:
+    """Timing of this thread's most recent :func:`fetch_cloud_file`, or None.
+
+    ``{"sign_s", "batch", "transfer_s", "bytes", "ok"}``: seconds spent
+    getting a signed URL (and whether it came from the batch cache), seconds
+    spent downloading, and bytes written. Per thread, so a fetcher worker
+    reads back the fetch it just made and no other. Used by the lightsheet
+    viewer's debug log to say where a slow tile's time went.
+    """
+    return getattr(_last_fetch, "timing", None)
+
+
 def fetch_cloud_file(
     ndic_uri: str,
     target_path: str | Path,
@@ -440,6 +456,10 @@ def fetch_cloud_file(
     if client is None:
         client = get_or_create_cloud_client()
 
+    import time as _time
+
+    _last_fetch.timing = None
+    t_sign = _time.monotonic()
     download_url = ""
     url_came_from_batch = False
     if ndi_document_id:
@@ -465,6 +485,8 @@ def fetch_cloud_file(
 
             raise CloudError(f"No downloadUrl in file details for {ndic_uri}. Response: {details}")
 
+    sign_s = _time.monotonic() - t_sign
+
     # Stream download to temp file, then atomic rename
     target = Path(target_path)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -480,6 +502,7 @@ def fetch_cloud_file(
     call_kwargs: dict = {"timeout": 300}
     if error_out is not None:
         call_kwargs["error_out"] = error_out
+    t_get = _time.monotonic()
     if observer is None:
         success = getFile(download_url, tmp_path, **call_kwargs)
     else:
@@ -493,6 +516,18 @@ def fetch_cloud_file(
             )
         finally:
             observer("done", ndic_uri, 0, None)
+
+    try:
+        nbytes = tmp_path.stat().st_size if success else 0
+    except OSError:
+        nbytes = 0
+    _last_fetch.timing = {
+        "sign_s": sign_s,
+        "batch": url_came_from_batch,
+        "transfer_s": _time.monotonic() - t_get,
+        "bytes": nbytes,
+        "ok": bool(success),
+    }
 
     if success:
         tmp_path.rename(target)
