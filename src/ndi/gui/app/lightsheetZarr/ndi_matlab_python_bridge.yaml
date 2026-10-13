@@ -35,7 +35,7 @@ functions:
   # -----------------------------------------------------------------------
   - name: LightsheetZarrManager
     matlab_path: "+ndi/+gui/+app/LightsheetZarrManager.m"
-    matlab_last_sync_hash: "2f9b0eaf"
+    matlab_last_sync_hash: "fb10169b"
     matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
     status: matlab_only
     decision_log: >-
@@ -61,6 +61,12 @@ functions:
       the status line) and the private detach helper is removed. Still
       matlab_only; the launched Python viewer already honours
       NDI_LIGHTSHEET_DEBUG.
+
+      2026-10-13: examined against fb10169b (was 2f9b0eaf). The range adds
+      the main merge (CRC32 file support) and fb10169b, where the View
+      dialog's command preview shows the exact logged shell line
+      (viewerShellCommand with the log named when the dialog opens) and
+      Launch reuses that log file. Still matlab_only.
 
   # -----------------------------------------------------------------------
   # CLI (napariViewLightsheet).
