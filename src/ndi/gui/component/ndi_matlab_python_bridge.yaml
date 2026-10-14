@@ -498,7 +498,7 @@ classes:
   - name: ndi_gui_component_ProgressBarWindow
     type: class
     matlab_path: "+ndi/+gui/+component/ProgressBarWindow.m"
-    matlab_last_sync_hash: "2b23dd30"
+    matlab_last_sync_hash: "aa96851e"
     python_path: "ndi/gui/component/ProgressBarWindow.py"
     python_class: "ndi_gui_component_ProgressBarWindow"
     inherits: "matlab.apps.AppBase"
@@ -522,6 +522,7 @@ classes:
       something to invent while dating a hash.
       2026-09-25: NDI-matlab b367283b added a per-bar Timeout name-value on addBar so a long-running bar can opt out of the global auto-timeout sweep. No Python UI counterpart; no behavioural change here.
       2026-09-28: NDI-matlab 2b23dd30 relaxed the addBar Timeout argument-block size constraint (dropped `(1,:)`, which was rejecting `duration.empty` under some MATLAB releases). Pure MATLAB argument-validation adjustment; no behavioural change here.
+      2026-10-14: NDI-matlab 1e8fc581, d367f621 and 175b08af (on main via merge aa96851e) made the bar fill its row on R2026a: addBar now parents the bar's uiaxes to a borderless uipanel (AutoResizeChildren off) and pins the axes' InnerPosition BarMargin (5) px inside it through the new static fitBarAxes, run once and as the panel's SizeChangedFcn; removeBar deletes and re-rows that panel via Axes.Parent. This works around uiaxes reserving tick-label/title room in a grid cell, which left R2026a a 2.7 px bar. The Qt port draws a QProgressBar that its layout already sizes to the row, so there is nothing to follow; BarMargin and fitBarAxes join the uifigure plumbing above that has no Qt counterpart. No behavioural change here.
 
       NDI-python#295: the MATLAB properties this port does not expose under
       MATLAB's name are enumerated in tests/bridge_property_allowlist.yaml,
