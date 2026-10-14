@@ -307,7 +307,11 @@ def public_names(
     names: set[str] = set()
     for node in index[class_name]:
         names |= _declared_names(node)
-        for base in node.bases:
+        # A metaclass's properties are reachable on the class itself, which
+        # is how ndi_common_PathConstants mirrors MATLAB's Constant
+        # properties (CalcDoc, CalcDocSchema), so follow it like a base.
+        metaclasses = [k.value for k in node.keywords if k.arg == "metaclass"]
+        for base in [*node.bases, *metaclasses]:
             name = _base_name(base)
             if name:
                 names |= public_names(name, index, seen)

@@ -42,14 +42,6 @@ DEPENDENCIES = [
         "description": "VH-Lab data utilities and file formats (not on PyPI)",
     },
     {
-        "name": "NDIcalc-vis-matlab",
-        "repo": "https://github.com/VH-Lab/NDIcalc-vis-matlab.git",
-        "branch": "main",
-        "python_path": "",
-        "ndi_common": True,
-        "description": "NDI calculator and visualization document definitions",
-    },
-    {
         "name": "Pyraview",
         "repo": "https://github.com/VH-Lab/Pyraview.git",
         "branch": "main",
@@ -371,56 +363,6 @@ def write_pth_file(site_packages: Path, tools_dir: Path) -> Path | None:
 
 
 # ---------------------------------------------------------------------------
-# ndi_common document definitions from external dependencies
-# ---------------------------------------------------------------------------
-
-
-def install_ndi_common_docs(tools_dir: Path, ndi_root: Path) -> bool:
-    """Copy ndi_common/{database,schema}_documents from external deps.
-
-    Some dependencies (e.g. NDIcalc-vis-matlab) ship document type
-    definitions that NDI-python needs at runtime.  This copies their
-    ``ndi_common/database_documents`` and ``ndi_common/schema_documents``
-    trees into NDI-python's own ``ndi_common`` folder so they are
-    discoverable via ``ndi_common_PathConstants.DOCUMENT_PATH``.
-    """
-    import shutil
-
-    ndi_common = ndi_root / "src" / "ndi" / "ndi_common"
-    ok = True
-
-    for dep in DEPENDENCIES:
-        if not dep.get("ndi_common"):
-            continue
-        dep_dir = tools_dir / dep["name"]
-        dep_common = dep_dir / "ndi_common"
-        if not dep_common.is_dir():
-            warn(f"{dep['name']}: ndi_common folder not found at {dep_common}")
-            ok = False
-            continue
-
-        for sub in ("database_documents", "schema_documents"):
-            src = dep_common / sub
-            dst = ndi_common / sub
-            if not src.is_dir():
-                continue
-            count = 0
-            for src_file in src.rglob("*"):
-                if src_file.is_dir():
-                    continue
-                rel = src_file.relative_to(src)
-                dst_file = dst / rel
-                dst_file.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src_file, dst_file)
-                count += 1
-            detail(f"Copied {count} {sub} files from {dep['name']}")
-
-        success(f"Installed document definitions from {dep['name']}")
-
-    return ok
-
-
-# ---------------------------------------------------------------------------
 # pip installation
 # ---------------------------------------------------------------------------
 
@@ -516,6 +458,7 @@ def validate() -> tuple[int, int]:
         ("DID (did.implementations.sqlitedb)", "did.implementations.sqlitedb"),
         ("DID (did.datastructures)", "did.datastructures"),
         ("vhlab-toolbox (vlt)", "vlt"),
+        ("ndicalc-vis-matlab (calculator documents)", "ndicalc_vis_matlab"),
         ("pyraview (signal pyramids)", "pyraview"),
         ("numpy", "numpy"),
         ("networkx", "networkx"),
@@ -705,9 +648,6 @@ def main() -> int:
         # against a half-installed tree, failing later somewhere less obvious.
         fail("Installation failed: see the pip errors above")
         return 1
-
-    # Copy document definitions from external dependencies
-    install_ndi_common_docs(tools_dir, ndi_root)
 
     # ── Step 5: Validate ───────────────────────────────────────────────
     if args.no_validate:

@@ -2,14 +2,25 @@
 ndi.fun.utils - General utility functions.
 
 MATLAB equivalents: +ndi/+fun/channelname2prefixnumber.m,
-    name2variableName.m, pseudorandomint.m, timestamp.m
+    name2variableName.m, pseudorandomint.m, timestamp.m,
+    find_calc_directories.m
 """
 
 from __future__ import annotations
 
 import random
 import re
+import warnings
 from datetime import datetime, timezone
+from pathlib import Path
+
+from pydantic import validate_call
+
+#: Entry-point group through which a calculator package announces itself.
+#: Each entry point's value is a zero-argument callable returning the
+#: package's toolbox directory -- the directory that CONTAINS ``ndi_common/``,
+#: just as each directory MATLAB's find_calc_directories returns does.
+CALC_ENTRY_POINT_GROUP = "ndi.calc"
 
 
 def channelname2prefixnumber(channelname: str) -> tuple[str, int]:
@@ -139,3 +150,72 @@ def identifier(obj) -> str | None:
     """
     value = getattr(obj, "id", None)
     return value() if callable(value) else value
+
+
+@validate_call
+def find_calc_directories() -> list[Path]:
+    """Find all NDI calculator toolbox directories.
+
+    MATLAB equivalent: ndi.fun.find_calc_directories
+
+    D = ndi.fun.find_calc_directories()
+
+    This function finds installed NDI calculator toolboxes. Each directory
+    returned contains an ``ndi_common`` folder whose ``database_documents``
+    and ``schema_documents`` trees hold the calculator's document
+    definitions and schemas.
+
+    Returns:
+        list[Path]: The full path to each calculator directory found. If none
+        is installed, an empty list.
+
+    Python-specific Notes:
+        MATLAB scans the folder three levels above ``ndi.toolboxdir`` for
+        sibling ``NDIcalc*-matlab`` directories, which works because MATLAB
+        toolboxes are installed side by side. A pip/uv install has no such
+        layout, so a calculator package instead registers an entry point in
+        the ``ndi.calc`` group (:data:`CALC_ENTRY_POINT_GROUP`) whose value is
+        a callable returning its toolbox directory -- for NDIcalc-vis-matlab,
+        ``ndicalc_vis_matlab:toolbox_dir``. Results are ordered by entry-point
+        name so the search order is stable.
+
+        Like MATLAB, a failure is a warning and not an error: an entry point
+        that cannot be loaded, raises, or returns something that is not a
+        directory is reported with a ``RuntimeWarning`` and skipped, so one
+        broken calculator package cannot stop ``import ndi``.
+    """
+    from importlib.metadata import entry_points
+
+    try:
+        found = sorted(entry_points(group=CALC_ENTRY_POINT_GROUP), key=lambda ep: ep.name)
+    except Exception as exc:  # pragma: no cover - a broken metadata store
+        warnings.warn(
+            f"An error occurred while trying to find calculator directories: {exc!r}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return []
+
+    d: list[Path] = []
+    for ep in found:
+        try:
+            directory = Path(ep.load()())
+        except Exception as exc:
+            warnings.warn(
+                f"Calculator entry point {ep.name!r} ({ep.value}) failed and was "
+                f"skipped: {exc!r}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            continue
+        if not directory.is_dir():
+            warnings.warn(
+                f"Calculator entry point {ep.name!r} ({ep.value}) returned "
+                f"{str(directory)!r}, which is not a directory; skipped.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            continue
+        if directory not in d:
+            d.append(directory)
+    return d

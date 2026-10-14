@@ -134,12 +134,6 @@ not_exposed:
   - python_class: ndi_common_PathConstants
     property: Preferences
     reason: "Lazily resolved. See ndi_common_PathConstants.RootFolder."
-  - python_class: ndi_common_PathConstants
-    property: CalcDoc
-    reason: "Lazily resolved. See ndi_common_PathConstants.RootFolder."
-  - python_class: ndi_common_PathConstants
-    property: CalcDocSchema
-    reason: "Lazily resolved. See ndi_common_PathConstants.RootFolder."
 
   # -------------------------------------------------------------------------
   # ndi.cloud.sync

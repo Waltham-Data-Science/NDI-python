@@ -130,6 +130,32 @@ classes:
         access: "class property (read-only)"
         decision_log: "Exact match. Python uses pathlib.Path."
 
+      - name: CalcDoc
+        type_matlab: "cell array of char"
+        type_python: "list[Path]"
+        access: "class property (overridable; None or del rediscovers)"
+        decision_log: >
+          MATLAB name and meaning: one <toolbox>/ndi_common/database_documents
+          per calculator toolbox found by ndi.fun.find_calc_directories
+          (MATLAB's private findCalculatorDocumentDefinitions). The toolbox
+          directories come from installed packages' `ndi.calc` entry points
+          rather than a sibling-folder scan -- see find_calc_directories in
+          src/ndi/fun/ndi_matlab_python_bridge.yaml. Resolved lazily and
+          memoized like the other properties here (MATLAB memoizes the
+          directory list in a persistent variable), and assignable so tests
+          can point it at a tmp tree. Registered with DID as
+          $NDICALCDOCUMENTPATH. Before 2026-10-14 this did not exist and
+          ndi_install.py copied NDIcalc-vis-matlab's trees into
+          src/ndi/ndi_common instead, which a pip/uv install never ran.
+
+      - name: CalcDocSchema
+        type_matlab: "cell array of char"
+        type_python: "list[Path]"
+        access: "class property (overridable; None or del rediscovers)"
+        decision_log: >
+          As CalcDoc, with ndi_common/schema_documents. Registered with DID
+          as $NDICALCSCHEMAPATH.
+
     methods:
       - name: set_paths
         kind: classmethod
@@ -145,6 +171,12 @@ classes:
             default: "None"
           - name: schema_path
             type_python: "Path | None"
+            default: "None"
+          - name: calc_doc
+            type_python: "list[Path] | None"
+            default: "None"
+          - name: calc_doc_schema
+            type_python: "list[Path] | None"
             default: "None"
         output_arguments: []
         decision_log: >
@@ -164,7 +196,7 @@ classes:
             default: "False"
         output_arguments:
           - name: registered
-            type_python: "dict[str, str]"
+            type_python: "dict[str, str | list[str]]"
         decision_log: >
           Registers NDI's $PATH placeholders in
           did.common.PathConstants.DEFINITIONS, so DID can resolve every
@@ -172,15 +204,16 @@ classes:
           this from the constant-property validator mustUpdateDidGlobals and
           from the static updateDIDConstants; Python has no property
           validators, so ndi.common calls it at import time.
-          Divergence, recorded deliberately: MATLAB registers
-          $NDICALCDOCUMENTPATH / $NDICALCSCHEMAPATH as a cell array of
-          calculator-toolbox directories found by ndi.fun.find_calc_directories.
-          Python has no separate calculator packages -- ndi_install.py copies
-          each dependency's ndi_common/{database,schema}_documents into
-          NDI-python's own tree -- so both calc placeholders resolve to the
-          same two directories as $NDIDOCUMENTPATH / $NDISCHEMAPATH.
+          As in MATLAB, $NDICALCDOCUMENTPATH / $NDICALCSCHEMAPATH hold a
+          list -- CalcDoc / CalcDocSchema, one folder per calculator package
+          -- and DID-python's resolve_definition_path tries each entry of a
+          list value, as MATLAB's readjsonfilelocation does with a cell. (They
+          used to alias NDI's own two folders, back when ndi_install.py copied
+          the calculator trees in; that copy is gone, 2026-10-14.)
           Like MATLAB, an already-registered key is left alone unless
-          force=True, and an unresolvable $NDIDOCUMENTPATH raises.
+          force=True, an empty value is not registered, and an unresolvable
+          $NDIDOCUMENTPATH raises. Python-only: force=True also drops a key
+          whose value has become empty, so DID does not keep stale paths.
           Ported 2026-08-29 because DID-python's add_docs began validating
           documents against their schemas; before that an unregistered
           placeholder merely made superclass lookups miss silently.

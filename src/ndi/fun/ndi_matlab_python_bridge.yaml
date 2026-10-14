@@ -466,7 +466,7 @@ functions:
 
       Examined against NDI-matlab f57144891, the file's last-touching commit.
       Same shape: scan the document folder and the calculator document paths
-      for .json files, take each file's stem, skip dotfiles, unique and sort.
+      (DOCUMENT_PATH and ndi_common_PathConstants.CalcDoc) for .json files, take each file's stem, skip dotfiles, unique and sort.
       Returns the same 101 type names here. One latent divergence: the port
       additionally strips a trailing '_schema' from the stem, which MATLAB
       does not -- today no file under database_documents is named that way, so
@@ -3401,20 +3401,34 @@ not_applicable:
     matlab_path: "+ndi/+fun/find_calc_directories.m"
     matlab_last_sync_hash: "5b9e08493"
     status: ported_differently
+    python_path: "ndi/fun/utils.py"
+    input_arguments: []
+    output_arguments:
+      - name: d
+        type_matlab: "cell array of char"
+        type_python: "list[Path]"
     decision_log: >
-      Not applicable. Finds NDIcalc*-matlab calculator toolboxes by going
-      three directories up from ndi.toolboxdir and globbing the siblings --
-      a search that only works because MATLAB toolboxes are installed side
-      by side. Python calculators are found through the ndi.calc package
-      and the class registry (ndi/class_registry.py), which is an import
-      question rather than a filesystem one; a third-party calculator
-      distributed as its own package is discovered by being importable.
+      Same name, same contract -- returns every calculator toolbox directory,
+      each one containing ndi_common/{database,schema}_documents, and warns
+      and returns what it could rather than erroring -- but found a different
+      way. MATLAB goes three directories up from ndi.toolboxdir and globs
+      sibling NDIcalc*-matlab folders, which works only because MATLAB
+      toolboxes are installed side by side. A pip/uv install has no such
+      layout, so a calculator package declares an entry point in the
+      `ndi.calc` group whose value returns its toolbox directory
+      (ndicalc-vis-matlab: `NDIcalc-vis-matlab = ndicalc_vis_matlab:toolbox_dir`),
+      and this reads importlib.metadata.entry_points(group="ndi.calc"),
+      sorted by entry-point name. An entry point that fails to load, raises,
+      or returns a non-directory warns (RuntimeWarning) and is skipped, so a
+      broken calculator package cannot break `import ndi`. Feeds
+      ndi_common_PathConstants.CalcDoc / CalcDocSchema, as in MATLAB.
 
-      Confirmed against NDI-matlab 5b9e08493, the file's last-touching commit.
-      Still resolves a base path three directories up from ndi.toolboxdir and
-      globs the siblings, wrapped in a try/catch that warns and returns {}.
-      Nothing to port: the Python answer is still importability, not the
-      filesystem.
+      Ported 2026-10-14, replacing the earlier "importability, not the
+      filesystem" note: calculator *classes* are still found by import, but
+      their document definitions are data files that must be located, which
+      ndi_install.py used to do by copying NDIcalc-vis-matlab's trees into
+      src/ndi/ndi_common -- something a pip/uv install never runs.
+      Examined against NDI-matlab 5b9e08493, the file's last-touching commit.
 
   - name: plot_extracellular_spikeshapes
     matlab_path: "+ndi/+fun/plot_extracellular_spikeshapes.m"

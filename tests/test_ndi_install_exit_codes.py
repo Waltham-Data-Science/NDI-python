@@ -67,7 +67,6 @@ def _run(module, argv: list[str], **overrides) -> tuple[int, str]:
         "get_site_packages": lambda: Path("/tmp"),
         "write_pth_file": lambda *a, **k: Path("/tmp/ndi-test.pth"),
         "find_ndi_root": lambda: REPO_ROOT,
-        "install_ndi_common_docs": lambda *a, **k: None,
     }
     defaults.update(overrides)
 

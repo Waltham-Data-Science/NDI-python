@@ -82,10 +82,14 @@ def run_checks() -> tuple[list[tuple[str, bool, str]], int, int]:
 
         definitions = _DIDPathConstants.DEFINITIONS
         missing = [k for k in _DID_PLACEHOLDERS if k not in definitions]
+
+        def _all_dirs(value) -> bool:
+            # The calculator placeholders hold a list, as in MATLAB.
+            values = value if isinstance(value, (list, tuple)) else [value]
+            return all(Path(str(v)).is_dir() for v in values)
+
         unresolved = [
-            k
-            for k in _DID_PLACEHOLDERS
-            if k in definitions and not Path(str(definitions[k])).is_dir()
+            k for k in _DID_PLACEHOLDERS if k in definitions and not _all_dirs(definitions[k])
         ]
         if missing:
             check(
@@ -107,6 +111,36 @@ def run_checks() -> tuple[list[tuple[str, bool, str]], int, int]:
             )
     except Exception as e:
         check("DID path globals ($NDI...PATH)", False, str(e))
+
+    # Calculator document definitions. They live in separate packages
+    # (ndicalc-vis-matlab, a runtime dependency) found through the ndi.calc
+    # entry-point group, so a broken or missing one leaves every calculator
+    # document type unresolvable while NDI's own types still work.
+    try:
+        from ndi.common import ndi_common_PathConstants
+
+        calc_doc = ndi_common_PathConstants.CalcDoc
+        absent = [str(p) for p in calc_doc if not p.is_dir()]
+        if not calc_doc:
+            check(
+                "NDI calculator documents (ndi.calc)",
+                False,
+                "no calculator package found; install ndicalc-vis-matlab",
+            )
+        elif absent:
+            check(
+                "NDI calculator documents (ndi.calc)",
+                False,
+                f"no such directory: {', '.join(absent)}",
+            )
+        else:
+            check(
+                "NDI calculator documents (ndi.calc)",
+                True,
+                f"{len(calc_doc)} package(s)",
+            )
+    except Exception as e:
+        check("NDI calculator documents (ndi.calc)", False, str(e))
 
     # NDR and NDI-compress are real runtime dependencies that nothing else here
     # imports, so a missing or broken one used to go unreported until a read.

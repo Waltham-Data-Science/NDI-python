@@ -110,6 +110,40 @@ class _PathConstantsMeta(type):
     def SCHEMA_PATH(cls) -> None:
         cls._schema_path = None
 
+    # CalcDoc / CalcDocSchema carry MATLAB's names (ndi.common.PathConstants).
+    # Each is a list -- MATLAB's cell array -- with one entry per installed
+    # calculator package, in ndi.fun.find_calc_directories order. Setting
+    # either to a list overrides discovery (tests point it at a tmp tree);
+    # setting None or deleting it rediscovers on the next read.
+
+    @property
+    def CalcDoc(cls) -> list[Path]:
+        if cls._calc_doc is None:
+            cls._calc_doc = cls._find_calculator_document_definitions("database_documents")
+        return list(cls._calc_doc)
+
+    @CalcDoc.setter
+    def CalcDoc(cls, value: list[Path] | None) -> None:
+        cls._calc_doc = None if value is None else [Path(v) for v in value]
+
+    @CalcDoc.deleter
+    def CalcDoc(cls) -> None:
+        cls._calc_doc = None
+
+    @property
+    def CalcDocSchema(cls) -> list[Path]:
+        if cls._calc_doc_schema is None:
+            cls._calc_doc_schema = cls._find_calculator_document_definitions("schema_documents")
+        return list(cls._calc_doc_schema)
+
+    @CalcDocSchema.setter
+    def CalcDocSchema(cls, value: list[Path] | None) -> None:
+        cls._calc_doc_schema = None if value is None else [Path(v) for v in value]
+
+    @CalcDocSchema.deleter
+    def CalcDocSchema(cls) -> None:
+        cls._calc_doc_schema = None
+
 
 class ndi_common_PathConstants(metaclass=_PathConstantsMeta):
     """NDI path constants for document definitions and schemas.
@@ -122,6 +156,10 @@ class ndi_common_PathConstants(metaclass=_PathConstantsMeta):
         COMMON_FOLDER: Path to ndi_common folder with shared resources.
         DOCUMENT_PATH: Path to document JSON definitions.
         SCHEMA_PATH: Path to JSON schema files.
+        CalcDoc: List of paths to NDI calculator document definitions, one
+            ``<toolbox>/ndi_common/database_documents`` per installed
+            calculator package (see ``ndi.fun.find_calc_directories``).
+        CalcDocSchema: The matching list of ``.../schema_documents`` paths.
     """
 
     # These can be overridden by environment variables or set programmatically
@@ -129,6 +167,25 @@ class ndi_common_PathConstants(metaclass=_PathConstantsMeta):
     _common_folder: Path | None = None
     _document_path: Path | None = None
     _schema_path: Path | None = None
+    _calc_doc: list[Path] | None = None
+    _calc_doc_schema: list[Path] | None = None
+
+    @classmethod
+    def _find_calculator_document_definitions(cls, key: str) -> list[Path]:
+        """MATLAB's private findCalculatorDocumentDefinitions.
+
+        Appends ``ndi_common/<key>`` to every calculator toolbox directory.
+        MATLAB memoizes the directory list in a ``persistent`` variable;
+        here CalcDoc / CalcDocSchema memoize the result instead, so deleting
+        either property re-runs discovery.
+        """
+        if key not in ("database_documents", "schema_documents"):
+            raise ValueError(f"key must be 'database_documents' or 'schema_documents', not {key!r}")
+        # Imported here, not at module level: ndi.common is imported while
+        # ndi itself is still initialising, and ndi.fun pulls in far more.
+        from ..fun.utils import find_calc_directories
+
+        return [d / "ndi_common" / key for d in find_calc_directories()]
 
     @classmethod
     def _find_ndi_root(cls) -> Path:
@@ -161,6 +218,8 @@ class ndi_common_PathConstants(metaclass=_PathConstantsMeta):
         common_folder: Path | None = None,
         document_path: Path | None = None,
         schema_path: Path | None = None,
+        calc_doc: list[Path] | None = None,
+        calc_doc_schema: list[Path] | None = None,
     ) -> None:
         """Set custom paths for NDI resources.
 
@@ -169,6 +228,8 @@ class ndi_common_PathConstants(metaclass=_PathConstantsMeta):
             common_folder: Custom path to common folder.
             document_path: Custom path to document definitions.
             schema_path: Custom path to schema files.
+            calc_doc: Custom list of calculator document-definition folders.
+            calc_doc_schema: Custom list of calculator schema folders.
         """
         if ndi_root is not None:
             cls._ndi_root = Path(ndi_root)
@@ -178,6 +239,10 @@ class ndi_common_PathConstants(metaclass=_PathConstantsMeta):
             cls._document_path = Path(document_path)
         if schema_path is not None:
             cls._schema_path = Path(schema_path)
+        if calc_doc is not None:
+            cls._calc_doc = [Path(p) for p in calc_doc]
+        if calc_doc_schema is not None:
+            cls._calc_doc_schema = [Path(p) for p in calc_doc_schema]
         # Paths moved: re-register them with DID so its resolver follows.
         updateDIDConstants(force=True)
 
@@ -188,14 +253,13 @@ class ndi_common_PathConstants(metaclass=_PathConstantsMeta):
 
 #: NDI's ``$PATH`` placeholders, in the order MATLAB registers them.
 #:
-#: MATLAB keeps calculator definitions in separate toolboxes and so registers
-#: ``$NDICALC*PATH`` as a *list* of directories.  Python has no separate
-#: calculator packages: ``ndi_install.py`` copies every dependency's
-#: ``ndi_common/{database,schema}_documents`` tree into NDI-python's own
-#: ``ndi_common`` folder, so the calculator placeholders resolve to the same
-#: two directories as the non-calculator ones.  Recorded rather than papered
-#: over: if Python ever grows out-of-tree calculator packages this mapping is
-#: where the extra directories belong.
+#: As in MATLAB, the two calculator placeholders hold a *list* of directories
+#: -- ``ndi_common_PathConstants.CalcDoc`` / ``CalcDocSchema``, one entry per
+#: calculator package found by ``ndi.fun.find_calc_directories`` (installed
+#: packages registering an ``ndi.calc`` entry point, such as
+#: ndicalc-vis-matlab).  DID-python's resolver (``did.validate.
+#: resolve_definition_path``) tries each entry of a list value in turn, which
+#: is what MATLAB's ``did.document.readjsonfilelocation`` does with a cell.
 _DID_PLACEHOLDERS = (
     "$NDISCHEMAPATH",
     "$NDIDOCUMENTPATH",
@@ -204,19 +268,35 @@ _DID_PLACEHOLDERS = (
 )
 
 
-def _did_placeholder_values() -> dict[str, str]:
-    """Current filesystem target for each NDI ``$PATH`` placeholder."""
-    document_path = str(ndi_common_PathConstants.DOCUMENT_PATH)
-    schema_path = str(ndi_common_PathConstants.SCHEMA_PATH)
+def _did_placeholder_values() -> dict[str, str | list[str]]:
+    """Current filesystem target(s) for each NDI ``$PATH`` placeholder."""
     return {
-        "$NDISCHEMAPATH": schema_path,
-        "$NDIDOCUMENTPATH": document_path,
-        "$NDICALCSCHEMAPATH": schema_path,
-        "$NDICALCDOCUMENTPATH": document_path,
+        "$NDISCHEMAPATH": str(ndi_common_PathConstants.SCHEMA_PATH),
+        "$NDIDOCUMENTPATH": str(ndi_common_PathConstants.DOCUMENT_PATH),
+        "$NDICALCSCHEMAPATH": [str(p) for p in ndi_common_PathConstants.CalcDocSchema],
+        "$NDICALCDOCUMENTPATH": [str(p) for p in ndi_common_PathConstants.CalcDoc],
     }
 
 
-def updateDIDConstants(force: bool = False) -> dict[str, str]:
+def _document_search_path() -> list[Path]:
+    """Every folder an NDI document definition may live in, in search order.
+
+    ``DOCUMENT_PATH`` first, then each entry of ``CalcDoc`` -- the folders
+    MATLAB's ``$NDIDOCUMENTPATH`` and ``$NDICALCDOCUMENTPATH`` name together.
+    Python-specific helper; MATLAB reaches the same set through DID's globals.
+    """
+    return [ndi_common_PathConstants.DOCUMENT_PATH, *ndi_common_PathConstants.CalcDoc]
+
+
+def _schema_search_path() -> list[Path]:
+    """Every folder an NDI validation schema may live in, in search order.
+
+    ``SCHEMA_PATH`` first, then each entry of ``CalcDocSchema``.
+    """
+    return [ndi_common_PathConstants.SCHEMA_PATH, *ndi_common_PathConstants.CalcDocSchema]
+
+
+def updateDIDConstants(force: bool = False) -> dict[str, str | list[str]]:
     """Register NDI's ``$PATH`` placeholders with DID's ``PathConstants``.
 
     MATLAB equivalent: ``ndi.common.PathConstants.updateDIDConstants`` (and the
@@ -229,6 +309,9 @@ def updateDIDConstants(force: bool = False) -> dict[str, str]:
     default, an unregistered placeholder is no longer a silent miss: adding any
     NDI document raises ``Validation file "$NDISCHEMAPATH/....json" not found``.
     MATLAB has always registered these four keys; Python never did.
+
+    Like MATLAB, an empty value is not registered: with no calculator package
+    installed, ``$NDICALCDOCUMENTPATH`` / ``$NDICALCSCHEMAPATH`` stay absent.
 
     Args:
         force: Overwrite entries that are already registered.  The default
@@ -255,6 +338,11 @@ def updateDIDConstants(force: bool = False) -> dict[str, str]:
     for key in _DID_PLACEHOLDERS:
         value = values.get(key)
         if not value:
+            # MATLAB never registers an empty value. A forced re-registration
+            # also drops one NDI registered earlier, so a calculator list that
+            # has since become empty does not leave DID searching stale paths.
+            if force:
+                definitions.pop(key, None)
             continue
         if force or key not in definitions:
             definitions[key] = value
