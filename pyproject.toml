@@ -70,6 +70,16 @@ dependencies = [
     # default. keyring is preferred when present but stays optional,
     # since it is the OS-keychain path rather than the portable one.
     "cryptography>=41.0",
+    # dask[array] powers ndi.pyramid.ImagePyramidLoader -- the
+    # napari-independent multiscale loader. It used to live under
+    # the napari extra because only napari-driven viewers touched
+    # it, but the loader is now a first-class ndi API that
+    # matplotlib, Jupyter and (eventually) a MATLAB comparison
+    # harness consume without napari. That makes dask a runtime
+    # dependency of the pyramid subpackage. It stays pinned in the
+    # napari extra as well (as a redundant floor), so an old lock
+    # file that pinned dask through napari does not break.
+    "dask[array]>=2023.1",
 ]
 
 [project.optional-dependencies]
@@ -82,10 +92,12 @@ dependencies = [
 gui = [
     "PySide6>=6.5",
 ]
-# napari, and the dask it drives the tile ladder through. An EXTRA for the
+# napari is the tile viewer over the pyramid loader. An EXTRA for the
 # same reason gui is: a headless install should not pull in Qt and OpenGL.
 # ndi.gui.app.genepyramid.viewer imports through require_napari(), so the
-# failure mode for a missing toolkit is a sentence naming this extra.
+# failure mode for a missing toolkit is a sentence naming this extra. The
+# loader's own dask requirement moved to project.dependencies once the
+# loader graduated out of the viewer namespace into ndi.pyramid.
 napari = [
     "napari[all]>=0.4.19",
     "dask[array]>=2023.1",
@@ -161,6 +173,7 @@ addopts = "-v --tb=short --ignore=tests/symmetry"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "symmetry: marks cross-language symmetry tests (run with 'pytest tests/symmetry/')",
+    "cloud: marks live-cloud tests (skipped when NDI_CLOUD_USERNAME / NDI_CLOUD_PASSWORD are missing)",
 ]
 
 [tool.black]

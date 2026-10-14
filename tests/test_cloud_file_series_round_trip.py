@@ -348,21 +348,26 @@ class TestFileSeriesRoundTrip:
             f"partial_map_retries={stats.partial_map_retries}, "
             f"failure_reason={stats.last_failure_reason!r}"
         )
-        # One presign call for the scope, plus at most one retry if the
-        # first answer was a partial map (Waltham-Data-Science/
-        # NDI-python#309 -- some environments lag briefly after the bulk
-        # upload). Anything beyond that would be per-uid fallback, which
-        # the uid_misses assertion above already rules out; this is just
-        # for a clearer failure message.
+        # One presign call for the scope, plus up to len(retry_delays)
+        # partial-map retries if the first answer(s) missed
+        # (Waltham-Data-Science/NDI-python#309 and #320 -- User 1 prod
+        # can lag long enough after ``waitForAllBulkUploads`` that the
+        # first retry is not enough, so the default schedule is now
+        # 1 s / 3 s / 9 s). Anything beyond that would be per-uid
+        # fallback, which the uid_misses assertion above already rules
+        # out; this is just for a clearer failure message.
+        from ndi.cloud.batch_signed_url import DEFAULT_PARTIAL_MAP_RETRY_DELAYS
+
         assert stats.signer_calls == 1 + stats.partial_map_retries, (
             f"the members of one series should cost ONE presign call, "
-            f"plus at most one retry if the first map was partial. "
+            f"plus at most one retry per partial-map wave. "
             f"Got signer_calls={stats.signer_calls}, "
             f"partial_map_retries={stats.partial_map_retries}."
         )
-        assert stats.partial_map_retries <= 1, (
-            f"the retry is bounded to once per scope; "
-            f"got partial_map_retries={stats.partial_map_retries}."
+        assert stats.partial_map_retries <= len(DEFAULT_PARTIAL_MAP_RETRY_DELAYS), (
+            f"the retry is bounded by the delay schedule; "
+            f"got partial_map_retries={stats.partial_map_retries}, "
+            f"schedule length={len(DEFAULT_PARTIAL_MAP_RETRY_DELAYS)}."
         )
 
     def test_members_survive_a_download_from_the_cloud_with_sync_files_false(

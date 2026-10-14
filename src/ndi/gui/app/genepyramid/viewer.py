@@ -35,6 +35,50 @@ def require_napari():
     return napari
 
 
+def _reportCollector(viewer, session, pyr_doc, gene_rows, density):
+    """A zero-argument callable returning ``buildReport`` extras.
+
+    The canvas and every layer (via :func:`ndi.gui.feedback.napariState`),
+    which section and gene selection is open, and the recent log -- what
+    a report needs that a reader cannot be expected to type.
+    """
+
+    def _docId(doc):
+        if doc is None:
+            return None
+        ident = getattr(doc, "id", None)
+        return str(ident() if callable(ident) else ident)
+
+    def collect() -> dict:
+        from ...feedback import installLogBuffer, napariState
+
+        state = napariState(viewer)
+        try:
+            state["section"] = {
+                "pyramid": _docId(pyr_doc),
+                "density": bool(density),
+                "gene_rows": None if gene_rows is None else len(list(gene_rows)),
+            }
+        except Exception as exc:  # noqa: BLE001
+            state["section"] = f"<unavailable: {type(exc).__name__}: {exc}>"
+        extra: dict[str, Any] = {"state": state, "documentId": _docId(pyr_doc)}
+        try:
+            checker = getattr(session, "is_in_cloud", None)
+            if callable(checker):
+                in_cloud, cloud_id = checker()
+                if in_cloud and cloud_id:
+                    extra["datasetId"] = str(cloud_id)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            extra["log"] = installLogBuffer().text()
+        except Exception:  # noqa: BLE001
+            pass
+        return {k: v for k, v in extra.items() if v is not None}
+
+    return collect
+
+
 def openPyramid(
     session,
     pyr_doc,
@@ -103,6 +147,16 @@ def openPyramid(
         The napari Viewer.
     """
     from .progress import closeLaunchWindow, note, stage
+
+    # Keep the recent log in memory from launch on, so "Report a
+    # problem..." can attach it -- a viewer opened from MATLAB has no
+    # terminal to copy it from.
+    try:
+        from ...feedback import installLogBuffer
+
+        installLogBuffer()
+    except Exception:  # noqa: BLE001 - reporting is never worth the launch
+        pass
 
     with stage("starting napari"):
         napari = require_napari()
@@ -198,6 +252,7 @@ def openPyramid(
                 shapes_layer=shapes,
                 labelings=labelings,
                 gene_layers=gene_layers,
+                report_collect=_reportCollector(viewer, session, pyr_doc, gene_rows, density),
             )
 
     # The launch window has reported everything it can: the viewer is

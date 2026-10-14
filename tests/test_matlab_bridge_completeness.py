@@ -50,6 +50,8 @@ from typing import Any
 import pytest
 import yaml
 
+from tests._matlab_branch import branch_ref, is_merged, pending_branch, read_on_branch
+
 #: Set by CI once NDI-matlab is checked out. See the module docstring.
 STRICT_ENV_VAR = "NDI_BRIDGE_CHECK_STRICT"
 
@@ -364,15 +366,24 @@ class TestTheBridgeFilesAreComplete:
         root = require_matlab_root()
         index = read_bridge_index(package)
         prefix = f"{package.matlab_dir}/"
+        # A path recorded with matlab_branch is checked against that branch
+        # by TestBranchPendingEntries instead -- its absence from the
+        # checked-out tree is the claim, not a defect.
+        pending = {path for _, path, _ in branch_pending_entries(package)}
         stale = sorted(
-            path for path in index.paths if path.startswith(prefix) and not (root / path).exists()
+            path
+            for path in index.paths
+            if path.startswith(prefix) and path not in pending and not (root / path).exists()
         )
         assert not stale, (
             f"{BRIDGE_FILENAME} entries under {package.python_dir} name MATLAB "
             "files that do not exist:\n  "
             + "\n  ".join(stale)
             + '\n\nPoint each at its new path, or set matlab_path: "N/A" and say '
-            "in the decision_log that MATLAB removed it."
+            "in the decision_log that MATLAB removed it. If the file is on an "
+            "NDI-matlab branch that has not merged yet, add matlab_branch: "
+            "<branch> to the entry instead (section 8 of "
+            "docs/developer_notes/ndi_matlab_python_bridge.yaml)."
         )
 
     @pytest.mark.parametrize("package", PACKAGES, ids=lambda p: p.id)
@@ -394,6 +405,74 @@ class TestTheBridgeFilesAreComplete:
         """An exclusion without a reason is indistinguishable from an omission."""
         for prefix, reason in package.excluded_layers:
             assert len(reason.split()) >= 10, f"exclusion {prefix!r} needs a real reason"
+
+
+def branch_pending_entries(package: BridgedPackage) -> list[tuple[str, str, dict[str, Any]]]:
+    """``(source, matlab_path, entry)`` for every entry carrying ``matlab_branch``.
+
+    ``matlab_path`` is normalized; it is ``""`` when the entry names no file,
+    which :class:`TestBranchPendingEntries` reports.
+    """
+    found = []
+    for source in sorted((REPO_ROOT / package.python_dir).rglob(BRIDGE_FILENAME)):
+        data = yaml.safe_load(source.read_text(encoding="utf-8"))
+        for entry in _entries_with_a_matlab_branch(data):
+            path = normalize_matlab_path(entry.get("matlab_path") or "")
+            found.append((str(source.relative_to(REPO_ROOT)), path, entry))
+    return found
+
+
+class TestBranchPendingEntries:
+    """``matlab_branch`` is a claim, and the claim is checked.
+
+    An entry may record a MATLAB file that is on a named NDI-matlab branch
+    but not yet on the tree this job checked out (section 8 of
+    docs/developer_notes/ndi_matlab_python_bridge.yaml). The stale-path
+    guard above exempts it, so this has to hold it to account instead, or
+    ``matlab_branch`` would be a way to silence that guard for good:
+
+    * the branch must exist and the file must be on it -- a typo in either
+      is the stale path the exemption would otherwise hide;
+    * once the branch has merged into NDI-matlab main, the marker must go,
+      so an entry does not keep pointing at a branch after its file has
+      reached main (and the branch, typically, has been deleted).
+    """
+
+    @pytest.mark.parametrize("package", PACKAGES, ids=lambda p: p.id)
+    def test_every_branch_pending_file_is_on_its_branch(self, package: BridgedPackage):
+        root = require_matlab_root()
+        repo = root.parent.parent
+        offenders, unresolved = [], []
+        for source, path, entry in branch_pending_entries(package):
+            name = entry.get("name", "<unnamed>")
+            branch = pending_branch(entry)
+            if not path:
+                offenders.append(f"{source}: {name} -- matlab_branch needs a real matlab_path")
+                continue
+            tip = branch_ref(repo, branch)
+            if tip is None:
+                unresolved.append(f"{source}: {name} -- branch {branch!r} not found")
+                continue
+            if read_on_branch(repo, tip, f"src/ndi/{path}") is None:
+                offenders.append(f"{source}: {name} -- {path} is not on {branch!r}")
+            elif is_merged(repo, tip):
+                offenders.append(
+                    f"{source}: {name} -- {branch!r} has merged into NDI-matlab main; "
+                    "remove matlab_branch"
+                )
+        if unresolved and not os.environ.get(STRICT_ENV_VAR, "").strip():
+            pytest.skip(
+                "this NDI-matlab checkout lacks branches the bridge names "
+                "(fetch them, or clone with full history): " + "; ".join(unresolved)
+            )
+        problems = offenders + unresolved
+        assert not problems, (
+            "bridge entries recorded against an NDI-matlab branch do not hold up:\n  "
+            + "\n  ".join(problems)
+            + "\n\nA branch that is not found was usually merged and deleted: check the "
+            "file is on NDI-matlab main and remove matlab_branch from the entry. See "
+            "section 8 of docs/developer_notes/ndi_matlab_python_bridge.yaml."
+        )
 
 
 class TestTheDeferralsSayWhy:
@@ -603,6 +682,20 @@ def _entries_with_a_matlab_path(node: Any) -> list[dict[str, Any]]:
     elif isinstance(node, list):
         for item in node:
             found.extend(_entries_with_a_matlab_path(item))
+    return found
+
+
+def _entries_with_a_matlab_branch(node: Any) -> list[dict[str, Any]]:
+    """Every mapping in the tree that carries a ``matlab_branch:`` key."""
+    found: list[dict[str, Any]] = []
+    if isinstance(node, dict):
+        if isinstance(node.get("matlab_branch"), str):
+            found.append(node)
+        for value in node.values():
+            found.extend(_entries_with_a_matlab_branch(value))
+    elif isinstance(node, list):
+        for item in node:
+            found.extend(_entries_with_a_matlab_branch(item))
     return found
 
 

@@ -292,6 +292,13 @@ def _fetch_manifest(
     what we want here). Otherwise, call :func:`fetch_cloud_file` directly,
     matching what the read-side handler does when a manifest is asked for
     by uid.
+
+    We bypass the batch signed-URL lookup here. The batch is scoped
+    per-document, and a series with N members has an N-URL scope: for a
+    lightsheet OME-Zarr level with 100k+ chunks that is a page walk of
+    50-100 minutes for the ONE URL a manifest fetch actually needs. A
+    single-file fetch through :func:`getFileDetails` is the right shape
+    at O(1). See Waltham-Data-Science/NDI-python#322 / issue TBD.
     """
     source_path = f"{NDIC_SCHEME}{cloud_dataset_id}/{manifest_uid}"
     if custom_file_handler is not None:
@@ -309,7 +316,10 @@ def _fetch_manifest(
         source_path,
         dest_path,
         client=client,
-        ndi_document_id=document_id,
+        # Empty ndi_document_id skips the batch lookup and goes straight to
+        # getFileDetails for the one uid. Batch here would ask the server
+        # for every other file in the document too.
+        ndi_document_id="",
         series_name="",
     )
 
@@ -385,6 +395,22 @@ def watchFetches(observer):
         _fetch_observer = previous
 
 
+#: Per-thread timing of the last :func:`fetch_cloud_file` on that thread.
+_last_fetch = threading.local()
+
+
+def lastFetchTiming() -> dict | None:
+    """Timing of this thread's most recent :func:`fetch_cloud_file`, or None.
+
+    ``{"sign_s", "batch", "transfer_s", "bytes", "ok"}``: seconds spent
+    getting a signed URL (and whether it came from the batch cache), seconds
+    spent downloading, and bytes written. Per thread, so a fetcher worker
+    reads back the fetch it just made and no other. Used by the lightsheet
+    viewer's debug log to say where a slow tile's time went.
+    """
+    return getattr(_last_fetch, "timing", None)
+
+
 def fetch_cloud_file(
     ndic_uri: str,
     target_path: str | Path,
@@ -430,7 +456,12 @@ def fetch_cloud_file(
     if client is None:
         client = get_or_create_cloud_client()
 
+    import time as _time
+
+    _last_fetch.timing = None
+    t_sign = _time.monotonic()
     download_url = ""
+    url_came_from_batch = False
     if ndi_document_id:
         # Batch path first. Empty means the batch could not answer for this
         # uid; fall back per uid so the read still succeeds.
@@ -444,6 +475,7 @@ def fetch_cloud_file(
             file_uid,
             client=client,
         )
+        url_came_from_batch = bool(download_url)
 
     if not download_url:
         details = getFileDetails(dataset_id, file_uid, client=client)
@@ -453,6 +485,8 @@ def fetch_cloud_file(
 
             raise CloudError(f"No downloadUrl in file details for {ndic_uri}. Response: {details}")
 
+    sign_s = _time.monotonic() - t_sign
+
     # Stream download to temp file, then atomic rename
     target = Path(target_path)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -460,19 +494,40 @@ def fetch_cloud_file(
 
     logger.debug("Fetching cloud file %s -> %s", ndic_uri, target)
     observer = _fetch_observer
+    # error_out is only needed when the URL came from the batch disk cache
+    # and we might have to invalidate a stale scope on S3 403. Passing it
+    # unconditionally would force every mocked getFile in the test suite
+    # to accept the new keyword.
+    error_out: dict | None = {} if url_came_from_batch else None
+    call_kwargs: dict = {"timeout": 300}
+    if error_out is not None:
+        call_kwargs["error_out"] = error_out
+    t_get = _time.monotonic()
     if observer is None:
-        success = getFile(download_url, tmp_path, timeout=300)
+        success = getFile(download_url, tmp_path, **call_kwargs)
     else:
         observer("start", ndic_uri, 0, None)
         try:
             success = getFile(
                 download_url,
                 tmp_path,
-                timeout=300,
                 progress=lambda done, total: observer("chunk", ndic_uri, done, total),
+                **call_kwargs,
             )
         finally:
             observer("done", ndic_uri, 0, None)
+
+    try:
+        nbytes = tmp_path.stat().st_size if success else 0
+    except OSError:
+        nbytes = 0
+    _last_fetch.timing = {
+        "sign_s": sign_s,
+        "batch": url_came_from_batch,
+        "transfer_s": _time.monotonic() - t_get,
+        "bytes": nbytes,
+        "ok": bool(success),
+    }
 
     if success:
         tmp_path.rename(target)
@@ -481,6 +536,28 @@ def fetch_cloud_file(
     else:
         # Clean up partial download
         tmp_path.unlink(missing_ok=True)
+
+        # An S3 403 on a URL that WAS served from the disk cache says
+        # the cached scope has gone stale (token revoked, or the object
+        # rotated). Drop the scope so the next read refetches --
+        # otherwise we'd 403 our way through every subsequent uid in
+        # the same scope. Best-effort; a failed forget is not fatal
+        # to the CloudError we're raising. Mirrors NDI-matlab's own
+        # 403-invalidation hook in didsqlite.download_file_from_cloud.
+        if url_came_from_batch and error_out is not None and error_out.get("status") == 403:
+            try:
+                from . import signed_url_disk_cache
+
+                signed_url_disk_cache.forget(dataset_id, ndi_document_id, series_name)
+            except Exception:  # noqa: BLE001 - best-effort
+                logger.debug(
+                    "signed-URL disk cache forget raised for scope " "(%s, %s, series=%r); ignored",
+                    dataset_id,
+                    ndi_document_id,
+                    series_name,
+                    exc_info=True,
+                )
+
         from .exceptions import CloudError
 
         raise CloudError(f"Failed to download file from {ndic_uri}")
@@ -957,6 +1034,22 @@ def download_file_from_cloud(
     if isinstance(context, dict):
         ndi_document_id = str(context.get("documentId", "") or "")
         series_name = str(context.get("seriesName", "") or "")
+
+    # A single-file fetch (a series manifest, or any doc-level attachment)
+    # arrives here with seriesName="", because there is no member being
+    # asked for. Going through the per-document batch scope to answer one
+    # uid is pure loss: for a lightsheet-scale pyramid document that scope
+    # names 15k+ files, so the batch endpoint spends 60-90 s on a signed-
+    # URL set the caller has no use for, delaying the ONE URL that
+    # download actually needs by more than a minute. Same reasoning that
+    # ``_fetch_manifest`` above uses for the internal manifest fetch: for
+    # a single uid, the direct ``getFileDetails`` path is O(1) and wins.
+    # (VH-Lab/NDI-matlab#1010's Python analog. When the caller does need
+    # a whole-doc scope -- an ordinary series member fetch that follows
+    # with seriesName="chunk.bin" -- the batch fires there and the cost
+    # amortizes across every member.)
+    if not series_name:
+        ndi_document_id = ""
 
     fetch_cloud_file(
         uri,

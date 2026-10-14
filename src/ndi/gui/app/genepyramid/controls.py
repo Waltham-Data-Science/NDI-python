@@ -32,6 +32,7 @@ __all__ = [
     "addCellTypePanel",
     "addAllPanels",
     "addCloudPanel",
+    "addReportPanel",
     "cloudSignInDialog",
     "buildCloudSignInDialog",
     "cloudProfileChoices",
@@ -1827,7 +1828,7 @@ def cloudLogoLabel(parent=None):
     return label
 
 
-def addCloudPanel(viewer) -> Any:
+def addCloudPanel(viewer, report_collect=None) -> Any:
     """A clock on the cloud token, and a button that renews it.
 
     A VIEWER OUTLIVES ITS TOKEN. Someone reading a section works for
@@ -1844,6 +1845,10 @@ def addCloudPanel(viewer) -> Any:
     and the time left. The credentials live behind the button, in a
     dialog, rather than as three permanently docked fields for something
     a reader does once a day at most.
+
+    REPORT_COLLECT, when given, adds the shared "Report a problem..."
+    button (:func:`ndi.gui.feedback.reportButton`): this is where a reader
+    is signed in, which is what sending a report needs.
     """
     from qtpy.QtCore import QTimer
     from qtpy.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
@@ -1876,6 +1881,8 @@ def addCloudPanel(viewer) -> Any:
     result.setWordWrap(True)
     result.hide()
     outer.addWidget(result)
+    if report_collect is not None:
+        outer.addWidget(_reportButton(box, report_collect))
     outer.addStretch()
 
     def _tick():
@@ -1912,6 +1919,35 @@ def addCloudPanel(viewer) -> Any:
 
     box._ndi_signin = _open
     _dockScrollable(viewer, box, name="NDI Cloud")
+    return box
+
+
+def _reportButton(parent, report_collect):
+    from ...feedback import reportButton
+
+    return reportButton(
+        parent,
+        app="genepyramid-viewer",
+        collect=report_collect,
+        title="Report a problem with the gene expression viewer",
+    )
+
+
+def addReportPanel(viewer, report_collect) -> Any:
+    """Just the "Report a problem..." button, for a session with no cloud
+    panel to carry it.
+
+    A purely local section has no token and so no NDI Cloud panel, but its
+    reader can still hit a problem. Sending needs a sign-in the dialog
+    will ask for; Save to file and Copy work without one.
+    """
+    from qtpy.QtWidgets import QVBoxLayout, QWidget
+
+    box = QWidget()
+    outer = QVBoxLayout(box)
+    outer.addWidget(_reportButton(box, report_collect))
+    outer.addStretch()
+    _dockScrollable(viewer, box, name="Feedback")
     return box
 
 
@@ -2561,6 +2597,7 @@ def addAllPanels(
     shapes_layer=None,
     labelings=None,
     gene_layers=None,
+    report_collect=None,
 ):
     """Every panel the session supports, skipping what it has no data for.
 
@@ -2616,7 +2653,16 @@ def addAllPanels(
     # at a convenient moment instead of discovering it through a tile
     # that will not load.
     if cloudSessionLooksLikely():
-        made["cloud"] = _build("cloud", lambda: addCloudPanel(viewer))
+        if report_collect is None:
+            made["cloud"] = _build("cloud", lambda: addCloudPanel(viewer))
+        else:
+            made["cloud"] = _build(
+                "cloud", lambda: addCloudPanel(viewer, report_collect=report_collect)
+            )
+    elif report_collect is not None:
+        # No cloud panel to carry the report button; a local reader can
+        # still hit a problem, so it gets a panel of its own.
+        made["report"] = _build("report", lambda: addReportPanel(viewer, report_collect))
     made["display"] = _build(
         "display", lambda: addDisplayPanel(viewer, session, pyr_doc, image_layer, density)
     )

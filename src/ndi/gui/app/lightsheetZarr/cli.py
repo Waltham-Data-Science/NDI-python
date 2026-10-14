@@ -252,8 +252,31 @@ def _pick_reduction(session: Any, pyramid_doc: Any, requested: str | None) -> st
     return available[0]
 
 
+def _configure_logging() -> None:
+    """Set up INFO-level stderr logging when the root has no handlers.
+
+    Without this, every ``logger.info(...)`` in ``ndi.cloud.*`` is silently
+    dropped -- the progress traces we rely on (async signed-URL-set-job
+    submit/wait/read, batch retry decisions, per-page walk timings) never
+    reach the terminal, and a stuck viewer looks identical to a healthy
+    one. Only configure when nothing else has: an embedding host (a
+    notebook, a downstream CLI) that has already set up logging keeps
+    control.
+    """
+    import logging
+
+    if logging.getLogger().handlers:
+        return
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        stream=sys.stderr,
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    _configure_logging()
 
     try:
         session = _open_session(args.session)

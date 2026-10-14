@@ -31,6 +31,8 @@ To port or update a function, agents must follow these steps:
    **It must be a commit, never a blob.** `git hash-object <file>` returns the hash *of the file's contents*, which looks equally plausible in the YAML and is useless here: the freshness check works by walking history (`git log <hash>..HEAD -- <path>`), and a blob is not a point in history to walk from. 35 entries carried blob hashes before this was written down, because "the hash of the MATLAB file" reads naturally as either one. A test now rejects anything that is not a commit.
 
    Either kind of commit is acceptable: the file'''s own last-touching commit (what the command above gives), or a repo-wide commit such as NDI-matlab `HEAD` when you examined a batch of files together. Both are points in history, so both let the check ask "has this file moved since?"
+
+   If the MATLAB file is on an NDI-matlab branch that has not merged into main yet, record a commit on that branch and add `matlab_branch: <branch>` to the entry. The checks then verify the entry against that branch and ask for the field to be removed once it merges. Section 8 of `docs/developer_notes/ndi_matlab_python_bridge.yaml` defines when this applies; do not use it for anything else.
 4. **Implement:** Write the Python code to satisfy the `input_arguments` and `output_arguments` defined in the YAML.
 
    If you are NOT porting it, the entry needs a `status` and a `decision_log` instead. The five permitted values, what each claims, and how to choose between them are defined in section 6 of `docs/developer_notes/ndi_matlab_python_bridge.yaml` — that is the normative list, and this guide deliberately does not repeat it.

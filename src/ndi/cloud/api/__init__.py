@@ -7,8 +7,9 @@ Submodules:
     files     — Presigned URL retrieval, file upload
     users     — User creation, profile
     compute   — Compute session management
+    feedback  — In-app problem reports
 """
 
-from . import compute, datasets, documents, files, users
+from . import compute, datasets, documents, feedback, files, users
 
-__all__ = ["datasets", "documents", "files", "users", "compute"]
+__all__ = ["datasets", "documents", "files", "users", "compute", "feedback"]
