@@ -522,3 +522,60 @@ def test_a_failing_appearance_panel_still_leaves_a_tour(monkeypatch, capsys):
     _args, kwargs = tour.calls[0]
     assert kwargs.get("appearance") is None
     assert "gene appearance" in capsys.readouterr().err
+
+
+def _stubPanels(monkeypatch):
+    monkeypatch.setattr(controls, "_importQtWidgets", lambda: None)
+    for name in (
+        "addDisplayPanel",
+        "addCellTypePanel",
+        "addGenePanel",
+        "addRotationPanel",
+        "addGeneAppearancePanel",
+        "addGeneTourPanel",
+    ):
+        monkeypatch.setattr(controls, name, _Recorder())
+
+
+def test_a_cloud_session_gets_the_report_button_on_the_cloud_panel(monkeypatch):
+    """Reporting a problem needs a sign-in, and the cloud panel is where
+    the reader signs in -- so that is where the button goes."""
+    _stubPanels(monkeypatch)
+    cloud, report = _Recorder(), _Recorder()
+    monkeypatch.setattr(controls, "addCloudPanel", cloud)
+    monkeypatch.setattr(controls, "addReportPanel", report)
+    monkeypatch.setenv("NDI_CLOUD_TOKEN", "anything")
+    collect = dict
+
+    made = controls.addAllPanels(
+        object(), object(), object(), object(), True, report_collect=collect
+    )
+    assert cloud.calls[0][1] == {"report_collect": collect}
+    assert not report.calls
+    assert "report" not in made
+
+
+def test_a_local_session_still_gets_a_way_to_report(monkeypatch):
+    """No token, no cloud panel -- but a local reader can still hit a
+    problem, and Save to file / Copy work without signing in."""
+    _stubPanels(monkeypatch)
+    cloud, report = _Recorder(), _Recorder()
+    monkeypatch.setattr(controls, "addCloudPanel", cloud)
+    monkeypatch.setattr(controls, "addReportPanel", report)
+    monkeypatch.delenv("NDI_CLOUD_TOKEN", raising=False)
+
+    made = controls.addAllPanels(object(), object(), object(), object(), True, report_collect=dict)
+    assert not cloud.calls
+    assert report.calls and made["report"] is not None
+
+
+def test_without_a_collector_nothing_changes(monkeypatch):
+    _stubPanels(monkeypatch)
+    cloud, report = _Recorder(), _Recorder()
+    monkeypatch.setattr(controls, "addCloudPanel", cloud)
+    monkeypatch.setattr(controls, "addReportPanel", report)
+    monkeypatch.setenv("NDI_CLOUD_TOKEN", "anything")
+
+    controls.addAllPanels(object(), object(), object(), object(), True)
+    assert cloud.calls[0][1] == {}
+    assert not report.calls

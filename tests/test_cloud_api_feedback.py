@@ -67,6 +67,9 @@ def make_client(resp, token="test-token"):
     client = CloudClient.__new__(CloudClient)
     client.config = CloudConfig(api_url=API_URL, token=token)
     client._session = Transport(resp)
+    # A hand-built client never refreshes against env credentials, so a
+    # 401/403 surfaces as CloudAuthError rather than a re-login attempt.
+    client._can_reauth = False
     return client
 
 

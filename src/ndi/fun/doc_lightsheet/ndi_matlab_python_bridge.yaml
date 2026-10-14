@@ -32,7 +32,6 @@ functions:
   - name: fromOMEZarr
     matlab_path: "+ndi/+fun/+doc/+lightsheet/fromOMEZarr.m"
     matlab_last_sync_hash: "5c9e8a83"
-    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
     status: porting_deferred
     decision_log: >-
       MATLAB probes an OME-Zarr store with ndr.format.omezarr.listPyramids,
@@ -59,8 +58,7 @@ functions:
 
   - name: makePyramid
     matlab_path: "+ndi/+fun/+doc/+lightsheet/makePyramid.m"
-    matlab_last_sync_hash: "5c9e8a83"
-    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
+    matlab_last_sync_hash: "04ce18f9"
     status: porting_deferred
     decision_log: >-
       The worker fromOMEZarr calls; writes one lightsheetZarrPyramid
@@ -99,11 +97,42 @@ functions:
       follow: this function has no Python counterpart yet, and the
       Python viewer only reads the levels MATLAB wrote. The Python port
       must use the 32 MB default when it lands.
+      2026-10-12: examined against 04ce18f9 on
+      claude/lightsheet-zarr-ndi-viewer-djp5vk (was 5c9e8a83). Adds
+      levelSources (per level path: 'omezarr' -- the unchanged default --
+      'smartspim' slices, or 'reduce' from an earlier level's stored
+      chunks) and channelNames, for fromSPIM. Default behaviour is
+      unchanged; the Python port must carry levelSources when it lands.
+
+  - name: fromSPIM
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/fromSPIM.m"
+    matlab_last_sync_hash: "668beb13"
+    status: porting_deferred
+    decision_log: >-
+      Builds a lightsheetZarrPyramid straight from a SmartSPIM
+      acquisition's stitched All_Channels slices (no spim2zarr step):
+      level 0 from ndr.format.smartspim, mean and max ladders built by
+      block-reducing each level just written, through makePyramid's
+      levelSources. Deferred with the rest of the ingest side (the
+      Python package is a viewer today); planned to port after the
+      MATLAB version is validated, on top of a makePyramid port, using
+      ndr-python's smartspim All_Channels reader.
+      2026-10-12: examined against 668beb13 (was 04ce18f9): preallocation of
+      the ladder arrays only; no behaviour change, nothing to port.
+
+  - name: reduceBlocks
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/reduceBlocks.m"
+    matlab_last_sync_hash: "04ce18f9"
+    status: porting_deferred
+    decision_log: >-
+      Vectorized per-axis block mean/max with
+      ndr.format.omezarr.reduce's semantics (trailing partial block
+      included), used by fromSPIM to build reduced levels. Ports with
+      fromSPIM; in numpy it is a reshape + mean/max per axis.
 
   - name: chooseTileShape
     matlab_path: "+ndi/+fun/+doc/+lightsheet/chooseTileShape.m"
     matlab_last_sync_hash: "5c9e8a83"
-    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
     status: porting_deferred
     decision_log: >-
       Pure function that picks an OME-Zarr chunk shape landing near a
@@ -133,7 +162,6 @@ functions:
   - name: makeSourceFile
     matlab_path: "+ndi/+fun/+doc/+lightsheet/makeSourceFile.m"
     matlab_last_sync_hash: "1af66bb"
-    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
     status: porting_deferred
     decision_log: >-
       MATLAB creates the fileReference document the lightsheet documents'
@@ -148,7 +176,6 @@ functions:
   - name: chooseLevel
     matlab_path: "+ndi/+fun/+doc/+lightsheet/chooseLevel.m"
     matlab_last_sync_hash: "5ab84f3"
-    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
     status: porting_deferred
     decision_log: >-
       Given a level table and a target per-axis voxel size, returns the
@@ -159,7 +186,6 @@ functions:
   - name: levelTable
     matlab_path: "+ndi/+fun/+doc/+lightsheet/levelTable.m"
     matlab_last_sync_hash: "1af66bb"
-    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
     status: porting_deferred
     decision_log: >-
       Joins a lightsheetZarrPyramid and its lightsheetZarrLevel children
@@ -175,7 +201,6 @@ functions:
   - name: viewCommand
     matlab_path: "+ndi/+fun/+doc/+lightsheet/viewCommand.m"
     matlab_last_sync_hash: "5ab84f3"
-    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
     status: porting_deferred
     decision_log: >-
       Pure command builder that ndi.gui.app.LightsheetZarrManager calls
@@ -190,8 +215,7 @@ functions:
       thin.
   - name: view
     matlab_path: "+ndi/+fun/+doc/+lightsheet/view.m"
-    matlab_last_sync_hash: "a7ba07a"
-    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
+    matlab_last_sync_hash: "2f9b0eaf"
     status: porting_deferred
     decision_log: >-
       MATLAB caller that pairs viewCommand + SYSTEM: builds the
@@ -203,3 +227,44 @@ functions:
       stays interactive. No Python-side counterpart is needed because
       the Python side IS the launcher; this is the MATLAB-side entry
       point. Ports with the other entries.
+      2026-10-12: examined against 2f9b0eaf on
+      claude/lightsheet-zarr-ndi-viewer-djp5vk (was a7ba07a). A viewer
+      launch now goes through launchViewer (NDI_LIGHTSHEET_DEBUG=1, output
+      appended to lightsheet_YYYYMMDDHHMMSS.txt in NDI's temp folder), and
+      view gains 'debug' and 'logFile' options; --list mode is unchanged.
+      Nothing on the Python side to follow: the Python side is the
+      launched process, and it already honours NDI_LIGHTSHEET_DEBUG.
+
+  - name: launchViewer
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/launchViewer.m"
+    matlab_last_sync_hash: "2f9b0eaf"
+    status: matlab_only
+    decision_log: >-
+      MATLAB-side launch of the Python viewer: runs a viewCommand line
+      through SYSTEM with NDI_LIGHTSHEET_DEBUG=1 and stdout/stderr
+      appended to lightsheet_YYYYMMDDHHMMSS.txt in
+      ndi.common.PathConstants.TempFolder, so a viewer started from
+      MATLAB (no terminal) leaves a log. No Python counterpart: from
+      Python the viewer is called directly (napariViewLightsheet or
+      ndi.gui.app.lightsheetZarr.viewer.openPyramid) with its output on
+      the caller's own stderr, and the in-viewer log buffer
+      (ndi.gui.feedback) already keeps it for problem reports.
+
+  - name: viewerLogFile
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/viewerLogFile.m"
+    matlab_last_sync_hash: "2f9b0eaf"
+    status: matlab_only
+    decision_log: >-
+      Pure helper of launchViewer: the timestamped log path
+      lightsheet_YYYYMMDDHHMMSS.txt under NDI's temp folder. Not
+      needed in Python for the same reason as launchViewer -- nothing in
+      Python launches the viewer as a detached child that needs a log.
+
+  - name: viewerShellCommand
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/viewerShellCommand.m"
+    matlab_last_sync_hash: "2f9b0eaf"
+    status: matlab_only
+    decision_log: >-
+      Pure helper of launchViewer: the POSIX / cmd.exe line that sets
+      NDI_LIGHTSHEET_DEBUG, appends output to the log and detaches. Not
+      needed in Python for the same reason as launchViewer.

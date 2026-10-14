@@ -188,6 +188,12 @@ def cloudFetches(label: str = "fetching"):
 _window = None
 _window_failed = False
 
+#: Set once closeLaunchWindow has run. Without it, the first progress
+#: call after the close (``note("viewer running ...")`` is one) goes
+#: through ``_mode()`` -> ``_launchWindow()``, finds no window, and
+#: builds a FRESH one stuck on "starting ..." that nothing ever closes.
+_window_closed = False
+
 
 def _mode() -> str:
     """Which indicator to use: ``"gui"``, ``"text"`` or ``"off"``."""
@@ -231,7 +237,7 @@ def _launchWindow():
     QApplication ourselves, which napari then reuses.
     """
     global _window, _window_failed
-    if _window is not None or _window_failed:
+    if _window is not None or _window_failed or _window_closed:
         return _window
     try:
         from qtpy.QtCore import Qt
@@ -331,8 +337,9 @@ def closeLaunchWindow() -> None:
     ``processEvents`` at the end flushes whatever the close and
     destroy queued so the desktop actually repaints without us.
     """
-    global _window
+    global _window, _window_closed
     win, _window = _window, None
+    _window_closed = True
     if win is None:
         return
     widget = win["widget"]

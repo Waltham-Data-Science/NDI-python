@@ -84,6 +84,17 @@ def attach_viewport_clip(
         return None
     if not layers or not per_layer_levels:
         return None
+    # Native multiscale layers manage their own level + viewport
+    # choice; swapping layer.data from the clip would corrupt the
+    # MultiScaleData wrapper. Clipping is a single-level-mode tool.
+    if any(getattr(layer, "multiscale", False) for layer in layers):
+        print(
+            "[lightsheet] viewport clip: skipped (layers are native "
+            "multiscale; napari handles level selection)",
+            file=sys.stderr,
+            flush=True,
+        )
+        return None
 
     try:
         clip = ViewportClip(viewer, layers, per_layer_levels, per_layer_scales, picker, labels)

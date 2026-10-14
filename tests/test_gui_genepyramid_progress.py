@@ -236,6 +236,11 @@ class TestModePrecedence(unittest.TestCase):
 
 
 class TestClosingIsAlwaysSafe(unittest.TestCase):
+    def setUp(self):
+        # Closing latches _window_closed; put it back so later tests can
+        # still build a window.
+        self.addCleanup(setattr, progress, "_window_closed", progress._window_closed)
+
     def test_closing_when_there_never_was_a_window(self):
         self.addCleanup(setattr, progress, "_window", progress._window)
         progress._window = None
