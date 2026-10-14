@@ -925,7 +925,6 @@ functions:
   - name: uploadFilesForDatasetDocuments
     matlab_path: "+ndi/+cloud/+sync/+internal/uploadFilesForDatasetDocuments.m"
     matlab_last_sync_hash: "d94973c1"
-    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
       - name: org_id
@@ -952,7 +951,7 @@ functions:
       2026-10-13: examined against NDI-matlab d94973c1 on
       claude/lightsheet-zarr-ndi-viewer-djp5vk: main's 9c21eb61
       (VH-Lab/NDI-matlab#1027) merged with that branch's verbose upload count
-      (VH-Lab/NDI-matlab#979). Drop matlab_branch once #979 merges.
+      (VH-Lab/NDI-matlab#979, merged as d292984f).
       The serial path now uploads every file with waitForUpload=false and
       then waits once, through waitForFileUpload, for NDI Cloud to record
       them all. Not ported: Python has no waitForFileUpload yet (recorded
@@ -1571,7 +1570,6 @@ porting_deferred:
     matlab_path: "+ndi/+cloud/+download/+internal/signedUrlDiskCache.m"
     python_path: "ndi/cloud/signed_url_disk_cache.py"
     matlab_last_sync_hash: "988ec74"
-    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
     status: ported
     decision_log: >
       PORTED for VH-Lab/NDI-matlab#1010 follow-on / Waltham-Data-Science/
@@ -1715,7 +1713,6 @@ porting_deferred:
   - name: resolveOrganizationId
     matlab_path: "+ndi/+cloud/+internal/resolveOrganizationId.m"
     matlab_last_sync_hash: "f847d7c4"
-    matlab_branch: "claude/lightsheet-zarr-ndi-viewer-djp5vk"
     status: porting_deferred
     decision_log: >
       MATLAB helper introduced with NDI-matlab#979: given
