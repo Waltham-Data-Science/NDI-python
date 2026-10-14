@@ -21,7 +21,7 @@ on:
       ndi_matlab_ref:
         description: 'NDI-matlab branch/tag/SHA that carries lightsheet_blob_cloud_roundtrip'
         required: true
-        default: 'claude/lightsheet-zarr-ndi-viewer-djp5vk'
+        default: 'main'
 
 concurrency:
   group: build-lightsheet-fixture
@@ -45,12 +45,10 @@ jobs:
           path: NDI-python
 
       # The blob-fixture routine (ndi.test.cloud.lightsheet_blob_cloud_roundtrip)
-      # is not on NDI-matlab main yet -- it lives on the sibling
-      # claude/lightsheet-zarr-ndi-viewer-djp5vk branch. `ndi_matlab_ref`
-      # picks which ref to check out (default: that branch). Fall back
-      # to main only when the requested ref no longer exists on the
-      # remote, and fail loudly rather than silently use a main that
-      # cannot resolve the routine.
+      # is on NDI-matlab main since VH-Lab/NDI-matlab#979. `ndi_matlab_ref`
+      # picks which ref to check out (default: main), so a fixture can still
+      # be built from a branch that changes the routine. Fall back to main
+      # only when the requested ref no longer exists on the remote.
       - name: Check out NDI-matlab (from ndi_matlab_ref)
         uses: actions/checkout@v4
         with:

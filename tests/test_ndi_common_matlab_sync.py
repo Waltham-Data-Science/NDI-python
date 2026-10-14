@@ -132,18 +132,7 @@ PYTHON_ONLY_EXPECTED: frozenset[str] = frozenset(
 # must match its copy on the branch byte-for-byte, and the entry must go once
 # the branch merges (test_branch_pending_files_match_their_branch). Section 8
 # of docs/developer_notes/ndi_matlab_python_bridge.yaml.
-_LIGHTSHEET_BRANCH = "claude/lightsheet-zarr-ndi-viewer-djp5vk"
-MATLAB_BRANCH_PENDING: dict[str, str] = {
-    # The lightsheet OME-Zarr document types, landed here with the napari
-    # viewer (src/ndi/gui/app/lightsheetZarr) and authored as a pair with
-    # the MATLAB writer on this branch.
-    "database_documents/data/lightsheetZarrLevel.json": _LIGHTSHEET_BRANCH,
-    "database_documents/data/lightsheetZarrLevel.md": _LIGHTSHEET_BRANCH,
-    "database_documents/data/lightsheetZarrPyramid.json": _LIGHTSHEET_BRANCH,
-    "database_documents/data/lightsheetZarrPyramid.md": _LIGHTSHEET_BRANCH,
-    "schema_documents/data/lightsheetZarrLevel_schema.json": _LIGHTSHEET_BRANCH,
-    "schema_documents/data/lightsheetZarrPyramid_schema.json": _LIGHTSHEET_BRANCH,
-}
+MATLAB_BRANCH_PENDING: dict[str, str] = {}
 
 
 # Files present on both sides that intentionally do not match byte-for-byte.
