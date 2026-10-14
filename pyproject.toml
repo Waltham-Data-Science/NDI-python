@@ -48,6 +48,12 @@ dependencies = [
     # now lives; NDI-matlab pulls the MATLAB half in the same way, through its
     # requirements.txt.
     "ndi-ontology @ https://github.com/Waltham-Data-Science/ndi-ontology-python/archive/refs/heads/main.zip",
+    # NDIcalc-vis-matlab's calculator document definitions and schemas
+    # (ndi_common/{database,schema}_documents/{calc,neuro,vision}). NDI finds
+    # them through the package's `ndi.calc` entry point -- see
+    # ndi.fun.find_calc_directories and ndi_common_PathConstants.CalcDoc --
+    # the way NDI-matlab finds sibling NDIcalc*-matlab toolboxes.
+    "ndicalc-vis-matlab @ https://github.com/VH-Lab/NDIcalc-vis-matlab/archive/refs/heads/main.zip",
     "numpy>=1.20.0",
     "networkx>=2.6",
     "jsonschema>=4.0.0",

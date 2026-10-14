@@ -32,6 +32,24 @@ from ndi.document import ndi_document
 # $PATH placeholder registration
 # ---------------------------------------------------------------------------
 
+#: ndicalc-vis-matlab is a runtime dependency, so CI always has a calculator
+#: package; `python -m ndi check` fails without one. A local environment
+#: built without it still runs everything else here.
+needs_calc_package = pytest.mark.skipif(
+    not ndi_common_PathConstants.CalcDoc,
+    reason="no calculator package (ndicalc-vis-matlab) is installed",
+)
+
+
+def _expected_placeholders():
+    """All four, less the calculator two when there is nothing to register.
+
+    MATLAB leaves an empty CalcDoc / CalcDocSchema unregistered too.
+    """
+    if ndi_common_PathConstants.CalcDoc:
+        return _DID_PLACEHOLDERS
+    return ("$NDISCHEMAPATH", "$NDIDOCUMENTPATH")
+
 
 class TestDIDPathConstants:
     """ndi.common registers NDI's placeholders with did.common.PathConstants."""
@@ -39,15 +57,19 @@ class TestDIDPathConstants:
     def test_all_placeholders_registered_on_import(self):
         from did.common import PathConstants
 
-        for key in _DID_PLACEHOLDERS:
+        for key in _expected_placeholders():
             assert key in PathConstants.DEFINITIONS, f"{key} not registered with DID"
 
     def test_placeholders_resolve_to_real_directories(self):
         from did.common import PathConstants
 
-        for key in _DID_PLACEHOLDERS:
-            target = Path(str(PathConstants.DEFINITIONS[key]))
-            assert target.is_dir(), f"{key} -> {target} is not a directory"
+        for key in _expected_placeholders():
+            value = PathConstants.DEFINITIONS[key]
+            # The calculator placeholders hold a list, as MATLAB's cell does.
+            targets = value if isinstance(value, list) else [value]
+            assert targets, f"{key} is registered with no directories"
+            for target in map(Path, map(str, targets)):
+                assert target.is_dir(), f"{key} -> {target} is not a directory"
 
     def test_document_and_schema_placeholders_point_where_ndi_keeps_them(self):
         from did.common import PathConstants
@@ -60,18 +82,33 @@ class TestDIDPathConstants:
             str(ndi_common_PathConstants.SCHEMA_PATH)
         )
 
-    def test_calc_placeholders_share_the_main_tree(self):
-        """ndi_install.py merges dependency ndi_common trees into NDI's own.
+    @needs_calc_package
+    def test_calc_placeholders_hold_the_calc_lists(self):
+        """$NDICALC*PATH are lists of calculator folders, as in MATLAB.
 
-        MATLAB keeps calculator toolboxes separate and registers a list of
-        directories; Python has one tree, so the calc placeholders resolve to
-        the same two directories.  Pinned so the divergence is deliberate.
+        MATLAB registers ndi.common.PathConstants.CalcDoc / CalcDocSchema --
+        cell arrays, one entry per calculator toolbox -- and so does this.
+        They used to alias NDI's own two folders, because ndi_install.py
+        copied the calculator trees into NDI-python's; nothing is copied now.
         """
         from did.common import PathConstants
 
         definitions = PathConstants.DEFINITIONS
-        assert definitions["$NDICALCDOCUMENTPATH"] == definitions["$NDIDOCUMENTPATH"]
-        assert definitions["$NDICALCSCHEMAPATH"] == definitions["$NDISCHEMAPATH"]
+        assert definitions["$NDICALCDOCUMENTPATH"] == [
+            str(p) for p in ndi_common_PathConstants.CalcDoc
+        ]
+        assert definitions["$NDICALCSCHEMAPATH"] == [
+            str(p) for p in ndi_common_PathConstants.CalcDocSchema
+        ]
+
+    @needs_calc_package
+    def test_did_resolves_a_calc_definition_through_its_placeholder(self):
+        """DID walks a list value, so a calculator superclass resolves."""
+        from did.validate import resolve_definition_path
+
+        path = resolve_definition_path("$NDICALCDOCUMENTPATH/vision/contrast_tuning.json")
+        assert path is not None
+        assert Path(path).name == "contrast_tuning.json"
 
     def test_registration_does_not_clobber_an_existing_entry(self):
         """MATLAB only fills in keys that are absent; so does this."""
@@ -194,10 +231,10 @@ KNOWN_UNVALIDATABLE_DEFINITIONS = {
     "session_in_a_dataset": "DID:Database:ValidationFieldDouble",
 }
 
-#: The same, for definitions ndi_install.py copies in from NDIcalc-vis-matlab.
-#: Kept separate because they are absent on a bare checkout, so their existence
-#: is not asserted -- only their behaviour when they are installed. Both were
-#: named by NDI-matlab's own sweep (854a658) before this repo could see them.
+#: The same, for definitions the ndicalc-vis-matlab package supplies (found
+#: through ndi_common_PathConstants.CalcDoc). Kept separate because they belong
+#: to that repository, not this one. Both were named by NDI-matlab's own sweep
+#: (854a658) before this repo could see them.
 KNOWN_UNVALIDATABLE_FROM_DEPENDENCIES = {
     # Inherits ngrid, which its schema omits.
     "neuro/hartley_reverse_correlation": "DID:Database:ValidationSuperClasses",
@@ -236,8 +273,23 @@ def _loads_as_matlab_reads(text):
     return loads_matlab_json(text)
 
 
+def _ndi_common_roots():
+    """NDI's own ndi_common folder, then each calculator package's."""
+    roots = [Path(str(ndi_common_PathConstants.COMMON_FOLDER))]
+    for folder in ndi_common_PathConstants.CalcDoc:
+        if folder.parent not in roots:
+            roots.append(folder.parent)
+    return roots
+
+
 def _bundled_document_types():
-    root = Path(str(ndi_common_PathConstants.DOCUMENT_PATH))
+    roots = [Path(str(ndi_common_PathConstants.DOCUMENT_PATH))]
+    roots += list(ndi_common_PathConstants.CalcDoc)
+    for root in roots:
+        yield from _document_types_under(root)
+
+
+def _document_types_under(root):
     for path in sorted(root.rglob("*.json")):
         try:
             raw = _loads_as_matlab_reads(path.read_text())
@@ -327,14 +379,15 @@ class TestBundledDefinitions:
         Python's stricter parser that had to catch up, which it now does in
         ``did.validate.loads_matlab_json``.
 
-        Files the dependency trees supply are scanned too, so this only checks
-        what is actually installed -- a machine where ``ndi_install.py`` has not
-        run sees a smaller bundle than CI does.
+        Files the calculator packages supply (each one's ``ndi_common``,
+        found through CalcDoc) are scanned too.
         """
-        root = Path(str(ndi_common_PathConstants.COMMON_FOLDER))
         unparseable = []
         still_bad = set()
-        for path in sorted(root.rglob("*.json")):
+        found = [
+            (base, path) for base in _ndi_common_roots() for path in sorted(base.rglob("*.json"))
+        ]
+        for root, path in found:
             # KNOWN_BAD_UPSTREAM_JSON is stored in POSIX form, so the
             # discovered relative path is normalised to match on Windows too.
             relative = PurePosixPath(*path.relative_to(root).parts).as_posix()
@@ -379,17 +432,24 @@ class TestBundledDefinitions:
         )
 
     def test_listed_entries_still_exist(self):
-        """A renamed or deleted definition must not linger in the list.
-
-        Only NDI's own tree is checked. The dependency-supplied list is not:
-        those files are absent until ``ndi_install.py`` copies them in, and a
-        bare checkout must not fail for that.
-        """
-        present = {t for t, _ in _bundled_document_types()}
-        stale = sorted(set(KNOWN_UNVALIDATABLE_DEFINITIONS) - present)
+        """A renamed or deleted definition must not linger in either list."""
+        own = {
+            t for t, _ in _document_types_under(Path(str(ndi_common_PathConstants.DOCUMENT_PATH)))
+        }
+        stale = sorted(set(KNOWN_UNVALIDATABLE_DEFINITIONS) - own)
         assert not stale, (
             "KNOWN_UNVALIDATABLE_DEFINITIONS names definitions that no longer "
             "exist: " + ", ".join(stale)
+        )
+        if not ndi_common_PathConstants.CalcDoc:
+            return
+        calc = {
+            t for root in ndi_common_PathConstants.CalcDoc for t, _ in _document_types_under(root)
+        }
+        stale = sorted(set(KNOWN_UNVALIDATABLE_FROM_DEPENDENCIES) - calc)
+        assert not stale, (
+            "KNOWN_UNVALIDATABLE_FROM_DEPENDENCIES names definitions no "
+            "installed calculator package has: " + ", ".join(stale)
         )
 
 

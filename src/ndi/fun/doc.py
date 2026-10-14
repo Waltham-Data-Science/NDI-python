@@ -17,19 +17,17 @@ def allTypes() -> list[str]:
 
     MATLAB equivalent: ndi.fun.doc.allTypes
 
+    The paths that are searched are given in
+    ndi.common.PathConstants.DocumentFolder (``DOCUMENT_PATH`` here) and
+    ndi.common.PathConstants.CalcDoc.
+
     Returns:
         Sorted list of document type names.
     """
-    from ndi.common import ndi_common_PathConstants
+    from ndi.common import _document_search_path
 
     types: set[str] = set()
-    doc_folder = ndi_common_PathConstants.COMMON_FOLDER / "database_documents"
-    search_paths = [doc_folder]
-
-    # Also check calculator doc paths
-    calc_path = doc_folder / "apps" / "calculators"
-    if calc_path.exists():
-        search_paths.append(calc_path)
+    search_paths = _document_search_path()
 
     for base in search_paths:
         if not base.exists():

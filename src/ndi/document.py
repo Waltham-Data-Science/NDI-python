@@ -32,7 +32,7 @@ try:
 except ImportError:
     DIDDocument = None
 
-from .common import ndi_common_PathConstants, timestamp
+from .common import _document_search_path, ndi_common_PathConstants, timestamp
 from .ido import ndi_ido
 
 #: MATLAB reads this out of ``ndi.common.PathConstants.CommonFolder/config``
@@ -71,11 +71,12 @@ def _definition_to_doc_type(definition: str) -> str:
     by NDIcalc-vis-matlab. MATLAB registers both as DID globals
     (ndi.common.PathConstants), so both resolve there.
 
-    Here they resolve to the same folder, because ndi_install.py copies
-    each dependency's ``ndi_common`` tree into NDI-python's own. So every
-    variable is stripped rather than only ``$NDIDOCUMENTPATH`` -- which is
-    what previously left ``$NDICALCDOCUMENTPATH/...`` as a literal path,
-    unfindable, and silently skipped.
+    Both are followed by a relative path, and read_blank_definition searches
+    DOCUMENT_PATH and every CalcDoc folder for it -- the union of what the
+    two placeholders hold -- so every variable is stripped rather than only
+    ``$NDIDOCUMENTPATH``, which is what once left
+    ``$NDICALCDOCUMENTPATH/...`` as a literal path, unfindable, and
+    silently skipped.
     """
     import re
 
@@ -986,10 +987,18 @@ class ndi_document:
         Returns:
             Dictionary with blank document structure.
         """
-        root = ndi_common_PathConstants.DOCUMENT_PATH
-        json_path = root / f"{document_type}.json"
+        # DOCUMENT_PATH, then every calculator package's folder (CalcDoc) --
+        # the folders $NDIDOCUMENTPATH and $NDICALCDOCUMENTPATH name, which
+        # is where MATLAB's did.document.readjsonfilelocation looks.
+        roots = _document_search_path()
+        json_path = None
+        for root in roots:
+            candidate = root / f"{document_type}.json"
+            if candidate.exists():
+                json_path = candidate
+                break
 
-        if not json_path.exists() and "/" not in document_type:
+        if json_path is None and "/" not in document_type:
             # Fall back to a recursive search for a BARE class name.
             #
             # MATLAB resolves a bare name against the whole document tree,
@@ -1002,20 +1011,29 @@ class ndi_document:
             # Only for a bare name: a caller who wrote 'data/image'
             # expects that exact file, and should not silently get a
             # same-named document from elsewhere in the tree.
-            matches = sorted(root.rglob(f"{document_type}.json"))
+            matches = [
+                (root, m)
+                for root in roots
+                if root.is_dir()
+                for m in sorted(root.rglob(f"{document_type}.json"))
+            ]
             if len(matches) == 1:
-                json_path = matches[0]
+                json_path = matches[0][1]
             elif len(matches) > 1:
-                rel = ", ".join(str(m.relative_to(root)) for m in matches)
+                rel = ", ".join(str(m.relative_to(root)) for root, m in matches)
+                first_root, first = matches[0]
                 raise FileNotFoundError(
                     f"ndi_document type {document_type!r} is ambiguous: {rel}. "
-                    f"Give the path, e.g. {matches[0].relative_to(root).with_suffix('')}."
+                    f"Give the path, e.g. {first.relative_to(first_root).with_suffix('')}."
                 )
 
-        if not json_path.exists():
+        if json_path is None:
+            searched = ", ".join(str(r) for r in roots)
             raise FileNotFoundError(
-                f"ndi_document definition not found: {json_path}. "
-                f"Make sure NDI is properly installed."
+                f"ndi_document definition not found: {document_type}.json "
+                f"(searched {searched}). Make sure NDI is properly installed; "
+                f"calculator document types come from calculator packages "
+                f"such as ndicalc-vis-matlab."
             )
 
         with open(json_path) as f:
@@ -1049,8 +1067,8 @@ class ndi_document:
 
                 # Strip whatever $...PATH/ prefix the definition carries, not
                 # just $NDIDOCUMENTPATH: calculator documents name their
-                # superclasses through $NDICALCDOCUMENTPATH, and ndi_install.py
-                # merges every dependency's ndi_common into one tree.
+                # superclasses through $NDICALCDOCUMENTPATH, and the lookup
+                # searches NDI's own tree and every CalcDoc folder.
                 sc_type = _definition_to_doc_type(sc_def)
                 try:
                     sc_props = ndi_document.read_blank_definition(sc_type)

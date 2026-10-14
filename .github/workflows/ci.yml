@@ -333,7 +333,7 @@ jobs:
 
       - name: Import NDI and its sibling packages
         run: |
-          "$RUNNER_TEMP/venv/bin/python" -c "import ndi, did, ndr, vlt, vhlib, ndicompress, ndi_ontology"
+          "$RUNNER_TEMP/venv/bin/python" -c "import ndi, did, ndr, vlt, vhlib, ndicompress, ndi_ontology, ndicalc_vis_matlab"
 
       - name: Validate installation
         # Run from outside the checkout so `import ndi` resolves to the
@@ -341,3 +341,25 @@ jobs:
         working-directory: ${{ runner.temp }}
         run: |
           "$RUNNER_TEMP/venv/bin/python" -m ndi check
+
+      - name: Resolve an NDIcalc document definition
+        # NDIcalc-vis-matlab's definitions are not in this repo: they come
+        # from the ndicalc-vis-matlab package, found through its `ndi.calc`
+        # entry point (ndi_common_PathConstants.CalcDoc). Prove a plain
+        # install finds one, both directly and through DID's
+        # $NDICALCDOCUMENTPATH placeholder. Run from outside the checkout for
+        # the same reason as the step above.
+        working-directory: ${{ runner.temp }}
+        run: |
+          "$RUNNER_TEMP/venv/bin/python" - <<'PY'
+          from did.validate import resolve_definition_path
+          from ndi.common import ndi_common_PathConstants
+          from ndi.document import ndi_document
+
+          print("CalcDoc:", ndi_common_PathConstants.CalcDoc)
+          doc = ndi_document("vision/contrast_tuning")
+          assert "contrast_tuning" in doc.document_properties, doc.document_properties
+          path = resolve_definition_path("$NDICALCDOCUMENTPATH/vision/contrast_tuning.json")
+          assert path, "DID could not resolve $NDICALCDOCUMENTPATH/vision/contrast_tuning.json"
+          print("vision/contrast_tuning resolved from", path)
+          PY

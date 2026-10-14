@@ -41,9 +41,9 @@ def _schema_dir() -> Path:
     return Path(ndi.ndi_common.__path__[0]) / "schema_documents"
 
 
-#: Upstream calc schemas that ``ndi_install.py`` copies in but that are
-#: broken at the upstream tag AND at head, so we cannot fix them from this
-#: repository. Kept in sync with ``tests/test_did_integration.py``'s
+#: Calc schemas the ndicalc-vis-matlab package supplies (found through
+#: ``ndi_common_PathConstants.CalcDocSchema``) that are broken at the upstream
+#: tag AND at head, so we cannot fix them from this repository. Kept in sync with ``tests/test_did_integration.py``'s
 #: ``KNOWN_BAD_UPSTREAM_JSON`` and named as ``schema_documents``-relative
 #: POSIX paths — see the quarantine comment there.
 _KNOWN_BAD_UPSTREAM_SCHEMAS = {
@@ -59,10 +59,12 @@ def test_all_bundled_schemas_parse():
     starts parsing, the second assertion below fails and this list must be
     trimmed so the quarantine cannot rot.
     """
-    root = _schema_dir()
+    from ndi.common import ndi_common_PathConstants
+
+    roots = [_schema_dir(), *ndi_common_PathConstants.CalcDocSchema]
     failures: list[tuple[Path, str]] = []
     unexpected_parses: list[str] = []
-    for path in sorted(root.rglob("*.json")):
+    for root, path in [(r, p) for r in roots for p in sorted(r.rglob("*.json"))]:
         rel = path.relative_to(root).as_posix()
         try:
             with open(path, encoding="utf-8") as f:

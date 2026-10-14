@@ -17,7 +17,7 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from .common import ndi_common_PathConstants
+from .common import _schema_search_path
 
 if TYPE_CHECKING:
     from .document import ndi_document
@@ -122,7 +122,9 @@ class SchemaLoadError(Exception):
 def _load_schema(schema_name: str) -> dict | None:
     """Load a schema JSON file by name.
 
-    Searches in ndi_common_PathConstants.SCHEMA_PATH for ``{name}_schema.json``.
+    Searches ndi_common_PathConstants.SCHEMA_PATH, then every folder in
+    ndi_common_PathConstants.CalcDocSchema (calculator packages), for
+    ``{name}_schema.json``.
     Handles subdirectory paths (e.g. 'apps/calculations/simple_calc').
 
     Args:
@@ -138,19 +140,29 @@ def _load_schema(schema_name: str) -> dict | None:
         return _schema_cache[schema_name]
 
     try:
-        schema_path = ndi_common_PathConstants.SCHEMA_PATH
+        schema_paths = _schema_search_path()
     except (ValueError, AttributeError):
         return None
 
-    # Try direct path first
     filename = f"{schema_name}_schema.json"
-    full_path = schema_path / filename
-
-    if not full_path.exists():
-        # Try searching subdirectories
-        for candidate in schema_path.rglob(f'{schema_name.split("/")[-1]}_schema.json'):
-            full_path = candidate
+    full_path = None
+    # Try the direct path in each folder first
+    for schema_path in schema_paths:
+        if (schema_path / filename).exists():
+            full_path = schema_path / filename
             break
+
+    if full_path is None:
+        # Try searching subdirectories
+        basename = f'{schema_name.split("/")[-1]}_schema.json'
+        for schema_path in schema_paths:
+            if not schema_path.is_dir():
+                continue
+            for candidate in schema_path.rglob(basename):
+                full_path = candidate
+                break
+            if full_path is not None:
+                break
         else:
             return None
 

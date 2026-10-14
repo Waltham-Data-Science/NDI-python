@@ -22,6 +22,7 @@ from .plot import plot_extracellular_spikeshapes
 from .text import parse_text, parseText
 from .utils import (
     channelname2prefixnumber,
+    find_calc_directories,
     identifier,
     name2variable_name,
     name2variableName,
@@ -31,6 +32,7 @@ from .utils import (
 
 __all__ = [
     "channelname2prefixnumber",
+    "find_calc_directories",
     "identifier",
     "plot_extracellular_spikeshapes",
     "name2variableName",

@@ -2,8 +2,9 @@
 
 MATLAB registers each one as a DID global (ndi.common.PathConstants), so
 ``$NDIDOCUMENTPATH`` and ``$NDICALCDOCUMENTPATH`` both resolve there. In
-NDI-python they resolve to the same folder, because ndi_install.py copies
-each dependency's ``ndi_common`` tree into NDI-python's own.
+NDI-python the second names the ``CalcDoc`` folders -- one per installed
+calculator package (ndicalc-vis-matlab), found through the ``ndi.calc``
+entry point -- and definition lookup searches NDI's own tree and all of them.
 
 Resolution used to strip only ``$NDIDOCUMENTPATH``, leaving
 ``$NDICALCDOCUMENTPATH/...`` as a literal path that could not be found --
@@ -19,10 +20,9 @@ import pytest
 from ndi.common import ndi_common_PathConstants
 from ndi.document import _definition_to_doc_type, ndi_document
 
-CALC_DOC = ndi_common_PathConstants.COMMON_FOLDER / "database_documents" / "calc"
 needs_calc = pytest.mark.skipif(
-    not CALC_DOC.is_dir(),
-    reason="NDIcalc-vis-matlab documents are installed by ndi_install.py",
+    not any((p / "calc").is_dir() for p in ndi_common_PathConstants.CalcDoc),
+    reason="NDIcalc-vis-matlab documents come from the ndicalc-vis-matlab package",
 )
 
 
