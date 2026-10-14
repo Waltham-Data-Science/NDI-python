@@ -282,3 +282,62 @@ jobs:
         env:
           NDI_REQUIRE_SONPIPE: "1"
         run: pytest tests/test_cedspike2_integration.py tests/test_cedspike2_sonpipe.py -v --tb=short
+
+  install-without-git:
+    # Guards the git-free install. The double-click installer is built on
+    # `uv tool install`, and uv shells out to a system `git` for every
+    # `git+` dependency URL -- which many end users (Windows and macOS in
+    # particular) do not have. Every runtime dependency is therefore pulled
+    # from a GitHub archive (zip) URL, fetched over plain HTTPS. This job
+    # installs NDI with `git` made unusable, so a `git+` URL sneaking back
+    # into pyproject.toml (here, or through an extra we install) fails CI
+    # instead of failing on a user's machine.
+    name: Install without git
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ci-install-without-git-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      # The checkout itself uses git; that is fine -- the user's installer
+      # ships the source too. Only the install step below must not need it.
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.32"
+          # No cache: a warm cache could satisfy a dependency without ever
+          # reaching the code path that would call git.
+          enable-cache: false
+
+      - name: Install NDI with git unavailable
+        run: |
+          # Shadow git with a script that always fails, ahead of the real one
+          # on PATH. (Removing /usr/bin from PATH would also remove most of
+          # the toolchain, so shadowing is the cleaner way to hide it.)
+          mkdir -p "$RUNNER_TEMP/nogit"
+          printf '#!/bin/sh\necho "git is deliberately unavailable in this job" >&2\nexit 127\n' \
+            > "$RUNNER_TEMP/nogit/git"
+          chmod +x "$RUNNER_TEMP/nogit/git"
+          export PATH="$RUNNER_TEMP/nogit:$PATH"
+
+          # Prove the shadow works before trusting the install below.
+          if git --version; then
+            echo "::error::git is still usable; this job would prove nothing"
+            exit 1
+          fi
+
+          uv venv --python 3.12 "$RUNNER_TEMP/venv"
+          # [tutorials] brings pandas and matplotlib, which `ndi check` checks.
+          uv pip install --python "$RUNNER_TEMP/venv/bin/python" ".[tutorials]"
+
+      - name: Import NDI and its sibling packages
+        run: |
+          "$RUNNER_TEMP/venv/bin/python" -c "import ndi, did, ndr, vlt, vhlib, ndicompress, ndi_ontology"
+
+      - name: Validate installation
+        # Run from outside the checkout so `import ndi` resolves to the
+        # installed wheel, not the source tree.
+        working-directory: ${{ runner.temp }}
+        run: |
+          "$RUNNER_TEMP/venv/bin/python" -m ndi check

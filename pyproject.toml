@@ -35,19 +35,19 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "did @ git+https://github.com/VH-Lab/DID-python.git@main",
-    "ndr[formats] @ git+https://github.com/VH-lab/NDR-python.git@main",
+    "did @ https://github.com/VH-Lab/DID-python/archive/refs/heads/main.zip",
+    "ndr[formats] @ https://github.com/VH-lab/NDR-python/archive/refs/heads/main.zip",
     "vhlab-toolbox-python @ https://github.com/VH-Lab/vhlab-toolbox-python/archive/refs/heads/main.zip",
     # ndi.app.oridirtuning needs vhlib.response_stats.neural_response_significance,
     # mirroring NDI-matlab, which calls vhlab-library-matlab directly (see
     # NDI-matlab/src/ndi/docs/developer_notes/vhlabLibraryMatlab.md).
     "vhlab-library-python @ https://github.com/VH-Lab/vhlab-library-python/archive/refs/heads/main.zip",
-    "ndi-compress @ git+https://github.com/Waltham-Data-Science/NDI-compress-python.git@main",
+    "ndi-compress @ https://github.com/Waltham-Data-Science/NDI-compress-python/archive/refs/heads/main.zip",
     # ndi.ontology is a re-export of this package -- see src/ndi/ontology.py.
     # It tracks ndi-ontology-matlab, which is where NDI-matlab's ontology code
     # now lives; NDI-matlab pulls the MATLAB half in the same way, through its
     # requirements.txt.
-    "ndi-ontology @ git+https://github.com/Waltham-Data-Science/ndi-ontology-python.git@main",
+    "ndi-ontology @ https://github.com/Waltham-Data-Science/ndi-ontology-python/archive/refs/heads/main.zip",
     "numpy>=1.20.0",
     "networkx>=2.6",
     "jsonschema>=4.0.0",

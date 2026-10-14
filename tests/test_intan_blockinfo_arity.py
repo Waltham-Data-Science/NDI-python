@@ -1,6 +1,6 @@
 """The Intan reader survives NDR growing a return value.
 
-``pyproject.toml`` pins ``ndr[formats] @ git+...NDR-python.git@main``, so
+``pyproject.toml`` pins ``ndr[formats] @ .../NDR-python/archive/refs/heads/main.zip``, so
 CI installs NDR from its tip on every run and an arity change upstream
 reaches this repo the moment it merges -- with no version bump to notice
 and no local reproduction, because a developer's installed NDR is
