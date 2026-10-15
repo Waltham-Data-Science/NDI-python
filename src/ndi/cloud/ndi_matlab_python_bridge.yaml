@@ -617,7 +617,7 @@ functions:
   # --- download.py functions ---
   - name: downloadDocumentCollection
     matlab_path: "+ndi/+cloud/+download/downloadDocumentCollection.m"
-    matlab_last_sync_hash: "e1a641f0b"
+    matlab_last_sync_hash: "2669a8525"
     python_path: "ndi/cloud/download.py"
     input_arguments:
       - name: dataset_id
