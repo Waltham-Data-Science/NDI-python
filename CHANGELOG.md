@@ -23,6 +23,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Bulk document downloads wait up to 60 s for each chunk** (mirroring
+  NDI-matlab#1030). `downloadDocumentCollection` polls each chunk's
+  presigned ZIP URL while the server builds the archive, and gave up after
+  20 s; a chunk of 2000 large documents can take longer, which surfaced as a
+  `TimeoutError` (in MATLAB, a 404 from curl) partway through downloading a
+  dataset. The default `timeout` is now 60 s in both
+  `downloadDocumentCollection` and `_download_chunk_zip`.
+
 - **`ndi.probe.timeseries.readtimeseries()` names its first argument
   `timeref_or_epoch`, matching MATLAB and `ndi.element.timeseries`**
   (NDI-python#166). It was called `epoch`, so the two classes could not be
