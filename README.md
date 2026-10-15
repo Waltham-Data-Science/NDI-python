@@ -58,6 +58,7 @@ NDI-Python requires these VH-Lab packages (installed automatically by `ndi_insta
 |---------|-----------|---------|
 | [DID-python](https://github.com/VH-Lab/DID-python) | VH-Lab/DID-python | Document database backend (SQLite, queries) |
 | [vhlab-toolbox-python](https://github.com/VH-Lab/vhlab-toolbox-python) | VH-Lab/vhlab-toolbox-python | Data utilities, file formats, signal processing |
+| [Pyraview](https://github.com/VH-Lab/Pyraview) | VH-Lab/Pyraview | Multi-resolution signal pyramids for `ndi.gui.app.pyraview` (pre-built wheels, `pyraview` extra) |
 
 Additional dependencies (installed automatically): `numpy`, `networkx`, `jsonschema`, `requests`, `scipy`, `pandas`, `matplotlib`.
 
@@ -80,6 +81,34 @@ pip install scipy pandas matplotlib opencv-python-headless portalocker openminds
 ```
 
 </details>
+
+### Pyraview (signal pyramids)
+
+[Pyraview](https://github.com/VH-Lab/Pyraview) is not on PyPI. Its GitHub
+release ships a pre-built wheel for every platform and CPython version (Linux
+x86_64/aarch64, macOS Apple Silicon *and* Intel, Windows), with the compiled
+library inside, so no compiler is ever needed. `ndi_install.py` installs it
+for you. In your own environment, from the repo root:
+
+```bash
+pip install -e ".[pyraview]" --find-links install/pyraview-wheels.html --only-binary pyraview
+```
+
+or, with uv (which needs the index as a URL, and checks hashes only through
+the constraints file):
+
+```bash
+uv pip install -e ".[pyraview]" --only-binary pyraview -c install/pyraview-constraints.txt \
+  -f https://raw.githubusercontent.com/Waltham-Data-Science/NDI-python/main/install/pyraview-wheels.html
+```
+
+`install/pyraview-wheels.html` lists each release wheel with its sha256 and
+deliberately leaves out the source archive; `--only-binary pyraview` makes a
+missing wheel an error instead of a C++ build. The extra is not part of `gui`,
+so `pip install ".[gui]"` keeps working without these flags. On a new Pyraview
+release, bump the pin in `pyproject.toml` and run
+`python tools/make_pyraview_index.py vX.Y.Z` to regenerate both files in
+`install/`.
 
 ## Quick Start
 
