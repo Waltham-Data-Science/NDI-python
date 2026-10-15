@@ -633,7 +633,7 @@ functions:
       - name: timeout
         type_matlab: "double"
         type_python: "float"
-        default: "20.0"
+        default: "60.0"
       - name: retry_interval
         type_python: "float"
         default: "1.0"
