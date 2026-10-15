@@ -18,7 +18,7 @@ classes:
     type: class
     status: porting_deferred
     matlab_path: "src/ndi/+ndi/+calc/+stimulus/tuningcurve.m"
-    matlab_last_sync_hash: "63043f393"
+    matlab_last_sync_hash: "49a875c94"
     python_path: "ndi/calc/stimulus/tuningcurve.py"
     python_class: "ndi_calc_stimulus_tuningcurve"
     inherits: "ndi.calculator"
@@ -50,6 +50,11 @@ classes:
       the MATLAB without a populated session to check against is how a
       plausible wrong answer gets committed, and this entry has already
       carried one claim too many.
+      RE-EXAMINED AT 49a875c94 (VH-Lab/NDI-matlab#1029): calculate now sets
+      the deal index to the loop index when one property is dealt (it was
+      fixed at 1, so every dealt curve used the first value) and accumulates
+      deal_log_str. Nothing to follow here: the port's calculate is the stub
+      described above and has no deal loop. Hash bumped only.
 
     methods:
       - name: tuningcurve
