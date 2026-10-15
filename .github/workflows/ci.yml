@@ -284,22 +284,90 @@ jobs:
         run: pytest tests/test_cedspike2_integration.py tests/test_cedspike2_sonpipe.py -v --tb=short
 
   install-without-git:
-    # Guards the git-free install. The double-click installer is built on
-    # `uv tool install`, and uv shells out to a system `git` for every
-    # `git+` dependency URL -- which many end users (Windows and macOS in
-    # particular) do not have. Every runtime dependency is therefore pulled
-    # from a GitHub archive (zip) URL, fetched over plain HTTPS. This job
-    # installs NDI with `git` made unusable, so a `git+` URL sneaking back
-    # into pyproject.toml (here, or through an extra we install) fails CI
+    # Guards the git-free, compiler-free install on every platform the
+    # double-click installer targets.
+    #
+    # git: the installer is built on `uv tool install`, and uv shells out to a
+    # system `git` for every `git+` dependency URL -- which many end users
+    # (Windows and macOS in particular) do not have. Every runtime dependency
+    # is therefore pulled from a GitHub archive (zip) URL over plain HTTPS.
+    # This job installs NDI with `git` made unusable, so a `git+` URL sneaking
+    # back into pyproject.toml (here, or through an extra we install) fails CI
     # instead of failing on a user's machine.
-    name: Install without git
-    runs-on: ubuntu-latest
+    #
+    # Pyraview: not on PyPI, and a C++ build from its sdist. It must come from
+    # the pre-built wheels on its GitHub release, found through the committed
+    # flat index install/pyraview-wheels.html, with hashes enforced through
+    # install/pyraview-constraints.txt. `--only-binary pyraview` makes a
+    # missing wheel an error rather than a compile, CMake and the C/C++
+    # compilers are hidden as well, and tools/check_pyraview_wheel.py then
+    # proves the installed WHEEL tags are exactly those of a release wheel.
+    #
+    # The Linux x86_64 leg keeps the job's original check name, so a branch
+    # rule that requires "Install without git" still finds it.
+    name: ${{ matrix.check_name }}
+    runs-on: ${{ matrix.os }}
+    # Bounds a hung install. (It does not bound time spent QUEUED for a
+    # runner label: if macos-15-intel is ever retired, drop that leg.)
+    timeout-minutes: 45
     concurrency:
-      group: ci-install-without-git-${{ github.ref }}
+      group: ci-install-without-git-${{ matrix.leg }}-${{ github.ref }}
       cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - leg: linux-x86_64
+            check_name: Install without git
+            os: ubuntu-latest
+            python: "3.12"
+            machine: x86_64
+            tags: "manylinux_ x86_64"
+          - leg: linux-aarch64
+            check_name: Install without git (linux-aarch64)
+            os: ubuntu-24.04-arm
+            python: "3.12"
+            machine: aarch64
+            tags: "manylinux_ aarch64"
+          - leg: windows-amd64
+            check_name: Install without git (windows-amd64)
+            os: windows-latest
+            python: "3.12"
+            machine: AMD64
+            tags: "win_amd64"
+          - leg: macos-arm64
+            check_name: Install without git (macos-arm64)
+            os: macos-latest
+            python: "3.12"
+            machine: arm64
+            tags: "macosx_ arm64"
+          - leg: macos-intel
+            check_name: Install without git (macos-intel)
+            os: macos-15-intel
+            python: "3.12"
+            machine: x86_64
+            tags: "macosx_ x86_64"
+          # An Intel Mac, as Apple Silicon sees one: an x86_64 CPython under
+          # Rosetta 2. uv picks wheels for the interpreter it installs into,
+          # so this resolves exactly what an Intel Mac would.
+          - leg: macos-rosetta-x86_64
+            check_name: Install without git (macos-rosetta-x86_64)
+            os: macos-latest
+            python: cpython-3.12-macos-x86_64
+            rosetta: true
+            machine: x86_64
+            tags: "macosx_ x86_64"
+    defaults:
+      run:
+        shell: bash
+    env:
+      # Raw URL of THIS commit's index: uv reads --find-links only from a URL
+      # or a directory (a local .html file is refused), and the raw URL is
+      # what the double-click installer will use on main.
+      PYRAVIEW_FIND_LINKS: https://raw.githubusercontent.com/${{ github.event.pull_request.head.repo.full_name || github.repository }}/${{ github.event.pull_request.head.sha || github.sha }}/install/pyraview-wheels.html
     steps:
       # The checkout itself uses git; that is fine -- the user's installer
-      # ships the source too. Only the install step below must not need it.
+      # ships the source too. Only the install steps below must not need it.
       - uses: actions/checkout@v4
 
       - name: Install uv
@@ -307,40 +375,193 @@ jobs:
         with:
           version: "0.11.32"
           # No cache: a warm cache could satisfy a dependency without ever
-          # reaching the code path that would call git.
+          # reaching the code path that would call git, or skip a download
+          # whose hash we mean to check.
           enable-cache: false
 
-      - name: Install NDI with git unavailable
+      - name: Make sure Rosetta 2 is available
+        if: matrix.rosetta
         run: |
-          # Shadow git with a script that always fails, ahead of the real one
-          # on PATH. (Removing /usr/bin from PATH would also remove most of
-          # the toolchain, so shadowing is the cleaner way to hide it.)
-          mkdir -p "$RUNNER_TEMP/nogit"
-          printf '#!/bin/sh\necho "git is deliberately unavailable in this job" >&2\nexit 127\n' \
-            > "$RUNNER_TEMP/nogit/git"
-          chmod +x "$RUNNER_TEMP/nogit/git"
-          export PATH="$RUNNER_TEMP/nogit:$PATH"
+          /usr/bin/pgrep -q oahd || sudo softwareupdate --install-rosetta --agree-to-license
+          arch -x86_64 /usr/bin/true
 
-          # Prove the shadow works before trusting the install below.
-          if git --version; then
-            echo "::error::git is still usable; this job would prove nothing"
+      - name: Create the Python ${{ matrix.python }} environment
+        run: |
+          uv python install "${{ matrix.python }}"
+          uv venv --python "${{ matrix.python }}" "$RUNNER_TEMP/venv"
+          if [ "$RUNNER_OS" = Windows ]; then
+            PY="$RUNNER_TEMP/venv/Scripts/python.exe"
+          else
+            PY="$RUNNER_TEMP/venv/bin/python"
+          fi
+          echo "PY=$PY" >> "$GITHUB_ENV"
+          "$PY" -c "import platform, sys; print(sys.version); print('machine:', platform.machine())"
+          "$PY" -c "import platform, sys; m = platform.machine(); sys.exit(0 if m == '${{ matrix.machine }}' else f'machine is {m}, expected ${{ matrix.machine }}')"
+
+      - name: Hide git, CMake and the C/C++ compilers
+        run: |
+          # Writes a script the install steps source. On Linux and macOS it
+          # SHADOWS each tool with one that always fails, ahead of the real
+          # one on PATH (removing /usr/bin would remove the whole toolchain).
+          # On Windows a shadow script would be ignored -- native programs
+          # look for git.exe, not a shell script -- so every PATH directory
+          # holding one of these tools is dropped instead.
+          tools="git cmake cc c++ gcc g++ clang clang++ cl"
+          hide="$RUNNER_TEMP/hide-tools.sh"
+          if [ "$RUNNER_OS" = Windows ]; then
+            cat > "$hide" <<EOF
+          newpath=""
+          IFS=':' read -ra dirs <<< "\$PATH"
+          for d in "\${dirs[@]}"; do
+            drop=""
+            for t in $tools; do if [ -e "\$d/\$t.exe" ]; then drop=1; fi; done
+            if [ -z "\$drop" ]; then newpath="\${newpath:+\$newpath:}\$d"; fi
+          done
+          export PATH="\$newpath"
+          EOF
+          else
+            mkdir -p "$RUNNER_TEMP/notools"
+            for t in $tools; do
+              printf '#!/bin/sh\necho "%s is deliberately unavailable in this job" >&2\nexit 127\n' "$t" \
+                > "$RUNNER_TEMP/notools/$t"
+              chmod +x "$RUNNER_TEMP/notools/$t"
+            done
+            echo "export PATH=\"$RUNNER_TEMP/notools:\$PATH\"" > "$hide"
+          fi
+          echo "HIDE_TOOLS=$hide" >> "$GITHUB_ENV"
+
+          # Prove the hiding works before trusting the steps that rely on it.
+          source "$hide"
+          for t in git cmake c++ gcc; do
+            if "$t" --version >/dev/null 2>&1; then
+              echo "::error::$t is still usable; this job would prove nothing"
+              exit 1
+            fi
+          done
+          echo "git, cmake, c++ and gcc are all unusable"
+
+      - name: "Negative check: no find-links means no pyraview (and no compile)"
+        run: |
+          source "$HIDE_TOOLS"
+          # pyraview is not on PyPI, and the sdist is in no index we name, so
+          # without --find-links this has nothing to install and must say so.
+          # It must not fall back to building anything.
+          if uv pip install --python "$PY" --only-binary pyraview \
+               --dry-run ".[pyraview]" > "$RUNNER_TEMP/neg.log" 2>&1; then
+            cat "$RUNNER_TEMP/neg.log"
+            echo "::error::installing .[pyraview] without --find-links succeeded"
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/neg.log"
+          grep -q "pyraview" "$RUNNER_TEMP/neg.log"
+          if grep -qiE "building pyraview|cmake" "$RUNNER_TEMP/neg.log"; then
+            echo "::error::the failed install tried to build pyraview"
             exit 1
           fi
 
-          uv venv --python 3.12 "$RUNNER_TEMP/venv"
+      - name: "Negative check: a wrong hash is refused"
+        run: |
+          source "$HIDE_TOOLS"
+          # uv does NOT check the #sha256 fragments in a find-links page; the
+          # constraints file is what makes it verify. Prove that it does by
+          # corrupting every hash in a copy and expecting a refusal.
+          sed -E 's/sha256:[0-9a-f]{64}/sha256:0000000000000000000000000000000000000000000000000000000000000000/' \
+            install/pyraview-constraints.txt > "$RUNNER_TEMP/bad-constraints.txt"
+          uv venv --python "${{ matrix.python }}" "$RUNNER_TEMP/hashcheck"
+          if uv pip install --python "$RUNNER_TEMP/hashcheck" --only-binary pyraview \
+               -f "$PYRAVIEW_FIND_LINKS" -c "$RUNNER_TEMP/bad-constraints.txt" \
+               "pyraview==0.4.2" > "$RUNNER_TEMP/hash.log" 2>&1; then
+            cat "$RUNNER_TEMP/hash.log"
+            echo "::error::a pyraview wheel with the wrong sha256 was installed"
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/hash.log"
+          grep -qi "hash mismatch" "$RUNNER_TEMP/hash.log"
+
+      - name: Install NDI with git and compilers unavailable
+        run: |
+          source "$HIDE_TOOLS"
           # [tutorials] brings pandas and matplotlib, which `ndi check` checks.
-          uv pip install --python "$RUNNER_TEMP/venv/bin/python" ".[tutorials]"
+          # [pyraview] is the extra the double-click installer will request.
+          # -v so the log names the wheel uv selected; only those lines are
+          # printed, the whole log only if the install fails.
+          if ! uv pip install -v --python "$PY" \
+                 -f "$PYRAVIEW_FIND_LINKS" \
+                 -c install/pyraview-constraints.txt \
+                 --only-binary pyraview \
+                 ".[tutorials,pyraview]" > "$RUNNER_TEMP/install.log" 2>&1; then
+            tail -n 200 "$RUNNER_TEMP/install.log"
+            exit 1
+          fi
+          grep -m 20 -E "Selecting: pyraview|/pyraview-[0-9.]+-[^ ]*\.whl|\+ pyraview" "$RUNNER_TEMP/install.log" \
+            || echo "(no pyraview lines in the uv log; the next step is the proof)"
+          if grep -qiE "building pyraview|pyraview-[0-9.]+\.tar\.gz" "$RUNNER_TEMP/install.log"; then
+            echo "::error::pyraview was built from source"
+            exit 1
+          fi
+
+      - name: Prove pyraview is a release wheel for this platform
+        # From outside the checkout, so imports resolve to the installed tree.
+        working-directory: ${{ runner.temp }}
+        run: |
+          "$PY" -c "import pyraview, os; print(pyraview.__file__, pyraview._lib_path)"
+          tag_args=()
+          for t in ${{ matrix.tags }}; do tag_args+=(--expect-tag "$t"); done
+          "$PY" "$GITHUB_WORKSPACE/tools/check_pyraview_wheel.py" \
+            --expect-machine "${{ matrix.machine }}" "${tag_args[@]}"
+
+      - name: The pip path (ndi_install.py's) also takes the wheel
+        run: |
+          source "$HIDE_TOOLS"
+          # pip, unlike uv, reads a local find-links .html file and checks the
+          # #sha256 fragment on each link -- which is how ndi_install.py uses
+          # the index. A seeded venv gives this interpreter its own pip.
+          uv venv --seed --python "${{ matrix.python }}" "$RUNNER_TEMP/pipvenv"
+          if [ "$RUNNER_OS" = Windows ]; then PIPPY="$RUNNER_TEMP/pipvenv/Scripts/python.exe"
+          else PIPPY="$RUNNER_TEMP/pipvenv/bin/python"; fi
+          "$PIPPY" -m pip install --no-cache-dir --only-binary pyraview \
+            --find-links install/pyraview-wheels.html "pyraview==0.4.2"
+          cd "$RUNNER_TEMP"
+          tag_args=()
+          for t in ${{ matrix.tags }}; do tag_args+=(--expect-tag "$t"); done
+          "$PIPPY" "$GITHUB_WORKSPACE/tools/check_pyraview_wheel.py" \
+            --expect-machine "${{ matrix.machine }}" "${tag_args[@]}"
+
+      - name: The installer's command form (uv tool install) also takes the wheel
+        if: matrix.leg == 'linux-x86_64'
+        run: |
+          source "$HIDE_TOOLS"
+          # What the double-click installer runs, against this checkout.
+          # uv tool install does not verify hashes (neither the #sha256
+          # fragments nor a constraints file's), so this leg proves only the
+          # wheel-not-sdist half; the steps above prove the hash half.
+          export UV_TOOL_DIR="$RUNNER_TEMP/uvtools" UV_TOOL_BIN_DIR="$RUNNER_TEMP/uvbin"
+          uv tool install --python 3.12 -f "$PYRAVIEW_FIND_LINKS" \
+            --no-build-package pyraview "$GITHUB_WORKSPACE[pyraview]"
+          cd "$RUNNER_TEMP"
+          "$UV_TOOL_DIR/ndi/bin/python" "$GITHUB_WORKSPACE/tools/check_pyraview_wheel.py" \
+            --expect-machine x86_64 --expect-tag manylinux_
+
+      - name: The committed index matches the GitHub release
+        if: matrix.leg == 'linux-x86_64'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          # Regenerates both install/ files from the GitHub API in memory and
+          # compares: the committed sha256s are GitHub's own asset digests.
+          tag="v$(sed -nE 's/^ *"pyraview==([^"]+)",/\1/p' pyproject.toml)"
+          python3 tools/make_pyraview_index.py "$tag" --check
 
       - name: Import NDI and its sibling packages
         run: |
-          "$RUNNER_TEMP/venv/bin/python" -c "import ndi, did, ndr, vlt, vhlib, ndicompress, ndi_ontology, ndicalc_vis_matlab"
+          "$PY" -c "import ndi, did, ndr, vlt, vhlib, ndicompress, ndi_ontology, ndicalc_vis_matlab, pyraview"
 
       - name: Validate installation
         # Run from outside the checkout so `import ndi` resolves to the
         # installed wheel, not the source tree.
         working-directory: ${{ runner.temp }}
         run: |
-          "$RUNNER_TEMP/venv/bin/python" -m ndi check
+          "$PY" -m ndi check
 
       - name: Resolve an NDIcalc document definition
         # NDIcalc-vis-matlab's definitions are not in this repo: they come
@@ -351,7 +572,7 @@ jobs:
         # the same reason as the step above.
         working-directory: ${{ runner.temp }}
         run: |
-          "$RUNNER_TEMP/venv/bin/python" - <<'PY'
+          "$PY" - <<'PY'
           from did.validate import resolve_definition_path
           from ndi.common import ndi_common_PathConstants
           from ndi.document import ndi_document

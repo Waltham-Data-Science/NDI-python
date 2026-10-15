@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Pyraview from pre-built wheels, never from source.** New `pyraview`
+  extra (`pyraview==0.4.2`). Pyraview is not on PyPI, so the wheels on its
+  GitHub release are named in a committed flat index,
+  `install/pyraview-wheels.html` (each link with its `#sha256`; the sdist left
+  out), with the same hashes in `install/pyraview-constraints.txt` for uv.
+  `tools/make_pyraview_index.py` regenerates both from a release tag.
+  `ndi_install.py` no longer clones Pyraview and compiles its C++; it installs
+  the wheel with `--only-binary pyraview`. CI installs it without git, CMake
+  or a compiler on Linux x86_64/aarch64, Windows, macOS arm64, macOS Intel and
+  x86_64-under-Rosetta.
+
 - **File CRC-32 checksums for NDI Cloud** (ndi-cloud-node#162, mirroring
   NDI-matlab#1025), so an importer can resume an interrupted upload by
   re-uploading only the files whose cloud copy does not match.

@@ -13,8 +13,9 @@ NETWORK_TIMEOUT further never fails these tests; writing a bare `timeout=120`
 into a network-bound step does. That is the mistake worth preventing, because
 120 looks generous right up until you remember the six clones behind it.
 
-Two literals are allowed, each for a stated reason, and adding a third means
-deciding here whether it deserves one.
+One literal is allowed, for a stated reason, and adding another means deciding
+here whether it deserves one. (There used to be a second, 1800 s for building
+Pyraview's C++ from a clone; Pyraview now installs from pre-built wheels.)
 """
 
 from __future__ import annotations
@@ -36,8 +37,6 @@ MINIMUM_NETWORK_TIMEOUT = 300
 #: rather than skips.
 ALLOWED_LITERALS = {
     10: "git --version: a version string, on no network",
-    1800: "the Pyraview build: COMPILES a C++ library, so its cost is the "
-    "machine's rather than the network's",
 }
 
 

@@ -14,7 +14,9 @@ is the NDI viewer. ``import pyraview`` -- no dots -- is the separate VH-Lab
 library (https://github.com/VH-Lab/Pyraview) that builds and reads the
 multi-resolution pyramids the viewer draws: a C++ core with MATLAB and Python
 bindings. Inside this package that name always means the library, since
-Python 3 resolves it absolutely; ``ndi_install.py`` clones and builds it.
+Python 3 resolves it absolutely. It is the ``pyraview`` extra, installed from
+the pre-built release wheels listed in ``install/pyraview-wheels.html``
+(``ndi_install.py`` does this; it is never compiled).
 
 Nothing here imports the library at module level, so a machine without it
 still imports ndi.gui.app and still discovers the other apps. The two
