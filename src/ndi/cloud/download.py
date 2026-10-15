@@ -114,7 +114,7 @@ def _check_zip_ratio(zf: Any) -> None:
 
 def _download_chunk_zip(
     url: str,
-    timeout: float = 60.0,
+    timeout: float = 300.0,
     retry_interval: float = 1.0,
 ) -> list[dict[str, Any]]:
     """Download and extract a bulk-download ZIP from a presigned S3 URL.
@@ -214,7 +214,7 @@ def downloadDocumentCollection(
     dataset_id: str,
     doc_ids: list[str] | None = None,
     chunk_size: int = 2000,
-    timeout: float = 60.0,
+    timeout: float = 300.0,
     retry_interval: float = 1.0,
     progress: Callable[[str], None] | None = None,
     *,
@@ -234,7 +234,7 @@ def downloadDocumentCollection(
         chunk_size: Number of documents per bulk-download request.
             Default 2000 matches MATLAB.
         timeout: Seconds to wait for each chunk's ZIP to become
-            available. Default 60 matches MATLAB.
+            available. Default 300 matches MATLAB.
         retry_interval: Seconds between polling attempts for each
             chunk. Default 1 matches MATLAB.
         progress: Optional callback for status messages.
