@@ -56,6 +56,11 @@ VENVS="$NDI_HOME/venvs"
 
 PATH_BEGIN="# >>> NDI: added by install-ndi.sh; remove with install-ndi.sh --uninstall >>>"
 PATH_END="# <<< NDI <<<"
+# Marks a block added after a last line that had no newline, so --uninstall
+# can take that newline away again and leave the file exactly as it was.
+JOINED=" (newline added)"
+# Marks a block in a file this script created, which --uninstall deletes.
+CREATED=" (file created)"
 
 say() { printf '%s\n' "$*"; }
 fail() {
@@ -115,16 +120,24 @@ profile_files() {
 }
 
 # Delete our marked block from one file, in place (keeping the file itself,
-# so its permissions, owner and any symlink survive).
+# so its permissions, owner and any symlink survive). If the block says it
+# added a newline to the line before it, and that line is still the last,
+# the newline goes too.
 remove_block() {
     file=$1
     [ -f "$file" ] || return 0
     grep -qF "$PATH_BEGIN" "$file" || return 0
     tmp=$(mktemp)
-    awk -v b="$PATH_BEGIN" -v e="$PATH_END" '
-        $0 == b { skip = 1; next }
+    awk -v b="$PATH_BEGIN" -v j="$PATH_BEGIN$JOINED" -v c="$PATH_BEGIN$CREATED" -v e="$PATH_END" '
+        $0 == b || $0 == j || $0 == c { if ($0 == j) joined = n; skip = 1; next }
         skip && $0 == e { skip = 0; next }
-        !skip { print }
+        !skip { line[++n] = $0 }
+        END {
+            for (i = 1; i <= n; i++) {
+                printf "%s", line[i]
+                if (!(joined && i == joined && i == n)) printf "\n"
+            }
+        }
     ' "$file" > "$tmp"
     cat "$tmp" > "$file"
     rm -f "$tmp"
@@ -134,11 +147,19 @@ remove_block() {
 # PATH, not prepended, so the uv in ~/.ndi/bin never shadows a uv of your own.
 add_to_path() {
     profile_files | sort -u | while IFS= read -r file; do
+        begin=$PATH_BEGIN
+        if [ ! -e "$file" ] || grep -qxF "$PATH_BEGIN$CREATED" "$file"; then
+            begin="$PATH_BEGIN$CREATED"
+        fi
         remove_block "$file"
-        # A last line with no newline would run into our first one.
-        if [ -s "$file" ] && [ -n "$(tail -c 1 "$file")" ]; then say >> "$file"; fi
+        # A last line with no newline would run into our first one: add the
+        # newline, and say so in the marker so --uninstall can remove it.
+        if [ -s "$file" ] && [ -n "$(tail -c 1 "$file")" ]; then
+            say >> "$file"
+            begin="$PATH_BEGIN$JOINED"
+        fi
         {
-            say "$PATH_BEGIN"
+            say "$begin"
             # shellcheck disable=SC2016  # expanded when the shell starts, not now
             say 'case ":$PATH:" in *":$HOME/.ndi/bin:"*) ;; *) export PATH="$PATH:$HOME/.ndi/bin" ;; esac'
             say "$PATH_END"
@@ -150,10 +171,12 @@ add_to_path() {
 remove_from_path() {
     for file in "$HOME/.zshrc" "$HOME/.zprofile" "$HOME/.bashrc" "$HOME/.profile" "$HOME/.bash_profile"; do
         if [ -f "$file" ] && grep -qF "$PATH_BEGIN" "$file"; then
+            created=0
+            if grep -qxF "$PATH_BEGIN$CREATED" "$file"; then created=1; fi
             remove_block "$file"
             say "  removed the NDI PATH lines from $file"
-            # Nothing left: it was a file we created. Remove it again.
-            if [ ! -s "$file" ]; then rm -f "$file"; fi
+            # A file this script created, with nothing else in it: delete it.
+            if [ "$created" = 1 ] && [ ! -s "$file" ]; then rm -f "$file"; fi
         fi
     done
 }
