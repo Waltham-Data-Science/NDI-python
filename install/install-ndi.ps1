@@ -90,9 +90,11 @@ Remove-Item Env:PYTHONHOME, Env:PYTHONPATH -ErrorAction SilentlyContinue
 
 $EnvKey = 'registry::HKEY_CURRENT_USER\Environment'
 
+# Entries are kept exactly, empty ones included (a trailing ';' is common),
+# so that adding and then removing ours gives back the identical string.
 function Get-UserPathEntries {
-    $raw = (Get-Item -LiteralPath $EnvKey).GetValue('Path', '', 'DoNotExpandEnvironmentNames')
-    return @($raw -split ';' | Where-Object { $_ -ne '' })
+    $raw = [string](Get-Item -LiteralPath $EnvKey).GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+    return , @($raw -split ';')
 }
 
 function Test-IsNdiBin([string]$Entry) {
@@ -112,8 +114,15 @@ function Add-NdiToPath {
         Write-Host "  $Bin is already on your PATH"
         return
     }
-    # Appended, not prepended, so the uv in .ndi\bin never shadows one of yours.
-    Set-UserPathEntries (@($entries) + $Bin)
+    # Appended, not prepended, so the uv in .ndi\bin never shadows one of yours;
+    # before a trailing empty entry, so "a;b;" becomes "a;b;<bin>;".
+    $n = $entries.Count
+    if ($entries[$n - 1] -eq '') {
+        if ($n -gt 1) { $new = @($entries[0..($n - 2)]) + $Bin + '' } else { $new = @($Bin, '') }
+    } else {
+        $new = @($entries) + $Bin
+    }
+    Set-UserPathEntries $new
     Write-Host "  added $Bin to your PATH"
 }
 
