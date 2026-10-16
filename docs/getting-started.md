@@ -2,6 +2,12 @@
 
 ## Installation
 
+To *use* NDI (the `ndi` command and the napari viewers, also from NDI-matlab)
+without setting up Python yourself, use the double-click installer in
+[`install/`](https://github.com/Waltham-Data-Science/NDI-python/tree/main/install):
+it needs no Python, git or compiler and puts everything in `~/.ndi`. The rest
+of this page is for working with NDI from your own Python environment.
+
 ### Prerequisites
 
 - Python 3.10 or later

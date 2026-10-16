@@ -213,6 +213,13 @@ functions:
       doc.gene package, but the shape is the same); the lightsheet
       package puts it under +doc/+lightsheet because the manager stays
       thin.
+      2026-10-16: the shell wrapper the MATLAB side names here,
+      scripts/napariViewLightsheet installed at
+      /usr/local/bin/napariViewLightsheet, is gone from NDI-python. The
+      napariViewLightsheet console script now drops MATLAB's library paths
+      itself (src/_ndi_launch.py), and install/install-ndi.sh puts it in
+      ~/.ndi/bin; the MATLAB-side default moves in NDI-matlab. Nothing
+      here to port; the hash is unchanged.
   - name: view
     matlab_path: "+ndi/+fun/+doc/+lightsheet/view.m"
     matlab_last_sync_hash: "2f9b0eaf"
@@ -234,6 +241,13 @@ functions:
       view gains 'debug' and 'logFile' options; --list mode is unchanged.
       Nothing on the Python side to follow: the Python side is the
       launched process, and it already honours NDI_LIGHTSHEET_DEBUG.
+      2026-10-16: the shell wrapper the MATLAB side names here,
+      scripts/napariViewLightsheet installed at
+      /usr/local/bin/napariViewLightsheet, is gone from NDI-python. The
+      napariViewLightsheet console script now drops MATLAB's library paths
+      itself (src/_ndi_launch.py), and install/install-ndi.sh puts it in
+      ~/.ndi/bin; the MATLAB-side default moves in NDI-matlab. Nothing
+      here to port; the hash is unchanged.
 
   - name: launchViewer
     matlab_path: "+ndi/+fun/+doc/+lightsheet/launchViewer.m"

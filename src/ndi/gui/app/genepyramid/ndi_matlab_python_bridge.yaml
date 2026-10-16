@@ -112,11 +112,15 @@ functions:
       - name: status
         type_python: "int"
     decision_log: >
-      Python-only. The napariViewGEF command line, reachable three ways
-      that are all this function: the installed console script, "python -m
-      ndi napari", and the shell wrapper that scrubs MATLAB's environment
-      before exec. Takes argv so a test can drive it; returns a status
-      rather than calling sys.exit, for the same reason.
+      Python-only. The napariViewGEF command line, reachable two ways
+      that are both this function: the installed console script (through
+      the stdlib-only _ndi_launch module, which drops MATLAB's library
+      paths and re-execs before `ndi` is imported -- it replaced the shell
+      wrapper tools/napariViewGEF), and "python -m ndi napari". When argv
+      is None it calls _ndi_launch.escapeMatlabEnvironment first, which
+      covers the second route and is a no-op after the first. Takes argv
+      so a test can drive it; returns a status rather than calling
+      sys.exit, for the same reason.
       --report and --list do their work without a display deliberately,
       so the argument handling, pyramid lookup and gene resolution have a
       path CI can exercise; only the viewing itself needs napari.

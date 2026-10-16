@@ -1,0 +1,7 @@
+# The Windows double-click installer is stored with CRLF line endings exactly
+# as committed (-text: no conversion either way), so a copy downloaded from
+# GitHub -- raw, zip or clone -- is a well-formed batch file.
+install/*.cmd -text
+# The macOS/Linux installer scripts must stay LF wherever they are checked out.
+install/*.sh text eol=lf
+install/*.command text eol=lf

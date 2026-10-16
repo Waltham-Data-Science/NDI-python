@@ -230,14 +230,15 @@ class ndi_preferences:
             "GUI",
             "GEFManager",
             "ViewerLauncher",
-            "/usr/local/bin/napariViewGEF",
+            "",
             "str",
             "Program the GEF Manager's View button runs to open a pyramid in "
-            "napari. Normally a small shell wrapper rather than the "
-            "napariViewGEF console script itself: MATLAB exports library "
-            "paths of its own, and a Python process started from MATLAB loads "
-            "MATLAB's copies of libraries it must not use, so the wrapper "
-            "scrubs the environment before running the real entry point.",
+            "napari. Empty (the default) means find it automatically: the "
+            "napariViewGEF console script the NDI installer puts in "
+            "~/.ndi/bin, else the one on the PATH. Set a full path only to "
+            "use a different copy. No shell wrapper is needed: started with "
+            "NDI_FROM_MATLAB=1, the console script itself drops MATLAB's "
+            "library paths before loading anything.",
         )
 
     def _add_item(
