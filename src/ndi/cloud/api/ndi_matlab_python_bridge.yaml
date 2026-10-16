@@ -2,6 +2,7 @@
 # The Primary Contract for the ndi.cloud.api namespace.
 #
 # Covers: datasets.py, documents.py, files.py, users.py, compute.py, feedback.py,
+#         admin.py,
 #         _validators.py
 
 project_metadata:
@@ -1575,6 +1576,369 @@ functions:
       The id is not checked for ObjectId shape client-side, matching MATLAB,
       so the server's 400 stays reachable.
 
+  # --- admin.py ---
+  - name: listOrganizations
+    matlab_path: "+ndi/+cloud/+api/+admin/listOrganizations.m"
+    matlab_last_sync_hash: "9dc83026"
+    python_path: "ndi/cloud/api/admin.py"
+    input_arguments:
+      - name: query
+        type_matlab: "string = \"\""
+        type_python: "str"
+        default: "\"\""
+      - name: page
+        type_matlab: "double {mustBePositive, mustBeInteger} = 1"
+        type_python: "PageNumber"
+        default: "1"
+      - name: page_size
+        type_matlab: "double {mustBeInteger, mustBePositive, mustBeLessThanOrEqual(pageSize, 100)} = 25"
+        type_python: "AdminPageSize"
+        default: "25"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "APIResponse"
+    decision_log: >
+      Ported from NDI-matlab#1031 (9dc83026). GET /admin/organizations with q,
+      page and limit. MATLAB's name-value options query / page / pageSize become
+      keyword-only query / page / page_size, snake_case like listDatasets;
+      page_size is sent as the server's limit parameter, as MATLAB's addQuery
+      does. q is sent only when query is not empty. Returns an APIResponse, so
+      `b, answer, status, url = listOrganizations(...)` unpacks like MATLAB's
+      [b, answer, apiResponse, apiURL]. Where MATLAB returns b = false, Python
+      raises, as every other ndi.cloud.api function does: CloudAuthError on 403
+      (not an admin), CloudNotFoundError on 404, CloudAPIError with status_code
+      400 for a malformed id. Tests: tests/test_cloud_api_admin.py (offline) and
+      tests/test_cloud_admin_live.py (port of AdminOrganizationsTest.m).
+
+  - name: getOrganization
+    matlab_path: "+ndi/+cloud/+api/+admin/getOrganization.m"
+    matlab_last_sync_hash: "9dc83026"
+    python_path: "ndi/cloud/api/admin.py"
+    input_arguments:
+      - name: organization_id
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "APIResponse"
+    decision_log: >
+      Ported from NDI-matlab#1031 (9dc83026). GET
+      /admin/organizations/{organizationId}. MATLAB also adds parallel memberID
+      / memberName / memberEmail cell arrays built from members, a MATLAB idiom
+      for reaching into an array of structs; the list of member dicts is the
+      same information in the shape Python already has, as recorded for
+      users.me. Returns an APIResponse, so `b, answer, status, url =
+      getOrganization(...)` unpacks like MATLAB's [b, answer, apiResponse,
+      apiURL]. Where MATLAB returns b = false, Python raises, as every other
+      ndi.cloud.api function does: CloudAuthError on 403 (not an admin),
+      CloudNotFoundError on 404, CloudAPIError with status_code 400 for a
+      malformed id. Tests: tests/test_cloud_api_admin.py (offline) and
+      tests/test_cloud_admin_live.py (port of AdminOrganizationsTest.m).
+
+  - name: createOrganization
+    matlab_path: "+ndi/+cloud/+api/+admin/createOrganization.m"
+    matlab_last_sync_hash: "9dc83026"
+    python_path: "ndi/cloud/api/admin.py"
+    input_arguments:
+      - name: name
+        type_matlab: "string {mustBeNonzeroLengthText}"
+        type_python: "NonEmptyStr"
+      - name: can_upload_dataset
+        type_matlab: "logical = false"
+        type_python: "bool"
+        default: "False"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "APIResponse"
+    decision_log: >
+      Ported from NDI-matlab#1031 (9dc83026). POST /admin/organizations with
+      {name, canUploadDataset}; the server answers 201. MATLAB's
+      canUploadDataset name-value option becomes keyword-only
+      can_upload_dataset. Returns an APIResponse, so `b, answer, status, url =
+      createOrganization(...)` unpacks like MATLAB's [b, answer, apiResponse,
+      apiURL]. Where MATLAB returns b = false, Python raises, as every other
+      ndi.cloud.api function does: CloudAuthError on 403 (not an admin),
+      CloudNotFoundError on 404, CloudAPIError with status_code 400 for a
+      malformed id. Tests: tests/test_cloud_api_admin.py (offline) and
+      tests/test_cloud_admin_live.py (port of AdminOrganizationsTest.m).
+
+  - name: updateOrganization
+    matlab_path: "+ndi/+cloud/+api/+admin/updateOrganization.m"
+    matlab_last_sync_hash: "9dc83026"
+    python_path: "ndi/cloud/api/admin.py"
+    input_arguments:
+      - name: organization_id
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: name
+        type_matlab: "string {mustBeNonzeroLengthText} (optional)"
+        type_python: "NonEmptyStr | None"
+        default: "None"
+      - name: can_upload_dataset
+        type_matlab: "logical (optional)"
+        type_python: "bool | None"
+        default: "None"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "APIResponse"
+    decision_log: >
+      Ported from NDI-matlab#1031 (9dc83026). PATCH
+      /admin/organizations/{organizationId} with only the fields given;
+      CloudClient gained a patch() method for it. None plays the role of an
+      omitted MATLAB name-value option. With neither given, raises ValueError
+      where MATLAB raises NDI:Cloud:Admin:NoUpdates, before any request. Returns
+      an APIResponse, so `b, answer, status, url = updateOrganization(...)`
+      unpacks like MATLAB's [b, answer, apiResponse, apiURL]. Where MATLAB
+      returns b = false, Python raises, as every other ndi.cloud.api function
+      does: CloudAuthError on 403 (not an admin), CloudNotFoundError on 404,
+      CloudAPIError with status_code 400 for a malformed id. Tests:
+      tests/test_cloud_api_admin.py (offline) and tests/test_cloud_admin_live.py
+      (port of AdminOrganizationsTest.m).
+
+  - name: addOrganizationMember
+    matlab_path: "+ndi/+cloud/+api/+admin/addOrganizationMember.m"
+    matlab_last_sync_hash: "9dc83026"
+    python_path: "ndi/cloud/api/admin.py"
+    input_arguments:
+      - name: organization_id
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: user_id
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "APIResponse"
+    decision_log: >
+      Ported from NDI-matlab#1031 (9dc83026). POST
+      /admin/organizations/{organizationId}/members with {userId}. Adding an
+      existing member succeeds and changes nothing (server $addToSet). Returns
+      an APIResponse, so `b, answer, status, url = addOrganizationMember(...)`
+      unpacks like MATLAB's [b, answer, apiResponse, apiURL]. Where MATLAB
+      returns b = false, Python raises, as every other ndi.cloud.api function
+      does: CloudAuthError on 403 (not an admin), CloudNotFoundError on 404,
+      CloudAPIError with status_code 400 for a malformed id. Tests:
+      tests/test_cloud_api_admin.py (offline) and tests/test_cloud_admin_live.py
+      (port of AdminOrganizationsTest.m).
+
+  - name: removeOrganizationMember
+    matlab_path: "+ndi/+cloud/+api/+admin/removeOrganizationMember.m"
+    matlab_last_sync_hash: "9dc83026"
+    python_path: "ndi/cloud/api/admin.py"
+    input_arguments:
+      - name: organization_id
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: user_id
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "APIResponse"
+    decision_log: >
+      Ported from NDI-matlab#1031 (9dc83026). DELETE
+      /admin/organizations/{organizationId}/members/{userId}. Removing a non-
+      member succeeds and changes nothing. Returns an APIResponse, so `b,
+      answer, status, url = removeOrganizationMember(...)` unpacks like MATLAB's
+      [b, answer, apiResponse, apiURL]. Where MATLAB returns b = false, Python
+      raises, as every other ndi.cloud.api function does: CloudAuthError on 403
+      (not an admin), CloudNotFoundError on 404, CloudAPIError with status_code
+      400 for a malformed id. Tests: tests/test_cloud_api_admin.py (offline) and
+      tests/test_cloud_admin_live.py (port of AdminOrganizationsTest.m).
+
+  - name: listUsers
+    matlab_path: "+ndi/+cloud/+api/+admin/listUsers.m"
+    matlab_last_sync_hash: "9dc83026"
+    python_path: "ndi/cloud/api/admin.py"
+    input_arguments:
+      - name: query
+        type_matlab: "string = \"\""
+        type_python: "str"
+        default: "\"\""
+      - name: page
+        type_matlab: "double {mustBePositive, mustBeInteger} = 1"
+        type_python: "PageNumber"
+        default: "1"
+      - name: page_size
+        type_matlab: "double {mustBeInteger, mustBePositive, mustBeLessThanOrEqual(pageSize, 100)} = 25"
+        type_python: "AdminPageSize"
+        default: "25"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "APIResponse"
+    decision_log: >
+      Ported from NDI-matlab#1031 (9dc83026). GET /admin/users with q, page and
+      limit; see listOrganizations for the argument names. Disabled users are
+      not listed. Returns an APIResponse, so `b, answer, status, url =
+      listUsers(...)` unpacks like MATLAB's [b, answer, apiResponse, apiURL].
+      Where MATLAB returns b = false, Python raises, as every other
+      ndi.cloud.api function does: CloudAuthError on 403 (not an admin),
+      CloudNotFoundError on 404, CloudAPIError with status_code 400 for a
+      malformed id. Tests: tests/test_cloud_api_admin.py (offline) and
+      tests/test_cloud_admin_live.py (port of AdminOrganizationsTest.m).
+
+  - name: getUser
+    matlab_path: "+ndi/+cloud/+api/+admin/getUser.m"
+    matlab_last_sync_hash: "9dc83026"
+    python_path: "ndi/cloud/api/admin.py"
+    input_arguments:
+      - name: user_id
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "APIResponse"
+    decision_log: >
+      Ported from NDI-matlab#1031 (9dc83026). GET /admin/users/{userId}. Not to
+      be confused with ndi.cloud.api.users.GetUser (GET /users/{userId}). MATLAB
+      also adds parallel organizationID / organizationName cell arrays built
+      from organizations; not added here, for the reason given on
+      getOrganization. Returns an APIResponse, so `b, answer, status, url =
+      getUser(...)` unpacks like MATLAB's [b, answer, apiResponse, apiURL].
+      Where MATLAB returns b = false, Python raises, as every other
+      ndi.cloud.api function does: CloudAuthError on 403 (not an admin),
+      CloudNotFoundError on 404, CloudAPIError with status_code 400 for a
+      malformed id. Tests: tests/test_cloud_api_admin.py (offline) and
+      tests/test_cloud_admin_live.py (port of AdminOrganizationsTest.m).
+
+  - name: findUserByEmail
+    matlab_path: "+ndi/+cloud/+api/+admin/findUserByEmail.m"
+    matlab_last_sync_hash: "9dc83026"
+    python_path: "ndi/cloud/api/admin.py"
+    input_arguments:
+      - name: email
+        type_matlab: "string {mustBeNonzeroLengthText}"
+        type_python: "NonEmptyStr"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "APIResponse"
+    decision_log: >
+      Ported from NDI-matlab#1031 (9dc83026). Pages through listUsers (page_size
+      100) with the email as the search and keeps the one user whose email
+      matches exactly, ignoring case, since the server's q is a substring match.
+      data is that user's dict. Where MATLAB returns b = false with an error
+      struct, Python raises CloudNotFoundError when no active user matches and
+      CloudError when more than one does. Returns an APIResponse, so `b, answer,
+      status, url = findUserByEmail(...)` unpacks like MATLAB's [b, answer,
+      apiResponse, apiURL]. Where MATLAB returns b = false, Python raises, as
+      every other ndi.cloud.api function does: CloudAuthError on 403 (not an
+      admin), CloudNotFoundError on 404, CloudAPIError with status_code 400 for
+      a malformed id. Tests: tests/test_cloud_api_admin.py (offline) and
+      tests/test_cloud_admin_live.py (port of AdminOrganizationsTest.m).
+
+  - name: addOrganizationMemberByEmail
+    matlab_path: "+ndi/+cloud/+api/+admin/addOrganizationMemberByEmail.m"
+    matlab_last_sync_hash: "9dc83026"
+    python_path: "ndi/cloud/api/admin.py"
+    input_arguments:
+      - name: organization_id
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: email
+        type_matlab: "string {mustBeNonzeroLengthText}"
+        type_python: "NonEmptyStr"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "APIResponse"
+    decision_log: >
+      Ported from NDI-matlab#1031 (9dc83026). findUserByEmail, then
+      addOrganizationMember. Raises as either step does. Returns an APIResponse,
+      so `b, answer, status, url = addOrganizationMemberByEmail(...)` unpacks
+      like MATLAB's [b, answer, apiResponse, apiURL]. Where MATLAB returns b =
+      false, Python raises, as every other ndi.cloud.api function does:
+      CloudAuthError on 403 (not an admin), CloudNotFoundError on 404,
+      CloudAPIError with status_code 400 for a malformed id. Tests:
+      tests/test_cloud_api_admin.py (offline) and tests/test_cloud_admin_live.py
+      (port of AdminOrganizationsTest.m).
+
+  - name: removeOrganizationMemberByEmail
+    matlab_path: "+ndi/+cloud/+api/+admin/removeOrganizationMemberByEmail.m"
+    matlab_last_sync_hash: "9dc83026"
+    python_path: "ndi/cloud/api/admin.py"
+    input_arguments:
+      - name: organization_id
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: email
+        type_matlab: "string {mustBeNonzeroLengthText}"
+        type_python: "NonEmptyStr"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "APIResponse"
+    decision_log: >
+      Ported from NDI-matlab#1031 (9dc83026). findUserByEmail, then
+      removeOrganizationMember. Raises as either step does. Returns an
+      APIResponse, so `b, answer, status, url =
+      removeOrganizationMemberByEmail(...)` unpacks like MATLAB's [b, answer,
+      apiResponse, apiURL]. Where MATLAB returns b = false, Python raises, as
+      every other ndi.cloud.api function does: CloudAuthError on 403 (not an
+      admin), CloudNotFoundError on 404, CloudAPIError with status_code 400 for
+      a malformed id. Tests: tests/test_cloud_api_admin.py (offline) and
+      tests/test_cloud_admin_live.py (port of AdminOrganizationsTest.m).
+
+  - name: getUserOrganizations
+    matlab_path: "+ndi/+cloud/+api/+admin/getUserOrganizations.m"
+    matlab_last_sync_hash: "9dc83026"
+    python_path: "ndi/cloud/api/admin.py"
+    input_arguments:
+      - name: user
+        type_matlab: "string = missing"
+        type_python: "str | None"
+        default: "None"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "APIResponse"
+    decision_log: >
+      Ported from NDI-matlab#1031 (9dc83026). With no user, uses users.me and
+      needs no admin rights; with a user id, getUser; with anything containing
+      '@', findUserByEmail then getUser. data is a dict with MATLAB's answer
+      fields: userID, email, organizationID (list[str]) and organizationName
+      (list[str], parallel), kept because they are this function's own output
+      rather than a convenience added to a server response. Returns an
+      APIResponse, so `b, answer, status, url = getUserOrganizations(...)`
+      unpacks like MATLAB's [b, answer, apiResponse, apiURL]. Where MATLAB
+      returns b = false, Python raises, as every other ndi.cloud.api function
+      does: CloudAuthError on 403 (not an admin), CloudNotFoundError on 404,
+      CloudAPIError with status_code 400 for a malformed id. Tests:
+      tests/test_cloud_api_admin.py (offline) and tests/test_cloud_admin_live.py
+      (port of AdminOrganizationsTest.m).
+
   # --- compute.py ---
   - name: startSession
     matlab_path: "+ndi/+cloud/+api/+compute/startSession.m"
@@ -1694,7 +2058,7 @@ not_yet_ported:
 
   - name: url
     matlab_path: "+ndi/+cloud/+api/url.m"
-    matlab_last_sync_hash: "8fa6ea5e"
+    matlab_last_sync_hash: "9dc83026"
     status: ported_differently
     decision_log: >
       MATLAB URL builder. Python uses CloudClient._build_url()
@@ -1716,6 +2080,11 @@ not_yet_ported:
       added submit_feedback (POST /feedback) and delete_feedback
       (DELETE /feedback/{feedbackId}); both are interpolated at their call
       sites in api/feedback.py, so there is no route table to update here.
+      2026-10-16: examined against 9dc83026 (was 8fa6ea5e). NDI-matlab#1031
+      added eight admin_* routes (/admin/organizations, /admin/organizations/{id},
+      /admin/organizations/{id}/members[/{userId}], /admin/users,
+      /admin/users/{id}); each is interpolated at its call site in
+      api/admin.py, so there is no route table to update here.
       2026-09-22: examined against 3fce6cb (was 6fdec7e7). NDI-matlab#1004
       (6bf12fc0) added the list_dataset_files route
       (/datasets/{datasetId}/files) and made it keyset-paginated. As above,

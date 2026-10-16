@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **`ndi.cloud.api.admin`: organization and user administration** (mirroring
+  NDI-matlab#1031). Wraps the NDI Cloud `/admin` endpoints:
+  `listOrganizations`, `getOrganization`, `createOrganization`,
+  `updateOrganization`, `addOrganizationMember`, `removeOrganizationMember`,
+  `listUsers` and `getUser`, plus `findUserByEmail` (exact, case-insensitive
+  match over the server's substring search), `addOrganizationMemberByEmail`,
+  `removeOrganizationMemberByEmail` and `getUserOrganizations`. All require
+  an administrator account (others raise `CloudAuthError`), except
+  `getUserOrganizations()` with no user, which lists your own organizations.
+  `CloudClient` gains `patch()`. Tests: `tests/test_cloud_api_admin.py`
+  (offline) and `tests/test_cloud_admin_live.py`, which skips the admin tests
+  for a non-admin account and the membership-changing tests outside dev.
+
 - **Pyraview from pre-built wheels, never from source.** New `pyraview`
   extra (`pyraview==0.4.2`). Pyraview is not on PyPI, so the wheels on its
   GitHub release are named in a committed flat index,
