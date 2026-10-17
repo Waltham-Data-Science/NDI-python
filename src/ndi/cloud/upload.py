@@ -9,7 +9,6 @@ MATLAB equivalents: +ndi/+cloud/+upload/*.m, uploadSingleFile.m
 
 from __future__ import annotations
 
-import json
 import logging
 import tempfile
 import zipfile
@@ -58,7 +57,9 @@ def uploadDocumentCollection(
         dataset_id: Cloud dataset ID.
         documents: List of document property dicts.
         only_missing: If True, skip documents already on the remote.
-        max_chunk: Maximum documents per ZIP chunk (None = all at once).
+        max_chunk: Maximum documents per chunk. ``None`` (default) reads the
+            preference ``Cloud.Upload.Max_Document_Batch_Count``; ``0`` or a
+            negative value means all at once.
         client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
@@ -99,6 +100,10 @@ def uploadDocumentCollection(
         return report
 
     # Chunk if needed
+    if max_chunk is None:
+        from .. import preferences
+
+        max_chunk = int(preferences.get("Cloud.Upload.Max_Document_Batch_Count"))
     chunks = [documents]
     if max_chunk and max_chunk > 0:
         chunks = [documents[i : i + max_chunk] for i in range(0, len(documents), max_chunk)]
@@ -119,37 +124,198 @@ def uploadDocumentCollection(
 
 
 def zipForUpload(
-    documents: list[dict[str, Any]],
+    file_manifest: list[dict[str, Any]],
     dataset_id: str,
-    target_dir: Path | None = None,
-) -> tuple[Path, list[str]]:
-    """Serialize documents to JSON and create a ZIP archive.
+    *,
+    org_id: str = "",
+    size_limit: float | None = None,
+    number_retries: int = 3,
+    completion_timeout: float = 300.0,
+    retry_pause: float = 5.0,
+    verbose: bool = False,
+    client: CloudClient | None = None,
+) -> dict[str, Any]:
+    """Upload binary files to the cloud in zip batches of at most *size_limit* bytes.
+
+    MATLAB equivalent: +ndi/+cloud/+upload/zipForUpload.m
+
+    Files are packed greedily in the order given: a batch closes when the next
+    file would take it past *size_limit*, and the next batch starts with that
+    file. A single file larger than *size_limit* still goes up, alone in its
+    own batch (the first file of a batch is always accepted). Each batch is
+    zipped to a temporary file, sent to the URL from
+    :func:`ndi.cloud.api.files.getFileCollectionUploadURL`, and deleted.
+
+    Each zip entry is named by the file's uid, which is how NDI Cloud keys the
+    extracted file.
+
+    Unlike MATLAB's version, which returns only success and a message, this
+    reports which documents' files did not make it, because the sync callers
+    must keep those documents out of the sync index (NDI-matlab#805). A batch
+    counts as failed if its URL could not be obtained, its zip could not be
+    built or sent after *number_retries* attempts, or the server's extraction
+    job did not reach ``'complete'`` within *completion_timeout* seconds. All
+    batches are sent before any extraction job is waited on, so the server
+    unpacks earlier batches while later ones are still uploading.
 
     Args:
-        documents: ndi_document property dicts.
-        dataset_id: Used for the archive filename.
-        target_dir: Directory for the ZIP file. Defaults to a temp dir.
+        file_manifest: Entries with ``file_uid``, ``file_path``, and optionally
+            ``document_id`` and ``bytes`` (looked up on disk when absent).
+        dataset_id: Cloud dataset ID.
+        org_id: Organisation ID. Defaults to ``client.config.org_id``.
+        size_limit: Maximum batch size in bytes. ``None`` (default) reads the
+            preference ``Cloud.Upload.Max_File_Batch_Size``.
+        number_retries: Attempts at getting the upload URL and at the PUT.
+        completion_timeout: Seconds to wait for each batch's server-side
+            extraction job.
+        retry_pause: Seconds between retry attempts.
+        verbose: Print progress.
+        client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
-        Tuple of (zip_path, manifest) where manifest is a list of
-        document IDs included in the archive.
+        Report dict with ``uploaded`` and ``failed`` (file counts), ``errors``,
+        ``failed_document_ids``, and ``batches`` (number of zips sent).
     """
-    if target_dir is None:
-        target_dir = Path(tempfile.mkdtemp())
-    target_dir = Path(target_dir)
-    target_dir.mkdir(parents=True, exist_ok=True)
+    import os
+    import time
+    import uuid
 
-    zip_path = target_dir / f"{dataset_id}_upload.zip"
-    manifest: list[str] = []
+    from .api import files as files_api
 
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for i, doc in enumerate(documents):
-            doc_id = doc.get("ndiId", doc.get("id", f"doc_{i}"))
-            filename = f"{doc_id}.json"
-            zf.writestr(filename, json.dumps(doc, indent=2))
-            manifest.append(doc_id)
+    if size_limit is None:
+        from .. import preferences
 
-    return zip_path, manifest
+        size_limit = float(preferences.get("Cloud.Upload.Max_File_Batch_Size"))
+    if size_limit <= 0:
+        raise ValueError(f"size_limit must be positive (got {size_limit!r})")
+    org_id = org_id or getattr(getattr(client, "config", None), "org_id", "")
+
+    report: dict[str, Any] = {
+        "uploaded": 0,
+        "failed": 0,
+        "errors": [],
+        "failed_document_ids": [],
+        "batches": 0,
+    }
+
+    def _fail(batch: list[dict[str, Any]], message: str) -> None:
+        report["failed"] += len(batch)
+        report["errors"].append(message)
+        for entry in batch:
+            doc_id = str(entry.get("document_id", "") or "")
+            if doc_id and doc_id not in report["failed_document_ids"]:
+                report["failed_document_ids"].append(doc_id)
+
+    def _size(entry: dict[str, Any]) -> int:
+        if entry.get("bytes") is not None:
+            return int(entry["bytes"])
+        try:
+            return os.path.getsize(entry["file_path"])
+        except OSError:
+            # Missing at sizing time: let it fail inside its batch's zip step,
+            # where it is reported, rather than silently dropping it.
+            return 0
+
+    # Greedy single-pass packing, same as MATLAB's cursor loop.
+    batches: list[list[dict[str, Any]]] = []
+    current: list[dict[str, Any]] = []
+    current_size = 0
+    for entry in file_manifest:
+        fb = _size(entry)
+        if current and current_size + fb > size_limit:
+            batches.append(current)
+            current, current_size = [], 0
+        current.append(entry)
+        current_size += fb
+    if current:
+        batches.append(current)
+
+    if verbose:
+        print(
+            f"Beginning upload process. {len(file_manifest)} files to upload "
+            f"in {len(batches)} batch(es)."
+        )
+
+    pending_jobs: list[tuple[str, list[dict[str, Any]]]] = []
+    for n, batch in enumerate(batches, start=1):
+        zip_path = Path(tempfile.gettempdir()) / f"{dataset_id}.{uuid.uuid4().hex}.zip"
+        try:
+            try:
+                if verbose:
+                    total_mb = sum(_size(e) for e in batch) / 1e6
+                    print(
+                        f"Zipping batch {n} of {len(batches)}: {len(batch)} files ({total_mb:.2f} MB)..."
+                    )
+                with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for entry in batch:
+                        zf.write(entry["file_path"], str(entry["file_uid"]))
+            except Exception as exc:  # noqa: BLE001 - reported per batch
+                _fail(batch, f"Batch {n}: could not build zip: {exc}")
+                continue
+
+            info: dict[str, Any] = {}
+            last_exc: Exception | None = None
+            for attempt in range(max(1, number_retries)):
+                try:
+                    info = files_api.getFileCollectionUploadURL(org_id, dataset_id, client=client)
+                    if info.get("url"):
+                        break
+                    last_exc = RuntimeError("no upload URL returned")
+                except Exception as exc:  # noqa: BLE001
+                    last_exc = exc
+                if attempt + 1 < number_retries:
+                    time.sleep(retry_pause)
+            if not info.get("url"):
+                _fail(batch, f"Batch {n}: could not get upload URL: {last_exc}")
+                continue
+
+            sent = False
+            for attempt in range(max(1, number_retries)):
+                try:
+                    files_api.putFiles(info["url"], str(zip_path))
+                    sent = True
+                    break
+                except Exception as exc:  # noqa: BLE001
+                    last_exc = exc
+                    if verbose:
+                        print(
+                            f"Attempt {attempt + 1} of {number_retries} to upload batch {n} failed."
+                        )
+                    if attempt + 1 < number_retries:
+                        time.sleep(retry_pause)
+            if not sent:
+                _fail(batch, f"Batch {n}: upload failed: {last_exc}")
+                continue
+
+            report["batches"] += 1
+            job_id = str(info.get("jobId", "") or "")
+            if job_id:
+                pending_jobs.append((job_id, batch))
+            else:
+                # Older servers return no job id: the PUT succeeding is all
+                # there is to go on.
+                report["uploaded"] += len(batch)
+        finally:
+            if zip_path.exists():
+                zip_path.unlink()
+
+    for job_id, batch in pending_jobs:
+        try:
+            final = files_api.waitForBulkUpload(job_id, timeout=completion_timeout, client=client)
+            state = final.get("state", "") if hasattr(final, "get") else ""
+        except Exception as exc:  # noqa: BLE001
+            state = f"error ({exc})"
+        if state == "complete":
+            report["uploaded"] += len(batch)
+        else:
+            _fail(batch, f"Bulk upload job {job_id} ended in state {state!r}")
+
+    if verbose:
+        print(
+            f"Upload process finished. {report['uploaded']} files uploaded, "
+            f"{report['failed']} failed."
+        )
+    return report
 
 
 def uploadFilesForDatasetDocuments(
@@ -158,6 +324,9 @@ def uploadFilesForDatasetDocuments(
     documents: list[dict[str, Any]],
     *,
     dataset: Any | None = None,
+    file_upload_strategy: str = "batch",
+    file_batch_size_limit: float | None = None,
+    verbose: bool = False,
     client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """Upload associated binary files for a list of documents.
@@ -172,12 +341,57 @@ def uploadFilesForDatasetDocuments(
             (which have no ``file_info`` entry) are enumerated from
             ``series_info[k].count``. Mirrors NDI-matlab's
             ``list_binary_files.m``.
+        file_upload_strategy: ``'batch'`` (default) packs the files into zip
+            batches and sends them with :func:`zipForUpload`; ``'serial'``
+            sends each file on its own signed URL. Mirrors MATLAB's
+            ``FileUploadStrategy``.
+        file_batch_size_limit: Maximum size in bytes of each zip batch.
+            ``None`` (default) uses the preference
+            ``Cloud.Upload.Max_File_Batch_Size``. Ignored for ``'serial'``.
+        verbose: Print progress.
         client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
         Report dict with counts of uploaded and failed files.
     """
+    import os
+
     from .api import files as files_api
+
+    if file_upload_strategy not in ("batch", "serial"):
+        raise ValueError(
+            f"file_upload_strategy must be 'batch' or 'serial' (got {file_upload_strategy!r})"
+        )
+
+    if file_upload_strategy == "batch":
+        manifest: list[dict[str, Any]] = []
+        for doc in documents:
+            doc_id = document_id(doc)
+            for file_uid, file_path in file_uploads_for_document(doc, dataset=dataset):
+                try:
+                    size = os.path.getsize(file_path)
+                except OSError:
+                    size = 0
+                manifest.append(
+                    {
+                        "document_id": doc_id,
+                        "file_uid": file_uid,
+                        "file_path": file_path,
+                        "bytes": size,
+                    }
+                )
+        if not manifest:
+            return {"uploaded": 0, "failed": 0, "errors": [], "failed_document_ids": []}
+        report = zipForUpload(
+            manifest,
+            dataset_id,
+            org_id=org_id,
+            size_limit=file_batch_size_limit,
+            verbose=verbose,
+            client=client,
+        )
+        report.pop("batches", None)
+        return report
 
     report: dict[str, Any] = {
         "uploaded": 0,
@@ -404,12 +618,14 @@ def uploadSingleFile(
             try:
                 with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
                     zf.write(file_path, os.path.basename(file_path))
-                url = files_api.getFileCollectionUploadURL(
+                info = files_api.getFileCollectionUploadURL(
                     client.config.org_id,
                     dataset_id,
                     client=client,
                 )
-                files_api.putFiles(url, str(zip_path))
+                # getFileCollectionUploadURL returns {"url", "jobId"}, not a
+                # bare URL; passing the dict to putFiles failed validation.
+                files_api.putFiles(info["url"], str(zip_path), job_id=info.get("jobId", ""))
             finally:
                 if zip_path.exists():
                     zip_path.unlink()

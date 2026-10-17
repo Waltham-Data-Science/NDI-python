@@ -213,7 +213,7 @@ def _download_chunk_zip(
 def downloadDocumentCollection(
     dataset_id: str,
     doc_ids: list[str] | None = None,
-    chunk_size: int = 2000,
+    chunk_size: int | None = None,
     timeout: float = 60.0,
     retry_interval: float = 1.0,
     progress: Callable[[str], None] | None = None,
@@ -223,7 +223,7 @@ def downloadDocumentCollection(
     """Download full documents from the cloud using chunked bulk download.
 
     Mirrors MATLAB ``ndi.cloud.download.downloadDocumentCollection``:
-    splits document IDs into chunks of *chunk_size* (default 2000),
+    splits document IDs into chunks of *chunk_size*,
     requests a bulk-download ZIP for each chunk, and concatenates
     the results.
 
@@ -232,7 +232,8 @@ def downloadDocumentCollection(
         doc_ids: Specific document IDs to download. If ``None``,
             discovers all document IDs via paginated listing first.
         chunk_size: Number of documents per bulk-download request.
-            Default 2000 matches MATLAB.
+            ``None`` (default) reads the preference
+            ``Cloud.Download.Max_Document_Batch_Count``, as MATLAB does.
         timeout: Seconds to wait for each chunk's ZIP to become
             available. Default 60 matches MATLAB.
         retry_interval: Seconds between polling attempts for each
@@ -266,6 +267,13 @@ def downloadDocumentCollection(
 
     if not doc_ids:
         return []
+
+    if chunk_size is None:
+        from .. import preferences
+
+        chunk_size = int(preferences.get("Cloud.Download.Max_Document_Batch_Count"))
+    if chunk_size <= 0:
+        raise ValueError(f"chunk_size must be positive (got {chunk_size!r})")
 
     # Split into chunks
     num_chunks = math.ceil(len(doc_ids) / chunk_size)

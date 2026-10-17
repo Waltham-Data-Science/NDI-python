@@ -359,6 +359,9 @@ def _upload_binaries(
             cloud_dataset_id,
             documents,
             dataset=dataset,
+            file_upload_strategy=options.file_upload_strategy,
+            file_batch_size_limit=options.file_batch_size_limit,
+            verbose=options.verbose,
             client=client,
         )
     except Exception as exc:  # noqa: BLE001

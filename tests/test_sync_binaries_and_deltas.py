@@ -149,7 +149,10 @@ class TestUploadNewSendsBinariesAtAll:
         ds = FakeDataset(tmp_path, [_document_with_file(tmp_path, "doc-A", "uid-A", "a.bin")])
 
         getattr(ops, operation)(
-            ds, CLOUD_ID, SyncOptions(sync_files=True, verbose=False), client=_Client()
+            ds,
+            CLOUD_ID,
+            SyncOptions(sync_files=True, verbose=False, file_upload_strategy="serial"),
+            client=_Client(),
         )
 
         assert uploads == [str(tmp_path / "a.bin")]

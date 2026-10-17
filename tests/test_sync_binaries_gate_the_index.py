@@ -90,7 +90,11 @@ def documents_upload(monkeypatch):
 
 
 def _binaries(monkeypatch, failing):
-    """Fail getFileUploadURL for the named documents' UIDs."""
+    """Fail getFileUploadURL for the named documents' UIDs.
+
+    These mock the per-file API, so the tests that use them ask for
+    ``file_upload_strategy="serial"``; the zip-batch path's failure reporting
+    is covered in test_cloud_upload_file_batches.py."""
     from ndi.cloud.api import files as files_api
 
     failing_uids = {f"uid-{d}" for d in failing}
@@ -115,7 +119,9 @@ class TestTheFileReportNamesTheDocuments:
         ]
         (tmp_path / "a").write_bytes(b"x")
         (tmp_path / "b").write_bytes(b"x")
-        report = upload.uploadFilesForDatasetDocuments("org-1", CLOUD_ID, docs, client=_Client())
+        report = upload.uploadFilesForDatasetDocuments(
+            "org-1", CLOUD_ID, docs, file_upload_strategy="serial", client=_Client()
+        )
         assert report["uploaded"] == 1
         assert report["failed"] == 1
         assert report["failed_document_ids"] == ["b"]
@@ -127,6 +133,7 @@ class TestTheFileReportNamesTheDocuments:
             "org-1",
             CLOUD_ID,
             [{"ndiId": "a", "file_uid": "uid-a", "file_path": str(tmp_path / "a")}],
+            file_upload_strategy="serial",
             client=_Client(),
         )
         assert report["failed_document_ids"] == []
@@ -141,6 +148,7 @@ class TestTheFileReportNamesTheDocuments:
             "org-1",
             CLOUD_ID,
             [{"base": {"id": "c"}, "file_uid": "uid-c", "file_path": str(tmp_path / "c")}],
+            file_upload_strategy="serial",
             client=_Client(),
         )
         assert report["failed_document_ids"] == ["c"]
@@ -158,7 +166,10 @@ class TestMirrorToRemoteWithholdsThem:
         _binaries(monkeypatch, {"b"})
 
         success, message, report = ops.mirrorToRemote(
-            ds, CLOUD_ID, SyncOptions(sync_files=True), client=_Client()
+            ds,
+            CLOUD_ID,
+            SyncOptions(sync_files=True, file_upload_strategy="serial"),
+            client=_Client(),
         )
 
         assert success is False
@@ -172,7 +183,10 @@ class TestMirrorToRemoteWithholdsThem:
         _binaries(monkeypatch, set())
 
         _ok, _msg, report = ops.mirrorToRemote(
-            ds, CLOUD_ID, SyncOptions(sync_files=True), client=_Client()
+            ds,
+            CLOUD_ID,
+            SyncOptions(sync_files=True, file_upload_strategy="serial"),
+            client=_Client(),
         )
 
         assert report["failed"] == []
@@ -191,7 +205,10 @@ class TestMirrorToRemoteWithholdsThem:
         monkeypatch.setattr(upload, "uploadFilesForDatasetDocuments", _boom)
 
         _ok, _msg, report = ops.mirrorToRemote(
-            ds, CLOUD_ID, SyncOptions(sync_files=True), client=_Client()
+            ds,
+            CLOUD_ID,
+            SyncOptions(sync_files=True, file_upload_strategy="serial"),
+            client=_Client(),
         )
 
         assert sorted(report["failed"]) == ["a", "b"]
@@ -203,7 +220,12 @@ class TestMirrorToRemoteWithholdsThem:
         ds = _dataset(tmp_path, ["a", "b"])
         _binaries(monkeypatch, {"b"})
         with caplog.at_level("WARNING", logger="ndi.cloud.sync.operations"):
-            ops.mirrorToRemote(ds, CLOUD_ID, SyncOptions(sync_files=True), client=_Client())
+            ops.mirrorToRemote(
+                ds,
+                CLOUD_ID,
+                SyncOptions(sync_files=True, file_upload_strategy="serial"),
+                client=_Client(),
+            )
         assert "without" in caplog.text
         assert "b" in caplog.text
 
