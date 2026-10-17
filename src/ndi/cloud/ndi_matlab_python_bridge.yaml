@@ -417,7 +417,7 @@ functions:
 
   - name: uploadDataset
     matlab_path: "+ndi/+cloud/uploadDataset.m"
-    matlab_last_sync_hash: "4e45d96e"
+    matlab_last_sync_hash: "7180cc8"
     python_path: "ndi/cloud/orchestration.py"
     input_arguments:
       - name: dataset
@@ -439,6 +439,14 @@ functions:
         type_matlab: "logical (via SyncOptions)"
         type_python: "bool"
         default: "False"
+      - name: file_upload_strategy
+        type_matlab: "string (via SyncOptions)"
+        type_python: "str"
+        default: "'batch'"
+      - name: file_batch_size_limit
+        type_matlab: "double (via SyncOptions)"
+        type_python: "float | None"
+        default: "None"
       - name: client
         type_python: "CloudClient | None"
         default: "None"
@@ -450,6 +458,12 @@ functions:
       - name: message
         type_python: "str"
     decision_log: >
+      2026-10-17: NDI-matlab 7180cc8 (VH-Lab/NDI-matlab#1033) adds
+      SyncOptions.FileBatchSizeLimit, passed through to the file upload.
+      Python's uploadDataset takes no SyncOptions, so file_upload_strategy and
+      file_batch_size_limit are keyword arguments, passed to
+      uploadFilesForDatasetDocuments.
+
       MATLAB takes (ndiDataset, syncOptions, options.*).
       Python unpacks into keyword args. Name exact match.
       Issue #136: Python now performs MATLAB's first check --
@@ -617,7 +631,7 @@ functions:
   # --- download.py functions ---
   - name: downloadDocumentCollection
     matlab_path: "+ndi/+cloud/+download/downloadDocumentCollection.m"
-    matlab_last_sync_hash: "e82a607f0"
+    matlab_last_sync_hash: "7180cc8"
     python_path: "ndi/cloud/download.py"
     input_arguments:
       - name: dataset_id
@@ -628,8 +642,8 @@ functions:
         type_python: "list[str] | None"
       - name: chunk_size
         type_matlab: "double"
-        type_python: "int"
-        default: "2000"
+        type_python: "int | None"
+        default: "None"
       - name: timeout
         type_matlab: "double"
         type_python: "float"
@@ -647,6 +661,11 @@ functions:
       - name: documents
         type_python: "list[dict[str, Any]]"
     decision_log: >
+      2026-10-17: NDI-matlab 7180cc8 (VH-Lab/NDI-matlab#1033) makes ChunkSize
+      default to the preference Cloud.Download.Max_Document_Batch_Count (10000
+      unless changed; was 2000). chunk_size=None now reads the same
+      preference.
+
       Exact match.
       2026-09-08: examined against e1a641f0b (was fbf6d337). Four commits.
       91b851b57 (curl instead of websave) does not port. f48f2efc6 refuses an
@@ -832,7 +851,7 @@ functions:
   # --- upload.py functions ---
   - name: uploadDocumentCollection
     matlab_path: "+ndi/+cloud/+upload/uploadDocumentCollection.m"
-    matlab_last_sync_hash: "e96801dee"
+    matlab_last_sync_hash: "7180cc8"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
       - name: dataset_id
@@ -856,6 +875,9 @@ functions:
         type_python: "dict[str, Any]"
     decision_log: >
       Exact match.
+      2026-10-17: NDI-matlab 7180cc8 (VH-Lab/NDI-matlab#1033) makes maxDocumentChunk default to the preference
+      Cloud.Upload.Max_Document_Batch_Count (was Inf). max_chunk=None now
+      reads the same preference; 0 or negative still means all at once.
       2026-09-08: examined against e96801dee (was f3d00bad). Two commits.
       29546720b makes the caller read the ok flag this function returns rather
       than assuming success; the report here already carries status and errors,
@@ -876,24 +898,62 @@ functions:
 
   - name: zipForUpload
     matlab_path: "+ndi/+cloud/+upload/zipForUpload.m"
-    matlab_last_sync_hash: "b367283b"
+    matlab_last_sync_hash: "7180cc8"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
-      - name: documents
-        type_matlab: "cell"
+      - name: file_manifest
+        type_matlab: "struct array (doc_file_struct)"
         type_python: "list[dict[str, Any]]"
       - name: dataset_id
-        type_matlab: "string"
+        type_matlab: "char"
         type_python: "str"
-      - name: target_dir
-        type_python: "Path | None"
+      - name: org_id
+        type_python: "str"
+        default: "''"
+      - name: size_limit
+        type_matlab: "double (SizeLimit)"
+        type_python: "float | None"
+        default: "None"
+      - name: number_retries
+        type_matlab: "double (numberRetries)"
+        type_python: "int"
+        default: "3"
+      - name: completion_timeout
+        type_python: "float"
+        default: "300.0"
+      - name: retry_pause
+        type_python: "float"
+        default: "5.0"
+      - name: verbose
+        type_matlab: "logical (Verbose)"
+        type_python: "bool"
+        default: "False"
+      - name: client
+        type_python: "CloudClient | None"
         default: "None"
     output_arguments:
-      - name: zip_path
-        type_python: "Path"
-      - name: doc_ids
-        type_python: "list[str]"
+      - name: report
+        type_python: "dict[str, Any]"
     decision_log: >
+      2026-10-17: REPLACED. The function that lived here zipped document JSON,
+      had no caller in src, and so was a port of nothing (see the 2026-09-08
+      note below). It is now a port of what MATLAB's zipForUpload actually
+      does: greedily pack binary files, in order, into zips of at most
+      size_limit bytes (a single file larger than the limit goes up alone),
+      send each to getFileCollectionUploadURL, and delete it. size_limit
+      defaults to the preference Cloud.Upload.Max_File_Batch_Size, as MATLAB's
+      SizeLimit does since NDI-matlab 7180cc8 (VH-Lab/NDI-matlab#1033). Differences, all on the reporting side:
+      MATLAB takes the ndi.database and a total size it no longer uses and
+      returns [b, msg]; this takes the manifest alone and returns a report
+      naming the documents whose batch failed, because the Python sync callers
+      must keep those documents out of the sync index (NDI-matlab#805). For the
+      same reason it waits on each batch's extraction job (after all batches
+      are sent, so extraction overlaps the remaining uploads) and counts a job
+      that does not reach 'complete' as failed; MATLAB sends with jobId and
+      does not wait here. Zip entries are named by file uid; MATLAB zips
+      <files dir>/<uid>, whose basename is the uid. DebugLog CSVs are not
+      ported.
+
       Exact match.
       2026-09-08: examined against 8c31a8f28 (was 97ead30b). Three commits, none
       of which lands in this function, because the two sides zip different things:
@@ -924,7 +984,7 @@ functions:
 
   - name: uploadFilesForDatasetDocuments
     matlab_path: "+ndi/+cloud/+sync/+internal/uploadFilesForDatasetDocuments.m"
-    matlab_last_sync_hash: "d94973c1"
+    matlab_last_sync_hash: "7180cc8"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
       - name: org_id
@@ -939,6 +999,18 @@ functions:
       - name: dataset
         type_python: "Any | None"
         default: "None"
+      - name: file_upload_strategy
+        type_matlab: "string (FileUploadStrategy)"
+        type_python: "str"
+        default: "'batch'"
+      - name: file_batch_size_limit
+        type_matlab: "double (FileBatchSizeLimit)"
+        type_python: "float | None"
+        default: "None"
+      - name: verbose
+        type_matlab: "logical (Verbose)"
+        type_python: "bool"
+        default: "False"
       - name: client
         type_python: "CloudClient | None"
         default: "None"
@@ -948,6 +1020,13 @@ functions:
     decision_log: >
       MATLAB places this in +sync/+internal. Python places it in upload.py.
       Exact name match.
+      2026-10-17: examined against NDI-matlab 7180cc8 (VH-Lab/NDI-matlab#1033). The batch path is now ported:
+      file_upload_strategy='batch' (the default, as in MATLAB) sends the
+      files through zipForUpload in zips of at most file_batch_size_limit
+      bytes (None = the Cloud.Upload.Max_File_Batch_Size preference);
+      'serial' keeps the one-signed-URL-per-file path. Before this the strategy
+      was read by nothing and every file went up singly. Python's verbose
+      default stays False, as it was.
       2026-10-13: examined against NDI-matlab d94973c1 on
       claude/lightsheet-zarr-ndi-viewer-djp5vk: main's 9c21eb61
       (VH-Lab/NDI-matlab#1027) merged with that branch's verbose upload count

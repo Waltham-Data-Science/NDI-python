@@ -154,6 +154,9 @@ not_exposed:
   - python_class: SyncOptions
     property: FileUploadStrategy
     reason: "Present as file_upload_strategy. See SyncOptions.SyncFiles."
+  - python_class: SyncOptions
+    property: FileBatchSizeLimit
+    reason: "Present as file_batch_size_limit. See SyncOptions.SyncFiles."
   - python_class: SyncMode
     property: Function
     reason: >

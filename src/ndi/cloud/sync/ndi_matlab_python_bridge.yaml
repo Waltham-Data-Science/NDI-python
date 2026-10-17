@@ -52,11 +52,15 @@ classes:
   - name: SyncOptions
     type: dataclass
     matlab_path: "+ndi/+cloud/+sync/SyncOptions.m"
-    matlab_last_sync_hash: "b7dc4b16"
+    matlab_last_sync_hash: "7180cc8"
     python_path: "ndi/cloud/sync/mode.py"
     python_class: "SyncOptions"
 
     decision_log: >
+      2026-10-17: NDI-matlab 7180cc8 (VH-Lab/NDI-matlab#1033) added FileBatchSizeLimit (bytes; empty = use
+      the preference Cloud.Upload.Max_File_Batch_Size). Ported as
+      file_batch_size_limit, None meaning the same.
+
       NDI-python#295: MATLAB's four public properties are CamelCase because
       the matlab.mixin.SetGet interface requires it; this port is a plain
       dataclass whose fields are passed as keyword arguments, so they carry
@@ -78,6 +82,10 @@ classes:
       - name: file_upload_strategy
         type_python: "str"
         default: "'batch'"
+      - name: file_batch_size_limit
+        type_matlab: "double (scalar or empty)"
+        type_python: "float | None"
+        default: "None"
     decision_log: "Exact match for shared fields."
 
   - name: SyncIndex
@@ -200,7 +208,7 @@ functions:
 
   - name: uploadNew
     matlab_path: "+ndi/+cloud/+sync/uploadNew.m"
-    matlab_last_sync_hash: "8c31a8f28"
+    matlab_last_sync_hash: "7180cc8"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: dataset_path
@@ -328,7 +336,7 @@ functions:
 
   - name: mirrorToRemote
     matlab_path: "+ndi/+cloud/+sync/mirrorToRemote.m"
-    matlab_last_sync_hash: "29546720b"
+    matlab_last_sync_hash: "7180cc8"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: dataset_path
@@ -452,7 +460,7 @@ functions:
 
   - name: twoWaySync
     matlab_path: "+ndi/+cloud/+sync/twoWaySync.m"
-    matlab_last_sync_hash: "29546720b"
+    matlab_last_sync_hash: "7180cc8"
     python_path: "ndi/cloud/sync/operations.py"
     input_arguments:
       - name: dataset_path
