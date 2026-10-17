@@ -8,8 +8,9 @@ Submodules:
     users     — User creation, profile
     compute   — Compute session management
     feedback  — In-app problem reports
+    admin     — Organization and user administration (admin only)
 """
 
-from . import compute, datasets, documents, feedback, files, users
+from . import admin, compute, datasets, documents, feedback, files, users
 
-__all__ = ["datasets", "documents", "files", "users", "compute", "feedback"]
+__all__ = ["datasets", "documents", "files", "users", "compute", "feedback", "admin"]

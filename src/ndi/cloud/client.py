@@ -231,6 +231,16 @@ class CloudClient:
         """HTTP PUT."""
         return self._request("PUT", endpoint, json=json, data=data, **path_params)
 
+    def patch(
+        self,
+        endpoint: str,
+        json: Any = None,
+        data: Any = None,
+        **path_params: str,
+    ) -> Any:
+        """HTTP PATCH."""
+        return self._request("PATCH", endpoint, json=json, data=data, **path_params)
+
     def delete(self, endpoint: str, params: dict | None = None, **path_params: str) -> Any:
         """HTTP DELETE."""
         return self._request("DELETE", endpoint, params=params, **path_params)
