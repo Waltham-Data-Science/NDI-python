@@ -1155,7 +1155,7 @@ classes:
   - name: preferences
     type: class
     matlab_path: "+ndi/preferences.m"
-    matlab_last_sync_hash: "7180cc8"
+    matlab_last_sync_hash: "f3bfff1"
     python_path: "ndi/preferences.py"
     python_class: "ndi_preferences"
     inherits: ""
@@ -1184,6 +1184,11 @@ classes:
       MATLAB's library paths itself (src/_ndi_launch.py). NDI-matlab makes
       the same change to ndi.preferences in a parallel PR; the hash moves
       when that lands and is examined.
+      2026-10-17: NDI-matlab f3bfff1 (VH-Lab/NDI-matlab#1036) makes saveToDisk
+      re-read the file and keep every key no registered item owns, so saving
+      from one language no longer resets the other's own preferences. Ported
+      here in the same change: _save_to_disk keeps unknown keys via
+      _unknown_entries_on_disk (NDI-python#335).
 
     properties:
       - name: Items
