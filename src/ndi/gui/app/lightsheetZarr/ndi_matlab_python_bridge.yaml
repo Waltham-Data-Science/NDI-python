@@ -35,7 +35,7 @@ functions:
   # -----------------------------------------------------------------------
   - name: LightsheetZarrManager
     matlab_path: "+ndi/+gui/+app/LightsheetZarrManager.m"
-    matlab_last_sync_hash: "fb10169b"
+    matlab_last_sync_hash: "d96fd856"
     status: matlab_only
     decision_log: >-
       matlab_only: napari is Python-only, so the manager class stays
@@ -71,6 +71,12 @@ functions:
       dialog's command preview shows the exact logged shell line
       (viewerShellCommand with the log named when the dialog opens) and
       Launch reuses that log file. Still matlab_only.
+      2026-10-17: NDI-matlab d96fd856 (VH-Lab/NDI-matlab#1032):
+      DefaultViewerLauncher is now empty, meaning find napariViewLightsheet
+      with ndi.python.findCommand, with
+      GUI.LightsheetZarrManager.ViewerLauncher as the override, and the View
+      dialog saves the preference only when the user changed the launcher.
+      Launcher handling for a MATLAB GUI; still MATLAB-only.
 
   # -----------------------------------------------------------------------
   # CLI (napariViewLightsheet).

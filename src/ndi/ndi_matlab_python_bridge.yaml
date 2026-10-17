@@ -1155,7 +1155,7 @@ classes:
   - name: preferences
     type: class
     matlab_path: "+ndi/preferences.m"
-    matlab_last_sync_hash: "f3bfff1"
+    matlab_last_sync_hash: "2941f93"
     python_path: "ndi/preferences.py"
     python_class: "ndi_preferences"
     inherits: ""
@@ -1189,6 +1189,14 @@ classes:
       from one language no longer resets the other's own preferences. Ported
       here in the same change: _save_to_disk keeps unknown keys via
       _unknown_entries_on_disk (NDI-python#335).
+      2026-10-17: NDI-matlab 2941f93 merges main into the #1036 branch and so
+      also carries NDI-matlab#1032, which registers
+      GUI.LightsheetZarrManager.ViewerLauncher, Tools.FFmpegPath and
+      Tools.RscriptPath (default "") and sets GUI.GEFManager.ViewerLauncher to
+      "", as here. The three new items are not ported: each is read only by
+      MATLAB code this port does not have (LightsheetZarrManager, avi2mp4,
+      prism2csv), and since this change a Python save keeps them in the shared
+      file instead of dropping them.
 
     properties:
       - name: Items
