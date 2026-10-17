@@ -434,6 +434,8 @@ def uploadDataset(
     sync_files: bool = True,
     verbose: bool = False,
     *,
+    file_upload_strategy: str = "batch",
+    file_batch_size_limit: float | None = None,
     client: CloudClient | None = None,
 ) -> tuple[bool, str, str]:
     """Upload a local dataset to NDI Cloud.
@@ -446,6 +448,12 @@ def uploadDataset(
         remote_name: Name for the remote dataset.
         sync_files: Upload binary files.
         verbose: Print progress.
+        file_upload_strategy: ``'batch'`` (default, zip batches) or
+            ``'serial'`` (one request per file). MATLAB: SyncOptions
+            ``FileUploadStrategy``.
+        file_batch_size_limit: Maximum size in bytes of each zip batch;
+            ``None`` uses the preference ``Cloud.Upload.Max_File_Batch_Size``.
+            MATLAB: SyncOptions ``FileBatchSizeLimit``.
         client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
@@ -540,6 +548,9 @@ def uploadDataset(
             cloud_id,
             doc_jsons,
             dataset=dataset,
+            file_upload_strategy=file_upload_strategy,
+            file_batch_size_limit=file_batch_size_limit,
+            verbose=verbose,
             client=client,
         )
         if verbose:

@@ -19,6 +19,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   hidden, on Linux x86_64/aarch64, Windows, macOS arm64, macOS Intel and
   x86_64-under-Rosetta.
 
+- **Binary files upload in zip batches** (mirroring NDI-matlab#1033).
+  `uploadFilesForDatasetDocuments` now honours `file_upload_strategy`:
+  `'batch'` (the default, as in MATLAB) packs a document set's files into
+  zips of at most `file_batch_size_limit` bytes and sends each through the
+  bulk endpoint; `'serial'` keeps the old one-request-per-file path. Until now
+  the strategy was read by nothing and every file went up singly.
+  `ndi.cloud.upload.zipForUpload` is now a port of MATLAB's (it used to zip
+  document JSON and had no caller); it reports the documents whose batch did
+  not arrive, including a batch whose server-side extraction did not
+  complete, so sync keeps them out of the index. `SyncOptions` gains
+  `file_batch_size_limit`, and `uploadDataset` gains `file_upload_strategy`
+  and `file_batch_size_limit`. Tests: `tests/test_cloud_upload_file_batches.py`.
+
 - **`ndi.cloud.api.admin`: organization and user administration** (mirroring
   NDI-matlab#1031). Wraps the NDI Cloud `/admin` endpoints:
   `listOrganizations`, `getOrganization`, `createOrganization`,
@@ -57,6 +70,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `fileInfo`. `listFiles` and `getFileDetails` already pass `crc32` through.
 
 ### Fixed
+
+- `uploadSingleFile(use_bulk_upload=True)` passed the whole
+  `getFileCollectionUploadURL` result (a `{"url", "jobId"}` dict) to
+  `putFiles` as the URL, so it could never succeed.
 
 - **Bulk document downloads wait up to 60 s for each chunk** (mirroring
   NDI-matlab#1030). `downloadDocumentCollection` polls each chunk's
@@ -108,6 +125,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   wrappers `tools/napariViewGEF` and `scripts/napariViewLightsheet` that did
   this are removed, and the `GUI.GEFManager.ViewerLauncher` preference now
   defaults to `""`, meaning "find napariViewGEF automatically".
+
+- **Cloud batch sizes come from preferences** (mirroring NDI-matlab#1033).
+  `Cloud.Upload.Max_File_Batch_Size` now defaults to 250 MB (was 500 MB) and
+  sets the zip batch size; `Cloud.Upload.Max_Document_Batch_Count` is the
+  default for `uploadDocumentCollection(max_chunk=None)`; and
+  `Cloud.Download.Max_Document_Batch_Count` (10000) is the default for
+  `downloadDocumentCollection(chunk_size=None)`, which was 2000. All three
+  were registered but nothing read them.
 
 - **`ndi.element.epochtable()` now returns registered epochs alphabetized by
   `epoch_id`** (NDI-python#162). They previously came back in the database's

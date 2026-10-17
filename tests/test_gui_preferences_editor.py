@@ -273,7 +273,7 @@ class TestState:
         row = [r for r in state.rows() if r.index == index][0]
         assert row.value == "12345"
         assert row.pending and row.label.endswith("*")
-        assert prefs.get("Cloud.Upload.Max_File_Batch_Size") == 500_000_000
+        assert prefs.get("Cloud.Upload.Max_File_Batch_Size") == 250_000_000
         assert not (tmp_path / "NDI_Preferences.json").exists()
 
     def test_set_pending_rejects_an_index_that_is_not_an_item(self, tmp_path):
@@ -340,7 +340,7 @@ class TestState:
         assert result.applied == ["Cloud.Download.Max_Document_Batch_Count"]
         assert prefs.get("Cloud.Download.Max_Document_Batch_Count") == 42
         assert prefs.get("Cloud.Upload.Max_Document_Batch_Count") == 100000
-        assert prefs.get("Cloud.Upload.Max_File_Batch_Size") == 500_000_000
+        assert prefs.get("Cloud.Upload.Max_File_Batch_Size") == 250_000_000
         assert set(state.pending) == {0, 1, 2}
 
     def test_apply_with_nothing_pending_writes_nothing(self, tmp_path):

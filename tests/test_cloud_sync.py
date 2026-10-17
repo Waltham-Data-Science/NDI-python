@@ -1,20 +1,18 @@
 """
 Tests for cloud sync structural components.
 
-Tests SyncMode, SyncOptions, SyncIndex, zipForUpload,
+Tests SyncMode, SyncOptions, SyncIndex,
 CloudClient.from_env(), and the _auto_client decorator.
 These test local data structures and file I/O — no cloud API calls needed.
 """
 
 import json
-import zipfile
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from ndi.cloud.sync.index import SyncIndex
 from ndi.cloud.sync.mode import SyncMode, SyncOptions
-from ndi.cloud.upload import zipForUpload
 
 # ===========================================================================
 # SyncMode & SyncOptions
@@ -97,32 +95,6 @@ class TestSyncIndex:
         # MATLAB's key names -- the index file is shared with MATLAB.
         assert len(raw["localDocumentIdsLastSync"]) == 2
         assert len(raw["remoteDocumentIdsLastSync"]) == 3
-
-
-# ===========================================================================
-# Zip documents for upload
-# ===========================================================================
-
-
-class TestZipDocuments:
-    def test_creates_zip(self, tmp_path):
-        docs = [{"ndiId": "doc-1", "type": "base"}, {"ndiId": "doc-2", "type": "probe"}]
-        zip_path, manifest = zipForUpload(docs, "ds-1", tmp_path)
-        assert zip_path.exists()
-        assert len(manifest) == 2
-        assert "doc-1" in manifest
-
-        with zipfile.ZipFile(zip_path) as zf:
-            names = zf.namelist()
-            assert "doc-1.json" in names
-            assert "doc-2.json" in names
-
-    def test_zip_content_is_valid_json(self, tmp_path):
-        docs = [{"ndiId": "x", "data": [1, 2, 3]}]
-        zip_path, _ = zipForUpload(docs, "ds-1", tmp_path)
-        with zipfile.ZipFile(zip_path) as zf:
-            content = json.loads(zf.read("x.json"))
-            assert content["data"] == [1, 2, 3]
 
 
 # ===========================================================================

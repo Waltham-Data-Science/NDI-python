@@ -210,9 +210,9 @@ class ndi_preferences:
             "Cloud",
             "Upload",
             "Max_File_Batch_Size",
-            500_000_000,
+            250_000_000,
             "float",
-            "Maximum size of file batch upload in bytes (default 500 MB).",
+            "Maximum size of file batch upload in bytes (default 250 MB).",
         )
         self._add_item(
             "GUI",
