@@ -1177,6 +1177,13 @@ classes:
       Corrected, and MATLAB's public Items property (SetAccess = private
       leaves GetAccess public) is now exposed read-only beside the private
       _items list.
+      2026-10-16: GUI/GEFManager/ViewerLauncher defaults to "" (find
+      napariViewGEF automatically: ~/.ndi/bin, where install/install-ndi.sh
+      puts it, then the PATH) instead of /usr/local/bin/napariViewGEF, the
+      shell wrapper this repo no longer ships -- the console script now drops
+      MATLAB's library paths itself (src/_ndi_launch.py). NDI-matlab makes
+      the same change to ndi.preferences in a parallel PR; the hash moves
+      when that lands and is examined.
 
     properties:
       - name: Items

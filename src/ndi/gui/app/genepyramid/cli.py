@@ -1,11 +1,14 @@
 """Command line for viewing a spatial gene expression pyramid.
 
-Reachable three ways, all the same function:
+Reachable two ways, both the same function:
 
     napariViewGEF <session> ...          the installed console script
     python -m ndi napari <session> ...   the ndi subcommand
-    /usr/local/bin/napariViewGEF ...     the shell wrapper, which scrubs
-                                         MATLAB's environment first
+
+Both are safe to start from MATLAB (which sets NDI_FROM_MATLAB=1): the
+console script goes through the stdlib-only ``_ndi_launch`` module, which
+drops MATLAB's library paths and re-execs before ``ndi`` is even imported,
+and main() calls the same escape first for the ``python -m`` route.
 
 --report and --list do their work WITHOUT a display. That is deliberate:
 it gives the entry point a path that CI can exercise, so the argument
@@ -355,6 +358,13 @@ def _resolve_gene_layers(spec: str):
 
 
 def main(argv=None) -> int:
+    if argv is None:
+        # The real command line, so possibly started by MATLAB: leave its
+        # library paths behind before Qt and napari load. A no-op when the
+        # console script already did it (see src/_ndi_launch.py).
+        from _ndi_launch import escapeMatlabEnvironment
+
+        escapeMatlabEnvironment()
     args = build_parser().parse_args(argv)
 
     from .progress import stage

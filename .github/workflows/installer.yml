@@ -1,0 +1,317 @@
+name: Installer
+
+# Runs the REAL end-user installer (install/install-ndi.sh, install/install-ndi.ps1)
+# on every platform it supports, with git and compilers unavailable, against
+# THIS commit's code -- not main -- through the installer's documented
+# NDI_INSTALL_SOURCE override. Then checks what MATLAB relies on: the three
+# commands in ~/.ndi/bin, a MATLAB-polluted environment left behind by the
+# viewers' launcher, and an uninstall that removes only what it installed.
+#
+# Each run downloads ~2 GB per leg, hence the path filter and weekly schedule
+# rather than every push. The weekly run catches a dependency that stops
+# installing cleanly (a wheel withdrawn for one platform, say) with no change
+# here.
+
+on:
+  pull_request:
+    paths:
+      - "install/**"
+      - "pyproject.toml"
+      - "src/_ndi_launch.py"
+      - "src/ndi/gui/app/genepyramid/cli.py"
+      - "src/ndi/gui/app/lightsheetZarr/cli.py"
+      - ".github/workflows/installer.yml"
+  push:
+    branches: [main]
+    paths:
+      - "install/**"
+      - "pyproject.toml"
+      - "src/_ndi_launch.py"
+      - "src/ndi/gui/app/genepyramid/cli.py"
+      - "src/ndi/gui/app/lightsheetZarr/cli.py"
+      - ".github/workflows/installer.yml"
+  workflow_dispatch:
+  schedule:
+    - cron: "23 7 * * 1"   # Mondays 07:23 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: Installer (${{ matrix.leg }})
+    runs-on: ${{ matrix.os }}
+    # Bounds a hung install. (It does not bound time spent QUEUED for a
+    # runner label: if macos-15-intel is ever retired, drop that leg.)
+    timeout-minutes: 60
+    concurrency:
+      group: installer-${{ matrix.leg }}-${{ github.ref }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - leg: linux-x86_64
+            os: ubuntu-latest
+            machine: x86_64
+            tags: "manylinux_ x86_64"
+          - leg: linux-aarch64
+            os: ubuntu-24.04-arm
+            machine: aarch64
+            tags: "manylinux_ aarch64"
+          - leg: windows-amd64
+            os: windows-latest
+            machine: AMD64
+            tags: "win_amd64"
+          - leg: macos-arm64
+            os: macos-latest
+            machine: arm64
+            tags: "macosx_ arm64"
+          - leg: macos-intel
+            os: macos-15-intel
+            machine: x86_64
+            tags: "macosx_ x86_64"
+          # An Intel Mac, as Apple Silicon sees one: an x86_64 CPython under
+          # Rosetta 2, requested through NDI_INSTALL_PYTHON (ci.yml's approach).
+          # uv picks wheels for the interpreter it installs into, so this
+          # resolves exactly what an Intel Mac would. (Running the installer
+          # under `arch -x86_64` would NOT do it: Astral's installer sees
+          # through Rosetta with sysctl and installs the arm64 uv, which would
+          # then fetch an arm64 Python.)
+          - leg: macos-rosetta-x86_64
+            os: macos-latest
+            machine: x86_64
+            tags: "macosx_ x86_64"
+            rosetta: true
+            python: cpython-3.12-macos-x86_64
+    defaults:
+      run:
+        shell: bash
+    env:
+      # Raw URL of THIS commit's wheel index: uv reads --find-links only from a
+      # URL or a directory. Same as the install-without-git job in ci.yml.
+      NDI_PYRAVIEW_FIND_LINKS: https://raw.githubusercontent.com/${{ github.event.pull_request.head.repo.full_name || github.repository }}/${{ github.event.pull_request.head.sha || github.sha }}/install/pyraview-wheels.html
+    steps:
+      # The checkout itself uses git; that is fine. Only the installer must
+      # not need it.
+      - uses: actions/checkout@v4
+
+      - name: Make sure Rosetta 2 is available
+        if: matrix.rosetta
+        run: |
+          /usr/bin/pgrep -q oahd || sudo softwareupdate --install-rosetta --agree-to-license
+          arch -x86_64 /usr/bin/true
+
+      - name: Hide git, CMake and the C/C++ compilers
+        run: |
+          # Copied from ci.yml's install-without-git job. Writes a script the
+          # install step sources. On Linux and macOS it SHADOWS each tool with
+          # one that always fails; on Windows every PATH directory holding one
+          # of these tools is dropped instead (native programs look for
+          # git.exe, not a shell script).
+          tools="git cmake cc c++ gcc g++ clang clang++ cl"
+          hide="$RUNNER_TEMP/hide-tools.sh"
+          if [ "$RUNNER_OS" = Windows ]; then
+            cat > "$hide" <<EOF
+          newpath=""
+          IFS=':' read -ra dirs <<< "\$PATH"
+          for d in "\${dirs[@]}"; do
+            drop=""
+            for t in $tools; do if [ -e "\$d/\$t.exe" ]; then drop=1; fi; done
+            if [ -z "\$drop" ]; then newpath="\${newpath:+\$newpath:}\$d"; fi
+          done
+          export PATH="\$newpath"
+          EOF
+          else
+            mkdir -p "$RUNNER_TEMP/notools"
+            for t in $tools; do
+              printf '#!/bin/sh\necho "%s is deliberately unavailable in this job" >&2\nexit 127\n' "$t" \
+                > "$RUNNER_TEMP/notools/$t"
+              chmod +x "$RUNNER_TEMP/notools/$t"
+            done
+            echo "export PATH=\"$RUNNER_TEMP/notools:\$PATH\"" > "$hide"
+          fi
+          echo "HIDE_TOOLS=$hide" >> "$GITHUB_ENV"
+          # shellcheck source=/dev/null
+          ( source "$hide"
+            for t in git cmake c++ gcc; do
+              if "$t" --version >/dev/null 2>&1; then
+                echo "::error::$t is still usable; this job would prove nothing"
+                exit 1
+              fi
+            done )
+          echo "git, cmake, c++ and gcc are all unusable"
+
+      - name: Set up what the installer must leave alone
+        run: |
+          # Files in ~/.ndi the installer does not own (NDI-matlab shares the
+          # folder), plus the shell start-up files and uv's update receipt,
+          # recorded so the uninstall step can prove they are as they were.
+          mkdir -p "$HOME/.ndi/tools/somerepo"
+          echo '{"dummy": "do not touch"}' > "$HOME/.ndi/NDI_Preferences.json"
+          echo 'keep me' > "$HOME/.ndi/tools/somerepo/README"
+          mkdir -p "$RUNNER_TEMP/before"
+          cp -R "$HOME/.ndi" "$RUNNER_TEMP/before/ndi"
+          if [ "$RUNNER_OS" != Windows ]; then
+            touch "$HOME/.bashrc"   # so the bash block has a file to go in
+            for f in .zshrc .zprofile .bashrc .profile .bash_profile; do
+              if [ -f "$HOME/$f" ]; then cp "$HOME/$f" "$RUNNER_TEMP/before/$f"; fi
+            done
+            receipt="${XDG_CONFIG_HOME:-$HOME/.config}/uv/uv-receipt.json"
+          else
+            receipt="$LOCALAPPDATA/uv/uv-receipt.json"
+            powershell.exe -NoProfile -Command \
+              "(Get-Item 'registry::HKEY_CURRENT_USER\Environment').GetValue('Path', '', 'DoNotExpandEnvironmentNames')" \
+              | tr -d '\r' > "$RUNNER_TEMP/before/userpath.txt"
+          fi
+          echo "RECEIPT=$receipt" >> "$GITHUB_ENV"
+          if [ -e "$receipt" ]; then echo "RECEIPT_EXISTED=1" >> "$GITHUB_ENV"; fi
+          echo "SHELL=$SHELL"
+
+      - name: Run the installer (git and compilers hidden)
+        env:
+          NDI_INSTALL_SOURCE: ${{ github.workspace }}
+          NDI_PYRAVIEW_CONSTRAINTS: ${{ github.workspace }}/install/pyraview-constraints.txt
+          NDI_INSTALL_PYTHON: ${{ matrix.python }}
+        run: |
+          tee=$(command -v tee)
+          log="$RUNNER_TEMP/install-out.log"
+          # shellcheck source=/dev/null
+          ( source "$HIDE_TOOLS"
+            if [ "$RUNNER_OS" = Windows ]; then
+              # Windows PowerShell 5.1, the oldest the script supports.
+              powershell.exe -NoProfile -ExecutionPolicy Bypass -File install/install-ndi.ps1 -Yes
+            else
+              sh install/install-ndi.sh --yes
+            fi ) | "$tee" "$log"
+          last=$(tail -n 1 "$log" | tr -d '\r')
+          if [ "$RUNNER_OS" = Windows ]; then
+            expected="NDI installed: $USERPROFILE\\.ndi\\bin"
+          else
+            expected="NDI installed: $HOME/.ndi/bin"
+          fi
+          if [ "$last" != "$expected" ]; then
+            echo "::error::last line was [$last], expected [$expected]"
+            exit 1
+          fi
+
+      - name: The commands MATLAB calls are in ~/.ndi/bin and run
+        run: |
+          bin="$HOME/.ndi/bin"
+          ls -l "$bin"
+          if [ "$RUNNER_OS" = Windows ]; then x=.exe; else x=; fi
+          for c in uv ndi napariViewGEF napariViewLightsheet; do
+            [ -f "$bin/$c$x" ] || { echo "::error::$bin/$c$x is missing"; exit 1; }
+          done
+          for c in ndi napariViewGEF napariViewLightsheet; do
+            echo "--- $c --help"
+            "$bin/$c$x" --help
+          done
+          "$bin/uv$x" --version
+
+      - name: The tool environment is this platform's, and pyraview a release wheel
+        working-directory: ${{ runner.temp }}
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then
+            py="$HOME/.ndi/venvs/ndi/Scripts/python.exe"
+          else
+            py="$HOME/.ndi/venvs/ndi/bin/python"
+          fi
+          "$py" -c "import platform, sys; print(sys.version, platform.machine()); sys.exit(0 if platform.machine() == '${{ matrix.machine }}' else 'wrong machine')"
+          # A uv-managed interpreter in ~/.ndi/python, not a system one.
+          "$py" -c "import sys, pathlib; b = pathlib.Path(sys.base_prefix).resolve(); print(b); sys.exit(0 if (pathlib.Path.home() / '.ndi' / 'python').resolve() in b.parents else 'not the managed python')"
+          tag_args=()
+          for t in ${{ matrix.tags }}; do tag_args+=(--expect-tag "$t"); done
+          "$py" "$GITHUB_WORKSPACE/tools/check_pyraview_wheel.py" \
+            --expect-machine "${{ matrix.machine }}" "${tag_args[@]}"
+
+      - name: Started as MATLAB would, the viewer leaves MATLAB's paths behind
+        run: |
+          # NDI_LAUNCH_DEBUG makes the final process report its environment
+          # (src/_ndi_launch.py). On Linux and macOS that must be a re-exec'd
+          # process with every loader variable gone; on Windows, an in-place
+          # clean with MATLAB's bin dir off PATH.
+          err="$RUNNER_TEMP/launch.err"
+          if [ "$RUNNER_OS" = Windows ]; then
+            NDI_FROM_MATLAB=1 NDI_LAUNCH_DEBUG=1 PYTHONPATH='C:\junk' \
+              PATH="/c/junk/MATLAB/R2026a/bin/win64:$PATH" \
+              "$HOME/.ndi/bin/napariViewGEF.exe" --help > /dev/null 2> "$err"
+            want='"cleaned": "in-place"'
+          else
+            NDI_FROM_MATLAB=1 NDI_LAUNCH_DEBUG=1 \
+              LD_LIBRARY_PATH=/opt/junk/MATLAB/R2026a/sys/os/glnxa64:/opt/junk/MATLAB/R2026a/sys/opengl/lib/glnxa64 \
+              LD_PRELOAD=/opt/junk/libjunk.so \
+              DYLD_LIBRARY_PATH=/opt/junk/MATLAB/bin/maca64 \
+              DYLD_FALLBACK_LIBRARY_PATH=/opt/junk/MATLAB/sys/os/maca64 \
+              PYTHONPATH=/opt/junk/python \
+              "$HOME/.ndi/bin/napariViewGEF" --help > /dev/null 2> "$err"
+            want='"cleaned": "reexec"'
+          fi
+          cat "$err"
+          report=$(grep '^ndi-launch: ' "$err" | tr -d '\r')
+          [ "$(printf '%s\n' "$report" | wc -l)" -eq 1 ] || { echo "::error::expected one report line"; exit 1; }
+          case "$report" in *"$want"*) ;; *) echo "::error::report lacks $want"; exit 1 ;; esac
+          for v in LD_LIBRARY_PATH LD_PRELOAD DYLD_LIBRARY_PATH DYLD_FALLBACK_LIBRARY_PATH PYTHONPATH PYTHONHOME; do
+            case "$report" in *"\"$v\": null"*) ;; *) echo "::error::$v survived"; exit 1 ;; esac
+          done
+          # And launched normally, nothing is touched.
+          NDI_LAUNCH_DEBUG=1 "$HOME/.ndi/bin/napariViewGEF" --help > /dev/null 2> "$err"
+          grep -q '"cleaned": null' "$err" || { cat "$err"; echo "::error::an ordinary launch was cleaned"; exit 1; }
+
+      - name: The PATH was updated once
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then
+            userpath=$(powershell.exe -NoProfile -Command \
+              "(Get-Item 'registry::HKEY_CURRENT_USER\Environment').GetValue('Path', '', 'DoNotExpandEnvironmentNames')" | tr -d '\r')
+            echo "$userpath"
+            n=$(printf '%s' "$userpath" | tr ';' '\n' | grep -ixcF "$USERPROFILE\\.ndi\\bin" || true)
+          else
+            n=0
+            for f in .zshrc .zprofile .bashrc .profile .bash_profile; do
+              if [ -f "$HOME/$f" ]; then
+                c=$(grep -c '^# >>> NDI: added by install-ndi.sh' "$HOME/$f" || true)
+                echo "$f: $c block(s)"
+                [ "$c" -le 1 ] || { echo "::error::$f has $c NDI blocks"; exit 1; }
+                n=$((n + c))
+              fi
+            done
+            # A new login shell of the user's kind finds the commands.
+            "$SHELL" -lc 'command -v napariViewGEF'
+          fi
+          [ "$n" -ge 1 ] || { echo "::error::the PATH was not updated"; exit 1; }
+
+      - name: No uv update receipt was written
+        run: |
+          if [ -z "${RECEIPT_EXISTED:-}" ] && [ -e "$RECEIPT" ]; then
+            cat "$RECEIPT"
+            echo "::error::the installer wrote $RECEIPT"
+            exit 1
+          fi
+
+      - name: Uninstall removes only what was installed
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -File install/install-ndi.ps1 -Uninstall
+          else
+            sh install/install-ndi.sh --uninstall
+          fi
+          for d in bin python venvs; do
+            if [ -e "$HOME/.ndi/$d" ]; then echo "::error::~/.ndi/$d is still there"; exit 1; fi
+          done
+          # Everything else in ~/.ndi is exactly as it was.
+          diff -r "$RUNNER_TEMP/before/ndi" "$HOME/.ndi"
+          if [ "$RUNNER_OS" = Windows ]; then
+            powershell.exe -NoProfile -Command \
+              "(Get-Item 'registry::HKEY_CURRENT_USER\Environment').GetValue('Path', '', 'DoNotExpandEnvironmentNames')" \
+              | tr -d '\r' > "$RUNNER_TEMP/after-userpath.txt"
+            diff "$RUNNER_TEMP/before/userpath.txt" "$RUNNER_TEMP/after-userpath.txt"
+          else
+            for f in .zshrc .zprofile .bashrc .profile .bash_profile; do
+              if [ -f "$RUNNER_TEMP/before/$f" ]; then
+                diff "$RUNNER_TEMP/before/$f" "$HOME/$f"
+              elif [ -f "$HOME/$f" ]; then
+                echo "::error::$f was created and not removed"; exit 1
+              fi
+            done
+          fi
+          echo "uninstall left everything else as it was"

@@ -23,15 +23,15 @@ project_metadata:
 # The MATLAB GUI class ndi.gui.app.LightsheetZarrManager is recorded here
 # rather than in src/ndi/gui/app/ndi_matlab_python_bridge.yaml so that
 # every part of the lightsheetZarr feature lives in one file. It's not
-# ported (napari is Python-only), but the shell wrapper it targets is,
+# ported (napari is Python-only), but the console script it targets is,
 # and that's the piece the CLI is documented against.
 # =========================================================================
 functions:
 
   # -----------------------------------------------------------------------
   # MATLAB GUI class — not ported (napari has no MATLAB counterpart).
-  # The manager shell-execs /usr/local/bin/napariViewLightsheet, which is
-  # a bash wrapper around this package's cli.main.
+  # The manager shell-execs the napariViewLightsheet console script, which
+  # runs this package's cli.main (through _ndi_launch; see src/_ndi_launch.py).
   # -----------------------------------------------------------------------
   - name: LightsheetZarrManager
     matlab_path: "+ndi/+gui/+app/LightsheetZarrManager.m"
@@ -40,9 +40,14 @@ functions:
     decision_log: >-
       matlab_only: napari is Python-only, so the manager class stays
       MATLAB-only. It is the caller side of the CLI in this package -
-      shell-execs /usr/local/bin/napariViewLightsheet (a wrapper that
-      scrubs MATLAB's library paths) which then runs
-      ndi.gui.app.lightsheetZarr.cli.main. Mirrors the GEFManager /
+      shell-execs the napariViewLightsheet console script, which runs
+      ndi.gui.app.lightsheetZarr.cli.main. (Until 2026-10 it ran a bash
+      wrapper, scripts/napariViewLightsheet, at
+      /usr/local/bin/napariViewLightsheet to scrub MATLAB's library paths;
+      the console script now does that itself, through the stdlib-only
+      _ndi_launch module, and install/install-ndi.sh puts it in
+      ~/.ndi/bin. The MATLAB-side launch path changes in step in
+      NDI-matlab.) Mirrors the GEFManager /
       napariViewGEF split; if the day ever comes that a Python-hosted
       MATLAB-app equivalent is built, this entry is where it will get
       declared.
@@ -95,9 +100,13 @@ functions:
       - name: exit_code
         type_python: int
     decision_log: >-
-      Python-only. The napariViewLightsheet command line, reachable two
-      ways that are the same function: the installed console script, and
-      the shell wrapper that scrubs MATLAB's environment before exec.
+      Python-only. The napariViewLightsheet command line, reached through
+      the installed console script, which goes through the stdlib-only
+      _ndi_launch module first: that drops MATLAB's library paths and
+      re-execs before `ndi` is imported (it replaced the shell wrapper
+      scripts/napariViewLightsheet). When argv is None main calls
+      _ndi_launch.escapeMatlabEnvironment itself as well, a no-op after
+      the console script's.
       Handles --list and --report without importing napari or dask so
       those subcommands stay cheap on a headless box; napari is loaded
       only when a viewer is actually opened. Returns an integer exit

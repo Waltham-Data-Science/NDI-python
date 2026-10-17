@@ -25,6 +25,17 @@ NDI provides a unified interface for working with multi-modal neuroscience data 
 
 ## Installation
 
+**Just want to use NDI** (the `ndi` command and the napari viewers, also from
+NDI-matlab)? Use the double-click installer for macOS, Windows and Linux in
+[`install/`](install/README.md): no Python, git or compiler needed, and
+everything goes in `~/.ndi`. One line from a terminal:
+
+```bash
+curl -LsSf https://raw.githubusercontent.com/Waltham-Data-Science/NDI-python/main/install/install-ndi.sh | sh
+```
+
+**Developing NDI**, or using it from your own Python environment:
+
 ```bash
 git clone https://github.com/Waltham-Data-Science/NDI-python.git
 cd NDI-python
