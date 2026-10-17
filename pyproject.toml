@@ -171,13 +171,13 @@ all = [
 
 [project.scripts]
 ndi = "ndi.__main__:main"
-# pip generates this with the venv's absolute interpreter in its shebang, so
-# a symlink from /usr/local/bin works with no activation and no PYTHONPATH.
-napariViewGEF = "ndi.gui.app.genepyramid.cli:main"
-# Sibling of napariViewGEF for lightsheet OME-Zarr pyramids. Same shell-wrapper
-# story: the MATLAB LightsheetZarrManager execs /usr/local/bin/napariViewLightsheet,
-# which scrubs MATLAB's library paths and then runs this console script.
-napariViewLightsheet = "ndi.gui.app.lightsheetZarr.cli:main"
+# The two napari viewers, which MATLAB starts (with NDI_FROM_MATLAB=1) from
+# ~/.ndi/bin, where install/install-ndi.sh puts them. They go through the
+# stdlib-only _ndi_launch module rather than straight to ndi.gui.app.*.cli:main
+# so MATLAB's library paths are dropped -- by re-exec -- BEFORE `import ndi`
+# loads numpy and friends. That replaced the shell wrappers that used to do it.
+napariViewGEF = "_ndi_launch:napariViewGEF"
+napariViewLightsheet = "_ndi_launch:napariViewLightsheet"
 
 [project.urls]
 Homepage = "https://github.com/Waltham-Data-Science/NDI-python"
@@ -189,7 +189,10 @@ Issues = "https://github.com/Waltham-Data-Science/NDI-python/issues"
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/ndi"]
+# The package, plus the console scripts' launcher: one top-level module beside
+# it, so running a viewer does not import `ndi` first (see src/_ndi_launch.py).
+only-include = ["src/ndi", "src/_ndi_launch.py"]
+sources = ["src"]
 
 [tool.hatch.build.targets.sdist]
 include = ["/src", "/tests", "/examples", "LICENSE", "README.md", "CHANGELOG.md", "MATLAB_MAPPING.md"]

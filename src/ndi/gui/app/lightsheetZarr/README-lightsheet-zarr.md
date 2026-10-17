@@ -2,8 +2,9 @@
 
 Sibling of `ndi.gui.app.genepyramid` for lightsheet OME-Zarr pyramids.
 Provides the `napariViewLightsheet` console script that the MATLAB
-`ndi.gui.app.LightsheetZarrManager` shells out to (via
-`/usr/local/bin/napariViewLightsheet`) and the pure-Python
+`ndi.gui.app.LightsheetZarrManager` shells out to (installed in
+`~/.ndi/bin` by [`install/install-ndi.sh`](../../../../../install/README.md))
+and the pure-Python
 multiscale/viewer surface underneath.
 
 ## Layout
@@ -45,20 +46,26 @@ Scaffold, with the specific hook named at the raise site:
 Add to `[project.scripts]`:
 
 ```toml
-napariViewLightsheet = "ndi.gui.app.lightsheetZarr.cli:main"
+napariViewLightsheet = "_ndi_launch:napariViewLightsheet"
 ```
+
+(`_ndi_launch.napariViewLightsheet` runs `ndi.gui.app.lightsheetZarr.cli:main`
+after leaving MATLAB's library paths behind; see below.)
 
 Existing `[project.optional-dependencies].napari` (napari + dask) already
 covers this app. `require_napari()` in `viewer.py` names the extra when
 it is missing.
 
-## Install the shell wrapper
+## Starting it from MATLAB
 
-Same pattern as `napariViewGEF`: install `scripts/napariViewLightsheet`
-at `/usr/local/bin/napariViewLightsheet`. The wrapper scrubs MATLAB's
-`LD_LIBRARY_PATH` / `DYLD_*` before exec-ing the console script, so a
-Python started from MATLAB does not pick up MATLAB's copies of libtiff /
-libcurl / etc.
+No shell wrapper is needed any more (`scripts/napariViewLightsheet` is
+gone). The console script itself goes through `src/_ndi_launch.py`: when
+`NDI_FROM_MATLAB` is set, or the loader paths name MATLAB's own
+directories, it drops `LD_LIBRARY_PATH` / `LD_PRELOAD` / `DYLD_*` /
+`PYTHONHOME` / `PYTHONPATH` and re-execs itself before `ndi` (and numpy,
+Qt, napari) is imported, so a Python started from MATLAB does not pick up
+MATLAB's copies of libstdc++ / OpenGL / etc. End users get the script in
+`~/.ndi/bin` from the installer in `install/`.
 
 ## Design notes
 

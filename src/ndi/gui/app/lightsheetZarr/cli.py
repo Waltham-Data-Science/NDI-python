@@ -1,9 +1,11 @@
 """napariViewLightsheet - open a lightsheetZarrPyramid in napari.
 
 Installed by ``pyproject.toml`` `[project.scripts]` as
-``napariViewLightsheet``; the MATLAB ``ndi.gui.app.LightsheetZarrManager``
-shell-execs it through ``/usr/local/bin/napariViewLightsheet``, a small
-wrapper that scrubs MATLAB's library paths before starting Python. The
+``napariViewLightsheet``, which the MATLAB
+``ndi.gui.app.LightsheetZarrManager`` shell-execs. The console script goes
+through the stdlib-only ``_ndi_launch`` module, which drops MATLAB's
+library paths and re-execs before ``ndi`` is imported; main() calls the
+same escape first when run from a real command line. The
 argument set here MUST stay in sync with
 ``ndi.fun.doc.lightsheet.viewCommand`` in NDI-matlab.
 
@@ -275,6 +277,13 @@ def _configure_logging() -> None:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    if argv is None:
+        # The real command line, so possibly started by MATLAB: leave its
+        # library paths behind before Qt and napari load. A no-op when the
+        # console script already did it (see src/_ndi_launch.py).
+        from _ndi_launch import escapeMatlabEnvironment
+
+        escapeMatlabEnvironment()
     args = build_parser().parse_args(argv)
     _configure_logging()
 

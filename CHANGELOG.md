@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **A double-click installer for end users** in `install/`: `Install NDI.command`
+  (macOS), `Install NDI.cmd` (Windows), and the scripts behind them,
+  `install-ndi.sh` (Linux and macOS) and `install-ndi.ps1` (Windows), which
+  NDI-matlab also runs. A pinned uv (0.11.32) installs Python 3.12 and
+  `ndi[gui,napari,pyraview]` as a uv tool, entirely under `~/.ndi/bin`,
+  `~/.ndi/python` and `~/.ndi/venvs`, with no git, compiler or admin rights;
+  `--uninstall` removes exactly those and the PATH lines. The
+  `.github/workflows/installer.yml` workflow runs the real installer, with git
+  hidden, on Linux x86_64/aarch64, Windows, macOS arm64, macOS Intel and
+  x86_64-under-Rosetta.
+
 - **Binary files upload in zip batches** (mirroring NDI-matlab#1033).
   `uploadFilesForDatasetDocuments` now honours `file_upload_strategy`:
   `'batch'` (the default, as in MATLAB) packs a document set's files into
@@ -104,6 +115,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   literal listed with a reason.
 
 ### Changed
+
+- **`napariViewGEF` and `napariViewLightsheet` are safe to start from MATLAB
+  by themselves.** They now go through `_ndi_launch`, a stdlib-only module
+  beside the package: started with `NDI_FROM_MATLAB=1` (or with MATLAB's
+  directories on the loader path), it drops `LD_LIBRARY_PATH`, `LD_PRELOAD`,
+  `DYLD_*`, `PYTHONHOME` and `PYTHONPATH` and re-execs before `import ndi`
+  loads numpy and friends (on Windows: cleans `PATH` in place). The shell
+  wrappers `tools/napariViewGEF` and `scripts/napariViewLightsheet` that did
+  this are removed, and the `GUI.GEFManager.ViewerLauncher` preference now
+  defaults to `""`, meaning "find napariViewGEF automatically".
 
 - **Cloud batch sizes come from preferences** (mirroring NDI-matlab#1033).
   `Cloud.Upload.Max_File_Batch_Size` now defaults to 250 MB (was 500 MB) and
