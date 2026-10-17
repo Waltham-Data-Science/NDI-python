@@ -19,17 +19,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   hidden, on Linux x86_64/aarch64, Windows, macOS arm64, macOS Intel and
   x86_64-under-Rosetta.
 
-### Changed
-
-- **`napariViewGEF` and `napariViewLightsheet` are safe to start from MATLAB
-  by themselves.** They now go through `_ndi_launch`, a stdlib-only module
-  beside the package: started with `NDI_FROM_MATLAB=1` (or with MATLAB's
-  directories on the loader path), it drops `LD_LIBRARY_PATH`, `LD_PRELOAD`,
-  `DYLD_*`, `PYTHONHOME` and `PYTHONPATH` and re-execs before `import ndi`
-  loads numpy and friends (on Windows: cleans `PATH` in place). The shell
-  wrappers `tools/napariViewGEF` and `scripts/napariViewLightsheet` that did
-  this are removed, and the `GUI.GEFManager.ViewerLauncher` preference now
-  defaults to `""`, meaning "find napariViewGEF automatically".
+- **`ndi.cloud.api.admin`: organization and user administration** (mirroring
+  NDI-matlab#1031). Wraps the NDI Cloud `/admin` endpoints:
+  `listOrganizations`, `getOrganization`, `createOrganization`,
+  `updateOrganization`, `addOrganizationMember`, `removeOrganizationMember`,
+  `listUsers` and `getUser`, plus `findUserByEmail` (exact, case-insensitive
+  match over the server's substring search), `addOrganizationMemberByEmail`,
+  `removeOrganizationMemberByEmail` and `getUserOrganizations`. All require
+  an administrator account (others raise `CloudAuthError`), except
+  `getUserOrganizations()` with no user, which lists your own organizations.
+  `CloudClient` gains `patch()`. Tests: `tests/test_cloud_api_admin.py`
+  (offline) and `tests/test_cloud_admin_live.py`, which skips the admin tests
+  for a non-admin account and the membership-changing tests outside dev.
 
 - **Pyraview from pre-built wheels, never from source.** New `pyraview`
   extra (`pyraview==0.4.2`). Pyraview is not on PyPI, so the wheels on its
@@ -97,6 +98,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   literal listed with a reason.
 
 ### Changed
+
+- **`napariViewGEF` and `napariViewLightsheet` are safe to start from MATLAB
+  by themselves.** They now go through `_ndi_launch`, a stdlib-only module
+  beside the package: started with `NDI_FROM_MATLAB=1` (or with MATLAB's
+  directories on the loader path), it drops `LD_LIBRARY_PATH`, `LD_PRELOAD`,
+  `DYLD_*`, `PYTHONHOME` and `PYTHONPATH` and re-execs before `import ndi`
+  loads numpy and friends (on Windows: cleans `PATH` in place). The shell
+  wrappers `tools/napariViewGEF` and `scripts/napariViewLightsheet` that did
+  this are removed, and the `GUI.GEFManager.ViewerLauncher` preference now
+  defaults to `""`, meaning "find napariViewGEF automatically".
 
 - **`ndi.element.epochtable()` now returns registered epochs alphabetized by
   `epoch_id`** (NDI-python#162). They previously came back in the database's

@@ -7,6 +7,7 @@ maps to a specific MATLAB argument constraint:
     NonEmptyStr -> (1,1) string   (non-empty general string)
     PageNumber  -> (1,1) double   (integer >= 1)
     PageSize    -> (1,1) double   (integer >= 1)
+    AdminPageSize -> (1,1) double (integer 1-100, admin list endpoints)
     Scope       -> {iMustBeValidScope} (keyword, or dataset-id list)
     FilePath    -> {mustBeFile}   (file must exist on disk)
     FeedbackCategory -> {mustBeMember(category, ["bug", "performance", "other"])}
@@ -38,6 +39,9 @@ NonEmptyStr = Annotated[str, Field(min_length=1)]
 # -- (1,1) double: pagination integers ---------------------------------------
 PageNumber = Annotated[int, Field(ge=1)]
 PageSize = Annotated[int, Field(ge=1)]
+#: The admin list endpoints cap a page at 100
+#: ({mustBePositive, mustBeLessThanOrEqual(pageSize, 100)}).
+AdminPageSize = Annotated[int, Field(ge=1, le=100)]
 
 # -- {iMustBeValidScope} -----------------------------------------------------
 #: The three keyword scopes. A query may instead name specific datasets.
