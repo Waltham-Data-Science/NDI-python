@@ -25,7 +25,14 @@ import math
 import pytest
 
 from ndi.gui.cloud_colors import CloudColors, cloud_colors, cloudColors, rgb_to_hex
-from ndi.gui.nav.ndi_pane import BROOM, BROOM_WIDTH, BUTTON_SPACING, PREFS_WIDTH, NdiPane
+from ndi.gui.nav.ndi_pane import (
+    BROOM,
+    BROOM_WIDTH,
+    BUTTON_SPACING,
+    PREFS_WIDTH,
+    UPDATE_WIDTH,
+    NdiPane,
+)
 from ndi.gui.nav.pane import HEADER_HEIGHT, TRIANGLE_DOWN, TRIANGLE_RIGHT, NavPane
 
 
@@ -261,8 +268,11 @@ class TestNdiPane:
         assert p.current_height() == HEADER_HEIGHT
 
     def test_right_width_is_the_sum_of_its_buttons(self):
-        assert NdiPane().right_width() == BROOM_WIDTH + BUTTON_SPACING + PREFS_WIDTH
-        assert NdiPane().right_width() == 92  # the number MATLAB hardcodes
+        assert (
+            NdiPane().right_width()
+            == BROOM_WIDTH + BUTTON_SPACING + UPDATE_WIDTH + BUTTON_SPACING + PREFS_WIDTH
+        )
+        assert NdiPane().right_width() == 156  # the number MATLAB hardcodes
 
     def test_broom_is_a_single_code_point(self):
         """MATLAB needs a UTF-16 surrogate pair for U+1F9F9; Python does not,

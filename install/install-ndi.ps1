@@ -10,10 +10,13 @@
   the ndi, napariViewGEF and napariViewLightsheet commands.
 
   WHAT IT TOUCHES. Everything lives under %USERPROFILE%\.ndi, which NDI-matlab
-  shares, and this script owns ONLY three folders there:
-    .ndi\bin      uv itself, plus ndi.exe / napariViewGEF.exe / napariViewLightsheet.exe
-    .ndi\python   the Python interpreter uv downloads (UV_PYTHON_INSTALL_DIR)
-    .ndi\venvs    the environment NDI is installed into (UV_TOOL_DIR)
+  shares, and this script owns ONLY three folders and one file there:
+    .ndi\bin           uv itself, plus ndi.exe / napariViewGEF.exe / napariViewLightsheet.exe
+    .ndi\python        the Python interpreter uv downloads (UV_PYTHON_INSTALL_DIR)
+    .ndi\venvs         the environment NDI is installed into (UV_TOOL_DIR)
+    .ndi\install.json  which commit was installed, and when, so that
+                       ndi.update (and NDI-matlab's ndi.update.checkPython)
+                       can tell whether main has moved on since
   Everything else in .ndi (NDI_Preferences.json, tools, caches, ...) is never
   touched, by install or by -Uninstall. Outside .ndi it changes only your
   user-level PATH (unless -NoPath); and uv keeps its download cache in its
@@ -65,6 +68,9 @@ $NdiHome = Join-Path $env:USERPROFILE '.ndi'
 $Bin = Join-Path $NdiHome 'bin'
 $PyDir = Join-Path $NdiHome 'python'
 $Venvs = Join-Path $NdiHome 'venvs'
+$Receipt = Join-Path $NdiHome 'install.json'
+$CommitsApi = 'https://api.github.com/repos/Waltham-Data-Science/NDI-python/commits/main'
+$ArchiveBase = 'https://github.com/Waltham-Data-Science/NDI-python/archive'
 
 function Fail([string]$Reason) {
     # One line saying why, and a nonzero exit. [Console]::Error so it is
@@ -138,12 +144,16 @@ function Remove-NdiFromPath {
 # ---- uninstall ---------------------------------------------------------------
 
 if ($Uninstall) {
-    Write-Host "Removing NDI from $NdiHome (bin, python, venvs) ..."
+    Write-Host "Removing NDI from $NdiHome (bin, python, venvs, install.json) ..."
     foreach ($d in @($Bin, $PyDir, $Venvs)) {
         if (Test-Path -LiteralPath $d) {
             try { Remove-Item -LiteralPath $d -Recurse -Force }
             catch { Fail "could not remove $d (is an NDI program still running?)" }
         }
+    }
+    if (Test-Path -LiteralPath $Receipt) {
+        try { Remove-Item -LiteralPath $Receipt -Force }
+        catch { Fail "could not remove $Receipt" }
     }
     Remove-NdiFromPath
     Write-Host "Your NDI settings and anything else in $NdiHome were left in place."
@@ -201,8 +211,31 @@ $env:UV_PYTHON_PREFERENCE = 'only-managed' # never a system/Store/conda Python t
 $env:UV_NO_CONFIG = '1'                    # ignore any uv.toml of yours
 $env:UV_NO_MODIFY_PATH = '1'
 
+# Which commit is being installed, for .ndi\install.json (step 4). For the
+# default source, ask GitHub for main's current commit and install exactly
+# that commit's archive, so the receipt cannot name a different commit from
+# the one installed. If GitHub's API cannot be reached (offline, rate limit),
+# install main as before and record no commit; ndi.update then falls back to
+# the install time. A local checkout records its HEAD when git is there.
+$Commit = $null
 $Source = [Environment]::GetEnvironmentVariable('NDI_INSTALL_SOURCE')
-if (-not $Source) { $Source = $DefaultSource }
+if (-not $Source) {
+    $Source = $DefaultSource
+    try {
+        $sha = (Invoke-RestMethod -Uri $CommitsApi -TimeoutSec 30 -UseBasicParsing).sha
+        if ($sha -match '^[0-9a-f]{40}$') {
+            $Commit = $sha
+            $Source = "$ArchiveBase/$Commit.zip"
+        }
+    } catch {
+        Write-Host '  (could not ask GitHub which commit main is at; installing main)'
+    }
+} elseif ((Test-Path -LiteralPath $Source -PathType Container) -and (Get-Command git -ErrorAction SilentlyContinue)) {
+    $ErrorActionPreference = 'Continue'
+    $head = & git -C $Source rev-parse HEAD 2>$null
+    if ($LASTEXITCODE -eq 0 -and $head -match '^[0-9a-f]{40}$') { $Commit = $head }
+    $ErrorActionPreference = 'Stop'
+}
 if (Test-Path -LiteralPath $Source) {
     # A local checkout (CI): a file:/// URL to its absolute path.
     $Source = ([System.Uri](Resolve-Path -LiteralPath $Source).ProviderPath).AbsoluteUri
@@ -253,7 +286,21 @@ if ($checkExit -ne 0) {
 }
 Write-Host '  ndi check: all checks passed'
 
-# 4. PATH.
+# 4. The receipt: what was installed, from where, and when. Written only
+# after the check passed, so it never describes an install that failed.
+# UTF-8 without a byte-order mark: Windows PowerShell 5.1's -Encoding UTF8
+# writes one, and JSON readers (Python's json, MATLAB's jsondecode) reject it.
+$receiptJson = [ordered]@{
+    commit      = $Commit
+    source      = $Source
+    installedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+    installer   = 'install-ndi.ps1'
+} | ConvertTo-Json
+try { [System.IO.File]::WriteAllText($Receipt, $receiptJson, (New-Object System.Text.UTF8Encoding $false)) }
+catch { Fail "could not write $Receipt" }
+if ($Commit) { Write-Host "  installed commit $Commit" }
+
+# 5. PATH.
 if (-not $NoPath) {
     Add-NdiToPath
     Write-Host 'Open a new terminal window to use the ndi, napariViewGEF and napariViewLightsheet commands.'

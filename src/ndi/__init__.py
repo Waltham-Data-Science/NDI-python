@@ -88,8 +88,11 @@ def version() -> tuple:
 
     Returns:
         Tuple of ``(version_string, url)``.  The version string is the
-        Git commit hash when running inside a checkout, otherwise the
-        package version.
+        Git commit hash when running inside a checkout; for a copy the NDI
+        installer put in ``~/.ndi``, the commit its ``install.json`` records
+        (MATLAB likewise reports an installed toolbox's release version);
+        otherwise the package version. To check for a newer version, see
+        :func:`ndi.update.check`.
     """
     import subprocess
     from pathlib import Path as _Path
@@ -107,6 +110,15 @@ def version() -> tuple:
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip(), url
+    except Exception:
+        pass
+    try:
+        from .update.install_type import installType
+
+        kind, info = installType()
+        commit = (info.get("Receipt") or {}).get("commit") if kind == "installer" else None
+        if commit:
+            return str(commit)[:7], url
     except Exception:
         pass
     return __version__, url

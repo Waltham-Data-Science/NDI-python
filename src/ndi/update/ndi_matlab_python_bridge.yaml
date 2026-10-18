@@ -1,0 +1,229 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/update/
+# The Primary Contract for the ndi.update namespace.
+#
+# Every MATLAB file here is on VH-Lab/NDI-matlab branch claude/amazing-clarke-a34o5c
+# (VH-Lab/NDI-matlab#1038), not yet on main, so each entry carries
+# matlab_branch (section 8 of docs/developer_notes/ndi_matlab_python_bridge.yaml).
+# Remove the markers once that branch merges.
+#
+# What the two halves have in common: both check their OWN repository's main
+# branch (NDI-matlab: also its releases, for the toolbox), report the same
+# result fields, refuse the same unsafe updates (not on main; the user's own
+# changes without consent), and read the same ~/.ndi/install.json receipt that
+# install/install-ndi.sh and install-ndi.ps1 now write.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+functions:
+
+  - name: check
+    type: function
+    matlab_path: "+ndi/+update/check.m"
+    matlab_last_sync_hash: "f9ced4bcd"
+    matlab_branch: "claude/amazing-clarke-a34o5c"
+    python_path: "ndi/update/check.py"
+    input_arguments:
+      - name: IncludeDependencies
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: Verbose
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: Timeout
+        type_matlab: "double"
+        type_python: "float"
+      - name: RepoRoot
+        type_matlab: "string"
+        type_python: "str"
+      - name: IncludePython
+        type_matlab: "logical"
+        decision_log: "No counterpart: NDI-python checking NDI-python is the whole function."
+      - name: NdiHome
+        type_python: "str"
+        decision_log: "Python only, for tests: check the installer install under this folder (MATLAB's checkPython has the same option)."
+      - name: GitHubApi
+        type_python: "Callable[[str, float], Any] | None"
+        decision_log: "Python only, for tests (MATLAB's checkPython has the same option)."
+    output_arguments:
+      - name: result
+        type_matlab: "struct"
+        type_python: "dict"
+    decision_log: >
+      Ported 2026-10-18 against NDI-matlab f9ced4bcd. Same field names in a dict.
+      Git installs: the same git logic (fetch origin main, commits behind and
+      ahead, the user's changed/new files and local commits), with the
+      dependency clones taken from ~/.ndi/tools, where ndi_install.py puts
+      them, instead of from requirements.txt siblings. Toolbox installs have
+      no counterpart (NDI-python has no releases); in their place the
+      installer install is compared with main through the commit in
+      ~/.ndi/install.json, falling back to commits since the install time --
+      the same three-step lookup as MATLAB's checkPython, which is how
+      NDI-matlab checks this same install. Adds CanInstall and InstalledAt
+      (both from checkPython's result) and drops ReleaseUrl, MltbxUrl,
+      BothInstalled and Python. NaN counts are None.
+
+  - name: install
+    type: function
+    matlab_path: "+ndi/+update/install.m"
+    matlab_last_sync_hash: "f9ced4bcd"
+    matlab_branch: "claude/amazing-clarke-a34o5c"
+    python_path: "ndi/update/install.py"
+    input_arguments:
+      - name: Confirm
+        type_python: "bool"
+      - name: Force
+        type_python: "bool"
+      - name: AllowModified
+        type_python: "bool"
+      - name: Timeout
+        type_python: "float"
+      - name: RepoRoot
+        type_python: "str"
+      - name: Dependencies
+        type_matlab: "double (1 or 2)"
+        decision_log: "No counterpart: NDI-python's dependencies are fixed by pyproject.toml."
+      - name: IncludePython
+        type_matlab: "logical"
+        decision_log: "No counterpart (see check)."
+    output_arguments:
+      - name: result
+        type_python: "dict"
+    decision_log: >
+      Ported 2026-10-18 against NDI-matlab f9ced4bcd. Same guards in the same order
+      and with the same error identifiers (UpdateError.identifier): not on
+      main, the user's modifications (listed, default No; with Confirm=False
+      an error unless AllowModified), then no installer. Git: pull --ff-only
+      origin main with changed files stashed and restored (MATLAB's
+      ndi_install stashes without restoring; ndi_install.py restores, and
+      this follows it), then python ndi_install.py --update. Installer:
+      re-runs install-ndi.sh --yes --no-path, or on Windows starts
+      install-ndi.ps1 in its own window, waiting for this process to exit,
+      because a running ndi.exe cannot be replaced. Clears caches afterwards,
+      as MATLAB does. Ask stands in for MATLAB's input (tests).
+
+  - name: installType
+    type: function
+    matlab_path: "+ndi/+update/installType.m"
+    matlab_last_sync_hash: "f9ced4bcd"
+    matlab_branch: "claude/amazing-clarke-a34o5c"
+    python_path: "ndi/update/install_type.py"
+    output_arguments:
+      - name: type
+        type_matlab: "string"
+        type_python: "str"
+      - name: info
+        type_matlab: "struct"
+        type_python: "dict"
+    decision_log: >
+      Ported 2026-10-18 against NDI-matlab f9ced4bcd. MATLAB answers git / toolbox /
+      unknown; NDI-python's installs are installer / git / pip / unknown. info
+      has SourceDir and RepoRoot as in MATLAB, plus NdiHome and Receipt (the
+      parsed install.json); ToolboxVersion and BothInstalled have no
+      counterpart without a packaged toolbox.
+
+  - name: modificationSummary
+    type: function
+    matlab_path: "+ndi/+update/modificationSummary.m"
+    matlab_last_sync_hash: "f9ced4bcd"
+    matlab_branch: "claude/amazing-clarke-a34o5c"
+    python_path: "ndi/update/modification_summary.py"
+    input_arguments:
+      - name: result
+        type_python: "dict"
+      - name: MaxFiles
+        type_python: "int"
+    output_arguments:
+      - name: txt
+        type_python: "str"
+    decision_log: >
+      Ported 2026-10-18 against NDI-matlab f9ced4bcd. Same layout. The closing
+      sentence says changed files are put back after the update, because
+      Python's git update restores the stash (see install).
+
+  - name: checkOnStartup
+    type: function
+    matlab_path: "+ndi/+update/checkOnStartup.m"
+    matlab_last_sync_hash: "f9ced4bcd"
+    matlab_branch: "claude/amazing-clarke-a34o5c"
+    python_path: "ndi/update/check_on_startup.py"
+    output_arguments:
+      - name: line
+        type_matlab: "(none; prints)"
+        type_python: "str"
+    decision_log: >
+      Ported 2026-10-18 against NDI-matlab f9ced4bcd. Shares Update.CheckOnStartup
+      and Update.CheckIntervalDays with MATLAB through NDI_Preferences.json,
+      but keeps its own Update.Python.LastCheckTime (MATLAB's is
+      Update.MATLAB.LastCheckTime), since one language checking must not hold
+      off the other's check of a different repository. NDI-python has no
+      ndi_Init: the navigator calls this, on a thread, when it opens; importing
+      ndi never does. Returns the line it printed.
+
+  - name: checkPython
+    type: function
+    matlab_path: "+ndi/+update/checkPython.m"
+    matlab_last_sync_hash: "e2a3d8e57"
+    matlab_branch: "claude/amazing-clarke-a34o5c"
+    python_path: "ndi/update/check.py"
+    status: ported_differently
+    decision_log: >
+      MATLAB's check of an installed NDI-python, from NDI-matlab. Here that is
+      ndi.update.check itself (its installer branch), using the same receipt,
+      the same fallback to the install time (the receipt's installedAt, then
+      uv's file time; NDI-matlab e2a3d8e57) and the same result fields.
+
+  - name: compareVersions
+    type: function
+    matlab_path: "+ndi/+update/compareVersions.m"
+    matlab_last_sync_hash: "f9ced4bcd"
+    matlab_branch: "claude/amazing-clarke-a34o5c"
+    status: matlab_only
+    decision_log: >
+      Compares release numbers for NDI-matlab's packaged toolbox. NDI-python
+      has no releases -- every install follows main and is compared by commit
+      -- so there is nothing to compare.
+
+  - name: latestRelease
+    type: function
+    matlab_path: "+ndi/+update/latestRelease.m"
+    matlab_last_sync_hash: "f9ced4bcd"
+    matlab_branch: "claude/amazing-clarke-a34o5c"
+    status: matlab_only
+    decision_log: >
+      Fetches NDI-matlab's latest GitHub release for its toolbox. NDI-python
+      has no releases (see compareVersions).
+
+  - name: toolboxIdentifier
+    type: function
+    matlab_path: "+ndi/+update/toolboxIdentifier.m"
+    matlab_last_sync_hash: "f9ced4bcd"
+    matlab_branch: "claude/amazing-clarke-a34o5c"
+    status: matlab_only
+    decision_log: >
+      The MATLAB Add-On identifier of the NDI-matlab toolbox. A MATLAB
+      packaging concept; NDI-python has no counterpart.
+
+  - name: runGit
+    type: function
+    matlab_path: "+ndi/+update/private/runGit.m"
+    matlab_last_sync_hash: "f9ced4bcd"
+    matlab_branch: "claude/amazing-clarke-a34o5c"
+    python_path: "ndi/update/_git.py"
+    status: ported_differently
+    decision_log: >
+      Private helper; here run_git in the private module _git, taking the
+      git arguments as a list (subprocess, no shell) rather than one string.
+
+  - name: githubApi
+    type: function
+    matlab_path: "+ndi/+update/private/githubApi.m"
+    matlab_last_sync_hash: "f9ced4bcd"
+    matlab_branch: "claude/amazing-clarke-a34o5c"
+    python_path: "ndi/update/_github.py"
+    status: ported_differently
+    decision_log: >
+      Private helper; here github_api in the private module _github, on
+      urllib.request instead of webread.

@@ -38,13 +38,14 @@ terminal window** and try `ndi check`.
 
 Everything goes in a hidden `.ndi` folder in your home folder
 (`~/.ndi` on macOS and Linux, `%USERPROFILE%\.ndi` on Windows), which
-NDI-matlab uses too. The installer owns only three folders there:
+NDI-matlab uses too. The installer owns only three folders and one file there:
 
-| folder | what is in it |
+| folder or file | what is in it |
 |---|---|
 | `.ndi/bin` | the `ndi`, `napariViewGEF` and `napariViewLightsheet` commands, and [uv](https://docs.astral.sh/uv/), the tool that installs them |
 | `.ndi/python` | a private copy of Python 3.12 |
 | `.ndi/venvs` | NDI and the packages it needs |
+| `.ndi/install.json` | which commit of NDI was installed, and when, so `ndi update` (and NDI-matlab) can tell whether there is a newer one |
 
 It never touches anything else in `.ndi`, such as your
 `NDI_Preferences.json`. Outside `.ndi` it only adds `.ndi/bin` to the end of
@@ -55,7 +56,11 @@ on Windows), which makes updates faster; `~/.ndi/bin/uv cache clean` empties it.
 
 ## Update
 
-Run the installer again, the same way. It replaces NDI with the latest version.
+`ndi update --check` says whether a newer NDI is available, and `ndi update`
+installs it (after asking). The navigator's **Update** button does the same,
+and NDI-matlab's `ndi.update.install()` / Update button update this
+installation too. Or run the installer again, the same way: it replaces NDI
+with the latest version.
 
 ## Uninstall
 
@@ -68,8 +73,9 @@ powershell -ExecutionPolicy Bypass -NoProfile -c "& ([scriptblock]::Create((irm 
 ```
 
 (or run `install-ndi.sh --uninstall` / `install-ndi.ps1 -Uninstall` from this
-folder). This removes `.ndi/bin`, `.ndi/python`, `.ndi/venvs` and the `PATH`
-lines, and leaves the rest of `.ndi` (your settings) alone.
+folder). This removes `.ndi/bin`, `.ndi/python`, `.ndi/venvs`,
+`.ndi/install.json` and the `PATH` lines, and leaves the rest of `.ndi` (your
+settings) alone.
 
 ## Options
 

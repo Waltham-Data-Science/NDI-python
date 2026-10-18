@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Checking for, and installing, a newer NDI-python** (mirroring
+  VH-Lab/NDI-matlab#1038). New `ndi.update`: `check()` compares this copy with
+  the latest commit on main -- a git clone through `git fetch` (plus the
+  `~/.ndi/tools` clones `ndi_install.py` makes, and the user's own changed
+  files, new files and local commits), an installer install through the commit
+  in `~/.ndi/install.json` -- and `install()` updates it: `git pull --ff-only`
+  then `ndi_install.py --update`, or the NDI installer again. It refuses a
+  clone not on main, and lists the user's own changes and asks (default No)
+  before touching them. `ndi update` / `ndi update --check [--json]` on the
+  command line, an **Update** button in the navigator's NDI pane, and a quiet
+  once-a-day check when the navigator opens (`Update.CheckOnStartup`,
+  `Update.CheckIntervalDays`, shared with NDI-matlab; `Update.Python.LastCheckTime`).
+  The installers now install the exact commit main is at and record it, with
+  the install time, in `~/.ndi/install.json` (removed by `--uninstall`), which
+  NDI-matlab's `ndi.update.checkPython` reads too. `ndi.version()` reports that
+  commit for an installer install.
+
 - **Users in several NDI Cloud organizations** (mirroring VH-Lab/NDI-matlab#1037).
   Login no longer keeps only the first organization: it caches the user's
   whole list -- id, name and upload permission -- as JSON in

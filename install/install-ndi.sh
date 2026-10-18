@@ -13,10 +13,13 @@
 #   --uninstall  remove what this script installed, and nothing else
 #
 # WHAT IT TOUCHES. Everything lives under ~/.ndi, which NDI-matlab shares,
-# and this script owns ONLY three folders there:
-#   ~/.ndi/bin      uv itself, plus the ndi / napariViewGEF / napariViewLightsheet commands
-#   ~/.ndi/python   the Python interpreter uv downloads (UV_PYTHON_INSTALL_DIR)
-#   ~/.ndi/venvs    the environment NDI is installed into (UV_TOOL_DIR)
+# and this script owns ONLY three folders and one file there:
+#   ~/.ndi/bin           uv itself, plus the ndi / napariViewGEF / napariViewLightsheet commands
+#   ~/.ndi/python        the Python interpreter uv downloads (UV_PYTHON_INSTALL_DIR)
+#   ~/.ndi/venvs         the environment NDI is installed into (UV_TOOL_DIR)
+#   ~/.ndi/install.json  which commit was installed, and when, so that
+#                        ndi.update (and NDI-matlab's ndi.update.checkPython)
+#                        can tell whether main has moved on since
 # Everything else in ~/.ndi (NDI_Preferences.json, tools/, caches, ...) is
 # never touched, by install or by --uninstall. Outside ~/.ndi it edits only
 # your shell start-up files, inside a marked block (see add_to_path), unless
@@ -53,6 +56,9 @@ NDI_HOME="$HOME/.ndi"
 BIN="$NDI_HOME/bin"
 PYDIR="$NDI_HOME/python"
 VENVS="$NDI_HOME/venvs"
+RECEIPT="$NDI_HOME/install.json"
+COMMITS_API="https://api.github.com/repos/Waltham-Data-Science/NDI-python/commits/main"
+ARCHIVE_BASE="https://github.com/Waltham-Data-Science/NDI-python/archive"
 
 PATH_BEGIN="# >>> NDI: added by install-ndi.sh; remove with install-ndi.sh --uninstall >>>"
 PATH_END="# <<< NDI <<<"
@@ -184,12 +190,13 @@ remove_from_path() {
 # ---- uninstall ---------------------------------------------------------------
 
 if [ "$UNINSTALL" = 1 ]; then
-    say "Removing NDI from $NDI_HOME (bin, python, venvs) ..."
+    say "Removing NDI from $NDI_HOME (bin, python, venvs, install.json) ..."
     for d in "$BIN" "$PYDIR" "$VENVS"; do
         # uv marks some of its files read-only; make them removable first.
         if [ -d "$d" ]; then chmod -R u+w "$d" 2>/dev/null || true; fi
         rm -rf "$d" || fail "could not remove $d"
     done
+    rm -f "$RECEIPT" || fail "could not remove $RECEIPT"
     remove_from_path
     say "Your NDI settings and anything else in $NDI_HOME were left in place."
     say "NDI uninstalled: $BIN"
@@ -258,7 +265,27 @@ export UV_PYTHON_PREFERENCE=only-managed  # never a system/Homebrew/conda Python
 export UV_NO_CONFIG=1                   # ignore any uv.toml of yours
 export UV_NO_MODIFY_PATH=1
 
+# Which commit is being installed, for ~/.ndi/install.json (step 4). For the
+# default source, ask GitHub for main's current commit and install exactly
+# that commit's archive, so the receipt cannot name a different commit from
+# the one installed. If GitHub's API cannot be reached (offline, rate limit),
+# install main as before and record no commit; ndi.update then falls back to
+# the install time. A local checkout records its HEAD when git is there.
+COMMIT=""
 SOURCE="${NDI_INSTALL_SOURCE:-$DEFAULT_SOURCE}"
+if [ -z "${NDI_INSTALL_SOURCE:-}" ]; then
+    tmp=$(mktemp)
+    if download "$COMMITS_API" "$tmp" 2>/dev/null; then
+        # The commit's own sha is the first "sha" at the top level (2 spaces in).
+        COMMIT=$(sed -n 's/^  "sha": "\([0-9a-f]\{40\}\)".*$/\1/p' "$tmp" | head -n 1)
+    fi
+    rm -f "$tmp"
+    if [ -n "$COMMIT" ]; then
+        SOURCE="$ARCHIVE_BASE/$COMMIT.zip"
+    fi
+elif [ -d "$SOURCE" ] && command -v git >/dev/null 2>&1; then
+    COMMIT=$(git -C "$SOURCE" rev-parse HEAD 2>/dev/null || true)
+fi
 if [ -d "$SOURCE" ]; then
     # A local checkout (CI): a file URL to its absolute path.
     SOURCE="file://$(cd "$SOURCE" && pwd -P | sed 's/ /%20/g')"
@@ -303,7 +330,17 @@ fi
 rm -f "$log"
 say "  ndi check: all checks passed"
 
-# 4. PATH.
+# 4. The receipt: what was installed, from where, and when. Written only
+# after the check passed, so it never describes an install that failed.
+if [ -n "$COMMIT" ]; then commit_json="\"$COMMIT\""; else commit_json=null; fi
+printf '{\n  "commit": %s,\n  "source": "%s",\n  "installedAt": "%s",\n  "installer": "install-ndi.sh"\n}\n' \
+    "$commit_json" "$SOURCE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$RECEIPT" \
+    || fail "could not write $RECEIPT"
+if [ -n "$COMMIT" ]; then
+    say "  installed commit $COMMIT"
+fi
+
+# 5. PATH.
 if [ "$NO_PATH" = 0 ]; then
     add_to_path
     say "Open a new terminal window to use the ndi, napariViewGEF and napariViewLightsheet commands."

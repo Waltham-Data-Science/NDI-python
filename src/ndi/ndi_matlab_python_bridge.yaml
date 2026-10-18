@@ -30,7 +30,7 @@ functions:
   - name: version
     type: function
     matlab_path: "+ndi/version.m"
-    matlab_last_sync_hash: "8533e9f89"
+    matlab_last_sync_hash: "f9ced4bcd"
     python_path: "ndi/__init__.py"
     input_arguments: []
     output_arguments:
@@ -53,6 +53,10 @@ functions:
       NDI-python URL and `git describe --always --dirty`, falling back to the
       packaged __version__ where MATLAB falls back to the unexpanded
       '$Format:%H$' placeholder. Nothing to port.
+      2026-10-18: NDI-matlab f9ced4bcd (VH-Lab/NDI-matlab#1038) makes a copy that is
+      not a git clone report its installed toolbox's release version instead
+      of the placeholder. Followed: a copy the NDI installer put in ~/.ndi
+      reports the commit its ~/.ndi/install.json records.
 
   - name: setup.lab
     type: function
@@ -1155,7 +1159,7 @@ classes:
   - name: preferences
     type: class
     matlab_path: "+ndi/preferences.m"
-    matlab_last_sync_hash: "2941f93"
+    matlab_last_sync_hash: "f9ced4bcd"
     python_path: "ndi/preferences.py"
     python_class: "ndi_preferences"
     inherits: ""
@@ -1197,6 +1201,12 @@ classes:
       MATLAB code this port does not have (LightsheetZarrManager, avi2mp4,
       prism2csv), and since this change a Python save keeps them in the shared
       file instead of dropping them.
+      2026-10-18: NDI-matlab f9ced4bcd (VH-Lab/NDI-matlab#1038) registers
+      Update.CheckOnStartup, Update.CheckIntervalDays and
+      Update.MATLAB.LastCheckTime for ndi.update. The first two are ported
+      under the same keys, so one setting governs both languages. The third is
+      MATLAB's own: Python registers Update.Python.LastCheckTime instead, since
+      the two check different repositories and one must not hold the other off.
 
     properties:
       - name: Items
