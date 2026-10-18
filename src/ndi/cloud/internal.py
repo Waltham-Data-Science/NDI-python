@@ -7,9 +7,15 @@ MATLAB equivalents: +ndi/+cloud/+internal/*.m,
 
 from __future__ import annotations
 
+import json
 import logging
+import os
+import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from .exceptions import CloudOrganizationError
 
 logger = logging.getLogger(__name__)
 
@@ -484,3 +490,405 @@ def formatApiError(response: Any) -> str:
     if body_part:
         return body_part
     return "unknown error"
+
+
+# ---------------------------------------------------------------------------
+# Organizations
+#
+# MATLAB equivalents: +ndi/+cloud/+internal/normalizeOrganizations.m,
+#   setOrganizations.m, getOrganizations.m, chooseOrganization.m,
+#   userIsAdmin.m
+#
+# An NDI Cloud user has one token but may belong to several organizations,
+# so there is no single "logged-in organization". The list is cached at
+# login; any operation that needs one organization asks chooseOrganization.
+# ---------------------------------------------------------------------------
+
+#: Environment variable holding the cached organization list as JSON. Same
+#: name as NDI-matlab uses, alongside NDI_CLOUD_TOKEN.
+ORGANIZATIONS_ENV_VAR = "NDI_CLOUD_ORGANIZATIONS"
+
+
+def normalizeOrganizations(raw: Any) -> list[dict[str, Any]]:
+    """Normalize an NDI Cloud organizations list.
+
+    MATLAB equivalent: ndi.cloud.internal.normalizeOrganizations
+
+    Converts the ``organizations`` field of an NDI Cloud login or
+    ``/users/me`` response (or a previously normalized list, or its cached
+    JSON) into a list of dicts with the keys:
+
+        id               - (str) the organization id
+        name             - (str) the organization name ('' if none)
+        canUploadDataset - (bool) whether datasets may be created in it
+
+    RAW may be a list of dicts, a single dict, or empty. Entries without an
+    id are dropped. An absent canUploadDataset is treated as True so that an
+    older API response never blocks an upload on the client side; the server
+    still enforces the permission.
+
+    Raises:
+        CloudOrganizationError: ``NDI:Cloud:InvalidOrganizations`` if RAW is
+            neither a list nor a dict.
+    """
+    if not raw:
+        return []
+    if isinstance(raw, dict):
+        items: list[Any] = [raw]
+    elif isinstance(raw, (list, tuple)):
+        items = list(raw)
+    else:
+        raise CloudOrganizationError(
+            "NDI:Cloud:InvalidOrganizations",
+            "Organizations must be a list of dicts or a dict.",
+        )
+
+    organizations: list[dict[str, Any]] = []
+    for org in items:
+        if not isinstance(org, dict):
+            continue
+        org_id = org.get("id")
+        if org_id is None or str(org_id) == "":
+            continue
+        name = org.get("name")
+        can_upload = org.get("canUploadDataset")
+        organizations.append(
+            {
+                "id": str(org_id),
+                "name": "" if name is None else str(name),
+                "canUploadDataset": True if can_upload is None else bool(can_upload),
+            }
+        )
+    return organizations
+
+
+def setOrganizations(organizations: Any = None) -> None:
+    """Cache the logged-in user's NDI Cloud organizations.
+
+    MATLAB equivalent: ndi.cloud.internal.setOrganizations
+
+    Stores the list of organizations the current NDI Cloud user belongs to,
+    so callers can offer a choice by name without another round trip to the
+    server. ORGANIZATIONS is the ``organizations`` field of a login or
+    ``/users/me`` response, or a list as returned by :func:`getOrganizations`.
+
+    The list is stored as JSON in the ``NDI_CLOUD_ORGANIZATIONS`` environment
+    variable, alongside ``NDI_CLOUD_TOKEN``, for the life of the process.
+
+    ``setOrganizations(None)`` (or an empty list) clears the cache. This is
+    what :func:`ndi.cloud.auth.logout` does.
+    """
+    normalized = normalizeOrganizations(organizations)
+    if normalized:
+        os.environ[ORGANIZATIONS_ENV_VAR] = json.dumps(normalized)
+    else:
+        os.environ.pop(ORGANIZATIONS_ENV_VAR, None)
+
+
+def _cachedOrganizations() -> list[dict[str, Any]]:
+    """The cached organization list, or [] if absent or unreadable. No network."""
+    cached = os.environ.get(ORGANIZATIONS_ENV_VAR, "")
+    if not cached:
+        return []
+    try:
+        return normalizeOrganizations(json.loads(cached))
+    except (ValueError, CloudOrganizationError):
+        return []
+
+
+def _unwrap(answer: Any) -> Any:
+    """The payload of an API answer, whether or not it is an APIResponse."""
+    return getattr(answer, "data", answer)
+
+
+def getOrganizations(
+    *,
+    refresh: bool = False,
+    client: CloudClient | None = None,
+) -> list[dict[str, Any]]:
+    """The organizations the logged-in NDI Cloud user belongs to.
+
+    MATLAB equivalent: ndi.cloud.internal.getOrganizations
+
+    Returns a list of dicts with keys ``id``, ``name`` and
+    ``canUploadDataset`` (see :func:`normalizeOrganizations`), one per
+    organization the current user belongs to, in the order the server
+    returned them.
+
+    The list is read from the cache written at login (:func:`setOrganizations`).
+    If the cache is empty or unreadable, the list is fetched from
+    :func:`ndi.cloud.api.users.me` (which authenticates as needed) and cached.
+
+    Args:
+        refresh: Always fetch a fresh list from the server and update the
+            cache; use this if the user may have been added to an
+            organization since login.
+        client: Authenticated cloud client (auto-created if omitted).
+    """
+    if not refresh:
+        cached = _cachedOrganizations()
+        if cached:
+            return cached
+
+    from .api import users as users_api
+
+    info = _unwrap(users_api.me(client=client))
+    raw = info.get("organizations") if isinstance(info, dict) else None
+    organizations = normalizeOrganizations(raw)
+    setOrganizations(organizations)
+    return organizations
+
+
+def _haveActiveToken() -> bool:
+    """True if this process holds an unexpired NDI Cloud token. No network."""
+    from .auth import isTokenExpired
+
+    token = os.environ.get("NDI_CLOUD_TOKEN", "")
+    return bool(token) and not isTokenExpired(token)
+
+
+def userIsAdmin(*, client: CloudClient | None = None) -> bool:
+    """Whether the logged-in NDI Cloud user is an administrator.
+
+    MATLAB equivalent: ndi.cloud.internal.userIsAdmin
+
+    Returns True if a user is logged in (there is an active token, or a
+    CLIENT was given) and :func:`ndi.cloud.api.users.me` reports
+    ``isAdmin``. Returns False when no one is logged in or the lookup
+    fails; this never logs in.
+
+    NDI Cloud lets administrators create datasets in any organization they
+    belong to, regardless of that organization's canUploadDataset flag.
+    """
+    if client is None and not _haveActiveToken():
+        return False
+    try:
+        from .api import users as users_api
+
+        info = _unwrap(users_api.me(client=client))
+    except Exception:  # noqa: BLE001 - "could not tell" is not an admin
+        return False
+    return isinstance(info, dict) and bool(info.get("isAdmin"))
+
+
+def _stdinIsInteractive() -> bool:
+    """True when a person can answer a prompt on standard input."""
+    try:
+        return sys.stdin is not None and sys.stdin.isatty()
+    except (AttributeError, ValueError):
+        return False
+
+
+def _consoleChoose(labels: list[str], prompt: str) -> int | None:
+    """Ask on the console for one of LABELS; its 0-based index, or None.
+
+    The list is numbered from 1, as a person counts. An empty answer, or the
+    end of input, cancels.
+    """
+    print(prompt)
+    for number, label in enumerate(labels, start=1):
+        print(f"  {number}. {label}")
+    while True:
+        try:
+            answer = input(f"Enter 1-{len(labels)} (empty to cancel): ").strip()
+        except EOFError:
+            return None
+        if not answer:
+            return None
+        if answer.isdigit() and 1 <= int(answer) <= len(labels):
+            return int(answer) - 1
+        print(f"Please enter a number from 1 to {len(labels)}.")
+
+
+def _describeOrganization(organization: dict[str, Any]) -> str:
+    if not organization["name"]:
+        return f"(no name) ({organization['id']})"
+    return f'"{organization["name"]}" ({organization["id"]})'
+
+
+def _availableList(organizations: list[dict[str, Any]]) -> str:
+    return ", ".join(_describeOrganization(o) for o in organizations)
+
+
+def chooseOrganization(
+    organization_name: str = "",
+    organization_id: str = "",
+    *,
+    require_upload: bool = False,
+    interactive: bool | None = None,
+    always_ask: bool = False,
+    prompt_string: str = "Select an organization:",
+    chooser: Callable[[list[str], str], int | None] | None = None,
+    client: CloudClient | None = None,
+) -> tuple[str, str]:
+    """Decide which of the user's NDI Cloud organizations to act on.
+
+    MATLAB equivalent: ndi.cloud.internal.chooseOrganization
+
+    NDI Cloud users may belong to several organizations, so any operation
+    that needs one (for example, creating a dataset) must decide which. This
+    function makes that decision from the user's organization list
+    (:func:`getOrganizations`), in this order:
+
+      1. If ORGANIZATION_NAME or ORGANIZATION_ID is given, it is matched
+         against the user's organizations and returned. When logged in, an
+         unknown value triggers one refresh of the list from the server
+         before failing, in case the user was added to an organization
+         after login.
+      2. Otherwise, if exactly one organization qualifies, it is returned
+         (unless ALWAYS_ASK is true).
+      3. Otherwise, if INTERACTIVE is true, the user picks one by name.
+      4. Otherwise an error is raised that lists the available organizations
+         by name and id, so the caller can pass one explicitly.
+
+    When REQUIRE_UPLOAD is true, only organizations in which the user may
+    create datasets qualify: those with canUploadDataset set, or any of the
+    user's organizations if the user is an NDI Cloud administrator (as on
+    the server). The administrator check (:func:`userIsAdmin`) is only made
+    when canUploadDataset would exclude an organization.
+
+    Args:
+        organization_name: Name of the organization to use. Matched
+            case-sensitively. Mutually exclusive with ORGANIZATION_ID.
+        organization_id: Id of the organization to use.
+        require_upload: Only consider organizations that allow dataset
+            upload.
+        interactive: Allow asking the user when a choice is needed.
+            Default (None): true when standard input is a terminal.
+        always_ask: Ask even when only one organization qualifies. Ignored
+            when not interactive.
+        prompt_string: Prompt shown when asking.
+        chooser: Called as ``chooser(labels, prompt_string)`` to ask; returns
+            the 0-based index of the chosen label, or None to cancel.
+            Default: a numbered prompt on the console.
+        client: Authenticated cloud client (auto-created if omitted).
+
+    Returns:
+        Tuple of ``(organization_id, organization_name)``; the name is ''
+        if the organization has none.
+
+    Raises:
+        CloudOrganizationError: with the MATLAB identifier of the failure --
+            ``NDI:Cloud:OrganizationArguments``, ``NDI:Cloud:NoOrganizations``,
+            ``NDI:Cloud:UnknownOrganization``,
+            ``NDI:Cloud:AmbiguousOrganization``,
+            ``NDI:Cloud:OrganizationCannotUpload``,
+            ``NDI:Cloud:NoUploadableOrganization``,
+            ``NDI:Cloud:OrganizationRequired``, or
+            ``NDI:CloudDialog:UserCanceled`` when the user cancels.
+
+    Python-specific Notes:
+        MATLAB asks in a dialog when running in the desktop. Python asks on
+        the console when standard input is a terminal, or through CHOOSER
+        (the Qt navigator passes its own list dialog).
+    """
+    if interactive is None:
+        interactive = _stdinIsInteractive()
+
+    if organization_name and organization_id:
+        raise CloudOrganizationError(
+            "NDI:Cloud:OrganizationArguments",
+            "organization_name and organization_id are mutually exclusive.",
+        )
+
+    organizations = getOrganizations(client=client)
+    if not organizations:
+        raise CloudOrganizationError(
+            "NDI:Cloud:NoOrganizations",
+            "Your NDI Cloud account does not belong to any organizations.",
+        )
+
+    # 1. An explicit request.
+    if organization_name or organization_id:
+
+        def find(orgs: list[dict[str, Any]]) -> list[int]:
+            key, wanted = (
+                ("name", organization_name) if organization_name else ("id", organization_id)
+            )
+            return [i for i, o in enumerate(orgs) if o[key] == wanted]
+
+        matches = find(organizations)
+        if not matches and (client is not None or _haveActiveToken()):
+            organizations = getOrganizations(refresh=True, client=client)
+            matches = find(organizations)
+        if not matches:
+            requested = (
+                f'name "{organization_name}"' if organization_name else f'id "{organization_id}"'
+            )
+            raise CloudOrganizationError(
+                "NDI:Cloud:UnknownOrganization",
+                f"Organization {requested} is not one of the organizations you belong "
+                f"to. Available: {_availableList(organizations)}.",
+            )
+        if len(matches) > 1:
+            raise CloudOrganizationError(
+                "NDI:Cloud:AmbiguousOrganization",
+                f'Organization name "{organization_name}" matches {len(matches)} '
+                "organizations you belong to; pass organization_id instead. Matches: "
+                f"{_availableList([organizations[i] for i in matches])}.",
+            )
+        chosen = organizations[matches[0]]
+        if require_upload and not chosen["canUploadDataset"] and not userIsAdmin(client=client):
+            raise CloudOrganizationError(
+                "NDI:Cloud:OrganizationCannotUpload",
+                f"Organization {_describeOrganization(chosen)} does not allow dataset upload.",
+            )
+        return chosen["id"], chosen["name"]
+
+    # 2. Only one candidate.
+    candidates = organizations
+    if (
+        require_upload
+        and not all(o["canUploadDataset"] for o in organizations)
+        and not userIsAdmin(client=client)
+    ):
+        candidates = [o for o in organizations if o["canUploadDataset"]]
+        if not candidates:
+            raise CloudOrganizationError(
+                "NDI:Cloud:NoUploadableOrganization",
+                "None of your organizations allows dataset upload. Your organizations: "
+                f"{_availableList(organizations)}.",
+            )
+
+    if len(candidates) == 1 and not (always_ask and interactive):
+        return candidates[0]["id"], candidates[0]["name"]
+
+    # 3. Ask the user.
+    if interactive:
+        from .ui.dialog import organizationLabels
+
+        labels = organizationLabels([c["name"] for c in candidates], [c["id"] for c in candidates])
+        index = (chooser or _consoleChoose)(labels, prompt_string)
+        if index is None or not 0 <= index < len(candidates):
+            raise CloudOrganizationError(
+                "NDI:CloudDialog:UserCanceled",
+                "Operation canceled during selection of an organization.",
+            )
+        return candidates[index]["id"], candidates[index]["name"]
+
+    # 4. No way to decide.
+    raise CloudOrganizationError(
+        "NDI:Cloud:OrganizationRequired",
+        f"You belong to {len(candidates)} organizations; specify one with "
+        f"organization_name or organization_id. Available: {_availableList(candidates)}.",
+    )
+
+
+def _datasetOrganizationId(cloud_dataset_id: str, *, client: CloudClient | None = None) -> str:
+    """The id of the organization that owns CLOUD_DATASET_ID.
+
+    MATLAB's file-upload calls read this from the dataset record
+    (``dsetinfo.organizationId`` in GetFileUploadURL / GetFileCollectionUploadURL)
+    rather than from the logged-in user, because a user in several
+    organizations has no single organization to fall back on.
+    """
+    from .api import datasets as datasets_api
+
+    info = _unwrap(datasets_api.getDataset(cloud_dataset_id, client=client))
+    org_id = info.get("organizationId", "") if isinstance(info, dict) else ""
+    if not org_id:
+        raise CloudOrganizationError(
+            "NDI:Cloud:NoOrganizations",
+            f"Could not determine the organization of cloud dataset {cloud_dataset_id}.",
+        )
+    return str(org_id)

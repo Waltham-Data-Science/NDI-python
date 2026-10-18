@@ -116,8 +116,9 @@ def _launcher(app_class: str):
 def fetch_cloud_datasets(is_public: bool) -> tuple[list[str], list[str]]:
     """The NDI Cloud dataset labels and their ids.
 
-    Public reads the published catalogue; private authenticates first to get
-    the organization id, then lists that organization's datasets.
+    Public reads the published catalogue; private lists the datasets in
+    every organization the user belongs to, and prefixes each label with its
+    organization's name when the user belongs to more than one.
 
     Entries whose id could not be extracted are DROPPED rather than listed
     with an empty id: a row the user can select but nothing can open is worse
@@ -129,18 +130,22 @@ def fetch_cloud_datasets(is_public: bool) -> tuple[list[str], list[str]]:
     if is_public:
         answer = datasets_api.getPublished()
     else:
-        from ...cloud.auth import authenticate
+        answer = datasets_api.listDatasets()
 
-        _, org_id = authenticate()
-        answer = datasets_api.listDatasets(org_id)
+    records = normalize_cloud_list(_unwrap(answer))
+    org_names = [
+        str(record.get("organizationName") or "") if isinstance(record, dict) else ""
+        for record in records
+    ]
+    show_org = not is_public and len(set(org_names)) > 1
 
     labels: list[str] = []
     ids: list[str] = []
-    for record in normalize_cloud_list(_unwrap(answer)):
+    for record, org_name in zip(records, org_names, strict=True):
         identifier, label = cloud_dataset_id_label(record)
         if identifier:
             ids.append(identifier)
-            labels.append(label)
+            labels.append(f"[{org_name}] {label}" if show_org and org_name else label)
     return labels, ids
 
 
@@ -727,7 +732,12 @@ class DatasetsPane(NavPane):
         if action == "check_status":
             result = datasets_cloud.check_cloud_status(dataset)
         elif action == "upload":
-            result = datasets_cloud.upload_dataset(dataset)
+            result = datasets_cloud.upload_dataset(
+                dataset,
+                organization_chooser=lambda labels, prompt: self._ask_choice(
+                    labels, prompt, "Select organization"
+                ),
+            )
         elif action == "check_new_remote":
             result = datasets_cloud.check_for_new(dataset, "remote")
         else:

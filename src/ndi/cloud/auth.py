@@ -111,7 +111,13 @@ def credentialReport() -> str:
             lines.append(f"token          : {state}, exp {expires:%Y-%m-%d %H:%M UTC}")
         except CloudAuthError as exc:
             lines.append(f"token          : unreadable ({exc})")
-    lines.append(f"organization   : {config.org_id or '(none)'}")
+    from .internal import _cachedOrganizations
+
+    organizations = _cachedOrganizations()
+    lines.append(
+        "organizations  : "
+        + (", ".join(o["name"] or o["id"] for o in organizations) or "(none cached)")
+    )
     lines.append(f"username in env: {'yes' if os.environ.get('NDI_CLOUD_USERNAME') else 'no'}")
     email, password = _profile_credentials()
     if email and password:
@@ -123,18 +129,18 @@ def credentialReport() -> str:
     # the only line that can disagree with the ones above -- a credential
     # that is present but wrong fails here and nowhere else.
     try:
-        _token, org = authenticate(config)
+        authenticate(config)
     except CloudAuthError as exc:
         lines.append(f"authenticate   : FAILED -- {exc}")
     else:
-        lines.append(f"authenticate   : ok (organization {org})")
+        lines.append("authenticate   : ok")
     return "\n".join(lines)
 
 
 def _noCredentialsMessage(config: CloudConfig) -> str:
     """Say WHICH step of :func:`authenticate` came up empty.
 
-    Three quite different situations end at the same raise, and the reader
+    Two quite different situations end at the same raise, and the reader
     of the message is usually looking at a failed file fetch rather than at
     a login: a token that expired while the process ran, a token that was
     never set, or credentials that exist but did not resolve. Naming the
@@ -155,27 +161,20 @@ def _noCredentialsMessage(config: CloudConfig) -> str:
     if not config.token:
         return f"Not logged in to NDI Cloud: no token, no username/password, no profile. {fix}"
 
-    if isTokenExpired(config.token):
-        when = ""
-        try:
-            when = f" (it expired at {getTokenExpiration(config.token):%Y-%m-%d %H:%M UTC})"
-        except CloudAuthError:
-            when = " (its expiry could not be read, which counts as expired)"
-        # The token is held in os.environ, so a login in another shell does
-        # NOT reach a process that is already running -- which is exactly
-        # the shape of this failure when a viewer has been open a while.
-        return (
-            f"The NDI Cloud token has expired{when}, and there are no "
-            f"credentials to renew it with. A login in another shell will "
-            f"not reach this process: log in and start it again. "
-            f"{fix}"
-        )
-
-    # A token that is neither absent nor expired: step 1 wanted an org id
-    # too, and did not get one.
+    # A token is present, so it has expired: an unexpired one is accepted at
+    # step 1 of authenticate and never reaches this message.
+    try:
+        when = f" (it expired at {getTokenExpiration(config.token):%Y-%m-%d %H:%M UTC})"
+    except CloudAuthError:
+        when = " (its expiry could not be read, which counts as expired)"
+    # The token is held in os.environ, so a login in another shell does
+    # NOT reach a process that is already running -- which is exactly
+    # the shape of this failure when a viewer has been open a while.
     return (
-        "The NDI Cloud token is present and unexpired but carries no "
-        f"organization id, so it cannot be used. {fix}"
+        f"The NDI Cloud token has expired{when}, and there are no "
+        f"credentials to renew it with. A login in another shell will "
+        f"not reach this process: log in and start it again. "
+        f"{fix}"
     )
 
 
@@ -270,14 +269,16 @@ def verifyToken(token: str) -> bool:
     return not isTokenExpired(token)
 
 
-def getActiveToken(config: CloudConfig | None = None) -> tuple[str, str]:
-    """Return ``(token, org_id)`` from *config* or environment.
+def getActiveToken(config: CloudConfig | None = None) -> str:
+    """Return the active NDI Cloud token from *config* or environment.
+
+    MATLAB equivalent: ndi.cloud.internal.getActiveToken
+
+    The organizations the user belongs to are not part of the token; see
+    :func:`ndi.cloud.internal.getOrganizations`.
 
     Raises:
-        CloudAuthError: If no valid token is available, or if the
-            organization id is missing.  Mirrors the MATLAB requirement
-            that the organization id be populated before the token can
-            be used for cached auth.
+        CloudAuthError: If no valid token is available.
     """
     if config is None:
         config = CloudConfig.from_env()
@@ -288,56 +289,7 @@ def getActiveToken(config: CloudConfig | None = None) -> tuple[str, str]:
     if isTokenExpired(config.token):
         raise CloudAuthError("Token is expired")
 
-    if not config.org_id:
-        raise CloudAuthError(
-            "Token is present but NDI_CLOUD_ORGANIZATION_ID is empty; "
-            "cached auth requires an organization id."
-        )
-
-    return config.token, config.org_id
-
-
-# ---------------------------------------------------------------------------
-# Organization-id extraction (handles struct / list / dict shapes)
-# ---------------------------------------------------------------------------
-
-
-def _extract_first_organization_id(user: dict) -> str:
-    """Extract the first organization id from a login response's user.
-
-    Mirrors MATLAB ``extractFirstOrganizationId``: accepts dict, list of
-    dicts, or a single dict; warns when multiple organizations are
-    present (we pick the first; explicit selection is not yet
-    implemented).
-    """
-    if not isinstance(user, dict) or "organizations" not in user:
-        raise CloudAuthError("Login response did not include an organizations field.")
-
-    orgs = user["organizations"]
-    org_id = ""
-    n_orgs = 0
-
-    if isinstance(orgs, dict) and "id" in orgs:
-        org_id = orgs.get("id", "")
-        n_orgs = 1
-    elif isinstance(orgs, list) and orgs:
-        first = orgs[0]
-        if isinstance(first, dict) and "id" in first:
-            org_id = first.get("id", "")
-            n_orgs = len(orgs)
-
-    if not org_id:
-        raise CloudAuthError("Could not extract an organization id from the login response.")
-
-    if n_orgs > 1:
-        logger.warning(
-            "Login response contained %d organizations; using the first (%r). "
-            "Selection among multiple organizations is not yet supported.",
-            n_orgs,
-            org_id,
-        )
-
-    return str(org_id)
+    return config.token
 
 
 # ---------------------------------------------------------------------------
@@ -360,7 +312,9 @@ def login(
         config: Optional base config. Defaults to ``CloudConfig.from_env()``.
 
     Returns:
-        Updated :class:`CloudConfig` with token and org_id populated.
+        Updated :class:`CloudConfig` with its token populated. The
+        organizations the user belongs to are cached
+        (:func:`ndi.cloud.internal.setOrganizations`).
 
     Raises:
         CloudAuthError: On failed login.
@@ -403,15 +357,16 @@ def login(
     data = resp.json()
     token = data.get("token", "")
     user = data.get("user", {}) or {}
-    org_id = _extract_first_organization_id(user)
 
-    # Store in environment for other code to pick up
+    # Store in environment for other code to pick up. A user may belong to
+    # several organizations, so all of them are cached rather than one
+    # chosen here; see ndi.cloud.internal.chooseOrganization.
+    from .internal import setOrganizations
+
     os.environ["NDI_CLOUD_TOKEN"] = token
-    if org_id:
-        os.environ["NDI_CLOUD_ORGANIZATION_ID"] = org_id
+    setOrganizations(user.get("organizations") if isinstance(user, dict) else None)
 
     config.token = token
-    config.org_id = org_id
     return config
 
 
@@ -447,7 +402,6 @@ def logout(config: CloudConfig | None = None) -> None:
 
     _clear_env_tokens()
     config.token = ""
-    config.org_id = ""
 
 
 def _profile_credentials() -> tuple[str, str]:
@@ -478,7 +432,7 @@ def _profile_credentials() -> tuple[str, str]:
 
 
 def authenticate(config: CloudConfig | None = None) -> tuple[str, str]:
-    """Return an active token and organization ID, attempting login if needed.
+    """Return an active token, attempting login if needed.
 
     Priority (matching MATLAB ``authenticate.m``):
     1. Existing valid token in config/env (local JWT exp pre-check).
@@ -490,26 +444,39 @@ def authenticate(config: CloudConfig | None = None) -> tuple[str, str]:
 
     Returns:
         A ``(token, organization_id)`` tuple, matching the two-output
-        convention of the MATLAB ``authenticate.m`` function.
+        convention of the MATLAB ``authenticate.m`` function. The second
+        output is deprecated, as in MATLAB: a user may belong to several
+        organizations, so there is no single "logged-in" organization. It
+        is the id of the user's only organization, or ``""`` when the user
+        belongs to several (or none is cached). New code should call
+        :func:`ndi.cloud.internal.chooseOrganization` or
+        :func:`ndi.cloud.internal.getOrganizations`.
 
     Raises:
         CloudAuthError: If authentication fails.
+
+    Python-specific Notes:
+        MATLAB computes the deprecated second output only when asked for,
+        and then lets chooseOrganization decide (a dialog when interaction
+        is enabled). A Python tuple is always fully built, so it never asks
+        and never makes a network call for it: it reads the cache, and
+        reports "" rather than guessing among several organizations.
     """
     if config is None:
         config = CloudConfig.from_env()
 
-    # 1. Already have a non-expired token AND an org id? Use it.
-    #    Mirrors MATLAB isAuthenticated() which requires both token and
-    #    organization_id to be present before short-circuiting.
-    if config.token and config.org_id and not isTokenExpired(config.token):
-        return config.token, config.org_id
+    # 1. Already have a non-expired token? Use it. Mirrors MATLAB
+    #    isAuthenticated(), which checks the token only: the organizations
+    #    are a list, cached at login, not part of being logged in.
+    if config.token and not isTokenExpired(config.token):
+        return config.token, _soleOrganizationId()
 
     # 2. Try env-var credentials
     email = config.username or os.environ.get("NDI_CLOUD_USERNAME", "")
     password = config.password or os.environ.get("NDI_CLOUD_PASSWORD", "")
     if email and password:
         updated = login(email, password, config)
-        return updated.token, updated.org_id
+        return updated.token, _soleOrganizationId()
 
     # 3. Fall back to the saved cloud profile.
     #
@@ -530,7 +497,7 @@ def authenticate(config: CloudConfig | None = None) -> tuple[str, str]:
     email, password = _profile_credentials()
     if email and password:
         updated = login(email, password, config)
-        return updated.token, updated.org_id
+        return updated.token, _soleOrganizationId()
 
     # WHICH OF THE THREE FAILED IS THE WHOLE DIAGNOSIS, and the old message
     # ran them together. "No valid token and no credentials available" is
@@ -880,7 +847,22 @@ def resendConfirmation(
 # ---------------------------------------------------------------------------
 
 
+def _soleOrganizationId() -> str:
+    """The id of the user's only cached organization, else "". No network."""
+    from .internal import _cachedOrganizations
+
+    organizations = _cachedOrganizations()
+    return organizations[0]["id"] if len(organizations) == 1 else ""
+
+
 def _clear_env_tokens() -> None:
-    """Remove cloud-related env vars."""
-    for var in ("NDI_CLOUD_TOKEN", "NDI_CLOUD_ORGANIZATION_ID"):
-        os.environ.pop(var, None)
+    """Remove the cloud token and the cached organization list.
+
+    ``NDI_CLOUD_ORGANIZATION_ID`` is no longer written; it is cleared too so
+    a value left by an older version cannot linger.
+    """
+    from .internal import setOrganizations
+
+    os.environ.pop("NDI_CLOUD_TOKEN", None)
+    os.environ.pop("NDI_CLOUD_ORGANIZATION_ID", None)
+    setOrganizations(None)

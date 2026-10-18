@@ -252,13 +252,16 @@ class TestUploadSingleFileChecksum:
         p = tmp_path / "f.bin"
         p.write_bytes(b"hello")
         client = MagicMock()
-        client.config.org_id = "org1"
+        # The upload URL is asked for in the dataset's own organization,
+        # read from the dataset record.
+        client.get.return_value = {"organizationId": "org1"}
         with (
             patch.object(files_api, "getFileUploadURL", return_value="https://s3/x") as get_url,
             patch.object(files_api, "putFiles", return_value=True) as put,
         ):
             ok, err = uploadSingleFile(DATASET, "uid1", str(p), client=client, **kwargs)
         assert ok, err
+        assert get_url.call_args.args[0] == "org1"
         return get_url, put
 
     def test_sends_the_checksum_by_default(self, tmp_path):

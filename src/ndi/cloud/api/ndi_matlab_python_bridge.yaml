@@ -21,11 +21,6 @@ infrastructure:
       Python-only Pydantic validators (CloudId, NonEmptyStr, PageNumber,
       PageSize, Scope, FilePath). MATLAB uses arguments blocks for validation.
 
-  - name: _resolve_org_id
-    type: internal_helper
-    python_path: "ndi/cloud/api/datasets.py"
-    decision_log: "Python-only helper to resolve org_id from client config."
-
   - name: _coerce_search_structure
     type: internal_helper
     python_path: "ndi/cloud/api/documents.py"
@@ -71,7 +66,7 @@ functions:
 
   - name: createDataset
     matlab_path: "+ndi/+cloud/+api/+datasets/createDataset.m"
-    matlab_last_sync_hash: "9b75c0fe"
+    matlab_last_sync_hash: "293ec411"
     python_path: "ndi/cloud/api/datasets.py"
     input_arguments:
       - name: org_id
@@ -86,13 +81,22 @@ functions:
         type_matlab: "char"
         type_python: "str"
         default: "''"
+      - name: organization_name
+        type_matlab: "char"
+        type_python: "str"
+        default: "''"
       - name: client
         type_python: "_Client"
         default: "None"
     output_arguments:
       - name: dataset
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      2026-10-18: synchronized with NDI-matlab 293ec411 (VH-Lab/NDI-matlab#1037). The organization is
+      named with org_id (MATLAB's organizationID) or organization_name, else
+      chosen by chooseOrganization with RequireUpload -- never taken from the
+      client config, which no longer holds one. The Python-only
+      _resolve_org_id helper that read it is gone.
 
   - name: updateDataset
     matlab_path: "+ndi/+cloud/+api/+datasets/updateDataset.m"
@@ -134,7 +138,7 @@ functions:
 
   - name: listDatasets
     matlab_path: "+ndi/+cloud/+api/+datasets/listDatasets.m"
-    matlab_last_sync_hash: "587ebc54"
+    matlab_last_sync_hash: "293ec411"
     python_path: "ndi/cloud/api/datasets.py"
     input_arguments:
       - name: org_id
@@ -155,7 +159,12 @@ functions:
     output_arguments:
       - name: result
         type_python: "dict[str, Any]"
-    decision_log: "Exact match."
+    decision_log: >
+      2026-10-18: synchronized with NDI-matlab 293ec411 (VH-Lab/NDI-matlab#1037). With org_id, one page
+      of that organization, as before. Without, every page of every
+      organization the user belongs to, each dataset tagged with
+      organizationId and organizationName (NDI Cloud only lists per
+      organization, so this loops client-side, as in MATLAB).
 
   - name: listAllDatasets
     matlab_path: "N/A"
@@ -172,7 +181,8 @@ functions:
         type_python: "APIResponse"
     decision_log: >
       Python-only auto-paginator that wraps listDatasets.
-      No direct MATLAB equivalent.
+      No direct MATLAB equivalent. Without org_id it lists every
+      organization the user belongs to, as listDatasets does.
 
   - name: getPublished
     matlab_path: "+ndi/+cloud/+api/+datasets/getPublished.m"

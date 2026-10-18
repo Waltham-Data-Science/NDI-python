@@ -101,7 +101,10 @@ def run_test(username: str, password: str) -> dict:
         config = login(username, password)
         client = CloudClient(config)
         print(f"  Authenticated as: {username}")
-        print(f"  Org ID: {config.org_id}")
+        from ndi.cloud.internal import _cachedOrganizations
+
+        names = ", ".join(o["name"] or o["id"] for o in _cachedOrganizations())
+        print(f"  Organizations: {names or '(none)'}")
         results["auth"] = True
     except Exception as exc:
         print(f"  FAILED to authenticate: {exc}")

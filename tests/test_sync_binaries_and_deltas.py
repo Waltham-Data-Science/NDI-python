@@ -25,6 +25,7 @@ import ndi.cloud.sync.operations as ops
 import ndi.cloud.upload as upload
 from ndi.cloud.sync.index import SyncIndex
 from ndi.cloud.sync.mode import SyncOptions
+from tests._cloud_organizations import use_organizations
 
 from .conftest import FakeDataset, make_document
 
@@ -37,7 +38,7 @@ def _no_bulk_settling(monkeypatch):
 
 
 class _Config:
-    org_id = "org-1"
+    """No organization here: file uploads use the dataset's own."""
 
 
 class _Client:
@@ -132,6 +133,7 @@ class TestUploadNewSendsBinariesAtAll:
         from ndi.cloud.api import files as files_api
 
         sent: list[str] = []
+        use_organizations(monkeypatch, {"id": "org-1", "name": "Org"})
         monkeypatch.setattr(docs_api, "addDocument", lambda *a, **k: {"ok": True})
         monkeypatch.setattr(internal, "listRemoteDocumentIds", lambda cid, client=None: {})
         monkeypatch.setattr(

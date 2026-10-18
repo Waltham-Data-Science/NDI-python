@@ -32,11 +32,12 @@ from unittest import mock
 from ndi.cloud import auth
 from ndi.cloud.config import CloudConfig
 from ndi.cloud.exceptions import CloudAuthError
+from ndi.cloud.internal import setOrganizations
 from ndi.cloud.profile import ProfileEntry
 
 _ENV_KEYS = (
     "NDI_CLOUD_TOKEN",
-    "NDI_CLOUD_ORGANIZATION_ID",
+    "NDI_CLOUD_ORGANIZATIONS",
     "NDI_CLOUD_USERNAME",
     "NDI_CLOUD_PASSWORD",
     "NDI_CLOUD_URL",
@@ -73,7 +74,8 @@ def _login_spy(token="tok", org="org-1"):
         calls.append((email, password, config.api_url if config else None))
         config = config or CloudConfig()
         config.token = token
-        config.org_id = org
+        # A real login caches the user's organizations; one here.
+        setOrganizations([{"id": org, "name": "Org"}])
         return config
 
     return fake, calls
@@ -185,7 +187,7 @@ class TestTheStageSurvivesTheTokenShortCircuit(_NoEnvMixin):
 
     def test_authenticate_short_circuits_without_losing_the_dev_url(self):
         os.environ["NDI_CLOUD_TOKEN"] = _unexpired_token()
-        os.environ["NDI_CLOUD_ORGANIZATION_ID"] = "org-1"
+        setOrganizations([{"id": "org-1", "name": "Org"}])
         with mock.patch("ndi.cloud.config._profile_stage", return_value="dev"):
             config = CloudConfig.from_env()
             _, org = auth.authenticate(config)
@@ -275,40 +277,45 @@ class TestWhatTheFailureSays(_NoEnvMixin):
     def test_an_expired_token_is_named_as_expired(self):
         """The one that reads as missing data if it is not said out loud:
         the tile is there, the token lapsed."""
-        message = self._raised(CloudConfig(token=_expired_token(), org_id="org-1"))
+        message = self._raised(CloudConfig(token=_expired_token()))
         self.assertIn("expired", message.lower())
         self.assertNotIn("Not logged in", message)
 
     def test_an_expired_token_says_when(self):
-        message = self._raised(CloudConfig(token=_expired_token(), org_id="org-1"))
+        message = self._raised(CloudConfig(token=_expired_token()))
         self.assertIn("UTC", message)
 
     def test_an_expired_token_says_another_shell_will_not_do(self):
         """The token lives in os.environ, so logging in elsewhere does not
         reach a process that is already running. Without that sentence the
         obvious remedy looks like it did not work."""
-        message = self._raised(CloudConfig(token=_expired_token(), org_id="org-1"))
+        message = self._raised(CloudConfig(token=_expired_token()))
         self.assertIn("another shell", message)
         self.assertIn("start it again", message)
 
     def test_no_token_at_all_says_so_instead(self):
-        message = self._raised(CloudConfig(token="", org_id=""))
+        message = self._raised(CloudConfig(token=""))
         self.assertIn("Not logged in", message)
         self.assertNotIn("expired", message.lower().split("only until")[0])
 
-    def test_a_token_with_no_organization_is_its_own_case(self):
-        """Step 1 wants both. A token that passes the expiry check and is
-        still refused is otherwise indistinguishable from a bad password."""
-        message = self._raised(CloudConfig(token=_unexpired_token(), org_id=""))
-        self.assertIn("organization id", message)
+    def test_an_unexpired_token_needs_no_organization(self):
+        """A user may belong to several organizations, so being logged in
+        is the token alone: step 1 accepts it with no organization cached,
+        and the deprecated second output is empty rather than a guess."""
+        token = _unexpired_token()
+        self.assertEqual(auth.authenticate(CloudConfig(token=token)), (token, ""))
+
+    def test_the_second_output_is_empty_for_several_organizations(self):
+        token = _unexpired_token()
+        setOrganizations([{"id": "org-1", "name": "A"}, {"id": "org-2", "name": "B"}])
+        self.assertEqual(auth.authenticate(CloudConfig(token=token)), (token, ""))
 
     def test_every_case_says_how_to_stop_it_happening_again(self):
-        """Credentials it can reach are the fix for all three: with them,
+        """Credentials it can reach are the fix for both: with them,
         authenticate renews the token itself and step 1 stops mattering."""
         for config in (
-            CloudConfig(token="", org_id=""),
-            CloudConfig(token=_expired_token(), org_id="org-1"),
-            CloudConfig(token=_unexpired_token(), org_id=""),
+            CloudConfig(token=""),
+            CloudConfig(token=_expired_token()),
         ):
             message = self._raised(config)
             self.assertIn("NDI_CLOUD_USERNAME", message)

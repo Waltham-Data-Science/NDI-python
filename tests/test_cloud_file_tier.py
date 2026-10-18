@@ -27,7 +27,6 @@ import pytest
 def _make_client() -> MagicMock:
     """Return a mock CloudClient."""
     client = MagicMock()
-    client.config.org_id = "org-123"
     client.config.api_url = "https://api.ndi-cloud.com/v1"
     return client
 

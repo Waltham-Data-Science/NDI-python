@@ -754,19 +754,28 @@ ported_late:
 
   - name: datasetsPane
     matlab_path: "+ndi/+gui/+nav/datasetsPane.m"
-    matlab_last_sync_hash: "958ff7c5"
+    matlab_last_sync_hash: "293ec411"
     python_path: "ndi/gui/nav/datasets_pane.py"
     decision_log: >
       The navigator's elastic pane, ported across #103, #109, #110 and
       #111 in four layers (pure, model, cloud actions, widgets) which is
       why Python spreads it over datasets_pane.py, datasets_model.py,
       datasets_cloud.py and datasets_text.py rather than one module.
+      2026-10-18: synchronized with NDI-matlab 293ec411 (VH-Lab/NDI-matlab#1037): the private cloud
+      list covers every organization the user belongs to, labelled
+      "[Org Name]" when there is more than one. Python's "Upload to Cloud"
+      also passes its list dialog to uploadDataset, so a user in several
+      organizations is asked which one, as MATLAB's navigator asks.
 
   - name: cloudPane
     matlab_path: "+ndi/+gui/+nav/cloudPane.m"
-    matlab_last_sync_hash: "92d7d903"
+    matlab_last_sync_hash: "293ec411"
     python_path: "ndi/gui/nav/cloud_pane.py"
-    decision_log: "Cloud status and actions pane. Ported in #112."
+    decision_log: >
+      Cloud status and actions pane. Ported in #112. NDI-matlab 293ec411 (VH-Lab/NDI-matlab#1037)
+      changed only a comment in refreshLogin (logout now clears the cached
+      organization list, not NDI_CLOUD_ORGANIZATION_ID); Python's docstring
+      already says "the locally stored credentials", so nothing to follow.
 
   - name: progressPane
     matlab_path: "+ndi/+gui/+nav/progressPane.m"

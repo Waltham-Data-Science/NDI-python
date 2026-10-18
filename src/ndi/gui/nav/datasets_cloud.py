@@ -37,6 +37,7 @@ rather than a stack trace from inside a sync.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, NamedTuple
 
 from .datasets_text import cloud_check_message, sync_result_message
@@ -173,19 +174,30 @@ def check_cloud_status(dataset: Any) -> CloudActionResult:
     )
 
 
-def upload_dataset(dataset: Any) -> CloudActionResult:
+def upload_dataset(
+    dataset: Any,
+    organization_chooser: Callable[[list[str], str], int | None] | None = None,
+) -> CloudActionResult:
     """Upload DATASET's documents and files to NDI Cloud.
 
     Creates the remote dataset on a first upload and otherwise sends
     whatever is missing. A successful upload is what LINKS the dataset to
     the cloud, so the new state is known without another query -- which is
     why success reports ``"incloud"`` directly.
+
+    A first upload must decide which of the user's organizations the new
+    dataset belongs to. ORGANIZATION_CHOOSER is how the user is asked when
+    they belong to more than one (see
+    :func:`ndi.cloud.orchestration.uploadDataset`); the navigator passes its
+    list dialog, as MATLAB's navigator shows ndi.util.ListDialog.
     """
     title = "Upload to Cloud"
     from ...cloud.orchestration import uploadDataset
 
     try:
-        success, _cloud_id, message = uploadDataset(dataset, verbose=False)
+        success, _cloud_id, message = uploadDataset(
+            dataset, verbose=False, organization_chooser=organization_chooser
+        )
     except Exception as exc:  # noqa: BLE001
         return CloudActionResult(False, title, str(exc), "error", None)
 

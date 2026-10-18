@@ -438,14 +438,17 @@ class TestUploadSingleFile:
         mock_files.getFileUploadURL.return_value = "https://s3.example.com/upload"
         mock_files.putFiles.return_value = None
 
-        with patch.dict("sys.modules", {"ndi.cloud.api.files": mock_files}):
-            with patch("ndi.cloud.api.files", mock_files):
-                # The file is never read here (the upload API is mocked), so
-                # skip the CRC-32 that uploadSingleFile computes by default;
-                # tests/test_cloud_api_files_crc32.py covers that path.
-                success, err = uploadSingleFile(
-                    "ds-123", "file-uid-1", "/tmp/test.dat", checksum=False, client=client
-                )
+        with (
+            patch.dict("sys.modules", {"ndi.cloud.api.files": mock_files}),
+            patch("ndi.cloud.api.files", mock_files),
+            patch("ndi.cloud.internal._datasetOrganizationId", return_value="org-1"),
+        ):
+            # The file is never read here (the upload API is mocked), so
+            # skip the CRC-32 that uploadSingleFile computes by default;
+            # tests/test_cloud_api_files_crc32.py covers that path.
+            success, err = uploadSingleFile(
+                "ds-123", "file-uid-1", "/tmp/test.dat", checksum=False, client=client
+            )
 
         assert success is True
         assert err == ""
@@ -458,13 +461,16 @@ class TestUploadSingleFile:
         mock_files = MagicMock()
         mock_files.getFileUploadURL.side_effect = Exception("Network error")
 
-        with patch.dict("sys.modules", {"ndi.cloud.api.files": mock_files}):
-            with patch("ndi.cloud.api.files", mock_files):
-                # As above: the file does not exist, so skip the default CRC-32
-                # and let the mocked network error be what fails.
-                success, err = uploadSingleFile(
-                    "ds-123", "file-uid-1", "/tmp/test.dat", checksum=False, client=client
-                )
+        with (
+            patch.dict("sys.modules", {"ndi.cloud.api.files": mock_files}),
+            patch("ndi.cloud.api.files", mock_files),
+            patch("ndi.cloud.internal._datasetOrganizationId", return_value="org-1"),
+        ):
+            # As above: the file does not exist, so skip the default CRC-32
+            # and let the mocked network error be what fails.
+            success, err = uploadSingleFile(
+                "ds-123", "file-uid-1", "/tmp/test.dat", checksum=False, client=client
+            )
 
         assert success is False
         assert "Network error" in err

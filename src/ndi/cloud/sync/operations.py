@@ -355,7 +355,7 @@ def _upload_binaries(
 
     try:
         report = uploadFilesForDatasetDocuments(
-            getattr(getattr(client, "config", None), "org_id", ""),
+            "",  # looked up from the dataset record
             cloud_dataset_id,
             documents,
             dataset=dataset,

@@ -503,7 +503,7 @@ class CloudClient:
         from .auth import authenticate
 
         config = CloudConfig.from_env()
-        config.token, config.org_id = authenticate(config)
+        config.token, _ = authenticate(config)
         client = cls(config)
         # We just obtained this token ourselves, so a mid-run 401/403
         # (typical after the token's TTL expires) can be answered by
@@ -528,10 +528,8 @@ class CloudClient:
         from .auth import authenticate
 
         fresh_config = CloudConfig.from_env()
-        token, org_id = authenticate(fresh_config)
+        token, _ = authenticate(fresh_config)
         self.config.token = token
-        if org_id:
-            self.config.org_id = org_id
 
     def __repr__(self) -> str:
         return f"CloudClient(api_url={self.config.api_url!r})"

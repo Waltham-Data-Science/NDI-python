@@ -64,7 +64,9 @@ class TestUploadDataset:
         """A successful upload is what links it, so the state is known."""
         import ndi.cloud.orchestration as orch
 
-        monkeypatch.setattr(orch, "uploadDataset", lambda ds, verbose=False: (True, "cid", ""))
+        monkeypatch.setattr(
+            orch, "uploadDataset", lambda ds, verbose=False, **kw: (True, "cid", "")
+        )
         r = dc.upload_dataset(FakeDataset())
         assert r.ok and r.state == "incloud"
 
@@ -72,7 +74,7 @@ class TestUploadDataset:
         import ndi.cloud.orchestration as orch
 
         monkeypatch.setattr(
-            orch, "uploadDataset", lambda ds, verbose=False: (False, "", "quota exceeded")
+            orch, "uploadDataset", lambda ds, verbose=False, **kw: (False, "", "quota exceeded")
         )
         r = dc.upload_dataset(FakeDataset())
         assert not r.ok
@@ -82,7 +84,7 @@ class TestUploadDataset:
     def test_a_raised_error_is_reported_not_propagated(self, monkeypatch):
         import ndi.cloud.orchestration as orch
 
-        def boom(ds, verbose=False):
+        def boom(ds, verbose=False, **kw):
             raise RuntimeError("network down")
 
         monkeypatch.setattr(orch, "uploadDataset", boom)

@@ -6,7 +6,8 @@ and authenticate() patterns.
 
 Environment variables:
     NDI_CLOUD_TOKEN           — JWT bearer token
-    NDI_CLOUD_ORGANIZATION_ID — Organisation ID
+    NDI_CLOUD_ORGANIZATIONS   — The user's organizations, cached at login as
+                                JSON (see ndi.cloud.internal.getOrganizations)
     NDI_CLOUD_URL             — Full API base URL override
     CLOUD_API_ENVIRONMENT     — 'prod' (default) or 'dev'
     NDI_CLOUD_UPLOAD_NO_ZIP   — 'true' to skip ZIP on upload
@@ -57,12 +58,15 @@ class CloudConfig:
         config = CloudConfig.from_env()
         # or
         config = CloudConfig(api_url='https://api.ndi-cloud.com/v1',
-                             token='eyJ...', org_id='org-123')
+                             token='eyJ...')
+
+    There is no organization here: a user may belong to several, so the
+    list is cached at login and an operation that needs one asks
+    :func:`ndi.cloud.internal.chooseOrganization`.
     """
 
     api_url: str = ""
     token: str = ""
-    org_id: str = ""
     upload_no_zip: bool = False
     username: str = ""
     password: str = ""
@@ -91,7 +95,6 @@ class CloudConfig:
         return cls(
             api_url=api_url,
             token=os.environ.get("NDI_CLOUD_TOKEN", ""),
-            org_id=os.environ.get("NDI_CLOUD_ORGANIZATION_ID", ""),
             upload_no_zip=upload_no_zip,
             username=os.environ.get("NDI_CLOUD_USERNAME", ""),
             password=os.environ.get("NDI_CLOUD_PASSWORD", ""),
@@ -105,6 +108,4 @@ class CloudConfig:
 
     def __repr__(self) -> str:
         masked = (self.token[:8] + "...") if len(self.token) > 8 else "***"
-        return (
-            f"CloudConfig(api_url={self.api_url!r}, " f"token={masked!r}, org_id={self.org_id!r})"
-        )
+        return f"CloudConfig(api_url={self.api_url!r}, token={masked!r})"

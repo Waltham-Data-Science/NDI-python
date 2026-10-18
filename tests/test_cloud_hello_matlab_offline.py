@@ -44,7 +44,7 @@ from ndi.cloud.orchestration import (
 class FakeClient:
     """Stands in for an authenticated CloudClient."""
 
-    config = types.SimpleNamespace(org_id="org", api_url="https://example.invalid")
+    config = types.SimpleNamespace(api_url="https://example.invalid")
 
 
 def session_doc(*, session_status="RUNNING", stage_status="RUNNING", message="", instance=""):

@@ -173,7 +173,7 @@ class TestAuthErrorsDoNotEchoResponseBody:
         from ndi.cloud.auth import CloudConfig
 
         _login_401_with_body(monkeypatch, self._BODY_WITH_SECRETS)
-        cfg = CloudConfig(api_url="https://example.invalid", token="", org_id="")
+        cfg = CloudConfig(api_url="https://example.invalid", token="")
         with pytest.raises(auth.CloudAuthError) as exc_info:
             auth.login("user@example.com", "hunter2", config=cfg)
         self._assert_body_absent_and_status_present(exc_info.value)
@@ -183,7 +183,7 @@ class TestAuthErrorsDoNotEchoResponseBody:
         from ndi.cloud.auth import CloudConfig
 
         _login_401_with_body(monkeypatch, self._BODY_WITH_SECRETS)
-        cfg = CloudConfig(api_url="https://example.invalid", token="tok", org_id="")
+        cfg = CloudConfig(api_url="https://example.invalid", token="tok")
         with pytest.raises(auth.CloudAuthError) as exc_info:
             auth.changePassword("old", "new", config=cfg)
         self._assert_body_absent_and_status_present(exc_info.value)
@@ -193,7 +193,7 @@ class TestAuthErrorsDoNotEchoResponseBody:
         from ndi.cloud.auth import CloudConfig
 
         _login_401_with_body(monkeypatch, self._BODY_WITH_SECRETS)
-        cfg = CloudConfig(api_url="https://example.invalid", token="", org_id="")
+        cfg = CloudConfig(api_url="https://example.invalid", token="")
         with pytest.raises(auth.CloudAuthError) as exc_info:
             auth.resetPassword("user@example.com", config=cfg)
         self._assert_body_absent_and_status_present(exc_info.value)
@@ -203,7 +203,7 @@ class TestAuthErrorsDoNotEchoResponseBody:
         from ndi.cloud.auth import CloudConfig
 
         _login_401_with_body(monkeypatch, self._BODY_WITH_SECRETS)
-        cfg = CloudConfig(api_url="https://example.invalid", token="", org_id="")
+        cfg = CloudConfig(api_url="https://example.invalid", token="")
         with pytest.raises(auth.CloudAuthError) as exc_info:
             auth.verifyUser("user@example.com", "code123", config=cfg)
         self._assert_body_absent_and_status_present(exc_info.value)
@@ -213,7 +213,7 @@ class TestAuthErrorsDoNotEchoResponseBody:
         from ndi.cloud.auth import CloudConfig
 
         _login_401_with_body(monkeypatch, self._BODY_WITH_SECRETS)
-        cfg = CloudConfig(api_url="https://example.invalid", token="", org_id="")
+        cfg = CloudConfig(api_url="https://example.invalid", token="")
         with pytest.raises(auth.CloudAuthError) as exc_info:
             auth.resendConfirmation("user@example.com", config=cfg)
         self._assert_body_absent_and_status_present(exc_info.value)
@@ -226,7 +226,7 @@ class TestAuthErrorsDoNotEchoResponseBody:
         from ndi.cloud.auth import CloudConfig
 
         _login_401_with_body(monkeypatch, self._BODY_WITH_SECRETS)
-        cfg = CloudConfig(api_url="https://example.invalid", token="", org_id="")
+        cfg = CloudConfig(api_url="https://example.invalid", token="")
 
         with caplog.at_level(logging.DEBUG, logger="ndi.cloud.auth"):
             with pytest.raises(auth.CloudAuthError):

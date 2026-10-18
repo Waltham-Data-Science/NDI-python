@@ -36,6 +36,7 @@ from ndi.dataset._dataset import ndi_dataset as ndi_dataset_base
 from ndi.document import ndi_document
 from ndi.query import ndi_query
 from ndi.session.dir import ndi_session_dir
+from tests._cloud_organizations import use_organizations
 
 FILE_SLOT = "filename1.ext"
 PAYLOAD = "hello world"
@@ -386,7 +387,7 @@ class TestDiskSpacePrecheck:
 # ======================================================================
 class FakeClient:
     class config:
-        org_id = "org"
+        pass
 
 
 class TestUploadDatasetRefusesUningestedDatasets:
@@ -409,6 +410,7 @@ class TestUploadDatasetRefusesUningestedDatasets:
 
         monkeypatch.setattr(ds_api, "createDataset", create_dataset)
         monkeypatch.setattr(upload_mod, "uploadDocumentCollection", upload_docs)
+        use_organizations(monkeypatch, {"id": "org", "name": "Org"})
         return box
 
     def test_an_uningested_dataset_is_refused(self, linked, captured, monkeypatch):
