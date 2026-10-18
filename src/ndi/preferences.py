@@ -240,6 +240,40 @@ class ndi_preferences:
             "NDI_FROM_MATLAB=1, the console script itself drops MATLAB's "
             "library paths before loading anything.",
         )
+        # Update.CheckOnStartup and Update.CheckIntervalDays are the same keys
+        # NDI-matlab registers, so one setting in the shared file governs
+        # both languages. The last-check time is per language (MATLAB's is
+        # Update.MATLAB.LastCheckTime): they check different repositories.
+        self._add_item(
+            "Update",
+            "",
+            "CheckOnStartup",
+            True,
+            "bool",
+            "Check for a newer NDI when it starts (NDI-python: when the "
+            "navigator opens), at most once every CheckIntervalDays days, and "
+            "print one line if there is one. NDI-python is compared with its "
+            "main branch on GitHub (see ndi.update.check).",
+        )
+        self._add_item(
+            "Update",
+            "",
+            "CheckIntervalDays",
+            1.0,
+            "float",
+            "Minimum number of days between the update checks made at startup.",
+        )
+        self._add_item(
+            "Update",
+            "Python",
+            "LastCheckTime",
+            "",
+            "str",
+            "When NDI-python last checked for an update at startup "
+            "(yyyy-MM-ddTHH:mm:ss, UTC). Set automatically; clear it to check "
+            "at the next start. Kept apart from NDI-matlab's own time, because "
+            "both share this preferences file.",
+        )
 
     def _add_item(
         self,

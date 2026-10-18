@@ -13,7 +13,8 @@ and asserts:
   NDI_Preferences.json with the same value;
 - every registered ndi.preferences default key has a corresponding entry
   in the JSON payload (sanity check that the make side wrote a complete
-  snapshot of the singleton).
+  snapshot of the singleton), except that Python's own per-language keys
+  (subcategory "Python") are not expected in MATLAB's file.
 """
 
 import json
@@ -80,9 +81,19 @@ class TestPreferencesReadArtifacts:
         # signal. Missing-on-python keys are tolerated by recording them
         # via pytest's verbose output, since the make-side may have been
         # written by a different language with a richer preference set.
+        #
+        # One deliberate exception: a subcategory named after a language holds
+        # that language's own state, which the other language never registers.
+        # Update.Python.LastCheckTime is the case (NDI-matlab keeps
+        # Update.MATLAB.LastCheckTime): the two check different repositories,
+        # so one checking must not hold off the other. Such keys are not
+        # expected in the OTHER language's file -- only there; this
+        # language's own file must still have every one of them.
         items = ndi_preferences.list_items()
         for item in items:
             subcategory = item.get("subcategory", "") or ""
+            if subcategory == "Python" and source_type == "matlabArtifacts":
+                continue
             if subcategory:
                 key = f"{item['category']}__{subcategory}__{item['name']}"
             else:

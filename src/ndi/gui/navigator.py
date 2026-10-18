@@ -295,6 +295,20 @@ class Navigator:
     def show(self) -> None:
         if self.figure is not None:
             self.figure.show()
+            self._check_for_updates_in_background()
+
+    def _check_for_updates_in_background(self) -> None:
+        """The once-a-day update check (``ndi.update.checkOnStartup``).
+
+        MATLAB runs it from ndi_Init; NDI-python has no such start-up hook,
+        so the navigator opening is where it happens. On a thread, so the
+        window never waits for GitHub; it only prints a line to the terminal.
+        """
+        import threading
+
+        from ..update import checkOnStartup
+
+        threading.Thread(target=checkOnStartup, name="ndi-update-check", daemon=True).start()
 
     # ------------------------------------------------------------------
     # window sizing

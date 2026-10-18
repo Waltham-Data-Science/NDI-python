@@ -748,9 +748,20 @@ ported_late:
 
   - name: ndiPane
     matlab_path: "+ndi/+gui/+nav/ndiPane.m"
-    matlab_last_sync_hash: "8653c2c8"
+    matlab_last_sync_hash: "f9ced4bcd"
     python_path: "ndi/gui/nav/ndi_pane.py"
-    decision_log: "The NDI-branded pane. Ported in #88."
+    decision_log: >
+      The NDI-branded pane. Ported in #88.
+      2026-10-18: synchronized with NDI-matlab f9ced4bcd (VH-Lab/NDI-matlab#1038,
+      branch claude/amazing-clarke-a34o5c): an "Update" button between the
+      broom and Prefs (pane 92 -> 156 pixels wide) that runs ndi.update.check
+      and, when an update can be installed, confirms and runs
+      ndi.update.install, defaulting to Cancel when the user's own code would
+      be touched. Ported with the decisions in a pure update_dialog() so they
+      are testable without Qt; the dialogs are QMessageBox (confirm blocks, as
+      uiconfirm does) and a wait cursor stands in for uiprogressdlg. MATLAB's
+      button also offers NDI-python updates from MATLAB; Python's checks
+      NDI-python only.
 
   - name: datasetsPane
     matlab_path: "+ndi/+gui/+nav/datasetsPane.m"

@@ -209,6 +209,31 @@ jobs:
           done
           "$bin/uv$x" --version
 
+      - name: The receipt says what was installed, and ndi.update reads it
+        working-directory: ${{ runner.temp }}
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then
+            py="$HOME/.ndi/venvs/ndi/Scripts/python.exe"
+          else
+            py="$HOME/.ndi/venvs/ndi/bin/python"
+          fi
+          cat "$HOME/.ndi/install.json"
+          # Written by the installer, read by ndi.update and by NDI-matlab's
+          # ndi.update.checkPython. git was hidden during the install, so a
+          # local-checkout install records no commit -- only the time.
+          "$py" -c "
+          import re, sys
+          from ndi.update import installType
+          kind, info = installType()
+          r = info['Receipt']
+          assert kind == 'installer', kind
+          assert r is not None, 'no readable ~/.ndi/install.json'
+          assert r['installer'] in ('install-ndi.sh', 'install-ndi.ps1'), r
+          assert re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ', r['installedAt']), r
+          assert r['commit'] is None or re.fullmatch('[0-9a-f]{40}', r['commit']), r
+          print('receipt ok:', r)
+          "
+
       - name: The tool environment is this platform's, and pyraview a release wheel
         working-directory: ${{ runner.temp }}
         run: |
