@@ -1,10 +1,7 @@
 # ndi_matlab_python_bridge.yaml — src/ndi/update/
 # The Primary Contract for the ndi.update namespace.
 #
-# Every MATLAB file here is on VH-Lab/NDI-matlab branch claude/amazing-clarke-a34o5c
-# (VH-Lab/NDI-matlab#1038), not yet on main, so each entry carries
-# matlab_branch (section 8 of docs/developer_notes/ndi_matlab_python_bridge.yaml).
-# Remove the markers once that branch merges.
+# The MATLAB side is +ndi/+update, added in VH-Lab/NDI-matlab#1038.
 #
 # What the two halves have in common: both check their OWN repository's main
 # branch (NDI-matlab: also its releases, for the toolbox), report the same
@@ -23,7 +20,6 @@ functions:
     type: function
     matlab_path: "+ndi/+update/check.m"
     matlab_last_sync_hash: "f9ced4bcd"
-    matlab_branch: "claude/amazing-clarke-a34o5c"
     python_path: "ndi/update/check.py"
     input_arguments:
       - name: IncludeDependencies
@@ -69,7 +65,6 @@ functions:
     type: function
     matlab_path: "+ndi/+update/install.m"
     matlab_last_sync_hash: "f9ced4bcd"
-    matlab_branch: "claude/amazing-clarke-a34o5c"
     python_path: "ndi/update/install.py"
     input_arguments:
       - name: Confirm
@@ -108,7 +103,6 @@ functions:
     type: function
     matlab_path: "+ndi/+update/installType.m"
     matlab_last_sync_hash: "f9ced4bcd"
-    matlab_branch: "claude/amazing-clarke-a34o5c"
     python_path: "ndi/update/install_type.py"
     output_arguments:
       - name: type
@@ -128,7 +122,6 @@ functions:
     type: function
     matlab_path: "+ndi/+update/modificationSummary.m"
     matlab_last_sync_hash: "f9ced4bcd"
-    matlab_branch: "claude/amazing-clarke-a34o5c"
     python_path: "ndi/update/modification_summary.py"
     input_arguments:
       - name: result
@@ -147,7 +140,6 @@ functions:
     type: function
     matlab_path: "+ndi/+update/checkOnStartup.m"
     matlab_last_sync_hash: "f9ced4bcd"
-    matlab_branch: "claude/amazing-clarke-a34o5c"
     python_path: "ndi/update/check_on_startup.py"
     output_arguments:
       - name: line
@@ -166,7 +158,6 @@ functions:
     type: function
     matlab_path: "+ndi/+update/checkPython.m"
     matlab_last_sync_hash: "e2a3d8e57"
-    matlab_branch: "claude/amazing-clarke-a34o5c"
     python_path: "ndi/update/check.py"
     status: ported_differently
     decision_log: >
@@ -179,7 +170,6 @@ functions:
     type: function
     matlab_path: "+ndi/+update/compareVersions.m"
     matlab_last_sync_hash: "f9ced4bcd"
-    matlab_branch: "claude/amazing-clarke-a34o5c"
     status: matlab_only
     decision_log: >
       Compares release numbers for NDI-matlab's packaged toolbox. NDI-python
@@ -190,7 +180,6 @@ functions:
     type: function
     matlab_path: "+ndi/+update/latestRelease.m"
     matlab_last_sync_hash: "f9ced4bcd"
-    matlab_branch: "claude/amazing-clarke-a34o5c"
     status: matlab_only
     decision_log: >
       Fetches NDI-matlab's latest GitHub release for its toolbox. NDI-python
@@ -200,7 +189,6 @@ functions:
     type: function
     matlab_path: "+ndi/+update/toolboxIdentifier.m"
     matlab_last_sync_hash: "f9ced4bcd"
-    matlab_branch: "claude/amazing-clarke-a34o5c"
     status: matlab_only
     decision_log: >
       The MATLAB Add-On identifier of the NDI-matlab toolbox. A MATLAB
@@ -210,7 +198,6 @@ functions:
     type: function
     matlab_path: "+ndi/+update/private/runGit.m"
     matlab_last_sync_hash: "42f532167"
-    matlab_branch: "claude/amazing-clarke-a34o5c"
     python_path: "ndi/update/_git.py"
     status: ported_differently
     decision_log: >
@@ -223,7 +210,6 @@ functions:
     type: function
     matlab_path: "+ndi/+update/private/githubApi.m"
     matlab_last_sync_hash: "f9ced4bcd"
-    matlab_branch: "claude/amazing-clarke-a34o5c"
     python_path: "ndi/update/_github.py"
     status: ported_differently
     decision_log: >

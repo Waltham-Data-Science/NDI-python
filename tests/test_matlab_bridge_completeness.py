@@ -107,6 +107,9 @@ class BridgedPackage:
 #: gui and fun, last and largest, closed the remaining fifty-eight. See
 #: #154.
 #:
+#: update joined when VH-Lab/NDI-matlab#1038 added +ndi/+update, recorded
+#: in full from its first commit.
+#:
 #: That is every MATLAB package that HAS a Python package with a bridge
 #: file of its own -- seventeen of MATLAB's twenty-three. The six that
 #: remain are not deferred work of the same kind; each is unlistable for a
@@ -160,6 +163,7 @@ PACKAGES = [
     BridgedPackage(python_dir="src/ndi/util", matlab_dir="+ndi/+util"),
     BridgedPackage(python_dir="src/ndi/gui", matlab_dir="+ndi/+gui"),
     BridgedPackage(python_dir="src/ndi/fun", matlab_dir="+ndi/+fun"),
+    BridgedPackage(python_dir="src/ndi/update", matlab_dir="+ndi/+update"),
 ]
 
 
