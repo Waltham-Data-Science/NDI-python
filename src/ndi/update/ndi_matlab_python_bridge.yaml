@@ -209,13 +209,15 @@ functions:
   - name: runGit
     type: function
     matlab_path: "+ndi/+update/private/runGit.m"
-    matlab_last_sync_hash: "f9ced4bcd"
+    matlab_last_sync_hash: "42f532167"
     matlab_branch: "claude/amazing-clarke-a34o5c"
     python_path: "ndi/update/_git.py"
     status: ported_differently
     decision_log: >
       Private helper; here run_git in the private module _git, taking the
       git arguments as a list (subprocess, no shell) rather than one string.
+      NDI-matlab 42f532167 makes git non-interactive (empty stdin, no
+      credential prompt, pager or editor); run_git does the same.
 
   - name: githubApi
     type: function
