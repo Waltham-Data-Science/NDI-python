@@ -44,3 +44,19 @@ class CloudSyncError(CloudError):
 
 class CloudUploadError(CloudError):
     """Upload operation failure."""
+
+
+class CloudOrganizationError(CloudError):
+    """No usable NDI Cloud organization could be decided on.
+
+    Raised by :func:`ndi.cloud.internal.chooseOrganization` and its callers.
+
+    Attributes:
+        identifier: The MATLAB error identifier for the same failure, e.g.
+            ``"NDI:Cloud:OrganizationRequired"``, so a caller can tell the
+            cases apart the way MATLAB code reads ``ME.identifier``.
+    """
+
+    def __init__(self, identifier: str, message: str):
+        super().__init__(message)
+        self.identifier = identifier

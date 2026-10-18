@@ -43,10 +43,11 @@ import ndi.cloud.upload as upload_mod
 from ndi.dataset import ndi_dataset_dir
 from ndi.document import ndi_document
 from ndi.query import ndi_query
+from tests._cloud_organizations import use_organizations
 
 
 class FakeClient:
-    config = types.SimpleNamespace(org_id="org")
+    config = types.SimpleNamespace()
 
 
 @pytest.fixture
@@ -80,6 +81,7 @@ def captured(monkeypatch):
     # helpers are imported inside the function bodies, so a name bound on the
     # orchestration module is never consulted.
     monkeypatch.setattr(upload_mod, "uploadDocumentCollection", upload_docs)
+    use_organizations(monkeypatch, {"id": "org", "name": "Org"})
     return box
 
 

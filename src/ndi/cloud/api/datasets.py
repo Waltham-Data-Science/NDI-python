@@ -22,20 +22,6 @@ from ._validators import VALIDATE_CONFIG, CloudId, PageNumber, PageSize
 _Client = Annotated[CloudClient | None, SkipValidation()]
 
 
-def _resolve_org_id(org_id: str | None, client: CloudClient) -> str:
-    """Return *org_id* if given, otherwise pull it from client config."""
-    if org_id:
-        return org_id
-    resolved = getattr(client, "config", None)
-    if resolved and getattr(resolved, "org_id", ""):
-        return resolved.org_id
-    raise ValueError(
-        "org_id is required but was not provided and could not be "
-        "resolved from the client config.  Either pass org_id explicitly "
-        "or set NDI_CLOUD_ORGANIZATION_ID in the environment."
-    )
-
-
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
 def getDataset(dataset_id: CloudId, *, client: _Client = None) -> dict[str, Any]:
@@ -49,17 +35,33 @@ def createDataset(
     name: str = "",
     description: str = "",
     *,
+    organization_name: str = "",
     client: _Client = None,
     **kwargs: Any,
 ) -> dict[str, Any]:
     """POST /organizations/{organizationId}/datasets
 
-    If *org_id* is omitted it is resolved from the client's config
-    (populated automatically during login), matching MATLAB behaviour.
+    MATLAB equivalent: ndi.cloud.api.datasets.createDataset
+
+    Creates a new dataset in one of the organizations the current user
+    belongs to. Name the organization with *org_id* or *organization_name*
+    (mutually exclusive). If neither is given and the user may upload to
+    exactly one organization, that one is used; otherwise the user is asked
+    to choose (when standard input is a terminal) or a
+    :class:`~ndi.cloud.exceptions.CloudOrganizationError` lists the
+    organizations. See :func:`ndi.cloud.internal.chooseOrganization`.
     """
-    org_id = _resolve_org_id(org_id, client)
     if not name:
         raise ValueError("name is required")
+    from ..internal import chooseOrganization
+
+    org_id, _ = chooseOrganization(
+        organization_name,
+        org_id or "",
+        require_upload=True,
+        prompt_string="Create the new dataset in which organization?",
+        client=client,
+    )
     body: dict[str, Any] = {"name": name}
     if description:
         body["description"] = description
@@ -112,6 +114,9 @@ def deleteDataset(
     )
 
 
+_MAX_PAGES = 1000
+
+
 @_auto_client
 def listDatasets(
     org_id: str | None = None,
@@ -122,39 +127,77 @@ def listDatasets(
 ) -> dict[str, Any]:
     """GET /organizations/{organizationId}/datasets?page=&pageSize=
 
-    If *org_id* is omitted it is resolved from the client's config
-    (populated automatically during login), matching MATLAB behaviour.
+    MATLAB equivalent: ndi.cloud.api.datasets.listDatasets
+
+    With *org_id*, retrieves one page of the datasets within that
+    organization.
+
+    Without *org_id*, retrieves ALL datasets in ALL of the organizations the
+    current user belongs to (:func:`ndi.cloud.internal.getOrganizations`).
+    NDI Cloud only lists datasets per organization, so this queries each
+    organization in turn and fetches every page; *page* and *page_size* are
+    ignored in this mode. Each returned dataset is tagged with the keys
+    ``organizationId`` and ``organizationName`` of the organization it was
+    listed under, and the answer's ``page`` is 1 while ``pageSize`` and
+    ``totalNumber`` are the number of datasets returned.
     """
-    org_id = _resolve_org_id(org_id, client)
-    return client.get(
-        "/organizations/{organizationId}/datasets",
-        params={"page": page, "pageSize": page_size},
-        organizationId=org_id,
-    )
+    if org_id:
+        return client.get(
+            "/organizations/{organizationId}/datasets",
+            params={"page": page, "pageSize": page_size},
+            organizationId=org_id,
+        )
+
+    from ..internal import getOrganizations
+
+    datasets: list[dict[str, Any]] = []
+    for organization in getOrganizations(client=client):
+        for dataset in _listOrganizationDatasets(organization["id"], client):
+            tagged = dict(dataset)
+            tagged.setdefault("organizationId", organization["id"])
+            tagged["organizationName"] = organization["name"]
+            datasets.append(tagged)
+    answer = {
+        "totalNumber": len(datasets),
+        "page": 1,
+        "pageSize": len(datasets),
+        "datasets": datasets,
+    }
+    return APIResponse(answer, success=True, status_code=200, url="")
 
 
-_MAX_PAGES = 1000
+def _listOrganizationDatasets(org_id: str, client: CloudClient) -> list[dict[str, Any]]:
+    """Every dataset of one organization, fetching page after page."""
+    all_datasets: list[dict[str, Any]] = []
+    page = 1
+    while page <= _MAX_PAGES:
+        result = listDatasets(org_id, page=page, client=client)
+        datasets = result.get("datasets", []) or []
+        all_datasets.extend(datasets)
+        total = result.get("totalNumber", 0)
+        if len(all_datasets) >= total or not datasets:
+            break
+        page += 1
+    return all_datasets
 
 
 @_auto_client
 def listAllDatasets(org_id: str | None = None, *, client: _Client = None) -> APIResponse:
     """Auto-paginate through all datasets for an organisation.
 
-    If *org_id* is omitted it is resolved from the client's config
-    (populated automatically during login), matching MATLAB behaviour.
+    Without *org_id*, lists every dataset in every organization the user
+    belongs to, tagged as :func:`listDatasets` does.
     """
-    org_id = _resolve_org_id(org_id, client)
-    all_datasets: list[dict[str, Any]] = []
-    page = 1
-    while page <= _MAX_PAGES:
-        result = listDatasets(org_id, page=page, client=client)
-        datasets = result.get("datasets", [])
-        all_datasets.extend(datasets)
-        total = result.get("totalNumber", 0)
-        if len(all_datasets) >= total or not datasets:
-            break
-        page += 1
-    return APIResponse(all_datasets, success=True, status_code=200, url="")
+    if not org_id:
+        return APIResponse(
+            listDatasets(client=client).get("datasets", []),
+            success=True,
+            status_code=200,
+            url="",
+        )
+    return APIResponse(
+        _listOrganizationDatasets(org_id, client), success=True, status_code=200, url=""
+    )
 
 
 @_auto_client

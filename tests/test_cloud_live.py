@@ -27,6 +27,8 @@ import time
 
 import pytest
 
+from tests._cloud_organizations import testOrganizationID
+
 # ---------------------------------------------------------------------------
 # Skip entire module if no credentials
 # ---------------------------------------------------------------------------
@@ -156,7 +158,9 @@ def can_write(client, cloud_config):
 
     try:
         result = _retry_on_server_error(
-            lambda: createDataset(cloud_config.org_id, "NDI_PYTEST_WRITE_CHECK", client=client)
+            lambda: createDataset(
+                testOrganizationID(client), "NDI_PYTEST_WRITE_CHECK", client=client
+            )
         )
         ds_id = result.get("_id", result.get("id", ""))
         if ds_id:
@@ -179,7 +183,7 @@ def fresh_dataset(client, cloud_config, can_write):
     from ndi.cloud.api.datasets import createDataset, deleteDataset
     from ndi.cloud.exceptions import CloudAPIError
 
-    org_id = cloud_config.org_id
+    org_id = testOrganizationID(client)
     try:
         result = _retry_on_server_error(
             lambda: createDataset(org_id, "NDI_PYTEST_TEMP_DATASET", client=client)
@@ -214,7 +218,7 @@ def _cleanup_stale_pytest_datasets(client, cloud_config):
     from ndi.cloud.api.datasets import deleteDataset, listDatasets
 
     try:
-        result = listDatasets(cloud_config.org_id, client=client)
+        result = listDatasets(testOrganizationID(client), client=client)
         datasets = result.get("datasets", [])
         stale = [
             ds
@@ -333,10 +337,14 @@ class TestAuth:
         assert "exp" in payload
         assert any(k in payload for k in ("sub", "email", "userId", "id"))
 
-    def test_config_has_org_id(self, cloud_config):
-        """Login should populate org_id."""
-        assert cloud_config.org_id
-        assert len(cloud_config.org_id) > 10
+    def test_login_caches_the_organizations(self, cloud_config):
+        """Login should cache every organization the user belongs to, with names."""
+        from ndi.cloud.internal import _cachedOrganizations
+
+        organizations = _cachedOrganizations()
+        assert organizations
+        assert all(len(o["id"]) > 10 for o in organizations)
+        assert all(isinstance(o["name"], str) for o in organizations)
 
     def test_decodeJwt_structure(self, cloud_config):
         """decodeJwt should return a dict with expected keys."""
@@ -400,7 +408,7 @@ class TestDatasetLifecycle:
         )
         from ndi.cloud.exceptions import CloudAPIError as _APIError
 
-        org_id = cloud_config.org_id
+        org_id = testOrganizationID(client)
         try:
             result = _retry_on_server_error(
                 lambda: createDataset(org_id, "NDI_PYTEST_CREATE_DELETE", client=client)
@@ -445,7 +453,7 @@ class TestDatasetLifecycle:
         """Created dataset should appear in the org's dataset list."""
         from ndi.cloud.api.datasets import listDatasets
 
-        result = listDatasets(cloud_config.org_id, client=client)
+        result = listDatasets(testOrganizationID(client), client=client)
         datasets = result.get("datasets", [])
         ids = {d.get("_id", d.get("id", "")) for d in datasets}
         assert fresh_dataset in ids
@@ -696,7 +704,7 @@ class TestFileLifecycle:
         from ndi.cloud.api.files import getFileUploadURL
 
         url = getFileUploadURL(
-            cloud_config.org_id,
+            testOrganizationID(client),
             fresh_dataset,
             "pytest-test-file-uid",
             client=client,
@@ -719,7 +727,9 @@ class TestFileLifecycle:
         test_content = b"Hello from NDI pytest! This is test file content."
 
         # Get upload URL
-        upload_url = getFileUploadURL(cloud_config.org_id, fresh_dataset, file_uid, client=client)
+        upload_url = getFileUploadURL(
+            testOrganizationID(client), fresh_dataset, file_uid, client=client
+        )
         assert upload_url
 
         # Upload
@@ -764,7 +774,9 @@ class TestFileLifecycle:
         from ndi.cloud.api.files import getFileUploadURL, listFiles, listFilesAll
 
         file_uid = "pytest-list-test-file"
-        upload_url = getFileUploadURL(cloud_config.org_id, fresh_dataset, file_uid, client=client)
+        upload_url = getFileUploadURL(
+            testOrganizationID(client), fresh_dataset, file_uid, client=client
+        )
         requests.put(
             upload_url,
             data=b"list test data",
@@ -792,7 +804,9 @@ class TestFileLifecycle:
         from ndi.cloud.api.files import getFileDetails, getFileUploadURL
 
         file_uid = "pytest-details-test-file"
-        upload_url = getFileUploadURL(cloud_config.org_id, fresh_dataset, file_uid, client=client)
+        upload_url = getFileUploadURL(
+            testOrganizationID(client), fresh_dataset, file_uid, client=client
+        )
         requests.put(
             upload_url,
             data=b"details test",
@@ -847,7 +861,11 @@ class TestFileChecksums:
         missing_uid = "pytest-crc32-never-uploaded"
 
         url = getFileUploadURL(
-            cloud_config.org_id, fresh_dataset, file_uid, checksum_crc32=local_crc, client=client
+            testOrganizationID(client),
+            fresh_dataset,
+            file_uid,
+            checksum_crc32=local_crc,
+            client=client,
         )
         assert putFiles(url, str(path), checksum_crc32=local_crc)
 
@@ -880,7 +898,7 @@ class TestFileChecksums:
         assert crc32(str(path)) != wrong
 
         url = getFileUploadURL(
-            cloud_config.org_id,
+            testOrganizationID(client),
             fresh_dataset,
             "pytest-crc32-wrong",
             checksum_crc32=wrong,
@@ -1077,7 +1095,7 @@ class TestSoftDelete:
         from ndi.cloud.api.documents import addDocument, listDatasetDocumentsAll
         from ndi.cloud.exceptions import CloudAPIError as _APIError
 
-        org_id = cloud_config.org_id
+        org_id = testOrganizationID(client)
         try:
             result = _retry_on_server_error(
                 lambda: createDataset(org_id, "NDI_PYTEST_SOFT_DELETE", client=client)
@@ -1150,7 +1168,7 @@ class TestSoftDelete:
         from ndi.cloud.api.documents import addDocument
         from ndi.cloud.exceptions import CloudAPIError as _APIError
 
-        org_id = cloud_config.org_id
+        org_id = testOrganizationID(client)
         try:
             result = _retry_on_server_error(
                 lambda: createDataset(org_id, "NDI_PYTEST_HARD_DELETE", client=client)
@@ -1212,7 +1230,7 @@ class TestSoftDelete:
         from ndi.cloud.api.datasets import createDataset, deleteDataset
         from ndi.cloud.exceptions import CloudAPIError as _APIError
 
-        org_id = cloud_config.org_id
+        org_id = testOrganizationID(client)
         try:
             result = _retry_on_server_error(
                 lambda: createDataset(org_id, "NDI_PYTEST_DEL_MSG", client=client)

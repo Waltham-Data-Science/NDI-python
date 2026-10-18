@@ -21,6 +21,7 @@ from pathlib import Path
 
 import pytest
 
+import ndi.cloud.internal
 import ndi.cloud.sync.operations as ops
 import ndi.cloud.upload as upload
 import ndi.preferences
@@ -30,12 +31,8 @@ from ndi.cloud.sync.mode import SyncOptions
 CLOUD_ID = "65a1b2c3d4e5f60718293a4b"
 
 
-class _Config:
-    org_id = "org-1"
-
-
 class _Client:
-    config = _Config()
+    """A stand-in client; the dataset's organization is looked up, not configured."""
 
 
 def _manifest(tmp_path: Path, sizes: dict[str, int]) -> list[dict]:
@@ -96,6 +93,13 @@ class _Server:
             state = self._job_states.pop(0) if self._job_states else "complete"
             return {"state": state}
 
+        # The organization comes from the dataset record, as in MATLAB's
+        # GetFileCollectionUploadURL -- not from the logged-in user.
+        def _dataset_org(dataset_id, client=None):
+            assert dataset_id == CLOUD_ID
+            return "org-1"
+
+        monkeypatch.setattr(ndi.cloud.internal, "_datasetOrganizationId", _dataset_org)
         monkeypatch.setattr(files_api, "getFileCollectionUploadURL", _url)
         monkeypatch.setattr(files_api, "putFiles", _put)
         monkeypatch.setattr(files_api, "waitForBulkUpload", _wait)

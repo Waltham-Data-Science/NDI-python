@@ -162,7 +162,8 @@ def zipForUpload(
         file_manifest: Entries with ``file_uid``, ``file_path``, and optionally
             ``document_id`` and ``bytes`` (looked up on disk when absent).
         dataset_id: Cloud dataset ID.
-        org_id: Organisation ID. Defaults to ``client.config.org_id``.
+        org_id: Organisation ID. Defaults to the organization that owns
+            *dataset_id*, read from the dataset record.
         size_limit: Maximum batch size in bytes. ``None`` (default) reads the
             preference ``Cloud.Upload.Max_File_Batch_Size``.
         number_retries: Attempts at getting the upload URL and at the PUT.
@@ -188,7 +189,6 @@ def zipForUpload(
         size_limit = float(preferences.get("Cloud.Upload.Max_File_Batch_Size"))
     if size_limit <= 0:
         raise ValueError(f"size_limit must be positive (got {size_limit!r})")
-    org_id = org_id or getattr(getattr(client, "config", None), "org_id", "")
 
     report: dict[str, Any] = {
         "uploaded": 0,
@@ -197,6 +197,10 @@ def zipForUpload(
         "failed_document_ids": [],
         "batches": 0,
     }
+    if file_manifest and not org_id:
+        from .internal import _datasetOrganizationId
+
+        org_id = _datasetOrganizationId(dataset_id, client=client)
 
     def _fail(batch: list[dict[str, Any]], message: str) -> None:
         report["failed"] += len(batch)
@@ -332,7 +336,9 @@ def uploadFilesForDatasetDocuments(
     """Upload associated binary files for a list of documents.
 
     Args:
-        org_id: Organisation ID.
+        org_id: Organisation ID -- the organization that owns *dataset_id*.
+            ``""`` looks it up from the dataset record, as MATLAB's
+            file-upload calls do.
         dataset_id: Cloud dataset ID.
         documents: List of document property dicts.
         dataset: The local ``ndi.dataset`` that produced *documents*. When
@@ -408,6 +414,10 @@ def uploadFilesForDatasetDocuments(
         doc_id = document_id(doc)
         for file_uid, file_path in file_uploads_for_document(doc, dataset=dataset):
             try:
+                if not org_id:
+                    from .internal import _datasetOrganizationId
+
+                    org_id = _datasetOrganizationId(dataset_id, client=client)
                 url = files_api.getFileUploadURL(org_id, dataset_id, file_uid, client=client)
                 files_api.putFiles(url, file_path)
                 report["uploaded"] += 1
@@ -610,8 +620,12 @@ def uploadSingleFile(
     import uuid
 
     from .api import files as files_api
+    from .internal import _datasetOrganizationId
 
     try:
+        # The dataset's own organization, as MATLAB's GetFileUploadURL reads
+        # it: a user in several organizations has no single one to assume.
+        org_id = _datasetOrganizationId(dataset_id, client=client)
         if use_bulk_upload:
             zip_name = f"{dataset_id}.{uuid.uuid4().hex}.zip"
             zip_path = Path(tempfile.gettempdir()) / zip_name
@@ -619,7 +633,7 @@ def uploadSingleFile(
                 with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
                     zf.write(file_path, os.path.basename(file_path))
                 info = files_api.getFileCollectionUploadURL(
-                    client.config.org_id,
+                    org_id,
                     dataset_id,
                     client=client,
                 )
@@ -636,7 +650,7 @@ def uploadSingleFile(
 
                 checksum_crc32 = crc32(file_path)
             url = files_api.getFileUploadURL(
-                client.config.org_id,
+                org_id,
                 dataset_id,
                 file_uid,
                 checksum_crc32=checksum_crc32,

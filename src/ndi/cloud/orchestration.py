@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import re
 import warnings
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
 
@@ -436,6 +437,9 @@ def uploadDataset(
     *,
     file_upload_strategy: str = "batch",
     file_batch_size_limit: float | None = None,
+    organization_name: str = "",
+    organization_id: str = "",
+    organization_chooser: Callable[[list[str], str], int | None] | None = None,
     client: CloudClient | None = None,
 ) -> tuple[bool, str, str]:
     """Upload a local dataset to NDI Cloud.
@@ -454,14 +458,43 @@ def uploadDataset(
         file_batch_size_limit: Maximum size in bytes of each zip batch;
             ``None`` uses the preference ``Cloud.Upload.Max_File_Batch_Size``.
             MATLAB: SyncOptions ``FileBatchSizeLimit``.
+        organization_name: The NAME of the NDI Cloud organization a NEW
+            remote dataset should be created under. The current user must
+            belong to it and be allowed to upload to it. Names are matched
+            case-sensitively. Mutually exclusive with *organization_id*.
+            When neither is given and the user can upload to exactly one
+            organization, that one is used; otherwise the user is asked to
+            choose (see *organization_chooser*) or the upload fails with a
+            message listing the organizations. See
+            :func:`ndi.cloud.internal.chooseOrganization`. Ignored when the
+            dataset already exists on NDI Cloud.
+        organization_id: The ID of the NDI Cloud organization to use.
+            Mutually exclusive with *organization_name*.
+        organization_chooser: How to ask the user, when an organization must
+            be chosen: called as ``chooser(labels, prompt)`` and returning the
+            0-based index of the chosen label, or None to cancel. Default:
+            a numbered console prompt when standard input is a terminal,
+            otherwise no asking.
         client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
         Tuple of ``(success, cloud_dataset_id, message)``.
+
+    Python-specific Notes:
+        MATLAB asks in a dialog in the desktop. *organization_chooser* lets
+        a Python GUI (the Qt navigator) supply its own list dialog instead.
     """
     from .api import datasets as ds_api
-    from .internal import createRemoteDatasetDoc, getCloudDatasetIdForLocalDataset
+    from .exceptions import CloudError
+    from .internal import (
+        chooseOrganization,
+        createRemoteDatasetDoc,
+        getCloudDatasetIdForLocalDataset,
+    )
     from .upload import uploadDocumentCollection, uploadFilesForDatasetDocuments
+
+    if organization_name and organization_id:
+        return False, "", "organization_name and organization_id are mutually exclusive."
 
     # MATLAB refuses to upload a dataset that is not fully ingested, and it is
     # the FIRST thing uploadDataset.m does (line 53). This had no counterpart
@@ -481,15 +514,32 @@ def uploadDataset(
             "Dataset is not fully ingested. All sessions must be ingested " "before uploading.",
         )
 
-    # Resolve or create remote dataset
+    # Resolve or create remote dataset. org_id stays "" for an existing one:
+    # its files go to the organization that owns it, which the file upload
+    # reads from the dataset record when it needs it.
     cloud_id = ""
+    org_id = ""
     if not upload_as_new:
         cloud_id, _ = getCloudDatasetIdForLocalDataset(dataset, client=client)
 
     if not cloud_id:
+        # Decide which organization the new dataset belongs to. A user may
+        # belong to several, so this is asked rather than assumed.
+        try:
+            org_id, _ = chooseOrganization(
+                organization_name,
+                organization_id,
+                require_upload=True,
+                interactive=True if organization_chooser else None,
+                prompt_string="Upload the dataset to which organization?",
+                chooser=organization_chooser,
+                client=client,
+            )
+        except CloudError as exc:
+            return False, "", str(exc)
+
         # Create new remote dataset
         name = remote_name or getattr(dataset, "name", "Unnamed ndi_dataset")
-        org_id = client.config.org_id
         try:
             result = ds_api.createDataset(org_id, name, client=client)
             cloud_id = result.get("id", result.get("_id", ""))
@@ -544,7 +594,7 @@ def uploadDataset(
     # Upload files
     if sync_files:
         file_report = uploadFilesForDatasetDocuments(
-            client.config.org_id,
+            org_id,
             cloud_id,
             doc_jsons,
             dataset=dataset,

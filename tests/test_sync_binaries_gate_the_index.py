@@ -37,6 +37,7 @@ import ndi.cloud.sync.operations as ops
 import ndi.cloud.upload as upload
 from ndi.cloud.sync.index import SyncIndex
 from ndi.cloud.sync.mode import SyncOptions
+from tests._cloud_organizations import use_organizations
 
 from .conftest import FakeDataset, make_document
 
@@ -44,7 +45,7 @@ CLOUD_ID = "65a1b2c3d4e5f60718293a4b"
 
 
 class _Config:
-    org_id = "org-1"
+    """No organization here: file uploads use the dataset's own."""
 
 
 class _Client:
@@ -98,6 +99,7 @@ def _binaries(monkeypatch, failing):
     from ndi.cloud.api import files as files_api
 
     failing_uids = {f"uid-{d}" for d in failing}
+    use_organizations(monkeypatch, {"id": "org-1", "name": "Org"})
 
     def _url(org, ds, uid, client=None):
         if uid in failing_uids:

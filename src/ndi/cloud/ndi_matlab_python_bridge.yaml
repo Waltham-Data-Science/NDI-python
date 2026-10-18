@@ -90,7 +90,7 @@ functions:
   # --- auth.py functions ---
   - name: authenticate
     matlab_path: "+ndi/+cloud/authenticate.m"
-    matlab_last_sync_hash: "2566fe4d"
+    matlab_last_sync_hash: "293ec411"
     python_path: "ndi/cloud/auth.py"
     input_arguments:
       - name: config
@@ -103,18 +103,20 @@ functions:
       - name: organizationID
         type_python: "str"
     decision_log: >
-      Synchronized with MATLAB main as of 2026-05-11 (matlab HEAD
-      2566fe4d). Now requires both token AND organization_id to be
-      populated before treating a cached login as valid (mirrors
-      commit 5c4352eeac). The local JWT exp pre-check is delegated to
-      isTokenExpired (extracted in commit 9562eb28e7). Organization-id
-      extraction (auth._extract_first_organization_id) accepts dict,
-      list-of-dicts, or single dict, and warns when multiple
-      organizations are present.
+      2026-10-18: synchronized with NDI-matlab 293ec411 (VH-Lab/NDI-matlab#1037). A user may belong
+      to several organizations, so login no longer picks the first: it caches
+      the whole list (ndi.cloud.internal.setOrganizations) and a cached login
+      is valid on the token alone. auth._extract_first_organization_id is
+      gone. The second output is deprecated on both sides. MATLAB computes it
+      only when asked for and then lets chooseOrganization decide (a dialog
+      when interaction is enabled); a Python tuple is always fully built, so
+      Python never asks and never makes a network call for it -- it returns
+      the id of the user's only cached organization, or "" when there are
+      several. No caller in this repo reads it any more.
 
   - name: testLogin
     matlab_path: "+ndi/+cloud/testLogin.m"
-    matlab_last_sync_hash: "2566fe4d"
+    matlab_last_sync_hash: "293ec411"
     python_path: "ndi/cloud/auth.py"
     input_arguments:
       - name: user_name
@@ -133,6 +135,10 @@ functions:
       - name: is_good
         type_python: "bool"
     decision_log: >
+      2026-10-18: NDI-matlab 293ec411 (VH-Lab/NDI-matlab#1037) changed only the Verbose token-state
+      report, which now prints the cached organization list instead of
+      NDI_CLOUD_ORGANIZATION_ID. Python's verbose output never printed the
+      organization, so there is nothing to follow.
       Ported from MATLAB main as of 2026-05-11 (matlab HEAD 2566fe4d).
       Three-attempt cascade: (1) probe NDI_CLOUD_TOKEN via direct GET
       /users/me bypassing wrappers (to avoid silent re-auth swapping
@@ -166,14 +172,18 @@ functions:
 
   - name: logout
     matlab_path: "+ndi/+cloud/logout.m"
-    matlab_last_sync_hash: "23a1f8d8"
+    matlab_last_sync_hash: "293ec411"
     python_path: "ndi/cloud/auth.py"
     input_arguments:
       - name: config
         type_python: "CloudConfig | None"
         default: "None"
     output_arguments: []
-    decision_log: "Exact match."
+    decision_log: >
+      2026-10-18: synchronized with NDI-matlab 293ec411 (VH-Lab/NDI-matlab#1037): clears the token and
+      the cached organization list (NDI_CLOUD_ORGANIZATIONS) instead of
+      NDI_CLOUD_ORGANIZATION_ID. Python also clears a leftover
+      NDI_CLOUD_ORGANIZATION_ID from an older version.
 
   - name: logout
     matlab_path: "+ndi/+cloud/+api/+auth/logout.m"
@@ -367,7 +377,7 @@ functions:
 
   - name: getActiveToken
     matlab_path: "+ndi/+cloud/+internal/getActiveToken.m"
-    matlab_last_sync_hash: "2566fe4d"
+    matlab_last_sync_hash: "293ec411"
     python_path: "ndi/cloud/auth.py"
     input_arguments:
       - name: config
@@ -376,13 +386,11 @@ functions:
     output_arguments:
       - name: token
         type_python: "str"
-      - name: org_id
-        type_python: "str"
     decision_log: >
-      Updated 2026-05-11 to require a non-empty organization id
-      (matches MATLAB commit 5c4352eeac which made org id required for
-      cached auth). MATLAB places this in +internal; Python places it
-      in auth.py. Name exact match.
+      2026-10-18: synchronized with NDI-matlab 293ec411 (VH-Lab/NDI-matlab#1037): returns the token
+      only. The organizations are a list, not part of the token; see
+      getOrganizations. MATLAB places this in +internal; Python places it in
+      auth.py. Name exact match.
 
   # --- orchestration.py functions ---
   - name: downloadDataset
@@ -417,7 +425,7 @@ functions:
 
   - name: uploadDataset
     matlab_path: "+ndi/+cloud/uploadDataset.m"
-    matlab_last_sync_hash: "7180cc8"
+    matlab_last_sync_hash: "293ec411"
     python_path: "ndi/cloud/orchestration.py"
     input_arguments:
       - name: dataset
@@ -447,6 +455,17 @@ functions:
         type_matlab: "double (via SyncOptions)"
         type_python: "float | None"
         default: "None"
+      - name: organization_name
+        type_matlab: "char"
+        type_python: "str"
+        default: "''"
+      - name: organization_id
+        type_matlab: "char"
+        type_python: "str"
+        default: "''"
+      - name: organization_chooser
+        type_python: "Callable[[list[str], str], int | None] | None"
+        default: "None"
       - name: client
         type_python: "CloudClient | None"
         default: "None"
@@ -458,6 +477,20 @@ functions:
       - name: message
         type_python: "str"
     decision_log: >
+      2026-10-18: NDI-matlab 293ec411 (VH-Lab/NDI-matlab#1037): a NEW remote dataset's organization
+      comes from chooseOrganization (organization_name / organization_id, else
+      the only uploadable organization, else ask, else an error listing them),
+      replacing both the first-organization default and the env-var swap
+      around resolveOrganizationId. Ported, with organization_name and
+      organization_id (MATLAB's organizationName / organizationID). Python's
+      file uploads now go to the organization that owns the dataset -- the
+      chosen one for a new dataset, the dataset record's organizationId for an
+      existing one -- as MATLAB's GetFileUploadURL reads it; they used the
+      login's first organization before, which was wrong for an existing
+      dataset in another organization. organization_chooser is Python-only:
+      MATLAB asks in a desktop dialog, and this lets the Qt navigator supply
+      its list dialog (the default asks on a terminal, if there is one).
+
       2026-10-17: NDI-matlab 7180cc8 (VH-Lab/NDI-matlab#1033) adds
       SyncOptions.FileBatchSizeLimit, passed through to the file upload.
       Python's uploadDataset takes no SyncOptions, so file_upload_strategy and
@@ -984,7 +1017,7 @@ functions:
 
   - name: uploadFilesForDatasetDocuments
     matlab_path: "+ndi/+cloud/+sync/+internal/uploadFilesForDatasetDocuments.m"
-    matlab_last_sync_hash: "7180cc8"
+    matlab_last_sync_hash: "293ec411"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
       - name: org_id
@@ -1018,6 +1051,12 @@ functions:
       - name: result
         type_python: "dict[str, Any]"
     decision_log: >
+      2026-10-18: NDI-matlab 293ec411 (VH-Lab/NDI-matlab#1037) only rewrote a Verbose error message
+      (it now names the user's organizations instead of
+      NDI_CLOUD_ORGANIZATION_ID). Python's org_id may now be "" to look the
+      organization up from the dataset record, which is what MATLAB's
+      file-upload calls do; callers pass "" or the dataset's own organization
+      instead of the login's first.
       MATLAB places this in +sync/+internal. Python places it in upload.py.
       Exact name match.
       2026-10-17: examined against NDI-matlab 7180cc8 (VH-Lab/NDI-matlab#1033). The batch path is now ported:
@@ -1790,21 +1829,16 @@ porting_deferred:
       with requests.ndi_session which handles auth headers internally.
 
   - name: resolveOrganizationId
-    matlab_path: "+ndi/+cloud/+internal/resolveOrganizationId.m"
-    matlab_last_sync_hash: "f847d7c4"
-    status: porting_deferred
+    matlab_path: "N/A"
+    matlab_last_sync_hash: "293ec411"
+    status: retired
     decision_log: >
-      MATLAB helper introduced with NDI-matlab#979: given
-      organizationName or organizationID, resolves against
-      ndi.cloud.api.users.me and returns the id, verifying membership.
-      Wired into ndi.cloud.uploadDataset as the 'organizationName' /
-      'organizationID' options so a user who belongs to more than one
-      NDI Cloud organization can route the upload explicitly. Python's
-      uploadDataset does not currently expose those options, so the
-      resolver has no Python caller yet -- porting_deferred rather
-      than matlab_only because Python COULD do this once the upload
-      surface grows the same options. See NDI-python cloud
-      orchestration when that lands.
+      Retired on both sides. NDI-matlab 293ec411 (VH-Lab/NDI-matlab#1037) deleted
+      +ndi/+cloud/+internal/resolveOrganizationId.m and folded it into
+      chooseOrganization, which resolves an organization name or id the same
+      way and also decides when none is given. Python never ported the
+      resolver; chooseOrganization is ported instead. matlab_path is "N/A"
+      per the stale-path rule.
 
   - name: createCloudMetadataStruct
     matlab_path: "+ndi/+cloud/+utility/createCloudMetadataStruct.m"
@@ -1829,9 +1863,12 @@ porting_deferred:
 
   - name: uilogin
     matlab_path: "+ndi/+cloud/uilogin.m"
-    matlab_last_sync_hash: "80092b7c"
+    matlab_last_sync_hash: "293ec411"
     status: matlab_only
     decision_log: >
+      2026-10-18: NDI-matlab 293ec411 (VH-Lab/NDI-matlab#1037) made uilogin return the token only
+      and stop requiring an organization id to count as logged in. Still a
+      MATLAB GUI wrapper with nothing for Python to follow.
       MATLAB GUI login. No Python equivalent; testLogin() in Python
       simply returns False when env credentials are absent (since a
       Python CLI session has no UI). The MATLAB profileEditor GUI is a
@@ -1854,7 +1891,7 @@ porting_deferred:
 
   - name: selectCloudDataset
     matlab_path: "+ndi/+cloud/+ui/+dialog/selectCloudDataset.m"
-    matlab_last_sync_hash: "b7102250"
+    matlab_last_sync_hash: "293ec411"
     status: ported_differently
     python_path: "ndi/gui/nav/datasets_pane.py"
     decision_log: >
@@ -1865,17 +1902,25 @@ porting_deferred:
       open_cloud_dataset(is_public) is the menu action that uses it. Same
       public/private split, same endpoints, different entry point.
 
-      One difference worth recording: MATLAB's listDatasets() takes no
-      argument, while Python authenticates first and passes the resulting
-      organization id. Python also DROPS records whose id cannot be
-      extracted rather than offering a row that nothing can open.
+      2026-10-18: synchronized with NDI-matlab 293ec411 (VH-Lab/NDI-matlab#1037). Private lists the
+      datasets in every organization the user belongs to (listDatasets with
+      no organization), and labels are prefixed with "[Org Name]" when there
+      is more than one -- as in MATLAB, which also fixed its private branch
+      reading the response wrapper instead of answer.datasets. Python still
+      DROPS records whose id cannot be extracted rather than offering a row
+      that nothing can open.
 
   - name: LoginDialog
     matlab_path: "+ndi/+cloud/+ui/+dialog/LoginDialog.mlapp"
-    matlab_last_sync_hash: "b7102250"
+    matlab_last_sync_hash: "9a3c972d"
     status: ported_differently
     python_path: "ndi/gui/profile_editor.py"
     decision_log: >
+      2026-10-18: NDI-matlab 9a3c972d (VH-Lab/NDI-matlab#1037) changed what the dialog stores
+      after logging in: the token plus every organization
+      (setOrganizations), instead of the first organization's id. Python has
+      no login dialog; its logins go through ndi.cloud.auth.login, which
+      makes the same change, so profile_editor.py has nothing to follow.
       MATLAB App Designer credential prompt, the UI behind uilogin (recorded
       separately as not_applicable). Python collects and stores credentials
       through ndi.gui.profile_editor.ProfileEditor -- add_profile() and
@@ -1884,31 +1929,176 @@ porting_deferred:
 
   - name: selectOrganization
     matlab_path: "+ndi/+cloud/+ui/+dialog/selectOrganization.m"
-    matlab_last_sync_hash: "56e2669c"
-    status: porting_deferred
+    matlab_last_sync_hash: "293ec411"
+    python_path: "ndi/cloud/ui/dialog.py"
+    input_arguments:
+      - name: auto_select_single
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "True"
+      - name: require_upload
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "False"
+      - name: prompt_string
+        type_matlab: "string"
+        type_python: "str"
+        default: "'Select an organization:'"
+      - name: chooser
+        type_python: "Callable[[list[str], str], int | None] | None"
+        default: "None"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: organizationID
+        type_python: "str"
+      - name: organizationName
+        type_python: "str"
     decision_log: >
-      The interactive counterpart to the "use the first organization"
-      behavior that Python already has in
-      ndi.cloud.auth._extract_first_organization_id. A user who belongs to
-      more than one organization cannot currently choose which one to act
-      on: Python takes the first and logs a warning saying selection is
-      unsupported. That warning is the honest marker of this gap, and this
-      entry is where the gap is recorded. Porting it means porting
-      organizationLabels below with it.
+      Ported 2026-10-18 against NDI-matlab 293ec411 (VH-Lab/NDI-matlab#1037), where it became the
+      always-interactive form of chooseOrganization (SetActive removed: there
+      is no active organization any more; RequireUpload added). MATLAB's
+      Parent (a figure to center the dialog over) has no meaning without a
+      dialog; Python asks on the console unless a chooser is given, which is
+      how a Python GUI supplies its own list dialog.
 
   - name: organizationLabels
     matlab_path: "+ndi/+cloud/+ui/+dialog/organizationLabels.m"
     matlab_last_sync_hash: "56e2669c"
-    status: porting_deferred
+    python_path: "ndi/cloud/ui/dialog.py"
+    input_arguments:
+      - name: organizationName
+        type_matlab: "cell"
+        type_python: "list"
+      - name: organizationID
+        type_matlab: "cell"
+        type_python: "list"
+    output_arguments:
+      - name: labels
+        type_python: "list[str]"
     decision_log: >
-      Pure helper for selectOrganization: turns parallel name/id lists into
-      unique display labels, falling back to the id when a name is empty and
-      appending the id in parentheses when two organizations share a name.
-      No UI and no MATLAB-only dependency, so it ports directly and is
-      exactly testable -- but it has no caller in Python until the picker
-      above exists, which is why it is deliberately deferred rather than
-      ported on its own.
+      Ported 2026-10-18 with selectOrganization / chooseOrganization, its
+      callers (VH-Lab/NDI-matlab#1037). Pure helper: the name, or the id when
+      the name is empty, with the id appended in parentheses when two
+      organizations share a label. Argument names kept as in MATLAB.
 
+
+  # --- organizations (+internal), ported with VH-Lab/NDI-matlab#1037 ---
+
+  - name: normalizeOrganizations
+    matlab_path: "+ndi/+cloud/+internal/normalizeOrganizations.m"
+    matlab_last_sync_hash: "293ec411"
+    python_path: "ndi/cloud/internal.py"
+    input_arguments:
+      - name: raw
+        type_matlab: "struct array | cell"
+        type_python: "Any"
+    output_arguments:
+      - name: organizations
+        type_matlab: "1xN struct (id, name, canUploadDataset)"
+        type_python: "list[dict[str, Any]]"
+    decision_log: >
+      MATLAB returns a struct array; Python a list of dicts with the same
+      three keys. Raises CloudOrganizationError with MATLAB's identifier
+      (NDI:Cloud:InvalidOrganizations).
+
+  - name: setOrganizations
+    matlab_path: "+ndi/+cloud/+internal/setOrganizations.m"
+    matlab_last_sync_hash: "293ec411"
+    python_path: "ndi/cloud/internal.py"
+    input_arguments:
+      - name: organizations
+        type_python: "Any"
+        default: "None"
+    output_arguments: []
+    decision_log: >
+      Same cache, same environment variable (NDI_CLOUD_ORGANIZATIONS, JSON).
+      Clearing pops the variable rather than setting it to ''.
+
+  - name: getOrganizations
+    matlab_path: "+ndi/+cloud/+internal/getOrganizations.m"
+    matlab_last_sync_hash: "293ec411"
+    python_path: "ndi/cloud/internal.py"
+    input_arguments:
+      - name: refresh
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "False"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: organizations
+        type_python: "list[dict[str, Any]]"
+    decision_log: >
+      MATLAB's Refresh option is refresh. Falls back to users.me when the
+      cache is empty, as in MATLAB.
+
+  - name: chooseOrganization
+    matlab_path: "+ndi/+cloud/+internal/chooseOrganization.m"
+    matlab_last_sync_hash: "c24d338d"
+    python_path: "ndi/cloud/internal.py"
+    input_arguments:
+      - name: organization_name
+        type_matlab: "char"
+        type_python: "str"
+        default: "''"
+      - name: organization_id
+        type_matlab: "char"
+        type_python: "str"
+        default: "''"
+      - name: require_upload
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "False"
+      - name: interactive
+        type_matlab: "logical (default: usejava('desktop'))"
+        type_python: "bool | None"
+        default: "None"
+      - name: always_ask
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "False"
+      - name: prompt_string
+        type_matlab: "string"
+        type_python: "str"
+        default: "'Select an organization:'"
+      - name: chooser
+        type_python: "Callable[[list[str], str], int | None] | None"
+        default: "None"
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: organizationID
+        type_python: "str"
+      - name: organizationName
+        type_python: "str"
+    decision_log: >
+      Same decision order and the same errors, raised as
+      CloudOrganizationError carrying MATLAB's identifier. Includes NDI-matlab
+      c24d338d: an administrator may upload to any of their organizations,
+      checked only when canUploadDataset would exclude one. Interactive
+      defaults to "standard input is a terminal" where MATLAB uses "running in
+      the desktop"; Python asks on the console (counting from 1) or through
+      chooser, where MATLAB opens ndi.util.ListDialog. MATLAB's Parent
+      option is not ported (no dialog).
+
+  - name: userIsAdmin
+    matlab_path: "+ndi/+cloud/+internal/userIsAdmin.m"
+    matlab_last_sync_hash: "c24d338d"
+    python_path: "ndi/cloud/internal.py"
+    input_arguments:
+      - name: client
+        type_python: "CloudClient | None"
+        default: "None"
+    output_arguments:
+      - name: tf
+        type_python: "bool"
+    decision_log: >
+      False when not logged in or the lookup fails, never prompting, as in
+      MATLAB. A given client counts as logged in.
   - name: DatasetUploadMonitor
     matlab_path: "+ndi/+cloud/+ui/DatasetUploadMonitor.mlapp"
     matlab_last_sync_hash: "b7102250"

@@ -966,21 +966,41 @@ class TestFetchCloudDatasets:
         assert labels[1] == "i2"
         assert ids == ["i1", "i2"]
 
-    def test_private_authenticates_first(self, monkeypatch):
+    def test_private_lists_every_organization(self, monkeypatch):
+        """No organization is passed: listDatasets() covers all of them."""
         import ndi.cloud.api.datasets as api
-        import ndi.cloud.auth as auth
         from ndi.gui.nav.datasets_pane import fetch_cloud_datasets
 
         seen = {}
-        monkeypatch.setattr(auth, "authenticate", lambda *a, **k: ("tok", "org-7"))
 
-        def fake_list(org_id, *a, **k):
-            seen["org"] = org_id
-            return {"datasets": []}
+        def fake_list(*a, **k):
+            seen["args"] = a
+            return {"datasets": [{"id": "i1", "name": "One", "organizationName": "Alpha"}]}
 
         monkeypatch.setattr(api, "listDatasets", fake_list)
-        fetch_cloud_datasets(False)
-        assert seen["org"] == "org-7"
+        labels, ids = fetch_cloud_datasets(False)
+        assert seen["args"] == ()
+        # One organization: its name is not repeated on every row.
+        assert labels == ["One  (i1)"]
+        assert ids == ["i1"]
+
+    def test_private_labels_name_the_organization_when_there_are_several(self, monkeypatch):
+        import ndi.cloud.api.datasets as api
+        from ndi.gui.nav.datasets_pane import fetch_cloud_datasets
+
+        monkeypatch.setattr(
+            api,
+            "listDatasets",
+            lambda *a, **k: {
+                "datasets": [
+                    {"id": "i1", "name": "One", "organizationName": "Alpha"},
+                    {"id": "i2", "name": "Two", "organizationName": "Beta"},
+                ]
+            },
+        )
+        labels, ids = fetch_cloud_datasets(False)
+        assert labels == ["[Alpha] One  (i1)", "[Beta] Two  (i2)"]
+        assert ids == ["i1", "i2"]
 
     def test_an_empty_catalogue_is_two_empty_lists(self, monkeypatch):
         import ndi.cloud.api.datasets as api

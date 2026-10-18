@@ -46,6 +46,8 @@ from pathlib import Path
 
 import pytest
 
+from tests._cloud_organizations import testOrganizationID
+
 # ---------------------------------------------------------------------------
 # Skip entire module if no credentials
 # ---------------------------------------------------------------------------
@@ -80,8 +82,9 @@ def _member_content(i: int) -> bytes:
 def cloud_client():
     """Authenticate once for the whole module and return an authenticated client.
 
-    Login populates ``NDI_CLOUD_ORGANIZATION_ID`` on the process, so any
-    subsequent call that resolves the org id from the environment sees it.
+    Login caches the account's organizations on the process; the upload
+    names one explicitly (testOrganizationID) rather than relying on there
+    being only one.
     """
     from ndi.cloud.auth import login
     from ndi.cloud.client import CloudClient
@@ -169,6 +172,7 @@ def uploaded_series(tmp_path_factory, cloud_client):
         remote_name=unique_name,
         sync_files=True,
         verbose=False,
+        organization_id=testOrganizationID(cloud_client),
         client=cloud_client,
     )
     # The CI test accounts share a quota, and the ingest lane may already

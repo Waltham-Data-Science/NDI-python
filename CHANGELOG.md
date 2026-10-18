@@ -8,6 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Users in several NDI Cloud organizations** (mirroring VH-Lab/NDI-matlab#1037).
+  Login no longer keeps only the first organization: it caches the user's
+  whole list -- id, name and upload permission -- as JSON in
+  `NDI_CLOUD_ORGANIZATIONS`, and `logout` clears it. New
+  `ndi.cloud.internal.getOrganizations`, `setOrganizations`,
+  `normalizeOrganizations`, `chooseOrganization` and `userIsAdmin`, and
+  `ndi.cloud.ui.dialog.organizationLabels` / `selectOrganization`.
+  `chooseOrganization` uses a named organization, else the only one that
+  qualifies, else asks (on a terminal, or through a supplied chooser), else
+  raises `CloudOrganizationError` listing the organizations by name and id.
+  `createDataset` and `uploadDataset` take `organization_name` /
+  `organization_id`; `listDatasets()` with no organization lists every
+  organization's datasets, tagged with `organizationId` and
+  `organizationName`. File uploads now go to the organization that owns the
+  dataset rather than the login's first organization.
+
 - **A double-click installer for end users** in `install/`: `Install NDI.command`
   (macOS), `Install NDI.cmd` (Windows), and the scripts behind them,
   `install-ndi.sh` (Linux and macOS) and `install-ndi.ps1` (Windows), which
@@ -122,6 +138,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   literal listed with a reason.
 
 ### Changed
+
+- **No single NDI Cloud organization any more** (VH-Lab/NDI-matlab#1037).
+  `CloudConfig.org_id` and `NDI_CLOUD_ORGANIZATION_ID` are gone, and
+  `ndi.cloud.auth.getActiveToken` returns the token only. The second output of
+  `ndi.cloud.auth.authenticate` is deprecated: it is the user's only
+  organization, or `""` when there are several. Code that read
+  `client.config.org_id` should call `ndi.cloud.internal.chooseOrganization`.
 
 - **`napariViewGEF` and `napariViewLightsheet` are safe to start from MATLAB
   by themselves.** They now go through `_ndi_launch`, a stdlib-only module
