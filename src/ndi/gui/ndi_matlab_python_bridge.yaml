@@ -838,7 +838,7 @@ ported_late:
 
   - name: GEFManager
     matlab_path: "+ndi/+gui/+app/GEFManager.m"
-    matlab_last_sync_hash: "59c96e57"
+    matlab_last_sync_hash: "d96fd856"
     status: porting_deferred
     decision_log: >
       MATLAB App Designer window that lists, views, adds and removes
@@ -881,3 +881,9 @@ ported_late:
       navigator's Apps menu opens it again. MATLAB App Designer window
       uniqueness only; nothing to port on this side, which draws no such
       window in the first place. Hash bumped to acknowledge the drift.
+      2026-10-17: NDI-matlab d96fd856 (VH-Lab/NDI-matlab#1032):
+      DefaultViewerLauncher is now empty, meaning find napariViewGEF with
+      ndi.python.findCommand (GUI.GEFManager.ViewerLauncher still overrides;
+      this port's preferences.py already defaults it to ""), detach adds
+      NDI_FROM_MATLAB=1, and the View dialog saves the preference only when
+      the user changed the launcher. Still deferred.

@@ -71,6 +71,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Saving preferences no longer drops NDI-matlab's own entries.**
+  `~/.ndi/NDI_Preferences.json` is shared with NDI-matlab, and each side
+  rewrote it with only the preferences it registers, so saving from Python
+  reset MATLAB-only preferences (such as `Tools.FFmpegPath`) to their
+  defaults, and vice versa. `ndi_preferences` now re-reads the file just
+  before writing and keeps every key it does not register, unchanged.
+
 - `uploadSingleFile(use_bulk_upload=True)` passed the whole
   `getFileCollectionUploadURL` result (a `{"url", "jobId"}` dict) to
   `putFiles` as the URL, so it could never succeed.

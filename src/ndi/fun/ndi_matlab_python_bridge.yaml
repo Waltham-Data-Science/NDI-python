@@ -2580,7 +2580,7 @@ functions:
   - name: clearAllCaches
     type: function
     matlab_path: "+ndi/+fun/clearAllCaches.m"
-    matlab_last_sync_hash: "8653c2c8"
+    matlab_last_sync_hash: "d96fd856"
     python_path: "ndi/fun/cache.py"
     python_name: clear_all_caches
     input_arguments:
@@ -2601,6 +2601,11 @@ functions:
       test can assert that a cache is still being cleared rather than
       silently skipped. Exported as both clearAllCaches and
       clear_all_caches.
+      2026-10-17: NDI-matlab d96fd856 (VH-Lab/NDI-matlab#1032) adds a sixth
+      step clearing ndi.fun.findExecutable's cache of external program
+      locations (ffmpeg, Rscript, NDI-python's own commands). Python has no
+      findExecutable (recorded below as porting_deferred), so clear_all_caches
+      has nothing to add.
 
   - name: parseText
     type: function
@@ -3275,7 +3280,7 @@ not_applicable:
 
   - name: avi2mp4
     matlab_path: "+ndi/+fun/+data/avi2mp4.m"
-    matlab_last_sync_hash: "0e2caa09"
+    matlab_last_sync_hash: "d96fd856"
     status: porting_deferred
     decision_log: >
       Not ported. Batch-compresses .avi to H.264 .mp4 by shelling out to
@@ -3284,10 +3289,16 @@ not_applicable:
       whenever one does. Deferred, not declined: unlike the MATLAB path and
       logging helpers below, this is portable work that simply has no
       demand.
+      2026-10-17: NDI-matlab d96fd856 (VH-Lab/NDI-matlab#1032) finds ffmpeg
+      through ndi.fun.findExecutable (ffmpegPath option, Tools.FFmpegPath
+      preference, FFMPEG_BINARY, install folders, login shell), quotes each
+      argument through ndi.fun.systemCommandLine, and validates preset and
+      crf. Still deferred; a port would take shutil.which and an argument
+      list.
 
   - name: prism2csv
     matlab_path: "+ndi/+fun/+data/prism2csv.m"
-    matlab_last_sync_hash: "0e2caa09"
+    matlab_last_sync_hash: "d96fd856"
     status: porting_deferred
     decision_log: >
       Not ported. Converts GraphPad Prism files to CSV by invoking an R
@@ -3295,6 +3306,37 @@ not_applicable:
       that R script in the Python package too or finding a Python reader for
       the .prism format; both are real decisions and neither is needed by a
       current caller, so the choice is left to whoever needs it.
+      2026-10-17: NDI-matlab d96fd856 (VH-Lab/NDI-matlab#1032) finds Rscript
+      through ndi.fun.findExecutable (RscriptPath option, Tools.RscriptPath
+      preference, R_HOME, CRAN install folders, login shell), quotes arguments
+      through ndi.fun.systemCommandLine, and passes NULL for an empty output
+      folder (isempty("") is false in MATLAB). Still deferred.
+
+  - name: findExecutable
+    matlab_path: "+ndi/+fun/findExecutable.m"
+    matlab_last_sync_hash: "d96fd856"
+    status: porting_deferred
+    decision_log: >
+      Not ported (added in VH-Lab/NDI-matlab#1032). Finds an external program
+      such as ffmpeg or Rscript: explicit path, preference, environment
+      variables, install folders with version wildcards, the standard Unix
+      folders, then the login shell (a MATLAB started from the macOS Dock does
+      not see the terminal's PATH). Its only MATLAB callers, avi2mp4 and
+      prism2csv (above) and ndi.python.findCommand, are not ported, so nothing
+      here needs it yet; a port would build on shutil.which. Deferred with
+      them.
+
+  - name: systemCommandLine
+    matlab_path: "+ndi/+fun/systemCommandLine.m"
+    matlab_last_sync_hash: "d96fd856"
+    status: matlab_only
+    decision_log: >
+      Not ported, by design (added in VH-Lab/NDI-matlab#1032). It exists
+      because MATLAB's system() takes one command string: it quotes the
+      program and each argument for sh or cmd.exe and restores the
+      LD_LIBRARY_PATH MATLAB replaced. Python's subprocess takes an argument
+      list, so there is nothing to quote, and a Python process does not carry
+      MATLAB's library paths.
 
   - name: parallelWorkers
     matlab_path: "+ndi/+fun/parallelWorkers.m"

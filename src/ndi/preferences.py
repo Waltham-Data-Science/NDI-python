@@ -309,8 +309,15 @@ class ndi_preferences:
         Builds a flat dict keyed by :meth:`PreferenceItem.key` and writes
         it pretty-printed. Failures are reported via
         :func:`warnings.warn`; the in-memory state is unaffected.
+
+        Keys in the file that this version of NDI-python does not register
+        are kept as they are: NDI-matlab (and other versions of NDI-python)
+        share this file and have preferences of their own. The file is
+        re-read just before writing, so a value the other side saved
+        meanwhile survives.
         """
-        payload = {item.key(): item.value for item in self._items}
+        payload = self._unknown_entries_on_disk()
+        payload.update({item.key(): item.value for item in self._items})
         try:
             self._filename.parent.mkdir(parents=True, exist_ok=True)
             self._filename.write_text(
@@ -324,6 +331,25 @@ class ndi_preferences:
                 RuntimeWarning,
                 stacklevel=2,
             )
+
+    def _unknown_entries_on_disk(self) -> dict[str, Any]:
+        """Entries in the JSON file that no registered item owns.
+
+        Returns only the keys that do not belong to a registered item, with
+        their values unchanged. A missing, empty or unreadable file gives an
+        empty dict: there is nothing to keep.
+        """
+        if not self._filename.is_file():
+            return {}
+        try:
+            text = self._filename.read_text(encoding="utf-8")
+            on_disk = json.loads(text) if text.strip() else {}
+        except Exception:  # noqa: BLE001 - an unreadable file has nothing to keep
+            return {}
+        if not isinstance(on_disk, dict):
+            return {}
+        known = {item.key() for item in self._items}
+        return {key: value for key, value in on_disk.items() if key not in known}
 
     # ------------------------------------------------------------------
     # Lookup helpers
