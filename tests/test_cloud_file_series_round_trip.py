@@ -166,13 +166,22 @@ def uploaded_series(tmp_path_factory, cloud_client):
         len(member_uids) == MEMBER_COUNT
     ), f"the local manifest names {len(member_uids)} members; expected {MEMBER_COUNT}"
 
+    # An account that may upload to none of its organizations (and is not an
+    # administrator) cannot create the dataset this test needs. The server
+    # used to say so as an HTTP 400 from createDataset, skipped below; the
+    # organization is now resolved first, so the same account is skipped here.
+    try:
+        organization_id = testOrganizationID(cloud_client)
+    except RuntimeError as exc:
+        pytest.skip(f"cannot create cloud dataset for this test: {exc}")
+
     unique_name = DATASET_NAME_PREFIX + uuid.uuid4().hex
     ok, cloud_id, message = uploadDataset(
         local,
         remote_name=unique_name,
         sync_files=True,
         verbose=False,
-        organization_id=testOrganizationID(cloud_client),
+        organization_id=organization_id,
         client=cloud_client,
     )
     # The CI test accounts share a quota, and the ingest lane may already
