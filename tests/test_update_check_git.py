@@ -156,14 +156,15 @@ def test_modifications_are_listed(clones):
     by_name = {m["Name"]: m for m in r["Modifications"]}
     assert set(by_name) == {"NDI-python", "vhlab-toolbox-python"}
     assert by_name["NDI-python"]["ChangedFiles"] == ["README.md"]
-    assert by_name["NDI-python"]["NewFiles"] == ["mine.py"]
+    # An untracked file the update does not touch is not listed.
+    assert by_name["NDI-python"]["BlockingFiles"] == []
     assert by_name["NDI-python"]["CommitsAhead"] == 0
     assert by_name["vhlab-toolbox-python"]["CommitsAhead"] == 1
     assert "changed code in" in r["Message"]
 
     txt = modificationSummary(r)
-    assert "changed: README.md" in txt
-    assert "new:     mine.py" in txt
+    assert "changed:    README.md" in txt
+    assert "mine.py" not in txt
     assert "1 local commit(s)" in txt
 
 
@@ -185,10 +186,59 @@ def test_install_allow_modified_goes_on(clones):
     # Past the modification guard, the next step needs ndi_install.py,
     # which the fake clone lacks.
     clones.push_upstream("NDI-python")
-    (clones.ndi / "mine.py").write_text("y = 2\n")
+    (clones.ndi / "local.py").write_text("x = 1\n")
+    commit_all(clones.ndi, "local work")
     with pytest.raises(UpdateError) as err:
         run_install(clones, AllowModified=True)
     assert err.value.identifier == "ndi:update:install:noInstaller"
+
+
+def test_untracked_files_need_no_consent(clones):
+    # git stash and git pull leave untracked files alone, so they are not
+    # "modifications": the update goes ahead without asking (and, in this fake
+    # clone, stops only for want of ndi_install.py).
+    clones.push_upstream("NDI-python")
+    (clones.ndi / "mine.py").write_text("y = 2\n")
+    (clones.ndi / "scratch").mkdir()
+    (clones.ndi / "scratch" / "notes.py").write_text("z = 3\n")
+    r = run_check(clones)
+    assert r["UpdateAvailable"] is True
+    assert r["HasModifications"] is False
+    assert r["Modifications"] == []
+    assert "changed code" not in r["Message"]
+    with pytest.raises(UpdateError) as err:
+        run_install(clones)
+    assert err.value.identifier == "ndi:update:install:noInstaller"
+
+
+def test_untracked_file_in_the_way_stops_the_update(clones):
+    # The update adds files where the user has untracked ones; git would refuse
+    # to overwrite them and stop part-way, so install stops before starting and
+    # names them -- even with AllowModified, since no answer could make the
+    # pull work.
+    seed = clones.seeds / "NDI-python"
+    (seed / "newfile.py").write_text("upstream\n")
+    (seed / "sub").mkdir()
+    (seed / "sub" / "added.py").write_text("upstream\n")
+    commit_all(seed, "upstream adds files")
+    git(seed, "push", "-q", "origin", "main")
+    (clones.ndi / "newfile.py").write_text("mine\n")
+    (clones.ndi / "sub").mkdir()
+    (clones.ndi / "sub" / "added.py").write_text("mine too\n")
+    (clones.ndi / "harmless.py").write_text("left alone\n")
+
+    r = run_check(clones)
+    assert r["HasModifications"] is True
+    assert sorted(r["Modifications"][0]["BlockingFiles"]) == ["newfile.py", "sub/added.py"]
+    assert r["Modifications"][0]["ChangedFiles"] == []
+    txt = modificationSummary(r)
+    assert "in the way: newfile.py" in txt
+    assert "harmless.py" not in txt
+    for allow in (False, True):
+        with pytest.raises(UpdateError) as err:
+            run_install(clones, AllowModified=allow)
+        assert err.value.identifier == "ndi:update:install:untrackedFilesInTheWay"
+    assert (clones.ndi / "newfile.py").read_text() == "mine\n"
 
 
 def test_install_refuses_other_branch(clones):

@@ -33,12 +33,12 @@ check_module = sys.modules["ndi.update.check"]
 # ---- modificationSummary ---------------------------------------------------
 
 
-def mod(name="NDI-python", changed=(), new=(), ahead=0):
+def mod(name="NDI-python", changed=(), blocking=(), ahead=0):
     return {
         "Name": name,
         "Path": f"/x/{name}",
         "ChangedFiles": list(changed),
-        "NewFiles": list(new),
+        "BlockingFiles": list(blocking),
         "CommitsAhead": ahead,
     }
 
@@ -49,21 +49,22 @@ def test_no_modifications_gives_empty():
 
 def test_summary_lists_files_and_commits():
     txt = modificationSummary(
-        {"Modifications": [mod(changed=["src/a.py", "src/b.py"], new=["mine.py"], ahead=1)]}
+        {"Modifications": [mod(changed=["src/a.py", "src/b.py"], blocking=["mine.py"], ahead=1)]}
     )
     assert "NDI-python (/x/NDI-python)" in txt
     assert "2 changed file(s)" in txt
-    assert "1 new file(s)" in txt
+    assert "1 untracked file(s) in the way of new files" in txt
     assert "1 local commit(s)" in txt
-    assert "changed: src/a.py" in txt
-    assert "new:     mine.py" in txt
+    assert "changed:    src/a.py" in txt
+    assert "in the way: mine.py" in txt
     assert "stash" in txt
+    assert "other untracked files are left alone" in txt
 
 
 def test_max_files_counts_the_rest():
     files = [f"f{i}.py" for i in range(1, 6)]
     txt = modificationSummary({"Modifications": [mod(changed=files)]}, MaxFiles=2)
-    assert "changed: f2.py" in txt
+    assert "changed:    f2.py" in txt
     assert "f3.py" not in txt
     assert "... and 3 more" in txt
 
@@ -245,5 +246,25 @@ def test_dialog_with_modified_code_defaults_to_cancel():
     )
     assert plan["accept"] == "Update anyway"
     assert plan["default_cancel"] is True
-    assert "changed: src/a.py" in plan["message"]
+    assert "changed:    src/a.py" in plan["message"]
     assert "Note: you have changed code" not in plan["message"]
+
+
+def test_dialog_with_untracked_files_in_the_way_only_explains():
+    # git will not overwrite them, so the button says to move them instead of
+    # offering an update that would stop part-way.
+    plan = update_dialog(
+        {
+            "UpdateAvailable": True,
+            "CanInstall": True,
+            "InstallType": "git",
+            "Branch": "main",
+            "HasModifications": True,
+            "Modifications": [mod(blocking=["new_module.py"])],
+            "Message": "An update is available.",
+        }
+    )
+    assert plan["kind"] == "alert"
+    assert plan["success"] is False
+    assert "in the way: new_module.py" in plan["message"]
+    assert "Move or rename" in plan["message"]

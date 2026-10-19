@@ -80,9 +80,19 @@ def update_dialog(result: dict[str, Any]) -> dict[str, Any]:
     if result.get("HasModifications"):
         from ...update import modificationSummary
 
+        summary = modificationSummary(result)
+        if any(m.get("BlockingFiles") for m in result.get("Modifications", [])):
+            # Untracked files sit where the update adds files; git will not
+            # overwrite them, so updating cannot work until they move.
+            return {
+                "kind": "alert",
+                "message": f"{message}\n\n{summary}\n\nMove or rename the files marked "
+                '"in the way", then press Update again.',
+                "success": False,
+            }
         return {
             "kind": "confirm",
-            "message": f"{message}\n\n{modificationSummary(result)}\n\nUpdate anyway?",
+            "message": f"{message}\n\n{summary}\n\nUpdate anyway?",
             "accept": "Update anyway",
             "default_cancel": True,
         }

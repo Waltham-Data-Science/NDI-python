@@ -748,7 +748,7 @@ ported_late:
 
   - name: ndiPane
     matlab_path: "+ndi/+gui/+nav/ndiPane.m"
-    matlab_last_sync_hash: "f9ced4bcd"
+    matlab_last_sync_hash: "a24f19076"
     python_path: "ndi/gui/nav/ndi_pane.py"
     decision_log: >
       The NDI-branded pane. Ported in #88.
@@ -762,6 +762,11 @@ ported_late:
       uiconfirm does) and a wait cursor stands in for uiprogressdlg. MATLAB's
       button also offers NDI-python updates from MATLAB; Python's checks
       NDI-python only.
+      2026-10-19: NDI-matlab a24f19076: untracked files no longer count as the user's
+      modifications (git stash and pull leave them alone); only untracked files
+      at a path the update adds a file to are reported, as BlockingFiles
+      (replacing NewFiles), and the Update button shows them in a
+      warning and asks for them to be moved instead of offering the update. Ported the same.
 
   - name: datasetsPane
     matlab_path: "+ndi/+gui/+nav/datasetsPane.m"
