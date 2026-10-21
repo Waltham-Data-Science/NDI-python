@@ -19,7 +19,7 @@ functions:
   - name: check
     type: function
     matlab_path: "+ndi/+update/check.m"
-    matlab_last_sync_hash: "a24f19076"
+    matlab_last_sync_hash: "b6427cc89"
     python_path: "ndi/update/check.py"
     input_arguments:
       - name: IncludeDependencies
@@ -64,11 +64,14 @@ functions:
       modifications (git stash and pull leave them alone); only untracked files
       at a path the update adds a file to are reported, as BlockingFiles
       (replacing NewFiles), and they set HasModifications. Ported the same.
+      2026-10-21: NDI-matlab b6427cc89: ndi_install now puts stashed changes back after
+      the pull (git stash pop), as ndi_install.py and this port already did, and
+      only pops a stash it made itself. Comment only here; nothing to port.
 
   - name: install
     type: function
     matlab_path: "+ndi/+update/install.m"
-    matlab_last_sync_hash: "a24f19076"
+    matlab_last_sync_hash: "b6427cc89"
     python_path: "ndi/update/install.py"
     input_arguments:
       - name: Confirm
@@ -107,6 +110,9 @@ functions:
       at a path the update adds a file to are reported, as BlockingFiles
       (replacing NewFiles), and install stops before starting with
       ndi:update:install:untrackedFilesInTheWay, even with AllowModified. Ported the same.
+      2026-10-21: NDI-matlab b6427cc89: ndi_install now puts stashed changes back after
+      the pull (git stash pop), as ndi_install.py and this port already did, and
+      only pops a stash it made itself. The two languages now behave the same.
 
   - name: installType
     type: function
@@ -130,7 +136,7 @@ functions:
   - name: modificationSummary
     type: function
     matlab_path: "+ndi/+update/modificationSummary.m"
-    matlab_last_sync_hash: "a24f19076"
+    matlab_last_sync_hash: "b6427cc89"
     python_path: "ndi/update/modification_summary.py"
     input_arguments:
       - name: result
@@ -148,6 +154,9 @@ functions:
       modifications (git stash and pull leave them alone); only untracked files
       at a path the update adds a file to are reported, as BlockingFiles
       (replacing NewFiles), and the summary lists them as "in the way". Ported the same.
+      2026-10-21: NDI-matlab b6427cc89: ndi_install now puts stashed changes back after
+      the pull (git stash pop), as ndi_install.py and this port already did, and
+      only pops a stash it made itself. Its closing sentence now matches this port's.
 
   - name: checkOnStartup
     type: function
